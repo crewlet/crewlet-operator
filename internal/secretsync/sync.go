@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+
+	"github.com/crewlet/crewlet-operator/internal/engine"
 )
 
 // Source is the provenance the operator records on every entry it writes
@@ -13,26 +15,23 @@ import (
 // with any other source was last written by someone else.
 const Source = "operator"
 
-// SecretInfo is what the engine's listing says about one stored entry. The
-// listing never carries a value.
-type SecretInfo struct {
-	// Name is the store name.
-	Name string
-	// Source is the provenance its last writer recorded.
-	Source string
-}
-
 // EngineSecrets is the part of the engine's API Sync needs: the /secrets
-// routes.
+// routes. *engine.Client implements it; Sync takes the interface so its
+// tests can script an engine that fails between two writes, which the real
+// one cannot be made to do on cue.
 type EngineSecrets interface {
 	// ListSecrets lists every entry in the store (GET /secrets).
-	ListSecrets(ctx context.Context) ([]SecretInfo, error)
+	ListSecrets(ctx context.Context) ([]engine.SecretInfo, error)
 	// PutSecret stores or replaces one value (PUT /secrets/{name}).
 	PutSecret(ctx context.Context, name string, value []byte, source string) error
 	// DeleteSecret removes one entry, reporting whether it existed
 	// (DELETE /secrets/{name}). Removing an absent entry is not an error.
 	DeleteSecret(ctx context.Context, name string) (removed bool, err error)
 }
+
+// The controller hands Sync the same *engine.Client it applies documents
+// with, so the interface must not drift away from the client's methods.
+var _ EngineSecrets = (*engine.Client)(nil)
 
 // Result names what one Sync changed in the store, each list sorted.
 type Result struct {

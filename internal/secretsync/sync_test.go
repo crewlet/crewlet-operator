@@ -8,6 +8,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/crewlet/crewlet-operator/internal/engine"
 	"github.com/crewlet/crewlet-operator/internal/secretref"
 )
 
@@ -33,14 +34,14 @@ func newFakeEngine() *fakeEngine {
 	return &fakeEngine{entries: map[string]fakeEntry{}, failPut: map[string]error{}, failDelete: map[string]error{}}
 }
 
-func (e *fakeEngine) ListSecrets(context.Context) ([]SecretInfo, error) {
+func (e *fakeEngine) ListSecrets(context.Context) ([]engine.SecretInfo, error) {
 	e.calls = append(e.calls, "list")
 	if e.failList != nil {
 		return nil, e.failList
 	}
-	var out []SecretInfo
+	var out []engine.SecretInfo
 	for _, name := range slices.Sorted(maps.Keys(e.entries)) {
-		out = append(out, SecretInfo{Name: name, Source: e.entries[name].source})
+		out = append(out, engine.SecretInfo{Name: name, Source: e.entries[name].source})
 	}
 	return out, nil
 }
