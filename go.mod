@@ -3,6 +3,7 @@ module github.com/crewlet/crewlet-operator
 go 1.27.2
 
 require (
+	github.com/crewlet/crewlet-operator/api v0.0.0-00010101000000-000000000000
 	github.com/onsi/ginkgo/v2 v2.33.0
 	github.com/onsi/gomega v1.44.0
 	k8s.io/apimachinery v0.37.1
@@ -105,3 +106,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+replace github.com/crewlet/crewlet-operator/api => ./api

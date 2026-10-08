@@ -9,6 +9,8 @@
 !**/*.go
 **/*_test.go
 
-# Re-include Go module files
+# Re-include the manifests of both Go modules (the operator and api/)
 !go.mod
 !go.sum
+!api/go.mod
+!api/go.sum

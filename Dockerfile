@@ -20,8 +20,11 @@ ENV GOTOOLCHAIN=auto
 WORKDIR /workspace
 
 # Module manifests first, so the dependency download is its own layer and
-# survives source-only changes.
+# survives source-only changes. The API module's manifests come too: go.mod
+# replaces github.com/crewlet/crewlet-operator/api with ./api, and the go
+# command reads that module's go.mod to resolve the graph.
 COPY go.mod go.sum ./
+COPY api/go.mod api/go.sum api/
 RUN go mod download
 
 # The rest of the source; .dockerignore keeps it to Go files.
