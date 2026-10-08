@@ -263,6 +263,7 @@ GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 HELM ?= $(LOCALBIN)/helm
 KUBEBUILDER ?= $(LOCALBIN)/kubebuilder
 CRD_REF_DOCS ?= $(LOCALBIN)/crd-ref-docs
+CREWLET ?= $(LOCALBIN)/crewlet
 
 KUBECTL_VERSION ?= v1.37.1
 HELM_VERSION ?= v4.3.0
@@ -271,6 +272,11 @@ CRD_REF_DOCS_VERSION ?= v0.3.0
 KIND_VERSION ?= v0.33.0
 KUSTOMIZE_VERSION ?= v5.8.3
 CONTROLLER_TOOLS_VERSION ?= v0.22.0
+# The Crewlet engine the operator is built and tested against. A commit of
+# crewlet's main rather than its newest tag: v0.1.0 holds no Go source at all
+# (no cmd/crewlet to build), so there is no tagged engine yet. Move it to the
+# first tag that carries the API internal/engine speaks.
+CREWLET_VERSION ?= v0.1.1-0.20261008075911-bee515243940
 # .custom-gcl.yml names the same version; the golangci-lint target refuses to
 # build if the two disagree.
 GOLANGCI_LINT_VERSION ?= v2.14.0
@@ -328,6 +334,12 @@ kind: $(LOCALBIN) ## Download kind locally if necessary.
 .PHONY: kustomize
 kustomize: $(LOCALBIN) ## Download kustomize locally if necessary.
 	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5,$(KUSTOMIZE_VERSION))
+
+# The engine itself, for the engine client's tests: built from the crewlet
+# module at CREWLET_VERSION, so every run tests against the same engine.
+.PHONY: crewlet
+crewlet: $(LOCALBIN) ## Build the Crewlet engine at CREWLET_VERSION into bin/crewlet, for the engine client's tests.
+	$(call go-install-tool,$(CREWLET),github.com/crewlet/crewlet/cmd/crewlet,$(CREWLET_VERSION))
 
 .PHONY: controller-gen
 controller-gen: $(LOCALBIN) ## Download controller-gen locally if necessary.

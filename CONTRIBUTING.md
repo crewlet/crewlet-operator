@@ -10,9 +10,9 @@ Prerequisites: **Go** (the version `go.mod` names; with the default
 `GOTOOLCHAIN=auto` the go command fetches it for you), **Docker**, **make**,
 **git** and **curl**. That is the whole list. Every other tool — controller-gen,
 kustomize, setup-envtest and the Kubernetes test binaries, golangci-lint,
-kind, kubectl, helm, kubebuilder, crd-ref-docs — is pinned in the
-[`Makefile`](Makefile) and installed into `bin/` the first time a target
-needs it, so your machine's copies never stand in for them.
+kind, kubectl, helm, kubebuilder, crd-ref-docs, and the Crewlet engine itself —
+is pinned in the [`Makefile`](Makefile) and installed into `bin/` the first
+time a target needs it, so your machine's copies never stand in for them.
 
 ```bash
 git clone https://github.com/crewlet/crewlet-operator.git
@@ -203,6 +203,7 @@ commit:
 | Pin | Where | Newest from |
 |---|---|---|
 | tool versions (`*_VERSION`) | `Makefile` | the Go module proxy, or the project's releases |
+| the Crewlet engine (`CREWLET_VERSION`) | `Makefile` | crewlet's releases; between releases, the commit of `main` the engine client is written against |
 | `ENVTEST_K8S_VERSION` | `Makefile` | `bin/setup-envtest list` |
 | golangci-lint and its plugins | `.custom-gcl.yml` (version must equal `GOLANGCI_LINT_VERSION`) | the Go module proxy |
 | the curl image | `test/e2e/e2e_test.go` | Docker Hub |
