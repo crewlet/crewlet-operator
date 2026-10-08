@@ -96,3 +96,38 @@ document. The operator handles them without a field:
   those as the key of a provider that names none, which would make them
   credentials outside the secret store, so a provider's key always comes
   from its own Secret reference.
+
+## Names in the engine's secret store
+
+Each referenced key becomes one entry in the engine's encrypted secret store,
+and the company document refers to it as `${NAME}`. The name is derived from
+the reference:
+
+```
+K8S_<SECRET NAME>_<KEY>_<HASH>
+```
+
+The Secret's name and the key are upper-cased, with each run of other
+characters, and each camelCase word boundary, turned into one underscore, and
+are cut to 40 and 32 characters. The hash is twelve base32 characters of the
+SHA-256 of the full reference, namespace included, so two references that
+read the same — `ana-slack` and `ana.slack`, or one Secret name in two
+namespaces — still have entries of their own. Key `botToken` of Secret
+`ana-slack` is `K8S_ANA_SLACK_BOT_TOKEN_` and a hash, and no name is longer
+than 90 characters. A reference keeps its name for as long as it exists, so
+rotating a Secret rewrites an entry rather than replacing it.
+
+**Names of that shape are reserved.** The operator writes them with the
+provenance `operator`, rewrites one whose value someone else replaced, and
+deletes one once nothing references it. It never touches a name of any other
+shape, so credentials written into the store by hand or by Crewlet's own
+provisioning are left alone. A name the running configuration still
+references is kept until the next configuration is applied.
+
+The engine's listing carries names, never values, so to know which values
+changed the operator keeps a fingerprint of each value it wrote, in a Secret
+it owns in the company's namespace. A fingerprint is an HMAC-SHA256 of the
+name and the value under a random key held in the same Secret: it confirms no
+guess about a value without that key, and two names holding one value have
+different fingerprints. Deleting that Secret is harmless; the operator writes
+every value once more and starts a new one.
