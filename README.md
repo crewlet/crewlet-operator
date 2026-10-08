@@ -1,121 +1,103 @@
 # crewlet-operator
-// TODO(user): Add simple overview of use/purpose
 
-## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+A Kubernetes operator for [Crewlet](https://github.com/crewlet/crewlet), the
+AI agent company engine. It makes a Crewlet company a native Kubernetes
+object: you declare a `Company` and its org chart — units, seats, model
+providers, MCP servers, integrations — as custom resources in the
+`crewlet.ai` API group, and the operator runs the engine for that company and
+keeps the engine's live configuration equal to what the resources say.
 
-## Getting Started
+> **Status: alpha, under active development.** The `crewlet.ai/v1alpha1` API
+> is being defined and will change without notice; nothing has been released
+> yet. Do not run it against anything you care about.
 
-### Prerequisites
-- go version v1.24.6+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
+## How it works
 
-### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
+The operator is built around two reconcilers for every `Company`. The first
+makes the engine exist: from the `Company` and the `EngineClass` it names (a
+cluster-scoped set of platform defaults and limits, in the way a
+`StorageClass` is), it creates and owns the engine's StatefulSet, storage,
+keyring and API tokens, Services, webhook routes and network policy. The
+second makes the engine's configuration match: it collects the `Unit`,
+`Seat`, `LLMProvider`, `MCPServer` and `Integration` objects that reference
+the company, renders them into the single company document Crewlet runs on,
+validates it with the engine, and applies it **whole or not at all** — one
+unresolved reference blocks the next revision and is reported on the object
+that caused it, while the last good revision keeps running.
 
-```sh
-make docker-build docker-push IMG=<some-registry>/crewlet-operator:tag
+Credentials are handled **by reference, never by value**. No field accepts a
+secret; every credential is a reference to a Kubernetes `Secret`, whose value
+the operator pushes into the engine's encrypted secret store and rotates live.
+Who put the value there — a person with `kubectl`, External Secrets, or a provisioning
+control plane after an OAuth flow only it knows about — is invisible to the
+operator, so the same API serves self-hosters writing YAML and a control
+plane writing objects programmatically, one namespace per tenant.
+
+```mermaid
+flowchart LR
+    platform["Platform admin"] -- EngineClass --> kapi[("Kubernetes API")]
+    users["kubectl, GitOps,<br/>or a provisioning control plane"] -- "Company, Unit, Seat,<br/>LLMProvider, MCPServer, Integration" --> kapi
+    users -- Secrets --> kapi
+    kapi --> operator["crewlet-operator"]
+    operator -- "StatefulSet, Services, routes,<br/>keyring, NetworkPolicy" --> engine["Crewlet engine<br/>(one per Company)"]
+    operator -- "company document,<br/>applied whole" --> engine
+    operator -- "referenced secret values" --> engine
+    vendors["Slack, GitHub, …"] -- "/webhooks/ only" --> engine
 ```
 
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
+## Requirements
 
-**Install the CRDs into the cluster:**
+- A Kubernetes cluster on one of the four newest minor releases (1.34 to
+  1.37 today). The e2e suite runs on kind's default node image, Kubernetes
+  1.37.
+- A CNI that enforces NetworkPolicy, for the isolation the operator sets up
+  around each engine.
+- To build and run from source: Go (the version in [`go.mod`](go.mod)),
+  Docker, make, git and curl. Every other tool is pinned in the
+  [`Makefile`](Makefile) and downloaded into `bin/`.
 
-```sh
-make install
+## Running it locally
+
+Against a throwaway kind cluster, with the manager running on your machine:
+
+```bash
+make kind kubectl                      # the pinned kind and kubectl, in bin/
+bin/kind create cluster --name crewlet
+make install                           # the CRDs
+make run                               # the manager, against your current kubeconfig
 ```
 
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
+Or in the cluster, from an image you build:
 
-```sh
-make deploy IMG=<some-registry>/crewlet-operator:tag
+```bash
+make docker-build IMG=crewlet-operator:dev
+bin/kind load docker-image crewlet-operator:dev --name crewlet
+make deploy IMG=crewlet-operator:dev   # or: make helm-deploy IMG=crewlet-operator:dev
 ```
 
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
+[docs/getting-started.md](docs/getting-started.md) walks through both, and
+how to remove everything again.
 
-**Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
+## Documentation
 
-```sh
-kubectl apply -k config/samples/
-```
-
->**NOTE**: Ensure that the samples has default values to test it out.
-
-### To Uninstall
-**Delete the instances (CRs) from the cluster:**
-
-```sh
-kubectl delete -k config/samples/
-```
-
-**Delete the APIs(CRDs) from the cluster:**
-
-```sh
-make uninstall
-```
-
-**UnDeploy the controller from the cluster:**
-
-```sh
-make undeploy
-```
-
-## Project Distribution
-
-Following the options to release and provide this solution to the users.
-
-### By providing a bundle with all YAML files
-
-1. Build the installer for the image built and published in the registry:
-
-```sh
-make build-installer IMG=<some-registry>/crewlet-operator:tag
-```
-
-**NOTE:** The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without its
-dependencies.
-
-2. Using the installer
-
-Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
-the project, i.e.:
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/crewlet-operator/<tag or branch>/dist/install.yaml
-```
-
-### By providing a Helm Chart
-
-1. Build the chart using the optional helm plugin
-
-```sh
-kubebuilder edit --plugins=helm/v2-alpha
-```
-
-2. See that a chart was generated under 'dist/chart', and users
-can obtain this solution from there.
-
-**NOTE:** If you change the project, you need to update the Helm Chart
-using the same command above to sync the latest changes. Furthermore,
-if you create webhooks, you need to use the above command with
-the '--force' flag and manually ensure that any custom configuration
-previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
-is manually re-applied afterwards.
+- [docs/](docs/README.md) — the documentation index
+- [docs/getting-started.md](docs/getting-started.md) — running the operator
+  on a local cluster
+- [docs/reference/api.md](docs/reference/api.md) — the `crewlet.ai` API
+  reference, generated from the types
+- [CONTRIBUTING.md](CONTRIBUTING.md) — development setup, checks, API change
+  policy, commit conventions
+- [RELEASING.md](RELEASING.md) — how releases are cut and verified
+- [SECURITY.md](SECURITY.md) — reporting vulnerabilities, and the operator's
+  security properties
 
 ## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
 
-**NOTE:** Run `make help` for more information on all potential `make` targets
-
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
+Contributions are welcome; [CONTRIBUTING.md](CONTRIBUTING.md) has everything
+you need, and `make check` runs every gate CI runs. Every commit is signed off
+under the [DCO](DCO). Participation is governed by the
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
+[MIT](LICENSE)

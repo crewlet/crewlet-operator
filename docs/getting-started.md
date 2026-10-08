@@ -1,0 +1,71 @@
+# Getting started
+
+This page runs the operator on a local [kind](https://kind.sigs.k8s.io/)
+cluster, first as a process on your machine and then as a Deployment in the
+cluster. Every command is a make target or a tool the Makefile pins into
+`bin/`, so nothing beyond Go, Docker, make, git and curl has to be installed.
+
+> The `crewlet.ai/v1alpha1` API is still being defined, so this page covers
+> running the operator and installing its API.
+
+## Create a cluster
+
+```bash
+make kind kubectl
+bin/kind create cluster --name crewlet
+bin/kubectl cluster-info --context kind-crewlet
+```
+
+Any cluster in your current kubeconfig context works the same way; kind is
+only the quickest to throw away.
+
+## Run the manager from your machine
+
+```bash
+make install    # install the CRDs into the cluster
+make run        # build and run the manager against the current kubeconfig
+```
+
+`make run` regenerates the CRDs and RBAC first, so it always runs the code in
+your working tree. The manager runs with your kubeconfig's credentials rather
+than its own ServiceAccount, which is convenient while developing and means
+RBAC mistakes do not show up here; the in-cluster deployment below catches
+them.
+
+In another terminal, list the kinds the CRDs added:
+
+```bash
+bin/kubectl api-resources --api-group=crewlet.ai
+```
+
+## Run the manager in the cluster
+
+Build the image, load it into kind (nothing is pushed to a registry), and
+deploy it either with kustomize or with the Helm chart:
+
+```bash
+make docker-build IMG=crewlet-operator:dev
+bin/kind load docker-image crewlet-operator:dev --name crewlet
+
+make deploy IMG=crewlet-operator:dev        # kustomize: config/default
+# or
+make helm-deploy IMG=crewlet-operator:dev   # Helm: dist/chart
+```
+
+The manager runs in `crewlet-operator-system`:
+
+```bash
+bin/kubectl -n crewlet-operator-system get pods
+bin/kubectl -n crewlet-operator-system logs deploy/crewlet-operator-controller-manager
+```
+
+`make deploy` records the image in `config/manager/kustomization.yaml`; do
+not commit that change.
+
+## Clean up
+
+```bash
+make undeploy            # or: make helm-uninstall
+make uninstall           # the CRDs, and with them every crewlet.ai object
+bin/kind delete cluster --name crewlet
+```
