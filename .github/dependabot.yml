@@ -1,0 +1,59 @@
+# Automated dependency updates, one entry per dependency surface:
+#
+#   .github/workflows/*.yml   the actions CI and releases run on
+#   go.mod                    the operator's Go dependencies
+#   api/go.mod                the API module's Go dependencies
+#   Dockerfile                the builder and runtime base images
+#
+# A new surface needs its entry here in the same change: a manifest with no
+# entry never gets a pull request, which looks exactly like one with nothing
+# to update. What Dependabot cannot see (the tool versions in the Makefile,
+# .custom-gcl.yml, the e2e suite's curl image) is listed in CONTRIBUTING.md,
+# "Latest versions".
+#
+# Every entry sets `commit-message.prefix: build(deps)`: the pull request
+# title becomes a commit subject and a line in the release notes, and left
+# unset Dependabot infers a prefix from recent history.
+
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build(deps)"
+
+  # The k8s.io staging modules are released in lockstep and controller-runtime
+  # tracks one Kubernetes minor, so a bump of any of them alone either mixes
+  # generations or does not build. The group moves them in one pull request.
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      kubernetes:
+        patterns:
+          - "k8s.io/*"
+          - "sigs.k8s.io/controller-runtime"
+
+  - package-ecosystem: gomod
+    directory: "/api"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      kubernetes:
+        patterns:
+          - "k8s.io/*"
+
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build(deps)"

@@ -1,0 +1,155 @@
+name: release
+
+# Publishes a release from a `v*` tag: the multi-arch manager image, signed
+# and attested; the Helm chart as an OCI artifact; and a GitHub Release with
+# generated notes and the kustomize-rendered install.yaml. See RELEASING.md.
+#
+# API module tags (`api/v*`) do not match `v*` and release nothing here: a Go
+# module tag is published by pushing it.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+# Two runs for one tag would race to publish the same artifacts.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GOTOOLCHAIN: auto
+  IMAGE: ghcr.io/crewlet/crewlet-operator
+  CHART_REPOSITORY: oci://ghcr.io/crewlet/charts
+
+jobs:
+  image:
+    name: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Push to GHCR with the run's own token.
+      packages: write
+      # Keyless cosign signing and the provenance attestation both take an
+      # OIDC token that names this workflow run.
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No QEMU: the Dockerfile cross-compiles on the build platform, and the
+      # final stage only copies the binary.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The tag itself (v1.2.3) and its minor (v1.2); `latest` only for a
+      # tag without a pre-release suffix.
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}}
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      # Signs the manifest list by digest, so every tag that points at it
+      # carries the signature and no tag can be moved under it.
+      - name: sign the image
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  chart:
+    name: chart
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            api/go.sum
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      # The pinned helm from the Makefile; the same lint CI's verify job runs.
+      - run: make helm-lint
+      # The tag is the chart's version (without the v, as SemVer 2 requires)
+      # and its appVersion (with it), and appVersion is the image tag the
+      # chart deploys by default.
+      - name: package and push the chart
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          bin/helm package dist/chart --version "$version" --app-version "$GITHUB_REF_NAME" --destination .
+          echo "$REGISTRY_PASSWORD" | bin/helm registry login ghcr.io --username "$REGISTRY_USER" --password-stdin
+          bin/helm push "crewlet-operator-${version}.tgz" "$CHART_REPOSITORY" 2>&1 | tee push.log
+          digest="$(sed -n 's/^Digest: //p' push.log)"
+          test -n "$digest"
+          cosign sign --yes "${CHART_REPOSITORY#oci://}/crewlet-operator@${digest}"
+
+  github-release:
+    name: GitHub Release
+    needs: [image, chart]
+    runs-on: ubuntu-latest
+    permissions:
+      # Creating the release and uploading its asset.
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            api/go.sum
+      # install.yaml pins the image by digest, so the manifest deploys exactly
+      # the image this run signed even if the tag is later moved.
+      - name: render install.yaml
+        env:
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: make build-installer IMG="${IMAGE}@${DIGEST}"
+      # Notes are generated by GitHub from the pull requests merged since the
+      # previous tag, sorted by .github/release.yml. A tag with a pre-release
+      # suffix (v1.2.0-rc.1) is published as a pre-release.
+      - name: create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          prerelease=()
+          case "$GITHUB_REF_NAME" in *-*) prerelease=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes \
+            --title "$GITHUB_REF_NAME" "${prerelease[@]}" dist/install.yaml

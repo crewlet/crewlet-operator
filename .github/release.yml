@@ -1,0 +1,25 @@
+# Shapes the release notes GitHub generates for a tag (release.yml runs
+# `gh release create --generate-notes`): the pull requests merged since the
+# previous tag, sorted into the categories below by label.
+#
+# A pull request lands in the first category whose labels match. Dependabot
+# labels its own pull requests `dependencies`, so bumps sort to the bottom
+# without any convention kept by hand, and the catch-all `*` means a pull
+# request with no label is never dropped from the notes.
+#
+# These notes are the only record of what a release contains, which is why a
+# pull request's title has to read as a release note (CONTRIBUTING.md).
+changelog:
+  categories:
+    - title: Breaking changes
+      labels:
+        - breaking-change
+    - title: What's changed
+      labels:
+        - "*"
+      exclude:
+        labels:
+          - dependencies
+    - title: Dependencies
+      labels:
+        - dependencies

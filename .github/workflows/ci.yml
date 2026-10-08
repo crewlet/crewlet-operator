@@ -1,0 +1,170 @@
+name: ci
+
+# Every job calls the same make target a contributor runs locally, so the
+# pinned tools in bin/ and the flags are the Makefile's, not a second copy
+# kept here. `make check` runs the union of these jobs except e2e and the
+# image build.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Nothing by default; each job asks for what it needs.
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  # A new push to a pull request makes the previous run moot; a push to main
+  # is never cancelled, so every commit on main has a complete run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # go.mod names the toolchain; auto lets setup-go's Go fetch it.
+  GOTOOLCHAIN: auto
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            api/go.sum
+      # bin/ holds the custom golangci-lint build, which takes minutes. Its
+      # name carries the version and a hash of .custom-gcl.yml, so a stale
+      # cache entry is never used, only rebuilt.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: bin
+          key: bin-lint-${{ runner.os }}-${{ hashFiles('Makefile', '.custom-gcl.yml') }}
+      - run: make lint-config
+      - run: make lint
+
+  test:
+    name: test (envtest)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            api/go.sum
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: bin
+          key: bin-test-${{ runner.os }}-${{ hashFiles('Makefile', 'go.mod') }}
+      - run: make test
+
+  verify:
+    name: verify (generated files, go.mod)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            api/go.sum
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: bin
+          key: bin-verify-${{ runner.os }}-${{ hashFiles('Makefile', 'go.mod') }}
+      - run: make fmt-check
+      - run: make tidy-check
+      # Regenerates deepcopy, CRDs, RBAC, the chart and the API reference,
+      # and fails if any of them differs from what is committed.
+      - run: make verify-generated
+      - run: make helm-lint
+
+  build:
+    name: build (binary, image)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            api/go.sum
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: bin
+          key: bin-build-${{ runner.os }}-${{ hashFiles('Makefile', 'go.mod') }}
+      - run: make build
+      # Built, never pushed: release.yml is the only workflow that publishes.
+      - run: make docker-build IMG=crewlet-operator:ci
+
+  signoff:
+    name: sign-off
+    # Pull requests only, and the guard is load-bearing: the step reads
+    # github.event.pull_request.*, which a push event does not populate, so
+    # on a push the script would judge an empty range and pass.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The full history: a shallow checkout has neither the base commit
+          # nor the branch's own commits, so there would be no range to judge.
+          fetch-depth: 0
+      # The pull request's own base and head, not origin/main..HEAD: the
+      # checkout sits on the merge ref, and a fork's origin is the fork. The
+      # SHAs reach the shell through the environment, never by pasting
+      # ${{ }} into the script.
+      - name: every commit carries a Signed-off-by trailer
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/check-signoff.sh "$BASE_SHA" "$HEAD_SHA"
+      - run: make signoff-test
+
+  e2e:
+    name: e2e (kind)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            api/go.sum
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: bin
+          key: bin-e2e-${{ runner.os }}-${{ hashFiles('Makefile', 'go.mod') }}
+      # Creates the kind cluster with the pinned kind, builds and loads the
+      # image, deploys it with kustomize, runs the suite, deletes the cluster.
+      - run: make test-e2e
