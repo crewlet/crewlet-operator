@@ -200,13 +200,20 @@ docker-push: ## Push the manager image.
 # Dockerfile cross-compiles on the build platform, so no target here needs
 # emulation; a builder with the docker-container driver is still required to
 # push a multi-platform manifest list.
+#
+# The builder is reused if a run that was killed left it behind, named with
+# --builder rather than made the default with `buildx use` (which would change
+# what every later `docker buildx` on the machine builds with), and removed by
+# a trap once the build has finished, so its exit status is the build's own:
+# a failed build or push fails the target.
 PLATFORMS ?= linux/amd64,linux/arm64
+BUILDX_BUILDER ?= crewlet-operator-builder
 .PHONY: docker-buildx
 docker-buildx: ## Build and push the manager image for every platform in PLATFORMS.
-	- $(CONTAINER_TOOL) buildx create --name crewlet-operator-builder
-	$(CONTAINER_TOOL) buildx use crewlet-operator-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} .
-	- $(CONTAINER_TOOL) buildx rm crewlet-operator-builder
+	"$(CONTAINER_TOOL)" buildx inspect $(BUILDX_BUILDER) >/dev/null 2>&1 || \
+		"$(CONTAINER_TOOL)" buildx create --name $(BUILDX_BUILDER) --driver docker-container >/dev/null
+	trap '"$(CONTAINER_TOOL)" buildx rm $(BUILDX_BUILDER)' EXIT; \
+		"$(CONTAINER_TOOL)" buildx build --builder $(BUILDX_BUILDER) --push --platform=$(PLATFORMS) --tag ${IMG} .
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Render CRDs and the manager deployment into dist/install.yaml.
