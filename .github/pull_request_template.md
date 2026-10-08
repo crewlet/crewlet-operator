@@ -12,7 +12,7 @@
 - [ ] Tests added or updated; an API change comes with an envtest case that
       the API server enforces it (a CEL rule refuses what it must refuse)
 - [ ] Generated files regenerated and committed:
-      `make manifests generate chart docs`
+      `make manifests generate chart api-docs`
 - [ ] Docs updated (`docs/`) for any change to the API, behaviour, the
       deployment or a make target
 - [ ] Credentials stay references to Secrets; no field accepts a secret
