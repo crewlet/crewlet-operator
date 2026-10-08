@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
 	crewletv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
+	"github.com/crewlet/crewlet-operator/test/envtestbin"
 )
 
 var (
@@ -47,7 +48,12 @@ func run(m *testing.M) int {
 	// Outside make (an IDE, a bare go test) KUBEBUILDER_ASSETS is unset;
 	// fall back to the binaries `make setup-envtest` put into bin/k8s.
 	if os.Getenv("KUBEBUILDER_ASSETS") == "" {
-		testEnv.BinaryAssetsDirectory = envtestBinaryDir()
+		dir, err := envtestbin.Dir(filepath.Join("..", "..", "bin", "k8s"))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		testEnv.BinaryAssetsDirectory = dir
 	}
 
 	// Stop is deferred before Start is checked: a Start that fails after
@@ -78,22 +84,6 @@ func run(m *testing.M) int {
 		return 1
 	}
 	return m.Run()
-}
-
-// envtestBinaryDir returns the first directory under bin/k8s, or "" when
-// there is none.
-func envtestBinaryDir() string {
-	base := filepath.Join("..", "..", "bin", "k8s")
-	entries, err := os.ReadDir(base)
-	if err != nil {
-		return ""
-	}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			return filepath.Join(base, entry.Name())
-		}
-	}
-	return ""
 }
 
 // newNamespace creates a namespace for one test, so that the names a test

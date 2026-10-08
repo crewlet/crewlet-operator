@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
+	"github.com/crewlet/crewlet-operator/test/envtestbin"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -57,8 +58,9 @@ var _ = BeforeSuite(func() {
 
 	// Outside make (an IDE, a bare go test) KUBEBUILDER_ASSETS is unset; fall
 	// back to the binaries `make setup-envtest` downloaded into bin/k8s.
-	if dir := firstEnvTestBinaryDir(); dir != "" {
-		testEnv.BinaryAssetsDirectory = dir
+	if os.Getenv("KUBEBUILDER_ASSETS") == "" {
+		testEnv.BinaryAssetsDirectory, err = envtestbin.Dir(filepath.Join("..", "..", "bin", "k8s"))
+		Expect(err).NotTo(HaveOccurred())
 	}
 
 	cfg, err = testEnv.Start()
@@ -76,21 +78,3 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })
-
-// firstEnvTestBinaryDir returns the first directory under bin/k8s, where
-// `make setup-envtest` puts the kube-apiserver and etcd binaries, or "" when
-// there is none and envtest has to rely on KUBEBUILDER_ASSETS.
-func firstEnvTestBinaryDir() string {
-	basePath := filepath.Join("..", "..", "bin", "k8s")
-	entries, err := os.ReadDir(basePath)
-	if err != nil {
-		logf.Log.Info("No envtest binaries in bin/k8s; relying on KUBEBUILDER_ASSETS", "path", basePath, "reason", err.Error())
-		return ""
-	}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			return filepath.Join(basePath, entry.Name())
-		}
-	}
-	return ""
-}
