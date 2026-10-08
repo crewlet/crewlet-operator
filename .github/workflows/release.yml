@@ -2,7 +2,9 @@ name: release
 
 # Publishes a release from a `v*` tag: the multi-arch manager image, signed
 # and attested; the Helm chart as an OCI artifact; and a GitHub Release with
-# generated notes and the kustomize-rendered install.yaml. See RELEASING.md.
+# generated notes and the kustomize-rendered install.yaml. Nothing is
+# published unless the tagged commit is on main and passes `make check`. See
+# RELEASING.md.
 #
 # API module tags (`api/v*`) do not match `v*` and release nothing here: a Go
 # module tag is published by pushing it.
@@ -24,8 +26,40 @@ env:
   CHART_REPOSITORY: oci://ghcr.io/crewlet/charts
 
 jobs:
+  # A tag is a claim that its commit is fit to ship, and nothing else checks
+  # that claim: the tag protection in RELEASING.md decides who may push one,
+  # not which commit it may point at. So the release first proves both halves
+  # itself, before anything is published: the commit is on main (it went
+  # through review and CI there), and it passes every gate CI runs, on this
+  # very checkout, with the pinned tools.
+  gate:
+    name: gate (on main, make check)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Every branch and tag, so origin/main is there to compare with.
+          fetch-depth: 0
+      - name: the tagged commit is on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME points at $GITHUB_SHA, which is not on main; tag a commit of main."
+            exit 1
+          fi
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            api/go.sum
+      - run: make check
+
   image:
     name: image
+    needs: gate
     runs-on: ubuntu-latest
     permissions:
       contents: read

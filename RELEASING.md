@@ -15,7 +15,8 @@ nothing for a tag to disagree with: **the tag is the version.**
 
 ```mermaid
 flowchart TD
-    T["git push origin v0.2.0"] --> I
+    T["git push origin v0.2.0"] --> G
+    G["gate<br/>the tagged commit is on main<br/>make check passes on it"] --> I
     I["image<br/>buildx: linux/amd64 + linux/arm64<br/>ghcr.io/crewlet/crewlet-operator:v0.2.0, :v0.2, :latest"] --> S
     S["sign + attest<br/>cosign keyless signature<br/>GitHub build-provenance attestation"] --> C
     C["chart<br/>helm package --version 0.2.0 --app-version v0.2.0<br/>push to oci://ghcr.io/crewlet/charts, sign"] --> R
@@ -42,9 +43,16 @@ What a release publishes:
 A tag with a pre-release suffix (`v0.2.0-rc.1`) is published as a GitHub
 pre-release and does not move `latest`.
 
+The first job, `gate`, publishes nothing: it fails the release unless the
+tagged commit is an ancestor of `main` and `make check` passes on it. A tag on
+an unmerged branch, or on a commit that broke since it merged, releases
+nothing, so a mistaken tag costs only its deletion.
+
 ### Cutting a release
 
-1. Make sure `main` is green, and that the pull request titles since the last
+1. Make sure `main` is green (the `gate` job refuses a commit that is not on
+   `main` or does not pass `make check`, but finding out from a failed
+   release is slower), and that the pull request titles since the last
    tag read as release notes (`gh pr list --state merged --base main`); fix a
    title before tagging, because the notes are generated from them.
 2. Choose the version. While the API is `v1alpha1`, releases are `v0.Y.Z`:
@@ -97,8 +105,8 @@ the tree:
 A tag that produced broken artifacts is not moved or reused: the image and
 chart may already have been pulled, and their signatures name the tag. Fix
 the problem on `main` and release the next patch version. If the workflow
-failed before publishing anything, delete the tag (`git push --delete origin
-vX.Y.Z`), fix, and tag again.
+failed before publishing anything (a failed `gate` publishes nothing), delete
+the tag (`git push --delete origin vX.Y.Z`), fix, and tag again.
 
 ## The API module: `api/v*` tags
 
