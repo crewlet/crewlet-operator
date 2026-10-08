@@ -5,10 +5,10 @@ cluster, first as a process on your machine and then as a Deployment in the
 cluster. Every command is a make target or a tool the Makefile pins into
 `bin/`, so nothing beyond Go, Docker, make, git and curl has to be installed.
 
-> The `crewlet.ai/v1alpha1` API is defined and the API server enforces it,
-> but the controllers that act on it are still being built: the objects this
-> page creates are validated and stored, and the operator reports whether
-> each Company is accepted, but no engine starts yet.
+> The `crewlet.ai/v1alpha1` API is defined and the API server enforces it.
+> The operator accepts each Company and runs its engine, but does not yet give
+> the engine its company document: the engine starts unconfigured, and the
+> Company stays `Ready=False` with the reason `ConfigPending`.
 
 ## Create a cluster
 
@@ -86,6 +86,20 @@ bin/kubectl get company nimbus -n nimbus \
 # The Company runs with EngineClass standard and is within its limits.
 ```
 
+The operator then creates the company's engine: its keyring and API token
+Secrets, the data StatefulSet and its Services and, as the sample class asks, a
+NetworkPolicy and a webhook route through the Gateway `gateway-system/public`
+([How a company's engine runs](concepts/runtime.md) lists them all). A kind
+cluster has no Gateway API, and the engine has no document to run yet, so
+expect the conditions to say that the routes are not exposed and the pod is
+not ready:
+
+```bash
+bin/kubectl get statefulsets,services,secrets -n nimbus -l crewlet.ai/company=nimbus
+bin/kubectl get company nimbus -n nimbus \
+  -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}{"\n"}{end}'
+```
+
 The objects reference Secrets (API keys, each agent's Slack and GitHub
 credentials) that the samples do not include, because a credential is never
 written into an object; [Credentials](concepts/credentials.md) lists which
@@ -100,7 +114,13 @@ bin/kubectl patch seat ana -n nimbus --type merge -p '{"spec":{"handle":"anna"}}
 
 ## Clean up
 
+Delete the Company while the operator still runs: its finalizer waits for the
+engine to stop and, with the sample's `deletionPolicy: Retain`, keeps the data
+volume claim and the keyring Secret, which the namespace's deletion then
+removes.
+
 ```bash
+bin/kubectl delete company nimbus -n nimbus
 make undeploy            # or: make helm-uninstall
 bin/kubectl delete namespace nimbus
 bin/kubectl delete engineclass standard

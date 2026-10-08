@@ -11,10 +11,12 @@ keeps the engine's live configuration equal to what the resources say.
 > is being defined and will change without notice; nothing has been released
 > yet. Do not run it against anything you care about.
 >
-> Today the API server enforces the API's rules, and the operator reports
-> whether each `Company` is accepted (its `EngineClass` resolves and its
-> objects stay within the class's limits). It does not run engines yet: what
-> follows is the design the API is built for, not what a cluster does today.
+> Today the API server enforces the API's rules, and the operator accepts
+> each `Company` (its `EngineClass` resolves and its objects stay within the
+> class's limits) and runs its engine: the StatefulSet, storage, keyring and
+> API tokens, Services, webhook routes and network policy. It does not yet
+> apply the company document: the second reconciler below is the design the
+> API is built for, not what a cluster does today.
 
 ## How it works
 

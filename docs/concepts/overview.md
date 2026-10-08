@@ -11,9 +11,10 @@ the engine, and who owns the document once the engine runs. Every field is in
 the [API reference](../reference/api.md).
 
 > The `crewlet.ai/v1alpha1` API is alpha. The API server enforces every rule
-> on this page today, and the operator sets a Company's `Accepted` condition;
-> the rest of what this page describes is the design the controllers are
-> being built to, and creating the objects does not yet start an engine.
+> on this page today, and the operator accepts each Company and runs its
+> engine. It does not yet apply the company document to the engine: what this
+> page says about rendering, applying and the children's status is the design
+> the config reconciler is being built to.
 
 ## The kinds
 
@@ -111,7 +112,8 @@ every seat and runs the background workers. Its size, image and storage come
 from the `EngineClass`; `Company.spec.topology.data.replicas` is 1, the only
 value v1alpha1 admits. A company can be stopped with `spec.suspend` (its volume is kept), and
 `spec.deletionPolicy` says whether its volume outlives the Company (`Retain`,
-the default) or goes with it (`Delete`).
+the default) or goes with it (`Delete`). [How a company's engine
+runs](runtime.md) lists every object the operator creates for it.
 
 Vendors deliver webhooks to the company's public address, which the class
 derives from a host name template (`{{uid}}.hooks.example.com`) or which the
