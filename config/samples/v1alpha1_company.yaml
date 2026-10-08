@@ -28,6 +28,9 @@ spec:
   llm:
     order:
       - name: anthropic
+    # The class's platform-claude model, which the seat ana uses for its
+    # cheap auxiliary work, is offered only to companies that opt in.
+    usePlatformProviders: true
   embeddings:
     type: OpenAI
     model: text-embedding-3-large
