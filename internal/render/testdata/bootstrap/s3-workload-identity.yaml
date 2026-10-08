@@ -1,0 +1,40 @@
+api:
+  auth:
+    allow_anonymous_read: false
+    tokens:
+    - id: operator
+      token: ${CREWLET_TOKEN_OPERATOR}
+    - id: access
+      token: ${CREWLET_TOKEN_ACCESS}
+  host: 0.0.0.0
+  port: 8080
+coordination:
+  type: embedded-kv
+node:
+  id: ${CREWLET_NODE_ID}
+  labels:
+    crewlet.ai/pool: data
+  roles:
+  - data
+  - ingress
+  - seats
+  - workers
+retention:
+  backup_owner: sre@example.com
+secrets:
+  active_key_id: k1
+  keys:
+  - id: k1
+    material: ${CREWLET_SECRET_KEY_K1}
+store:
+  objects:
+    backend: s3
+    s3:
+      bucket: crewlet-tenants
+      prefix: tenant-nimbus/nimbus/
+      region: eu-central-1
+  path: /var/lib/crewlet/store/crewlet.db
+stream:
+  replicas: 1
+  store_dir: /var/lib/crewlet/stream
+  type: embedded

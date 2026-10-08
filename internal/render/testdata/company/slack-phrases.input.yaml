@@ -1,0 +1,24 @@
+# Slack with every company-wide setting: when a seat shows it is working,
+# and what the indicator says.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: chatty
+spec:
+  engineClassName: basic
+  companyName: Chatty
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: slack
+spec:
+  companyRef:
+    name: chatty
+  slack:
+    typingStatus: Always
+    statusPhrases:
+      onboarding: [getting to know the team...]
+      execute: [working on it...]
+      review: [double-checking...]
+      default: [thinking...]

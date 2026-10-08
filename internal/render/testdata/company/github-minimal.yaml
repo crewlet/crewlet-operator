@@ -1,0 +1,6 @@
+integrations:
+  github:
+    enabled: true
+    webhook_secret: ${K8S_TENANT_NIMBUS_FORGE_GITHUB_WEBHOOKSECRET}
+  public_base_url: https://github-minimal.hooks.example.com
+name: Forge

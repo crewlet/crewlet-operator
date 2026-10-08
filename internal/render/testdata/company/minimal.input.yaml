@@ -1,0 +1,9 @@
+# The smallest Company the API admits, with no children: Crewlet accepts a
+# company with no seats and no model provider.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: tiny
+spec:
+  engineClassName: basic
+  companyName: Tiny

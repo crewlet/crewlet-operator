@@ -1,0 +1,31 @@
+# Slack with nothing overridden, which Crewlet spells as an empty block, and
+# one agent seat with its own Slack app.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: chatty
+spec:
+  engineClassName: basic
+  companyName: Chatty
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: slack
+spec:
+  companyRef:
+    name: chatty
+  slack: {}
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: concierge
+spec:
+  companyRef:
+    name: chatty
+  displayName: Concierge
+  integrations:
+    slack:
+      credentialsSecretRef:
+        name: concierge-slack

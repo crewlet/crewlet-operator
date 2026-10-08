@@ -166,6 +166,8 @@ Whatever the policy, a document is applied whole or not at all. When one
 object is wrong — a Seat whose Secret is missing, a Unit whose parent does not
 exist — the next revision waits, the object reports why in its conditions,
 and the engine keeps running the last revision that worked.
+[What the engine is given](company-document.md) shows the document the
+objects render to, and what keeps one from rendering.
 
 ## Status
 

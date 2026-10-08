@@ -1,0 +1,40 @@
+integrations:
+  github:
+    enabled: true
+    provisioning:
+      org: forge
+      org_webhook: "true"
+      repos:
+      - forge/api
+      - forge/web
+    token: ${K8S_TENANT_NIMBUS_FORGE_GITHUB_ORGTOKEN}
+    url: https://github.forge.example
+    webhook_secret: ${K8S_TENANT_NIMBUS_FORGE_GITHUB_WEBHOOKSECRET}
+  public_base_url: https://github-enterprise.hooks.example.com
+name: Forge
+roles:
+- handle: builder
+  integrations:
+    github:
+      app_id: 42
+      app_slug: forge-builder
+      installation_id: 4242
+      private_key: ${K8S_TENANT_NIMBUS_BUILDER_GITHUB_APP_PRIVATEKEY}
+      tier: full_access
+      webhook_secret: ${K8S_TENANT_NIMBUS_BUILDER_GITHUB_APP_WEBHOOKSECRET}
+  kind: agent
+  name: builder
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- handle: reviewer
+  integrations:
+    github:
+      repos:
+      - forge/api
+      tier: read_only
+  kind: agent
+  name: reviewer
+  placement:
+    labels:
+      crewlet.ai/pool: data

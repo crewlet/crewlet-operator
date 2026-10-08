@@ -1,0 +1,14 @@
+integrations:
+  public_base_url: https://slack-phrases.hooks.example.com
+  slack:
+    status_phrases:
+      default:
+      - thinking...
+      execute:
+      - working on it...
+      onboarding:
+      - getting to know the team...
+      review:
+      - double-checking...
+    typing_status: always
+name: Chatty

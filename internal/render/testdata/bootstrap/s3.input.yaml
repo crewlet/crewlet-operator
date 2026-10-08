@@ -1,0 +1,32 @@
+# An S3-compatible bucket shared by every company of the class, reached with
+# keys the platform provides.
+apiVersion: crewlet.ai/v1alpha1
+kind: EngineClass
+metadata:
+  name: bucket
+spec:
+  engine:
+    image: ghcr.io/crewlet/crewlet:v0.1.0
+  data:
+    storage:
+      size: 10Gi
+  objects:
+    backend: S3
+    s3:
+      endpoint: https://minio.storage.example
+      region: us-east-1
+      bucket: crewlet-tenants
+      prefix: "tenants/{{uid}}/"
+      pathStyle: true
+      credentialsSecretRef:
+        namespace: crewlet-system
+        name: tenant-bucket
+  retention:
+    backupOwner: storage-team
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: nimbus
+spec:
+  companyName: Nimbus

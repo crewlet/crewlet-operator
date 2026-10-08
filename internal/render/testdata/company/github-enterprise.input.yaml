@@ -1,0 +1,61 @@
+# GitHub Enterprise Server with every company-wide setting, and agent seats
+# with and without an installed app of their own.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: forge
+spec:
+  engineClassName: basic
+  companyName: Forge
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: ghes
+spec:
+  companyRef:
+    name: forge
+  github:
+    url: https://github.forge.example
+    webhookSecretRef:
+      name: forge-github
+      key: webhookSecret
+    tokenSecretRef:
+      name: forge-github
+      key: orgToken
+    provisioning:
+      org: forge
+      repos:
+        - forge/api
+        - forge/web
+      orgWebhook: Require
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: builder
+spec:
+  companyRef:
+    name: forge
+  integrations:
+    github:
+      tier: FullAccess
+      app:
+        id: 42
+        slug: forge-builder
+        installationID: 4242
+        credentialsSecretRef:
+          name: builder-github-app
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: reviewer
+spec:
+  companyRef:
+    name: forge
+  integrations:
+    github:
+      tier: ReadOnly
+      repos:
+        - forge/api

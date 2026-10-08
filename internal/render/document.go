@@ -1,0 +1,259 @@
+package render
+
+// The types in this file are the company document in Crewlet's own shape:
+// each field carries the key Crewlet reads (internal/config in Crewlet), and
+// nothing else. They exist only to be encoded. A field the custom resources
+// left unset is omitted, so the engine applies its own default rather than a
+// copy of it frozen into the operator.
+
+type companyDoc struct {
+	Name         string          `json:"name"`
+	Mission      string          `json:"mission,omitempty"`
+	Vision       string          `json:"vision,omitempty"`
+	Policies     []string        `json:"policies,omitempty"`
+	Timezone     string          `json:"timezone,omitempty"`
+	Tracker      trackerDoc      `json:"tracker,omitzero"`
+	Knowledge    knowledgeDoc    `json:"knowledge,omitzero"`
+	TokenBudget  tokenBudgetDoc  `json:"token_budget,omitzero"`
+	Providers    providersDoc    `json:"providers,omitzero"`
+	Integrations integrationsDoc `json:"integrations,omitzero"`
+	MCPServers   []mcpServerDoc  `json:"mcp_servers,omitempty"`
+	Roles        []roleDoc       `json:"roles,omitempty"`
+	Units        []unitDoc       `json:"units,omitempty"`
+}
+
+type trackerDoc struct {
+	Backend string            `json:"backend,omitempty"`
+	Native  *trackerNativeDoc `json:"native,omitempty"`
+}
+
+type trackerNativeDoc struct {
+	InboxRetentionDays int32 `json:"inbox_retention_days,omitempty"`
+}
+
+type knowledgeDoc struct {
+	Backend         string   `json:"backend,omitempty"`
+	Scope           []string `json:"scope,omitempty"`
+	SkillsContainer *string  `json:"skills_container,omitempty"`
+	RootSpace       string   `json:"root_space,omitempty"`
+	Vectors         *bool    `json:"vectors,omitempty"`
+}
+
+type tokenBudgetDoc struct {
+	Day   int64 `json:"day,omitempty"`
+	Week  int64 `json:"week,omitempty"`
+	Month int64 `json:"month,omitempty"`
+}
+
+type providersDoc struct {
+	LLM        map[string]llmProviderDoc `json:"llm,omitempty"`
+	LLMOrder   []string                  `json:"llm_order,omitempty"`
+	Embeddings *embeddingsDoc            `json:"embeddings,omitempty"`
+	Sandbox    *sandboxDoc               `json:"sandbox,omitempty"`
+}
+
+type llmProviderDoc struct {
+	Type                  string        `json:"type"`
+	Model                 string        `json:"model"`
+	ClaudeModel           string        `json:"claude_model,omitempty"`
+	APIKeys               []string      `json:"api_keys,omitempty"`
+	BaseURL               string        `json:"base_url,omitempty"`
+	Reasoning             *bool         `json:"reasoning,omitempty"`
+	ReasoningEffort       string        `json:"reasoning_effort,omitempty"`
+	ReasoningBudgetTokens int32         `json:"reasoning_budget_tokens,omitempty"`
+	TimeoutSeconds        int32         `json:"timeout_seconds,omitempty"`
+	Cooldowns             *cooldownsDoc `json:"cooldowns,omitempty"`
+}
+
+type cooldownsDoc struct {
+	RateLimitSeconds int32 `json:"rate_limit_seconds,omitempty"`
+	AuthSeconds      int32 `json:"auth_seconds,omitempty"`
+}
+
+type embeddingsDoc struct {
+	Type           string `json:"type"`
+	Model          string `json:"model"`
+	APIKey         string `json:"api_key,omitempty"`
+	BaseURL        string `json:"base_url,omitempty"`
+	Dimensions     int32  `json:"dimensions,omitempty"`
+	MaxInputTokens int32  `json:"max_input_tokens,omitempty"`
+	MaxBatchInputs int32  `json:"max_batch_inputs,omitempty"`
+	MaxBatchTokens int32  `json:"max_batch_tokens,omitempty"`
+}
+
+type sandboxDoc struct {
+	E2B                    e2bDoc         `json:"e2b"`
+	DefaultRunIn           string         `json:"default_run_in"`
+	DefaultCodingAgent     string         `json:"default_coding_agent,omitempty"`
+	DefaultTimeoutSeconds  int32          `json:"default_timeout_seconds,omitempty"`
+	DefaultPauseTTLSeconds *int32         `json:"default_pause_ttl_seconds,omitempty"`
+	DefaultMaxTurns        *int32         `json:"default_max_turns,omitempty"`
+	Setup                  []setupStepDoc `json:"setup,omitempty"`
+}
+
+type e2bDoc struct {
+	APIKey   string `json:"api_key"`
+	Domain   string `json:"domain,omitempty"`
+	Template string `json:"template,omitempty"`
+}
+
+type setupStepDoc struct {
+	Name           string            `json:"name"`
+	Files          map[string]string `json:"files,omitempty"`
+	Commands       []string          `json:"commands,omitempty"`
+	Env            map[string]string `json:"env,omitempty"`
+	Brief          string            `json:"brief,omitempty"`
+	TimeoutSeconds int32             `json:"timeout_seconds,omitempty"`
+}
+
+type integrationsDoc struct {
+	// Slack is a pointer because an empty block is meaningful to Crewlet:
+	// `slack: {}` turns Slack on with nothing overridden.
+	Slack                *slackDoc  `json:"slack,omitempty"`
+	GitHub               *githubDoc `json:"github,omitempty"`
+	PublicBaseURL        string     `json:"public_base_url,omitempty"`
+	CheckIntervalSeconds int32      `json:"check_interval_seconds,omitempty"`
+}
+
+type slackDoc struct {
+	TypingStatus  string           `json:"typing_status,omitempty"`
+	StatusPhrases statusPhrasesDoc `json:"status_phrases,omitzero"`
+}
+
+type statusPhrasesDoc struct {
+	Onboarding []string `json:"onboarding,omitempty"`
+	Execute    []string `json:"execute,omitempty"`
+	Review     []string `json:"review,omitempty"`
+	Default    []string `json:"default,omitempty"`
+}
+
+type githubDoc struct {
+	Enabled       bool                   `json:"enabled"`
+	URL           string                 `json:"url,omitempty"`
+	WebhookSecret string                 `json:"webhook_secret"`
+	Token         string                 `json:"token,omitempty"`
+	Provisioning  *githubProvisioningDoc `json:"provisioning,omitempty"`
+}
+
+type githubProvisioningDoc struct {
+	Org        string   `json:"org,omitempty"`
+	Repos      []string `json:"repos,omitempty"`
+	OrgWebhook string   `json:"org_webhook,omitempty"`
+}
+
+type mcpServerDoc struct {
+	Name                  string                        `json:"name"`
+	Transport             string                        `json:"transport"`
+	Shared                *bool                         `json:"shared,omitempty"`
+	Command               string                        `json:"command,omitempty"`
+	Args                  []string                      `json:"args,omitempty"`
+	Env                   map[string]string             `json:"env,omitempty"`
+	URL                   string                        `json:"url,omitempty"`
+	Headers               map[string]string             `json:"headers,omitempty"`
+	ToolPrefix            string                        `json:"tool_prefix,omitempty"`
+	ToolAnnotations       map[string]toolAnnotationsDoc `json:"tool_annotations,omitempty"`
+	StartupTimeoutSeconds int32                         `json:"startup_timeout_seconds,omitempty"`
+	RequestTimeoutSeconds int32                         `json:"request_timeout_seconds,omitempty"`
+}
+
+type toolAnnotationsDoc struct {
+	ReadOnly    *bool `json:"read_only,omitempty"`
+	Destructive *bool `json:"destructive,omitempty"`
+	Idempotent  *bool `json:"idempotent,omitempty"`
+	OpenWorld   *bool `json:"open_world,omitempty"`
+}
+
+type unitDoc struct {
+	Name      string                       `json:"name"`
+	ID        string                       `json:"id"`
+	Type      string                       `json:"type,omitempty"`
+	Purpose   string                       `json:"purpose,omitempty"`
+	Lead      string                       `json:"lead,omitempty"`
+	Goals     []string                     `json:"goals,omitempty"`
+	Channel   string                       `json:"channel,omitempty"`
+	Knowledge []string                     `json:"knowledge,omitempty"`
+	MCPEnv    map[string]map[string]string `json:"mcp_env,omitempty"`
+	Project   string                       `json:"project,omitempty"`
+	Space     string                       `json:"space,omitempty"`
+	Roles     []roleDoc                    `json:"roles,omitempty"`
+	Children  []unitDoc                    `json:"children,omitempty"`
+}
+
+type roleDoc struct {
+	Name                 string                       `json:"name"`
+	Handle               string                       `json:"handle"`
+	Kind                 string                       `json:"kind"`
+	Email                string                       `json:"email,omitempty"`
+	Contact              *contactDoc                  `json:"contact,omitempty"`
+	Availability         string                       `json:"availability,omitempty"`
+	Goal                 string                       `json:"goal,omitempty"`
+	Backstory            string                       `json:"backstory,omitempty"`
+	Responsibilities     []string                     `json:"responsibilities,omitempty"`
+	BehavioralGuidelines []string                     `json:"behavioral_guidelines,omitempty"`
+	Manages              []string                     `json:"manages,omitempty"`
+	Workers              []string                     `json:"workers,omitempty"`
+	TokenBudget          tokenBudgetDoc               `json:"token_budget,omitzero"`
+	LLM                  phaseLLMDoc                  `json:"llm,omitzero"`
+	LearningEnabled      *bool                        `json:"learning_enabled,omitempty"`
+	MCPEnv               map[string]map[string]string `json:"mcp_env,omitempty"`
+	Sandbox              *roleSandboxDoc              `json:"sandbox,omitempty"`
+	Placement            *placementDoc                `json:"placement,omitempty"`
+	Integrations         roleIntegrationsDoc          `json:"integrations,omitzero"`
+	Project              string                       `json:"project,omitempty"`
+	Space                string                       `json:"space,omitempty"`
+}
+
+type contactDoc struct {
+	SlackUserID string `json:"slack_user_id,omitempty"`
+	GitHubLogin string `json:"github_login,omitempty"`
+}
+
+// phaseLLMDoc is Crewlet's per-phase mapping form of a seat's llm field. The
+// mapping is always used, even for a default chain alone, so that the shape
+// of the document does not depend on how many phases a Seat sets.
+type phaseLLMDoc struct {
+	Default   []string `json:"default,omitempty"`
+	Review    []string `json:"review,omitempty"`
+	Subagent  []string `json:"subagent,omitempty"`
+	Auxiliary []string `json:"auxiliary,omitempty"`
+	Judge     []string `json:"judge,omitempty"`
+	Sandbox   []string `json:"sandbox,omitempty"`
+}
+
+type roleSandboxDoc struct {
+	Enabled         bool              `json:"enabled"`
+	CodingAgent     string            `json:"coding_agent,omitempty"`
+	PauseTTLSeconds *int32            `json:"pause_ttl_seconds,omitempty"`
+	MaxTurns        *int32            `json:"max_turns,omitempty"`
+	MCP             *roleSandboxMCP   `json:"mcp,omitempty"`
+	Env             map[string]string `json:"env,omitempty"`
+	Setup           []setupStepDoc    `json:"setup,omitempty"`
+}
+
+type roleSandboxMCP struct {
+	Servers []string `json:"servers"`
+}
+
+type placementDoc struct {
+	Labels map[string]string `json:"labels"`
+}
+
+type roleIntegrationsDoc struct {
+	Slack  *roleSlackDoc  `json:"slack,omitempty"`
+	GitHub *roleGitHubDoc `json:"github,omitempty"`
+}
+
+type roleSlackDoc struct {
+	BotToken      string `json:"bot_token"`
+	SigningSecret string `json:"signing_secret"`
+}
+
+type roleGitHubDoc struct {
+	Tier           string   `json:"tier,omitempty"`
+	Repos          []string `json:"repos,omitempty"`
+	AppID          int64    `json:"app_id,omitempty"`
+	AppSlug        string   `json:"app_slug,omitempty"`
+	InstallationID int64    `json:"installation_id,omitempty"`
+	PrivateKey     string   `json:"private_key,omitempty"`
+	WebhookSecret  string   `json:"webhook_secret,omitempty"`
+}

@@ -1,0 +1,19 @@
+mission: Answer every support email within a day.
+name: Solo
+providers:
+  llm:
+    claude:
+      api_keys:
+      - ${K8S_TENANT_NIMBUS_ANTHROPIC_APIKEY}
+      model: claude-sonnet-5
+      type: anthropic
+  llm_order:
+  - claude
+roles:
+- goal: Answer support email.
+  handle: support
+  kind: agent
+  name: support
+  placement:
+    labels:
+      crewlet.ai/pool: data

@@ -1,0 +1,21 @@
+# GitHub with only the webhook secret: github.com, and no organization
+# token, so each seat's own app registers its own webhooks.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: forge
+spec:
+  engineClassName: basic
+  companyName: Forge
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: github
+spec:
+  companyRef:
+    name: forge
+  github:
+    webhookSecretRef:
+      name: forge-github
+      key: webhookSecret

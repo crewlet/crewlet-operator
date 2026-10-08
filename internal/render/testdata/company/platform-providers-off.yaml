@@ -1,0 +1,10 @@
+name: Bring Your Own Key
+providers:
+  llm:
+    own-openai:
+      api_keys:
+      - ${K8S_TENANT_NIMBUS_OPENAI_APIKEY}
+      model: gpt-5
+      type: openai
+  llm_order:
+  - own-openai

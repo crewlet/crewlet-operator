@@ -1,0 +1,153 @@
+integrations:
+  github:
+    enabled: true
+    provisioning:
+      org: nimbus-hq
+      org_webhook: auto
+    token: ${K8S_TENANT_NIMBUS_NIMBUS_GITHUB_ORGTOKEN}
+    webhook_secret: ${K8S_TENANT_NIMBUS_NIMBUS_GITHUB_WEBHOOKSECRET}
+  public_base_url: https://nimbus.hooks.example.com
+  slack:
+    typing_status: addressed
+knowledge:
+  backend: native
+learning:
+  enabled: true
+mcp_servers:
+- name: github
+  request_timeout_seconds: 60
+  shared: false
+  tool_prefix: gh_
+  transport: http
+  url: https://api.githubcopilot.com/mcp/
+mission: Turn any hardware into cloud-native infrastructure.
+name: Nimbus
+policies:
+- Communicate decisions in writing.
+- Never push directly to the default branch.
+providers:
+  embeddings:
+    api_key: ${K8S_TENANT_NIMBUS_NIMBUS_OPENAI_APIKEY}
+    model: text-embedding-3-large
+    type: openai
+  llm:
+    anthropic:
+      api_keys:
+      - ${K8S_TENANT_NIMBUS_NIMBUS_ANTHROPIC_APIKEY}
+      model: claude-sonnet-5
+      reasoning_effort: high
+      timeout_seconds: 600
+      type: anthropic
+    platform-claude:
+      api_keys:
+      - ${K8S_CREWLET_SYSTEM_PLATFORM_ANTHROPIC_APIKEY}
+      model: claude-sonnet-5
+      type: anthropic
+  llm_order:
+  - anthropic
+  - platform-claude
+  sandbox:
+    default_coding_agent: claude-code
+    default_pause_ttl_seconds: 1800
+    default_run_in: e2b
+    e2b:
+      api_key: ${K8S_TENANT_NIMBUS_NIMBUS_E2B_APIKEY}
+roles:
+- availability: CET business hours
+  contact:
+    github_login: jane-founder
+    slack_user_id: U0FOUNDER
+  goal: Own Nimbus's direction and make the final call on what ships.
+  handle: jane
+  kind: human
+  manages:
+  - Agent CTO
+  name: Jane Founder
+timezone: Europe/Berlin
+token_budget:
+  day: 3000000
+  month: 40000000
+tracker:
+  backend: native
+turn_engine:
+  extension_enabled: true
+units:
+- children:
+  - channel: '#platform'
+    goals:
+    - p99 API latency under 200ms
+    id: platform
+    lead: Ana (Platform Engineer)
+    name: Platform Engineering
+    project: PLAT
+    purpose: Keep the platform boring.
+    roles:
+    - behavioral_guidelines:
+      - Prefer small pull requests.
+      email: ana@nimbus.example
+      goal: Keep CI green and deploys boring.
+      handle: ana
+      integrations:
+        github:
+          app_id: 1234567
+          app_slug: nimbus-ana
+          installation_id: 89012345
+          private_key: ${K8S_TENANT_NIMBUS_ANA_GITHUB_APP_PRIVATEKEY}
+          repos:
+          - nimbus-hq/nimbuscore
+          tier: review
+          webhook_secret: ${K8S_TENANT_NIMBUS_ANA_GITHUB_APP_WEBHOOKSECRET}
+        slack:
+          bot_token: ${K8S_TENANT_NIMBUS_ANA_SLACK_BOTTOKEN}
+          signing_secret: ${K8S_TENANT_NIMBUS_ANA_SLACK_SIGNINGSECRET}
+      kind: agent
+      llm:
+        auxiliary:
+        - platform-claude
+        default:
+        - anthropic
+      mcp_env:
+        github:
+          Authorization: ${K8S_TENANT_NIMBUS_ANA_GITHUB_AUTHORIZATION}
+      name: Ana (Platform Engineer)
+      placement:
+        labels:
+          crewlet.ai/pool: data
+      responsibilities:
+      - Own the deploy pipeline
+      sandbox:
+        enabled: true
+        env:
+          GITHUB_TOKEN: ${K8S_TENANT_NIMBUS_ANA_GITHUB_TOKEN}
+        mcp:
+          servers:
+          - github
+      token_budget:
+        day: 300000
+    space: PLAT
+    type: team
+  id: engineering
+  lead: Agent CTO
+  name: Engineering
+  purpose: Build and run the Nimbus platform.
+  roles:
+  - email: cto@nimbus.example
+    goal: Own Nimbus's technical architecture and engineering execution.
+    handle: cto
+    integrations:
+      slack:
+        bot_token: ${K8S_TENANT_NIMBUS_CTO_SLACK_BOTTOKEN}
+        signing_secret: ${K8S_TENANT_NIMBUS_CTO_SLACK_SIGNINGSECRET}
+    kind: agent
+    llm:
+      default:
+      - anthropic
+    manages:
+    - Platform Engineering
+    name: Agent CTO
+    placement:
+      labels:
+        crewlet.ai/pool: data
+  type: department
+vision: A control plane that turns bare metal, cloud and edge hardware into Kubernetes
+  clusters ready to serve AI workloads, and an open framework that runs on them.

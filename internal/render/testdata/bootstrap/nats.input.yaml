@@ -1,0 +1,20 @@
+# The default object store: files on the company's own event stream.
+apiVersion: crewlet.ai/v1alpha1
+kind: EngineClass
+metadata:
+  name: basic
+spec:
+  engine:
+    image: ghcr.io/crewlet/crewlet:v0.1.0
+  data:
+    storage:
+      size: 10Gi
+  retention:
+    backupOwner: platform-oncall
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: nimbus
+spec:
+  companyName: Nimbus

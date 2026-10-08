@@ -1,0 +1,138 @@
+integrations:
+  check_interval_seconds: 300
+knowledge:
+  backend: native
+  root_space: ACME
+  scope:
+  - ENG
+  - OPS
+  skills_container: ""
+  vectors: false
+mcp_servers:
+- args:
+  - --read-only
+  - --region
+  - us
+  command: catalog-mcp
+  name: catalog
+  request_timeout_seconds: 120
+  shared: true
+  startup_timeout_seconds: 30
+  tool_annotations:
+    delete_item:
+      destructive: true
+      read_only: false
+    search:
+      idempotent: true
+      open_world: false
+      read_only: true
+  tool_prefix: cat_
+  transport: stdio
+mission: Make anvils.
+name: Acme Corp
+notification_rate_limit: 5
+policies:
+- Ship small.
+roles:
+- handle: chief-of-staff
+  kind: agent
+  learning_enabled: false
+  name: Chief of Staff
+  placement:
+    labels:
+      crewlet.ai/pool: data
+  project: COS
+  space: COS
+  workers:
+  - researcher
+- availability: Mornings only
+  contact:
+    github_login: wile-e
+    slack_user_id: U0WILE
+  email: wile@acme.example
+  handle: wile
+  kind: human
+  manages:
+  - Research and Development
+  name: Wile E.
+skill_variables:
+  support_url: https://support.acme.example
+timezone: America/Phoenix
+token_budget:
+  day: 1000000
+  month: 20000000
+  week: 5000000
+tracker:
+  backend: native
+  native:
+    inbox_retention_days: 90
+turn_engine:
+  extension_enabled: false
+  max_iterations: 4
+units:
+- channel: '#rnd'
+  children:
+  - id: anvils
+    name: anvils
+    type: team
+  - children:
+    - id: alloys
+      lead: smith
+      name: Alloys Squad
+      roles:
+      - handle: smith
+        kind: agent
+        manages:
+        - welder
+        name: smith
+        placement:
+          labels:
+            crewlet.ai/pool: data
+      - handle: welder
+        kind: agent
+        name: welder
+        placement:
+          labels:
+            crewlet.ai/pool: data
+      type: squad
+    id: metals
+    name: metals
+    roles:
+    - handle: caster
+      kind: agent
+      name: caster
+      placement:
+        labels:
+          crewlet.ai/pool: data
+    type: team
+  goals:
+  - One patent a quarter
+  id: rnd
+  knowledge:
+  - The anvil handbook
+  lead: VP of R&D
+  name: Research and Development
+  project: RND
+  purpose: Invent the next anvil.
+  roles:
+  - backstory: Twenty years of anvils.
+    behavioral_guidelines:
+    - Decide in writing.
+    goal: Keep R&D pointed at what sells.
+    handle: vp
+    kind: agent
+    name: VP of R&D
+    placement:
+      labels:
+        crewlet.ai/pool: data
+    responsibilities:
+    - Roadmap
+    token_budget:
+      week: 400000
+  space: RND
+  type: division
+vision: Every coyote owns an anvil.
+workers:
+  researcher:
+    description: Finds prior art.
+    system_prompt: You search patents and summarise what you find.

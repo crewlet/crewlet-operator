@@ -1,0 +1,207 @@
+# An org chart three units deep, with seats at every level and outside every
+# unit, a person, management by seat and by unit, inherited and explicit
+# leads, and every company-wide field and engine setting that is not a
+# credential.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: acme
+spec:
+  engineClassName: basic
+  companyName: Acme Corp
+  mission: Make anvils.
+  vision: Every coyote owns an anvil.
+  policies:
+    - Ship small.
+  timeZone: America/Phoenix
+  tracker:
+    backend: Native
+    native:
+      inboxRetentionDays: 90
+  knowledge:
+    backend: Native
+    scope: [ENG, OPS]
+    skillsContainer: ""
+    rootSpace: ACME
+    vectors: false
+  tokenBudget:
+    day: 1000000
+    week: 5000000
+    month: 20000000
+  integrations:
+    checkIntervalSeconds: 300
+  engineConfig:
+    - name: turn_engine
+      value:
+        max_iterations: 4
+        extension_enabled: false
+    - name: notification_rate_limit
+      value: 5
+    - name: skill_variables
+      value:
+        support_url: https://support.acme.example
+    - name: workers
+      value:
+        researcher:
+          description: Finds prior art.
+          system_prompt: You search patents and summarise what you find.
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Unit
+metadata:
+  name: rnd
+spec:
+  companyRef:
+    name: acme
+  displayName: Research and Development
+  type: Division
+  leadRef:
+    name: vp
+  purpose: Invent the next anvil.
+  goals: [One patent a quarter]
+  channel: "#rnd"
+  knowledge: [The anvil handbook]
+  project: RND
+  space: RND
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Unit
+metadata:
+  name: metals
+spec:
+  companyRef:
+    name: acme
+  type: Team
+  parentRef:
+    name: rnd
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Unit
+metadata:
+  name: alloys
+spec:
+  companyRef:
+    name: acme
+  displayName: Alloys Squad
+  type: Squad
+  parentRef:
+    name: metals
+  leadRef:
+    name: smith
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Unit
+metadata:
+  name: anvils
+spec:
+  companyRef:
+    name: acme
+  type: Team
+  parentRef:
+    name: rnd
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: wile
+spec:
+  companyRef:
+    name: acme
+  kind: Human
+  displayName: Wile E.
+  email: wile@acme.example
+  manages:
+    - kind: Unit
+      name: rnd
+  contact:
+    slackUserID: U0WILE
+    githubLogin: wile-e
+  availability: Mornings only
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: assistant
+spec:
+  companyRef:
+    name: acme
+  handle: chief-of-staff
+  displayName: Chief of Staff
+  project: COS
+  space: COS
+  workers: [researcher]
+  learningEnabled: false
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: vp
+spec:
+  companyRef:
+    name: acme
+  displayName: VP of R&D
+  unitRef:
+    name: rnd
+  goal: Keep R&D pointed at what sells.
+  backstory: Twenty years of anvils.
+  responsibilities: [Roadmap]
+  behavioralGuidelines: [Decide in writing.]
+  tokenBudget:
+    week: 400000
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: smith
+spec:
+  companyRef:
+    name: acme
+  unitRef:
+    name: alloys
+  manages:
+    - name: welder
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: welder
+spec:
+  companyRef:
+    name: acme
+  unitRef:
+    name: alloys
+  placement:
+    pool: data
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: caster
+spec:
+  companyRef:
+    name: acme
+  unitRef:
+    name: metals
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: catalog
+spec:
+  companyRef:
+    name: acme
+  transport: Stdio
+  shared: true
+  command: catalog-mcp
+  args: [--read-only, --region, us]
+  toolPrefix: cat_
+  toolAnnotations:
+    - tool: delete_item
+      destructive: true
+      readOnly: false
+    - tool: search
+      readOnly: true
+      idempotent: true
+      openWorld: false
+  startupTimeoutSeconds: 30
+  requestTimeoutSeconds: 120

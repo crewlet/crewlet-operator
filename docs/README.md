@@ -8,6 +8,7 @@ so these pages describe what exists today and grow with it.
 | [Getting started](getting-started.md) | Running the operator on a local kind cluster, from source or as an image, applying the example company, and removing it all again |
 | [How the operator models a company](concepts/overview.md) | The kinds and how they relate, the identities that never change, credentials, management policies and status |
 | [Credentials](concepts/credentials.md) | Every position in a Crewlet company that holds a credential, and the field that fills it |
+| [What the engine is given](concepts/company-document.md) | The company document and the data pod's `crewlet.yaml` the operator renders from the objects, and what blocks a document |
 | [API reference](reference/api.md) | Every kind and field of `crewlet.ai/v1alpha1`, generated from the types with `make api-docs` |
 
 For working on the operator itself, see [CONTRIBUTING.md](../CONTRIBUTING.md);

@@ -1,0 +1,42 @@
+name: Managed
+providers:
+  llm:
+    own-openai:
+      api_keys:
+      - ${K8S_TENANT_NIMBUS_OPENAI_APIKEY}
+      cooldowns:
+        auth_seconds: 120
+        rate_limit_seconds: 600
+      model: gpt-5
+      reasoning: true
+      reasoning_effort: high
+      type: openai
+    platform-claude:
+      api_keys:
+      - ${K8S_CREWLET_SYSTEM_PLATFORM_ANTHROPIC_PRIMARY}
+      - ${K8S_CREWLET_SYSTEM_PLATFORM_ANTHROPIC_SECONDARY}
+      model: claude-sonnet-5
+      reasoning_effort: medium
+      type: anthropic
+    platform-gateway:
+      base_url: https://llm.platform.example/v1
+      model: llama-4
+      timeout_seconds: 120
+      type: openai-compatible
+  llm_order:
+  - platform-claude
+  - own-openai
+  - platform-gateway
+roles:
+- handle: analyst
+  kind: agent
+  llm:
+    default:
+    - own-openai
+    - platform-claude
+    judge:
+    - platform-gateway
+  name: analyst
+  placement:
+    labels:
+      crewlet.ai/pool: data

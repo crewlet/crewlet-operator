@@ -1,0 +1,15 @@
+integrations:
+  public_base_url: https://slack.hooks.example.com
+  slack: {}
+name: Chatty
+roles:
+- handle: concierge
+  integrations:
+    slack:
+      bot_token: ${K8S_TENANT_NIMBUS_CONCIERGE_SLACK_BOTTOKEN}
+      signing_secret: ${K8S_TENANT_NIMBUS_CONCIERGE_SLACK_SIGNINGSECRET}
+  kind: agent
+  name: Concierge
+  placement:
+    labels:
+      crewlet.ai/pool: data

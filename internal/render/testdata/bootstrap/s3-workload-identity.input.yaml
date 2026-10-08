@@ -1,0 +1,26 @@
+# Amazon S3 reached with the pod's own identity: no keys, and the default
+# prefix, which keys a company's files by its namespace and name.
+apiVersion: crewlet.ai/v1alpha1
+kind: EngineClass
+metadata:
+  name: aws
+spec:
+  engine:
+    image: ghcr.io/crewlet/crewlet:v0.1.0
+  data:
+    storage:
+      size: 10Gi
+  objects:
+    backend: S3
+    s3:
+      region: eu-central-1
+      bucket: crewlet-tenants
+  retention:
+    backupOwner: sre@example.com
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: nimbus
+spec:
+  companyName: Nimbus

@@ -1,0 +1,12 @@
+# The EngineClass every case but nimbus renders with: the smallest class the
+# API admits.
+apiVersion: crewlet.ai/v1alpha1
+kind: EngineClass
+metadata:
+  name: basic
+spec:
+  engine:
+    image: ghcr.io/crewlet/crewlet:v0.1.0
+  data:
+    storage:
+      size: 10Gi

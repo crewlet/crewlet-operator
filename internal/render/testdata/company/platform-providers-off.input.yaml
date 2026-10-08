@@ -1,0 +1,41 @@
+# The same class, for a company that does not opt in: the platform's models
+# are not rendered, and the company's own provider is the only one.
+apiVersion: crewlet.ai/v1alpha1
+kind: EngineClass
+metadata:
+  name: managed
+spec:
+  engine:
+    image: ghcr.io/crewlet/crewlet:v0.1.0
+  data:
+    storage:
+      size: 10Gi
+  platformLLMProviders:
+    - name: platform-claude
+      type: Anthropic
+      model: claude-sonnet-5
+      apiKeySecretRefs:
+        - namespace: crewlet-system
+          name: platform-anthropic
+          key: primary
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: byok
+spec:
+  engineClassName: managed
+  companyName: Bring Your Own Key
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: own-openai
+spec:
+  companyRef:
+    name: byok
+  type: OpenAI
+  model: gpt-5
+  apiKeySecretRefs:
+    - name: openai
+      key: apiKey

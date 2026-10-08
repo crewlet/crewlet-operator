@@ -1,0 +1,32 @@
+# One model provider and one agent seat outside every unit: the smallest
+# company that does any work.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: solo
+spec:
+  engineClassName: basic
+  companyName: Solo
+  mission: Answer every support email within a day.
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude
+spec:
+  companyRef:
+    name: solo
+  type: Anthropic
+  model: claude-sonnet-5
+  apiKeySecretRefs:
+    - name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: support
+spec:
+  companyRef:
+    name: solo
+  goal: Answer support email.
