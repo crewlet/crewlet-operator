@@ -104,9 +104,11 @@ type LLMProviderSettings struct {
 	// +optional
 	Reasoning *bool `json:"reasoning,omitempty"`
 
-	// reasoningEffort is how hard the model thinks. For OpenAI it is sent
-	// while reasoning is on; for Anthropic it is sent on every call, and
-	// unset means High. Crewlet's `reasoning_effort`.
+	// reasoningEffort is how hard the model thinks. For Anthropic it is sent
+	// on every call, and unset means High. For OpenAI it is sent only while
+	// reasoning is true, so it requires reasoning; an OpenAICompatible
+	// provider cannot turn reasoning on and takes no reasoningEffort.
+	// Crewlet's `reasoning_effort`.
 	// +optional
 	ReasoningEffort ReasoningEffort `json:"reasoningEffort,omitempty"`
 
@@ -135,6 +137,7 @@ type LLMProviderSettings struct {
 // and the Company's model order refer to it by that name.
 // +kubebuilder:validation:XValidation:rule="!has(self.claudeModel) || self.type == 'Anthropic'",message="claudeModel applies to type Anthropic only"
 // +kubebuilder:validation:XValidation:rule="!has(self.reasoning) || self.type == 'OpenAI'",message="reasoning applies to type OpenAI only; an Anthropic model's thinking depth is reasoningEffort"
+// +kubebuilder:validation:XValidation:rule="!has(self.reasoningEffort) || self.type == 'Anthropic' || (self.type == 'OpenAI' && has(self.reasoning) && self.reasoning)",message="reasoningEffort is sent to an OpenAI model only while reasoning is true, and never to an OpenAICompatible one"
 // +kubebuilder:validation:XValidation:rule="!has(self.reasoningBudgetTokens) || self.type == 'Anthropic'",message="reasoningBudgetTokens applies to type Anthropic only"
 // +kubebuilder:validation:XValidation:rule="self.type != 'OpenAICompatible' || has(self.baseURL)",message="baseURL is required for type OpenAICompatible, which has no default endpoint"
 // +kubebuilder:validation:XValidation:rule="self.type == 'OpenAICompatible' || has(self.apiKeySecretRefs)",message="apiKeySecretRefs needs at least one key for types Anthropic and OpenAI"

@@ -86,7 +86,9 @@ spec:
                 description: github connects GitHub.
                 properties:
                   provisioning:
-                    description: provisioning is where the webhooks are registered.
+                    description: |-
+                      provisioning is where the webhooks are registered. It requires
+                      tokenSecretRef, without which the engine registers nothing.
                     minProperties: 1
                     properties:
                       org:
@@ -174,6 +176,10 @@ spec:
                 required:
                 - webhookSecretRef
                 type: object
+                x-kubernetes-validations:
+                - message: 'provisioning needs tokenSecretRef: without an organization
+                    token the engine registers no webhooks'
+                  rule: '!has(self.provisioning) || has(self.tokenSecretRef)'
               slack:
                 description: slack connects Slack.
                 properties:

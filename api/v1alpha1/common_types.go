@@ -171,6 +171,41 @@ type EnvVar struct {
 	ValueFrom SecretValueSource `json:"valueFrom,omitzero"`
 }
 
+// NamespacedSecretValueSource says where a value set by the cluster-scoped
+// EngineClass comes from: a Secret in a namespace the platform controls.
+type NamespacedSecretValueSource struct {
+	// secretKeyRef selects the Secret key that holds the value.
+	// +required
+	SecretKeyRef NamespacedSecretKeyReference `json:"secretKeyRef,omitzero"`
+}
+
+// ClassEnvVar is an environment variable an EngineClass sets on the engine
+// pods of every Company of the class: platform wiring such as the address of
+// the platform's own API. A value from a Secret is copied by the operator into
+// a Secret it owns in each Company's namespace and referenced from the pod, as
+// telemetry headers are, so the value never appears in the pod template and the
+// platform's Secret never has to be readable from a tenant namespace.
+// +kubebuilder:validation:XValidation:rule="has(self.value) != has(self.valueFrom)",message="exactly one of value and valueFrom must be set"
+type ClassEnvVar struct {
+	// name is the variable's name.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
+	Name string `json:"name,omitempty"`
+
+	// value is the variable's literal value. An empty string is a valid
+	// value, which is why the field is a pointer.
+	// +optional
+	// +kubebuilder:validation:MaxLength=4096
+	Value *string `json:"value,omitempty"`
+
+	// valueFrom reads the value from a Secret key in a namespace the
+	// platform controls.
+	// +optional
+	ValueFrom NamespacedSecretValueSource `json:"valueFrom,omitzero"`
+}
+
 // TokenBudget caps how many LLM tokens may be spent per calendar window on the
 // company's clock (spec.timeZone of the Company). Every window is optional and
 // independent; an absent window is uncapped. It maps onto Crewlet's
@@ -326,8 +361,13 @@ const (
 	ReasonSecretNotFound = "SecretNotFound"
 
 	// ReasonConflict is Accepted=False when the object collides with
-	// another of its company: two Integrations for one vendor, or two
-	// Seats with one handle.
+	// another of its company in a way Crewlet refuses: two Integrations for
+	// one vendor; two Seats with one handle, one displayName or one contact
+	// account (contact.slackUserID or contact.githubLogin); two Units with
+	// one displayName; or an LLMProvider whose name is also the name of one
+	// of the EngineClass's platformLLMProviders the company uses, since both
+	// are keys of Crewlet's one providers.llm mapping. The message names the
+	// other object.
 	ReasonConflict = "Conflict"
 
 	// ReasonCycle is ResolvedRefs=False on a Unit whose parentRef chain
@@ -341,3 +381,42 @@ const (
 	// engine's integration check found.
 	ReasonCheckFailed = "CheckFailed"
 )
+
+// The keys a Secret must carry where a field references the whole Secret
+// (a SecretReference or a NamespacedSecretReference), and the keys of the
+// Secrets the operator writes. A program that writes or reads these Secrets
+// uses the constants rather than repeating the strings.
+const (
+	// SlackBotTokenKey holds a seat's Slack bot token, in the Secret named by
+	// a Seat's spec.integrations.slack.credentialsSecretRef.
+	SlackBotTokenKey = "botToken"
+	// SlackSigningSecretKey holds the signing secret of a seat's Slack app,
+	// in the same Secret.
+	SlackSigningSecretKey = "signingSecret"
+
+	// GitHubAppPrivateKeyKey holds a seat's GitHub App private key (PEM), in
+	// the Secret named by a Seat's
+	// spec.integrations.github.app.credentialsSecretRef.
+	GitHubAppPrivateKeyKey = "privateKey"
+	// GitHubAppWebhookSecretKey holds the secret that verifies the app's own
+	// webhook deliveries, in the same Secret.
+	GitHubAppWebhookSecretKey = "webhookSecret"
+
+	// S3AccessKeyIDKey holds the access key id, in the Secret named by an
+	// EngineClass's spec.objects.s3.credentialsSecretRef.
+	S3AccessKeyIDKey = "accessKeyID"
+	// S3SecretAccessKeyKey holds the secret access key, in the same Secret.
+	S3SecretAccessKeyKey = "secretAccessKey"
+
+	// APIAccessTokenKey holds the bearer token for a company's engine API,
+	// in the Secret the operator names in a Company's
+	// status.apiAccessSecretRef.
+	APIAccessTokenKey = "token"
+)
+
+// APIConsumerNamespaceLabel is the namespace label that, with the value
+// "true", admits the namespace's pods to the engine's port under the
+// EngineClass's networkPolicy Isolated: it is how a platform lets its own
+// components (a control plane, a dashboard) reach the engine API of every
+// company.
+const APIConsumerNamespaceLabel = "crewlet.ai/api-consumer"

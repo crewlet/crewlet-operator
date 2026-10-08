@@ -22,22 +22,45 @@ func TestUnitValidation(t *testing.T) {
 				u.Spec.LeadRef = v1.LocalObjectReference{Name: seatHandle}
 				u.Spec.Goals = []string{"p99 under 200ms"}
 				u.Spec.Channel = "#platform"
-				u.Spec.Project = "PLAT"
-				u.Spec.Space = "PLAT"
+				u.Spec.Project = containerKey
+				u.Spec.Space = containerKey
 				u.Spec.MCP = []v1.MCPCredentials{mcpCredentials("github"), mcpCredentials("datadog")}
 			},
 		},
-		// The name is the Crewlet unit id: ^[a-z][a-z0-9_-]{0,63}$.
+		// The name is the Crewlet unit id, less the '_' no Kubernetes name
+		// can hold: ^[a-z][a-z0-9-]{0,63}$.
 		{name: "a name that starts with a digit is refused", mutate: rename("1platform"), want: msgUnitID},
 		{name: "a name with a dot is refused", mutate: rename("platform.eu"), want: msgUnitID},
 		{name: "a name of 65 characters is refused", mutate: rename("p" + strings.Repeat("a", 64)), want: msgUnitID},
 		{name: "a name of 64 characters is accepted", mutate: rename("p" + strings.Repeat("a", 63))},
+		{name: "a name with an underscore is refused", mutate: rename("platform_eu"), want: msgUnitID},
 		{
 			name: "credentials for one server twice are refused",
 			mutate: func(u *v1.Unit) {
 				u.Spec.MCP = []v1.MCPCredentials{mcpCredentials("github"), mcpCredentials("github")}
 			},
-			want: msgMCPOnce,
+			want: msgDuplicate,
+		},
+		{
+			name:   "a project that is not a container key is refused",
+			mutate: func(u *v1.Unit) { u.Spec.Project = "platform-engineering" },
+			want:   "spec.project",
+		},
+		{
+			name:   "a space that is not a container key is refused",
+			mutate: func(u *v1.Unit) { u.Spec.Space = "Plat" },
+			want:   msgContainerKey,
+		},
+		{
+			name: "two credentials differing only in case are refused",
+			mutate: func(u *v1.Unit) {
+				c := mcpCredentials("github")
+				c.Env = append(c.Env, v1.MCPCredentialValue{
+					Name: "authorization", ValueFrom: fromSecret("platform-github", "authorization"),
+				})
+				u.Spec.MCP = []v1.MCPCredentials{c}
+			},
+			want: msgHeaderCase,
 		},
 		{
 			name:   "an unknown unit type is refused",
@@ -214,7 +237,22 @@ func TestSeatValidation(t *testing.T) {
 			mutate: func(s *v1.Seat) {
 				s.Spec.MCP = []v1.MCPCredentials{mcpCredentials("github"), mcpCredentials("github")}
 			},
-			want: msgMCPOnce,
+			want: msgDuplicate,
+		},
+		{
+			name:   "a worker that is no template name is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Workers = []string{"Not A Worker Key!"} },
+			want:   "spec.workers[0]",
+		},
+		{
+			name:   "a project that is not a container key is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Project = "lead" },
+			want:   msgContainerKey,
+		},
+		{
+			name:   "a space of 11 characters is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Space = "LEADERSHIP1" },
+			want:   "spec.space",
 		},
 		{
 			name: "an MCP credential that is no header or variable name is refused",

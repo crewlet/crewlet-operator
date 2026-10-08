@@ -110,11 +110,13 @@ type MCPServerSpec struct {
 
 	// headers are sent with every request to an HTTP server, shared by every
 	// instance; per-seat values belong in a Seat's or a Unit's spec.mcp.
-	// Crewlet's `headers`, a credential position.
+	// Header names are case-insensitive, so names must differ in more than
+	// case. Crewlet's `headers`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=32
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.name.lowerAscii() == a.name.lowerAscii()))",message="names must differ in more than case: HTTP header names are case-insensitive"
 	Headers []SecretHeader `json:"headers,omitempty"`
 
 	// toolPrefix is put in front of the server's tool names, to keep them

@@ -71,32 +71,38 @@ type KnowledgeSettings struct {
 	Backend KnowledgeBackend `json:"backend,omitempty"`
 
 	// scope narrows every knowledge search to these containers. Empty
-	// searches the whole company. Crewlet's `scope`.
+	// searches the whole company. Each is a container key, which Crewlet
+	// requires to be an upper-case letter followed by 1 to 9 upper-case
+	// letters or digits, such as PLAT. Crewlet's `scope`.
 	// +optional
 	// +listType=set
 	// +kubebuilder:validation:MaxItems=64
-	// +kubebuilder:validation:items:MinLength=1
-	// +kubebuilder:validation:items:MaxLength=256
+	// +kubebuilder:validation:items:MinLength=2
+	// +kubebuilder:validation:items:MaxLength=10
+	// +kubebuilder:validation:items:Pattern=`^[A-Z][A-Z0-9]{1,9}$`
 	Scope []string `json:"scope,omitempty"`
 
-	// skillsContainer is the container holding tool-skill pages. Unset takes
-	// Crewlet's default container; an empty string turns tool skills off.
-	// Crewlet's `skills_container`.
+	// skillsContainer is the container holding tool-skill pages, a container
+	// key (see scope). Unset takes Crewlet's default container; an empty
+	// string turns tool skills off. Crewlet's `skills_container`.
 	// +optional
-	// +kubebuilder:validation:MaxLength=256
+	// +kubebuilder:validation:MaxLength=10
+	// +kubebuilder:validation:XValidation:rule="self == '' || self.matches('^[A-Z][A-Z0-9]{1,9}$')",message="skillsContainer must be empty or a container key: an upper-case letter followed by 1 to 9 upper-case letters or digits"
 	SkillsContainer *string `json:"skillsContainer,omitempty"`
 
 	// rootSpace is the container holding the company's own pages, such as
-	// the root onboarding page. Unset takes Crewlet's default. Crewlet's
-	// `root_space`.
+	// the root onboarding page, a container key (see scope). Unset takes
+	// Crewlet's default. Crewlet's `root_space`.
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=256
+	// +kubebuilder:validation:MinLength=2
+	// +kubebuilder:validation:MaxLength=10
+	// +kubebuilder:validation:Pattern=`^[A-Z][A-Z0-9]{1,9}$`
 	RootSpace string `json:"rootSpace,omitempty"`
 
 	// vectors fuses semantic recall into knowledge and work search; false
 	// also stops embedding the corpus. Unset is on exactly when the company
-	// has an embeddings provider. Crewlet's `vectors`.
+	// has an embeddings provider; true requires one (spec.embeddings).
+	// Crewlet's `vectors`.
 	// +optional
 	Vectors *bool `json:"vectors,omitempty"`
 }
@@ -168,6 +174,7 @@ const (
 // semantic knowledge search and for recall of a seat's memory. Each field maps
 // onto the same-named field of Crewlet's providers.embeddings.
 // +kubebuilder:validation:XValidation:rule="self.type != 'OpenAICompatible' || has(self.baseURL)",message="baseURL is required for type OpenAICompatible"
+// +kubebuilder:validation:XValidation:rule="self.type != 'OpenAI' || has(self.apiKeySecretRef)",message="apiKeySecretRef is required for type OpenAI"
 type EmbeddingSettings struct {
 	// type is which embeddings API the provider speaks.
 	// +optional
@@ -181,7 +188,10 @@ type EmbeddingSettings struct {
 	Model string `json:"model,omitempty"`
 
 	// apiKeySecretRef is the Secret key holding the API key. Crewlet's
-	// `api_key`, a credential position.
+	// `api_key`, a credential position. Required for type OpenAI: Crewlet
+	// reads OPENAI_API_KEY from the environment when it is unset, and the
+	// engine's environment never carries one (see spec.runtime.env). An
+	// OpenAICompatible endpoint that needs no key may omit it.
 	// +optional
 	APIKeySecretRef SecretKeyReference `json:"apiKeySecretRef,omitzero"`
 
@@ -412,15 +422,16 @@ type ConfigSettings struct {
 // +kubebuilder:validation:MinProperties=1
 type DataTopology struct {
 	// replicas is the number of data pods. It must be one of the class's
-	// spec.data.allowedReplicas. Only 1 is available in v1alpha1. It cannot
-	// be changed once set: the event stream's replication is fixed when the
-	// estate is created.
+	// spec.data.allowedReplicas. v1alpha1 runs exactly one data pod, so 1 is
+	// the only value admitted. A highly available estate of 3 or 5 is a
+	// later addition, and it comes with a rule that the count cannot change
+	// once set, because the event stream's replication is fixed when the
+	// estate is created: admitting 3 or 5 before the operator can run them
+	// would leave Companies that could never be corrected.
 	// +optional
 	// +default=1
 	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=5
-	// +kubebuilder:validation:Enum=1;3;5
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="topology.data.replicas is immutable"
+	// +kubebuilder:validation:Enum=1
 	Replicas int32 `json:"replicas,omitempty"`
 }
 
@@ -441,8 +452,8 @@ type CompanyExposure struct {
 	// publicBaseURL is the HTTPS address vendors deliver webhooks to,
 	// overriding the one the class's webhooks.hostname derives. Required when
 	// the class's webhooks.mode is External, where something outside the
-	// operator forwards to the engine. Crewlet's
-	// integrations.public_base_url.
+	// operator (a relay, an API gateway) forwards its /webhooks/ path to the
+	// engine. Crewlet's integrations.public_base_url.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
@@ -464,14 +475,72 @@ type CompanyRuntime struct {
 	Version string `json:"version,omitempty"`
 
 	// env adds environment variables to the engine container, for platform
-	// wiring the engine reads from its environment. Names starting with
-	// CREWLET_ or OTEL_ are the operator's own.
+	// wiring the engine reads from its environment. They are merged over the
+	// class's podTemplate.spec.env by name: a variable here replaces the
+	// class's variable of the same name.
+	//
+	// Names starting with CREWLET_ or OTEL_ are the operator's own.
+	// ANTHROPIC_API_KEY and OPENAI_API_KEY are refused too: Crewlet reads them
+	// as the key of a model or embeddings provider that names none, so a
+	// value here would be a credential outside the engine's secret store;
+	// give the provider its key with apiKeySecretRefs or apiKeySecretRef.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=32
 	// +kubebuilder:validation:XValidation:rule="self.all(e, !e.name.startsWith('CREWLET_') && !e.name.startsWith('OTEL_'))",message="variables starting with CREWLET_ or OTEL_ are set by the operator"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']))",message="ANTHROPIC_API_KEY and OPENAI_API_KEY are model provider keys: give a provider its key with a Secret reference instead"
 	Env []EnvVar `json:"env,omitempty"`
+}
+
+// engineConfig is a list of entries rather than one opaque object, which is how
+// Crewlet would spell it, because the API server's rules can see a typed name
+// but not the keys of an object that has no schema: the list is what lets the
+// rule on engineConfig refuse a reserved key at admission, before a credential
+// could ever be stored. A list keyed by name also lets server-side apply merge
+// it entry by entry.
+
+// EngineConfigEntry is one top-level key of the company document that
+// spec.engineConfig passes through, and its value.
+type EngineConfigEntry struct {
+	// name is the key, as Crewlet spells it, such as turn_engine.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9_]*$`
+	Name string `json:"name,omitempty"`
+
+	// value is the key's value: an object, a list, a string, a number or a
+	// boolean, kept as written.
+	// +required
+	Value *EngineConfigValue `json:"value,omitempty"`
+}
+
+// EngineConfigValue is a type of its own rather than runtime.RawExtension
+// because a RawExtension's schema is an object, which would refuse a scalar
+// setting such as notification_rate_limit; this type's schema has no type at
+// all.
+
+// EngineConfigValue is any JSON value, kept byte for byte as it was written.
+// +kubebuilder:validation:Type=""
+// +kubebuilder:pruning:PreserveUnknownFields
+type EngineConfigValue struct {
+	// Raw is the value's JSON encoding.
+	Raw []byte `json:"-"`
+}
+
+// MarshalJSON returns the value as it was written.
+func (v EngineConfigValue) MarshalJSON() ([]byte, error) {
+	if v.Raw == nil {
+		return []byte("null"), nil
+	}
+	return v.Raw, nil
+}
+
+// UnmarshalJSON keeps a copy of the value's encoding.
+func (v *EngineConfigValue) UnmarshalJSON(data []byte) error {
+	v.Raw = append(v.Raw[:0], data...)
+	return nil
 }
 
 // DeletionPolicy is what happens to a company's data volumes when the Company
@@ -492,9 +561,17 @@ const (
 // of its document. Its units, seats, model providers, tool servers and
 // integrations are objects of their own that name the Company in their
 // spec.companyRef.
+// +kubebuilder:validation:XValidation:rule="!has(self.knowledge) || !has(self.knowledge.vectors) || !self.knowledge.vectors || has(self.embeddings)",message="knowledge.vectors needs spec.embeddings: there is nothing to compute an embedding with"
 type CompanySpec struct {
 	// engineClassName is the EngineClass the company runs with. Unset uses
 	// the class annotated crewlet.ai/is-default-class=true.
+	//
+	// Choosing a class is not access-controlled, as choosing a StorageClass
+	// is not: whoever may write a Company may name any class, including one
+	// that offers platformLLMProviders or larger limits. A platform whose
+	// tenants write their own Companies restricts the choice with an
+	// admission policy (a ValidatingAdmissionPolicy over
+	// spec.engineClassName, for example).
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
@@ -575,20 +652,24 @@ type CompanySpec struct {
 	// engineConfig is passed through into the company document as written,
 	// for the engine's tuning blocks that have no field here: turn_engine,
 	// learning, scheduling, workers, skill_variables and the
-	// notification_* settings, spelled as Crewlet spells them. The operator
-	// does not interpret it; the engine validates it in the dry run before
-	// every apply, and a refusal is reported on the Company.
+	// notification_* settings, spelled as Crewlet spells them. Each entry is
+	// one top-level key of the document and its value. The operator does not
+	// interpret it; the engine validates it in the dry run before every
+	// apply, and a refusal is reported on the Company.
 	//
 	// It may not set what another field or object of this API owns: name,
 	// mission, vision, policies, timezone, tracker, knowledge, token_budget,
 	// providers, integrations, mcp_servers, roles or units. Every position
 	// Crewlet holds a credential in lives under one of those keys, so
-	// engineConfig can never carry a credential; the operator refuses a
-	// Company whose engineConfig names one of them.
+	// engineConfig can never carry a credential: the API server refuses a
+	// Company whose engineConfig names one of them, before anything is
+	// stored.
 	// +optional
-	// +kubebuilder:validation:Type=object
-	// +kubebuilder:pruning:PreserveUnknownFields
-	EngineConfig *runtime.RawExtension `json:"engineConfig,omitempty"`
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'token_budget', 'providers', 'integrations', 'mcp_servers', 'roles', 'units']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, token_budget, providers, integrations, mcp_servers, roles or units: those are fields and objects of this API, and the only blocks that hold credentials"
+	EngineConfig []EngineConfigEntry `json:"engineConfig,omitempty"`
 
 	// config is how the operator manages the company's document.
 	// +optional
@@ -726,17 +807,33 @@ type ConfigStatus struct {
 	Objects AppliedObjectCounts `json:"objects,omitzero"`
 }
 
-// CompanyEndpoints is where a company is reached.
+// CompanyEndpoints is where a company is reached. Every address is a base URL
+// with its scheme, so that a caller appends a path to it and never
+// reconstructs one from the EngineClass's templates.
 // +kubebuilder:validation:MinProperties=1
 type CompanyEndpoints struct {
-	// api is the in-cluster base URL of the engine's API.
+	// api is the in-cluster base URL of the engine's API: the company's
+	// Service, for callers inside the cluster.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	API string `json:"api,omitempty"`
 
+	// exposedAPI is the base URL of the engine's API through the class's
+	// exposure.api, for callers outside the cluster: https://<hostname>
+	// when the route terminates TLS (the Ingress has tls, or the Gateway
+	// listener the route attaches to is HTTPS), http://<hostname> otherwise,
+	// with the hostname template expanded. Set only while exposure.api.mode
+	// is Gateway or Ingress and the route has been accepted.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	ExposedAPI string `json:"exposedAPI,omitempty"`
+
 	// publicBaseURL is the address vendors deliver webhooks to, when the
-	// company has one.
+	// company has one: spec.exposure.publicBaseURL, or https://<hostname>
+	// from the class's webhooks.hostname. Every vendor route is a path under
+	// it, such as /webhooks/forge for an Atlassian Forge relay.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
@@ -776,7 +873,8 @@ type CompanyStatus struct {
 	Endpoints CompanyEndpoints `json:"endpoints,omitzero"`
 
 	// apiAccessSecretRef names the Secret, in the Company's namespace, that
-	// holds a bearer token for the engine's API under the key token. It is
+	// holds a bearer token for the engine's API under the key token
+	// (APIAccessTokenKey). It is
 	// for the company's consumers (a control plane, a dashboard); the
 	// operator uses a token of its own, so revoking this one never locks the
 	// operator out.

@@ -123,6 +123,7 @@ type GitHubProvisioning struct {
 // a GitHub Enterprise Server wake the seats they concern. It maps onto
 // Crewlet's integrations.github. Each agent seat's own GitHub App is in its
 // Seat's spec.integrations.github; the GitHub tools are an MCPServer.
+// +kubebuilder:validation:XValidation:rule="!has(self.provisioning) || has(self.tokenSecretRef)",message="provisioning needs tokenSecretRef: without an organization token the engine registers no webhooks"
 type GitHubIntegration struct {
 	// url is the base URL of a GitHub Enterprise Server, such as
 	// https://github.example.com. Unset is github.com. Crewlet's `url`.
@@ -145,7 +146,8 @@ type GitHubIntegration struct {
 	// +optional
 	TokenSecretRef SecretKeyReference `json:"tokenSecretRef,omitzero"`
 
-	// provisioning is where the webhooks are registered.
+	// provisioning is where the webhooks are registered. It requires
+	// tokenSecretRef, without which the engine registers nothing.
 	// +optional
 	Provisioning GitHubProvisioning `json:"provisioning,omitzero"`
 }
@@ -153,6 +155,13 @@ type GitHubIntegration struct {
 // IntegrationSpec connects a company to one vendor. Exactly one vendor member
 // is set; the Integration's kind of vendor cannot change, and a company has at
 // most one Integration per vendor (a second is reported as a conflict).
+//
+// For both vendors, every per-seat credential (a seat's Slack app, its GitHub
+// App) comes from a Secret its Seat references, whoever created the app: the
+// engine mints no credential for Slack or GitHub. So an Integration has no
+// switch between credentials the platform provides and credentials the engine
+// provisions; one arrives with the vendors whose apps the engine can create
+// (GitLab, Mattermost).
 //
 // v1alpha1 has the members slack and github. Crewlet's other integrations
 // arrive as further members of this union, each with a reference field per

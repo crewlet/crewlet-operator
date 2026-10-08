@@ -13,10 +13,13 @@ import (
 const DefaultEngineClassAnnotation = "crewlet.ai/is-default-class"
 
 // EngineSettings is the engine image a class runs.
+// +kubebuilder:validation:XValidation:rule="!has(self.allowVersionOverride) || !self.allowVersionOverride || !self.image.contains('@')",message="allowVersionOverride needs an image by tag: a Company's spec.runtime.version replaces the tag, and an image pinned by digest has none"
 type EngineSettings struct {
 	// image is the Crewlet engine image, by tag or by digest, for example
 	// ghcr.io/crewlet/crewlet:v0.14.2. There is no default: the platform
-	// decides which build its tenants run.
+	// decides which build its tenants run. A Company's spec.runtime.version
+	// replaces the tag, so an image pinned by digest cannot be combined with
+	// allowVersionOverride.
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=512
@@ -56,7 +59,14 @@ type DataStorage struct {
 	// size is the capacity requested for each data volume. It holds the
 	// store, the event stream and the store's cache. There is no default: how
 	// much a tenant may keep is a platform decision.
+	//
+	// It applies to the data volumes of companies created after it is set.
+	// An existing company's volumes keep the size they were created with:
+	// they are claimed through the StatefulSet's volume claim templates,
+	// which Kubernetes does not let change, and resizing a volume is a
+	// decision about one company's storage class and data, not the class's.
 	// +required
+	// +kubebuilder:validation:XValidation:rule="quantity(string(self)).isGreaterThan(quantity('0'))",message="size must be greater than zero"
 	Size *resource.Quantity `json:"size,omitempty"`
 }
 
@@ -65,13 +75,14 @@ type DataStorage struct {
 // seat and runs the background workers.
 type DataPodSettings struct {
 	// allowedReplicas is the set of data-pod counts a Company of this class
-	// may choose in spec.topology.data.replicas. Only 1 is available in
-	// v1alpha1; 3 and 5 (a highly available estate) are reserved values.
+	// may choose in spec.topology.data.replicas. v1alpha1 runs exactly one
+	// data pod, so the only value admitted is 1; 3 and 5, a highly available
+	// estate, are added when the operator can run them.
 	// +optional
 	// +listType=set
 	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=3
-	// +kubebuilder:validation:items:Enum=1;3;5
+	// +kubebuilder:validation:MaxItems=1
+	// +kubebuilder:validation:items:Enum=1
 	// +default=[1]
 	AllowedReplicas []int32 `json:"allowedReplicas,omitempty"`
 
@@ -176,8 +187,10 @@ type S3ObjectSettings struct {
 	PathStyle *bool `json:"pathStyle,omitempty"`
 
 	// credentialsSecretRef is a Secret holding the keys accessKeyID and
-	// secretAccessKey. Unset uses the pod's own credentials (a workload
-	// identity or the node's role). The engine reads object-store credentials
+	// secretAccessKey (S3AccessKeyIDKey, S3SecretAccessKeyKey). Unset uses
+	// the pod's own credentials through the SDK's default chain: a workload
+	// identity (EKS Pod Identity, or IRSA and GKE Workload Identity with the
+	// class's spec.serviceAccount.annotations) or the node's role. The engine reads object-store credentials
 	// from its environment, so the operator copies the two values into a
 	// Secret it owns in each Company's namespace and references them from the
 	// pod; the values never appear in the pod template.
@@ -402,8 +415,8 @@ const (
 	// NetworkPolicyIsolated admits traffic to the engine's port only from
 	// the operator, from the namespaces of the Gateways or Ingress
 	// controller the class routes through, and from namespaces labelled
-	// crewlet.ai/api-consumer=true. It needs a CNI that enforces
-	// NetworkPolicy.
+	// crewlet.ai/api-consumer=true (APIConsumerNamespaceLabel). It needs a
+	// CNI that enforces NetworkPolicy.
 	NetworkPolicyIsolated NetworkPolicyMode = "Isolated"
 	// NetworkPolicyNone creates no NetworkPolicy.
 	NetworkPolicyNone NetworkPolicyMode = "None"
@@ -463,6 +476,20 @@ type EnginePodSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 	PriorityClassName string `json:"priorityClassName,omitempty"`
+
+	// env adds environment variables to the engine container of every
+	// Company of the class: platform wiring that is the same for all of
+	// them, such as the address of the platform's own API. A Company's
+	// spec.runtime.env is merged over it by name. The same names are
+	// refused as there: those starting with CREWLET_ or OTEL_, and
+	// ANTHROPIC_API_KEY and OPENAI_API_KEY.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=32
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !e.name.startsWith('CREWLET_') && !e.name.startsWith('OTEL_'))",message="variables starting with CREWLET_ or OTEL_ are set by the operator"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']))",message="ANTHROPIC_API_KEY and OPENAI_API_KEY are model provider keys: give a provider its key with a Secret reference instead"
+	Env []ClassEnvVar `json:"env,omitempty"`
 }
 
 // EnginePodTemplate is what a class adds to every engine pod.
@@ -483,6 +510,7 @@ type EnginePodTemplate struct {
 // engine's secret store, so a tenant never holds them.
 // +kubebuilder:validation:XValidation:rule="!has(self.claudeModel) || self.type == 'Anthropic'",message="claudeModel applies to type Anthropic only"
 // +kubebuilder:validation:XValidation:rule="!has(self.reasoning) || self.type == 'OpenAI'",message="reasoning applies to type OpenAI only; an Anthropic model's thinking depth is reasoningEffort"
+// +kubebuilder:validation:XValidation:rule="!has(self.reasoningEffort) || self.type == 'Anthropic' || (self.type == 'OpenAI' && has(self.reasoning) && self.reasoning)",message="reasoningEffort is sent to an OpenAI model only while reasoning is true, and never to an OpenAICompatible one"
 // +kubebuilder:validation:XValidation:rule="!has(self.reasoningBudgetTokens) || self.type == 'Anthropic'",message="reasoningBudgetTokens applies to type Anthropic only"
 // +kubebuilder:validation:XValidation:rule="self.type != 'OpenAICompatible' || has(self.baseURL)",message="baseURL is required for type OpenAICompatible, which has no default endpoint"
 // +kubebuilder:validation:XValidation:rule="self.type == 'OpenAICompatible' || has(self.apiKeySecretRefs)",message="apiKeySecretRefs needs at least one key for types Anthropic and OpenAI"
@@ -546,6 +574,19 @@ type TelemetrySettings struct {
 	HeadersSecretRef NamespacedSecretKeyReference `json:"headersSecretRef,omitzero"`
 }
 
+// EngineServiceAccount is what a class adds to the ServiceAccount the operator
+// creates for each Company's engine pods.
+// +kubebuilder:validation:MinProperties=1
+type EngineServiceAccount struct {
+	// annotations are added to the ServiceAccount, for a workload identity
+	// that is bound through one: eks.amazonaws.com/role-arn for IRSA,
+	// iam.gke.io/gcp-service-account for GKE Workload Identity. That is how
+	// the engine reaches an S3 bucket without credentialsSecretRef.
+	// +optional
+	// +kubebuilder:validation:MaxProperties=16
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
 // RetentionSettings is who answers for a class's companies' backups.
 type RetentionSettings struct {
 	// backupOwner names whoever is responsible for backing up the companies'
@@ -592,6 +633,11 @@ type EngineClassSpec struct {
 	// +optional
 	PodTemplate EnginePodTemplate `json:"podTemplate,omitzero"`
 
+	// serviceAccount is what is added to each company's engine
+	// ServiceAccount.
+	// +optional
+	ServiceAccount EngineServiceAccount `json:"serviceAccount,omitzero"`
+
 	// platformLLMProviders are model providers the platform offers to
 	// companies that opt in.
 	// +optional
@@ -635,6 +681,9 @@ type EngineClassStatus struct {
 // engines: the image, the size of the data pods, how companies are exposed,
 // and limits. A Company names one in spec.engineClassName; in a multi-tenant platform, a service tier
 // usually maps to a class.
+//
+// Like a StorageClass, a class is not access-controlled: anyone who may write
+// a Company may name any class (see the Company's spec.engineClassName).
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

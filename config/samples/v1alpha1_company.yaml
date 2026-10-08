@@ -44,10 +44,12 @@ spec:
   # Engine tuning without a typed field, written as Crewlet spells it and
   # validated by the engine before every apply.
   engineConfig:
-    turn_engine:
-      extension_enabled: true
-    learning:
-      enabled: true
+    - name: turn_engine
+      value:
+        extension_enabled: true
+    - name: learning
+      value:
+        enabled: true
   config:
     managementPolicy: Enforce
   deletionPolicy: Retain

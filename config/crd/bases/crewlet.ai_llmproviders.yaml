@@ -177,9 +177,11 @@ spec:
                 type: integer
               reasoningEffort:
                 description: |-
-                  reasoningEffort is how hard the model thinks. For OpenAI it is sent
-                  while reasoning is on; for Anthropic it is sent on every call, and
-                  unset means High. Crewlet's `reasoning_effort`.
+                  reasoningEffort is how hard the model thinks. For Anthropic it is sent
+                  on every call, and unset means High. For OpenAI it is sent only while
+                  reasoning is true, so it requires reasoning; an OpenAICompatible
+                  provider cannot turn reasoning on and takes no reasoningEffort.
+                  Crewlet's `reasoning_effort`.
                 enum:
                 - Low
                 - Medium
@@ -214,6 +216,10 @@ spec:
             - message: reasoning applies to type OpenAI only; an Anthropic model's
                 thinking depth is reasoningEffort
               rule: '!has(self.reasoning) || self.type == ''OpenAI'''
+            - message: reasoningEffort is sent to an OpenAI model only while reasoning
+                is true, and never to an OpenAICompatible one
+              rule: '!has(self.reasoningEffort) || self.type == ''Anthropic'' || (self.type
+                == ''OpenAI'' && has(self.reasoning) && self.reasoning)'
             - message: reasoningBudgetTokens applies to type Anthropic only
               rule: '!has(self.reasoningBudgetTokens) || self.type == ''Anthropic'''
             - message: baseURL is required for type OpenAICompatible, which has no

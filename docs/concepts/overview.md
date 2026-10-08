@@ -66,7 +66,7 @@ graph LR
   I1 -- companyRef --> C
   I2 -- companyRef --> C
   S1 -. llm .-> P
-  S1 -. mcp.serverRef .-> M
+  S1 -. mcp .-> M
   S1 -. integrations.slack .-> SEC
 ```
 
@@ -94,13 +94,21 @@ company's name and the seat's handle. The API makes both immutable:
 - Every object's `spec.companyRef` is immutable: an object does not move
   between companies.
 
+Crewlet also refuses some collisions between objects, which the API server
+cannot see because each object is validated on its own: two Seats with one
+handle, one `displayName` or one contact account; two Units with one
+`displayName`; two Integrations for one vendor; and an `LLMProvider` named
+like a platform provider of the class. The operator reports each on the
+object as `Accepted=False` with the reason `Conflict`, naming the other
+object.
+
 ## What the engine looks like
 
 A Company runs on one data pod in v1alpha1: a StatefulSet with one replica
 and a volume, which holds the company's estate and also serves the API, runs
 every seat and runs the background workers. Its size, image and storage come
-from the `EngineClass`; `Company.spec.topology.data.replicas` is 1 and cannot
-change. A company can be stopped with `spec.suspend` (its volume is kept), and
+from the `EngineClass`; `Company.spec.topology.data.replicas` is 1, the only
+value v1alpha1 admits. A company can be stopped with `spec.suspend` (its volume is kept), and
 `spec.deletionPolicy` says whether its volume outlives the Company (`Retain`,
 the default) or goes with it (`Delete`).
 
@@ -133,8 +141,11 @@ Secret rotates the value in the engine without a restart. Who writes the
 Secret is up to you: a person with `kubectl`, External Secrets, or a control
 plane after an OAuth flow only it knows about.
 
-The opaque `Company.spec.engineConfig` block is for engine tuning only, and
-may not name any block that holds a credential. [Credentials](credentials.md)
+`Company.spec.engineConfig` passes engine tuning through as written, one
+entry per top-level key of the document (`turn_engine`, `learning`,
+`notification_rate_limit`, ...). The API server refuses an entry for any key
+another field or object owns, and those are the only blocks that hold
+credentials, so engineConfig can never carry one. [Credentials](credentials.md)
 lists every credential position Crewlet has and the field that covers it,
 including the ones v1alpha1 does not offer yet.
 
@@ -167,7 +178,31 @@ Every object reports `status.conditions` with `observedGeneration`:
 | `Integration` | `Accepted`, `ResolvedRefs`, `Applied`, `Healthy` |
 
 A Company also reports the revision the engine runs, its endpoints and the
-Secret holding a token for its API. A Seat reports its handle, its identity in
-the engine and the addresses its vendor apps must deliver to, so a platform
-that creates a seat's Slack app reads the request URL from
-`status.integrations.slack.requestURL` instead of building it.
+Secret holding a token for its API (`status.apiAccessSecretRef`, key
+`token`). The endpoints are base URLs to append a path to: `api` inside the
+cluster, `exposedAPI` through the class's API route when it has one, and
+`publicBaseURL` for vendors' webhooks. A Seat reports its handle, its identity
+in the engine and the addresses its vendor apps must deliver to
+(`<publicBaseURL>/webhooks/slack/<handle>` and
+`<publicBaseURL>/webhooks/github/<handle>`). They are set as soon as the
+company has the vendor's Integration and a public address, before the seat
+has any credentials, so a platform that creates a seat's Slack app reads the
+request URL for the app's manifest from `status.integrations.slack.requestURL`
+instead of building it, and they never change for a seat.
+
+## Writing the objects from a program
+
+A control plane imports the types from the Go module
+`github.com/crewlet/crewlet-operator/api`, which depends on `k8s.io/api` and
+`k8s.io/apimachinery` only. The Secret keys and labels the API documents are
+constants there (`SlackBotTokenKey`, `APIAccessTokenKey`,
+`APIConsumerNamespaceLabel`, ...), so a program never repeats the strings.
+
+The module has no generated apply configurations, because they would bring in
+`k8s.io/client-go`. Server-side apply works with the typed objects
+themselves: every optional field is omitted when unset, so the object sent
+holds only the fields the caller sets, and those are the fields its field
+manager owns. Lists that more than one writer may share are keyed, so that
+each entry has its own owner: a Seat's or a Unit's `spec.mcp` by server name
+(one manager can own the GitHub server's credentials and another the rest),
+`spec.engineConfig` by key, and `env` and `headers` by name.

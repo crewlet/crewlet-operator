@@ -44,6 +44,11 @@ spec:
           Seat is one seat of a company's org chart: an AI agent the engine runs, or a
           person agents work with.
 
+          v1alpha1 has no way to pause a seat while keeping it in the chart. Crewlet
+          pauses a seat through its API rather than its company document, and a
+          paused field arrives with the operator's use of that API; until then,
+          Company's spec.suspend stops the whole engine.
+
           Unless spec.handle is set, the Seat's metadata.name is its handle and must
           follow the handle's rules: lowercase letters, digits and '-', starting with
           a letter or digit, at most 63 characters. The handle cannot change.
@@ -133,7 +138,10 @@ spec:
               displayName:
                 description: |-
                   displayName is the seat's name as people read it, such as "Ana
-                  (Platform Engineer)". Unset is the handle. Crewlet's `name`.
+                  (Platform Engineer)". Unset is the handle. Crewlet's `name`. Crewlet
+                  refuses two seats with one name, so a Seat whose displayName (or, unset,
+                  handle) another Seat of the company already uses is reported as a
+                  Conflict.
                 maxLength: 256
                 minLength: 1
                 type: string
@@ -516,19 +524,29 @@ spec:
                 description: |-
                   mcp are the seat's own tool-server credentials, which make it act as
                   itself on each server. They are merged over its unit's, per variable.
-                  Crewlet's `mcp_env`, a credential position.
+                  One entry per server, keyed by its name. Crewlet's `mcp_env`, a
+                  credential position.
                 items:
                   description: |-
                     MCPCredentials are the credentials one tool server is started with for a
                     seat: environment variables for a Stdio server, request headers for an HTTP
                     one. They map onto one server's entry of Crewlet's mcp_env, a credential
                     position.
+
+                    The server is named by a top-level name, as an imagePullSecrets entry names
+                    its Secret, rather than by a nested reference, because name is the key of
+                    the list that holds these: with a scalar key, server-side apply merges the
+                    list entry by entry, so that one field manager (a control plane's GitHub
+                    flow, say) can own the credentials of one server without owning, or
+                    overwriting, every other server's.
                   properties:
                     env:
                       description: |-
                         env are the values. For a Stdio server each is an environment
                         variable of its process; for an HTTP server each is a request header
-                        (the name is the header's name).
+                        (the name is the header's name). Names must differ in more than case:
+                        HTTP header names are case-insensitive, so Authorization and
+                        authorization are one header.
                       items:
                         description: |-
                           MCPCredentialValue is one value of a seat's credentials for a tool server.
@@ -584,30 +602,27 @@ spec:
                       x-kubernetes-list-map-keys:
                       - name
                       x-kubernetes-list-type: map
-                    serverRef:
+                      x-kubernetes-validations:
+                      - message: 'names must differ in more than case: HTTP header
+                          names are case-insensitive'
+                        rule: self.all(a, self.exists_one(b, b.name.lowerAscii() ==
+                          a.name.lowerAscii()))
+                    name:
                       description: |-
-                        serverRef names the MCPServer, in this namespace, the credentials are
-                        for.
-                      properties:
-                        name:
-                          description: name is the metadata.name of the referenced
-                            object.
-                          maxLength: 253
-                          minLength: 1
-                          type: string
-                      required:
-                      - name
-                      type: object
+                        name is the metadata.name of the MCPServer, in this namespace, the
+                        credentials are for.
+                      maxLength: 253
+                      minLength: 1
+                      type: string
                   required:
                   - env
-                  - serverRef
+                  - name
                   type: object
                 maxItems: 16
                 type: array
-                x-kubernetes-list-type: atomic
-                x-kubernetes-validations:
-                - message: mcp must name each server once
-                  rule: self.all(a, self.exists_one(b, b.serverRef.name == a.serverRef.name))
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               placement:
                 description: placement is where the seat runs.
                 properties:
@@ -626,10 +641,13 @@ spec:
                 type: object
               project:
                 description: |-
-                  project is the tracker project a seat outside every unit owns; a seat
-                  in a unit takes its unit's. Crewlet's `project`.
-                maxLength: 256
-                minLength: 1
+                  project is the tracker project a seat outside every unit owns, by its
+                  key; a seat in a unit takes its unit's. Crewlet requires a container
+                  key to be an upper-case letter followed by 1 to 9 upper-case letters or
+                  digits, such as LEAD. Crewlet's `project`.
+                maxLength: 10
+                minLength: 2
+                pattern: ^[A-Z][A-Z0-9]{1,9}$
                 type: string
               responsibilities:
                 description: |-
@@ -902,10 +920,12 @@ spec:
                 type: object
               space:
                 description: |-
-                  space is the knowledge container a seat outside every unit owns; a
-                  seat in a unit takes its unit's. Crewlet's `space`.
-                maxLength: 256
-                minLength: 1
+                  space is the knowledge container a seat outside every unit owns, by
+                  its key, which follows the same rule as project; a seat in a unit
+                  takes its unit's. Crewlet's `space`.
+                maxLength: 10
+                minLength: 2
+                pattern: ^[A-Z][A-Z0-9]{1,9}$
                 type: string
               tokenBudget:
                 description: |-
@@ -947,11 +967,13 @@ spec:
               workers:
                 description: |-
                   workers narrows which of the company's delegate templates (the
-                  workers block of the Company's engineConfig) the seat may use. Unset
-                  is every one. Crewlet's `workers`.
+                  workers block of the Company's engineConfig) the seat may use, by the
+                  templates' names: a lowercase letter or digit, then lowercase letters,
+                  digits, '_' and '-'. Unset is every one. Crewlet's `workers`.
                 items:
                   maxLength: 128
                   minLength: 1
+                  pattern: ^[a-z0-9][a-z0-9_-]*$
                   type: string
                 maxItems: 32
                 type: array
@@ -1055,8 +1077,11 @@ spec:
                     minProperties: 1
                     properties:
                       webhookURL:
-                        description: webhookURL is the URL the seat's GitHub App must
-                          deliver webhooks to.
+                        description: |-
+                          webhookURL is the URL the seat's GitHub App must deliver webhooks to,
+                          <publicBaseURL>/webhooks/github/<handle>. Like the Slack requestURL it
+                          is set whenever the Company has a GitHub Integration and a public base
+                          URL, before the seat's app exists, and it never changes for a seat.
                         maxLength: 2048
                         minLength: 1
                         type: string
@@ -1068,8 +1093,14 @@ spec:
                       requestURL:
                         description: |-
                           requestURL is the URL the seat's Slack app must deliver events to: its
-                          Event Subscriptions request URL. A platform that creates the app puts
-                          it into the app's manifest.
+                          Event Subscriptions request URL, <publicBaseURL>/webhooks/slack/<handle>,
+                          where publicBaseURL is the Company's status.endpoints.publicBaseURL.
+
+                          It is set whenever the Company has a Slack Integration and a public
+                          base URL, whether or not this Seat sets spec.integrations.slack: a
+                          platform that creates the seat's Slack app needs the URL for the app's
+                          manifest before the app, and so its credentials, exist. Derived from
+                          the handle, which never changes, it never changes for a seat either.
                         maxLength: 2048
                         minLength: 1
                         type: string

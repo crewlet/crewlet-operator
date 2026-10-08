@@ -77,6 +77,24 @@ func TestLLMProviderValidation(t *testing.T) {
 			want:   msgBudgetTokens,
 		},
 		{
+			name:   "reasoningEffort on an OpenAI provider without reasoning is refused",
+			mutate: and(openAI, func(p *v1.LLMProvider) { p.Spec.ReasoningEffort = v1.ReasoningEffortHigh }),
+			want:   msgReasoningEffort,
+		},
+		{
+			name: "reasoningEffort on an OpenAI provider with reasoning off is refused",
+			mutate: and(openAI, func(p *v1.LLMProvider) {
+				p.Spec.Reasoning = new(false)
+				p.Spec.ReasoningEffort = v1.ReasoningEffortLow
+			}),
+			want: msgReasoningEffort,
+		},
+		{
+			name:   "reasoningEffort on an OpenAICompatible provider is refused",
+			mutate: and(openAICompatible, func(p *v1.LLMProvider) { p.Spec.ReasoningEffort = v1.ReasoningEffortHigh }),
+			want:   msgReasoningEffort,
+		},
+		{
 			name:   "a baseURL that is not a URL is refused",
 			mutate: func(p *v1.LLMProvider) { p.Spec.BaseURL = "gateway.example" },
 			want:   msgBaseURLShape,

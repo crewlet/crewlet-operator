@@ -21,6 +21,7 @@ const (
 	githubKeys    = "nimbus-github"
 	githubServer  = "https://api.githubcopilot.com/mcp/"
 	platformKeyNS = "crewlet-system"
+	containerKey  = "PLAT"
 )
 
 // The messages of the rules more than one case checks. Each is the message
@@ -46,7 +47,12 @@ const (
 	msgEnvReserved      = "variables starting with CREWLET_ or OTEL_ are set by the operator"
 	msgPublicBaseURL    = "publicBaseURL must be an absolute https URL"
 	msgUnitID           = "a Unit's name is its Crewlet unit id"
-	msgMCPOnce          = "mcp must name each server once"
+	msgDuplicate        = "Duplicate value"
+	msgThreeReplicas    = "Unsupported value: 3"
+	msgHeaderCase       = "names must differ in more than case: HTTP header names are case-insensitive"
+	msgContainerKey     = `should match '^[A-Z][A-Z0-9]{1,9}$'`
+	msgProviderKeyEnv   = "ANTHROPIC_API_KEY and OPENAI_API_KEY are model provider keys"
+	msgReasoningEffort  = "reasoningEffort is sent to an OpenAI model only while reasoning is true"
 	msgSeatName         = "without spec.handle the Seat's name is its handle"
 	msgHandleImmutable  = "the seat's handle is immutable"
 	msgHumanContact     = "a Human seat needs contact"
@@ -149,7 +155,7 @@ func githubMember() v1.GitHubIntegration {
 // server.
 func mcpCredentials(server string) v1.MCPCredentials {
 	return v1.MCPCredentials{
-		ServerRef: v1.LocalObjectReference{Name: server},
+		Name: server,
 		Env: []v1.MCPCredentialValue{{
 			Name:      "Authorization",
 			ValueFrom: fromSecret(seatHandle+"-"+server, "authorization"),

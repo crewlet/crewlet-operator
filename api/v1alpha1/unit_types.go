@@ -48,20 +48,32 @@ type MCPCredentialValue struct {
 // seat: environment variables for a Stdio server, request headers for an HTTP
 // one. They map onto one server's entry of Crewlet's mcp_env, a credential
 // position.
+//
+// The server is named by a top-level name, as an imagePullSecrets entry names
+// its Secret, rather than by a nested reference, because name is the key of
+// the list that holds these: with a scalar key, server-side apply merges the
+// list entry by entry, so that one field manager (a control plane's GitHub
+// flow, say) can own the credentials of one server without owning, or
+// overwriting, every other server's.
 type MCPCredentials struct {
-	// serverRef names the MCPServer, in this namespace, the credentials are
-	// for.
+	// name is the metadata.name of the MCPServer, in this namespace, the
+	// credentials are for.
 	// +required
-	ServerRef LocalObjectReference `json:"serverRef,omitzero"`
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name,omitempty"`
 
 	// env are the values. For a Stdio server each is an environment
 	// variable of its process; for an HTTP server each is a request header
-	// (the name is the header's name).
+	// (the name is the header's name). Names must differ in more than case:
+	// HTTP header names are case-insensitive, so Authorization and
+	// authorization are one header.
 	// +required
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=32
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.name.lowerAscii() == a.name.lowerAscii()))",message="names must differ in more than case: HTTP header names are case-insensitive"
 	Env []MCPCredentialValue `json:"env,omitempty"`
 }
 
@@ -76,7 +88,9 @@ type UnitSpec struct {
 	// displayName is the unit's name as people read it, in prompts and on
 	// boards. Unset is the Unit's metadata.name. The metadata.name itself is
 	// the unit's stable id, which survives a rename. Crewlet's `name`; the
-	// metadata.name is Crewlet's `id`.
+	// metadata.name is Crewlet's `id`. Crewlet refuses two units with one
+	// name, so a Unit whose displayName (or, unset, metadata.name) another
+	// Unit of the company already uses is reported as a Conflict.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
@@ -127,27 +141,31 @@ type UnitSpec struct {
 	// +kubebuilder:validation:items:MaxLength=1024
 	Knowledge []string `json:"knowledge,omitempty"`
 
-	// project is the tracker project the unit files work in. Crewlet's
+	// project is the tracker project the unit files work in, by its key.
+	// Crewlet requires a container key to be an upper-case letter followed
+	// by 1 to 9 upper-case letters or digits, such as PLAT. Crewlet's
 	// `project`.
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=256
+	// +kubebuilder:validation:MinLength=2
+	// +kubebuilder:validation:MaxLength=10
+	// +kubebuilder:validation:Pattern=`^[A-Z][A-Z0-9]{1,9}$`
 	Project string `json:"project,omitempty"`
 
-	// space is the knowledge container the unit writes pages in. Crewlet's
-	// `space`.
+	// space is the knowledge container the unit writes pages in, by its
+	// key, which follows the same rule as project. Crewlet's `space`.
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=256
+	// +kubebuilder:validation:MinLength=2
+	// +kubebuilder:validation:MaxLength=10
+	// +kubebuilder:validation:Pattern=`^[A-Z][A-Z0-9]{1,9}$`
 	Space string `json:"space,omitempty"`
 
 	// mcp are tool-server credentials every agent seat directly in this unit
-	// inherits; a seat's own credentials win per variable. Crewlet's
-	// `mcp_env`, a credential position.
+	// inherits; a seat's own credentials win per variable. One entry per
+	// server, keyed by its name. Crewlet's `mcp_env`, a credential position.
 	// +optional
-	// +listType=atomic
+	// +listType=map
+	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=16
-	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.serverRef.name == a.serverRef.name))",message="mcp must name each server once"
 	MCP []MCPCredentials `json:"mcp,omitempty"`
 }
 
@@ -186,7 +204,8 @@ type UnitStatus struct {
 //
 // The Unit's metadata.name is the unit's stable id in Crewlet, which has its
 // own rules: it must start with a lowercase letter and be at most 64
-// characters, and may hold lowercase letters, digits and '-'.
+// characters, and may hold lowercase letters, digits and '-'. (Crewlet also
+// admits '_' in a unit id, which no Kubernetes name can hold.)
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -196,7 +215,7 @@ type UnitStatus struct {
 // +kubebuilder:printcolumn:name="Lead",type=string,JSONPath=`.spec.leadRef.name`
 // +kubebuilder:printcolumn:name="Applied",type=string,JSONPath=`.status.conditions[?(@.type=="Applied")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-// +kubebuilder:validation:XValidation:rule="self.metadata.name.matches('^[a-z][a-z0-9_-]{0,63}$')",message="a Unit's name is its Crewlet unit id: it must start with a lowercase letter, hold only lowercase letters, digits and '-', and be at most 64 characters"
+// +kubebuilder:validation:XValidation:rule="self.metadata.name.matches('^[a-z][a-z0-9-]{0,63}$')",message="a Unit's name is its Crewlet unit id: it must start with a lowercase letter, hold only lowercase letters, digits and '-', and be at most 64 characters"
 type Unit struct {
 	metav1.TypeMeta `json:",inline"`
 

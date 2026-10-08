@@ -265,7 +265,9 @@ type SeatIntegrations struct {
 }
 
 // SeatContact is how agents reach a person: their accounts on the company's
-// surfaces. It maps onto Crewlet's role `contact`.
+// surfaces. It maps onto Crewlet's role `contact`. Crewlet refuses two seats
+// that claim one account, so a Seat whose slackUserID or githubLogin another
+// Seat of the company already claims is reported as a Conflict.
 // +kubebuilder:validation:MinProperties=1
 type SeatContact struct {
 	// slackUserID is the person's Slack member id, such as U0123ABCD.
@@ -312,7 +314,10 @@ type SeatSpec struct {
 	Kind SeatKind `json:"kind,omitempty"`
 
 	// displayName is the seat's name as people read it, such as "Ana
-	// (Platform Engineer)". Unset is the handle. Crewlet's `name`.
+	// (Platform Engineer)". Unset is the handle. Crewlet's `name`. Crewlet
+	// refuses two seats with one name, so a Seat whose displayName (or, unset,
+	// handle) another Seat of the company already uses is reported as a
+	// Conflict.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
@@ -372,13 +377,15 @@ type SeatSpec struct {
 	Manages []ManagedReference `json:"manages,omitempty"`
 
 	// workers narrows which of the company's delegate templates (the
-	// workers block of the Company's engineConfig) the seat may use. Unset
-	// is every one. Crewlet's `workers`.
+	// workers block of the Company's engineConfig) the seat may use, by the
+	// templates' names: a lowercase letter or digit, then lowercase letters,
+	// digits, '_' and '-'. Unset is every one. Crewlet's `workers`.
 	// +optional
 	// +listType=set
 	// +kubebuilder:validation:MaxItems=32
 	// +kubebuilder:validation:items:MinLength=1
 	// +kubebuilder:validation:items:MaxLength=128
+	// +kubebuilder:validation:items:Pattern=`^[a-z0-9][a-z0-9_-]*$`
 	Workers []string `json:"workers,omitempty"`
 
 	// tokenBudget caps the tokens this seat may spend per window, on top of
@@ -398,11 +405,12 @@ type SeatSpec struct {
 
 	// mcp are the seat's own tool-server credentials, which make it act as
 	// itself on each server. They are merged over its unit's, per variable.
-	// Crewlet's `mcp_env`, a credential position.
+	// One entry per server, keyed by its name. Crewlet's `mcp_env`, a
+	// credential position.
 	// +optional
-	// +listType=atomic
+	// +listType=map
+	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=16
-	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.serverRef.name == a.serverRef.name))",message="mcp must name each server once"
 	MCP []MCPCredentials `json:"mcp,omitempty"`
 
 	// sandbox gives the seat a sandbox to run code in. Unset gives it none.
@@ -418,18 +426,23 @@ type SeatSpec struct {
 	// +optional
 	Integrations SeatIntegrations `json:"integrations,omitzero"`
 
-	// project is the tracker project a seat outside every unit owns; a seat
-	// in a unit takes its unit's. Crewlet's `project`.
+	// project is the tracker project a seat outside every unit owns, by its
+	// key; a seat in a unit takes its unit's. Crewlet requires a container
+	// key to be an upper-case letter followed by 1 to 9 upper-case letters or
+	// digits, such as LEAD. Crewlet's `project`.
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=256
+	// +kubebuilder:validation:MinLength=2
+	// +kubebuilder:validation:MaxLength=10
+	// +kubebuilder:validation:Pattern=`^[A-Z][A-Z0-9]{1,9}$`
 	Project string `json:"project,omitempty"`
 
-	// space is the knowledge container a seat outside every unit owns; a
-	// seat in a unit takes its unit's. Crewlet's `space`.
+	// space is the knowledge container a seat outside every unit owns, by
+	// its key, which follows the same rule as project; a seat in a unit
+	// takes its unit's. Crewlet's `space`.
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=256
+	// +kubebuilder:validation:MinLength=2
+	// +kubebuilder:validation:MaxLength=10
+	// +kubebuilder:validation:Pattern=`^[A-Z][A-Z0-9]{1,9}$`
 	Space string `json:"space,omitempty"`
 
 	// contact is how agents reach the person in a Human seat. Required for,
@@ -449,8 +462,14 @@ type SeatSpec struct {
 // +kubebuilder:validation:MinProperties=1
 type SlackSeatStatus struct {
 	// requestURL is the URL the seat's Slack app must deliver events to: its
-	// Event Subscriptions request URL. A platform that creates the app puts
-	// it into the app's manifest.
+	// Event Subscriptions request URL, <publicBaseURL>/webhooks/slack/<handle>,
+	// where publicBaseURL is the Company's status.endpoints.publicBaseURL.
+	//
+	// It is set whenever the Company has a Slack Integration and a public
+	// base URL, whether or not this Seat sets spec.integrations.slack: a
+	// platform that creates the seat's Slack app needs the URL for the app's
+	// manifest before the app, and so its credentials, exist. Derived from
+	// the handle, which never changes, it never changes for a seat either.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
@@ -460,7 +479,10 @@ type SlackSeatStatus struct {
 // GitHubSeatStatus is the GitHub side of a seat, as the operator computed it.
 // +kubebuilder:validation:MinProperties=1
 type GitHubSeatStatus struct {
-	// webhookURL is the URL the seat's GitHub App must deliver webhooks to.
+	// webhookURL is the URL the seat's GitHub App must deliver webhooks to,
+	// <publicBaseURL>/webhooks/github/<handle>. Like the Slack requestURL it
+	// is set whenever the Company has a GitHub Integration and a public base
+	// URL, before the seat's app exists, and it never changes for a seat.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
@@ -517,6 +539,11 @@ type SeatStatus struct {
 
 // Seat is one seat of a company's org chart: an AI agent the engine runs, or a
 // person agents work with.
+//
+// v1alpha1 has no way to pause a seat while keeping it in the chart. Crewlet
+// pauses a seat through its API rather than its company document, and a
+// paused field arrives with the operator's use of that API; until then,
+// Company's spec.suspend stops the whole engine.
 //
 // Unless spec.handle is set, the Seat's metadata.name is its handle and must
 // follow the handle's rules: lowercase letters, digits and '-', starting with

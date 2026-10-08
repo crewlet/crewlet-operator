@@ -98,6 +98,29 @@ _Appears in:_
 | `integrations` _integer_ | integrations is the number of Integrations. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 
 
+#### ClassEnvVar
+
+
+
+ClassEnvVar is an environment variable an EngineClass sets on the engine
+pods of every Company of the class: platform wiring such as the address of
+the platform's own API. A value from a Secret is copied by the operator into
+a Secret it owns in each Company's namespace and referenced from the pod, as
+telemetry headers are, so the value never appears in the pod template and the
+platform's Secret never has to be readable from a tenant namespace.
+
+
+
+_Appears in:_
+- [EnginePodSpec](#enginepodspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name is the variable's name. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z_][A-Za-z0-9_]*$` <br />Required: \{\} <br /> |
+| `value` _string_ | value is the variable's literal value. An empty string is a valid<br />value, which is why the field is a pointer. |  | MaxLength: 4096 <br />Optional: \{\} <br /> |
+| `valueFrom` _[NamespacedSecretValueSource](#namespacedsecretvaluesource)_ | valueFrom reads the value from a Secret key in a namespace the<br />platform controls. |  | Optional: \{\} <br /> |
+
+
 #### CodingAgent
 
 _Underlying type:_ _string_
@@ -148,7 +171,9 @@ characters overflows its pods' controller-revision-hash label.
 
 
 
-CompanyEndpoints is where a company is reached.
+CompanyEndpoints is where a company is reached. Every address is a base URL
+with its scheme, so that a caller appends a path to it and never
+reconstructs one from the EngineClass's templates.
 
 _Validation:_
 - MinProperties: 1
@@ -158,8 +183,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `api` _string_ | api is the in-cluster base URL of the engine's API. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `publicBaseURL` _string_ | publicBaseURL is the address vendors deliver webhooks to, when the<br />company has one. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `api` _string_ | api is the in-cluster base URL of the engine's API: the company's<br />Service, for callers inside the cluster. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `exposedAPI` _string_ | exposedAPI is the base URL of the engine's API through the class's<br />exposure.api, for callers outside the cluster: https://<hostname><br />when the route terminates TLS (the Ingress has tls, or the Gateway<br />listener the route attaches to is HTTPS), http://<hostname> otherwise,<br />with the hostname template expanded. Set only while exposure.api.mode<br />is Gateway or Ingress and the route has been accepted. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `publicBaseURL` _string_ | publicBaseURL is the address vendors deliver webhooks to, when the<br />company has one: spec.exposure.publicBaseURL, or https://<hostname><br />from the class's webhooks.hostname. Every vendor route is a path under<br />it, such as /webhooks/forge for an Atlassian Forge relay. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### CompanyExposure
@@ -176,7 +202,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `publicBaseURL` _string_ | publicBaseURL is the HTTPS address vendors deliver webhooks to,<br />overriding the one the class's webhooks.hostname derives. Required when<br />the class's webhooks.mode is External, where something outside the<br />operator forwards to the engine. Crewlet's<br />integrations.public_base_url. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `publicBaseURL` _string_ | publicBaseURL is the HTTPS address vendors deliver webhooks to,<br />overriding the one the class's webhooks.hostname derives. Required when<br />the class's webhooks.mode is External, where something outside the<br />operator (a relay, an API gateway) forwards its /webhooks/ path to the<br />engine. Crewlet's integrations.public_base_url. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### CompanyIntegrationSettings
@@ -253,7 +279,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `version` _string_ | version replaces the tag of the class's engine image, for example<br />v0.14.3. It is honoured only when the class sets<br />engine.allowVersionOverride; the operator refuses a version older than<br />the one the company's data was last written by. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9_][A-Za-z0-9_.-]\{0,127\}$` <br />Optional: \{\} <br /> |
-| `env` _[EnvVar](#envvar) array_ | env adds environment variables to the engine container, for platform<br />wiring the engine reads from its environment. Names starting with<br />CREWLET_ or OTEL_ are the operator's own. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `env` _[EnvVar](#envvar) array_ | env adds environment variables to the engine container, for platform<br />wiring the engine reads from its environment. They are merged over the<br />class's podTemplate.spec.env by name: a variable here replaces the<br />class's variable of the same name.<br />Names starting with CREWLET_ or OTEL_ are the operator's own.<br />ANTHROPIC_API_KEY and OPENAI_API_KEY are refused too: Crewlet reads them<br />as the key of a model or embeddings provider that names none, so a<br />value here would be a credential outside the engine's secret store;<br />give the provider its key with apiKeySecretRefs or apiKeySecretRef. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 
 
 #### CompanySpec
@@ -272,7 +298,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `engineClassName` _string_ | engineClassName is the EngineClass the company runs with. Unset uses<br />the class annotated crewlet.ai/is-default-class=true. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `engineClassName` _string_ | engineClassName is the EngineClass the company runs with. Unset uses<br />the class annotated crewlet.ai/is-default-class=true.<br />Choosing a class is not access-controlled, as choosing a StorageClass<br />is not: whoever may write a Company may name any class, including one<br />that offers platformLLMProviders or larger limits. A platform whose<br />tenants write their own Companies restricts the choice with an<br />admission policy (a ValidatingAdmissionPolicy over<br />spec.engineClassName, for example). |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `companyName` _string_ | companyName is the company's name. Crewlet derives every seat's<br />identity from it and the seat's handle, so it cannot be changed: a new<br />name would orphan every seat's memory. Crewlet's `name`. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `mission` _string_ | mission is one line on what the company is for; every seat's prompt<br />carries it. Crewlet's `mission`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `vision` _string_ | vision is a longer statement of where the company is going. Crewlet's<br />`vision`. |  | MaxLength: 8192 <br />MinLength: 1 <br />Optional: \{\} <br /> |
@@ -285,7 +311,7 @@ _Appears in:_
 | `embeddings` _[EmbeddingSettings](#embeddingsettings)_ | embeddings is the provider vectors are computed with. Unset leaves<br />search keyword-only. Crewlet's providers.embeddings. |  | Optional: \{\} <br /> |
 | `sandbox` _[SandboxSettings](#sandboxsettings)_ | sandbox is where seats run code. Unset gives no seat a sandbox.<br />Crewlet's providers.sandbox. |  | Optional: \{\} <br /> |
 | `integrations` _[CompanyIntegrationSettings](#companyintegrationsettings)_ | integrations is company-wide integration behaviour. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `engineConfig` _[RawExtension](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#rawextension-runtime-pkg)_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables and the<br />notification_* settings, spelled as Crewlet spells them. The operator<br />does not interpret it; the engine validates it in the dry run before<br />every apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, token_budget,<br />providers, integrations, mcp_servers, roles or units. Every position<br />Crewlet holds a credential in lives under one of those keys, so<br />engineConfig can never carry a credential; the operator refuses a<br />Company whose engineConfig names one of them. |  | Type: object <br />Optional: \{\} <br /> |
+| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, token_budget,<br />providers, integrations, mcp_servers, roles or units. Every position<br />Crewlet holds a credential in lives under one of those keys, so<br />engineConfig can never carry a credential: the API server refuses a<br />Company whose engineConfig names one of them, before anything is<br />stored. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
 | `config` _[ConfigSettings](#configsettings)_ | config is how the operator manages the company's document. | \{ managementPolicy:Enforce \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `topology` _[CompanyTopology](#companytopology)_ | topology is how the engine is laid out in pods. | \{ data:map[replicas:1] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `exposure` _[CompanyExposure](#companyexposure)_ | exposure overrides how the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -314,7 +340,7 @@ _Appears in:_
 | `topology` _[TopologyStatus](#topologystatus)_ | topology is the state of the company's pods. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `config` _[ConfigStatus](#configstatus)_ | config is the revision the engine runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `endpoints` _[CompanyEndpoints](#companyendpoints)_ | endpoints is where the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `apiAccessSecretRef` _[SecretReference](#secretreference)_ | apiAccessSecretRef names the Secret, in the Company's namespace, that<br />holds a bearer token for the engine's API under the key token. It is<br />for the company's consumers (a control plane, a dashboard); the<br />operator uses a token of its own, so revoking this one never locks the<br />operator out. |  | Optional: \{\} <br /> |
+| `apiAccessSecretRef` _[SecretReference](#secretreference)_ | apiAccessSecretRef names the Secret, in the Company's namespace, that<br />holds a bearer token for the engine's API under the key token<br />(APIAccessTokenKey). It is<br />for the company's consumers (a control plane, a dashboard); the<br />operator uses a token of its own, so revoking this one never locks the<br />operator out. |  | Optional: \{\} <br /> |
 
 
 #### CompanyTopology
@@ -410,7 +436,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `allowedReplicas` _integer array_ | allowedReplicas is the set of data-pod counts a Company of this class<br />may choose in spec.topology.data.replicas. Only 1 is available in<br />v1alpha1; 3 and 5 (a highly available estate) are reserved values. | [1] | MaxItems: 3 <br />MinItems: 1 <br />items:Enum: [1 3 5] <br />Optional: \{\} <br /> |
+| `allowedReplicas` _integer array_ | allowedReplicas is the set of data-pod counts a Company of this class<br />may choose in spec.topology.data.replicas. v1alpha1 runs exactly one<br />data pod, so the only value admitted is 1; 3 and 5, a highly available<br />estate, are added when the operator can run them. | [1] | MaxItems: 1 <br />MinItems: 1 <br />items:Enum: [1] <br />Optional: \{\} <br /> |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#resourcerequirements-v1-core)_ | resources are the compute resources of the engine container. |  | Optional: \{\} <br /> |
 | `storage` _[DataStorage](#datastorage)_ | storage is the data volume each data pod gets. |  | Required: \{\} <br /> |
 | `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long a data pod may take to stop.<br />The engine finishes running turns before it exits and puts no bound on<br />that itself, so the default is five minutes, which covers a long turn,<br />rather than the Kubernetes default of thirty seconds, which does not. | 300 | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
@@ -430,7 +456,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `storageClassName` _string_ | storageClassName is the StorageClass of the data volumes. Unset uses<br />the cluster's default class. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | size is the capacity requested for each data volume. It holds the<br />store, the event stream and the store's cache. There is no default: how<br />much a tenant may keep is a platform decision. |  | Required: \{\} <br /> |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | size is the capacity requested for each data volume. It holds the<br />store, the event stream and the store's cache. There is no default: how<br />much a tenant may keep is a platform decision.<br />It applies to the data volumes of companies created after it is set.<br />An existing company's volumes keep the size they were created with:<br />they are claimed through the StatefulSet's volume claim templates,<br />which Kubernetes does not let change, and resizing a volume is a<br />decision about one company's storage class and data, not the class's. |  | Required: \{\} <br /> |
 
 
 #### DataTopology
@@ -447,7 +473,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `replicas` _integer_ | replicas is the number of data pods. It must be one of the class's<br />spec.data.allowedReplicas. Only 1 is available in v1alpha1. It cannot<br />be changed once set: the event stream's replication is fixed when the<br />estate is created. | 1 | Enum: [1 3 5] <br />Maximum: 5 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `replicas` _integer_ | replicas is the number of data pods. It must be one of the class's<br />spec.data.allowedReplicas. v1alpha1 runs exactly one data pod, so 1 is<br />the only value admitted. A highly available estate of 3 or 5 is a<br />later addition, and it comes with a rule that the count cannot change<br />once set, because the event stream's replication is fixed when the<br />estate is created: admitting 3 or 5 before the operator can run them<br />would leave Companies that could never be corrected. | 1 | Enum: [1] <br />Minimum: 1 <br />Optional: \{\} <br /> |
 
 
 #### DataTopologyStatus
@@ -544,7 +570,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `type` _[EmbeddingProviderType](#embeddingprovidertype)_ | type is which embeddings API the provider speaks. | OpenAI | Enum: [OpenAI OpenAICompatible] <br />Optional: \{\} <br /> |
 | `model` _string_ | model is the embedding model id. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
-| `apiKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | apiKeySecretRef is the Secret key holding the API key. Crewlet's<br />`api_key`, a credential position. |  | Optional: \{\} <br /> |
+| `apiKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | apiKeySecretRef is the Secret key holding the API key. Crewlet's<br />`api_key`, a credential position. Required for type OpenAI: Crewlet<br />reads OPENAI_API_KEY from the environment when it is unset, and the<br />engine's environment never carries one (see spec.runtime.env). An<br />OpenAICompatible endpoint that needs no key may omit it. |  | Optional: \{\} <br /> |
 | `baseURL` _string_ | baseURL is the endpoint of an OpenAI-compatible service. Crewlet's<br />`base_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `dimensions` _integer_ | dimensions is the vector width. Unset takes the model's own width,<br />which Crewlet knows for the models it names; any other model needs it<br />stated, and it must match what the model produces. |  | Maximum: 4096 <br />Minimum: 64 <br />Optional: \{\} <br /> |
 | `maxInputTokens` _integer_ | maxInputTokens is the most tokens one input may hold. Unset takes the<br />model's documented window; it may only lower it. |  | Minimum: 1 <br />Optional: \{\} <br /> |
@@ -560,6 +586,9 @@ EngineClass is a platform's defaults and guard rails for running Crewlet
 engines: the image, the size of the data pods, how companies are exposed,
 and limits. A Company names one in spec.engineClassName; in a multi-tenant platform, a service tier
 usually maps to a class.
+
+Like a StorageClass, a class is not access-controlled: anyone who may write
+a Company may name any class (see the Company's spec.engineClassName).
 
 
 
@@ -595,6 +624,7 @@ _Appears in:_
 | `exposure` _[ExposureSettings](#exposuresettings)_ | exposure is how each company is reached from outside its namespace. | \{ api:map[mode:ClusterInternal] webhooks:map[mode:None] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `networkPolicy` _[NetworkPolicyMode](#networkpolicymode)_ | networkPolicy is whether the operator restricts traffic to the engine. | Isolated | Enum: [Isolated None] <br />Optional: \{\} <br /> |
 | `podTemplate` _[EnginePodTemplate](#enginepodtemplate)_ | podTemplate is what is added to every engine pod. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `serviceAccount` _[EngineServiceAccount](#engineserviceaccount)_ | serviceAccount is what is added to each company's engine<br />ServiceAccount. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `platformLLMProviders` _[PlatformLLMProvider](#platformllmprovider) array_ | platformLLMProviders are model providers the platform offers to<br />companies that opt in. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `limits` _[EngineLimits](#enginelimits)_ | limits caps what a company may declare. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `telemetry` _[TelemetrySettings](#telemetrysettings)_ | telemetry sends the engine's traces to a collector. Unset exports<br />nothing. |  | Optional: \{\} <br /> |
@@ -617,6 +647,38 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions has Accepted: whether the class is one the operator can run<br />companies with. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+
+
+#### EngineConfigEntry
+
+
+
+EngineConfigEntry is one top-level key of the company document that
+spec.engineConfig passes through, and its value.
+
+
+
+_Appears in:_
+- [CompanySpec](#companyspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name is the key, as Crewlet spells it, such as turn_engine. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z][a-z0-9_]*$` <br />Required: \{\} <br /> |
+| `value` _[EngineConfigValue](#engineconfigvalue)_ | value is the key's value: an object, a list, a string, a number or a<br />boolean, kept as written. |  | Type:  <br />Required: \{\} <br /> |
+
+
+#### EngineConfigValue
+
+
+
+EngineConfigValue is any JSON value, kept byte for byte as it was written.
+
+_Validation:_
+- Type: 
+
+_Appears in:_
+- [EngineConfigEntry](#engineconfigentry)
+
 
 
 #### EngineLimits
@@ -681,6 +743,7 @@ _Appears in:_
 | `topologySpreadConstraints` _[TopologySpreadConstraint](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#topologyspreadconstraint-v1-core) array_ | topologySpreadConstraints spread engine pods across topology domains. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `runtimeClassName` _string_ | runtimeClassName is the RuntimeClass engine pods run with, for example<br />a sandboxed runtime such as gVisor. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `priorityClassName` _string_ | priorityClassName is the PriorityClass of engine pods. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `env` _[ClassEnvVar](#classenvvar) array_ | env adds environment variables to the engine container of every<br />Company of the class: platform wiring that is the same for all of<br />them, such as the address of the platform's own API. A Company's<br />spec.runtime.env is merged over it by name. The same names are<br />refused as there: those starting with CREWLET_ or OTEL_, and<br />ANTHROPIC_API_KEY and OPENAI_API_KEY. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 
 
 #### EnginePodTemplate
@@ -701,6 +764,24 @@ _Appears in:_
 | `spec` _[EnginePodSpec](#enginepodspec)_ | spec is merged into every engine pod's spec. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
+#### EngineServiceAccount
+
+
+
+EngineServiceAccount is what a class adds to the ServiceAccount the operator
+creates for each Company's engine pods.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [EngineClassSpec](#engineclassspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `annotations` _object (keys:string, values:string)_ | annotations are added to the ServiceAccount, for a workload identity<br />that is bound through one: eks.amazonaws.com/role-arn for IRSA,<br />iam.gke.io/gcp-service-account for GKE Workload Identity. That is how<br />the engine reaches an S3 bucket without credentialsSecretRef. |  | MaxProperties: 16 <br />Optional: \{\} <br /> |
+
+
 #### EngineSettings
 
 
@@ -714,7 +795,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `image` _string_ | image is the Crewlet engine image, by tag or by digest, for example<br />ghcr.io/crewlet/crewlet:v0.14.2. There is no default: the platform<br />decides which build its tenants run. |  | MaxLength: 512 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `image` _string_ | image is the Crewlet engine image, by tag or by digest, for example<br />ghcr.io/crewlet/crewlet:v0.14.2. There is no default: the platform<br />decides which build its tenants run. A Company's spec.runtime.version<br />replaces the tag, so an image pinned by digest cannot be combined with<br />allowVersionOverride. |  | MaxLength: 512 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `imagePullPolicy` _[PullPolicy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#pullpolicy-v1-core)_ | imagePullPolicy is the pull policy of the engine container. Unset<br />takes the Kubernetes default for the image reference. |  | Enum: [Always IfNotPresent Never] <br />Optional: \{\} <br /> |
 | `imagePullSecrets` _[LocalObjectReference](#localobjectreference) array_ | imagePullSecrets name Secrets in each Company's namespace that pull<br />the image. They are referenced, not copied: the platform puts them<br />into the tenant namespaces it creates. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `allowVersionOverride` _boolean_ | allowVersionOverride lets a Company of this class choose its own engine<br />version with spec.runtime.version. Off by default: the class usually<br />decides which version its tenants run. |  | Optional: \{\} <br /> |
@@ -875,7 +956,7 @@ _Appears in:_
 | `url` _string_ | url is the base URL of a GitHub Enterprise Server, such as<br />https://github.example.com. Unset is github.com. Crewlet's `url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `webhookSecretRef` _[SecretKeyReference](#secretkeyreference)_ | webhookSecretRef is the Secret key holding the secret that verifies<br />webhooks delivered to the company-wide route. Crewlet's<br />`webhook_secret`, a credential position. |  | Required: \{\} <br /> |
 | `tokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | tokenSecretRef is the Secret key holding an organization token with<br />the admin:org_hook scope, which the engine registers the company's<br />webhooks with. Unset registers none. Crewlet's `token`, a credential<br />position. |  | Optional: \{\} <br /> |
-| `provisioning` _[GitHubProvisioning](#githubprovisioning)_ | provisioning is where the webhooks are registered. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `provisioning` _[GitHubProvisioning](#githubprovisioning)_ | provisioning is where the webhooks are registered. It requires<br />tokenSecretRef, without which the engine registers nothing. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### GitHubProvisioning
@@ -935,7 +1016,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `webhookURL` _string_ | webhookURL is the URL the seat's GitHub App must deliver webhooks to. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `webhookURL` _string_ | webhookURL is the URL the seat's GitHub App must deliver webhooks to,<br /><publicBaseURL>/webhooks/github/<handle>. Like the Slack requestURL it<br />is set whenever the Company has a GitHub Integration and a public base<br />URL, before the seat's app exists, and it never changes for a seat. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### IngressExposure
@@ -1001,6 +1082,13 @@ that belong to one seat, such as its own Slack app, are on the Seat.
 IntegrationSpec connects a company to one vendor. Exactly one vendor member
 is set; the Integration's kind of vendor cannot change, and a company has at
 most one Integration per vendor (a second is reported as a conflict).
+
+For both vendors, every per-seat credential (a seat's Slack app, its GitHub
+App) comes from a Secret its Seat references, whoever created the app: the
+engine mints no credential for Slack or GitHub. So an Integration has no
+switch between credentials the platform provides and credentials the engine
+provisions; one arrives with the vendors whose apps the engine can create
+(GitLab, Mattermost).
 
 v1alpha1 has the members slack and github. Crewlet's other integrations
 arrive as further members of this union, each with a reference field per
@@ -1079,10 +1167,10 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `backend` _[KnowledgeBackend](#knowledgebackend)_ | backend is which knowledge base the company runs. | Native | Enum: [Native None] <br />Optional: \{\} <br /> |
-| `scope` _string array_ | scope narrows every knowledge search to these containers. Empty<br />searches the whole company. Crewlet's `scope`. |  | MaxItems: 64 <br />items:MaxLength: 256 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
-| `skillsContainer` _string_ | skillsContainer is the container holding tool-skill pages. Unset takes<br />Crewlet's default container; an empty string turns tool skills off.<br />Crewlet's `skills_container`. |  | MaxLength: 256 <br />Optional: \{\} <br /> |
-| `rootSpace` _string_ | rootSpace is the container holding the company's own pages, such as<br />the root onboarding page. Unset takes Crewlet's default. Crewlet's<br />`root_space`. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `vectors` _boolean_ | vectors fuses semantic recall into knowledge and work search; false<br />also stops embedding the corpus. Unset is on exactly when the company<br />has an embeddings provider. Crewlet's `vectors`. |  | Optional: \{\} <br /> |
+| `scope` _string array_ | scope narrows every knowledge search to these containers. Empty<br />searches the whole company. Each is a container key, which Crewlet<br />requires to be an upper-case letter followed by 1 to 9 upper-case<br />letters or digits, such as PLAT. Crewlet's `scope`. |  | MaxItems: 64 <br />items:MaxLength: 10 <br />items:MinLength: 2 <br />items:Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
+| `skillsContainer` _string_ | skillsContainer is the container holding tool-skill pages, a container<br />key (see scope). Unset takes Crewlet's default container; an empty<br />string turns tool skills off. Crewlet's `skills_container`. |  | MaxLength: 10 <br />Optional: \{\} <br /> |
+| `rootSpace` _string_ | rootSpace is the container holding the company's own pages, such as<br />the root onboarding page, a container key (see scope). Unset takes<br />Crewlet's default. Crewlet's `root_space`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
+| `vectors` _boolean_ | vectors fuses semantic recall into knowledge and work search; false<br />also stops embedding the corpus. Unset is on exactly when the company<br />has an embeddings provider; true requires one (spec.embeddings).<br />Crewlet's `vectors`. |  | Optional: \{\} <br /> |
 
 
 #### LLMCredentialCooldowns
@@ -1190,7 +1278,7 @@ _Appears in:_
 | `claudeModel` _string_ | claudeModel names the Claude model whose request shape an Anthropic<br />provider uses when model is a gateway alias Crewlet cannot recognise.<br />Crewlet's `claude_model`; type Anthropic only. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `baseURL` _string_ | baseURL sends requests to this endpoint instead of the vendor's own,<br />for a gateway or a proxy. Required for type OpenAICompatible. Crewlet's<br />`base_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `reasoning` _boolean_ | reasoning turns on an OpenAI reasoning model's effort, so that<br />reasoningEffort is sent. Crewlet's `reasoning`; type OpenAI only. |  | Optional: \{\} <br /> |
-| `reasoningEffort` _[ReasoningEffort](#reasoningeffort)_ | reasoningEffort is how hard the model thinks. For OpenAI it is sent<br />while reasoning is on; for Anthropic it is sent on every call, and<br />unset means High. Crewlet's `reasoning_effort`. |  | Enum: [Low Medium High XHigh Max] <br />Optional: \{\} <br /> |
+| `reasoningEffort` _[ReasoningEffort](#reasoningeffort)_ | reasoningEffort is how hard the model thinks. For Anthropic it is sent<br />on every call, and unset means High. For OpenAI it is sent only while<br />reasoning is true, so it requires reasoning; an OpenAICompatible<br />provider cannot turn reasoning on and takes no reasoningEffort.<br />Crewlet's `reasoning_effort`. |  | Enum: [Low Medium High XHigh Max] <br />Optional: \{\} <br /> |
 | `reasoningBudgetTokens` _integer_ | reasoningBudgetTokens is the thinking budget of an older, budget-based<br />Claude model. Unset means such a model does not think. Crewlet's<br />`reasoning_budget_tokens`; type Anthropic only. |  | Minimum: 1024 <br />Optional: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one HTTP attempt: the whole of a unary call, the<br />longest silence in a streamed one. Unset takes Crewlet's default of<br />600. Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `cooldowns` _[LLMCredentialCooldowns](#llmcredentialcooldowns)_ | cooldowns is how long a failing key is set aside. Crewlet's<br />`cooldowns`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -1217,7 +1305,7 @@ _Appears in:_
 | `claudeModel` _string_ | claudeModel names the Claude model whose request shape an Anthropic<br />provider uses when model is a gateway alias Crewlet cannot recognise.<br />Crewlet's `claude_model`; type Anthropic only. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `baseURL` _string_ | baseURL sends requests to this endpoint instead of the vendor's own,<br />for a gateway or a proxy. Required for type OpenAICompatible. Crewlet's<br />`base_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `reasoning` _boolean_ | reasoning turns on an OpenAI reasoning model's effort, so that<br />reasoningEffort is sent. Crewlet's `reasoning`; type OpenAI only. |  | Optional: \{\} <br /> |
-| `reasoningEffort` _[ReasoningEffort](#reasoningeffort)_ | reasoningEffort is how hard the model thinks. For OpenAI it is sent<br />while reasoning is on; for Anthropic it is sent on every call, and<br />unset means High. Crewlet's `reasoning_effort`. |  | Enum: [Low Medium High XHigh Max] <br />Optional: \{\} <br /> |
+| `reasoningEffort` _[ReasoningEffort](#reasoningeffort)_ | reasoningEffort is how hard the model thinks. For Anthropic it is sent<br />on every call, and unset means High. For OpenAI it is sent only while<br />reasoning is true, so it requires reasoning; an OpenAICompatible<br />provider cannot turn reasoning on and takes no reasoningEffort.<br />Crewlet's `reasoning_effort`. |  | Enum: [Low Medium High XHigh Max] <br />Optional: \{\} <br /> |
 | `reasoningBudgetTokens` _integer_ | reasoningBudgetTokens is the thinking budget of an older, budget-based<br />Claude model. Unset means such a model does not think. Crewlet's<br />`reasoning_budget_tokens`; type Anthropic only. |  | Minimum: 1024 <br />Optional: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one HTTP attempt: the whole of a unary call, the<br />longest silence in a streamed one. Unset takes Crewlet's default of<br />600. Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `cooldowns` _[LLMCredentialCooldowns](#llmcredentialcooldowns)_ | cooldowns is how long a failing key is set aside. Crewlet's<br />`cooldowns`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -1282,7 +1370,6 @@ documents, in the referring object's own namespace.
 
 _Appears in:_
 - [EngineSettings](#enginesettings)
-- [MCPCredentials](#mcpcredentials)
 - [SeatSandbox](#seatsandbox)
 - [SeatSpec](#seatspec)
 - [UnitSpec](#unitspec)
@@ -1321,6 +1408,13 @@ seat: environment variables for a Stdio server, request headers for an HTTP
 one. They map onto one server's entry of Crewlet's mcp_env, a credential
 position.
 
+The server is named by a top-level name, as an imagePullSecrets entry names
+its Secret, rather than by a nested reference, because name is the key of
+the list that holds these: with a scalar key, server-side apply merges the
+list entry by entry, so that one field manager (a control plane's GitHub
+flow, say) can own the credentials of one server without owning, or
+overwriting, every other server's.
+
 
 
 _Appears in:_
@@ -1329,8 +1423,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `serverRef` _[LocalObjectReference](#localobjectreference)_ | serverRef names the MCPServer, in this namespace, the credentials are<br />for. |  | Required: \{\} <br /> |
-| `env` _[MCPCredentialValue](#mcpcredentialvalue) array_ | env are the values. For a Stdio server each is an environment<br />variable of its process; for an HTTP server each is a request header<br />(the name is the header's name). |  | MaxItems: 32 <br />MinItems: 1 <br />Required: \{\} <br /> |
+| `name` _string_ | name is the metadata.name of the MCPServer, in this namespace, the<br />credentials are for. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `env` _[MCPCredentialValue](#mcpcredentialvalue) array_ | env are the values. For a Stdio server each is an environment<br />variable of its process; for an HTTP server each is a request header<br />(the name is the header's name). Names must differ in more than case:<br />HTTP header names are case-insensitive, so Authorization and<br />authorization are one header. |  | MaxItems: 32 <br />MinItems: 1 <br />Required: \{\} <br /> |
 
 
 #### MCPServer
@@ -1377,7 +1471,7 @@ _Appears in:_
 | `args` _string array_ | args are the executable's arguments. Crewlet's `args`. |  | MaxItems: 64 <br />items:MaxLength: 4096 <br />Optional: \{\} <br /> |
 | `env` _[SecretEnvVar](#secretenvvar) array_ | env is the environment of a Stdio server's process, shared by every<br />instance; per-seat values belong in a Seat's or a Unit's spec.mcp.<br />Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `url` _string_ | url is the endpoint of an HTTP server. Crewlet's `url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `headers` _[SecretHeader](#secretheader) array_ | headers are sent with every request to an HTTP server, shared by every<br />instance; per-seat values belong in a Seat's or a Unit's spec.mcp.<br />Crewlet's `headers`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `headers` _[SecretHeader](#secretheader) array_ | headers are sent with every request to an HTTP server, shared by every<br />instance; per-seat values belong in a Seat's or a Unit's spec.mcp.<br />Header names are case-insensitive, so names must differ in more than<br />case. Crewlet's `headers`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `toolPrefix` _string_ | toolPrefix is put in front of the server's tool names, to keep them<br />apart from another server's. Crewlet's `tool_prefix`. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[A-Za-z][A-Za-z0-9_-]*$` <br />Optional: \{\} <br /> |
 | `toolAnnotations` _[MCPToolAnnotations](#mcptoolannotations) array_ | toolAnnotations correct the hints individual tools advertise.<br />Crewlet's `tool_annotations`. |  | MaxItems: 128 <br />Optional: \{\} <br /> |
 | `startupTimeoutSeconds` _integer_ | startupTimeoutSeconds bounds starting the server, the handshake and<br />its first tool listing. Unset takes Crewlet's default of 60. Crewlet's<br />`startup_timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
@@ -1511,6 +1605,7 @@ platform controls, never in a tenant's.
 
 
 _Appears in:_
+- [NamespacedSecretValueSource](#namespacedsecretvaluesource)
 - [PlatformLLMProvider](#platformllmprovider)
 - [TelemetrySettings](#telemetrysettings)
 
@@ -1539,6 +1634,23 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `namespace` _string_ | namespace is the namespace the Secret is in. |  | MaxLength: 63 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `name` _string_ | name is the metadata.name of the Secret. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
+
+
+#### NamespacedSecretValueSource
+
+
+
+NamespacedSecretValueSource says where a value set by the cluster-scoped
+EngineClass comes from: a Secret in a namespace the platform controls.
+
+
+
+_Appears in:_
+- [ClassEnvVar](#classenvvar)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `secretKeyRef` _[NamespacedSecretKeyReference](#namespacedsecretkeyreference)_ | secretKeyRef selects the Secret key that holds the value. |  | Required: \{\} <br /> |
 
 
 #### NativeTrackerSettings
@@ -1573,7 +1685,7 @@ _Appears in:_
 
 | Field | Description |
 | --- | --- |
-| `Isolated` | NetworkPolicyIsolated admits traffic to the engine's port only from<br />the operator, from the namespaces of the Gateways or Ingress<br />controller the class routes through, and from namespaces labelled<br />crewlet.ai/api-consumer=true. It needs a CNI that enforces<br />NetworkPolicy.<br /> |
+| `Isolated` | NetworkPolicyIsolated admits traffic to the engine's port only from<br />the operator, from the namespaces of the Gateways or Ingress<br />controller the class routes through, and from namespaces labelled<br />crewlet.ai/api-consumer=true (APIConsumerNamespaceLabel). It needs a<br />CNI that enforces NetworkPolicy.<br /> |
 | `None` | NetworkPolicyNone creates no NetworkPolicy.<br /> |
 
 
@@ -1636,7 +1748,7 @@ _Appears in:_
 | `claudeModel` _string_ | claudeModel names the Claude model whose request shape an Anthropic<br />provider uses when model is a gateway alias Crewlet cannot recognise.<br />Crewlet's `claude_model`; type Anthropic only. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `baseURL` _string_ | baseURL sends requests to this endpoint instead of the vendor's own,<br />for a gateway or a proxy. Required for type OpenAICompatible. Crewlet's<br />`base_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `reasoning` _boolean_ | reasoning turns on an OpenAI reasoning model's effort, so that<br />reasoningEffort is sent. Crewlet's `reasoning`; type OpenAI only. |  | Optional: \{\} <br /> |
-| `reasoningEffort` _[ReasoningEffort](#reasoningeffort)_ | reasoningEffort is how hard the model thinks. For OpenAI it is sent<br />while reasoning is on; for Anthropic it is sent on every call, and<br />unset means High. Crewlet's `reasoning_effort`. |  | Enum: [Low Medium High XHigh Max] <br />Optional: \{\} <br /> |
+| `reasoningEffort` _[ReasoningEffort](#reasoningeffort)_ | reasoningEffort is how hard the model thinks. For Anthropic it is sent<br />on every call, and unset means High. For OpenAI it is sent only while<br />reasoning is true, so it requires reasoning; an OpenAICompatible<br />provider cannot turn reasoning on and takes no reasoningEffort.<br />Crewlet's `reasoning_effort`. |  | Enum: [Low Medium High XHigh Max] <br />Optional: \{\} <br /> |
 | `reasoningBudgetTokens` _integer_ | reasoningBudgetTokens is the thinking budget of an older, budget-based<br />Claude model. Unset means such a model does not think. Crewlet's<br />`reasoning_budget_tokens`; type Anthropic only. |  | Minimum: 1024 <br />Optional: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one HTTP attempt: the whole of a unary call, the<br />longest silence in a streamed one. Unset takes Crewlet's default of<br />600. Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `cooldowns` _[LLMCredentialCooldowns](#llmcredentialcooldowns)_ | cooldowns is how long a failing key is set aside. Crewlet's<br />`cooldowns`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -1703,7 +1815,7 @@ _Appears in:_
 | `bucket` _string_ | bucket is the bucket's name. |  | MaxLength: 63 <br />MinLength: 3 <br />Required: \{\} <br /> |
 | `prefix` _string_ | prefix is prepended to every key, so that one bucket holds many<br />companies. It is a template: \{\{namespace\}\}, \{\{name\}\} and \{\{uid\}\} are<br />replaced by the Company's namespace, name and UID, and the result must<br />differ between companies, so it must contain \{\{uid\}\}, or both<br />\{\{namespace\}\} and \{\{name\}\}. The default keys files by namespace and<br />name, which is also what the data volumes are named by: a Company<br />re-created under its old name after a Retain deletion finds both its<br />estate and its files again. | \{\{namespace\}\}/\{\{name\}\}/ | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `pathStyle` _boolean_ | pathStyle addresses the bucket in the URL path rather than in the host<br />name; MinIO and most self-hosted gateways need it. |  | Optional: \{\} <br /> |
-| `credentialsSecretRef` _[NamespacedSecretReference](#namespacedsecretreference)_ | credentialsSecretRef is a Secret holding the keys accessKeyID and<br />secretAccessKey. Unset uses the pod's own credentials (a workload<br />identity or the node's role). The engine reads object-store credentials<br />from its environment, so the operator copies the two values into a<br />Secret it owns in each Company's namespace and references them from the<br />pod; the values never appear in the pod template. |  | Optional: \{\} <br /> |
+| `credentialsSecretRef` _[NamespacedSecretReference](#namespacedsecretreference)_ | credentialsSecretRef is a Secret holding the keys accessKeyID and<br />secretAccessKey (S3AccessKeyIDKey, S3SecretAccessKeyKey). Unset uses<br />the pod's own credentials through the SDK's default chain: a workload<br />identity (EKS Pod Identity, or IRSA and GKE Workload Identity with the<br />class's spec.serviceAccount.annotations) or the node's role. The engine reads object-store credentials<br />from its environment, so the operator copies the two values into a<br />Secret it owns in each Company's namespace and references them from the<br />pod; the values never appear in the pod template. |  | Optional: \{\} <br /> |
 
 
 #### SandboxFile
@@ -1782,6 +1894,11 @@ _Appears in:_
 Seat is one seat of a company's org chart: an AI agent the engine runs, or a
 person agents work with.
 
+v1alpha1 has no way to pause a seat while keeping it in the chart. Crewlet
+pauses a seat through its API rather than its company document, and a
+paused field arrives with the operator's use of that API; until then,
+Company's spec.suspend stops the whole engine.
+
 Unless spec.handle is set, the Seat's metadata.name is its handle and must
 follow the handle's rules: lowercase letters, digits and '-', starting with
 a letter or digit, at most 63 characters. The handle cannot change.
@@ -1804,7 +1921,9 @@ a letter or digit, at most 63 characters. The handle cannot change.
 
 
 SeatContact is how agents reach a person: their accounts on the company's
-surfaces. It maps onto Crewlet's role `contact`.
+surfaces. It maps onto Crewlet's role `contact`. Crewlet refuses two seats
+that claim one account, so a Seat whose slackUserID or githubLogin another
+Seat of the company already claims is reported as a Conflict.
 
 _Validation:_
 - MinProperties: 1
@@ -1957,7 +2076,7 @@ _Appears in:_
 | `companyRef` _[CompanyReference](#companyreference)_ | companyRef names the Company this seat belongs to. Immutable. |  | Required: \{\} <br /> |
 | `handle` _string_ | handle is the seat's canonical slug. Unset is the Seat's<br />metadata.name. Crewlet derives the seat's identity, and with it the<br />seat's memory, from the company name and the handle, so the handle<br />cannot be changed; a Seat deleted and created again with the same<br />handle gets its memory back. Crewlet's `handle`. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9-]*$` <br />Optional: \{\} <br /> |
 | `kind` _[SeatKind](#seatkind)_ | kind is whether the seat is an AI agent or a person. Crewlet's `kind`. | Agent | Enum: [Agent Human] <br />Optional: \{\} <br /> |
-| `displayName` _string_ | displayName is the seat's name as people read it, such as "Ana<br />(Platform Engineer)". Unset is the handle. Crewlet's `name`. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `displayName` _string_ | displayName is the seat's name as people read it, such as "Ana<br />(Platform Engineer)". Unset is the handle. Crewlet's `name`. Crewlet<br />refuses two seats with one name, so a Seat whose displayName (or, unset,<br />handle) another Seat of the company already uses is reported as a<br />Conflict. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `email` _string_ | email is the seat's email address. Crewlet's `email`. |  | MaxLength: 254 <br />MinLength: 3 <br />Pattern: `^[^@\s]+@[^@\s]+$` <br />Optional: \{\} <br /> |
 | `unitRef` _[LocalObjectReference](#localobjectreference)_ | unitRef names the Unit, in this namespace, the seat belongs to. Unset<br />is a seat outside every unit, such as a chief executive. |  | Optional: \{\} <br /> |
 | `goal` _string_ | goal is what the seat is for; it reaches the seat's prompt. Crewlet's<br />`goal`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
@@ -1965,16 +2084,16 @@ _Appears in:_
 | `responsibilities` _string array_ | responsibilities are what the seat owns. Crewlet's<br />`responsibilities`. |  | MaxItems: 32 <br />items:MaxLength: 1024 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
 | `behavioralGuidelines` _string array_ | behavioralGuidelines are how the seat should work. Crewlet's<br />`behavioral_guidelines`. |  | MaxItems: 32 <br />items:MaxLength: 1024 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
 | `manages` _[ManagedReference](#managedreference) array_ | manages names the seats and units this seat manages; a unit stands<br />for every seat in it and below it. Crewlet's `manages`. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
-| `workers` _string array_ | workers narrows which of the company's delegate templates (the<br />workers block of the Company's engineConfig) the seat may use. Unset<br />is every one. Crewlet's `workers`. |  | MaxItems: 32 <br />items:MaxLength: 128 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
+| `workers` _string array_ | workers narrows which of the company's delegate templates (the<br />workers block of the Company's engineConfig) the seat may use, by the<br />templates' names: a lowercase letter or digit, then lowercase letters,<br />digits, '_' and '-'. Unset is every one. Crewlet's `workers`. |  | MaxItems: 32 <br />items:MaxLength: 128 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9][a-z0-9_-]*$` <br />Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens this seat may spend per window, on top of<br />the Company's caps. Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `llm` _[SeatLLM](#seatllm)_ | llm is the model providers the seat runs on. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `learningEnabled` _boolean_ | learningEnabled overrides the company's learning setting for this<br />seat: false stops reflection after the seat's turns. Unset inherits.<br />Crewlet's `learning_enabled`. |  | Optional: \{\} <br /> |
-| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are the seat's own tool-server credentials, which make it act as<br />itself on each server. They are merged over its unit's, per variable.<br />Crewlet's `mcp_env`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are the seat's own tool-server credentials, which make it act as<br />itself on each server. They are merged over its unit's, per variable.<br />One entry per server, keyed by its name. Crewlet's `mcp_env`, a<br />credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `sandbox` _[SeatSandbox](#seatsandbox)_ | sandbox gives the seat a sandbox to run code in. Unset gives it none. |  | Optional: \{\} <br /> |
 | `placement` _[SeatPlacement](#seatplacement)_ | placement is where the seat runs. |  | Optional: \{\} <br /> |
 | `integrations` _[SeatIntegrations](#seatintegrations)_ | integrations is the seat's own identity on the company's<br />integrations. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `project` _string_ | project is the tracker project a seat outside every unit owns; a seat<br />in a unit takes its unit's. Crewlet's `project`. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `space` _string_ | space is the knowledge container a seat outside every unit owns; a<br />seat in a unit takes its unit's. Crewlet's `space`. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `project` _string_ | project is the tracker project a seat outside every unit owns, by its<br />key; a seat in a unit takes its unit's. Crewlet requires a container<br />key to be an upper-case letter followed by 1 to 9 upper-case letters or<br />digits, such as LEAD. Crewlet's `project`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
+| `space` _string_ | space is the knowledge container a seat outside every unit owns, by<br />its key, which follows the same rule as project; a seat in a unit<br />takes its unit's. Crewlet's `space`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
 | `contact` _[SeatContact](#seatcontact)_ | contact is how agents reach the person in a Human seat. Required for,<br />and only for, kind Human. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `availability` _string_ | availability tells colleagues of a Human seat when to expect an<br />answer, such as "CET business hours". Crewlet's `availability`. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
@@ -2159,7 +2278,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `requestURL` _string_ | requestURL is the URL the seat's Slack app must deliver events to: its<br />Event Subscriptions request URL. A platform that creates the app puts<br />it into the app's manifest. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `requestURL` _string_ | requestURL is the URL the seat's Slack app must deliver events to: its<br />Event Subscriptions request URL, <publicBaseURL>/webhooks/slack/<handle>,<br />where publicBaseURL is the Company's status.endpoints.publicBaseURL.<br />It is set whenever the Company has a Slack Integration and a public<br />base URL, whether or not this Seat sets spec.integrations.slack: a<br />platform that creates the seat's Slack app needs the URL for the app's<br />manifest before the app, and so its credentials, exist. Derived from<br />the handle, which never changes, it never changes for a seat either. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### StatusPhrases
@@ -2325,7 +2444,8 @@ spec.parentRef; Seats join one through spec.unitRef.
 
 The Unit's metadata.name is the unit's stable id in Crewlet, which has its
 own rules: it must start with a lowercase letter and be at most 64
-characters, and may hold lowercase letters, digits and '-'.
+characters, and may hold lowercase letters, digits and '-'. (Crewlet also
+admits '_' in a unit id, which no Kubernetes name can hold.)
 
 
 
@@ -2355,7 +2475,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `companyRef` _[CompanyReference](#companyreference)_ | companyRef names the Company this unit belongs to. Immutable. |  | Required: \{\} <br /> |
-| `displayName` _string_ | displayName is the unit's name as people read it, in prompts and on<br />boards. Unset is the Unit's metadata.name. The metadata.name itself is<br />the unit's stable id, which survives a rename. Crewlet's `name`; the<br />metadata.name is Crewlet's `id`. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `displayName` _string_ | displayName is the unit's name as people read it, in prompts and on<br />boards. Unset is the Unit's metadata.name. The metadata.name itself is<br />the unit's stable id, which survives a rename. Crewlet's `name`; the<br />metadata.name is Crewlet's `id`. Crewlet refuses two units with one<br />name, so a Unit whose displayName (or, unset, metadata.name) another<br />Unit of the company already uses is reported as a Conflict. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `type` _[UnitType](#unittype)_ | type is an informational label. Crewlet's `type`. |  | Enum: [Division Department Group Team Squad Pod Guild Chapter Unit] <br />Optional: \{\} <br /> |
 | `parentRef` _[LocalObjectReference](#localobjectreference)_ | parentRef names the Unit this one belongs to. Unset makes it a<br />top-level unit. A parent that does not exist, or a chain of parents<br />that leads back to this unit, is reported on this Unit. |  | Optional: \{\} <br /> |
 | `leadRef` _[LocalObjectReference](#localobjectreference)_ | leadRef names the Seat that leads the unit. Unset inherits the<br />parent's lead. Crewlet's `lead`. |  | Optional: \{\} <br /> |
@@ -2363,9 +2483,9 @@ _Appears in:_
 | `goals` _string array_ | goals are what the unit is working toward. Crewlet's `goals`. |  | MaxItems: 32 <br />items:MaxLength: 1024 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
 | `channel` _string_ | channel is the unit's channel on the company's chat surface, such as<br />#platform; child units without one inherit it. Crewlet's `channel`. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `knowledge` _string array_ | knowledge are free-text references to knowledge the unit relies on.<br />They are not a read scope. Crewlet's `knowledge`. |  | MaxItems: 32 <br />items:MaxLength: 1024 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
-| `project` _string_ | project is the tracker project the unit files work in. Crewlet's<br />`project`. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `space` _string_ | space is the knowledge container the unit writes pages in. Crewlet's<br />`space`. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are tool-server credentials every agent seat directly in this unit<br />inherits; a seat's own credentials win per variable. Crewlet's<br />`mcp_env`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `project` _string_ | project is the tracker project the unit files work in, by its key.<br />Crewlet requires a container key to be an upper-case letter followed<br />by 1 to 9 upper-case letters or digits, such as PLAT. Crewlet's<br />`project`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
+| `space` _string_ | space is the knowledge container the unit writes pages in, by its<br />key, which follows the same rule as project. Crewlet's `space`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
+| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are tool-server credentials every agent seat directly in this unit<br />inherits; a seat's own credentials win per variable. One entry per<br />server, keyed by its name. Crewlet's `mcp_env`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 
 
 #### UnitStatus

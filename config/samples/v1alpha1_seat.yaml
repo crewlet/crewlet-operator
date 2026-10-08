@@ -68,8 +68,7 @@ spec:
       - kind: PlatformLLMProvider
         name: platform-claude
   mcp:
-    - serverRef:
-        name: github
+    - name: github
       env:
         - name: Authorization
           valueFrom:

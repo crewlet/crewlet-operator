@@ -42,6 +42,9 @@ spec:
           engines: the image, the size of the data pods, how companies are exposed,
           and limits. A Company names one in spec.engineClassName; in a multi-tenant platform, a service tier
           usually maps to a class.
+
+          Like a StorageClass, a class is not access-controlled: anyone who may write
+          a Company may name any class (see the Company's spec.engineClassName).
         properties:
           apiVersion:
             description: |-
@@ -71,16 +74,15 @@ spec:
                     - 1
                     description: |-
                       allowedReplicas is the set of data-pod counts a Company of this class
-                      may choose in spec.topology.data.replicas. Only 1 is available in
-                      v1alpha1; 3 and 5 (a highly available estate) are reserved values.
+                      may choose in spec.topology.data.replicas. v1alpha1 runs exactly one
+                      data pod, so the only value admitted is 1; 3 and 5, a highly available
+                      estate, are added when the operator can run them.
                     items:
                       enum:
                       - 1
-                      - 3
-                      - 5
                       format: int32
                       type: integer
-                    maxItems: 3
+                    maxItems: 1
                     minItems: 1
                     type: array
                     x-kubernetes-list-type: set
@@ -155,8 +157,17 @@ spec:
                           size is the capacity requested for each data volume. It holds the
                           store, the event stream and the store's cache. There is no default: how
                           much a tenant may keep is a platform decision.
+
+                          It applies to the data volumes of companies created after it is set.
+                          An existing company's volumes keep the size they were created with:
+                          they are claimed through the StatefulSet's volume claim templates,
+                          which Kubernetes does not let change, and resizing a volume is a
+                          decision about one company's storage class and data, not the class's.
                         pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                         x-kubernetes-int-or-string: true
+                        x-kubernetes-validations:
+                        - message: size must be greater than zero
+                          rule: quantity(string(self)).isGreaterThan(quantity('0'))
                       storageClassName:
                         description: |-
                           storageClassName is the StorageClass of the data volumes. Unset uses
@@ -194,7 +205,9 @@ spec:
                     description: |-
                       image is the Crewlet engine image, by tag or by digest, for example
                       ghcr.io/crewlet/crewlet:v0.14.2. There is no default: the platform
-                      decides which build its tenants run.
+                      decides which build its tenants run. A Company's spec.runtime.version
+                      replaces the tag, so an image pinned by digest cannot be combined with
+                      allowVersionOverride.
                     maxLength: 512
                     minLength: 1
                     type: string
@@ -234,6 +247,12 @@ spec:
                 required:
                 - image
                 type: object
+                x-kubernetes-validations:
+                - message: 'allowVersionOverride needs an image by tag: a Company''s
+                    spec.runtime.version replaces the tag, and an image pinned by
+                    digest has none'
+                  rule: '!has(self.allowVersionOverride) || !self.allowVersionOverride
+                    || !self.image.contains(''@'')'
               exposure:
                 default:
                   api:
@@ -565,8 +584,10 @@ spec:
                       credentialsSecretRef:
                         description: |-
                           credentialsSecretRef is a Secret holding the keys accessKeyID and
-                          secretAccessKey. Unset uses the pod's own credentials (a workload
-                          identity or the node's role). The engine reads object-store credentials
+                          secretAccessKey (S3AccessKeyIDKey, S3SecretAccessKeyKey). Unset uses
+                          the pod's own credentials through the SDK's default chain: a workload
+                          identity (EKS Pod Identity, or IRSA and GKE Workload Identity with the
+                          class's spec.serviceAccount.annotations) or the node's role. The engine reads object-store credentials
                           from its environment, so the operator copies the two values into a
                           Secret it owns in each Company's namespace and references them from the
                           pod; the values never appear in the pod template.
@@ -760,9 +781,11 @@ spec:
                       type: integer
                     reasoningEffort:
                       description: |-
-                        reasoningEffort is how hard the model thinks. For OpenAI it is sent
-                        while reasoning is on; for Anthropic it is sent on every call, and
-                        unset means High. Crewlet's `reasoning_effort`.
+                        reasoningEffort is how hard the model thinks. For Anthropic it is sent
+                        on every call, and unset means High. For OpenAI it is sent only while
+                        reasoning is true, so it requires reasoning; an OpenAICompatible
+                        provider cannot turn reasoning on and takes no reasoningEffort.
+                        Crewlet's `reasoning_effort`.
                       enum:
                       - Low
                       - Medium
@@ -797,6 +820,10 @@ spec:
                   - message: reasoning applies to type OpenAI only; an Anthropic model's
                       thinking depth is reasoningEffort
                     rule: '!has(self.reasoning) || self.type == ''OpenAI'''
+                  - message: reasoningEffort is sent to an OpenAI model only while
+                      reasoning is true, and never to an OpenAICompatible one
+                    rule: '!has(self.reasoningEffort) || self.type == ''Anthropic''
+                      || (self.type == ''OpenAI'' && has(self.reasoning) && self.reasoning)'
                   - message: reasoningBudgetTokens applies to type Anthropic only
                     rule: '!has(self.reasoningBudgetTokens) || self.type == ''Anthropic'''
                   - message: baseURL is required for type OpenAICompatible, which
@@ -1764,6 +1791,90 @@ spec:
                                 x-kubernetes-list-type: atomic
                             type: object
                         type: object
+                      env:
+                        description: |-
+                          env adds environment variables to the engine container of every
+                          Company of the class: platform wiring that is the same for all of
+                          them, such as the address of the platform's own API. A Company's
+                          spec.runtime.env is merged over it by name. The same names are
+                          refused as there: those starting with CREWLET_ or OTEL_, and
+                          ANTHROPIC_API_KEY and OPENAI_API_KEY.
+                        items:
+                          description: |-
+                            ClassEnvVar is an environment variable an EngineClass sets on the engine
+                            pods of every Company of the class: platform wiring such as the address of
+                            the platform's own API. A value from a Secret is copied by the operator into
+                            a Secret it owns in each Company's namespace and referenced from the pod, as
+                            telemetry headers are, so the value never appears in the pod template and the
+                            platform's Secret never has to be readable from a tenant namespace.
+                          properties:
+                            name:
+                              description: name is the variable's name.
+                              maxLength: 128
+                              minLength: 1
+                              pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+                              type: string
+                            value:
+                              description: |-
+                                value is the variable's literal value. An empty string is a valid
+                                value, which is why the field is a pointer.
+                              maxLength: 4096
+                              type: string
+                            valueFrom:
+                              description: |-
+                                valueFrom reads the value from a Secret key in a namespace the
+                                platform controls.
+                              properties:
+                                secretKeyRef:
+                                  description: secretKeyRef selects the Secret key
+                                    that holds the value.
+                                  properties:
+                                    key:
+                                      description: key is the key within the Secret's
+                                        data.
+                                      maxLength: 253
+                                      minLength: 1
+                                      pattern: ^[-._a-zA-Z0-9]+$
+                                      type: string
+                                    name:
+                                      description: name is the metadata.name of the
+                                        Secret.
+                                      maxLength: 253
+                                      minLength: 1
+                                      type: string
+                                    namespace:
+                                      description: namespace is the namespace the
+                                        Secret is in.
+                                      maxLength: 63
+                                      minLength: 1
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  - namespace
+                                  type: object
+                              required:
+                              - secretKeyRef
+                              type: object
+                          required:
+                          - name
+                          type: object
+                          x-kubernetes-validations:
+                          - message: exactly one of value and valueFrom must be set
+                            rule: has(self.value) != has(self.valueFrom)
+                        maxItems: 32
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                        x-kubernetes-validations:
+                        - message: variables starting with CREWLET_ or OTEL_ are set
+                            by the operator
+                          rule: self.all(e, !e.name.startsWith('CREWLET_') && !e.name.startsWith('OTEL_'))
+                        - message: 'ANTHROPIC_API_KEY and OPENAI_API_KEY are model
+                            provider keys: give a provider its key with a Secret reference
+                            instead'
+                          rule: self.all(e, !(e.name in ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']))
                       nodeSelector:
                         additionalProperties:
                           type: string
@@ -2018,6 +2129,23 @@ spec:
                     type: string
                 required:
                 - backupOwner
+                type: object
+              serviceAccount:
+                description: |-
+                  serviceAccount is what is added to each company's engine
+                  ServiceAccount.
+                minProperties: 1
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      annotations are added to the ServiceAccount, for a workload identity
+                      that is bound through one: eks.amazonaws.com/role-arn for IRSA,
+                      iam.gke.io/gcp-service-account for GKE Workload Identity. That is how
+                      the engine reaches an S3 bucket without credentialsSecretRef.
+                    maxProperties: 16
+                    type: object
                 type: object
               stream:
                 default:

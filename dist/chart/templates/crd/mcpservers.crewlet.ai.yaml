@@ -153,7 +153,8 @@ spec:
                 description: |-
                   headers are sent with every request to an HTTP server, shared by every
                   instance; per-seat values belong in a Seat's or a Unit's spec.mcp.
-                  Crewlet's `headers`, a credential position.
+                  Header names are case-insensitive, so names must differ in more than
+                  case. Crewlet's `headers`, a credential position.
                 items:
                   description: |-
                     SecretHeader is a named credential sent as an HTTP request header, such as
@@ -200,6 +201,10 @@ spec:
                 x-kubernetes-list-map-keys:
                 - name
                 x-kubernetes-list-type: map
+                x-kubernetes-validations:
+                - message: 'names must differ in more than case: HTTP header names
+                    are case-insensitive'
+                  rule: self.all(a, self.exists_one(b, b.name.lowerAscii() == a.name.lowerAscii()))
               requestTimeoutSeconds:
                 description: |-
                   requestTimeoutSeconds bounds one tool call. Unset takes Crewlet's

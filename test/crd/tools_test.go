@@ -104,6 +104,13 @@ func TestMCPServerValidation(t *testing.T) {
 			want:   "url must be an absolute http or https URL",
 		},
 		{
+			name: "two headers differing only in case are refused",
+			mutate: asHTTP(func(s *v1.MCPServer) {
+				s.Spec.Headers = []v1.SecretHeader{secretHeaders[0], {Name: "x-api-key", ValueFrom: tavilyKey}}
+			}),
+			want: msgHeaderCase,
+		},
+		{
 			name:   "the name crewlet is refused",
 			mutate: func(s *v1.MCPServer) { s.Name = "crewlet" },
 			want:   "the name crewlet is reserved",
@@ -154,6 +161,13 @@ func TestIntegrationValidation(t *testing.T) {
 			name:   "two vendors are refused",
 			mutate: func(i *v1.Integration) { i.Spec.GitHub = githubMember() },
 			want:   msgOneVendor,
+		},
+		{
+			name: "GitHub provisioning without an organization token is refused",
+			mutate: asGitHub(func(gh *v1.GitHubIntegration) {
+				gh.Provisioning = v1.GitHubProvisioning{Org: "nimbus-hq"}
+			}),
+			want: "provisioning needs tokenSecretRef",
 		},
 		{
 			name:   "an http GitHub url is refused",

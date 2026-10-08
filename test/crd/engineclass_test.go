@@ -3,6 +3,7 @@ package crd_test
 import (
 	"testing"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -60,9 +61,34 @@ func TestEngineClassObjects(t *testing.T) {
 	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
 		{name: "minimal class is accepted"},
 		{
-			name:   "allowedReplicas outside 1, 3 and 5 is refused",
-			mutate: func(c *v1.EngineClass) { c.Spec.Data.AllowedReplicas = []int32{2} },
-			want:   "Unsupported value: 2",
+			name:   "allowedReplicas of 3 is refused",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.AllowedReplicas = []int32{3} },
+			want:   msgThreeReplicas,
+		},
+		{
+			name:   "a storage size of zero is refused",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("0")) },
+			want:   "size must be greater than zero",
+		},
+		{
+			name:   "a storage size in bytes is accepted",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("10737418240")) },
+		},
+		{
+			name:   "a version override with an image by tag is accepted",
+			mutate: func(c *v1.EngineClass) { c.Spec.Engine.AllowVersionOverride = new(true) },
+		},
+		{
+			name: "a version override with an image by digest is refused",
+			mutate: func(c *v1.EngineClass) {
+				c.Spec.Engine.Image = engineDigestImage
+				c.Spec.Engine.AllowVersionOverride = new(true)
+			},
+			want: "allowVersionOverride needs an image by tag",
+		},
+		{
+			name:   "an image by digest without a version override is accepted",
+			mutate: func(c *v1.EngineClass) { c.Spec.Engine.Image = engineDigestImage },
 		},
 		{name: "S3 with a per-company prefix is accepted", mutate: s3("{{uid}}/")},
 		{name: "S3 with the default prefix is accepted", mutate: s3("")},
@@ -96,6 +122,10 @@ func TestEngineClassObjects(t *testing.T) {
 		},
 	})
 }
+
+// engineDigestImage is the engine image pinned by digest.
+const engineDigestImage = "ghcr.io/crewlet/crewlet@sha256:" +
+	"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func TestEngineClassExposure(t *testing.T) {
 	webhooks := func(w v1.WebhookExposure) func(*v1.EngineClass) {
@@ -236,7 +266,54 @@ func TestEngineClassPods(t *testing.T) {
 			mutate: func(c *v1.EngineClass) { c.Spec.Telemetry = v1.TelemetrySettings{OTLPEndpoint: "otel-collector:4318"} },
 			want:   "otlpEndpoint must be an absolute http or https URL",
 		},
+		{
+			name: "service account annotations are accepted",
+			mutate: func(c *v1.EngineClass) {
+				c.Spec.ServiceAccount.Annotations = map[string]string{
+					"eks.amazonaws.com/role-arn": "arn:aws:iam::111122223333:role/crewlet-engine",
+				}
+			},
+		},
+		{
+			name: "env from a literal and from a platform Secret is accepted",
+			mutate: classEnv(
+				v1.ClassEnvVar{Name: "PLATFORM_URL", Value: new("https://platform.example")},
+				v1.ClassEnvVar{Name: platformKeyVar, ValueFrom: platformKey},
+			),
+		},
+		{
+			name:   "an env var with both value and valueFrom is refused",
+			mutate: classEnv(v1.ClassEnvVar{Name: platformKeyVar, Value: new("x"), ValueFrom: platformKey}),
+			want:   msgEnvExactlyOne,
+		},
+		{
+			name:   "an env var with neither value nor valueFrom is refused",
+			mutate: classEnv(v1.ClassEnvVar{Name: platformKeyVar}),
+			want:   msgEnvExactlyOne,
+		},
+		{
+			name:   "a CREWLET_ variable is refused",
+			mutate: classEnv(v1.ClassEnvVar{Name: "CREWLET_NODE_ID", Value: new("x")}),
+			want:   msgEnvReserved,
+		},
+		{
+			name:   "OPENAI_API_KEY is refused",
+			mutate: classEnv(v1.ClassEnvVar{Name: "OPENAI_API_KEY", ValueFrom: platformKey}),
+			want:   msgProviderKeyEnv,
+		},
 	})
+}
+
+// platformKeyVar is a variable a platform sets on every engine of a class,
+// from platformKey, a Secret in the platform's namespace.
+const platformKeyVar = "PLATFORM_KEY"
+
+var platformKey = v1.NamespacedSecretValueSource{
+	SecretKeyRef: v1.NamespacedSecretKeyReference{Namespace: platformKeyNS, Name: "platform-wiring", Key: "machineKey"},
+}
+
+func classEnv(env ...v1.ClassEnvVar) func(*v1.EngineClass) {
+	return func(c *v1.EngineClass) { c.Spec.PodTemplate.Spec.Env = env }
 }
 
 // TestPlatformLLMProviders checks the copy of the LLMProvider rules that
@@ -285,6 +362,26 @@ func TestPlatformLLMProviders(t *testing.T) {
 			name:   "a thinking budget on a platform OpenAI provider is refused",
 			mutate: platform(with(openAI, func(s *v1.LLMProviderSettings) { s.ReasoningBudgetTokens = 2048 }), true),
 			want:   msgBudgetTokens,
+		},
+		{
+			name: "reasoningEffort on a platform OpenAI provider with reasoning is accepted",
+			mutate: platform(with(openAI, func(s *v1.LLMProviderSettings) {
+				s.Reasoning = new(true)
+				s.ReasoningEffort = v1.ReasoningEffortHigh
+			}), true),
+		},
+		{
+			name:   "reasoningEffort on a platform OpenAI provider without reasoning is refused",
+			mutate: platform(with(openAI, func(s *v1.LLMProviderSettings) { s.ReasoningEffort = v1.ReasoningEffortHigh }), true),
+			want:   msgReasoningEffort,
+		},
+		{
+			name: "reasoningEffort on a platform OpenAICompatible provider is refused",
+			mutate: platform(v1.LLMProviderSettings{
+				Type: v1.LLMProviderOpenAICompatible, Model: "llama", BaseURL: "http://vllm:8000/v1",
+				ReasoningEffort: v1.ReasoningEffortHigh,
+			}, false),
+			want: msgReasoningEffort,
 		},
 	})
 }

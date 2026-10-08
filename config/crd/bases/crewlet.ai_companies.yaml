@@ -114,7 +114,10 @@ spec:
                   apiKeySecretRef:
                     description: |-
                       apiKeySecretRef is the Secret key holding the API key. Crewlet's
-                      `api_key`, a credential position.
+                      `api_key`, a credential position. Required for type OpenAI: Crewlet
+                      reads OPENAI_API_KEY from the environment when it is unset, and the
+                      engine's environment never carries one (see spec.runtime.env). An
+                      OpenAICompatible endpoint that needs no key may omit it.
                     properties:
                       key:
                         description: key is the key within the Secret's data.
@@ -190,10 +193,19 @@ spec:
                 x-kubernetes-validations:
                 - message: baseURL is required for type OpenAICompatible
                   rule: self.type != 'OpenAICompatible' || has(self.baseURL)
+                - message: apiKeySecretRef is required for type OpenAI
+                  rule: self.type != 'OpenAI' || has(self.apiKeySecretRef)
               engineClassName:
                 description: |-
                   engineClassName is the EngineClass the company runs with. Unset uses
                   the class annotated crewlet.ai/is-default-class=true.
+
+                  Choosing a class is not access-controlled, as choosing a StorageClass
+                  is not: whoever may write a Company may name any class, including one
+                  that offers platformLLMProviders or larger limits. A platform whose
+                  tenants write their own Companies restricts the choice with an
+                  admission policy (a ValidatingAdmissionPolicy over
+                  spec.engineClassName, for example).
                 maxLength: 253
                 minLength: 1
                 type: string
@@ -202,18 +214,52 @@ spec:
                   engineConfig is passed through into the company document as written,
                   for the engine's tuning blocks that have no field here: turn_engine,
                   learning, scheduling, workers, skill_variables and the
-                  notification_* settings, spelled as Crewlet spells them. The operator
-                  does not interpret it; the engine validates it in the dry run before
-                  every apply, and a refusal is reported on the Company.
+                  notification_* settings, spelled as Crewlet spells them. Each entry is
+                  one top-level key of the document and its value. The operator does not
+                  interpret it; the engine validates it in the dry run before every
+                  apply, and a refusal is reported on the Company.
 
                   It may not set what another field or object of this API owns: name,
                   mission, vision, policies, timezone, tracker, knowledge, token_budget,
                   providers, integrations, mcp_servers, roles or units. Every position
                   Crewlet holds a credential in lives under one of those keys, so
-                  engineConfig can never carry a credential; the operator refuses a
-                  Company whose engineConfig names one of them.
-                type: object
-                x-kubernetes-preserve-unknown-fields: true
+                  engineConfig can never carry a credential: the API server refuses a
+                  Company whose engineConfig names one of them, before anything is
+                  stored.
+                items:
+                  description: |-
+                    EngineConfigEntry is one top-level key of the company document that
+                    spec.engineConfig passes through, and its value.
+                  properties:
+                    name:
+                      description: name is the key, as Crewlet spells it, such as
+                        turn_engine.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z][a-z0-9_]*$
+                      type: string
+                    value:
+                      description: |-
+                        value is the key's value: an object, a list, a string, a number or a
+                        boolean, kept as written.
+                      x-kubernetes-preserve-unknown-fields: true
+                  required:
+                  - name
+                  - value
+                  type: object
+                maxItems: 64
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+                x-kubernetes-validations:
+                - message: 'engineConfig may not set name, mission, vision, policies,
+                    timezone, tracker, knowledge, token_budget, providers, integrations,
+                    mcp_servers, roles or units: those are fields and objects of this
+                    API, and the only blocks that hold credentials'
+                  rule: self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies',
+                    'timezone', 'tracker', 'knowledge', 'token_budget', 'providers',
+                    'integrations', 'mcp_servers', 'roles', 'units']))
               exposure:
                 description: exposure overrides how the company is reached.
                 minProperties: 1
@@ -223,8 +269,8 @@ spec:
                       publicBaseURL is the HTTPS address vendors deliver webhooks to,
                       overriding the one the class's webhooks.hostname derives. Required when
                       the class's webhooks.mode is External, where something outside the
-                      operator forwards to the engine. Crewlet's
-                      integrations.public_base_url.
+                      operator (a relay, an API gateway) forwards its /webhooks/ path to the
+                      engine. Crewlet's integrations.public_base_url.
                     maxLength: 2048
                     minLength: 1
                     type: string
@@ -261,34 +307,44 @@ spec:
                   rootSpace:
                     description: |-
                       rootSpace is the container holding the company's own pages, such as
-                      the root onboarding page. Unset takes Crewlet's default. Crewlet's
-                      `root_space`.
-                    maxLength: 256
-                    minLength: 1
+                      the root onboarding page, a container key (see scope). Unset takes
+                      Crewlet's default. Crewlet's `root_space`.
+                    maxLength: 10
+                    minLength: 2
+                    pattern: ^[A-Z][A-Z0-9]{1,9}$
                     type: string
                   scope:
                     description: |-
                       scope narrows every knowledge search to these containers. Empty
-                      searches the whole company. Crewlet's `scope`.
+                      searches the whole company. Each is a container key, which Crewlet
+                      requires to be an upper-case letter followed by 1 to 9 upper-case
+                      letters or digits, such as PLAT. Crewlet's `scope`.
                     items:
-                      maxLength: 256
-                      minLength: 1
+                      maxLength: 10
+                      minLength: 2
+                      pattern: ^[A-Z][A-Z0-9]{1,9}$
                       type: string
                     maxItems: 64
                     type: array
                     x-kubernetes-list-type: set
                   skillsContainer:
                     description: |-
-                      skillsContainer is the container holding tool-skill pages. Unset takes
-                      Crewlet's default container; an empty string turns tool skills off.
-                      Crewlet's `skills_container`.
-                    maxLength: 256
+                      skillsContainer is the container holding tool-skill pages, a container
+                      key (see scope). Unset takes Crewlet's default container; an empty
+                      string turns tool skills off. Crewlet's `skills_container`.
+                    maxLength: 10
                     type: string
+                    x-kubernetes-validations:
+                    - message: 'skillsContainer must be empty or a container key:
+                        an upper-case letter followed by 1 to 9 upper-case letters
+                        or digits'
+                      rule: self == '' || self.matches('^[A-Z][A-Z0-9]{1,9}$')
                   vectors:
                     description: |-
                       vectors fuses semantic recall into knowledge and work search; false
                       also stops embedding the corpus. Unset is on exactly when the company
-                      has an embeddings provider. Crewlet's `vectors`.
+                      has an embeddings provider; true requires one (spec.embeddings).
+                      Crewlet's `vectors`.
                     type: boolean
                 type: object
               llm:
@@ -360,8 +416,15 @@ spec:
                   env:
                     description: |-
                       env adds environment variables to the engine container, for platform
-                      wiring the engine reads from its environment. Names starting with
-                      CREWLET_ or OTEL_ are the operator's own.
+                      wiring the engine reads from its environment. They are merged over the
+                      class's podTemplate.spec.env by name: a variable here replaces the
+                      class's variable of the same name.
+
+                      Names starting with CREWLET_ or OTEL_ are the operator's own.
+                      ANTHROPIC_API_KEY and OPENAI_API_KEY are refused too: Crewlet reads them
+                      as the key of a model or embeddings provider that names none, so a
+                      value here would be a credential outside the engine's secret store;
+                      give the provider its key with apiKeySecretRefs or apiKeySecretRef.
                     items:
                       description: |-
                         EnvVar is an environment variable set on the engine's pods. Unlike
@@ -425,6 +488,9 @@ spec:
                     - message: variables starting with CREWLET_ or OTEL_ are set by
                         the operator
                       rule: self.all(e, !e.name.startsWith('CREWLET_') && !e.name.startsWith('OTEL_'))
+                    - message: 'ANTHROPIC_API_KEY and OPENAI_API_KEY are model provider
+                        keys: give a provider its key with a Secret reference instead'
+                      rule: self.all(e, !(e.name in ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']))
                   version:
                     description: |-
                       version replaces the tag of the class's engine image, for example
@@ -725,20 +791,17 @@ spec:
                         default: 1
                         description: |-
                           replicas is the number of data pods. It must be one of the class's
-                          spec.data.allowedReplicas. Only 1 is available in v1alpha1. It cannot
-                          be changed once set: the event stream's replication is fixed when the
-                          estate is created.
+                          spec.data.allowedReplicas. v1alpha1 runs exactly one data pod, so 1 is
+                          the only value admitted. A highly available estate of 3 or 5 is a
+                          later addition, and it comes with a rule that the count cannot change
+                          once set, because the event stream's replication is fixed when the
+                          estate is created: admitting 3 or 5 before the operator can run them
+                          would leave Companies that could never be corrected.
                         enum:
                         - 1
-                        - 3
-                        - 5
                         format: int32
-                        maximum: 5
                         minimum: 1
                         type: integer
-                        x-kubernetes-validations:
-                        - message: topology.data.replicas is immutable
-                          rule: self == oldSelf
                     type: object
                 type: object
               tracker:
@@ -781,6 +844,11 @@ spec:
             required:
             - companyName
             type: object
+            x-kubernetes-validations:
+            - message: 'knowledge.vectors needs spec.embeddings: there is nothing
+                to compute an embedding with'
+              rule: '!has(self.knowledge) || !has(self.knowledge.vectors) || !self.knowledge.vectors
+                || has(self.embeddings)'
           status:
             description: status is the company's observed state.
             minProperties: 1
@@ -788,7 +856,8 @@ spec:
               apiAccessSecretRef:
                 description: |-
                   apiAccessSecretRef names the Secret, in the Company's namespace, that
-                  holds a bearer token for the engine's API under the key token. It is
+                  holds a bearer token for the engine's API under the key token
+                  (APIAccessTokenKey). It is
                   for the company's consumers (a control plane, a dashboard); the
                   operator uses a token of its own, so revoking this one never locks the
                   operator out.
@@ -929,14 +998,29 @@ spec:
                 minProperties: 1
                 properties:
                   api:
-                    description: api is the in-cluster base URL of the engine's API.
+                    description: |-
+                      api is the in-cluster base URL of the engine's API: the company's
+                      Service, for callers inside the cluster.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                  exposedAPI:
+                    description: |-
+                      exposedAPI is the base URL of the engine's API through the class's
+                      exposure.api, for callers outside the cluster: https://<hostname>
+                      when the route terminates TLS (the Ingress has tls, or the Gateway
+                      listener the route attaches to is HTTPS), http://<hostname> otherwise,
+                      with the hostname template expanded. Set only while exposure.api.mode
+                      is Gateway or Ingress and the route has been accepted.
                     maxLength: 2048
                     minLength: 1
                     type: string
                   publicBaseURL:
                     description: |-
                       publicBaseURL is the address vendors deliver webhooks to, when the
-                      company has one.
+                      company has one: spec.exposure.publicBaseURL, or https://<hostname>
+                      from the class's webhooks.hostname. Every vendor route is a path under
+                      it, such as /webhooks/forge for an Atlassian Forge relay.
                     maxLength: 2048
                     minLength: 1
                     type: string

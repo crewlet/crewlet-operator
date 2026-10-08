@@ -31,10 +31,10 @@ those referenced from an `EngineClass` name their namespace.
 | `roles[].sandbox.env` | `Seat.spec.sandbox.env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
 | `roles[].sandbox.setup[].files` | `Seat.spec.sandbox.setup[].files[].valueFrom.secretKeyRef` | one `SecretKeyReference` per file |
 | `roles[].sandbox.setup[].env` | `Seat.spec.sandbox.setup[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
-| `roles[].integrations.slack.bot_token` | `Seat.spec.integrations.slack.credentialsSecretRef` | `SecretReference`, key `botToken` |
-| `roles[].integrations.slack.signing_secret` | `Seat.spec.integrations.slack.credentialsSecretRef` | `SecretReference`, key `signingSecret` |
-| `roles[].integrations.github.private_key` | `Seat.spec.integrations.github.app.credentialsSecretRef` | `SecretReference`, key `privateKey` |
-| `roles[].integrations.github.webhook_secret` | `Seat.spec.integrations.github.app.credentialsSecretRef` | `SecretReference`, key `webhookSecret` |
+| `roles[].integrations.slack.bot_token` | `Seat.spec.integrations.slack.credentialsSecretRef` | `SecretReference`, key `botToken` (`SlackBotTokenKey`) |
+| `roles[].integrations.slack.signing_secret` | `Seat.spec.integrations.slack.credentialsSecretRef` | `SecretReference`, key `signingSecret` (`SlackSigningSecretKey`) |
+| `roles[].integrations.github.private_key` | `Seat.spec.integrations.github.app.credentialsSecretRef` | `SecretReference`, key `privateKey` (`GitHubAppPrivateKeyKey`) |
+| `roles[].integrations.github.webhook_secret` | `Seat.spec.integrations.github.app.credentialsSecretRef` | `SecretReference`, key `webhookSecret` (`GitHubAppWebhookSecretKey`) |
 | `integrations.github.webhook_secret` | `Integration.spec.github.webhookSecretRef` | `SecretKeyReference` |
 | `integrations.github.token` | `Integration.spec.github.tokenSecretRef` | `SecretKeyReference` |
 
@@ -46,9 +46,10 @@ Keep such settings in the same Secret as the tool's token.
 ## Not offered in v1alpha1
 
 These positions belong to features v1alpha1 does not offer. No field can fill
-them, and because `Company.spec.engineConfig` may not name the blocks they sit
-in (`integrations`, `providers`, `mcp_servers`, `roles`, `units`), nothing can
-put a literal there either.
+them, and nothing can put a literal there either: they sit in the blocks
+`integrations`, `providers`, `mcp_servers`, `roles` and `units`, and the API
+server refuses a Company whose `spec.engineConfig` names any of those (or any
+other block a field of the API owns), so such a Company is never stored.
 
 | Crewlet position | Why it is not offered |
 |---|---|
@@ -75,11 +76,23 @@ document. The operator handles them without a field:
   `Company.status.apiAccessSecretRef`; the operator uses a token of its own,
   so revoking the consumers' token never locks the operator out.
 - **Object-store keys** (`EngineClass.spec.objects.s3.credentialsSecretRef`,
-  keys `accessKeyID` and `secretAccessKey`) and **telemetry headers**
-  (`EngineClass.spec.telemetry.headersSecretRef`) are read by the engine from
-  its environment. The operator copies them into a Secret it owns in the
+  keys `accessKeyID` and `secretAccessKey`), **telemetry headers**
+  (`EngineClass.spec.telemetry.headersSecretRef`) and **class-wide
+  environment variables from a Secret**
+  (`EngineClass.spec.podTemplate.spec.env[].valueFrom`) are read by the engine
+  from its environment. The operator copies them into a Secret it owns in the
   company's namespace and references that Secret from the pod, so the values
-  never appear in a pod template.
-- **Platform wiring** a company needs in its environment goes in
-  `Company.spec.runtime.env`, with `valueFrom.secretKeyRef` for anything
-  sensitive.
+  never appear in a pod template. Without `credentialsSecretRef` the engine
+  reaches the bucket with the pod's own identity: EKS Pod Identity, the
+  node's role, or a workload identity bound through the ServiceAccount's
+  annotations (`EngineClass.spec.serviceAccount.annotations`, such as
+  `eks.amazonaws.com/role-arn` or `iam.gke.io/gcp-service-account`).
+- **Platform wiring** goes in the engine's environment: what every company
+  of a class shares in `EngineClass.spec.podTemplate.spec.env` (from a
+  Secret in the platform's namespace), and what is one company's own in
+  `Company.spec.runtime.env` (from a Secret in its namespace), which is
+  merged over the class's by name. Use `valueFrom` for anything sensitive.
+  Neither accepts `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`: Crewlet reads
+  those as the key of a provider that names none, which would make them
+  credentials outside the secret store, so a provider's key always comes
+  from its own Secret reference.
