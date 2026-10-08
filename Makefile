@@ -48,6 +48,13 @@ fmt: ## Run go fmt in both modules.
 vet: ## Run go vet in both modules.
 	@for m in $(GO_MODULES); do (cd $$m && go vet ./...); done
 
+# The API reference is generated from the types' doc comments and markers, so
+# a field's documentation is written once, on the field.
+.PHONY: docs
+docs: crd-ref-docs ## Generate the API reference (docs/reference/api.md) from the API types.
+	cd api && "$(CRD_REF_DOCS)" --source-path=. --config=../hack/crd-ref-docs/config.yaml \
+		--renderer=markdown --output-path=../docs/reference/api.md --log-level=WARN
+
 .PHONY: tidy
 tidy: ## Run go mod tidy in both modules.
 	@for m in $(GO_MODULES); do (cd $$m && go mod tidy); done
@@ -135,20 +142,21 @@ tidy-check: ## Fail if go.mod or go.sum of either module is not tidy.
 	done
 
 # The paths whose content is generated: deepcopy (api/), CRDs and RBAC
-# (config/) and the chart templates (dist/chart).
-GENERATED_PATHS := api config dist/chart
+# (config/), the chart templates (dist/chart) and the API reference
+# (docs/reference).
+GENERATED_PATHS := api config dist/chart docs/reference
 
 # The tree is snapshotted into a throwaway index before regenerating, and the
 # regenerated tree is compared with that snapshot rather than with HEAD, so the
 # check answers "is the generated output in step with its sources?" on a
 # working tree with uncommitted changes as well as on CI's clean checkout.
 .PHONY: verify-generated
-verify-generated: ## Fail if make manifests generate chart would change any generated file.
+verify-generated: ## Fail if make manifests generate chart docs would change any generated file.
 	@index="$$(mktemp)"; \
 	trap 'rm -f "$$index"' EXIT; \
 	cp "$$(git rev-parse --git-path index)" "$$index"; \
 	GIT_INDEX_FILE="$$index" git add -A -- $(GENERATED_PATHS); \
-	$(MAKE) --no-print-directory manifests generate chart; \
+	$(MAKE) --no-print-directory manifests generate chart docs; \
 	new="$$(GIT_INDEX_FILE="$$index" git ls-files --others --exclude-standard -- $(GENERATED_PATHS))"; \
 	if ! GIT_INDEX_FILE="$$index" git diff --exit-code -- $(GENERATED_PATHS) || [ -n "$$new" ]; then \
 		[ -z "$$new" ] || printf 'New files:\n%s\n' "$$new"; \
@@ -241,10 +249,12 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 HELM ?= $(LOCALBIN)/helm
 KUBEBUILDER ?= $(LOCALBIN)/kubebuilder
+CRD_REF_DOCS ?= $(LOCALBIN)/crd-ref-docs
 
 KUBECTL_VERSION ?= v1.37.1
 HELM_VERSION ?= v4.3.0
 KUBEBUILDER_VERSION ?= v4.16.0
+CRD_REF_DOCS_VERSION ?= v0.3.0
 KIND_VERSION ?= v0.33.0
 KUSTOMIZE_VERSION ?= v5.8.3
 CONTROLLER_TOOLS_VERSION ?= v0.22.0
@@ -293,6 +303,10 @@ helm: $(LOCALBIN) ## Download helm locally if necessary.
 .PHONY: kubebuilder
 kubebuilder: $(LOCALBIN) ## Download kubebuilder locally if necessary.
 	$(call go-install-tool,$(KUBEBUILDER),sigs.k8s.io/kubebuilder/v4,$(KUBEBUILDER_VERSION))
+
+.PHONY: crd-ref-docs
+crd-ref-docs: $(LOCALBIN) ## Download crd-ref-docs locally if necessary.
+	$(call go-install-tool,$(CRD_REF_DOCS),github.com/elastic/crd-ref-docs,$(CRD_REF_DOCS_VERSION))
 
 .PHONY: kind
 kind: $(LOCALBIN) ## Download kind locally if necessary.

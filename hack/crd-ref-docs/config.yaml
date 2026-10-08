@@ -1,0 +1,11 @@
+# crd-ref-docs configuration for docs/reference/api.md (make docs).
+processor:
+  # List types are the API machinery's envelope, not part of the API's shape.
+  ignoreTypes:
+    - "List$"
+  ignoreFields:
+    - "TypeMeta$"
+
+render:
+  # The Kubernetes minor whose API reference the generated links point at.
+  kubernetesVersion: "1.37"

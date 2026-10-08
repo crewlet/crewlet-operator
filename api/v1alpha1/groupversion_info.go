@@ -1,11 +1,6 @@
 // Package v1alpha1 contains the v1alpha1 API of the crewlet.ai group: a
 // Crewlet company and its org chart as Kubernetes objects.
 //
-// The package registers its types with apimachinery's own scheme builder
-// rather than controller-runtime's, so that importing it — as a provisioning control
-// plane does to write these objects — pulls in k8s.io/apimachinery and nothing
-// of the operator.
-//
 // +kubebuilder:object:generate=true
 // +groupName=crewlet.ai
 package v1alpha1
@@ -25,7 +20,10 @@ var (
 	SchemeGroupVersion = GroupVersion
 
 	// SchemeBuilder collects the functions that register this package's
-	// types; each kind's file adds itself from init.
+	// types; each kind's file adds itself from init. It is apimachinery's
+	// builder rather than controller-runtime's, so that importing this
+	// package (as a provisioning control plane does to write these objects) pulls in
+	// k8s.io/apimachinery and nothing of the operator.
 	SchemeBuilder = runtime.NewSchemeBuilder(func(scheme *runtime.Scheme) error {
 		metav1.AddToGroupVersion(scheme, GroupVersion)
 		return nil
