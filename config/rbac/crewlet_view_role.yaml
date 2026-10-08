@@ -1,0 +1,36 @@
+# Aggregated into the built-in view, edit and admin ClusterRoles, so that
+# whoever may read a namespace may also read the crewlet.ai objects in it
+# and their status. The operator does not use it.
+#
+# Nothing here exposes a credential: the objects hold references to Secrets,
+# never values, and view does not grant the Secrets themselves.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: crewlet-operator
+    app.kubernetes.io/managed-by: kustomize
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+  name: crewlet-view
+rules:
+- apiGroups:
+  - crewlet.ai
+  resources:
+  - companies
+  - companies/status
+  - integrations
+  - integrations/status
+  - llmproviders
+  - llmproviders/status
+  - mcpservers
+  - mcpservers/status
+  - seats
+  - seats/status
+  - units
+  - units/status
+  verbs:
+  - get
+  - list
+  - watch

@@ -1,0 +1,34 @@
+# Aggregated into the built-in admin and edit ClusterRoles, so that whoever
+# may edit a namespace may also manage the crewlet.ai objects in it, the way
+# they manage its Deployments. The operator does not use it.
+#
+# EngineClasses are left out: they are cluster-scoped platform settings, and
+# a namespace's editors choose one by name, which needs no access to them.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: crewlet-operator
+    app.kubernetes.io/managed-by: kustomize
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+  name: crewlet-edit
+rules:
+- apiGroups:
+  - crewlet.ai
+  resources:
+  - companies
+  - integrations
+  - llmproviders
+  - mcpservers
+  - seats
+  - units
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
