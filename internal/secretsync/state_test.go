@@ -223,3 +223,26 @@ func TestFingerprintsRevealNothing(t *testing.T) {
 		}
 	}
 }
+
+// TestDigestFollowsTheValues: the digest a caller stores beside an applied
+// document must change when a value it references is rotated, and only then,
+// or a rotation would never reach the engine, or every reconcile would apply.
+func TestDigestFollowsTheValues(t *testing.T) {
+	a, b := nameA, nameB
+	eng := newFakeEngine()
+	values := map[string]string{a: "first-a", b: "first-b"}
+	first, _ := mustSync(t, eng, desiredOf(values), State{})
+	names := []string{a, b}
+
+	same, _ := mustSync(t, eng, desiredOf(values), first)
+	if first.Digest(names) != same.Digest(names) {
+		t.Error("the digest changed although no value did")
+	}
+	rotated, _ := mustSync(t, eng, desiredOf(map[string]string{a: "first-a", b: "second-b"}), first)
+	if first.Digest(names) == rotated.Digest(names) {
+		t.Error("the digest did not change when a value was rotated")
+	}
+	if first.Digest(names) == first.Digest([]string{a}) {
+		t.Error("the digest of fewer names is the digest of all of them")
+	}
+}

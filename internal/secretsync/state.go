@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"maps"
@@ -55,6 +56,25 @@ func (s State) fingerprint(name string, value []byte) []byte {
 	mac.Write([]byte{0})
 	mac.Write(value)
 	return mac.Sum(nil)
+}
+
+// Digest returns a hex SHA-256 over names and the fingerprint the State
+// holds for each, in the order given. It changes when the value pushed under
+// one of the names changes, and reveals no more about the values than the
+// fingerprints do, which is nothing without the State's key: a caller can
+// store it beside the document it applied, to tell later whether a value
+// that document references has been rotated since.
+//
+// A name the State holds no fingerprint for contributes its name alone.
+func (s State) Digest(names []string) string {
+	h := sha256.New()
+	for _, name := range names {
+		h.Write([]byte(name))
+		h.Write([]byte{0})
+		h.Write(s.fingerprints[name])
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // String returns the names the State holds a fingerprint for.
