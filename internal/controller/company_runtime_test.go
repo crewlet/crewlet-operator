@@ -562,6 +562,56 @@ var _ = Describe("Company runtime", func() {
 		Expect(*statefulSet().Spec.Replicas).To(Equal(int32(1)))
 	})
 
+	Context("suspending a Company that is not accepted", func() {
+		// expectStopped checks the invariant: a suspended Company's data
+		// StatefulSet has no replicas whatever Accepted says, and Ready says
+		// the engine is stopped only once it is.
+		expectStopped := func(company *crewletaiv1alpha1.Company, reason string) {
+			GinkgoHelper()
+			Expect(condition(company, crewletaiv1alpha1.ConditionAccepted).Reason).To(Equal(reason))
+			Expect(*statefulSet().Spec.Replicas).To(BeZero())
+			Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonSuspended))
+			ready := condition(company, crewletaiv1alpha1.ConditionReady)
+			Expect(ready.Reason).To(Equal(crewletaiv1alpha1.ReasonSuspended))
+			Expect(ready.Message).To(ContainSubstring("its engine is stopped"))
+		}
+
+		It("stops the engine of a Company over its class's limits", func() {
+			class := newClass(func(c *crewletaiv1alpha1.EngineClass) { c.Spec.Limits.MaxSeats = new(int32(1)) })
+			company := reconciled(newCompany(class.Name))
+			rollOut()
+			for _, name := range []string{"ana", "bob"} {
+				Expect(k8sClient.Create(ctx, &crewletaiv1alpha1.Seat{
+					Namespace: namespace, Name: name,
+					Spec: crewletaiv1alpha1.SeatSpec{CompanyRef: crewletaiv1alpha1.CompanyReference{Name: companyName}},
+				})).To(Succeed())
+			}
+			updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Suspend = new(true) })
+			expectStopped(reconciled(company), crewletaiv1alpha1.ReasonLimitExceeded)
+		})
+
+		It("stops the engine of a Company whose class is gone", func() {
+			class := newClass()
+			company := reconciled(newCompany(class.Name))
+			rollOut()
+			Expect(k8sClient.Delete(ctx, class)).To(Succeed())
+			updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Suspend = new(true) })
+			expectStopped(reconciled(company), crewletaiv1alpha1.ReasonEngineClassNotFound)
+		})
+	})
+
+	It("does not say a suspended Company's engine is stopped before it is", func() {
+		company := &crewletaiv1alpha1.Company{Spec: crewletaiv1alpha1.CompanySpec{Suspend: new(true)}}
+		company.Generation = 2
+		company.Status.Conditions = []metav1.Condition{{
+			Type: crewletaiv1alpha1.ConditionRuntimeReady, Status: metav1.ConditionTrue,
+			Reason: crewletaiv1alpha1.ReasonPodsReady, ObservedGeneration: 1,
+		}}
+		ready := summarize(company)
+		Expect(ready.Reason).To(Equal(crewletaiv1alpha1.ReasonSuspended))
+		Expect(ready.Message).NotTo(ContainSubstring("is stopped"))
+	})
+
 	It("rolls the pod template when the class changes, and keeps the volumes the StatefulSet was created with", func() {
 		class := newClass()
 		company := reconciled(newCompany(class.Name))

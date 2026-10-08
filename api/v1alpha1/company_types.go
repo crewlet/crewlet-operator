@@ -692,8 +692,9 @@ type CompanySpec struct {
 	Runtime CompanyRuntime `json:"runtime,omitzero"`
 
 	// suspend stops the engine and keeps its data volumes; setting it back
-	// to false starts it again. The Company reports Ready=False with the
-	// reason Suspended meanwhile. Vendors keep delivering webhooks meanwhile,
+	// to false starts it again. It takes effect whatever else is wrong with
+	// the Company, even while it is not Accepted. The Company reports
+	// Ready=False with the reason Suspended meanwhile. Vendors keep delivering webhooks meanwhile,
 	// and some disable a subscription after a long run of failed deliveries.
 	// +optional
 	Suspend *bool `json:"suspend,omitempty"`

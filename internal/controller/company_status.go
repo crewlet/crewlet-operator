@@ -19,8 +19,16 @@ import (
 func summarize(c *crewletaiv1alpha1.Company) metav1.Condition {
 	ready := metav1.Condition{Type: crewletaiv1alpha1.ConditionReady, Status: metav1.ConditionFalse}
 	if suspended(c) {
+		// Only RuntimeReady=Suspended for this generation says the
+		// StatefulSet was scaled to zero; a suspension the operator has not
+		// carried out yet must not read as one it has.
 		ready.Reason = crewletaiv1alpha1.ReasonSuspended
-		ready.Message = "The Company is suspended: its engine is stopped and its data volumes kept."
+		runtime := meta.FindStatusCondition(c.Status.Conditions, crewletaiv1alpha1.ConditionRuntimeReady)
+		if runtime != nil && runtime.Reason == crewletaiv1alpha1.ReasonSuspended && runtime.ObservedGeneration == c.Generation {
+			ready.Message = "The Company is suspended: its engine is stopped and its data volumes kept."
+		} else {
+			ready.Message = "The Company is suspended, and the operator has not stopped its engine yet."
+		}
 		return ready
 	}
 	for _, t := range []string{

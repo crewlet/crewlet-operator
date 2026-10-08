@@ -316,7 +316,7 @@ _Appears in:_
 | `topology` _[CompanyTopology](#companytopology)_ | topology is how the engine is laid out in pods. | \{ data:map[replicas:1] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `exposure` _[CompanyExposure](#companyexposure)_ | exposure overrides how the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `runtime` _[CompanyRuntime](#companyruntime)_ | runtime is the company's bounded overrides of its class. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `suspend` _boolean_ | suspend stops the engine and keeps its data volumes; setting it back<br />to false starts it again. The Company reports Ready=False with the<br />reason Suspended meanwhile. Vendors keep delivering webhooks meanwhile,<br />and some disable a subscription after a long run of failed deliveries. |  | Optional: \{\} <br /> |
+| `suspend` _boolean_ | suspend stops the engine and keeps its data volumes; setting it back<br />to false starts it again. It takes effect whatever else is wrong with<br />the Company, even while it is not Accepted. The Company reports<br />Ready=False with the reason Suspended meanwhile. Vendors keep delivering webhooks meanwhile,<br />and some disable a subscription after a long run of failed deliveries. |  | Optional: \{\} <br /> |
 | `deletionPolicy` _[DeletionPolicy](#deletionpolicy)_ | deletionPolicy is what happens to the data volumes when the Company is<br />deleted. With Retain the keyring Secret is kept as well, since the<br />volumes cannot be read without it. | Retain | Enum: [Retain Delete] <br />Optional: \{\} <br /> |
 
 

@@ -129,6 +129,9 @@ func (r *CompanyReconciler) reconcileWorkload(
 	image, refusal := engineImage(c, class)
 	if refusal != nil {
 		if existing == nil {
+			if suspended(c) {
+				return suspendedCondition("Once it resumes, its pods are held back: " + refusal.message), nil
+			}
 			return runtimeCondition(metav1.ConditionFalse, refusal.reason, refusal.message), nil
 		}
 		image = runningImage(existing)
@@ -149,11 +152,15 @@ func (r *CompanyReconciler) reconcileWorkload(
 	recordRollout(c, sts, progress.ready)
 
 	switch {
+	case suspended(c):
+		// The StatefulSet was just applied with no replicas, whatever was
+		// refused.
+		if refusal != nil {
+			return suspendedCondition("Once it resumes, its pods run " + image + ": " + refusal.message), nil
+		}
+		return suspendedCondition(""), nil
 	case refusal != nil:
 		return runtimeCondition(metav1.ConditionFalse, refusal.reason, refusal.message+" The data pods keep running "+image+"."), nil
-	case suspended(c):
-		return runtimeCondition(metav1.ConditionFalse, crewletaiv1alpha1.ReasonSuspended,
-			"The Company is suspended: its data pods are stopped and its data volumes kept."), nil
 	case progress.ready:
 		return runtimeCondition(metav1.ConditionTrue, crewletaiv1alpha1.ReasonPodsReady, progress.message), nil
 	default:
@@ -164,18 +171,61 @@ func (r *CompanyReconciler) reconcileWorkload(
 // holdBack leaves the data StatefulSet as it is, except that a suspended
 // Company's is scaled to zero: suspending is how a platform stops an engine,
 // and it must work while something else is wrong. The scale is the one change
-// that needs nothing rendered.
+// that needs nothing rendered. A suspended Company reports Suspended, which is
+// what its pods are, and says what will hold them back once it resumes.
 func (r *CompanyReconciler) holdBack(
 	ctx context.Context, c *crewletaiv1alpha1.Company, existing *appsv1.StatefulSet, reason, message string,
 ) (metav1.Condition, error) {
-	if existing != nil && suspended(c) && (existing.Spec.Replicas == nil || *existing.Spec.Replicas != 0) {
-		base := existing.DeepCopy()
-		existing.Spec.Replicas = new(int32(0))
-		if err := r.Patch(ctx, existing, client.MergeFrom(base), client.FieldOwner(FieldOwner)); err != nil {
-			return metav1.Condition{}, fmt.Errorf("scaling StatefulSet %s/%s to zero: %w", existing.Namespace, existing.Name, err)
+	if suspended(c) {
+		if err := r.scaleToZero(ctx, c, existing); err != nil {
+			return metav1.Condition{}, err
 		}
+		return suspendedCondition("Once it resumes, its pods are held back: " + message), nil
 	}
 	return runtimeCondition(metav1.ConditionFalse, reason, message), nil
+}
+
+// stop scales a suspended Company's data StatefulSet to zero when nothing
+// else of its runtime can be reconciled (it is not accepted), and records
+// RuntimeReady=Suspended, which is then true: Ready reads its claim that the
+// engine is stopped from that condition.
+func (r *CompanyReconciler) stop(ctx context.Context, c *crewletaiv1alpha1.Company) error {
+	existing, err := r.existingStatefulSet(ctx, c)
+	if err != nil {
+		return err
+	}
+	if err := r.scaleToZero(ctx, c, existing); err != nil {
+		return err
+	}
+	condition := suspendedCondition("")
+	condition.ObservedGeneration = c.Generation
+	meta.SetStatusCondition(&c.Status.Conditions, condition)
+	return nil
+}
+
+// scaleToZero sets the replicas of a data StatefulSet the Company controls to
+// zero, with a patch of that one field: it needs nothing rendered, so it works
+// whatever else about the Company is wrong.
+func (r *CompanyReconciler) scaleToZero(ctx context.Context, c *crewletaiv1alpha1.Company, sts *appsv1.StatefulSet) error {
+	if sts == nil || !metav1.IsControlledBy(sts, c) || (sts.Spec.Replicas != nil && *sts.Spec.Replicas == 0) {
+		return nil
+	}
+	base := sts.DeepCopy()
+	sts.Spec.Replicas = new(int32(0))
+	if err := r.Patch(ctx, sts, client.MergeFrom(base), client.FieldOwner(FieldOwner)); err != nil {
+		return fmt.Errorf("scaling StatefulSet %s/%s to zero: %w", sts.Namespace, sts.Name, err)
+	}
+	return nil
+}
+
+// suspendedCondition is RuntimeReady for a suspended Company whose data
+// StatefulSet is scaled to zero, or that has none; more adds to its message.
+func suspendedCondition(more string) metav1.Condition {
+	message := "The Company is suspended: its data pods are stopped and its data volumes kept."
+	if more != "" {
+		message += " " + more
+	}
+	return runtimeCondition(metav1.ConditionFalse, crewletaiv1alpha1.ReasonSuspended, message)
 }
 
 // capitalize makes an error message, which starts in lower case, the start of

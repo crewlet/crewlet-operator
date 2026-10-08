@@ -90,7 +90,11 @@ are not compared. `spec.runtime.version` on a class without
 (the StatefulSet's retention policy keeps claims on scale-down whatever
 `deletionPolicy` says). The Company reports `Ready=False` and
 `RuntimeReady=False`, both with the reason `Suspended`. Setting it back starts
-the engine on the same volume.
+the engine on the same volume. Suspending takes effect whatever else is wrong
+with the Company: one that is not `Accepted` (its class is gone, or it is over
+its class's limits) is still scaled to zero, so a tenant cannot keep a
+suspended engine running by breaking its own Company. `Ready` says the engine
+is stopped only once `RuntimeReady` reports it for the current generation.
 
 When the operator cannot give the pod what it needs, it holds the pod back
 and keeps what runs: a keyring Secret it cannot read as a keyring
