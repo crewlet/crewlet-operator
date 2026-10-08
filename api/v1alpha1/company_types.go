@@ -791,19 +791,28 @@ type AppliedObjectCounts struct {
 // ConfigStatus is the revision of the company document the engine runs.
 // +kubebuilder:validation:MinProperties=1
 type ConfigStatus struct {
-	// revisionID is the engine's id of the active revision.
+	// revisionID is the engine's id of the last revision the operator saw
+	// run the rendered document: the one it applied, one the engine
+	// activated with the same content (a reload), or, under Observe, the
+	// one it found in sync. Under Seed it is the revision the document was
+	// seeded as.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	RevisionID string `json:"revisionID,omitempty"`
 
-	// epoch is the engine's activation counter for that revision.
+	// epoch is the engine's activation counter for that revision. The
+	// engine applies a revision asynchronously; it runs it once the applied
+	// epoch its /health reports has reached this.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	Epoch *int64 `json:"epoch,omitempty"`
 
-	// appliedHash is the hash of the rendered document and of the Secret
-	// versions it references, as last applied.
+	// appliedHash is the hash of the rendered document and of the values
+	// of the Secret keys it references, as last applied: a change to
+	// either is applied as a new revision, since the engine reads a
+	// rotated value only when a revision activates. The values enter it
+	// only as keyed fingerprints, so it reveals nothing about them.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128

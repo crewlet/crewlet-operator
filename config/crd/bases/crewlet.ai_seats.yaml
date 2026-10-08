@@ -1109,6 +1109,21 @@ spec:
                 format: int64
                 minimum: 1
                 type: integer
+              placement:
+                description: |-
+                  placement is where the engine runs the seat. Unset for a Human seat,
+                  which the engine does not run.
+                minProperties: 1
+                properties:
+                  pool:
+                    description: |-
+                      pool is the pool of pods that runs the seat: spec.placement.pool, or
+                      data. The seat is rendered with role.placement.labels
+                      {crewlet.ai/pool: <pool>}, which only the pool's pods carry.
+                    maxLength: 20
+                    minLength: 1
+                    type: string
+                type: object
               seatID:
                 description: |-
                   seatID is the seat's identity in the engine, derived from the company

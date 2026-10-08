@@ -333,13 +333,33 @@ const (
 	ReasonDriftCorrected = "DriftCorrected"
 
 	// ReasonDrifted is ConfigApplied=False under the Observe policy when the
-	// engine runs a document other than the rendered one.
+	// engine runs a document other than the rendered one, and Applied=False
+	// on each child whose part of the document differs; the messages name
+	// the places that differ.
 	ReasonDrifted = "Drifted"
 
+	// ReasonInSync is ConfigApplied=True under the Observe policy when the
+	// engine runs the rendered document, although the operator did not write
+	// it.
+	ReasonInSync = "InSync"
+
 	// ReasonSeeded is ConfigApplied=True under the Seed policy once the
-	// document has been handed to the engine, and Applied=False on every
-	// child afterwards: the engine owns the document from then on.
+	// engine has a document, whether the operator wrote it or found one
+	// there: the engine owns the document from then on.
 	ReasonSeeded = "Seeded"
+
+	// ReasonNotManaged is Applied=False on every child of a Company whose
+	// document the engine owns (the Seed policy, once the engine has a
+	// document), and SecretsSynced=Unknown on a Company whose policy keeps
+	// the operator out of the engine's secret store (Observe, and Seed once
+	// seeded): the operator does not write what the condition is about.
+	ReasonNotManaged = "NotManaged"
+
+	// ReasonEngineUnavailable is ConfigApplied=False while the operator
+	// cannot reach the company's engine or its token: the data pod has not
+	// started, does not answer, or refuses the operator's token. The message
+	// carries what failed.
+	ReasonEngineUnavailable = "EngineUnavailable"
 
 	// ReasonInvalid is Applied=False (or ConfigApplied=False) when the
 	// engine's dry run refuses the rendered document; the message carries
@@ -347,11 +367,15 @@ const (
 	ReasonInvalid = "Invalid"
 
 	// ReasonBlocked is Applied=False on a child that is valid but cannot be
-	// applied because another object of its company is not: a document is
-	// applied whole or not at all.
+	// applied because another object of its company is not, or because a
+	// Secret the company references is missing: a document is applied whole
+	// or not at all. A child whose current generation is already in the
+	// revision the engine runs keeps Applied=True meanwhile.
 	ReasonBlocked = "Blocked"
 
-	// ReasonInRevision is Applied=True; the message names the revision.
+	// ReasonInRevision is Applied=True; the message names the revision, and
+	// the condition's observedGeneration is the child's generation that
+	// revision was rendered from.
 	ReasonInRevision = "InRevision"
 
 	// ReasonRouteAccepted is Exposed=True when every route the class asks
@@ -387,6 +411,9 @@ const (
 	// ReasonValid is Accepted=True.
 	ReasonValid = "Valid"
 
+	// ReasonResolved is ResolvedRefs=True.
+	ReasonResolved = "Resolved"
+
 	// ReasonCompanyNotFound is Accepted=False on a child whose
 	// spec.companyRef names no Company.
 	ReasonCompanyNotFound = "CompanyNotFound"
@@ -394,6 +421,11 @@ const (
 	// ReasonRefNotFound is ResolvedRefs=False when a referenced object does
 	// not exist.
 	ReasonRefNotFound = "RefNotFound"
+
+	// ReasonSecretTooLarge is ResolvedRefs=False (and SecretsSynced=False)
+	// when a referenced Secret key holds more than the 64 KiB the engine's
+	// secret store accepts.
+	ReasonSecretTooLarge = "SecretTooLarge"
 
 	// ReasonSecretNotFound is ResolvedRefs=False (or SecretsSynced=False)
 	// when a referenced Secret or Secret key does not exist, and

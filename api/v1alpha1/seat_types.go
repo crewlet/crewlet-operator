@@ -489,6 +489,18 @@ type GitHubSeatStatus struct {
 	WebhookURL string `json:"webhookURL,omitempty"`
 }
 
+// SeatPlacementStatus is where the engine runs a seat.
+// +kubebuilder:validation:MinProperties=1
+type SeatPlacementStatus struct {
+	// pool is the pool of pods that runs the seat: spec.placement.pool, or
+	// data. The seat is rendered with role.placement.labels
+	// {crewlet.ai/pool: <pool>}, which only the pool's pods carry.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=20
+	Pool string `json:"pool,omitempty"`
+}
+
 // SeatIntegrationsStatus is the addresses a seat's vendor apps must use.
 // +kubebuilder:validation:MinProperties=1
 type SeatIntegrationsStatus struct {
@@ -531,6 +543,11 @@ type SeatStatus struct {
 	// +kubebuilder:validation:MinLength=36
 	// +kubebuilder:validation:MaxLength=36
 	SeatID string `json:"seatID,omitempty"`
+
+	// placement is where the engine runs the seat. Unset for a Human seat,
+	// which the engine does not run.
+	// +optional
+	Placement SeatPlacementStatus `json:"placement,omitzero"`
 
 	// integrations is the addresses the seat's vendor apps must use.
 	// +optional

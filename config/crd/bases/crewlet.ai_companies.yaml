@@ -947,14 +947,19 @@ spec:
                     type: string
                   appliedHash:
                     description: |-
-                      appliedHash is the hash of the rendered document and of the Secret
-                      versions it references, as last applied.
+                      appliedHash is the hash of the rendered document and of the values
+                      of the Secret keys it references, as last applied: a change to
+                      either is applied as a new revision, since the engine reads a
+                      rotated value only when a revision activates. The values enter it
+                      only as keyed fingerprints, so it reveals nothing about them.
                     maxLength: 128
                     minLength: 1
                     type: string
                   epoch:
-                    description: epoch is the engine's activation counter for that
-                      revision.
+                    description: |-
+                      epoch is the engine's activation counter for that revision. The
+                      engine applies a revision asynchronously; it runs it once the applied
+                      epoch its /health reports has reached this.
                     format: int64
                     minimum: 0
                     type: integer
@@ -992,7 +997,12 @@ spec:
                         type: integer
                     type: object
                   revisionID:
-                    description: revisionID is the engine's id of the active revision.
+                    description: |-
+                      revisionID is the engine's id of the last revision the operator saw
+                      run the rendered document: the one it applied, one the engine
+                      activated with the same content (a reload), or, under Observe, the
+                      one it found in sync. Under Seed it is the revision the document was
+                      seeded as.
                     maxLength: 128
                     minLength: 1
                     type: string

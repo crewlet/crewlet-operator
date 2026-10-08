@@ -393,9 +393,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `revisionID` _string_ | revisionID is the engine's id of the active revision. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `epoch` _integer_ | epoch is the engine's activation counter for that revision. |  | Minimum: 0 <br />Optional: \{\} <br /> |
-| `appliedHash` _string_ | appliedHash is the hash of the rendered document and of the Secret<br />versions it references, as last applied. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `revisionID` _string_ | revisionID is the engine's id of the last revision the operator saw<br />run the rendered document: the one it applied, one the engine<br />activated with the same content (a reload), or, under Observe, the<br />one it found in sync. Under Seed it is the revision the document was<br />seeded as. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `epoch` _integer_ | epoch is the engine's activation counter for that revision. The<br />engine applies a revision asynchronously; it runs it once the applied<br />epoch its /health reports has reached this. |  | Minimum: 0 <br />Optional: \{\} <br /> |
+| `appliedHash` _string_ | appliedHash is the hash of the rendered document and of the values<br />of the Secret keys it references, as last applied: a change to<br />either is applied as a new revision, since the engine reads a<br />rotated value only when a revision activates. The values enter it<br />only as keyed fingerprints, so it reveals nothing about them. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `appliedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#time-v1-meta)_ | appliedAt is when the operator last applied a revision. |  | Optional: \{\} <br /> |
 | `objects` _[AppliedObjectCounts](#appliedobjectcounts)_ | objects counts the objects the revision was rendered from. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
@@ -2038,6 +2038,23 @@ _Appears in:_
 | `pool` _string_ | pool is the pool of pods that runs the seat. In v1alpha1 every seat<br />runs on the company's data pod, whose pool is data. | data | MaxLength: 20 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
+#### SeatPlacementStatus
+
+
+
+SeatPlacementStatus is where the engine runs a seat.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [SeatStatus](#seatstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `pool` _string_ | pool is the pool of pods that runs the seat: spec.placement.pool, or<br />data. The seat is rendered with role.placement.labels<br />\{crewlet.ai/pool: <pool>\}, which only the pool's pods carry. |  | MaxLength: 20 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+
+
 #### SeatSandbox
 
 
@@ -2118,6 +2135,7 @@ _Appears in:_
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `handle` _string_ | handle is the seat's handle: spec.handle, or the metadata.name. |  | MaxLength: 63 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `seatID` _string_ | seatID is the seat's identity in the engine, derived from the company<br />name and the handle, so that callers need not derive it themselves. |  | MaxLength: 36 <br />MinLength: 36 <br />Optional: \{\} <br /> |
+| `placement` _[SeatPlacementStatus](#seatplacementstatus)_ | placement is where the engine runs the seat. Unset for a Human seat,<br />which the engine does not run. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `integrations` _[SeatIntegrationsStatus](#seatintegrationsstatus)_ | integrations is the addresses the seat's vendor apps must use. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
