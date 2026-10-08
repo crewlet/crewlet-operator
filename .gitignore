@@ -27,3 +27,6 @@ go.work
 
 # Kubeconfig might contain secrets
 *.kubeconfig
+
+# Rendered by `make build-installer`; a release attaches it to the GitHub Release.
+dist/install.yaml

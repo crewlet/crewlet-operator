@@ -1,0 +1,21 @@
+apiVersion: v2
+name: crewlet-operator
+description: Runs Crewlet companies on Kubernetes, declared as custom resources.
+type: application
+home: https://github.com/crewlet/crewlet-operator
+sources:
+  - https://github.com/crewlet/crewlet-operator
+
+# A release overrides both with its tag (helm package --version
+# --app-version), so neither is bumped by hand.
+version: 0.0.0
+appVersion: "dev"
+
+keywords:
+  - kubernetes
+  - operator
+  - crewlet
+  - ai-agents
+
+annotations:
+  kubebuilder.io/generated-by: kubebuilder
