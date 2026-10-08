@@ -65,10 +65,14 @@ tidy: ## Run go mod tidy in both modules.
 
 # The race detector is on because a controller is concurrent by construction:
 # a reconciler, its watches and the cache all run on their own goroutines.
-# test/e2e is excluded; it needs a cluster and runs under test-e2e.
+# test/e2e is excluded; it needs a cluster and runs under test-e2e. The engine
+# client's suite runs the pinned crewlet binary (internal/engine/enginetest),
+# named explicitly so a CREWLET_BIN in the caller's environment cannot swap in
+# another engine version.
 .PHONY: test
-test: manifests generate fmt vet setup-envtest ## Run the unit and envtest suites of both modules.
+test: manifests generate fmt vet setup-envtest crewlet ## Run the unit and envtest suites of both modules.
 	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" \
+		CREWLET_BIN="$(CREWLET)" \
 		go test -race $$(go list ./... | grep -v /test/e2e) -coverprofile cover.out
 	cd api && go test -race ./... -coverprofile cover.out
 

@@ -74,7 +74,7 @@ change?* It runs, in order:
 | `lint` | golangci-lint in both modules, with the logcheck and kube-api-linter plugins |
 | `helm-lint` | the Helm chart passes `helm lint --strict` and renders with its default values |
 | `build` | the manager binary builds |
-| `test` | unit and envtest suites of both modules, under `-race` |
+| `test` | unit, envtest and engine suites of both modules, under `-race` |
 | `signoff-check` | every commit your branch adds carries a DCO sign-off |
 | `signoff-test` | the sign-off gate's own suite |
 
@@ -91,6 +91,24 @@ Two more suites are not part of `make check`:
 
 The [`ci.yml`](.github/workflows/ci.yml) jobs call these same targets, so a
 local run and CI run the same commands with the same pinned tools.
+
+### The engine suite
+
+The engine client in [`internal/engine`](internal/engine) is tested against a
+real Crewlet engine, not a mock of one: `internal/engine/enginetest` starts the
+`crewlet` binary on a free loopback port with a throwaway configuration in the
+test's temporary directory, and stops it when the test ends. A mock would agree
+with the client by construction; the real engine is what tells the two apart
+when Crewlet's API moves.
+
+The engine is pinned like every other tool, as `CREWLET_VERSION` in the
+Makefile, and `make crewlet` builds it into `bin/crewlet` (`make test` does so
+first). To run these tests outside make — from an IDE, or with a plain
+`go test ./internal/engine/...` — build it once with `make crewlet`, or point
+`CREWLET_BIN` at a `crewlet` binary of your own. A test that finds no binary
+**fails** and says which of the two to do; it never skips, because a skipped
+contract test reads as a passing one. When a test fails, the engine's log is
+printed with it.
 
 ## Generated files
 
