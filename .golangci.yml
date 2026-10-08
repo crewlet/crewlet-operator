@@ -24,6 +24,7 @@ linters:
     - gosec
     - govet
     - ineffassign
+    - kubeapilinter
     - lll
     - logcheck
     - misspell
@@ -44,6 +45,30 @@ linters:
       logcheck:
         type: module
         description: Checks Go logging calls for Kubernetes logging conventions.
+      kubeapilinter:
+        type: module
+        description: Checks API types against the Kubernetes API conventions.
+        settings:
+          linters:
+            enable:
+              - statusoptional
+              - statussubresource
+            disable:
+              # Documented by the linter as meant for natively validated
+              # types; a CRD's optionality is enforced by its OpenAPI schema,
+              # which optionalfields and requiredfields check.
+              - nonpointerstructs
+          lintersConfig:
+            conditions:
+              # CRDs are served as JSON and patched with merge or server-side
+              # apply, never strategic merge, and have no protobuf encoding.
+              usePatchStrategy: Ignore
+              useProtobuf: Ignore
+            optionalfields:
+              pointers:
+                # A pointer only where the zero value is valid and must stay
+                # distinguishable from unset.
+                preference: WhenRequired
     depguard:
       rules:
         forbid-sort-pkg:
@@ -97,6 +122,10 @@ linters:
           - dupl
           - lll
         path: internal/
+      # The API conventions apply to API types, not to the operator.
+      - linters:
+          - kubeapilinter
+        path-except: api/
       # The e2e suite drives kubectl and make with arguments it builds itself.
       - linters:
           - gosec
