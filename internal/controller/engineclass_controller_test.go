@@ -9,8 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 )
 
@@ -34,10 +32,8 @@ var _ = Describe("EngineClass Controller", func() {
 			err := k8sClient.Get(ctx, typeNamespacedName, engineclass)
 			if err != nil && errors.IsNotFound(err) {
 				resource := &crewletaiv1alpha1.EngineClass{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: resourceNamespace,
-					},
+					Name:      resourceName,
+					Namespace: resourceNamespace,
 					// TODO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
