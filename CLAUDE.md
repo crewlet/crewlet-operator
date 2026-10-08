@@ -36,7 +36,7 @@ adr/                  decisions that bind more than one package
 test/crd/             envtest suite for the CRDs: every CEL rule, defaults, samples
 test/e2e/             kind-based e2e suite (build tag e2e)
 test/envtestbin/      finds bin/k8s's newest test binaries for a run outside make
-scripts/              the DCO sign-off gate and its tests
+scripts/              the DCO sign-off gate and its tests; the engine image build
 hack/                 generator configuration
 ```
 

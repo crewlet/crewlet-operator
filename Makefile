@@ -211,6 +211,18 @@ run: manifests generate fmt vet ## Run the manager from your host against the cu
 docker-build: ## Build the manager image for the local platform.
 	$(CONTAINER_TOOL) build -t ${IMG} .
 
+# The engine image the e2e suite runs. It is built the way a Crewlet release
+# builds its own, from crewlet's Dockerfile, at the CREWLET_VERSION every
+# other suite tests against, so the suite runs no image that differs from the
+# engine the code was written for. The build clones crewlet's repository;
+# CREWLET_SRC instead names a local clone that holds the commit, which is
+# only read from.
+CREWLET_IMG ?= example.com/crewlet:$(CREWLET_VERSION)
+
+.PHONY: crewlet-image
+crewlet-image: ## Build the Crewlet engine image CREWLET_IMG from source at CREWLET_VERSION (CREWLET_SRC: a local clone to read it from).
+	CONTAINER_TOOL="$(CONTAINER_TOOL)" scripts/build-crewlet-image.sh "$(CREWLET_VERSION)" "$(CREWLET_IMG)"
+
 .PHONY: docker-push
 docker-push: ## Push the manager image.
 	$(CONTAINER_TOOL) push ${IMG}
