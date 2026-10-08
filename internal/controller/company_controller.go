@@ -134,7 +134,7 @@ func (r *CompanyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 func (r *CompanyReconciler) accept(
 	ctx context.Context, company *crewletaiv1alpha1.Company,
 ) (*crewletaiv1alpha1.EngineClass, metav1.Condition, error) {
-	class, refused, err := r.engineClass(ctx, company)
+	class, refused, err := engineClassOf(ctx, r.Client, company)
 	if err != nil {
 		return nil, metav1.Condition{}, err
 	}
@@ -180,11 +180,13 @@ func (r *CompanyReconciler) withinLimits(
 	}, nil
 }
 
-// engineClass resolves the EngineClass a Company runs with: the one it names,
-// or else the one class annotated as the default. When it cannot, it returns
-// the Accepted=False condition that says why instead.
-func (r *CompanyReconciler) engineClass(
-	ctx context.Context, company *crewletaiv1alpha1.Company,
+// engineClassOf resolves the EngineClass a Company runs with: the one it
+// names, or else the one class annotated as the default. When it cannot, it
+// returns the Accepted=False condition that says why instead. Both
+// reconcilers resolve it this way, so they never disagree on a Company's
+// class.
+func engineClassOf(
+	ctx context.Context, r client.Reader, company *crewletaiv1alpha1.Company,
 ) (*crewletaiv1alpha1.EngineClass, *metav1.Condition, error) {
 	if name := company.Spec.EngineClassName; name != "" {
 		class := &crewletaiv1alpha1.EngineClass{}

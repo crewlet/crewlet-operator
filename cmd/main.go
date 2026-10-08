@@ -24,6 +24,7 @@ import (
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/controller"
+	"github.com/crewlet/crewlet-operator/internal/engine"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -160,6 +161,18 @@ func main() {
 		OperatorNamespace: operatorNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "company")
+		os.Exit(1)
+	}
+	if err := (&controller.CompanyConfigReconciler{
+		Client:    mgr.GetClient(),
+		APIReader: mgr.GetAPIReader(),
+		Engines: &controller.InClusterEngines{
+			Reader:     mgr.GetAPIReader(),
+			HTTPClient: engine.NewHTTPClient(),
+		},
+		Recorder: mgr.GetEventRecorder("crewlet-operator"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "companyconfig")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

@@ -61,6 +61,11 @@ rules:
   - crewlet.ai
   resources:
   - companies/status
+  - integrations/status
+  - llmproviders/status
+  - mcpservers/status
+  - seats/status
+  - units/status
   verbs:
   - get
   - patch
@@ -68,12 +73,22 @@ rules:
   - crewlet.ai
   resources:
   - engineclasses
+  - integrations
+  - llmproviders
   - mcpservers
   - seats
+  - units
   verbs:
   - get
   - list
   - watch
+- apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
 - apiGroups:
   - gateway.networking.k8s.io
   resources:
