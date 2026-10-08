@@ -24,7 +24,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"testing"
 	"time"
 
 	"github.com/crewlet/crewlet-operator/internal/engine"
@@ -79,6 +78,20 @@ const stopTimeout = 30 * time.Second
 // was taken between choosing it and the engine binding it.
 const portAttempts = 3
 
+// T is the part of testing.TB that Start and Binary use. It is an interface
+// of its own, rather than testing.TB, so that a Ginkgo suite can start an
+// engine with GinkgoT(): testing.TB has an unexported method that only the
+// testing package's own types implement. Every testing.TB is a T.
+type T interface {
+	Helper()
+	TempDir() string
+	Cleanup(func())
+	Failed() bool
+	Errorf(format string, args ...any)
+	Fatalf(format string, args ...any)
+	Logf(format string, args ...any)
+}
+
 // Engine is a running engine.
 type Engine struct {
 	// URL is the base URL of the engine's API, http://127.0.0.1:<port>.
@@ -120,7 +133,7 @@ func WithCompany(document []byte) Option {
 }
 
 // Start runs an engine for the rest of the test and stops it at cleanup.
-func Start(t testing.TB, opts ...Option) *Engine {
+func Start(t T, opts ...Option) *Engine {
 	t.Helper()
 	var o options
 	for _, opt := range opts {
@@ -171,7 +184,7 @@ var errPortTaken = errors.New("the engine's port was taken")
 
 // run starts the engine and waits until it answers. On success the engine is
 // stopped at the test's cleanup; on failure it is not running.
-func (e *Engine) run(t testing.TB, bin string, args, env []string, seeded bool) error {
+func (e *Engine) run(t T, bin string, args, env []string, seeded bool) error {
 	t.Helper()
 	// TRUNCATED on every attempt, so the port-taken check below reads this
 	// attempt's log and not the one before it.
@@ -257,7 +270,7 @@ func (e *Engine) waitUntilAnswering(exited <-chan error, seeded bool) (stillRunn
 
 // stop sends SIGTERM, the engine's graceful shutdown, and kills it if it has not
 // stopped within stopTimeout.
-func (e *Engine) stop(t testing.TB, cmd *exec.Cmd, exited <-chan error) {
+func (e *Engine) stop(t T, cmd *exec.Cmd, exited <-chan error) {
 	t.Helper()
 	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		t.Errorf("stopping the crewlet engine: %v", err)
@@ -312,7 +325,7 @@ retention:
 // never a skip, because a suite against the engine that did not run has not
 // passed. Start uses it; a suite that runs another crewlet subcommand, such
 // as `crewlet validate`, calls it directly so both find the same engine.
-func Binary(t testing.TB) string {
+func Binary(t T) string {
 	t.Helper()
 	if bin := os.Getenv(BinaryEnv); bin != "" {
 		// LookPath rather than Stat: it also refuses a file that is not
@@ -355,7 +368,7 @@ func moduleRoot() (string, error) {
 }
 
 // freePort returns a loopback port nothing was listening on a moment ago.
-func freePort(t testing.TB) int {
+func freePort(t T) int {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -368,7 +381,7 @@ func freePort(t testing.TB) int {
 	return port
 }
 
-func randomToken(t testing.TB) string {
+func randomToken(t T) string {
 	t.Helper()
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -379,7 +392,7 @@ func randomToken(t testing.TB) string {
 
 // randomKey is a keyring key in the form `crewlet secrets keygen` prints:
 // 32 random bytes, base64.
-func randomKey(t testing.TB) string {
+func randomKey(t T) string {
 	t.Helper()
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -388,7 +401,7 @@ func randomKey(t testing.TB) string {
 	return base64.StdEncoding.EncodeToString(b)
 }
 
-func writeFile(t testing.TB, path string, data []byte) {
+func writeFile(t T, path string, data []byte) {
 	t.Helper()
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatalf("writing %s: %v", path, err)

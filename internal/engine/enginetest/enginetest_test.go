@@ -8,6 +8,9 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 )
 
+// Every testing.TB must be a T, or a plain Go test could not start an engine.
+var _ enginetest.T = testing.TB(nil)
+
 // TestWithCompanyStartsReady pins the seeded start: Start returns once the
 // seed is the engine's running company, so a test can read it at once.
 func TestWithCompanyStartsReady(t *testing.T) {
