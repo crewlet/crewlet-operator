@@ -245,6 +245,23 @@ type GatewayExposure struct {
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=8
 	ParentRefs []GatewayParentReference `json:"parentRefs,omitempty"`
+
+	// proxyNamespaces are the namespaces the pods that carry the Gateways'
+	// traffic run in. Under networkPolicy Isolated they are admitted to the
+	// engine's port; nothing else outside the operator and the API consumers
+	// is. Unset is the namespaces of parentRefs, which is right for
+	// implementations that run a proxy beside each Gateway (Istio, for
+	// example); implementations with a shared data plane run it elsewhere
+	// (Envoy Gateway in envoy-gateway-system, for example) and need it named
+	// here.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=63
+	// +kubebuilder:validation:items:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	ProxyNamespaces []string `json:"proxyNamespaces,omitempty"`
 }
 
 // IngressTLS terminates TLS on a company's Ingress.
@@ -280,6 +297,20 @@ type IngressExposure struct {
 	// webhooks over HTTPS only.
 	// +optional
 	TLS IngressTLS `json:"tls,omitzero"`
+
+	// controllerNamespaces are the namespaces the Ingress controller's pods
+	// run in. Under networkPolicy Isolated they are admitted to the engine's
+	// port, and they are required there: an Ingress does not say which pods
+	// serve it, and without them the policy would refuse every request the
+	// Ingress forwards.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=63
+	// +kubebuilder:validation:items:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	ControllerNamespaces []string `json:"controllerNamespaces,omitempty"`
 }
 
 // WebhookExposureMode is how vendors' webhooks reach a company's engine.
@@ -413,8 +444,9 @@ type NetworkPolicyMode string
 // The network policy modes.
 const (
 	// NetworkPolicyIsolated admits traffic to the engine's port only from
-	// the operator, from the namespaces of the Gateways or Ingress
-	// controller the class routes through, and from namespaces labelled
+	// the operator's namespace, from the namespaces the class's Gateway
+	// proxies or Ingress controller run in (gateway.proxyNamespaces,
+	// ingress.controllerNamespaces), and from namespaces labelled
 	// crewlet.ai/api-consumer=true (APIConsumerNamespaceLabel). It needs a
 	// CNI that enforces NetworkPolicy.
 	NetworkPolicyIsolated NetworkPolicyMode = "Isolated"
@@ -600,6 +632,7 @@ type RetentionSettings struct {
 
 // EngineClassSpec is the defaults and guard rails a platform sets once for
 // every Company that names the class, the way a StorageClass does for volumes.
+// +kubebuilder:validation:XValidation:rule="self.networkPolicy != 'Isolated' || ((!has(self.exposure.webhooks.ingress) || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress) || has(self.exposure.api.ingress.controllerNamespaces)))",message="networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces: without them the policy refuses everything the Ingress forwards"
 type EngineClassSpec struct {
 	// engine is the engine image.
 	// +required

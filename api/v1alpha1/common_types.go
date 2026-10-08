@@ -231,9 +231,12 @@ type TokenBudget struct {
 // Condition types. Every kind reports a subset; each kind's status documents
 // which.
 const (
-	// ConditionReady summarises a Company: True when everything it asks for
-	// is in effect. Generic health checks (kstatus, Argo CD, Flux) read this
-	// one.
+	// ConditionReady summarises a Company: True when it is Accepted, its
+	// engine runs (RuntimeReady), its routes are in place (Exposed) and the
+	// engine runs its document (ConfigApplied). When it is False its reason
+	// is the reason of the first of those that is not True, in that order,
+	// except that a suspended Company reports Suspended. Generic health
+	// checks (kstatus, Argo CD, Flux) read this one.
 	ConditionReady = "Ready"
 
 	// ConditionRuntimeReady reports whether a Company's engine pods exist,
@@ -276,8 +279,13 @@ const (
 	// current revision.
 	ReasonAvailable = "Available"
 
-	// ReasonSuspended is Ready=False on a Company with spec.suspend set.
+	// ReasonSuspended is Ready=False and RuntimeReady=False on a Company
+	// with spec.suspend set.
 	ReasonSuspended = "Suspended"
+
+	// ReasonConfigPending is Ready=False on a Company whose engine runs
+	// and is exposed while ConfigApplied has not been reported yet.
+	ReasonConfigPending = "ConfigPending"
 
 	// ReasonPodsReady is RuntimeReady=True.
 	ReasonPodsReady = "PodsReady"
@@ -293,6 +301,13 @@ const (
 	// ReasonVersionOverrideNotAllowed is RuntimeReady=False when a Company
 	// sets spec.runtime.version and its EngineClass does not allow it.
 	ReasonVersionOverrideNotAllowed = "VersionOverrideNotAllowed"
+
+	// ReasonKeyringInvalid is RuntimeReady=False when the company's keyring
+	// Secret cannot be read as a keyring: it holds no key, or its active key
+	// is not one of them. The operator never rewrites a keyring, because
+	// every value the engine has sealed depends on it; the message says
+	// what to repair.
+	ReasonKeyringInvalid = "KeyringInvalid"
 
 	// ReasonEngineClassNotFound is Accepted=False on a Company whose class
 	// does not exist, or that names none while no class, or more than one,
@@ -339,11 +354,34 @@ const (
 	// ReasonInRevision is Applied=True; the message names the revision.
 	ReasonInRevision = "InRevision"
 
-	// ReasonRouteAccepted is Exposed=True.
+	// ReasonRouteAccepted is Exposed=True when every route the class asks
+	// for exists and was accepted by its Gateway or Ingress controller.
 	ReasonRouteAccepted = "RouteAccepted"
 
-	// ReasonNotExposed is Exposed=False (and Healthy=False on an integration
-	// that needs inbound delivery) when the class exposes no webhooks.
+	// ReasonNoRoutes is Exposed=True when the class asks for no route at
+	// all: webhooks None or External, and the API ClusterInternal. There is
+	// nothing to wait for, so it does not hold Ready back.
+	ReasonNoRoutes = "NoRoutes"
+
+	// ReasonRouteNotAccepted is Exposed=False while a route the class asks
+	// for has not been accepted: its Gateway has not attached it, or its
+	// Ingress controller has not published an address for it. The message
+	// carries what the controller reported.
+	ReasonRouteNotAccepted = "RouteNotAccepted"
+
+	// ReasonGatewayAPINotInstalled is Exposed=False when the class routes
+	// through Gateways and the cluster has no Gateway API (no HTTPRoute
+	// kind). The operator checks once, when it starts: restart it after
+	// installing the Gateway API.
+	ReasonGatewayAPINotInstalled = "GatewayAPINotInstalled"
+
+	// ReasonPublicBaseURLMissing is Exposed=False when the class's
+	// webhooks.mode is External and the Company does not state its address
+	// in spec.exposure.publicBaseURL.
+	ReasonPublicBaseURLMissing = "PublicBaseURLMissing"
+
+	// ReasonNotExposed is Healthy=False on an integration that needs inbound
+	// delivery when the class's webhooks.mode is None.
 	ReasonNotExposed = "NotExposed"
 
 	// ReasonValid is Accepted=True.
@@ -358,7 +396,11 @@ const (
 	ReasonRefNotFound = "RefNotFound"
 
 	// ReasonSecretNotFound is ResolvedRefs=False (or SecretsSynced=False)
-	// when a referenced Secret or Secret key does not exist.
+	// when a referenced Secret or Secret key does not exist, and
+	// RuntimeReady=False when a Secret the EngineClass references for the
+	// engine's pods (objects.s3.credentialsSecretRef,
+	// telemetry.headersSecretRef, a podTemplate.spec.env valueFrom) does not,
+	// or when the company's API tokens Secret lacks a token.
 	ReasonSecretNotFound = "SecretNotFound"
 
 	// ReasonConflict is Accepted=False when the object collides with
@@ -413,7 +455,22 @@ const (
 	// in the Secret the operator names in a Company's
 	// status.apiAccessSecretRef.
 	APIAccessTokenKey = "token"
+	// APIAccessURLKey holds the in-cluster base URL of the company's engine
+	// API, the same as its status.endpoints.api, in the same Secret, so a
+	// consumer that mounts the Secret needs nothing else.
+	APIAccessURLKey = "url"
 )
+
+// CompanyLabel is the label, with the Company's name as its value, on every
+// object the operator creates for a Company. Several companies may share a
+// namespace, so selectors (the Services', the NetworkPolicy's) match on it
+// rather than on the namespace.
+const CompanyLabel = "crewlet.ai/company"
+
+// CompanyFinalizer is the finalizer the operator puts on every Company. It
+// holds the Company's deletion until the engine has drained and stopped and
+// the data volumes have been kept or deleted as spec.deletionPolicy says.
+const CompanyFinalizer = "crewlet.ai/company"
 
 // APIConsumerNamespaceLabel is the namespace label that, with the value
 // "true", admits the namespace's pods to the engine's port under the

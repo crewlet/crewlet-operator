@@ -307,6 +307,25 @@ spec:
                             minItems: 1
                             type: array
                             x-kubernetes-list-type: atomic
+                          proxyNamespaces:
+                            description: |-
+                              proxyNamespaces are the namespaces the pods that carry the Gateways'
+                              traffic run in. Under networkPolicy Isolated they are admitted to the
+                              engine's port; nothing else outside the operator and the API consumers
+                              is. Unset is the namespaces of parentRefs, which is right for
+                              implementations that run a proxy beside each Gateway (Istio, for
+                              example); implementations with a shared data plane run it elsewhere
+                              (Envoy Gateway in envoy-gateway-system, for example) and need it named
+                              here.
+                            items:
+                              maxLength: 63
+                              minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                              type: string
+                            maxItems: 8
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: set
                         required:
                         - parentRefs
                         type: object
@@ -347,6 +366,22 @@ spec:
                             maxLength: 253
                             minLength: 1
                             type: string
+                          controllerNamespaces:
+                            description: |-
+                              controllerNamespaces are the namespaces the Ingress controller's pods
+                              run in. Under networkPolicy Isolated they are admitted to the engine's
+                              port, and they are required there: an Ingress does not say which pods
+                              serve it, and without them the policy would refuse every request the
+                              Ingress forwards.
+                            items:
+                              maxLength: 63
+                              minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                              type: string
+                            maxItems: 8
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: set
                           tls:
                             description: |-
                               tls terminates TLS on the Ingress. Unset serves plain HTTP, which is
@@ -437,6 +472,25 @@ spec:
                             minItems: 1
                             type: array
                             x-kubernetes-list-type: atomic
+                          proxyNamespaces:
+                            description: |-
+                              proxyNamespaces are the namespaces the pods that carry the Gateways'
+                              traffic run in. Under networkPolicy Isolated they are admitted to the
+                              engine's port; nothing else outside the operator and the API consumers
+                              is. Unset is the namespaces of parentRefs, which is right for
+                              implementations that run a proxy beside each Gateway (Istio, for
+                              example); implementations with a shared data plane run it elsewhere
+                              (Envoy Gateway in envoy-gateway-system, for example) and need it named
+                              here.
+                            items:
+                              maxLength: 63
+                              minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                              type: string
+                            maxItems: 8
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: set
                         required:
                         - parentRefs
                         type: object
@@ -484,6 +538,22 @@ spec:
                             maxLength: 253
                             minLength: 1
                             type: string
+                          controllerNamespaces:
+                            description: |-
+                              controllerNamespaces are the namespaces the Ingress controller's pods
+                              run in. Under networkPolicy Isolated they are admitted to the engine's
+                              port, and they are required there: an Ingress does not say which pods
+                              serve it, and without them the policy would refuse every request the
+                              Ingress forwards.
+                            items:
+                              maxLength: 63
+                              minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                              type: string
+                            maxItems: 8
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: set
                           tls:
                             description: |-
                               tls terminates TLS on the Ingress. Unset serves plain HTTP, which is
@@ -2213,6 +2283,12 @@ spec:
             - data
             - engine
             type: object
+            x-kubernetes-validations:
+            - message: 'networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces:
+                without them the policy refuses everything the Ingress forwards'
+              rule: self.networkPolicy != 'Isolated' || ((!has(self.exposure.webhooks.ingress)
+                || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress)
+                || has(self.exposure.api.ingress.controllerNamespaces)))
           status:
             description: status is the class's observed state.
             minProperties: 1

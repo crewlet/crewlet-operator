@@ -185,7 +185,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `api` _string_ | api is the in-cluster base URL of the engine's API: the company's<br />Service, for callers inside the cluster. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `exposedAPI` _string_ | exposedAPI is the base URL of the engine's API through the class's<br />exposure.api, for callers outside the cluster: https://<hostname><br />when the route terminates TLS (the Ingress has tls, or the Gateway<br />listener the route attaches to is HTTPS), http://<hostname> otherwise,<br />with the hostname template expanded. Set only while exposure.api.mode<br />is Gateway or Ingress and the route has been accepted. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `publicBaseURL` _string_ | publicBaseURL is the address vendors deliver webhooks to, when the<br />company has one: spec.exposure.publicBaseURL, or https://<hostname><br />from the class's webhooks.hostname. Every vendor route is a path under<br />it, such as /webhooks/forge for an Atlassian Forge relay. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `publicBaseURL` _string_ | publicBaseURL is the address vendors deliver webhooks to, when the<br />company has one: spec.exposure.publicBaseURL, or https://<hostname><br />from the class's webhooks.hostname. Every vendor route is a path under<br />it, such as /webhooks/forge for an Atlassian Forge relay. Unset while<br />the class's webhooks.mode is None, which exposes nothing. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### CompanyExposure
@@ -316,8 +316,8 @@ _Appears in:_
 | `topology` _[CompanyTopology](#companytopology)_ | topology is how the engine is laid out in pods. | \{ data:map[replicas:1] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `exposure` _[CompanyExposure](#companyexposure)_ | exposure overrides how the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `runtime` _[CompanyRuntime](#companyruntime)_ | runtime is the company's bounded overrides of its class. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `suspend` _boolean_ | suspend stops the engine and keeps its data volumes; setting it back<br />to false starts it again. Vendors keep delivering webhooks meanwhile,<br />and some disable a subscription after a long run of failed deliveries. |  | Optional: \{\} <br /> |
-| `deletionPolicy` _[DeletionPolicy](#deletionpolicy)_ | deletionPolicy is what happens to the data volumes when the Company is<br />deleted. | Retain | Enum: [Retain Delete] <br />Optional: \{\} <br /> |
+| `suspend` _boolean_ | suspend stops the engine and keeps its data volumes; setting it back<br />to false starts it again. The Company reports Ready=False with the<br />reason Suspended meanwhile. Vendors keep delivering webhooks meanwhile,<br />and some disable a subscription after a long run of failed deliveries. |  | Optional: \{\} <br /> |
+| `deletionPolicy` _[DeletionPolicy](#deletionpolicy)_ | deletionPolicy is what happens to the data volumes when the Company is<br />deleted. With Retain the keyring Secret is kept as well, since the<br />volumes cannot be read without it. | Retain | Enum: [Retain Delete] <br />Optional: \{\} <br /> |
 
 
 #### CompanyStatus
@@ -340,7 +340,7 @@ _Appears in:_
 | `topology` _[TopologyStatus](#topologystatus)_ | topology is the state of the company's pods. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `config` _[ConfigStatus](#configstatus)_ | config is the revision the engine runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `endpoints` _[CompanyEndpoints](#companyendpoints)_ | endpoints is where the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `apiAccessSecretRef` _[SecretReference](#secretreference)_ | apiAccessSecretRef names the Secret, in the Company's namespace, that<br />holds a bearer token for the engine's API under the key token<br />(APIAccessTokenKey). It is<br />for the company's consumers (a control plane, a dashboard); the<br />operator uses a token of its own, so revoking this one never locks the<br />operator out. |  | Optional: \{\} <br /> |
+| `apiAccessSecretRef` _[SecretReference](#secretreference)_ | apiAccessSecretRef names the Secret, in the Company's namespace, that<br />holds a bearer token for the engine's API under the key token<br />(APIAccessTokenKey) and the API's in-cluster base URL under the key<br />url (APIAccessURLKey). It is<br />for the company's consumers (a control plane, a dashboard); the<br />operator uses a token of its own, so revoking this one never locks the<br />operator out. |  | Optional: \{\} <br /> |
 
 
 #### CompanyTopology
@@ -510,7 +510,7 @@ _Appears in:_
 
 | Field | Description |
 | --- | --- |
-| `Retain` | DeletionPolicyRetain keeps the data volumes. A Company created again<br />with the same name and namespace finds its estate again.<br /> |
+| `Retain` | DeletionPolicyRetain keeps the data volumes and the keyring Secret<br /><name>-keyring that opens the secrets sealed on them. A Company created<br />again with the same name and namespace finds both and its estate again.<br /> |
 | `Delete` | DeletionPolicyDelete deletes them with the Company.<br /> |
 
 
@@ -815,8 +815,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `image` _string_ | image is the engine image the data pods run. |  | MaxLength: 512 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `version` _string_ | version is the engine version the data pods report. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `image` _string_ | image is the engine image the data pods last ran on, recorded once<br />every data pod ran it and was ready. A rollout that has not finished<br />leaves the previous image here. |  | MaxLength: 512 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `version` _string_ | version is the tag of that image, such as v0.14.2; unset for an image<br />pinned by digest alone. The engine migrates its data forward only, so<br />the operator refuses to roll the data pods to an image whose tag is an<br />older semantic version than this one (RuntimeReady=False,<br />DowngradeRefused). A version that never became ready is never<br />recorded, so a rollout that failed can still be taken back. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### EnvVar
@@ -875,6 +875,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `parentRefs` _[GatewayParentReference](#gatewayparentreference) array_ | parentRefs are the Gateways the HTTPRoute attaches to. |  | MaxItems: 8 <br />MinItems: 1 <br />Required: \{\} <br /> |
+| `proxyNamespaces` _string array_ | proxyNamespaces are the namespaces the pods that carry the Gateways'<br />traffic run in. Under networkPolicy Isolated they are admitted to the<br />engine's port; nothing else outside the operator and the API consumers<br />is. Unset is the namespaces of parentRefs, which is right for<br />implementations that run a proxy beside each Gateway (Istio, for<br />example); implementations with a shared data plane run it elsewhere<br />(Envoy Gateway in envoy-gateway-system, for example) and need it named<br />here. |  | MaxItems: 8 <br />MinItems: 1 <br />items:MaxLength: 63 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
 
 
 #### GatewayParentReference
@@ -1036,6 +1037,7 @@ _Appears in:_
 | `className` _string_ | className is the IngressClass. Unset uses the cluster's default class. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `annotations` _object (keys:string, values:string)_ | annotations are added to the Ingress, for the controller that serves it<br />or a certificate controller. |  | MaxProperties: 32 <br />Optional: \{\} <br /> |
 | `tls` _[IngressTLS](#ingresstls)_ | tls terminates TLS on the Ingress. Unset serves plain HTTP, which is<br />right only behind something else that terminates TLS: vendors deliver<br />webhooks over HTTPS only. |  | Optional: \{\} <br /> |
+| `controllerNamespaces` _string array_ | controllerNamespaces are the namespaces the Ingress controller's pods<br />run in. Under networkPolicy Isolated they are admitted to the engine's<br />port, and they are required there: an Ingress does not say which pods<br />serve it, and without them the policy would refuse every request the<br />Ingress forwards. |  | MaxItems: 8 <br />MinItems: 1 <br />items:MaxLength: 63 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
 
 
 #### IngressTLS
@@ -1685,7 +1687,7 @@ _Appears in:_
 
 | Field | Description |
 | --- | --- |
-| `Isolated` | NetworkPolicyIsolated admits traffic to the engine's port only from<br />the operator, from the namespaces of the Gateways or Ingress<br />controller the class routes through, and from namespaces labelled<br />crewlet.ai/api-consumer=true (APIConsumerNamespaceLabel). It needs a<br />CNI that enforces NetworkPolicy.<br /> |
+| `Isolated` | NetworkPolicyIsolated admits traffic to the engine's port only from<br />the operator's namespace, from the namespaces the class's Gateway<br />proxies or Ingress controller run in (gateway.proxyNamespaces,<br />ingress.controllerNamespaces), and from namespaces labelled<br />crewlet.ai/api-consumer=true (APIConsumerNamespaceLabel). It needs a<br />CNI that enforces NetworkPolicy.<br /> |
 | `None` | NetworkPolicyNone creates no NetworkPolicy.<br /> |
 
 

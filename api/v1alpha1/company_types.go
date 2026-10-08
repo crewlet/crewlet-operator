@@ -551,8 +551,9 @@ type DeletionPolicy string
 
 // The deletion policies.
 const (
-	// DeletionPolicyRetain keeps the data volumes. A Company created again
-	// with the same name and namespace finds its estate again.
+	// DeletionPolicyRetain keeps the data volumes and the keyring Secret
+	// <name>-keyring that opens the secrets sealed on them. A Company created
+	// again with the same name and namespace finds both and its estate again.
 	DeletionPolicyRetain DeletionPolicy = "Retain"
 	// DeletionPolicyDelete deletes them with the Company.
 	DeletionPolicyDelete DeletionPolicy = "Delete"
@@ -691,13 +692,15 @@ type CompanySpec struct {
 	Runtime CompanyRuntime `json:"runtime,omitzero"`
 
 	// suspend stops the engine and keeps its data volumes; setting it back
-	// to false starts it again. Vendors keep delivering webhooks meanwhile,
+	// to false starts it again. The Company reports Ready=False with the
+	// reason Suspended meanwhile. Vendors keep delivering webhooks meanwhile,
 	// and some disable a subscription after a long run of failed deliveries.
 	// +optional
 	Suspend *bool `json:"suspend,omitempty"`
 
 	// deletionPolicy is what happens to the data volumes when the Company is
-	// deleted.
+	// deleted. With Retain the keyring Secret is kept as well, since the
+	// volumes cannot be read without it.
 	// +optional
 	// +default="Retain"
 	DeletionPolicy DeletionPolicy `json:"deletionPolicy,omitempty"`
@@ -706,13 +709,20 @@ type CompanySpec struct {
 // EngineStatus is what runs a company.
 // +kubebuilder:validation:MinProperties=1
 type EngineStatus struct {
-	// image is the engine image the data pods run.
+	// image is the engine image the data pods last ran on, recorded once
+	// every data pod ran it and was ready. A rollout that has not finished
+	// leaves the previous image here.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=512
 	Image string `json:"image,omitempty"`
 
-	// version is the engine version the data pods report.
+	// version is the tag of that image, such as v0.14.2; unset for an image
+	// pinned by digest alone. The engine migrates its data forward only, so
+	// the operator refuses to roll the data pods to an image whose tag is an
+	// older semantic version than this one (RuntimeReady=False,
+	// DowngradeRefused). A version that never became ready is never
+	// recorded, so a rollout that failed can still be taken back.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
@@ -834,7 +844,8 @@ type CompanyEndpoints struct {
 	// publicBaseURL is the address vendors deliver webhooks to, when the
 	// company has one: spec.exposure.publicBaseURL, or https://<hostname>
 	// from the class's webhooks.hostname. Every vendor route is a path under
-	// it, such as /webhooks/forge for an Atlassian Forge relay.
+	// it, such as /webhooks/forge for an Atlassian Forge relay. Unset while
+	// the class's webhooks.mode is None, which exposes nothing.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
@@ -875,7 +886,8 @@ type CompanyStatus struct {
 
 	// apiAccessSecretRef names the Secret, in the Company's namespace, that
 	// holds a bearer token for the engine's API under the key token
-	// (APIAccessTokenKey). It is
+	// (APIAccessTokenKey) and the API's in-cluster base URL under the key
+	// url (APIAccessURLKey). It is
 	// for the company's consumers (a control plane, a dashboard); the
 	// operator uses a token of its own, so revoking this one never locks the
 	// operator out.

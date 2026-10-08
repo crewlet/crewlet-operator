@@ -13,10 +13,14 @@ func gatewayExposure() v1.GatewayExposure {
 	return v1.GatewayExposure{ParentRefs: []v1.GatewayParentReference{{Namespace: "gateway-system", Name: "public"}}}
 }
 
+// ingressClass is the IngressClass of the Ingress exposures.
+const ingressClass = "nginx"
+
 // ingressWithTLS is an Ingress exposure whose TLS Secret is named by the
-// template given.
+// template given, with the controller namespace the default networkPolicy
+// Isolated needs.
 func ingressWithTLS(secretTemplate string) *v1.IngressExposure {
-	ingress := &v1.IngressExposure{ClassName: "nginx"}
+	ingress := &v1.IngressExposure{ClassName: ingressClass, ControllerNamespaces: []string{"ingress-nginx"}}
 	ingress.TLS.SecretName = secretTemplate
 	return ingress
 }
@@ -241,6 +245,54 @@ func TestEngineClassExposure(t *testing.T) {
 			name:   "an API hostname that is no DNS name is refused",
 			mutate: apiGatewayHost("{{uid}}..example.com"),
 			want:   msgHostnameDNS,
+		},
+
+		// Under networkPolicy Isolated the operator has to know where an
+		// Ingress controller runs, or its policy would refuse everything the
+		// Ingress forwards.
+		{
+			name: "Isolated Ingress webhooks without controllerNamespaces are refused",
+			mutate: webhooks(v1.WebhookExposure{
+				Mode:     v1.WebhookExposureIngress,
+				Ingress:  &v1.IngressExposure{ClassName: ingressClass},
+				Hostname: webhookHost,
+			}),
+			want: msgIngressControllerNamespaces,
+		},
+		{
+			name: "an Isolated Ingress API without controllerNamespaces is refused",
+			mutate: api(v1.APIExposure{
+				Mode:     v1.APIExposureIngress,
+				Ingress:  &v1.IngressExposure{ClassName: "internal"},
+				Hostname: apiHost,
+			}),
+			want: msgIngressControllerNamespaces,
+		},
+		{
+			name: "Ingress webhooks without controllerNamespaces and no network policy are accepted",
+			mutate: func(c *v1.EngineClass) {
+				c.Spec.NetworkPolicy = v1.NetworkPolicyNone
+				c.Spec.Exposure.Webhooks = v1.WebhookExposure{
+					Mode:     v1.WebhookExposureIngress,
+					Ingress:  &v1.IngressExposure{ClassName: ingressClass},
+					Hostname: webhookHost,
+				}
+			},
+		},
+		{
+			name: "Gateway proxy namespaces are accepted",
+			mutate: func(c *v1.EngineClass) {
+				gatewayHost(webhookHost)(c)
+				c.Spec.Exposure.Webhooks.Gateway.ProxyNamespaces = []string{"envoy-gateway-system"}
+			},
+		},
+		{
+			name: "a proxy namespace that is no namespace name is refused",
+			mutate: func(c *v1.EngineClass) {
+				gatewayHost(webhookHost)(c)
+				c.Spec.Exposure.Webhooks.Gateway.ProxyNamespaces = []string{"Envoy_Gateway"}
+			},
+			want: "spec.exposure.webhooks.gateway.proxyNamespaces[0]",
 		},
 	})
 }

@@ -104,7 +104,8 @@ spec:
                 default: Retain
                 description: |-
                   deletionPolicy is what happens to the data volumes when the Company is
-                  deleted.
+                  deleted. With Retain the keyring Secret is kept as well, since the
+                  volumes cannot be read without it.
                 enum:
                 - Retain
                 - Delete
@@ -742,7 +743,8 @@ spec:
               suspend:
                 description: |-
                   suspend stops the engine and keeps its data volumes; setting it back
-                  to false starts it again. Vendors keep delivering webhooks meanwhile,
+                  to false starts it again. The Company reports Ready=False with the
+                  reason Suspended meanwhile. Vendors keep delivering webhooks meanwhile,
                   and some disable a subscription after a long run of failed deliveries.
                 type: boolean
               timeZone:
@@ -861,7 +863,8 @@ spec:
                 description: |-
                   apiAccessSecretRef names the Secret, in the Company's namespace, that
                   holds a bearer token for the engine's API under the key token
-                  (APIAccessTokenKey). It is
+                  (APIAccessTokenKey) and the API's in-cluster base URL under the key
+                  url (APIAccessURLKey). It is
                   for the company's consumers (a control plane, a dashboard); the
                   operator uses a token of its own, so revoking this one never locks the
                   operator out.
@@ -1024,7 +1027,8 @@ spec:
                       publicBaseURL is the address vendors deliver webhooks to, when the
                       company has one: spec.exposure.publicBaseURL, or https://<hostname>
                       from the class's webhooks.hostname. Every vendor route is a path under
-                      it, such as /webhooks/forge for an Atlassian Forge relay.
+                      it, such as /webhooks/forge for an Atlassian Forge relay. Unset while
+                      the class's webhooks.mode is None, which exposes nothing.
                     maxLength: 2048
                     minLength: 1
                     type: string
@@ -1034,12 +1038,21 @@ spec:
                 minProperties: 1
                 properties:
                   image:
-                    description: image is the engine image the data pods run.
+                    description: |-
+                      image is the engine image the data pods last ran on, recorded once
+                      every data pod ran it and was ready. A rollout that has not finished
+                      leaves the previous image here.
                     maxLength: 512
                     minLength: 1
                     type: string
                   version:
-                    description: version is the engine version the data pods report.
+                    description: |-
+                      version is the tag of that image, such as v0.14.2; unset for an image
+                      pinned by digest alone. The engine migrates its data forward only, so
+                      the operator refuses to roll the data pods to an image whose tag is an
+                      older semantic version than this one (RuntimeReady=False,
+                      DowngradeRefused). A version that never became ready is never
+                      recorded, so a rollout that failed can still be taken back.
                     maxLength: 128
                     minLength: 1
                     type: string
