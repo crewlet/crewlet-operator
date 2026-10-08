@@ -1,67 +1,33 @@
 package controller
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 )
 
-var _ = Describe("EngineClass Controller", func() {
-	Context("When reconciling a resource", func() {
-		const (
-			resourceName      = "test-resource"
-			resourceNamespace = "default"
-		)
+var _ = Describe("EngineClass controller", func() {
+	// EngineClass is cluster-scoped, so its key has no namespace.
+	key := types.NamespacedName{Name: "pro"}
 
-		ctx := context.Background()
+	reconcileEngineClass := func() error {
+		r := &EngineClassReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+		return err
+	}
 
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: resourceNamespace,
-		}
-		engineclass := &crewletaiv1alpha1.EngineClass{}
+	It("reconciles an existing EngineClass", func() {
+		class := &crewletaiv1alpha1.EngineClass{Name: key.Name}
+		Expect(k8sClient.Create(ctx, class)).To(Succeed())
+		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, class)).To(Succeed()) })
 
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind EngineClass")
-			err := k8sClient.Get(ctx, typeNamespacedName, engineclass)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &crewletaiv1alpha1.EngineClass{
-					Name:      resourceName,
-					Namespace: resourceNamespace,
-					// TODO(user): Specify other spec details if needed.
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
+		Expect(reconcileEngineClass()).To(Succeed())
+	})
 
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &crewletaiv1alpha1.EngineClass{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance EngineClass")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &EngineClassReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
-		})
+	It("reconciles an EngineClass that no longer exists", func() {
+		Expect(reconcileEngineClass()).To(Succeed())
 	})
 })

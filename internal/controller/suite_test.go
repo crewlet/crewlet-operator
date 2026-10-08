@@ -20,8 +20,9 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
-// These tests use Ginkgo (BDD-style Go testing framework). Refer to
-// http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
+// The suite runs the controllers' tests against a real kube-apiserver and
+// etcd started by envtest, with the CRDs from config/crd/bases installed, so
+// the schemas and CEL rules the API server enforces are the ones under test.
 
 var (
 	ctx       context.Context
@@ -40,7 +41,7 @@ func TestControllers(t *testing.T) {
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	ctx, cancel = context.WithCancel(context.TODO())
+	ctx, cancel = context.WithCancel(context.Background())
 
 	var err error
 	err = crewletaiv1alpha1.AddToScheme(scheme.Scheme)
@@ -54,12 +55,12 @@ var _ = BeforeSuite(func() {
 		ErrorIfCRDPathMissing: true,
 	}
 
-	// Retrieve the first found binary directory to allow running tests from IDEs
-	if getFirstFoundEnvTestBinaryDir() != "" {
-		testEnv.BinaryAssetsDirectory = getFirstFoundEnvTestBinaryDir()
+	// Outside make (an IDE, a bare go test) KUBEBUILDER_ASSETS is unset; fall
+	// back to the binaries `make setup-envtest` downloaded into bin/k8s.
+	if dir := firstEnvTestBinaryDir(); dir != "" {
+		testEnv.BinaryAssetsDirectory = dir
 	}
 
-	// cfg is defined in this file globally.
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
@@ -76,19 +77,14 @@ var _ = AfterSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 })
 
-// getFirstFoundEnvTestBinaryDir locates the first binary in the specified path.
-// ENVTEST-based tests depend on specific binaries, usually located in paths set by
-// controller-runtime. When running tests directly (e.g., via an IDE) without using
-// Makefile targets, the 'BinaryAssetsDirectory' must be explicitly configured.
-//
-// This function streamlines the process by finding the required binaries, similar to
-// setting the 'KUBEBUILDER_ASSETS' environment variable. To ensure the binaries are
-// properly set up, run 'make setup-envtest' beforehand.
-func getFirstFoundEnvTestBinaryDir() string {
+// firstEnvTestBinaryDir returns the first directory under bin/k8s, where
+// `make setup-envtest` puts the kube-apiserver and etcd binaries, or "" when
+// there is none and envtest has to rely on KUBEBUILDER_ASSETS.
+func firstEnvTestBinaryDir() string {
 	basePath := filepath.Join("..", "..", "bin", "k8s")
 	entries, err := os.ReadDir(basePath)
 	if err != nil {
-		logf.Log.Error(err, "Failed to read directory", "path", basePath)
+		logf.Log.Info("No envtest binaries in bin/k8s; relying on KUBEBUILDER_ASSETS", "path", basePath, "reason", err.Error())
 		return ""
 	}
 	for _, entry := range entries {
