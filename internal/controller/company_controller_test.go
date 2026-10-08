@@ -20,8 +20,7 @@ var _ = Describe("Company controller", Ordered, func() {
 
 	reconcileCompany := func(name string) {
 		GinkgoHelper()
-		r := &CompanyReconciler{Client: k8sClient}
-		_, err := r.Reconcile(ctx, reconcile.Request{Namespace: namespace, Name: name})
+		_, err := newReconciler().Reconcile(ctx, reconcile.Request{Namespace: namespace, Name: name})
 		Expect(err).NotTo(HaveOccurred())
 	}
 
@@ -44,7 +43,7 @@ var _ = Describe("Company controller", Ordered, func() {
 		company := &crewletaiv1alpha1.Company{
 			Namespace: namespace,
 			Name:      name,
-			Spec:      crewletaiv1alpha1.CompanySpec{CompanyName: "Nimbus", EngineClassName: class},
+			Spec:      crewletaiv1alpha1.CompanySpec{CompanyName: companyDisplayName, EngineClassName: class},
 		}
 		Expect(k8sClient.Create(ctx, company)).To(Succeed())
 		return company
@@ -210,10 +209,10 @@ var _ = Describe("Company controller event mapping", func() {
 			Expect(k8sClient.Create(ctx, &crewletaiv1alpha1.Company{
 				Namespace: ns.Name,
 				Name:      name,
-				Spec:      crewletaiv1alpha1.CompanySpec{CompanyName: "Nimbus", EngineClassName: class},
+				Spec:      crewletaiv1alpha1.CompanySpec{CompanyName: companyDisplayName, EngineClassName: class},
 			})).To(Succeed())
 		}
-		r := &CompanyReconciler{Client: k8sClient}
+		r := newReconciler()
 		var got []string
 		for _, req := range r.companiesOfClass(ctx, &crewletaiv1alpha1.EngineClass{Name: "mapped"}) {
 			if req.Namespace == ns.Name {

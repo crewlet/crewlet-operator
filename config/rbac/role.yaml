@@ -5,9 +5,68 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  - serviceaccounts
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  verbs:
+  - delete
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - list
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
   - crewlet.ai
   resources:
   - companies
+  verbs:
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - crewlet.ai
+  resources:
+  - companies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - crewlet.ai
+  resources:
+  - companies/status
+  verbs:
+  - get
+  - patch
+- apiGroups:
+  - crewlet.ai
+  resources:
   - engineclasses
   - mcpservers
   - seats
@@ -16,10 +75,31 @@ rules:
   - list
   - watch
 - apiGroups:
-  - crewlet.ai
+  - gateway.networking.k8s.io
   resources:
-  - companies/status
+  - gateways
   verbs:
   - get
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - httproutes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
   - patch
-  - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  - networkpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - watch

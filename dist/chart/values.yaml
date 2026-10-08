@@ -28,6 +28,17 @@ manager:
   args:
     - --leader-elect
 
+  ## Environment variables
+  ## POD_NAMESPACE is the operator's own namespace, which every engine's
+  ## NetworkPolicy admits so that the operator can reach the engines it
+  ## configures; keep it.
+  ##
+  env:
+    - name: POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+
   ## Health probes.
   ## The manager serves the liveness (/healthz) and readiness (/readyz) endpoints on this port.
   ##

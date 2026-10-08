@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/test/envtestbin"
@@ -23,7 +24,14 @@ import (
 
 // The suite runs the controllers' tests against a real kube-apiserver and
 // etcd started by envtest, with the CRDs from config/crd/bases installed, so
-// the schemas and CEL rules the API server enforces are the ones under test.
+// the schemas and CEL rules the API server enforces are the ones under test,
+// and with the Gateway API's standard CRDs from testdata/gateway-api, so the
+// HTTPRoutes the controller writes are validated as a cluster would.
+//
+// envtest runs no controllers: no StatefulSet controller, no garbage
+// collector, no kubelet. A test that needs what they would do (a StatefulSet
+// reporting ready pods, a Gateway accepting a route) writes that status
+// itself, and says so.
 
 var (
 	ctx       context.Context
@@ -47,12 +55,16 @@ var _ = BeforeSuite(func() {
 	var err error
 	err = crewletaiv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
+	Expect(gatewayv1.Install(scheme.Scheme)).To(Succeed())
 
 	// +kubebuilder:scaffold:scheme
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "config", "crd", "bases"),
+			gatewayAPICRDs,
+		},
 		ErrorIfCRDPathMissing: true,
 	}
 

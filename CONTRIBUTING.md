@@ -229,6 +229,7 @@ commit:
 | `ENVTEST_K8S_VERSION` | `Makefile` | `bin/setup-envtest list` |
 | golangci-lint and its plugins | `.custom-gcl.yml` (version must equal `GOLANGCI_LINT_VERSION`) | the Go module proxy |
 | the curl image | `test/e2e/e2e_test.go` | Docker Hub |
+| the Gateway API CRDs the controller suite installs | `internal/controller/testdata/gateway-api` | `make gateway-api-crds`, after Dependabot bumps `sigs.k8s.io/gateway-api`; the suite fails until the two match |
 | cosign (`cosign-release`) | `.github/workflows/release.yml` | sigstore/cosign's releases |
 
 ## Documentation

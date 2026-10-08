@@ -45,6 +45,13 @@ spec:
           - --health-probe-bind-address=:8081
         image: controller:latest
         name: manager
+        env:
+        # The operator's own namespace, which every engine's NetworkPolicy
+        # admits so that the operator can reach the engines it configures.
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         ports:
         - containerPort: 8081
           name: health

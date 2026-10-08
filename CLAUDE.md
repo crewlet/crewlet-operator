@@ -13,9 +13,12 @@ the short form.
 api/                  separate Go module github.com/crewlet/crewlet-operator/api
   v1alpha1/           the crewlet.ai types, markers, generated deepcopy
 cmd/main.go           the manager
-internal/controller/  reconcilers: Company (today its Accepted condition only);
-                      by design the other kinds are reconciled through the
-                      Company they reference
+internal/controller/  reconcilers: Company (Accepted, and the runtime: the
+                      engine's Secrets, StatefulSet, Services, routes and
+                      NetworkPolicy); by design the other kinds are
+                      reconciled through the Company they reference
+  testdata/gateway-api/  the Gateway API CRDs envtest installs
+                      (make gateway-api-crds)
 internal/engine/      typed client for the Crewlet engine's REST API;
   enginetest/         runs the real pinned engine (bin/crewlet) for a test
 internal/render/      pure render of the crewlet.ai objects into the company

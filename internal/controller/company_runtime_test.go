@@ -1,0 +1,1085 @@
+package controller
+
+import (
+	"encoding/base64"
+	"fmt"
+	"maps"
+	"slices"
+	"time"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
+	"github.com/crewlet/crewlet-operator/internal/render"
+)
+
+// operatorNamespace stands for the namespace the operator runs in.
+const operatorNamespace = "crewlet-system"
+
+// The Company every runtime spec creates, the names of what the operator
+// creates for it, and of what the specs create around it.
+const (
+	companyName        = "nimbus"
+	companyDisplayName = "Nimbus"
+	engineImageV020    = "ghcr.io/crewlet/crewlet:v0.2.0"
+	keyringName        = "nimbus-keyring"
+	tokensName         = "nimbus-api-tokens"
+	accessName         = "nimbus-api-access"
+	platformName       = "nimbus-platform"
+	engineName         = "nimbus-engine"
+	webhooksRoute      = "nimbus-webhooks"
+	gatewayNamespace   = "gateways"
+	publicGateway      = "public"
+	internalGateway    = "internal"
+	otlpSecret         = "otlp"
+	platformTokenVar   = "PLATFORM_TOKEN"
+)
+
+// newReconciler is the Company reconciler as the manager builds it, on a
+// cluster that serves the Gateway API. The suite's client reads from the API
+// server directly, so it stands for both the cached client and the
+// APIReader.
+func newReconciler() *CompanyReconciler {
+	return &CompanyReconciler{
+		Client:            k8sClient,
+		APIReader:         k8sClient,
+		GatewayAPI:        true,
+		OperatorNamespace: operatorNamespace,
+	}
+}
+
+var _ = Describe("Company runtime", func() {
+	var namespace string
+
+	BeforeEach(func() {
+		ns := &corev1.Namespace{GenerateName: "runtime-"}
+		Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+		namespace = ns.Name
+	})
+
+	// newClass creates an EngineClass named after the spec's namespace (classes
+	// are cluster-scoped) and deletes it when the spec ends.
+	newClass := func(mutate ...func(*crewletaiv1alpha1.EngineClass)) *crewletaiv1alpha1.EngineClass {
+		GinkgoHelper()
+		class := &crewletaiv1alpha1.EngineClass{
+			Name: namespace,
+			Spec: crewletaiv1alpha1.EngineClassSpec{
+				Engine: crewletaiv1alpha1.EngineSettings{Image: engineImageV020},
+				Data: crewletaiv1alpha1.DataPodSettings{
+					Storage: crewletaiv1alpha1.DataStorage{Size: new(resource.MustParse("10Gi"))},
+				},
+				Retention: crewletaiv1alpha1.RetentionSettings{BackupOwner: "platform-oncall"},
+			},
+		}
+		for _, m := range mutate {
+			m(class)
+		}
+		Expect(k8sClient.Create(ctx, class)).To(Succeed())
+		DeferCleanup(func() { Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, class))).To(Succeed()) })
+		return class
+	}
+	updateClass := func(class *crewletaiv1alpha1.EngineClass, mutate func(*crewletaiv1alpha1.EngineClass)) {
+		GinkgoHelper()
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(class), class)).To(Succeed())
+		mutate(class)
+		Expect(k8sClient.Update(ctx, class)).To(Succeed())
+	}
+
+	newCompany := func(class string, mutate ...func(*crewletaiv1alpha1.Company)) *crewletaiv1alpha1.Company {
+		GinkgoHelper()
+		company := &crewletaiv1alpha1.Company{
+			Namespace: namespace,
+			Name:      companyName,
+			Spec:      crewletaiv1alpha1.CompanySpec{CompanyName: companyDisplayName, EngineClassName: class},
+		}
+		for _, m := range mutate {
+			m(company)
+		}
+		Expect(k8sClient.Create(ctx, company)).To(Succeed())
+		return company
+	}
+	updateCompany := func(company *crewletaiv1alpha1.Company, mutate func(*crewletaiv1alpha1.Company)) {
+		GinkgoHelper()
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(company), company)).To(Succeed())
+		mutate(company)
+		Expect(k8sClient.Update(ctx, company)).To(Succeed())
+	}
+
+	reconcileWith := func(r *CompanyReconciler, company *crewletaiv1alpha1.Company) ctrl.Result {
+		GinkgoHelper()
+		result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(company)})
+		Expect(err).NotTo(HaveOccurred())
+		return result
+	}
+	// reconciled reconciles the Company and returns it as it is afterwards.
+	reconciled := func(company *crewletaiv1alpha1.Company) *crewletaiv1alpha1.Company {
+		GinkgoHelper()
+		reconcileWith(newReconciler(), company)
+		got := &crewletaiv1alpha1.Company{}
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(company), got)).To(Succeed())
+		return got
+	}
+	condition := func(company *crewletaiv1alpha1.Company, t string) metav1.Condition {
+		GinkgoHelper()
+		c := meta.FindStatusCondition(company.Status.Conditions, t)
+		Expect(c).NotTo(BeNil(), "the Company has no %s condition", t)
+		Expect(c.ObservedGeneration).To(Equal(company.Generation), "%s describes an older generation", t)
+		return *c
+	}
+	get := func(obj client.Object, name string) {
+		GinkgoHelper()
+		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, obj)).To(Succeed())
+	}
+	absent := func(obj client.Object, name string) {
+		GinkgoHelper()
+		err := k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, obj)
+		Expect(apierrors.IsNotFound(err)).To(BeTrue(), "%T %s exists (err=%v)", obj, name, err)
+	}
+	statefulSet := func() *appsv1.StatefulSet {
+		GinkgoHelper()
+		sts := &appsv1.StatefulSet{}
+		get(sts, "nimbus-data")
+		return sts
+	}
+	engine := func(sts *appsv1.StatefulSet) corev1.Container {
+		GinkgoHelper()
+		Expect(sts.Spec.Template.Spec.Containers).To(HaveLen(1))
+		return sts.Spec.Template.Spec.Containers[0]
+	}
+	// rollOut stands in for the StatefulSet controller and the kubelet, which
+	// envtest does not run: it reports every replica of the current template
+	// ready.
+	rollOut := func() {
+		GinkgoHelper()
+		sts := statefulSet()
+		n := *sts.Spec.Replicas
+		sts.Status = appsv1.StatefulSetStatus{
+			ObservedGeneration: sts.Generation,
+			Replicas:           n,
+			ReadyReplicas:      n,
+			AvailableReplicas:  n,
+			UpdatedReplicas:    n,
+			CurrentReplicas:    n,
+			CurrentRevision:    fmt.Sprintf("nimbus-data-%d", sts.Generation),
+			UpdateRevision:     fmt.Sprintf("nimbus-data-%d", sts.Generation),
+		}
+		Expect(k8sClient.Status().Update(ctx, sts)).To(Succeed())
+	}
+	// expectedBootstrap is what render.Bootstrap makes of the Company and its
+	// class with a keyring of the given key ids.
+	expectedBootstrap := func(company *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, active string, ids ...string) *render.BootstrapDocument {
+		GinkgoHelper()
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(class), class)).To(Succeed())
+		doc, err := render.Bootstrap(&render.BootstrapInput{
+			Company: company,
+			Class:   class,
+			Keyring: render.Keyring{ActiveKeyID: active, KeyIDs: ids},
+			Secrets: render.BootstrapSecrets{Keyring: keyringName, APITokens: tokensName, Objects: platformName},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		return doc
+	}
+	ownedByCompany := func(obj client.Object, company *crewletaiv1alpha1.Company) {
+		GinkgoHelper()
+		owner := metav1.GetControllerOf(obj)
+		Expect(owner).NotTo(BeNil(), "%T %s has no controller", obj, obj.GetName())
+		Expect(owner.UID).To(Equal(company.UID))
+		Expect(owner.Kind).To(Equal("Company"))
+		Expect(obj.GetLabels()).To(HaveKeyWithValue(crewletaiv1alpha1.CompanyLabel, company.Name))
+		Expect(obj.GetLabels()).To(HaveKeyWithValue("app.kubernetes.io/managed-by", FieldOwner))
+	}
+
+	It("creates every object of an accepted Company's engine", func() {
+		class := newClass()
+		company := reconciled(newCompany(class.Name))
+		Expect(company.Finalizers).To(ContainElement(crewletaiv1alpha1.CompanyFinalizer))
+
+		By("generating the keyring in the form Crewlet's keygen prints")
+		keyring := &corev1.Secret{}
+		get(keyring, keyringName)
+		ownedByCompany(keyring, company)
+		Expect(keyring.Annotations).To(HaveKeyWithValue(KeyringActiveKeyAnnotation, "key-1"))
+		Expect(keyring.Data).To(HaveLen(1))
+		material, err := base64.StdEncoding.DecodeString(string(keyring.Data["key-1"]))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(material).To(HaveLen(32))
+
+		By("generating two different API tokens")
+		tokens := &corev1.Secret{}
+		get(tokens, tokensName)
+		ownedByCompany(tokens, company)
+		Expect(slices.Sorted(maps.Keys(tokens.Data))).To(Equal([]string{render.TokenAccess, render.TokenOperator}))
+		Expect(len(tokens.Data[render.TokenOperator])).To(BeNumerically(">=", 43))
+		Expect(tokens.Data[render.TokenOperator]).NotTo(Equal(tokens.Data[render.TokenAccess]))
+
+		By("publishing the access token and the API's address, and not the operator's token")
+		access := &corev1.Secret{}
+		get(access, accessName)
+		ownedByCompany(access, company)
+		Expect(access.Data).To(Equal(map[string][]byte{
+			crewletaiv1alpha1.APIAccessTokenKey: tokens.Data[render.TokenAccess],
+			crewletaiv1alpha1.APIAccessURLKey:   []byte("http://nimbus-engine." + namespace + ".svc:8080"),
+		}))
+		Expect(company.Status.APIAccessSecretRef.Name).To(Equal(accessName))
+		Expect(company.Status.Endpoints.API).To(Equal("http://nimbus-engine." + namespace + ".svc:8080"))
+
+		By("rendering the bootstrap document into a ConfigMap")
+		want := expectedBootstrap(company, class, "key-1", "key-1")
+		bootstrap := &corev1.ConfigMap{}
+		get(bootstrap, "nimbus-bootstrap-data")
+		ownedByCompany(bootstrap, company)
+		Expect(bootstrap.Data).To(Equal(map[string]string{"crewlet.yaml": string(want.YAML)}))
+
+		By("creating a ServiceAccount whose token is never mounted")
+		sa := &corev1.ServiceAccount{}
+		get(sa, engineName)
+		ownedByCompany(sa, company)
+		Expect(*sa.AutomountServiceAccountToken).To(BeFalse())
+
+		By("creating the engine Service and the headless data Service")
+		dataSelector := map[string]string{
+			"app.kubernetes.io/name":       "crewlet",
+			"app.kubernetes.io/instance":   companyName,
+			"app.kubernetes.io/component":  "data",
+			crewletaiv1alpha1.CompanyLabel: companyName,
+		}
+		engineSvc := &corev1.Service{}
+		get(engineSvc, engineName)
+		ownedByCompany(engineSvc, company)
+		Expect(engineSvc.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
+		Expect(engineSvc.Spec.Selector).To(Equal(dataSelector))
+		Expect(engineSvc.Spec.Ports).To(HaveLen(1))
+		Expect(engineSvc.Spec.Ports[0].Port).To(Equal(int32(8080)))
+		Expect(engineSvc.Spec.Ports[0].TargetPort).To(Equal(intstr.FromString("http")))
+		dataSvc := &corev1.Service{}
+		get(dataSvc, "nimbus-data")
+		Expect(dataSvc.Spec.ClusterIP).To(Equal(corev1.ClusterIPNone))
+		Expect(dataSvc.Spec.PublishNotReadyAddresses).To(BeTrue())
+		Expect(dataSvc.Spec.Selector).To(Equal(dataSelector))
+
+		By("creating the data StatefulSet")
+		sts := statefulSet()
+		ownedByCompany(sts, company)
+		Expect(*sts.Spec.Replicas).To(Equal(int32(1)))
+		Expect(sts.Spec.ServiceName).To(Equal("nimbus-data"))
+		Expect(sts.Spec.Selector.MatchLabels).To(Equal(dataSelector))
+		Expect(sts.Spec.PodManagementPolicy).To(Equal(appsv1.ParallelPodManagement))
+		Expect(sts.Spec.UpdateStrategy.Type).To(Equal(appsv1.RollingUpdateStatefulSetStrategyType))
+		Expect(sts.Spec.PersistentVolumeClaimRetentionPolicy).To(Equal(&appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+			WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+			WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+		}))
+		Expect(sts.Spec.VolumeClaimTemplates).To(HaveLen(1))
+		claim := sts.Spec.VolumeClaimTemplates[0]
+		Expect(claim.Name).To(Equal("data"))
+		Expect(claim.Spec.Resources.Requests.Storage().String()).To(Equal("10Gi"))
+		Expect(claim.Labels).To(HaveKeyWithValue(crewletaiv1alpha1.CompanyLabel, companyName))
+
+		pod := sts.Spec.Template
+		Expect(pod.Labels).To(HaveKeyWithValue(crewletaiv1alpha1.CompanyLabel, companyName))
+		Expect(pod.Annotations).To(HaveKeyWithValue(BootstrapHashAnnotation, want.Hash))
+		Expect(pod.Annotations).To(HaveKey(SecretsVersionAnnotation))
+		Expect(pod.Spec.ServiceAccountName).To(Equal(engineName))
+		Expect(*pod.Spec.AutomountServiceAccountToken).To(BeFalse())
+		Expect(*pod.Spec.EnableServiceLinks).To(BeFalse())
+		Expect(*pod.Spec.TerminationGracePeriodSeconds).To(Equal(int64(300)))
+		Expect(*pod.Spec.SecurityContext.RunAsNonRoot).To(BeTrue())
+		Expect(*pod.Spec.SecurityContext.RunAsUser).To(Equal(int64(10001)))
+		Expect(pod.Spec.SecurityContext.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault))
+
+		container := engine(sts)
+		Expect(container.Image).To(Equal(engineImageV020))
+		Expect(container.Args).To(Equal([]string{"run", "-config", "/etc/crewlet/crewlet.yaml"}))
+		Expect(*container.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*container.SecurityContext.ReadOnlyRootFilesystem).To(BeTrue())
+		Expect(container.SecurityContext.Capabilities.Drop).To(Equal([]corev1.Capability{"ALL"}))
+		Expect(container.LivenessProbe.HTTPGet.Path).To(Equal("/health"))
+		Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/health"))
+		Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/ready"))
+		Expect(container.Lifecycle.PreStop.Sleep.Seconds).To(BeNumerically(">", 0))
+		// The environment starts with exactly what the bootstrap document
+		// references, wired as render says.
+		Expect(container.Env[:len(want.Env)]).To(Equal(want.Env))
+		Expect(container.Env).To(ContainElement(corev1.EnvVar{Name: "TURSO_GO_CACHE_DIR", Value: "/var/lib/crewlet/cache"}))
+		for _, env := range container.Env {
+			Expect(env.Name).NotTo(HavePrefix("OTEL_"), "no telemetry without a class's telemetry")
+		}
+		Expect(container.VolumeMounts).To(ContainElements(
+			corev1.VolumeMount{Name: "data", MountPath: "/var/lib/crewlet"},
+			corev1.VolumeMount{Name: "config", MountPath: "/etc/crewlet", ReadOnly: true},
+		))
+
+		By("isolating the data pods")
+		policy := &networkingv1.NetworkPolicy{}
+		get(policy, companyName)
+		ownedByCompany(policy, company)
+		Expect(policy.Spec.PodSelector.MatchLabels).To(Equal(dataSelector))
+		Expect(policy.Spec.PolicyTypes).To(Equal([]networkingv1.PolicyType{networkingv1.PolicyTypeIngress}))
+		Expect(policy.Spec.Ingress).To(HaveLen(1))
+		rule := policy.Spec.Ingress[0]
+		Expect(rule.Ports).To(HaveLen(1))
+		Expect(rule.Ports[0].Port.IntValue()).To(Equal(8080))
+		Expect(rule.From).To(ConsistOf(
+			networkingv1.NetworkPolicyPeer{NamespaceSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{crewletaiv1alpha1.APIConsumerNamespaceLabel: "true"},
+			}},
+			networkingv1.NetworkPolicyPeer{NamespaceSelector: &metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{{
+					Key: corev1.LabelMetadataName, Operator: metav1.LabelSelectorOpIn, Values: []string{operatorNamespace},
+				}},
+			}},
+		))
+
+		By("routing nothing from outside the cluster")
+		absent(&networkingv1.Ingress{}, webhooksRoute)
+		absent(&gatewayv1.HTTPRoute{}, webhooksRoute)
+
+		By("reporting the pods as not ready yet")
+		Expect(company.Status.ObservedGeneration).To(Equal(company.Generation))
+		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+		exposed := condition(company, crewletaiv1alpha1.ConditionExposed)
+		Expect(exposed.Status).To(Equal(metav1.ConditionTrue))
+		Expect(exposed.Reason).To(Equal(crewletaiv1alpha1.ReasonNoRoutes))
+		ready := condition(company, crewletaiv1alpha1.ConditionReady)
+		Expect(ready.Status).To(Equal(metav1.ConditionFalse))
+		Expect(ready.Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+		Expect(company.Status.Endpoints.PublicBaseURL).To(BeEmpty())
+	})
+
+	It("changes nothing on a second reconcile", func() {
+		class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.Exposure.Webhooks = crewletaiv1alpha1.WebhookExposure{
+				Mode:     crewletaiv1alpha1.WebhookExposureGateway,
+				Gateway:  crewletaiv1alpha1.GatewayExposure{ParentRefs: []crewletaiv1alpha1.GatewayParentReference{{Namespace: gatewayNamespace, Name: publicGateway}}},
+				Hostname: "{{uid}}.hooks.example.com",
+			}
+			c.Spec.Telemetry = crewletaiv1alpha1.TelemetrySettings{OTLPEndpoint: "http://collector.observability:4318"}
+		})
+		company := newCompany(class.Name, func(c *crewletaiv1alpha1.Company) {
+			c.Spec.Runtime.Env = []crewletaiv1alpha1.EnvVar{{Name: "TEAM", Value: new("platform")}}
+		})
+		reconciled(company)
+
+		objects := map[string]client.Object{
+			keyringName:             &corev1.Secret{},
+			tokensName:              &corev1.Secret{},
+			accessName:              &corev1.Secret{},
+			"nimbus-bootstrap-data": &corev1.ConfigMap{},
+			engineName:              &corev1.Service{},
+			"nimbus-data":           &corev1.Service{},
+			webhooksRoute:           &gatewayv1.HTTPRoute{},
+			companyName:             &networkingv1.NetworkPolicy{},
+		}
+		versions := func() map[string]string {
+			GinkgoHelper()
+			out := map[string]string{}
+			for name, obj := range objects {
+				get(obj, name)
+				out[fmt.Sprintf("%T/%s", obj, name)] = obj.GetResourceVersion()
+			}
+			out["StatefulSet"] = statefulSet().ResourceVersion
+			sa := &corev1.ServiceAccount{}
+			get(sa, engineName)
+			out["ServiceAccount"] = sa.ResourceVersion
+			c := &crewletaiv1alpha1.Company{}
+			get(c, companyName)
+			out["Company"] = c.ResourceVersion
+			return out
+		}
+		before := versions()
+		reconciled(company)
+		Expect(versions()).To(Equal(before))
+	})
+
+	It("never regenerates the keyring or the API tokens", func() {
+		class := newClass()
+		company := reconciled(newCompany(class.Name))
+		keyring, tokens := &corev1.Secret{}, &corev1.Secret{}
+		get(keyring, keyringName)
+		get(tokens, tokensName)
+
+		updateClass(class, func(c *crewletaiv1alpha1.EngineClass) { c.Spec.Retention.BackupOwner = "storage-team" })
+		updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Mission = "Ship it." })
+		reconciled(company)
+
+		keyringAfter, tokensAfter := &corev1.Secret{}, &corev1.Secret{}
+		get(keyringAfter, keyringName)
+		get(tokensAfter, tokensName)
+		Expect(keyringAfter.Data).To(Equal(keyring.Data))
+		Expect(keyringAfter.ResourceVersion).To(Equal(keyring.ResourceVersion))
+		Expect(tokensAfter.Data).To(Equal(tokens.Data))
+		Expect(tokensAfter.ResourceVersion).To(Equal(tokens.ResourceVersion))
+	})
+
+	It("adopts a keyring kept from an earlier Company without changing it", func() {
+		class := newClass()
+		material := base64.StdEncoding.EncodeToString(make([]byte, 32))
+		kept := &corev1.Secret{
+			Namespace:   namespace,
+			Name:        keyringName,
+			Annotations: map[string]string{KeyringActiveKeyAnnotation: "k7"},
+			Data:        map[string][]byte{"k6": []byte(material), "k7": []byte(material)},
+		}
+		Expect(k8sClient.Create(ctx, kept)).To(Succeed())
+
+		company := reconciled(newCompany(class.Name))
+		keyring := &corev1.Secret{}
+		get(keyring, keyringName)
+		ownedByCompany(keyring, company)
+		Expect(keyring.Data).To(Equal(kept.Data))
+		Expect(keyring.Annotations).To(HaveKeyWithValue(KeyringActiveKeyAnnotation, "k7"))
+
+		bootstrap := &corev1.ConfigMap{}
+		get(bootstrap, "nimbus-bootstrap-data")
+		Expect(bootstrap.Data["crewlet.yaml"]).To(Equal(string(expectedBootstrap(company, class, "k7", "k6", "k7").YAML)))
+	})
+
+	It("uses API tokens another controller supplies as they are, and holds the pods back while one is missing", func() {
+		class := newClass()
+		// Any object can be a Secret's controller; a ConfigMap stands for
+		// the ExternalSecret a platform would use.
+		supplier := &corev1.ConfigMap{Namespace: namespace, Name: "token-supplier"}
+		Expect(k8sClient.Create(ctx, supplier)).To(Succeed())
+		supplied := &corev1.Secret{
+			Namespace: namespace,
+			Name:      tokensName,
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "v1", Kind: "ConfigMap", Name: supplier.Name, UID: supplier.UID, Controller: new(true),
+			}},
+			Data: map[string][]byte{render.TokenOperator: []byte("supplied-operator-token")},
+		}
+		Expect(k8sClient.Create(ctx, supplied)).To(Succeed())
+
+		company := reconciled(newCompany(class.Name))
+		runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonSecretNotFound))
+		Expect(runtimeReady.Message).To(ContainSubstring(tokensName + " has no key " + render.TokenAccess))
+		absent(&appsv1.StatefulSet{}, "nimbus-data")
+		absent(&corev1.Secret{}, accessName)
+
+		tokens := &corev1.Secret{}
+		get(tokens, tokensName)
+		Expect(metav1.GetControllerOf(tokens).UID).To(Equal(supplier.UID), "adopted a Secret another controller owns")
+		tokens.Data[render.TokenAccess] = []byte("supplied-access-token")
+		Expect(k8sClient.Update(ctx, tokens)).To(Succeed())
+		company = reconciled(company)
+		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+		access := &corev1.Secret{}
+		get(access, accessName)
+		Expect(string(access.Data[crewletaiv1alpha1.APIAccessTokenKey])).To(Equal("supplied-access-token"))
+		get(tokens, tokensName)
+		Expect(string(tokens.Data[render.TokenOperator])).To(Equal("supplied-operator-token"))
+	})
+
+	It("holds the pods back on a keyring it cannot read, and never rewrites it", func() {
+		class := newClass()
+		broken := &corev1.Secret{
+			Namespace: namespace,
+			Name:      keyringName,
+			Data:      map[string][]byte{"key-1": []byte("material")},
+		}
+		Expect(k8sClient.Create(ctx, broken)).To(Succeed())
+
+		company := reconciled(newCompany(class.Name))
+		runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+		Expect(runtimeReady.Status).To(Equal(metav1.ConditionFalse))
+		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonKeyringInvalid))
+		Expect(runtimeReady.Message).To(ContainSubstring(KeyringActiveKeyAnnotation))
+		absent(&appsv1.StatefulSet{}, "nimbus-data")
+		keyring := &corev1.Secret{}
+		get(keyring, keyringName)
+		Expect(keyring.Data).To(Equal(broken.Data))
+		Expect(keyring.Annotations).NotTo(HaveKey(KeyringActiveKeyAnnotation))
+	})
+
+	It("reports the engine ready once its pods are, and the Company once its document is applied", func() {
+		class := newClass()
+		company := reconciled(newCompany(class.Name))
+		rollOut()
+		company = reconciled(company)
+
+		runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+		Expect(runtimeReady.Status).To(Equal(metav1.ConditionTrue))
+		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonPodsReady))
+		Expect(company.Status.Engine).To(Equal(crewletaiv1alpha1.EngineStatus{Image: engineImageV020, Version: "v0.2.0"}))
+		Expect(company.Status.Topology.Data).To(Equal(crewletaiv1alpha1.DataTopologyStatus{
+			Replicas: new(int32(1)), ReadyReplicas: new(int32(1)), UpdatedReplicas: new(int32(1)),
+		}))
+		ready := condition(company, crewletaiv1alpha1.ConditionReady)
+		Expect(ready.Status).To(Equal(metav1.ConditionFalse))
+		Expect(ready.Reason).To(Equal(crewletaiv1alpha1.ReasonConfigPending))
+
+		By("reading ConfigApplied as the config reconciler writes it")
+		base := company.DeepCopy()
+		meta.SetStatusCondition(&company.Status.Conditions, metav1.Condition{
+			Type: crewletaiv1alpha1.ConditionConfigApplied, Status: metav1.ConditionTrue,
+			Reason: crewletaiv1alpha1.ReasonApplied, Message: "Revision r1 is active.", ObservedGeneration: company.Generation,
+		})
+		Expect(k8sClient.Status().Patch(ctx, company, client.MergeFrom(base))).To(Succeed())
+		company = reconciled(company)
+		ready = condition(company, crewletaiv1alpha1.ConditionReady)
+		Expect(ready.Status).To(Equal(metav1.ConditionTrue))
+		Expect(ready.Reason).To(Equal(crewletaiv1alpha1.ReasonAvailable))
+		// The runtime reconciler wrote its status without dropping the
+		// config reconciler's condition.
+		Expect(condition(company, crewletaiv1alpha1.ConditionConfigApplied).Reason).To(Equal(crewletaiv1alpha1.ReasonApplied))
+	})
+
+	It("scales a suspended Company to zero and keeps its volumes", func() {
+		class := newClass()
+		company := reconciled(newCompany(class.Name))
+		rollOut()
+		updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Suspend = new(true) })
+		company = reconciled(company)
+
+		sts := statefulSet()
+		Expect(*sts.Spec.Replicas).To(BeZero())
+		Expect(sts.Spec.PersistentVolumeClaimRetentionPolicy.WhenScaled).To(Equal(appsv1.RetainPersistentVolumeClaimRetentionPolicyType))
+		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonSuspended))
+		ready := condition(company, crewletaiv1alpha1.ConditionReady)
+		Expect(ready.Status).To(Equal(metav1.ConditionFalse))
+		Expect(ready.Reason).To(Equal(crewletaiv1alpha1.ReasonSuspended))
+
+		updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Suspend = new(false) })
+		reconciled(company)
+		Expect(*statefulSet().Spec.Replicas).To(Equal(int32(1)))
+	})
+
+	It("rolls the pod template when the class changes, and keeps the volumes the StatefulSet was created with", func() {
+		class := newClass()
+		company := reconciled(newCompany(class.Name))
+		before := statefulSet()
+
+		updateClass(class, func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.Engine.Image = "ghcr.io/crewlet/crewlet:v0.3.0"
+			c.Spec.Data.Resources = &corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("1Gi")},
+			}
+			c.Spec.Retention.BackupOwner = "storage-team"
+			c.Spec.Data.Storage.Size = new(resource.MustParse("50Gi"))
+			c.Spec.PodTemplate.Spec.Tolerations = []corev1.Toleration{{Key: "crewlet.ai/tenant", Operator: corev1.TolerationOpExists}}
+		})
+		company = reconciled(company)
+
+		after := statefulSet()
+		Expect(after.Generation).To(BeNumerically(">", before.Generation))
+		Expect(engine(after).Image).To(Equal("ghcr.io/crewlet/crewlet:v0.3.0"))
+		Expect(engine(after).Resources.Requests).To(HaveKeyWithValue(corev1.ResourceMemory, resource.MustParse("1Gi")))
+		Expect(after.Spec.Template.Spec.Tolerations).To(ConsistOf(corev1.Toleration{Key: "crewlet.ai/tenant", Operator: corev1.TolerationOpExists}))
+		Expect(after.Spec.Template.Annotations[BootstrapHashAnnotation]).To(Equal(expectedBootstrap(company, class, "key-1", "key-1").Hash))
+		Expect(after.Spec.Template.Annotations[BootstrapHashAnnotation]).NotTo(Equal(before.Spec.Template.Annotations[BootstrapHashAnnotation]))
+		Expect(after.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests.Storage().String()).To(Equal("10Gi"))
+	})
+
+	It("rolls the pods when a Secret their environment reads changes", func() {
+		class := newClass()
+		reconciled(newCompany(class.Name))
+		before := statefulSet().Spec.Template.Annotations[SecretsVersionAnnotation]
+
+		tokens := &corev1.Secret{}
+		get(tokens, tokensName)
+		tokens.Data[render.TokenAccess] = []byte("revoked-and-replaced-by-hand")
+		Expect(k8sClient.Update(ctx, tokens)).To(Succeed())
+		company := &crewletaiv1alpha1.Company{}
+		get(company, companyName)
+		reconciled(company)
+
+		Expect(statefulSet().Spec.Template.Annotations[SecretsVersionAnnotation]).NotTo(Equal(before))
+		access := &corev1.Secret{}
+		get(access, accessName)
+		Expect(string(access.Data[crewletaiv1alpha1.APIAccessTokenKey])).To(Equal("revoked-and-replaced-by-hand"))
+	})
+
+	Context("the engine version", func() {
+		overridable := func(c *crewletaiv1alpha1.EngineClass) { c.Spec.Engine.AllowVersionOverride = new(true) }
+		version := func(v string) func(*crewletaiv1alpha1.Company) {
+			return func(c *crewletaiv1alpha1.Company) { c.Spec.Runtime.Version = v }
+		}
+
+		It("refuses a downgrade below what the pods last ran ready, and keeps running that", func() {
+			class := newClass(overridable)
+			company := reconciled(newCompany(class.Name, version("v0.3.0")))
+			Expect(engine(statefulSet()).Image).To(Equal("ghcr.io/crewlet/crewlet:v0.3.0"))
+			rollOut()
+			company = reconciled(company)
+			Expect(company.Status.Engine.Version).To(Equal("v0.3.0"))
+
+			updateCompany(company, version("v0.2.9"))
+			company = reconciled(company)
+			runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+			Expect(runtimeReady.Status).To(Equal(metav1.ConditionFalse))
+			Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonDowngradeRefused))
+			Expect(runtimeReady.Message).To(ContainSubstring("v0.3.0"))
+			Expect(engine(statefulSet()).Image).To(Equal("ghcr.io/crewlet/crewlet:v0.3.0"))
+
+			updateCompany(company, version("v0.4.0"))
+			company = reconciled(company)
+			Expect(engine(statefulSet()).Image).To(Equal("ghcr.io/crewlet/crewlet:v0.4.0"))
+			Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+		})
+
+		It("lets a version that never became ready be taken back", func() {
+			class := newClass(overridable)
+			company := reconciled(newCompany(class.Name, version("v0.3.0")))
+			rollOut()
+			reconciled(company)
+			updateCompany(company, version("v0.9.0"))
+			reconciled(company)
+			updateCompany(company, version("v0.3.0"))
+			company = reconciled(company)
+			Expect(engine(statefulSet()).Image).To(Equal("ghcr.io/crewlet/crewlet:v0.3.0"))
+			Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).NotTo(Equal(crewletaiv1alpha1.ReasonDowngradeRefused))
+		})
+
+		It("refuses a version the class does not let the Company choose", func() {
+			class := newClass()
+			company := reconciled(newCompany(class.Name, version("v0.3.0")))
+			runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+			Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonVersionOverrideNotAllowed))
+			absent(&appsv1.StatefulSet{}, "nimbus-data")
+		})
+	})
+
+	Context("the platform's Secrets", func() {
+		var platform string
+		BeforeEach(func() {
+			ns := &corev1.Namespace{GenerateName: "platform-"}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+			platform = ns.Name
+		})
+		s3Class := func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.Objects = crewletaiv1alpha1.ObjectSettings{
+				Backend: crewletaiv1alpha1.ObjectBackendS3,
+				S3: crewletaiv1alpha1.S3ObjectSettings{
+					Region: "eu-central-1", Bucket: "tenants",
+					CredentialsSecretRef: crewletaiv1alpha1.NamespacedSecretReference{Namespace: platform, Name: "s3"},
+				},
+			}
+			c.Spec.Telemetry = crewletaiv1alpha1.TelemetrySettings{
+				OTLPEndpoint:     "https://otlp.example.com",
+				HeadersSecretRef: crewletaiv1alpha1.NamespacedSecretKeyReference{Namespace: platform, Name: otlpSecret, Key: "headers"},
+			}
+			c.Spec.PodTemplate.Spec.Env = []crewletaiv1alpha1.ClassEnvVar{
+				{Name: "PLATFORM_URL", Value: new("https://platform.example.com")},
+				{Name: platformTokenVar, ValueFrom: crewletaiv1alpha1.NamespacedSecretValueSource{
+					SecretKeyRef: crewletaiv1alpha1.NamespacedSecretKeyReference{Namespace: platform, Name: otlpSecret, Key: "token"},
+				}},
+			}
+		}
+
+		It("holds the pods back until the platform's Secrets exist, then copies them into the Company's namespace", func() {
+			class := newClass(s3Class)
+			company := reconciled(newCompany(class.Name))
+			runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+			Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonSecretNotFound))
+			Expect(runtimeReady.Message).To(ContainSubstring(platform + "/s3"))
+			absent(&appsv1.StatefulSet{}, "nimbus-data")
+			absent(&corev1.Secret{}, platformName)
+
+			Expect(k8sClient.Create(ctx, &corev1.Secret{Namespace: platform, Name: "s3", Data: map[string][]byte{
+				crewletaiv1alpha1.S3AccessKeyIDKey: []byte("AKIA"), crewletaiv1alpha1.S3SecretAccessKeyKey: []byte("s3cr3t"),
+			}})).To(Succeed())
+			Expect(k8sClient.Create(ctx, &corev1.Secret{Namespace: platform, Name: otlpSecret, Data: map[string][]byte{
+				"headers": []byte("authorization=Bearer x"), "token": []byte("platform-token"),
+			}})).To(Succeed())
+			company = reconciled(company)
+
+			copied := &corev1.Secret{}
+			get(copied, platformName)
+			ownedByCompany(copied, company)
+			Expect(copied.Data).To(Equal(map[string][]byte{
+				crewletaiv1alpha1.S3AccessKeyIDKey:     []byte("AKIA"),
+				crewletaiv1alpha1.S3SecretAccessKeyKey: []byte("s3cr3t"),
+				"otlpHeaders":                          []byte("authorization=Bearer x"),
+				"env." + platformTokenVar:              []byte("platform-token"),
+			}))
+
+			fromPlatform := func(key string) *corev1.EnvVarSource {
+				return &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Name: platformName, Key: key}}
+			}
+			sts := statefulSet()
+			Expect(engine(sts).Env).To(ContainElements(
+				corev1.EnvVar{Name: render.EnvS3AccessKeyID, ValueFrom: fromPlatform(crewletaiv1alpha1.S3AccessKeyIDKey)},
+				corev1.EnvVar{Name: "OTEL_EXPORTER_OTLP_ENDPOINT", Value: "https://otlp.example.com"},
+				corev1.EnvVar{Name: "OTEL_EXPORTER_OTLP_HEADERS", ValueFrom: fromPlatform("otlpHeaders")},
+				corev1.EnvVar{Name: "PLATFORM_URL", Value: "https://platform.example.com"},
+				corev1.EnvVar{Name: platformTokenVar, ValueFrom: fromPlatform("env." + platformTokenVar)},
+			))
+			Expect(sts.Spec.Template.Annotations[SecretsVersionAnnotation]).To(ContainSubstring("platform=" + copied.ResourceVersion))
+			Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+
+			By("letting the Company's own variable replace the class's")
+			updateCompany(company, func(c *crewletaiv1alpha1.Company) {
+				c.Spec.Runtime.Env = []crewletaiv1alpha1.EnvVar{{Name: platformTokenVar, Value: new("mine")}}
+			})
+			reconciled(company)
+			get(copied, platformName)
+			Expect(copied.Data).NotTo(HaveKey("env." + platformTokenVar))
+			env := engine(statefulSet()).Env
+			Expect(env).To(ContainElement(corev1.EnvVar{Name: platformTokenVar, Value: "mine"}))
+			Expect(slices.ContainsFunc(env, func(e corev1.EnvVar) bool { return e.Name == platformTokenVar && e.ValueFrom != nil })).To(BeFalse())
+
+			By("deleting the copy when the class stops asking for it")
+			updateClass(class, func(c *crewletaiv1alpha1.EngineClass) {
+				c.Spec.Objects = crewletaiv1alpha1.ObjectSettings{Backend: crewletaiv1alpha1.ObjectBackendNATS}
+				c.Spec.Telemetry = crewletaiv1alpha1.TelemetrySettings{}
+				c.Spec.PodTemplate.Spec.Env = nil
+			})
+			reconciled(company)
+			absent(&corev1.Secret{}, platformName)
+		})
+
+		It("maps a Secret to the Companies whose class copies it, or whose keyring or tokens it is", func() {
+			class := newClass(s3Class)
+			newCompany(class.Name)
+			companiesOf := func(secretNamespace, name string) []reconcile.Request {
+				var got []reconcile.Request
+				for _, req := range newReconciler().companiesOfSecret(ctx, &corev1.Secret{Namespace: secretNamespace, Name: name}) {
+					if req.Namespace == namespace {
+						got = append(got, req)
+					}
+				}
+				return got
+			}
+			nimbus := reconcile.Request{Namespace: namespace, Name: companyName}
+			Expect(companiesOf(platform, otlpSecret)).To(ConsistOf(nimbus))
+			Expect(companiesOf(namespace, otlpSecret)).To(BeEmpty())
+			Expect(companiesOf(namespace, tokensName)).To(ConsistOf(nimbus))
+			Expect(companiesOf(namespace, keyringName)).To(ConsistOf(nimbus))
+		})
+	})
+
+	Context("exposure", func() {
+		gatewayWebhooks := func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.Exposure.Webhooks = crewletaiv1alpha1.WebhookExposure{
+				Mode: crewletaiv1alpha1.WebhookExposureGateway,
+				Gateway: crewletaiv1alpha1.GatewayExposure{ParentRefs: []crewletaiv1alpha1.GatewayParentReference{
+					{Namespace: gatewayNamespace, Name: publicGateway},
+				}},
+				Hostname: "{{uid}}.hooks.example.com",
+			}
+		}
+		// accept stands in for the Gateway's controller.
+		accept := func(name, gatewayNamespace, gateway string) {
+			GinkgoHelper()
+			route := &gatewayv1.HTTPRoute{}
+			get(route, name)
+			route.Status.Parents = []gatewayv1.RouteParentStatus{{
+				ParentRef:      gatewayv1.ParentReference{Namespace: new(gatewayv1.Namespace(gatewayNamespace)), Name: gatewayv1.ObjectName(gateway)},
+				ControllerName: "example.com/gateway-controller",
+				Conditions: []metav1.Condition{{
+					Type: string(gatewayv1.RouteConditionAccepted), Status: metav1.ConditionTrue, Reason: "Accepted",
+					Message: "Accepted.", LastTransitionTime: metav1.Now(), ObservedGeneration: route.Generation,
+				}},
+			}}
+			Expect(k8sClient.Status().Update(ctx, route)).To(Succeed())
+		}
+
+		It("routes only /webhooks/ through the class's Gateways", func() {
+			class := newClass(gatewayWebhooks)
+			company := reconciled(newCompany(class.Name))
+			host := string(company.UID) + ".hooks.example.com"
+
+			route := &gatewayv1.HTTPRoute{}
+			get(route, webhooksRoute)
+			ownedByCompany(route, company)
+			Expect(route.Spec.Hostnames).To(Equal([]gatewayv1.Hostname{gatewayv1.Hostname(host)}))
+			Expect(route.Spec.ParentRefs).To(HaveLen(1))
+			Expect(string(*route.Spec.ParentRefs[0].Namespace)).To(Equal(gatewayNamespace))
+			Expect(string(route.Spec.ParentRefs[0].Name)).To(Equal(publicGateway))
+			Expect(route.Spec.Rules).To(HaveLen(1))
+			Expect(route.Spec.Rules[0].Matches).To(HaveLen(1))
+			Expect(*route.Spec.Rules[0].Matches[0].Path.Type).To(Equal(gatewayv1.PathMatchPathPrefix))
+			Expect(*route.Spec.Rules[0].Matches[0].Path.Value).To(Equal("/webhooks/"))
+			Expect(route.Spec.Rules[0].BackendRefs).To(HaveLen(1))
+			Expect(string(route.Spec.Rules[0].BackendRefs[0].Name)).To(Equal(engineName))
+			Expect(*route.Spec.Rules[0].BackendRefs[0].Port).To(Equal(gatewayv1.PortNumber(8080)))
+
+			Expect(company.Status.Endpoints.PublicBaseURL).To(Equal("https://" + host))
+			exposed := condition(company, crewletaiv1alpha1.ConditionExposed)
+			Expect(exposed.Status).To(Equal(metav1.ConditionFalse))
+			Expect(exposed.Reason).To(Equal(crewletaiv1alpha1.ReasonRouteNotAccepted))
+
+			By("admitting the Gateway's namespace to the engine's port")
+			policy := &networkingv1.NetworkPolicy{}
+			get(policy, companyName)
+			Expect(policy.Spec.Ingress[0].From).To(ContainElement(networkingv1.NetworkPolicyPeer{
+				NamespaceSelector: &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{
+					Key: corev1.LabelMetadataName, Operator: metav1.LabelSelectorOpIn, Values: []string{gatewayNamespace},
+				}}},
+			}))
+
+			accept(webhooksRoute, gatewayNamespace, publicGateway)
+			company = reconciled(company)
+			exposed = condition(company, crewletaiv1alpha1.ConditionExposed)
+			Expect(exposed.Status).To(Equal(metav1.ConditionTrue))
+			Expect(exposed.Reason).To(Equal(crewletaiv1alpha1.ReasonRouteAccepted))
+			Expect(company.Status.Endpoints.ExposedAPI).To(BeEmpty())
+		})
+
+		It("moves the route to an Ingress when the class does", func() {
+			class := newClass(gatewayWebhooks)
+			company := reconciled(newCompany(class.Name, func(c *crewletaiv1alpha1.Company) {
+				c.Spec.Exposure.PublicBaseURL = "https://hooks.nimbus.example.com"
+			}))
+			Expect(company.Status.Endpoints.PublicBaseURL).To(Equal("https://hooks.nimbus.example.com"))
+
+			updateClass(class, func(c *crewletaiv1alpha1.EngineClass) {
+				ingress := &crewletaiv1alpha1.IngressExposure{
+					ClassName:            "nginx",
+					Annotations:          map[string]string{"cert-manager.io/cluster-issuer": "public"},
+					ControllerNamespaces: []string{"ingress-nginx"},
+				}
+				ingress.TLS.SecretName = "{{name}}-webhooks-tls"
+				c.Spec.Exposure.Webhooks = crewletaiv1alpha1.WebhookExposure{
+					Mode: crewletaiv1alpha1.WebhookExposureIngress, Ingress: ingress, Hostname: "{{name}}.{{namespace}}.hooks.example.com",
+				}
+			})
+			company = reconciled(company)
+			absent(&gatewayv1.HTTPRoute{}, webhooksRoute)
+
+			host := "nimbus." + namespace + ".hooks.example.com"
+			ingress := &networkingv1.Ingress{}
+			get(ingress, webhooksRoute)
+			ownedByCompany(ingress, company)
+			Expect(ingress.Annotations).To(HaveKeyWithValue("cert-manager.io/cluster-issuer", "public"))
+			Expect(*ingress.Spec.IngressClassName).To(Equal("nginx"))
+			Expect(ingress.Spec.TLS).To(Equal([]networkingv1.IngressTLS{{Hosts: []string{host}, SecretName: "nimbus-webhooks-tls"}}))
+			prefix := networkingv1.PathTypePrefix
+			Expect(ingress.Spec.Rules).To(Equal([]networkingv1.IngressRule{{
+				Host: host,
+				HTTP: &networkingv1.HTTPIngressRuleValue{
+					Paths: []networkingv1.HTTPIngressPath{{
+						Path: "/webhooks/", PathType: &prefix,
+						Backend: networkingv1.IngressBackend{Service: &networkingv1.IngressServiceBackend{
+							Name: engineName, Port: networkingv1.ServiceBackendPort{Number: 8080},
+						}},
+					}},
+				},
+			}}))
+			// The Company's own address still wins over the class's host name.
+			Expect(company.Status.Endpoints.PublicBaseURL).To(Equal("https://hooks.nimbus.example.com"))
+			Expect(condition(company, crewletaiv1alpha1.ConditionExposed).Reason).To(Equal(crewletaiv1alpha1.ReasonRouteNotAccepted))
+
+			policy := &networkingv1.NetworkPolicy{}
+			get(policy, companyName)
+			Expect(policy.Spec.Ingress[0].From).To(ContainElement(networkingv1.NetworkPolicyPeer{
+				NamespaceSelector: &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{
+					Key: corev1.LabelMetadataName, Operator: metav1.LabelSelectorOpIn, Values: []string{"ingress-nginx"},
+				}}},
+			}))
+
+			// The Ingress controller publishes the address it serves on.
+			ingress.Status.LoadBalancer.Ingress = []networkingv1.IngressLoadBalancerIngress{{IP: "203.0.113.10"}}
+			Expect(k8sClient.Status().Update(ctx, ingress)).To(Succeed())
+			company = reconciled(company)
+			Expect(condition(company, crewletaiv1alpha1.ConditionExposed).Reason).To(Equal(crewletaiv1alpha1.ReasonRouteAccepted))
+		})
+
+		It("needs the Company's address when webhooks are forwarded from outside", func() {
+			class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+				c.Spec.Exposure.Webhooks = crewletaiv1alpha1.WebhookExposure{Mode: crewletaiv1alpha1.WebhookExposureExternal}
+			})
+			company := reconciled(newCompany(class.Name))
+			exposed := condition(company, crewletaiv1alpha1.ConditionExposed)
+			Expect(exposed.Status).To(Equal(metav1.ConditionFalse))
+			Expect(exposed.Reason).To(Equal(crewletaiv1alpha1.ReasonPublicBaseURLMissing))
+			Expect(condition(company, crewletaiv1alpha1.ConditionReady).Reason).NotTo(Equal(crewletaiv1alpha1.ReasonAvailable))
+
+			updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Exposure.PublicBaseURL = "https://relay.example.com/nimbus" })
+			company = reconciled(company)
+			exposed = condition(company, crewletaiv1alpha1.ConditionExposed)
+			Expect(exposed.Status).To(Equal(metav1.ConditionTrue))
+			Expect(exposed.Reason).To(Equal(crewletaiv1alpha1.ReasonNoRoutes))
+			Expect(company.Status.Endpoints.PublicBaseURL).To(Equal("https://relay.example.com/nimbus"))
+			absent(&gatewayv1.HTTPRoute{}, webhooksRoute)
+			absent(&networkingv1.Ingress{}, webhooksRoute)
+		})
+
+		It("routes the whole API through an internal Gateway and reports its HTTPS address", func() {
+			Expect(k8sClient.Create(ctx, &gatewayv1.Gateway{
+				Namespace: namespace,
+				Name:      internalGateway,
+				Spec: gatewayv1.GatewaySpec{
+					GatewayClassName: internalGateway,
+					Listeners: []gatewayv1.Listener{{
+						Name: "https", Port: 443, Protocol: gatewayv1.HTTPSProtocolType,
+						TLS: &gatewayv1.ListenerTLSConfig{CertificateRefs: []gatewayv1.SecretObjectReference{{Name: "internal-tls"}}},
+					}},
+				},
+			})).To(Succeed())
+			class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+				c.Spec.Exposure.API = crewletaiv1alpha1.APIExposure{
+					Mode:     crewletaiv1alpha1.APIExposureGateway,
+					Gateway:  crewletaiv1alpha1.GatewayExposure{ParentRefs: []crewletaiv1alpha1.GatewayParentReference{{Name: internalGateway}}},
+					Hostname: "{{uid}}.api.internal.example.com",
+				}
+			})
+			company := reconciled(newCompany(class.Name))
+			route := &gatewayv1.HTTPRoute{}
+			get(route, "nimbus-api")
+			Expect(*route.Spec.Rules[0].Matches[0].Path.Value).To(Equal("/"))
+			Expect(company.Status.Endpoints.ExposedAPI).To(BeEmpty(), "set before the route was accepted")
+
+			accept("nimbus-api", namespace, internalGateway)
+			company = reconciled(company)
+			Expect(company.Status.Endpoints.ExposedAPI).To(Equal("https://" + string(company.UID) + ".api.internal.example.com"))
+			Expect(condition(company, crewletaiv1alpha1.ConditionExposed).Reason).To(Equal(crewletaiv1alpha1.ReasonRouteAccepted))
+		})
+
+		It("reports a Gateway route as not exposed on a cluster without the Gateway API", func() {
+			class := newClass(gatewayWebhooks)
+			company := newCompany(class.Name)
+			r := newReconciler()
+			r.GatewayAPI = false
+			reconcileWith(r, company)
+			get(company, companyName)
+			exposed := condition(company, crewletaiv1alpha1.ConditionExposed)
+			Expect(exposed.Status).To(Equal(metav1.ConditionFalse))
+			Expect(exposed.Reason).To(Equal(crewletaiv1alpha1.ReasonGatewayAPINotInstalled))
+			absent(&gatewayv1.HTTPRoute{}, webhooksRoute)
+		})
+
+		It("finds the Gateway API on a cluster that serves it", func() {
+			installed, err := GatewayAPIInstalled(k8sClient.RESTMapper())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(installed).To(BeTrue())
+		})
+	})
+
+	It("removes the network policy when the class stops isolating the engine", func() {
+		class := newClass()
+		company := reconciled(newCompany(class.Name))
+		get(&networkingv1.NetworkPolicy{}, companyName)
+		updateClass(class, func(c *crewletaiv1alpha1.EngineClass) { c.Spec.NetworkPolicy = crewletaiv1alpha1.NetworkPolicyNone })
+		reconciled(company)
+		absent(&networkingv1.NetworkPolicy{}, companyName)
+	})
+
+	Context("deletion", func() {
+		// A data pod and its volume claim as the StatefulSet controller would
+		// have made them; envtest runs neither it nor the garbage collector,
+		// so the spec makes them and deletes the pod itself.
+		dataPod := func() *corev1.Pod {
+			GinkgoHelper()
+			pod := &corev1.Pod{
+				Namespace: namespace,
+				Name:      "nimbus-data-0",
+				Labels:    selectorFor(&crewletaiv1alpha1.Company{Name: companyName}, componentData),
+				Spec: corev1.PodSpec{
+					ServiceAccountName:           engineName,
+					AutomountServiceAccountToken: new(false),
+					Containers:                   []corev1.Container{{Name: "engine", Image: engineImageV020}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+			return pod
+		}
+		dataClaim := func() *corev1.PersistentVolumeClaim {
+			GinkgoHelper()
+			claim := &corev1.PersistentVolumeClaim{
+				Namespace: namespace,
+				Name:      "data-nimbus-data-0",
+				Labels:    selectorFor(&crewletaiv1alpha1.Company{Name: companyName}, componentData),
+				Spec: corev1.PersistentVolumeClaimSpec{
+					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, claim)).To(Succeed())
+			return claim
+		}
+		// deleteAndDrain deletes the Company and checks that it is held
+		// until its data pod is gone.
+		deleteAndDrain := func(company *crewletaiv1alpha1.Company) {
+			GinkgoHelper()
+			pod := dataPod()
+			Expect(k8sClient.Delete(ctx, company)).To(Succeed())
+			result := reconcileWith(newReconciler(), company)
+			Expect(result.RequeueAfter).To(BeNumerically(">", time.Duration(0)), "released before the data pod stopped")
+			absent(&appsv1.StatefulSet{}, "nimbus-data")
+			get(company, companyName)
+			Expect(company.Finalizers).To(ContainElement(crewletaiv1alpha1.CompanyFinalizer))
+
+			Expect(k8sClient.Delete(ctx, pod)).To(Succeed())
+			Eventually(func() bool {
+				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), &corev1.Pod{}))
+			}).Should(BeTrue())
+			Expect(reconcileWith(newReconciler(), company)).To(Equal(ctrl.Result{}))
+			absent(&crewletaiv1alpha1.Company{}, companyName)
+		}
+
+		It("keeps the volumes and the keyring with deletionPolicy Retain", func() {
+			class := newClass()
+			company := reconciled(newCompany(class.Name))
+			claim := dataClaim()
+			deleteAndDrain(company)
+
+			kept := &corev1.PersistentVolumeClaim{}
+			get(kept, claim.Name)
+			Expect(kept.DeletionTimestamp).To(BeNil())
+			keyring := &corev1.Secret{}
+			get(keyring, keyringName)
+			Expect(keyring.OwnerReferences).To(BeEmpty(), "the garbage collector would delete the keyring with the Company")
+		})
+
+		It("deletes the volumes with deletionPolicy Delete", func() {
+			class := newClass()
+			company := reconciled(newCompany(class.Name, func(c *crewletaiv1alpha1.Company) {
+				c.Spec.DeletionPolicy = crewletaiv1alpha1.DeletionPolicyDelete
+			}))
+			Expect(statefulSet().Spec.PersistentVolumeClaimRetentionPolicy.WhenDeleted).
+				To(Equal(appsv1.DeletePersistentVolumeClaimRetentionPolicyType))
+			claim := dataClaim()
+			deleteAndDrain(company)
+
+			// The claim's protection finalizer holds it while no controller
+			// runs to release it; the deletion has been asked for either way.
+			gone := &corev1.PersistentVolumeClaim{}
+			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(claim), gone)
+			if !apierrors.IsNotFound(err) {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(gone.DeletionTimestamp).NotTo(BeNil())
+			}
+			keyring := &corev1.Secret{}
+			get(keyring, keyringName)
+			ownedByCompany(keyring, company)
+		})
+	})
+})
+
+var _ = Describe("Company runtime event filters", func() {
+	It("re-runs a Company when its ConfigApplied condition changes, and not for other status writes", func() {
+		withConfigApplied := func(status metav1.ConditionStatus) *crewletaiv1alpha1.Company {
+			c := &crewletaiv1alpha1.Company{}
+			if status != "" {
+				c.Status.Conditions = []metav1.Condition{{Type: crewletaiv1alpha1.ConditionConfigApplied, Status: status, Reason: "R"}}
+			}
+			return c
+		}
+		changed := configAppliedChanged()
+		update := func(old, updated *crewletaiv1alpha1.Company) bool {
+			return changed.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated})
+		}
+		Expect(update(withConfigApplied(""), withConfigApplied(metav1.ConditionTrue))).To(BeTrue())
+		Expect(update(withConfigApplied(metav1.ConditionFalse), withConfigApplied(metav1.ConditionTrue))).To(BeTrue())
+		Expect(update(withConfigApplied(metav1.ConditionTrue), withConfigApplied(metav1.ConditionTrue))).To(BeFalse())
+		Expect(update(withConfigApplied(""), withConfigApplied(""))).To(BeFalse())
+	})
+})

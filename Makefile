@@ -63,6 +63,21 @@ api-docs: crd-ref-docs ## Generate the API reference (docs/reference/api.md) fro
 tidy: ## Run go mod tidy in both modules.
 	@for m in $(GO_MODULES); do (cd $$m && go mod tidy); done
 
+# The Gateway API CRDs the controller suite installs into envtest: the
+# standard channel of the sigs.k8s.io/gateway-api release go.mod requires,
+# copied from the module cache, so the CRDs the tests run against and the Go
+# types the operator writes are one release. The suite fails if they drift
+# apart; run this after bumping the module.
+GATEWAY_API_CRDS := internal/controller/testdata/gateway-api
+.PHONY: gateway-api-crds
+gateway-api-crds: ## Copy the Gateway API CRDs of the release go.mod requires into the controller suite's test data.
+	@dir="$$(go list -m -f '{{.Dir}}' sigs.k8s.io/gateway-api)"; \
+	rm -rf "$(GATEWAY_API_CRDS)"; \
+	mkdir -p "$(GATEWAY_API_CRDS)"; \
+	for kind in gatewayclasses gateways httproutes; do \
+		install -m 0644 "$$dir/config/crd/standard/gateway.networking.k8s.io_$$kind.yaml" "$(GATEWAY_API_CRDS)/"; \
+	done
+
 # The race detector is on because a controller is concurrent by construction:
 # a reconciler, its watches and the cache all run on their own goroutines.
 # test/e2e is excluded; it needs a cluster and runs under test-e2e. The engine

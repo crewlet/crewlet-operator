@@ -20,6 +20,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/controller"
 	// +kubebuilder:scaffold:imports
@@ -34,6 +36,9 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(crewletaiv1alpha1.AddToScheme(scheme))
+	// The Gateway API's types are registered whether or not the cluster
+	// serves them; the controller uses them only where it does.
+	utilruntime.Must(gatewayv1.Install(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -132,8 +137,27 @@ func main() {
 		os.Exit(1)
 	}
 
+	gatewayAPI, err := controller.GatewayAPIInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		setupLog.Error(err, "Failed to find out whether the cluster serves the Gateway API")
+		os.Exit(1)
+	}
+	if !gatewayAPI {
+		setupLog.Info("The cluster has no Gateway API HTTPRoute kind; EngineClasses that route through " +
+			"Gateways are reported as not exposed until the operator restarts with it")
+	}
+	// The Deployment sets POD_NAMESPACE from the downward API. It is unset
+	// when the manager runs outside the cluster (make run), where there is
+	// no namespace for the engines' network policies to admit.
+	operatorNamespace := os.Getenv("POD_NAMESPACE")
+	if operatorNamespace == "" {
+		setupLog.Info("POD_NAMESPACE is unset; the engines' network policies will not admit the operator's namespace")
+	}
 	if err := (&controller.CompanyReconciler{
-		Client: mgr.GetClient(),
+		Client:            mgr.GetClient(),
+		APIReader:         mgr.GetAPIReader(),
+		GatewayAPI:        gatewayAPI,
+		OperatorNamespace: operatorNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "company")
 		os.Exit(1)
