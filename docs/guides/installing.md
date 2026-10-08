@@ -67,6 +67,10 @@ So whoever may edit a namespace may run a company in it, with the same
 limits on what it costs that the namespace's other workloads have
 (ResourceQuotas apply to the engine's pod and volume). EngineClasses are not
 in either role: they are the platform's, written by its administrators.
+Naming one in a Company is not access-controlled, as naming a StorageClass is
+not, so whoever may write a Company may choose any class; where that matters
+(a class with platform-provided models, say), restrict `spec.engineClassName`
+with a ValidatingAdmissionPolicy.
 
 ### A tenant provisioner
 

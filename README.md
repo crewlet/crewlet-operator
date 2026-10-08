@@ -11,12 +11,14 @@ keeps the engine's live configuration equal to what the resources say.
 > is being defined and will change without notice; nothing has been released
 > yet. Do not run it against anything you care about.
 >
-> Today the API server enforces the API's rules, and the operator accepts
-> each `Company` (its `EngineClass` resolves and its objects stay within the
-> class's limits), runs its engine (the StatefulSet, storage, keyring and API
-> tokens, Services, webhook routes and network policy) and applies its
-> company document, with the Secret values it references, as its management
-> policy says.
+> Today the operator runs a company end to end: it accepts each `Company`
+> (its `EngineClass` resolves and its objects stay within the class's
+> limits), runs its engine (the StatefulSet, storage, keyring and API tokens,
+> Services, webhook routes and network policy), applies its company
+> document, with the Secret values it references, as its management policy
+> says, and cleans up after it as its deletion policy says. The e2e suite
+> proves that on kind with the pinned Crewlet engine built from source. It
+> runs one data pod per company; highly available companies come later.
 
 ## How it works
 
@@ -65,31 +67,29 @@ flowchart LR
 
 ## Running it locally
 
-Against a throwaway kind cluster, with the manager running on your machine:
+On a throwaway kind cluster, with the operator's image and the Crewlet
+engine's, both built from source and loaded into the cluster:
 
 ```bash
-make kind kubectl                      # the pinned kind and kubectl, in bin/
+make kind kubectl                                 # the pinned kind and kubectl, in bin/
 bin/kind create cluster --name crewlet
-make install                           # the CRDs
-make run                               # the manager, against your current kubeconfig
-```
-
-Or in the cluster, from an image you build:
-
-```bash
 make docker-build IMG=crewlet-operator:dev
-bin/kind load docker-image crewlet-operator:dev --name crewlet
-make deploy IMG=crewlet-operator:dev   # or: make helm-deploy IMG=crewlet-operator:dev
+make crewlet-image CREWLET_IMG=crewlet:dev        # the engine, at the pinned CREWLET_VERSION
+bin/kind load docker-image crewlet-operator:dev crewlet:dev --name crewlet
+make install deploy IMG=crewlet-operator:dev      # or: make helm-deploy IMG=crewlet-operator:dev
 ```
 
-[docs/getting-started.md](docs/getting-started.md) walks through both, and
-how to remove everything again.
+[docs/getting-started.md](docs/getting-started.md) continues from there: an
+`EngineClass`, a company with a team of two agents, changing it, and removing
+everything again.
 
 ## Documentation
 
 - [docs/](docs/README.md) — the documentation index
 - [docs/getting-started.md](docs/getting-started.md) — running the operator
-  on a local cluster
+  and a company on a local cluster
+- [docs/guides/](docs/README.md#guides) — installing, credentials, exposure,
+  management policies, hosting many tenants on the operator, troubleshooting
 - [docs/concepts/overview.md](docs/concepts/overview.md) — the kinds, how
   they relate, credentials and management policies
 - [docs/reference/api.md](docs/reference/api.md) — the `crewlet.ai` API
