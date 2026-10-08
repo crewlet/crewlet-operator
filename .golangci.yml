@@ -1,6 +1,13 @@
+# Lint configuration for both Go modules; `make lint` runs it in each.
 version: "2"
 run:
   allow-parallel-runners: true
+  # Exclusion paths below are relative to this file, so the run in api/
+  # matches them the same way as the run at the root.
+  relative-path-mode: cfg
+  # The e2e suite is behind a build tag; lint it with everything else.
+  build-tags:
+    - e2e
 linters:
   default: none
   enable:
@@ -8,26 +15,34 @@ linters:
     - depguard
     - dupl
     - errcheck
+    - errorlint
+    - exhaustive
     - ginkgolinter
+    - gocritic
     - goconst
     - gocyclo
+    - gosec
     - govet
     - ineffassign
     - lll
-    - modernize
+    - logcheck
     - misspell
+    - modernize
     - nakedret
+    - nilerr
+    - nolintlint
     - prealloc
     - revive
     - staticcheck
     - unconvert
     - unparam
     - unused
-    - logcheck
+    - usestdlibvars
+    - wastedassign
   settings:
     custom:
       logcheck:
-        type: "module"
+        type: module
         description: Checks Go logging calls for Kubernetes logging conventions.
     depguard:
       rules:
@@ -35,10 +50,40 @@ linters:
           deny:
             - pkg: sort
               desc: Should be replaced with slices package
+        # The API module is imported by consumers that must not inherit the
+        # operator's dependency tree; see CONTRIBUTING.md.
+        api-module:
+          files:
+            - "**/api/**/*.go"
+          deny:
+            - pkg: sigs.k8s.io/controller-runtime
+              desc: the API module depends on k8s.io/api and k8s.io/apimachinery only
+            - pkg: github.com/crewlet/crewlet-operator/internal
+              desc: the API module cannot import the operator
+    exhaustive:
+      # A switch over an enum with a default branch has made its choice.
+      default-signifies-exhaustive: true
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+    nolintlint:
+      # A //nolint must name the linter and say why it is wrong at that spot.
+      require-explanation: true
+      require-specific: true
     revive:
       rules:
         - name: comment-spacings
         - name: import-shadowing
+        - name: exported
+        - name: package-comments
+        - name: errorf
+        - name: error-strings
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: unreachable-code
     modernize:
       disable:
         - omitzero
@@ -47,11 +92,16 @@ linters:
     rules:
       - linters:
           - lll
-        path: api/*
+        path: api/
       - linters:
           - dupl
           - lll
-        path: internal/*
+        path: internal/
+      # The e2e suite drives kubectl and make with arguments it builds itself.
+      - linters:
+          - gosec
+        path: test/
+        text: "G204"
     paths:
       - third_party$
       - builtin$
@@ -60,6 +110,10 @@ formatters:
   enable:
     - gofmt
     - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/crewlet/crewlet-operator
   exclusions:
     generated: lax
     paths:

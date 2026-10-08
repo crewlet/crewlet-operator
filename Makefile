@@ -100,6 +100,70 @@ lint-fix: golangci-lint ## Run golangci-lint in both modules and apply its fixes
 lint-config: golangci-lint ## Verify the golangci-lint configuration.
 	"$(GOLANGCI_LINT)" config verify --config "$(CURDIR)/.golangci.yml"
 
+##@ Verification
+
+# check is one target because it answers one question: would CI accept this
+# change? Each step is a target of its own and runs in this order, cheapest
+# first, with verify-generated ahead of everything that regenerates files
+# (build and test run manifests and generate), since a step that rewrites the
+# tree before the comparison would hide the drift it exists to catch.
+.PHONY: check
+check: ## Run every gate CI runs: formatting, tidiness, generated files, vet, lint, build, tests, sign-off.
+	$(MAKE) fmt-check
+	$(MAKE) tidy-check
+	$(MAKE) verify-generated
+	$(MAKE) vet
+	$(MAKE) lint
+	$(MAKE) build
+	$(MAKE) test
+	$(MAKE) signoff-check
+	$(MAKE) signoff-test
+
+.PHONY: fmt-check
+fmt-check: ## Fail if any Go file in either module is not gofmt-formatted.
+	@unformatted="$$(gofmt -l $$(git ls-files --cached --others --exclude-standard -- '*.go'))"; \
+	if [ -n "$$unformatted" ]; then \
+		echo "These files are not gofmt-formatted; run: make fmt"; \
+		echo "$$unformatted"; \
+		exit 1; \
+	fi
+
+.PHONY: tidy-check
+tidy-check: ## Fail if go.mod or go.sum of either module is not tidy.
+	@for m in $(GO_MODULES); do \
+		(cd $$m && go mod tidy -diff) || { echo "$$m/go.mod is not tidy; the diff above is what make tidy writes."; exit 1; }; \
+	done
+
+# The paths whose content is generated: deepcopy (api/), CRDs and RBAC
+# (config/) and the chart templates (dist/chart).
+GENERATED_PATHS := api config dist/chart
+
+# The tree is snapshotted into a throwaway index before regenerating, and the
+# regenerated tree is compared with that snapshot rather than with HEAD, so the
+# check answers "is the generated output in step with its sources?" on a
+# working tree with uncommitted changes as well as on CI's clean checkout.
+.PHONY: verify-generated
+verify-generated: ## Fail if make manifests generate chart would change any generated file.
+	@index="$$(mktemp)"; \
+	trap 'rm -f "$$index"' EXIT; \
+	cp "$$(git rev-parse --git-path index)" "$$index"; \
+	GIT_INDEX_FILE="$$index" git add -A -- $(GENERATED_PATHS); \
+	$(MAKE) --no-print-directory manifests generate chart; \
+	new="$$(GIT_INDEX_FILE="$$index" git ls-files --others --exclude-standard -- $(GENERATED_PATHS))"; \
+	if ! GIT_INDEX_FILE="$$index" git diff --exit-code -- $(GENERATED_PATHS) || [ -n "$$new" ]; then \
+		[ -z "$$new" ] || printf 'New files:\n%s\n' "$$new"; \
+		echo "Generated files were out of date and have been regenerated; review and commit them."; \
+		exit 1; \
+	fi
+
+.PHONY: signoff-check
+signoff-check: ## Fail if a commit this branch adds lacks a DCO Signed-off-by trailer.
+	scripts/check-signoff.sh
+
+.PHONY: signoff-test
+signoff-test: ## Run the sign-off gate's own test suite.
+	scripts/check-signoff_test.sh
+
 ##@ Build
 
 .PHONY: build
@@ -257,22 +321,25 @@ envtest: $(LOCALBIN) ## Download setup-envtest locally if necessary.
 # .custom-gcl.yml adds the logcheck plugin, which golangci-lint can only load
 # by compiling it in: the stock binary is installed to a scratch directory and
 # used once, to build the custom binary that bin/golangci-lint then points at.
+# The binary's name carries a hash of .custom-gcl.yml, so a plugin change
+# rebuilds it just as a version bump does.
+GOLANGCI_LINT_BUILD = $(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION)-$(shell sha256sum .custom-gcl.yml | cut -c1-12)
 .PHONY: golangci-lint
-golangci-lint: $(LOCALBIN) ## Build golangci-lint with the logcheck plugin locally if necessary.
+golangci-lint: $(LOCALBIN) ## Build golangci-lint with the plugins in .custom-gcl.yml locally if necessary.
 	@grep -qx 'version: $(GOLANGCI_LINT_VERSION)' .custom-gcl.yml || { \
 		echo "GOLANGCI_LINT_VERSION is $(GOLANGCI_LINT_VERSION) but .custom-gcl.yml names another version; set both."; \
 		exit 1; \
 	}
-	@[ -f "$(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION)" ] || { \
+	@[ -f "$(GOLANGCI_LINT_BUILD)" ] || { \
 		set -e; \
 		stock="$$(mktemp -d)"; \
 		trap 'rm -rf "$$stock"' EXIT; \
 		echo "Downloading github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)"; \
 		GOBIN="$$stock" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
 		echo "Building golangci-lint $(GOLANGCI_LINT_VERSION) with the plugins in .custom-gcl.yml"; \
-		"$$stock/golangci-lint" custom --destination "$(LOCALBIN)" --name "golangci-lint-$(GOLANGCI_LINT_VERSION)"; \
+		"$$stock/golangci-lint" custom --destination "$(LOCALBIN)" --name "$$(basename "$(GOLANGCI_LINT_BUILD)")"; \
 	}
-	@ln -sf "$(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION)" "$(GOLANGCI_LINT)"
+	@ln -sf "$(GOLANGCI_LINT_BUILD)" "$(GOLANGCI_LINT)"
 
 # go-install-tool installs a Go tool into bin/ as <name>-<version> and points
 # <name> at it, unless that version is already there.
