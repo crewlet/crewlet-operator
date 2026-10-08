@@ -92,24 +92,30 @@ test: manifests generate fmt vet setup-envtest crewlet ## Run the unit and envte
 	cd api && go test -race ./... -coverprofile cover.out
 
 KIND_CLUSTER ?= crewlet-operator-test-e2e
+# KIND_CONFIG optionally names a kind cluster configuration file, for a host
+# that cannot run kind's default cluster (one whose kubelet needs settings of
+# its own, for instance). Unset, the cluster is kind's default, as in CI.
+KIND_CONFIG ?=
 
 .PHONY: setup-test-e2e
-setup-test-e2e: kind ## Create the kind cluster for the e2e suite unless it exists.
+setup-test-e2e: kind ## Create the kind cluster for the e2e suite unless it exists (KIND_CONFIG: optional cluster configuration).
 	@case "$$("$(KIND)" get clusters)" in \
 		*"$(KIND_CLUSTER)"*) \
 			echo "Kind cluster '$(KIND_CLUSTER)' already exists. Skipping creation." ;; \
 		*) \
 			echo "Creating Kind cluster '$(KIND_CLUSTER)'..."; \
-			"$(KIND)" create cluster --name $(KIND_CLUSTER) ;; \
+			"$(KIND)" create cluster --name $(KIND_CLUSTER) $(if $(KIND_CONFIG),--config "$(KIND_CONFIG)") ;; \
 	esac
 
 # The suite shells out to kind, kubectl and make, so the pinned tools go first
 # on its PATH. kubectl's kuberc is off unless KUBECTL_KUBERC=true, so a local
-# kubectl configuration cannot change what the suite sees.
+# kubectl configuration cannot change what the suite sees. The suite builds
+# and loads two images: the manager's and the engine's, CREWLET_IMG, from
+# source at CREWLET_VERSION (make crewlet-image).
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt vet kubectl ## Run the e2e suite against a kind cluster, then delete the cluster.
-	PATH="$(LOCALBIN):$$PATH" KIND="$(KIND)" KIND_CLUSTER=$(KIND_CLUSTER) \
-		go test -tags=e2e ./test/e2e/ -v -ginkgo.v
+	PATH="$(LOCALBIN):$$PATH" KIND="$(KIND)" KIND_CLUSTER=$(KIND_CLUSTER) CREWLET_IMG="$(CREWLET_IMG)" \
+		go test -tags=e2e ./test/e2e/ -v -ginkgo.v -timeout 60m
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: cleanup-test-e2e

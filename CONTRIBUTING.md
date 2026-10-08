@@ -84,9 +84,18 @@ drift it exists to catch.
 
 Two more suites are not part of `make check`:
 
-- `make test-e2e` creates a kind cluster, builds and loads the manager image,
-  deploys it with kustomize, checks that it runs and serves metrics, and
-  deletes the cluster. CI runs it on every pull request.
+- `make test-e2e` creates a kind cluster, builds the manager image and the
+  Crewlet engine image, loads both, deploys the manager with kustomize, and
+  checks it from the outside: that it runs and serves metrics, and that a
+  company runs end to end — its engine becomes ready and is given its
+  document and Secret values, a consumer reads the API with the published
+  token, an edited Seat becomes a new revision, and deleting the Company
+  keeps or deletes its volume and keyring as its `deletionPolicy` says. Then
+  it deletes the cluster. CI runs it on every pull request. The engine image
+  is built from source at `CREWLET_VERSION` with `make crewlet-image`, which
+  clones Crewlet; set `CREWLET_SRC` to a local clone that has the commit to
+  build from it instead. On a host that cannot run kind's default cluster,
+  `KIND_CONFIG` names a kind cluster configuration to create it with.
 - `make docker-build` builds the image; CI's `build` job runs it too.
 
 The [`ci.yml`](.github/workflows/ci.yml) jobs call these same targets, so a
