@@ -50,14 +50,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       # The tag itself (v1.2.3) and its minor (v1.2); `latest` only for a
-      # tag without a pre-release suffix.
+      # tag without a pre-release suffix. The v is a prefix rather than part
+      # of the pattern because, for a pre-release tag, metadata-action
+      # replaces every pattern but {{raw}} with {{version}} and keeps only the
+      # prefix: v0.2.0-rc.1 is then published as v0.2.0-rc.1 (by both lines),
+      # which is the tag the chart's appVersion names.
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.IMAGE }}
           tags: |
-            type=semver,pattern=v{{version}}
-            type=semver,pattern=v{{major}}.{{minor}}
+            type=semver,pattern={{version}},prefix=v
+            type=semver,pattern={{major}}.{{minor}},prefix=v
       - id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:

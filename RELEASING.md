@@ -25,8 +25,9 @@ flowchart TD
 What a release publishes:
 
 - **The image** `ghcr.io/crewlet/crewlet-operator`, for linux/amd64 and
-  linux/arm64, tagged `vX.Y.Z` and `vX.Y`, plus `latest` unless the tag has a
-  pre-release suffix. It carries an SBOM, a keyless cosign signature and a
+  linux/arm64, tagged `vX.Y.Z`, `vX.Y` and `latest`. A pre-release tag
+  (`vX.Y.Z-rc.N`) publishes the image under that tag alone: no `vX.Y`, no
+  `latest`. It carries an SBOM, a keyless cosign signature and a
   GitHub build-provenance attestation, all bound to the manifest digest.
 - **The Helm chart** `oci://ghcr.io/crewlet/charts/crewlet-operator`, at
   version `X.Y.Z` (SemVer has no `v`) with appVersion `vX.Y.Z`. The chart's
