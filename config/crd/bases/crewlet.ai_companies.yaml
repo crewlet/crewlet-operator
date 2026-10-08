@@ -354,8 +354,9 @@ spec:
                   order:
                     description: |-
                       order is the providers' precedence: a seat that names no provider for
-                      a phase falls back to the first one here. Unset orders the company's
-                      LLMProviders by name. Crewlet's providers.llm_order.
+                      a phase falls back to the first one here. The providers it leaves out
+                      follow it: the company's LLMProviders by name, then the platform
+                      providers by name. Crewlet's providers.llm_order.
                     items:
                       description: |-
                         LLMProviderReference names a model provider: an LLMProvider in the

@@ -237,7 +237,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `order` _[LLMProviderReference](#llmproviderreference) array_ | order is the providers' precedence: a seat that names no provider for<br />a phase falls back to the first one here. Unset orders the company's<br />LLMProviders by name. Crewlet's providers.llm_order. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `order` _[LLMProviderReference](#llmproviderreference) array_ | order is the providers' precedence: a seat that names no provider for<br />a phase falls back to the first one here. The providers it leaves out<br />follow it: the company's LLMProviders by name, then the platform<br />providers by name. Crewlet's providers.llm_order. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `usePlatformProviders` _boolean_ | usePlatformProviders adds the EngineClass's platformLLMProviders to the<br />company, so seats can run on models the platform provides. |  | Optional: \{\} <br /> |
 
 

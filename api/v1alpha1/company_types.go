@@ -142,8 +142,9 @@ type LLMProviderReference struct {
 // +kubebuilder:validation:MinProperties=1
 type CompanyLLMSettings struct {
 	// order is the providers' precedence: a seat that names no provider for
-	// a phase falls back to the first one here. Unset orders the company's
-	// LLMProviders by name. Crewlet's providers.llm_order.
+	// a phase falls back to the first one here. The providers it leaves out
+	// follow it: the company's LLMProviders by name, then the platform
+	// providers by name. Crewlet's providers.llm_order.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MaxItems=32
