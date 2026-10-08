@@ -51,7 +51,7 @@ func (r *renderer) org() ([]roleDoc, []unitDoc) {
 	}
 
 	t := tree{children: children, members: members}
-	return r.roles(Path{"roles"}, rootSeats), r.unitList(Path{"units"}, roots, t)
+	return r.roles(Path{keyRoles}, rootSeats), r.unitList(Path{keyUnits}, roots, t)
 }
 
 // tree is the org chart indexed by parent: each Unit's child Units and its
@@ -109,14 +109,14 @@ func (r *renderer) unit(at Path, u *v1alpha1.Unit, t tree) unitDoc {
 				"names Seat %s as the lead, which does not exist in namespace %s", lead, r.namespace()))
 		}
 	}
-	doc.Roles = r.roles(append(slices.Clone(at), "roles"), t.members[u.Name])
+	doc.Roles = r.roles(append(slices.Clone(at), keyRoles), t.members[u.Name])
 	doc.Children = r.unitList(append(slices.Clone(at), "children"), t.children[u.Name], t)
 	return doc
 }
 
 func (r *renderer) roles(at Path, seats []*v1alpha1.Seat) []roleDoc {
 	slices.SortFunc(seats, func(a, b *v1alpha1.Seat) int {
-		return cmp.Or(strings.Compare(seatHandle(a), seatHandle(b)), strings.Compare(a.Name, b.Name))
+		return cmp.Or(strings.Compare(SeatHandle(a), SeatHandle(b)), strings.Compare(a.Name, b.Name))
 	})
 	out := make([]roleDoc, 0, len(seats))
 	for i, s := range seats {
@@ -130,7 +130,7 @@ func (r *renderer) role(s *v1alpha1.Seat) roleDoc {
 	spec := &s.Spec
 	doc := roleDoc{
 		Name:                 seatName(s),
-		Handle:               seatHandle(s),
+		Handle:               SeatHandle(s),
 		Kind:                 seatKind(spec.Kind),
 		Email:                spec.Email,
 		Availability:         spec.Availability,
@@ -282,14 +282,16 @@ func (r *renderer) seatNamed(name string) *v1alpha1.Seat {
 	return found
 }
 
-// seatHandle is a Seat's handle: spec.handle, or its metadata.name.
-func seatHandle(s *v1alpha1.Seat) string {
+// SeatHandle is a Seat's handle: spec.handle, or its metadata.name. With the
+// Company's spec.companyName it is what SeatID derives the seat's identity
+// from.
+func SeatHandle(s *v1alpha1.Seat) string {
 	return cmp.Or(s.Spec.Handle, s.Name)
 }
 
 // seatName is a Seat's Crewlet name: spec.displayName, or its handle.
 func seatName(s *v1alpha1.Seat) string {
-	return cmp.Or(s.Spec.DisplayName, seatHandle(s))
+	return cmp.Or(s.Spec.DisplayName, SeatHandle(s))
 }
 
 // unitName is a Unit's Crewlet name: spec.displayName, or its metadata.name,

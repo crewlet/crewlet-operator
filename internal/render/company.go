@@ -123,9 +123,12 @@ func Company(in *Input) (*Document, error) {
 const (
 	keyProviders    = "providers"
 	keyIntegrations = "integrations"
+	keyMCPServers   = "mcp_servers"
+	keyRoles        = "roles"
+	keyUnits        = "units"
 )
 
-var childBlocks = []string{keyProviders, keyIntegrations, "mcp_servers", "roles", "units"}
+var childBlocks = []string{keyProviders, keyIntegrations, keyMCPServers, keyRoles, keyUnits}
 
 // renderer holds the state of one render: the objects indexed by name, the
 // Secret keys referenced so far, the sources recorded and the refusals.
@@ -520,7 +523,7 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 			}
 		}
 		out = append(out, doc)
-		r.source(Path{"mcp_servers", i}, ObjectRef{Kind: KindMCPServer, Name: s.Name})
+		r.source(Path{keyMCPServers, i}, ObjectRef{Kind: KindMCPServer, Name: s.Name})
 	}
 	return out
 }
