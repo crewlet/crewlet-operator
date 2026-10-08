@@ -3,7 +3,7 @@ providers:
   llm:
     own-openai:
       api_keys:
-      - ${K8S_TENANT_NIMBUS_OPENAI_APIKEY}
+      - ${K8S_OPENAI_API_KEY_LEK6X7NDATC5}
       model: gpt-5
       type: openai
   llm_order:

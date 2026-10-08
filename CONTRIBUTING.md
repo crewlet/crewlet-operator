@@ -94,17 +94,21 @@ local run and CI run the same commands with the same pinned tools.
 
 ### The engine suite
 
-The engine client in [`internal/engine`](internal/engine) is tested against a
-real Crewlet engine, not a mock of one: `internal/engine/enginetest` starts the
-`crewlet` binary on a free loopback port with a throwaway configuration in the
-test's temporary directory, and stops it when the test ends. A mock would agree
-with the client by construction; the real engine is what tells the two apart
-when Crewlet's API moves.
+Every package that speaks to Crewlet is tested against a real Crewlet engine,
+not a mock of one. `internal/engine/enginetest` starts the `crewlet` binary on
+a free loopback port with a throwaway configuration in the test's temporary
+directory, and stops it when the test ends; the engine client in
+[`internal/engine`](internal/engine) and the secret sync in
+[`internal/secretsync`](internal/secretsync) run against it. The renderer in
+[`internal/render`](internal/render) hands every document it renders to the
+same binary's `crewlet validate`, with the secret sync's store names in every
+credential position. A mock would agree with the code by construction; the
+real engine is what tells the two apart when Crewlet's API or schema moves.
 
 The engine is pinned like every other tool, as `CREWLET_VERSION` in the
 Makefile, and `make crewlet` builds it into `bin/crewlet` (`make test` does so
 first). To run these tests outside make — from an IDE, or with a plain
-`go test ./internal/engine/...` — build it once with `make crewlet`, or point
+`go test ./internal/render` — build it once with `make crewlet`, or point
 `CREWLET_BIN` at a `crewlet` binary of your own. A test that finds no binary
 **fails** and says which of the two to do; it never skips, because a skipped
 contract test reads as a passing one. When a test fails, the engine's log is

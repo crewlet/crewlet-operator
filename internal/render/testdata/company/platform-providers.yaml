@@ -3,7 +3,7 @@ providers:
   llm:
     own-openai:
       api_keys:
-      - ${K8S_TENANT_NIMBUS_OPENAI_APIKEY}
+      - ${K8S_OPENAI_API_KEY_LEK6X7NDATC5}
       cooldowns:
         auth_seconds: 120
         rate_limit_seconds: 600
@@ -13,8 +13,8 @@ providers:
       type: openai
     platform-claude:
       api_keys:
-      - ${K8S_CREWLET_SYSTEM_PLATFORM_ANTHROPIC_PRIMARY}
-      - ${K8S_CREWLET_SYSTEM_PLATFORM_ANTHROPIC_SECONDARY}
+      - ${K8S_PLATFORM_ANTHROPIC_PRIMARY_HCBRZ7ARUTYC}
+      - ${K8S_PLATFORM_ANTHROPIC_SECONDARY_HJM23COSZAIE}
       model: claude-sonnet-5
       reasoning_effort: medium
       type: anthropic

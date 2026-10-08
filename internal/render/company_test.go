@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/crewlet/crewlet-operator/internal/secretref"
+	"github.com/crewlet/crewlet-operator/internal/secretsync"
 )
 
 // companyCase is one company document the tests render, pin in a golden
@@ -107,7 +108,7 @@ func TestCompanyRefsAreExactlyThePointers(t *testing.T) {
 
 			listed := make([]string, len(doc.Refs))
 			for i, k := range doc.Refs {
-				listed[i] = storeName(k)
+				listed[i] = secretsync.StoreName(k)
 			}
 			slices.Sort(listed)
 			if !slices.Equal(pointed, listed) {
@@ -162,7 +163,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 			t.Errorf("%s: %s is not among the document's Refs", p.path, p.key)
 			continue
 		}
-		if want := "${" + storeName(k) + "}"; leaves[p.path] != want {
+		if want := "${" + secretsync.StoreName(k) + "}"; leaves[p.path] != want {
 			t.Errorf("%s = %v, want %s", p.path, leaves[p.path], want)
 		}
 	}

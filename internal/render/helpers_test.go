@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,7 +13,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
-	"github.com/crewlet/crewlet-operator/internal/secretref"
+	"github.com/crewlet/crewlet-operator/internal/secretsync"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files under testdata from the current render")
@@ -117,14 +116,10 @@ func load(t *testing.T, files ...string) objects {
 	}
 	o.input.Company = o.company
 	o.input.Class = o.class
-	o.input.StoreName = storeName
+	// The secret sync's own naming rather than a stand-in, so the contract
+	// tests hand the engine the names a cluster would.
+	o.input.StoreName = secretsync.StoreName
 	return o
-}
-
-// storeName stands in for the secret sync's naming: any pure function of the
-// key will do, and this one keeps the golden files readable.
-func storeName(k secretref.Key) string {
-	return "K8S_" + strings.ToUpper(regexp.MustCompile(`[^A-Za-z0-9]+`).ReplaceAllString(k.Namespace+"_"+k.Name+"_"+k.Key, "_"))
 }
 
 // golden compares got with the golden file, or rewrites the file under

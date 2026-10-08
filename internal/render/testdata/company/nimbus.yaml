@@ -4,8 +4,8 @@ integrations:
     provisioning:
       org: nimbus-hq
       org_webhook: auto
-    token: ${K8S_TENANT_NIMBUS_NIMBUS_GITHUB_ORGTOKEN}
-    webhook_secret: ${K8S_TENANT_NIMBUS_NIMBUS_GITHUB_WEBHOOKSECRET}
+    token: ${K8S_NIMBUS_GITHUB_ORG_TOKEN_O4ARELY4DZXZ}
+    webhook_secret: ${K8S_NIMBUS_GITHUB_WEBHOOK_SECRET_H2I5AHRDL2VE}
   public_base_url: https://nimbus.hooks.example.com
   slack:
     typing_status: addressed
@@ -27,20 +27,20 @@ policies:
 - Never push directly to the default branch.
 providers:
   embeddings:
-    api_key: ${K8S_TENANT_NIMBUS_NIMBUS_OPENAI_APIKEY}
+    api_key: ${K8S_NIMBUS_OPENAI_API_KEY_YACPCD23WGRQ}
     model: text-embedding-3-large
     type: openai
   llm:
     anthropic:
       api_keys:
-      - ${K8S_TENANT_NIMBUS_NIMBUS_ANTHROPIC_APIKEY}
+      - ${K8S_NIMBUS_ANTHROPIC_API_KEY_A4IZBDSXZ6HX}
       model: claude-sonnet-5
       reasoning_effort: high
       timeout_seconds: 600
       type: anthropic
     platform-claude:
       api_keys:
-      - ${K8S_CREWLET_SYSTEM_PLATFORM_ANTHROPIC_APIKEY}
+      - ${K8S_PLATFORM_ANTHROPIC_API_KEY_KBCSEOJXFCWQ}
       model: claude-sonnet-5
       type: anthropic
   llm_order:
@@ -51,7 +51,7 @@ providers:
     default_pause_ttl_seconds: 1800
     default_run_in: e2b
     e2b:
-      api_key: ${K8S_TENANT_NIMBUS_NIMBUS_E2B_APIKEY}
+      api_key: ${K8S_NIMBUS_E2B_API_KEY_HH5CATIPGVOD}
 roles:
 - availability: CET business hours
   contact:
@@ -92,14 +92,14 @@ units:
           app_id: 1234567
           app_slug: nimbus-ana
           installation_id: 89012345
-          private_key: ${K8S_TENANT_NIMBUS_ANA_GITHUB_APP_PRIVATEKEY}
+          private_key: ${K8S_ANA_GITHUB_APP_PRIVATE_KEY_JSUSQ7FYDCSN}
           repos:
           - nimbus-hq/nimbuscore
           tier: review
-          webhook_secret: ${K8S_TENANT_NIMBUS_ANA_GITHUB_APP_WEBHOOKSECRET}
+          webhook_secret: ${K8S_ANA_GITHUB_APP_WEBHOOK_SECRET_DE4RFGLQA4OW}
         slack:
-          bot_token: ${K8S_TENANT_NIMBUS_ANA_SLACK_BOTTOKEN}
-          signing_secret: ${K8S_TENANT_NIMBUS_ANA_SLACK_SIGNINGSECRET}
+          bot_token: ${K8S_ANA_SLACK_BOT_TOKEN_HGFIPUYDX4KF}
+          signing_secret: ${K8S_ANA_SLACK_SIGNING_SECRET_YMDA6WMUYTHW}
       kind: agent
       llm:
         auxiliary:
@@ -108,7 +108,7 @@ units:
         - anthropic
       mcp_env:
         github:
-          Authorization: ${K8S_TENANT_NIMBUS_ANA_GITHUB_AUTHORIZATION}
+          Authorization: ${K8S_ANA_GITHUB_AUTHORIZATION_TWHVOQBEQ7JM}
       name: Ana (Platform Engineer)
       placement:
         labels:
@@ -118,7 +118,7 @@ units:
       sandbox:
         enabled: true
         env:
-          GITHUB_TOKEN: ${K8S_TENANT_NIMBUS_ANA_GITHUB_TOKEN}
+          GITHUB_TOKEN: ${K8S_ANA_GITHUB_TOKEN_OI3SDKAPI3E5}
         mcp:
           servers:
           - github
@@ -136,8 +136,8 @@ units:
     handle: cto
     integrations:
       slack:
-        bot_token: ${K8S_TENANT_NIMBUS_CTO_SLACK_BOTTOKEN}
-        signing_secret: ${K8S_TENANT_NIMBUS_CTO_SLACK_SIGNINGSECRET}
+        bot_token: ${K8S_CTO_SLACK_BOT_TOKEN_EOG5NAYJ7TBU}
+        signing_secret: ${K8S_CTO_SLACK_SIGNING_SECRET_N3SILNAKL2CL}
     kind: agent
     llm:
       default:

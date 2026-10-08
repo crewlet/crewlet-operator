@@ -12,6 +12,7 @@ import (
 
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 	"github.com/crewlet/crewlet-operator/internal/secretref"
+	"github.com/crewlet/crewlet-operator/internal/secretsync"
 )
 
 // The contract tests hand every rendered document to the engine's own
@@ -129,7 +130,7 @@ func TestContractCompany(t *testing.T) {
 			}
 			env := bootstrapEnv(tierA)
 			for _, k := range doc.Refs {
-				env[storeName(k)] = dummyCredential(k)
+				env[secretsync.StoreName(k)] = dummyCredential(k)
 			}
 			validate(t, env, "-config", config, "-company", write(t, "company.yaml", doc.YAML))
 		})

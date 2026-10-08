@@ -7,9 +7,9 @@ integrations:
       repos:
       - forge/api
       - forge/web
-    token: ${K8S_TENANT_NIMBUS_FORGE_GITHUB_ORGTOKEN}
+    token: ${K8S_FORGE_GITHUB_ORG_TOKEN_BQMOGEO5YFB4}
     url: https://github.forge.example
-    webhook_secret: ${K8S_TENANT_NIMBUS_FORGE_GITHUB_WEBHOOKSECRET}
+    webhook_secret: ${K8S_FORGE_GITHUB_WEBHOOK_SECRET_TBDDG2MGKIUZ}
   public_base_url: https://github-enterprise.hooks.example.com
 name: Forge
 roles:
@@ -19,9 +19,9 @@ roles:
       app_id: 42
       app_slug: forge-builder
       installation_id: 4242
-      private_key: ${K8S_TENANT_NIMBUS_BUILDER_GITHUB_APP_PRIVATEKEY}
+      private_key: ${K8S_BUILDER_GITHUB_APP_PRIVATE_KEY_XJ3ZLBDFZG45}
       tier: full_access
-      webhook_secret: ${K8S_TENANT_NIMBUS_BUILDER_GITHUB_APP_WEBHOOKSECRET}
+      webhook_secret: ${K8S_BUILDER_GITHUB_APP_WEBHOOK_SECRET_2FHJJ6YLPUEG}
   kind: agent
   name: builder
   placement:

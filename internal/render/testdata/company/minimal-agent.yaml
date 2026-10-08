@@ -4,7 +4,7 @@ providers:
   llm:
     claude:
       api_keys:
-      - ${K8S_TENANT_NIMBUS_ANTHROPIC_APIKEY}
+      - ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
       model: claude-sonnet-5
       type: anthropic
   llm_order:
