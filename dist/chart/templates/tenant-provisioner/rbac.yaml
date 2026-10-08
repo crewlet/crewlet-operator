@@ -1,0 +1,104 @@
+{{- /*
+Written by hand, unlike the rest of templates/: kustomize has no opt-in
+switch for the chart generator to turn into one. The operator itself never
+uses this role.
+*/ -}}
+{{- if .Values.tenantProvisioner.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "crewlet-operator.resourceName" (dict "suffix" "tenant-provisioner" "context" $) }}
+rules:
+# Each tenant's namespace, created and deleted with the tenant: the operator
+# never creates one.
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+# The credentials the tenant's objects reference, and the API access Secret
+# each Company publishes.
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - crewlet.ai
+  resources:
+  - companies
+  - integrations
+  - llmproviders
+  - mcpservers
+  - seats
+  - units
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+# The status the operator reports: endpoints, the API access Secret, each
+# Seat's identity and webhook addresses.
+- apiGroups:
+  - crewlet.ai
+  resources:
+  - companies/status
+  - integrations/status
+  - llmproviders/status
+  - mcpservers/status
+  - seats/status
+  - units/status
+  verbs:
+  - get
+# The platform's classes, to choose one by name. Writing them stays with the
+# platform's administrators.
+- apiGroups:
+  - crewlet.ai
+  resources:
+  - engineclasses
+  verbs:
+  - get
+  - list
+  - watch
+{{- with .Values.tenantProvisioner.subjects }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" $ }}
+    helm.sh/chart: {{ $.Chart.Name }}-{{ $.Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+  name: {{ include "crewlet-operator.resourceName" (dict "suffix" "tenant-provisioner" "context" $) }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "crewlet-operator.resourceName" (dict "suffix" "tenant-provisioner" "context" $) }}
+subjects:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}

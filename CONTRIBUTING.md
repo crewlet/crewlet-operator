@@ -142,7 +142,9 @@ After changing an API type or an RBAC marker, run
 `make manifests generate chart api-docs` and commit the result with the change.
 In the chart, `Chart.yaml`, `values.yaml`, `templates/NOTES.txt` and
 `templates/_helpers.tpl` are written once by the generator and then curated by
-hand; everything else under `templates/` is regenerated on every run.
+hand; `values.schema.json` and `templates/tenant-provisioner/` are written by
+hand, since the generator has no way to make a template opt-in; everything
+else under `templates/` is regenerated on every run.
 
 New kinds and webhooks are scaffolded with the pinned `bin/kubebuilder`
 (`make kubebuilder`), never written from scratch, and the

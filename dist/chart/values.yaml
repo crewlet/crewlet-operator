@@ -13,7 +13,12 @@ manager:
   ##
   enabled: true
 
-  replicas: 1
+  ## Two replicas with leader election: one reconciles, the other waits to
+  ## take over, so a node drain or a crash does not stop reconciling for
+  ## longer than the lease takes to move. --leader-elect in args below is
+  ## what makes a second replica safe; keep it.
+  ##
+  replicas: 2
 
   image:
     repository: ghcr.io/crewlet/crewlet-operator
@@ -67,19 +72,34 @@ manager:
       - ALL
     readOnlyRootFilesystem: true
 
-  ## Resource limits and requests
+  ## Resource limits and requests.
+  ## The manager's own footprint; every engine runs in a pod of its own,
+  ## sized by its EngineClass. Its memory grows with the number of companies
+  ## and their objects, which it caches. No CPU limit: a throttled manager
+  ## only reconciles later, and reconciles in bursts.
   ##
   resources:
     limits:
-      cpu: 500m
-      memory: 128Mi
+      memory: 512Mi
     requests:
-      cpu: 10m
-      memory: 64Mi
+      cpu: 50m
+      memory: 128Mi
 
-  ## Manager pod's affinity
+  ## Manager pod's affinity.
+  ## The replicas prefer separate nodes, so that losing one node never takes
+  ## both. The selector names the chart's default labels; change it with
+  ## nameOverride.
   ##
-  affinity: {}
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: crewlet-operator
+                control-plane: controller-manager
 
   ## Manager pod's node selector
   ##
@@ -123,21 +143,42 @@ manager:
   #   labels: {}
   #   annotations: {}
 
-## RBAC configuration
+## RBAC configuration.
+## The operator is cluster-scoped: it reads the cluster-scoped EngineClasses
+## and runs Companies in every namespace, so its role is always a
+## ClusterRole. There is no namespace-scoped mode; values.schema.json refuses
+## rbac.namespaced.
+##
+## The ClusterRoles crewlet-edit and crewlet-view are always installed. They
+## are aggregated into the built-in admin, edit and view roles, so that
+## people manage and read crewlet.ai objects in the namespaces they already
+## may edit or read.
 ##
 rbac:
-  ## RBAC resource scope
-  ## - false (default): ClusterRole/ClusterRoleBinding (all namespaces)
-  ## - true: Role/RoleBinding (release namespace only)
-  ##
-  namespaced: false
-
   ## Helper roles for CRD management (admin/editor/viewer)
   ##
   helpers:
-    ## Install convenience admin/editor/viewer roles for CRDs
+    ## Install convenience admin/editor/viewer roles for each kind
     ##
     enabled: false
+
+## The ClusterRole of a control plane that provisions tenants: it creates
+## each tenant's namespace (the operator never creates namespaces), the
+## crewlet.ai objects in it and the Secrets they reference, and reads the
+## Secret each Company publishes for its API. Secrets in every namespace are
+## a lot to hold: bind it only to the control plane's own identity.
+##
+tenantProvisioner:
+  ## Install the ClusterRole
+  ##
+  enabled: false
+  ## Subjects to bind it to with a ClusterRoleBinding; empty installs the
+  ## role alone, for a binding of your own
+  ##
+  subjects: []
+  # - kind: ServiceAccount
+  #   name: control-plane
+  #   namespace: platform
 
 ## ServiceAccount configuration
 ##

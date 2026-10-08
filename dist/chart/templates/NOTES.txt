@@ -1,15 +1,18 @@
-Thank you for installing {{ .Chart.Name }}.
+{{ .Chart.Name }} is installed in namespace {{ .Release.Namespace }} as release {{ .Release.Name }}.
 
-Your release is named {{ .Release.Name }}.
-
-The controller and CRDs have been installed in namespace {{ .Release.Namespace }}.
-
-To verify the installation:
+Check that the manager runs (one replica holds the leader lease, the others
+wait to take over):
 
   kubectl get pods -n {{ .Release.Namespace }}
-  kubectl get customresourcedefinitions
+  kubectl api-resources --api-group=crewlet.ai
 
-To learn more about the release, try:
+Next, create an EngineClass, the class your companies run on, and a Company:
 
-  $ helm status {{ .Release.Name }} -n {{ .Release.Namespace }}
-  $ helm get all {{ .Release.Name }} -n {{ .Release.Namespace }}
+  https://github.com/crewlet/crewlet-operator/blob/main/docs/getting-started.md
+{{- if .Values.tenantProvisioner.enabled }}
+
+The ClusterRole {{ include "crewlet-operator.resourceName" (dict "suffix" "tenant-provisioner" "context" $) }} is installed for the control plane that provisions tenants
+{{- if .Values.tenantProvisioner.subjects }}, and bound to the subjects in tenantProvisioner.subjects.
+{{- else }}; bind it to your control plane's identity.
+{{- end }}
+{{- end }}

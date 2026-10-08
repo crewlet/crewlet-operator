@@ -75,14 +75,15 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 10
         # The manager's own footprint. The engines it runs are separate pods,
-        # sized by their EngineClass, and do not count against these.
+        # sized by their EngineClass, and do not count against these. Its
+        # memory grows with the companies and objects it caches. No CPU
+        # limit: a throttled manager only reconciles later.
         resources:
           limits:
-            cpu: 500m
-            memory: 128Mi
+            memory: 512Mi
           requests:
-            cpu: 10m
-            memory: 64Mi
+            cpu: 50m
+            memory: 128Mi
         volumeMounts: []
       volumes: []
       serviceAccountName: controller-manager
