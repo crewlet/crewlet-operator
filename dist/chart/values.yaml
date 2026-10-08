@@ -167,18 +167,14 @@ metrics:
   # Note: Metrics authn/authz needs ClusterRole access.
   secure: true
 
-## Cert-manager integration for TLS certificates.
-## Required for webhook certificates and metrics endpoint certificates.
+## Whether the ServiceMonitor verifies the metrics endpoint against the
+## certificate in the Secret metrics-server-cert (ca.crt, tls.crt, tls.key)
+## instead of skipping verification. The chart does not create that Secret:
+## issue it (cert-manager or otherwise) in the release namespace first. The
+## operator serves no admission webhooks, so nothing else needs a certificate.
 ##
 certManager:
   enabled: false
-
-## Webhook server configuration
-##
-webhook:
-  enabled: false
-  # Webhook server port
-  port: 9443
 
 ## Prometheus ServiceMonitor for metrics scraping.
 ## Requires prometheus-operator to be installed in the cluster.

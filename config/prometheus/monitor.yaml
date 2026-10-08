@@ -16,8 +16,8 @@ spec:
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
       tlsConfig:
         # The manager's default metrics certificate is self-signed, so it
-        # cannot be verified. With cert-manager enabled, the patch in
-        # monitor_tls_patch.yaml replaces this with the issued certificate.
+        # cannot be verified. A deployment that mounts an issued certificate
+        # (the manager's --metrics-cert-path) replaces this with its CA.
         insecureSkipVerify: true
   selector:
     matchLabels:
