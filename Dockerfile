@@ -3,19 +3,14 @@
 # Both base images are pinned by digest, with the tag beside it for the reader
 # and for Dependabot, which bumps the tag and the digest together.
 
-# golang:1.27.1 is held back on purpose: go1.27.2 is the newest Go release,
-# but no golang:1.27.2 image has been published yet. GOTOOLCHAIN=auto below
-# makes this image fetch the go1.27.2 toolchain that go.mod's `go` line
-# names (checksum-verified against sum.golang.org), so the binary is still
-# built with the newest Go. Move the tag when the image appears; auto is
-# then a no-op.
-FROM --platform=$BUILDPLATFORM golang:1.27.1-trixie@sha256:8f58fd67ea075142d947a60e0caa4317746a55118d312f027793d382c7741734 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.2-trixie@sha256:e58d6f83b3416618d8bcac2b3dde1b7f7e3c4a77d25e88637f8bbae81536c48d AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
-# The official golang images set GOTOOLCHAIN=local, which would refuse a
-# go.mod asking for a newer Go than the image carries.
-ENV GOTOOLCHAIN=auto
+# The image's Go is the go.mod `go` line, and the image's own
+# GOTOOLCHAIN=local is left alone: a go.mod that asks for a newer Go than
+# this tag fails the build at once, which says to move the tag here, rather
+# than fetching a toolchain the pin above does not name.
 
 WORKDIR /workspace
 
