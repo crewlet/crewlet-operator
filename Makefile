@@ -119,12 +119,14 @@ lint-config: golangci-lint ## Verify the golangci-lint configuration.
 # (build and test run manifests and generate), since a step that rewrites the
 # tree before the comparison would hide the drift it exists to catch.
 .PHONY: check
-check: ## Run every gate CI runs: formatting, tidiness, generated files, vet, lint, build, tests, sign-off.
+check: ## Run every gate CI runs except e2e and the image: formatting, tidiness, generated files, vet, lint, chart, build, tests, sign-off.
 	$(MAKE) fmt-check
 	$(MAKE) tidy-check
 	$(MAKE) verify-generated
 	$(MAKE) vet
+	$(MAKE) lint-config
 	$(MAKE) lint
+	$(MAKE) helm-lint
 	$(MAKE) build
 	$(MAKE) test
 	$(MAKE) signoff-check

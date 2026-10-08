@@ -5,7 +5,8 @@
 ## Checklist
 
 - [ ] `make check` passes — gofmt, `go mod tidy -diff` and `go vet` in both
-      modules, generated files in step with their sources, golangci-lint,
+      modules, generated files in step with their sources, the
+      golangci-lint configuration and golangci-lint, the Helm chart's lint,
       the build, the unit and envtest suites under `-race`, and the DCO
       sign-off
 - [ ] Tests added or updated; an API change comes with an envtest case that

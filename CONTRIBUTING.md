@@ -70,7 +70,9 @@ change?* It runs, in order:
 | `tidy-check` | `go mod tidy -diff` is empty in both modules |
 | `verify-generated` | regenerating deepcopy, CRDs, RBAC, the chart and the API reference changes nothing |
 | `vet` | `go vet` in both modules |
-| `lint` | golangci-lint in both modules, with the logcheck plugin |
+| `lint-config` | `.golangci.yml` is a valid golangci-lint configuration |
+| `lint` | golangci-lint in both modules, with the logcheck and kube-api-linter plugins |
+| `helm-lint` | the Helm chart passes `helm lint --strict` and renders with its default values |
 | `build` | the manager binary builds |
 | `test` | unit and envtest suites of both modules, under `-race` |
 | `signoff-check` | every commit your branch adds carries a DCO sign-off |

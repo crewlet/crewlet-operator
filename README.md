@@ -96,9 +96,9 @@ how to remove everything again.
 ## Contributing
 
 Contributions are welcome; [CONTRIBUTING.md](CONTRIBUTING.md) has everything
-you need, and `make check` runs every gate CI runs. Every commit is signed off
-under the [DCO](DCO). Participation is governed by the
-[Code of Conduct](CODE_OF_CONDUCT.md).
+you need, and `make check` runs every gate CI runs except the e2e suite and
+the image build. Every commit is signed off under the [DCO](DCO).
+Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
