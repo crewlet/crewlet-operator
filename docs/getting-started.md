@@ -7,7 +7,8 @@ cluster. Every command is a make target or a tool the Makefile pins into
 
 > The `crewlet.ai/v1alpha1` API is defined and the API server enforces it,
 > but the controllers that act on it are still being built: the objects this
-> page creates are validated and stored, and no engine starts yet.
+> page creates are validated and stored, and the operator reports whether
+> each Company is accepted, but no engine starts yet.
 
 ## Create a cluster
 
@@ -73,6 +74,16 @@ an `MCPServer` and two `Integration`s. Apply it into a namespace of its own:
 bin/kubectl create namespace nimbus
 bin/kubectl apply -n nimbus -k config/samples
 bin/kubectl get crewlet -n nimbus
+```
+
+With the operator running, the Company reports that it is accepted: its
+EngineClass exists and its seats and tool servers are within the class's
+limits.
+
+```bash
+bin/kubectl get company nimbus -n nimbus \
+  -o jsonpath='{.status.conditions[?(@.type=="Accepted")].message}{"\n"}'
+# The Company runs with EngineClass standard and is within its limits.
 ```
 
 The objects reference Secrets (API keys, each agent's Slack and GitHub

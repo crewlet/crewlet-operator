@@ -10,10 +10,15 @@ keeps the engine's live configuration equal to what the resources say.
 > **Status: alpha, under active development.** The `crewlet.ai/v1alpha1` API
 > is being defined and will change without notice; nothing has been released
 > yet. Do not run it against anything you care about.
+>
+> Today the API server enforces the API's rules, and the operator reports
+> whether each `Company` is accepted (its `EngineClass` resolves and its
+> objects stay within the class's limits). It does not run engines yet: what
+> follows is the design the API is built for, not what a cluster does today.
 
 ## How it works
 
-The operator is built around two reconcilers for every `Company`. The first
+The operator is designed around two reconcilers for every `Company`. The first
 makes the engine exist: from the `Company` and the `EngineClass` it names (a
 cluster-scoped set of platform defaults and limits, in the way a
 `StorageClass` is), it creates and owns the engine's StatefulSet, storage,

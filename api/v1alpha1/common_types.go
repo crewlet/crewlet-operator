@@ -295,7 +295,8 @@ const (
 	ReasonVersionOverrideNotAllowed = "VersionOverrideNotAllowed"
 
 	// ReasonEngineClassNotFound is Accepted=False on a Company whose class
-	// does not exist, or that names none while no class is the default.
+	// does not exist, or that names none while no class, or more than one,
+	// is the default.
 	ReasonEngineClassNotFound = "EngineClassNotFound"
 
 	// ReasonReplicasNotAllowed is Accepted=False on a Company whose

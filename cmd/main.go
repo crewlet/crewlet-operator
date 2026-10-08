@@ -134,16 +134,8 @@ func main() {
 
 	if err := (&controller.CompanyReconciler{
 		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "company")
-		os.Exit(1)
-	}
-	if err := (&controller.EngineClassReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "Failed to create controller", "controller", "engineclass")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

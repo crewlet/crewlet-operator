@@ -11,8 +11,9 @@ the engine, and who owns the document once the engine runs. Every field is in
 the [API reference](../reference/api.md).
 
 > The `crewlet.ai/v1alpha1` API is alpha. The API server enforces every rule
-> on this page today; the controllers that act on the objects are still being
-> built, so creating them does not yet start an engine.
+> on this page today, and the operator sets a Company's `Accepted` condition;
+> the rest of what this page describes is the design the controllers are
+> being built to, and creating the objects does not yet start an engine.
 
 ## The kinds
 

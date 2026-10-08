@@ -23,7 +23,6 @@ resources:
   version: v1alpha1
 - api:
     crdVersion: v1
-  controller: true
   domain: crewlet.ai
   kind: EngineClass
   path: github.com/crewlet/crewlet-operator/api/v1alpha1

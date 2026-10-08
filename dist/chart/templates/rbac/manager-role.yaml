@@ -15,26 +15,16 @@ rules:
   resources:
   - companies
   - engineclasses
+  - mcpservers
+  - seats
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - crewlet.ai
   resources:
-  - companies/finalizers
-  - engineclasses/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - crewlet.ai
-  resources:
   - companies/status
-  - engineclasses/status
   verbs:
   - get
   - patch
