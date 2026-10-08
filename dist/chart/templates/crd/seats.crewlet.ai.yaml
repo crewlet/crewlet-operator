@@ -11,16 +11,42 @@ metadata:
 spec:
   group: crewlet.ai
   names:
+    categories:
+    - crewlet
     kind: Seat
     listKind: SeatList
     plural: seats
+    shortNames:
+    - st
     singular: seat
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.companyRef.name
+      name: Company
+      type: string
+    - jsonPath: .spec.kind
+      name: Kind
+      type: string
+    - jsonPath: .spec.unitRef.name
+      name: Unit
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Applied")].status
+      name: Applied
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Seat is the Schema for the seats API
+        description: |-
+          Seat is one seat of a company's org chart: an AI agent the engine runs, or a
+          person agents work with.
+
+          Unless spec.handle is set, the Seat's metadata.name is its handle and must
+          follow the handle's rules: lowercase letters, digits and '-', starting with
+          a letter or digit, at most 63 characters. The handle cannot change.
         properties:
           apiVersion:
             description: |-
@@ -40,27 +66,921 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of Seat
+            description: spec is the seat's desired state.
             properties:
-              foo:
-                description: foo is an example field of Seat. Edit seat_types.go to
-                  remove/update
+              availability:
+                description: |-
+                  availability tells colleagues of a Human seat when to expect an
+                  answer, such as "CET business hours". Crewlet's `availability`.
+                maxLength: 256
+                minLength: 1
                 type: string
+              backstory:
+                description: |-
+                  backstory is who the seat is; it reaches the seat's prompt. Crewlet's
+                  `backstory`.
+                maxLength: 8192
+                minLength: 1
+                type: string
+              behavioralGuidelines:
+                description: |-
+                  behavioralGuidelines are how the seat should work. Crewlet's
+                  `behavioral_guidelines`.
+                items:
+                  maxLength: 1024
+                  minLength: 1
+                  type: string
+                maxItems: 32
+                type: array
+                x-kubernetes-list-type: atomic
+              companyRef:
+                description: companyRef names the Company this seat belongs to. Immutable.
+                properties:
+                  name:
+                    description: name is the metadata.name of a Company in this object's
+                      namespace.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+                x-kubernetes-validations:
+                - message: companyRef is immutable
+                  rule: self == oldSelf
+              contact:
+                description: |-
+                  contact is how agents reach the person in a Human seat. Required for,
+                  and only for, kind Human.
+                minProperties: 1
+                properties:
+                  githubLogin:
+                    description: githubLogin is the person's GitHub login. Crewlet's
+                      `github_login`.
+                    maxLength: 39
+                    minLength: 1
+                    pattern: ^[A-Za-z0-9-]+$
+                    type: string
+                  slackUserID:
+                    description: |-
+                      slackUserID is the person's Slack member id, such as U0123ABCD.
+                      Crewlet's `slack_user_id`.
+                    maxLength: 64
+                    minLength: 1
+                    pattern: ^[A-Z0-9]+$
+                    type: string
+                type: object
+              displayName:
+                description: |-
+                  displayName is the seat's name as people read it, such as "Ana
+                  (Platform Engineer)". Unset is the handle. Crewlet's `name`.
+                maxLength: 256
+                minLength: 1
+                type: string
+              email:
+                description: email is the seat's email address. Crewlet's `email`.
+                maxLength: 254
+                minLength: 3
+                pattern: ^[^@\s]+@[^@\s]+$
+                type: string
+              goal:
+                description: |-
+                  goal is what the seat is for; it reaches the seat's prompt. Crewlet's
+                  `goal`.
+                maxLength: 2048
+                minLength: 1
+                type: string
+              handle:
+                description: |-
+                  handle is the seat's canonical slug. Unset is the Seat's
+                  metadata.name. Crewlet derives the seat's identity, and with it the
+                  seat's memory, from the company name and the handle, so the handle
+                  cannot be changed; a Seat deleted and created again with the same
+                  handle gets its memory back. Crewlet's `handle`.
+                maxLength: 63
+                minLength: 1
+                pattern: ^[a-z0-9][a-z0-9-]*$
+                type: string
+              integrations:
+                description: |-
+                  integrations is the seat's own identity on the company's
+                  integrations.
+                minProperties: 1
+                properties:
+                  github:
+                    description: github is the seat's identity on GitHub.
+                    minProperties: 1
+                    properties:
+                      app:
+                        description: app is the GitHub App the seat acts as.
+                        properties:
+                          credentialsSecretRef:
+                            description: |-
+                              credentialsSecretRef is a Secret holding the app's credentials under
+                              the keys privateKey (the app's PEM key) and webhookSecret (which
+                              verifies the app's own webhook deliveries). Crewlet's `private_key`
+                              and `webhook_secret`, both credential positions.
+                            properties:
+                              name:
+                                description: name is the metadata.name of the Secret.
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          id:
+                            description: id is the app's numeric id. Crewlet's `app_id`.
+                            format: int64
+                            minimum: 1
+                            type: integer
+                          installationID:
+                            description: |-
+                              installationID is the app's installation on the organization. Unset
+                              while the app is created but not yet installed. Crewlet's
+                              `installation_id`.
+                            format: int64
+                            minimum: 1
+                            type: integer
+                          slug:
+                            description: |-
+                              slug is the app's slug; the bot's login, and so how the seat is
+                              mentioned, derives from it. Crewlet's `app_slug`.
+                            maxLength: 128
+                            minLength: 1
+                            pattern: ^[a-z0-9][a-z0-9-]*$
+                            type: string
+                        required:
+                        - credentialsSecretRef
+                        - id
+                        - slug
+                        type: object
+                      repos:
+                        description: |-
+                          repos are the repositories the seat works in, as owner/name. Unset is
+                          every repository the app's installation covers. Crewlet's `repos`.
+                        items:
+                          maxLength: 201
+                          pattern: ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$
+                          type: string
+                        maxItems: 64
+                        type: array
+                        x-kubernetes-list-type: set
+                      tier:
+                        description: |-
+                          tier is how much the seat may do in a repository. Unset is ReadOnly.
+                          Crewlet's `tier`.
+                        enum:
+                        - ReadOnly
+                        - Review
+                        - FullAccess
+                        type: string
+                    type: object
+                  slack:
+                    description: slack is the seat's own Slack app.
+                    properties:
+                      credentialsSecretRef:
+                        description: |-
+                          credentialsSecretRef is a Secret holding the app's credentials under
+                          the keys botToken (the bot token) and signingSecret (which verifies
+                          the app's webhooks). Crewlet's `bot_token` and `signing_secret`, both
+                          credential positions. Rewriting the Secret rotates them without a
+                          restart.
+                        properties:
+                          name:
+                            description: name is the metadata.name of the Secret.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - credentialsSecretRef
+                    type: object
+                type: object
+              kind:
+                default: Agent
+                description: kind is whether the seat is an AI agent or a person.
+                  Crewlet's `kind`.
+                enum:
+                - Agent
+                - Human
+                type: string
+              learningEnabled:
+                description: |-
+                  learningEnabled overrides the company's learning setting for this
+                  seat: false stops reflection after the seat's turns. Unset inherits.
+                  Crewlet's `learning_enabled`.
+                type: boolean
+              llm:
+                description: llm is the model providers the seat runs on.
+                minProperties: 1
+                properties:
+                  auxiliary:
+                    description: |-
+                      auxiliary is the chain of the cheap model used for reflection and
+                      summaries. Crewlet's `auxiliary`.
+                    items:
+                      description: |-
+                        LLMProviderReference names a model provider: an LLMProvider in the
+                        referring object's namespace, or a provider the EngineClass offers.
+                      properties:
+                        kind:
+                          default: LLMProvider
+                          description: kind is the kind of provider named.
+                          enum:
+                          - LLMProvider
+                          - PlatformLLMProvider
+                          type: string
+                        name:
+                          description: |-
+                            name is the LLMProvider's metadata.name, or the platform provider's
+                            name.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 8
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-type: atomic
+                    x-kubernetes-validations:
+                    - message: a provider may appear only once in a chain
+                      rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
+                        == a.name))
+                  default:
+                    description: |-
+                      default is the chain of every phase not set below, including the
+                      executor that does the seat's work. Crewlet's `default`.
+                    items:
+                      description: |-
+                        LLMProviderReference names a model provider: an LLMProvider in the
+                        referring object's namespace, or a provider the EngineClass offers.
+                      properties:
+                        kind:
+                          default: LLMProvider
+                          description: kind is the kind of provider named.
+                          enum:
+                          - LLMProvider
+                          - PlatformLLMProvider
+                          type: string
+                        name:
+                          description: |-
+                            name is the LLMProvider's metadata.name, or the platform provider's
+                            name.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 8
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-type: atomic
+                    x-kubernetes-validations:
+                    - message: a provider may appear only once in a chain
+                      rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
+                        == a.name))
+                  judge:
+                    description: |-
+                      judge is the chain of the model that decides whether a turn that ran
+                      out of rounds may have more. Crewlet's `judge`.
+                    items:
+                      description: |-
+                        LLMProviderReference names a model provider: an LLMProvider in the
+                        referring object's namespace, or a provider the EngineClass offers.
+                      properties:
+                        kind:
+                          default: LLMProvider
+                          description: kind is the kind of provider named.
+                          enum:
+                          - LLMProvider
+                          - PlatformLLMProvider
+                          type: string
+                        name:
+                          description: |-
+                            name is the LLMProvider's metadata.name, or the platform provider's
+                            name.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 8
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-type: atomic
+                    x-kubernetes-validations:
+                    - message: a provider may appear only once in a chain
+                      rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
+                        == a.name))
+                  review:
+                    description: |-
+                      review is the chain of the reviewer that judges the executor's work.
+                      Crewlet's `review`.
+                    items:
+                      description: |-
+                        LLMProviderReference names a model provider: an LLMProvider in the
+                        referring object's namespace, or a provider the EngineClass offers.
+                      properties:
+                        kind:
+                          default: LLMProvider
+                          description: kind is the kind of provider named.
+                          enum:
+                          - LLMProvider
+                          - PlatformLLMProvider
+                          type: string
+                        name:
+                          description: |-
+                            name is the LLMProvider's metadata.name, or the platform provider's
+                            name.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 8
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-type: atomic
+                    x-kubernetes-validations:
+                    - message: a provider may appear only once in a chain
+                      rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
+                        == a.name))
+                  sandbox:
+                    description: |-
+                      sandbox is the chain the coding agent in the seat's sandbox runs on.
+                      Crewlet's `sandbox`.
+                    items:
+                      description: |-
+                        LLMProviderReference names a model provider: an LLMProvider in the
+                        referring object's namespace, or a provider the EngineClass offers.
+                      properties:
+                        kind:
+                          default: LLMProvider
+                          description: kind is the kind of provider named.
+                          enum:
+                          - LLMProvider
+                          - PlatformLLMProvider
+                          type: string
+                        name:
+                          description: |-
+                            name is the LLMProvider's metadata.name, or the platform provider's
+                            name.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 8
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-type: atomic
+                    x-kubernetes-validations:
+                    - message: a provider may appear only once in a chain
+                      rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
+                        == a.name))
+                  subagent:
+                    description: |-
+                      subagent is the chain of the short-lived workers the seat delegates
+                      to. Crewlet's `subagent`.
+                    items:
+                      description: |-
+                        LLMProviderReference names a model provider: an LLMProvider in the
+                        referring object's namespace, or a provider the EngineClass offers.
+                      properties:
+                        kind:
+                          default: LLMProvider
+                          description: kind is the kind of provider named.
+                          enum:
+                          - LLMProvider
+                          - PlatformLLMProvider
+                          type: string
+                        name:
+                          description: |-
+                            name is the LLMProvider's metadata.name, or the platform provider's
+                            name.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 8
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-type: atomic
+                    x-kubernetes-validations:
+                    - message: a provider may appear only once in a chain
+                      rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
+                        == a.name))
+                type: object
+              manages:
+                description: |-
+                  manages names the seats and units this seat manages; a unit stands
+                  for every seat in it and below it. Crewlet's `manages`.
+                items:
+                  description: |-
+                    ManagedReference names a Seat or a Unit, in the referring Seat's namespace,
+                    that a seat manages.
+                  properties:
+                    kind:
+                      default: Seat
+                      description: kind is the kind of object named.
+                      enum:
+                      - Seat
+                      - Unit
+                      type: string
+                    name:
+                      description: name is the object's metadata.name.
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  type: object
+                maxItems: 64
+                type: array
+                x-kubernetes-list-map-keys:
+                - kind
+                - name
+                x-kubernetes-list-type: map
+              mcp:
+                description: |-
+                  mcp are the seat's own tool-server credentials, which make it act as
+                  itself on each server. They are merged over its unit's, per variable.
+                  Crewlet's `mcp_env`, a credential position.
+                items:
+                  description: |-
+                    MCPCredentials are the credentials one tool server is started with for a
+                    seat: environment variables for a Stdio server, request headers for an HTTP
+                    one. They map onto one server's entry of Crewlet's mcp_env, a credential
+                    position.
+                  properties:
+                    env:
+                      description: |-
+                        env are the values. For a Stdio server each is an environment
+                        variable of its process; for an HTTP server each is a request header
+                        (the name is the header's name).
+                      items:
+                        description: |-
+                          MCPCredentialValue is one value of a seat's credentials for a tool server.
+                          Whether it is an environment variable or a request header depends on the
+                          server's transport, which is why its name follows the grammar of an HTTP
+                          header name, of which an environment variable's name is a subset.
+                        properties:
+                          name:
+                            description: |-
+                              name is the environment variable's name (Stdio) or the header's name
+                              (HTTP).
+                            maxLength: 128
+                            minLength: 1
+                            pattern: ^[A-Za-z0-9!#$%&'*+.^_|~-]+$
+                            type: string
+                          valueFrom:
+                            description: |-
+                              valueFrom is the Secret key the value is read from. For a header the
+                              Secret key holds the whole header value, scheme included (for example
+                              "Bearer <token>").
+                            properties:
+                              secretKeyRef:
+                                description: secretKeyRef selects the Secret key that
+                                  holds the value.
+                                properties:
+                                  key:
+                                    description: key is the key within the Secret's
+                                      data.
+                                    maxLength: 253
+                                    minLength: 1
+                                    pattern: ^[-._a-zA-Z0-9]+$
+                                    type: string
+                                  name:
+                                    description: name is the metadata.name of the
+                                      Secret.
+                                    maxLength: 253
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - key
+                                - name
+                                type: object
+                            required:
+                            - secretKeyRef
+                            type: object
+                        required:
+                        - name
+                        - valueFrom
+                        type: object
+                      maxItems: 32
+                      minItems: 1
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - name
+                      x-kubernetes-list-type: map
+                    serverRef:
+                      description: |-
+                        serverRef names the MCPServer, in this namespace, the credentials are
+                        for.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                  required:
+                  - env
+                  - serverRef
+                  type: object
+                maxItems: 16
+                type: array
+                x-kubernetes-list-type: atomic
+                x-kubernetes-validations:
+                - message: mcp must name each server once
+                  rule: self.all(a, self.exists_one(b, b.serverRef.name == a.serverRef.name))
+              placement:
+                description: placement is where the seat runs.
+                properties:
+                  pool:
+                    default: data
+                    description: |-
+                      pool is the pool of pods that runs the seat. In v1alpha1 every seat
+                      runs on the company's data pod, whose pool is data.
+                    maxLength: 20
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: 'v1alpha1 runs every seat on the company''s data pod:
+                        pool must be data'
+                      rule: self == 'data'
+                type: object
+              project:
+                description: |-
+                  project is the tracker project a seat outside every unit owns; a seat
+                  in a unit takes its unit's. Crewlet's `project`.
+                maxLength: 256
+                minLength: 1
+                type: string
+              responsibilities:
+                description: |-
+                  responsibilities are what the seat owns. Crewlet's
+                  `responsibilities`.
+                items:
+                  maxLength: 1024
+                  minLength: 1
+                  type: string
+                maxItems: 32
+                type: array
+                x-kubernetes-list-type: atomic
+              sandbox:
+                description: sandbox gives the seat a sandbox to run code in. Unset
+                  gives it none.
+                properties:
+                  codingAgent:
+                    description: |-
+                      codingAgent is the coding agent the seat's sandbox runs. Unset takes
+                      the Company's spec.sandbox.defaultCodingAgent. Crewlet's
+                      `coding_agent`.
+                    enum:
+                    - ClaudeCode
+                    - OpenCode
+                    type: string
+                  env:
+                    description: |-
+                      env is the environment of the seat's sandbox runs, for the external
+                      tokens its code work needs. Crewlet's `env`, a credential position.
+                    items:
+                      description: |-
+                        SecretEnvVar is a named credential delivered as an environment variable,
+                        such as a tool server's API token. Crewlet treats every value in the
+                        positions that use this type as a credential, so a literal value is not
+                        accepted: the value always comes from a Secret.
+                      properties:
+                        name:
+                          description: name is the variable's name.
+                          maxLength: 128
+                          minLength: 1
+                          pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+                          type: string
+                        valueFrom:
+                          description: valueFrom is the Secret key the value is read
+                            from.
+                          properties:
+                            secretKeyRef:
+                              description: secretKeyRef selects the Secret key that
+                                holds the value.
+                              properties:
+                                key:
+                                  description: key is the key within the Secret's
+                                    data.
+                                  maxLength: 253
+                                  minLength: 1
+                                  pattern: ^[-._a-zA-Z0-9]+$
+                                  type: string
+                                name:
+                                  description: name is the metadata.name of the Secret.
+                                  maxLength: 253
+                                  minLength: 1
+                                  type: string
+                              required:
+                              - key
+                              - name
+                              type: object
+                          required:
+                          - secretKeyRef
+                          type: object
+                      required:
+                      - name
+                      - valueFrom
+                      type: object
+                    maxItems: 32
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  maxTurns:
+                    description: |-
+                      maxTurns caps the agentic rounds of the seat's coding runs. Unset
+                      takes the Company's default; 0 is uncapped. Crewlet's `max_turns`.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  mcpServerRefs:
+                    description: |-
+                      mcpServerRefs name the MCPServers the coding agent may use. Crewlet's
+                      mcp.servers.
+                    items:
+                      description: |-
+                        LocalObjectReference names another object of the kind the referring field
+                        documents, in the referring object's own namespace.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 16
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  pauseTTLSeconds:
+                    description: |-
+                      pauseTTLSeconds is how long the seat's sandbox stays paused while it
+                      waits on a person. Unset takes the Company's default; 0 never pauses.
+                      Crewlet's `pause_ttl_seconds`.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  setup:
+                    description: |-
+                      setup is the seat's own provisioning, applied after the Company's.
+                      Crewlet's `setup`.
+                    items:
+                      description: |-
+                        SandboxSetupStep is one provisioning step applied to a sandbox before the
+                        coding agent starts. It maps onto a Crewlet sandbox setup step.
+                      properties:
+                        brief:
+                          description: |-
+                            brief tells the coding agent what this step made true about the
+                            sandbox.
+                          maxLength: 2048
+                          minLength: 1
+                          type: string
+                        commands:
+                          description: |-
+                            commands are shell commands run in order; one that exits non-zero
+                            fails the sandbox.
+                          items:
+                            maxLength: 4096
+                            minLength: 1
+                            type: string
+                          maxItems: 32
+                          type: array
+                          x-kubernetes-list-type: atomic
+                        env:
+                          description: |-
+                            env is merged into the environment of the commands and of the run.
+                            Crewlet's `env`, a credential position.
+                          items:
+                            description: |-
+                              SecretEnvVar is a named credential delivered as an environment variable,
+                              such as a tool server's API token. Crewlet treats every value in the
+                              positions that use this type as a credential, so a literal value is not
+                              accepted: the value always comes from a Secret.
+                            properties:
+                              name:
+                                description: name is the variable's name.
+                                maxLength: 128
+                                minLength: 1
+                                pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+                                type: string
+                              valueFrom:
+                                description: valueFrom is the Secret key the value
+                                  is read from.
+                                properties:
+                                  secretKeyRef:
+                                    description: secretKeyRef selects the Secret key
+                                      that holds the value.
+                                    properties:
+                                      key:
+                                        description: key is the key within the Secret's
+                                          data.
+                                        maxLength: 253
+                                        minLength: 1
+                                        pattern: ^[-._a-zA-Z0-9]+$
+                                        type: string
+                                      name:
+                                        description: name is the metadata.name of
+                                          the Secret.
+                                        maxLength: 253
+                                        minLength: 1
+                                        type: string
+                                    required:
+                                    - key
+                                    - name
+                                    type: object
+                                required:
+                                - secretKeyRef
+                                type: object
+                            required:
+                            - name
+                            - valueFrom
+                            type: object
+                          maxItems: 32
+                          type: array
+                          x-kubernetes-list-map-keys:
+                          - name
+                          x-kubernetes-list-type: map
+                        files:
+                          description: |-
+                            files are written into the sandbox before the commands run. Crewlet's
+                            `files`, a credential position.
+                          items:
+                            description: |-
+                              SandboxFile is a file written into a sandbox before its commands run. Its
+                              content is a credential position in Crewlet (it typically holds a git or
+                              registry login), so it always comes from a Secret.
+                            properties:
+                              path:
+                                description: path is where the file is written inside
+                                  the sandbox.
+                                maxLength: 1024
+                                minLength: 1
+                                type: string
+                              valueFrom:
+                                description: valueFrom is the Secret key holding the
+                                  file's content.
+                                properties:
+                                  secretKeyRef:
+                                    description: secretKeyRef selects the Secret key
+                                      that holds the value.
+                                    properties:
+                                      key:
+                                        description: key is the key within the Secret's
+                                          data.
+                                        maxLength: 253
+                                        minLength: 1
+                                        pattern: ^[-._a-zA-Z0-9]+$
+                                        type: string
+                                      name:
+                                        description: name is the metadata.name of
+                                          the Secret.
+                                        maxLength: 253
+                                        minLength: 1
+                                        type: string
+                                    required:
+                                    - key
+                                    - name
+                                    type: object
+                                required:
+                                - secretKeyRef
+                                type: object
+                            required:
+                            - path
+                            - valueFrom
+                            type: object
+                          maxItems: 16
+                          type: array
+                          x-kubernetes-list-map-keys:
+                          - path
+                          x-kubernetes-list-type: map
+                        name:
+                          description: name identifies the step in logs and failure
+                            messages.
+                          maxLength: 63
+                          minLength: 1
+                          type: string
+                        timeoutSeconds:
+                          description: timeoutSeconds caps each command of the step.
+                          format: int32
+                          minimum: 1
+                          type: integer
+                      required:
+                      - name
+                      type: object
+                    maxItems: 16
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                type: object
+              space:
+                description: |-
+                  space is the knowledge container a seat outside every unit owns; a
+                  seat in a unit takes its unit's. Crewlet's `space`.
+                maxLength: 256
+                minLength: 1
+                type: string
+              tokenBudget:
+                description: |-
+                  tokenBudget caps the tokens this seat may spend per window, on top of
+                  the Company's caps. Crewlet's `token_budget`.
+                minProperties: 1
+                properties:
+                  day:
+                    description: day is the most tokens one local day, midnight to
+                      midnight, may spend.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  month:
+                    description: month is the most tokens one calendar month may spend.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  week:
+                    description: week is the most tokens one ISO week, starting on
+                      Monday, may spend.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                type: object
+              unitRef:
+                description: |-
+                  unitRef names the Unit, in this namespace, the seat belongs to. Unset
+                  is a seat outside every unit, such as a chief executive.
+                properties:
+                  name:
+                    description: name is the metadata.name of the referenced object.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              workers:
+                description: |-
+                  workers narrows which of the company's delegate templates (the
+                  workers block of the Company's engineConfig) the seat may use. Unset
+                  is every one. Crewlet's `workers`.
+                items:
+                  maxLength: 128
+                  minLength: 1
+                  type: string
+                maxItems: 32
+                type: array
+                x-kubernetes-list-type: set
+            required:
+            - companyRef
             type: object
+            x-kubernetes-validations:
+            - message: 'a Human seat needs contact: how agents reach the person'
+              rule: self.kind != 'Human' || has(self.contact)
+            - message: contact and availability apply to Human seats only
+              rule: self.kind != 'Agent' || (!has(self.contact) && !has(self.availability))
+            - message: 'a Human seat is never run by the engine: llm, tokenBudget,
+                workers, learningEnabled, mcp, sandbox, integrations, behavioralGuidelines,
+                project, space and placement apply to Agent seats only'
+              rule: self.kind != 'Human' || !(has(self.llm) || has(self.tokenBudget)
+                || has(self.workers) || has(self.learningEnabled) || has(self.mcp)
+                || has(self.sandbox) || has(self.integrations) || has(self.behavioralGuidelines)
+                || has(self.project) || has(self.space) || has(self.placement))
           status:
-            description: status defines the observed state of Seat
+            description: status is the seat's observed state.
+            minProperties: 1
             properties:
               conditions:
                 description: |-
-                  conditions represent the current state of the Seat resource.
-                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
-
-                  Standard condition types include:
-                  - "Available": the resource is fully functional
-                  - "Progressing": the resource is being created or updated
-                  - "Degraded": the resource failed to reach or maintain its desired state
-
-                  The status of each condition is one of True, False, or Unknown.
+                  conditions are Accepted (the Company exists and no other Seat has the
+                  handle), ResolvedRefs (the unit, the providers, the tool servers and
+                  every Secret key exist) and Applied (the seat is in the revision the
+                  engine runs).
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -115,14 +1035,74 @@ spec:
                   - status
                   - type
                   type: object
+                maxItems: 8
                 type: array
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              handle:
+                description: 'handle is the seat''s handle: spec.handle, or the metadata.name.'
+                maxLength: 63
+                minLength: 1
+                type: string
+              integrations:
+                description: integrations is the addresses the seat's vendor apps
+                  must use.
+                minProperties: 1
+                properties:
+                  github:
+                    description: github is the GitHub side of the seat.
+                    minProperties: 1
+                    properties:
+                      webhookURL:
+                        description: webhookURL is the URL the seat's GitHub App must
+                          deliver webhooks to.
+                        maxLength: 2048
+                        minLength: 1
+                        type: string
+                    type: object
+                  slack:
+                    description: slack is the Slack side of the seat.
+                    minProperties: 1
+                    properties:
+                      requestURL:
+                        description: |-
+                          requestURL is the URL the seat's Slack app must deliver events to: its
+                          Event Subscriptions request URL. A platform that creates the app puts
+                          it into the app's manifest.
+                        maxLength: 2048
+                        minLength: 1
+                        type: string
+                    type: object
+                type: object
+              observedGeneration:
+                description: observedGeneration is the metadata.generation this status
+                  describes.
+                format: int64
+                minimum: 1
+                type: integer
+              seatID:
+                description: |-
+                  seatID is the seat's identity in the engine, derived from the company
+                  name and the handle, so that callers need not derive it themselves.
+                maxLength: 36
+                minLength: 36
+                type: string
             type: object
         required:
         - spec
         type: object
+        x-kubernetes-validations:
+        - fieldPath: .spec.handle
+          message: 'without spec.handle the Seat''s name is its handle: lowercase
+            letters, digits and ''-'', starting with a letter or digit, at most 63
+            characters'
+          rule: has(self.spec.handle) || self.metadata.name.matches('^[a-z0-9][a-z0-9-]{0,62}$')
+        - fieldPath: .spec.handle
+          message: 'the seat''s handle is immutable: the seat''s identity and memory
+            are derived from it'
+          rule: '(has(self.spec.handle) ? self.spec.handle : self.metadata.name) ==
+            (has(oldSelf.spec.handle) ? oldSelf.spec.handle : oldSelf.metadata.name)'
     served: true
     storage: true
     subresources:

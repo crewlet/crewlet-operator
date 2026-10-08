@@ -11,16 +11,40 @@ metadata:
 spec:
   group: crewlet.ai
   names:
+    categories:
+    - crewlet
     kind: MCPServer
     listKind: MCPServerList
     plural: mcpservers
+    shortNames:
+    - mcps
     singular: mcpserver
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.companyRef.name
+      name: Company
+      type: string
+    - jsonPath: .spec.transport
+      name: Transport
+      type: string
+    - jsonPath: .spec.shared
+      name: Shared
+      type: boolean
+    - jsonPath: .status.conditions[?(@.type=="Applied")].status
+      name: Applied
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: MCPServer is the Schema for the mcpservers API
+        description: |-
+          MCPServer is a Model Context Protocol tool server a company's agents call.
+
+          The name crewlet is reserved: the engine gives a seat's own tool bridge that
+          name inside a coding agent's sandbox.
         properties:
           apiVersion:
             description: |-
@@ -40,27 +64,256 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of MCPServer
+            description: spec is the server's desired state.
             properties:
-              foo:
-                description: foo is an example field of MCPServer. Edit mcpserver_types.go
-                  to remove/update
+              args:
+                description: args are the executable's arguments. Crewlet's `args`.
+                items:
+                  maxLength: 4096
+                  type: string
+                maxItems: 64
+                type: array
+                x-kubernetes-list-type: atomic
+              command:
+                description: |-
+                  command is the executable a Stdio server is launched with. Crewlet's
+                  `command`.
+                maxLength: 1024
+                minLength: 1
                 type: string
+              companyRef:
+                description: companyRef names the Company this server belongs to.
+                  Immutable.
+                properties:
+                  name:
+                    description: name is the metadata.name of a Company in this object's
+                      namespace.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+                x-kubernetes-validations:
+                - message: companyRef is immutable
+                  rule: self == oldSelf
+              env:
+                description: |-
+                  env is the environment of a Stdio server's process, shared by every
+                  instance; per-seat values belong in a Seat's or a Unit's spec.mcp.
+                  Crewlet's `env`, a credential position.
+                items:
+                  description: |-
+                    SecretEnvVar is a named credential delivered as an environment variable,
+                    such as a tool server's API token. Crewlet treats every value in the
+                    positions that use this type as a credential, so a literal value is not
+                    accepted: the value always comes from a Secret.
+                  properties:
+                    name:
+                      description: name is the variable's name.
+                      maxLength: 128
+                      minLength: 1
+                      pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+                      type: string
+                    valueFrom:
+                      description: valueFrom is the Secret key the value is read from.
+                      properties:
+                        secretKeyRef:
+                          description: secretKeyRef selects the Secret key that holds
+                            the value.
+                          properties:
+                            key:
+                              description: key is the key within the Secret's data.
+                              maxLength: 253
+                              minLength: 1
+                              pattern: ^[-._a-zA-Z0-9]+$
+                              type: string
+                            name:
+                              description: name is the metadata.name of the Secret.
+                              maxLength: 253
+                              minLength: 1
+                              type: string
+                          required:
+                          - key
+                          - name
+                          type: object
+                      required:
+                      - secretKeyRef
+                      type: object
+                  required:
+                  - name
+                  - valueFrom
+                  type: object
+                maxItems: 32
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              headers:
+                description: |-
+                  headers are sent with every request to an HTTP server, shared by every
+                  instance; per-seat values belong in a Seat's or a Unit's spec.mcp.
+                  Crewlet's `headers`, a credential position.
+                items:
+                  description: |-
+                    SecretHeader is a named credential sent as an HTTP request header, such as
+                    the Authorization header of a remote tool server. The Secret key holds the
+                    whole header value, scheme included (for example "Bearer <token>").
+                  properties:
+                    name:
+                      description: name is the header's name.
+                      maxLength: 128
+                      minLength: 1
+                      pattern: ^[A-Za-z0-9!#$%&'*+.^_|~-]+$
+                      type: string
+                    valueFrom:
+                      description: valueFrom is the Secret key the value is read from.
+                      properties:
+                        secretKeyRef:
+                          description: secretKeyRef selects the Secret key that holds
+                            the value.
+                          properties:
+                            key:
+                              description: key is the key within the Secret's data.
+                              maxLength: 253
+                              minLength: 1
+                              pattern: ^[-._a-zA-Z0-9]+$
+                              type: string
+                            name:
+                              description: name is the metadata.name of the Secret.
+                              maxLength: 253
+                              minLength: 1
+                              type: string
+                          required:
+                          - key
+                          - name
+                          type: object
+                      required:
+                      - secretKeyRef
+                      type: object
+                  required:
+                  - name
+                  - valueFrom
+                  type: object
+                maxItems: 32
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              requestTimeoutSeconds:
+                description: |-
+                  requestTimeoutSeconds bounds one tool call. Unset takes Crewlet's
+                  default of 300. Crewlet's `request_timeout_seconds`.
+                format: int32
+                minimum: 1
+                type: integer
+              shared:
+                default: true
+                description: |-
+                  shared launches one instance whose tools every agent calls. false
+                  makes the server a template instead: every seat that has credentials
+                  for it in spec.mcp gets an instance of its own, which is how each
+                  agent acts as itself on the server. Crewlet's `shared`.
+                type: boolean
+              startupTimeoutSeconds:
+                description: |-
+                  startupTimeoutSeconds bounds starting the server, the handshake and
+                  its first tool listing. Unset takes Crewlet's default of 60. Crewlet's
+                  `startup_timeout_seconds`.
+                format: int32
+                minimum: 1
+                type: integer
+              toolAnnotations:
+                description: |-
+                  toolAnnotations correct the hints individual tools advertise.
+                  Crewlet's `tool_annotations`.
+                items:
+                  description: |-
+                    MCPToolAnnotations corrects the behavioural hints one tool advertises. The
+                    engine decides from them what a tool may be used for, such as whether a
+                    delegated worker may call it. Each field maps onto Crewlet's
+                    tool_annotations entry; unset keeps what the server says.
+                  properties:
+                    destructive:
+                      description: |-
+                        destructive marks a tool whose effect cannot be undone. Crewlet's
+                        `destructive`.
+                      type: boolean
+                    idempotent:
+                      description: |-
+                        idempotent marks a tool that can be repeated safely. Crewlet's
+                        `idempotent`.
+                      type: boolean
+                    openWorld:
+                      description: |-
+                        openWorld marks a tool that reaches outside the company. Crewlet's
+                        `open_world`.
+                      type: boolean
+                    readOnly:
+                      description: readOnly marks a tool that changes nothing. Crewlet's
+                        `read_only`.
+                      type: boolean
+                    tool:
+                      description: |-
+                        tool is the tool's name as the server publishes it, without any
+                        prefix.
+                      maxLength: 128
+                      minLength: 1
+                      type: string
+                  required:
+                  - tool
+                  type: object
+                maxItems: 128
+                type: array
+                x-kubernetes-list-map-keys:
+                - tool
+                x-kubernetes-list-type: map
+              toolPrefix:
+                description: |-
+                  toolPrefix is put in front of the server's tool names, to keep them
+                  apart from another server's. Crewlet's `tool_prefix`.
+                maxLength: 32
+                minLength: 1
+                pattern: ^[A-Za-z][A-Za-z0-9_-]*$
+                type: string
+              transport:
+                default: Stdio
+                description: transport is how the engine reaches the server. Crewlet's
+                  `transport`.
+                enum:
+                - Stdio
+                - HTTP
+                type: string
+              url:
+                description: url is the endpoint of an HTTP server. Crewlet's `url`.
+                maxLength: 2048
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: url must be an absolute http or https URL
+                  rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+            required:
+            - companyRef
             type: object
+            x-kubernetes-validations:
+            - message: command is required with transport Stdio and not allowed with
+                HTTP
+              rule: 'self.transport == ''Stdio'' ? has(self.command) : !has(self.command)'
+            - message: args and env apply to transport Stdio only
+              rule: self.transport == 'Stdio' || (!has(self.args) && !has(self.env))
+            - message: url is required with transport HTTP and not allowed with Stdio
+              rule: 'self.transport == ''HTTP'' ? has(self.url) : !has(self.url)'
+            - message: headers apply to transport HTTP only
+              rule: self.transport == 'HTTP' || !has(self.headers)
           status:
-            description: status defines the observed state of MCPServer
+            description: status is the server's observed state.
+            minProperties: 1
             properties:
               conditions:
                 description: |-
-                  conditions represent the current state of the MCPServer resource.
-                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
-
-                  Standard condition types include:
-                  - "Available": the resource is fully functional
-                  - "Progressing": the resource is being created or updated
-                  - "Degraded": the resource failed to reach or maintain its desired state
-
-                  The status of each condition is one of True, False, or Unknown.
+                  conditions are Accepted (the Company exists), ResolvedRefs (every
+                  Secret key exists) and Applied (the server is in the revision the
+                  engine runs).
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -115,14 +368,24 @@ spec:
                   - status
                   - type
                   type: object
+                maxItems: 8
                 type: array
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              observedGeneration:
+                description: observedGeneration is the metadata.generation this status
+                  describes.
+                format: int64
+                minimum: 1
+                type: integer
             type: object
         required:
         - spec
         type: object
+        x-kubernetes-validations:
+        - message: the name crewlet is reserved for the seat's own tool bridge
+          rule: self.metadata.name != 'crewlet'
     served: true
     storage: true
     subresources:

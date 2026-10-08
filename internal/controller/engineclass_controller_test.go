@@ -3,6 +3,7 @@ package controller
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -20,7 +21,15 @@ var _ = Describe("EngineClass controller", func() {
 	}
 
 	It("reconciles an existing EngineClass", func() {
-		class := &crewletaiv1alpha1.EngineClass{Name: key.Name}
+		class := &crewletaiv1alpha1.EngineClass{
+			Name: key.Name,
+			Spec: crewletaiv1alpha1.EngineClassSpec{
+				Engine: crewletaiv1alpha1.EngineSettings{Image: "ghcr.io/crewlet/crewlet:v0.1.0"},
+				Data: crewletaiv1alpha1.DataPodSettings{
+					Storage: crewletaiv1alpha1.DataStorage{Size: new(resource.MustParse("10Gi"))},
+				},
+			},
+		}
 		Expect(k8sClient.Create(ctx, class)).To(Succeed())
 		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, class)).To(Succeed()) })
 

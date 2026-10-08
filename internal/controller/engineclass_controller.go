@@ -20,9 +20,9 @@ type EngineClassReconciler struct {
 // +kubebuilder:rbac:groups=crewlet.ai,resources=engineclasses/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=crewlet.ai,resources=engineclasses/finalizers,verbs=update
 
-// Reconcile moves the cluster toward what a EngineClass declares. The API
-// types are not final yet, so there is nothing to act on: it reports success
-// without touching the cluster.
+// Reconcile moves the cluster toward what an EngineClass declares. The API
+// is defined and its rules are enforced by the API server, but the controller
+// does not act on it yet: it reports success without touching the cluster.
 func (r *EngineClassReconciler) Reconcile(_ context.Context, _ ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }

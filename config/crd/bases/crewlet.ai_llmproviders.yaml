@@ -8,16 +8,38 @@ metadata:
 spec:
   group: crewlet.ai
   names:
+    categories:
+    - crewlet
     kind: LLMProvider
     listKind: LLMProviderList
     plural: llmproviders
+    shortNames:
+    - llmp
     singular: llmprovider
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.companyRef.name
+      name: Company
+      type: string
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .spec.model
+      name: Model
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Applied")].status
+      name: Applied
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: LLMProvider is the Schema for the llmproviders API
+        description: |-
+          LLMProvider is a model provider a company's seats can run on: one entry of
+          Crewlet's providers.llm.
         properties:
           apiVersion:
             description: |-
@@ -37,27 +59,178 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of LLMProvider
+            description: spec is the provider's desired state.
             properties:
-              foo:
-                description: foo is an example field of LLMProvider. Edit llmprovider_types.go
-                  to remove/update
+              apiKeySecretRefs:
+                description: |-
+                  apiKeySecretRefs are the provider's API keys, each a key of a Secret in
+                  this namespace. With more than one, Crewlet rotates through them,
+                  setting aside a key that hits a rate limit or is refused, in the order
+                  listed when several are equally free. Crewlet's `api_keys`, a
+                  credential position: the values are pushed into the engine's secret
+                  store and the document refers to them by name only. Required for types
+                  Anthropic and OpenAI; an OpenAICompatible endpoint that needs no key
+                  may omit it.
+                items:
+                  description: |-
+                    SecretKeyReference selects one key of a Secret in the referring object's
+                    namespace. The operator reads the value when it renders the company and
+                    pushes it into the engine's encrypted secret store; the value itself never
+                    appears in the company document, in a pod template or in any status.
+                  properties:
+                    key:
+                      description: key is the key within the Secret's data.
+                      maxLength: 253
+                      minLength: 1
+                      pattern: ^[-._a-zA-Z0-9]+$
+                      type: string
+                    name:
+                      description: name is the metadata.name of the Secret.
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                  required:
+                  - key
+                  - name
+                  type: object
+                maxItems: 16
+                minItems: 1
+                type: array
+                x-kubernetes-list-type: atomic
+              baseURL:
+                description: |-
+                  baseURL sends requests to this endpoint instead of the vendor's own,
+                  for a gateway or a proxy. Required for type OpenAICompatible. Crewlet's
+                  `base_url`.
+                maxLength: 2048
+                minLength: 1
                 type: string
+                x-kubernetes-validations:
+                - message: baseURL must be an absolute http or https URL
+                  rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+              claudeModel:
+                description: |-
+                  claudeModel names the Claude model whose request shape an Anthropic
+                  provider uses when model is a gateway alias Crewlet cannot recognise.
+                  Crewlet's `claude_model`; type Anthropic only.
+                maxLength: 256
+                minLength: 1
+                type: string
+              companyRef:
+                description: companyRef names the Company this provider belongs to.
+                  Immutable.
+                properties:
+                  name:
+                    description: name is the metadata.name of a Company in this object's
+                      namespace.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+                x-kubernetes-validations:
+                - message: companyRef is immutable
+                  rule: self == oldSelf
+              cooldowns:
+                description: |-
+                  cooldowns is how long a failing key is set aside. Crewlet's
+                  `cooldowns`.
+                minProperties: 1
+                properties:
+                  authSeconds:
+                    description: |-
+                      authSeconds is how long a key the provider refused is set aside. Unset
+                      takes Crewlet's default of 300.
+                    format: int32
+                    maximum: 86400
+                    minimum: 60
+                    type: integer
+                  rateLimitSeconds:
+                    description: |-
+                      rateLimitSeconds is how long a key that hit a rate limit is set aside.
+                      Unset takes Crewlet's default of 3600.
+                    format: int32
+                    maximum: 86400
+                    minimum: 60
+                    type: integer
+                type: object
+              model:
+                description: |-
+                  model is the model id requests are sent for, as the provider names it.
+                  Crewlet's `model`.
+                maxLength: 256
+                minLength: 1
+                type: string
+              reasoning:
+                description: |-
+                  reasoning turns on an OpenAI reasoning model's effort, so that
+                  reasoningEffort is sent. Crewlet's `reasoning`; type OpenAI only.
+                type: boolean
+              reasoningBudgetTokens:
+                description: |-
+                  reasoningBudgetTokens is the thinking budget of an older, budget-based
+                  Claude model. Unset means such a model does not think. Crewlet's
+                  `reasoning_budget_tokens`; type Anthropic only.
+                format: int32
+                minimum: 1024
+                type: integer
+              reasoningEffort:
+                description: |-
+                  reasoningEffort is how hard the model thinks. For OpenAI it is sent
+                  while reasoning is on; for Anthropic it is sent on every call, and
+                  unset means High. Crewlet's `reasoning_effort`.
+                enum:
+                - Low
+                - Medium
+                - High
+                - XHigh
+                - Max
+                type: string
+              timeoutSeconds:
+                description: |-
+                  timeoutSeconds bounds one HTTP attempt: the whole of a unary call, the
+                  longest silence in a streamed one. Unset takes Crewlet's default of
+                  600. Crewlet's `timeout_seconds`.
+                format: int32
+                minimum: 1
+                type: integer
+              type:
+                description: type is which model API the provider speaks. Crewlet's
+                  `type`.
+                enum:
+                - Anthropic
+                - OpenAI
+                - OpenAICompatible
+                type: string
+            required:
+            - companyRef
+            - model
+            - type
             type: object
+            x-kubernetes-validations:
+            - message: claudeModel applies to type Anthropic only
+              rule: '!has(self.claudeModel) || self.type == ''Anthropic'''
+            - message: reasoning applies to type OpenAI only; an Anthropic model's
+                thinking depth is reasoningEffort
+              rule: '!has(self.reasoning) || self.type == ''OpenAI'''
+            - message: reasoningBudgetTokens applies to type Anthropic only
+              rule: '!has(self.reasoningBudgetTokens) || self.type == ''Anthropic'''
+            - message: baseURL is required for type OpenAICompatible, which has no
+                default endpoint
+              rule: self.type != 'OpenAICompatible' || has(self.baseURL)
+            - message: apiKeySecretRefs needs at least one key for types Anthropic
+                and OpenAI
+              rule: self.type == 'OpenAICompatible' || has(self.apiKeySecretRefs)
           status:
-            description: status defines the observed state of LLMProvider
+            description: status is the provider's observed state.
+            minProperties: 1
             properties:
               conditions:
                 description: |-
-                  conditions represent the current state of the LLMProvider resource.
-                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
-
-                  Standard condition types include:
-                  - "Available": the resource is fully functional
-                  - "Progressing": the resource is being created or updated
-                  - "Degraded": the resource failed to reach or maintain its desired state
-
-                  The status of each condition is one of True, False, or Unknown.
+                  conditions are Accepted (the Company exists), ResolvedRefs (every
+                  Secret key exists) and Applied (the provider is in the revision the
+                  engine runs).
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -112,10 +285,17 @@ spec:
                   - status
                   - type
                   type: object
+                maxItems: 8
                 type: array
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              observedGeneration:
+                description: observedGeneration is the metadata.generation this status
+                  describes.
+                format: int64
+                minimum: 1
+                type: integer
             type: object
         required:
         - spec

@@ -5,67 +5,552 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// SeatKind is whether a seat is an AI agent or a person. It maps onto
+// Crewlet's role `kind` (Agent is `agent`, Human is `human`).
+// +kubebuilder:validation:Enum=Agent;Human
+type SeatKind string
 
-// SeatSpec defines the desired state of Seat
-type SeatSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
+// The seat kinds.
+const (
+	// SeatKindAgent is an AI agent: the engine runs it, with its own inbox,
+	// models and tools.
+	SeatKindAgent SeatKind = "Agent"
+	// SeatKindHuman is a person: part of the chart (a lead, an escalation
+	// target, a colleague to mention) whom the engine never runs.
+	SeatKindHuman SeatKind = "Human"
+)
 
-	// foo is an example field of Seat. Edit seat_types.go to remove/update
+// ManagedKind is the kind of object a seat manages.
+// +kubebuilder:validation:Enum=Seat;Unit
+type ManagedKind string
+
+// The managed kinds.
+const (
+	// ManagedKindSeat is a single Seat.
+	ManagedKindSeat ManagedKind = "Seat"
+	// ManagedKindUnit is every seat of a Unit and of the units below it.
+	ManagedKindUnit ManagedKind = "Unit"
+)
+
+// ManagedReference names a Seat or a Unit, in the referring Seat's namespace,
+// that a seat manages.
+type ManagedReference struct {
+	// kind is the kind of object named.
 	// +optional
-	Foo *string `json:"foo,omitempty"`
+	// +default="Seat"
+	Kind ManagedKind `json:"kind,omitempty"`
+
+	// name is the object's metadata.name.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name,omitempty"`
 }
 
-// SeatStatus defines the observed state of Seat.
+// SeatLLM is the model providers a seat runs on, one fallback chain per phase
+// of its work: when every key of the first provider is cooling down, the next
+// is tried. It maps onto Crewlet's per-phase `llm` mapping. A phase left unset
+// uses the default chain; a seat with no default chain uses the first provider
+// of the Company's spec.llm.order.
+// +kubebuilder:validation:MinProperties=1
+type SeatLLM struct {
+	// default is the chain of every phase not set below, including the
+	// executor that does the seat's work. Crewlet's `default`.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
+	Default []LLMProviderReference `json:"default,omitempty"`
+
+	// review is the chain of the reviewer that judges the executor's work.
+	// Crewlet's `review`.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
+	Review []LLMProviderReference `json:"review,omitempty"`
+
+	// subagent is the chain of the short-lived workers the seat delegates
+	// to. Crewlet's `subagent`.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
+	Subagent []LLMProviderReference `json:"subagent,omitempty"`
+
+	// auxiliary is the chain of the cheap model used for reflection and
+	// summaries. Crewlet's `auxiliary`.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
+	Auxiliary []LLMProviderReference `json:"auxiliary,omitempty"`
+
+	// judge is the chain of the model that decides whether a turn that ran
+	// out of rounds may have more. Crewlet's `judge`.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
+	Judge []LLMProviderReference `json:"judge,omitempty"`
+
+	// sandbox is the chain the coding agent in the seat's sandbox runs on.
+	// Crewlet's `sandbox`.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
+	Sandbox []LLMProviderReference `json:"sandbox,omitempty"`
+}
+
+// SeatSandbox gives a seat a sandbox to run code in, on the Company's
+// spec.sandbox. It maps onto Crewlet's role `sandbox`; its presence is
+// Crewlet's `enabled: true`.
+type SeatSandbox struct {
+	// codingAgent is the coding agent the seat's sandbox runs. Unset takes
+	// the Company's spec.sandbox.defaultCodingAgent. Crewlet's
+	// `coding_agent`.
+	// +optional
+	CodingAgent CodingAgent `json:"codingAgent,omitempty"`
+
+	// pauseTTLSeconds is how long the seat's sandbox stays paused while it
+	// waits on a person. Unset takes the Company's default; 0 never pauses.
+	// Crewlet's `pause_ttl_seconds`.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	PauseTTLSeconds *int32 `json:"pauseTTLSeconds,omitempty"`
+
+	// maxTurns caps the agentic rounds of the seat's coding runs. Unset
+	// takes the Company's default; 0 is uncapped. Crewlet's `max_turns`.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	MaxTurns *int32 `json:"maxTurns,omitempty"`
+
+	// mcpServerRefs name the MCPServers the coding agent may use. Crewlet's
+	// mcp.servers.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=16
+	MCPServerRefs []LocalObjectReference `json:"mcpServerRefs,omitempty"`
+
+	// env is the environment of the seat's sandbox runs, for the external
+	// tokens its code work needs. Crewlet's `env`, a credential position.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=32
+	Env []SecretEnvVar `json:"env,omitempty"`
+
+	// setup is the seat's own provisioning, applied after the Company's.
+	// Crewlet's `setup`.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=16
+	Setup []SandboxSetupStep `json:"setup,omitempty"`
+}
+
+// SeatPlacement is where a seat runs.
+type SeatPlacement struct {
+	// pool is the pool of pods that runs the seat. In v1alpha1 every seat
+	// runs on the company's data pod, whose pool is data.
+	// +optional
+	// +default="data"
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=20
+	// +kubebuilder:validation:XValidation:rule="self == 'data'",message="v1alpha1 runs every seat on the company's data pod: pool must be data"
+	Pool string `json:"pool,omitempty"`
+}
+
+// SlackSeatIntegration is a seat's own Slack app, so the seat posts as itself.
+// It maps onto Crewlet's role integrations.slack and needs the company's Slack
+// Integration.
+type SlackSeatIntegration struct {
+	// credentialsSecretRef is a Secret holding the app's credentials under
+	// the keys botToken (the bot token) and signingSecret (which verifies
+	// the app's webhooks). Crewlet's `bot_token` and `signing_secret`, both
+	// credential positions. Rewriting the Secret rotates them without a
+	// restart.
+	// +required
+	CredentialsSecretRef SecretReference `json:"credentialsSecretRef,omitzero"`
+}
+
+// GitHubAccessTier is how much a seat may do in a repository. It maps onto
+// Crewlet's role integrations.github.tier (ReadOnly is `read_only`, Review is
+// `review`, FullAccess is `full_access`).
+// +kubebuilder:validation:Enum=ReadOnly;Review;FullAccess
+type GitHubAccessTier string
+
+// The GitHub access tiers, least first.
+const (
+	GitHubAccessReadOnly   GitHubAccessTier = "ReadOnly"
+	GitHubAccessReview     GitHubAccessTier = "Review"
+	GitHubAccessFullAccess GitHubAccessTier = "FullAccess"
+)
+
+// GitHubApp is the GitHub App a seat acts as. An app carries exactly one bot
+// identity, so every agent seat that works on GitHub has its own.
+type GitHubApp struct {
+	// id is the app's numeric id. Crewlet's `app_id`.
+	// +required
+	// +kubebuilder:validation:Minimum=1
+	ID int64 `json:"id,omitempty"`
+
+	// slug is the app's slug; the bot's login, and so how the seat is
+	// mentioned, derives from it. Crewlet's `app_slug`.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[a-z0-9][a-z0-9-]*$`
+	Slug string `json:"slug,omitempty"`
+
+	// installationID is the app's installation on the organization. Unset
+	// while the app is created but not yet installed. Crewlet's
+	// `installation_id`.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	InstallationID int64 `json:"installationID,omitempty"`
+
+	// credentialsSecretRef is a Secret holding the app's credentials under
+	// the keys privateKey (the app's PEM key) and webhookSecret (which
+	// verifies the app's own webhook deliveries). Crewlet's `private_key`
+	// and `webhook_secret`, both credential positions.
+	// +required
+	CredentialsSecretRef SecretReference `json:"credentialsSecretRef,omitzero"`
+}
+
+// GitHubSeatIntegration is a seat's identity on GitHub. It maps onto
+// Crewlet's role integrations.github and needs the company's GitHub
+// Integration.
+// +kubebuilder:validation:MinProperties=1
+type GitHubSeatIntegration struct {
+	// tier is how much the seat may do in a repository. Unset is ReadOnly.
+	// Crewlet's `tier`.
+	// +optional
+	Tier GitHubAccessTier `json:"tier,omitempty"`
+
+	// repos are the repositories the seat works in, as owner/name. Unset is
+	// every repository the app's installation covers. Crewlet's `repos`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:items:MaxLength=201
+	// +kubebuilder:validation:items:Pattern=`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`
+	Repos []string `json:"repos,omitempty"`
+
+	// app is the GitHub App the seat acts as.
+	// +optional
+	App GitHubApp `json:"app,omitzero"`
+}
+
+// SeatIntegrations is a seat's own identity on the company's integrations:
+// the chat app it speaks as, the code-host app it acts as. Its tool
+// credentials are in spec.mcp instead.
+// +kubebuilder:validation:MinProperties=1
+type SeatIntegrations struct {
+	// slack is the seat's own Slack app.
+	// +optional
+	Slack SlackSeatIntegration `json:"slack,omitzero"`
+
+	// github is the seat's identity on GitHub.
+	// +optional
+	GitHub GitHubSeatIntegration `json:"github,omitzero"`
+}
+
+// SeatContact is how agents reach a person: their accounts on the company's
+// surfaces. It maps onto Crewlet's role `contact`.
+// +kubebuilder:validation:MinProperties=1
+type SeatContact struct {
+	// slackUserID is the person's Slack member id, such as U0123ABCD.
+	// Crewlet's `slack_user_id`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[A-Z0-9]+$`
+	SlackUserID string `json:"slackUserID,omitempty"`
+
+	// githubLogin is the person's GitHub login. Crewlet's `github_login`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=39
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9-]+$`
+	GitHubLogin string `json:"githubLogin,omitempty"`
+}
+
+// SeatSpec is one seat of a company: an AI agent or a person. It renders to
+// one entry of Crewlet's roles, nested under its unit's.
+// +kubebuilder:validation:XValidation:rule="self.kind != 'Human' || has(self.contact)",message="a Human seat needs contact: how agents reach the person"
+// +kubebuilder:validation:XValidation:rule="self.kind != 'Agent' || (!has(self.contact) && !has(self.availability))",message="contact and availability apply to Human seats only"
+// +kubebuilder:validation:XValidation:rule="self.kind != 'Human' || !(has(self.llm) || has(self.tokenBudget) || has(self.workers) || has(self.learningEnabled) || has(self.mcp) || has(self.sandbox) || has(self.integrations) || has(self.behavioralGuidelines) || has(self.project) || has(self.space) || has(self.placement))",message="a Human seat is never run by the engine: llm, tokenBudget, workers, learningEnabled, mcp, sandbox, integrations, behavioralGuidelines, project, space and placement apply to Agent seats only"
+type SeatSpec struct {
+	// companyRef names the Company this seat belongs to. Immutable.
+	// +required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="companyRef is immutable"
+	CompanyRef CompanyReference `json:"companyRef,omitzero"`
+
+	// handle is the seat's canonical slug. Unset is the Seat's
+	// metadata.name. Crewlet derives the seat's identity, and with it the
+	// seat's memory, from the company name and the handle, so the handle
+	// cannot be changed; a Seat deleted and created again with the same
+	// handle gets its memory back. Crewlet's `handle`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9][a-z0-9-]*$`
+	Handle string `json:"handle,omitempty"`
+
+	// kind is whether the seat is an AI agent or a person. Crewlet's `kind`.
+	// +optional
+	// +default="Agent"
+	Kind SeatKind `json:"kind,omitempty"`
+
+	// displayName is the seat's name as people read it, such as "Ana
+	// (Platform Engineer)". Unset is the handle. Crewlet's `name`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+	DisplayName string `json:"displayName,omitempty"`
+
+	// email is the seat's email address. Crewlet's `email`.
+	// +optional
+	// +kubebuilder:validation:MinLength=3
+	// +kubebuilder:validation:MaxLength=254
+	// +kubebuilder:validation:Pattern=`^[^@\s]+@[^@\s]+$`
+	Email string `json:"email,omitempty"`
+
+	// unitRef names the Unit, in this namespace, the seat belongs to. Unset
+	// is a seat outside every unit, such as a chief executive.
+	// +optional
+	UnitRef LocalObjectReference `json:"unitRef,omitzero"`
+
+	// goal is what the seat is for; it reaches the seat's prompt. Crewlet's
+	// `goal`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	Goal string `json:"goal,omitempty"`
+
+	// backstory is who the seat is; it reaches the seat's prompt. Crewlet's
+	// `backstory`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=8192
+	Backstory string `json:"backstory,omitempty"`
+
+	// responsibilities are what the seat owns. Crewlet's
+	// `responsibilities`.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=32
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=1024
+	Responsibilities []string `json:"responsibilities,omitempty"`
+
+	// behavioralGuidelines are how the seat should work. Crewlet's
+	// `behavioral_guidelines`.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=32
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=1024
+	BehavioralGuidelines []string `json:"behavioralGuidelines,omitempty"`
+
+	// manages names the seats and units this seat manages; a unit stands
+	// for every seat in it and below it. Crewlet's `manages`.
+	// +optional
+	// +listType=map
+	// +listMapKey=kind
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=64
+	Manages []ManagedReference `json:"manages,omitempty"`
+
+	// workers narrows which of the company's delegate templates (the
+	// workers block of the Company's engineConfig) the seat may use. Unset
+	// is every one. Crewlet's `workers`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=32
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=128
+	Workers []string `json:"workers,omitempty"`
+
+	// tokenBudget caps the tokens this seat may spend per window, on top of
+	// the Company's caps. Crewlet's `token_budget`.
+	// +optional
+	TokenBudget TokenBudget `json:"tokenBudget,omitzero"`
+
+	// llm is the model providers the seat runs on.
+	// +optional
+	LLM SeatLLM `json:"llm,omitzero"`
+
+	// learningEnabled overrides the company's learning setting for this
+	// seat: false stops reflection after the seat's turns. Unset inherits.
+	// Crewlet's `learning_enabled`.
+	// +optional
+	LearningEnabled *bool `json:"learningEnabled,omitempty"`
+
+	// mcp are the seat's own tool-server credentials, which make it act as
+	// itself on each server. They are merged over its unit's, per variable.
+	// Crewlet's `mcp_env`, a credential position.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=16
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.serverRef.name == a.serverRef.name))",message="mcp must name each server once"
+	MCP []MCPCredentials `json:"mcp,omitempty"`
+
+	// sandbox gives the seat a sandbox to run code in. Unset gives it none.
+	// +optional
+	Sandbox *SeatSandbox `json:"sandbox,omitempty"`
+
+	// placement is where the seat runs.
+	// +optional
+	Placement *SeatPlacement `json:"placement,omitempty"`
+
+	// integrations is the seat's own identity on the company's
+	// integrations.
+	// +optional
+	Integrations SeatIntegrations `json:"integrations,omitzero"`
+
+	// project is the tracker project a seat outside every unit owns; a seat
+	// in a unit takes its unit's. Crewlet's `project`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+	Project string `json:"project,omitempty"`
+
+	// space is the knowledge container a seat outside every unit owns; a
+	// seat in a unit takes its unit's. Crewlet's `space`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+	Space string `json:"space,omitempty"`
+
+	// contact is how agents reach the person in a Human seat. Required for,
+	// and only for, kind Human.
+	// +optional
+	Contact SeatContact `json:"contact,omitzero"`
+
+	// availability tells colleagues of a Human seat when to expect an
+	// answer, such as "CET business hours". Crewlet's `availability`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+	Availability string `json:"availability,omitempty"`
+}
+
+// SlackSeatStatus is the Slack side of a seat, as the operator computed it.
+// +kubebuilder:validation:MinProperties=1
+type SlackSeatStatus struct {
+	// requestURL is the URL the seat's Slack app must deliver events to: its
+	// Event Subscriptions request URL. A platform that creates the app puts
+	// it into the app's manifest.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	RequestURL string `json:"requestURL,omitempty"`
+}
+
+// GitHubSeatStatus is the GitHub side of a seat, as the operator computed it.
+// +kubebuilder:validation:MinProperties=1
+type GitHubSeatStatus struct {
+	// webhookURL is the URL the seat's GitHub App must deliver webhooks to.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	WebhookURL string `json:"webhookURL,omitempty"`
+}
+
+// SeatIntegrationsStatus is the addresses a seat's vendor apps must use.
+// +kubebuilder:validation:MinProperties=1
+type SeatIntegrationsStatus struct {
+	// slack is the Slack side of the seat.
+	// +optional
+	Slack SlackSeatStatus `json:"slack,omitzero"`
+
+	// github is the GitHub side of the seat.
+	// +optional
+	GitHub GitHubSeatStatus `json:"github,omitzero"`
+}
+
+// SeatStatus is what the operator observed about a Seat.
+// +kubebuilder:validation:MinProperties=1
 type SeatStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// For Kubernetes API conventions, see:
-	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
-
-	// conditions represent the current state of the Seat resource.
-	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
-	//
-	// Standard condition types include:
-	// - "Available": the resource is fully functional
-	// - "Progressing": the resource is being created or updated
-	// - "Degraded": the resource failed to reach or maintain its desired state
-	//
-	// The status of each condition is one of True, False, or Unknown.
+	// conditions are Accepted (the Company exists and no other Seat has the
+	// handle), ResolvedRefs (the unit, the providers, the tool servers and
+	// every Secret key exist) and Applied (the seat is in the revision the
+	// engine runs).
+	// +optional
 	// +listType=map
 	// +listMapKey=type
-	// +optional
+	// +kubebuilder:validation:MaxItems=8
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// observedGeneration is the metadata.generation this status describes.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// handle is the seat's handle: spec.handle, or the metadata.name.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	Handle string `json:"handle,omitempty"`
+
+	// seatID is the seat's identity in the engine, derived from the company
+	// name and the handle, so that callers need not derive it themselves.
+	// +optional
+	// +kubebuilder:validation:MinLength=36
+	// +kubebuilder:validation:MaxLength=36
+	SeatID string `json:"seatID,omitempty"`
+
+	// integrations is the addresses the seat's vendor apps must use.
+	// +optional
+	Integrations SeatIntegrationsStatus `json:"integrations,omitzero"`
 }
 
+// Seat is one seat of a company's org chart: an AI agent the engine runs, or a
+// person agents work with.
+//
+// Unless spec.handle is set, the Seat's metadata.name is its handle and must
+// follow the handle's rules: lowercase letters, digits and '-', starting with
+// a letter or digit, at most 63 characters. The handle cannot change.
+//
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-
-// Seat is the Schema for the seats API
+// +kubebuilder:resource:shortName=st,categories=crewlet
+// +kubebuilder:printcolumn:name="Company",type=string,JSONPath=`.spec.companyRef.name`
+// +kubebuilder:printcolumn:name="Kind",type=string,JSONPath=`.spec.kind`
+// +kubebuilder:printcolumn:name="Unit",type=string,JSONPath=`.spec.unitRef.name`
+// +kubebuilder:printcolumn:name="Applied",type=string,JSONPath=`.status.conditions[?(@.type=="Applied")].status`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:validation:XValidation:rule="has(self.spec.handle) || self.metadata.name.matches('^[a-z0-9][a-z0-9-]{0,62}$')",message="without spec.handle the Seat's name is its handle: lowercase letters, digits and '-', starting with a letter or digit, at most 63 characters",fieldPath=".spec.handle"
+// +kubebuilder:validation:XValidation:rule="(has(self.spec.handle) ? self.spec.handle : self.metadata.name) == (has(oldSelf.spec.handle) ? oldSelf.spec.handle : oldSelf.metadata.name)",message="the seat's handle is immutable: the seat's identity and memory are derived from it",fieldPath=".spec.handle"
 type Seat struct {
 	metav1.TypeMeta `json:",inline"`
 
-	// metadata is a standard object metadata
+	// metadata is the standard object metadata.
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitzero"`
 
-	// spec defines the desired state of Seat
+	// spec is the seat's desired state.
 	// +required
-	Spec SeatSpec `json:"spec"`
+	Spec SeatSpec `json:"spec,omitzero"`
 
-	// status defines the observed state of Seat
+	// status is the seat's observed state.
 	// +optional
 	Status SeatStatus `json:"status,omitzero"`
 }
 
 // +kubebuilder:object:root=true
 
-// SeatList contains a list of Seat
+// SeatList contains a list of Seat.
 type SeatList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitzero"`

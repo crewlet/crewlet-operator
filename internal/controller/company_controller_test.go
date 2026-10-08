@@ -19,7 +19,11 @@ var _ = Describe("Company controller", func() {
 	}
 
 	It("reconciles an existing Company", func() {
-		company := &crewletaiv1alpha1.Company{Name: key.Name, Namespace: key.Namespace}
+		company := &crewletaiv1alpha1.Company{
+			Name:      key.Name,
+			Namespace: key.Namespace,
+			Spec:      crewletaiv1alpha1.CompanySpec{CompanyName: "Nimbus"},
+		}
 		Expect(k8sClient.Create(ctx, company)).To(Succeed())
 		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, company)).To(Succeed()) })
 

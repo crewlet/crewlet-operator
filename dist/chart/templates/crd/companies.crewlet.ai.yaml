@@ -11,16 +11,47 @@ metadata:
 spec:
   group: crewlet.ai
   names:
+    categories:
+    - crewlet
     kind: Company
     listKind: CompanyList
     plural: companies
+    shortNames:
+    - cmp
     singular: company
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.engineClassName
+      name: Class
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.topology.data.readyReplicas
+      name: Pods
+      type: integer
+    - jsonPath: .status.config.objects.seats
+      name: Seats
+      type: integer
+    - jsonPath: .status.config.revisionID
+      name: Revision
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Company is the Schema for the companies API
+        description: |-
+          Company is one Crewlet company: the operator runs an engine for it and keeps
+          the engine's company document equal to what the Company and the objects that
+          name it declare.
+
+          The Company's name becomes part of the names of the objects the operator
+          creates for it (the data StatefulSet and the engine Service), so it must be
+          a DNS label of at most 47 characters: a StatefulSet name longer than 52
+          characters overflows its pods' controller-revision-hash label.
         properties:
           apiVersion:
             description: |-
@@ -40,27 +71,743 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of Company
+            description: spec is the company's desired state.
             properties:
-              foo:
-                description: foo is an example field of Company. Edit company_types.go
-                  to remove/update
+              companyName:
+                description: |-
+                  companyName is the company's name. Crewlet derives every seat's
+                  identity from it and the seat's handle, so it cannot be changed: a new
+                  name would orphan every seat's memory. Crewlet's `name`.
+                maxLength: 256
+                minLength: 1
                 type: string
+                x-kubernetes-validations:
+                - message: 'companyName is immutable: every seat''s identity is derived
+                    from it'
+                  rule: self == oldSelf
+              config:
+                default:
+                  managementPolicy: Enforce
+                description: config is how the operator manages the company's document.
+                minProperties: 1
+                properties:
+                  managementPolicy:
+                    default: Enforce
+                    description: managementPolicy says who owns the document.
+                    enum:
+                    - Enforce
+                    - Observe
+                    - Seed
+                    type: string
+                type: object
+              deletionPolicy:
+                default: Retain
+                description: |-
+                  deletionPolicy is what happens to the data volumes when the Company is
+                  deleted.
+                enum:
+                - Retain
+                - Delete
+                type: string
+              embeddings:
+                description: |-
+                  embeddings is the provider vectors are computed with. Unset leaves
+                  search keyword-only. Crewlet's providers.embeddings.
+                properties:
+                  apiKeySecretRef:
+                    description: |-
+                      apiKeySecretRef is the Secret key holding the API key. Crewlet's
+                      `api_key`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  baseURL:
+                    description: |-
+                      baseURL is the endpoint of an OpenAI-compatible service. Crewlet's
+                      `base_url`.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: baseURL must be an absolute http or https URL
+                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                  dimensions:
+                    description: |-
+                      dimensions is the vector width. Unset takes the model's own width,
+                      which Crewlet knows for the models it names; any other model needs it
+                      stated, and it must match what the model produces.
+                    format: int32
+                    maximum: 4096
+                    minimum: 64
+                    type: integer
+                  maxBatchInputs:
+                    description: |-
+                      maxBatchInputs is the most inputs one request may carry. Unset takes
+                      the model's documented limit; it may only lower it.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  maxBatchTokens:
+                    description: |-
+                      maxBatchTokens is the most tokens one request may carry, summed over
+                      its inputs. Unset takes the model's documented limit; it may only
+                      lower it.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  maxInputTokens:
+                    description: |-
+                      maxInputTokens is the most tokens one input may hold. Unset takes the
+                      model's documented window; it may only lower it.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  model:
+                    description: model is the embedding model id.
+                    maxLength: 256
+                    minLength: 1
+                    type: string
+                  type:
+                    default: OpenAI
+                    description: type is which embeddings API the provider speaks.
+                    enum:
+                    - OpenAI
+                    - OpenAICompatible
+                    type: string
+                required:
+                - model
+                type: object
+                x-kubernetes-validations:
+                - message: baseURL is required for type OpenAICompatible
+                  rule: self.type != 'OpenAICompatible' || has(self.baseURL)
+              engineClassName:
+                description: |-
+                  engineClassName is the EngineClass the company runs with. Unset uses
+                  the class annotated crewlet.ai/is-default-class=true.
+                maxLength: 253
+                minLength: 1
+                type: string
+              engineConfig:
+                description: |-
+                  engineConfig is passed through into the company document as written,
+                  for the engine's tuning blocks that have no field here: turn_engine,
+                  learning, scheduling, workers, skill_variables and the
+                  notification_* settings, spelled as Crewlet spells them. The operator
+                  does not interpret it; the engine validates it in the dry run before
+                  every apply, and a refusal is reported on the Company.
+
+                  It may not set what another field or object of this API owns: name,
+                  mission, vision, policies, timezone, tracker, knowledge, token_budget,
+                  providers, integrations, mcp_servers, roles or units. Every position
+                  Crewlet holds a credential in lives under one of those keys, so
+                  engineConfig can never carry a credential; the operator refuses a
+                  Company whose engineConfig names one of them.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              exposure:
+                description: exposure overrides how the company is reached.
+                minProperties: 1
+                properties:
+                  publicBaseURL:
+                    description: |-
+                      publicBaseURL is the HTTPS address vendors deliver webhooks to,
+                      overriding the one the class's webhooks.hostname derives. Required when
+                      the class's webhooks.mode is External, where something outside the
+                      operator forwards to the engine. Crewlet's
+                      integrations.public_base_url.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: publicBaseURL must be an absolute https URL
+                      rule: isURL(self) && url(self).getScheme() == 'https' && url(self).getHostname()
+                        != ''
+                type: object
+              integrations:
+                description: integrations is company-wide integration behaviour.
+                minProperties: 1
+                properties:
+                  checkIntervalSeconds:
+                    description: |-
+                      checkIntervalSeconds is how long a working integration is trusted
+                      before the engine reads it back, and so how long access revoked at the
+                      vendor goes unnoticed. Unset takes Crewlet's default of 600. Crewlet's
+                      integrations.check_interval_seconds.
+                    format: int32
+                    minimum: 60
+                    type: integer
+                type: object
+              knowledge:
+                description: knowledge is which knowledge base the company runs.
+                minProperties: 1
+                properties:
+                  backend:
+                    default: Native
+                    description: backend is which knowledge base the company runs.
+                    enum:
+                    - Native
+                    - None
+                    type: string
+                  rootSpace:
+                    description: |-
+                      rootSpace is the container holding the company's own pages, such as
+                      the root onboarding page. Unset takes Crewlet's default. Crewlet's
+                      `root_space`.
+                    maxLength: 256
+                    minLength: 1
+                    type: string
+                  scope:
+                    description: |-
+                      scope narrows every knowledge search to these containers. Empty
+                      searches the whole company. Crewlet's `scope`.
+                    items:
+                      maxLength: 256
+                      minLength: 1
+                      type: string
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-type: set
+                  skillsContainer:
+                    description: |-
+                      skillsContainer is the container holding tool-skill pages. Unset takes
+                      Crewlet's default container; an empty string turns tool skills off.
+                      Crewlet's `skills_container`.
+                    maxLength: 256
+                    type: string
+                  vectors:
+                    description: |-
+                      vectors fuses semantic recall into knowledge and work search; false
+                      also stops embedding the corpus. Unset is on exactly when the company
+                      has an embeddings provider. Crewlet's `vectors`.
+                    type: boolean
+                type: object
+              llm:
+                description: llm is how the company chooses among its model providers.
+                minProperties: 1
+                properties:
+                  order:
+                    description: |-
+                      order is the providers' precedence: a seat that names no provider for
+                      a phase falls back to the first one here. Unset orders the company's
+                      LLMProviders by name. Crewlet's providers.llm_order.
+                    items:
+                      description: |-
+                        LLMProviderReference names a model provider: an LLMProvider in the
+                        referring object's namespace, or a provider the EngineClass offers.
+                      properties:
+                        kind:
+                          default: LLMProvider
+                          description: kind is the kind of provider named.
+                          enum:
+                          - LLMProvider
+                          - PlatformLLMProvider
+                          type: string
+                        name:
+                          description: |-
+                            name is the LLMProvider's metadata.name, or the platform provider's
+                            name.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 32
+                    type: array
+                    x-kubernetes-list-type: atomic
+                    x-kubernetes-validations:
+                    - message: order must name each provider once
+                      rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
+                        == a.name))
+                  usePlatformProviders:
+                    description: |-
+                      usePlatformProviders adds the EngineClass's platformLLMProviders to the
+                      company, so seats can run on models the platform provides.
+                    type: boolean
+                type: object
+              mission:
+                description: |-
+                  mission is one line on what the company is for; every seat's prompt
+                  carries it. Crewlet's `mission`.
+                maxLength: 2048
+                minLength: 1
+                type: string
+              policies:
+                description: |-
+                  policies are company-wide rules every seat's prompt carries. Crewlet's
+                  `policies`.
+                items:
+                  maxLength: 2048
+                  minLength: 1
+                  type: string
+                maxItems: 64
+                type: array
+                x-kubernetes-list-type: atomic
+              runtime:
+                description: runtime is the company's bounded overrides of its class.
+                minProperties: 1
+                properties:
+                  env:
+                    description: |-
+                      env adds environment variables to the engine container, for platform
+                      wiring the engine reads from its environment. Names starting with
+                      CREWLET_ or OTEL_ are the operator's own.
+                    items:
+                      description: |-
+                        EnvVar is an environment variable set on the engine's pods. Unlike
+                        SecretEnvVar it may carry a literal value, because it is not a Crewlet
+                        credential position but platform wiring (a feature flag, an endpoint); a
+                        sensitive value is referenced from a Secret with valueFrom, which Kubernetes
+                        resolves when it starts the container, so the value never appears in the pod
+                        template.
+                      properties:
+                        name:
+                          description: name is the variable's name.
+                          maxLength: 128
+                          minLength: 1
+                          pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+                          type: string
+                        value:
+                          description: |-
+                            value is the variable's literal value. An empty string is a valid
+                            value, which is why the field is a pointer.
+                          maxLength: 4096
+                          type: string
+                        valueFrom:
+                          description: valueFrom reads the value from a Secret key
+                            in the Company's namespace.
+                          properties:
+                            secretKeyRef:
+                              description: secretKeyRef selects the Secret key that
+                                holds the value.
+                              properties:
+                                key:
+                                  description: key is the key within the Secret's
+                                    data.
+                                  maxLength: 253
+                                  minLength: 1
+                                  pattern: ^[-._a-zA-Z0-9]+$
+                                  type: string
+                                name:
+                                  description: name is the metadata.name of the Secret.
+                                  maxLength: 253
+                                  minLength: 1
+                                  type: string
+                              required:
+                              - key
+                              - name
+                              type: object
+                          required:
+                          - secretKeyRef
+                          type: object
+                      required:
+                      - name
+                      type: object
+                      x-kubernetes-validations:
+                      - message: exactly one of value and valueFrom must be set
+                        rule: has(self.value) != has(self.valueFrom)
+                    maxItems: 32
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                    x-kubernetes-validations:
+                    - message: variables starting with CREWLET_ or OTEL_ are set by
+                        the operator
+                      rule: self.all(e, !e.name.startsWith('CREWLET_') && !e.name.startsWith('OTEL_'))
+                  version:
+                    description: |-
+                      version replaces the tag of the class's engine image, for example
+                      v0.14.3. It is honoured only when the class sets
+                      engine.allowVersionOverride; the operator refuses a version older than
+                      the one the company's data was last written by.
+                    maxLength: 128
+                    minLength: 1
+                    pattern: ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$
+                    type: string
+                type: object
+              sandbox:
+                description: |-
+                  sandbox is where seats run code. Unset gives no seat a sandbox.
+                  Crewlet's providers.sandbox.
+                properties:
+                  defaultCodingAgent:
+                    description: |-
+                      defaultCodingAgent is the coding agent of seats that name none.
+                      Crewlet's `default_coding_agent`.
+                    enum:
+                    - ClaudeCode
+                    - OpenCode
+                    type: string
+                  defaultMaxTurns:
+                    description: |-
+                      defaultMaxTurns caps the agentic rounds of a coding run on seats that
+                      name none. Unset or 0 is uncapped. Crewlet's `default_max_turns`.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  defaultPauseTTLSeconds:
+                    description: |-
+                      defaultPauseTTLSeconds is how long a sandbox waiting on a person's
+                      answer stays paused before it is reclaimed. Unset takes Crewlet's
+                      default of 1800; 0 never pauses. Crewlet's
+                      `default_pause_ttl_seconds`.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  defaultTimeoutSeconds:
+                    description: |-
+                      defaultTimeoutSeconds is how long a sandbox outlives an engine that
+                      stopped renewing it. It never stops a running job. Crewlet's
+                      `default_timeout_seconds`.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  e2b:
+                    description: e2b is the remote sandbox service.
+                    properties:
+                      apiKeySecretRef:
+                        description: |-
+                          apiKeySecretRef is the Secret key holding the service's API key.
+                          Crewlet's `api_key`, a credential position.
+                        properties:
+                          key:
+                            description: key is the key within the Secret's data.
+                            maxLength: 253
+                            minLength: 1
+                            pattern: ^[-._a-zA-Z0-9]+$
+                            type: string
+                          name:
+                            description: name is the metadata.name of the Secret.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      domain:
+                        description: |-
+                          domain points at a self-hosted cluster of the service. Unset is the
+                          vendor's cloud.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                      template:
+                        description: |-
+                          template is the sandbox template, which also fixes each sandbox's CPU,
+                          memory and disk.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - apiKeySecretRef
+                    type: object
+                  setup:
+                    description: |-
+                      setup is applied to every sandbox before each seat's own steps.
+                      Crewlet's `setup`.
+                    items:
+                      description: |-
+                        SandboxSetupStep is one provisioning step applied to a sandbox before the
+                        coding agent starts. It maps onto a Crewlet sandbox setup step.
+                      properties:
+                        brief:
+                          description: |-
+                            brief tells the coding agent what this step made true about the
+                            sandbox.
+                          maxLength: 2048
+                          minLength: 1
+                          type: string
+                        commands:
+                          description: |-
+                            commands are shell commands run in order; one that exits non-zero
+                            fails the sandbox.
+                          items:
+                            maxLength: 4096
+                            minLength: 1
+                            type: string
+                          maxItems: 32
+                          type: array
+                          x-kubernetes-list-type: atomic
+                        env:
+                          description: |-
+                            env is merged into the environment of the commands and of the run.
+                            Crewlet's `env`, a credential position.
+                          items:
+                            description: |-
+                              SecretEnvVar is a named credential delivered as an environment variable,
+                              such as a tool server's API token. Crewlet treats every value in the
+                              positions that use this type as a credential, so a literal value is not
+                              accepted: the value always comes from a Secret.
+                            properties:
+                              name:
+                                description: name is the variable's name.
+                                maxLength: 128
+                                minLength: 1
+                                pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+                                type: string
+                              valueFrom:
+                                description: valueFrom is the Secret key the value
+                                  is read from.
+                                properties:
+                                  secretKeyRef:
+                                    description: secretKeyRef selects the Secret key
+                                      that holds the value.
+                                    properties:
+                                      key:
+                                        description: key is the key within the Secret's
+                                          data.
+                                        maxLength: 253
+                                        minLength: 1
+                                        pattern: ^[-._a-zA-Z0-9]+$
+                                        type: string
+                                      name:
+                                        description: name is the metadata.name of
+                                          the Secret.
+                                        maxLength: 253
+                                        minLength: 1
+                                        type: string
+                                    required:
+                                    - key
+                                    - name
+                                    type: object
+                                required:
+                                - secretKeyRef
+                                type: object
+                            required:
+                            - name
+                            - valueFrom
+                            type: object
+                          maxItems: 32
+                          type: array
+                          x-kubernetes-list-map-keys:
+                          - name
+                          x-kubernetes-list-type: map
+                        files:
+                          description: |-
+                            files are written into the sandbox before the commands run. Crewlet's
+                            `files`, a credential position.
+                          items:
+                            description: |-
+                              SandboxFile is a file written into a sandbox before its commands run. Its
+                              content is a credential position in Crewlet (it typically holds a git or
+                              registry login), so it always comes from a Secret.
+                            properties:
+                              path:
+                                description: path is where the file is written inside
+                                  the sandbox.
+                                maxLength: 1024
+                                minLength: 1
+                                type: string
+                              valueFrom:
+                                description: valueFrom is the Secret key holding the
+                                  file's content.
+                                properties:
+                                  secretKeyRef:
+                                    description: secretKeyRef selects the Secret key
+                                      that holds the value.
+                                    properties:
+                                      key:
+                                        description: key is the key within the Secret's
+                                          data.
+                                        maxLength: 253
+                                        minLength: 1
+                                        pattern: ^[-._a-zA-Z0-9]+$
+                                        type: string
+                                      name:
+                                        description: name is the metadata.name of
+                                          the Secret.
+                                        maxLength: 253
+                                        minLength: 1
+                                        type: string
+                                    required:
+                                    - key
+                                    - name
+                                    type: object
+                                required:
+                                - secretKeyRef
+                                type: object
+                            required:
+                            - path
+                            - valueFrom
+                            type: object
+                          maxItems: 16
+                          type: array
+                          x-kubernetes-list-map-keys:
+                          - path
+                          x-kubernetes-list-type: map
+                        name:
+                          description: name identifies the step in logs and failure
+                            messages.
+                          maxLength: 63
+                          minLength: 1
+                          type: string
+                        timeoutSeconds:
+                          description: timeoutSeconds caps each command of the step.
+                          format: int32
+                          minimum: 1
+                          type: integer
+                      required:
+                      - name
+                      type: object
+                    maxItems: 16
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                required:
+                - e2b
+                type: object
+              suspend:
+                description: |-
+                  suspend stops the engine and keeps its data volumes; setting it back
+                  to false starts it again. Vendors keep delivering webhooks meanwhile,
+                  and some disable a subscription after a long run of failed deliveries.
+                type: boolean
+              timeZone:
+                description: |-
+                  timeZone is the company's clock, an IANA time zone such as
+                  Europe/Berlin: where its days begin for budgets, due dates and
+                  schedules. Unset is UTC. Crewlet's `timezone`.
+                maxLength: 64
+                minLength: 1
+                pattern: ^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)*$
+                type: string
+              tokenBudget:
+                description: |-
+                  tokenBudget caps the tokens all seats together may spend per window.
+                  Crewlet's `token_budget`.
+                minProperties: 1
+                properties:
+                  day:
+                    description: day is the most tokens one local day, midnight to
+                      midnight, may spend.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  month:
+                    description: month is the most tokens one calendar month may spend.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  week:
+                    description: week is the most tokens one ISO week, starting on
+                      Monday, may spend.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                type: object
+              topology:
+                default:
+                  data:
+                    replicas: 1
+                description: topology is how the engine is laid out in pods.
+                minProperties: 1
+                properties:
+                  data:
+                    default:
+                      replicas: 1
+                    description: data is the pods that hold the estate.
+                    minProperties: 1
+                    properties:
+                      replicas:
+                        default: 1
+                        description: |-
+                          replicas is the number of data pods. It must be one of the class's
+                          spec.data.allowedReplicas. Only 1 is available in v1alpha1. It cannot
+                          be changed once set: the event stream's replication is fixed when the
+                          estate is created.
+                        enum:
+                        - 1
+                        - 3
+                        - 5
+                        format: int32
+                        maximum: 5
+                        minimum: 1
+                        type: integer
+                        x-kubernetes-validations:
+                        - message: topology.data.replicas is immutable
+                          rule: self == oldSelf
+                    type: object
+                type: object
+              tracker:
+                description: tracker is which work tracker the company runs.
+                minProperties: 1
+                properties:
+                  backend:
+                    default: Native
+                    description: backend is which tracker the company runs.
+                    enum:
+                    - Native
+                    - None
+                    type: string
+                  native:
+                    description: native is the policy of the engine's own tracker,
+                      for backend Native.
+                    minProperties: 1
+                    properties:
+                      inboxRetentionDays:
+                        description: |-
+                          inboxRetentionDays is how long a person's inbox keeps a row; the
+                          history the row points at is kept regardless. Unset takes Crewlet's
+                          default of 365. Crewlet's `inbox_retention_days`.
+                        format: int32
+                        maximum: 3650
+                        minimum: 30
+                        type: integer
+                    type: object
+                type: object
+                x-kubernetes-validations:
+                - message: native applies to backend Native only
+                  rule: '!has(self.native) || self.backend == ''Native'''
+              vision:
+                description: |-
+                  vision is a longer statement of where the company is going. Crewlet's
+                  `vision`.
+                maxLength: 8192
+                minLength: 1
+                type: string
+            required:
+            - companyName
             type: object
           status:
-            description: status defines the observed state of Company
+            description: status is the company's observed state.
+            minProperties: 1
             properties:
+              apiAccessSecretRef:
+                description: |-
+                  apiAccessSecretRef names the Secret, in the Company's namespace, that
+                  holds a bearer token for the engine's API under the key token. It is
+                  for the company's consumers (a control plane, a dashboard); the
+                  operator uses a token of its own, so revoking this one never locks the
+                  operator out.
+                properties:
+                  name:
+                    description: name is the metadata.name of the Secret.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
               conditions:
                 description: |-
-                  conditions represent the current state of the Company resource.
-                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
-
-                  Standard condition types include:
-                  - "Available": the resource is fully functional
-                  - "Progressing": the resource is being created or updated
-                  - "Degraded": the resource failed to reach or maintain its desired state
-
-                  The status of each condition is one of True, False, or Unknown.
+                  conditions are Ready (the summary), Accepted, RuntimeReady,
+                  SecretsSynced, ConfigApplied and Exposed.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -115,14 +862,146 @@ spec:
                   - status
                   - type
                   type: object
+                maxItems: 16
                 type: array
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              config:
+                description: config is the revision the engine runs.
+                minProperties: 1
+                properties:
+                  appliedAt:
+                    description: appliedAt is when the operator last applied a revision.
+                    format: date-time
+                    type: string
+                  appliedHash:
+                    description: |-
+                      appliedHash is the hash of the rendered document and of the Secret
+                      versions it references, as last applied.
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                  epoch:
+                    description: epoch is the engine's activation counter for that
+                      revision.
+                    format: int64
+                    minimum: 0
+                    type: integer
+                  objects:
+                    description: objects counts the objects the revision was rendered
+                      from.
+                    minProperties: 1
+                    properties:
+                      integrations:
+                        description: integrations is the number of Integrations.
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      llmProviders:
+                        description: |-
+                          llmProviders is the number of model providers, platform providers
+                          included.
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      mcpServers:
+                        description: mcpServers is the number of MCPServers.
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      seats:
+                        description: seats is the number of Seats.
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      units:
+                        description: units is the number of Units.
+                        format: int32
+                        minimum: 0
+                        type: integer
+                    type: object
+                  revisionID:
+                    description: revisionID is the engine's id of the active revision.
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                type: object
+              endpoints:
+                description: endpoints is where the company is reached.
+                minProperties: 1
+                properties:
+                  api:
+                    description: api is the in-cluster base URL of the engine's API.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                  publicBaseURL:
+                    description: |-
+                      publicBaseURL is the address vendors deliver webhooks to, when the
+                      company has one.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                type: object
+              engine:
+                description: engine is what runs the company.
+                minProperties: 1
+                properties:
+                  image:
+                    description: image is the engine image the data pods run.
+                    maxLength: 512
+                    minLength: 1
+                    type: string
+                  version:
+                    description: version is the engine version the data pods report.
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                type: object
+              observedGeneration:
+                description: observedGeneration is the metadata.generation this status
+                  describes.
+                format: int64
+                minimum: 1
+                type: integer
+              topology:
+                description: topology is the state of the company's pods.
+                minProperties: 1
+                properties:
+                  data:
+                    description: data is the state of the data pods.
+                    minProperties: 1
+                    properties:
+                      readyReplicas:
+                        description: readyReplicas is the number of data pods that
+                          are ready.
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      replicas:
+                        description: replicas is the number of data pods.
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      updatedReplicas:
+                        description: |-
+                          updatedReplicas is the number of data pods that run the current pod
+                          template.
+                        format: int32
+                        minimum: 0
+                        type: integer
+                    type: object
+                type: object
             type: object
         required:
         - spec
         type: object
+        x-kubernetes-validations:
+        - message: a Company's name must be a DNS label of at most 47 characters that
+            starts with a letter, because it names the company's StatefulSet and Service
+          rule: self.metadata.name.matches('^[a-z]([-a-z0-9]*[a-z0-9])?$') && size(self.metadata.name)
+            <= 47
     served: true
     storage: true
     subresources:

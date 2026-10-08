@@ -8,16 +8,42 @@ metadata:
 spec:
   group: crewlet.ai
   names:
+    categories:
+    - crewlet
     kind: Unit
     listKind: UnitList
     plural: units
+    shortNames:
+    - un
     singular: unit
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.companyRef.name
+      name: Company
+      type: string
+    - jsonPath: .spec.parentRef.name
+      name: Parent
+      type: string
+    - jsonPath: .spec.leadRef.name
+      name: Lead
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Applied")].status
+      name: Applied
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Unit is the Schema for the units API
+        description: |-
+          Unit is one node of a company's org chart. Units nest through
+          spec.parentRef; Seats join one through spec.unitRef.
+
+          The Unit's metadata.name is the unit's stable id in Crewlet, which has its
+          own rules: it must start with a lowercase letter and be at most 64
+          characters, and may hold lowercase letters, digits and '-'.
         properties:
           apiVersion:
             description: |-
@@ -37,27 +63,228 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of Unit
+            description: spec is the unit's desired state.
             properties:
-              foo:
-                description: foo is an example field of Unit. Edit unit_types.go to
-                  remove/update
+              channel:
+                description: |-
+                  channel is the unit's channel on the company's chat surface, such as
+                  #platform; child units without one inherit it. Crewlet's `channel`.
+                maxLength: 256
+                minLength: 1
                 type: string
+              companyRef:
+                description: companyRef names the Company this unit belongs to. Immutable.
+                properties:
+                  name:
+                    description: name is the metadata.name of a Company in this object's
+                      namespace.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+                x-kubernetes-validations:
+                - message: companyRef is immutable
+                  rule: self == oldSelf
+              displayName:
+                description: |-
+                  displayName is the unit's name as people read it, in prompts and on
+                  boards. Unset is the Unit's metadata.name. The metadata.name itself is
+                  the unit's stable id, which survives a rename. Crewlet's `name`; the
+                  metadata.name is Crewlet's `id`.
+                maxLength: 256
+                minLength: 1
+                type: string
+              goals:
+                description: goals are what the unit is working toward. Crewlet's
+                  `goals`.
+                items:
+                  maxLength: 1024
+                  minLength: 1
+                  type: string
+                maxItems: 32
+                type: array
+                x-kubernetes-list-type: atomic
+              knowledge:
+                description: |-
+                  knowledge are free-text references to knowledge the unit relies on.
+                  They are not a read scope. Crewlet's `knowledge`.
+                items:
+                  maxLength: 1024
+                  minLength: 1
+                  type: string
+                maxItems: 32
+                type: array
+                x-kubernetes-list-type: atomic
+              leadRef:
+                description: |-
+                  leadRef names the Seat that leads the unit. Unset inherits the
+                  parent's lead. Crewlet's `lead`.
+                properties:
+                  name:
+                    description: name is the metadata.name of the referenced object.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              mcp:
+                description: |-
+                  mcp are tool-server credentials every agent seat directly in this unit
+                  inherits; a seat's own credentials win per variable. Crewlet's
+                  `mcp_env`, a credential position.
+                items:
+                  description: |-
+                    MCPCredentials are the credentials one tool server is started with for a
+                    seat: environment variables for a Stdio server, request headers for an HTTP
+                    one. They map onto one server's entry of Crewlet's mcp_env, a credential
+                    position.
+                  properties:
+                    env:
+                      description: |-
+                        env are the values. For a Stdio server each is an environment
+                        variable of its process; for an HTTP server each is a request header
+                        (the name is the header's name).
+                      items:
+                        description: |-
+                          MCPCredentialValue is one value of a seat's credentials for a tool server.
+                          Whether it is an environment variable or a request header depends on the
+                          server's transport, which is why its name follows the grammar of an HTTP
+                          header name, of which an environment variable's name is a subset.
+                        properties:
+                          name:
+                            description: |-
+                              name is the environment variable's name (Stdio) or the header's name
+                              (HTTP).
+                            maxLength: 128
+                            minLength: 1
+                            pattern: ^[A-Za-z0-9!#$%&'*+.^_|~-]+$
+                            type: string
+                          valueFrom:
+                            description: |-
+                              valueFrom is the Secret key the value is read from. For a header the
+                              Secret key holds the whole header value, scheme included (for example
+                              "Bearer <token>").
+                            properties:
+                              secretKeyRef:
+                                description: secretKeyRef selects the Secret key that
+                                  holds the value.
+                                properties:
+                                  key:
+                                    description: key is the key within the Secret's
+                                      data.
+                                    maxLength: 253
+                                    minLength: 1
+                                    pattern: ^[-._a-zA-Z0-9]+$
+                                    type: string
+                                  name:
+                                    description: name is the metadata.name of the
+                                      Secret.
+                                    maxLength: 253
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - key
+                                - name
+                                type: object
+                            required:
+                            - secretKeyRef
+                            type: object
+                        required:
+                        - name
+                        - valueFrom
+                        type: object
+                      maxItems: 32
+                      minItems: 1
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - name
+                      x-kubernetes-list-type: map
+                    serverRef:
+                      description: |-
+                        serverRef names the MCPServer, in this namespace, the credentials are
+                        for.
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            object.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                  required:
+                  - env
+                  - serverRef
+                  type: object
+                maxItems: 16
+                type: array
+                x-kubernetes-list-type: atomic
+                x-kubernetes-validations:
+                - message: mcp must name each server once
+                  rule: self.all(a, self.exists_one(b, b.serverRef.name == a.serverRef.name))
+              parentRef:
+                description: |-
+                  parentRef names the Unit this one belongs to. Unset makes it a
+                  top-level unit. A parent that does not exist, or a chain of parents
+                  that leads back to this unit, is reported on this Unit.
+                properties:
+                  name:
+                    description: name is the metadata.name of the referenced object.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              project:
+                description: |-
+                  project is the tracker project the unit files work in. Crewlet's
+                  `project`.
+                maxLength: 256
+                minLength: 1
+                type: string
+              purpose:
+                description: purpose is what the unit is for. Crewlet's `purpose`.
+                maxLength: 2048
+                minLength: 1
+                type: string
+              space:
+                description: |-
+                  space is the knowledge container the unit writes pages in. Crewlet's
+                  `space`.
+                maxLength: 256
+                minLength: 1
+                type: string
+              type:
+                description: type is an informational label. Crewlet's `type`.
+                enum:
+                - Division
+                - Department
+                - Group
+                - Team
+                - Squad
+                - Pod
+                - Guild
+                - Chapter
+                - Unit
+                type: string
+            required:
+            - companyRef
             type: object
           status:
-            description: status defines the observed state of Unit
+            description: status is the unit's observed state.
+            minProperties: 1
             properties:
               conditions:
                 description: |-
-                  conditions represent the current state of the Unit resource.
-                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
-
-                  Standard condition types include:
-                  - "Available": the resource is fully functional
-                  - "Progressing": the resource is being created or updated
-                  - "Degraded": the resource failed to reach or maintain its desired state
-
-                  The status of each condition is one of True, False, or Unknown.
+                  conditions are Accepted (the Company exists), ResolvedRefs (the
+                  parent, the lead, the tool servers and every Secret key exist, and the
+                  parents form no cycle) and Applied (the unit is in the revision the
+                  engine runs).
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -112,14 +339,38 @@ spec:
                   - status
                   - type
                   type: object
+                maxItems: 8
                 type: array
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              depth:
+                description: |-
+                  depth is the unit's distance from the top of the chart: 0 for a
+                  top-level unit.
+                format: int32
+                minimum: 0
+                type: integer
+              observedGeneration:
+                description: observedGeneration is the metadata.generation this status
+                  describes.
+                format: int64
+                minimum: 1
+                type: integer
+              seats:
+                description: seats is the number of Seats directly in the unit.
+                format: int32
+                minimum: 0
+                type: integer
             type: object
         required:
         - spec
         type: object
+        x-kubernetes-validations:
+        - message: 'a Unit''s name is its Crewlet unit id: it must start with a lowercase
+            letter, hold only lowercase letters, digits and ''-'', and be at most
+            64 characters'
+          rule: self.metadata.name.matches('^[a-z][a-z0-9_-]{0,63}$')
     served: true
     storage: true
     subresources:

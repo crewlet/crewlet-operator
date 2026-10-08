@@ -8,16 +8,40 @@ metadata:
 spec:
   group: crewlet.ai
   names:
+    categories:
+    - crewlet
     kind: Integration
     listKind: IntegrationList
     plural: integrations
+    shortNames:
+    - intg
     singular: integration
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.companyRef.name
+      name: Company
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Applied")].status
+      name: Applied
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Healthy")].status
+      name: Healthy
+      type: string
+    - jsonPath: .status.webhookURL
+      name: Webhook
+      priority: 1
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Integration is the Schema for the integrations API
+        description: |-
+          Integration connects a company to a vendor (Slack, GitHub): the company-wide
+          settings and the credentials that verify the vendor's webhooks. Credentials
+          that belong to one seat, such as its own Slack app, are on the Seat.
         properties:
           apiVersion:
             description: |-
@@ -37,27 +61,192 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of Integration
+            description: spec is the integration's desired state.
             properties:
-              foo:
-                description: foo is an example field of Integration. Edit integration_types.go
-                  to remove/update
-                type: string
+              companyRef:
+                description: companyRef names the Company this integration belongs
+                  to. Immutable.
+                properties:
+                  name:
+                    description: name is the metadata.name of a Company in this object's
+                      namespace.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+                x-kubernetes-validations:
+                - message: companyRef is immutable
+                  rule: self == oldSelf
+              github:
+                description: github connects GitHub.
+                properties:
+                  provisioning:
+                    description: provisioning is where the webhooks are registered.
+                    minProperties: 1
+                    properties:
+                      org:
+                        description: |-
+                          org is the GitHub organization holding the repositories. Crewlet's
+                          `org`.
+                        maxLength: 39
+                        minLength: 1
+                        pattern: ^[A-Za-z0-9-]+$
+                        type: string
+                      orgWebhook:
+                        description: |-
+                          orgWebhook is whether one organization hook replaces the
+                          per-repository ones. Unset is Auto. Crewlet's `org_webhook`.
+                        enum:
+                        - Auto
+                        - Require
+                        - Never
+                        type: string
+                      repos:
+                        description: |-
+                          repos are repositories, as owner/name, to register a webhook on one by
+                          one. Crewlet's `repos`.
+                        items:
+                          maxLength: 201
+                          pattern: ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$
+                          type: string
+                        maxItems: 128
+                        type: array
+                        x-kubernetes-list-type: set
+                    type: object
+                  tokenSecretRef:
+                    description: |-
+                      tokenSecretRef is the Secret key holding an organization token with
+                      the admin:org_hook scope, which the engine registers the company's
+                      webhooks with. Unset registers none. Crewlet's `token`, a credential
+                      position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  url:
+                    description: |-
+                      url is the base URL of a GitHub Enterprise Server, such as
+                      https://github.example.com. Unset is github.com. Crewlet's `url`.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: url must be an absolute https URL
+                      rule: isURL(self) && url(self).getScheme() == 'https'
+                  webhookSecretRef:
+                    description: |-
+                      webhookSecretRef is the Secret key holding the secret that verifies
+                      webhooks delivered to the company-wide route. Crewlet's
+                      `webhook_secret`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                required:
+                - webhookSecretRef
+                type: object
+              slack:
+                description: slack connects Slack.
+                properties:
+                  statusPhrases:
+                    description: |-
+                      statusPhrases replaces the words the working indicator shows.
+                      Crewlet's `status_phrases`.
+                    minProperties: 1
+                    properties:
+                      default:
+                        description: default is shown in any phase without lines of
+                          its own.
+                        items:
+                          maxLength: 256
+                          minLength: 1
+                          type: string
+                        maxItems: 32
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      execute:
+                        description: execute is shown while the seat works.
+                        items:
+                          maxLength: 256
+                          minLength: 1
+                          type: string
+                        maxItems: 32
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      onboarding:
+                        description: onboarding is shown during a seat's first-turn
+                          onboarding pass.
+                        items:
+                          maxLength: 256
+                          minLength: 1
+                          type: string
+                        maxItems: 32
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      review:
+                        description: review is shown while the reviewer judges the
+                          seat's work.
+                        items:
+                          maxLength: 256
+                          minLength: 1
+                          type: string
+                        maxItems: 32
+                        type: array
+                        x-kubernetes-list-type: atomic
+                    type: object
+                  typingStatus:
+                    description: |-
+                      typingStatus is when a seat shows that it is working. Unset takes
+                      Crewlet's default, Always. Crewlet's `typing_status`.
+                    enum:
+                    - Always
+                    - Addressed
+                    type: string
+                type: object
+            required:
+            - companyRef
             type: object
+            x-kubernetes-validations:
+            - message: exactly one vendor (slack or github) must be set
+              rule: '[has(self.slack), has(self.github)].filter(x, x).size() == 1'
+            - message: an Integration's vendor cannot change; create another Integration
+              rule: has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github)
           status:
-            description: status defines the observed state of Integration
+            description: status is the integration's observed state.
+            minProperties: 1
             properties:
               conditions:
                 description: |-
-                  conditions represent the current state of the Integration resource.
-                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
-
-                  Standard condition types include:
-                  - "Available": the resource is fully functional
-                  - "Progressing": the resource is being created or updated
-                  - "Degraded": the resource failed to reach or maintain its desired state
-
-                  The status of each condition is one of True, False, or Unknown.
+                  conditions are Accepted (the Company exists and has no other
+                  Integration for the vendor), ResolvedRefs (every Secret key exists),
+                  Applied (the integration is in the revision the engine runs) and
+                  Healthy (the engine's own check of the vendor passes).
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -112,10 +301,25 @@ spec:
                   - status
                   - type
                   type: object
+                maxItems: 8
                 type: array
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              observedGeneration:
+                description: observedGeneration is the metadata.generation this status
+                  describes.
+                format: int64
+                minimum: 1
+                type: integer
+              webhookURL:
+                description: |-
+                  webhookURL is the company-wide URL the vendor delivers webhooks to,
+                  when the company is exposed and the vendor has one. Per-seat URLs are
+                  in each Seat's status.
+                maxLength: 2048
+                minLength: 1
+                type: string
             type: object
         required:
         - spec

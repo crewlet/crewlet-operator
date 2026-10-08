@@ -5,67 +5,217 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// UnitType is an informational label for a unit; nothing in the engine
+// behaves differently for one. It maps onto Crewlet's well-known unit types
+// (Division is `division`, Team is `team`, and so on).
+// +kubebuilder:validation:Enum=Division;Department;Group;Team;Squad;Pod;Guild;Chapter;Unit
+type UnitType string
 
-// UnitSpec defines the desired state of Unit
-type UnitSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
+// The unit types.
+const (
+	UnitTypeDivision   UnitType = "Division"
+	UnitTypeDepartment UnitType = "Department"
+	UnitTypeGroup      UnitType = "Group"
+	UnitTypeTeam       UnitType = "Team"
+	UnitTypeSquad      UnitType = "Squad"
+	UnitTypePod        UnitType = "Pod"
+	UnitTypeGuild      UnitType = "Guild"
+	UnitTypeChapter    UnitType = "Chapter"
+	UnitTypeUnit       UnitType = "Unit"
+)
 
-	// foo is an example field of Unit. Edit unit_types.go to remove/update
-	// +optional
-	Foo *string `json:"foo,omitempty"`
+// MCPCredentialValue is one value of a seat's credentials for a tool server.
+// Whether it is an environment variable or a request header depends on the
+// server's transport, which is why its name follows the grammar of an HTTP
+// header name, of which an environment variable's name is a subset.
+type MCPCredentialValue struct {
+	// name is the environment variable's name (Stdio) or the header's name
+	// (HTTP).
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9!#$%&'*+.^_|~-]+$`
+	Name string `json:"name,omitempty"`
+
+	// valueFrom is the Secret key the value is read from. For a header the
+	// Secret key holds the whole header value, scheme included (for example
+	// "Bearer <token>").
+	// +required
+	ValueFrom SecretValueSource `json:"valueFrom,omitzero"`
 }
 
-// UnitStatus defines the observed state of Unit.
+// MCPCredentials are the credentials one tool server is started with for a
+// seat: environment variables for a Stdio server, request headers for an HTTP
+// one. They map onto one server's entry of Crewlet's mcp_env, a credential
+// position.
+type MCPCredentials struct {
+	// serverRef names the MCPServer, in this namespace, the credentials are
+	// for.
+	// +required
+	ServerRef LocalObjectReference `json:"serverRef,omitzero"`
+
+	// env are the values. For a Stdio server each is an environment
+	// variable of its process; for an HTTP server each is a request header
+	// (the name is the header's name).
+	// +required
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32
+	Env []MCPCredentialValue `json:"env,omitempty"`
+}
+
+// UnitSpec is one node of a company's org chart: a division, a team, a squad.
+// It renders to one entry of Crewlet's units, nested under its parent's.
+type UnitSpec struct {
+	// companyRef names the Company this unit belongs to. Immutable.
+	// +required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="companyRef is immutable"
+	CompanyRef CompanyReference `json:"companyRef,omitzero"`
+
+	// displayName is the unit's name as people read it, in prompts and on
+	// boards. Unset is the Unit's metadata.name. The metadata.name itself is
+	// the unit's stable id, which survives a rename. Crewlet's `name`; the
+	// metadata.name is Crewlet's `id`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+	DisplayName string `json:"displayName,omitempty"`
+
+	// type is an informational label. Crewlet's `type`.
+	// +optional
+	Type UnitType `json:"type,omitempty"`
+
+	// parentRef names the Unit this one belongs to. Unset makes it a
+	// top-level unit. A parent that does not exist, or a chain of parents
+	// that leads back to this unit, is reported on this Unit.
+	// +optional
+	ParentRef LocalObjectReference `json:"parentRef,omitzero"`
+
+	// leadRef names the Seat that leads the unit. Unset inherits the
+	// parent's lead. Crewlet's `lead`.
+	// +optional
+	LeadRef LocalObjectReference `json:"leadRef,omitzero"`
+
+	// purpose is what the unit is for. Crewlet's `purpose`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	Purpose string `json:"purpose,omitempty"`
+
+	// goals are what the unit is working toward. Crewlet's `goals`.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=32
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=1024
+	Goals []string `json:"goals,omitempty"`
+
+	// channel is the unit's channel on the company's chat surface, such as
+	// #platform; child units without one inherit it. Crewlet's `channel`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+	Channel string `json:"channel,omitempty"`
+
+	// knowledge are free-text references to knowledge the unit relies on.
+	// They are not a read scope. Crewlet's `knowledge`.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=32
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=1024
+	Knowledge []string `json:"knowledge,omitempty"`
+
+	// project is the tracker project the unit files work in. Crewlet's
+	// `project`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+	Project string `json:"project,omitempty"`
+
+	// space is the knowledge container the unit writes pages in. Crewlet's
+	// `space`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+	Space string `json:"space,omitempty"`
+
+	// mcp are tool-server credentials every agent seat directly in this unit
+	// inherits; a seat's own credentials win per variable. Crewlet's
+	// `mcp_env`, a credential position.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=16
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.serverRef.name == a.serverRef.name))",message="mcp must name each server once"
+	MCP []MCPCredentials `json:"mcp,omitempty"`
+}
+
+// UnitStatus is what the operator observed about a Unit.
+// +kubebuilder:validation:MinProperties=1
 type UnitStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// For Kubernetes API conventions, see:
-	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
-
-	// conditions represent the current state of the Unit resource.
-	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
-	//
-	// Standard condition types include:
-	// - "Available": the resource is fully functional
-	// - "Progressing": the resource is being created or updated
-	// - "Degraded": the resource failed to reach or maintain its desired state
-	//
-	// The status of each condition is one of True, False, or Unknown.
+	// conditions are Accepted (the Company exists), ResolvedRefs (the
+	// parent, the lead, the tool servers and every Secret key exist, and the
+	// parents form no cycle) and Applied (the unit is in the revision the
+	// engine runs).
+	// +optional
 	// +listType=map
 	// +listMapKey=type
-	// +optional
+	// +kubebuilder:validation:MaxItems=8
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// observedGeneration is the metadata.generation this status describes.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// depth is the unit's distance from the top of the chart: 0 for a
+	// top-level unit.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	Depth *int32 `json:"depth,omitempty"`
+
+	// seats is the number of Seats directly in the unit.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	Seats *int32 `json:"seats,omitempty"`
 }
 
+// Unit is one node of a company's org chart. Units nest through
+// spec.parentRef; Seats join one through spec.unitRef.
+//
+// The Unit's metadata.name is the unit's stable id in Crewlet, which has its
+// own rules: it must start with a lowercase letter and be at most 64
+// characters, and may hold lowercase letters, digits and '-'.
+//
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-
-// Unit is the Schema for the units API
+// +kubebuilder:resource:shortName=un,categories=crewlet
+// +kubebuilder:printcolumn:name="Company",type=string,JSONPath=`.spec.companyRef.name`
+// +kubebuilder:printcolumn:name="Parent",type=string,JSONPath=`.spec.parentRef.name`
+// +kubebuilder:printcolumn:name="Lead",type=string,JSONPath=`.spec.leadRef.name`
+// +kubebuilder:printcolumn:name="Applied",type=string,JSONPath=`.status.conditions[?(@.type=="Applied")].status`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:validation:XValidation:rule="self.metadata.name.matches('^[a-z][a-z0-9_-]{0,63}$')",message="a Unit's name is its Crewlet unit id: it must start with a lowercase letter, hold only lowercase letters, digits and '-', and be at most 64 characters"
 type Unit struct {
 	metav1.TypeMeta `json:",inline"`
 
-	// metadata is a standard object metadata
+	// metadata is the standard object metadata.
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitzero"`
 
-	// spec defines the desired state of Unit
+	// spec is the unit's desired state.
 	// +required
-	Spec UnitSpec `json:"spec"`
+	Spec UnitSpec `json:"spec,omitzero"`
 
-	// status defines the observed state of Unit
+	// status is the unit's observed state.
 	// +optional
 	Status UnitStatus `json:"status,omitzero"`
 }
 
 // +kubebuilder:object:root=true
 
-// UnitList contains a list of Unit
+// UnitList contains a list of Unit.
 type UnitList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitzero"`
