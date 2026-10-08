@@ -1,4 +1,4 @@
-# crd-ref-docs configuration for docs/reference/api.md (make docs).
+# crd-ref-docs configuration for docs/reference/api.md (make api-docs).
 processor:
   # List types are the API machinery's envelope, not part of the API's shape.
   ignoreTypes:

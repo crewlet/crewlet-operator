@@ -100,10 +100,10 @@ Never edit these by hand; change their source and regenerate.
 | `config/crd/bases/*.yaml` | `+kubebuilder` markers in `api/` | `make manifests` |
 | `config/rbac/role.yaml` | `+kubebuilder:rbac` markers in `internal/` | `make manifests` |
 | `dist/chart/templates/**` | the kustomize output of `config/` | `make chart` |
-| `docs/reference/api.md` | doc comments and markers in `api/` | `make docs` |
+| `docs/reference/api.md` | doc comments and markers in `api/` | `make api-docs` |
 
 After changing an API type or an RBAC marker, run
-`make manifests generate chart docs` and commit the result with the change.
+`make manifests generate chart api-docs` and commit the result with the change.
 In the chart, `Chart.yaml`, `values.yaml`, `templates/NOTES.txt` and
 `templates/_helpers.tpl` are written once by the generator and then curated by
 hand; everything else under `templates/` is regenerated on every run.
@@ -197,7 +197,7 @@ commit:
 Docs are part of the change. A pull request that changes an API field,
 behaviour, a make target or the deployment updates the page under
 [`docs/`](docs/README.md) that describes it, and regenerates
-`docs/reference/api.md` (`make docs`) when the types changed. A field's
+`docs/reference/api.md` (`make api-docs`) when the types changed. A field's
 documentation is written once, as the doc comment on the field; the API
 reference is generated from it.
 

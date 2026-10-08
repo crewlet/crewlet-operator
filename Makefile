@@ -49,11 +49,15 @@ vet: ## Run go vet in both modules.
 	@for m in $(GO_MODULES); do (cd $$m && go vet ./...); done
 
 # The API reference is generated from the types' doc comments and markers, so
-# a field's documentation is written once, on the field.
-.PHONY: docs
-docs: crd-ref-docs ## Generate the API reference (docs/reference/api.md) from the API types.
+# a field's documentation is written once, on the field. --max-depth is raised
+# from crd-ref-docs' default of 10 because EngineClass embeds corev1.Affinity,
+# whose selector types sit deeper than that; the deeper walk adds nothing to
+# the output (Kubernetes types link to their own reference) and keeps the run
+# free of warnings.
+.PHONY: api-docs
+api-docs: crd-ref-docs ## Generate the API reference (docs/reference/api.md) from the API types.
 	cd api && "$(CRD_REF_DOCS)" --source-path=. --config=../hack/crd-ref-docs/config.yaml \
-		--renderer=markdown --output-path=../docs/reference/api.md --log-level=WARN
+		--renderer=markdown --output-path=../docs/reference/api.md --log-level=WARN --max-depth=12
 
 .PHONY: tidy
 tidy: ## Run go mod tidy in both modules.
@@ -151,12 +155,12 @@ GENERATED_PATHS := api config dist/chart docs/reference
 # check answers "is the generated output in step with its sources?" on a
 # working tree with uncommitted changes as well as on CI's clean checkout.
 .PHONY: verify-generated
-verify-generated: ## Fail if make manifests generate chart docs would change any generated file.
+verify-generated: ## Fail if make manifests generate chart api-docs would change any generated file.
 	@index="$$(mktemp)"; \
 	trap 'rm -f "$$index"' EXIT; \
 	cp "$$(git rev-parse --git-path index)" "$$index"; \
 	GIT_INDEX_FILE="$$index" git add -A -- $(GENERATED_PATHS); \
-	$(MAKE) --no-print-directory manifests generate chart docs; \
+	$(MAKE) --no-print-directory manifests generate chart api-docs; \
 	new="$$(GIT_INDEX_FILE="$$index" git ls-files --others --exclude-standard -- $(GENERATED_PATHS))"; \
 	if ! GIT_INDEX_FILE="$$index" git diff --exit-code -- $(GENERATED_PATHS) || [ -n "$$new" ]; then \
 		[ -z "$$new" ] || printf 'New files:\n%s\n' "$$new"; \
