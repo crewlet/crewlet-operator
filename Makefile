@@ -13,13 +13,13 @@ CONTAINER_TOOL ?= docker
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
-.PHONY: all
-all: build
-
 ##@ General
 
 # Every target that carries a `## description` is listed by `make help`,
 # grouped under the `##@` heading above it.
+
+.PHONY: all
+all: build ## Build the manager binary; the target a bare `make` runs.
 
 .PHONY: help
 help: ## Display this help.
