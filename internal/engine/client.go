@@ -80,7 +80,7 @@ func New(baseURL, token string, opts ...Option) *Client {
 	c := &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		token:   token,
-		http:    defaultHTTPClient(),
+		http:    NewHTTPClient(),
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -88,9 +88,15 @@ func New(baseURL, token string, opts ...Option) *Client {
 	return c
 }
 
-// defaultHTTPClient is net/http's default transport with every phase of a
+// NewHTTPClient returns the HTTP client a Client uses unless WithHTTPClient
+// gives it another: net/http's default transport with every phase of a
 // connection bounded, under DefaultTimeout for the whole request.
-func defaultHTTPClient() *http.Client {
+//
+// A caller that builds a Client per request, as a reconciler does for each
+// engine it reaches, passes one NewHTTPClient to all of them with
+// WithHTTPClient, so that they share one pool of connections instead of
+// each leaving its own idle connections behind.
+func NewHTTPClient() *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DialContext = (&net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}).DialContext
 	transport.TLSHandshakeTimeout = 5 * time.Second
