@@ -284,6 +284,17 @@ func (e *Engine) stop(t T, cmd *exec.Cmd, exited <-chan error) {
 	}
 }
 
+// streamMaxBytes is the embedded broker's declared limit: Crewlet's floor,
+// 5 GiB, which its four state logs fit inside. A suite runs many engines at
+// once on one filesystem, and an engine with no declared limit takes three
+// quarters of the free space it finds at boot, so on a machine with a few
+// gibibytes free, or busy writing a build cache, the engine that boots last
+// refuses its own logs ("insufficient storage resources available") and
+// never applies a document. A declared limit is a reservation the broker
+// keeps count of, not a check against the disk, and a test's streams hold
+// kilobytes.
+const streamMaxBytes = 5 << 30
+
 // tierA is the engine's bootstrap: the embedded broker with its own store, the
 // local store and coordination of a single node, an encrypted secret store,
 // and the API on the loopback interface with two tokens. Every credential is a
@@ -296,6 +307,7 @@ func tierA(port int) []byte {
 stream:
   type: embedded
   store_dir: ./data/stream
+  store_max_bytes: %d
 store:
   path: ./data/company.db
 coordination:
@@ -316,7 +328,7 @@ secrets:
       material: "${ENGINETEST_SECRET_KEY}"
 retention:
   backup_owner: enginetest
-`, port, OperatorTokenID, AccessTokenID)
+`, streamMaxBytes, port, OperatorTokenID, AccessTokenID)
 }
 
 // Binary returns the crewlet binary a test runs: the one BinaryEnv names, or
