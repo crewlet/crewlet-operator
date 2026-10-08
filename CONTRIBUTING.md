@@ -124,10 +124,17 @@ closely enough that nobody has to learn a house style:
   `Ready` summary and `observedGeneration` on the status and on every
   condition, so Argo CD's and Flux's health checks work unmodified.
 - Enum values in PascalCase; lists of named things as `+listType=map` with
-  `+listMapKey=name`, never maps.
+  `+listMapKey=name`, never maps. The one exception is the string-to-string
+  maps Kubernetes itself uses for labels, annotations and node selectors.
 - **Credentials by reference, never by value.** A credential is a
-  `SecretKeySelector` or a `LocalObjectReference` to a Secret with documented
-  keys. No field accepts a literal secret, including any pass-through block.
+  `SecretKeyReference` (one key of a Secret) or a `SecretReference` (a whole
+  Secret whose keys the field documents), in the object's own namespace; only
+  `EngineClass` uses the `Namespaced…` variants. Every position Crewlet treats
+  as a credential takes a reference, even where the value would not be secret,
+  because the API cannot tell the two apart. No field accepts a literal
+  secret, and the pass-through `engineConfig` may not name a block that holds
+  credentials. [docs/concepts/credentials.md](docs/concepts/credentials.md)
+  maps every Crewlet credential position to its field.
 - References stay within the object's namespace. Only the cluster-scoped
   `EngineClass` may reference objects in another namespace.
 - Validation is OpenAPI plus CEL (`x-kubernetes-validations`) — immutability
@@ -138,9 +145,15 @@ closely enough that nobody has to learn a house style:
   category; everything the operator creates carries `app.kubernetes.io/*`
   labels and an owner reference.
 
-Every API change comes with a test that the API server enforces it: the
-envtest suite installs the generated CRDs, so a CEL rule can be tested by
-creating an object it must refuse.
+Every API change comes with a test that the API server enforces it. The
+suite in [`test/crd/`](test/crd) installs the generated CRDs into envtest and
+is table-driven per kind: a valid object first, then, for each rule, the
+object it must refuse and the rule's message; transition rules are tested by
+an update. It also applies every sample in `config/samples`. `make lint` runs
+[kube-api-linter](https://github.com/kubernetes-sigs/kube-api-linter) over
+`api/`, which holds the types to the conventions above: `+optional` or
+`+required` on every field, a pointer only where the zero value is a setting
+of its own, bounds on every string and list, a list type on every list.
 
 ### Compatibility, by API version
 

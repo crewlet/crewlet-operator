@@ -5,8 +5,9 @@ cluster, first as a process on your machine and then as a Deployment in the
 cluster. Every command is a make target or a tool the Makefile pins into
 `bin/`, so nothing beyond Go, Docker, make, git and curl has to be installed.
 
-> The `crewlet.ai/v1alpha1` API is still being defined, so this page covers
-> running the operator and installing its API.
+> The `crewlet.ai/v1alpha1` API is defined and the API server enforces it,
+> but the controllers that act on it are still being built: the objects this
+> page creates are validated and stored, and no engine starts yet.
 
 ## Create a cluster
 
@@ -62,10 +63,36 @@ bin/kubectl -n crewlet-operator-system logs deploy/crewlet-operator-controller-m
 `make deploy` records the image in `config/manager/kustomization.yaml`; do
 not commit that change.
 
+## Apply the example company
+
+[`config/samples`](../config/samples) is one complete company, Nimbus: an
+`EngineClass`, the `Company`, two `Unit`s, three `Seat`s, an `LLMProvider`,
+an `MCPServer` and two `Integration`s. Apply it into a namespace of its own:
+
+```bash
+bin/kubectl create namespace nimbus
+bin/kubectl apply -n nimbus -k config/samples
+bin/kubectl get crewlet -n nimbus
+```
+
+The objects reference Secrets (API keys, each agent's Slack and GitHub
+credentials) that the samples do not include, because a credential is never
+written into an object; [Credentials](concepts/credentials.md) lists which
+field reads which key. Try changing an object so that it breaks a rule, and the
+API server refuses it with the rule's message:
+
+```bash
+bin/kubectl patch seat ana -n nimbus --type merge -p '{"spec":{"handle":"anna"}}'
+# The Seat "ana" is invalid: spec.handle: Invalid value: the seat's handle is
+# immutable: the seat's identity and memory are derived from it
+```
+
 ## Clean up
 
 ```bash
 make undeploy            # or: make helm-uninstall
+bin/kubectl delete namespace nimbus
+bin/kubectl delete engineclass standard
 make uninstall           # the CRDs, and with them every crewlet.ai object
 bin/kind delete cluster --name crewlet
 ```

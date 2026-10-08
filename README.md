@@ -83,6 +83,8 @@ how to remove everything again.
 - [docs/](docs/README.md) — the documentation index
 - [docs/getting-started.md](docs/getting-started.md) — running the operator
   on a local cluster
+- [docs/concepts/overview.md](docs/concepts/overview.md) — the kinds, how
+  they relate, credentials and management policies
 - [docs/reference/api.md](docs/reference/api.md) — the `crewlet.ai` API
   reference, generated from the types
 - [CONTRIBUTING.md](CONTRIBUTING.md) — development setup, checks, API change
