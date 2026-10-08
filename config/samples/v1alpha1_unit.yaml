@@ -1,9 +1,34 @@
+# Nimbus's engineering department and its platform team. A Unit's name is its
+# stable id in the engine; displayName is what people read.
 apiVersion: crewlet.ai/v1alpha1
 kind: Unit
 metadata:
-  labels:
-    app.kubernetes.io/name: crewlet-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: unit-sample
+  name: engineering
 spec:
-  # TODO(user): Add fields here
+  companyRef:
+    name: nimbus
+  displayName: Engineering
+  type: Department
+  leadRef:
+    name: cto
+  purpose: Build and run the Nimbus platform.
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Unit
+metadata:
+  name: platform
+spec:
+  companyRef:
+    name: nimbus
+  displayName: Platform Engineering
+  type: Team
+  parentRef:
+    name: engineering
+  leadRef:
+    name: ana
+  purpose: Keep the platform boring.
+  goals:
+    - p99 API latency under 200ms
+  channel: "#platform"
+  project: PLAT
+  space: PLAT

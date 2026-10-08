@@ -1,9 +1,56 @@
+# A platform's "standard" plan. One EngineClass is shared by every Company
+# that names it; the Secrets it references live in the platform's own
+# namespace (crewlet-system), never in a tenant's.
 apiVersion: crewlet.ai/v1alpha1
 kind: EngineClass
 metadata:
-  labels:
-    app.kubernetes.io/name: crewlet-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: engineclass-sample
+  name: standard
+  annotations:
+    # Companies that name no class use this one.
+    crewlet.ai/is-default-class: "true"
 spec:
-  # TODO(user): Add fields here
+  engine:
+    # Crewlet publishes its engine image here from each release tag; name the
+    # release your platform runs, or pin it by digest.
+    image: ghcr.io/crewlet/crewlet:v0.1.0
+    allowVersionOverride: false
+  data:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        memory: 4Gi
+    storage:
+      size: 20Gi
+  exposure:
+    webhooks:
+      mode: Gateway
+      gateway:
+        parentRefs:
+          - namespace: gateway-system
+            name: public
+      # The UID keeps a company's webhook address stable for its lifetime.
+      hostname: "{{uid}}.hooks.example.com"
+    api:
+      mode: ClusterInternal
+  networkPolicy: Isolated
+  podTemplate:
+    spec:
+      tolerations:
+        - key: crewlet.ai/tenant
+          operator: Exists
+          effect: NoSchedule
+  platformLLMProviders:
+    - name: platform-claude
+      type: Anthropic
+      model: claude-sonnet-5
+      apiKeySecretRefs:
+        - namespace: crewlet-system
+          name: platform-anthropic
+          key: apiKey
+  limits:
+    maxSeats: 20
+    maxMCPServers: 10
+  retention:
+    backupOwner: platform-oncall

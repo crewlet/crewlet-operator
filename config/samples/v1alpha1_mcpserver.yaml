@@ -1,9 +1,14 @@
+# GitHub's remote tool server. shared: false starts one instance per seat
+# with that seat's own Authorization header (see the Seat ana).
 apiVersion: crewlet.ai/v1alpha1
 kind: MCPServer
 metadata:
-  labels:
-    app.kubernetes.io/name: crewlet-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: mcpserver-sample
+  name: github
 spec:
-  # TODO(user): Add fields here
+  companyRef:
+    name: nimbus
+  transport: HTTP
+  shared: false
+  url: https://api.githubcopilot.com/mcp/
+  toolPrefix: gh_
+  requestTimeoutSeconds: 60

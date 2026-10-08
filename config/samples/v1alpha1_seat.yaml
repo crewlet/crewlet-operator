@@ -1,9 +1,103 @@
+# Nimbus's seats: the founder (a person), the CTO and a platform engineer
+# (agents). The Secrets each agent references hold its own credentials, so it
+# acts as itself on Slack, on GitHub and on the GitHub tool server.
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat
 metadata:
-  labels:
-    app.kubernetes.io/name: crewlet-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: seat-sample
+  name: jane
 spec:
-  # TODO(user): Add fields here
+  companyRef:
+    name: nimbus
+  kind: Human
+  displayName: Jane Founder
+  goal: Own Nimbus's direction and make the final call on what ships.
+  manages:
+    - kind: Seat
+      name: cto
+  contact:
+    slackUserID: U0FOUNDER
+    githubLogin: jane-founder
+  availability: CET business hours
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: cto
+spec:
+  companyRef:
+    name: nimbus
+  displayName: Agent CTO
+  email: cto@nimbus.example
+  unitRef:
+    name: engineering
+  goal: Own Nimbus's technical architecture and engineering execution.
+  manages:
+    - kind: Unit
+      name: platform
+  llm:
+    default:
+      - name: anthropic
+  integrations:
+    slack:
+      # Keys: botToken, signingSecret.
+      credentialsSecretRef:
+        name: cto-slack
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: ana
+spec:
+  companyRef:
+    name: nimbus
+  displayName: Ana (Platform Engineer)
+  email: ana@nimbus.example
+  unitRef:
+    name: platform
+  goal: Keep CI green and deploys boring.
+  responsibilities:
+    - Own the deploy pipeline
+  behavioralGuidelines:
+    - Prefer small pull requests.
+  tokenBudget:
+    day: 300000
+  llm:
+    default:
+      - name: anthropic
+    auxiliary:
+      - kind: PlatformLLMProvider
+        name: platform-claude
+  mcp:
+    - serverRef:
+        name: github
+      env:
+        - name: Authorization
+          valueFrom:
+            secretKeyRef:
+              name: ana-github
+              key: authorization
+  sandbox:
+    mcpServerRefs:
+      - name: github
+    env:
+      - name: GITHUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: ana-github
+            key: token
+  integrations:
+    slack:
+      # Keys: botToken, signingSecret.
+      credentialsSecretRef:
+        name: ana-slack
+    github:
+      tier: Review
+      repos:
+        - nimbus-hq/nimbuscore
+      app:
+        id: 1234567
+        slug: nimbus-ana
+        installationID: 89012345
+        # Keys: privateKey, webhookSecret.
+        credentialsSecretRef:
+          name: ana-github-app

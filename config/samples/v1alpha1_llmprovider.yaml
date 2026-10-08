@@ -1,9 +1,16 @@
+# The model Nimbus's seats run on. The Secret nimbus-anthropic holds the API
+# key under apiKey.
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
 metadata:
-  labels:
-    app.kubernetes.io/name: crewlet-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: llmprovider-sample
+  name: anthropic
 spec:
-  # TODO(user): Add fields here
+  companyRef:
+    name: nimbus
+  type: Anthropic
+  model: claude-sonnet-5
+  apiKeySecretRefs:
+    - name: nimbus-anthropic
+      key: apiKey
+  reasoningEffort: High
+  timeoutSeconds: 600

@@ -1,9 +1,27 @@
+# Slack and GitHub for Nimbus. Slack needs no company-wide credential: each
+# seat brings its own app. GitHub's company-wide webhook route is verified
+# with the secret in nimbus-github under webhookSecret.
 apiVersion: crewlet.ai/v1alpha1
 kind: Integration
 metadata:
-  labels:
-    app.kubernetes.io/name: crewlet-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: integration-sample
+  name: slack
 spec:
-  # TODO(user): Add fields here
+  companyRef:
+    name: nimbus
+  slack:
+    typingStatus: Addressed
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: github
+spec:
+  companyRef:
+    name: nimbus
+  github:
+    webhookSecretRef:
+      name: nimbus-github
+      key: webhookSecret
+    provisioning:
+      org: nimbus-hq
+      orgWebhook: Auto

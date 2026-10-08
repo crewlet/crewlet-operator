@@ -1,10 +1,11 @@
-## Append samples of your project ##
+# The Nimbus example company, one file per kind. Apply it into a namespace of
+# your own after creating the Secrets the objects reference.
 resources:
-- v1alpha1_company.yaml
 - v1alpha1_engineclass.yaml
-- v1alpha1_unit.yaml
-- v1alpha1_seat.yaml
+- v1alpha1_company.yaml
 - v1alpha1_llmprovider.yaml
 - v1alpha1_mcpserver.yaml
 - v1alpha1_integration.yaml
+- v1alpha1_unit.yaml
+- v1alpha1_seat.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

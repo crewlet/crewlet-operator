@@ -1,9 +1,53 @@
+# Nimbus, an example company. Its units, seats, model provider, tool server
+# and integrations are the other samples in this directory; each names the
+# Company in spec.companyRef. The Secrets they reference are not included:
+# create them in the same namespace before the company can be applied.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
-  labels:
-    app.kubernetes.io/name: crewlet-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: company-sample
+  name: nimbus
 spec:
-  # TODO(user): Add fields here
+  engineClassName: standard
+  companyName: Nimbus
+  mission: Turn any hardware into cloud-native infrastructure.
+  vision: >-
+    A control plane that turns bare metal, cloud and edge hardware into
+    Kubernetes clusters ready to serve AI workloads, and an open framework
+    that runs on them.
+  policies:
+    - Communicate decisions in writing.
+    - Never push directly to the default branch.
+  timeZone: Europe/Berlin
+  tracker:
+    backend: Native
+  knowledge:
+    backend: Native
+  tokenBudget:
+    day: 3000000
+    month: 40000000
+  llm:
+    order:
+      - name: anthropic
+  embeddings:
+    type: OpenAI
+    model: text-embedding-3-large
+    apiKeySecretRef:
+      name: nimbus-openai
+      key: apiKey
+  sandbox:
+    e2b:
+      apiKeySecretRef:
+        name: nimbus-e2b
+        key: apiKey
+    defaultCodingAgent: ClaudeCode
+    defaultPauseTTLSeconds: 1800
+  # Engine tuning without a typed field, written as Crewlet spells it and
+  # validated by the engine before every apply.
+  engineConfig:
+    turn_engine:
+      extension_enabled: true
+    learning:
+      enabled: true
+  config:
+    managementPolicy: Enforce
+  deletionPolicy: Retain
