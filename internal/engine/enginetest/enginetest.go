@@ -126,7 +126,7 @@ func Start(t testing.TB, opts ...Option) *Engine {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	bin := binary(t)
+	bin := Binary(t)
 	dir := t.TempDir()
 	e := &Engine{
 		OperatorToken: randomToken(t),
@@ -306,9 +306,13 @@ retention:
 `, port, OperatorTokenID, AccessTokenID)
 }
 
-// binary returns the crewlet binary to run, failing the test with what to do
-// when there is none.
-func binary(t testing.TB) string {
+// Binary returns the crewlet binary a test runs: the one BinaryEnv names, or
+// bin/crewlet at the root of the module, which `make crewlet` builds at the
+// pinned version. It fails the test, with what to do, when there is none:
+// never a skip, because a suite against the engine that did not run has not
+// passed. Start uses it; a suite that runs another crewlet subcommand, such
+// as `crewlet validate`, calls it directly so both find the same engine.
+func Binary(t testing.TB) string {
 	t.Helper()
 	if bin := os.Getenv(BinaryEnv); bin != "" {
 		// LookPath rather than Stat: it also refuses a file that is not

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 	"github.com/crewlet/crewlet-operator/internal/secretref"
 )
 
@@ -18,44 +19,6 @@ import (
 // tested against. They are what keeps the renderer and Crewlet from drifting
 // apart: a field Crewlet renamed or a rule it added fails here, not in a
 // cluster.
-
-// crewletBin is the engine binary the contract tests run: CREWLET_BIN, or
-// bin/crewlet at the root of the module. A missing binary fails the test
-// rather than skipping it, because a contract that was never checked is not
-// one that passed.
-func crewletBin(t *testing.T) string {
-	t.Helper()
-	bin := os.Getenv("CREWLET_BIN")
-	if bin == "" {
-		bin = filepath.Join(moduleRoot(t), "bin", "crewlet")
-	}
-	//nolint:gosec // G703: the path is the engine binary whoever runs the tests chose.
-	if _, err := os.Stat(bin); err != nil {
-		t.Fatalf("the contract tests run the Crewlet engine's own validator, and %v.\n"+
-			"Install the engine version the operator is tested against with `make crewlet` "+
-			"(it writes bin/crewlet), or point CREWLET_BIN at a crewlet binary.", err)
-	}
-	return bin
-}
-
-// moduleRoot is the directory of the go.mod the test package belongs to.
-func moduleRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatal("no go.mod above the test's working directory")
-		}
-		dir = parent
-	}
-}
 
 // validation is what `crewlet validate -json` prints.
 type validation struct {
@@ -72,7 +35,7 @@ type validation struct {
 func validate(t *testing.T, env map[string]string, args ...string) {
 	t.Helper()
 	//nolint:gosec // G204: the binary is the engine under test, chosen by whoever runs the tests.
-	cmd := exec.CommandContext(t.Context(), crewletBin(t), append([]string{"validate", "-json"}, args...)...)
+	cmd := exec.CommandContext(t.Context(), enginetest.Binary(t), append([]string{"validate", "-json"}, args...)...)
 	cmd.Dir = t.TempDir()
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + cmd.Dir}
 	for name, value := range env {
