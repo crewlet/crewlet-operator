@@ -28,6 +28,7 @@
 // here with a *RefError naming the object and field that hold the reference,
 // so the controller can report it on that object. Everything else Crewlet
 // refuses is left to the engine's dry run, whose problems name a path in the
-// rendered document; Document.Attribute maps such a path back to the object
-// that produced it.
+// rendered document; Document.Attribute maps such a path, read with PathOf
+// from the engine client's *engine.ValidationError, back to the object that
+// produced it.
 package render

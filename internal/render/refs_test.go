@@ -3,10 +3,12 @@ package render
 import (
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
+	"github.com/crewlet/crewlet-operator/internal/engine"
 )
 
 // TestCompanyRefusesWhatItCannotRender covers every reference between
@@ -193,71 +195,87 @@ func integration(in *Input, name string) *v1alpha1.Integration {
 }
 
 // TestAttributeFindsTheInnermostObject maps the paths of problems the
-// engine's dry run could report on the Nimbus document, as the engine prints
-// their segments, back to the objects that produced them.
+// engine's dry run could report on the Nimbus document, as the engine client
+// hands over their segments, back to the objects that produced them.
 func TestAttributeFindsTheInnermostObject(t *testing.T) {
 	doc, err := Company(companyCaseNamed(t, sampleCompany).input(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	company := ObjectRef{KindCompany, sampleCompany}
+	// Each path as the engine prints it beside the segments; none of these
+	// keys holds a dot, so the printed form spells the segments exactly.
 	for _, c := range []struct {
-		segments string
-		want     ObjectRef
+		path string
+		want ObjectRef
 	}{
-		{`["name"]`, company},
-		{`["turn_engine","extension_enabled"]`, company},
-		{`["providers","embeddings","model"]`, company},
-		{`["providers","llm_order",1]`, company},
-		{`["integrations","public_base_url"]`, company},
-		{`["providers","llm","anthropic","api_keys",0]`, ObjectRef{KindLLMProvider, "anthropic"}},
-		{`["providers","llm","platform-claude","model"]`, ObjectRef{KindEngineClass, "standard"}},
-		{`["mcp_servers",0,"url"]`, ObjectRef{KindMCPServer, sampleGitHub}},
-		{`["integrations","github","webhook_secret"]`, ObjectRef{KindIntegration, sampleGitHub}},
-		{`["integrations","slack","typing_status"]`, ObjectRef{KindIntegration, "slack"}},
-		{`["roles",0,"contact"]`, ObjectRef{KindSeat, seatJane}},
-		{`["units",0,"lead"]`, ObjectRef{KindUnit, unitEngineering}},
-		{`["units",0,"roles",0,"llm"]`, ObjectRef{KindSeat, seatCTO}},
-		{`["units",0,"children",0,"space"]`, ObjectRef{KindUnit, unitPlatform}},
-		{`["units",0,"children",0,"roles",0,"sandbox","env"]`, ObjectRef{KindSeat, seatAna}},
+		{"name", company},
+		{"turn_engine.extension_enabled", company},
+		{"providers.embeddings.model", company},
+		{"providers.llm_order[1]", company},
+		{"integrations.public_base_url", company},
+		{"providers.llm.anthropic.api_keys[0]", ObjectRef{KindLLMProvider, "anthropic"}},
+		{"providers.llm.platform-claude.model", ObjectRef{KindEngineClass, "standard"}},
+		{"mcp_servers[0].url", ObjectRef{KindMCPServer, sampleGitHub}},
+		{"integrations.github.webhook_secret", ObjectRef{KindIntegration, sampleGitHub}},
+		{"integrations.slack.typing_status", ObjectRef{KindIntegration, "slack"}},
+		{"roles[0].contact", ObjectRef{KindSeat, seatJane}},
+		{"units[0].lead", ObjectRef{KindUnit, unitEngineering}},
+		{"units[0].roles[0].llm", ObjectRef{KindSeat, seatCTO}},
+		{"units[0].children[0].space", ObjectRef{KindUnit, unitPlatform}},
+		{"units[0].children[0].roles[0].sandbox.env", ObjectRef{KindSeat, seatAna}},
 	} {
-		var p Path
-		if err := p.UnmarshalJSON([]byte(c.segments)); err != nil {
-			t.Fatal(err)
+		p := PathOf(segmentsOf(t, c.path))
+		if p.String() != c.path {
+			t.Fatalf("segmentsOf(%q) reads back as %q", c.path, p)
 		}
 		got, ok := doc.Attribute(p)
 		if !ok || got != c.want {
 			t.Errorf("Attribute(%s) = %v, %v; want %v", p, got, ok, c.want)
 		}
 	}
-	for _, segments := range []string{`null`, `["units",1]`, `["workers"]`} {
-		var p Path
-		if err := p.UnmarshalJSON([]byte(segments)); err != nil {
-			t.Fatal(err)
+	for _, path := range []string{"units[1]", "workers"} {
+		if got, ok := doc.Attribute(PathOf(segmentsOf(t, path))); ok {
+			t.Errorf("Attribute(%s) = %v; want no object for a path nothing rendered", path, got)
 		}
-		if got, ok := doc.Attribute(p); ok {
-			t.Errorf("Attribute(%s) = %v; want no object for a path nothing rendered", segments, got)
-		}
+	}
+	if got, ok := doc.Attribute(PathOf(nil)); ok {
+		t.Errorf("Attribute of a problem with no location = %v; want no object", got)
 	}
 }
 
-// TestPathReadsCrewletSegments decodes the segments of a problem as
-// `crewlet validate -json` and the dry run print them.
-func TestPathReadsCrewletSegments(t *testing.T) {
-	var p Path
-	if err := p.UnmarshalJSON([]byte(` [ "a.b", 0, "c", 12 ] `)); err != nil {
-		t.Fatal(err)
+// TestPathOfKeepsKeysAndIndexesApart reads the engine client's segments: an
+// index must become an int and a key a string, whatever either looks like,
+// or no Source path would ever match it.
+func TestPathOfKeepsKeysAndIndexesApart(t *testing.T) {
+	p := PathOf([]engine.Segment{{Key: "a.b"}, {Index: 0, IsIndex: true}, {Key: "0"}, {Key: ""}, {Index: 12, IsIndex: true}})
+	want := Path{"a.b", 0, "0", "", 12}
+	if !slices.Equal(p, want) {
+		t.Fatalf("PathOf = %#v, want %#v", p, want)
 	}
-	want := Path{"a.b", 0, "c", 12}
-	if !slices.Equal(p, want) || p.String() != "a.b[0].c[12]" {
-		t.Fatalf("decoded %#v (%s), want %#v", p, p, want)
+	if p := PathOf(nil); p != nil {
+		t.Fatalf("PathOf(nil) = %#v, want nil: a problem the engine could not locate has no path", p)
 	}
-	if err := p.UnmarshalJSON([]byte(`null`)); err != nil || p != nil {
-		t.Fatalf("null decoded to %#v, %v", p, err)
-	}
-	for _, bad := range []string{`[true]`, `[1.5]`, `{"a": 1}`} {
-		if err := p.UnmarshalJSON([]byte(bad)); err == nil {
-			t.Errorf("%s decoded to %#v; want an error", bad, p)
+}
+
+// segmentsOf takes apart a path the way the engine client hands it over:
+// keys separated by dots, list indexes as [i].
+func segmentsOf(t *testing.T, path string) []engine.Segment {
+	t.Helper()
+	var out []engine.Segment
+	for part := range strings.SplitSeq(path, ".") {
+		key, indexes, _ := strings.Cut(part, "[")
+		out = append(out, engine.Segment{Key: key})
+		if indexes == "" {
+			continue
+		}
+		for index := range strings.SplitSeq(strings.TrimSuffix(indexes, "]"), "][") {
+			i, err := strconv.Atoi(index)
+			if err != nil {
+				t.Fatalf("%q: index %q: %v", path, index, err)
+			}
+			out = append(out, engine.Segment{Index: i, IsIndex: true})
 		}
 	}
+	return out
 }

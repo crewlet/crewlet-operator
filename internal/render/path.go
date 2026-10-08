@@ -1,11 +1,10 @@
 package render
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/crewlet/crewlet-operator/internal/engine"
 )
 
 // Path is a location in a rendered document, in the form Crewlet reports a
@@ -45,37 +44,26 @@ func (p Path) HasPrefix(prefix Path) bool {
 	return true
 }
 
-// UnmarshalJSON reads the segments array of a Crewlet problem. Decoded into
-// a plain []any an index would arrive as a float64, which would never equal
-// the int segment a Source holds, so every number is read back as an int.
-func (p *Path) UnmarshalJSON(data []byte) error {
-	var raw []json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("a document path is an array of keys and indexes: %w", err)
-	}
-	if raw == nil {
-		*p = nil
+// PathOf is the Path of a problem the engine reported, from its segments,
+// so a refusal of an applied document can be attributed with Attribute.
+//
+// The engine client has already taken the segments apart; reading them from
+// the client's type rather than from the engine's JSON keeps one decoder of
+// that format, where a second one would have to agree with it on every
+// edge, such as an index arriving as a JSON number.
+func PathOf(segments []engine.Segment) Path {
+	if segments == nil {
 		return nil
 	}
-	out := make(Path, len(raw))
-	for i, element := range raw {
-		element = bytes.TrimSpace(element)
-		if len(element) > 0 && element[0] == '"' {
-			var key string
-			if err := json.Unmarshal(element, &key); err != nil {
-				return fmt.Errorf("path segment %d: %w", i, err)
-			}
-			out[i] = key
-			continue
+	p := make(Path, len(segments))
+	for i, s := range segments {
+		if s.IsIndex {
+			p[i] = s.Index
+		} else {
+			p[i] = s.Key
 		}
-		index, err := strconv.Atoi(string(element))
-		if err != nil {
-			return fmt.Errorf("path segment %d is %s: want a key or a list index", i, element)
-		}
-		out[i] = index
 	}
-	*p = out
-	return nil
+	return p
 }
 
 // ObjectRef names the custom resource a part of a document was rendered
