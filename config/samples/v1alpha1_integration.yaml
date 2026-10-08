@@ -1,0 +1,9 @@
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  labels:
+    app.kubernetes.io/name: crewlet-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: integration-sample
+spec:
+  # TODO(user): Add fields here

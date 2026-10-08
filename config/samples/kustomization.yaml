@@ -1,0 +1,10 @@
+## Append samples of your project ##
+resources:
+- v1alpha1_company.yaml
+- v1alpha1_engineclass.yaml
+- v1alpha1_unit.yaml
+- v1alpha1_seat.yaml
+- v1alpha1_llmprovider.yaml
+- v1alpha1_mcpserver.yaml
+- v1alpha1_integration.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples
