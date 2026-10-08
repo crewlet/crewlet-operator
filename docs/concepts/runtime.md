@@ -6,11 +6,9 @@ engine's API, runs every seat and runs the background workers. This page
 describes what the operator creates for it, how it is reached, how it changes,
 and what happens when the Company is suspended or deleted.
 
-> The operator creates and runs the engine today. It does not yet give the
-> engine its company document (the units, seats, providers and integrations
-> the other kinds declare): an engine starts unconfigured, its pod is not
-> ready, and the Company reports `Ready=False` with the reason
-> `ConfigPending`.
+An engine starts unconfigured, and its pod is not ready until the config
+reconciler has applied the company document: [How the document is
+applied](applying.md) describes that half.
 
 ## What the operator creates
 
@@ -184,7 +182,7 @@ other:
 |---|---|
 | `conditions` `Accepted`, `RuntimeReady`, `Exposed`, `Ready` | the runtime reconciler (this page) |
 | `observedGeneration`, `engine`, `topology`, `endpoints`, `apiAccessSecretRef` | the runtime reconciler |
-| `conditions` `SecretsSynced`, `ConfigApplied`; `config` | the config reconciler, which applies the company document |
+| `conditions` `SecretsSynced`, `ConfigApplied`; `config` | the config reconciler, which [applies the company document](applying.md) |
 
 `Ready` is `True` when `Accepted`, `RuntimeReady`, `Exposed` and
 `ConfigApplied` all are. Otherwise its reason is the reason of the first of

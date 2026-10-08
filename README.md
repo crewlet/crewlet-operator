@@ -13,14 +13,14 @@ keeps the engine's live configuration equal to what the resources say.
 >
 > Today the API server enforces the API's rules, and the operator accepts
 > each `Company` (its `EngineClass` resolves and its objects stay within the
-> class's limits) and runs its engine: the StatefulSet, storage, keyring and
-> API tokens, Services, webhook routes and network policy. It does not yet
-> apply the company document: the second reconciler below is the design the
-> API is built for, not what a cluster does today.
+> class's limits), runs its engine (the StatefulSet, storage, keyring and API
+> tokens, Services, webhook routes and network policy) and applies its
+> company document, with the Secret values it references, as its management
+> policy says.
 
 ## How it works
 
-The operator is designed around two reconcilers for every `Company`. The first
+The operator runs two reconcilers for every `Company`. The first
 makes the engine exist: from the `Company` and the `EngineClass` it names (a
 cluster-scoped set of platform defaults and limits, in the way a
 `StorageClass` is), it creates and owns the engine's StatefulSet, storage,

@@ -9,6 +9,7 @@ so these pages describe what exists today and grow with it.
 | [How the operator models a company](concepts/overview.md) | The kinds and how they relate, the identities that never change, credentials, management policies and status |
 | [Credentials](concepts/credentials.md) | Every position in a Crewlet company that holds a credential, and the field that fills it |
 | [What the engine is given](concepts/company-document.md) | The company document and the data pod's `crewlet.yaml` the operator renders from the objects, and what blocks a document |
+| [How the document is applied](concepts/applying.md) | What the operator does on every change: coalescing, the secret store, the dry run and the apply; the management policies and drift; what every object reports |
 | [How a company's engine runs](concepts/runtime.md) | The objects the operator creates for a Company, the data pod, exposure and network policy, versions, suspension, deletion, and who writes which status field |
 | [API reference](reference/api.md) | Every kind and field of `crewlet.ai/v1alpha1`, generated from the types with `make api-docs` |
 

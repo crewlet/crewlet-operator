@@ -10,11 +10,7 @@ This page explains the objects, how they fit together, how credentials reach
 the engine, and who owns the document once the engine runs. Every field is in
 the [API reference](../reference/api.md).
 
-> The `crewlet.ai/v1alpha1` API is alpha. The API server enforces every rule
-> on this page today, and the operator accepts each Company and runs its
-> engine. It does not yet apply the company document to the engine: what this
-> page says about rendering, applying and the children's status is the design
-> the config reconciler is being built to.
+> The `crewlet.ai/v1alpha1` API is alpha and may change without notice.
 
 ## The kinds
 
@@ -164,6 +160,8 @@ operator did not make:
 | `Observe` | It renders the document and compares it with the engine's, and never writes. A difference is reported only. | Migrating an engine that already runs; trying the operator out |
 | `Seed` | It writes the document once, into an engine that has none, and then leaves it to the engine and its dashboard. Later changes to the Company's units, seats and other objects are ignored, and their status says so. | Self-hosters who prefer to work in the dashboard |
 
+[How the document is applied](applying.md) says what each policy writes and
+reports, and how drift is told from the engine's own encoding of a document.
 Whatever the policy, a document is applied whole or not at all. When one
 object is wrong — a Seat whose Secret is missing, a Unit whose parent does not
 exist — the next revision waits, the object reports why in its conditions,

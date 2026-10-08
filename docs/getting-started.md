@@ -5,10 +5,7 @@ cluster, first as a process on your machine and then as a Deployment in the
 cluster. Every command is a make target or a tool the Makefile pins into
 `bin/`, so nothing beyond Go, Docker, make, git and curl has to be installed.
 
-> The `crewlet.ai/v1alpha1` API is defined and the API server enforces it.
-> The operator accepts each Company and runs its engine, but does not yet give
-> the engine its company document: the engine starts unconfigured, and the
-> Company stays `Ready=False` with the reason `ConfigPending`.
+> The `crewlet.ai/v1alpha1` API is alpha and may change without notice.
 
 ## Create a cluster
 
@@ -32,7 +29,9 @@ make run        # build and run the manager against the current kubeconfig
 your working tree. The manager runs with your kubeconfig's credentials rather
 than its own ServiceAccount, which is convenient while developing and means
 RBAC mistakes do not show up here; the in-cluster deployment below catches
-them.
+them. It also cannot reach the engines it runs: it addresses each by its
+pod's DNS name inside the cluster, so every Company reports
+`ConfigApplied=False` with the reason `EngineUnavailable`.
 
 In another terminal, list the kinds the CRDs added:
 
@@ -103,7 +102,19 @@ bin/kubectl get company nimbus -n nimbus \
 The objects reference Secrets (API keys, each agent's Slack and GitHub
 credentials) that the samples do not include, because a credential is never
 written into an object; [Credentials](concepts/credentials.md) lists which
-field reads which key. Try changing an object so that it breaks a rule, and the
+field reads which key. Until they exist, nothing is applied, and the Company
+and each object that references one say which Secret and key is missing:
+
+```bash
+bin/kubectl get company nimbus -n nimbus \
+  -o jsonpath='{.status.conditions[?(@.type=="SecretsSynced")].message}{"\n"}'
+bin/kubectl get seats -n nimbus \
+  -o jsonpath='{range .items[*]}{.metadata.name}: {.status.conditions[?(@.type=="ResolvedRefs")].message}{"\n"}{end}'
+```
+
+Once they do, the operator pushes their values into the engine's secret
+store and applies the document, and every object reports the revision it is
+in ([How the document is applied](concepts/applying.md)). Try changing an object so that it breaks a rule, and the
 API server refuses it with the rule's message:
 
 ```bash

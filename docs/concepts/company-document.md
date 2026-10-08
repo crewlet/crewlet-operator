@@ -8,9 +8,6 @@ into the pod. The operator renders both from the `crewlet.ai` objects. This
 page says what they contain, so that what the engine reports can be traced
 back to an object.
 
-> The renderer described here exists today; the reconcilers that apply its
-> output to a running engine are being built.
-
 Both documents are rendered deterministically: the same objects always give
 the same bytes, whatever order the API server lists them in. Keys are
 sorted, units and their child units are ordered by `metadata.name`, seats by
@@ -116,4 +113,6 @@ the reference:
 Everything else Crewlet checks itself, when the operator dry-runs the
 rendered document. Crewlet locates each problem by its path in the document
 (`units[0].roles[1].llm`), and the operator traces that path back to the
-object that rendered that part of it.
+object that rendered that part of it, which reports `Applied=False` with the
+reason `Invalid` and the engine's own words. [How the document is
+applied](applying.md) covers the rest of what is reported where.
