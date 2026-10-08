@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 	"github.com/crewlet/crewlet-operator/internal/secretref"
 	"github.com/crewlet/crewlet-operator/internal/secretsync"
@@ -35,6 +37,26 @@ type validation struct {
 // boots with an empty token.
 func validate(t *testing.T, env map[string]string, args ...string) {
 	t.Helper()
+	got, stdout, stderr, err := verdict(t, env, args...)
+	if !got.Valid || len(got.Problems) > 0 || err != nil {
+		t.Errorf("crewlet validate refused the document (exit %v):\n%s\n%s", err, stdout, stderr)
+	}
+	if strings.Contains(stderr, "config_reference_unresolved") {
+		t.Errorf("a reference resolved to nothing:\n%s", stderr)
+	}
+	// A warning is a document Crewlet runs but doubts: a lead or a manages
+	// entry naming nobody, a backup nobody owns. Every rendered document
+	// is meant to be one Crewlet has nothing to say about.
+	for _, w := range got.Warnings {
+		t.Errorf("crewlet validate warns: %s", w)
+	}
+}
+
+// verdict runs `crewlet validate -json args...` as validate describes and
+// returns what it printed, its exit error included, for a test that
+// expects a refusal.
+func verdict(t *testing.T, env map[string]string, args ...string) (validation, string, string, error) {
+	t.Helper()
 	//nolint:gosec // G204: the binary is the engine under test, chosen by whoever runs the tests.
 	cmd := exec.CommandContext(t.Context(), enginetest.Binary(t), append([]string{"validate", "-json"}, args...)...)
 	cmd.Dir = t.TempDir()
@@ -54,18 +76,7 @@ func validate(t *testing.T, env map[string]string, args ...string) {
 	if jsonErr := json.Unmarshal(stdout.Bytes(), &got); jsonErr != nil {
 		t.Fatalf("crewlet validate printed no verdict (%v, exit %v):\n%s\n%s", jsonErr, err, stdout.String(), stderr.String())
 	}
-	if !got.Valid || len(got.Problems) > 0 || err != nil {
-		t.Errorf("crewlet validate refused the document (exit %v):\n%s\n%s", err, stdout.String(), stderr.String())
-	}
-	if strings.Contains(stderr.String(), "config_reference_unresolved") {
-		t.Errorf("a reference resolved to nothing:\n%s", stderr.String())
-	}
-	// A warning is a document Crewlet runs but doubts: a lead or a manages
-	// entry naming nobody, a backup nobody owns. Every rendered document
-	// is meant to be one Crewlet has nothing to say about.
-	for _, w := range got.Warnings {
-		t.Errorf("crewlet validate warns: %s", w)
-	}
+	return got, stdout.String(), stderr.String(), err
 }
 
 // write puts data in a file of the test's own and returns its path.
@@ -108,6 +119,38 @@ func TestContractBootstrap(t *testing.T) {
 				t.Fatal(err)
 			}
 			validate(t, bootstrapEnv(doc), "-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML))
+		})
+	}
+}
+
+// TestContractStreamFloor ties the API's floor on data.storage.size to
+// Crewlet's on stream.store_max_bytes: the smallest volume an EngineClass
+// admits renders a stream Crewlet accepts, and a volume a gibibyte smaller
+// one it refuses, so the floor is the engine's and not a guess.
+func TestContractStreamFloor(t *testing.T) {
+	for _, c := range []struct {
+		size   string
+		accept bool
+	}{
+		{size: "7Gi", accept: true},
+		{size: "6Gi", accept: false},
+	} {
+		t.Run(c.size, func(t *testing.T) {
+			in := bootstrapCases()[0].input(t)
+			in.VolumeSize = resource.MustParse(c.size)
+			doc, err := Bootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			args := []string{"-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML)}
+			if c.accept {
+				validate(t, bootstrapEnv(doc), args...)
+				return
+			}
+			got, stdout, stderr, _ := verdict(t, bootstrapEnv(doc), args...)
+			if got.Valid || !strings.Contains(stdout+stderr, "store_max_bytes") {
+				t.Errorf("crewlet validate did not refuse stream.store_max_bytes for a %s volume:\n%s\n%s", c.size, stdout, stderr)
+			}
 		})
 	}
 }

@@ -155,6 +155,11 @@ spec:
                           store, the event stream and the store's cache. There is no default: how
                           much a tenant may keep is a platform decision.
 
+                          Three quarters of it is the engine's event stream, Crewlet's
+                          stream.store_max_bytes: the stream reserves its logs' ceilings against
+                          that share up front. Crewlet's own floor for it is 5Gi, so a volume
+                          must be at least 7Gi.
+
                           It applies to the data volumes of companies created after it is set.
                           An existing company's volumes keep the size they were created with:
                           they are claimed through the StatefulSet's volume claim templates,
@@ -163,8 +168,10 @@ spec:
                         pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                         x-kubernetes-int-or-string: true
                         x-kubernetes-validations:
-                        - message: size must be greater than zero
-                          rule: quantity(string(self)).isGreaterThan(quantity('0'))
+                        - message: 'size must be at least 7Gi: three quarters of the
+                            volume is the engine''s event stream, which Crewlet needs
+                            at least 5Gi for'
+                          rule: '!quantity(string(self)).isLessThan(quantity(''7Gi''))'
                       storageClassName:
                         description: |-
                           storageClassName is the StorageClass of the data volumes. Unset uses

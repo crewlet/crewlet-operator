@@ -33,4 +33,5 @@ store:
 stream:
   replicas: 1
   store_dir: /var/lib/crewlet/stream
+  store_max_bytes: 8053063680
   type: embedded

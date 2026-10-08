@@ -189,6 +189,9 @@ var _ = Describe("Company runtime", func() {
 			Class:   class,
 			Keyring: render.Keyring{ActiveKeyID: active, KeyIDs: ids},
 			Secrets: render.BootstrapSecrets{Keyring: keyringName, APITokens: tokensName, Objects: platformName},
+			// Every data StatefulSet here is created from newClass's
+			// volume, and keeps it when the class changes later.
+			VolumeSize: resource.MustParse("10Gi"),
 		})
 		Expect(err).NotTo(HaveOccurred())
 		return doc
@@ -583,6 +586,10 @@ var _ = Describe("Company runtime", func() {
 		Expect(after.Spec.Template.Annotations[BootstrapHashAnnotation]).To(Equal(expectedBootstrap(company, class, "key-1", "key-1").Hash))
 		Expect(after.Spec.Template.Annotations[BootstrapHashAnnotation]).NotTo(Equal(before.Spec.Template.Annotations[BootstrapHashAnnotation]))
 		Expect(after.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests.Storage().String()).To(Equal("10Gi"))
+		bootstrap := &corev1.ConfigMap{}
+		get(bootstrap, "nimbus-bootstrap-data")
+		Expect(bootstrap.Data["crewlet.yaml"]).To(ContainSubstring("store_max_bytes: 8053063680"),
+			"the event stream is three quarters of the 10Gi volume the pod keeps, not of the class's new 50Gi")
 	})
 
 	It("rolls the pods when a Secret their environment reads changes", func() {

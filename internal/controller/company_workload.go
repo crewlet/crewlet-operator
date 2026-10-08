@@ -10,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -478,6 +479,22 @@ func (r *CompanyReconciler) existingStatefulSet(ctx context.Context, c *crewleta
 		return nil, fmt.Errorf("reading StatefulSet %s/%s: %w", c.Namespace, dataStatefulSetName(c), err)
 	}
 	return sts, nil
+}
+
+// dataVolumeSize is the capacity the data pods' volume claims request: the
+// existing StatefulSet's own claim template, which a change of the class's
+// storage does not move, or the class's for a StatefulSet not created yet.
+// The engine's event stream is sized from it, so it has to be the volume
+// the pod actually gets.
+func dataVolumeSize(existing *appsv1.StatefulSet, class *crewletaiv1alpha1.EngineClass) resource.Quantity {
+	if existing != nil {
+		for i := range existing.Spec.VolumeClaimTemplates {
+			if claim := &existing.Spec.VolumeClaimTemplates[i]; claim.Name == dataVolume {
+				return *claim.Spec.Resources.Requests.Storage()
+			}
+		}
+	}
+	return *class.Spec.Data.Storage.Size
 }
 
 // runningImage is the engine image in a StatefulSet's pod template.

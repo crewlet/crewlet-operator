@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/yaml"
 )
 
@@ -36,7 +37,10 @@ func bootstrapCases() []bootstrapCase {
 func (c bootstrapCase) input(t *testing.T) *BootstrapInput {
 	t.Helper()
 	o := load(t, filepath.Join("testdata", "bootstrap", c.name+".input.yaml"))
-	return &BootstrapInput{Company: o.company, Class: o.class, Keyring: c.keyring, Secrets: testSecrets}
+	return &BootstrapInput{
+		Company: o.company, Class: o.class, Keyring: c.keyring, Secrets: testSecrets,
+		VolumeSize: *o.class.Spec.Data.Storage.Size,
+	}
 }
 
 // TestBootstrapGolden pins each Tier A and the environment it needs.
@@ -157,5 +161,28 @@ func TestBootstrapPlacesTheDataPodInTheDataPool(t *testing.T) {
 	}
 	if got := flatten(t, doc.YAML)["node.labels."+PoolLabel]; got != DataPool {
 		t.Fatalf("node.labels[%s] = %v, want %s", PoolLabel, got, DataPool)
+	}
+}
+
+// TestBootstrapBoundsTheStreamByTheVolume pins the event stream's share of
+// the volume: three quarters of the claim the pod runs on, whatever the
+// class says now, since the claim is what the pod was given.
+func TestBootstrapBoundsTheStreamByTheVolume(t *testing.T) {
+	in := bootstrapCases()[0].input(t)
+	in.VolumeSize = resource.MustParse("8Gi")
+	doc, err := Bootstrap(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Stream struct {
+			StoreMaxBytes int64 `json:"store_max_bytes"`
+		} `json:"stream"`
+	}
+	if err := yaml.Unmarshal(doc.YAML, &got); err != nil {
+		t.Fatal(err)
+	}
+	if want := int64(6 << 30); got.Stream.StoreMaxBytes != want {
+		t.Fatalf("stream.store_max_bytes = %d for an 8Gi volume, want %d", got.Stream.StoreMaxBytes, want)
 	}
 }

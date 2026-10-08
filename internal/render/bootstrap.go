@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/yaml"
 
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -63,6 +64,11 @@ type BootstrapInput struct {
 	// Secrets names the Secrets, in the Company's namespace, that the pod's
 	// environment reads the document's references from.
 	Secrets BootstrapSecrets
+	// VolumeSize is the capacity the data pod's volume claim requests: the
+	// data StatefulSet's own claim template once it exists, which a later
+	// change of the class does not move, and the class's data.storage.size
+	// before.
+	VolumeSize resource.Quantity
 }
 
 // Keyring is the engine's secret-store keyring: the keys it can open, and
@@ -159,10 +165,20 @@ type s3Doc struct {
 }
 
 type streamDoc struct {
-	Type     string `json:"type"`
-	StoreDir string `json:"store_dir"`
-	Replicas int    `json:"replicas"`
+	Type          string `json:"type"`
+	StoreDir      string `json:"store_dir"`
+	StoreMaxBytes int64  `json:"store_max_bytes"`
+	Replicas      int    `json:"replicas"`
 }
+
+// The engine's event stream is given streamShareNumerator /
+// streamShareDenominator of the data volume: three quarters, the share
+// Crewlet's embedded broker takes of the free space it finds when nothing
+// sets one. The rest is the store and its snapshots.
+const (
+	streamShareNumerator   = 3
+	streamShareDenominator = 4
+)
 
 type coordinationDoc struct {
 	Type string `json:"type"`
@@ -252,7 +268,18 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 			// setting it from the first boot means adding seat pods later
 			// changes nothing on the data pod's disk.
 			StoreDir: DataDir + "/stream",
-			Replicas: 1,
+			// Declared rather than left to the engine, which takes three
+			// quarters of the free space it finds on the filesystem at
+			// boot. That is the volume on a host with one engine, but not
+			// under a provisioner that carves claims out of one node
+			// filesystem (local-path, hostPath, kind's default): there
+			// every engine on the node sees the node's whole free space,
+			// they over-commit it between them, and the engine whose
+			// stream is created last is refused with "insufficient
+			// storage resources available". The claim's size is the space
+			// this engine was promised, so the share is taken of that.
+			StoreMaxBytes: in.VolumeSize.Value() / streamShareDenominator * streamShareNumerator,
+			Replicas:      1,
 		},
 		Coordination: coordinationDoc{Type: "embedded-kv"},
 		Secrets:      keyring,

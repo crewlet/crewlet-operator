@@ -117,6 +117,7 @@ func (r *CompanyReconciler) reconcileWorkload(
 			APITokens: tokens.Name,
 			Objects:   platformSecretName(c),
 		},
+		VolumeSize: dataVolumeSize(existing, class),
 	})
 	if err != nil {
 		return r.holdBack(ctx, c, existing, crewletaiv1alpha1.ReasonKeyringInvalid,

@@ -76,6 +76,17 @@ later adds pods of other kinds, so that adding them moves nothing on the
 data pod's disk: coordination is Crewlet's replicated `embedded-kv`, and the
 event stream is persisted on the data volume under `/var/lib/crewlet`.
 
+The event stream is given three quarters of the data volume
+(`stream.store_max_bytes`), measured from the size the pod's volume claim
+requests. Left unset, Crewlet would take three quarters of the free space it
+finds on the filesystem, which is the volume only when the volume is a disk
+of its own: a provisioner that carves claims out of one node filesystem
+(local-path, hostPath, kind's default) shows every engine on the node the
+node's whole free space, and engines that share it over-commit it until the
+last one is refused with `insufficient storage resources available`. Crewlet
+needs at least 5 GiB for the stream, so an EngineClass's `data.storage.size`
+is at least `7Gi`.
+
 It holds no credential either. It refers to environment variables, which the
 pod reads from Secrets the operator owns in the Company's namespace:
 
