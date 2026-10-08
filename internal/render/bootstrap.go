@@ -265,7 +265,7 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 			Endpoint:  s3.Endpoint,
 			Region:    s3.Region,
 			Bucket:    s3.Bucket,
-			Prefix:    expandTemplate(cmp.Or(s3.Prefix, defaultS3Prefix), in.Company),
+			Prefix:    ExpandTemplate(cmp.Or(s3.Prefix, defaultS3Prefix), in.Company),
 			PathStyle: s3.PathStyle != nil && *s3.PathStyle,
 		}
 		// Without credentials the engine uses the SDK's default chain: the
@@ -327,9 +327,11 @@ func secretEnv(name, secret, key string) corev1.EnvVar {
 	}}
 }
 
-// expandTemplate replaces the variables of an EngineClass template with a
-// Company's namespace, name and UID.
-func expandTemplate(template string, c *v1alpha1.Company) string {
+// ExpandTemplate replaces the variables of an EngineClass template (an S3
+// prefix, a host name, a TLS Secret's name) with a Company's namespace, name
+// and UID. The API server has already refused a template with any other
+// variable, so nothing else needs replacing.
+func ExpandTemplate(template string, c *v1alpha1.Company) string {
 	return strings.NewReplacer(
 		"{{namespace}}", c.Namespace,
 		"{{name}}", c.Name,
