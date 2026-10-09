@@ -1,6 +1,7 @@
 // Package engine is a typed client for the REST API of a Crewlet engine: its
 // probes, the company document under /config, the encrypted secret store under
-// /secrets, and the integration status under /integrations.
+// /secrets, the integration status under /integrations, and the fleet's nodes
+// and seat leases under /fleet.
 //
 // It speaks the engine's API as the engine documents it
 // (docs/reference/api-endpoints.md in github.com/crewlet/crewlet) and maps
@@ -175,36 +176,71 @@ func (c *Client) Health(ctx context.Context) (Health, error) {
 	return h, nil
 }
 
-// LastApply returns what the answering node recorded about its last attempt
-// to apply an activation epoch, read from its own row of the engine's /fleet.
+// Fleet returns the engine's view of its fleet, GET /fleet: every live node
+// with its roles, labels and last apply, which node holds each seat's lease,
+// and the agent seats no live node may run.
 //
-// It is what tells an apply in progress from a failed one. /health cannot:
-// the engine counts an attempt before it makes it, so while a revision is
-// being applied its posture already reads as diverged (isolated, on a single
-// node) and turns serve when the apply ends, whereas the record is written
-// only once the attempt has ended, with its outcome. A node that has
-// recorded no attempt, or that the fleet does not list yet, is the zero
-// ApplyRecord.
-func (c *Client) LastApply(ctx context.Context) (ApplyRecord, error) {
+// Every node answers the same, read from the coordination store's lease
+// table rather than from the node that served the request, so the answer
+// describes the whole company whichever data pod the operator reaches. A
+// lease table the engine cannot read is its 503, an *APIError, never an
+// empty Fleet: "no node is live" is a claim, and a store blip is not
+// evidence for it.
+func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 	var answer struct {
 		ThisNode string `json:"this_node"`
 		Nodes    []struct {
-			ID         string `json:"id"`
-			Epoch      int64  `json:"config_epoch"`
-			RevisionID string `json:"config_revision_id"`
-			Status     string `json:"config_status"`
-			Error      string `json:"config_error"`
+			ID         string            `json:"id"`
+			Roles      []string          `json:"roles"`
+			Broker     string            `json:"broker"`
+			Labels     map[string]string `json:"labels"`
+			Seats      int               `json:"seats"`
+			Epoch      int64             `json:"config_epoch"`
+			RevisionID string            `json:"config_revision_id"`
+			Status     string            `json:"config_status"`
+			Error      string            `json:"config_error"`
 		} `json:"nodes"`
+		Seats []struct {
+			Handle     string `json:"handle"`
+			Node       string `json:"node"`
+			Epoch      int64  `json:"epoch"`
+			AcquiredAt string `json:"acquired_at"`
+		} `json:"seats"`
+		// Only the handle of an unplaceable seat is read: the engine
+		// renders its placement for a person, and the operator knows
+		// where it placed the seat.
+		Unplaceable []struct {
+			Handle string `json:"handle"`
+		} `json:"unplaceable"`
+		UnmannedRoles []string `json:"unmanned_roles"`
+		TargetEpoch   int64    `json:"target_epoch"`
 	}
 	if err := c.call(ctx, request{method: http.MethodGet, path: "/fleet"}, http.StatusOK, &answer); err != nil {
-		return ApplyRecord{}, err
+		return Fleet{}, err
 	}
-	for _, n := range answer.Nodes {
-		if n.ID == answer.ThisNode {
-			return ApplyRecord{Epoch: n.Epoch, RevisionID: n.RevisionID, Status: ApplyStatus(n.Status), Error: n.Error}, nil
+	f := Fleet{ThisNode: answer.ThisNode, UnmannedRoles: answer.UnmannedRoles, TargetEpoch: answer.TargetEpoch}
+	for i := range answer.Nodes {
+		n := &answer.Nodes[i]
+		f.Nodes = append(f.Nodes, FleetNode{
+			ID: n.ID, Roles: n.Roles, Broker: BrokerKind(n.Broker), Labels: n.Labels, Seats: n.Seats,
+			Apply: ApplyRecord{Epoch: n.Epoch, RevisionID: n.RevisionID, Status: ApplyStatus(n.Status), Error: n.Error},
+		})
+	}
+	for _, s := range answer.Seats {
+		lease := SeatLease{Handle: s.Handle, Node: s.Node, Epoch: s.Epoch}
+		if s.AcquiredAt != "" {
+			at, err := time.Parse(time.RFC3339Nano, s.AcquiredAt)
+			if err != nil {
+				return Fleet{}, fmt.Errorf("GET /fleet: seat %q: acquired_at %q is not an RFC 3339 time: %w", s.Handle, s.AcquiredAt, err)
+			}
+			lease.AcquiredAt = at
 		}
+		f.Seats = append(f.Seats, lease)
 	}
-	return ApplyRecord{}, nil
+	for _, u := range answer.Unplaceable {
+		f.Unplaceable = append(f.Unplaceable, u.Handle)
+	}
+	return f, nil
 }
 
 // ActiveConfig returns the company document the engine runs, redacted, with

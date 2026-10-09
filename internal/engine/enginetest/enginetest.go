@@ -19,10 +19,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -126,6 +128,13 @@ type options struct {
 	company []byte
 	tierA   *tierAOption
 	writers []string
+	node    *nodeOption
+}
+
+// nodeOption is the node block of enginetest's own Tier A (WithNode).
+type nodeOption struct {
+	id     string
+	labels map[string]string
 }
 
 // tierAOption is a Tier A of the caller's (WithTierA).
@@ -157,6 +166,16 @@ func WithTierA(operator, access string, render func(port int, dir string) []byte
 // the caller's to write, list included.
 func WithCompanyWriters(ids ...string) Option {
 	return func(o *options) { o.writers = ids }
+}
+
+// WithNode names the engine's node and gives it labels, the node block of
+// enginetest's own Tier A, so that a test can run the engine as the node a
+// rendered document places its seats on: a seat whose role.placement asks for
+// a label the node does not carry is one the engine never runs. Without it the
+// node has the engine's default id and no label. It does not combine with
+// WithTierA, whose Tier A, node block included, is the caller's.
+func WithNode(id string, labels map[string]string) Option {
+	return func(o *options) { o.node = &nodeOption{id: id, labels: labels} }
 }
 
 // WithCompany seeds the engine with document as its first company revision
@@ -205,7 +224,11 @@ func Start(t T, opts ...Option) *Engine {
 		t.Fatalf("enginetest: WithTierA and WithCompanyWriters do not combine: " +
 			"the engine runs the caller's Tier A, so the writers go in it as api.auth.company_writers")
 	}
-	render := func(port int) []byte { return tierA(port, o.writers) }
+	if o.tierA != nil && o.node != nil {
+		t.Fatalf("enginetest: WithTierA and WithNode do not combine: " +
+			"the engine runs the caller's Tier A, so the node goes in it as its node block")
+	}
+	render := func(port int) []byte { return tierA(port, o.writers, o.node) }
 	if custom := o.tierA; custom != nil {
 		e.OperatorToken, e.AccessToken = custom.operator, custom.access
 		env = append([]string{"PATH=" + os.Getenv("PATH"), "HOME=" + dir}, custom.env...)
@@ -349,12 +372,24 @@ const streamMaxBytes = 5 << 30
 // and the API on the loopback interface with two tokens. Every credential is a
 // ${VAR} the engine resolves from the environment Start gives it, so none is
 // written to disk. writers, when there are any, are api.auth.company_writers.
-func tierA(port int, writers []string) []byte {
+func tierA(port int, writers []string, node *nodeOption) []byte {
 	var companyWriters string
 	if len(writers) > 0 {
 		companyWriters = "    company_writers: [" + strings.Join(writers, ", ") + "]\n"
 	}
-	return fmt.Appendf(nil, `logging:
+	var nodeBlock strings.Builder
+	if node != nil {
+		// Quoted, as JSON strings are YAML strings: a label value such as
+		// "true" or "1" stays a string.
+		fmt.Fprintf(&nodeBlock, "node:\n  id: %q\n", node.id)
+		if len(node.labels) > 0 {
+			nodeBlock.WriteString("  labels:\n")
+			for _, k := range slices.Sorted(maps.Keys(node.labels)) {
+				fmt.Fprintf(&nodeBlock, "    %q: %q\n", k, node.labels[k])
+			}
+		}
+	}
+	return fmt.Appendf(nil, `%slogging:
   level: info
   format: json
 stream:
@@ -381,7 +416,7 @@ api:
       material: "${ENGINETEST_SECRET_KEY}"
 retention:
   backup_owner: enginetest
-`, streamMaxBytes, port, OperatorTokenID, AccessTokenID, companyWriters)
+`, nodeBlock.String(), streamMaxBytes, port, OperatorTokenID, AccessTokenID, companyWriters)
 }
 
 // Binary returns the crewlet binary a test runs: the one BinaryEnv names, or

@@ -280,3 +280,128 @@ type IntegrationSurface struct {
 	// surface.
 	Seats []string
 }
+
+// Fleet is the engine's view of its fleet: the live nodes, the seat leases and
+// the agent seats no live node may run, read from the coordination store's
+// lease table, so every node of the fleet answers the same.
+type Fleet struct {
+	// ThisNode is the id of the node that answered.
+	ThisNode string
+
+	// Nodes are the live nodes, by id.
+	Nodes []FleetNode
+
+	// Seats are the agent seats some live node holds the lease of, by
+	// handle. A seat that is not here is held by no node: its messages wait
+	// for one.
+	Seats []SeatLease
+
+	// Unplaceable are the handles of the agent seats whose placement no
+	// live node that runs seats matches. An agent seat that is neither held
+	// nor unplaceable is one a node may take and has not yet: the engine
+	// claims a few seats every five seconds.
+	Unplaceable []string
+
+	// UnmannedRoles are the node roles (data, ingress, seats, workers) no
+	// live node runs.
+	UnmannedRoles []string
+
+	// TargetEpoch is the activation epoch the fleet converges on, zero when
+	// nothing has been activated or the engine could not read it.
+	TargetEpoch int64
+}
+
+// Holder returns the lease of the seat with handle, and whether a node holds
+// it.
+func (f *Fleet) Holder(handle string) (SeatLease, bool) {
+	for i := range f.Seats {
+		if f.Seats[i].Handle == handle {
+			return f.Seats[i], true
+		}
+	}
+	return SeatLease{}, false
+}
+
+// Node returns the live node with id, and whether there is one.
+func (f *Fleet) Node(id string) (FleetNode, bool) {
+	for i := range f.Nodes {
+		if f.Nodes[i].ID == id {
+			return f.Nodes[i], true
+		}
+	}
+	return FleetNode{}, false
+}
+
+// LastApply is what the answering node recorded about its last attempt to
+// apply an activation epoch.
+//
+// It is what tells an apply in progress from a failed one. /health cannot:
+// the engine counts an attempt before it makes it, so while a revision is
+// being applied its posture already reads as diverged (isolated, on a single
+// node) and turns serve when the apply ends, whereas the record is written
+// only once the attempt has ended, with its outcome. A node that has
+// recorded no attempt, or that the fleet does not list yet, is the zero
+// ApplyRecord.
+func (f *Fleet) LastApply() ApplyRecord {
+	n, _ := f.Node(f.ThisNode)
+	return n.Apply
+}
+
+// FleetNode is one live node of a fleet, as its presence lease describes it.
+type FleetNode struct {
+	// ID is the node's id: Tier A's node.id, which the operator sets to
+	// the pod's name.
+	ID string
+
+	// Roles are the node's roles: data, ingress, seats, workers.
+	Roles []string
+
+	// Broker is how the node's broker takes part in the fleet's.
+	Broker BrokerKind
+
+	// Labels are the node's Tier A node.labels, which a seat's
+	// role.placement matches.
+	Labels map[string]string
+
+	// Seats is how many seats the node holds.
+	Seats int
+
+	// Apply is the node's record of its last attempt to apply an epoch.
+	Apply ApplyRecord
+}
+
+// BrokerKind is how a node's broker takes part in the fleet's.
+type BrokerKind string
+
+// The broker kinds the engine reports. A newer engine may report one this
+// client does not know, which the engine itself calls "unknown".
+const (
+	// BrokerMember is an embedded broker that holds the streams and votes
+	// in the JetStream cluster: a data pod.
+	BrokerMember BrokerKind = "member"
+
+	// BrokerLeaf is an embedded broker that joins the members as a leaf
+	// and holds nothing: a seat pod.
+	BrokerLeaf BrokerKind = "leaf"
+
+	// BrokerClient is a node on an external NATS cluster.
+	BrokerClient BrokerKind = "client"
+)
+
+// SeatLease is which node holds a seat's lease, and so runs the seat.
+type SeatLease struct {
+	// Handle is the seat's handle.
+	Handle string
+
+	// Node is the id of the node that holds the lease.
+	Node string
+
+	// Epoch is the lease's fencing epoch, which moves when the seat
+	// changes hands.
+	Epoch int64
+
+	// AcquiredAt is when the node took the seat, on the coordination
+	// store's clock: it moves with Epoch, never with a renewal. Zero when
+	// the engine did not say.
+	AcquiredAt time.Time
+}

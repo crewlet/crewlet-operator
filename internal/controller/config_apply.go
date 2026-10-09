@@ -139,12 +139,13 @@ func (run *configRun) verifyApplied(
 	// before it makes it, so its posture reads diverged for as long as an
 	// apply that will succeed takes. Only the record of an attempt that
 	// ended does.
-	record, err := eng.LastApply(ctx)
+	fleet, err := eng.Fleet(ctx)
 	if err != nil {
 		run.unavailable(err)
 		run.applied = appliedVerdict{}
 		return ctrl.Result{RequeueAfter: engineRetryInterval}
 	}
+	record := fleet.LastApply()
 	switch {
 	case record.Status.Failed() && record.Epoch >= target && record.Epoch > health.AppliedEpoch:
 		account := record.Error

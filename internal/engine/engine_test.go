@@ -96,12 +96,53 @@ func TestEngineHealthReportsTheAppliedEpoch(t *testing.T) {
 		}
 		return nil
 	})
-	record, err := client.LastApply(ctx)
+	fleet, err := client.Fleet(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (engine.ApplyRecord{Epoch: applied.Epoch, RevisionID: applied.RevisionID, Status: engine.ApplyOK}); record != want {
+	if record, want := fleet.LastApply(), (engine.ApplyRecord{Epoch: applied.Epoch, RevisionID: applied.RevisionID, Status: engine.ApplyOK}); record != want {
 		t.Fatalf("LastApply() = %+v, want %+v", record, want)
+	}
+}
+
+// TestEngineFleetNamesTheSeatsHolder pins the read of /fleet against the
+// engine: the answering node, its roles, broker and labels, the seat it holds
+// because its labels match the seat's placement, and a seat whose placement
+// no node matches, which no node holds and the engine calls unplaceable.
+func TestEngineFleetNamesTheSeatsHolder(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	const node = "nimbus-data-0"
+	labels := map[string]string{poolLabel: dataPool}
+	company := enginetest.MinimalCompany + `    placement:
+      labels: {crewlet.ai/pool: data}
+  - name: Bo
+    goal: "Answer what Ana cannot"
+    placement:
+      labels: {crewlet.ai/pool: general}
+`
+	client := enginetest.Start(t, enginetest.WithNode(node, labels), enginetest.WithCompany([]byte(company))).Client()
+
+	var fleet engine.Fleet
+	eventually(t, "the node holding ana", func() error {
+		var err error
+		if fleet, err = client.Fleet(ctx); err != nil {
+			return err
+		}
+		if lease, ok := fleet.Holder("ana"); !ok || lease.Node != node || lease.Epoch < 1 || lease.AcquiredAt.IsZero() {
+			return fmt.Errorf("Holder(ana) = %+v, %t, want %s with an epoch and a tenure", lease, ok, node)
+		}
+		return nil
+	})
+	self, ok := fleet.Node(node)
+	if fleet.ThisNode != node || !ok || self.Broker != engine.BrokerMember || self.Labels[poolLabel] != dataPool ||
+		!slices.Contains(self.Roles, "seats") || self.Seats != 1 {
+		t.Errorf("Fleet() = this node %q, node %+v (%t); want %s, a member labelled for data that holds one seat",
+			fleet.ThisNode, self, ok, node)
+	}
+	if _, held := fleet.Holder("bo"); held || !slices.Equal(fleet.Unplaceable, []string{"bo"}) {
+		t.Errorf("bo: held %t, unplaceable %v; want held by nobody and unplaceable, as no node is labelled for its pool",
+			held, fleet.Unplaceable)
 	}
 }
 
