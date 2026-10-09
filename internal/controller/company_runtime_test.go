@@ -36,6 +36,9 @@ import (
 // operatorNamespace stands for the namespace the operator runs in.
 const operatorNamespace = "crewlet-system"
 
+// operatorPodLabels stand for the labels of the operator's pods.
+var operatorPodLabels = map[string]string{"app.kubernetes.io/name": "crewlet-operator"}
+
 // The Company every runtime spec creates, the names of what the operator
 // creates for it, and of what the specs create around it.
 const (
@@ -69,7 +72,44 @@ func newReconciler() *CompanyReconciler {
 		APIReader:         k8sClient,
 		GatewayAPI:        true,
 		OperatorNamespace: operatorNamespace,
+		OperatorPodLabels: operatorPodLabels,
 	}
+}
+
+// egressRules describes a NetworkPolicy's egress rules, a line for each
+// rule's ports and for each peer it admits, so that a test can state them.
+func egressRules(policy *networkingv1.NetworkPolicy) []string {
+	var out []string
+	for _, rule := range policy.Spec.Egress {
+		if len(rule.Ports) > 0 {
+			ports := make([]string, 0, len(rule.Ports))
+			for _, p := range rule.Ports {
+				ports = append(ports, fmt.Sprintf("%s/%s", *p.Protocol, p.Port))
+			}
+			out = append(out, "ports "+strings.Join(ports, " "))
+		}
+		for _, peer := range rule.To {
+			switch {
+			case peer.IPBlock != nil:
+				out = append(out, fmt.Sprintf("to %s except %v", peer.IPBlock.CIDR, peer.IPBlock.Except))
+			case peer.NamespaceSelector == nil:
+				out = append(out, fmt.Sprintf("to pods {%s} in the policy's namespace", selectorText(peer.PodSelector)))
+			default:
+				out = append(out, fmt.Sprintf("to pods {%s} in namespaces {%s}",
+					selectorText(peer.PodSelector), selectorText(peer.NamespaceSelector)))
+			}
+		}
+	}
+	return out
+}
+
+// selectorText is a peer's selector as text; "any" for one that is unset or
+// empty, which a NetworkPolicy peer reads as selecting everything.
+func selectorText(s *metav1.LabelSelector) string {
+	if s == nil || (len(s.MatchLabels) == 0 && len(s.MatchExpressions) == 0) {
+		return "any"
+	}
+	return metav1.FormatLabelSelector(s)
 }
 
 var _ = Describe("Company runtime", func() {
@@ -356,20 +396,24 @@ var _ = Describe("Company runtime", func() {
 		get(policy, engineName)
 		ownedByCompany(policy, company)
 		Expect(policy.Spec.PodSelector.MatchLabels).To(Equal(dataSelector))
-		Expect(policy.Spec.PolicyTypes).To(Equal([]networkingv1.PolicyType{networkingv1.PolicyTypeIngress}))
+		Expect(policy.Spec.PolicyTypes).To(Equal([]networkingv1.PolicyType{networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress}))
 		Expect(policy.Spec.Ingress).To(HaveLen(1))
 		rule := policy.Spec.Ingress[0]
 		Expect(rule.Ports).To(HaveLen(1))
 		Expect(rule.Ports[0].Port.IntValue()).To(Equal(8080))
-		Expect(rule.From).To(ConsistOf(
-			networkingv1.NetworkPolicyPeer{NamespaceSelector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{crewletaiv1alpha1.APIConsumerNamespaceLabel: "true"},
-			}},
-			networkingv1.NetworkPolicyPeer{NamespaceSelector: &metav1.LabelSelector{
-				MatchExpressions: []metav1.LabelSelectorRequirement{{
-					Key: corev1.LabelMetadataName, Operator: metav1.LabelSelectorOpIn, Values: []string{operatorNamespace},
-				}},
-			}},
+		// The operator's pods, and not the rest of its namespace.
+		Expect(rule.From).To(ConsistOf(networkingv1.NetworkPolicyPeer{
+			NamespaceSelector: &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{
+				Key: corev1.LabelMetadataName, Operator: metav1.LabelSelectorOpIn, Values: []string{operatorNamespace},
+			}}},
+			PodSelector: &metav1.LabelSelector{MatchLabels: operatorPodLabels},
+		}))
+		By("letting the engine reach DNS, its own namespace and outside the cluster, but no metadata endpoint")
+		Expect(egressRules(policy)).To(ConsistOf(
+			"ports UDP/53 TCP/53",
+			"to pods {any} in the policy's namespace",
+			"to "+anyIPv4+" except [169.254.169.254/32]",
+			"to "+anyIPv6+" except [fd00:ec2::254/128]",
 		))
 
 		By("routing nothing from outside the cluster")
@@ -386,6 +430,39 @@ var _ = Describe("Company runtime", func() {
 		Expect(ready.Status).To(Equal(metav1.ConditionFalse))
 		Expect(ready.Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
 		Expect(company.Status.Endpoints.PublicBaseURL).To(BeEmpty())
+	})
+
+	It("admits the class's API consumers and narrows the engine's egress as the class says", func() {
+		platform := metav1.LabelSelector{MatchLabels: map[string]string{corev1.LabelMetadataName: "platform"}}
+		class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.NetworkPolicy = crewletaiv1alpha1.NetworkPolicySettings{
+				Mode: crewletaiv1alpha1.NetworkPolicyIsolated,
+				APIConsumers: []crewletaiv1alpha1.NetworkPolicyPeer{{
+					NamespaceSelector: &platform,
+					PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{"app": "control-plane"}},
+				}},
+				Egress: crewletaiv1alpha1.NetworkPolicyEgress{
+					ExceptCIDRs: []string{"10.0.0.0/8", "fd00:10::/48", "192.168.0.0/16"},
+					To:          []crewletaiv1alpha1.NetworkPolicyPeer{{NamespaceSelector: &platform}},
+				},
+			}
+		})
+		reconciled(newCompany(class.Name))
+
+		policy := &networkingv1.NetworkPolicy{}
+		get(policy, engineName)
+		Expect(policy.Spec.Ingress[0].From).To(ContainElement(networkingv1.NetworkPolicyPeer{
+			NamespaceSelector: &platform,
+			PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{"app": "control-plane"}},
+		}))
+		Expect(policy.Spec.Ingress[0].From).To(HaveLen(2), "admits more than the operator and the class's consumer")
+		Expect(egressRules(policy)).To(ConsistOf(
+			"ports UDP/53 TCP/53",
+			"to pods {any} in the policy's namespace",
+			"to "+anyIPv4+" except [169.254.169.254/32 10.0.0.0/8 192.168.0.0/16]",
+			"to "+anyIPv6+" except [fd00:ec2::254/128 fd00:10::/48]",
+			"to pods {any} in namespaces {kubernetes.io/metadata.name=platform}",
+		))
 	})
 
 	It("changes nothing on a second reconcile", func() {
@@ -1300,7 +1377,9 @@ var _ = Describe("Company runtime", func() {
 		class := newClass()
 		company := reconciled(newCompany(class.Name))
 		get(&networkingv1.NetworkPolicy{}, engineName)
-		updateClass(class, func(c *crewletaiv1alpha1.EngineClass) { c.Spec.NetworkPolicy = crewletaiv1alpha1.NetworkPolicyNone })
+		updateClass(class, func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.NetworkPolicy = crewletaiv1alpha1.NetworkPolicySettings{Mode: crewletaiv1alpha1.NetworkPolicyNone}
+		})
 		reconciled(company)
 		absent(&networkingv1.NetworkPolicy{}, engineName)
 	})

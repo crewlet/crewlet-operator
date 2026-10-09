@@ -34,9 +34,12 @@ manager:
   args: []
 
   ## Environment variables
-  ## POD_NAMESPACE is the operator's own namespace, which every engine's
-  ## NetworkPolicy admits so that the operator can reach the engines it
-  ## configures; keep it.
+  ## POD_NAMESPACE is the operator's own namespace, whose operator pods
+  ## every engine's NetworkPolicy admits so that the operator can reach the
+  ## engines it configures; keep it. The pods are selected by the labels
+  ## --operator-pod-labels names (app.kubernetes.io/name=crewlet-operator,
+  ## control-plane=controller-manager by default): with a nameOverride, pass
+  ## the flag in args.
   ##
   env:
     - name: POD_NAMESPACE

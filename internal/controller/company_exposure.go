@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"slices"
 	"strings"
 
@@ -367,18 +368,24 @@ func (r *CompanyReconciler) applyIngress(ctx context.Context, c *crewletaiv1alph
 	}, nil
 }
 
-// reconcileNetworkPolicy writes the NetworkPolicy that isolates the data
-// pods under networkPolicy Isolated, and deletes it otherwise.
+// reconcileNetworkPolicy writes the NetworkPolicy around the company's data
+// pods under the class's networkPolicy Isolated, and deletes it otherwise.
 //
 // It selects the data pods only, so that a policy for other pods of the
 // company can be added beside it: NetworkPolicies are additive, and one that
-// selected every pod would open them all to what the data pods admit. It
-// restricts ingress only; the engine reaches vendors and model providers
-// outward on its own.
+// selected every pod would open them all to what the data pods admit.
+//
+// Ingress is the engine's API port only, from the operator's pods, the
+// class's Gateway proxies or Ingress controller, and the class's
+// apiConsumers. Egress is DNS, the pods of the Company's namespace, every
+// address but the cloud metadata endpoints and the class's exceptCIDRs, and
+// the class's egress.to peers: the engine runs code the tenant supplies, and
+// the metadata endpoint hands out the node's credentials to whatever asks.
 func (r *CompanyReconciler) reconcileNetworkPolicy(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 ) error {
-	if class.Spec.NetworkPolicy != crewletaiv1alpha1.NetworkPolicyIsolated {
+	settings := class.Spec.NetworkPolicy
+	if settings.Mode != crewletaiv1alpha1.NetworkPolicyIsolated {
 		return r.deleteControlled(ctx, c, networkPolicyGVK, networkPolicyName(c))
 	}
 	namespaceIn := func(names ...string) *networkingv1ac.NetworkPolicyPeerApplyConfiguration {
@@ -388,30 +395,111 @@ func (r *CompanyReconciler) reconcileNetworkPolicy(
 				WithOperator(metav1.LabelSelectorOpIn).
 				WithValues(names...)))
 	}
-	peers := []*networkingv1ac.NetworkPolicyPeerApplyConfiguration{
-		networkingv1ac.NetworkPolicyPeer().WithNamespaceSelector(metav1ac.LabelSelector().
-			WithMatchLabels(map[string]string{crewletaiv1alpha1.APIConsumerNamespaceLabel: "true"})),
-	}
+	var from []*networkingv1ac.NetworkPolicyPeerApplyConfiguration
 	// Outside the cluster (make run) the operator has no namespace, and its
-	// requests do not come from a pod a policy could admit anyway.
+	// requests do not come from a pod a policy could admit anyway. Its pods
+	// only, and not its whole namespace: other workloads may share it.
 	if r.OperatorNamespace != "" {
-		peers = append(peers, namespaceIn(r.OperatorNamespace))
+		from = append(from, namespaceIn(r.OperatorNamespace).
+			WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(r.OperatorPodLabels)))
 	}
 	if routed := routeNamespaces(c, class); len(routed) > 0 {
-		peers = append(peers, namespaceIn(routed...))
+		from = append(from, namespaceIn(routed...))
 	}
+	for i := range settings.APIConsumers {
+		from = append(from, peerOf(&settings.APIConsumers[i]))
+	}
+
+	egress := []*networkingv1ac.NetworkPolicyEgressRuleApplyConfiguration{
+		// DNS, wherever the cluster's resolver runs (a kube-system
+		// Service, or a node-local cache on a link-local address).
+		networkingv1ac.NetworkPolicyEgressRule().WithPorts(
+			networkingv1ac.NetworkPolicyPort().WithProtocol(corev1.ProtocolUDP).WithPort(intstr.FromInt32(dnsPort)),
+			networkingv1ac.NetworkPolicyPort().WithProtocol(corev1.ProtocolTCP).WithPort(intstr.FromInt32(dnsPort))),
+		// The tenant's own namespace: what it runs beside the engine
+		// (an MCP server, a database) is the tenant's to reach.
+		networkingv1ac.NetworkPolicyEgressRule().WithTo(
+			networkingv1ac.NetworkPolicyPeer().WithPodSelector(metav1ac.LabelSelector())),
+		networkingv1ac.NetworkPolicyEgressRule().WithTo(
+			networkingv1ac.NetworkPolicyPeer().WithIPBlock(networkingv1ac.IPBlock().
+				WithCIDR(anyIPv4).WithExcept(exceptCIDRs(settings.Egress.ExceptCIDRs, false)...)),
+			networkingv1ac.NetworkPolicyPeer().WithIPBlock(networkingv1ac.IPBlock().
+				WithCIDR(anyIPv6).WithExcept(exceptCIDRs(settings.Egress.ExceptCIDRs, true)...))),
+	}
+	if len(settings.Egress.To) > 0 {
+		to := make([]*networkingv1ac.NetworkPolicyPeerApplyConfiguration, 0, len(settings.Egress.To))
+		for i := range settings.Egress.To {
+			to = append(to, peerOf(&settings.Egress.To[i]))
+		}
+		egress = append(egress, networkingv1ac.NetworkPolicyEgressRule().WithTo(to...))
+	}
+
 	policy := networkingv1ac.NetworkPolicy(networkPolicyName(c), c.Namespace).
 		WithLabels(labelsFor(c, componentData)).
 		WithOwnerReferences(ownerReference(c)).
 		WithSpec(networkingv1ac.NetworkPolicySpec().
 			WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(selectorFor(c, componentData))).
-			WithPolicyTypes(networkingv1.PolicyTypeIngress).
+			WithPolicyTypes(networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress).
 			WithIngress(networkingv1ac.NetworkPolicyIngressRule().
 				WithPorts(networkingv1ac.NetworkPolicyPort().
 					WithProtocol(corev1.ProtocolTCP).
 					WithPort(intstr.FromInt32(render.APIPort))).
-				WithFrom(peers...)))
+				WithFrom(from...)).
+			WithEgress(egress...))
 	return r.apply(ctx, c, networkPolicyGVK, networkPolicyName(c), policy)
+}
+
+// The address space an engine may reach, and the cloud metadata endpoints
+// it may not: AWS, GCP and Azure serve theirs at 169.254.169.254, and AWS
+// also at fd00:ec2::254 on IPv6.
+const (
+	dnsPort      = 53
+	anyIPv4      = "0.0.0.0/0"
+	anyIPv6      = "::/0"
+	metadataIPv4 = "169.254.169.254/32"
+	metadataIPv6 = "fd00:ec2::254/128"
+)
+
+// exceptCIDRs are the blocks of one address family the engine may not
+// reach: the metadata endpoint and the class's exceptCIDRs of that family.
+// The API server has checked that each is a CIDR.
+func exceptCIDRs(class []string, ipv6 bool) []string {
+	except := []string{metadataIPv4}
+	if ipv6 {
+		except = []string{metadataIPv6}
+	}
+	for _, block := range class {
+		if prefix, err := netip.ParsePrefix(block); err == nil && prefix.Addr().Is6() == ipv6 {
+			except = append(except, block)
+		}
+	}
+	return except
+}
+
+// peerOf is a class's peer as a NetworkPolicy peer.
+func peerOf(p *crewletaiv1alpha1.NetworkPolicyPeer) *networkingv1ac.NetworkPolicyPeerApplyConfiguration {
+	peer := networkingv1ac.NetworkPolicyPeer().WithNamespaceSelector(selectorOf(p.NamespaceSelector))
+	if p.PodSelector != nil {
+		peer = peer.WithPodSelector(selectorOf(p.PodSelector))
+	}
+	return peer
+}
+
+// selectorOf is a label selector as an apply configuration. A nil one is
+// empty, which selects everything.
+func selectorOf(s *metav1.LabelSelector) *metav1ac.LabelSelectorApplyConfiguration {
+	out := metav1ac.LabelSelector()
+	if s == nil {
+		return out
+	}
+	if len(s.MatchLabels) > 0 {
+		out = out.WithMatchLabels(s.MatchLabels)
+	}
+	for _, e := range s.MatchExpressions {
+		out = out.WithMatchExpressions(metav1ac.LabelSelectorRequirement().
+			WithKey(e.Key).WithOperator(e.Operator).WithValues(e.Values...))
+	}
+	return out
 }
 
 // routeNamespaces are the namespaces routed traffic reaches the data pods

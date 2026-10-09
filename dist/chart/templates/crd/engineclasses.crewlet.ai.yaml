@@ -697,13 +697,289 @@ spec:
                     type: integer
                 type: object
               networkPolicy:
-                default: Isolated
-                description: networkPolicy is whether the operator restricts traffic
-                  to the engine.
-                enum:
-                - Isolated
-                - None
-                type: string
+                default:
+                  mode: Isolated
+                description: |-
+                  networkPolicy is the NetworkPolicy the operator puts around each
+                  company's engine pods.
+                minProperties: 1
+                properties:
+                  apiConsumers:
+                    description: |-
+                      apiConsumers are the pods admitted to the engine's API port besides
+                      the operator and the class's Gateway proxies or Ingress controller:
+                      the platform's own components (a control plane, a dashboard) that
+                      call the engines of this class's companies. Each holds an access
+                      token, which the engine still requires.
+                    items:
+                      description: |-
+                        NetworkPolicyPeer is the pods its podSelector selects in the namespaces
+                        its namespaceSelector selects, as a NetworkPolicy peer that sets both.
+                      properties:
+                        namespaceSelector:
+                          description: |-
+                            namespaceSelector selects namespaces by their labels; an empty one
+                            selects every namespace. Select a namespace by name with the label
+                            kubernetes.io/metadata.name, which the API server sets on every
+                            namespace.
+                          properties:
+                            matchExpressions:
+                              description: matchExpressions is a list of label selector
+                                requirements. The requirements are ANDed.
+                              items:
+                                description: |-
+                                  A label selector requirement is a selector that contains values, a key, and an operator that
+                                  relates the key and values.
+                                properties:
+                                  key:
+                                    description: key is the label key that the selector
+                                      applies to.
+                                    type: string
+                                  operator:
+                                    description: |-
+                                      operator represents a key's relationship to a set of values.
+                                      Valid operators are In, NotIn, Exists and DoesNotExist.
+                                    type: string
+                                  values:
+                                    description: |-
+                                      values is an array of string values. If the operator is In or NotIn,
+                                      the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                      the values array must be empty. This array is replaced during a strategic
+                                      merge patch.
+                                    items:
+                                      type: string
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            matchLabels:
+                              additionalProperties:
+                                type: string
+                              description: |-
+                                matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                operator is "In", and the values array contains only "value". The requirements are ANDed.
+                              type: object
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        podSelector:
+                          description: |-
+                            podSelector selects pods in those namespaces by their labels. Unset
+                            selects every pod in them.
+                          properties:
+                            matchExpressions:
+                              description: matchExpressions is a list of label selector
+                                requirements. The requirements are ANDed.
+                              items:
+                                description: |-
+                                  A label selector requirement is a selector that contains values, a key, and an operator that
+                                  relates the key and values.
+                                properties:
+                                  key:
+                                    description: key is the label key that the selector
+                                      applies to.
+                                    type: string
+                                  operator:
+                                    description: |-
+                                      operator represents a key's relationship to a set of values.
+                                      Valid operators are In, NotIn, Exists and DoesNotExist.
+                                    type: string
+                                  values:
+                                    description: |-
+                                      values is an array of string values. If the operator is In or NotIn,
+                                      the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                      the values array must be empty. This array is replaced during a strategic
+                                      merge patch.
+                                    items:
+                                      type: string
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            matchLabels:
+                              additionalProperties:
+                                type: string
+                              description: |-
+                                matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                operator is "In", and the values array contains only "value". The requirements are ANDed.
+                              type: object
+                          type: object
+                          x-kubernetes-map-type: atomic
+                      required:
+                      - namespaceSelector
+                      type: object
+                    maxItems: 16
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  egress:
+                    description: |-
+                      egress narrows where the engine may connect to. The engine runs code
+                      the tenant supplies (stdio MCP servers, sandbox commands, what its
+                      agents write), so under Isolated its pods may reach DNS, the pods of
+                      their own namespace, and every address outside the cluster except the
+                      cloud metadata endpoints (169.254.169.254, fd00:ec2::254), which hand
+                      out the node's credentials. What else is in the cluster is
+                      unreachable only if listed in exceptCIDRs.
+                    minProperties: 1
+                    properties:
+                      exceptCIDRs:
+                        description: |-
+                          exceptCIDRs are address blocks the engine may not reach, besides the
+                          cloud metadata endpoints. List the cluster's pod, Service and node
+                          networks here: a NetworkPolicy has no other way to tell an address in
+                          the cluster from one outside it, and without them an engine reaches
+                          other tenants' pods, the Kubernetes API server and the nodes. Each is
+                          a canonical IPv4 or IPv6 CIDR, narrower than the whole address space.
+                        items:
+                          maxLength: 43
+                          type: string
+                        maxItems: 32
+                        minItems: 1
+                        type: array
+                        x-kubernetes-list-type: set
+                        x-kubernetes-validations:
+                        - message: exceptCIDRs must be canonical CIDRs such as 10.0.0.0/8
+                            or fd00::/8, narrower than /0
+                          rule: self.all(c, isCIDR(c) && cidr(c).prefixLength() >
+                            0 && string(cidr(c).masked()) == c)
+                      to:
+                        description: |-
+                          to are pods in the cluster the engine may reach although
+                          exceptCIDRs covers them: an in-cluster model gateway, the telemetry
+                          collector, an object store.
+                        items:
+                          description: |-
+                            NetworkPolicyPeer is the pods its podSelector selects in the namespaces
+                            its namespaceSelector selects, as a NetworkPolicy peer that sets both.
+                          properties:
+                            namespaceSelector:
+                              description: |-
+                                namespaceSelector selects namespaces by their labels; an empty one
+                                selects every namespace. Select a namespace by name with the label
+                                kubernetes.io/metadata.name, which the API server sets on every
+                                namespace.
+                              properties:
+                                matchExpressions:
+                                  description: matchExpressions is a list of label
+                                    selector requirements. The requirements are ANDed.
+                                  items:
+                                    description: |-
+                                      A label selector requirement is a selector that contains values, a key, and an operator that
+                                      relates the key and values.
+                                    properties:
+                                      key:
+                                        description: key is the label key that the
+                                          selector applies to.
+                                        type: string
+                                      operator:
+                                        description: |-
+                                          operator represents a key's relationship to a set of values.
+                                          Valid operators are In, NotIn, Exists and DoesNotExist.
+                                        type: string
+                                      values:
+                                        description: |-
+                                          values is an array of string values. If the operator is In or NotIn,
+                                          the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                          the values array must be empty. This array is replaced during a strategic
+                                          merge patch.
+                                        items:
+                                          type: string
+                                        type: array
+                                        x-kubernetes-list-type: atomic
+                                    required:
+                                    - key
+                                    - operator
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                                matchLabels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                    map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                    operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                  type: object
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            podSelector:
+                              description: |-
+                                podSelector selects pods in those namespaces by their labels. Unset
+                                selects every pod in them.
+                              properties:
+                                matchExpressions:
+                                  description: matchExpressions is a list of label
+                                    selector requirements. The requirements are ANDed.
+                                  items:
+                                    description: |-
+                                      A label selector requirement is a selector that contains values, a key, and an operator that
+                                      relates the key and values.
+                                    properties:
+                                      key:
+                                        description: key is the label key that the
+                                          selector applies to.
+                                        type: string
+                                      operator:
+                                        description: |-
+                                          operator represents a key's relationship to a set of values.
+                                          Valid operators are In, NotIn, Exists and DoesNotExist.
+                                        type: string
+                                      values:
+                                        description: |-
+                                          values is an array of string values. If the operator is In or NotIn,
+                                          the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                          the values array must be empty. This array is replaced during a strategic
+                                          merge patch.
+                                        items:
+                                          type: string
+                                        type: array
+                                        x-kubernetes-list-type: atomic
+                                    required:
+                                    - key
+                                    - operator
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                                matchLabels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                    map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                    operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                  type: object
+                              type: object
+                              x-kubernetes-map-type: atomic
+                          required:
+                          - namespaceSelector
+                          type: object
+                        maxItems: 16
+                        minItems: 1
+                        type: array
+                        x-kubernetes-list-type: atomic
+                    type: object
+                  mode:
+                    default: Isolated
+                    description: mode is whether the operator restricts the engine's
+                      traffic.
+                    enum:
+                    - Isolated
+                    - None
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: apiConsumers and egress apply to mode Isolated only
+                  rule: self.mode == 'Isolated' || (!has(self.apiConsumers) && !has(self.egress))
               objects:
                 default:
                   backend: NATS
@@ -2381,7 +2657,7 @@ spec:
             x-kubernetes-validations:
             - message: 'networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces:
                 without them the policy refuses everything the Ingress forwards'
-              rule: self.networkPolicy != 'Isolated' || ((!has(self.exposure.webhooks.ingress)
+              rule: self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress)
                 || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress)
                 || has(self.exposure.api.ingress.controllerNamespaces)))
           status:

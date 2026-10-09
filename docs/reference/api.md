@@ -643,7 +643,7 @@ _Appears in:_
 | `stream` _[StreamSettings](#streamsettings)_ | stream is how each company's event stream runs. | \{ mode:Embedded \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `objects` _[ObjectSettings](#objectsettings)_ | objects is where each company's files are kept. | \{ backend:NATS \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `exposure` _[ExposureSettings](#exposuresettings)_ | exposure is how each company is reached from outside its namespace. | \{ api:map[mode:ClusterInternal] webhooks:map[mode:None] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `networkPolicy` _[NetworkPolicyMode](#networkpolicymode)_ | networkPolicy is whether the operator restricts traffic to the engine. | Isolated | Enum: [Isolated None] <br />Optional: \{\} <br /> |
+| `networkPolicy` _[NetworkPolicySettings](#networkpolicysettings)_ | networkPolicy is the NetworkPolicy the operator puts around each<br />company's engine pods. | \{ mode:Isolated \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `podTemplate` _[EnginePodTemplate](#enginepodtemplate)_ | podTemplate is what is added to every engine pod. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `serviceAccount` _[EngineServiceAccount](#engineserviceaccount)_ | serviceAccount is what is added to each company's engine<br />ServiceAccount. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `platformLLMProviders` _[PlatformLLMProvider](#platformllmprovider) array_ | platformLLMProviders are model providers the platform offers to<br />companies that opt in. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
@@ -1679,6 +1679,25 @@ _Appears in:_
 | `inboxRetentionDays` _integer_ | inboxRetentionDays is how long a person's inbox keeps a row; the<br />history the row points at is kept regardless. Unset takes Crewlet's<br />default of 365. Crewlet's `inbox_retention_days`. |  | Maximum: 3650 <br />Minimum: 30 <br />Optional: \{\} <br /> |
 
 
+#### NetworkPolicyEgress
+
+
+
+NetworkPolicyEgress is where the engine may connect to, beyond DNS and
+its own namespace.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [NetworkPolicySettings](#networkpolicysettings)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `exceptCIDRs` _string array_ | exceptCIDRs are address blocks the engine may not reach, besides the<br />cloud metadata endpoints. List the cluster's pod, Service and node<br />networks here: a NetworkPolicy has no other way to tell an address in<br />the cluster from one outside it, and without them an engine reaches<br />other tenants' pods, the Kubernetes API server and the nodes. Each is<br />a canonical IPv4 or IPv6 CIDR, narrower than the whole address space. |  | MaxItems: 32 <br />MinItems: 1 <br />items:MaxLength: 43 <br />Optional: \{\} <br /> |
+| `to` _[NetworkPolicyPeer](#networkpolicypeer) array_ | to are pods in the cluster the engine may reach although<br />exceptCIDRs covers them: an in-cluster model gateway, the telemetry<br />collector, an object store. |  | MaxItems: 16 <br />MinItems: 1 <br />Optional: \{\} <br /> |
+
+
 #### NetworkPolicyMode
 
 _Underlying type:_ _string_
@@ -1689,12 +1708,51 @@ _Validation:_
 - Enum: [Isolated None]
 
 _Appears in:_
-- [EngineClassSpec](#engineclassspec)
+- [NetworkPolicySettings](#networkpolicysettings)
 
 | Field | Description |
 | --- | --- |
-| `Isolated` | NetworkPolicyIsolated admits traffic to the engine's port only from<br />the operator's namespace, from the namespaces the class's Gateway<br />proxies or Ingress controller run in (gateway.proxyNamespaces,<br />ingress.controllerNamespaces), and from namespaces labelled<br />crewlet.ai/api-consumer=true (APIConsumerNamespaceLabel). It needs a<br />CNI that enforces NetworkPolicy.<br /> |
+| `Isolated` | NetworkPolicyIsolated admits traffic to the engine's API port only<br />from the operator's pods, from the namespaces the class's Gateway<br />proxies or Ingress controller run in (gateway.proxyNamespaces,<br />ingress.controllerNamespaces), and from the class's apiConsumers; and<br />lets the engine connect only as networkPolicy.egress says. It needs a<br />CNI that enforces NetworkPolicy, egress included.<br /> |
 | `None` | NetworkPolicyNone creates no NetworkPolicy.<br /> |
+
+
+#### NetworkPolicyPeer
+
+
+
+NetworkPolicyPeer is the pods its podSelector selects in the namespaces
+its namespaceSelector selects, as a NetworkPolicy peer that sets both.
+
+
+
+_Appears in:_
+- [NetworkPolicyEgress](#networkpolicyegress)
+- [NetworkPolicySettings](#networkpolicysettings)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `namespaceSelector` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#labelselector-v1-meta)_ | namespaceSelector selects namespaces by their labels; an empty one<br />selects every namespace. Select a namespace by name with the label<br />kubernetes.io/metadata.name, which the API server sets on every<br />namespace. |  | Required: \{\} <br /> |
+| `podSelector` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#labelselector-v1-meta)_ | podSelector selects pods in those namespaces by their labels. Unset<br />selects every pod in them. |  | Optional: \{\} <br /> |
+
+
+#### NetworkPolicySettings
+
+
+
+NetworkPolicySettings is the NetworkPolicy the operator puts around each
+company's engine pods.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [EngineClassSpec](#engineclassspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `mode` _[NetworkPolicyMode](#networkpolicymode)_ | mode is whether the operator restricts the engine's traffic. | Isolated | Enum: [Isolated None] <br />Optional: \{\} <br /> |
+| `apiConsumers` _[NetworkPolicyPeer](#networkpolicypeer) array_ | apiConsumers are the pods admitted to the engine's API port besides<br />the operator and the class's Gateway proxies or Ingress controller:<br />the platform's own components (a control plane, a dashboard) that<br />call the engines of this class's companies. Each holds an access<br />token, which the engine still requires. |  | MaxItems: 16 <br />MinItems: 1 <br />Optional: \{\} <br /> |
+| `egress` _[NetworkPolicyEgress](#networkpolicyegress)_ | egress narrows where the engine may connect to. The engine runs code<br />the tenant supplies (stdio MCP servers, sandbox commands, what its<br />agents write), so under Isolated its pods may reach DNS, the pods of<br />their own namespace, and every address outside the cluster except the<br />cloud metadata endpoints (169.254.169.254, fd00:ec2::254), which hand<br />out the node's credentials. What else is in the cluster is<br />unreachable only if listed in exceptCIDRs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### ObjectBackend

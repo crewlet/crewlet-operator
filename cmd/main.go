@@ -11,6 +11,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -61,6 +62,13 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", true,
 		"Elect a leader among the manager's replicas, so that only one reconciles. "+
 			"Turn it off only for a single manager run outside the cluster.")
+	// The labels both the kustomize manifests and the chart put on the
+	// manager's pods.
+	operatorPodLabels := "app.kubernetes.io/name=crewlet-operator,control-plane=controller-manager"
+	flag.StringVar(&operatorPodLabels, "operator-pod-labels", operatorPodLabels,
+		"Labels, as key=value pairs separated by commas, that select the operator's own pods in its namespace: "+
+			"the engines' network policies admit those pods, and no others of the namespace. "+
+			"Set it when the chart's nameOverride or a fork changes the pods' labels.")
 	flag.BoolVar(&secureMetrics, "metrics-secure", true,
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 	flag.StringVar(&metricsCertPath, "metrics-cert-path", "",
@@ -159,11 +167,17 @@ func main() {
 	if operatorNamespace == "" {
 		setupLog.Info("POD_NAMESPACE is unset; the engines' network policies will not admit the operator's namespace")
 	}
+	podLabels, err := labels.ConvertSelectorToLabelsMap(operatorPodLabels)
+	if err != nil || len(podLabels) == 0 {
+		setupLog.Error(err, "--operator-pod-labels must be key=value pairs separated by commas", "value", operatorPodLabels)
+		os.Exit(1)
+	}
 	if err := (&controller.CompanyReconciler{
 		Client:            mgr.GetClient(),
 		APIReader:         mgr.GetAPIReader(),
 		GatewayAPI:        gatewayAPI,
 		OperatorNamespace: operatorNamespace,
+		OperatorPodLabels: podLabels,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "company")
 		os.Exit(1)

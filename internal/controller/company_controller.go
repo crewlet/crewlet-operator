@@ -57,11 +57,16 @@ type CompanyReconciler struct {
 	// detected once when the manager starts (GatewayAPIInstalled).
 	GatewayAPI bool
 
-	// OperatorNamespace is the namespace the operator runs in, admitted to
-	// every engine's port under networkPolicy Isolated so that the operator
-	// can reach the engines it configures. It is empty when the operator
-	// runs outside the cluster.
+	// OperatorNamespace is the namespace the operator runs in, whose
+	// operator pods every engine's port admits under networkPolicy Isolated
+	// so that the operator can reach the engines it configures. It is empty
+	// when the operator runs outside the cluster.
 	OperatorNamespace string
+
+	// OperatorPodLabels select the operator's own pods in OperatorNamespace,
+	// which the engines' network policies admit: not the whole namespace,
+	// which other workloads may share.
+	OperatorPodLabels map[string]string
 }
 
 // Writes use server-side apply or patch, never update, so no rule grants

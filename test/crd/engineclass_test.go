@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -45,7 +46,7 @@ func TestEngineClassDefaults(t *testing.T) {
 		{"objects.backend", s.Objects.Backend, v1.ObjectBackendNATS},
 		{"exposure.webhooks.mode", s.Exposure.Webhooks.Mode, v1.WebhookExposureNone},
 		{"exposure.api.mode", s.Exposure.API.Mode, v1.APIExposureClusterInternal},
-		{"networkPolicy", s.NetworkPolicy, v1.NetworkPolicyIsolated},
+		{"networkPolicy.mode", s.NetworkPolicy.Mode, v1.NetworkPolicyIsolated},
 	} {
 		if !equal(c.got, c.want) {
 			t.Errorf("%s defaulted to %v, want %v", c.field, c.got, c.want)
@@ -325,7 +326,7 @@ func TestEngineClassExposure(t *testing.T) {
 		{
 			name: "Ingress webhooks without controllerNamespaces and no network policy are accepted",
 			mutate: func(c *v1.EngineClass) {
-				c.Spec.NetworkPolicy = v1.NetworkPolicyNone
+				c.Spec.NetworkPolicy = v1.NetworkPolicySettings{Mode: v1.NetworkPolicyNone}
 				c.Spec.Exposure.Webhooks = v1.WebhookExposure{
 					Mode:     v1.WebhookExposureIngress,
 					Ingress:  &v1.IngressExposure{ClassName: ingressClass},
@@ -348,6 +349,58 @@ func TestEngineClassExposure(t *testing.T) {
 			},
 			want: "spec.exposure.webhooks.gateway.proxyNamespaces[0]",
 		},
+	})
+}
+
+func TestEngineClassNetworkPolicy(t *testing.T) {
+	platform := &metav1.LabelSelector{MatchLabels: map[string]string{"kubernetes.io/metadata.name": "platform-system"}}
+	policy := func(p v1.NetworkPolicySettings) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) { c.Spec.NetworkPolicy = p }
+	}
+	except := func(cidrs ...string) func(*v1.EngineClass) {
+		return policy(v1.NetworkPolicySettings{Egress: v1.NetworkPolicyEgress{ExceptCIDRs: cidrs}})
+	}
+	const msgCIDR = "exceptCIDRs must be canonical CIDRs"
+	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
+		{
+			name: "API consumers and egress peers are accepted",
+			mutate: policy(v1.NetworkPolicySettings{
+				APIConsumers: []v1.NetworkPolicyPeer{{
+					NamespaceSelector: platform,
+					PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{"app": "control-plane"}},
+				}},
+				Egress: v1.NetworkPolicyEgress{To: []v1.NetworkPolicyPeer{{NamespaceSelector: platform}}},
+			}),
+		},
+		{
+			name:   "an API consumer without a namespace selector is refused",
+			mutate: policy(v1.NetworkPolicySettings{APIConsumers: []v1.NetworkPolicyPeer{{PodSelector: platform}}}),
+			want:   "spec.networkPolicy.apiConsumers[0].namespaceSelector: Required value",
+		},
+		{
+			name: "API consumers with mode None are refused",
+			mutate: policy(v1.NetworkPolicySettings{
+				Mode:         v1.NetworkPolicyNone,
+				APIConsumers: []v1.NetworkPolicyPeer{{NamespaceSelector: platform}},
+			}),
+			want: "apiConsumers and egress apply to mode Isolated only",
+		},
+		{
+			name: "egress with mode None is refused",
+			mutate: policy(v1.NetworkPolicySettings{
+				Mode:   v1.NetworkPolicyNone,
+				Egress: v1.NetworkPolicyEgress{ExceptCIDRs: []string{"10.0.0.0/8"}},
+			}),
+			want: "apiConsumers and egress apply to mode Isolated only",
+		},
+		{name: "IPv4 and IPv6 blocks are accepted", mutate: except("10.0.0.0/8", "fd00:10::/48", "192.168.1.7/32")},
+		{name: "an address that is no CIDR is refused", mutate: except("10.0.0.1"), want: msgCIDR},
+		{name: "a CIDR with host bits set is refused", mutate: except("10.0.0.1/8"), want: msgCIDR},
+		// The whole address space as an exception would leave the engine
+		// nothing, and the API server refuses an ipBlock whose except is its
+		// cidr.
+		{name: "the whole IPv4 space is refused", mutate: except("0.0.0.0/0"), want: msgCIDR},
+		{name: "the whole IPv6 space is refused", mutate: except("::/0"), want: msgCIDR},
 	})
 }
 

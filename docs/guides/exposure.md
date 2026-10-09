@@ -92,7 +92,7 @@ spec:
           cert-manager.io/cluster-issuer: letsencrypt
         tls:
           secretName: "{{name}}-webhooks-tls"     # in the Company's namespace
-        controllerNamespaces: [ingress-nginx]   # required with networkPolicy: Isolated
+        controllerNamespaces: [ingress-nginx]   # required with networkPolicy.mode: Isolated
       hostname: "{{uid}}.hooks.example.com"
 ```
 
@@ -144,22 +144,62 @@ accepted. Every request still needs a token.
 
 ## Network policy
 
-With `networkPolicy: Isolated`, the default, the operator creates a
-NetworkPolicy `<company>-engine` that admits traffic to the engine's port only from:
+With `networkPolicy.mode: Isolated`, the default, the operator creates a
+NetworkPolicy `<company>-engine` around the company's data pods. It admits
+traffic to the engine's port only from:
 
-- the operator's own namespace, so it can apply documents;
-- namespaces labelled `crewlet.ai/api-consumer: "true"`, for your platform's
-  components that call the engines' APIs;
+- the operator's own pods (its namespace, and the pod labels its
+  `--operator-pod-labels` flag names), so it can apply documents;
+- the class's `networkPolicy.apiConsumers`, for your platform's components
+  that call the engines' APIs;
 - the namespaces routed traffic arrives from: each Gateway route's
   `gateway.proxyNamespaces` (the Gateways' own namespaces when unset) and each
   Ingress route's `ingress.controllerNamespaces`.
 
-Everything else, other tenants included, is refused. Label the namespaces of
-your own consumers:
+Everything else, other tenants and the tenant's own other pods included, is
+refused. Name your consumers in the class, by namespace and pod labels:
 
-```bash
-kubectl label namespace platform crewlet.ai/api-consumer=true
+```yaml
+spec:
+  networkPolicy:
+    mode: Isolated
+    apiConsumers:
+      - namespaceSelector:
+          matchLabels: {kubernetes.io/metadata.name: platform}
+        podSelector:
+          matchLabels: {app: control-plane}
 ```
+
+Only whoever writes EngineClasses decides this; no label a tenant or a
+namespace editor can set admits anything.
+
+The engine runs code its tenant supplies: stdio MCP servers, sandbox commands,
+whatever its agents write. So the policy also limits where the engine
+connects to. It may reach DNS (port 53), the pods of its own namespace, and
+every address except the cloud metadata endpoints (`169.254.169.254`,
+`fd00:ec2::254`), which hand the node's credentials to whatever asks. A
+NetworkPolicy cannot tell an address inside the cluster from one outside it,
+so list the cluster's pod, Service and node networks in `egress.exceptCIDRs`;
+without them, an engine reaches other tenants' pods, the Kubernetes API
+server and the nodes. Admit what the engine needs inside the cluster (an
+in-cluster model gateway, the telemetry collector, an object store) with
+`egress.to`:
+
+```yaml
+spec:
+  networkPolicy:
+    mode: Isolated
+    egress:
+      exceptCIDRs: [10.244.0.0/16, 10.96.0.0/12, 172.18.0.0/16]
+      to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: observability}
+          podSelector:
+            matchLabels: {app: otel-collector}
+```
+
+On AWS, also require IMDSv2 with a hop limit of 1 on the nodes, so that a
+pod that gets past the policy still cannot read the node's role.
 
 Set `gateway.proxyNamespaces` when your Gateway implementation runs its proxy
 somewhere other than the Gateway's namespace:
@@ -171,12 +211,11 @@ gateway:
   proxyNamespaces: [envoy-gateway-system]
 ```
 
-The policy restricts ingress only; engines reach model providers and vendors
-directly. It holds only on a CNI that enforces NetworkPolicy (Calico, Cilium,
-Antrea; not kind's default). Some Gateway implementations deliver traffic from
-the node rather than from a pod, which no NetworkPolicy can admit by
-namespace; with those, set `networkPolicy: None` and isolate the engines with
-the CNI's own policy.
+The policy holds only on a CNI that enforces NetworkPolicy, egress included
+(Calico, Cilium, Antrea, and kind's kindnet). Some Gateway implementations
+deliver traffic from the node rather than from a pod, which no NetworkPolicy
+can admit by namespace; with those, set `networkPolicy.mode: None` and isolate
+the engines with the CNI's own policy.
 
 ## Check it
 

@@ -34,7 +34,13 @@ spec:
       hostname: "{{uid}}.hooks.example.com"
     api:
       mode: ClusterInternal
-  networkPolicy: Isolated
+  networkPolicy:
+    mode: Isolated
+    egress:
+      # The cluster's own networks (pods, Services, nodes): the engine runs
+      # code its tenant supplies, which has no business reaching other
+      # tenants or the API server. Use your cluster's ranges.
+      exceptCIDRs: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16]
   podTemplate:
     spec:
       tolerations:

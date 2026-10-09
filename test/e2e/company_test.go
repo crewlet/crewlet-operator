@@ -34,6 +34,7 @@ import (
 const (
 	tenantNamespace   = "e2e-acme"
 	consumerNamespace = "e2e-consumer"
+	outsiderNamespace = "e2e-outsider"
 	className         = "e2e"
 	companyName       = "acme"
 	providerSecret    = "model-gateway"
@@ -89,6 +90,12 @@ var _ = Describe("Company", Ordered, func() {
 					Storage: v1.DataStorage{Size: new(resource.MustParse("7Gi"))},
 				},
 				Exposure: v1.ExposureSettings{Webhooks: v1.WebhookExposure{Mode: v1.WebhookExposureNone}},
+				NetworkPolicy: v1.NetworkPolicySettings{
+					Mode: v1.NetworkPolicyIsolated,
+					APIConsumers: []v1.NetworkPolicyPeer{{NamespaceSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{corev1.LabelMetadataName: consumerNamespace},
+					}}},
+				},
 			},
 		})
 	})
@@ -96,11 +103,11 @@ var _ = Describe("Company", Ordered, func() {
 	AfterAll(func() {
 		By("deleting the tenant's objects while the operator runs to finalize them")
 		_ = k8sClient.Delete(ctx, &v1.Company{Namespace: tenantNamespace, Name: companyName})
-		for _, ns := range []string{tenantNamespace, consumerNamespace} {
+		for _, ns := range []string{tenantNamespace, consumerNamespace, outsiderNamespace} {
 			_ = k8sClient.Delete(ctx, &corev1.Namespace{Name: ns})
 		}
 		Eventually(func(g Gomega) {
-			for _, ns := range []string{tenantNamespace, consumerNamespace} {
+			for _, ns := range []string{tenantNamespace, consumerNamespace, outsiderNamespace} {
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: ns}, &corev1.Namespace{})
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "namespace %s is still there", ns)
 			}
@@ -146,59 +153,34 @@ var _ = Describe("Company", Ordered, func() {
 		}
 	})
 
-	It("lets a consumer read the engine's API with the published token", func() {
-		By("copying the API access Secret into a namespace labelled as an API consumer")
+	It("lets a consumer the class admits read the engine's API with the published token", func() {
+		By("copying the API access Secret into the namespace the class admits as an API consumer")
 		access := &corev1.Secret{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: tenantNamespace, Name: accessSecret}, access)).To(Succeed())
 		Expect(access.Data).To(HaveKey(v1.APIAccessTokenKey))
 		Expect(string(access.Data[v1.APIAccessURLKey])).To(Equal(engineURL))
-		apply(&corev1.Namespace{
-			Name: consumerNamespace,
-			Labels: map[string]string{
-				v1.APIConsumerNamespaceLabel:         "true",
-				"pod-security.kubernetes.io/enforce": "restricted",
-			},
-		})
-		apply(&corev1.Secret{Namespace: consumerNamespace, Name: accessSecret, Data: access.Data})
+		for _, ns := range []string{consumerNamespace, outsiderNamespace} {
+			apply(&corev1.Namespace{
+				Name:   ns,
+				Labels: map[string]string{"pod-security.kubernetes.io/enforce": "restricted"},
+			})
+			apply(&corev1.Secret{Namespace: ns, Name: accessSecret, Data: access.Data})
+		}
 
 		By("reading the active company document with the token")
 		// The token reaches curl from the Secret, through the environment:
 		// never as a literal in the pod.
-		script := `curl -fsS -H "Authorization: Bearer ${TOKEN}" "${URL}/config"`
-		apply(&corev1.Pod{
-			Namespace: consumerNamespace, Name: "read-config",
-			Spec: corev1.PodSpec{
-				RestartPolicy: corev1.RestartPolicyNever,
-				SecurityContext: &corev1.PodSecurityContext{
-					RunAsNonRoot:   new(true),
-					RunAsUser:      new(int64(1000)),
-					SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
-				},
-				Containers: []corev1.Container{{
-					Name:    "curl",
-					Image:   curlImage,
-					Command: []string{"/bin/sh", "-c", script},
-					Env: []corev1.EnvVar{
-						secretEnv("TOKEN", accessSecret, v1.APIAccessTokenKey),
-						secretEnv("URL", accessSecret, v1.APIAccessURLKey),
-					},
-					SecurityContext: &corev1.SecurityContext{
-						AllowPrivilegeEscalation: new(false),
-						ReadOnlyRootFilesystem:   new(true),
-						Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
-					},
-				}},
-			},
-		})
-		Eventually(func(g Gomega) {
-			pod := &corev1.Pod{}
-			key := types.NamespacedName{Namespace: consumerNamespace, Name: "read-config"}
-			g.Expect(k8sClient.Get(ctx, key, pod)).To(Succeed())
-			g.Expect(pod.Status.Phase).To(Equal(corev1.PodSucceeded), "the consumer's request did not succeed")
-		}).Should(Succeed())
-		out, err := utils.Run(exec.Command("kubectl", "logs", "read-config", "-n", consumerNamespace))
+		readConfig := `curl -fsS --max-time 20 -H "Authorization: Bearer ${TOKEN}" "${URL}/config"`
+		apply(curlPod(consumerNamespace, readConfig))
+		Expect(curlPhase(consumerNamespace)).To(Equal(corev1.PodSucceeded), "the consumer's request did not succeed")
+		out, err := utils.Run(exec.Command("kubectl", "logs", curlPodName, "-n", consumerNamespace))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(out).To(ContainSubstring("Acme"), "the engine's active document is not the company's")
+
+		By("finding a namespace the class does not admit refused, token or not")
+		apply(curlPod(outsiderNamespace, readConfig))
+		Expect(curlPhase(outsiderNamespace)).To(Equal(corev1.PodFailed),
+			"a pod in a namespace the engine's NetworkPolicy does not admit reached its API")
 	})
 
 	It("applies an edited Seat as a new revision", func() {
@@ -462,4 +444,48 @@ func dump(args ...string) {
 		return
 	}
 	_, _ = fmt.Fprintf(GinkgoWriter, "kubectl %s:\n%s\n", strings.Join(args, " "), out)
+}
+
+// curlPodName is the name of the pod curlPod makes.
+const curlPodName = "read-config"
+
+// curlPod is a pod in namespace that runs script with curl, with the API
+// access Secret's token and URL in its environment as TOKEN and URL.
+func curlPod(namespace, script string) *corev1.Pod {
+	return &corev1.Pod{
+		Namespace: namespace, Name: curlPodName,
+		Spec: corev1.PodSpec{
+			RestartPolicy: corev1.RestartPolicyNever,
+			SecurityContext: &corev1.PodSecurityContext{
+				RunAsNonRoot:   new(true),
+				RunAsUser:      new(int64(1000)),
+				SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+			},
+			Containers: []corev1.Container{{
+				Name:    "curl",
+				Image:   curlImage,
+				Command: []string{"/bin/sh", "-c", script},
+				Env: []corev1.EnvVar{
+					secretEnv("TOKEN", accessSecret, v1.APIAccessTokenKey),
+					secretEnv("URL", accessSecret, v1.APIAccessURLKey),
+				},
+				SecurityContext: &corev1.SecurityContext{
+					AllowPrivilegeEscalation: new(false),
+					ReadOnlyRootFilesystem:   new(true),
+					Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+				},
+			}},
+		},
+	}
+}
+
+// curlPhase waits for curlPod's pod in namespace to finish and returns how.
+func curlPhase(namespace string) corev1.PodPhase {
+	GinkgoHelper()
+	pod := &corev1.Pod{}
+	Eventually(func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: curlPodName}, pod)).To(Succeed())
+		g.Expect(pod.Status.Phase).To(BeElementOf(corev1.PodSucceeded, corev1.PodFailed), "the pod has not finished")
+	}).Should(Succeed())
+	return pod.Status.Phase
 }

@@ -45,8 +45,9 @@ spec:
         image: controller:latest
         name: manager
         env:
-        # The operator's own namespace, which every engine's NetworkPolicy
-        # admits so that the operator can reach the engines it configures.
+        # The operator's own namespace, whose pods with this Deployment's
+        # labels (--operator-pod-labels) every engine's NetworkPolicy admits
+        # so that the operator can reach the engines it configures.
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:

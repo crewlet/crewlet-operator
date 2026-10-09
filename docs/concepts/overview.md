@@ -199,7 +199,7 @@ A control plane imports the types from the Go module
 `github.com/crewlet/crewlet-operator/api`, which depends on `k8s.io/api` and
 `k8s.io/apimachinery` only. The Secret keys and labels the API documents are
 constants there (`SlackBotTokenKey`, `APIAccessTokenKey`,
-`APIConsumerNamespaceLabel`, ...), so a program never repeats the strings.
+`CompanyLabel`, ...), so a program never repeats the strings.
 
 The module has no generated apply configurations, because they would bring in
 `k8s.io/client-go`. Server-side apply works with the typed objects

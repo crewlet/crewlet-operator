@@ -443,18 +443,94 @@ type ExposureSettings struct {
 	API APIExposure `json:"api,omitzero"`
 }
 
+// NetworkPolicySettings is the NetworkPolicy the operator puts around each
+// company's engine pods.
+// +kubebuilder:validation:MinProperties=1
+// +kubebuilder:validation:XValidation:rule="self.mode == 'Isolated' || (!has(self.apiConsumers) && !has(self.egress))",message="apiConsumers and egress apply to mode Isolated only"
+type NetworkPolicySettings struct {
+	// mode is whether the operator restricts the engine's traffic.
+	// +optional
+	// +default="Isolated"
+	Mode NetworkPolicyMode `json:"mode,omitempty"`
+
+	// apiConsumers are the pods admitted to the engine's API port besides
+	// the operator and the class's Gateway proxies or Ingress controller:
+	// the platform's own components (a control plane, a dashboard) that
+	// call the engines of this class's companies. Each holds an access
+	// token, which the engine still requires.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=16
+	APIConsumers []NetworkPolicyPeer `json:"apiConsumers,omitempty"`
+
+	// egress narrows where the engine may connect to. The engine runs code
+	// the tenant supplies (stdio MCP servers, sandbox commands, what its
+	// agents write), so under Isolated its pods may reach DNS, the pods of
+	// their own namespace, and every address outside the cluster except the
+	// cloud metadata endpoints (169.254.169.254, fd00:ec2::254), which hand
+	// out the node's credentials. What else is in the cluster is
+	// unreachable only if listed in exceptCIDRs.
+	// +optional
+	Egress NetworkPolicyEgress `json:"egress,omitzero"`
+}
+
+// NetworkPolicyEgress is where the engine may connect to, beyond DNS and
+// its own namespace.
+// +kubebuilder:validation:MinProperties=1
+type NetworkPolicyEgress struct {
+	// exceptCIDRs are address blocks the engine may not reach, besides the
+	// cloud metadata endpoints. List the cluster's pod, Service and node
+	// networks here: a NetworkPolicy has no other way to tell an address in
+	// the cluster from one outside it, and without them an engine reaches
+	// other tenants' pods, the Kubernetes API server and the nodes. Each is
+	// a canonical IPv4 or IPv6 CIDR, narrower than the whole address space.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32
+	// +kubebuilder:validation:items:MaxLength=43
+	// +kubebuilder:validation:XValidation:rule="self.all(c, isCIDR(c) && cidr(c).prefixLength() > 0 && string(cidr(c).masked()) == c)",message="exceptCIDRs must be canonical CIDRs such as 10.0.0.0/8 or fd00::/8, narrower than /0"
+	ExceptCIDRs []string `json:"exceptCIDRs,omitempty"`
+
+	// to are pods in the cluster the engine may reach although
+	// exceptCIDRs covers them: an in-cluster model gateway, the telemetry
+	// collector, an object store.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=16
+	To []NetworkPolicyPeer `json:"to,omitempty"`
+}
+
+// NetworkPolicyPeer is the pods its podSelector selects in the namespaces
+// its namespaceSelector selects, as a NetworkPolicy peer that sets both.
+type NetworkPolicyPeer struct {
+	// namespaceSelector selects namespaces by their labels; an empty one
+	// selects every namespace. Select a namespace by name with the label
+	// kubernetes.io/metadata.name, which the API server sets on every
+	// namespace.
+	// +required
+	NamespaceSelector *metav1.LabelSelector `json:"namespaceSelector,omitempty"`
+
+	// podSelector selects pods in those namespaces by their labels. Unset
+	// selects every pod in them.
+	// +optional
+	PodSelector *metav1.LabelSelector `json:"podSelector,omitempty"`
+}
+
 // NetworkPolicyMode is whether the operator restricts traffic to the engine.
 // +kubebuilder:validation:Enum=Isolated;None
 type NetworkPolicyMode string
 
 // The network policy modes.
 const (
-	// NetworkPolicyIsolated admits traffic to the engine's port only from
-	// the operator's namespace, from the namespaces the class's Gateway
+	// NetworkPolicyIsolated admits traffic to the engine's API port only
+	// from the operator's pods, from the namespaces the class's Gateway
 	// proxies or Ingress controller run in (gateway.proxyNamespaces,
-	// ingress.controllerNamespaces), and from namespaces labelled
-	// crewlet.ai/api-consumer=true (APIConsumerNamespaceLabel). It needs a
-	// CNI that enforces NetworkPolicy.
+	// ingress.controllerNamespaces), and from the class's apiConsumers; and
+	// lets the engine connect only as networkPolicy.egress says. It needs a
+	// CNI that enforces NetworkPolicy, egress included.
 	NetworkPolicyIsolated NetworkPolicyMode = "Isolated"
 	// NetworkPolicyNone creates no NetworkPolicy.
 	NetworkPolicyNone NetworkPolicyMode = "None"
@@ -658,7 +734,7 @@ type RetentionSettings struct {
 
 // EngineClassSpec is the defaults and guard rails a platform sets once for
 // every Company that names the class, the way a StorageClass does for volumes.
-// +kubebuilder:validation:XValidation:rule="self.networkPolicy != 'Isolated' || ((!has(self.exposure.webhooks.ingress) || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress) || has(self.exposure.api.ingress.controllerNamespaces)))",message="networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces: without them the policy refuses everything the Ingress forwards"
+// +kubebuilder:validation:XValidation:rule="self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress) || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress) || has(self.exposure.api.ingress.controllerNamespaces)))",message="networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces: without them the policy refuses everything the Ingress forwards"
 type EngineClassSpec struct {
 	// allowedNamespaces selects, by their labels, the namespaces whose
 	// Companies may run with this class, as a Gateway's
@@ -701,10 +777,11 @@ type EngineClassSpec struct {
 	// +default={"webhooks": {"mode": "None"}, "api": {"mode": "ClusterInternal"}}
 	Exposure ExposureSettings `json:"exposure,omitzero"`
 
-	// networkPolicy is whether the operator restricts traffic to the engine.
+	// networkPolicy is the NetworkPolicy the operator puts around each
+	// company's engine pods.
 	// +optional
-	// +default="Isolated"
-	NetworkPolicy NetworkPolicyMode `json:"networkPolicy,omitempty"`
+	// +default={"mode": "Isolated"}
+	NetworkPolicy NetworkPolicySettings `json:"networkPolicy,omitzero"`
 
 	// podTemplate is what is added to every engine pod.
 	// +optional

@@ -17,8 +17,8 @@ bin/kind create cluster --name crewlet
 bin/kubectl cluster-info --context kind-crewlet
 ```
 
-kind's default CNI does not enforce NetworkPolicy, so the isolation the
-operator sets up around each engine is created but not applied here; see
+kind's default CNI, kindnet, enforces NetworkPolicy, so the isolation the
+operator sets up around each engine applies here as in production; see
 [Exposure and network policy](guides/exposure.md).
 
 ## Build and load the images

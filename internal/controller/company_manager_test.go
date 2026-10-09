@@ -83,6 +83,7 @@ var _ = Describe("Company controller in a manager", Ordered, func() {
 			APIReader:         mgr.GetAPIReader(),
 			GatewayAPI:        gatewayAPI,
 			OperatorNamespace: operatorNamespace,
+			OperatorPodLabels: operatorPodLabels,
 		}).SetupWithManager(mgr)).To(Succeed())
 
 		managerCtx, stop := context.WithCancel(ctx)
@@ -193,6 +194,7 @@ var _ = Describe("Company and config controllers in one manager", Ordered, func(
 			APIReader:         mgr.GetAPIReader(),
 			GatewayAPI:        gatewayAPI,
 			OperatorNamespace: operatorNamespace,
+			OperatorPodLabels: operatorPodLabels,
 		}).SetupWithManager(mgr)).To(Succeed())
 		Expect((&CompanyConfigReconciler{
 			Client:    mgr.GetClient(),

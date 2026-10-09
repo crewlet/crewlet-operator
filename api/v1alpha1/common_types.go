@@ -561,10 +561,3 @@ const CompanyLabel = "crewlet.ai/company"
 // holds the Company's deletion until the engine has drained and stopped and
 // the data volumes have been kept or deleted as spec.deletionPolicy says.
 const CompanyFinalizer = "crewlet.ai/company"
-
-// APIConsumerNamespaceLabel is the namespace label that, with the value
-// "true", admits the namespace's pods to the engine's port under the
-// EngineClass's networkPolicy Isolated: it is how a platform lets its own
-// components (a control plane, a dashboard) reach the engine API of every
-// company.
-const APIConsumerNamespaceLabel = "crewlet.ai/api-consumer"

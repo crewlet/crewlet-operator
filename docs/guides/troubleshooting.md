@@ -122,6 +122,10 @@ requests to `http://<company>-data-0.<company>-data.<namespace>.svc:8080` fail:
 
 - A NetworkPolicy of your own refuses the operator's namespace. The operator's
   own policy admits it; check others selecting the data pods.
+- The operator's pods do not carry the labels its `--operator-pod-labels`
+  flag names (the default is `app.kubernetes.io/name=crewlet-operator,
+  control-plane=controller-manager`), so the engine's policy does not admit
+  them: a chart `nameOverride` changes the first.
 - The operator runs outside the cluster (`make run`): it cannot resolve the
   pod's DNS name.
 - The `<company>-api-tokens` Secret was changed by hand and the pod has not

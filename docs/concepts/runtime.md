@@ -27,7 +27,7 @@ Company, so it is deleted with it. For a Company `nimbus`:
 | Service `nimbus-engine` | ClusterIP on port 8080, routing to ready data pods. The routes and `status.endpoints.api` point at it. |
 | Service `nimbus-data` | Headless, the StatefulSet's governing Service, publishing each data pod's address before it is ready. |
 | HTTPRoute or Ingress `nimbus-webhooks`, `nimbus-api` | The routes the class asks for; see [Exposure](#exposure). |
-| NetworkPolicy `nimbus-engine` | With the class's `networkPolicy: Isolated`; see [Network policy](#network-policy). |
+| NetworkPolicy `nimbus-engine` | With the class's `networkPolicy.mode: Isolated`; see [Network policy](#network-policy). |
 
 The operator writes an object only if it does not exist or the Company
 controls it. An object of one of these names that someone else created (a
@@ -172,24 +172,27 @@ in another only if the Gateway's listener admits routes from that namespace
 
 ## Network policy
 
-With the class's `networkPolicy: Isolated` (the default) the operator creates a
-NetworkPolicy that selects the company's data pods and admits traffic to port
-8080 only from:
+With the class's `networkPolicy.mode: Isolated` (the default) the operator
+creates a NetworkPolicy that selects the company's data pods and admits
+traffic to port 8080 only from:
 
-- the operator's own namespace, so it can reach the engines it configures;
-- namespaces labelled `crewlet.ai/api-consumer: "true"`, for a platform's own
-  components;
+- the operator's own pods, so it can reach the engines it configures;
+- the class's `networkPolicy.apiConsumers`, for a platform's own components;
 - the namespaces the class's routes arrive from: each Gateway route's
   `gateway.proxyNamespaces`, or the namespaces of its Gateways when unset
   (right for implementations that run a proxy beside each Gateway), and each
   Ingress route's `ingress.controllerNamespaces`, which `Isolated` requires.
 
-Everything else is refused. It restricts ingress only; the engine reaches
-vendors and model providers on its own. A CNI that enforces NetworkPolicy is
-required for any of this to hold. Some Gateway implementations deliver traffic
-from the node rather than from a pod (Cilium's, for example), which no
-NetworkPolicy can admit by namespace; with those, set `networkPolicy: None`
-and isolate the engines with the CNI's own policy.
+Everything else is refused. Outward, the engine, which runs code its tenant
+supplies, may reach DNS, the pods of its own namespace, the class's
+`networkPolicy.egress.to`, and every address but the cloud metadata
+endpoints and the class's `networkPolicy.egress.exceptCIDRs`, where the
+cluster's own networks belong ([Network policy](../guides/exposure.md#network-policy)).
+A CNI that enforces NetworkPolicy is required for any of this to hold. Some
+Gateway implementations deliver traffic from the node rather than from a pod
+(Cilium's, for example), which no NetworkPolicy can admit by namespace; with
+those, set `networkPolicy.mode: None` and isolate the engines with the CNI's
+own policy.
 
 ## Deletion
 
@@ -239,8 +242,8 @@ which is what a client waiting for a change to take effect checks.
 ## Reaching the engine
 
 A consumer in the cluster reads the Secret `status.apiAccessSecretRef` names
-and sends its `token` as a bearer token to its `url`, from a namespace
-labelled `crewlet.ai/api-consumer: "true"` when the class isolates the engine.
+and sends its `token` as a bearer token to its `url`, from a pod the class's
+`networkPolicy.apiConsumers` admit when the class isolates the engine.
 The token is the engine's administrator: Crewlet has no token scopes, so
 whoever holds it can rewrite the company document and reveal every value in
 the secret store, platform model keys included. Grant read on that Secret by
