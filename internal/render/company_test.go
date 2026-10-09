@@ -179,7 +179,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.datadog.provisioning.app_key", "tenant-nimbus/datadog[appKey]"},
 		{"integrations.atlassian.api_key", "tenant-nimbus/atlassian[apiKey]"},
 		{"providers.llm.claude-subscription.cli.auth.token", "tenant-nimbus/claude-cli[oauthToken]"},
-		{"providers.llm.claude-subscription.cli.auth.credential_bundle", "tenant-nimbus/claude-cli[bundle]"},
+		{"providers.llm.codex-subscription.cli.auth.credential_bundle", "tenant-nimbus/codex-cli[bundle]"},
 		{"providers.llm.claude-subscription.cli.env.CLAUDE_CODE_USE_PROXY", "tenant-nimbus/claude-cli[proxy]"},
 	}
 	// The seats' provisioned credentials, named as the engine's

@@ -138,7 +138,15 @@ mints, or with a credential bundle `crewlet llm export` wrote from a login
 made elsewhere. A bundle is restored only while the provider's login on the
 data volume is empty, so the refreshed login a running engine keeps there
 wins over the bundle; a token never needs refreshing, which makes it the
-better of the two wherever the CLI mints one.
+better of the two wherever the CLI mints one. A provider names one of the
+two: given both, which login the CLI acts on would be the CLI's choice
+between its environment and its own files, which nothing here can see.
+
+Crewlet hands a CLI a token or a key only through the variable its profile
+names, and drops one for a CLI whose profile names none, which would leave
+the CLI signed in to nothing: so CLIAgentSettings holds tokenSecretRef to
+the CLIs with a token variable and mode APIKey to the CLIs with a key
+variable.
 
 _Validation:_
 - MinProperties: 1

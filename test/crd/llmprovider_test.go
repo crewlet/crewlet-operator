@@ -116,7 +116,10 @@ const (
 	msgCLIKey         = "a CLIAgent provider takes apiKeySecretRefs with cli.auth.mode APIKey, and only then"
 	msgCLIOneKey      = "a CLIAgent provider gives its CLI one key"
 	msgCLIRunIn       = "runIn applies to mode Agent only"
-	msgCLIAgentRunner = "mode Agent runs ClaudeCode or OpenCode"
+	msgCLIAgentRunner = "mode Agent runs ClaudeCode only"
+	msgCLIToken       = "auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode"
+	msgCLIKeyAgent    = "auth mode APIKey takes a CLI Crewlet hands a key to"
+	msgCLITwoLogins   = "tokenSecretRef and credentialBundleSecretRef are two logins"
 	msgCLIRemoteLogin = "a Subscription login reaches an Agent-mode run in a remote sandbox only as a headless token"
 	msgCLINoLogin     = "a Subscription login needs tokenSecretRef or credentialBundleSecretRef"
 	msgCLILoginFields = "tokenSecretRef and credentialBundleSecretRef sign in to a subscription"
@@ -160,13 +163,54 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			},
 		},
 		{
-			name: "OpenCode in mode Agent on a metered key is accepted",
+			name: "Claude Code in mode Agent on a metered key is accepted",
 			mutate: func(p *v1.LLMProvider) {
 				agentMode(p)
-				p.Spec.CLI.Agent = v1.CLIAgentOpenCode
 				p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}
 				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
 			},
+		},
+		{
+			name: "Codex on a metered key is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.CLI.Agent = v1.CLIAgentCodex
+				p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}
+				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
+			},
+		},
+		{
+			// OpenCode has a sandbox runner, and its profile names no
+			// variable a key or a token would reach the remote box in.
+			name: "OpenCode in mode Agent is refused",
+			mutate: func(p *v1.LLMProvider) {
+				agentMode(p)
+				p.Spec.CLI.Agent = v1.CLIAgentOpenCode
+				p.Spec.CLI.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("opencode", "bundle")}
+			},
+			want: msgCLIAgentRunner,
+		},
+		{
+			name: "a headless token for a CLI other than Claude Code is refused",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.CLI.Agent = v1.CLIAgentCodex
+			},
+			want: msgCLIToken,
+		},
+		{
+			name: "auth mode APIKey for a CLI with no key variable is refused",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.CLI.Agent = v1.CLIAgentHermes
+				p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}
+				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
+			},
+			want: msgCLIKeyAgent,
+		},
+		{
+			name: "a headless token beside an exported login is refused",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.CLI.Auth.CredentialBundleSecretRef = secretKey("claude", "bundle")
+			},
+			want: msgCLITwoLogins,
 		},
 		{
 			name:   "type CLIAgent without cli is refused",

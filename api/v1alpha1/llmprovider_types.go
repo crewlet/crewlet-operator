@@ -116,9 +116,18 @@ const (
 // made elsewhere. A bundle is restored only while the provider's login on the
 // data volume is empty, so the refreshed login a running engine keeps there
 // wins over the bundle; a token never needs refreshing, which makes it the
-// better of the two wherever the CLI mints one.
+// better of the two wherever the CLI mints one. A provider names one of the
+// two: given both, which login the CLI acts on would be the CLI's choice
+// between its environment and its own files, which nothing here can see.
+//
+// Crewlet hands a CLI a token or a key only through the variable its profile
+// names, and drops one for a CLI whose profile names none, which would leave
+// the CLI signed in to nothing: so CLIAgentSettings holds tokenSecretRef to
+// the CLIs with a token variable and mode APIKey to the CLIs with a key
+// variable.
 // +kubebuilder:validation:XValidation:rule="(has(self.mode) && self.mode != 'Subscription') || has(self.tokenSecretRef) || has(self.credentialBundleSecretRef)",message="a Subscription login needs tokenSecretRef or credentialBundleSecretRef: a pod has no terminal to log in at"
 // +kubebuilder:validation:XValidation:rule="!(has(self.mode) && self.mode != 'Subscription') || (!has(self.tokenSecretRef) && !has(self.credentialBundleSecretRef))",message="tokenSecretRef and credentialBundleSecretRef sign in to a subscription: they apply to mode Subscription only"
+// +kubebuilder:validation:XValidation:rule="!has(self.tokenSecretRef) || !has(self.credentialBundleSecretRef)",message="tokenSecretRef and credentialBundleSecretRef are two logins, and the CLI is given one: keep the headless token, which never needs refreshing, or the bundle where the CLI mints no token"
 // +kubebuilder:validation:MinProperties=1
 type CLIAgentAuth struct {
 	// mode is how the CLI signs in. Unset is Subscription. Crewlet's
@@ -148,7 +157,9 @@ type CLIAgentAuth struct {
 // the per-seat homes the CLI keeps, are on the data volume, so a restart or a
 // new pod keeps them.
 // +kubebuilder:validation:XValidation:rule="!has(self.runIn) || (has(self.mode) && self.mode == 'Agent')",message="runIn applies to mode Agent only: in mode Text the CLI is a process in the engine's pod"
-// +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'Agent' || self.agent in ['ClaudeCode', 'OpenCode']",message="mode Agent runs ClaudeCode or OpenCode: the engine has a sandbox runner for those two CLIs only"
+// +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'Agent' || self.agent == 'ClaudeCode'",message="mode Agent runs ClaudeCode only: of the two CLIs the engine has a sandbox runner for, ClaudeCode and OpenCode, Crewlet's opencode profile names no credential variable, so a run in the remote sandbox (E2B, the only runIn) cannot authenticate"
+// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.tokenSecretRef) || self.agent == 'ClaudeCode'",message="auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode (CLAUDE_CODE_OAUTH_TOKEN): its profile for every other CLI names no token variable and drops it. Sign that CLI in with auth.credentialBundleSecretRef"
+// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'APIKey' || self.agent in ['ClaudeCode', 'Codex', 'GeminiCLI', 'QwenCode', 'Copilot', 'Grok', 'MuseCode']",message="auth mode APIKey takes a CLI Crewlet hands a key to: ClaudeCode, Codex, GeminiCLI, QwenCode, Copilot, Grok or MuseCode. Crewlet's profiles for OpenCode, CursorAgent, KimiCode, Hermes and Pi name no key variable and drop the key: sign those in with auth.credentialBundleSecretRef"
 // +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'Agent' || (has(self.auth) && has(self.auth.mode) && self.auth.mode != 'Subscription') || (self.agent == 'ClaudeCode' && has(self.auth) && has(self.auth.tokenSecretRef))",message="a Subscription login reaches an Agent-mode run in a remote sandbox only as a headless token: give ClaudeCode auth.tokenSecretRef, or use auth mode APIKey"
 type CLIAgentSettings struct {
 	// agent is which CLI to drive. Crewlet's `agent`.

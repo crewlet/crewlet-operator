@@ -50,8 +50,14 @@ from a Secret, in one of two forms:
 
 | `auth` | What the Secret holds | Use it when |
 |---|---|---|
-| `tokenSecretRef` | a long-lived headless token the CLI mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the CLI mints one: it never needs refreshing, and it is the only login an agent-mode run can carry |
-| `credentialBundleSecretRef` | a bundle of the CLI's credential files, from `crewlet llm export <key>` on a machine where you logged in | the CLI mints no token (Codex, Gemini CLI) |
+| `tokenSecretRef` | a long-lived headless token the CLI mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the CLI is Claude Code, the one CLI whose Crewlet profile names a token variable: it never needs refreshing, and it is the only subscription login an agent-mode run can carry |
+| `credentialBundleSecretRef` | a bundle of the CLI's credential files, from `crewlet llm export <key>` on a machine where you logged in | any other CLI: they mint no token Crewlet hands on |
+
+A provider names one of the two: given both, which login the CLI acts on
+would be its own choice between its environment and its files, so the API
+server refuses the pair. Crewlet hands a token to a CLI only through the
+variable its profile names and drops it for every other CLI, so the API
+server refuses `tokenSecretRef` on any agent but `ClaudeCode`.
 
 ```bash
 claude setup-token          # on your machine: prints the token
@@ -88,7 +94,21 @@ homes, which is how several models run off one subscription; they must
 drive the same CLI, or the engine refuses the document.
 
 `auth.mode: APIKey` gives the CLI the provider's one `apiKeySecretRefs` key
-instead, billing the metered account.
+instead, billing the metered account. Crewlet hands the key over in the
+variable the CLI's profile names, and at the pinned engine only seven name
+one; for the others the key would be dropped and the CLI signed in to
+nothing, so the API server refuses the mode for them:
+
+| `cli.agent` | The variable `auth.mode: APIKey` fills |
+|---|---|
+| `ClaudeCode` | `ANTHROPIC_API_KEY` |
+| `Codex` | `OPENAI_API_KEY` |
+| `GeminiCLI` | `GEMINI_API_KEY` |
+| `QwenCode` | `DASHSCOPE_API_KEY` |
+| `Copilot` | `GITHUB_TOKEN` |
+| `Grok` | `XAI_API_KEY` |
+| `MuseCode` | `META_API_KEY` |
+| `OpenCode`, `CursorAgent`, `KimiCode`, `Hermes`, `Pi` | no: sign them in with `credentialBundleSecretRef` |
 
 ## Text mode and agent mode
 
@@ -103,10 +123,13 @@ CLI must be in the engine's image either way. In agent mode:
   must carry the CLI too. `cli.runIn` is `E2B`, the only cell v1alpha1
   offers: Crewlet's local cells would run every seat's code in the engine's
   pod, with its credentials.
-- Only Claude Code and OpenCode have a sandbox runner in the engine.
+- Only Claude Code runs in agent mode. The engine has a sandbox runner for
+  Claude Code and OpenCode, and a run in a remote sandbox authenticates
+  through the token or key variable the CLI's profile names, which Crewlet's
+  OpenCode profile does not have: every such run would be refused.
 - The login must follow the run into a remote sandbox, which only a headless
-  token can: an agent-mode Claude Code takes `auth.tokenSecretRef`, or
-  `auth.mode: APIKey`. A credential bundle stays on the data volume.
+  token or a key can: an agent-mode Claude Code takes `auth.tokenSecretRef`,
+  or `auth.mode: APIKey`. A credential bundle stays on the data volume.
 - The run calls the seat's own tools back through the engine's tool bridge.
   While any LLMProvider of the company is in agent mode, the operator gives
   the engine its public address as the bridge's
@@ -152,7 +175,8 @@ CLI it cannot do:
   pods hold at each refresh, and logs them out. A seat in a seat pool that
   runs on a provider with `credentialBundleSecretRef`, in any phase, is
   refused with `Applied=False`, `CLIAuthNotPortable`: sign it in with
-  `tokenSecretRef` or `auth.mode: APIKey`, or place the seat in `data`.
+  `tokenSecretRef` (Claude Code) or `auth.mode: APIKey` (a CLI the table
+  above gives a key variable), or place the seat in `data`.
 
 ## What v1alpha1 does not offer
 

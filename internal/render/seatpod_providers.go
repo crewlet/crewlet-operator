@@ -77,8 +77,9 @@ func (r *renderer) seatPodProviders(s *v1alpha1.Seat, pool string) {
 			r.errs.add(KindSeat, s.Name, link.field, v1alpha1.ReasonCLIAuthNotPortable, fmt.Sprintf(
 				"runs on LLMProvider %s, whose CLI signs in with a credential bundle, and places the seat in seat pool %s: "+
 					"a seat pod keeps the login on a volume it loses at every start, restores the bundle each time and "+
-					"refreshes it on its own, which logs every pod out once the vendor rotates the refresh token. Give "+
-					"the provider cli.auth.tokenSecretRef or auth mode APIKey, or place the seat in data",
+					"refreshes it on its own, which logs every pod out once the vendor rotates the refresh token. Sign "+
+					"the CLI in with cli.auth.tokenSecretRef (ClaudeCode) or auth mode APIKey in place of the bundle, "+
+					"or place the seat in data",
 				link.provider, pool))
 		}
 	}

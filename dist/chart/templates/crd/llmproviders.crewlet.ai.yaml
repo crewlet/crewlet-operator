@@ -216,6 +216,11 @@ spec:
                         in to a subscription: they apply to mode Subscription only'
                       rule: '!(has(self.mode) && self.mode != ''Subscription'') ||
                         (!has(self.tokenSecretRef) && !has(self.credentialBundleSecretRef))'
+                    - message: 'tokenSecretRef and credentialBundleSecretRef are two
+                        logins, and the CLI is given one: keep the headless token,
+                        which never needs refreshing, or the bundle where the CLI
+                        mints no token'
+                      rule: '!has(self.tokenSecretRef) || !has(self.credentialBundleSecretRef)'
                   env:
                     description: |-
                       env is extra environment of every invocation of the CLI: the child
@@ -321,10 +326,25 @@ spec:
                 - message: 'runIn applies to mode Agent only: in mode Text the CLI
                     is a process in the engine''s pod'
                   rule: '!has(self.runIn) || (has(self.mode) && self.mode == ''Agent'')'
-                - message: 'mode Agent runs ClaudeCode or OpenCode: the engine has
-                    a sandbox runner for those two CLIs only'
-                  rule: '!has(self.mode) || self.mode != ''Agent'' || self.agent in
-                    [''ClaudeCode'', ''OpenCode'']'
+                - message: 'mode Agent runs ClaudeCode only: of the two CLIs the engine
+                    has a sandbox runner for, ClaudeCode and OpenCode, Crewlet''s
+                    opencode profile names no credential variable, so a run in the
+                    remote sandbox (E2B, the only runIn) cannot authenticate'
+                  rule: '!has(self.mode) || self.mode != ''Agent'' || self.agent ==
+                    ''ClaudeCode'''
+                - message: 'auth.tokenSecretRef is a headless token, which Crewlet
+                    hands only to ClaudeCode (CLAUDE_CODE_OAUTH_TOKEN): its profile
+                    for every other CLI names no token variable and drops it. Sign
+                    that CLI in with auth.credentialBundleSecretRef'
+                  rule: '!has(self.auth) || !has(self.auth.tokenSecretRef) || self.agent
+                    == ''ClaudeCode'''
+                - message: 'auth mode APIKey takes a CLI Crewlet hands a key to: ClaudeCode,
+                    Codex, GeminiCLI, QwenCode, Copilot, Grok or MuseCode. Crewlet''s
+                    profiles for OpenCode, CursorAgent, KimiCode, Hermes and Pi name
+                    no key variable and drop the key: sign those in with auth.credentialBundleSecretRef'
+                  rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode
+                    != ''APIKey'' || self.agent in [''ClaudeCode'', ''Codex'', ''GeminiCLI'',
+                    ''QwenCode'', ''Copilot'', ''Grok'', ''MuseCode'']'
                 - message: 'a Subscription login reaches an Agent-mode run in a remote
                     sandbox only as a headless token: give ClaudeCode auth.tokenSecretRef,
                     or use auth mode APIKey'
