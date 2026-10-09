@@ -414,6 +414,17 @@ func TestErrorMapping(t *testing.T) {
 			sentinel: engine.ErrUnauthorized, wantCode: "invalid_token", wantStatus: http.StatusUnauthorized,
 		},
 		{
+			name: "a managed document",
+			handler: answer(http.StatusForbidden,
+				`{"error":"config_managed","managed_by":["operator"],"detail":"the company document is managed by operator"}`),
+			sentinel: engine.ErrConfigManaged, wantCode: "config_managed", wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "a proxy's 403",
+			handler:    page(http.StatusForbidden),
+			wantStatus: http.StatusForbidden,
+		},
+		{
 			name:     "missing summary",
 			handler:  answer(http.StatusBadRequest, `{"error":"summary_required","hint":"PUT /config needs an audit summary"}`),
 			wantCode: "summary_required", wantStatus: http.StatusBadRequest,
@@ -422,7 +433,7 @@ func TestErrorMapping(t *testing.T) {
 	}
 	sentinels := []error{
 		engine.ErrRevisionAdvanced, engine.ErrAlreadyConfigured, engine.ErrNoActiveRevision,
-		engine.ErrUnauthorized, engine.ErrNotReady,
+		engine.ErrUnauthorized, engine.ErrNotReady, engine.ErrConfigManaged,
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

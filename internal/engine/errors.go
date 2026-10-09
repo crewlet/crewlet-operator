@@ -35,6 +35,14 @@ var (
 	// first apply.
 	ErrNoActiveRevision = errors.New("the engine has no active configuration revision")
 
+	// ErrConfigManaged is a write onto the company document that the
+	// engine refuses this token: its Tier A api.auth.company_writers names
+	// the tokens that alone may change the document, and this one is not
+	// among them (403 config_managed). Reads, a reload and the secret store
+	// stay open to it. The *APIError behind it lists the writers in
+	// ManagedBy.
+	ErrConfigManaged = errors.New("the engine's company document is managed by another token")
+
 	// ErrNotReady is an engine that is up but should not be sent work: it
 	// is draining for a shutdown, has no company yet, or its posture is shed
 	// or stuck. The *NotReadyError behind it names which.
@@ -50,6 +58,7 @@ const (
 	codeAlreadyConfigured = "already_configured"
 	codeNoActiveRevision  = "no_active_revision"
 	codeDraining          = "draining"
+	codeConfigManaged     = "config_managed"
 )
 
 // codesWithProblems are the refusals of a document: the engine located each
@@ -64,9 +73,10 @@ var codesWithProblems = map[string]struct{}{
 // every refusal that is not a document's (*ValidationError) or a not-ready
 // engine's (*NotReadyError).
 //
-// It matches ErrUnauthorized, ErrRevisionAdvanced, ErrAlreadyConfigured and
-// ErrNoActiveRevision with errors.Is where its status and code say so, so a
-// caller can branch on the sentinel and still read the engine's message.
+// It matches ErrUnauthorized, ErrRevisionAdvanced, ErrAlreadyConfigured,
+// ErrNoActiveRevision and ErrConfigManaged with errors.Is where its status
+// and code say so, so a caller can branch on the sentinel and still read the
+// engine's message.
 type APIError struct {
 	// StatusCode is the HTTP status.
 	StatusCode int
@@ -91,6 +101,10 @@ type APIError struct {
 	// StoredRevisionID is the revision a write that lost the race stored and
 	// left inert, when the engine kept one.
 	StoredRevisionID string
+
+	// ManagedBy are the token ids that may change the company document,
+	// when the engine refused this write as config_managed.
+	ManagedBy []string
 }
 
 func (e *APIError) Error() string {
@@ -129,6 +143,10 @@ func (e *APIError) Is(target error) bool {
 		// nothing active, and a 409 one a patch or reload; both mean there is
 		// no company yet.
 		return e.Code == codeNoActiveRevision
+	case ErrConfigManaged:
+		// Matched by code and status together: a 403 without the code is
+		// a proxy's, and says nothing about the document.
+		return e.StatusCode == http.StatusForbidden && e.Code == codeConfigManaged
 	}
 	return false
 }
@@ -268,6 +286,7 @@ type refusal struct {
 	Problems          []Problem `json:"problems"`
 	CurrentRevisionID string    `json:"current_revision_id"`
 	StoredRevisionID  string    `json:"stored_revision_id"`
+	ManagedBy         []string  `json:"managed_by"`
 }
 
 // errorFromResponse turns a non-2xx answer into the package's error for it.
@@ -307,5 +326,6 @@ func errorFromResponse(status int, body []byte) error {
 		Hint:              r.Hint,
 		CurrentRevisionID: r.CurrentRevisionID,
 		StoredRevisionID:  r.StoredRevisionID,
+		ManagedBy:         r.ManagedBy,
 	}
 }

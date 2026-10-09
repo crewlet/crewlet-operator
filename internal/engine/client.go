@@ -7,6 +7,7 @@
 // every refusal onto a typed error: a refused document becomes a
 // *ValidationError whose problems carry their place in the document, a lost
 // compare-and-set matches ErrRevisionAdvanced, a refused token ErrUnauthorized,
+// a write a managed document refuses this token ErrConfigManaged,
 // a draining or unconfigured engine ErrNotReady, and anything else an
 // *APIError with the engine's code and message.
 //

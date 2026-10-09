@@ -125,6 +125,7 @@ type Option func(*options)
 type options struct {
 	company []byte
 	tierA   *tierAOption
+	writers []string
 }
 
 // tierAOption is a Tier A of the caller's (WithTierA).
@@ -145,6 +146,16 @@ func WithTierA(operator, access string, render func(port int, dir string) []byte
 	return func(o *options) {
 		o.tierA = &tierAOption{operator: operator, access: access, render: render, env: env}
 	}
+}
+
+// WithCompanyWriters makes the company document managed: enginetest's Tier A
+// names ids as api.auth.company_writers, the token ids that alone may change
+// the document, and the engine refuses every other token a change with 403
+// config_managed. Its reads, a reload and the secret store stay open to
+// every token. The engine ignores a WithCompany seed when the document is
+// managed, so the two do not combine. It has no effect with WithTierA.
+func WithCompanyWriters(ids ...string) Option {
+	return func(o *options) { o.writers = ids }
 }
 
 // WithCompany seeds the engine with document as its first company revision
@@ -186,7 +197,10 @@ func Start(t T, opts ...Option) *Engine {
 		"ENGINETEST_SECRET_KEY=" + randomKey(t),
 	}
 
-	render := tierA
+	if o.company != nil && len(o.writers) > 0 {
+		t.Fatalf("enginetest: WithCompany and WithCompanyWriters do not combine: a managed engine ignores its -company seed")
+	}
+	render := func(port int) []byte { return tierA(port, o.writers) }
 	if custom := o.tierA; custom != nil {
 		e.OperatorToken, e.AccessToken = custom.operator, custom.access
 		env = append([]string{"PATH=" + os.Getenv("PATH"), "HOME=" + dir}, custom.env...)
@@ -329,8 +343,12 @@ const streamMaxBytes = 5 << 30
 // local store and coordination of a single node, an encrypted secret store,
 // and the API on the loopback interface with two tokens. Every credential is a
 // ${VAR} the engine resolves from the environment Start gives it, so none is
-// written to disk.
-func tierA(port int) []byte {
+// written to disk. writers, when there are any, are api.auth.company_writers.
+func tierA(port int, writers []string) []byte {
+	var companyWriters string
+	if len(writers) > 0 {
+		companyWriters = "    company_writers: [" + strings.Join(writers, ", ") + "]\n"
+	}
 	return fmt.Appendf(nil, `logging:
   level: info
   format: json
@@ -351,14 +369,14 @@ api:
         token: "${ENGINETEST_OPERATOR_TOKEN}"
       - id: %s
         token: "${ENGINETEST_ACCESS_TOKEN}"
-secrets:
+%ssecrets:
   active_key_id: enginetest
   keys:
     - id: enginetest
       material: "${ENGINETEST_SECRET_KEY}"
 retention:
   backup_owner: enginetest
-`, streamMaxBytes, port, OperatorTokenID, AccessTokenID)
+`, streamMaxBytes, port, OperatorTokenID, AccessTokenID, companyWriters)
 }
 
 // Binary returns the crewlet binary a test runs: the one BinaryEnv names, or

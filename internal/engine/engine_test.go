@@ -303,11 +303,71 @@ func TestEngineIntegrationsOfACompanyWithoutAny(t *testing.T) {
 func TestEngineRefusesAWrongToken(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	e := enginetest.Start(t)
+	e := enginetest.Start(t, enginetest.WithCompanyWriters(enginetest.OperatorTokenID))
 	if _, err := engine.New(e.URL, "not-"+e.OperatorToken).ListSecrets(ctx); !errors.Is(err, engine.ErrUnauthorized) {
 		t.Fatalf("ListSecrets() with a wrong token = %v, want ErrUnauthorized", err)
 	}
 	if _, err := engine.New(e.URL, e.AccessToken).ListSecrets(ctx); err != nil {
 		t.Fatalf("ListSecrets() with the access token = %v", err)
+	}
+}
+
+// TestEngineRefusesAManagedDocumentToEveryOtherToken pins what the operator
+// relies on when it renders api.auth.company_writers under Enforce: the token
+// the list names writes the company document as before, while every other
+// token is refused any change to it, a dry run included, with
+// ErrConfigManaged naming the writers, and the document stays as it was. The
+// same token still reads the document and writes the secret store, which a
+// person keeps for rotating a leaked credential.
+func TestEngineRefusesAManagedDocumentToEveryOtherToken(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	e := enginetest.Start(t, enginetest.WithCompanyWriters(enginetest.OperatorTokenID))
+	operator := e.Client()
+	access := engine.New(e.URL, e.AccessToken)
+
+	refused := func(what string, err error) {
+		t.Helper()
+		var apiErr *engine.APIError
+		if !errors.Is(err, engine.ErrConfigManaged) || !errors.As(err, &apiErr) ||
+			!slices.Equal(apiErr.ManagedBy, []string{enginetest.OperatorTokenID}) {
+			t.Fatalf("%s with the access token = %v, want ErrConfigManaged naming %s as the writer", what, err, enginetest.OperatorTokenID)
+		}
+	}
+	_, err := access.ApplyConfig(ctx, engine.ApplyRequest{
+		Document: []byte(enginetest.MinimalCompany), Summary: "enginetest: not a writer", CreateOnly: true,
+	})
+	refused("the first apply", err)
+
+	first, err := operator.ApplyConfig(ctx, engine.ApplyRequest{
+		Document: []byte(enginetest.MinimalCompany), Summary: "enginetest: the writer", CreateOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("the first apply with the operator token: %v", err)
+	}
+
+	edited := []byte(strings.Replace(enginetest.MinimalCompany, "name: Acme", "name: Edited", 1))
+	_, err = access.ApplyConfig(ctx, engine.ApplyRequest{Document: edited, DryRun: true})
+	refused("a dry run", err)
+	_, err = access.ApplyConfig(ctx, engine.ApplyRequest{Document: edited, Summary: "enginetest: an edit", IfMatch: first.RevisionID})
+	refused("an edit", err)
+
+	active, err := access.ActiveConfig(ctx)
+	if err != nil {
+		t.Fatalf("reading the managed document with the access token: %v", err)
+	}
+	if active.RevisionID != first.RevisionID || strings.Contains(string(active.Document), "Edited") {
+		t.Fatalf("the engine runs revision %s:\n%s\nwant the operator's %s, unchanged", active.RevisionID, active.Document, first.RevisionID)
+	}
+	if err := access.PutSecret(ctx, "ENGINETEST_ROTATED", []byte("rotated"), ""); err != nil {
+		t.Fatalf("writing the secret store with the access token: %v", err)
+	}
+
+	second, err := operator.ApplyConfig(ctx, engine.ApplyRequest{Document: edited, Summary: "enginetest: the writer edits", IfMatch: first.RevisionID})
+	if err != nil {
+		t.Fatalf("an edit with the operator token: %v", err)
+	}
+	if active, err := operator.ActiveConfig(ctx); err != nil || active.RevisionID != second.RevisionID {
+		t.Fatalf("after the operator's edit the engine runs %+v (%v), want revision %s", active.RevisionID, err, second.RevisionID)
 	}
 }
