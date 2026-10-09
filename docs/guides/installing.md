@@ -37,8 +37,13 @@ to them: every object it writes, changes or deletes carries
 the label, with its data unchanged), every Secret it writes is `Opaque`, and
 every StatefulSet runs its pods as a ServiceAccount named `*-engine`, without
 the node's network, PID or IPC namespaces, host paths or privileged
-containers. Whoever takes over the manager's token therefore cannot mint a
-token for another ServiceAccount or run a pod on a node's terms. It can
+containers, and every PodDisruptionBudget and NetworkPolicy selects a
+company's engine pods (by `app.kubernetes.io/name: crewlet`, a component of
+`data` or `seats`, and `crewlet.ai/company`) and nothing else. Whoever takes
+over the manager's token therefore cannot mint a token for another
+ServiceAccount, run a pod on a node's terms, hold up every node drain with a
+budget over the cluster's DNS, or cut off a namespace with a policy that
+selects all of its pods. It can
 still read every Secret in the cluster, and run an engine-shaped pod with any
 image as a company's engine ServiceAccount: protect the manager's namespace
 as you would any controller with cluster-wide Secret read.

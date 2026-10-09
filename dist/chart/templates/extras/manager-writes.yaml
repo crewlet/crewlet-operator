@@ -98,6 +98,20 @@ spec:
     message: 'the operator runs only engine pods: as a ServiceAccount named *-engine,
       without the node''s network, PID or IPC namespace, host paths or privileged
       containers'
+  - expression: |-
+      request.resource.resource != 'poddisruptionbudgets' || request.operation == 'DELETE' || (variables.selected[?'app.kubernetes.io/name'].orValue('') == 'crewlet' && variables.selected[?'app.kubernetes.io/component'].orValue('') == 'seats' && variables.selected[?'crewlet.ai/company'].orValue('') != '' && object.spec.?selector.?matchExpressions.orValue([]).all(e,
+
+        e.key == 'crewlet.ai/seat' && e.operator == 'DoesNotExist'))
+    message: 'the operator budgets disruptions only of a company''s seat pods: a selector
+      of app.kubernetes.io/name=crewlet, app.kubernetes.io/component=seats and crewlet.ai/company'
+  - expression: request.resource.resource != 'networkpolicies' || request.operation
+      == 'DELETE' || (variables.podSelector[?'app.kubernetes.io/name'].orValue('')
+      == 'crewlet' && variables.podSelector[?'app.kubernetes.io/component'].orValue('')
+      in ['data', 'seats'] && variables.podSelector[?'crewlet.ai/company'].orValue('')
+      != '' && object.spec.podSelector.?matchExpressions.orValue([]).size() == 0)
+    message: 'the operator''s NetworkPolicies select only a company''s engine pods:
+      a podSelector of app.kubernetes.io/name=crewlet, app.kubernetes.io/component
+      data or seats and crewlet.ai/company'
   variables:
   - expression: '''app.kubernetes.io/managed-by'' in object.?metadata.?labels.orValue({})
       && object.metadata.labels[''app.kubernetes.io/managed-by''] == ''crewlet-operator'''
@@ -105,3 +119,7 @@ spec:
   - expression: '''app.kubernetes.io/managed-by'' in oldObject.?metadata.?labels.orValue({})
       && oldObject.metadata.labels[''app.kubernetes.io/managed-by''] == ''crewlet-operator'''
     name: wasManaged
+  - expression: object.?spec.?selector.?matchLabels.orValue({})
+    name: selected
+  - expression: object.?spec.?podSelector.?matchLabels.orValue({})
+    name: podSelector

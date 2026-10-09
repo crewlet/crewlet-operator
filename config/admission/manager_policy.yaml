@@ -1,13 +1,15 @@
 # The manager's ClusterRole lets it write Secrets, ServiceAccounts, Services,
-# StatefulSets and PodDisruptionBudgets in every namespace, since a Company
-# may live in any. RBAC cannot say "only the ones the operator made", so
-# whoever took over the
-# manager's token could otherwise mint a token Secret for any ServiceAccount,
-# or run any pod as any ServiceAccount. This policy holds the manager to the
-# objects it makes: each carries app.kubernetes.io/managed-by=crewlet-operator,
-# Secrets are Opaque, and a StatefulSet runs its pods as a company's engine
-# ServiceAccount, without the node's namespaces, host paths or privileged
-# containers. It is in-tree admission (no webhook) and matches the manager's
+# StatefulSets, PodDisruptionBudgets and NetworkPolicies in every namespace,
+# since a Company may live in any. RBAC cannot say "only the ones the operator
+# made", so whoever took over the manager's token could otherwise mint a
+# token Secret for any ServiceAccount, run any pod as any ServiceAccount, hold
+# up every node drain with a budget of no disruption over CoreDNS, or cut a
+# namespace off with a policy that selects its every pod. This policy holds the
+# manager to the objects it makes: each carries
+# app.kubernetes.io/managed-by=crewlet-operator, Secrets are Opaque, a
+# StatefulSet runs its pods as a company's engine ServiceAccount, without the
+# node's namespaces, host paths or privileged containers, and a budget or a
+# NetworkPolicy selects a company's engine pods and nothing else. It is in-tree admission (no webhook) and matches the manager's
 # ServiceAccount only. Reading every Secret stays possible: see
 # docs/guides/installing.md, "What the operator may do".
 apiVersion: admissionregistration.k8s.io/v1
@@ -63,6 +65,11 @@ spec:
     expression: >-
       'app.kubernetes.io/managed-by' in oldObject.?metadata.?labels.orValue({}) &&
       oldObject.metadata.labels['app.kubernetes.io/managed-by'] == 'crewlet-operator'
+  # The labels a budget's selector requires, and a policy's pod selector.
+  - name: selected
+    expression: object.?spec.?selector.?matchLabels.orValue({})
+  - name: podSelector
+    expression: object.?spec.?podSelector.?matchLabels.orValue({})
   validations:
   - expression: request.operation == 'DELETE' || variables.managed
     messageExpression: >-
@@ -93,6 +100,28 @@ spec:
     message: >-
       the operator runs only engine pods: as a ServiceAccount named *-engine, without the node's
       network, PID or IPC namespace, host paths or privileged containers
+  # A budget covers a company's seat pods: the pool's or the seat's, and a
+  # Shared pool's excludes a PerSeat seat's pods by the seat label's absence.
+  - expression: >-
+      request.resource.resource != 'poddisruptionbudgets' || request.operation == 'DELETE' ||
+      (variables.selected[?'app.kubernetes.io/name'].orValue('') == 'crewlet' &&
+      variables.selected[?'app.kubernetes.io/component'].orValue('') == 'seats' &&
+      variables.selected[?'crewlet.ai/company'].orValue('') != '' &&
+      object.spec.?selector.?matchExpressions.orValue([]).all(e,
+        e.key == 'crewlet.ai/seat' && e.operator == 'DoesNotExist'))
+    message: >-
+      the operator budgets disruptions only of a company's seat pods: a selector of
+      app.kubernetes.io/name=crewlet, app.kubernetes.io/component=seats and crewlet.ai/company
+  # A policy selects a company's data pods or its seat pods, by labels alone.
+  - expression: >-
+      request.resource.resource != 'networkpolicies' || request.operation == 'DELETE' ||
+      (variables.podSelector[?'app.kubernetes.io/name'].orValue('') == 'crewlet' &&
+      variables.podSelector[?'app.kubernetes.io/component'].orValue('') in ['data', 'seats'] &&
+      variables.podSelector[?'crewlet.ai/company'].orValue('') != '' &&
+      object.spec.podSelector.?matchExpressions.orValue([]).size() == 0)
+    message: >-
+      the operator's NetworkPolicies select only a company's engine pods: a podSelector of
+      app.kubernetes.io/name=crewlet, app.kubernetes.io/component data or seats and crewlet.ai/company
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding

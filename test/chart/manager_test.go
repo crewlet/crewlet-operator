@@ -6,15 +6,19 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// instanceLabel is the label the operator gives every object of a Company,
-// with the Company's name.
-const instanceLabel = "app.kubernetes.io/instance"
+// instanceLabel and companyLabel are the labels the operator gives every
+// object of a Company, with the Company's name.
+const (
+	instanceLabel = "app.kubernetes.io/instance"
+	companyLabel  = "crewlet.ai/company"
+)
 
 // engineSet is a data StatefulSet as the operator writes one, in the
 // respects the manager's policy checks; mutate makes it what a subverted
@@ -40,6 +44,17 @@ func engineSet(ns string, mutate ...func(*appsv1.StatefulSet)) *appsv1.StatefulS
 	}
 	return sts
 }
+
+// enginePods selects the pods of one component of a company, as the operator
+// selects them; seatPods its seat pods.
+func enginePods(component string) map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name": "crewlet", instanceLabel: tenantName,
+		"app.kubernetes.io/component": component, companyLabel: tenantName,
+	}
+}
+
+func seatPods() map[string]string { return enginePods("seats") }
 
 func TestManagerWrites(t *testing.T) {
 	m := as(t, managerUser)
@@ -83,7 +98,7 @@ func TestManagerWrites(t *testing.T) {
 				Namespace: ns, Name: name, Labels: labels,
 				Spec: policyv1.PodDisruptionBudgetSpec{
 					MaxUnavailable: new(intstr.FromInt32(1)),
-					Selector:       &metav1.LabelSelector{MatchLabels: map[string]string{instanceLabel: tenantName}},
+					Selector:       &metav1.LabelSelector{MatchLabels: seatPods()},
 				},
 			}
 		}
@@ -96,6 +111,68 @@ func TestManagerWrites(t *testing.T) {
 		}
 		expect(t, m.Delete(ctx, theirs),
 			"the operator changes or deletes only objects labelled app.kubernetes.io/managed-by=crewlet-operator")
+	})
+
+	t.Run("budgets disruptions of a company's seat pods alone", func(t *testing.T) {
+		const msg = "the operator budgets disruptions only of a company's seat pods"
+		budget := func(name string, selector *metav1.LabelSelector) *policyv1.PodDisruptionBudget {
+			return &policyv1.PodDisruptionBudget{
+				Namespace: ns, Name: name, Labels: managedBy,
+				Spec: policyv1.PodDisruptionBudgetSpec{MaxUnavailable: new(intstr.FromInt32(0)), Selector: selector},
+			}
+		}
+		// A Shared pool's budget, which leaves a PerSeat seat's pods out.
+		expect(t, m.Create(ctx, budget("acme-seats-batch", &metav1.LabelSelector{
+			MatchLabels: seatPods(),
+			MatchExpressions: []metav1.LabelSelectorRequirement{
+				{Key: "crewlet.ai/seat", Operator: metav1.LabelSelectorOpDoesNotExist},
+			},
+		})), "")
+		for name, selector := range map[string]*metav1.LabelSelector{
+			"the cluster's DNS": {MatchLabels: map[string]string{"k8s-app": "kube-dns"}},
+			"every pod":         {},
+			"a data pod":        {MatchLabels: enginePods("data")},
+			"more pods by an expression": {
+				MatchLabels: seatPods(),
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{Key: companyLabel, Operator: metav1.LabelSelectorOpExists},
+				},
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				expect(t, m.Create(ctx, budget("drain-stopper", selector)), msg)
+			})
+		}
+	})
+
+	t.Run("writes NetworkPolicies that select a company's engine pods alone", func(t *testing.T) {
+		const msg = "the operator's NetworkPolicies select only a company's engine pods"
+		policy := func(name string, selector metav1.LabelSelector) *networkingv1.NetworkPolicy {
+			return &networkingv1.NetworkPolicy{
+				Namespace: ns, Name: name, Labels: managedBy,
+				Spec: networkingv1.NetworkPolicySpec{
+					PodSelector: selector,
+					PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
+				},
+			}
+		}
+		expect(t, m.Create(ctx, policy("acme-engine", metav1.LabelSelector{MatchLabels: enginePods("data")})), "")
+		expect(t, m.Create(ctx, policy("acme-seats", metav1.LabelSelector{MatchLabels: seatPods()})), "")
+		for name, selector := range map[string]metav1.LabelSelector{
+			"every pod of the namespace": {},
+			"the cluster's DNS":          {MatchLabels: map[string]string{"k8s-app": "kube-dns"}},
+			"another component":          {MatchLabels: enginePods("keyring")},
+			"more pods by an expression": {
+				MatchLabels: enginePods("data"),
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{Key: companyLabel, Operator: metav1.LabelSelectorOpExists},
+				},
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				expect(t, m.Create(ctx, policy("isolate", selector)), msg)
+			})
+		}
 	})
 
 	t.Run("runs only engine pods", func(t *testing.T) {
