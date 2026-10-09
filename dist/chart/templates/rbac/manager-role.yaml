@@ -28,14 +28,9 @@ rules:
   - ""
   resources:
   - persistentvolumeclaims
-  verbs:
-  - delete
-  - list
-- apiGroups:
-  - ""
-  resources:
   - pods
   verbs:
+  - delete
   - list
 - apiGroups:
   - apps

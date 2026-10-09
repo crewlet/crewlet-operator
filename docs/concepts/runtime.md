@@ -192,7 +192,12 @@ A Company carries the finalizer `crewlet.ai/company`. When it is deleted, the
 operator:
 
 1. deletes the data StatefulSet and waits until no data pod is left, each
-   draining as on any stop;
+   draining as on any stop. Under `Retain` the StatefulSet is deleted with
+   the `Orphan` propagation policy and the operator deletes its pods itself:
+   a claim the StatefulSet controller made while the policy was `Delete`
+   carries an owner reference to the StatefulSet until that controller next
+   syncs, and a background deletion would have the garbage collector delete
+   the claim with it. Orphaning releases every claim first;
 2. settles the data volume claims as `spec.deletionPolicy` says: `Delete`
    deletes them; `Retain` (the default) keeps them, and releases the keyring
    Secret from the Company so it is kept too, since the volumes cannot be read

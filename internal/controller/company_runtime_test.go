@@ -53,6 +53,7 @@ const (
 	otlpSecret         = "otlp"
 	platformTokenVar   = "PLATFORM_TOKEN"
 	webhooksHostname   = "{{uid}}.hooks.example.com"
+	dataName           = "nimbus-data"
 )
 
 // newReconciler is the Company reconciler as the manager builds it, on a
@@ -158,7 +159,7 @@ var _ = Describe("Company runtime", func() {
 	statefulSet := func() *appsv1.StatefulSet {
 		GinkgoHelper()
 		sts := &appsv1.StatefulSet{}
-		get(sts, "nimbus-data")
+		get(sts, dataName)
 		return sts
 	}
 	engine := func(sts *appsv1.StatefulSet) corev1.Container {
@@ -275,7 +276,7 @@ var _ = Describe("Company runtime", func() {
 		Expect(engineSvc.Spec.Ports[0].Port).To(Equal(int32(8080)))
 		Expect(engineSvc.Spec.Ports[0].TargetPort).To(Equal(intstr.FromString("http")))
 		dataSvc := &corev1.Service{}
-		get(dataSvc, "nimbus-data")
+		get(dataSvc, dataName)
 		Expect(dataSvc.Spec.ClusterIP).To(Equal(corev1.ClusterIPNone))
 		Expect(dataSvc.Spec.PublishNotReadyAddresses).To(BeTrue())
 		Expect(dataSvc.Spec.Selector).To(Equal(dataSelector))
@@ -284,7 +285,7 @@ var _ = Describe("Company runtime", func() {
 		sts := statefulSet()
 		ownedByCompany(sts, company)
 		Expect(*sts.Spec.Replicas).To(Equal(int32(1)))
-		Expect(sts.Spec.ServiceName).To(Equal("nimbus-data"))
+		Expect(sts.Spec.ServiceName).To(Equal(dataName))
 		Expect(sts.Spec.Selector.MatchLabels).To(Equal(dataSelector))
 		Expect(sts.Spec.PodManagementPolicy).To(Equal(appsv1.ParallelPodManagement))
 		Expect(sts.Spec.UpdateStrategy.Type).To(Equal(appsv1.RollingUpdateStatefulSetStrategyType))
@@ -392,7 +393,7 @@ var _ = Describe("Company runtime", func() {
 			{accessName, &corev1.Secret{}},
 			{"nimbus-bootstrap-data", &corev1.ConfigMap{}},
 			{engineName, &corev1.Service{}},
-			{"nimbus-data", &corev1.Service{}},
+			{dataName, &corev1.Service{}},
 			{webhooksRoute, &gatewayv1.HTTPRoute{}},
 			{engineName, &networkingv1.NetworkPolicy{}},
 		}
@@ -480,7 +481,7 @@ var _ = Describe("Company runtime", func() {
 		runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
 		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonSecretNotFound))
 		Expect(runtimeReady.Message).To(ContainSubstring(tokensName + " has no key " + render.TokenAccess))
-		absent(&appsv1.StatefulSet{}, "nimbus-data")
+		absent(&appsv1.StatefulSet{}, dataName)
 		absent(&corev1.Secret{}, accessName)
 
 		tokens := &corev1.Secret{}
@@ -511,7 +512,7 @@ var _ = Describe("Company runtime", func() {
 		Expect(runtimeReady.Status).To(Equal(metav1.ConditionFalse))
 		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonKeyringInvalid))
 		Expect(runtimeReady.Message).To(ContainSubstring(KeyringActiveKeyAnnotation))
-		absent(&appsv1.StatefulSet{}, "nimbus-data")
+		absent(&appsv1.StatefulSet{}, dataName)
 		keyring := &corev1.Secret{}
 		get(keyring, keyringName)
 		Expect(keyring.Data).To(Equal(broken.Data))
@@ -552,7 +553,7 @@ var _ = Describe("Company runtime", func() {
 		Expect(k8sClient.Delete(ctx, statefulSet())).To(Succeed())
 		company = reconciled(company)
 		absent(&corev1.Secret{}, keyringName)
-		absent(&appsv1.StatefulSet{}, "nimbus-data")
+		absent(&appsv1.StatefulSet{}, dataName)
 		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonKeyringMissing))
 
 		By("generating one once the claim is being deleted, with the data it holds")
@@ -582,7 +583,7 @@ var _ = Describe("Company runtime", func() {
 		runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
 		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonPreviousCompanyObjects))
 		Expect(runtimeReady.Message).To(ContainSubstring(keyringName))
-		absent(&appsv1.StatefulSet{}, "nimbus-data")
+		absent(&appsv1.StatefulSet{}, dataName)
 		kept := &corev1.Secret{}
 		get(kept, keyringName)
 		Expect(kept.OwnerReferences).To(Equal(stale.OwnerReferences), "took over a Secret that is about to be collected")
@@ -794,7 +795,7 @@ var _ = Describe("Company runtime", func() {
 			company := reconciled(newCompany(class.Name, version("v0.3.0")))
 			runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
 			Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonVersionOverrideNotAllowed))
-			absent(&appsv1.StatefulSet{}, "nimbus-data")
+			absent(&appsv1.StatefulSet{}, dataName)
 		})
 	})
 
@@ -831,7 +832,7 @@ var _ = Describe("Company runtime", func() {
 			runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
 			Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonSecretNotFound))
 			Expect(runtimeReady.Message).To(ContainSubstring(platform + "/s3"))
-			absent(&appsv1.StatefulSet{}, "nimbus-data")
+			absent(&appsv1.StatefulSet{}, dataName)
 			absent(&corev1.Secret{}, platformName)
 
 			Expect(k8sClient.Create(ctx, &corev1.Secret{Namespace: platform, Name: "s3", Data: map[string][]byte{
@@ -1128,7 +1129,7 @@ var _ = Describe("Company runtime", func() {
 			runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
 			Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonNameConflict))
 			Expect(runtimeReady.Message).To(ContainSubstring("NetworkPolicy " + namespace + "/" + engineName))
-			absent(&appsv1.StatefulSet{}, "nimbus-data")
+			absent(&appsv1.StatefulSet{}, dataName)
 		})
 
 		It("leaves a user's Service and Secret of the derived names alone", func() {
@@ -1234,21 +1235,39 @@ var _ = Describe("Company runtime", func() {
 			return claim
 		}
 		// deleteAndDrain deletes the Company and checks that it is held
-		// until its data pod is gone.
+		// until its data StatefulSet and data pod are gone.
 		deleteAndDrain := func(company *crewletaiv1alpha1.Company) {
 			GinkgoHelper()
+			retain := company.Spec.DeletionPolicy != crewletaiv1alpha1.DeletionPolicyDelete
 			pod := dataPod()
 			Expect(k8sClient.Delete(ctx, company)).To(Succeed())
 			result := reconcileWith(newReconciler(), company)
 			Expect(result.RequeueAfter).To(BeNumerically(">", time.Duration(0)), "released before the data pod stopped")
-			absent(&appsv1.StatefulSet{}, "nimbus-data")
 			get(company, companyName)
 			Expect(company.Finalizers).To(ContainElement(crewletaiv1alpha1.CompanyFinalizer))
 
-			Expect(k8sClient.Delete(ctx, pod)).To(Succeed())
+			if retain {
+				By("orphaning the StatefulSet's claims, standing in for the garbage collector")
+				// The Orphan policy has the garbage collector take the
+				// StatefulSet's owner references off its pods and claims
+				// before it deletes it, so that no claim the StatefulSet
+				// controller marked under Delete goes with it.
+				sts := statefulSet()
+				Expect(sts.DeletionTimestamp).NotTo(BeNil())
+				Expect(sts.Finalizers).To(ContainElement(metav1.FinalizerOrphanDependents))
+				sts.Finalizers = nil
+				Expect(k8sClient.Update(ctx, sts)).To(Succeed())
+			}
+			absent(&appsv1.StatefulSet{}, dataName)
+			result = reconcileWith(newReconciler(), company)
+			Expect(result.RequeueAfter).To(BeNumerically(">", time.Duration(0)), "released before the data pod stopped")
+			if !retain {
+				// The garbage collector deletes the pods with the StatefulSet.
+				Expect(k8sClient.Delete(ctx, pod)).To(Succeed())
+			}
 			Eventually(func() bool {
 				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), &corev1.Pod{}))
-			}).Should(BeTrue())
+			}).Should(BeTrue(), "the orphaned data pod was not deleted")
 			Expect(reconcileWith(newReconciler(), company)).To(Equal(ctrl.Result{}))
 			absent(&crewletaiv1alpha1.Company{}, companyName)
 		}

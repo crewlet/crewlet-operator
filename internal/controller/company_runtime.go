@@ -375,35 +375,61 @@ func (e *nameConflictError) message() string {
 // finalize stops a deleted Company's engine and settles its data volumes,
 // then lets the deletion finish.
 //
-//  1. The data StatefulSet is deleted and the operator waits until no data
-//     pod is left. Each pod drains on SIGTERM: running turns finish,
-//     waiting ones are handed back. The Company's other objects stay until
-//     then, so a draining engine keeps its Services, Secrets and routes.
+//  1. The data StatefulSet is deleted and the operator waits until it and
+//     every data pod are gone. Each pod drains on SIGTERM: running turns
+//     finish, waiting ones are handed back. The Company's other objects stay
+//     until then, so a draining engine keeps its Services, Secrets and routes.
 //  2. With deletionPolicy Delete the data volume claims are deleted. With
 //     Retain they are left, and so is the keyring Secret, which is released
 //     from the Company: the volumes cannot be read without it.
 //  3. The finalizer is removed; the garbage collector deletes everything else
 //     the Company owns.
+//
+// Under Retain the StatefulSet is deleted with the Orphan propagation
+// policy, and its pods are deleted by the operator once it is gone. A claim
+// the StatefulSet controller made while the policy was Delete carries an
+// owner reference to the StatefulSet, which that controller removes only on
+// its next sync after the policy changes; a background deletion would let the
+// garbage collector delete the claim, and the data with it, whatever Retain
+// says. Orphaning has the garbage collector remove the references from every
+// dependent before the StatefulSet goes, so no claim can be collected with
+// it.
 func (r *CompanyReconciler) finalize(ctx context.Context, c *crewletaiv1alpha1.Company) (ctrl.Result, error) {
 	if !controllerutil.ContainsFinalizer(c, crewletaiv1alpha1.CompanyFinalizer) {
 		return ctrl.Result{}, nil
 	}
 	log := logf.FromContext(ctx)
+	retain := c.Spec.DeletionPolicy == crewletaiv1alpha1.DeletionPolicyRetain
 
 	sts, err := r.existingStatefulSet(ctx, c)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if sts != nil {
-		if err := r.deleteIfControlled(ctx, c, sts); err != nil {
+	if sts != nil && metav1.IsControlledBy(sts, c) {
+		propagation := metav1.DeletePropagationBackground
+		if retain {
+			propagation = metav1.DeletePropagationOrphan
+		}
+		if err := r.deleteIfControlled(ctx, c, sts, client.PropagationPolicy(propagation)); err != nil {
 			return ctrl.Result{}, err
 		}
+		log.V(1).Info("Waiting for the data StatefulSet to be deleted")
+		return ctrl.Result{RequeueAfter: drainPollInterval}, nil
 	}
 	pods := &corev1.PodList{}
 	if err := r.APIReader.List(ctx, pods, client.InNamespace(c.Namespace), client.MatchingLabels(selectorFor(c, componentData))); err != nil {
 		return ctrl.Result{}, fmt.Errorf("listing the data pods of Company %s/%s: %w", c.Namespace, c.Name, err)
 	}
 	if len(pods.Items) > 0 {
+		if retain {
+			// Orphaned with the StatefulSet: nothing else deletes them.
+			for i := range pods.Items {
+				pod := &pods.Items[i]
+				if err := r.Delete(ctx, pod); err != nil && !apierrors.IsNotFound(err) {
+					return ctrl.Result{}, fmt.Errorf("deleting data pod %s/%s: %w", pod.Namespace, pod.Name, err)
+				}
+			}
+		}
 		log.V(1).Info("Waiting for the data pods to stop", "pods", len(pods.Items))
 		return ctrl.Result{RequeueAfter: drainPollInterval}, nil
 	}

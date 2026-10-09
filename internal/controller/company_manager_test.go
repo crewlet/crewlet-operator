@@ -23,6 +23,27 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 )
 
+// collectOrphaned stands in for the garbage collector, which envtest does
+// not run, for a Company deleted with deletionPolicy Retain: the operator
+// deletes its data StatefulSet with the Orphan propagation policy, and the
+// collector's part is to drop the orphan finalizer once it has released the
+// dependents.
+func collectOrphaned(namespace string, timeout time.Duration) {
+	GinkgoHelper()
+	Eventually(func(g Gomega) {
+		sts := &appsv1.StatefulSet{}
+		err := k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: dataName}, sts)
+		if apierrors.IsNotFound(err) {
+			return
+		}
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(sts.DeletionTimestamp).NotTo(BeNil(), "the StatefulSet is not being deleted yet")
+		g.Expect(sts.Finalizers).To(ContainElement(metav1.FinalizerOrphanDependents))
+		sts.Finalizers = nil
+		g.Expect(k8sClient.Update(ctx, sts)).To(Succeed())
+	}).WithTimeout(timeout).Should(Succeed())
+}
+
 // The other specs call Reconcile directly; this one runs the controller in a
 // manager, as cmd/main.go does, so that its watches are what drives it: a
 // Company's creation, the status of the StatefulSet it owns, and the
@@ -99,7 +120,7 @@ var _ = Describe("Company controller in a manager", Ordered, func() {
 
 		By("following the StatefulSet's status, as its controller would report it")
 		sts := &appsv1.StatefulSet{}
-		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: "nimbus-data"}, sts)).To(Succeed())
+		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: dataName}, sts)).To(Succeed())
 		sts.Status = appsv1.StatefulSetStatus{
 			ObservedGeneration: sts.Generation, Replicas: 1, ReadyReplicas: 1, AvailableReplicas: 1,
 			UpdatedReplicas: 1, CurrentReplicas: 1, CurrentRevision: "r1", UpdateRevision: "r1",
@@ -123,6 +144,7 @@ var _ = Describe("Company controller in a manager", Ordered, func() {
 
 		By("releasing the Company when it is deleted")
 		Expect(k8sClient.Delete(ctx, company)).To(Succeed())
+		collectOrphaned(namespace, settle)
 		Eventually(func() error {
 			return k8sClient.Get(ctx, client.ObjectKeyFromObject(company), &crewletaiv1alpha1.Company{})
 		}).WithTimeout(settle).Should(Satisfy(apierrors.IsNotFound))
@@ -244,6 +266,7 @@ var _ = Describe("Company and config controllers in one manager", Ordered, func(
 
 		By("releasing the Company when it is deleted")
 		Expect(k8sClient.Delete(ctx, company)).To(Succeed())
+		collectOrphaned(namespace, settle)
 		Eventually(func() error {
 			return k8sClient.Get(ctx, client.ObjectKeyFromObject(company), &crewletaiv1alpha1.Company{})
 		}).WithTimeout(settle).Should(Satisfy(apierrors.IsNotFound))

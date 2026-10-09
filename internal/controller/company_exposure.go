@@ -468,12 +468,15 @@ func (r *CompanyReconciler) deleteControlled(
 // deleteIfControlled deletes an object the Company controls. The UID
 // precondition keeps the delete from reaching an object that replaced this
 // one since it was read.
-func (r *CompanyReconciler) deleteIfControlled(ctx context.Context, c *crewletaiv1alpha1.Company, obj client.Object) error {
+func (r *CompanyReconciler) deleteIfControlled(
+	ctx context.Context, c *crewletaiv1alpha1.Company, obj client.Object, opts ...client.DeleteOption,
+) error {
 	if !metav1.IsControlledBy(obj, c) {
 		return nil
 	}
 	uid := obj.GetUID()
-	if err := r.Delete(ctx, obj, &client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}}); err != nil &&
+	opts = append(opts, client.Preconditions{UID: &uid})
+	if err := r.Delete(ctx, obj, opts...); err != nil &&
 		!apierrors.IsNotFound(err) {
 		return fmt.Errorf("deleting %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
 	}
