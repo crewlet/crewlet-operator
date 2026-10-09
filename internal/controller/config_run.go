@@ -759,10 +759,14 @@ func (run *configRun) writeRefused(err error) bool {
 	if len(apiErr.ManagedBy) > 0 {
 		writers = strings.Join(apiErr.ManagedBy, ", ")
 	}
-	message := fmt.Sprintf("The engine refuses the operator's token (id %q) a change to the company document: its "+
-		"api.auth.company_writers names %s. The operator renders that list into the data pod's crewlet.yaml (Secret %s), "+
-		"naming its own token under Enforce, so the engine runs a crewlet.yaml the operator did not write: check that "+
-		"Secret and that the data pod has restarted since it changed.", render.TokenOperator, writers, bootstrapSecretName(run.company))
+	// The engine names the writers and not the id it read the refused token
+	// as, so the message says which id the operator renders for its token
+	// rather than claiming the engine saw that one.
+	message := fmt.Sprintf("The engine refuses the operator's token a change to the company document: its "+
+		"api.auth.company_writers names %s. The crewlet.yaml the operator renders for the data pod (Secret %s) sets "+
+		"that list only under Enforce, and then to its own token's id, %q, so the engine runs a crewlet.yaml the "+
+		"operator did not write: check that Secret and that the data pod has restarted since it changed.",
+		writers, bootstrapSecretName(run.company), render.TokenOperator)
 	if current := meta.FindStatusCondition(run.company.Status.Conditions, crewletaiv1alpha1.ConditionConfigApplied); current == nil ||
 		current.Reason != crewletaiv1alpha1.ReasonWriteRefused {
 		run.event(corev1.EventTypeWarning, crewletaiv1alpha1.ReasonWriteRefused, "ApplyConfig", "%s", message)
