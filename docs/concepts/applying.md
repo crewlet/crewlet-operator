@@ -30,10 +30,12 @@ A Company is looked at again when:
   engine's own API or dashboard, which nothing announces, and to refresh the
   integrations' health and where each seat runs. While a seat of the running
   revision is not yet held by a pod of its own StatefulSet although one of
-  them is ready, the engine is placing it, and the operator looks every
-  fifteen seconds instead, for at most three minutes: the engine claims a few
-  seats every five seconds, and a seat whose pod was killed waits out its
-  45-second lease first.
+  them is ready, or is held by a pod of it past that pod's share of its seats
+  (a pool that gained a pod, where the engine moves seats onto the new one),
+  the engine is placing it, and the operator looks every fifteen seconds
+  instead, for at most three minutes: the engine claims a few seats every
+  five seconds, and a seat whose pod was killed waits out its 45-second lease
+  first.
 
 **Changes are coalesced.** A platform that provisions a company writes its
 objects one request at a time, and each revision is a permanent entry in the

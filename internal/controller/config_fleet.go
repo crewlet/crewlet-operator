@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -240,32 +241,72 @@ func (run *configRun) placementResync(ctx context.Context, result ctrl.Result) (
 }
 
 // settlingSeats are the handles of the agent seats of the revision the
-// engine runs that no pod of their StatefulSet holds while that StatefulSet
-// has a ready pod: the engine is placing them, or moving them there.
+// engine runs that the engine is still placing on the pods of their
+// StatefulSet, while that StatefulSet has a ready pod: those no pod of it
+// holds (the engine is placing them, or moving them there), and those a pod
+// of it holds past its share (it is shedding them onto another pod of it).
+//
+// The second kind is a move between two pods of one StatefulSet, which the
+// first cannot see: when a pool gains a pod, the engine bounds each pod by
+// its share of the seats pinned to the pool, ceil(seats / live pods), and a
+// pod past it gives seats back for the new pod to claim, a few seconds of
+// sweeps later. Without it the Seats would name the pod they left until the
+// next resync.
 func (run *configRun) settlingSeats(ctx context.Context) ([]string, error) {
 	list := &appsv1.StatefulSetList{}
 	if err := run.List(ctx, list, client.InNamespace(run.company.Namespace),
 		client.MatchingLabels{crewletaiv1alpha1.CompanyLabel: run.company.Name}); err != nil {
 		return nil, fmt.Errorf("listing the StatefulSets of Company %s/%s: %w", run.company.Namespace, run.company.Name, err)
 	}
-	ready := map[string]bool{}
+	// The ready pods of each of the company's StatefulSets that has one.
+	ready := map[string]int{}
 	for i := range list.Items {
 		if sts := &list.Items[i]; metav1.IsControlledBy(sts, run.company) && sts.Status.ReadyReplicas > 0 {
-			ready[sts.Name] = true
+			ready[sts.Name] = int(sts.Status.ReadyReplicas)
 		}
 	}
 	var out []string
+	// The seats each pod of a ready StatefulSet holds, and how many seats
+	// that StatefulSet is placed, by StatefulSet.
+	held := map[string]map[string][]string{}
+	placed := map[string]int{}
 	for _, p := range run.parts {
 		s, ok := p.obj.(*crewletaiv1alpha1.Seat)
 		if !ok || s.Spec.Kind == crewletaiv1alpha1.SeatKindHuman || p.handleTaken || !p.inRevision() {
 			continue
 		}
 		workload := s.Status.Placement.Workload
-		if workload == "" || !ready[workload] {
+		if workload == "" || ready[workload] == 0 {
 			continue
 		}
-		if lease, held := run.fleet.Holder(s.Status.Handle); !held || !podOf(lease.Node, workload) {
+		placed[workload]++
+		lease, isHeld := run.fleet.Holder(s.Status.Handle)
+		if !isHeld || !podOf(lease.Node, workload) {
 			out = append(out, s.Status.Handle)
+			continue
+		}
+		if held[workload] == nil {
+			held[workload] = map[string][]string{}
+		}
+		held[workload][lease.Node] = append(held[workload][lease.Node], s.Status.Handle)
+	}
+	for _, workload := range slices.Sorted(maps.Keys(held)) {
+		// The pods the engine will share the seats among: those it counts
+		// live, or the StatefulSet's ready ones where more are, since a seat
+		// pod has no probe and is ready a moment before it joins the fleet.
+		pods := ready[workload]
+		var live int
+		for i := range run.fleet.Nodes {
+			if podOf(run.fleet.Nodes[i].ID, workload) {
+				live++
+			}
+		}
+		pods = max(pods, live)
+		share := (placed[workload] + pods - 1) / pods
+		for _, node := range slices.Sorted(maps.Keys(held[workload])) {
+			if seats := held[workload][node]; len(seats) > share {
+				out = append(out, seats...)
+			}
 		}
 	}
 	return out, nil

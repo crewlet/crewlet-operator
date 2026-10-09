@@ -3,6 +3,8 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -68,6 +70,19 @@ func seatRun(lastNode string) (*configRun, *part) {
 	// decide clears the placement and sets the workload before Ready.
 	seat.Status.Placement = crewletaiv1alpha1.SeatPlacementStatus{Pool: "general", Workload: workload}
 	return &configRun{CompanyConfigReconciler: &CompanyConfigReconciler{}, company: company, parts: []*part{p}}, p
+}
+
+// fleetStatefulSet is a StatefulSet named name that the seatRun Company
+// controls, with ready pods.
+func fleetStatefulSet(name string, ready int32) *appsv1.StatefulSet {
+	sts := &appsv1.StatefulSet{}
+	sts.Namespace, sts.Name = "ns", name
+	sts.Labels = map[string]string{crewletaiv1alpha1.CompanyLabel: fleetCompany}
+	sts.OwnerReferences = []metav1.OwnerReference{{
+		APIVersion: crewletaiv1alpha1.GroupVersion.String(), Kind: "Company", Name: fleetCompany, UID: "company-uid", Controller: new(true),
+	}}
+	sts.Status.ReadyReplicas = ready
+	return sts
 }
 
 func readyOf(p *part) metav1.Condition {
@@ -191,16 +206,7 @@ func TestPlacementResyncPollsOnlyWhileSeatsSettle(t *testing.T) {
 	if err := crewletaiv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	statefulSet := func(ready int32) *appsv1.StatefulSet {
-		sts := &appsv1.StatefulSet{}
-		sts.Namespace, sts.Name = "ns", workload
-		sts.Labels = map[string]string{crewletaiv1alpha1.CompanyLabel: fleetCompany}
-		sts.OwnerReferences = []metav1.OwnerReference{{
-			APIVersion: crewletaiv1alpha1.GroupVersion.String(), Kind: "Company", Name: fleetCompany, UID: "company-uid", Controller: new(true),
-		}}
-		sts.Status.ReadyReplicas = ready
-		return sts
-	}
+	statefulSet := func(ready int32) *appsv1.StatefulSet { return fleetStatefulSet(workload, ready) }
 	start := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
 	reconciler := &CompanyConfigReconciler{ResyncInterval: time.Minute}
 	look := func(at time.Time, ready int32, fleet *engine.Fleet, result ctrl.Result) time.Duration {
@@ -269,5 +275,61 @@ func TestPlacementSettlingIsPerSeat(t *testing.T) {
 	settling.recent(company, nil, stuck)
 	if !settling.recent(company, []string{seatAna}, stuck.Add(time.Second)) {
 		t.Error("a seat that settled and starts over gets no quick looks")
+	}
+}
+
+// TestSeatsPastAPodsShareAreSettling holds the quick looks to a move the
+// engine makes between two pods of one StatefulSet: when a pool gains a pod,
+// a pod holding more than its share of the pool's seats, ceil(seats / live
+// pods), sheds them for the new pod to claim, and the Seats must follow
+// before the next resync.
+func TestSeatsPastAPodsShareAreSettling(t *testing.T) {
+	const (
+		workload = fleetWorkload
+		seatBo   = "bo"
+	)
+	scheme := runtime.NewScheme()
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	nodes := func(n int) []engine.FleetNode {
+		var out []engine.FleetNode
+		for i := range n {
+			out = append(out, engine.FleetNode{ID: fmt.Sprintf("%s-%d", workload, i)})
+		}
+		return append(out, engine.FleetNode{ID: fleetDataPod})
+	}
+	leases := func(ana, bo string) []engine.SeatLease {
+		return []engine.SeatLease{{Handle: seatAna, Node: workload + "-" + ana}, {Handle: seatBo, Node: workload + "-" + bo}}
+	}
+	for _, c := range []struct {
+		name  string
+		ready int32
+		fleet *engine.Fleet
+		want  []string
+	}{
+		{"both seats on one of two pods", 2, &engine.Fleet{Nodes: nodes(2), Seats: leases("0", "0")}, []string{seatAna, seatBo}},
+		{"one seat on each of two pods", 2, &engine.Fleet{Nodes: nodes(2), Seats: leases("0", "1")}, nil},
+		{"both seats on the one pod", 1, &engine.Fleet{Nodes: nodes(1), Seats: leases("0", "0")}, nil},
+		// The StatefulSet's second pod is ready and has not joined yet: the
+		// engine will share the seats with it once it does.
+		{"both seats on one of two ready pods, one of them live", 2, &engine.Fleet{Nodes: nodes(1), Seats: leases("0", "0")}, []string{seatAna, seatBo}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			run, ana := seatRun("")
+			bo := ana.obj.(*crewletaiv1alpha1.Seat).DeepCopy()
+			bo.Name, bo.Status.Handle = seatBo, seatBo
+			run.parts = append(run.parts, newPart(bo))
+			bo.Status.Placement = ana.obj.(*crewletaiv1alpha1.Seat).Status.Placement
+			run.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(fleetStatefulSet(workload, c.ready)).Build()
+			run.fleet = c.fleet
+			got, err := run.settlingSeats(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(got, c.want) {
+				t.Errorf("settling %v, want %v", got, c.want)
+			}
+		})
 	}
 }
