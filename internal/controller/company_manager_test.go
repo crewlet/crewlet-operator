@@ -23,6 +23,15 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 )
 
+// cacheIn is the manager's cache options, as cmd/main.go sets them, for a
+// cache that sees one namespace only, so that a manager spec leaves the
+// other specs' Companies alone.
+func cacheIn(namespace string) cache.Options {
+	opts := CacheOptions()
+	opts.DefaultNamespaces = map[string]cache.Config{namespace: {}}
+	return opts
+}
+
 // collectOrphaned stands in for the garbage collector, which envtest does
 // not run, for a Company deleted with deletionPolicy Retain: the operator
 // deletes its data StatefulSet with the Orphan propagation policy, and the
@@ -64,7 +73,7 @@ var _ = Describe("Company controller in a manager", Ordered, func() {
 			Scheme:                 scheme.Scheme,
 			Metrics:                metricsserver.Options{BindAddress: "0"},
 			HealthProbeBindAddress: "0",
-			Cache:                  cache.Options{DefaultNamespaces: map[string]cache.Config{namespace: {}}},
+			Cache:                  cacheIn(namespace),
 		})
 		Expect(err).NotTo(HaveOccurred())
 		gatewayAPI, err := GatewayAPIInstalled(mgr.GetRESTMapper())
@@ -171,7 +180,7 @@ var _ = Describe("Company and config controllers in one manager", Ordered, func(
 			Scheme:                 scheme.Scheme,
 			Metrics:                metricsserver.Options{BindAddress: "0"},
 			HealthProbeBindAddress: "0",
-			Cache:                  cache.Options{DefaultNamespaces: map[string]cache.Config{namespace: {}}},
+			Cache:                  cacheIn(namespace),
 			// The other specs register controllers of the same names in
 			// managers of their own.
 			Controller: config.Controller{SkipNameValidation: new(true)},

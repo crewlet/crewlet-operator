@@ -16,6 +16,10 @@ import (
 // back on the next reconcile.
 const FieldOwner = "crewlet-operator"
 
+// managedByLabel names the operator on every object it creates, so that a
+// cache, a policy or a person can select them.
+const managedByLabel = "app.kubernetes.io/managed-by"
+
 // The components a Company's objects are labelled with
 // (app.kubernetes.io/component).
 const (
@@ -56,7 +60,7 @@ func apiURL(c *crewletaiv1alpha1.Company) string {
 func labelsFor(c *crewletaiv1alpha1.Company, component string) map[string]string {
 	labels := selectorFor(c, component)
 	labels["app.kubernetes.io/part-of"] = "crewlet"
-	labels["app.kubernetes.io/managed-by"] = FieldOwner
+	labels[managedByLabel] = FieldOwner
 	return labels
 }
 

@@ -181,9 +181,11 @@ var _ = Describe("Company config", Ordered, func() {
 			Scheme:                 scheme.Scheme,
 			Metrics:                metricsserver.Options{BindAddress: "0"},
 			HealthProbeBindAddress: "0",
-			Cache: cache.Options{DefaultNamespaces: map[string]cache.Config{
-				namespace: {}, operatorNamespace: {},
-			}},
+			Cache: func() cache.Options {
+				opts := CacheOptions()
+				opts.DefaultNamespaces = map[string]cache.Config{namespace: {}, operatorNamespace: {}}
+				return opts
+			}(),
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Expect((&CompanyConfigReconciler{

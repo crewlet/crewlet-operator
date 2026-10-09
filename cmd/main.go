@@ -125,6 +125,7 @@ func main() {
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
 		HealthProbeBindAddress: probeAddr,
+		Cache:                  controller.CacheOptions(),
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "839a0df8.crewlet.ai",
 		// Release the lease as soon as the manager stops, so a rolling update

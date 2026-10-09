@@ -469,9 +469,16 @@ func applyConfigOf[T any](v any) (*T, error) {
 }
 
 // existingStatefulSet returns the data StatefulSet, or nil when there is none.
+// The cache holds only the StatefulSets the operator manages (CacheOptions),
+// so when it has none the API server is asked: a StatefulSet of that name
+// someone else created must be found, to be left alone.
 func (r *CompanyReconciler) existingStatefulSet(ctx context.Context, c *crewletaiv1alpha1.Company) (*appsv1.StatefulSet, error) {
 	sts := &appsv1.StatefulSet{}
-	err := r.Get(ctx, types.NamespacedName{Namespace: c.Namespace, Name: dataStatefulSetName(c)}, sts)
+	key := types.NamespacedName{Namespace: c.Namespace, Name: dataStatefulSetName(c)}
+	err := r.Get(ctx, key, sts)
+	if apierrors.IsNotFound(err) {
+		err = r.APIReader.Get(ctx, key, sts)
+	}
 	if apierrors.IsNotFound(err) {
 		return nil, nil
 	}

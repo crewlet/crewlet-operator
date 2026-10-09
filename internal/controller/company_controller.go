@@ -309,8 +309,11 @@ func (r *CompanyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&networkingv1.NetworkPolicy{}, builder.OnlyMetadata).
 		WatchesMetadata(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.companiesOfSecret)).
 		Watches(&crewletaiv1alpha1.EngineClass{}, handler.EnqueueRequestsFromMapFunc(r.companiesOfClass)).
-		Watches(&crewletaiv1alpha1.Seat{}, handler.EnqueueRequestsFromMapFunc(companyOfChild)).
-		Watches(&crewletaiv1alpha1.MCPServer{}, handler.EnqueueRequestsFromMapFunc(companyOfChild))
+		// Only how many there are matters to the limits, and companyRef is
+		// immutable, so an update (the config reconciler writing a part's
+		// status, a spec edit) cannot change what a Company is allowed.
+		Watches(&crewletaiv1alpha1.Seat{}, handler.EnqueueRequestsFromMapFunc(companyOfChild), builder.WithPredicates(createdOrDeleted())).
+		Watches(&crewletaiv1alpha1.MCPServer{}, handler.EnqueueRequestsFromMapFunc(companyOfChild), builder.WithPredicates(createdOrDeleted()))
 	// Without the Gateway API's CRDs a watch on HTTPRoutes would fail the
 	// manager's start; GatewayAPI is false there, and nothing reads them.
 	if r.GatewayAPI {
@@ -348,6 +351,17 @@ func configAppliedChanged() predicate.Funcs {
 		},
 		CreateFunc:  func(event.CreateEvent) bool { return false },
 		DeleteFunc:  func(event.DeleteEvent) bool { return false },
+		GenericFunc: func(event.GenericEvent) bool { return false },
+	}
+}
+
+// createdOrDeleted passes the creation and the deletion of an object, and
+// nothing else.
+func createdOrDeleted() predicate.Funcs {
+	return predicate.Funcs{
+		CreateFunc:  func(event.CreateEvent) bool { return true },
+		DeleteFunc:  func(event.DeleteEvent) bool { return true },
+		UpdateFunc:  func(event.UpdateEvent) bool { return false },
 		GenericFunc: func(event.GenericEvent) bool { return false },
 	}
 }
