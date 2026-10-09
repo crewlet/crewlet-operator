@@ -153,7 +153,8 @@ func WithTierA(operator, access string, render func(port int, dir string) []byte
 // the document, and the engine refuses every other token a change with 403
 // config_managed. Its reads, a reload and the secret store stay open to
 // every token. The engine ignores a WithCompany seed when the document is
-// managed, so the two do not combine. It has no effect with WithTierA.
+// managed, so the two do not combine; nor does WithTierA, whose Tier A is
+// the caller's to write, list included.
 func WithCompanyWriters(ids ...string) Option {
 	return func(o *options) { o.writers = ids }
 }
@@ -199,6 +200,10 @@ func Start(t T, opts ...Option) *Engine {
 
 	if o.company != nil && len(o.writers) > 0 {
 		t.Fatalf("enginetest: WithCompany and WithCompanyWriters do not combine: a managed engine ignores its -company seed")
+	}
+	if o.tierA != nil && len(o.writers) > 0 {
+		t.Fatalf("enginetest: WithTierA and WithCompanyWriters do not combine: " +
+			"the engine runs the caller's Tier A, so the writers go in it as api.auth.company_writers")
 	}
 	render := func(port int) []byte { return tierA(port, o.writers) }
 	if custom := o.tierA; custom != nil {

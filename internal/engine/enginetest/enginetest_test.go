@@ -78,3 +78,31 @@ func TestBinaryFailsWithoutTheEngine(t *testing.T) {
 	}()
 	enginetest.Binary(fatalT{t})
 }
+
+// TestCompanyWritersRefuseWhatWouldIgnoreThem: WithCompanyWriters makes the
+// document managed only on enginetest's own Tier A, and a managed engine
+// ignores a -company seed. Combined with either, the engine would run
+// unmanaged or unseeded while the test believed otherwise, so Start fails
+// the test before it runs anything.
+func TestCompanyWritersRefuseWhatWouldIgnoreThem(t *testing.T) {
+	writers := enginetest.WithCompanyWriters(enginetest.OperatorTokenID)
+	for name, other := range map[string]enginetest.Option{
+		"WithCompany": enginetest.WithCompany([]byte(enginetest.MinimalCompany)),
+		"WithTierA": enginetest.WithTierA("operator-token", "access-token", func(int, string) []byte {
+			panic(fatal("Start rendered the caller's Tier A, which ignores the writers"))
+		}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				msg, ok := recover().(fatal)
+				if !ok {
+					t.Fatalf("Start ran an engine with %s and WithCompanyWriters", name)
+				}
+				if !strings.Contains(string(msg), name+" and WithCompanyWriters do not combine") {
+					t.Errorf("Start failed with %q, which does not say the two options do not combine", msg)
+				}
+			}()
+			enginetest.Start(fatalT{t}, writers, other)
+		})
+	}
+}
