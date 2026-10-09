@@ -306,7 +306,7 @@ func unitTree(parts []*part) map[string]unitFacts {
 // has not been rendered, and claiming it was would let Ready report it
 // applied. The generation change queues the Company again.
 func (run *configRun) patchCompanyStatus(ctx context.Context) error {
-	if run.secretsSynced == nil && run.configApplied == nil && run.engineHealthy == nil && run.config == nil {
+	if run.secretsSynced == nil && run.configApplied == nil && run.engineHealthy == nil && run.config == nil && run.placement == nil {
 		return nil
 	}
 	company := run.company
@@ -322,8 +322,15 @@ func (run *configRun) patchCompanyStatus(ctx context.Context) error {
 			condition.Message = bounded(condition.Message)
 			meta.SetStatusCondition(&company.Status.Conditions, condition)
 		}
+		recorded := company.Status.Config.Placement
 		if run.config != nil {
 			company.Status.Config = *run.config
+			company.Status.Config.Placement = recorded
+		}
+		if run.placement != nil {
+			// Against the record as this write finds it, which a conflict
+			// reads again: a pin an earlier write recorded stays.
+			company.Status.Config.Placement = run.placement.of(recorded)
 		}
 		if equality.Semantic.DeepEqual(base.Status, company.Status) {
 			return nil

@@ -16,7 +16,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -67,8 +69,16 @@ type configRun struct {
 
 	// rendered is where the rendered document pins its seats, and running
 	// where the document the engine runs or is applying does, once this
-	// reconcile has found out; see recordPlacement.
+	// reconcile has found out; see recordPlacement. runningRevision is the
+	// revision of running when it is the engine's own document (Observe,
+	// Seed), whose apply only the engine's record of it tells, and empty for
+	// a document the operator wrote or found in sync with the rendered one,
+	// whose apply verifyApplied settles.
 	rendered, running *crewletaiv1alpha1.RevisionPlacement
+	runningRevision   string
+	// placement is what status.config.placement becomes once this reconcile
+	// writes the status; nil leaves it as it is.
+	placement *placementUpdate
 }
 
 // appliedKind is what a reconcile found out about whether the parts are in
@@ -219,6 +229,7 @@ func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error
 	}
 	health, healthErr := run.readHealth(ctx, eng)
 	result = run.verifyApplied(ctx, eng, health, healthErr, result)
+	run.narrowPlacement(ctx, eng, health, healthErr)
 	// For the seats' placement, if the verification did not need it.
 	_, _ = run.fleetOf(ctx, eng)
 	return result, nil
@@ -389,6 +400,14 @@ func (run *configRun) enforce(
 		if run.invalid(err) {
 			return ctrl.Result{}, nil
 		}
+		return ctrl.Result{}, err
+	}
+	// The pins go into the record before the write that activates them, not
+	// with the status written after it: between the two the runtime
+	// reconciler may see a Company that no longer asks for a pool the new
+	// revision pins a seat to, and a record without it, and delete the pods
+	// the engine is about to need.
+	if err := run.widenPlacement(ctx, *run.rendered); err != nil {
 		return ctrl.Result{}, err
 	}
 	req := engine.ApplyRequest{Document: run.doc.YAML, Summary: run.summary(active, diffs, pushed.Put)}
@@ -581,6 +600,7 @@ func (run *configRun) observe(ctx context.Context, eng *engine.Client, active *e
 			run.config = &crewletaiv1alpha1.ConfigStatus{RevisionID: active.RevisionID, Objects: run.objectCounts()}
 		}
 		run.recordPlacement(*run.rendered, false)
+		run.runningRevision = active.RevisionID
 		run.configApplied = &metav1.Condition{
 			Type: crewletaiv1alpha1.ConditionConfigApplied, Status: metav1.ConditionTrue, Reason: crewletaiv1alpha1.ReasonInSync,
 			Message: fmt.Sprintf("The engine runs the rendered document as revision %s.", active.RevisionID),
@@ -589,15 +609,19 @@ func (run *configRun) observe(ctx context.Context, eng *engine.Client, active *e
 		return ctrl.Result{RequeueAfter: run.resyncInterval()}, nil
 	}
 
-	// The engine's own document runs, and nothing the operator does moves
-	// it: its pins are what the pods must serve.
-	running := crewletaiv1alpha1.RevisionPlacement{}
-	if active != nil {
-		if running, err = revisionPlacement(active.Document); err != nil {
+	// The engine's own document is what runs, once the engine has applied
+	// it, and nothing the operator does moves it: its pins join the record
+	// until narrowPlacement finds it applied. No document runs nothing.
+	if active == nil {
+		run.recordPlacement(crewletaiv1alpha1.RevisionPlacement{}, true)
+	} else {
+		running, err := revisionPlacement(active.Document)
+		if err != nil {
 			return ctrl.Result{}, err
 		}
+		run.recordPlacement(running, false)
+		run.runningRevision = active.RevisionID
 	}
-	run.recordPlacement(running, true)
 	message := "The engine runs no company document; under the Company's Observe policy the operator does not write one."
 	revision := ""
 	if active != nil {
@@ -635,6 +659,7 @@ func (run *configRun) seeded(active *engine.ActiveConfig) error {
 		return err
 	}
 	run.recordPlacement(running, false)
+	run.runningRevision = active.RevisionID
 	recorded := run.company.Status.Config.RevisionID
 	message := fmt.Sprintf("The engine had a company document (revision %s) before the operator seeded one; "+
 		"under the Company's Seed policy the operator leaves it to the engine.", active.RevisionID)
@@ -1102,25 +1127,77 @@ func boundedPlacement(pools, seats []string) crewletaiv1alpha1.RevisionPlacement
 // A revision the operator activates, or finds activated, runs only once the
 // engine has applied it, and the engine keeps running the previous one if
 // the apply fails. Until it is applied (exact is false) the record is
-// therefore the union of what it already held and the new document's pins,
-// so that no pod the previous revision still needs goes; settled narrows it
-// to the document alone (exact) once the engine reports the epoch applied.
-// A document the operator wrote nothing for, under Observe, is recorded
-// exactly at once.
+// therefore the union of what it already holds and the new document's pins,
+// so that no pod the previous revision still needs goes; settled and
+// narrowPlacement narrow it to the document alone (exact) once the engine
+// reports it applied. The union is taken when the status is written, against
+// the record as that write finds it, so that a pin an earlier write recorded
+// and the cached Company does not show yet is kept.
 func (run *configRun) recordPlacement(placement crewletaiv1alpha1.RevisionPlacement, exact bool) {
-	recorded := run.company.Status.Config.Placement
 	if !exact {
 		running := placement
 		run.running = &running
-		placement = boundedPlacement(slices.Concat(recorded.Pools, placement.Pools), slices.Concat(recorded.Seats, placement.Seats))
 	}
-	config := run.config
-	if config == nil {
-		if equality.Semantic.DeepEqual(recorded, placement) {
-			return
+	run.placement = &placementUpdate{pins: placement, exact: exact}
+}
+
+// placementUpdate is a change to status.config.placement: pins that replace
+// the record (exact) or join it.
+type placementUpdate struct {
+	pins  crewletaiv1alpha1.RevisionPlacement
+	exact bool
+}
+
+// of is the record recorded becomes.
+func (u *placementUpdate) of(recorded crewletaiv1alpha1.RevisionPlacement) crewletaiv1alpha1.RevisionPlacement {
+	if u.exact {
+		return boundedPlacement(u.pins.Pools, u.pins.Seats)
+	}
+	return boundedPlacement(slices.Concat(recorded.Pools, u.pins.Pools), slices.Concat(recorded.Seats, u.pins.Seats))
+}
+
+// widenPlacement adds pins to the Company's status.config.placement, as the
+// API server holds it, ahead of the write that activates the revision that
+// pins them.
+func (run *configRun) widenPlacement(ctx context.Context, pins crewletaiv1alpha1.RevisionPlacement) error {
+	update := placementUpdate{pins: pins}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		fresh := &crewletaiv1alpha1.Company{}
+		if err := run.APIReader.Get(ctx, client.ObjectKeyFromObject(run.company), fresh); err != nil {
+			return err
 		}
-		config = run.company.Status.Config.DeepCopy()
+		widened := update.of(fresh.Status.Config.Placement)
+		if equality.Semantic.DeepEqual(widened, fresh.Status.Config.Placement) {
+			return nil
+		}
+		base := fresh.DeepCopy()
+		fresh.Status.Config.Placement = widened
+		if err := run.Status().Patch(ctx, fresh, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+			if apierrors.IsConflict(err) {
+				return err
+			}
+			return fmt.Errorf("recording where the next revision of Company %s/%s pins its seats: %w",
+				run.company.Namespace, run.company.Name, err)
+		}
+		return nil
+	})
+}
+
+// narrowPlacement narrows the record to the pins of the engine's own document
+// (Observe, Seed) once the engine has applied that document: its record of
+// its last apply names the document's revision, ended well, and is no later
+// than the epoch it runs. Until then the engine may still be running an
+// earlier revision, whose pins the record keeps.
+func (run *configRun) narrowPlacement(ctx context.Context, eng *engine.Client, health engine.Health, healthErr error) {
+	if run.running == nil || run.runningRevision == "" || healthErr != nil {
+		return
 	}
-	config.Placement = placement
-	run.config = config
+	fleet, err := run.fleetOf(ctx, eng)
+	if err != nil {
+		return
+	}
+	record := fleet.LastApply()
+	if record.RevisionID == run.runningRevision && record.Status == engine.ApplyOK && health.AppliedEpoch >= record.Epoch {
+		run.recordPlacement(*run.running, true)
+	}
 }

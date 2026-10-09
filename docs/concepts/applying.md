@@ -268,11 +268,15 @@ Besides the conditions:
   the engine runs pins its agent seats: every value of `crewlet.ai/pool`
   (`data` and the Shared pools that run a seat) and of `crewlet.ai/seat` (each
   seat of a PerSeat pool). It is read from the engine's own document under
-  every policy, so under Observe and Seed too. While the engine applies a
-  new revision the record is the previous revision's pins and the new one's
-  together, because the engine keeps running the previous revision until it
-  has applied the new one, and for good if that apply fails; once the engine
-  reports the new revision's epoch applied, the record is its pins alone.
+  every policy, so under Observe and Seed too. A new revision's pins join
+  the record before the operator's write that activates it, and while the
+  engine applies it the record is the previous revision's pins and the new
+  one's together, because the engine keeps running the previous revision
+  until it has applied the new one, and for good if that apply fails. Once
+  the engine reports the new revision's epoch applied, the record is its
+  pins alone; a document the engine owns (Observe, Seed) is narrowed to only
+  once the engine's own record of its last apply names that revision and
+  says it ended well.
   The runtime reconciler reads it to keep a seat pool's pods running for as
   long as the running revision pins a seat to them ([A pool removed while
   seats still run in it](runtime.md#a-pool-removed-while-seats-still-run-in-it)).

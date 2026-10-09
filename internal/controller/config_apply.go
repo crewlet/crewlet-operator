@@ -180,8 +180,10 @@ func (run *configRun) settled(key types.NamespacedName, target int64, revision s
 		run.configApplied = &remembered
 	}
 	// The engine runs this document now, and no earlier one: its pins
-	// alone are what the pods must serve.
-	if run.running != nil {
+	// alone are what the pods must serve. A document of the engine's own
+	// is narrowed by narrowPlacement, from the engine's record of applying
+	// it: the epoch the operator recorded says nothing about it.
+	if run.running != nil && run.runningRevision == "" {
 		run.recordPlacement(*run.running, true)
 	}
 	current := meta.FindStatusCondition(run.company.Status.Conditions, crewletaiv1alpha1.ConditionConfigApplied)
