@@ -1,0 +1,101 @@
+# The manager's ClusterRole lets it write Secrets, ServiceAccounts, Services
+# and StatefulSets in every namespace, since a Company may live in any. RBAC
+# cannot say "only the ones the operator made", so whoever took over the
+# manager's token could otherwise mint a token Secret for any ServiceAccount,
+# or run any pod as any ServiceAccount. This policy holds the manager to the
+# objects it makes: each carries app.kubernetes.io/managed-by=crewlet-operator,
+# Secrets are Opaque, and a StatefulSet runs its pods as a company's engine
+# ServiceAccount, without the node's namespaces, host paths or privileged
+# containers. It is in-tree admission (no webhook) and matches the manager's
+# ServiceAccount only. Reading every Secret stays possible: see
+# docs/guides/installing.md, "What the operator may do".
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: manager-writes
+  labels:
+    app.kubernetes.io/name: crewlet-operator
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [""]
+      apiVersions: ["*"]
+      resources: [secrets, serviceaccounts, services, persistentvolumeclaims]
+      operations: [CREATE, UPDATE, DELETE]
+    - apiGroups: [""]
+      apiVersions: ["*"]
+      resources: [pods]
+      operations: [DELETE]
+    - apiGroups: [apps]
+      apiVersions: ["*"]
+      resources: [statefulsets]
+      operations: [CREATE, UPDATE, DELETE]
+    - apiGroups: [networking.k8s.io]
+      apiVersions: ["*"]
+      resources: [ingresses, networkpolicies]
+      operations: [CREATE, UPDATE, DELETE]
+    - apiGroups: [gateway.networking.k8s.io]
+      apiVersions: ["*"]
+      resources: [httproutes]
+      operations: [CREATE, UPDATE, DELETE]
+  # The manager's ServiceAccount, by the end of its name, which kustomize
+  # (crewlet-operator-controller-manager) and the chart (<release>-...
+  # unless nameOverride or fullnameOverride change it) both give it, in
+  # whatever namespace it was installed in.
+  matchConditions:
+  - name: manager
+    expression: >-
+      request.userInfo.username.startsWith('system:serviceaccount:') &&
+      request.userInfo.username.endsWith('crewlet-operator-controller-manager')
+  variables:
+  - name: managed
+    expression: >-
+      'app.kubernetes.io/managed-by' in object.?metadata.?labels.orValue({}) &&
+      object.metadata.labels['app.kubernetes.io/managed-by'] == 'crewlet-operator'
+  - name: wasManaged
+    expression: >-
+      'app.kubernetes.io/managed-by' in oldObject.?metadata.?labels.orValue({}) &&
+      oldObject.metadata.labels['app.kubernetes.io/managed-by'] == 'crewlet-operator'
+  validations:
+  - expression: request.operation == 'DELETE' || variables.managed
+    messageExpression: >-
+      request.resource.resource + ' ' + request.namespace + '/' + request.name +
+      ': the operator writes only objects labelled app.kubernetes.io/managed-by=crewlet-operator'
+  # Adopting a Secret nobody controls (a keyring kept by an earlier Company)
+  # labels it without touching its data.
+  - expression: >-
+      request.operation == 'CREATE' || variables.wasManaged ||
+      (request.resource.resource == 'secrets' && request.operation == 'UPDATE' &&
+      object.?data.orValue({}) == oldObject.?data.orValue({}) && object.?type == oldObject.?type)
+    messageExpression: >-
+      request.resource.resource + ' ' + request.namespace + '/' + request.name +
+      ': the operator changes or deletes only objects labelled app.kubernetes.io/managed-by=crewlet-operator'
+  - expression: >-
+      request.resource.resource != 'secrets' || request.operation == 'DELETE' ||
+      object.?type.orValue('Opaque') == 'Opaque'
+    message: the operator writes only Secrets of type Opaque
+  - expression: >-
+      request.resource.resource != 'statefulsets' || request.operation == 'DELETE' ||
+      (object.spec.template.spec.?serviceAccountName.orValue('').endsWith('-engine') &&
+      !object.spec.template.spec.?hostNetwork.orValue(false) &&
+      !object.spec.template.spec.?hostPID.orValue(false) &&
+      !object.spec.template.spec.?hostIPC.orValue(false) &&
+      object.spec.template.spec.?volumes.orValue([]).all(v, !has(v.hostPath)) &&
+      object.spec.template.spec.containers.all(c, !c.?securityContext.?privileged.orValue(false)) &&
+      object.spec.template.spec.?initContainers.orValue([]).all(c, !c.?securityContext.?privileged.orValue(false)))
+    message: >-
+      the operator runs only engine pods: as a ServiceAccount named *-engine, without the node's
+      network, PID or IPC namespace, host paths or privileged containers
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: manager-writes-binding
+  labels:
+    app.kubernetes.io/name: crewlet-operator
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  policyName: manager-writes
+  validationActions: [Deny]

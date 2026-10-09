@@ -8,7 +8,9 @@ the same on a laptop, from source.
 
 ## Before you install
 
-- Kubernetes on one of its four newest minor releases (1.34 to 1.37 today).
+- Kubernetes on one of its four newest minor releases (1.34 to 1.37 today);
+  the chart's admission policies are ValidatingAdmissionPolicies, built into
+  the API server.
 - A CNI that enforces NetworkPolicy, for the isolation around each engine
   ([Exposure and network policy](exposure.md#network-policy)).
 - A default StorageClass, or the one your EngineClasses name, that provisions
@@ -18,6 +20,29 @@ the same on a laptop, from source.
   Gateway API when it starts.
 
 Nothing else: there are no admission webhooks, so no cert-manager.
+
+## What the operator may do
+
+A Company may live in any namespace, so the manager's ClusterRole lets it
+create, change and delete Secrets, ServiceAccounts, Services, StatefulSets,
+volume claims, NetworkPolicies and routes in every namespace, and read every
+Secret. RBAC cannot narrow that to the objects the operator makes, so the
+chart and `dist/install.yaml` also install a ValidatingAdmissionPolicy,
+`crewlet-operator-manager-writes`, which holds the manager's ServiceAccount
+to them: every object it writes, changes or deletes carries
+`app.kubernetes.io/managed-by: crewlet-operator` (a Secret it adopts may gain
+the label, with its data unchanged), every Secret it writes is `Opaque`, and
+every StatefulSet runs its pods as a ServiceAccount named `*-engine`, without
+the node's network, PID or IPC namespaces, host paths or privileged
+containers. Whoever takes over the manager's token therefore cannot mint a
+token for another ServiceAccount or run a pod on a node's terms. It can
+still read every Secret in the cluster, and run an engine-shaped pod with any
+image as a company's engine ServiceAccount: protect the manager's namespace
+as you would any controller with cluster-wide Secret read.
+
+The policy matches the manager's ServiceAccount by the end of its name,
+`crewlet-operator-controller-manager`; a `nameOverride` or `fullnameOverride`
+that changes it leaves the manager unchecked.
 
 ## Install
 
@@ -87,8 +112,8 @@ helper only to whoever may read every Secret.
 
 A platform that hosts tenants usually has a control plane that creates each
 tenant's namespace, its crewlet.ai objects and the Secrets they reference
-([Hosting many tenants on the operator](multi-tenancy.md)). The chart has a ClusterRole for
-it, off by default:
+([Hosting many tenants on the operator](multi-tenancy.md)). The chart has roles for it, off
+by default:
 
 ```yaml
 tenantProvisioner:
@@ -97,12 +122,40 @@ tenantProvisioner:
     - kind: ServiceAccount
       name: control-plane
       namespace: platform
+  namespaceLabels:
+    tenant: crewlet.ai/tenant
+    required:
+      pod-security.kubernetes.io/enforce: restricted
+    protectedPrefixes:
+      - pod-security.kubernetes.io/
 ```
 
-It grants namespaces, Secrets and every namespaced crewlet.ai kind with its
-status, cluster-wide, and read access to EngineClasses. Secrets in every
-namespace is a lot: bind it to the control plane's own identity and nothing
-else. Leave `subjects` empty to install the role alone and bind it yourself.
+The `crewlet-operator-tenant-provisioner` ClusterRole, bound to `subjects`,
+lets the control plane create namespaces, bind the
+`crewlet-operator-tenant-access` ClusterRole in them, and read the crewlet.ai
+objects and EngineClasses. It holds no Secret access of its own: the
+tenant-access role, once bound in a tenant's namespace, grants Secrets and
+the crewlet.ai kinds there. A role that could write Secrets or relabel
+namespaces everywhere would be as good as cluster-admin, so the chart also
+installs a ValidatingAdmissionPolicy that holds the `subjects`, and no one
+else, to this:
+
+- a namespace is created with the tenant label and, under the protected
+  prefixes, exactly the `required` labels;
+- only namespaces with the tenant label are changed or deleted, the tenant
+  label is never removed, and labels under the protected prefixes are never
+  set, changed or removed;
+- RoleBindings are made only in tenants' namespaces, and only to the
+  tenant-access role;
+- Secrets are written only in tenants' namespaces, and never as
+  `kubernetes.io/service-account-token`, whose token the API server would
+  fill in for any ServiceAccount.
+
+Add the prefix of any namespace label that grants something (a Gateway's
+`allowedRoutes` selector, an EngineClass's `allowedNamespaces`) to
+`protectedPrefixes` when the control plane is not the one to set it.
+`subjects` is required when the provisioner is enabled, since the policy
+matches by them.
 
 ### Not supported
 

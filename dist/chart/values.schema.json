@@ -29,6 +29,18 @@
     },
     "tenantProvisioner": {
       "type": "object",
+      "if": {
+        "properties": {"enabled": {"const": true}},
+        "required": ["enabled"]
+      },
+      "then": {
+        "properties": {
+          "subjects": {
+            "description": "The admission policy that keeps the provisioner to tenants' namespaces matches these subjects; without them the role would be unchecked.",
+            "minItems": 1
+          }
+        }
+      },
       "properties": {
         "enabled": {"type": "boolean"},
         "subjects": {
@@ -41,7 +53,18 @@
               "name": {"type": "string", "minLength": 1},
               "namespace": {"type": "string"},
               "apiGroup": {"type": "string"}
-            }
+            },
+            "if": {"properties": {"kind": {"const": "ServiceAccount"}}},
+            "then": {"required": ["namespace"]}
+          }
+        },
+        "namespaceLabels": {
+          "type": "object",
+          "required": ["tenant"],
+          "properties": {
+            "tenant": {"type": "string", "minLength": 1},
+            "required": {"type": "object", "additionalProperties": {"type": "string"}},
+            "protectedPrefixes": {"type": "array", "items": {"type": "string", "minLength": 1}}
           }
         }
       }

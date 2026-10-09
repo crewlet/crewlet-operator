@@ -172,16 +172,31 @@ rbac:
 ## a lot to hold: bind it only to the control plane's own identity.
 ##
 tenantProvisioner:
-  ## Install the ClusterRole
+  ## Install the provisioner's ClusterRoles, its ClusterRoleBinding and the
+  ## ValidatingAdmissionPolicy that keeps its writes to tenants' namespaces
   ##
   enabled: false
-  ## Subjects to bind it to with a ClusterRoleBinding; empty installs the
-  ## role alone, for a binding of your own
+  ## Subjects to bind it to, which the admission policy matches; required
+  ## when enabled, since a role nobody's writes are checked under would be
+  ## close to cluster-admin
   ##
   subjects: []
   # - kind: ServiceAccount
   #   name: control-plane
   #   namespace: platform
+  ## The labels of a tenant's namespace. The provisioner creates a namespace
+  ## only with the tenant label and exactly the required labels under the
+  ## protected prefixes; it changes and deletes only namespaces with the
+  ## tenant label, and never sets, changes or removes a label under a
+  ## protected prefix. Add the prefixes of labels that grant something (a
+  ## Gateway's allowedRoutes selector, say) to protectedPrefixes.
+  ##
+  namespaceLabels:
+    tenant: crewlet.ai/tenant
+    required:
+      pod-security.kubernetes.io/enforce: restricted
+    protectedPrefixes:
+      - pod-security.kubernetes.io/
 
 ## ServiceAccount configuration
 ##

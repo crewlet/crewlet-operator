@@ -1,0 +1,133 @@
+{{- /*
+Written by hand, as rbac.yaml is. What RBAC cannot say about the tenant
+provisioner's writes, in-tree admission (no webhook) does: it may create a
+namespace only as a tenant's (with the tenant label and the required labels),
+change or delete only tenants' namespaces, never touch the labels under the
+protected prefixes (the Pod Security level, say) once a namespace exists,
+bind only the tenant-access role and only in tenants' namespaces, and write
+no service-account-token Secret, whose token the API server would fill in
+for any ServiceAccount the Secret names.
+
+The policy matches the subjects the chart binds, by the user names and
+groups the API server gives them, and no one else: the platform's
+administrators and the operator are not held to it.
+*/ -}}
+{{- if .Values.tenantProvisioner.enabled }}
+{{- $access := include "crewlet-operator.resourceName" (dict "suffix" "tenant-access" "context" $) }}
+{{- $labels := .Values.tenantProvisioner.namespaceLabels }}
+{{- $users := list }}
+{{- $groups := list }}
+{{- range .Values.tenantProvisioner.subjects }}
+{{- if eq .kind "ServiceAccount" }}
+{{- $users = append $users (printf "system:serviceaccount:%s:%s" .namespace .name) }}
+{{- else if eq .kind "User" }}
+{{- $users = append $users .name }}
+{{- else }}
+{{- $groups = append $groups .name }}
+{{- end }}
+{{- end }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "crewlet-operator.resourceName" (dict "suffix" "tenant-provisioner" "context" $) }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [""]
+      apiVersions: ["*"]
+      resources: [namespaces, secrets]
+      operations: [CREATE, UPDATE, DELETE]
+    - apiGroups: [rbac.authorization.k8s.io]
+      apiVersions: ["*"]
+      resources: [rolebindings]
+      operations: [CREATE, UPDATE, DELETE]
+  matchConditions:
+  - name: tenant-provisioner
+    expression: >-
+      request.userInfo.username in {{ $users | toJson }} ||
+      request.userInfo.?groups.orValue([]).exists(g, g in {{ $groups | toJson }})
+  variables:
+  - name: tenantLabel
+    expression: {{ $labels.tenant | toJson | squote }}
+  - name: required
+    expression: {{ $labels.required | default dict | toJson | squote }}
+  - name: protectedPrefixes
+    expression: {{ $labels.protectedPrefixes | default list | toJson | squote }}
+  - name: labels
+    expression: object.?metadata.?labels.orValue({})
+  - name: oldLabels
+    expression: oldObject.?metadata.?labels.orValue({})
+  - name: inTenantNamespace
+    expression: >-
+      namespaceObject != null &&
+      variables.tenantLabel in namespaceObject.?metadata.?labels.orValue({})
+  validations:
+  # Namespaces.
+  - expression: >-
+      request.resource.resource != 'namespaces' || request.operation == 'DELETE' ||
+      variables.tenantLabel in variables.labels
+    messageExpression: >-
+      'the tenant provisioner writes only namespaces labelled ' + variables.tenantLabel
+  - expression: >-
+      request.resource.resource != 'namespaces' || request.operation == 'CREATE' ||
+      variables.tenantLabel in variables.oldLabels
+    messageExpression: >-
+      'namespace ' + request.name + ' is not a tenant\'s: the tenant provisioner changes and deletes only namespaces labelled ' +
+      variables.tenantLabel
+  - expression: >-
+      request.resource.resource != 'namespaces' || request.operation != 'CREATE' ||
+      (variables.required.all(k, k in variables.labels && variables.labels[k] == variables.required[k]) &&
+      variables.labels.all(k, !variables.protectedPrefixes.exists(p, k.startsWith(p)) ||
+        (k in variables.required && variables.labels[k] == variables.required[k])))
+    messageExpression: >-
+      'a tenant namespace is created with exactly these labels under ' + variables.protectedPrefixes.join(', ') +
+      ': ' + variables.required.map(k, k + '=' + variables.required[k]).join(', ')
+  - expression: >-
+      request.resource.resource != 'namespaces' || request.operation != 'UPDATE' ||
+      (variables.oldLabels.all(k, !variables.protectedPrefixes.exists(p, k.startsWith(p)) ||
+        (k in variables.labels && variables.labels[k] == variables.oldLabels[k])) &&
+      variables.labels.all(k, !variables.protectedPrefixes.exists(p, k.startsWith(p)) ||
+        (k in variables.oldLabels && variables.oldLabels[k] == variables.labels[k])))
+    messageExpression: >-
+      'the tenant provisioner may not set, change or remove a namespace label under ' +
+      variables.protectedPrefixes.join(', ')
+  # RoleBindings: the tenant-access role, in tenants' namespaces.
+  - expression: >-
+      request.resource.resource != 'rolebindings' || variables.inTenantNamespace
+    messageExpression: >-
+      'namespace ' + request.namespace + ' is not a tenant\'s: the tenant provisioner binds roles only in namespaces labelled ' +
+      variables.tenantLabel
+  - expression: >-
+      request.resource.resource != 'rolebindings' || request.operation == 'DELETE' ||
+      (object.roleRef.kind == 'ClusterRole' && object.roleRef.name == {{ $access | squote }})
+    message: the tenant provisioner binds only the ClusterRole {{ $access }}
+  # Secrets: in tenants' namespaces, and never a token.
+  - expression: >-
+      request.resource.resource != 'secrets' || variables.inTenantNamespace
+    messageExpression: >-
+      'namespace ' + request.namespace + ' is not a tenant\'s: the tenant provisioner writes Secrets only in namespaces labelled ' +
+      variables.tenantLabel
+  - expression: >-
+      request.resource.resource != 'secrets' || request.operation == 'DELETE' ||
+      object.?type.orValue('Opaque') != 'kubernetes.io/service-account-token'
+    message: the tenant provisioner may not write a service-account-token Secret
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "crewlet-operator.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "crewlet-operator.resourceName" (dict "suffix" "tenant-provisioner" "context" $) }}
+spec:
+  policyName: {{ include "crewlet-operator.resourceName" (dict "suffix" "tenant-provisioner" "context" $) }}
+  validationActions: [Deny]
+{{- end }}

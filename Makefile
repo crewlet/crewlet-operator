@@ -85,9 +85,9 @@ gateway-api-crds: ## Copy the Gateway API CRDs of the release go.mod requires in
 # named explicitly so a CREWLET_BIN in the caller's environment cannot swap in
 # another engine version.
 .PHONY: test
-test: manifests generate fmt vet setup-envtest crewlet ## Run the unit and envtest suites of both modules.
+test: manifests generate fmt vet setup-envtest crewlet helm ## Run the unit and envtest suites of both modules.
 	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" \
-		CREWLET_BIN="$(CREWLET)" \
+		CREWLET_BIN="$(CREWLET)" HELM="$(HELM)" \
 		go test -race $$(go list ./... | grep -v /test/e2e) -coverprofile cover.out
 	cd api && go test -race ./... -coverprofile cover.out
 

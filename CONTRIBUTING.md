@@ -188,7 +188,10 @@ Every API change comes with a test that the API server enforces it. The
 suite in [`test/crd/`](test/crd) installs the generated CRDs into envtest and
 is table-driven per kind: a valid object first, then, for each rule, the
 object it must refuse and the rule's message; transition rules are tested by
-an update. It also applies every sample in `config/samples`. `make lint` runs
+an update. It also applies every sample in `config/samples`. The suite in
+[`test/chart/`](test/chart) does the same for the chart's RBAC and admission
+policies: it renders the chart with `bin/helm`, installs them, and acts as
+the manager and the tenant provisioner to check what each may do. `make lint` runs
 [kube-api-linter](https://github.com/kubernetes-sigs/kube-api-linter) over
 `api/`, which holds the types to the conventions above: `+optional` or
 `+required` on every field, a pointer only where the zero value is a setting

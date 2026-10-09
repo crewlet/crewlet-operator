@@ -18,6 +18,7 @@ resources:
 - ../crd
 - ../rbac
 - ../manager
+- ../admission
 # [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
 #- ../prometheus
 # [METRICS] Expose the controller manager metrics service.
