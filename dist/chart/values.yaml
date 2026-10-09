@@ -15,8 +15,9 @@ manager:
 
   ## Two replicas with leader election: one reconciles, the other waits to
   ## take over, so a node drain or a crash does not stop reconciling for
-  ## longer than the lease takes to move. --leader-elect in args below is
-  ## what makes a second replica safe; keep it.
+  ## longer than the lease takes to move. The manager elects a leader
+  ## unless it is started with --leader-elect=false, which args below
+  ## must not set while replicas is more than one.
   ##
   replicas: 2
 
@@ -30,8 +31,7 @@ manager:
 
   ## Arguments
   ##
-  args:
-    - --leader-elect
+  args: []
 
   ## Environment variables
   ## POD_NAMESPACE is the operator's own namespace, which every engine's

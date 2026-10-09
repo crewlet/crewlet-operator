@@ -54,9 +54,13 @@ func main() {
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
+	// On by default, so that no deployment runs two active managers by
+	// leaving the flag out: two would write engine revisions and the secret
+	// store at once. Only a manager run outside the cluster (make run),
+	// which has no namespace to hold the lease in, turns it off.
+	flag.BoolVar(&enableLeaderElection, "leader-elect", true,
+		"Elect a leader among the manager's replicas, so that only one reconciles. "+
+			"Turn it off only for a single manager run outside the cluster.")
 	flag.BoolVar(&secureMetrics, "metrics-secure", true,
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
 	flag.StringVar(&metricsCertPath, "metrics-cert-path", "",

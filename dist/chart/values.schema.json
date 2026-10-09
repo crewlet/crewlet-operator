@@ -3,6 +3,21 @@
   "description": "Refuses the values the chart's generated templates read but the operator cannot run with. Every other value is described in values.yaml.",
   "type": "object",
   "properties": {
+    "manager": {
+      "type": "object",
+      "if": {
+        "properties": {"replicas": {"type": "integer", "minimum": 2}},
+        "required": ["replicas"]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "description": "More than one replica is safe only with leader election, which the manager runs unless it is turned off.",
+            "not": {"contains": {"type": "string", "pattern": "^--?leader-elect=(false|f|0|FALSE|False|F)$"}}
+          }
+        }
+      }
+    },
     "rbac": {
       "type": "object",
       "properties": {

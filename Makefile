@@ -211,7 +211,7 @@ build: manifests generate fmt vet ## Build the manager binary into bin/manager.
 
 .PHONY: run
 run: manifests generate fmt vet ## Run the manager from your host against the current kubeconfig.
-	go run ./cmd
+	go run ./cmd --leader-elect=false
 
 .PHONY: docker-build
 docker-build: ## Build the manager image for the local platform.

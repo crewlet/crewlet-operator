@@ -45,7 +45,7 @@ install decides on:
 
 | Value | Default | Why |
 |---|---|---|
-| `manager.replicas` | `2` | One replica reconciles and holds a Lease; the other takes over when it goes, after at most the lease duration. `--leader-elect` in `manager.args` is what makes more than one safe. The replicas prefer separate nodes (`manager.affinity`). |
+| `manager.replicas` | `2` | One replica reconciles and holds a Lease; the other takes over when it goes, after at most the lease duration. The manager elects a leader by default; never pass `--leader-elect=false` in `manager.args` with more than one replica. The replicas prefer separate nodes (`manager.affinity`). |
 | `manager.resources` | 50m CPU and 128Mi requested, 512Mi memory limit | The manager caches every Company, its objects and its StatefulSet; raise the memory for thousands of companies. The engines are pods of their own, sized by their EngineClass. |
 | `metrics.enabled`, `metrics.secure` | `true`, `true` | Metrics on `:8443` over HTTPS, every request authenticated and authorised against the Kubernetes API. A scraper needs the ClusterRole `crewlet-operator-metrics-reader`. |
 | `prometheus.enabled` | `false` | A ServiceMonitor, for the Prometheus Operator. `certManager.enabled` makes it verify the endpoint's certificate from a Secret you issue. |
