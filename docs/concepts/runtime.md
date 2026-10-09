@@ -113,6 +113,8 @@ start, joined to the data pods' event stream as a NATS leaf. The class's
 `seatPools.policy` must be `Allowed`; its `allowPerSeat` and `maxPods` bound
 what a Company may run. Where each seat runs is decided by its `Seat`'s
 `spec.placement.pool` ([Placement](company-document.md#placement)).
+[Choosing where seats run](../guides/topology.md) says when a company needs
+pools, and which kind.
 
 | | Shared pool `general` | PerSeat pool, seat `cy` |
 |---|---|---|

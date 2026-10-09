@@ -110,7 +110,8 @@ storage come from the `EngineClass`; `Company.spec.topology.data.replicas` is
 1, the only value v1alpha1 admits. Where the class allows it, the Company's
 `spec.topology.seatPools` add stateless seat pods beside the data pod, which
 run the seats placed in them and hold no data
-([Seat pools](runtime.md#seat-pools)). A company can be stopped with `spec.suspend` (its volume is kept), and
+([Seat pools](runtime.md#seat-pools); [Choosing where seats
+run](../guides/topology.md) says when a company needs them). A company can be stopped with `spec.suspend` (its volume is kept), and
 `spec.deletionPolicy` says whether its volume outlives the Company (`Retain`,
 the default) or goes with it (`Delete`). [How a company's engine
 runs](runtime.md) lists every object the operator creates for it.

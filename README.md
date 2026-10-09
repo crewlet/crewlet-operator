@@ -93,7 +93,8 @@ everything again.
 - [docs/getting-started.md](docs/getting-started.md) — running the operator
   and a company on a local cluster
 - [docs/guides/](docs/README.md#guides) — installing, credentials, exposure,
-  management policies, hosting many tenants on the operator, troubleshooting
+  management policies, choosing where seats run, hosting many tenants on the
+  operator, troubleshooting
 - [docs/concepts/overview.md](docs/concepts/overview.md) — the kinds, how
   they relate, credentials and management policies
 - [docs/reference/api.md](docs/reference/api.md) — the `crewlet.ai` API

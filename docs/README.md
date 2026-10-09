@@ -17,6 +17,7 @@ so these pages describe what exists today and grow with it.
 | [Supplying credentials](guides/credentials.md) | Writing the Secret for each credential, rotating it, and what an object reports when one is missing |
 | [Exposure and network policy](guides/exposure.md) | Webhook routes through a Gateway, an Ingress or your own proxy, the public address vendors use, the internal API route, the network policy around each engine |
 | [Choosing a management policy](guides/management-policies.md) | Enforce, Observe and Seed: which to use, and how to move an engine under the operator |
+| [Choosing where seats run](guides/topology.md) | Data pods and stateless seat pools, Shared and PerSeat pools, what a pod of its own isolates and what it does not, what pools cost, where each seat runs now, and what the current engine does not do |
 | [Hosting many tenants on the operator](guides/multi-tenancy.md) | A control plane that provisions tenants: a namespace each, server-side apply with a field manager, the status to read, credentials from an OAuth flow |
 | [Troubleshooting](guides/troubleshooting.md) | Every condition and reason an object reports, and what to do about each |
 
