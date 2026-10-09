@@ -105,15 +105,18 @@ it, so a seat whose pool has no pod runs nowhere and its messages wait.
 | a Shared pool `P` | `{labels: {crewlet.ai/pool: P}}` | every pod of `P`: `{crewlet.ai/pool: P}` |
 | a PerSeat pool, as seat `h` | `{labels: {crewlet.ai/seat: h}}` | the seat's own pods: `{crewlet.ai/seat: h}` |
 
+Every agent seat is pinned, those on the data pods included: an unpinned
+seat could land on any pod that runs seats, a seat pod among them, which
+cannot serve everything a data pod does (an agent-mode CLI, a login kept as
+a credential bundle; see [Running seats on a coding CLI](../guides/cli-agents.md#seat-pools)).
 Every pod that runs seats carries exactly one of these labels, so each pod is
-in exactly one of Crewlet's placement groups. That is what makes the pins
-hold: Crewlet gives a node a share of every group it matches and fills the
-sum from whichever seats it reaches first, so a pod matching two groups could
-fill itself from one and leave a seat of the other held by nobody, with no
-warning. For the same reason every agent seat is pinned, those on the data
-pods included: an unpinned seat could land on any pod that runs seats. Pins
-are literal values, since Crewlet expands no `${NAME}` in a placement. Human
-seats are never run by the engine and have no placement.
+in exactly one of Crewlet's placement groups, and the operator can read where
+a seat runs, and whether its pool is settled, off one workload per pod.
+Crewlet holds a node to its share of each group it matches separately, and
+never pools the shares into one capacity, so the single label is not what
+keeps a pinned seat from being stranded; its `internal/seat/placement` states
+that rule. Pins are literal values, since Crewlet expands no `${NAME}` in a
+placement. Human seats are never run by the engine and have no placement.
 
 ### Credentials
 

@@ -20,12 +20,14 @@ import (
 // seats carries exactly one of them, so each pod matches exactly one
 // placement group.
 //
-// One group per pod is what makes the pin hold. Crewlet gives a node a fair
-// share of each group it matches and sums the shares into one capacity, which
-// it fills with whichever eligible seats it reaches first: a pod matching two
-// groups can fill its capacity from one of them and leave a seat of the other
-// held by nobody, with no warning, because a matching node exists. A pod that
-// matches one group never does.
+// Every agent seat is pinned, the data pods' too, because an unpinned seat
+// may run on any node, a seat pod among them, and a seat pod cannot serve
+// every seat (an agent-mode CLI, a bundled login: seatPodProviders). The
+// pins are literals, since Crewlet expands no ${NAME} in a Tier B placement,
+// and one label per pod lets placement status and settling map each pod to
+// exactly one workload. Capacity is no reason for it: Crewlet bounds a node
+// by its share of each group separately, never by the shares pooled
+// (internal/seat/placement, "A share bounds its own group and nothing else").
 const (
 	// PoolLabel places the seats of a pool whose pods share them: the data
 	// pods' (data) and each Shared pool's, with the pool's name as its value.

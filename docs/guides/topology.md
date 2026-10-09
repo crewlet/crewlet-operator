@@ -204,8 +204,9 @@ has the details.
 
 A refusal blocks the company's next revision, like any other, and the last
 good revision keeps running. Users cannot write Crewlet node labels or pin a
-seat to a node themselves: one stray label would put a pod in two placement
-groups, where the engine can leave a seat it was pinned for held by nobody.
+seat to a node themselves: one stray label would let a seat run on a pod it
+was never placed on, a seat pod that cannot serve it among them, and the
+operator could no longer tell which pool a pod serves.
 
 ## What the current engine does not do
 

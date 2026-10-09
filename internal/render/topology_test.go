@@ -88,8 +88,8 @@ func TestSeatsArePinnedToTheirPools(t *testing.T) {
 // seat's pod) and every seat's pin, and holds them to the rule the
 // placement depends on: each pod carries exactly one placement label, so it
 // is in exactly one placement group, and each agent seat's pin matches the
-// pods of its own pool and no other pod. A pod in two groups can be filled
-// from one and leave the other's seat held by nobody.
+// pods of its own pool and no other pod: a pin matching another pool's pod
+// could run the seat where it was not placed.
 func TestEveryPodMatchesExactlyOnePlacementGroup(t *testing.T) {
 	in := companyCaseNamed(t, "seat-pools").input(t)
 	doc, err := Company(in)
