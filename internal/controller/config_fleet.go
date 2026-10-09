@@ -49,28 +49,38 @@ const placementPollInterval = 15 * time.Second
 // to its resync interval rather than polling a fault.
 const placementSettleWindow = 3 * time.Minute
 
-// placementSettling remembers, per Company, since when its seats have been
-// settling (see placementPollInterval). In memory only: an operator that
-// restarts polls one more window, which costs nothing.
+// placementSettling remembers, per Company and per seat, since when each of
+// its seats has been settling (see placementPollInterval): one seat stuck
+// past the window must not cost a seat that starts settling later its quick
+// looks. In memory only: an operator that restarts polls one more window,
+// which costs nothing.
 type placementSettling struct {
 	mu    sync.Mutex
-	since map[types.NamespacedName]time.Time
+	since map[types.NamespacedName]map[string]time.Time
 }
 
-// start returns since when the company's seats have been settling, now if
-// they were not.
-func (p *placementSettling) start(company types.NamespacedName, now time.Time) time.Time {
+// recent records which of the company's seats are settling now, forgetting
+// those that no longer are, and reports whether any started settling less
+// than placementSettleWindow ago.
+func (p *placementSettling) recent(company types.NamespacedName, seats []string, now time.Time) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.since == nil {
-		p.since = map[types.NamespacedName]time.Time{}
+		p.since = map[types.NamespacedName]map[string]time.Time{}
 	}
-	since, ok := p.since[company]
-	if !ok {
-		p.since[company] = now
-		return now
+	before := p.since[company]
+	current := make(map[string]time.Time, len(seats))
+	recent := false
+	for _, seat := range seats {
+		since, ok := before[seat]
+		if !ok {
+			since = now
+		}
+		current[seat] = since
+		recent = recent || now.Sub(since) < placementSettleWindow
 	}
-	return since
+	p.since[company] = current
+	return recent
 }
 
 func (p *placementSettling) forget(company types.NamespacedName) {
@@ -221,8 +231,7 @@ func (run *configRun) placementResync(ctx context.Context, result ctrl.Result) (
 		run.settling.forget(key)
 		return result, nil
 	}
-	now := run.clock()
-	if since := run.settling.start(key, now); now.Sub(since) < placementSettleWindow {
+	if run.settling.recent(key, settling, run.clock()) {
 		result.RequeueAfter = min(result.RequeueAfter, placementPollInterval)
 		logf.FromContext(ctx).V(1).Info("Seats are being placed; looking at the engine's fleet again soon",
 			"seats", settling, "after", result.RequeueAfter)

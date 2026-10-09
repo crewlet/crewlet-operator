@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -245,5 +246,28 @@ func TestPlacementResyncPollsOnlyWhileSeatsSettle(t *testing.T) {
 	run.CompanyConfigReconciler = reconciler
 	if got, err := run.placementResync(context.Background(), ctrl.Result{}); err != nil || got.RequeueAfter != 0 {
 		t.Errorf("a reconcile that did not read the fleet: %+v, %v, want the result unchanged", got, err)
+	}
+}
+
+// TestPlacementSettlingIsPerSeat keeps one seat stuck past the settle window
+// from costing a seat that starts settling later its quick looks, and starts
+// a seat's window again once it settled and starts over.
+func TestPlacementSettlingIsPerSeat(t *testing.T) {
+	var settling placementSettling
+	company := types.NamespacedName{Namespace: "ns", Name: fleetCompany}
+	start := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
+	if !settling.recent(company, []string{seatAna}, start) {
+		t.Fatal("a seat that starts settling gets no quick looks")
+	}
+	stuck := start.Add(placementSettleWindow + time.Minute)
+	if settling.recent(company, []string{seatAna}, stuck) {
+		t.Error("a seat stuck past the window still gets quick looks")
+	}
+	if !settling.recent(company, []string{seatAna, "bo"}, stuck) {
+		t.Error("a seat that starts settling beside a stuck one gets no quick looks")
+	}
+	settling.recent(company, nil, stuck)
+	if !settling.recent(company, []string{seatAna}, stuck.Add(time.Second)) {
+		t.Error("a seat that settled and starts over gets no quick looks")
 	}
 }
