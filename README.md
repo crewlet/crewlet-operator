@@ -55,7 +55,8 @@ flowchart LR
     operator -- "StatefulSet, Services, routes,<br/>keyring, NetworkPolicy" --> engine["Crewlet engine<br/>(one per Company)"]
     operator -- "company document,<br/>applied whole" --> engine
     operator -- "referenced secret values" --> engine
-    vendors["Slack, GitHub, GitLab, …"] -- "/webhooks/ only" --> engine
+    vendors["Slack, GitHub, GitLab, …"] -- "/webhooks/" --> engine
+    sandbox["a coding CLI's sandbox<br/>(agent mode only)"] -- "/mcp/" --> engine
 ```
 
 ## Requirements

@@ -35,10 +35,12 @@ breaks one of them is a vulnerability and should be reported as above.
   store, and puts nothing but the store's name into the company document.
   The engine's own start-up credentials (its keyring, API tokens and
   object-store keys, and the class's telemetry headers and env values) go
-  into one Secret, `<company>-bootstrap`, that the data pod mounts as its
-  `crewlet.yaml`. The operator never copies a secret value into a pod
-  template, an environment variable, an annotation, a status field, an
-  event or a log line.
+  into `<company>-bootstrap`, the Secret the data pods mount as their
+  `crewlet.yaml`, and into one `<company>-bootstrap-<pool>-<hash>` Secret per
+  seat pool, which that pool's seat pods mount as theirs (the keyring and the
+  object-store keys included). The operator never copies a secret value
+  into a pod template, an environment variable, an annotation, a status
+  field, an event or a log line.
 - **Who may write a `crewlet.ai` object decides what an engine can reach.**
   A `Seat` that references a Secret makes that Secret's value available to
   the engine, so RBAC on these kinds is as sensitive as RBAC on the Secrets
@@ -62,12 +64,25 @@ breaks one of them is a vulnerability and should be reported as above.
   store or act as its API clients; treat them like any other root
   credential, including in backups of etcd.
 - **The engine's admin API is not exposed.** Only the engine's
-  `/webhooks/` path is routed publicly; its configuration, secrets and setup
-  endpoints stay on the cluster network, where a NetworkPolicy (when the
+  `/webhooks/` path is routed publicly, and `/mcp/`, the tool bridge, while
+  an `LLMProvider` of the company runs a coding CLI in `mode: Agent`: each
+  call there carries a token the engine signed for that one run. The
+  engine's configuration, secrets and setup endpoints stay on the cluster
+  network, where a NetworkPolicy (when the
   engine class enables isolation) limits who can reach them, unless the
   EngineClass routes the whole API (`exposure.api`) through a Gateway or an
   Ingress of your own, which should be internal. Your CNI must enforce
   NetworkPolicy for that layer to exist.
+- **The data pods' leaf listener is unauthenticated.** While a company may
+  run seat pools, its data pods listen on port 7422 for the seat pods to
+  join the event stream, with no authentication and no TLS; whoever connects
+  reads and writes the company's whole event stream. The NetworkPolicy
+  `<company>-broker` admits the port only from pods carrying the company's
+  seat-pod labels, so the listener is closed to other namespaces only where
+  the CNI enforces NetworkPolicy, and within a namespace only where nobody
+  but the operator creates pods: one company per namespace, or a namespace
+  no tenant can create pods in
+  ([Network policy](docs/concepts/runtime.md#network-policy)).
 - **The manager's metrics endpoint requires authentication.** It is served
   over HTTPS and every request is authorised against the Kubernetes API,
   using a self-signed certificate unless one is provided.

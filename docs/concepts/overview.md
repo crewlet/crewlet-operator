@@ -132,8 +132,11 @@ owns it only for a Seat that sets the field; see
 Vendors deliver webhooks to the company's public address, which the class
 derives from a host name template (`{{uid}}.hooks.example.com`) or which the
 Company states itself (`spec.exposure.publicBaseURL`). Only the path
-`/webhooks/` is ever exposed publicly; the engine's admin API stays inside the
-cluster unless the class routes it through an internal gateway.
+`/webhooks/` is exposed publicly, and `/mcp/`, the tool bridge an agent-mode
+coding CLI calls the seat's tools back through, while an `LLMProvider` runs
+one in `mode: Agent` ([Exposure](../guides/exposure.md)); the engine's admin
+API stays inside the cluster unless the class routes it through an internal
+gateway.
 
 ## Credentials: by reference, never by value
 

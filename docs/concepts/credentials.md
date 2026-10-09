@@ -53,8 +53,9 @@ what each tenant may hold: per-tenant keys, or per-tenant virtual keys from
 an LLM gateway. Object-store keys are a Company's own
 (`spec.objects.credentialsSecretRef`) for that reason. In the tenant's
 namespace, grant `get` on `<company>-api-access` by `resourceNames`: read on
-every Secret there also exposes `<company>-api-tokens`, `<company>-keyring`
-and `<company>-bootstrap`.
+every Secret there also exposes `<company>-api-tokens`, `<company>-keyring`,
+`<company>-bootstrap` and each seat pool's
+`<company>-bootstrap-<pool>-<hash>`, which hold the same keyring.
 
 ## Covered in v1alpha1
 
@@ -166,7 +167,9 @@ its own:
 
 Crewlet suggests a `${VAR}` at these positions, resolved from the node's
 environment. The operator writes the values themselves instead, into the
-`crewlet.yaml` it keeps in the Secret `<company>-bootstrap`, because the
+`crewlet.yaml` it keeps in the Secret `<company>-bootstrap` (and the keyring
+and object-store keys into each seat pool's
+`<company>-bootstrap-<pool>-<hash>`, whose seat pods need them too), because the
 engine also expands a `${NAME}` in the company document from its environment,
 in fields that are not credentials, such as an MCP server's `url`: a
 credential in the environment is one anyone who can write the document could
@@ -191,10 +194,11 @@ document. The operator handles them without a field:
   `secretAccessKey`, in the company's namespace, for the class's S3 bucket.
   Issue them per company, limited to the company's prefix of the bucket. The
   operator writes them into the pod's `crewlet.yaml`, with the keyring and
-  the API tokens, in the Secret it owns for the engine's pod,
-  `<company>-bootstrap`. Without them the engine reaches the bucket with the
-  pod's own identity: EKS Pod Identity, the node's role, or a workload
-  identity bound through the ServiceAccount's annotations
+  the API tokens, in the Secret it owns for the data pods,
+  `<company>-bootstrap`, and into the one it owns for each seat pool,
+  `<company>-bootstrap-<pool>-<hash>`. Without them the engine reaches the
+  bucket with the pod's own identity: EKS Pod Identity, the node's role, or a
+  workload identity bound through the ServiceAccount's annotations
   (`EngineClass.spec.serviceAccount.annotations`, such as
   `eks.amazonaws.com/role-arn` or `iam.gke.io/gcp-service-account`), which
   every company of the class shares unless the identity is scoped per
