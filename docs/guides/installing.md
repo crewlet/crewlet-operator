@@ -251,4 +251,6 @@ to `exposure.webhooks.external.forwarders`, which such a class now requires,
 dropping it from `apiConsumers` unless it also calls the admin API. Until
 then every webhook is answered `404` (port 8080 serves none) or refused by
 the policy ([From outside the
-operator](exposure.md#from-outside-the-operator)).
+operator](exposure.md#from-outside-the-operator)). A load balancer that
+health-checks the port it routes to needs its check moved to port 8080
+([Load balancer health checks](exposure.md#load-balancer-health-checks)).

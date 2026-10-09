@@ -1629,6 +1629,25 @@ var _ = Describe("Company runtime", func() {
 		})
 	})
 
+	It("puts the class's service annotations on the engine Service, and takes them off again", func() {
+		const backendConfig = "cloud.google.com/backend-config"
+		class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.Service.Annotations = map[string]string{backendConfig: `{"ports": {"public": "crewlet-public"}}`}
+		})
+		company := reconciled(newCompany(class.Name))
+		service := &corev1.Service{}
+		get(service, engineName)
+		Expect(service.Annotations).To(HaveKeyWithValue(backendConfig, `{"ports": {"public": "crewlet-public"}}`))
+		get(service, dataName)
+		Expect(service.Annotations).NotTo(HaveKey(backendConfig), "the headless Service is no route's backend")
+
+		updateClass(class, func(c *crewletaiv1alpha1.EngineClass) { c.Spec.Service = crewletaiv1alpha1.EngineService{} })
+		reconciled(company)
+		service = &corev1.Service{}
+		get(service, engineName)
+		Expect(service.Annotations).NotTo(HaveKey(backendConfig), "an annotation the class dropped stays")
+	})
+
 	It("removes the network policy when the class stops isolating the engine", func() {
 		class := newClass()
 		company := reconciled(newCompany(class.Name))

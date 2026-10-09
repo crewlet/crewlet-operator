@@ -27,7 +27,7 @@ Company, so it is deleted with it. For a Company `nimbus`:
 | Secret `nimbus-secret-sync` | What the config reconciler last pushed into the engine's secret store: a keyed fingerprint of each value, never the value, by which it decides what to push or remove next ([Applying the document](applying.md)). |
 | ServiceAccount `nimbus-engine` | The engine's identity, carrying the class's `serviceAccount.annotations` for a workload identity. Its token is never mounted: the engine does not call the Kubernetes API. |
 | StatefulSet `nimbus-data` | The data pod. |
-| Service `nimbus-engine` | ClusterIP routing to ready data pods, with two ports: `http` (8080), the engine's API, dashboard and probes, which `status.endpoints.api` and the API's route point at; and `public` (8081), the engine's public listener, which the webhooks' route points at. |
+| Service `nimbus-engine` | ClusterIP routing to ready data pods, with two ports: `http` (8080), the engine's API, dashboard and probes, which `status.endpoints.api` and the API's route point at; and `public` (8081), the engine's public listener, which the webhooks' route points at. It carries the class's `service.annotations`, for a load balancer controller that reads a backend's health check there ([Load balancer health checks](../guides/exposure.md#load-balancer-health-checks)). |
 | Service `nimbus-data` | Headless, the StatefulSet's governing Service, publishing each data pod's address before it is ready. |
 | HTTPRoute or Ingress `nimbus-webhooks`, `nimbus-api` | The routes the class asks for; see [Exposure](#exposure). |
 | NetworkPolicy `nimbus-engine` | With the class's `networkPolicy.mode: Isolated`; see [Network policy](#network-policy). |

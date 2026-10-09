@@ -861,6 +861,23 @@ type EngineServiceAccount struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
+// EngineService is what a class adds to the Service <company>-engine the
+// operator creates in front of each Company's data pods, which the class's
+// routes send to. It has no Crewlet field: the engine never sees its
+// Service.
+// +kubebuilder:validation:MinProperties=1
+type EngineService struct {
+	// annotations are added to the Service, for a load balancer controller
+	// that reads a backend's settings from it. On GKE an Ingress takes its
+	// health check from cloud.google.com/backend-config, naming a
+	// BackendConfig in each company's namespace: point its check at port
+	// 8080, path /ready, since the public port the webhooks' route sends to
+	// answers 404 on every path it does not serve, / included.
+	// +optional
+	// +kubebuilder:validation:MaxProperties=16
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
 // RetentionSettings is who answers for a class's companies' backups.
 type RetentionSettings struct {
 	// backupOwner names whoever is responsible for backing up the companies'
@@ -939,6 +956,11 @@ type EngineClassSpec struct {
 	// ServiceAccount.
 	// +optional
 	ServiceAccount EngineServiceAccount `json:"serviceAccount,omitzero"`
+
+	// service is what is added to each company's engine Service, which the
+	// class's routes send to.
+	// +optional
+	Service EngineService `json:"service,omitzero"`
 
 	// platformLLMProviders are model providers the platform offers to
 	// companies that opt in.

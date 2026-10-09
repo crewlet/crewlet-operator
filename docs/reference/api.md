@@ -950,6 +950,7 @@ _Appears in:_
 | `networkPolicy` _[NetworkPolicySettings](#networkpolicysettings)_ | networkPolicy is the NetworkPolicy the operator puts around each<br />company's engine pods. | \{ mode:Isolated \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `podTemplate` _[EnginePodTemplate](#enginepodtemplate)_ | podTemplate is what is added to every engine pod. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `serviceAccount` _[EngineServiceAccount](#engineserviceaccount)_ | serviceAccount is what is added to each company's engine<br />ServiceAccount. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `service` _[EngineService](#engineservice)_ | service is what is added to each company's engine Service, which the<br />class's routes send to. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `platformLLMProviders` _[PlatformLLMProvider](#platformllmprovider) array_ | platformLLMProviders are model providers the platform offers to<br />companies that opt in. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `limits` _[EngineLimits](#enginelimits)_ | limits caps what a company may declare. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `telemetry` _[TelemetrySettings](#telemetrysettings)_ | telemetry sends the engine's traces to a collector. Unset exports<br />nothing. |  | Optional: \{\} <br /> |
@@ -1087,6 +1088,26 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `metadata` _[EnginePodMetadata](#enginepodmetadata)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `spec` _[EnginePodSpec](#enginepodspec)_ | spec is merged into every engine pod's spec. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+
+
+#### EngineService
+
+
+
+EngineService is what a class adds to the Service <company>-engine the
+operator creates in front of each Company's data pods, which the class's
+routes send to. It has no Crewlet field: the engine never sees its
+Service.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [EngineClassSpec](#engineclassspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `annotations` _object (keys:string, values:string)_ | annotations are added to the Service, for a load balancer controller<br />that reads a backend's settings from it. On GKE an Ingress takes its<br />health check from cloud.google.com/backend-config, naming a<br />BackendConfig in each company's namespace: point its check at port<br />8080, path /ready, since the public port the webhooks' route sends to<br />answers 404 on every path it does not serve, / included. |  | MaxProperties: 16 <br />Optional: \{\} <br /> |
 
 
 #### EngineServiceAccount

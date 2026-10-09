@@ -180,8 +180,9 @@ func (r *CompanyReconciler) applyServiceAccount(
 // applyServices writes the company's two Services. <c>-engine routes to
 // ready data pods and backs the routes and status.endpoints.api: its port
 // http is the engine's API, which the API's route reaches, and its port
-// public the engine's public listener, which the webhooks' route reaches.
-// <c>-data is the StatefulSet's headless governing Service: it gives each
+// public the engine's public listener, which the webhooks' route reaches. It
+// carries the class's service annotations, for a load balancer controller
+// that reads a backend's health check there. <c>-data is the StatefulSet's headless governing Service: it gives each
 // data pod a stable DNS name, published before the pod is ready, because an
 // engine with no document yet answers /ready with 503 and the operator must
 // reach it to apply the first one. The seat pods join the data pods' leaf listener by the
@@ -205,6 +206,9 @@ func (r *CompanyReconciler) applyServices(ctx context.Context, c *crewletaiv1alp
 				WithProtocol(corev1.ProtocolTCP).
 				WithPort(render.PublicPort).
 				WithTargetPort(intstr.FromString(publicPortName))))
+	if annotations := class.Spec.Service.Annotations; len(annotations) > 0 {
+		engine.WithAnnotations(annotations)
+	}
 	if err := r.apply(ctx, c, serviceGVK, engineServiceName(c), engine); err != nil {
 		return err
 	}

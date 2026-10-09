@@ -355,6 +355,11 @@ Webhooks reach the engine's public listener, port 8081 of the
   `ingress.controllerNamespaces`, or `external.forwarders`). An `External`
   forwarder must be listed in `exposure.webhooks.external.forwarders`;
   `networkPolicy.apiConsumers` admits port 8080 only.
+- **The load balancer reports every backend unhealthy** (`502` or `503`
+  from the load balancer itself, never reaching the engine): it
+  health-checks the port it routes to, where the public listener answers
+  `/` and the probe paths `404`. Point the check at port 8080, path `/ready`
+  ([Load balancer health checks](exposure.md#load-balancer-health-checks)).
 
 ## Collecting what to report
 

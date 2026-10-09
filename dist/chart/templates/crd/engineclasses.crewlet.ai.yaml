@@ -2871,6 +2871,25 @@ spec:
                 - message: 'a class that allows seat pools caps them: set maxPods,
                     the most seat pods one company may run'
                   rule: '!has(self.policy) || self.policy != ''Allowed'' || has(self.maxPods)'
+              service:
+                description: |-
+                  service is what is added to each company's engine Service, which the
+                  class's routes send to.
+                minProperties: 1
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      annotations are added to the Service, for a load balancer controller
+                      that reads a backend's settings from it. On GKE an Ingress takes its
+                      health check from cloud.google.com/backend-config, naming a
+                      BackendConfig in each company's namespace: point its check at port
+                      8080, path /ready, since the public port the webhooks' route sends to
+                      answers 404 on every path it does not serve, / included.
+                    maxProperties: 16
+                    type: object
+                type: object
               serviceAccount:
                 description: |-
                   serviceAccount is what is added to each company's engine

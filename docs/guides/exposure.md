@@ -136,6 +136,46 @@ address for it. Its TLS Secret lives in the Company's namespace, so it is
 issued per company, here by a certificate controller from the Ingress's
 annotations.
 
+### Load balancer health checks
+
+The public port answers `404` on every path it does not serve, `/` and the
+probe paths included, so a load balancer that health-checks a backend on the
+port it routes to marks every engine unhealthy and drops every delivery.
+Controllers that run in the cluster (ingress-nginx, Envoy Gateway and most
+Gateway implementations) send no such check by default; cloud load balancers
+do. Point their check at port `http` (8080), path `/ready`, which every engine
+pod answers `200` once it serves:
+
+- **AWS Load Balancer Controller** (ALB, `target-type: ip`): checks `GET /`
+  and expects `200`. Set the class's `ingress.annotations`:
+
+  ```yaml
+  alb.ingress.kubernetes.io/target-type: ip
+  alb.ingress.kubernetes.io/healthcheck-port: "8080"
+  alb.ingress.kubernetes.io/healthcheck-path: /ready
+  ```
+
+- **GKE Ingress**: takes its check from the pod's readiness probe only when
+  that probe is on the port the Ingress sends to, and otherwise checks
+  `GET /` there. Create a `BackendConfig` in each company's namespace whose
+  `healthCheck` is `{type: HTTP, port: 8080, requestPath: /ready}`, and name
+  it on the engine Service through the class's `service.annotations`:
+
+  ```yaml
+  spec:                       # EngineClass
+    service:
+      annotations:
+        cloud.google.com/backend-config: '{"ports": {"public": "crewlet-public"}}'
+  ```
+
+- **GKE Gateway**: create a `HealthCheckPolicy` in each company's namespace
+  whose `targetRef` is the Service `<company>-engine`, with the same check.
+
+These load balancers deliver to the pods from addresses outside the pod
+network, which a NetworkPolicy cannot admit by namespace: run their classes
+with `networkPolicy.mode: None` and isolate the engines with your cloud's or
+CNI's own policy.
+
 ### From outside the operator
 
 With `mode: External` the operator creates no route. Forward everything

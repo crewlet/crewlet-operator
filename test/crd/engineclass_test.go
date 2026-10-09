@@ -305,6 +305,14 @@ func TestEngineClassExposure(t *testing.T) {
 		// The API's exposure follows the same rules as the webhooks'.
 		{name: "a Gateway API route is accepted", mutate: apiGatewayHost(apiHost)},
 		{
+			name: "annotations for the engine Service are accepted",
+			mutate: func(c *v1.EngineClass) {
+				c.Spec.Service.Annotations = map[string]string{
+					"cloud.google.com/backend-config": `{"ports": {"public": "crewlet-public"}}`,
+				}
+			},
+		},
+		{
 			name: "a Gateway API route beside the webhooks' on another host is accepted",
 			mutate: func(c *v1.EngineClass) {
 				gatewayHost(webhookHost)(c)
