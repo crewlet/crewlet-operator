@@ -148,10 +148,14 @@ func (c *Client) Ready(ctx context.Context) error {
 }
 
 // Health returns what the engine's /health says about the answering node:
-// the activation epoch it has applied and its standing alarms.
+// its status and config posture, the activation epoch it has applied, and
+// its standing alarms.
 func (c *Client) Health(ctx context.Context) (Health, error) {
 	var answer struct {
-		AppliedEpoch int64 `json:"applied_epoch"`
+		Status       string `json:"status"`
+		Configured   bool   `json:"configured"`
+		Posture      string `json:"posture"`
+		AppliedEpoch int64  `json:"applied_epoch"`
 		Alarms       *struct {
 			Count int    `json:"count"`
 			Worst string `json:"worst"`
@@ -160,11 +164,46 @@ func (c *Client) Health(ctx context.Context) (Health, error) {
 	if err := c.call(ctx, request{method: http.MethodGet, path: "/health"}, http.StatusOK, &answer); err != nil {
 		return Health{}, err
 	}
-	h := Health{AppliedEpoch: answer.AppliedEpoch}
+	h := Health{
+		Status: answer.Status, Configured: answer.Configured, Posture: Posture(answer.Posture),
+		AppliedEpoch: answer.AppliedEpoch,
+	}
 	if a := answer.Alarms; a != nil {
 		h.Alarms = &Alarms{Count: a.Count, Worst: a.Worst}
 	}
 	return h, nil
+}
+
+// LastApply returns what the answering node recorded about its last attempt
+// to apply an activation epoch, read from its own row of the engine's /fleet.
+//
+// It is what tells an apply in progress from a failed one. /health cannot:
+// the engine counts an attempt before it makes it, so while a revision is
+// being applied its posture already reads as diverged (isolated, on a single
+// node) and turns serve when the apply ends, whereas the record is written
+// only once the attempt has ended, with its outcome. A node that has
+// recorded no attempt, or that the fleet does not list yet, is the zero
+// ApplyRecord.
+func (c *Client) LastApply(ctx context.Context) (ApplyRecord, error) {
+	var answer struct {
+		ThisNode string `json:"this_node"`
+		Nodes    []struct {
+			ID         string `json:"id"`
+			Epoch      int64  `json:"config_epoch"`
+			RevisionID string `json:"config_revision_id"`
+			Status     string `json:"config_status"`
+			Error      string `json:"config_error"`
+		} `json:"nodes"`
+	}
+	if err := c.call(ctx, request{method: http.MethodGet, path: "/fleet"}, http.StatusOK, &answer); err != nil {
+		return ApplyRecord{}, err
+	}
+	for _, n := range answer.Nodes {
+		if n.ID == answer.ThisNode {
+			return ApplyRecord{Epoch: n.Epoch, RevisionID: n.RevisionID, Status: ApplyStatus(n.Status), Error: n.Error}, nil
+		}
+	}
+	return ApplyRecord{}, nil
 }
 
 // ActiveConfig returns the company document the engine runs, redacted, with

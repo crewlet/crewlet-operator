@@ -25,13 +25,104 @@ type ActiveConfig struct {
 
 // Health is what an engine's /health says about the node that answered.
 type Health struct {
-	// AppliedEpoch is the activation epoch the node has applied.
+	// Status is the engine's one-word verdict on the node, in its order of
+	// precedence: "shutting_down", a diverged posture ("shed", "stuck" or
+	// "isolated"), "unconfigured", or "ok". A newer engine may add one.
+	Status string
+
+	// Configured is whether a company revision is active on the node.
+	Configured bool
+
+	// Posture is what the node concluded about the activation epoch it
+	// has applied against the fleet's, empty from an engine that has not
+	// decided yet.
+	Posture Posture
+
+	// AppliedEpoch is the activation epoch the node has applied. The engine
+	// applies a revision asynchronously after the write that activates it,
+	// so it runs a revision written at epoch N once this has reached N.
 	AppliedEpoch int64
 
 	// Alarms is the node's standing alarms, nil before the engine has
 	// first evaluated them or on a node that keeps no state log: neither
 	// has looked, which is not the same as no alarm.
 	Alarms *Alarms
+}
+
+// Posture is an engine node's config posture: what it does about an
+// activation epoch it has not applied (crewlet's docs/concepts/control-plane.md,
+// "Posture: what a lagging node does").
+type Posture string
+
+// The postures the engine reports.
+const (
+	// PostureServe is a node that has applied the current epoch.
+	PostureServe Posture = "serve"
+
+	// PostureWait is a node behind the current epoch for an ordinary
+	// reason: it has not polled the activation pointer yet, or its peers
+	// have not applied the epoch either and it has not failed to.
+	PostureWait Posture = "wait"
+
+	// PostureShed is a node that cannot apply an epoch its peers have, and
+	// refuses new work.
+	PostureShed Posture = "shed"
+
+	// PostureIsolated is a node that failed to apply the epoch while no
+	// peer has applied it, and keeps serving the epoch it applied last. A
+	// single-node engine that cannot apply a revision ends here.
+	PostureIsolated Posture = "isolated"
+
+	// PostureStuck is a node that cannot apply an epoch its peers have and
+	// has exhausted its retries: it needs a corrected revision.
+	PostureStuck Posture = "stuck"
+)
+
+// Diverged reports whether the posture says the node has failed to apply
+// the current epoch rather than only not reached it yet.
+func (p Posture) Diverged() bool {
+	return p == PostureShed || p == PostureIsolated || p == PostureStuck
+}
+
+// ApplyStatus is how a node's last attempt to apply an activation epoch
+// ended, as it recorded it for its peers.
+type ApplyStatus string
+
+// The outcomes the engine records.
+const (
+	// ApplyOK is an epoch applied cleanly.
+	ApplyOK ApplyStatus = "ok"
+
+	// ApplyError is an epoch the node refused: it changed nothing, and
+	// keeps serving the epoch it applied before.
+	ApplyError ApplyStatus = "error"
+
+	// ApplyDegraded is an apply that failed after a subsystem it cannot
+	// undo had changed; the node needs a restart.
+	ApplyDegraded ApplyStatus = "degraded"
+)
+
+// Failed reports whether the attempt did not apply the epoch.
+func (s ApplyStatus) Failed() bool { return s == ApplyError || s == ApplyDegraded }
+
+// ApplyRecord is what a node recorded about its last attempt to apply an
+// activation epoch: the config_* fields of its row in the engine's /fleet.
+// The zero value is a node that has recorded no attempt.
+type ApplyRecord struct {
+	// Epoch is the activation epoch the attempt was for.
+	Epoch int64
+
+	// RevisionID is the revision that epoch activated.
+	RevisionID string
+
+	// Status is how the attempt ended.
+	Status ApplyStatus
+
+	// Error is the engine's own account of a failed attempt, empty for
+	// one that succeeded. The engine shows it on its dashboard and caps it
+	// at 2000 bytes; it names configuration, never a credential's value,
+	// which the engine resolves only where a provider is constructed.
+	Error string
 }
 
 // Alarms is how many of a node's alarms are firing, and which has stood

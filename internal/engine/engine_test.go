@@ -58,6 +58,53 @@ func TestEngineReadyFollowsTheFirstApply(t *testing.T) {
 	eventually(t, "Ready() after the first apply", func() error { return client.Ready(ctx) })
 }
 
+// TestEngineHealthReportsTheAppliedEpoch pins what the config reconciler
+// waits for after a write: the engine applies the revision asynchronously,
+// and its /health reports it applied, converged (posture serve) and ok, with
+// an applied epoch that reaches the epoch the write returned; and the node's
+// record in /fleet names that epoch, its revision and a clean outcome.
+func TestEngineHealthReportsTheAppliedEpoch(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client := enginetest.Start(t).Client()
+
+	before, err := client.Health(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Status != unconfigured || before.Configured {
+		t.Fatalf("Health() before the first apply = %+v, want status unconfigured and not configured", before)
+	}
+
+	applied, err := client.ApplyConfig(ctx, engine.ApplyRequest{
+		Document: []byte(enginetest.MinimalCompany), Summary: "enginetest: health", CreateOnly: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the engine reporting the write's epoch applied", func() error {
+		h, err := client.Health(ctx)
+		switch {
+		case err != nil:
+			return err
+		case h.AppliedEpoch < applied.Epoch:
+			// Its posture may read isolated meanwhile: the engine counts
+			// the attempt before it makes it (see LastApply).
+			return fmt.Errorf("applied epoch %d is behind the write's %d", h.AppliedEpoch, applied.Epoch)
+		case h.Status != "ok" || !h.Configured || h.Posture != engine.PostureServe:
+			return fmt.Errorf("Health() = %+v, want status ok, configured, posture serve", h)
+		}
+		return nil
+	})
+	record, err := client.LastApply(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (engine.ApplyRecord{Epoch: applied.Epoch, RevisionID: applied.RevisionID, Status: engine.ApplyOK}); record != want {
+		t.Fatalf("LastApply() = %+v, want %+v", record, want)
+	}
+}
+
 // TestEngineApplyActivatesTheRevision pins the write's answer to what the engine
 // then runs: the revision it names is the active one, at the epoch it names.
 func TestEngineApplyActivatesTheRevision(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -735,5 +736,66 @@ func TestHealthReadsTheAlarms(t *testing.T) {
 				t.Errorf("Alarms = %+v, want %+v", got.Alarms, c.want)
 			}
 		})
+	}
+}
+
+// TestHealthReadsThePosture pins the fields the config reconciler decides
+// ConfigApplied from: the status, whether a revision is active, the
+// posture, and the applied epoch, and which postures say the node failed to
+// apply the current epoch rather than not reached it yet.
+func TestHealthReadsThePosture(t *testing.T) {
+	for _, c := range []struct {
+		posture  engine.Posture
+		diverged bool
+	}{
+		{engine.PostureServe, false},
+		{engine.PostureWait, false},
+		{engine.PostureShed, true},
+		{engine.PostureIsolated, true},
+		{engine.PostureStuck, true},
+		{"", false},
+	} {
+		t.Run(string(c.posture), func(t *testing.T) {
+			f := newFakeEngine(t)
+			f.handle("GET /health", answer(http.StatusOK,
+				fmt.Sprintf(`{"status":"isolated","configured":true,"posture":%q,"applied_epoch":7}`, c.posture)))
+			got, err := f.client().Health(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := engine.Health{Status: "isolated", Configured: true, Posture: c.posture, AppliedEpoch: 7}
+			if got != want {
+				t.Errorf("Health() = %+v, want %+v", got, want)
+			}
+			if got.Posture.Diverged() != c.diverged {
+				t.Errorf("Posture(%q).Diverged() = %t, want %t", c.posture, got.Posture.Diverged(), c.diverged)
+			}
+		})
+	}
+}
+
+// TestLastApplyReadsTheAnsweringNodesRecord pins which row of /fleet is the
+// answering node's (this_node), what a failed attempt carries, and that a
+// node the fleet does not list has recorded nothing.
+func TestLastApplyReadsTheAnsweringNodesRecord(t *testing.T) {
+	const fleet = `{"this_node":"node-1","nodes":[
+		{"id":"node-0","config_epoch":9,"config_revision_id":"r9","config_status":"ok","config_error":""},
+		{"id":"node-1","config_epoch":9,"config_revision_id":"r9","config_status":"error","config_error":"engine: apply: no such provider"}]}`
+	f := newFakeEngine(t)
+	f.handle("GET /fleet", answer(http.StatusOK, fleet))
+	got, err := f.client().LastApply(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := engine.ApplyRecord{Epoch: 9, RevisionID: "r9", Status: engine.ApplyError, Error: "engine: apply: no such provider"}
+	if got != want || !got.Status.Failed() {
+		t.Fatalf("LastApply() = %+v, want %+v, failed", got, want)
+	}
+
+	unlisted := newFakeEngine(t)
+	unlisted.handle("GET /fleet", answer(http.StatusOK, `{"this_node":"node-2","nodes":[{"id":"node-0","config_status":"error"}]}`))
+	got, err = unlisted.client().LastApply(context.Background())
+	if err != nil || got != (engine.ApplyRecord{}) || got.Status.Failed() {
+		t.Fatalf("LastApply() of an unlisted node = %+v, %v, want the zero record", got, err)
 	}
 }
