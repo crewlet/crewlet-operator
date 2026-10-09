@@ -7,6 +7,8 @@
 // test that needs it fails, rather than skips, when it is missing: a skipped
 // contract test is indistinguishable from a passing one in a CI summary, and
 // this suite is what tells the operator and the engine apart when they drift.
+// ADR-0002 (adr/0002-test-against-the-real-pinned-engine.md) records the
+// decision for every package that tests against the engine.
 package enginetest
 
 import (

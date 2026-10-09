@@ -2,6 +2,8 @@ package enginetest_test
 
 import (
 	"context"
+	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -48,4 +50,31 @@ func TestEnginesDoNotShareState(t *testing.T) {
 	if len(listed) != 0 {
 		t.Fatalf("engine b lists %+v, want nothing written to engine a", listed)
 	}
+}
+
+// fatal is the panic fatalT's Fatalf raises, standing for the end of the
+// test that testing.T's Fatalf brings.
+type fatal string
+
+// fatalT is a T whose Fatalf ends the call it is in, so a test can see that
+// Binary fails a test rather than skip it.
+type fatalT struct{ testing.TB }
+
+func (f fatalT) Fatalf(format string, args ...any) { panic(fatal(fmt.Sprintf(format, args...))) }
+
+// TestBinaryFailsWithoutTheEngine pins ADR-0002: a suite with no engine
+// binary fails, with the command that builds one, rather than skipping its
+// contract tests and passing.
+func TestBinaryFailsWithoutTheEngine(t *testing.T) {
+	t.Setenv(enginetest.BinaryEnv, filepath.Join(t.TempDir(), "no-crewlet-here"))
+	defer func() {
+		msg, ok := recover().(fatal)
+		if !ok {
+			t.Fatal("Binary returned without failing the test")
+		}
+		if !strings.Contains(string(msg), "unset it to use bin/crewlet") {
+			t.Errorf("Binary failed with %q, which does not say how to get the engine", msg)
+		}
+	}()
+	enginetest.Binary(fatalT{t})
 }

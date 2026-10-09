@@ -22,6 +22,9 @@
 //
 // # What the operator owns in the store
 //
+// The naming is ADR-0001's (adr/0001-name-store-entries-by-their-secret-reference.md),
+// which render and the config reconciler depend on too.
+//
 // Every name StoreName produces starts with Prefix and ends with a hash of
 // the reference, and Owns recognises exactly that shape. Sync deletes only
 // names Owns accepts, so entries a person or a provisioner wrote under any

@@ -26,7 +26,7 @@ like any other change.
 
 ## The records
 
-None yet.
-
 | # | Decision | Enforced by |
 |---|---|---|
+| [0001](0001-name-store-entries-by-their-secret-reference.md) | Name every store entry the operator owns by its Secret reference | `TestCompanyRefsAreExactlyThePointers`, `TestStoreNameIsDeterministic`, `TestOwnsOnlyTheOperatorsNames`, `TestSyncCollectsOnlyTheOperatorsNames` |
+| [0002](0002-test-against-the-real-pinned-engine.md) | Test against the real, pinned engine, and fail without it | `TestBinaryFailsWithoutTheEngine` |
