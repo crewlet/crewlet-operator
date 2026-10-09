@@ -220,13 +220,14 @@ docker-build: ## Build the manager image for the local platform.
 # The engine image the e2e suite runs. It is built the way a Crewlet release
 # builds its own, from crewlet's Dockerfile, at the CREWLET_VERSION every
 # other suite tests against, so the suite runs no image that differs from the
-# engine the code was written for. The build clones crewlet's repository;
-# CREWLET_SRC instead names a local clone that holds the commit, which is
-# only read from.
+# engine the code was written for. The source is the crewlet module at
+# CREWLET_VERSION, downloaded and checked against the Go checksum database as
+# `make crewlet` does, so the image and bin/crewlet are built from the same
+# bytes.
 CREWLET_IMG ?= example.com/crewlet:$(CREWLET_VERSION)
 
 .PHONY: crewlet-image
-crewlet-image: ## Build the Crewlet engine image CREWLET_IMG from source at CREWLET_VERSION (CREWLET_SRC: a local clone to read it from).
+crewlet-image: ## Build the Crewlet engine image CREWLET_IMG from the crewlet module at CREWLET_VERSION.
 	CONTAINER_TOOL="$(CONTAINER_TOOL)" scripts/build-crewlet-image.sh "$(CREWLET_VERSION)" "$(CREWLET_IMG)"
 
 .PHONY: docker-push

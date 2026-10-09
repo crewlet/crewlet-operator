@@ -25,9 +25,9 @@ operator sets up around each engine is created but not applied here; see
 
 The operator's image, and the Crewlet engine's. The engine is built from
 source at the version the operator is pinned to (`CREWLET_VERSION` in the
-Makefile), with Crewlet's own Dockerfile; `make crewlet-image` clones Crewlet
-to do so. Nothing is pushed to a registry: both images are loaded into the
-kind node.
+Makefile), with Crewlet's own Dockerfile; `make crewlet-image` downloads
+that version's module, checked against the Go checksum database, to do so.
+Nothing is pushed to a registry: both images are loaded into the kind node.
 
 ```bash
 make docker-build IMG=crewlet-operator:dev

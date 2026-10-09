@@ -166,7 +166,7 @@ jobs:
           path: bin
           key: bin-e2e-${{ runner.os }}-${{ hashFiles('Makefile', 'go.mod') }}
       # Creates the kind cluster with the pinned kind, builds and loads the
-      # manager image and the engine image (cloned and built from source at
+      # manager image and the engine image (built from the crewlet module at
       # the Makefile's CREWLET_VERSION), deploys the manager with kustomize,
       # runs the suite, deletes the cluster.
       - run: make test-e2e

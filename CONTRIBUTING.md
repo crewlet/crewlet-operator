@@ -92,9 +92,10 @@ Two more suites are not part of `make check`:
   token, an edited Seat becomes a new revision, and deleting the Company
   keeps or deletes its volume and keyring as its `deletionPolicy` says. Then
   it deletes the cluster. CI runs it on every pull request. The engine image
-  is built from source at `CREWLET_VERSION` with `make crewlet-image`, which
-  clones Crewlet; set `CREWLET_SRC` to a local clone that has the commit to
-  build from it instead. On a host that cannot run kind's default cluster,
+  is built from source at `CREWLET_VERSION` with `make crewlet-image`, from
+  the crewlet module the Go command downloads and checks against the
+  checksum database, the same source `make crewlet` builds `bin/crewlet`
+  from. On a host that cannot run kind's default cluster,
   `KIND_CONFIG` names a kind cluster configuration to create it with.
 - `make docker-build` builds the image; CI's `build` job runs it too.
 

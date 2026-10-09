@@ -12,13 +12,15 @@
 # suite tests against.
 #
 # Environment:
-#   CREWLET_REPO    the repository to clone (default
-#                   https://github.com/crewlet/crewlet.git)
-#   CREWLET_SRC     an existing clone to read the commit from instead of
-#                   cloning; it is only read (git archive), never checked out
-#                   or written, so uncommitted changes in it cannot leak into
-#                   the image
 #   CONTAINER_TOOL  the image builder (default docker)
+#
+# WHY THE MODULE AND NOT A CLONE: the source is the module zip the Go command
+# downloads for <version>, whose hash it checks against the checksum
+# database, as it does when `make crewlet` installs the same version. A
+# clone of a tag, which can be moved, or of a commit prefix would build an
+# engine nothing ties to the one every other suite tests; the module is that
+# engine's source, byte for byte. The zip holds everything the build reads:
+# the Dockerfile, LICENSE, scripts/notices and static/.
 #
 # WHY NOT `docker build` IN THE CHECKOUT: crewlet's Dockerfile builds nothing.
 # Its release (goreleaser) cross-compiles the binary and stages it, with the
@@ -36,34 +38,29 @@ if [ "$#" -ne 2 ]; then
 fi
 version="$1"
 image="$2"
-repo="${CREWLET_REPO:-https://github.com/crewlet/crewlet.git}"
 tool="${CONTAINER_TOOL:-docker}"
 
-# A pseudo-version names its commit by a 12-digit prefix; anything else is
-# taken to be a tag.
-if [[ "$version" =~ [.-]([0-9]{14})-([0-9a-f]{12})$ ]]; then
-	ref="${BASH_REMATCH[2]}"
-else
-	ref="$version"
-fi
-
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
+trap 'chmod -R u+w "$tmp"; rm -rf "$tmp"' EXIT
 
-src="${CREWLET_SRC:-}"
-if [ -z "$src" ]; then
-	echo "Cloning $repo"
-	git clone --quiet --no-checkout "$repo" "$tmp/repo"
-	src="$tmp/repo"
-fi
-if ! commit="$(git -C "$src" rev-parse --verify --quiet "$ref^{commit}")"; then
-	echo "$src has no commit $ref (from version $version); fetch it there, or unset CREWLET_SRC to clone $repo" >&2
+# Outside any module, so that only the checksum database vouches for the
+# download: no go.sum of ours is consulted or written. The variables that
+# would exempt the module from the database (GOPRIVATE, GONOSUMDB,
+# GOINSECURE, GOSUMDB=off, GOFLAGS=-insecure) are cleared; GOPROXY is kept,
+# since the database checks whatever proxy served the zip.
+dir="$(cd "$tmp" && GOWORK=off GOFLAGS= GOPRIVATE= GONOSUMDB= GOINSECURE= GOSUMDB= \
+	go mod download -json "github.com/crewlet/crewlet@$version" | sed -n 's/^[[:space:]]*"Dir": "\(.*\)",$/\1/p')"
+if [ -z "$dir" ] || [ ! -f "$dir/go.mod" ]; then
+	echo "go mod download github.com/crewlet/crewlet@$version gave no source directory" >&2
 	exit 1
 fi
-echo "Building crewlet $version from commit $commit"
+echo "Building crewlet $version from $dir"
 
+# The module cache is read-only; the build writes nothing there, but the
+# notices generator and go build run in a copy all the same.
 mkdir "$tmp/src"
-git -C "$src" archive --format=tar "$commit" | tar -x -C "$tmp/src"
+cp -R "$dir/." "$tmp/src"
+chmod -R u+w "$tmp/src"
 
 # The image is for the machine that builds it, which is the machine kind runs
 # on: the binary is not cross-compiled for any other architecture.
