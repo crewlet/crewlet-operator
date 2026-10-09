@@ -32,7 +32,9 @@ objects one request at a time, and each revision is a permanent entry in the
 engine's history and a rebuild of every seat. So after a change to a part or
 to a referenced Secret the operator waits until two seconds have passed
 without another one, and then applies everything as one revision: twenty
-Seats created in a burst become one revision, not twenty.
+Seats created in a burst become one revision, not twenty. A burst that never
+pauses (a Secret something rewrites every second) holds the company back for
+ten seconds at most; the operator then applies what it has.
 
 ## What one reconcile does
 

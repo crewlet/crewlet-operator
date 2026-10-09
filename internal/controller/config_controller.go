@@ -93,6 +93,7 @@ func (r *CompanyConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	company := &crewletaiv1alpha1.Company{}
 	if err := r.Get(ctx, req.NamespacedName, company); err != nil {
 		if apierrors.IsNotFound(err) {
+			r.changes.forget(req.NamespacedName)
 			return ctrl.Result{}, r.orphan(ctx, req.NamespacedName)
 		}
 		return ctrl.Result{}, fmt.Errorf("reading Company %s: %w", req.NamespacedName, err)
@@ -100,6 +101,7 @@ func (r *CompanyConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if !company.DeletionTimestamp.IsZero() {
 		// The runtime reconciler stops the engine; there is no document
 		// left to keep.
+		r.changes.forget(req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 	// Before anything is rendered: a burst is often an object and what it

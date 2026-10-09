@@ -163,7 +163,7 @@ func TestReferencesMatchesAKeyOrTheWholeSecret(t *testing.T) {
 func TestChangeClockWaitsOutTheQuietPeriod(t *testing.T) {
 	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	clock := changeClock{now: func() time.Time { return now }}
-	company := types.NamespacedName{Namespace: "ns", Name: "nimbus"}
+	company := types.NamespacedName{Namespace: "ns", Name: companyName}
 
 	if wait := clock.unsettled(company); wait != 0 {
 		t.Fatalf("a company nothing changed for waits %s", wait)
@@ -181,6 +181,39 @@ func TestChangeClockWaitsOutTheQuietPeriod(t *testing.T) {
 	now = now.Add(quietPeriod)
 	if wait := clock.unsettled(company); wait != 0 {
 		t.Fatalf("unsettled() = %s after the quiet period", wait)
+	}
+}
+
+// TestChangeClockStopsWaitingForAnEndlessBurst: changes that never pause
+// (a Secret rewritten every second) hold a company back for maxSettle at
+// most, so its document is applied after all.
+func TestChangeClockStopsWaitingForAnEndlessBurst(t *testing.T) {
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	clock := changeClock{now: func() time.Time { return now }}
+	company := types.NamespacedName{Namespace: "ns", Name: companyName}
+	start := now
+	for now.Sub(start) < maxSettle {
+		clock.touch(company)
+		if wait := clock.unsettled(company); wait <= 0 || now.Add(wait).After(start.Add(maxSettle)) {
+			t.Fatalf("unsettled() = %s at %s into the burst, want a wait that ends by %s", wait, now.Sub(start), maxSettle)
+		}
+		now = now.Add(time.Second)
+	}
+	clock.touch(company)
+	if wait := clock.unsettled(company); wait != 0 {
+		t.Fatalf("unsettled() = %s after %s of changes, want 0", wait, now.Sub(start))
+	}
+}
+
+// TestChangeClockForgetsACompany: the clock holds nothing about a company
+// once it is forgotten, as it is when the company is deleted.
+func TestChangeClockForgetsACompany(t *testing.T) {
+	clock := changeClock{}
+	company := types.NamespacedName{Namespace: "ns", Name: companyName}
+	clock.touch(company)
+	clock.forget(company)
+	if len(clock.bursts) != 0 {
+		t.Fatalf("the clock still holds %v", clock.bursts)
 	}
 }
 

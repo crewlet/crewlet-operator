@@ -132,7 +132,7 @@ requests to `http://<company>-data-0.<company>-data.<namespace>.svc:8080` fail:
 - A Secret change that leaves the value as it was writes nothing; a change to
   a value is applied as a new revision.
 - Changes are coalesced: the operator waits for two quiet seconds after the
-  last one.
+  last one, and ten seconds at most for a burst that never pauses.
 
 ## Webhooks do not arrive
 

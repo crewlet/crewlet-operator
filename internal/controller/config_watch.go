@@ -42,44 +42,73 @@ const (
 // enough that a person editing one object does not notice the wait.
 const quietPeriod = 2 * time.Second
 
-// changeClock remembers, per Company, when the last change to one of its
-// parts or referenced Secrets arrived, so a reconcile can tell whether a
-// burst of changes is still under way.
+// maxSettle bounds how long a burst of changes holds a company back: a
+// Secret that something rewrites more often than the quiet period (a
+// controller re-annotating it) would otherwise keep its companies unsettled
+// for as long as it does, and their documents never applied.
+const maxSettle = 5 * quietPeriod
+
+// changeClock remembers, per Company, when the first and the last of a
+// burst of changes to its parts or referenced Secrets arrived, so a reconcile
+// can tell whether the burst is still under way.
 //
 // It is kept in memory rather than read from the objects, because a
 // deletion leaves no object to read a time from. Losing it on a restart
 // costs at most one revision more than coalescing would have made.
 type changeClock struct {
-	mu   sync.Mutex
-	last map[types.NamespacedName]time.Time
-	now  func() time.Time
+	mu     sync.Mutex
+	bursts map[types.NamespacedName]burst
+	now    func() time.Time
+}
+
+// burst is when a company's unsettled changes began and when the latest
+// arrived.
+type burst struct {
+	first, last time.Time
 }
 
 // touch records a change to the company's parts now.
 func (c *changeClock) touch(company types.NamespacedName) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.last == nil {
-		c.last = map[types.NamespacedName]time.Time{}
+	if c.bursts == nil {
+		c.bursts = map[types.NamespacedName]burst{}
 	}
-	c.last[company] = c.clock()
+	now := c.clock()
+	b, ok := c.bursts[company]
+	if !ok {
+		b.first = now
+	}
+	b.last = now
+	c.bursts[company] = b
 }
 
 // unsettled returns how much of the quiet period after the company's last
-// change is still to run, and zero once it has run, forgetting the change
-// then.
+// change is still to run, never past maxSettle after the burst began, and
+// zero once it has run, forgetting the burst then.
 func (c *changeClock) unsettled(company types.NamespacedName) time.Duration {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	last, ok := c.last[company]
+	b, ok := c.bursts[company]
 	if !ok {
 		return 0
 	}
-	if wait := quietPeriod - c.clock().Sub(last); wait > 0 {
+	now := c.clock()
+	wait := min(quietPeriod-now.Sub(b.last), maxSettle-now.Sub(b.first))
+	if wait > 0 {
 		return wait
 	}
-	delete(c.last, company)
+	delete(c.bursts, company)
 	return 0
+}
+
+// forget drops what the clock holds about a company: one that was deleted
+// would otherwise stay in it for as long as the operator runs, since only a
+// reconcile that gets as far as unsettled forgets a burst.
+func (c *changeClock) forget(company types.NamespacedName) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.bursts, company)
 }
 
 func (c *changeClock) clock() time.Time {
