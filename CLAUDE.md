@@ -56,9 +56,13 @@ modules.
 
 ```bash
 make check       # everything CI runs except e2e and the image: run it before every commit
-make test        # unit + envtest + engine suites (both modules, -race)
+make test        # unit + envtest + engine + chart suites (both modules, -race)
 make lint        # golangci-lint, both modules
-make test-e2e    # kind cluster, deploy, assert, delete
+make crewlet     # bin/crewlet at CREWLET_VERSION: a go test outside make needs it (or CREWLET_BIN)
+make helm        # bin/helm: test/chart outside make needs it (or HELM)
+make test-e2e    # kind cluster; builds the engine image too (make crewlet-image,
+                 # CREWLET_IMG); KIND_CONFIG names a cluster config of your own;
+                 # a failed run leaves the cluster: make cleanup-test-e2e deletes it
 make help        # every target
 ```
 

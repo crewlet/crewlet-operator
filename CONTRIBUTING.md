@@ -91,7 +91,9 @@ Two more suites are not part of `make check`:
   document and Secret values, a consumer reads the API with the published
   token, an edited Seat becomes a new revision, and deleting the Company
   keeps or deletes its volume and keyring as its `deletionPolicy` says. Then
-  it deletes the cluster. CI runs it on every pull request. The engine image
+  it deletes the cluster, unless the suite failed: the cluster is left for a
+  look, and `make cleanup-test-e2e` deletes it. CI runs it on every pull
+  request. The engine image
   is built from source at `CREWLET_VERSION` with `make crewlet-image`, from
   the crewlet module the Go command downloads and checks against the
   checksum database, the same source `make crewlet` builds `bin/crewlet`

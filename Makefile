@@ -80,12 +80,13 @@ gateway-api-crds: ## Copy the Gateway API CRDs of the release go.mod requires in
 
 # The race detector is on because a controller is concurrent by construction:
 # a reconciler, its watches and the cache all run on their own goroutines.
-# test/e2e is excluded; it needs a cluster and runs under test-e2e. The engine
-# client's suite runs the pinned crewlet binary (internal/engine/enginetest),
-# named explicitly so a CREWLET_BIN in the caller's environment cannot swap in
-# another engine version.
+# test/e2e is excluded; it needs a cluster and runs under test-e2e. Every suite
+# that runs the real engine (engine, render, secretsync, controller) runs the
+# pinned crewlet binary (internal/engine/enginetest), named explicitly so a
+# CREWLET_BIN in the caller's environment cannot swap in another engine
+# version; test/chart renders the chart with the pinned helm.
 .PHONY: test
-test: manifests generate fmt vet setup-envtest crewlet helm ## Run the unit and envtest suites of both modules.
+test: manifests generate fmt vet setup-envtest crewlet helm ## Run the unit, envtest, engine and chart suites of both modules.
 	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" \
 		CREWLET_BIN="$(CREWLET)" HELM="$(HELM)" \
 		go test -race $$(go list ./... | grep -v /test/e2e) -coverprofile cover.out
@@ -113,7 +114,7 @@ setup-test-e2e: kind ## Create the kind cluster for the e2e suite unless it exis
 # and loads two images: the manager's and the engine's, CREWLET_IMG, from
 # source at CREWLET_VERSION (make crewlet-image).
 .PHONY: test-e2e
-test-e2e: setup-test-e2e manifests generate fmt vet kubectl ## Run the e2e suite against a kind cluster, then delete the cluster.
+test-e2e: setup-test-e2e manifests generate fmt vet kubectl ## Run the e2e suite against a kind cluster, then delete the cluster (left in place when the suite fails; make cleanup-test-e2e).
 	PATH="$(LOCALBIN):$$PATH" KIND="$(KIND)" KIND_CLUSTER=$(KIND_CLUSTER) CREWLET_IMG="$(CREWLET_IMG)" \
 		go test -tags=e2e ./test/e2e/ -v -ginkgo.v -timeout 60m
 	$(MAKE) cleanup-test-e2e
@@ -373,10 +374,11 @@ kind: $(LOCALBIN) ## Download kind locally if necessary.
 kustomize: $(LOCALBIN) ## Download kustomize locally if necessary.
 	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5,$(KUSTOMIZE_VERSION))
 
-# The engine itself, for the engine client's tests: built from the crewlet
-# module at CREWLET_VERSION, so every run tests against the same engine.
+# The engine itself, for every suite that runs the real engine (engine, render,
+# secretsync, controller): built from the crewlet module at CREWLET_VERSION,
+# so every run tests against the same engine.
 .PHONY: crewlet
-crewlet: $(LOCALBIN) ## Build the Crewlet engine at CREWLET_VERSION into bin/crewlet, for the engine client's tests.
+crewlet: $(LOCALBIN) ## Build the Crewlet engine at CREWLET_VERSION into bin/crewlet, for every suite that runs the real engine.
 	$(call go-install-tool,$(CREWLET),github.com/crewlet/crewlet/cmd/crewlet,$(CREWLET_VERSION))
 
 .PHONY: controller-gen
