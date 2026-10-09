@@ -315,6 +315,13 @@ const (
 	// what to repair.
 	ReasonKeyringInvalid = "KeyringInvalid"
 
+	// ReasonAPITokensInvalid is RuntimeReady=False when the company's API
+	// tokens Secret, as another controller supplies it, lacks a token or
+	// holds one shorter than 43 characters (32 random bytes in base64url)
+	// or with characters outside base64, base64url and hex. The operator
+	// never rewrites the Secret; the message says what to repair.
+	ReasonAPITokensInvalid = "APITokensInvalid"
+
 	// ReasonKeyringMissing is RuntimeReady=False when the company's keyring
 	// Secret does not exist while its data StatefulSet or data volume claims
 	// do. A new keyring could not open the secrets sealed on the volumes, so
@@ -469,9 +476,8 @@ const (
 	// when a referenced Secret or Secret key does not exist, and
 	// RuntimeReady=False when a Secret the engine's pods are given values
 	// from does not: one the EngineClass references (telemetry.headersSecretRef,
-	// a podTemplate.spec.env valueFrom), the Company's
-	// spec.objects.credentialsSecretRef, or the company's API tokens Secret
-	// when it lacks a token.
+	// a podTemplate.spec.env valueFrom) or the Company's
+	// spec.objects.credentialsSecretRef.
 	ReasonSecretNotFound = "SecretNotFound"
 
 	// ReasonConflict is Accepted=False when the object collides with

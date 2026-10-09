@@ -131,10 +131,11 @@ is stopped only once `RuntimeReady` reports it for the current generation.
 When the operator cannot give the pod what it needs, it holds the pod back
 and keeps what runs: a keyring Secret it cannot read as a keyring
 (`KeyringInvalid`; the operator never rewrites a keyring, since the engine's
-sealed data opens only with its keys), a platform Secret the class references
-that is missing, or a token missing from a tokens Secret the platform
-supplied (`SecretNotFound`). Suspending still scales the
-pod to zero meanwhile.
+sealed data opens only with its keys), a tokens Secret the platform supplied
+that lacks a token or holds one shorter than 43 characters or outside
+base64, base64url and hex (`APITokensInvalid`), or a platform Secret the
+class references that is missing (`SecretNotFound`). Suspending still
+scales the pod to zero meanwhile.
 
 ## Exposure
 

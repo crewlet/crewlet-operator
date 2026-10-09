@@ -76,19 +76,15 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 	if err != nil {
 		return err
 	}
-	hold := cmp.Or(keyringHeld, tokensHeld)
-	var missing []string
-	if tokens != nil {
-		// A tokens Secret the platform supplies (see ensureGenerated) may
-		// lack a token; the pods could not start without it, and consumers
-		// must not be handed an empty one.
-		missing = missingTokens(tokens)
-		if len(missing) == 0 {
+	if tokens != nil && tokensHeld == nil {
+		tokensHeld = checkTokens(tokens)
+		if tokensHeld == nil {
 			if err := r.applyAPIAccess(ctx, c, tokens); err != nil {
 				return err
 			}
 		}
 	}
+	hold := cmp.Or(keyringHeld, tokensHeld)
 	c.Status.APIAccessSecretRef = crewletaiv1alpha1.SecretReference{Name: apiAccessSecretName(c)}
 	c.Status.Endpoints.API = apiURL(c)
 
@@ -96,7 +92,7 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 	if err != nil {
 		return err
 	}
-	missing = append(missing, platformMissing...)
+	missing := platformMissing
 	objects, objectsMissing, err := r.readObjectCredentials(ctx, c, class)
 	if err != nil {
 		return err

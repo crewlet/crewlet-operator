@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -43,7 +44,20 @@ const (
 	// key, because a token opens the company's configuration and secret
 	// store.
 	apiTokenBytes = 32
+	// minAPITokenLength is the shortest token the pods are started with: the
+	// length of apiTokenBytes in unpadded base64url, the form the operator
+	// generates. A platform that supplies the tokens Secret may use base64 or
+	// hex instead, but nothing shorter than what the operator would have
+	// generated.
+	minAPITokenLength = 43
 )
+
+// apiTokenAlphabet is what a token may hold: the base64 and base64url
+// alphabets, which hex is part of. The token is written into the engine's
+// crewlet.yaml as it is, where a '$' would start a ${NAME} the engine
+// expands, and a trailing newline (a Secret made with --from-file) would be
+// part of a token no consumer sends.
+var apiTokenAlphabet = regexp.MustCompile(`^[A-Za-z0-9_+/=-]*$`)
 
 // The keys of the bootstrap Secret beyond configFile that hold the values
 // the engine's environment reads from it.
@@ -229,15 +243,35 @@ func isPreviousCompany(owner *metav1.OwnerReference, c *crewletaiv1alpha1.Compan
 		owner.Name == c.Name && owner.UID != c.UID
 }
 
-// missingTokens says which API tokens a tokens Secret lacks.
-func missingTokens(tokens *corev1.Secret) []string {
-	var missing []string
+// checkTokens holds the pods back on a tokens Secret the platform supplies
+// (see ensureGenerated) that lacks a token or holds one too short to guard
+// the engine: the pods could not start without a token, consumers must not
+// be handed an empty one, and a short one opens the company's configuration
+// and secret store to whoever guesses it. The operator never rewrites the
+// Secret, since the consumers of the access token hold a copy of it.
+func checkTokens(tokens *corev1.Secret) *held {
+	var problems []string
 	for _, id := range []string{render.TokenOperator, render.TokenAccess} {
-		if len(tokens.Data[id]) == 0 {
-			missing = append(missing, fmt.Sprintf("Secret %s/%s has no key %s", tokens.Namespace, tokens.Name, id))
+		switch token := tokens.Data[id]; {
+		case len(token) == 0:
+			problems = append(problems, "it has no key "+id)
+		case !apiTokenAlphabet.Match(token):
+			problems = append(problems, fmt.Sprintf("its %s token holds characters outside base64 and base64url", id))
+		case len(token) < minAPITokenLength:
+			problems = append(problems, fmt.Sprintf("its %s token is %d characters long", id, len(token)))
 		}
 	}
-	return missing
+	if len(problems) == 0 {
+		return nil
+	}
+	return &held{
+		reason: crewletaiv1alpha1.ReasonAPITokensInvalid,
+		message: fmt.Sprintf("Secret %s/%s does not hold the engine's API tokens: %s. Each of %s and %s must be at least %d "+
+			"characters of base64, base64url or hex, as long as %d random bytes in unpadded base64url (`openssl rand -base64 32` "+
+			"prints one); or delete the Secret to have the operator generate it.",
+			tokens.Namespace, tokens.Name, strings.Join(problems, "; "), render.TokenOperator, render.TokenAccess,
+			minAPITokenLength, apiTokenBytes),
+	}
 }
 
 // keyringOf reads the keys a keyring Secret holds. render.Bootstrap refuses
@@ -261,7 +295,9 @@ func tokensOf(secret *corev1.Secret) render.APITokens {
 // applyAPIAccess writes the Secret the Company's status.apiAccessSecretRef
 // names: the access token and the API's in-cluster URL, for the company's
 // consumers. It is a copy rather than a reference to the tokens Secret so
-// that a consumer allowed to read it never sees the operator's own token.
+// that a consumer can be allowed to read it without the operator's own
+// token: both Secrets are in the Company's namespace, so that holds only
+// for a consumer granted read on this one by resourceNames.
 func (r *CompanyReconciler) applyAPIAccess(ctx context.Context, c *crewletaiv1alpha1.Company, tokens *corev1.Secret) error {
 	secret := corev1ac.Secret(apiAccessSecretName(c), c.Namespace).
 		WithLabels(labelsFor(c, componentAPI)).

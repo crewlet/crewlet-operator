@@ -242,7 +242,10 @@ The operator generates two Secrets for every company and never rewrites them:
   `crewlet.ai/active-key-id` names the key that seals new writes.
 - `<company>-api-tokens`: the operator's own token and the one for the
   company's consumers, which is also published, with the API's address, in
-  the Secret `status.apiAccessSecretRef` names.
+  the Secret `status.apiAccessSecretRef` names. A platform may supply this
+  one too; each token must be at least 43 characters of base64, base64url
+  or hex (32 random bytes: `openssl rand -base64 32`), or the pod is held
+  back with `RuntimeReady=False APITokensInvalid`.
 
 Deleting the tokens Secret makes the operator generate new tokens and roll
 the data pod; consumers then read the new one from the access Secret. Never
@@ -257,7 +260,8 @@ cannot be read without it.
 | `SecretTooLarge` | The value is over the 64 KiB the engine's secret store accepts. |
 | `SecretsSynced=False EngineUnavailable` | The values could not be written to the engine; the message says why. The operator retries. |
 | `SecretsSynced=Unknown NotManaged` | The management policy keeps the operator out of the engine's secret store (`Observe`, and `Seed` once seeded). |
-| `RuntimeReady=False SecretNotFound` | A Secret the EngineClass references for the pods is missing in the platform's namespace, or the API tokens Secret lacks a token. |
+| `RuntimeReady=False SecretNotFound` | A Secret the EngineClass references for the pods is missing in the platform's namespace, or the Company's `spec.objects.credentialsSecretRef` is. |
+| `RuntimeReady=False APITokensInvalid` | A supplied `<company>-api-tokens` lacks a token or holds one the engine should not be guarded by; the message says which. |
 | `Integration` `Healthy=False CheckFailed` | The engine reached the vendor and the credential did not work; the message carries the vendor's answer. |
 
 [Troubleshooting](troubleshooting.md) lists every condition.

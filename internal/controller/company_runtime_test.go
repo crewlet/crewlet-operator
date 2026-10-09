@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -479,7 +480,11 @@ var _ = Describe("Company runtime", func() {
 		Expect(string(bootstrap.Data[configFile])).To(ContainSubstring("active_key_id: k7"))
 	})
 
-	It("uses API tokens another controller supplies as they are, and holds the pods back while one is missing", func() {
+	It("uses API tokens another controller supplies as they are, and holds the pods back while one is unusable", func() {
+		// 32 random bytes in base64 and in hex: the forms a platform's
+		// secret store would generate.
+		suppliedOperator := "q83vEjRWeJq83vEjRWeJq83vEjRWeJq83vEjRWeJq80="
+		suppliedAccess := strings.Repeat("0123456789abcdef", 4)
 		class := newClass()
 		// Any object can be a Secret's controller; a ConfigMap stands for
 		// the ExternalSecret a platform would use.
@@ -491,29 +496,48 @@ var _ = Describe("Company runtime", func() {
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: "v1", Kind: "ConfigMap", Name: supplier.Name, UID: supplier.UID, Controller: new(true),
 			}},
-			Data: map[string][]byte{render.TokenOperator: []byte("supplied-operator-token")},
+			Data: map[string][]byte{render.TokenOperator: []byte(suppliedOperator)},
 		}
 		Expect(k8sClient.Create(ctx, supplied)).To(Succeed())
 
 		company := reconciled(newCompany(class.Name))
 		runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
-		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonSecretNotFound))
-		Expect(runtimeReady.Message).To(ContainSubstring(tokensName + " has no key " + render.TokenAccess))
+		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonAPITokensInvalid))
+		Expect(runtimeReady.Message).To(ContainSubstring("it has no key " + render.TokenAccess))
 		absent(&appsv1.StatefulSet{}, dataName)
 		absent(&corev1.Secret{}, accessName)
 
 		tokens := &corev1.Secret{}
 		get(tokens, tokensName)
 		Expect(metav1.GetControllerOf(tokens).UID).To(Equal(supplier.UID), "adopted a Secret another controller owns")
+		By("supplying an access token too short to guard the engine")
 		tokens.Data[render.TokenAccess] = []byte("supplied-access-token")
+		Expect(k8sClient.Update(ctx, tokens)).To(Succeed())
+		company = reconciled(company)
+		runtimeReady = condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonAPITokensInvalid))
+		Expect(runtimeReady.Message).To(ContainSubstring("its access token is 21 characters long"))
+		absent(&appsv1.StatefulSet{}, dataName)
+		absent(&corev1.Secret{}, accessName)
+
+		By("supplying one with a ${NAME} the engine would expand")
+		tokens.Data[render.TokenAccess] = []byte(strings.Repeat("a", 40) + "${PATH}")
+		Expect(k8sClient.Update(ctx, tokens)).To(Succeed())
+		company = reconciled(company)
+		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Message).
+			To(ContainSubstring("its access token holds characters outside base64 and base64url"))
+		absent(&appsv1.StatefulSet{}, dataName)
+
+		By("supplying a usable one")
+		tokens.Data[render.TokenAccess] = []byte(suppliedAccess)
 		Expect(k8sClient.Update(ctx, tokens)).To(Succeed())
 		company = reconciled(company)
 		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
 		access := &corev1.Secret{}
 		get(access, accessName)
-		Expect(string(access.Data[crewletaiv1alpha1.APIAccessTokenKey])).To(Equal("supplied-access-token"))
+		Expect(string(access.Data[crewletaiv1alpha1.APIAccessTokenKey])).To(Equal(suppliedAccess))
 		get(tokens, tokensName)
-		Expect(string(tokens.Data[render.TokenOperator])).To(Equal("supplied-operator-token"))
+		Expect(string(tokens.Data[render.TokenOperator])).To(Equal(suppliedOperator))
 	})
 
 	It("holds the pods back on a keyring it cannot read, and never rewrites it", func() {
@@ -766,16 +790,17 @@ var _ = Describe("Company runtime", func() {
 		Expect(hash()).To(Equal(before), "a label rolled the pods")
 
 		By("replacing the access token")
+		replaced := "revoked-and-replaced-by-hand-" + strings.Repeat("r", 20)
 		tokens := &corev1.Secret{}
 		get(tokens, tokensName)
-		tokens.Data[render.TokenAccess] = []byte("revoked-and-replaced-by-hand")
+		tokens.Data[render.TokenAccess] = []byte(replaced)
 		Expect(k8sClient.Update(ctx, tokens)).To(Succeed())
 		reconciled(company)
 
 		Expect(hash()).NotTo(Equal(before))
 		access := &corev1.Secret{}
 		get(access, accessName)
-		Expect(string(access.Data[crewletaiv1alpha1.APIAccessTokenKey])).To(Equal("revoked-and-replaced-by-hand"))
+		Expect(string(access.Data[crewletaiv1alpha1.APIAccessTokenKey])).To(Equal(replaced))
 	})
 
 	Context("the engine version", func() {
