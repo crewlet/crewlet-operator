@@ -24,6 +24,12 @@ const (
 	containerKey  = "PLAT"
 )
 
+// The kinds the tests that apply manifests treat specially.
+const (
+	kindEngineClass = "EngineClass"
+	kindCompany     = "Company"
+)
+
 // The messages of the rules more than one case checks. Each is the message
 // declared on the rule, or the start of it.
 const (

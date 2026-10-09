@@ -59,7 +59,10 @@ bin/kubectl api-resources --api-group=crewlet.ai
 An `EngineClass` is a platform's defaults and limits: the engine image, the size of each
 company's data pod, and how companies are reached. This one runs the image
 you loaded, exposes no webhooks (kind has no public address), and gives each
-company the smallest data volume the API admits.
+company the smallest data volume the API admits. The engine reserves three
+quarters of that volume for its event stream, and kind's provisioner puts it
+on the node's disk without enforcing the size: the Docker host needs about
+6 GiB free for each company, or its pod never becomes ready.
 
 ```bash
 bin/kubectl apply -f - <<'EOF'
@@ -67,8 +70,6 @@ apiVersion: crewlet.ai/v1alpha1
 kind: EngineClass
 metadata:
   name: local
-  annotations:
-    crewlet.ai/is-default-class: "true"
 spec:
   engine:
     image: crewlet:dev
@@ -82,6 +83,10 @@ spec:
   exposure:
     webhooks:
       mode: None
+  retention:
+    # Who the engine's backup alarms name: the engine trims its logs only
+    # behind a recent backup (see Backups in docs/concepts/runtime.md).
+    backupOwner: you
 EOF
 ```
 
@@ -104,6 +109,7 @@ kind: Company
 metadata:
   name: acme
 spec:
+  engineClassName: local
   companyName: Acme
   mission: Make widgets people love.
   deletionPolicy: Delete
@@ -285,7 +291,7 @@ bin/kubectl delete company --all -n acme
 bin/kubectl delete company --all -n nimbus --ignore-not-found
 bin/kubectl delete namespace acme nimbus --ignore-not-found
 bin/kubectl delete engineclass --all
-make undeploy            # or: make helm-uninstall
-make uninstall           # the CRDs, and with them every crewlet.ai object
+make undeploy            # the manager and the CRDs, and with them every crewlet.ai object
+# or, if you installed the chart: make helm-uninstall uninstall   # the chart keeps the CRDs
 bin/kind delete cluster --name crewlet
 ```

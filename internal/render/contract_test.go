@@ -24,6 +24,7 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 	"github.com/crewlet/crewlet-operator/internal/secretref"
 	"github.com/crewlet/crewlet-operator/internal/secretsync"
+	"github.com/crewlet/crewlet-operator/test/docs"
 )
 
 // The contract tests hand every rendered document to the engine's own
@@ -322,4 +323,36 @@ func TestContractChainlessSeatRunsOnTheFirstProviderAlone(t *testing.T) {
 			t.Errorf("seat %s runs phase %s on %v, want [claude] alone", org.Roles[0].Handle, phase, chain)
 		}
 	}
+}
+
+// TestContractGettingStarted renders the company the getting-started guide
+// applies, as the guide applies it, with the Tier A its class gives a data
+// pod, and has the engine validate both: the first page a reader follows
+// must run on the engine the operator is built against.
+func TestContractGettingStarted(t *testing.T) {
+	manifests, err := docs.Manifests(filepath.Join("..", "..", "docs", "getting-started.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := load(t, write(t, "guide.yaml", []byte(strings.Join(manifests, "\n---\n")))).input
+	if in.Class.Name != in.Company.Spec.EngineClassName {
+		t.Fatalf("the guide's Company names EngineClass %q and the guide creates %q", in.Company.Spec.EngineClassName, in.Class.Name)
+	}
+	doc, err := Company(&in)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	boot := bootstrapCases()[0].input(t)
+	boot.Company, boot.Class = in.Company, in.Class
+	boot.VolumeSize = *in.Class.Spec.Data.Storage.Size
+	tierA, err := Bootstrap(boot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := bootstrapEnv(tierA)
+	for _, k := range doc.Refs {
+		env[secretsync.StoreName(k)] = dummyCredential(k)
+	}
+	validate(t, env, "-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
 }

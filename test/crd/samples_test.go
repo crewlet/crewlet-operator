@@ -47,7 +47,7 @@ func TestSamplesAreAccepted(t *testing.T) {
 	kinds := map[string]int{}
 	for _, resource := range kustomization.Resources {
 		for _, obj := range readObjects(t, samples, resource) {
-			if obj.GetKind() != "EngineClass" {
+			if obj.GetKind() != kindEngineClass {
 				obj.SetNamespace(namespace)
 			} else {
 				// Cluster-scoped: keep it from colliding with another test's.
@@ -59,7 +59,9 @@ func TestSamplesAreAccepted(t *testing.T) {
 			kinds[obj.GetKind()]++
 		}
 	}
-	for _, kind := range []string{"EngineClass", "Company", "Unit", "Seat", "LLMProvider", "MCPServer", "Integration"} {
+	for _, kind := range []string{
+		kindEngineClass, kindCompany, "Unit", "Seat", "LLMProvider", "MCPServer", "Integration",
+	} {
 		if kinds[kind] == 0 {
 			t.Errorf("config/samples has no %s", kind)
 		}
