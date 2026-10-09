@@ -31,6 +31,16 @@ handle, and model providers and tool servers by name.
 out while the company has none. It is where vendors and sandboxes reach the
 engine, and it reaches the engine's public listener alone, which serves the
 webhooks and the sandbox endpoints and no dashboard.
+`integrations.dashboard_base_url` is the address people reach the engine's
+dashboard at, `status.endpoints.dashboardBaseURL`: the Company's
+`spec.exposure.dashboardBaseURL`, or the address of the class's API route,
+whether or not that route has been accepted yet. Every link the engine composes for a person (a tool
+skill's `${crewlet_base_url}`, a page change's notification) is built on it.
+It is left out while the company has neither: the engine then composes no
+link for a person, and a skill's `${crewlet_base_url}` stays as written.
+Neither is ever the other: Crewlet does not fall back from one to the other,
+since on a deployment with a public listener the two are different sockets
+([Exposure](runtime.md#exposure)).
 
 ### Names and identities
 

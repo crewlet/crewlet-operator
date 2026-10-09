@@ -590,6 +590,23 @@ type CompanyExposure struct {
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() == 'https' && url(self).getHostname() != ''",message="publicBaseURL must be an absolute https URL"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="publicBaseURL may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
 	PublicBaseURL string `json:"publicBaseURL,omitempty"`
+
+	// dashboardBaseURL is the address people reach the engine's dashboard
+	// at, overriding the address of the class's API route: set it when the
+	// class routes no API, or people reach it through something in front of
+	// the route (a single sign-on proxy, say). Every link the engine's
+	// agents compose for a person is built on it, as the base followed by
+	// one of the engine dashboard's routes (/#/work/ENG-42,
+	// /#/knowledge/pages/<id>), which an address other than the route's
+	// must serve or redirect. It is never the public address: the public
+	// listener serves no dashboard. A trailing '/' is dropped. Crewlet's
+	// integrations.dashboard_base_url.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() in ['http', 'https'] && url(self).getHostname() != ''",message="dashboardBaseURL must be an absolute http or https URL"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="dashboardBaseURL may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	DashboardBaseURL string `json:"dashboardBaseURL,omitempty"`
 }
 
 // CompanyRuntime is a company's bounded overrides of its class.
@@ -1104,6 +1121,19 @@ type CompanyEndpoints struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	PublicBaseURL string `json:"publicBaseURL,omitempty"`
+
+	// dashboardBaseURL is the address people reach the engine's dashboard
+	// at, when the company has one: spec.exposure.dashboardBaseURL, or the
+	// address of the class's API route, on the scheme exposedAPI takes. It
+	// does not wait for the route to be accepted, as exposedAPI does: it is
+	// rendered into the company document, which a flip of acceptance would
+	// otherwise change. The engine builds every link its agents compose for
+	// a person on it (Crewlet's integrations.dashboard_base_url); unset,
+	// they compose none.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	DashboardBaseURL string `json:"dashboardBaseURL,omitempty"`
 }
 
 // CompanyStatus is what the operator observed about a Company.

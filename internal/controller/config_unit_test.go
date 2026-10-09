@@ -356,6 +356,31 @@ func TestEngineStateChangedSeesWhyACompanyIsRefused(t *testing.T) {
 	}
 }
 
+// TestEngineStateChangedSeesTheAddressesTheDocumentCarries: the runtime
+// reconciler writes the public and dashboard addresses into the Company's
+// status, and the document carries both, so a change of either re-renders it.
+func TestEngineStateChangedSeesTheAddressesTheDocumentCarries(t *testing.T) {
+	p := engineStateChanged()
+	for _, c := range []struct {
+		name string
+		set  func(*crewletaiv1alpha1.CompanyEndpoints)
+	}{
+		{"vendors'", func(e *crewletaiv1alpha1.CompanyEndpoints) { e.PublicBaseURL = "https://hooks.example.com" }},
+		{"people's", func(e *crewletaiv1alpha1.CompanyEndpoints) { e.DashboardBaseURL = "https://crewlet.example.com" }},
+	} {
+		updated := &crewletaiv1alpha1.Company{}
+		c.set(&updated.Status.Endpoints)
+		if !p.Update(event.UpdateEvent{ObjectOld: &crewletaiv1alpha1.Company{}, ObjectNew: updated}) {
+			t.Errorf("a new %s address does not re-render the document", c.name)
+		}
+	}
+	unchanged := &crewletaiv1alpha1.Company{}
+	unchanged.Status.Endpoints.ExposedAPI = "https://api.example.com"
+	if p.Update(event.UpdateEvent{ObjectOld: &crewletaiv1alpha1.Company{}, ObjectNew: unchanged}) {
+		t.Error("an endpoint the document does not carry re-renders it")
+	}
+}
+
 // TestEngineHealthyReportsTheEnginesAlarms pins the EngineHealthy condition:
 // unknown until the engine has looked, and pointing at backups when that is
 // what it raises.

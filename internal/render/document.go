@@ -136,6 +136,7 @@ type integrationsDoc struct {
 	Datadog              *datadogDoc    `json:"datadog,omitempty"`
 	Atlassian            *atlassianDoc  `json:"atlassian,omitempty"`
 	PublicBaseURL        string         `json:"public_base_url,omitempty"`
+	DashboardBaseURL     string         `json:"dashboard_base_url,omitempty"`
 	CheckIntervalSeconds int32          `json:"check_interval_seconds,omitempty"`
 }
 

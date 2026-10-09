@@ -55,6 +55,7 @@ const (
 	msgEnvExactlyOne               = "exactly one of value and valueFrom must be set"
 	msgEnvReserved                 = "variables starting with CREWLET_ or OTEL_ are set by the operator"
 	msgPublicBaseURL               = "publicBaseURL must be an absolute https URL"
+	msgDashboardBaseURL            = "dashboardBaseURL must be an absolute http or https URL"
 	msgUnitID                      = "a Unit's name is its Crewlet unit id"
 	msgDuplicate                   = "Duplicate value"
 	msgThreeReplicas               = "Unsupported value: 3"

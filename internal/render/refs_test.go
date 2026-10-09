@@ -413,6 +413,7 @@ func TestAttributeFindsTheInnermostObject(t *testing.T) {
 		{"providers.embeddings.model", company},
 		{"providers.llm_order[1]", company},
 		{"integrations.public_base_url", company},
+		{"integrations.dashboard_base_url", company},
 		{"providers.llm.anthropic.api_keys[0]", ObjectRef{KindLLMProvider, "anthropic"}},
 		{"providers.llm.platform-claude.model", ObjectRef{KindEngineClass, "standard"}},
 		{"mcp_servers[0].url", ObjectRef{KindMCPServer, sampleGitHub}},

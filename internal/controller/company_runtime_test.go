@@ -486,6 +486,8 @@ var _ = Describe("Company runtime", func() {
 		Expect(ready.Status).To(Equal(metav1.ConditionFalse))
 		Expect(ready.Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
 		Expect(company.Status.Endpoints.PublicBaseURL).To(BeEmpty())
+		Expect(company.Status.Endpoints.DashboardBaseURL).To(BeEmpty())
+		Expect(exposed.Message).To(ContainSubstring("compose no link for a person"))
 	})
 
 	It("admits the class's API consumers and narrows the engine's egress as the class says", func() {
@@ -1476,7 +1478,10 @@ var _ = Describe("Company runtime", func() {
 			get(route, "nimbus-api")
 			Expect(*route.Spec.Rules[0].Matches[0].Path.Value).To(Equal("/"))
 			Expect(*route.Spec.Rules[0].BackendRefs[0].Port).To(Equal(gatewayv1.PortNumber(8080)))
+			apiURL := "https://" + string(company.UID) + ".api.internal.example.com"
 			Expect(company.Status.Endpoints.ExposedAPI).To(BeEmpty(), "set before the route was accepted")
+			Expect(company.Status.Endpoints.DashboardBaseURL).To(Equal(apiURL),
+				"the dashboard's address is the class's and the Gateway's, and does not wait for the route to be accepted")
 
 			By("admitting the internal Gateway's namespace to the API port, and not to the public port")
 			policy := &networkingv1.NetworkPolicy{}
@@ -1486,8 +1491,44 @@ var _ = Describe("Company runtime", func() {
 
 			accept("nimbus-api", namespace, internalGateway)
 			company = reconciled(company)
-			Expect(company.Status.Endpoints.ExposedAPI).To(Equal("https://" + string(company.UID) + ".api.internal.example.com"))
-			Expect(condition(company, crewletaiv1alpha1.ConditionExposed).Reason).To(Equal(crewletaiv1alpha1.ReasonRouteAccepted))
+			Expect(company.Status.Endpoints.ExposedAPI).To(Equal(apiURL))
+			Expect(company.Status.Endpoints.DashboardBaseURL).To(Equal(apiURL), "people reach the dashboard where the API is routed")
+			exposed := condition(company, crewletaiv1alpha1.ConditionExposed)
+			Expect(exposed.Reason).To(Equal(crewletaiv1alpha1.ReasonRouteAccepted))
+			Expect(exposed.Message).NotTo(ContainSubstring("no link"))
+
+			By("keeping the dashboard's address while the Gateway withdraws its acceptance")
+			route = &gatewayv1.HTTPRoute{}
+			get(route, "nimbus-api")
+			route.Status.Parents[0].Conditions[0].Status = metav1.ConditionFalse
+			route.Status.Parents[0].Conditions[0].Reason = "Pending"
+			Expect(k8sClient.Status().Update(ctx, route)).To(Succeed())
+			company = reconciled(company)
+			Expect(company.Status.Endpoints.ExposedAPI).To(BeEmpty(), "a route no longer accepted still reads as exposed")
+			Expect(company.Status.Endpoints.DashboardBaseURL).To(Equal(apiURL),
+				"a flip of the route's acceptance changed the address rendered into the company document")
+
+			By("taking the Company's own dashboard address over the route's, without its trailing '/'")
+			updateCompany(company, func(c *crewletaiv1alpha1.Company) {
+				c.Spec.Exposure.DashboardBaseURL = "https://crewlet.sso.example.com/nimbus/"
+			})
+			company = reconciled(company)
+			Expect(company.Status.Endpoints.DashboardBaseURL).To(Equal("https://crewlet.sso.example.com/nimbus"))
+		})
+
+		It("takes the dashboard's address from an API Ingress whose controller publishes none", func() {
+			class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+				c.Spec.Exposure.API = crewletaiv1alpha1.APIExposure{
+					Mode:     crewletaiv1alpha1.APIExposureIngress,
+					Ingress:  &crewletaiv1alpha1.IngressExposure{ClassName: "internal", ControllerNamespaces: []string{"ingress-internal"}},
+					Hostname: "{{name}}.{{namespace}}.api.internal.example.com",
+				}
+			})
+			company := reconciled(newCompany(class.Name))
+			get(&networkingv1.Ingress{}, "nimbus-api")
+			Expect(company.Status.Endpoints.ExposedAPI).To(BeEmpty(), "an Ingress with no published address reads as exposed")
+			Expect(company.Status.Endpoints.DashboardBaseURL).To(Equal("http://nimbus."+namespace+".api.internal.example.com"),
+				"an Ingress that terminates no TLS serves the dashboard over http, whether or not its controller publishes an address")
 		})
 
 		It("reports a Gateway route as not exposed on a cluster without the Gateway API", func() {

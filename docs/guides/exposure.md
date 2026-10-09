@@ -7,8 +7,9 @@ operator credential: vendors' webhooks (`/webhooks/`), and a remote
 sandbox's telemetry (`/otlp/{token}`) and tool calls (`/mcp/{token}`), with a
 token signed for its one run in the path. Only the public listener needs to
 be reachable from the internet, and only it is routed there. This guide sets
-up the webhook routes, the public address vendors are given, an internal
-route to the API, and the network policy around each engine. The objects involved are described in
+up the webhook routes, the public address vendors are given, the address
+people reach the dashboard at, an internal route to the API, and the network
+policy around each engine. The objects involved are described in
 [How a company's engine runs](../concepts/runtime.md#exposure).
 
 The split is the engine's own (Crewlet's `api.public`): the public listener
@@ -200,6 +201,44 @@ API, the dashboard and the probes, and none of the public routes, which
 that port does not serve. Put it only on a listener that is not public.
 `status.endpoints.exposedAPI` is its address once accepted. Every request
 still needs a token.
+
+## Where people reach the dashboard
+
+The engine's agents put links to the dashboard in what they write for
+people (a tool skill's `${crewlet_base_url}`, the link in a page change's
+notification), and build them on Crewlet's
+`integrations.dashboard_base_url`. That is never the public address, whose
+listener serves no dashboard. The operator writes it from, in order:
+
+1. the Company's `spec.exposure.dashboardBaseURL`, an `http` or `https` URL,
+   for an address people reach the dashboard at that the class does not
+   route (a single sign-on proxy in front of the API's route, a VPN
+   address);
+2. the API route's address: its expanded `api.hostname`, on `https` when
+   the Ingress has `tls.secretName` or a Gateway listener the route can
+   attach to is HTTPS, and on `http` otherwise. Unlike `exposedAPI`, it
+   does not wait for the route to be accepted. It is rendered into the
+   company document, so an address that followed acceptance would apply a
+   new revision on every engine each time a Gateway controller re-evaluated
+   the route, and would never be known behind an Ingress controller that
+   publishes no address.
+
+The result is `status.endpoints.dashboardBaseURL`. With neither, the engine
+composes no link for a person (a skill shows `${crewlet_base_url}` as
+written), and the Company's `Exposed` condition says so in its message.
+
+A link is the base followed by one of the engine dashboard's own routes,
+such as `<base>/#/work/ENG-42` for a work item and
+`<base>/#/knowledge/pages/<page id>` for a page. So an address other than
+the API route's must serve the engine's dashboard there, or redirect those
+routes to a view of its own: the part after `#` never reaches a server, so
+that view reads it in the browser.
+
+```yaml
+spec:                       # Company
+  exposure:
+    dashboardBaseURL: https://crewlet.sso.example.com/acme
+```
 
 ## Network policy
 

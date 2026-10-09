@@ -146,6 +146,11 @@ func TestReferencesInCompanies(t *testing.T) {
 			mutate: func(c *v1.Company) { c.Spec.Exposure.PublicBaseURL = "https://hooks.example.com/" + leak },
 			want:   "publicBaseURL" + msgReference,
 		},
+		{
+			name:   "a reference in the dashboard base URL is refused",
+			mutate: func(c *v1.Company) { c.Spec.Exposure.DashboardBaseURL = "https://crewlet.example.com/" + leak },
+			want:   "dashboardBaseURL" + msgReference,
+		},
 	})
 }
 

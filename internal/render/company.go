@@ -49,6 +49,14 @@ type Input struct {
 	// derives. Empty when the company is not exposed.
 	PublicBaseURL string
 
+	// DashboardBaseURL is the address people reach the engine's dashboard
+	// at, rendered as integrations.dashboard_base_url: the Company's
+	// spec.exposure.dashboardBaseURL, or the address of the class's API
+	// route. Empty when people have no address of it: Crewlet then composes
+	// no link for a person, and never falls back to PublicBaseURL, whose
+	// listener serves no dashboard.
+	DashboardBaseURL string
+
 	// HeldPlacements are the role.placement labels to render for the agent
 	// seats, by handle, that keep running where the revision the engine runs
 	// pins them while the pods of the pool they move to start: the pin
@@ -639,10 +647,14 @@ func (r *renderer) secretEnv(env []v1alpha1.SecretEnvVar) map[string]string {
 func (r *renderer) integrations() integrationsDoc {
 	doc := integrationsDoc{
 		PublicBaseURL:        r.in.PublicBaseURL,
+		DashboardBaseURL:     r.in.DashboardBaseURL,
 		CheckIntervalSeconds: r.in.Company.Spec.Integrations.CheckIntervalSeconds,
 	}
 	if doc.PublicBaseURL != "" {
 		r.source(Path{keyIntegrations, "public_base_url"}, r.owner)
+	}
+	if doc.DashboardBaseURL != "" {
+		r.source(Path{keyIntegrations, "dashboard_base_url"}, r.owner)
 	}
 	if doc.CheckIntervalSeconds != 0 {
 		r.source(Path{keyIntegrations, "check_interval_seconds"}, r.owner)

@@ -204,6 +204,22 @@ func TestCompanyValidation(t *testing.T) {
 			mutate: func(c *v1.Company) { c.Spec.Exposure.PublicBaseURL = "/webhooks" },
 			want:   msgPublicBaseURL,
 		},
+		{
+			// An internal network's dashboard may be plain HTTP; Crewlet
+			// takes either scheme.
+			name:   "an http dashboardBaseURL is accepted",
+			mutate: func(c *v1.Company) { c.Spec.Exposure.DashboardBaseURL = "http://crewlet.nimbus.internal:8080/" },
+		},
+		{
+			name:   "a dashboardBaseURL without a scheme is refused",
+			mutate: func(c *v1.Company) { c.Spec.Exposure.DashboardBaseURL = "crewlet.nimbus.example" },
+			want:   msgDashboardBaseURL,
+		},
+		{
+			name:   "a dashboardBaseURL of another scheme is refused",
+			mutate: func(c *v1.Company) { c.Spec.Exposure.DashboardBaseURL = "ftp://crewlet.nimbus.example" },
+			want:   msgDashboardBaseURL,
+		},
 		{name: "an env var from a Secret is accepted", mutate: env(v1.EnvVar{Name: platformURLVar, ValueFrom: platformURL})},
 		{name: "an empty env value is accepted", mutate: env(v1.EnvVar{Name: "EMPTY", Value: new("")})},
 		{

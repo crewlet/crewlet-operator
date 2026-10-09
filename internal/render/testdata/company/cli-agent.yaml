@@ -1,4 +1,5 @@
 integrations:
+  dashboard_base_url: https://cli-agent.crewlet.internal.example.com
   public_base_url: https://cli-agent.hooks.example.com
 name: Forge
 providers:

@@ -1,4 +1,5 @@
 integrations:
+  dashboard_base_url: https://nimbus.crewlet.internal.example.com
   github:
     enabled: true
     provisioning:

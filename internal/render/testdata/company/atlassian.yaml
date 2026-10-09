@@ -6,6 +6,7 @@ integrations:
     email: admin@helix.example
     token: ${K8S_CONFLUENCE_ADMIN_TOKEN_I5YZ7WBJFFIM}
     webhook_token: ${K8S_CONFLUENCE_ADMIN_WEBHOOK_TOKEN_4RJM7KLAIPPX}
+  dashboard_base_url: https://atlassian.crewlet.internal.example.com
   datadog:
     enabled: true
     handle_tag: owner

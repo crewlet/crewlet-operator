@@ -384,6 +384,15 @@ address once the route is accepted: `https://` when the Ingress has TLS or a
 Gateway listener the route attaches to is HTTPS. `status.endpoints.api` is
 always the in-cluster address, `http://<name>-engine.<namespace>.svc:8080`.
 
+`status.endpoints.dashboardBaseURL` is where people reach the dashboard:
+the Company's `spec.exposure.dashboardBaseURL`, else the API route's
+address on the same scheme as `exposedAPI`, without waiting for the route
+to be accepted, since a flip of acceptance would otherwise apply a new
+revision of the company document. The engine builds every link its agents compose for a person on it (Crewlet's
+`integrations.dashboard_base_url`), and never on the public address, whose
+listener serves no dashboard. With neither, no link is composed, and the
+`Exposed` condition's message says so.
+
 The `Exposed` condition is `True` with the reason `RouteAccepted` once every
 route exists and was accepted: an HTTPRoute when each Gateway it names reports
 it `Accepted`, an Ingress when its controller published an address for it.

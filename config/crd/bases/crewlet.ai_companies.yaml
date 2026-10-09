@@ -278,6 +278,31 @@ spec:
                 description: exposure overrides how the company is reached.
                 minProperties: 1
                 properties:
+                  dashboardBaseURL:
+                    description: |-
+                      dashboardBaseURL is the address people reach the engine's dashboard
+                      at, overriding the address of the class's API route: set it when the
+                      class routes no API, or people reach it through something in front of
+                      the route (a single sign-on proxy, say). Every link the engine's
+                      agents compose for a person is built on it, as the base followed by
+                      one of the engine dashboard's routes (/#/work/ENG-42,
+                      /#/knowledge/pages/<id>), which an address other than the route's
+                      must serve or redirect. It is never the public address: the public
+                      listener serves no dashboard. A trailing '/' is dropped. Crewlet's
+                      integrations.dashboard_base_url.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: dashboardBaseURL must be an absolute http or https
+                        URL
+                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                        && url(self).getHostname() != ''
+                    - message: 'dashboardBaseURL may not hold a ${NAME} reference:
+                        the engine would resolve it from its own secret store and
+                        environment, which hold credentials that are not this object''s
+                        to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   publicBaseURL:
                     description: |-
                       publicBaseURL is the HTTPS address vendors deliver webhooks to, and a
@@ -1250,6 +1275,19 @@ spec:
                     description: |-
                       api is the in-cluster base URL of the engine's API: the company's
                       Service, for callers inside the cluster.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                  dashboardBaseURL:
+                    description: |-
+                      dashboardBaseURL is the address people reach the engine's dashboard
+                      at, when the company has one: spec.exposure.dashboardBaseURL, or the
+                      address of the class's API route, on the scheme exposedAPI takes. It
+                      does not wait for the route to be accepted, as exposedAPI does: it is
+                      rendered into the company document, which a flip of acceptance would
+                      otherwise change. The engine builds every link its agents compose for
+                      a person on it (Crewlet's integrations.dashboard_base_url); unset,
+                      they compose none.
                     maxLength: 2048
                     minLength: 1
                     type: string

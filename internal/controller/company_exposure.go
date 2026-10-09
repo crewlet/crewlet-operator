@@ -92,13 +92,11 @@ type routeState struct {
 	accepted bool
 	reason   string
 	message  string
-	// https is whether the route terminates TLS.
-	https bool
 }
 
 // reconcileExposure writes the routes the class asks for, deletes those it no
-// longer asks for, sets the Company's public base URL and exposed API
-// endpoint, and returns the Exposed condition.
+// longer asks for, sets the Company's public and dashboard base URLs and
+// exposed API endpoint, and returns the Exposed condition.
 func (r *CompanyReconciler) reconcileExposure(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 ) (metav1.Condition, error) {
@@ -149,13 +147,29 @@ func (r *CompanyReconciler) reconcileExposure(
 	if err != nil {
 		return metav1.Condition{}, err
 	}
+	// The API's scheme, like the public base URL, is fixed by the class
+	// (and the Gateways it names) and not by whether the route has been
+	// accepted, so the dashboard's address does not wait for acceptance
+	// either: it is rendered into the company document, and an address
+	// that followed acceptance would make every flip of it (a Gateway
+	// controller re-evaluating its routes, an Ingress's published address
+	// briefly cleared) a new revision of the document on every engine,
+	// and would never be known behind an Ingress controller that publishes
+	// no address. exposedAPI keeps waiting: it says the route works.
+	apiScheme, err := r.routeScheme(ctx, c, &api)
+	if err != nil {
+		return metav1.Condition{}, err
+	}
 	c.Status.Endpoints.ExposedAPI = ""
 	if apiState != nil && apiState.accepted {
-		scheme := "http"
-		if apiState.https {
-			scheme = "https"
-		}
-		c.Status.Endpoints.ExposedAPI = scheme + "://" + api.hostname
+		c.Status.Endpoints.ExposedAPI = apiScheme + "://" + api.hostname
+	}
+	// Where people reach the dashboard: never the public address, whose
+	// listener serves no dashboard, so with neither this stays unset and
+	// the engine composes no link for a person rather than one to a 404.
+	c.Status.Endpoints.DashboardBaseURL = strings.TrimRight(c.Spec.Exposure.DashboardBaseURL, "/")
+	if c.Status.Endpoints.DashboardBaseURL == "" && apiScheme != "" {
+		c.Status.Endpoints.DashboardBaseURL = apiScheme + "://" + api.hostname
 	}
 	var states []routeState
 	for _, state := range []*routeState{webhooksState, apiState} {
@@ -179,16 +193,20 @@ func (r *CompanyReconciler) reconcileExposure(
 		}
 	}
 	exposed.Status = metav1.ConditionTrue
+	messages := make([]string, 0, len(states)+1)
 	if len(states) == 0 {
 		exposed.Reason = crewletaiv1alpha1.ReasonNoRoutes
-		exposed.Message = fmt.Sprintf("EngineClass %s routes nothing to the engine from outside the cluster.", class.Name)
-		return exposed, nil
+		messages = append(messages, fmt.Sprintf("EngineClass %s routes nothing to the engine from outside the cluster.", class.Name))
+	} else {
+		exposed.Reason = crewletaiv1alpha1.ReasonRouteAccepted
+		for _, state := range states {
+			messages = append(messages, state.message)
+		}
 	}
-	messages := make([]string, 0, len(states))
-	for _, state := range states {
-		messages = append(messages, state.message)
+	if c.Status.Endpoints.DashboardBaseURL == "" {
+		messages = append(messages, "No address of the dashboard is known (the class routes no API and the Company states no "+
+			"spec.exposure.dashboardBaseURL), so the engine's agents compose no link for a person.")
 	}
-	exposed.Reason = crewletaiv1alpha1.ReasonRouteAccepted
 	exposed.Message = strings.Join(messages, " ")
 	return exposed, nil
 }
@@ -272,13 +290,8 @@ func (r *CompanyReconciler) applyHTTPRoute(ctx context.Context, c *crewletaiv1al
 			}, nil
 		}
 	}
-	https, err := r.gatewaysServeHTTPS(ctx, c, rt.gateway)
-	if err != nil {
-		return nil, err
-	}
 	return &routeState{
 		accepted: true,
-		https:    https,
 		message:  fmt.Sprintf("HTTPRoute %s routes the %s from %s.", rt.name, rt.what, rt.hostname),
 	}, nil
 }
@@ -311,11 +324,35 @@ func parentAccepted(route *gatewayv1ac.HTTPRouteApplyConfiguration, gateway type
 	return false, ""
 }
 
+// routeScheme is the scheme a route serves its host name on: https when an
+// Ingress terminates TLS (tls.secretName) or a Gateway listener the route can
+// attach to is HTTPS, and http otherwise. It is empty when the class asks
+// for no such route, or for one through Gateways on a cluster without the
+// Gateway API, where the route cannot be written at all.
+func (r *CompanyReconciler) routeScheme(ctx context.Context, c *crewletaiv1alpha1.Company, rt *route) (string, error) {
+	switch {
+	case rt.ingress != nil:
+		if rt.ingress.TLS.SecretName != "" {
+			return "https", nil
+		}
+		return "http", nil
+	case rt.gateway != nil && r.GatewayAPI:
+		https, err := r.gatewaysServeHTTPS(ctx, c, rt.gateway)
+		if err != nil || !https {
+			return "http", err
+		}
+		return "https", nil
+	default:
+		return "", nil
+	}
+}
+
 // gatewaysServeHTTPS reports whether a route's Gateways terminate TLS for
-// it: whether a listener the route can attach to is HTTPS. It reads the
-// Gateways uncached: the operator's cache holds Gateways as metadata only
-// (for the EngineClass reconciler), and their listeners are read only once a
-// route was accepted.
+// it: whether a listener the route can attach to is HTTPS. A Gateway that
+// does not exist yet terminates nothing. It reads the Gateways uncached: the
+// operator's cache holds Gateways as metadata only (for the EngineClass
+// reconciler), and only a class that routes the API through Gateways has
+// their listeners read, once per reconcile of each of its Companies.
 func (r *CompanyReconciler) gatewaysServeHTTPS(
 	ctx context.Context, c *crewletaiv1alpha1.Company, exposure *crewletaiv1alpha1.GatewayExposure,
 ) (bool, error) {
@@ -356,8 +393,7 @@ func (r *CompanyReconciler) applyIngress(ctx context.Context, c *crewletaiv1alph
 	if rt.ingress.ClassName != "" {
 		spec.WithIngressClassName(rt.ingress.ClassName)
 	}
-	https := rt.ingress.TLS.SecretName != ""
-	if https {
+	if rt.ingress.TLS.SecretName != "" {
 		spec.WithTLS(networkingv1ac.IngressTLS().
 			WithHosts(rt.hostname).
 			WithSecretName(render.ExpandTemplate(rt.ingress.TLS.SecretName, c)))
@@ -381,7 +417,6 @@ func (r *CompanyReconciler) applyIngress(ctx context.Context, c *crewletaiv1alph
 	}
 	return &routeState{
 		accepted: true,
-		https:    https,
 		message:  fmt.Sprintf("Ingress %s routes the %s from %s.", rt.name, rt.what, rt.hostname),
 	}, nil
 }
