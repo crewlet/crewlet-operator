@@ -244,15 +244,20 @@ func unitTree(parts []*part) map[string]unitFacts {
 }
 
 // patchCompanyStatus writes the Company's conditions and status.config this
-// reconcile decided. A conflict means the runtime reconciler wrote the status
-// since the Company was read: the Company is read again from the API server
-// and the same decisions are written onto it, which is safe because the two
-// reconcilers never write the same fields.
+// reconcile decided. A conflict means someone wrote the Company since it was
+// read: the runtime reconciler's status, or a spec change. The Company is
+// read again from the API server and the same decisions are written onto it,
+// which is safe because the two reconcilers never write the same fields.
+// They are stamped with the generation this reconcile read and rendered, not
+// the fresh object's: after a spec change the document of the new generation
+// has not been rendered, and claiming it was would let Ready report it
+// applied. The generation change queues the Company again.
 func (run *configRun) patchCompanyStatus(ctx context.Context) error {
 	if run.secretsSynced == nil && run.configApplied == nil && run.config == nil {
 		return nil
 	}
 	company := run.company
+	generation := company.Generation
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		base := company.DeepCopy()
 		for _, c := range []*metav1.Condition{run.secretsSynced, run.configApplied} {
@@ -260,7 +265,7 @@ func (run *configRun) patchCompanyStatus(ctx context.Context) error {
 				continue
 			}
 			condition := *c
-			condition.ObservedGeneration = company.Generation
+			condition.ObservedGeneration = generation
 			condition.Message = bounded(condition.Message)
 			meta.SetStatusCondition(&company.Status.Conditions, condition)
 		}

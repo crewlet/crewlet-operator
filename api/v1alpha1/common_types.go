@@ -284,7 +284,8 @@ const (
 	ReasonSuspended = "Suspended"
 
 	// ReasonConfigPending is Ready=False on a Company whose engine runs
-	// and is exposed while ConfigApplied has not been reported yet.
+	// and is exposed while ConfigApplied has not been reported for the
+	// Company's current generation yet.
 	ReasonConfigPending = "ConfigPending"
 
 	// ReasonPodsReady is RuntimeReady=True.

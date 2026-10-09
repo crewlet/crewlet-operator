@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"fmt"
+
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -14,8 +16,9 @@ import (
 // says Suspended, which is the one cause a user chose.
 //
 // ConfigApplied is the config reconciler's. Until that reconciler has
-// reported it, the Company is not Ready: an engine without its document runs
-// nothing.
+// reported it for the Company's current generation, the Company is not
+// Ready: an engine without its document runs nothing, and one that runs an
+// older document has not taken the change.
 func summarize(c *crewletaiv1alpha1.Company) metav1.Condition {
 	ready := metav1.Condition{Type: crewletaiv1alpha1.ConditionReady, Status: metav1.ConditionFalse}
 	if suspended(c) {
@@ -43,6 +46,17 @@ func summarize(c *crewletaiv1alpha1.Company) metav1.Condition {
 			// set, and the runtime conditions with it once it is True.
 			ready.Reason = crewletaiv1alpha1.ReasonConfigPending
 			ready.Message = "The company document has not been applied to the engine yet."
+			return ready
+		}
+		if t == crewletaiv1alpha1.ConditionConfigApplied && condition.ObservedGeneration < c.Generation {
+			// The runtime reconciler usually runs first after a spec
+			// change: a ConfigApplied of the previous generation says
+			// nothing about the document of this one, and Ready=True
+			// stamped with this generation would tell a client waiting
+			// for observedGeneration that the change is done.
+			ready.Reason = crewletaiv1alpha1.ReasonConfigPending
+			ready.Message = fmt.Sprintf("The company document of generation %d has not been applied to the engine yet "+
+				"(ConfigApplied describes generation %d).", c.Generation, condition.ObservedGeneration)
 			return ready
 		}
 		if condition.Status != metav1.ConditionTrue {

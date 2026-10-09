@@ -1218,3 +1218,41 @@ var _ = Describe("Company runtime event filters", func() {
 		Expect(update(withConfigApplied(""), withConfigApplied(""))).To(BeFalse())
 	})
 })
+
+var _ = Describe("Company status writes", func() {
+	var namespace string
+	BeforeEach(func() {
+		ns := &corev1.Namespace{GenerateName: "status-"}
+		Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+		namespace = ns.Name
+	})
+
+	It("stamps the config reconciler's conditions with the generation it rendered, after a spec change", func() {
+		company := &crewletaiv1alpha1.Company{
+			Namespace: namespace, Name: companyName,
+			Spec: crewletaiv1alpha1.CompanySpec{CompanyName: companyDisplayName},
+		}
+		Expect(k8sClient.Create(ctx, company)).To(Succeed())
+		read := company.DeepCopy()
+
+		// The spec changes while the reconcile that read generation 1 runs.
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(company), company)).To(Succeed())
+		company.Spec.Mission = "Answer every customer within a day."
+		Expect(k8sClient.Update(ctx, company)).To(Succeed())
+		Expect(company.Generation).To(Equal(read.Generation + 1))
+
+		run := &configRun{
+			CompanyConfigReconciler: &CompanyConfigReconciler{Client: k8sClient, APIReader: k8sClient},
+			company:                 read,
+			configApplied: &metav1.Condition{
+				Type: crewletaiv1alpha1.ConditionConfigApplied, Status: metav1.ConditionTrue,
+				Reason: crewletaiv1alpha1.ReasonApplied, Message: "Applied revision r1.",
+			},
+		}
+		Expect(run.patchCompanyStatus(ctx)).To(Succeed())
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(company), company)).To(Succeed())
+		applied := meta.FindStatusCondition(company.Status.Conditions, crewletaiv1alpha1.ConditionConfigApplied)
+		Expect(applied).NotTo(BeNil())
+		Expect(applied.ObservedGeneration).To(Equal(read.Generation), "claims a generation that was never rendered")
+	})
+})

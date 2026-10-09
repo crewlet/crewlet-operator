@@ -26,7 +26,7 @@ with your last change yet.
 |---|---|---|---|
 | `Ready` | True | `Available` | The engine runs the current revision and is reachable as the class asks. |
 | | False | `Suspended` | `spec.suspend` is set: the engine is stopped, its volume kept. |
-| | False | `ConfigPending` | The engine runs and is exposed; the document has not been reported applied yet. Wait a few seconds. |
+| | False | `ConfigPending` | The engine runs and is exposed; the document of the Company's current generation has not been reported applied yet. Wait a few seconds. |
 | | False | any other | The reason of the first condition below that is not True. |
 | `Accepted` | True | `Valid` | The class exists and the company is within its limits. |
 | | False | `EngineClassNotFound` | `spec.engineClassName` names no class, or it is unset and there is not exactly one class annotated `crewlet.ai/is-default-class: "true"`. Create the class or name one. |

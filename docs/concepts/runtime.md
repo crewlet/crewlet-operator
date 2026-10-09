@@ -211,7 +211,10 @@ other:
 `Ready` is `True` when `Accepted`, `RuntimeReady`, `Exposed` and
 `ConfigApplied` all are. Otherwise its reason is the reason of the first of
 them that is not, in that order, or `ConfigPending` while `ConfigApplied` has
-not been reported; a suspended Company reports `Suspended`.
+not been reported for the Company's current generation; a suspended Company
+reports `Suspended`. So `Ready=True` with an `observedGeneration` equal to
+`metadata.generation` means the engine runs the document of that generation,
+which is what a client waiting for a change to take effect checks.
 
 ## Reaching the engine
 

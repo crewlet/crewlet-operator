@@ -326,7 +326,11 @@ func configAppliedChanged() predicate.Funcs {
 			case before == nil || after == nil:
 				return (before == nil) != (after == nil)
 			default:
-				return before.Status != after.Status || before.Reason != after.Reason || before.Message != after.Message
+				// The generation too: the config reconciler re-stamps a
+				// condition it keeps (an engine found in sync after a spec
+				// change), and Ready waits for exactly that.
+				return before.Status != after.Status || before.Reason != after.Reason || before.Message != after.Message ||
+					before.ObservedGeneration != after.ObservedGeneration
 			}
 		},
 		CreateFunc:  func(event.CreateEvent) bool { return false },
