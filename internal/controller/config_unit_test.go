@@ -320,3 +320,27 @@ func TestMovingTheDefaultClassReachesTheDocument(t *testing.T) {
 		t.Error("an unchanged annotation re-runs Companies")
 	}
 }
+
+// TestEngineStateChangedSeesWhyACompanyIsRefused: the parts repeat the
+// Company's Accepted reason, so a new reason re-runs the Company, and the
+// config reconciler's own writes do not.
+func TestEngineStateChangedSeesWhyACompanyIsRefused(t *testing.T) {
+	with := func(t, reason string) *crewletaiv1alpha1.Company {
+		c := &crewletaiv1alpha1.Company{}
+		c.Status.Conditions = []metav1.Condition{{Type: t, Status: metav1.ConditionFalse, Reason: reason}}
+		return c
+	}
+	p := engineStateChanged()
+	if !p.Update(event.UpdateEvent{
+		ObjectOld: with(crewletaiv1alpha1.ConditionAccepted, crewletaiv1alpha1.ReasonEngineClassNotFound),
+		ObjectNew: with(crewletaiv1alpha1.ConditionAccepted, crewletaiv1alpha1.ReasonLimitExceeded),
+	}) {
+		t.Error("a Company refused for another reason does not re-run its parts' status")
+	}
+	if p.Update(event.UpdateEvent{
+		ObjectOld: with(crewletaiv1alpha1.ConditionConfigApplied, crewletaiv1alpha1.ReasonInvalid),
+		ObjectNew: with(crewletaiv1alpha1.ConditionConfigApplied, crewletaiv1alpha1.ReasonApplied),
+	}) {
+		t.Error("the config reconciler's own condition re-runs it")
+	}
+}

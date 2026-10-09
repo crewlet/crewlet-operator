@@ -69,6 +69,7 @@ with your last change yet.
 |---|---|---|---|
 | `Accepted` | True | `Valid` | Its Company exists and nothing collides with it. |
 | | False | `CompanyNotFound` | `spec.companyRef` names no Company in the namespace. |
+| | False | `CompanyNotAccepted` | Its Company is not `Accepted` (its class is gone, or it is over its class's limits); the message carries why. Nothing of the company is applied until it is. |
 | | False | `Conflict` | Crewlet would read it and another object as one: two Seats with one handle, display name or contact account; two Units with one display name; two Integrations for one vendor; an LLMProvider named like a platform provider of the class. The message names the other object. |
 | `ResolvedRefs` | True | `Resolved` | Every object and Secret key it references exists. |
 | | False | `RefNotFound` | It references an object that does not exist (a Unit, a Seat, an LLMProvider, an MCPServer); the message names it. |

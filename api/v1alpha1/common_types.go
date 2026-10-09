@@ -445,6 +445,12 @@ const (
 	// spec.companyRef names no Company.
 	ReasonCompanyNotFound = "CompanyNotFound"
 
+	// ReasonCompanyNotAccepted is Accepted=False on a child whose Company
+	// exists and is not accepted (its class is gone, or it is over its
+	// class's limits): nothing of the company is applied meanwhile. The
+	// message carries the Company's own Accepted reason and message.
+	ReasonCompanyNotAccepted = "CompanyNotAccepted"
+
 	// ReasonRefNotFound is ResolvedRefs=False when a referenced object does
 	// not exist.
 	ReasonRefNotFound = "RefNotFound"

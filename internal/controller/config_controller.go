@@ -247,7 +247,8 @@ func itemsOfKind(list client.ObjectList) client.Object {
 }
 
 // engineStateChanged passes a Company update that changes what decides
-// whether, and where, its document can be applied: whether it is Accepted,
+// whether, and where, its document can be applied: whether it is Accepted
+// and why not,
 // the state of its engine's pods (RuntimeReady), and the public base URL the
 // document carries. These are status fields the runtime reconciler writes;
 // the config reconciler's own status writes change none of them.
@@ -265,8 +266,13 @@ func engineStateChanged() predicate.Funcs {
 			if old.Status.Endpoints.PublicBaseURL != updated.Status.Endpoints.PublicBaseURL {
 				return true
 			}
-			if meta.IsStatusConditionTrue(old.Status.Conditions, crewletaiv1alpha1.ConditionAccepted) !=
-				meta.IsStatusConditionTrue(updated.Status.Conditions, crewletaiv1alpha1.ConditionAccepted) {
+			// The whole of Accepted, not only its status: the parts'
+			// Accepted condition repeats why a Company is refused.
+			beforeAccepted := meta.FindStatusCondition(old.Status.Conditions, crewletaiv1alpha1.ConditionAccepted)
+			afterAccepted := meta.FindStatusCondition(updated.Status.Conditions, crewletaiv1alpha1.ConditionAccepted)
+			if (beforeAccepted == nil) != (afterAccepted == nil) || (beforeAccepted != nil &&
+				(beforeAccepted.Status != afterAccepted.Status || beforeAccepted.Reason != afterAccepted.Reason ||
+					beforeAccepted.Message != afterAccepted.Message)) {
 				return true
 			}
 			before := meta.FindStatusCondition(old.Status.Conditions, crewletaiv1alpha1.ConditionRuntimeReady)

@@ -736,6 +736,26 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(err).To(MatchError(engine.ErrNoActiveRevision))
 	})
 
+	It("reports the parts of a Company that is not accepted as not accepted either", func() {
+		c := company("refused", crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
+		Eventually(func(g Gomega) {
+			got := &crewletaiv1alpha1.Company{}
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(c), got)).To(Succeed())
+			base := got.DeepCopy()
+			meta.SetStatusCondition(&got.Status.Conditions, metav1.Condition{
+				Type: crewletaiv1alpha1.ConditionAccepted, Status: metav1.ConditionFalse, Reason: crewletaiv1alpha1.ReasonLimitExceeded,
+				Message: "The Company has 3 Seats; EngineClass team allows 2.", ObservedGeneration: got.Generation,
+			})
+			g.Expect(k8sClient.Status().Patch(ctx, got, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))).To(Succeed())
+		}).WithTimeout(settle).Should(Succeed())
+		ana := seat("refused-ana")
+		Eventually(func(g Gomega) string { return conditionOf(ana, crewletaiv1alpha1.ConditionAccepted)(g).Message }).
+			WithTimeout(settle).Should(ContainSubstring(crewletaiv1alpha1.ReasonLimitExceeded))
+		accepted := conditionOf(ana, crewletaiv1alpha1.ConditionAccepted)(Default)
+		Expect(accepted.Status).To(Equal(metav1.ConditionFalse))
+		Expect(accepted.Reason).To(Equal(crewletaiv1alpha1.ReasonCompanyNotAccepted))
+	})
+
 	It("reports the parts of a Company that does not exist", func() {
 		orphan := newSeat(namespace, "no-such-company", "orphan")
 		Eventually(reasonOf(orphan, crewletaiv1alpha1.ConditionAccepted)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonCompanyNotFound))

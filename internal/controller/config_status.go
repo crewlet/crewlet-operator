@@ -47,9 +47,20 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 	gen := p.obj.GetGeneration()
 	conditions := p.conditions()
 
-	if len(p.conflicts) > 0 {
+	companyAccepted := meta.FindStatusCondition(run.company.Status.Conditions, crewletaiv1alpha1.ConditionAccepted)
+	switch {
+	case companyAccepted == nil || companyAccepted.Status != metav1.ConditionTrue:
+		// Nothing of the company is applied while the Company itself is
+		// refused (its class is gone, it is over its limits), and a part
+		// reported as accepted would say otherwise.
+		message := fmt.Sprintf("Company %s has not been accepted yet.", run.company.Name)
+		if companyAccepted != nil {
+			message = fmt.Sprintf("Company %s is not accepted (%s): %s", run.company.Name, companyAccepted.Reason, companyAccepted.Message)
+		}
+		setCondition(conditions, gen, crewletaiv1alpha1.ConditionAccepted, false, crewletaiv1alpha1.ReasonCompanyNotAccepted, message)
+	case len(p.conflicts) > 0:
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionAccepted, false, crewletaiv1alpha1.ReasonConflict, sentences(p.conflicts))
-	} else {
+	default:
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionAccepted, true, crewletaiv1alpha1.ReasonValid,
 			fmt.Sprintf("Part of Company %s.", run.company.Name))
 	}
