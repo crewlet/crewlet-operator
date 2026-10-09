@@ -24,6 +24,7 @@ labels: bug
 
 ## Logs and events
 
-<!-- The manager's logs (`kubectl -n crewlet-operator-system logs
-     deploy/crewlet-operator-controller-manager`) and the events on the
-     objects concerned. -->
+<!-- The manager's logs, from every replica since only the leader
+     reconciles (`kubectl -n crewlet-operator-system logs
+     -l control-plane=controller-manager --prefix --tail=300`), and the
+     events on the objects concerned. -->

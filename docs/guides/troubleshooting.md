@@ -160,7 +160,15 @@ kubectl get crewlet,statefulsets,pods,pvc,services,networkpolicies -n acme -o wi
 kubectl get company acme -n acme -o yaml
 kubectl events -n acme
 kubectl logs acme-data-0 -n acme --tail=300
-kubectl logs -n crewlet-operator-system deploy/crewlet-operator-controller-manager --tail=300
+kubectl logs -n crewlet-operator-system -l control-plane=controller-manager --prefix --tail=300
+```
+
+The manager runs two replicas by default and only the leader reconciles, so
+read every replica's log (`-l ... --prefix`, as above), or the leader's alone:
+the Lease `839a0df8.crewlet.ai` names it, as its pod's name and a suffix.
+
+```bash
+kubectl get lease 839a0df8.crewlet.ai -n crewlet-operator-system -o jsonpath='{.spec.holderIdentity}{"\n"}'
 ```
 
 Conditions, events and logs name Secrets and keys, never their values, so
