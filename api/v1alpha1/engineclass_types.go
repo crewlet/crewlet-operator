@@ -639,11 +639,14 @@ type EnginePodTemplate struct {
 // +kubebuilder:validation:XValidation:rule="self.type == 'OpenAICompatible' || has(self.apiKeySecretRefs)",message="apiKeySecretRefs needs at least one key for types Anthropic and OpenAI"
 type PlatformLLMProvider struct {
 	// name is the provider's name. Seats and the Company's model order refer
-	// to it with kind PlatformLLMProvider.
+	// to it with kind PlatformLLMProvider. It may not be default, which
+	// Crewlet would run every chainless seat of every opted-in company on,
+	// whatever the company's own order says.
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	// +kubebuilder:validation:XValidation:rule="self != 'default'",message="a platform provider may not be named default: Crewlet runs every seat that names no chain on the provider keyed default, ahead of spec.llm.order"
 	Name string `json:"name,omitempty"`
 
 	LLMProviderSettings `json:",inline"`

@@ -375,8 +375,10 @@ func (r *renderer) providersDoc() providersDoc {
 
 	// llm_order is written out in full rather than left for Crewlet to
 	// complete, so the document alone says which provider a seat without a
-	// chain runs on: the Company's spec.llm.order, then its own providers by
-	// name, then the platform's by name.
+	// chain runs on: the first of the Company's spec.llm.order, then its own
+	// providers by name, then the platform's by name, and that one alone.
+	// The API refuses a provider named default, which Crewlet would put
+	// ahead of the order.
 	named := map[string]bool{}
 	for i, ref := range spec.LLM.Order {
 		key, ok := r.provider(KindCompany, r.in.Company.Name, fmt.Sprintf("spec.llm.order[%d]", i), ref)

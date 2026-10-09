@@ -1191,11 +1191,18 @@ spec:
                     name:
                       description: |-
                         name is the provider's name. Seats and the Company's model order refer
-                        to it with kind PlatformLLMProvider.
+                        to it with kind PlatformLLMProvider. It may not be default, which
+                        Crewlet would run every chainless seat of every opted-in company on,
+                        whatever the company's own order says.
                       maxLength: 63
                       minLength: 1
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                       type: string
+                      x-kubernetes-validations:
+                      - message: 'a platform provider may not be named default: Crewlet
+                          runs every seat that names no chain on the provider keyed
+                          default, ahead of spec.llm.order'
+                        rule: self != 'default'
                     reasoning:
                       description: |-
                         reasoning turns on an OpenAI reasoning model's effort, so that

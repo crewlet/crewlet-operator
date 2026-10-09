@@ -104,5 +104,12 @@ func TestLLMProviderValidation(t *testing.T) {
 			mutate: func(p *v1.LLMProvider) { p.Spec.Type = "CLIAgent" },
 			want:   `Unsupported value: "CLIAgent"`,
 		},
+		// Crewlet runs every chainless seat on the provider keyed default,
+		// ahead of the Company's order.
+		{
+			name:   "a provider named default is refused",
+			mutate: func(p *v1.LLMProvider) { p.Name = "default" },
+			want:   "an LLMProvider may not be named default",
+		},
 	})
 }

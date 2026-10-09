@@ -186,8 +186,11 @@ type LLMProviderStatus struct {
 }
 
 // LLMProvider is a model provider a company's seats can run on: one entry of
-// Crewlet's providers.llm.
+// Crewlet's providers.llm, keyed by its name. The name default is refused:
+// Crewlet runs a seat that names no chain on the provider keyed default when
+// there is one, whatever the Company's spec.llm.order says.
 //
+// +kubebuilder:validation:XValidation:rule="self.metadata.name != 'default'",message="an LLMProvider may not be named default: Crewlet runs every seat that names no chain on the provider keyed default, ahead of spec.llm.order"
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=llmp,categories=crewlet

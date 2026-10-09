@@ -239,7 +239,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `order` _[LLMProviderReference](#llmproviderreference) array_ | order is the providers' precedence: a seat that names no provider for<br />a phase falls back to the first one here. The providers it leaves out<br />follow it: the company's LLMProviders by name, then the platform<br />providers by name. Crewlet's providers.llm_order. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `order` _[LLMProviderReference](#llmproviderreference) array_ | order is the providers' precedence. A seat with no default chain runs<br />on the first provider here, and on it alone: Crewlet tries no other<br />provider of the order when its keys are all cooling down, so give a<br />seat a chain for a fallback. The providers the order leaves out follow<br />it: the company's LLMProviders by name, then the platform providers by<br />name. Crewlet's providers.llm_order. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `usePlatformProviders` _boolean_ | usePlatformProviders adds the EngineClass's platformLLMProviders to the<br />company, so seats can run on models the platform provides. Their keys<br />are pushed into the company's engine, where the tenant can read them<br />(see the class's platformLLMProviders). |  | Optional: \{\} <br /> |
 
 
@@ -1222,7 +1222,9 @@ _Appears in:_
 
 
 LLMProvider is a model provider a company's seats can run on: one entry of
-Crewlet's providers.llm.
+Crewlet's providers.llm, keyed by its name. The name default is refused:
+Crewlet runs a seat that names no chain on the provider keyed default when
+there is one, whatever the Company's spec.llm.order says.
 
 
 
@@ -1815,7 +1817,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | name is the provider's name. Seats and the Company's model order refer<br />to it with kind PlatformLLMProvider. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Required: \{\} <br /> |
+| `name` _string_ | name is the provider's name. Seats and the Company's model order refer<br />to it with kind PlatformLLMProvider. It may not be default, which<br />Crewlet would run every chainless seat of every opted-in company on,<br />whatever the company's own order says. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Required: \{\} <br /> |
 | `type` _[LLMProviderType](#llmprovidertype)_ | type is which model API the provider speaks. Crewlet's `type`. |  | Enum: [Anthropic OpenAI OpenAICompatible] <br />Required: \{\} <br /> |
 | `model` _string_ | model is the model id requests are sent for, as the provider names it.<br />Crewlet's `model`. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `claudeModel` _string_ | claudeModel names the Claude model whose request shape an Anthropic<br />provider uses when model is a gateway alias Crewlet cannot recognise.<br />Crewlet's `claude_model`; type Anthropic only. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
@@ -2079,8 +2081,8 @@ _Appears in:_
 SeatLLM is the model providers a seat runs on, one fallback chain per phase
 of its work: when every key of the first provider is cooling down, the next
 is tried. It maps onto Crewlet's per-phase `llm` mapping. A phase left unset
-uses the default chain; a seat with no default chain uses the first provider
-of the Company's spec.llm.order.
+uses the default chain; a seat with no default chain runs on the first
+provider of the Company's spec.llm.order alone, with no fallback.
 
 _Validation:_
 - MinProperties: 1

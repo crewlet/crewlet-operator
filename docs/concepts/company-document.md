@@ -45,7 +45,11 @@ out while the company has none.
 
 `providers.llm_order` is written out in full: the Company's `spec.llm.order`,
 then its own `LLMProvider`s by name, then the class's platform providers by
-name. A seat that names no provider for a phase runs on the first one.
+name. A seat with no `default` chain runs on the first one alone: Crewlet
+tries no other provider of the order when that one's keys are all cooling
+down, so a seat that needs a fallback names a chain. No provider may be named
+`default`, since Crewlet would run every such seat on the provider keyed
+`default` instead, whatever the order says.
 
 Each Seat's `spec.llm` becomes Crewlet's per-phase `llm` mapping, each chain
 naming providers by their key in `providers.llm`.

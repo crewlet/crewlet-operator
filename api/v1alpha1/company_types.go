@@ -141,10 +141,12 @@ type LLMProviderReference struct {
 // CompanyLLMSettings is how a company chooses among its model providers.
 // +kubebuilder:validation:MinProperties=1
 type CompanyLLMSettings struct {
-	// order is the providers' precedence: a seat that names no provider for
-	// a phase falls back to the first one here. The providers it leaves out
-	// follow it: the company's LLMProviders by name, then the platform
-	// providers by name. Crewlet's providers.llm_order.
+	// order is the providers' precedence. A seat with no default chain runs
+	// on the first provider here, and on it alone: Crewlet tries no other
+	// provider of the order when its keys are all cooling down, so give a
+	// seat a chain for a fallback. The providers the order leaves out follow
+	// it: the company's LLMProviders by name, then the platform providers by
+	// name. Crewlet's providers.llm_order.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MaxItems=32

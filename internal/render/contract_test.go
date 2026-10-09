@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/yaml"
 
+	"github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine"
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 	"github.com/crewlet/crewlet-operator/internal/secretref"
@@ -253,5 +255,71 @@ func TestContractNoCredentialLeavesThroughAReference(t *testing.T) {
 		}
 	case <-time.After(30 * time.Second):
 		t.Fatal("the engine never reached the MCP server, so the test proves nothing")
+	}
+}
+
+// TestContractChainlessSeatRunsOnTheFirstProviderAlone ties the docs of
+// spec.llm.order to the engine: a seat that names no chain runs on the first
+// provider of the rendered llm_order and on no other, as the engine's own
+// org projection resolves it, which is how a turn resolves it. A provider
+// named default would take its place; the API refuses that name.
+func TestContractChainlessSeatRunsOnTheFirstProviderAlone(t *testing.T) {
+	in := companyCaseNamed(t, "minimal-agent").input(t)
+	second := in.LLMProviders[0].DeepCopy()
+	second.Name = "aardvark"
+	in.LLMProviders = append(in.LLMProviders, *second)
+	// The order names the provider that sorts last, so that the first
+	// provider of llm_order is the order's and not the first by name.
+	in.Company.Spec.LLM.Order = []v1alpha1.LLMProviderReference{{Kind: v1alpha1.LLMProviderKindLLMProvider, Name: "claude"}}
+	doc, err := Company(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e := enginetest.Start(t)
+	client := e.Client()
+	for _, k := range doc.Refs {
+		if err := client.PutSecret(t.Context(), secretsync.StoreName(k), []byte(dummyCredential(k)), ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := client.ApplyConfig(t.Context(), engine.ApplyRequest{Document: doc.YAML, CreateOnly: true, Summary: "chains"}); err != nil {
+		t.Fatalf("applying the company document: %v", err)
+	}
+
+	// The engine activates a revision after it answers the apply; it is
+	// ready once its first company runs.
+	for deadline := time.Now().Add(time.Minute); client.Ready(t.Context()) != nil; {
+		if time.Now().After(deadline) {
+			t.Fatalf("the engine never became ready: %v", client.Ready(t.Context()))
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, e.URL+"/org", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+e.OperatorToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var org struct {
+		Roles []struct {
+			Handle string              `json:"handle"`
+			LLM    map[string][]string `json:"llm"`
+		} `json:"roles"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&org); err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /org: %d, %v", resp.StatusCode, err)
+	}
+	if len(org.Roles) != 1 || len(org.Roles[0].LLM) == 0 {
+		t.Fatalf("GET /org shows no seat with its chains: %+v", org.Roles)
+	}
+	for phase, chain := range org.Roles[0].LLM {
+		if !slices.Equal(chain, []string{"claude"}) {
+			t.Errorf("seat %s runs phase %s on %v, want [claude] alone", org.Roles[0].Handle, phase, chain)
+		}
 	}
 }

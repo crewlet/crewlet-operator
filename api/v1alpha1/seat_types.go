@@ -50,8 +50,8 @@ type ManagedReference struct {
 // SeatLLM is the model providers a seat runs on, one fallback chain per phase
 // of its work: when every key of the first provider is cooling down, the next
 // is tried. It maps onto Crewlet's per-phase `llm` mapping. A phase left unset
-// uses the default chain; a seat with no default chain uses the first provider
-// of the Company's spec.llm.order.
+// uses the default chain; a seat with no default chain runs on the first
+// provider of the Company's spec.llm.order alone, with no fallback.
 // +kubebuilder:validation:MinProperties=1
 type SeatLLM struct {
 	// default is the chain of every phase not set below, including the

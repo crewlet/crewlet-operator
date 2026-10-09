@@ -498,6 +498,14 @@ func TestPlatformLLMProviders(t *testing.T) {
 	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
 		{name: "a platform provider is accepted", mutate: platform(anthropic, true)},
 		{
+			name: "a platform provider named default is refused",
+			mutate: func(c *v1.EngineClass) {
+				platform(anthropic, true)(c)
+				c.Spec.PlatformLLMProviders[0].Name = "default"
+			},
+			want: "a platform provider may not be named default",
+		},
+		{
 			name:   "a platform Anthropic provider without keys is refused",
 			mutate: platform(anthropic, false),
 			want:   msgKeysRequired,
