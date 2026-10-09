@@ -128,13 +128,8 @@ var _ = Describe("Seat pools", Ordered, func() {
 					// specs delete pods and scale pools.
 					Defaults: v1.SeatPoolDefaults{Resources: small, TerminationGracePeriodSeconds: 30},
 				},
-				Exposure: v1.ExposureSettings{Webhooks: v1.WebhookExposure{Mode: v1.WebhookExposureNone}},
-				NetworkPolicy: v1.NetworkPolicySettings{
-					Mode: v1.NetworkPolicyIsolated,
-					APIConsumers: []v1.NetworkPolicyPeer{{NamespaceSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{corev1.LabelMetadataName: poolsConsumerNamespace},
-					}}},
-				},
+				Exposure:      v1.ExposureSettings{Webhooks: v1.WebhookExposure{Mode: v1.WebhookExposureNone}},
+				NetworkPolicy: poolsIsolated(),
 			},
 		})
 
@@ -265,8 +260,8 @@ var _ = Describe("Seat pools", Ordered, func() {
 		}
 
 		By("refusing every other pod under None, which keeps the broker's policy")
-		setPoolsNetworkPolicy(v1.NetworkPolicyNone)
-		DeferCleanup(setPoolsNetworkPolicy, v1.NetworkPolicyIsolated)
+		setPoolsNetworkPolicy(&v1.NetworkPolicySettings{Mode: v1.NetworkPolicyNone})
+		DeferCleanup(setPoolsNetworkPolicy, new(poolsIsolated()))
 		refused()
 		Expect(leafProbe(poolsNamespace, "leaf-own-none", seatLabels(poolsCompany), leafAddress)).
 			To(Equal(corev1.PodSucceeded), "the company's own seat pod was refused under None")
@@ -479,14 +474,28 @@ func listenerPod(name string, labels map[string]string) string {
 	return address
 }
 
-// setPoolsNetworkPolicy sets the pools class's networkPolicy.mode and waits
+// poolsIsolated is the pools class's networkPolicy: Isolated, admitting the
+// consumer namespace to the API.
+func poolsIsolated() v1.NetworkPolicySettings {
+	return v1.NetworkPolicySettings{
+		Mode: v1.NetworkPolicyIsolated,
+		APIConsumers: []v1.NetworkPolicyPeer{{NamespaceSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{corev1.LabelMetadataName: poolsConsumerNamespace},
+		}}},
+	}
+}
+
+// setPoolsNetworkPolicy replaces the pools class's networkPolicy and waits
 // for the operator to have acted on it: <company>-engine exists under
-// Isolated alone.
-func setPoolsNetworkPolicy(mode v1.NetworkPolicyMode) {
+// Isolated alone. The whole block is replaced rather than its mode, because
+// apiConsumers and egress belong to Isolated and the class refuses them
+// beside any other mode.
+func setPoolsNetworkPolicy(settings *v1.NetworkPolicySettings) {
 	GinkgoHelper()
+	mode := settings.Mode
 	class := &v1.EngineClass{}
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: poolsClassName}, class)).To(Succeed())
-	class.Spec.NetworkPolicy.Mode = mode
+	class.Spec.NetworkPolicy = *settings
 	Expect(k8sClient.Update(ctx, class)).To(Succeed())
 	Eventually(func(g Gomega) {
 		key := types.NamespacedName{Namespace: poolsNamespace, Name: poolsCompany + "-engine"}
