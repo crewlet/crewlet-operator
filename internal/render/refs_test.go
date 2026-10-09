@@ -90,8 +90,8 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 		{
 			name: "a seat's tool server is missing",
 			mutate: func(in *Input) {
-				seat(in, seatAna).Spec.MCP[0].Name = "gitlab"
-				seat(in, seatAna).Spec.Sandbox.MCPServerRefs[0].Name = "gitlab"
+				seat(in, seatAna).Spec.MCP[0].Name = "notion"
+				seat(in, seatAna).Spec.Sandbox.MCPServerRefs[0].Name = "notion"
 			},
 			want: []refusal{
 				{KindSeat, seatAna, "spec.mcp[0].name", v1alpha1.ReasonRefNotFound},
@@ -102,7 +102,7 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			name: "a unit's tool server is missing",
 			mutate: func(in *Input) {
 				unit(in, unitPlatform).Spec.MCP = []v1alpha1.MCPCredentials{{Name: "datadog", Env: []v1alpha1.MCPCredentialValue{{
-					Name: "DD_API_KEY", ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "dd", Key: "apiKey"}},
+					Name: "DD_API_KEY", ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "dd", Key: "apiKey"}},
 				}}}}
 			},
 			want: []refusal{{KindUnit, unitPlatform, "spec.mcp[0].name", v1alpha1.ReasonRefNotFound}},
@@ -191,6 +191,81 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			},
 			want: []refusal{{KindSchedule, scheduleCIHealth, "document units[0].children[0].roles[0].schedules[0].task",
 				v1alpha1.ReasonReferenceNotAllowed}},
+		},
+		{
+			// Nothing would create the value: the engine provisions only
+			// under an Integration with provisioning Engine.
+			name: "a seat names a provisioned credential and no integration provisions",
+			mutate: func(in *Input) {
+				integration(in, sampleGitLab).Spec.Provisioning = v1alpha1.IntegrationProvisioningExternal
+				integration(in, sampleGitLab).Spec.GitLab.EngineProvisioning = v1alpha1.GitLabEngineProvisioning{}
+			},
+			want: []refusal{
+				{KindSeat, seatAna, "spec.mcp[1].env[0].valueFrom", v1alpha1.ReasonNoProvisioner},
+				{KindSeat, seatAna, "spec.sandbox.env[1].valueFrom", v1alpha1.ReasonNoProvisioner},
+			},
+		},
+		{
+			name: "a seat's provisioned Mattermost bot token with no integration that provisions",
+			mutate: func(in *Input) {
+				in.Integrations = slices.DeleteFunc(in.Integrations, func(i v1alpha1.Integration) bool { return i.Name == sampleGitLab })
+				for i := range in.Seats {
+					in.Seats[i].Spec.MCP = slices.DeleteFunc(in.Seats[i].Spec.MCP, func(c v1alpha1.MCPCredentials) bool { return c.Name == sampleGitLab })
+					if sb := in.Seats[i].Spec.Sandbox; sb != nil {
+						sb.Env = slices.DeleteFunc(sb.Env, func(e v1alpha1.SeatEnvVar) bool { return e.ValueFrom.SecretKeyRef.Name == "" })
+					}
+				}
+				seat(in, seatCTO).Spec.Integrations.Mattermost.BotToken.Provisioned.Name = "bot"
+			},
+			want: []refusal{{KindSeat, seatCTO, "spec.integrations.mattermost.botToken", v1alpha1.ReasonNoProvisioner}},
+		},
+		{
+			// The run happens in a remote sandbox, which calls the seat's
+			// tools back through the company's public address.
+			name: "an Agent-mode CLI provider in a company with no public address",
+			mutate: func(in *Input) {
+				in.PublicBaseURL = ""
+				in.LLMProviders = append(in.LLMProviders, cliProvider(v1alpha1.CLIAgentModeAgent))
+			},
+			want: []refusal{{KindLLMProvider, providerCLI, "spec.cli.mode", v1alpha1.ReasonNotExposed}},
+		},
+		{
+			name: "datadog routes alerts to a seat that does not exist",
+			mutate: func(in *Input) {
+				in.Integrations = append(in.Integrations, datadogIntegration("sre"))
+			},
+			want: []refusal{{KindIntegration, VendorDatadog, "spec.datadog.routeTo.seatRef.name", v1alpha1.ReasonRefNotFound}},
+		},
+		{
+			name: "datadog routes alerts to a person",
+			mutate: func(in *Input) {
+				in.Integrations = append(in.Integrations, datadogIntegration(seatJane))
+			},
+			want: []refusal{{KindIntegration, VendorDatadog, "spec.datadog.routeTo.seatRef.name", v1alpha1.ReasonHumanSeat}},
+		},
+		{
+			name: "gitlab gives an access level to a seat that does not exist",
+			mutate: func(in *Input) {
+				p := &integration(in, sampleGitLab).Spec.GitLab.EngineProvisioning
+				p.AccessLevels = []v1alpha1.GitLabSeatAccess{{Name: "mallory", AccessLevel: v1alpha1.GitLabMaintainer}}
+			},
+			want: []refusal{{KindIntegration, sampleGitLab, "spec.gitlab.engineProvisioning.accessLevels[0].name", v1alpha1.ReasonRefNotFound}},
+		},
+		{
+			name: "two integrations connect jira",
+			mutate: func(in *Input) {
+				jira := v1alpha1.JiraIntegration{
+					URL:            "https://jira.example.com",
+					TokenSecretRef: v1alpha1.SecretKeyReference{Name: "jira", Key: "apiToken"},
+				}
+				for _, name := range []string{"jira-a", "jira-b"} {
+					i := *integration(in, "slack")
+					i.Name = name
+					i.Spec = v1alpha1.IntegrationSpec{CompanyRef: i.Spec.CompanyRef, Jira: jira}
+					in.Integrations = append(in.Integrations, i)
+				}
+			},
+			want: []refusal{{KindIntegration, "jira-b", "spec.jira", v1alpha1.ReasonConflict}},
 		},
 		{
 			name: "two integrations connect one vendor",
@@ -410,8 +485,9 @@ func segmentsOf(t *testing.T, path string) []engine.Segment {
 // TestEveryReferenceInADocumentIsTheOperators holds every rendered document to
 // the invariant checkReferences enforces: a ${NAME} appears only as the whole
 // of a value, and names a store entry of a Secret key the document declares
-// in Refs, which the secret sync fills. Anything else would be resolved by
-// the engine from its own store or environment.
+// in Refs, which the secret sync fills, or of a provisioned credential it
+// declares in Provisioned, which the engine's provisioning fills. Anything
+// else would be resolved by the engine from its own store or environment.
 func TestEveryReferenceInADocumentIsTheOperators(t *testing.T) {
 	for _, c := range companyCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -423,6 +499,9 @@ func TestEveryReferenceInADocumentIsTheOperators(t *testing.T) {
 			declared := map[string]bool{}
 			for _, k := range doc.Refs {
 				declared["${"+in.StoreName(k)+"}"] = true
+			}
+			for _, name := range doc.Provisioned {
+				declared["${"+name+"}"] = true
 			}
 			var tree any
 			if err := yaml.Unmarshal(doc.YAML, &tree); err != nil {
@@ -450,5 +529,51 @@ func TestEveryReferenceInADocumentIsTheOperators(t *testing.T) {
 			}
 			walk("", tree)
 		})
+	}
+}
+
+// providerCLI names the LLMProvider cliProvider makes.
+const providerCLI = "claude-cli"
+
+// cliProvider is a CLIAgent provider of Claude Code on a headless token, in
+// the mode given.
+func cliProvider(mode v1alpha1.CLIAgentMode) v1alpha1.LLMProvider {
+	return v1alpha1.LLMProvider{
+		Namespace: testNamespace,
+		Name:      providerCLI,
+		Spec: v1alpha1.LLMProviderSpec{
+			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
+			LLMProviderSettings: v1alpha1.LLMProviderSettings{Type: v1alpha1.LLMProviderCLIAgent, Model: "sonnet"},
+			CLI: v1alpha1.CLIAgentSettings{
+				Agent: v1alpha1.CLIAgentClaudeCode,
+				Mode:  mode,
+				Auth: v1alpha1.CLIAgentAuth{
+					TokenSecretRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "oauthToken"},
+				},
+			},
+		},
+	}
+}
+
+// datadogIntegration is Datadog for the sample company, routing alerts that
+// name no seat to the Seat named route.
+func datadogIntegration(route string) v1alpha1.Integration {
+	key := func(k string) v1alpha1.SecretKeyReference {
+		return v1alpha1.SecretKeyReference{Name: "datadog", Key: k}
+	}
+	return v1alpha1.Integration{
+		Namespace: testNamespace,
+		Name:      VendorDatadog,
+		Spec: v1alpha1.IntegrationSpec{
+			CompanyRef:   v1alpha1.CompanyReference{Name: sampleCompany},
+			Provisioning: v1alpha1.IntegrationProvisioningEngine,
+			Datadog: v1alpha1.DatadogIntegration{
+				WebhookTokenSecretRef: key("webhookToken"),
+				RouteTo:               v1alpha1.DatadogRouteTo{SeatRef: v1alpha1.LocalObjectReference{Name: route}},
+				Site:                  v1alpha1.DatadogSiteUS1,
+				APIKeySecretRef:       key("apiKey"),
+				AppKeySecretRef:       key("appKey"),
+			},
+		},
 	}
 }

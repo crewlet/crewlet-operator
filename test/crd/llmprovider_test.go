@@ -99,17 +99,169 @@ func TestLLMProviderValidation(t *testing.T) {
 			mutate: func(p *v1.LLMProvider) { p.Spec.BaseURL = "gateway.example" },
 			want:   msgBaseURLShape,
 		},
-		{
-			name:   "the cli-agent type is not offered",
-			mutate: func(p *v1.LLMProvider) { p.Spec.Type = "CLIAgent" },
-			want:   `Unsupported value: "CLIAgent"`,
-		},
 		// Crewlet runs every chainless seat on the provider keyed default,
 		// ahead of the Company's order.
 		{
 			name:   "a provider named default is refused",
 			mutate: func(p *v1.LLMProvider) { p.Name = "default" },
 			want:   "an LLMProvider may not be named default",
+		},
+	})
+}
+
+// The messages of the rules over a CLIAgent provider.
+const (
+	msgCLIBlock       = "cli is required with type CLIAgent and not allowed otherwise"
+	msgCLIHTTP        = "baseURL, timeoutSeconds and cooldowns configure an HTTP client"
+	msgCLIKey         = "a CLIAgent provider takes apiKeySecretRefs with cli.auth.mode APIKey, and only then"
+	msgCLIOneKey      = "a CLIAgent provider gives its CLI one key"
+	msgCLIRunIn       = "runIn applies to mode Agent only"
+	msgCLIAgentRunner = "mode Agent runs ClaudeCode or OpenCode"
+	msgCLIRemoteLogin = "a Subscription login reaches an Agent-mode run in a remote sandbox only as a headless token"
+	msgCLINoLogin     = "a Subscription login needs tokenSecretRef or credentialBundleSecretRef"
+	msgCLILoginFields = "tokenSecretRef and credentialBundleSecretRef sign in to a subscription"
+)
+
+func TestCLIAgentProviderValidation(t *testing.T) {
+	// cliProvider is Claude Code as a text model on a headless token.
+	cliProvider := func(namespace, name string) *v1.LLMProvider {
+		p := llmProvider(namespace, name)
+		p.Spec.Type = v1.LLMProviderCLIAgent
+		p.Spec.Model = "sonnet"
+		p.Spec.APIKeySecretRefs = nil
+		p.Spec.CLI = v1.CLIAgentSettings{
+			Agent: v1.CLIAgentClaudeCode,
+			Auth:  v1.CLIAgentAuth{TokenSecretRef: secretKey("claude", "oauthToken")},
+		}
+		return p
+	}
+	agentMode := func(p *v1.LLMProvider) { p.Spec.CLI.Mode = v1.CLIAgentModeAgent }
+
+	runCreateCases(t, cliProvider, []createCase[*v1.LLMProvider]{
+		{name: "Claude Code on a headless token is accepted"},
+		{
+			name: "every setting is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				c := &p.Spec.CLI
+				c.Mode = v1.CLIAgentModeAgent
+				c.RunIn = v1.CLIAgentRunInE2B
+				c.Auth.Mode = v1.CLIAgentAuthSubscription
+				c.Env = []v1.SecretEnvVar{{Name: "HTTPS_PROXY", ValueFrom: fromSecret("claude", "proxy")}}
+				c.TimeoutSeconds = 900
+				c.MaxConcurrent = 2
+				c.LoginName = "claude"
+			},
+		},
+		{
+			name: "Codex on an exported login is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.CLI.Agent = v1.CLIAgentCodex
+				p.Spec.CLI.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("codex", "bundle")}
+			},
+		},
+		{
+			name: "OpenCode in mode Agent on a metered key is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				agentMode(p)
+				p.Spec.CLI.Agent = v1.CLIAgentOpenCode
+				p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}
+				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
+			},
+		},
+		{
+			name: "a key inherited from the engine's environment is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.CLI.Agent = v1.CLIAgentCopilot
+				p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthInheritEnv}
+			},
+		},
+		{
+			name:   "type CLIAgent without cli is refused",
+			mutate: func(p *v1.LLMProvider) { p.Spec.CLI = v1.CLIAgentSettings{} },
+			want:   msgCLIBlock,
+		},
+		{
+			name: "cli on an Anthropic provider is refused",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.Type = v1.LLMProviderAnthropic
+				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
+			},
+			want: msgCLIBlock,
+		},
+		{
+			name:   "an HTTP timeout is refused",
+			mutate: func(p *v1.LLMProvider) { p.Spec.TimeoutSeconds = 600 },
+			want:   msgCLIHTTP,
+		},
+		{
+			name:   "a baseURL is refused",
+			mutate: func(p *v1.LLMProvider) { p.Spec.BaseURL = "https://gateway.example" },
+			want:   msgCLIHTTP,
+		},
+		{
+			name: "a key outside auth mode APIKey is refused",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
+			},
+			want: msgCLIKey,
+		},
+		{
+			name:   "auth mode APIKey without a key is refused",
+			mutate: func(p *v1.LLMProvider) { p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey} },
+			want:   msgCLIKey,
+		},
+		{
+			name: "two keys are refused",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}
+				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{
+					secretKey(providerName, "first"), secretKey(providerName, "second"),
+				}
+			},
+			want: msgCLIOneKey,
+		},
+		{
+			name:   "runIn in mode Text is refused",
+			mutate: func(p *v1.LLMProvider) { p.Spec.CLI.RunIn = v1.CLIAgentRunInE2B },
+			want:   msgCLIRunIn,
+		},
+		{
+			name: "a CLI with no sandbox runner in mode Agent is refused",
+			mutate: func(p *v1.LLMProvider) {
+				agentMode(p)
+				p.Spec.CLI.Agent = v1.CLIAgentCodex
+			},
+			want: msgCLIAgentRunner,
+		},
+		{
+			name: "an exported login in mode Agent is refused",
+			mutate: func(p *v1.LLMProvider) {
+				agentMode(p)
+				p.Spec.CLI.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("claude", "bundle")}
+			},
+			want: msgCLIRemoteLogin,
+		},
+		{
+			name:   "a subscription with no login is refused",
+			mutate: func(p *v1.LLMProvider) { p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription} },
+			want:   msgCLINoLogin,
+		},
+		{
+			name: "a subscription token beside auth mode InheritEnv is refused",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.CLI.Auth.Mode = v1.CLIAgentAuthInheritEnv
+			},
+			want: msgCLILoginFields,
+		},
+		{
+			name:   "Crewlet's custom profile is not offered",
+			mutate: func(p *v1.LLMProvider) { p.Spec.CLI.Agent = "Custom" },
+			want:   `Unsupported value: "Custom"`,
+		},
+		{
+			name:   "a local run is not offered",
+			mutate: func(p *v1.LLMProvider) { agentMode(p); p.Spec.CLI.RunIn = "Direct" },
+			want:   `Unsupported value: "Direct"`,
 		},
 	})
 }

@@ -19,9 +19,9 @@ handle, and model providers and tool servers by name.
 |---|---|
 | `Company` | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `token_budget`, `providers.embeddings`, `providers.sandbox`, `providers.llm_order`, `integrations.check_interval_seconds`, and one top-level key per `spec.engineConfig` entry |
 | `EngineClass` | `providers.llm.<name>` for each of its `platformLLMProviders`, when the Company sets `spec.llm.usePlatformProviders` |
-| `LLMProvider` | `providers.llm.<metadata.name>` |
+| `LLMProvider` | `providers.llm.<metadata.name>`; a `CLIAgent` provider's `cli.state_dir` is `/var/lib/crewlet/llm-cli/<loginName>`, on the data volume |
 | `MCPServer` | one entry of `mcp_servers`, named by its `metadata.name` |
-| `Integration` | `integrations.slack` or `integrations.github` |
+| `Integration` | one of `integrations.slack`, `github`, `gitlab`, `mattermost`, `jira`, `confluence`, `datadog` and `atlassian`; a Seat it names (Datadog's `routeTo`, GitLab's `accessLevels`) by the seat's handle |
 | `Unit` | one entry of `units`, or of its parent's `children` |
 | `Seat` | one entry of its Unit's `roles`, or of the top-level `roles` when it has no Unit |
 | `Schedule` | one entry of the `schedules` of the Seat's role or the Unit it targets, named by its `metadata.name` |
@@ -169,11 +169,15 @@ the reference:
 | `Seat` | `unitRef`, a `manages` entry, a `spec.llm` provider, a `spec.mcp` entry or a `sandbox.mcpServerRefs` entry names an object that does not exist | `RefNotFound` |
 | `Seat` | a `spec.llm` entry names a platform provider the class does not offer, or the Company does not set `spec.llm.usePlatformProviders` | `RefNotFound` |
 | `Seat` | a `manages` entry names a Unit whose name is also a Seat's | `Conflict` |
+| `Seat` | it names a provisioned credential and no Integration of the company has `provisioning: Engine` | `NoProvisioner` |
 | `Unit` | `parentRef`, `leadRef` or a `spec.mcp` entry names an object that does not exist | `RefNotFound` |
 | `Unit` | its chain of parents leads back to it | `Cycle` |
 | `Company` | `spec.llm.order` names a provider that does not exist or is not offered to it | `RefNotFound` |
 | `LLMProvider` | its name is also the name of a platform provider the company uses | `Conflict` |
+| `LLMProvider` | it runs a CLI in `mode: Agent` and the company has no public address for the sandbox to call its tools back through | `NotExposed` |
 | `Integration` | another Integration of the company, earlier by name, connects the same vendor | `Conflict` |
+| `Integration` | Datadog's `routeTo.seatRef` or a GitLab `accessLevels` entry names a Seat that does not exist | `RefNotFound` |
+| `Integration` | Datadog's `routeTo.seatRef` or a GitLab `accessLevels` entry names a Human seat | `HumanSeat` |
 | any, the `Company` included | a string it renders into the document, `engineConfig` included, holds a `${NAME}` reference | `ReferenceNotAllowed` |
 
 The last row is the operator's, not Crewlet's. Crewlet resolves a `${NAME}`
@@ -183,7 +187,8 @@ sandbox setup command, a skill variable), so a reference an object holds
 itself would name values that are not its own: the class's platform model
 keys in the store, or the engine's environment. The only references in a
 rendered document are the ones the operator writes for a Secret key the
-object references. The API server already refuses a `${NAME}` in the typed
+object references, and for a seat's credentials the engine provisions
+([Credentials](credentials.md#credentials-the-engine-provisions)). The API server already refuses a `${NAME}` in the typed
 fields Crewlet is known to expand; the render check covers every other
 string. A sandbox setup command keeps shell syntax Crewlet leaves alone,
 such as `$HOME` and `${1:-x}`.

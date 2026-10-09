@@ -139,6 +139,69 @@ spec:
     tokenSecretRef: {name: acme-github, key: orgToken}
 ```
 
+### An agent's Mattermost bot
+
+Each agent seat speaks on Mattermost as its own bot, whose one token covers
+everything it does there:
+
+```yaml
+spec:                       # Seat lead
+  integrations:
+    mattermost:
+      botToken:
+        secretKeyRef: {name: lead-mattermost, key: botToken}
+```
+
+### The other integrations
+
+GitLab's signing token and read token, Jira's and Confluence's administrator
+tokens and webhook secrets, Datadog's webhook token and organization keys,
+and the administrator credentials the engine creates the seats' accounts
+with are each a `SecretKeyReference` of the vendor's `Integration`;
+[Connecting integrations](integrations.md) shows every one.
+
+### Credentials the engine provisions
+
+Under an `Integration` with `provisioning: Engine`, the engine creates each
+agent seat's account at the vendor and mints its credential itself, into its
+own secret store. No Secret holds that value, so the seat names it as
+**provisioned** where it would name a Secret key:
+
+```yaml
+spec:                       # Seat lead
+  mcp:
+    - name: gitlab
+      env:
+        - name: GITLAB_TOKEN
+          valueFrom:
+            provisioned: {name: gitlab-token}
+```
+
+The engine rotates and heals it; the operator never writes, rewrites or
+deletes it. [Credentials](../concepts/credentials.md#credentials-the-engine-provisions)
+says how it is named.
+
+### A coding CLI's login
+
+A `CLIAgent` provider signs its CLI in with a headless subscription token or
+with a credential bundle `crewlet llm export` wrote, each a Secret key:
+
+```yaml
+spec:                       # LLMProvider claude-code
+  type: CLIAgent
+  model: sonnet
+  cli:
+    agent: ClaudeCode
+    auth:
+      tokenSecretRef: {name: claude-subscription, key: oauthToken}
+    env:
+      - name: HTTPS_PROXY       # every variable comes from a Secret
+        valueFrom:
+          secretKeyRef: {name: claude-subscription, key: proxy}
+```
+
+[Running seats on a coding CLI](cli-agents.md) says which to use.
+
 ### A tool server's token
 
 An `MCPServer` shared by every seat takes its credentials as environment
@@ -273,5 +336,6 @@ keyring that opens everything it did); removing one is not.
 | `RuntimeReady=False SecretNotFound` | A Secret the EngineClass references for the pods is missing in the platform's namespace, or the Company's `spec.objects.credentialsSecretRef` is. |
 | `RuntimeReady=False APITokensInvalid` | A supplied `<company>-api-tokens` lacks a token or holds one the engine should not be guarded by; the message says which. |
 | `Integration` `Healthy=False CheckFailed` | The engine reached the vendor and the credential did not work; the message carries the vendor's answer. |
+| `Seat` `ResolvedRefs=False NoProvisioner` | The Seat names a provisioned credential, and no Integration of its company has `provisioning: Engine` to create it. |
 
 [Troubleshooting](troubleshooting.md) lists every condition.

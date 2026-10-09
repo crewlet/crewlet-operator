@@ -30,10 +30,15 @@ import (
 
 // The paths a route sends to the engine. Vendors need /webhooks/ only; the
 // engine's admin API (/config, /secrets, ...) shares the port and is never
-// routed publicly. A path prefix matches whole path segments in both the
+// routed publicly. The tool bridge, /mcp/, is routed beside the webhooks
+// while the company has an Agent-mode CLI provider: its runs happen in a
+// remote sandbox, which calls the seat's tools back there, admitted by a
+// token signed for the one run in the path itself, as a webhook is admitted
+// by its signature. A path prefix matches whole path segments in both the
 // Gateway API and Ingress, so /webhooks/ does not match /webhooksx.
 const (
 	webhooksPath = "/webhooks/"
+	bridgePath   = "/mcp/"
 	apiPath      = "/"
 )
 
@@ -69,7 +74,7 @@ type route struct {
 	what      string
 	name      string
 	component string
-	path      string
+	paths     []string
 	gateway   *crewletaiv1alpha1.GatewayExposure
 	ingress   *crewletaiv1alpha1.IngressExposure
 	// hostname is the expanded host name template.
@@ -87,12 +92,16 @@ type routeState struct {
 
 // reconcileExposure writes the routes the class asks for, deletes those it no
 // longer asks for, sets the Company's public base URL and exposed API
-// endpoint, and returns the Exposed condition.
+// endpoint, and returns the Exposed condition. With bridge the webhooks'
+// route sends the tool bridge's path to the engine too.
 func (r *CompanyReconciler) reconcileExposure(
-	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
+	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, bridge bool,
 ) (metav1.Condition, error) {
 	exposure := class.Spec.Exposure
-	webhooks := route{what: "webhooks", name: webhooksRouteName(c), component: componentWebhooks, path: webhooksPath}
+	webhooks := route{what: "webhooks", name: webhooksRouteName(c), component: componentWebhooks, paths: []string{webhooksPath}}
+	if bridge {
+		webhooks.paths = append(webhooks.paths, bridgePath)
+	}
 	if exposure.Webhooks.Mode == crewletaiv1alpha1.WebhookExposureGateway {
 		webhooks.gateway = &exposure.Webhooks.Gateway
 	}
@@ -102,7 +111,7 @@ func (r *CompanyReconciler) reconcileExposure(
 	if exposure.Webhooks.Hostname != "" {
 		webhooks.hostname = render.ExpandTemplate(exposure.Webhooks.Hostname, c)
 	}
-	api := route{what: "API", name: apiRouteName(c), component: componentAPI, path: apiPath}
+	api := route{what: "API", name: apiRouteName(c), component: componentAPI, paths: []string{apiPath}}
 	if exposure.API.Mode == crewletaiv1alpha1.APIExposureGateway {
 		api.gateway = &exposure.API.Gateway
 	}
@@ -223,14 +232,17 @@ func (r *CompanyReconciler) reconcileRoute(ctx context.Context, c *crewletaiv1al
 // applyHTTPRoute writes a route as a Gateway API HTTPRoute and reads whether
 // every Gateway it names accepted it.
 func (r *CompanyReconciler) applyHTTPRoute(ctx context.Context, c *crewletaiv1alpha1.Company, rt *route) (*routeState, error) {
+	rule := gatewayv1ac.HTTPRouteRule().
+		WithBackendRefs(gatewayv1ac.HTTPBackendRef().
+			WithName(gatewayv1.ObjectName(engineServiceName(c))).
+			WithPort(render.APIPort))
+	for _, path := range rt.paths {
+		rule.WithMatches(gatewayv1ac.HTTPRouteMatch().
+			WithPath(gatewayv1ac.HTTPPathMatch().WithType(gatewayv1.PathMatchPathPrefix).WithValue(path)))
+	}
 	spec := gatewayv1ac.HTTPRouteSpec().
 		WithHostnames(gatewayv1.Hostname(rt.hostname)).
-		WithRules(gatewayv1ac.HTTPRouteRule().
-			WithMatches(gatewayv1ac.HTTPRouteMatch().
-				WithPath(gatewayv1ac.HTTPPathMatch().WithType(gatewayv1.PathMatchPathPrefix).WithValue(rt.path))).
-			WithBackendRefs(gatewayv1ac.HTTPBackendRef().
-				WithName(gatewayv1.ObjectName(engineServiceName(c))).
-				WithPort(render.APIPort)))
+		WithRules(rule)
 	for _, p := range rt.gateway.ParentRefs {
 		ref := gatewayv1ac.ParentReference().WithName(gatewayv1.ObjectName(p.Name))
 		if p.Namespace != "" {
@@ -329,17 +341,20 @@ func (r *CompanyReconciler) gatewaysServeHTTPS(
 // its own; it counts as accepted once its controller published an address
 // for it.
 func (r *CompanyReconciler) applyIngress(ctx context.Context, c *crewletaiv1alpha1.Company, rt *route) (*routeState, error) {
+	paths := networkingv1ac.HTTPIngressRuleValue()
+	for _, path := range rt.paths {
+		paths.WithPaths(networkingv1ac.HTTPIngressPath().
+			WithPath(path).
+			WithPathType(networkingv1.PathTypePrefix).
+			WithBackend(networkingv1ac.IngressBackend().
+				WithService(networkingv1ac.IngressServiceBackend().
+					WithName(engineServiceName(c)).
+					WithPort(networkingv1ac.ServiceBackendPort().WithNumber(render.APIPort)))))
+	}
 	spec := networkingv1ac.IngressSpec().
 		WithRules(networkingv1ac.IngressRule().
 			WithHost(rt.hostname).
-			WithHTTP(networkingv1ac.HTTPIngressRuleValue().
-				WithPaths(networkingv1ac.HTTPIngressPath().
-					WithPath(rt.path).
-					WithPathType(networkingv1.PathTypePrefix).
-					WithBackend(networkingv1ac.IngressBackend().
-						WithService(networkingv1ac.IngressServiceBackend().
-							WithName(engineServiceName(c)).
-							WithPort(networkingv1ac.ServiceBackendPort().WithNumber(render.APIPort)))))))
+			WithHTTP(paths))
 	if rt.ingress.ClassName != "" {
 		spec.WithIngressClassName(rt.ingress.ClassName)
 	}

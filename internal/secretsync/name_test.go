@@ -163,3 +163,66 @@ func TestOwnsOnlyTheOperatorsNames(t *testing.T) {
 		t.Error("Owns refuses a name StoreName returns")
 	}
 }
+
+// seatAna is the handle of the seat the provisioned names are made for.
+const seatAna = "ana"
+
+// TestProvisionedNameIsTheEnginesAlone: a provisioned credential's entry is
+// written by the engine's provisioning and by nothing of the operator's, so
+// Owns must refuse every such name, or the next Sync would delete the token
+// the engine just minted. Each name is in the store's grammar, reads like
+// the seat and the value, and is as long as MaxProvisionedNameLength at most.
+func TestProvisionedNameIsTheEnginesAlone(t *testing.T) {
+	long := strings.Repeat("a", 63)
+	for _, c := range []struct{ handle, name, wantPrefix string }{
+		{seatAna, "gitlab-token", "PROVISIONED_ANA_GITLAB_TOKEN_"},
+		{"sre-lead", "atlassian-email", "PROVISIONED_SRE_LEAD_ATLASSIAN_EMAIL_"},
+		// A name whose readable part ends like a hash still is not one
+		// the operator owns: the prefix differs.
+		{"k8s", "abcdefghijkl", "PROVISIONED_K8S_ABCDEFGHIJKL_"},
+		{long, strings.Repeat("b", 32), ""},
+	} {
+		got := ProvisionedName(c.handle, c.name)
+		if !storeGrammar.MatchString(got) || strings.Contains(got, "__") {
+			t.Errorf("ProvisionedName(%q, %q) = %q is not a store name of single-underscore words", c.handle, c.name, got)
+		}
+		if c.wantPrefix != "" && (!strings.HasPrefix(got, c.wantPrefix) || len(got) != len(c.wantPrefix)+hashLen) {
+			t.Errorf("ProvisionedName(%q, %q) = %q, want %q and a %d-character hash", c.handle, c.name, got, c.wantPrefix, hashLen)
+		}
+		if len(got) > MaxProvisionedNameLength {
+			t.Errorf("ProvisionedName(%q, %q) is %d characters, more than %d", c.handle, c.name, len(got), MaxProvisionedNameLength)
+		}
+		if Owns(got) {
+			t.Errorf("Owns(%q) = true: the sync would delete a credential the engine minted", got)
+		}
+	}
+}
+
+// TestProvisionedNamesDoNotCollide: values that read the same once
+// sanitised are different entries, so one seat's minted token is never
+// another seat's, or another value of the same seat.
+func TestProvisionedNamesDoNotCollide(t *testing.T) {
+	const handle, name = "a-b", "token"
+	pairs := [][2][2]string{
+		{{handle, "c"}, {"a", "b-c"}},
+		{{handle, name}, {"a--b", name}},
+		{{"ana", name}, {"ana", name + "-"}},
+	}
+	for _, p := range pairs {
+		x, y := ProvisionedName(p[0][0], p[0][1]), ProvisionedName(p[1][0], p[1][1])
+		if x == y {
+			t.Errorf("ProvisionedName%v and ProvisionedName%v are both %q", p[0], p[1], x)
+		}
+	}
+}
+
+// TestProvisionedNameIsDeterministic pins one name: changing it would point
+// every rendered document at an entry the engine never minted into, and leave
+// every seat's credential behind under the old name.
+func TestProvisionedNameIsDeterministic(t *testing.T) {
+	// A golden value, as StoreName's is.
+	const want = "PROVISIONED_ANA_GITLAB_TOKEN_ZXUWOCASQLKO"
+	if got := ProvisionedName(seatAna, "gitlab-token"); got != want {
+		t.Fatalf("ProvisionedName(%s, gitlab-token) = %q, want %q", seatAna, got, want)
+	}
+}

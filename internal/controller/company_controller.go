@@ -77,7 +77,7 @@ type CompanyReconciler struct {
 // +kubebuilder:rbac:groups=crewlet.ai,resources=companies/status,verbs=get;patch
 // +kubebuilder:rbac:groups=crewlet.ai,resources=companies/finalizers,verbs=update
 // +kubebuilder:rbac:groups=crewlet.ai,resources=engineclasses,verbs=get;list;watch
-// +kubebuilder:rbac:groups=crewlet.ai,resources=seats;mcpservers,verbs=get;list;watch
+// +kubebuilder:rbac:groups=crewlet.ai,resources=seats;mcpservers;llmproviders,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets;services;serviceaccounts,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=list;delete
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
@@ -368,7 +368,11 @@ func (r *CompanyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// immutable, so an update (the config reconciler writing a part's
 		// status, a spec edit) cannot change what a Company is allowed.
 		Watches(&crewletaiv1alpha1.Seat{}, handler.EnqueueRequestsFromMapFunc(companyOfChild), builder.WithPredicates(createdOrDeleted())).
-		Watches(&crewletaiv1alpha1.MCPServer{}, handler.EnqueueRequestsFromMapFunc(companyOfChild), builder.WithPredicates(createdOrDeleted()))
+		Watches(&crewletaiv1alpha1.MCPServer{}, handler.EnqueueRequestsFromMapFunc(companyOfChild), builder.WithPredicates(createdOrDeleted())).
+		// An LLMProvider's mode decides whether the engine serves its tool
+		// bridge (toolBridge), which only a spec change can move.
+		Watches(&crewletaiv1alpha1.LLMProvider{}, handler.EnqueueRequestsFromMapFunc(companyOfChild),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}))
 	// Without the Gateway API's CRDs a watch on HTTPRoutes would fail the
 	// manager's start; GatewayAPI is false there, and nothing reads them.
 	if r.GatewayAPI {

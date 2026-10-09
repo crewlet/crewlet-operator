@@ -63,6 +63,24 @@ type llmProviderDoc struct {
 	ReasoningBudgetTokens int32         `json:"reasoning_budget_tokens,omitempty"`
 	TimeoutSeconds        int32         `json:"timeout_seconds,omitempty"`
 	Cooldowns             *cooldownsDoc `json:"cooldowns,omitempty"`
+	CLI                   *cliDoc       `json:"cli,omitempty"`
+}
+
+type cliDoc struct {
+	Agent          string            `json:"agent"`
+	Mode           string            `json:"mode,omitempty"`
+	RunIn          string            `json:"run_in,omitempty"`
+	StateDir       string            `json:"state_dir"`
+	TimeoutSeconds int32             `json:"timeout_seconds,omitempty"`
+	MaxConcurrent  int32             `json:"max_concurrent,omitempty"`
+	Env            map[string]string `json:"env,omitempty"`
+	Auth           cliAuthDoc        `json:"auth,omitzero"`
+}
+
+type cliAuthDoc struct {
+	Mode             string `json:"mode,omitempty"`
+	Token            string `json:"token,omitempty"`
+	CredentialBundle string `json:"credential_bundle,omitempty"`
 }
 
 type cooldownsDoc struct {
@@ -109,10 +127,94 @@ type setupStepDoc struct {
 type integrationsDoc struct {
 	// Slack is a pointer because an empty block is meaningful to Crewlet:
 	// `slack: {}` turns Slack on with nothing overridden.
-	Slack                *slackDoc  `json:"slack,omitempty"`
-	GitHub               *githubDoc `json:"github,omitempty"`
-	PublicBaseURL        string     `json:"public_base_url,omitempty"`
-	CheckIntervalSeconds int32      `json:"check_interval_seconds,omitempty"`
+	Slack                *slackDoc      `json:"slack,omitempty"`
+	GitHub               *githubDoc     `json:"github,omitempty"`
+	GitLab               *gitlabDoc     `json:"gitlab,omitempty"`
+	Mattermost           *mattermostDoc `json:"mattermost,omitempty"`
+	Jira                 *jiraDoc       `json:"jira,omitempty"`
+	Confluence           *confluenceDoc `json:"confluence,omitempty"`
+	Datadog              *datadogDoc    `json:"datadog,omitempty"`
+	Atlassian            *atlassianDoc  `json:"atlassian,omitempty"`
+	PublicBaseURL        string         `json:"public_base_url,omitempty"`
+	CheckIntervalSeconds int32          `json:"check_interval_seconds,omitempty"`
+}
+
+type gitlabDoc struct {
+	Enabled       bool                   `json:"enabled"`
+	URL           string                 `json:"url"`
+	SigningSecret string                 `json:"signing_secret"`
+	Token         string                 `json:"token,omitempty"`
+	WebhookName   string                 `json:"webhook_name,omitempty"`
+	Provisioning  *gitlabProvisioningDoc `json:"provisioning,omitempty"`
+}
+
+type gitlabProvisioningDoc struct {
+	Group          string            `json:"group"`
+	AdminToken     string            `json:"admin_token"`
+	Mode           string            `json:"mode,omitempty"`
+	AccessLevel    string            `json:"access_level,omitempty"`
+	AccessLevels   map[string]string `json:"access_levels,omitempty"`
+	UsernamePrefix string            `json:"username_prefix,omitempty"`
+	Projects       []string          `json:"projects,omitempty"`
+	GroupWebhook   string            `json:"group_webhook,omitempty"`
+	TokenScopes    []string          `json:"token_scopes,omitempty"`
+}
+
+type mattermostDoc struct {
+	Enabled      bool                       `json:"enabled"`
+	URL          string                     `json:"url"`
+	Team         string                     `json:"team"`
+	TypingStatus string                     `json:"typing_status,omitempty"`
+	Provisioning *mattermostProvisioningDoc `json:"provisioning,omitempty"`
+}
+
+type mattermostProvisioningDoc struct {
+	AdminToken        string   `json:"admin_token"`
+	UsernamePrefix    string   `json:"username_prefix,omitempty"`
+	Channels          []string `json:"channels,omitempty"`
+	DisplayNameSuffix string   `json:"display_name_suffix,omitempty"`
+}
+
+type jiraDoc struct {
+	URL           string `json:"url,omitempty"`
+	CloudID       string `json:"cloud_id,omitempty"`
+	SiteURL       string `json:"site_url,omitempty"`
+	Email         string `json:"email,omitempty"`
+	Token         string `json:"token"`
+	WebhookSecret string `json:"webhook_secret,omitempty"`
+	WebhookName   string `json:"webhook_name,omitempty"`
+}
+
+type confluenceDoc struct {
+	URL           string `json:"url,omitempty"`
+	CloudID       string `json:"cloud_id,omitempty"`
+	SiteURL       string `json:"site_url,omitempty"`
+	Email         string `json:"email,omitempty"`
+	Token         string `json:"token"`
+	WebhookSecret string `json:"webhook_secret,omitempty"`
+	WebhookToken  string `json:"webhook_token,omitempty"`
+}
+
+type datadogDoc struct {
+	Enabled      bool                   `json:"enabled"`
+	WebhookToken string                 `json:"webhook_token"`
+	RouteTo      string                 `json:"route_to"`
+	WebhookName  string                 `json:"webhook_name,omitempty"`
+	HandleTag    string                 `json:"handle_tag,omitempty"`
+	Provisioning datadogProvisioningDoc `json:"provisioning"`
+}
+
+type datadogProvisioningDoc struct {
+	Site        string `json:"site"`
+	APIKey      string `json:"api_key"`
+	AppKey      string `json:"app_key"`
+	Role        string `json:"role,omitempty"`
+	EmailDomain string `json:"email_domain,omitempty"`
+}
+
+type atlassianDoc struct {
+	OrgID  string `json:"org_id"`
+	APIKey string `json:"api_key"`
 }
 
 type slackDoc struct {
@@ -255,8 +357,15 @@ type placementDoc struct {
 }
 
 type roleIntegrationsDoc struct {
-	Slack  *roleSlackDoc  `json:"slack,omitempty"`
-	GitHub *roleGitHubDoc `json:"github,omitempty"`
+	Slack      *roleSlackDoc      `json:"slack,omitempty"`
+	GitHub     *roleGitHubDoc     `json:"github,omitempty"`
+	Mattermost *roleMattermostDoc `json:"mattermost,omitempty"`
+}
+
+type roleMattermostDoc struct {
+	BotToken string `json:"bot_token"`
+	Username string `json:"username,omitempty"`
+	Channel  string `json:"channel,omitempty"`
 }
 
 type roleSlackDoc struct {

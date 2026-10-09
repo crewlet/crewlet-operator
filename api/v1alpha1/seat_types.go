@@ -141,12 +141,15 @@ type SeatSandbox struct {
 	MCPServerRefs []LocalObjectReference `json:"mcpServerRefs,omitempty"`
 
 	// env is the environment of the seat's sandbox runs, for the external
-	// tokens its code work needs. Crewlet's `env`, a credential position.
+	// tokens its code work needs: from Secrets, or provisioned by the
+	// engine, such as the GitLab token a provisioning Integration mints for
+	// the seat, named as its tool server's is so both are one token.
+	// Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=32
-	Env []SecretEnvVar `json:"env,omitempty"`
+	Env []SeatEnvVar `json:"env,omitempty"`
 
 	// setup is the seat's own provisioning, applied after the Company's.
 	// Crewlet's `setup`.
@@ -250,9 +253,42 @@ type GitHubSeatIntegration struct {
 	App GitHubApp `json:"app,omitzero"`
 }
 
+// MattermostSeatIntegration is a seat's own Mattermost bot. It maps onto
+// Crewlet's role integrations.mattermost and needs the company's Mattermost
+// Integration. One credential covers everything the bot does: the websocket
+// the engine listens on, its REST calls, and the Mattermost tool server, whose
+// credentials (in spec.mcp) name the same token.
+type MattermostSeatIntegration struct {
+	// botToken is the bot account's personal access token: from a Secret,
+	// or provisioned by the engine under a Mattermost Integration with
+	// provisioning Engine, which creates the bot and mints the token.
+	// Crewlet's `bot_token`, a credential position.
+	// +required
+	BotToken SeatCredentialSource `json:"botToken,omitzero"`
+
+	// username is the bot's username, for a bot that exists under a name
+	// other than the seat's handle (with the Integration's
+	// engineProvisioning.usernamePrefix before it). Crewlet's `username`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[a-z0-9][a-z0-9._-]*$`
+	Username string `json:"username,omitempty"`
+
+	// channel is a channel, by its name (the URL slug), the engine adds the
+	// bot to when it provisions it, on top of the Integration's
+	// engineProvisioning.channels. Crewlet's `channel`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[a-z0-9][a-z0-9_-]*$`
+	Channel string `json:"channel,omitempty"`
+}
+
 // SeatIntegrations is a seat's own identity on the company's integrations:
 // the chat app it speaks as, the code-host app it acts as. Its tool
-// credentials are in spec.mcp instead.
+// credentials, the GitLab, Jira, Confluence and Datadog ones included, are in
+// spec.mcp instead, which is where Crewlet reads them.
 // +kubebuilder:validation:MinProperties=1
 type SeatIntegrations struct {
 	// slack is the seat's own Slack app.
@@ -262,6 +298,10 @@ type SeatIntegrations struct {
 	// github is the seat's identity on GitHub.
 	// +optional
 	GitHub GitHubSeatIntegration `json:"github,omitzero"`
+
+	// mattermost is the seat's own Mattermost bot.
+	// +optional
+	Mattermost MattermostSeatIntegration `json:"mattermost,omitzero"`
 }
 
 // SeatContact is how agents reach a person: their accounts on the company's

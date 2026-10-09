@@ -173,6 +173,10 @@ func TestContractCompany(t *testing.T) {
 			for _, k := range doc.Refs {
 				env[secretsync.StoreName(k)] = dummyCredential(k)
 			}
+			// What the engine's provisioning mints, once it has.
+			for _, name := range doc.Provisioned {
+				env[name] = "minted-" + name
+			}
 			validate(t, env, "-config", config, "-company", write(t, "company.yaml", doc.YAML))
 		})
 	}
@@ -420,6 +424,72 @@ func TestContractScheduleRefusalsReachTheSchedule(t *testing.T) {
 				t.Fatalf("the refusal names no problem: %v", verr)
 			}
 			want := ObjectRef{Kind: KindSchedule, Name: c.schedule}
+			for _, p := range verr.Problems {
+				if got, ok := doc.Attribute(PathOf(p.Segments)); !ok || got != want {
+					t.Errorf("the engine's problem at %q (%s) is attributed to %v, %v; want %v", p.Path, p.Message, got, ok, want)
+				}
+			}
+		})
+	}
+}
+
+// TestContractCLIAgentRefusalsReachTheProvider has the engine's dry run refuse
+// the mistakes of a CLIAgent provider no API rule can see, because each turns
+// on another object, and checks that the document attributes every problem to
+// the LLMProvider, which is where the controller reports it.
+func TestContractCLIAgentRefusalsReachTheProvider(t *testing.T) {
+	const (
+		providerAgent = "claude-agent"
+		providerCodex = "codex"
+	)
+	client := enginetest.Start(t).Client()
+	for _, c := range []struct {
+		name     string
+		mutate   func(*Input)
+		provider string
+	}{
+		{
+			// The run is a sandbox run, and the company has no sandbox to
+			// run it in.
+			name:     "agent mode in a company with no sandbox",
+			mutate:   func(in *Input) { in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{} },
+			provider: providerAgent,
+		},
+		{
+			// One login is one CLI's credential files.
+			name: "two providers of different CLIs share one login",
+			mutate: func(in *Input) {
+				var login string
+				for _, p := range in.LLMProviders {
+					if p.Name == providerAgent {
+						login = p.Spec.CLI.LoginName
+					}
+				}
+				for i := range in.LLMProviders {
+					if in.LLMProviders[i].Name == providerCodex {
+						in.LLMProviders[i].Spec.CLI.LoginName = login
+					}
+				}
+			},
+			provider: providerCodex,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := companyCaseNamed(t, "cli-agent").input(t)
+			c.mutate(in)
+			doc, err := Company(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = client.ApplyConfig(t.Context(), engine.ApplyRequest{Document: doc.YAML, DryRun: true})
+			verr, ok := errors.AsType[*engine.ValidationError](err)
+			if !ok {
+				t.Fatalf("the dry run answered %v, want a refusal", err)
+			}
+			if len(verr.Problems) == 0 {
+				t.Fatalf("the refusal names no problem: %v", verr)
+			}
+			want := ObjectRef{Kind: KindLLMProvider, Name: c.provider}
 			for _, p := range verr.Problems {
 				if got, ok := doc.Attribute(PathOf(p.Segments)); !ok || got != want {
 					t.Errorf("the engine's problem at %q (%s) is attributed to %v, %v; want %v", p.Path, p.Message, got, ok, want)

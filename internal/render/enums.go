@@ -44,12 +44,18 @@ func unitType(t v1alpha1.UnitType) string {
 	return ""
 }
 
+// crewletNone is how Crewlet spells the absence of a backend, and a Datadog
+// route_to that wakes nobody.
+const crewletNone = "none"
+
 func trackerBackend(b v1alpha1.TrackerBackend) string {
 	switch b {
 	case v1alpha1.TrackerNative:
 		return "native"
+	case v1alpha1.TrackerJira:
+		return "jira"
 	case v1alpha1.TrackerNone:
-		return "none"
+		return crewletNone
 	}
 	return ""
 }
@@ -58,8 +64,10 @@ func knowledgeBackend(b v1alpha1.KnowledgeBackend) string {
 	switch b {
 	case v1alpha1.KnowledgeNative:
 		return "native"
+	case v1alpha1.KnowledgeConfluence:
+		return "confluence"
 	case v1alpha1.KnowledgeNone:
-		return "none"
+		return crewletNone
 	}
 	return ""
 }
@@ -72,6 +80,8 @@ func llmProviderType(t v1alpha1.LLMProviderType) string {
 		return "openai"
 	case v1alpha1.LLMProviderOpenAICompatible:
 		return "openai-compatible"
+	case v1alpha1.LLMProviderCLIAgent:
+		return "cli-agent"
 	}
 	return ""
 }
@@ -177,6 +187,108 @@ func scheduleFanOut(f v1alpha1.ScheduleFanOut) string {
 		return "each"
 	case v1alpha1.ScheduleFanOutLead:
 		return "lead"
+	}
+	return ""
+}
+
+func cliAgentName(a v1alpha1.CLIAgentName) string {
+	switch a {
+	case v1alpha1.CLIAgentClaudeCode:
+		return "claude-code"
+	case v1alpha1.CLIAgentCodex:
+		return "codex"
+	case v1alpha1.CLIAgentGeminiCLI:
+		return "gemini-cli"
+	case v1alpha1.CLIAgentQwenCode:
+		return "qwen-code"
+	case v1alpha1.CLIAgentOpenCode:
+		return "opencode"
+	case v1alpha1.CLIAgentCursorAgent:
+		return "cursor-agent"
+	case v1alpha1.CLIAgentCopilot:
+		return "copilot"
+	case v1alpha1.CLIAgentGrok:
+		return "grok"
+	case v1alpha1.CLIAgentMuseCode:
+		return "muse-code"
+	case v1alpha1.CLIAgentKimiCode:
+		return "kimi-code"
+	case v1alpha1.CLIAgentHermes:
+		return "hermes"
+	case v1alpha1.CLIAgentPi:
+		return "pi"
+	}
+	return ""
+}
+
+func cliAgentMode(m v1alpha1.CLIAgentMode) string {
+	switch m {
+	case v1alpha1.CLIAgentModeText:
+		return "text"
+	case v1alpha1.CLIAgentModeAgent:
+		return "agent"
+	}
+	return ""
+}
+
+func cliAgentRunIn(r v1alpha1.CLIAgentRunIn) string {
+	//nolint:gocritic // singleCaseSwitch: a switch, so the exhaustive linter fails the build when the API gains a run cell nobody mapped.
+	switch r {
+	case v1alpha1.CLIAgentRunInE2B:
+		return "e2b"
+	}
+	return ""
+}
+
+func cliAgentAuthMode(m v1alpha1.CLIAgentAuthMode) string {
+	switch m {
+	case v1alpha1.CLIAgentAuthSubscription:
+		return "subscription"
+	case v1alpha1.CLIAgentAuthAPIKey:
+		return "api-key"
+	case v1alpha1.CLIAgentAuthInheritEnv:
+		return "inherit-env"
+	}
+	return ""
+}
+
+func gitLabAccessLevel(l v1alpha1.GitLabAccessLevel) string {
+	switch l {
+	case v1alpha1.GitLabDeveloper:
+		return "developer"
+	case v1alpha1.GitLabMaintainer:
+		return "maintainer"
+	}
+	return ""
+}
+
+func gitLabAccountOwner(o v1alpha1.GitLabAccountOwner) string {
+	switch o {
+	case v1alpha1.GitLabAccountOwnerGroup:
+		return "group"
+	case v1alpha1.GitLabAccountOwnerInstance:
+		return "instance"
+	}
+	return ""
+}
+
+// datadogSite maps a region onto the host name Crewlet names it by.
+func datadogSite(s v1alpha1.DatadogSite) string {
+	switch s {
+	case v1alpha1.DatadogSiteUS1:
+		return "datadoghq.com"
+	case v1alpha1.DatadogSiteUS3:
+		return "us3.datadoghq.com"
+	case v1alpha1.DatadogSiteUS5:
+		return "us5.datadoghq.com"
+	case v1alpha1.DatadogSiteEU1:
+		return "datadoghq.eu"
+	case v1alpha1.DatadogSiteAP1:
+		return "ap1.datadoghq.com"
+	case v1alpha1.DatadogSiteAP2:
+		return "ap2.datadoghq.com"
+	case v1alpha1.DatadogSiteUS1FED:
+		return "ddog-gov.com"
 	}
 	return ""
 }

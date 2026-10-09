@@ -246,9 +246,13 @@ func (r *renderer) unit(at Path, u *v1alpha1.Unit, t tree) unitDoc {
 		Goals:     spec.Goals,
 		Channel:   spec.Channel,
 		Knowledge: spec.Knowledge,
-		MCPEnv:    r.mcpEnv(KindUnit, u.Name, spec.MCP),
-		Project:   spec.Project,
-		Space:     spec.Space,
+		// A unit's credentials come from Secrets: the API refuses a
+		// provisioned one, which belongs to one seat.
+		MCPEnv: r.mcpEnv(KindUnit, u.Name, spec.MCP, func(_ string, src v1alpha1.SeatCredentialSource) string {
+			return r.secret(src.SecretKeyRef.Name, src.SecretKeyRef.Key)
+		}),
+		Project: spec.Project,
+		Space:   spec.Space,
 	}
 	if lead := spec.LeadRef.Name; lead != "" {
 		if s := r.seats[lead]; s != nil {
@@ -295,9 +299,11 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 		Workers:              spec.Workers,
 		TokenBudget:          tokenBudget(spec.TokenBudget),
 		LearningEnabled:      spec.LearningEnabled,
-		MCPEnv:               r.mcpEnv(KindSeat, s.Name, spec.MCP),
-		Project:              spec.Project,
-		Space:                spec.Space,
+		MCPEnv: r.mcpEnv(KindSeat, s.Name, spec.MCP, func(field string, src v1alpha1.SeatCredentialSource) string {
+			return r.seatCredential(s, field, src)
+		}),
+		Project: spec.Project,
+		Space:   spec.Space,
 	}
 	if c := spec.Contact; c != (v1alpha1.SeatContact{}) {
 		doc.Contact = &contactDoc{SlackUserID: c.SlackUserID, GitHubLogin: c.GitHubLogin}
@@ -332,7 +338,7 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 			CodingAgent:     codingAgent(sb.CodingAgent),
 			PauseTTLSeconds: sb.PauseTTLSeconds,
 			MaxTurns:        sb.MaxTurns,
-			Env:             r.secretEnv(sb.Env),
+			Env:             r.seatEnv(s, sb.Env),
 			Setup:           r.setup(sb.Setup),
 		}
 		for i, ref := range sb.MCPServerRefs {
@@ -347,7 +353,7 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 			doc.Sandbox.MCP.Servers = append(doc.Sandbox.MCP.Servers, ref.Name)
 		}
 	}
-	doc.Integrations = r.roleIntegrations(&spec.Integrations)
+	doc.Integrations = r.roleIntegrations(s)
 	doc.Schedules = r.schedules(at, r.seatSchedules[s.Name])
 	return doc
 }
@@ -417,7 +423,21 @@ func (r *renderer) schedules(owner Path, schedules []*v1alpha1.Schedule) []sched
 	return out
 }
 
-func (r *renderer) roleIntegrations(in *v1alpha1.SeatIntegrations) roleIntegrationsDoc {
+// seatEnv renders a seat's own environment variables, each from a Secret or
+// provisioned.
+func (r *renderer) seatEnv(s *v1alpha1.Seat, env []v1alpha1.SeatEnvVar) map[string]string {
+	if len(env) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(env))
+	for i, e := range env {
+		out[e.Name] = r.seatCredential(s, fmt.Sprintf("spec.sandbox.env[%d].valueFrom", i), e.ValueFrom)
+	}
+	return out
+}
+
+func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
+	in := &s.Spec.Integrations
 	var doc roleIntegrationsDoc
 	if creds := in.Slack.CredentialsSecretRef.Name; creds != "" {
 		doc.Slack = &roleSlackDoc{
@@ -436,6 +456,13 @@ func (r *renderer) roleIntegrations(in *v1alpha1.SeatIntegrations) roleIntegrati
 			doc.GitHub.InstallationID = app.InstallationID
 			doc.GitHub.PrivateKey = r.secret(app.CredentialsSecretRef.Name, v1alpha1.GitHubAppPrivateKeyKey)
 			doc.GitHub.WebhookSecret = r.secret(app.CredentialsSecretRef.Name, v1alpha1.GitHubAppWebhookSecretKey)
+		}
+	}
+	if m := in.Mattermost; m != (v1alpha1.MattermostSeatIntegration{}) {
+		doc.Mattermost = &roleMattermostDoc{
+			BotToken: r.seatCredential(s, "spec.integrations.mattermost.botToken", m.BotToken),
+			Username: m.Username,
+			Channel:  m.Channel,
 		}
 	}
 	return doc

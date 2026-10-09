@@ -39,6 +39,8 @@ func companyCases() []companyCase {
 		{name: "platform-providers"},
 		{name: "platform-providers-off"},
 		{name: "secret-positions", exposed: true},
+		{name: "cli-agent", exposed: true},
+		{name: "atlassian", exposed: true},
 	}
 }
 
@@ -106,13 +108,22 @@ func TestCompanyRefsAreExactlyThePointers(t *testing.T) {
 			slices.Sort(pointed)
 			pointed = slices.Compact(pointed)
 
-			listed := make([]string, len(doc.Refs))
-			for i, k := range doc.Refs {
-				listed[i] = secretsync.StoreName(k)
+			listed := make([]string, 0, len(doc.Refs)+len(doc.Provisioned))
+			for _, k := range doc.Refs {
+				listed = append(listed, secretsync.StoreName(k))
 			}
+			listed = append(listed, doc.Provisioned...)
 			slices.Sort(listed)
 			if !slices.Equal(pointed, listed) {
-				t.Errorf("the document points at %v, Refs lists %v", pointed, listed)
+				t.Errorf("the document points at %v, Refs and Provisioned list %v", pointed, listed)
+			}
+			if !slices.IsSorted(doc.Provisioned) || len(slices.Compact(slices.Clone(doc.Provisioned))) != len(doc.Provisioned) {
+				t.Errorf("Provisioned is not sorted and free of duplicates: %v", doc.Provisioned)
+			}
+			for _, name := range doc.Provisioned {
+				if secretsync.Owns(name) {
+					t.Errorf("the provisioned credential %s has a name the secret sync owns, and would delete", name)
+				}
 			}
 			if !slices.IsSortedFunc(doc.Refs, secretref.Compare) || len(slices.Compact(slices.Clone(doc.Refs))) != len(doc.Refs) {
 				t.Errorf("Refs is not sorted and free of duplicates: %v", doc.Refs)
@@ -138,7 +149,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"providers.sandbox.e2b.api_key", "tenant-nimbus/e2b[apiKey]"},
 		{"providers.sandbox.setup[0].files./root/.git-credentials", "tenant-nimbus/company-sandbox[gitCredentials]"},
 		{"providers.sandbox.setup[0].env.NPM_TOKEN", "tenant-nimbus/company-sandbox[npmToken]"},
-		{"mcp_servers[1].env.LINEAR_API_KEY", "tenant-nimbus/linear[apiKey]"},
+		{"mcp_servers[2].env.LINEAR_API_KEY", "tenant-nimbus/linear[apiKey]"},
 		{"mcp_servers[0].headers.X-Org", "tenant-nimbus/github-mcp[org]"},
 		{"units[0].mcp_env.linear.LINEAR_TEAM_TOKEN", "tenant-nimbus/engineering-linear[token]"},
 		{"units[0].children[0].mcp_env.linear.LINEAR_TEAM_TOKEN", "tenant-nimbus/platform-linear[token]"},
@@ -152,6 +163,30 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"units[0].roles[0].integrations.github.webhook_secret", "tenant-nimbus/coder-github-app[webhookSecret]"},
 		{githubWebhookSecret, "tenant-nimbus/github-org[webhookSecret]"},
 		{"integrations.github.token", "tenant-nimbus/github-org[token]"},
+		{"units[0].roles[0].integrations.mattermost.bot_token", "tenant-nimbus/coder-mattermost[botToken]"},
+		{"integrations.gitlab.signing_secret", "tenant-nimbus/gitlab[signingSecret]"},
+		{"integrations.gitlab.token", "tenant-nimbus/gitlab[readToken]"},
+		{"integrations.gitlab.provisioning.admin_token", "tenant-nimbus/gitlab-admin[token]"},
+		{"integrations.mattermost.provisioning.admin_token", "tenant-nimbus/mattermost-admin[token]"},
+		{"integrations.jira.token", "tenant-nimbus/jira[token]"},
+		{"integrations.jira.webhook_secret", "tenant-nimbus/jira[webhookSecret]"},
+		{"integrations.confluence.token", "tenant-nimbus/confluence[token]"},
+		{"integrations.confluence.webhook_secret", "tenant-nimbus/confluence[webhookSecret]"},
+		{"integrations.confluence.webhook_token", "tenant-nimbus/confluence[webhookToken]"},
+		{"integrations.datadog.webhook_token", "tenant-nimbus/datadog[webhookToken]"},
+		{"integrations.datadog.provisioning.api_key", "tenant-nimbus/datadog[apiKey]"},
+		{"integrations.datadog.provisioning.app_key", "tenant-nimbus/datadog[appKey]"},
+		{"integrations.atlassian.api_key", "tenant-nimbus/atlassian[apiKey]"},
+		{"providers.llm.claude-subscription.cli.auth.token", "tenant-nimbus/claude-cli[oauthToken]"},
+		{"providers.llm.claude-subscription.cli.auth.credential_bundle", "tenant-nimbus/claude-cli[bundle]"},
+		{"providers.llm.claude-subscription.cli.env.CLAUDE_CODE_USE_PROXY", "tenant-nimbus/claude-cli[proxy]"},
+	}
+	// The seats' provisioned credentials, named as the engine's
+	// provisioning finds them: one value wherever a seat names it.
+	provisioned := []struct{ path, handle, name string }{
+		{"units[0].roles[0].mcp_env.gitlab.GITLAB_TOKEN", "coder", "gitlab-token"},
+		{"units[0].roles[0].sandbox.env.GITLAB_TOKEN", "coder", "gitlab-token"},
+		{"roles[0].integrations.mattermost.bot_token", "support", "mattermost-bot-token"},
 	}
 	byKey := map[string]secretref.Key{}
 	for _, k := range doc.Refs {
@@ -170,6 +205,17 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 	}
 	if len(doc.Refs) != len(positions) {
 		t.Errorf("the document references %d keys, the test names %d positions: name the new one here", len(doc.Refs), len(positions))
+	}
+	names := map[string]bool{}
+	for _, p := range provisioned {
+		name := secretsync.ProvisionedName(p.handle, p.name)
+		names[name] = true
+		if want := "${" + name + "}"; leaves[p.path] != want {
+			t.Errorf("%s = %v, want %s", p.path, leaves[p.path], want)
+		}
+	}
+	if len(doc.Provisioned) != len(names) {
+		t.Errorf("the document lists %d provisioned credentials, the test names %d: name the new one here", len(doc.Provisioned), len(names))
 	}
 
 	// Every position credentialPositions says the API covers is filled

@@ -41,6 +41,9 @@ const (
 	// sampleGitHub names both the GitHub MCPServer and the GitHub
 	// Integration.
 	sampleGitHub = "github"
+	// sampleGitLab names both the GitLab MCPServer and the GitLab
+	// Integration.
+	sampleGitLab = "gitlab"
 
 	schedulePlatformStandup = "platform-standup"
 	scheduleCIHealth        = "ci-health"
@@ -130,6 +133,7 @@ func load(t *testing.T, files ...string) objects {
 	// The secret sync's own naming rather than a stand-in, so the contract
 	// tests hand the engine the names a cluster would.
 	o.input.StoreName = secretsync.StoreName
+	o.input.ProvisionedName = secretsync.ProvisionedName
 	return o
 }
 

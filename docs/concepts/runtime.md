@@ -72,7 +72,7 @@ Two cases are refused rather than guessed at:
 | Image | The class's `engine.image`; with `engine.allowVersionOverride`, its tag replaced by the Company's `spec.runtime.version`. |
 | Command | `crewlet run -config /etc/crewlet/crewlet.yaml`, the bootstrap Secret's `crewlet.yaml` mounted read-only, readable by the engine's user alone (mode `0440`, group `fsGroup`). |
 | Storage | One volume claim per pod (`data-nimbus-data-0`) at `/var/lib/crewlet`, from the class's `data.storage`: the store, the event stream (three quarters of the volume, [sized from the claim](company-document.md#the-data-pods-crewletyaml)), and the store's native library cache (`TURSO_GO_CACHE_DIR`), so a restart does not extract it again. |
-| Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; the OpenTelemetry variables when the class sets `telemetry`; then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). |
+| Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the Company's public address, while an LLMProvider of the company runs a CLI in `mode: Agent` (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`; then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). |
 | Probes | `/health` for startup (up to five minutes for the first start) and liveness, `/ready` for readiness. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
 | Stopping | A five-second `preStop` sleep, so the endpoint is gone from the Services and Gateways before the engine drains, and the class's `data.terminationGracePeriodSeconds` (default five minutes) for the drain: running turns finish, waiting ones are handed back. |
 | Updates | `RollingUpdate` with `maxUnavailable: 1`, `podManagementPolicy: Parallel`. |
@@ -146,10 +146,20 @@ cluster unless the class routes the API through an internal gateway.
 
 | Class `exposure.webhooks.mode` | What the operator creates | `status.endpoints.publicBaseURL` |
 |---|---|---|
-| `Gateway` | HTTPRoute `<name>-webhooks` on the class's Gateways: the expanded `hostname`, path prefix `/webhooks/` only, to the engine Service | `spec.exposure.publicBaseURL`, else `https://<hostname>` |
-| `Ingress` | Ingress `<name>-webhooks`: the class's IngressClass, annotations and TLS Secret, the expanded `hostname`, path prefix `/webhooks/` only | the same |
-| `External` | Nothing: something outside the operator forwards `/webhooks/` to `<name>-engine:8080` | `spec.exposure.publicBaseURL`, which is required |
+| `Gateway` | HTTPRoute `<name>-webhooks` on the class's Gateways: the expanded `hostname`, path prefix `/webhooks/` only (and `/mcp/`, below), to the engine Service | `spec.exposure.publicBaseURL`, else `https://<hostname>` |
+| `Ingress` | Ingress `<name>-webhooks`: the class's IngressClass, annotations and TLS Secret, the expanded `hostname`, path prefix `/webhooks/` only (and `/mcp/`, below) | the same |
+| `External` | Nothing: something outside the operator forwards `/webhooks/` (and `/mcp/`, below) to `<name>-engine:8080` | `spec.exposure.publicBaseURL`, which is required |
 | `None` | Nothing | unset |
+
+While an LLMProvider of the company runs a CLI in `mode: Agent`, the
+webhooks' route also sends the path prefix `/mcp/` to the engine, and the
+engine is given the public address as `CREWLET_MCP_BRIDGE_URL`. That is the
+engine's tool bridge: an agent-mode run happens in a remote sandbox and calls
+the seat's own tools back there, each request carrying a token signed for its
+one run, which expires with it. Crewlet requires the address to reach the
+node that runs the seat, which the single data pod is. With no such provider
+the bridge is neither mounted nor routed; adding or removing one changes the
+pod's environment, so the data pod rolls.
 
 `exposure.api.mode` `Gateway` or `Ingress` creates `<name>-api` the same way
 for every path, and `status.endpoints.exposedAPI` is its address once the route

@@ -1242,6 +1242,7 @@ spec:
                       - Anthropic
                       - OpenAI
                       - OpenAICompatible
+                      - CLIAgent
                       type: string
                   required:
                   - model
@@ -1266,6 +1267,10 @@ spec:
                   - message: apiKeySecretRefs needs at least one key for types Anthropic
                       and OpenAI
                     rule: self.type == 'OpenAICompatible' || has(self.apiKeySecretRefs)
+                  - message: 'a platform model provider speaks a model API: type CLIAgent
+                      drives a CLI on one subscription login, which is a tenant''s
+                      own LLMProvider or nobody''s'
+                    rule: self.type != 'CLIAgent'
                 maxItems: 16
                 type: array
                 x-kubernetes-list-map-keys:

@@ -1,6 +1,7 @@
 package render
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -44,6 +45,13 @@ type Input struct {
 	// render depends on nothing but its input.
 	StoreName func(secretref.Key) string
 
+	// ProvisionedName is the name of the engine secret-store entry that
+	// holds the credential the engine provisions for the seat with the
+	// handle under the provisioned name. The document refers to it as
+	// ${ProvisionedName(handle, name)}. Like StoreName it must be a pure
+	// function of its arguments.
+	ProvisionedName func(handle, name string) string
+
 	// PublicBaseURL is the address vendors deliver webhooks to, rendered as
 	// integrations.public_base_url: the Company's
 	// spec.exposure.publicBaseURL, or the one the class's webhooks.hostname
@@ -60,6 +68,10 @@ type Document struct {
 	// Refs is every Secret key the document refers to, sorted with
 	// secretref.Compare and without duplicates.
 	Refs []secretref.Key
+	// Provisioned is every store entry the document refers to that the
+	// engine's provisioning fills rather than the operator, sorted and
+	// without duplicates: the names of the seats' provisioned credentials.
+	Provisioned []string
 	// Sources map each part of the document to the object it was rendered
 	// from; see Attribute.
 	Sources []Source
@@ -74,7 +86,7 @@ type Document struct {
 // other failure is an engineConfig value that is not JSON, which the API
 // server never stores.
 func Company(in *Input) (*Document, error) {
-	r, merged, err := renderJSON(in, in.StoreName)
+	r, merged, err := renderJSON(in, in.StoreName, in.ProvisionedName)
 	if err != nil {
 		return nil, err
 	}
@@ -86,16 +98,19 @@ func Company(in *Input) (*Document, error) {
 	sum := sha256.Sum256(out)
 	slices.SortFunc(r.sources, func(a, b Source) int { return strings.Compare(a.Path.String(), b.Path.String()) })
 	rendered := &Document{
-		YAML:    out,
-		Hash:    hex.EncodeToString(sum[:]),
-		Refs:    sortedKeys(r.refs),
-		Sources: r.sources,
+		YAML:        out,
+		Hash:        hex.EncodeToString(sum[:]),
+		Refs:        sortedKeys(r.refs),
+		Provisioned: slices.Sorted(maps.Keys(r.provisioned)),
+		Sources:     r.sources,
 	}
 
 	// The same render with every store name changed tells the references
 	// the renderer wrote from strings an object holds: only the former
 	// differ between the two.
-	_, probe, err := renderJSON(in, func(k secretref.Key) string { return "PROBE_" + in.StoreName(k) })
+	_, probe, err := renderJSON(in,
+		func(k secretref.Key) string { return "PROBE_" + in.StoreName(k) },
+		func(handle, name string) string { return "PROBE_" + in.ProvisionedName(handle, name) })
 	if err != nil {
 		return nil, err
 	}
@@ -106,10 +121,14 @@ func Company(in *Input) (*Document, error) {
 }
 
 // renderJSON renders the document as JSON, its map keys sorted, with
-// storeName naming each referenced Secret key's entry in the engine's store.
-func renderJSON(in *Input, storeName func(secretref.Key) string) (*renderer, []byte, error) {
+// storeName naming each referenced Secret key's entry in the engine's store
+// and provisionedName each provisioned credential's.
+func renderJSON(
+	in *Input, storeName func(secretref.Key) string, provisionedName func(handle, name string) string,
+) (*renderer, []byte, error) {
 	in = new(*in)
 	in.StoreName = storeName
+	in.ProvisionedName = provisionedName
 	r := newRenderer(in)
 	doc := r.company()
 	if err := r.errs.err(); err != nil {
@@ -151,8 +170,9 @@ func renderJSON(in *Input, storeName func(secretref.Key) string) (*renderer, []b
 var reference = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
 // checkReferences refuses every ${NAME} in the document but the ones the
-// renderer wrote for a referenced Secret key: the strings that differ from
-// the same place in probe, a render with every store name changed.
+// renderer wrote for a referenced Secret key or a provisioned credential: the
+// strings that differ from the same place in probe, a render with every store
+// name changed.
 //
 // Crewlet resolves a ${NAME} in the company document from its secret store
 // and then from its process environment, and not only where a credential
@@ -246,21 +266,23 @@ type renderer struct {
 	seatSchedules map[string][]*v1alpha1.Schedule
 	unitSchedules map[string][]*v1alpha1.Schedule
 
-	refs    map[secretref.Key]struct{}
-	sources []Source
-	errs    refErrors
+	refs        map[secretref.Key]struct{}
+	provisioned map[string]struct{}
+	sources     []Source
+	errs        refErrors
 }
 
 func newRenderer(in *Input) *renderer {
 	r := &renderer{
-		in:        in,
-		owner:     ObjectRef{Kind: KindCompany, Name: in.Company.Name},
-		units:     map[string]*v1alpha1.Unit{},
-		seats:     map[string]*v1alpha1.Seat{},
-		mcp:       map[string]*v1alpha1.MCPServer{},
-		providers: map[string]bool{},
-		platform:  map[string]bool{},
-		refs:      map[secretref.Key]struct{}{},
+		in:          in,
+		owner:       ObjectRef{Kind: KindCompany, Name: in.Company.Name},
+		units:       map[string]*v1alpha1.Unit{},
+		seats:       map[string]*v1alpha1.Seat{},
+		mcp:         map[string]*v1alpha1.MCPServer{},
+		providers:   map[string]bool{},
+		platform:    map[string]bool{},
+		refs:        map[secretref.Key]struct{}{},
+		provisioned: map[string]struct{}{},
 	}
 	for i := range in.Units {
 		r.units[in.Units[i].Name] = &in.Units[i]
@@ -298,6 +320,38 @@ func (r *renderer) secret(name, key string) string {
 func (r *renderer) secretKey(k secretref.Key) string {
 	r.refs[k] = struct{}{}
 	return "${" + r.in.StoreName(k) + "}"
+}
+
+// seatCredential returns the pointer the document holds for one of a seat's
+// own credentials: a Secret key's store entry, which the secret sync fills,
+// or a provisioned credential's, which the engine's provisioning fills. A
+// provisioned credential in a company where no Integration provisions is
+// refused at field: nothing would ever fill it.
+func (r *renderer) seatCredential(s *v1alpha1.Seat, field string, src v1alpha1.SeatCredentialSource) string {
+	if ref := src.SecretKeyRef; ref.Name != "" {
+		return r.secret(ref.Name, ref.Key)
+	}
+	if !r.engineProvisions() {
+		r.errs.add(KindSeat, s.Name, field, v1alpha1.ReasonNoProvisioner, fmt.Sprintf(
+			"names the provisioned credential %s, and no Integration of Company %s has provisioning Engine, "+
+				"so nothing would create it: give the value from a Secret, or provision the vendor with the engine",
+			src.Provisioned.Name, r.in.Company.Name))
+		return ""
+	}
+	name := r.in.ProvisionedName(SeatHandle(s), src.Provisioned.Name)
+	r.provisioned[name] = struct{}{}
+	return "${" + name + "}"
+}
+
+// engineProvisions reports whether an Integration of the company has the
+// engine create the seats' accounts, and so fill provisioned credentials.
+func (r *renderer) engineProvisions() bool {
+	for i := range r.in.Integrations {
+		if r.in.Integrations[i].Spec.Provisioning == v1alpha1.IntegrationProvisioningEngine {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *renderer) source(p Path, o ObjectRef) {
@@ -350,7 +404,11 @@ func (r *renderer) providersDoc() providersDoc {
 		for i, ref := range p.Spec.APIKeySecretRefs {
 			keys[i] = r.secret(ref.Name, ref.Key)
 		}
-		doc.LLM[p.Name] = llmProvider(&p.Spec.LLMProviderSettings, keys)
+		entry := llmProvider(&p.Spec.LLMProviderSettings, keys)
+		if p.Spec.Type == v1alpha1.LLMProviderCLIAgent {
+			entry.CLI = r.cli(p)
+		}
+		doc.LLM[p.Name] = entry
 		r.source(Path{keyProviders, "llm", p.Name}, ObjectRef{Kind: KindLLMProvider, Name: p.Name})
 	}
 
@@ -468,6 +526,42 @@ func llmProvider(s *v1alpha1.LLMProviderSettings, keys []string) llmProviderDoc 
 	return doc
 }
 
+// CLIStateRoot is the directory on a data pod's volume under which each
+// CLIAgent provider keeps its login and its per-seat homes, one directory per
+// loginName: on the volume, so they outlive the pod.
+const CLIStateRoot = DataDir + "/llm-cli"
+
+// cli renders the cli block of a CLIAgent provider, or records why it cannot
+// run: in mode Agent its runs happen in a remote sandbox and call the seat's
+// tools back through the engine's public address, which the company must have.
+func (r *renderer) cli(p *v1alpha1.LLMProvider) *cliDoc {
+	c := &p.Spec.CLI
+	if c.Mode == v1alpha1.CLIAgentModeAgent && r.in.PublicBaseURL == "" {
+		r.errs.add(KindLLMProvider, p.Name, "spec.cli.mode", v1alpha1.ReasonNotExposed, fmt.Sprintf(
+			"is Agent, whose runs happen in a sandbox that calls the seat's tools back through the engine's public address, "+
+				"and Company %s has none (status.endpoints.publicBaseURL): give its EngineClass a webhooks route, or the "+
+				"Company spec.exposure.publicBaseURL, or use mode Text", r.in.Company.Name))
+	}
+	login := cmp.Or(c.LoginName, p.Name)
+	doc := &cliDoc{
+		Agent:          cliAgentName(c.Agent),
+		Mode:           cliAgentMode(c.Mode),
+		RunIn:          cliAgentRunIn(c.RunIn),
+		StateDir:       CLIStateRoot + "/" + login,
+		TimeoutSeconds: c.TimeoutSeconds,
+		MaxConcurrent:  c.MaxConcurrent,
+		Env:            r.secretEnv(c.Env),
+		Auth:           cliAuthDoc{Mode: cliAgentAuthMode(c.Auth.Mode)},
+	}
+	if k := c.Auth.TokenSecretRef; k.Name != "" {
+		doc.Auth.Token = r.secret(k.Name, k.Key)
+	}
+	if k := c.Auth.CredentialBundleSecretRef; k.Name != "" {
+		doc.Auth.CredentialBundle = r.secret(k.Name, k.Key)
+	}
+	return doc
+}
+
 // provider resolves a reference to a model provider to its providers.llm
 // key, or records why it cannot be resolved.
 func (r *renderer) provider(kind, name, field string, ref v1alpha1.LLMProviderReference) (string, bool) {
@@ -545,10 +639,7 @@ func (r *renderer) integrations() integrationsDoc {
 
 	claimed := map[string]string{}
 	for _, in := range sortedByName(r.in.Integrations) {
-		vendor := "github"
-		if in.Spec.Slack != nil {
-			vendor = "slack"
-		}
+		vendor := Vendor(in)
 		// Each vendor is one block of Crewlet's integrations, so a second
 		// Integration for it would replace the first. The one that sorts
 		// first by name keeps the block.
@@ -559,27 +650,75 @@ func (r *renderer) integrations() integrationsDoc {
 		}
 		claimed[vendor] = in.Name
 		r.source(Path{keyIntegrations, vendor}, ObjectRef{Kind: KindIntegration, Name: in.Name})
+		r.integration(&doc, in)
+	}
+	return doc
+}
 
-		if s := in.Spec.Slack; s != nil {
-			doc.Slack = &slackDoc{
-				TypingStatus: workingStatus(s.TypingStatus),
-				StatusPhrases: statusPhrasesDoc{
-					Onboarding: s.StatusPhrases.Onboarding,
-					Execute:    s.StatusPhrases.Execute,
-					Review:     s.StatusPhrases.Review,
-					Default:    s.StatusPhrases.Default,
-				},
-			}
-			continue
+// The vendors an Integration connects, by the key of Crewlet's integrations
+// block each is.
+const (
+	VendorSlack      = "slack"
+	VendorGitHub     = "github"
+	VendorGitLab     = "gitlab"
+	VendorMattermost = "mattermost"
+	VendorJira       = "jira"
+	VendorConfluence = "confluence"
+	VendorDatadog    = "datadog"
+	VendorAtlassian  = "atlassian"
+)
+
+// Vendor is the vendor an Integration connects: the key of the block of
+// Crewlet's integrations it renders. The API admits exactly one member.
+func Vendor(in *v1alpha1.Integration) string {
+	spec := &in.Spec
+	switch {
+	case spec.Slack != nil:
+		return VendorSlack
+	case spec.GitLab.URL != "":
+		return VendorGitLab
+	case spec.Mattermost.URL != "":
+		return VendorMattermost
+	case spec.Jira.TokenSecretRef.Name != "":
+		return VendorJira
+	case spec.Confluence.TokenSecretRef.Name != "":
+		return VendorConfluence
+	case spec.Datadog.WebhookTokenSecretRef.Name != "":
+		return VendorDatadog
+	case spec.Atlassian.OrgID != "":
+		return VendorAtlassian
+	}
+	return VendorGitHub
+}
+
+// integration renders one Integration's block into doc.
+func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
+	spec := &in.Spec
+	ref := func(k v1alpha1.SecretKeyReference) string {
+		if k.Name == "" {
+			return ""
 		}
-		g := &in.Spec.GitHub
+		return r.secret(k.Name, k.Key)
+	}
+	switch Vendor(in) {
+	case VendorSlack:
+		s := spec.Slack
+		doc.Slack = &slackDoc{
+			TypingStatus: workingStatus(s.TypingStatus),
+			StatusPhrases: statusPhrasesDoc{
+				Onboarding: s.StatusPhrases.Onboarding,
+				Execute:    s.StatusPhrases.Execute,
+				Review:     s.StatusPhrases.Review,
+				Default:    s.StatusPhrases.Default,
+			},
+		}
+	case VendorGitHub:
+		g := &spec.GitHub
 		doc.GitHub = &githubDoc{
 			Enabled:       true,
 			URL:           g.URL,
-			WebhookSecret: r.secret(g.WebhookSecretRef.Name, g.WebhookSecretRef.Key),
-		}
-		if g.TokenSecretRef.Name != "" {
-			doc.GitHub.Token = r.secret(g.TokenSecretRef.Name, g.TokenSecretRef.Key)
+			WebhookSecret: ref(g.WebhookSecretRef),
+			Token:         ref(g.TokenSecretRef),
 		}
 		if p := g.Provisioning; p.Org != "" || len(p.Repos) > 0 || p.OrgWebhook != "" {
 			doc.GitHub.Provisioning = &githubProvisioningDoc{
@@ -588,8 +727,133 @@ func (r *renderer) integrations() integrationsDoc {
 				OrgWebhook: containerWebhookMode(p.OrgWebhook),
 			}
 		}
+	case VendorGitLab:
+		g := &spec.GitLab
+		doc.GitLab = &gitlabDoc{
+			Enabled:       true,
+			URL:           g.URL,
+			SigningSecret: ref(g.SigningSecretRef),
+			Token:         ref(g.TokenSecretRef),
+			WebhookName:   g.WebhookName,
+		}
+		if p := &g.EngineProvisioning; p.Group != "" {
+			doc.GitLab.Provisioning = &gitlabProvisioningDoc{
+				Group:          p.Group,
+				AdminToken:     ref(p.AdminTokenSecretRef),
+				Mode:           gitLabAccountOwner(p.AccountOwner),
+				AccessLevel:    gitLabAccessLevel(p.AccessLevel),
+				AccessLevels:   r.gitLabAccessLevels(in, p.AccessLevels),
+				UsernamePrefix: p.UsernamePrefix,
+				Projects:       p.Projects,
+				GroupWebhook:   containerWebhookMode(p.GroupWebhook),
+				TokenScopes:    p.TokenScopes,
+			}
+		}
+	case VendorMattermost:
+		m := &spec.Mattermost
+		doc.Mattermost = &mattermostDoc{
+			Enabled:      true,
+			URL:          m.URL,
+			Team:         m.Team,
+			TypingStatus: workingStatus(m.TypingStatus),
+		}
+		if p := &m.EngineProvisioning; p.AdminTokenSecretRef.Name != "" {
+			doc.Mattermost.Provisioning = &mattermostProvisioningDoc{
+				AdminToken:        ref(p.AdminTokenSecretRef),
+				UsernamePrefix:    p.UsernamePrefix,
+				Channels:          p.Channels,
+				DisplayNameSuffix: p.DisplayNameSuffix,
+			}
+		}
+	case VendorJira:
+		j := &spec.Jira
+		doc.Jira = &jiraDoc{
+			URL:           j.URL,
+			CloudID:       j.CloudID,
+			SiteURL:       j.SiteURL,
+			Email:         j.Email,
+			Token:         ref(j.TokenSecretRef),
+			WebhookSecret: ref(j.WebhookSecretRef),
+			WebhookName:   j.WebhookName,
+		}
+	case VendorConfluence:
+		c := &spec.Confluence
+		doc.Confluence = &confluenceDoc{
+			URL:           c.URL,
+			CloudID:       c.CloudID,
+			SiteURL:       c.SiteURL,
+			Email:         c.Email,
+			Token:         ref(c.TokenSecretRef),
+			WebhookSecret: ref(c.WebhookSecretRef),
+			WebhookToken:  ref(c.WebhookTokenSecretRef),
+		}
+	case VendorDatadog:
+		d := &spec.Datadog
+		doc.Datadog = &datadogDoc{
+			Enabled:      true,
+			WebhookToken: ref(d.WebhookTokenSecretRef),
+			RouteTo:      r.datadogRouteTo(in),
+			WebhookName:  d.WebhookName,
+			HandleTag:    d.HandleTag,
+			Provisioning: datadogProvisioningDoc{
+				Site:        datadogSite(d.Site),
+				APIKey:      ref(d.APIKeySecretRef),
+				AppKey:      ref(d.AppKeySecretRef),
+				Role:        d.Role,
+				EmailDomain: d.EmailDomain,
+			},
+		}
+	case VendorAtlassian:
+		a := &spec.Atlassian
+		doc.Atlassian = &atlassianDoc{OrgID: a.OrgID, APIKey: ref(a.APIKeySecretRef)}
 	}
-	return doc
+}
+
+// gitLabAccessLevels renders a GitLab Integration's per-seat access levels,
+// which Crewlet keys by the seat's handle, or records why a Seat named there
+// cannot carry one.
+func (r *renderer) gitLabAccessLevels(in *v1alpha1.Integration, levels []v1alpha1.GitLabSeatAccess) map[string]string {
+	if len(levels) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(levels))
+	for i, l := range levels {
+		if handle, ok := r.agentSeat(in, fmt.Sprintf("spec.gitlab.engineProvisioning.accessLevels[%d].name", i), l.Name,
+			"which has no GitLab account: the engine provisions agent seats only"); ok {
+			out[handle] = gitLabAccessLevel(l.AccessLevel)
+		}
+	}
+	return out
+}
+
+// datadogRouteTo renders a Datadog Integration's route_to: the handle of the
+// seat an alert naming no seat wakes, or Crewlet's `none`.
+func (r *renderer) datadogRouteTo(in *v1alpha1.Integration) string {
+	route := in.Spec.Datadog.RouteTo
+	if route.Dismiss != nil && *route.Dismiss {
+		return crewletNone
+	}
+	handle, _ := r.agentSeat(in, "spec.datadog.routeTo.seatRef.name", route.SeatRef.Name,
+		"and the engine runs no turn for a person: route the alert to an Agent seat")
+	return handle
+}
+
+// agentSeat resolves the Seat an Integration names at field to its handle,
+// or records why it cannot be named there: it does not exist, or it is a
+// Human seat, which humanReason says the consequence of.
+func (r *renderer) agentSeat(in *v1alpha1.Integration, field, name, humanReason string) (string, bool) {
+	s := r.seats[name]
+	switch {
+	case s == nil:
+		r.errs.notFound(KindIntegration, in.Name, field, fmt.Sprintf(
+			"names Seat %s, which does not exist in namespace %s", name, r.namespace()))
+		return "", false
+	case s.Spec.Kind == v1alpha1.SeatKindHuman:
+		r.errs.add(KindIntegration, in.Name, field, v1alpha1.ReasonHumanSeat, fmt.Sprintf(
+			"names Seat %s, a Human seat, %s", name, humanReason))
+		return "", false
+	}
+	return SeatHandle(s), true
 }
 
 // ---- tool servers ------------------------------------------------------- //
@@ -636,7 +900,10 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 
 // mcpEnv renders a Unit's or a Seat's per-server credentials as Crewlet's
 // mcp_env, a mapping from server name to variable (or header) name to value.
-func (r *renderer) mcpEnv(kind, name string, creds []v1alpha1.MCPCredentials) map[string]map[string]string {
+// value renders one credential, at its field of the object.
+func (r *renderer) mcpEnv(
+	kind, name string, creds []v1alpha1.MCPCredentials, value func(field string, src v1alpha1.SeatCredentialSource) string,
+) map[string]map[string]string {
 	if len(creds) == 0 {
 		return nil
 	}
@@ -648,8 +915,8 @@ func (r *renderer) mcpEnv(kind, name string, creds []v1alpha1.MCPCredentials) ma
 			continue
 		}
 		values := make(map[string]string, len(c.Env))
-		for _, v := range c.Env {
-			values[v.Name] = r.secret(v.ValueFrom.SecretKeyRef.Name, v.ValueFrom.SecretKeyRef.Key)
+		for j, v := range c.Env {
+			values[v.Name] = value(fmt.Sprintf("spec.mcp[%d].env[%d].valueFrom", i, j), v.ValueFrom)
 		}
 		out[c.Name] = values
 	}

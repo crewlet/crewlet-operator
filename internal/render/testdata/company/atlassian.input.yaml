@@ -1,0 +1,165 @@
+# A company on Atlassian Cloud: Jira is its tracker and Confluence its
+# knowledge base, both on sites the engine discovers through the
+# organization, where it creates each agent seat's account and mints the
+# token and the address the seat's Atlassian tool server signs in with.
+# Mattermost bots are made by hand (provisioning External), and Datadog
+# alerts that name no seat are dismissed.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: helix
+spec:
+  engineClassName: basic
+  companyName: Helix
+  tracker:
+    backend: Jira
+  knowledge:
+    backend: Confluence
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude
+spec:
+  companyRef:
+    name: helix
+  type: Anthropic
+  model: claude-sonnet-5
+  apiKeySecretRefs:
+    - name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: atlassian
+spec:
+  companyRef:
+    name: helix
+  transport: Stdio
+  shared: false
+  command: uvx
+  args: ["mcp-atlassian"]
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: atlassian
+spec:
+  companyRef:
+    name: helix
+  provisioning: Engine
+  atlassian:
+    orgID: 4f3e2d1c-0b9a-8f7e-6d5c-4b3a2f1e0d9c
+    apiKeySecretRef:
+      name: atlassian-org
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: jira
+spec:
+  companyRef:
+    name: helix
+  jira:
+    email: admin@helix.example
+    tokenSecretRef:
+      name: jira-admin
+      key: token
+    webhookSecretRef:
+      name: jira-admin
+      key: webhookSecret
+    webhookName: helix
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: confluence
+spec:
+  companyRef:
+    name: helix
+  confluence:
+    email: admin@helix.example
+    tokenSecretRef:
+      name: confluence-admin
+      key: token
+    webhookTokenSecretRef:
+      name: confluence-admin
+      key: webhookToken
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: mattermost
+spec:
+  companyRef:
+    name: helix
+  mattermost:
+    url: https://chat.helix.example
+    team: helix
+    typingStatus: Addressed
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: datadog
+spec:
+  companyRef:
+    name: helix
+  provisioning: Engine
+  datadog:
+    webhookTokenSecretRef:
+      name: datadog
+      key: webhookToken
+    routeTo:
+      dismiss: true
+    site: US5
+    apiKeySecretRef:
+      name: datadog
+      key: apiKey
+    appKeySecretRef:
+      name: datadog
+      key: appKey
+    role: Datadog Standard Role
+    emailDomain: agents.helix.example
+    webhookName: helix
+    handleTag: owner
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: triage
+spec:
+  companyRef:
+    name: helix
+  goal: Triage the issues and the alerts nobody owns yet.
+  project: OPS
+  space: OPS
+  mcp:
+    - name: atlassian
+      env:
+        - name: JIRA_API_TOKEN
+          valueFrom:
+            provisioned:
+              name: atlassian-token
+        - name: JIRA_USERNAME
+          valueFrom:
+            provisioned:
+              name: atlassian-email
+        - name: CONFLUENCE_API_TOKEN
+          valueFrom:
+            provisioned:
+              name: atlassian-token
+        - name: CONFLUENCE_USERNAME
+          valueFrom:
+            provisioned:
+              name: atlassian-email
+  integrations:
+    mattermost:
+      botToken:
+        secretKeyRef:
+          name: triage-mattermost
+          key: botToken
+      username: helix-triage
+      channel: ops

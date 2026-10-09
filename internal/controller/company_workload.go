@@ -74,6 +74,7 @@ const (
 	envOTLPProtocol    = "OTEL_EXPORTER_OTLP_PROTOCOL"
 	envOTLPHeaders     = "OTEL_EXPORTER_OTLP_HEADERS"
 	envOTELResourceAtt = "OTEL_RESOURCE_ATTRIBUTES"
+	envMCPBridgeURL    = "CREWLET_MCP_BRIDGE_URL"
 )
 
 // preStopSleepSeconds is how long a stopping data pod keeps serving before
@@ -89,6 +90,9 @@ type workload struct {
 	bootstrap *render.BootstrapDocument
 	// bootstrapHash is the BootstrapHashAnnotation's value.
 	bootstrapHash string
+	// bridgeURL is the base URL a sandbox reaches the engine's tool bridge
+	// at, or empty for an engine that serves none.
+	bridgeURL string
 }
 
 // applyBootstrap writes the Secret the data pods start from: their
@@ -450,6 +454,13 @@ func engineEnv(
 		// 20 MB native library again.
 		literal(envTursoCache, render.DataDir+"/cache"),
 	)
+
+	// A single data pod is the node every seat runs on, so the company's
+	// public address reaches the node that holds each bridged session,
+	// which Crewlet requires of the URL.
+	if w.bridgeURL != "" {
+		env = append(env, literal(envMCPBridgeURL, w.bridgeURL))
+	}
 
 	if t := class.Spec.Telemetry; t.OTLPEndpoint != "" {
 		env = append(env,

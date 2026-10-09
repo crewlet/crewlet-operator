@@ -19,11 +19,18 @@ address when the class leaves that to it.
 | `Gateway` | The cluster runs a Gateway API implementation | `https://<hostname>`, or the Company's `spec.exposure.publicBaseURL` |
 | `Ingress` | The cluster has an Ingress controller | the same |
 | `External` | Something outside the operator (a CDN, a tunnel, a load balancer you manage) forwards to the engine | the Company's `spec.exposure.publicBaseURL`, which is then required |
-| `None` (the default) | Nothing reaches the engine from outside: development, or companies without Slack or GitHub | none; integrations that need inbound delivery report `Healthy=False NotExposed` |
+| `None` (the default) | Nothing reaches the engine from outside: development, or companies whose integrations deliver no webhooks (Mattermost, an Atlassian organization) | none; integrations that need inbound delivery report `Healthy=False NotExposed` |
 
-Whatever the mode, only the path prefix `/webhooks/` is routed. The address
-appears in the Company's `status.endpoints.publicBaseURL`, and each Seat's
-and Integration's status carries the exact URL to register with the vendor.
+Whatever the mode, only the path prefix `/webhooks/` is routed, and `/mcp/`
+beside it while an `LLMProvider` of the company runs a CLI in `mode: Agent`:
+that run happens in a remote sandbox, which calls the seat's tools back
+through the engine's tool bridge there, each call carrying a token signed for
+its one run ([Running seats on a coding CLI](cli-agents.md)). The operator
+then gives the engine the public address as the bridge's
+(`CREWLET_MCP_BRIDGE_URL`); under `External`, forward `/mcp/` as well. The
+address appears in the Company's `status.endpoints.publicBaseURL`, and each
+Seat's and Integration's status carries the exact URL to register with the
+vendor.
 
 ### Through a Gateway
 

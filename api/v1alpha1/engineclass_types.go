@@ -637,6 +637,7 @@ type EnginePodTemplate struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.reasoningBudgetTokens) || self.type == 'Anthropic'",message="reasoningBudgetTokens applies to type Anthropic only"
 // +kubebuilder:validation:XValidation:rule="self.type != 'OpenAICompatible' || has(self.baseURL)",message="baseURL is required for type OpenAICompatible, which has no default endpoint"
 // +kubebuilder:validation:XValidation:rule="self.type == 'OpenAICompatible' || has(self.apiKeySecretRefs)",message="apiKeySecretRefs needs at least one key for types Anthropic and OpenAI"
+// +kubebuilder:validation:XValidation:rule="self.type != 'CLIAgent'",message="a platform model provider speaks a model API: type CLIAgent drives a CLI on one subscription login, which is a tenant's own LLMProvider or nobody's"
 type PlatformLLMProvider struct {
 	// name is the provider's name. Seats and the Company's model order refer
 	// to it with kind PlatformLLMProvider. It may not be default, which

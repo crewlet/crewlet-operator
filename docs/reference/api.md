@@ -14,12 +14,12 @@ its doc comment names; enum values are PascalCase here and Crewlet's own
 spelling there. Engine tuning without a typed field passes through
 Company.spec.engineConfig.
 
-No field holds a credential. Every position Crewlet marks as a credential is
-filled from a Secret through a SecretKeyReference or a SecretReference
-(NamespacedSecretKeyReference and NamespacedSecretReference on the
-cluster-scoped EngineClass), or is not offered in v1alpha1: the credentials
-of the integrations other than Slack and GitHub (see IntegrationSpec) and of
-the cli-agent model provider (see LLMProviderType). docs/concepts/credentials.md
+No field holds a credential. Every position Crewlet marks as a credential in
+the company document is filled from a Secret through a SecretKeyReference or
+a SecretReference (NamespacedSecretKeyReference and NamespacedSecretReference
+on the cluster-scoped EngineClass), or, for a seat's account the engine
+creates under an Integration with provisioning Engine, is a value the engine
+mints into its own store (ProvisionedCredential). docs/concepts/credentials.md
 in the repository maps every position to its field.
 
 
@@ -98,6 +98,183 @@ _Appears in:_
 | `mcpServers` _integer_ | mcpServers is the number of MCPServers. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `integrations` _integer_ | integrations is the number of Integrations. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `schedules` _integer_ | schedules is the number of Schedules. |  | Minimum: 0 <br />Optional: \{\} <br /> |
+
+
+#### AtlassianIntegration
+
+
+
+AtlassianIntegration connects a company's Atlassian Cloud organization, in
+which the engine creates a service account for each agent seat, grants it
+the company's Jira and Confluence sites, and mints its API token. It maps
+onto Crewlet's integrations.atlassian. Each seat names the minted token and
+the account's address as provisioned values of its MCPServer named
+atlassian, so the Integration's provisioning is Engine. A Data Center
+deployment has no organization; its accounts are made by hand and each
+seat's token comes from a Secret.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `orgID` _string_ | orgID is the organization's id, from admin.atlassian.com. Crewlet's<br />`org_id`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9-]+$` <br />Required: \{\} <br /> |
+| `apiKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | apiKeySecretRef is the Secret key holding an organization API key<br />created without scopes: Atlassian refuses a scoped key the call that<br />creates an account. Crewlet's `api_key`, a credential position. |  | Required: \{\} <br /> |
+
+
+#### CLIAgentAuth
+
+
+
+CLIAgentAuth is how a CLIAgent provider signs in. It maps onto Crewlet's
+cli.auth.
+
+A subscription login is made at a terminal, by `crewlet llm login` or the
+CLI's own command, and a pod has no terminal: Subscription signs in with a
+headless token, such as the CLAUDE_CODE_OAUTH_TOKEN `claude setup-token`
+mints, or with a credential bundle `crewlet llm export` wrote from a login
+made elsewhere. A bundle is restored only while the provider's login on the
+data volume is empty, so the refreshed login a running engine keeps there
+wins over the bundle; a token never needs refreshing, which makes it the
+better of the two wherever the CLI mints one.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [CLIAgentSettings](#cliagentsettings)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `mode` _[CLIAgentAuthMode](#cliagentauthmode)_ | mode is how the CLI signs in. Unset is Subscription. Crewlet's<br />`mode`. |  | Enum: [Subscription APIKey InheritEnv] <br />Optional: \{\} <br /> |
+| `tokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | tokenSecretRef is the Secret key holding a long-lived subscription<br />token the CLI mints for headless use. Crewlet's `token`, a credential<br />position. |  | Optional: \{\} <br /> |
+| `credentialBundleSecretRef` _[SecretKeyReference](#secretkeyreference)_ | credentialBundleSecretRef is the Secret key holding a credential<br />bundle `crewlet llm export` wrote. Crewlet's `credential_bundle`, a<br />credential position. |  | Optional: \{\} <br /> |
+
+
+#### CLIAgentAuthMode
+
+_Underlying type:_ _string_
+
+CLIAgentAuthMode is how a CLIAgent provider authenticates. It maps onto
+Crewlet's cli.auth.mode (Subscription is `subscription`, APIKey is
+`api-key`, InheritEnv is `inherit-env`).
+
+_Validation:_
+- Enum: [Subscription APIKey InheritEnv]
+
+_Appears in:_
+- [CLIAgentAuth](#cliagentauth)
+
+| Field | Description |
+| --- | --- |
+| `Subscription` | CLIAgentAuthSubscription signs the CLI in to a subscription with<br />tokenSecretRef or credentialBundleSecretRef.<br /> |
+| `APIKey` | CLIAgentAuthAPIKey gives the CLI the provider's apiKeySecretRefs<br />key, billing the metered account.<br /> |
+| `InheritEnv` | CLIAgentAuthInheritEnv gives the CLI whichever of its token and key<br />variables the engine container's own environment holds, such as a<br />Company's spec.runtime.env.<br /> |
+
+
+#### CLIAgentMode
+
+_Underlying type:_ _string_
+
+CLIAgentMode is how the engine uses the CLI. It maps onto Crewlet's
+cli.mode (Text is `text`, Agent is `agent`).
+
+_Validation:_
+- Enum: [Text Agent]
+
+_Appears in:_
+- [CLIAgentSettings](#cliagentsettings)
+
+| Field | Description |
+| --- | --- |
+| `Text` | CLIAgentModeText drives the CLI as a text model behind the engine's<br />own tool loop, as a process in the engine's pod.<br /> |
+| `Agent` | CLIAgentModeAgent runs a seat's executor as the CLI's own agentic<br />run, in a sandbox, with the seat's tools reached back through the<br />engine's tool bridge.<br /> |
+
+
+#### CLIAgentName
+
+_Underlying type:_ _string_
+
+CLIAgentName is which coding CLI a CLIAgent provider drives. It maps onto
+Crewlet's cli.agent (ClaudeCode is `claude-code`, Codex is `codex`,
+GeminiCLI is `gemini-cli`, QwenCode is `qwen-code`, OpenCode is `opencode`,
+CursorAgent is `cursor-agent`, Copilot is `copilot`, Grok is `grok`,
+MuseCode is `muse-code`, KimiCode is `kimi-code`, Hermes is `hermes`, Pi is
+`pi`). Crewlet's `custom`, a CLI described wholly by profile overrides, is
+not offered: the overrides name the binary and the arguments the engine's
+pod runs.
+
+_Validation:_
+- Enum: [ClaudeCode Codex GeminiCLI QwenCode OpenCode CursorAgent Copilot Grok MuseCode KimiCode Hermes Pi]
+
+_Appears in:_
+- [CLIAgentSettings](#cliagentsettings)
+
+| Field | Description |
+| --- | --- |
+| `ClaudeCode` |  |
+| `Codex` |  |
+| `GeminiCLI` |  |
+| `QwenCode` |  |
+| `OpenCode` |  |
+| `CursorAgent` |  |
+| `Copilot` |  |
+| `Grok` |  |
+| `MuseCode` |  |
+| `KimiCode` |  |
+| `Hermes` |  |
+| `Pi` |  |
+
+
+#### CLIAgentRunIn
+
+_Underlying type:_ _string_
+
+CLIAgentRunIn is where an Agent-mode run happens. It maps onto Crewlet's
+cli.run_in (E2B is `e2b`). Crewlet's local cells, `direct` and `container`,
+are not offered, as the Company's spec.sandbox does not offer them.
+
+_Validation:_
+- Enum: [E2B]
+
+_Appears in:_
+- [CLIAgentSettings](#cliagentsettings)
+
+| Field | Description |
+| --- | --- |
+| `E2B` | CLIAgentRunInE2B is the Company's E2B sandbox.<br /> |
+
+
+#### CLIAgentSettings
+
+
+
+CLIAgentSettings is the coding CLI a CLIAgent provider drives. It maps onto
+Crewlet's providers.llm entry's cli block.
+
+The CLI is a binary in the engine's image, which the official image does
+not ship: a class running such a provider names an image derived from the
+engine's with the CLI installed (docs/guides/cli-agents.md). Its login, and
+the per-seat homes the CLI keeps, are on the data volume, so a restart or a
+new pod keeps them.
+
+
+
+_Appears in:_
+- [LLMProviderSpec](#llmproviderspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `agent` _[CLIAgentName](#cliagentname)_ | agent is which CLI to drive. Crewlet's `agent`. |  | Enum: [ClaudeCode Codex GeminiCLI QwenCode OpenCode CursorAgent Copilot Grok MuseCode KimiCode Hermes Pi] <br />Required: \{\} <br /> |
+| `mode` _[CLIAgentMode](#cliagentmode)_ | mode is how the engine uses the CLI. Unset is Text. Crewlet's `mode`. |  | Enum: [Text Agent] <br />Optional: \{\} <br /> |
+| `runIn` _[CLIAgentRunIn](#cliagentrunin)_ | runIn is where an Agent-mode run happens. Unset is the Company's<br />sandbox, which is E2B. Crewlet's `run_in`. |  | Enum: [E2B] <br />Optional: \{\} <br /> |
+| `auth` _[CLIAgentAuth](#cliagentauth)_ | auth is how the CLI signs in. |  | MinProperties: 1 <br />Required: \{\} <br /> |
+| `env` _[SecretEnvVar](#secretenvvar) array_ | env is extra environment of every invocation of the CLI: the child<br />gets an allowlisted environment, not the engine's, so a variable the<br />CLI needs beyond that is given here. Crewlet's `env`, a credential<br />position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `timeoutSeconds` _integer_ | timeoutSeconds caps one invocation of the CLI, launch included. Unset<br />takes Crewlet's default of 300. Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `maxConcurrent` _integer_ | maxConcurrent is how many CLI processes the provider runs at once;<br />each takes 200 to 400 MB of the engine pod's memory. Unset takes<br />Crewlet's default of 4. Crewlet's `max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `loginName` _string_ | loginName names the login, and the per-seat homes, the provider<br />keeps on the data volume. Providers of the company with the same<br />loginName share one login, which is how several models run off one<br />subscription; they must drive the same CLI. Unset is the provider's<br />own metadata.name. Crewlet's `state_dir`, as<br />/var/lib/crewlet/llm-cli/<loginName>. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9-]*$` <br />Optional: \{\} <br /> |
 
 
 #### ClassEnvVar
@@ -423,6 +600,33 @@ _Appears in:_
 | `objects` _[AppliedObjectCounts](#appliedobjectcounts)_ | objects counts the objects the revision was rendered from. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
+#### ConfluenceIntegration
+
+
+
+ConfluenceIntegration turns Confluence on for a company: page changes wake
+the seats they concern, and the company may run Confluence as its knowledge
+base (the Company's spec.knowledge.backend Confluence). It maps onto
+Crewlet's integrations.confluence. Each seat's Confluence identity is its
+own token, a credential of the MCPServer named atlassian in its Seat's
+spec.mcp.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `url` _string_ | url is a Data Center instance's or a Cloud site's base URL. Unset<br />with cloudID unset, the company's Atlassian Integration discovers the<br />site. Crewlet's `url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `cloudID` _string_ | cloudID is an Atlassian Cloud site's id; requests go through<br />Atlassian's API gateway. Crewlet's `cloud_id`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9-]+$` <br />Optional: \{\} <br /> |
+| `siteURL` _string_ | siteURL is the site's address as a browser opens it, for the links<br />the engine hands people; needed with cloudID. Unset is url. Crewlet's<br />`site_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `email` _string_ | email is the account's address, for Confluence Cloud's basic<br />authentication. Unset sends the token as a bearer token. Crewlet's<br />`email`. |  | MaxLength: 254 <br />MinLength: 3 <br />Pattern: `^[^@\s]+@[^@\s]+$` <br />Optional: \{\} <br /> |
+| `tokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | tokenSecretRef is the Secret key holding the API token (Cloud) or<br />personal access token (Data Center) of the account a seat without a<br />Confluence credential of its own searches as, which also reads the<br />tool-skill pages. Crewlet's `token`, a credential position. |  | Required: \{\} <br /> |
+| `webhookSecretRef` _[SecretKeyReference](#secretkeyreference)_ | webhookSecretRef is the Secret key holding the secret a Data Center<br />instance signs webhook deliveries with. Required for Data Center.<br />Crewlet's `webhook_secret`, a credential position. |  | Optional: \{\} <br /> |
+| `webhookTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | webhookTokenSecretRef is the Secret key holding the token a Confluence<br />Cloud webhook carries in its delivery URL, Cloud signing nothing: at<br />least 26 characters, random. Crewlet's `webhook_token`, a credential<br />position. |  | Optional: \{\} <br /> |
+
+
 #### ContainerWebhookMode
 
 _Underlying type:_ _string_
@@ -436,6 +640,7 @@ _Validation:_
 
 _Appears in:_
 - [GitHubProvisioning](#githubprovisioning)
+- [GitLabEngineProvisioning](#gitlabengineprovisioning)
 
 | Field | Description |
 | --- | --- |
@@ -516,6 +721,80 @@ _Appears in:_
 | `replicas` _integer_ | replicas is the number of data pods. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `readyReplicas` _integer_ | readyReplicas is the number of data pods that are ready. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `updatedReplicas` _integer_ | updatedReplicas is the number of data pods that run the current pod<br />template. |  | Minimum: 0 <br />Optional: \{\} <br /> |
+
+
+#### DatadogIntegration
+
+
+
+DatadogIntegration turns Datadog on for a company: a firing monitor wakes
+the seat its tags name. It maps onto Crewlet's integrations.datadog. The
+engine registers the webhook at Datadog itself and creates a service
+account for each agent seat whose credentials for the MCPServer named
+datadog name a provisioned application key, so the Integration's
+provisioning is Engine.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `webhookTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | webhookTokenSecretRef is the Secret key holding the token every<br />delivery carries in its X-Crewlet-Token header: at least 26<br />characters, random. Datadog signs nothing, so this token is the whole<br />of the check. Crewlet's `webhook_token`, a credential position. |  | Required: \{\} <br /> |
+| `routeTo` _[DatadogRouteTo](#datadogrouteto)_ | routeTo is where an alert goes whose monitor names no seat.<br />Crewlet's `route_to`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
+| `site` _[DatadogSite](#datadogsite)_ | site is the region the organization, and so its keys, are in.<br />Crewlet's `provisioning.site`. |  | Enum: [US1 US3 US5 EU1 AP1 AP2 US1FED] <br />Required: \{\} <br /> |
+| `apiKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | apiKeySecretRef is the Secret key holding an API key of the<br />organization, which says which organization a call is for. Crewlet's<br />`provisioning.api_key`, a credential position. |  | Required: \{\} <br /> |
+| `appKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | appKeySecretRef is the Secret key holding an application key, which<br />says which user acts: one allowed to manage webhooks and service<br />accounts. Crewlet's `provisioning.app_key`, a credential position. |  | Required: \{\} <br /> |
+| `role` _string_ | role is the Datadog role each seat's service account is created<br />with, by its name. Unset takes Crewlet's default, Datadog Read Only<br />Role. Crewlet's `provisioning.role`. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `emailDomain` _string_ | emailDomain is the domain the service accounts' addresses are built<br />under; Datadog requires an address and never writes to it. Unset<br />takes Crewlet's default, agents.crewlet.invalid. Crewlet's<br />`provisioning.email_domain`. |  | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$` <br />Optional: \{\} <br /> |
+| `webhookName` _string_ | webhookName is the name of the webhook the engine keeps at Datadog,<br />and so the handle monitors write: @webhook-<name>. Unset is crewlet.<br />Crewlet's `webhook_name`. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[^ @,]+$` <br />Optional: \{\} <br /> |
+| `handleTag` _string_ | handleTag is the monitor tag key whose value names the seat an alert<br />wakes, such as crewlet:sre-lead. Unset is crewlet. Crewlet's<br />`handle_tag`. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[a-z][a-z0-9_./-]*$` <br />Optional: \{\} <br /> |
+
+
+#### DatadogRouteTo
+
+
+
+DatadogRouteTo is where an alert goes whose monitor names no seat.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [DatadogIntegration](#datadogintegration)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `seatRef` _[LocalObjectReference](#localobjectreference)_ | seatRef names the agent Seat, in this namespace, the alert wakes.<br />Crewlet's `route_to`, as the seat's handle. |  | Optional: \{\} <br /> |
+| `dismiss` _boolean_ | dismiss wakes nobody: only monitors that name a seat reach an agent,<br />and the rest stay with whatever Datadog already does about them.<br />Crewlet's `route_to: none`. |  | Optional: \{\} <br /> |
+
+
+#### DatadogSite
+
+_Underlying type:_ _string_
+
+DatadogSite is the Datadog region a company's organization is in. It maps
+onto Crewlet's provisioning.site, the region's host name (US1 is
+datadoghq.com, US3 us3.datadoghq.com, US5 us5.datadoghq.com, EU1
+datadoghq.eu, AP1 ap1.datadoghq.com, AP2 ap2.datadoghq.com, US1FED
+ddog-gov.com).
+
+_Validation:_
+- Enum: [US1 US3 US5 EU1 AP1 AP2 US1FED]
+
+_Appears in:_
+- [DatadogIntegration](#datadogintegration)
+
+| Field | Description |
+| --- | --- |
+| `US1` |  |
+| `US3` |  |
+| `US5` |  |
+| `EU1` |  |
+| `AP1` |  |
+| `AP2` |  |
+| `US1FED` |  |
 
 
 #### DeletionPolicy
@@ -1044,6 +1323,117 @@ _Appears in:_
 | `webhookURL` _string_ | webhookURL is the URL the seat's GitHub App must deliver webhooks to,<br /><publicBaseURL>/webhooks/github/<handle>. Like the Slack requestURL it<br />is set whenever the Company has a GitHub Integration and a public base<br />URL, before the seat's app exists, and it never changes for a seat. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
+#### GitLabAccessLevel
+
+_Underlying type:_ _string_
+
+GitLabAccessLevel is the membership level the engine gives a seat's GitLab
+service account. It maps onto Crewlet's access_level (Developer is
+`developer`, Maintainer is `maintainer`).
+
+_Validation:_
+- Enum: [Developer Maintainer]
+
+_Appears in:_
+- [GitLabEngineProvisioning](#gitlabengineprovisioning)
+- [GitLabSeatAccess](#gitlabseataccess)
+
+| Field | Description |
+| --- | --- |
+| `Developer` | GitLabDeveloper can push branches and open merge requests.<br /> |
+| `Maintainer` | GitLabMaintainer can also merge to protected branches.<br /> |
+
+
+#### GitLabAccountOwner
+
+_Underlying type:_ _string_
+
+GitLabAccountOwner is where the engine creates the seats' GitLab service
+accounts. It maps onto Crewlet's provisioning mode (Group is `group`,
+Instance is `instance`).
+
+_Validation:_
+- Enum: [Group Instance]
+
+_Appears in:_
+- [GitLabEngineProvisioning](#gitlabengineprovisioning)
+
+| Field | Description |
+| --- | --- |
+| `Group` | GitLabAccountOwnerGroup creates them under the group, which is all<br />GitLab.com offers.<br /> |
+| `Instance` | GitLabAccountOwnerInstance creates them on a self-managed instance<br />itself, with an instance administrator's token.<br /> |
+
+
+#### GitLabEngineProvisioning
+
+
+
+GitLabEngineProvisioning is how the engine provisions the seats' GitLab
+accounts under provisioning Engine. It maps onto Crewlet's
+integrations.gitlab.provisioning: for each agent seat whose credentials for
+the MCPServer named gitlab name a provisioned value, the engine creates a
+service account, adds it to the group and the projects, mints a token into
+that value, and registers the webhook.
+
+
+
+_Appears in:_
+- [GitLabIntegration](#gitlabintegration)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `group` _string_ | group is the top-level group, by its path, the service accounts join<br />and the webhook is registered on. Crewlet's `group`. |  | MaxLength: 255 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9_.][A-Za-z0-9_./-]*$` <br />Required: \{\} <br /> |
+| `adminTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | adminTokenSecretRef is the Secret key holding a personal access token<br />with the api scope of an Owner of the group (of an instance<br />administrator, for accountOwner Instance), which creates and removes<br />the service accounts. Crewlet's `admin_token`, a credential position. |  | Required: \{\} <br /> |
+| `accountOwner` _[GitLabAccountOwner](#gitlabaccountowner)_ | accountOwner is where the service accounts are created. Unset is<br />Group. Crewlet's `mode`. |  | Enum: [Group Instance] <br />Optional: \{\} <br /> |
+| `accessLevel` _[GitLabAccessLevel](#gitlabaccesslevel)_ | accessLevel is the membership level of every seat's account. Unset<br />takes Crewlet's default, Developer. Crewlet's `access_level`. |  | Enum: [Developer Maintainer] <br />Optional: \{\} <br /> |
+| `accessLevels` _[GitLabSeatAccess](#gitlabseataccess) array_ | accessLevels override accessLevel for single seats. Crewlet's<br />`access_levels`. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+| `usernamePrefix` _string_ | usernamePrefix is put before each seat's handle to form its account's<br />username, for a group shared with people. Crewlet's<br />`username_prefix`. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9_.-]+$` <br />Optional: \{\} <br /> |
+| `projects` _string array_ | projects are projects, by path, the accounts also join, and the ones<br />the webhook is registered on one by one when no group hook is.<br />Crewlet's `projects`. |  | MaxItems: 128 <br />items:MaxLength: 255 <br />items:MinLength: 1 <br />items:Pattern: `^[A-Za-z0-9_.][A-Za-z0-9_./-]*$` <br />Optional: \{\} <br /> |
+| `groupWebhook` _[ContainerWebhookMode](#containerwebhookmode)_ | groupWebhook is whether one group hook replaces the per-project ones.<br />Unset is Auto. Crewlet's `group_webhook`. |  | Enum: [Auto Require Never] <br />Optional: \{\} <br /> |
+| `tokenScopes` _string array_ | tokenScopes are the scopes minted on each seat's token. Unset takes<br />Crewlet's default, api. Crewlet's `token_scopes`. |  | MaxItems: 16 <br />items:MaxLength: 64 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z_]+$` <br />Optional: \{\} <br /> |
+
+
+#### GitLabIntegration
+
+
+
+GitLabIntegration turns GitLab on for a company: webhooks from a GitLab
+instance wake the seats they concern. It maps onto Crewlet's
+integrations.gitlab. Each seat's GitLab token is a credential of the
+MCPServer named gitlab in its Seat's spec.mcp, which is where Crewlet reads
+a seat's GitLab identity from.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `url` _string_ | url is the instance's base URL, such as https://gitlab.com. Crewlet's<br />`url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `signingSecretRef` _[SecretKeyReference](#secretkeyreference)_ | signingSecretRef is the Secret key holding the signing token every<br />webhook delivery is verified against: whsec_ followed by the standard<br />base64 of 32 bytes, the only form GitLab signs with (its "Generate<br />signing token" button makes one). Crewlet's `signing_secret`, a<br />credential position. |  | Required: \{\} <br /> |
+| `tokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | tokenSecretRef is the Secret key holding a personal access token with<br />the read_api scope, which the engine reads an issue's or merge<br />request's participants with, so that everyone in a thread hears its<br />activity. Unset routes to the people a delivery names only. Crewlet's<br />`token`, a credential position. |  | Optional: \{\} <br /> |
+| `webhookName` _string_ | webhookName is the name of the hooks the engine registers, which is<br />how it tells its own from others on the instance: two deployments<br />watching one instance need two names. Unset is crewlet. Crewlet's<br />`webhook_name`. |  | MaxLength: 255 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `engineProvisioning` _[GitLabEngineProvisioning](#gitlabengineprovisioning)_ | engineProvisioning is how the engine creates the seats' accounts.<br />Required with provisioning Engine, and not allowed with External. |  | Optional: \{\} <br /> |
+
+
+#### GitLabSeatAccess
+
+
+
+GitLabSeatAccess overrides the access level of one seat's service account.
+
+
+
+_Appears in:_
+- [GitLabEngineProvisioning](#gitlabengineprovisioning)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name is the metadata.name of the Seat, in this namespace. Crewlet keys<br />the override by the seat's handle, which the operator renders. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `accessLevel` _[GitLabAccessLevel](#gitlabaccesslevel)_ | accessLevel is the seat's membership level. |  | Enum: [Developer Maintainer] <br />Required: \{\} <br /> |
+
+
 #### IngressExposure
 
 
@@ -1084,9 +1474,12 @@ _Appears in:_
 
 
 
-Integration connects a company to a vendor (Slack, GitHub): the company-wide
-settings and the credentials that verify the vendor's webhooks. Credentials
-that belong to one seat, such as its own Slack app, are on the Seat.
+Integration connects a company to a vendor (Slack, GitHub, GitLab,
+Mattermost, Jira, Confluence, Datadog or an Atlassian organization): the
+company-wide settings, the credentials that verify the vendor's webhooks,
+and, where the engine creates the seats' accounts, the administrator
+credential it creates them with. Credentials that belong to one seat, such
+as its own Slack app or its GitLab token, are on the Seat.
 
 
 
@@ -1101,6 +1494,25 @@ that belong to one seat, such as its own Slack app, are on the Seat.
 | `status` _[IntegrationStatus](#integrationstatus)_ | status is the integration's observed state. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
+#### IntegrationProvisioning
+
+_Underlying type:_ _string_
+
+IntegrationProvisioning is who creates the seats' accounts at a vendor, and
+so where their credentials come from.
+
+_Validation:_
+- Enum: [External Engine]
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description |
+| --- | --- |
+| `External` | IntegrationProvisioningExternal leaves the seats' accounts to someone<br />outside the engine (a person, a platform): each seat's credentials are<br />Secrets its Seat references, and the engine is given no administrator<br />credential, so it creates, changes and removes nothing at the vendor.<br /> |
+| `Engine` | IntegrationProvisioningEngine has the engine create each agent seat's<br />account with an administrator credential the Integration references,<br />mint the account's credential into the engine's secret store, register<br />the company's webhooks, and heal all of it on a schedule. Seats name<br />the minted credentials as provisioned values.<br /> |
+
+
 #### IntegrationSpec
 
 
@@ -1109,22 +1521,15 @@ IntegrationSpec connects a company to one vendor. Exactly one vendor member
 is set; the Integration's kind of vendor cannot change, and a company has at
 most one Integration per vendor (a second is reported as a conflict).
 
-For both vendors, every per-seat credential (a seat's Slack app, its GitHub
-App) comes from a Secret its Seat references, whoever created the app: the
-engine mints no credential for Slack or GitHub. So an Integration has no
-switch between credentials the platform provides and credentials the engine
-provisions; one arrives with the vendors whose apps the engine can create
-(GitLab, Mattermost).
-
-v1alpha1 has the members slack and github. Crewlet's other integrations
-arrive as further members of this union, each with a reference field per
-credential. Until then their credential positions cannot be set at all:
-integrations.gitlab (signing_secret, token, provisioning.admin_token),
-integrations.mattermost.provisioning.admin_token and a seat's
-integrations.mattermost.bot_token, integrations.jira (token,
-webhook_secret), integrations.confluence (token, webhook_secret,
-webhook_token), integrations.datadog (webhook_token, provisioning.api_key,
-provisioning.app_key) and integrations.atlassian.api_key.
+provisioning says who creates the seats' accounts at the vendor. Under
+External (the default) someone else does, and every per-seat credential
+comes from a Secret its Seat references; the Integration then holds no
+administrator credential. Under Engine the engine creates them, from the
+administrator credential the vendor member references, and seats name the
+credentials it mints as provisioned values. The engine can create accounts
+at GitLab, Mattermost, Datadog and Atlassian; Datadog and Atlassian are
+always provisioned by the engine, and Slack, GitHub, Jira and Confluence
+never are (the engine mints no credential there).
 
 
 
@@ -1134,8 +1539,15 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `companyRef` _[CompanyReference](#companyreference)_ | companyRef names the Company this integration belongs to. Immutable. |  | Required: \{\} <br /> |
+| `provisioning` _[IntegrationProvisioning](#integrationprovisioning)_ | provisioning is who creates the seats' accounts at the vendor. Unset<br />is External. |  | Enum: [External Engine] <br />Optional: \{\} <br /> |
 | `slack` _[SlackIntegration](#slackintegration)_ | slack connects Slack. |  | Optional: \{\} <br /> |
 | `github` _[GitHubIntegration](#githubintegration)_ | github connects GitHub. |  | Optional: \{\} <br /> |
+| `gitlab` _[GitLabIntegration](#gitlabintegration)_ | gitlab connects GitLab. |  | Optional: \{\} <br /> |
+| `mattermost` _[MattermostIntegration](#mattermostintegration)_ | mattermost connects Mattermost. |  | Optional: \{\} <br /> |
+| `jira` _[JiraIntegration](#jiraintegration)_ | jira connects Jira. |  | Optional: \{\} <br /> |
+| `confluence` _[ConfluenceIntegration](#confluenceintegration)_ | confluence connects Confluence. |  | Optional: \{\} <br /> |
+| `datadog` _[DatadogIntegration](#datadogintegration)_ | datadog connects Datadog. |  | Optional: \{\} <br /> |
+| `atlassian` _[AtlassianIntegration](#atlassianintegration)_ | atlassian connects an Atlassian Cloud organization. |  | Optional: \{\} <br /> |
 
 
 #### IntegrationStatus
@@ -1154,7 +1566,33 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists and has no other<br />Integration for the vendor), ResolvedRefs (every Secret key exists),<br />Applied (the integration is in the revision the engine runs) and<br />Healthy (the engine's own check of the vendor passes). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one. Per-seat URLs are<br />in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `webhookURL` _string_ | webhookURL is the company-wide URL the vendor delivers webhooks to,<br />when the company is exposed and the vendor has one:<br /><publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,<br />Confluence (a Data Center instance's; Confluence Cloud delivers to<br /><webhookURL>/<event>, a hook the engine registers per event) and<br />Datadog. Slack, Mattermost and Atlassian have none; Slack's and<br />GitHub's per-seat URLs are in each Seat's status. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+
+
+#### JiraIntegration
+
+
+
+JiraIntegration turns Jira on for a company: webhooks from a Jira site wake
+the seats they concern, and the company may run Jira as its tracker (the
+Company's spec.tracker.backend Jira). It maps onto Crewlet's
+integrations.jira. Each seat's Jira identity is its own token, a credential
+of the MCPServer named atlassian (or jira) in its Seat's spec.mcp.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `url` _string_ | url is a Data Center instance's or a Cloud site's base URL. Unset<br />with cloudID unset, the company's Atlassian Integration discovers the<br />site. Crewlet's `url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `cloudID` _string_ | cloudID is an Atlassian Cloud site's id; requests go through<br />Atlassian's API gateway. Crewlet's `cloud_id`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9-]+$` <br />Optional: \{\} <br /> |
+| `siteURL` _string_ | siteURL is the site's address as a browser opens it, for the links<br />the engine hands people; needed with cloudID, whose gateway address<br />opens nothing in a browser. Unset is url. Crewlet's `site_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `email` _string_ | email is the account's address, for Jira Cloud's basic<br />authentication. Unset sends the token as a bearer token, as a service<br />account and a Data Center personal access token want. Crewlet's<br />`email`. |  | MaxLength: 254 <br />MinLength: 3 <br />Pattern: `^[^@\s]+@[^@\s]+$` <br />Optional: \{\} <br /> |
+| `tokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | tokenSecretRef is the Secret key holding the API token (Cloud) or<br />personal access token (Data Center) of an administrator account. The<br />engine reads an issue's watchers with it, which no webhook carries,<br />and registers the company's webhook. Crewlet's `token`, a credential<br />position. |  | Required: \{\} <br /> |
+| `webhookSecretRef` _[SecretKeyReference](#secretkeyreference)_ | webhookSecretRef is the Secret key holding the secret webhook<br />deliveries are signed with. Required for a Data Center instance, whose<br />route answers none without it; on Cloud, webhooks the engine<br />registers are signed with it, and the Forge relay needs none.<br />Crewlet's `webhook_secret`, a credential position. |  | Optional: \{\} <br /> |
+| `webhookName` _string_ | webhookName is the name of the webhook the engine registers, which is<br />how it tells its own from others on the site: two deployments<br />watching one site need two names. Unset is crewlet. Crewlet's<br />`webhook_name`. |  | MaxLength: 255 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### KnowledgeBackend
@@ -1162,11 +1600,11 @@ _Appears in:_
 _Underlying type:_ _string_
 
 KnowledgeBackend is which knowledge base a company runs. It maps onto
-Crewlet's knowledge.backend (Native is `native`, None is `none`). Crewlet's
-`confluence` backend arrives with the Confluence integration.
+Crewlet's knowledge.backend (Native is `native`, Confluence is
+`confluence`, None is `none`).
 
 _Validation:_
-- Enum: [Native None]
+- Enum: [Native Confluence None]
 
 _Appears in:_
 - [KnowledgeSettings](#knowledgesettings)
@@ -1174,6 +1612,7 @@ _Appears in:_
 | Field | Description |
 | --- | --- |
 | `Native` | KnowledgeNative is the engine's own knowledge base.<br /> |
+| `Confluence` | KnowledgeConfluence is Confluence, connected by the company's<br />Confluence Integration.<br /> |
 | `None` | KnowledgeNone is a company with no knowledge base.<br /> |
 
 
@@ -1192,7 +1631,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `backend` _[KnowledgeBackend](#knowledgebackend)_ | backend is which knowledge base the company runs. | Native | Enum: [Native None] <br />Optional: \{\} <br /> |
+| `backend` _[KnowledgeBackend](#knowledgebackend)_ | backend is which knowledge base the company runs. | Native | Enum: [Native Confluence None] <br />Optional: \{\} <br /> |
 | `scope` _string array_ | scope narrows every knowledge search to these containers. Empty<br />searches the whole company. Each is a container key, which Crewlet<br />requires to be an upper-case letter followed by 1 to 9 upper-case<br />letters or digits, such as PLAT. Crewlet's `scope`. |  | MaxItems: 64 <br />items:MaxLength: 10 <br />items:MinLength: 2 <br />items:Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
 | `skillsContainer` _string_ | skillsContainer is the container holding tool-skill pages, a container<br />key (see scope). Unset takes Crewlet's default container; an empty<br />string turns tool skills off. Crewlet's `skills_container`. |  | MaxLength: 10 <br />Optional: \{\} <br /> |
 | `rootSpace` _string_ | rootSpace is the container holding the company's own pages, such as<br />the root onboarding page, a container key (see scope). Unset takes<br />Crewlet's default. Crewlet's `root_space`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
@@ -1301,7 +1740,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `type` _[LLMProviderType](#llmprovidertype)_ | type is which model API the provider speaks. Crewlet's `type`. |  | Enum: [Anthropic OpenAI OpenAICompatible] <br />Required: \{\} <br /> |
+| `type` _[LLMProviderType](#llmprovidertype)_ | type is which model API the provider speaks. Crewlet's `type`. |  | Enum: [Anthropic OpenAI OpenAICompatible CLIAgent] <br />Required: \{\} <br /> |
 | `model` _string_ | model is the model id requests are sent for, as the provider names it.<br />Crewlet's `model`. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `claudeModel` _string_ | claudeModel names the Claude model whose request shape an Anthropic<br />provider uses when model is a gateway alias Crewlet cannot recognise.<br />Crewlet's `claude_model`; type Anthropic only. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `baseURL` _string_ | baseURL sends requests to this endpoint instead of the vendor's own,<br />for a gateway or a proxy. Required for type OpenAICompatible. Crewlet's<br />`base_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
@@ -1328,7 +1767,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `companyRef` _[CompanyReference](#companyreference)_ | companyRef names the Company this provider belongs to. Immutable. |  | Required: \{\} <br /> |
-| `type` _[LLMProviderType](#llmprovidertype)_ | type is which model API the provider speaks. Crewlet's `type`. |  | Enum: [Anthropic OpenAI OpenAICompatible] <br />Required: \{\} <br /> |
+| `type` _[LLMProviderType](#llmprovidertype)_ | type is which model API the provider speaks. Crewlet's `type`. |  | Enum: [Anthropic OpenAI OpenAICompatible CLIAgent] <br />Required: \{\} <br /> |
 | `model` _string_ | model is the model id requests are sent for, as the provider names it.<br />Crewlet's `model`. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `claudeModel` _string_ | claudeModel names the Claude model whose request shape an Anthropic<br />provider uses when model is a gateway alias Crewlet cannot recognise.<br />Crewlet's `claude_model`; type Anthropic only. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `baseURL` _string_ | baseURL sends requests to this endpoint instead of the vendor's own,<br />for a gateway or a proxy. Required for type OpenAICompatible. Crewlet's<br />`base_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
@@ -1337,7 +1776,8 @@ _Appears in:_
 | `reasoningBudgetTokens` _integer_ | reasoningBudgetTokens is the thinking budget of an older, budget-based<br />Claude model. Unset means such a model does not think. Crewlet's<br />`reasoning_budget_tokens`; type Anthropic only. |  | Minimum: 1024 <br />Optional: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one HTTP attempt: the whole of a unary call, the<br />longest silence in a streamed one. Unset takes Crewlet's default of<br />600. Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `cooldowns` _[LLMCredentialCooldowns](#llmcredentialcooldowns)_ | cooldowns is how long a failing key is set aside. Crewlet's<br />`cooldowns`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `apiKeySecretRefs` _[SecretKeyReference](#secretkeyreference) array_ | apiKeySecretRefs are the provider's API keys, each a key of a Secret in<br />this namespace. With more than one, Crewlet rotates through them,<br />setting aside a key that hits a rate limit or is refused, in the order<br />listed when several are equally free. Crewlet's `api_keys`, a<br />credential position: the values are pushed into the engine's secret<br />store and the document refers to them by name only. Required for types<br />Anthropic and OpenAI; an OpenAICompatible endpoint that needs no key<br />may omit it. |  | MaxItems: 16 <br />MinItems: 1 <br />Optional: \{\} <br /> |
+| `apiKeySecretRefs` _[SecretKeyReference](#secretkeyreference) array_ | apiKeySecretRefs are the provider's API keys, each a key of a Secret in<br />this namespace. With more than one, Crewlet rotates through them,<br />setting aside a key that hits a rate limit or is refused, in the order<br />listed when several are equally free. Crewlet's `api_keys`, a<br />credential position: the values are pushed into the engine's secret<br />store and the document refers to them by name only. Required for types<br />Anthropic and OpenAI; an OpenAICompatible endpoint that needs no key<br />may omit it. A CLIAgent provider takes exactly one, with<br />cli.auth.mode APIKey, which it gives the CLI. |  | MaxItems: 16 <br />MinItems: 1 <br />Optional: \{\} <br /> |
+| `cli` _[CLIAgentSettings](#cliagentsettings)_ | cli is the coding CLI a provider of type CLIAgent drives. Required<br />for, and only for, type CLIAgent. Crewlet's `cli`. |  | Optional: \{\} <br /> |
 
 
 #### LLMProviderStatus
@@ -1364,16 +1804,11 @@ _Underlying type:_ _string_
 
 LLMProviderType is which model API a provider speaks. It maps onto the
 `type` of a Crewlet providers.llm entry: Anthropic is `anthropic`, OpenAI is
-`openai` and OpenAICompatible is `openai-compatible`.
-
-Crewlet's fourth type, `cli-agent`, drives a coding CLI installed next to
-the engine on a subscription login. It is not offered in v1alpha1: the
-engine image ships no coding CLI, and its credentials (a subscription token
-or an exported credential bundle) are per-node logins that a pod which can
-be rescheduled at any time cannot hold.
+`openai`, OpenAICompatible is `openai-compatible` and CLIAgent is
+`cli-agent`.
 
 _Validation:_
-- Enum: [Anthropic OpenAI OpenAICompatible]
+- Enum: [Anthropic OpenAI OpenAICompatible CLIAgent]
 
 _Appears in:_
 - [LLMProviderSettings](#llmprovidersettings)
@@ -1385,6 +1820,7 @@ _Appears in:_
 | `Anthropic` | LLMProviderAnthropic is Anthropic's Messages API.<br /> |
 | `OpenAI` | LLMProviderOpenAI is OpenAI's API.<br /> |
 | `OpenAICompatible` | LLMProviderOpenAICompatible is any endpoint that speaks the OpenAI wire<br />format: a gateway, an aggregator, a self-hosted inference server.<br /> |
+| `CLIAgent` | LLMProviderCLIAgent drives a coding CLI (Claude Code, Codex, ...) on a<br />subscription login, installed in the engine's image: see<br />LLMProviderSpec.cli.<br /> |
 
 
 #### LocalObjectReference
@@ -1397,6 +1833,7 @@ documents, in the referring object's own namespace.
 
 
 _Appears in:_
+- [DatadogRouteTo](#datadogrouteto)
 - [EngineSettings](#enginesettings)
 - [ScheduleTarget](#scheduletarget)
 - [SeatSandbox](#seatsandbox)
@@ -1425,7 +1862,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | name is the environment variable's name (Stdio) or the header's name<br />(HTTP). |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9!#$%&'*+.^_\|~-]+$` <br />Required: \{\} <br /> |
-| `valueFrom` _[SecretValueSource](#secretvaluesource)_ | valueFrom is the Secret key the value is read from. For a header the<br />Secret key holds the whole header value, scheme included (for example<br />"Bearer <token>"). |  | Required: \{\} <br /> |
+| `valueFrom` _[SeatCredentialSource](#seatcredentialsource)_ | valueFrom is where the value comes from: a Secret key, or, for a<br />Seat's own credentials, the engine (provisioned). For a header the<br />value is the whole header, scheme included (for example "Bearer<br /><token>"); a provisioned value is the credential alone, so provision<br />one for a variable rather than a header. |  | MinProperties: 1 <br />Required: \{\} <br /> |
 
 
 #### MCPCredentials
@@ -1620,6 +2057,75 @@ _Appears in:_
 | `Enforce` | ManagementPolicyEnforce makes the operator the document's only<br />writer. The engine refuses every other token a change to the document<br />(403 config_managed), the published access token included, and its<br />dashboard shows the document read-only; a revision made some other way<br />all the same (the engine's own writes, or one made before the data pod<br />restarted onto the policy) is reported and overwritten.<br /> |
 | `Observe` | ManagementPolicyObserve renders and compares, and never writes; a<br />difference is reported only. The engine's own users may change the<br />document.<br /> |
 | `Seed` | ManagementPolicySeed writes the document once, into an engine that<br />has none, and then leaves it to the engine and its dashboard, whose<br />users may change it. Changes to the Company's children are ignored<br />afterwards and say so in their status.<br /> |
+
+
+#### MattermostEngineProvisioning
+
+
+
+MattermostEngineProvisioning is how the engine provisions the seats'
+Mattermost bots under provisioning Engine. It maps onto Crewlet's
+integrations.mattermost.provisioning: for each agent seat whose
+spec.integrations.mattermost.botToken is provisioned, the engine creates a
+bot, adds it to the team and the channels, and mints its token into that
+value.
+
+
+
+_Appears in:_
+- [MattermostIntegration](#mattermostintegration)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `adminTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | adminTokenSecretRef is the Secret key holding a system<br />administrator's personal access token, which creates and disables the<br />bots. Crewlet's `admin_token`, a credential position. |  | Required: \{\} <br /> |
+| `usernamePrefix` _string_ | usernamePrefix is put before each seat's handle to form its bot's<br />username, for a server shared with people. Crewlet's<br />`username_prefix`. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[a-z0-9._-]+$` <br />Optional: \{\} <br /> |
+| `channels` _string array_ | channels are channels, by name (the URL slug), every bot joins: a bot<br />hears only the channels it is in. Crewlet's `channels`. |  | MaxItems: 64 <br />items:MaxLength: 64 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9][a-z0-9_-]*$` <br />Optional: \{\} <br /> |
+| `displayNameSuffix` _string_ | displayNameSuffix is put after each bot's display name, such as<br />" (AI)", to tell agents from people at a glance. Crewlet's<br />`display_name_suffix`. |  | MaxLength: 64 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+
+
+#### MattermostIntegration
+
+
+
+MattermostIntegration turns Mattermost on for a company. It maps onto
+Crewlet's integrations.mattermost. Mattermost delivers no webhook the engine
+can use: the engine holds a websocket per seat's bot instead, so the
+integration needs no public address. Each seat's bot is in its Seat's
+spec.integrations.mattermost.
+
+
+
+_Appears in:_
+- [IntegrationSpec](#integrationspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `url` _string_ | url is the server's base URL, such as https://chat.example.com: its<br />Site URL, which the websocket, the REST calls and every link derive<br />from. Crewlet's `url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `team` _string_ | team is the team, by name (the URL slug), the bots belong to.<br />Crewlet's `team`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9_-]*$` <br />Required: \{\} <br /> |
+| `typingStatus` _[WorkingStatus](#workingstatus)_ | typingStatus is when a seat shows that it is typing. Unset takes<br />Crewlet's default, Always; each indicator costs a request every few<br />seconds while the seat works. Crewlet's `typing_status`. |  | Enum: [Always Addressed] <br />Optional: \{\} <br /> |
+| `engineProvisioning` _[MattermostEngineProvisioning](#mattermostengineprovisioning)_ | engineProvisioning is how the engine creates the seats' bots.<br />Required with provisioning Engine, and not allowed with External. |  | Optional: \{\} <br /> |
+
+
+#### MattermostSeatIntegration
+
+
+
+MattermostSeatIntegration is a seat's own Mattermost bot. It maps onto
+Crewlet's role integrations.mattermost and needs the company's Mattermost
+Integration. One credential covers everything the bot does: the websocket
+the engine listens on, its REST calls, and the Mattermost tool server, whose
+credentials (in spec.mcp) name the same token.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `botToken` _[SeatCredentialSource](#seatcredentialsource)_ | botToken is the bot account's personal access token: from a Secret,<br />or provisioned by the engine under a Mattermost Integration with<br />provisioning Engine, which creates the bot and mints the token.<br />Crewlet's `bot_token`, a credential position. |  | MinProperties: 1 <br />Required: \{\} <br /> |
+| `username` _string_ | username is the bot's username, for a bot that exists under a name<br />other than the seat's handle (with the Integration's<br />engineProvisioning.usernamePrefix before it). Crewlet's `username`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9._-]*$` <br />Optional: \{\} <br /> |
+| `channel` _string_ | channel is a channel, by its name (the URL slug), the engine adds the<br />bot to when it provisions it, on top of the Integration's<br />engineProvisioning.channels. Crewlet's `channel`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9_-]*$` <br />Optional: \{\} <br /> |
 
 
 #### NamespacedSecretKeyReference
@@ -1822,7 +2328,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | name is the provider's name. Seats and the Company's model order refer<br />to it with kind PlatformLLMProvider. It may not be default, which<br />Crewlet would run every chainless seat of every opted-in company on,<br />whatever the company's own order says. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Required: \{\} <br /> |
-| `type` _[LLMProviderType](#llmprovidertype)_ | type is which model API the provider speaks. Crewlet's `type`. |  | Enum: [Anthropic OpenAI OpenAICompatible] <br />Required: \{\} <br /> |
+| `type` _[LLMProviderType](#llmprovidertype)_ | type is which model API the provider speaks. Crewlet's `type`. |  | Enum: [Anthropic OpenAI OpenAICompatible CLIAgent] <br />Required: \{\} <br /> |
 | `model` _string_ | model is the model id requests are sent for, as the provider names it.<br />Crewlet's `model`. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `claudeModel` _string_ | claudeModel names the Claude model whose request shape an Anthropic<br />provider uses when model is a gateway alias Crewlet cannot recognise.<br />Crewlet's `claude_model`; type Anthropic only. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `baseURL` _string_ | baseURL sends requests to this endpoint instead of the vendor's own,<br />for a gateway or a proxy. Required for type OpenAICompatible. Crewlet's<br />`base_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
@@ -1832,6 +2338,28 @@ _Appears in:_
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one HTTP attempt: the whole of a unary call, the<br />longest silence in a streamed one. Unset takes Crewlet's default of<br />600. Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `cooldowns` _[LLMCredentialCooldowns](#llmcredentialcooldowns)_ | cooldowns is how long a failing key is set aside. Crewlet's<br />`cooldowns`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `apiKeySecretRefs` _[NamespacedSecretKeyReference](#namespacedsecretkeyreference) array_ | apiKeySecretRefs are the provider's API keys, rotated as an<br />LLMProvider's are. |  | MaxItems: 16 <br />MinItems: 1 <br />Optional: \{\} <br /> |
+
+
+#### ProvisionedCredential
+
+
+
+ProvisionedCredential is a seat's credential the engine creates: an
+Integration with provisioning Engine (GitLab, Mattermost, Datadog,
+Atlassian) makes the seat's account at the vendor, mints the account's
+credential, and seals it in the engine's own secret store. The company
+document refers to it by a name the operator derives from the seat's handle
+and this name, and nothing else ever writes that store entry: the operator
+pushes no value into it and deletes none it finds there.
+
+
+
+_Appears in:_
+- [SeatCredentialSource](#seatcredentialsource)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name names the value among the seat's provisioned credentials. Every<br />place a seat names the same provisioned name refers to one value, so<br />a token given to a tool server's environment and to the seat's<br />sandbox is one token; different names are different values, such as<br />an account's token and its email address. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9-]*$` <br />Required: \{\} <br /> |
 
 
 #### ReasoningEffort
@@ -2132,13 +2660,54 @@ _Appears in:_
 | `githubLogin` _string_ | githubLogin is the person's GitHub login. Crewlet's `github_login`. |  | MaxLength: 39 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9-]+$` <br />Optional: \{\} <br /> |
 
 
+#### SeatCredentialSource
+
+
+
+SeatCredentialSource says where one of a seat's own credentials comes from:
+a Secret key, or the engine, which provisions it (see
+ProvisionedCredential).
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [MCPCredentialValue](#mcpcredentialvalue)
+- [MattermostSeatIntegration](#mattermostseatintegration)
+- [SeatEnvVar](#seatenvvar)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `secretKeyRef` _[SecretKeyReference](#secretkeyreference)_ | secretKeyRef selects the Secret key that holds the value. |  | Optional: \{\} <br /> |
+| `provisioned` _[ProvisionedCredential](#provisionedcredential)_ | provisioned is a value the engine creates and keeps, under an<br />Integration with provisioning Engine. |  | Optional: \{\} <br /> |
+
+
+#### SeatEnvVar
+
+
+
+SeatEnvVar is a named credential of a seat delivered as an environment
+variable: from a Secret, or provisioned by the engine.
+
+
+
+_Appears in:_
+- [SeatSandbox](#seatsandbox)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name is the variable's name. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z_][A-Za-z0-9_]*$` <br />Required: \{\} <br /> |
+| `valueFrom` _[SeatCredentialSource](#seatcredentialsource)_ | valueFrom is where the value comes from. |  | MinProperties: 1 <br />Required: \{\} <br /> |
+
+
 #### SeatIntegrations
 
 
 
 SeatIntegrations is a seat's own identity on the company's integrations:
 the chat app it speaks as, the code-host app it acts as. Its tool
-credentials are in spec.mcp instead.
+credentials, the GitLab, Jira, Confluence and Datadog ones included, are in
+spec.mcp instead, which is where Crewlet reads them.
 
 _Validation:_
 - MinProperties: 1
@@ -2150,6 +2719,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `slack` _[SlackSeatIntegration](#slackseatintegration)_ | slack is the seat's own Slack app. |  | Optional: \{\} <br /> |
 | `github` _[GitHubSeatIntegration](#githubseatintegration)_ | github is the seat's identity on GitHub. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `mattermost` _[MattermostSeatIntegration](#mattermostseatintegration)_ | mattermost is the seat's own Mattermost bot. |  | Optional: \{\} <br /> |
 
 
 #### SeatIntegrationsStatus
@@ -2287,7 +2857,7 @@ _Appears in:_
 | `pauseTTLSeconds` _integer_ | pauseTTLSeconds is how long the seat's sandbox stays paused while it<br />waits on a person. Unset takes the Company's default; 0 never pauses.<br />Crewlet's `pause_ttl_seconds`. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `maxTurns` _integer_ | maxTurns caps the agentic rounds of the seat's coding runs. Unset<br />takes the Company's default; 0 is uncapped. Crewlet's `max_turns`. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `mcpServerRefs` _[LocalObjectReference](#localobjectreference) array_ | mcpServerRefs name the MCPServers the coding agent may use. Crewlet's<br />mcp.servers. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
-| `env` _[SecretEnvVar](#secretenvvar) array_ | env is the environment of the seat's sandbox runs, for the external<br />tokens its code work needs. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `env` _[SeatEnvVar](#seatenvvar) array_ | env is the environment of the seat's sandbox runs, for the external<br />tokens its code work needs: from Secrets, or provisioned by the<br />engine, such as the GitLab token a provisioning Integration mints for<br />the seat, named as its tool server's is so both are one token.<br />Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `setup` _[SandboxSetupStep](#sandboxsetupstep) array_ | setup is the seat's own provisioning, applied after the Company's.<br />Crewlet's `setup`. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 
 
@@ -2368,9 +2938,9 @@ accepted: the value always comes from a Secret.
 
 
 _Appears in:_
+- [CLIAgentSettings](#cliagentsettings)
 - [MCPServerSpec](#mcpserverspec)
 - [SandboxSetupStep](#sandboxsetupstep)
-- [SeatSandbox](#seatsandbox)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -2409,10 +2979,19 @@ appears in the company document, in a pod template or in any status.
 
 
 _Appears in:_
+- [AtlassianIntegration](#atlassianintegration)
+- [CLIAgentAuth](#cliagentauth)
+- [ConfluenceIntegration](#confluenceintegration)
+- [DatadogIntegration](#datadogintegration)
 - [E2BSandbox](#e2bsandbox)
 - [EmbeddingSettings](#embeddingsettings)
 - [GitHubIntegration](#githubintegration)
+- [GitLabEngineProvisioning](#gitlabengineprovisioning)
+- [GitLabIntegration](#gitlabintegration)
+- [JiraIntegration](#jiraintegration)
 - [LLMProviderSpec](#llmproviderspec)
+- [MattermostEngineProvisioning](#mattermostengineprovisioning)
+- [SeatCredentialSource](#seatcredentialsource)
 - [SecretValueSource](#secretvaluesource)
 
 | Field | Description | Default | Validation |
@@ -2455,7 +3034,6 @@ reshaping every list that carries credentials.
 
 _Appears in:_
 - [EnvVar](#envvar)
-- [MCPCredentialValue](#mcpcredentialvalue)
 - [SandboxFile](#sandboxfile)
 - [SecretEnvVar](#secretenvvar)
 - [SecretHeader](#secretheader)
@@ -2643,11 +3221,10 @@ _Appears in:_
 _Underlying type:_ _string_
 
 TrackerBackend is which work tracker a company runs. It maps onto Crewlet's
-tracker.backend (Native is `native`, None is `none`). Crewlet's `jira`
-backend arrives with the Jira integration.
+tracker.backend (Native is `native`, Jira is `jira`, None is `none`).
 
 _Validation:_
-- Enum: [Native None]
+- Enum: [Native Jira None]
 
 _Appears in:_
 - [TrackerSettings](#trackersettings)
@@ -2655,6 +3232,7 @@ _Appears in:_
 | Field | Description |
 | --- | --- |
 | `Native` | TrackerNative is the engine's own tracker.<br /> |
+| `Jira` | TrackerJira is Jira, connected by the company's Jira Integration.<br /> |
 | `None` | TrackerNone is a company with no tracker.<br /> |
 
 
@@ -2673,7 +3251,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `backend` _[TrackerBackend](#trackerbackend)_ | backend is which tracker the company runs. | Native | Enum: [Native None] <br />Optional: \{\} <br /> |
+| `backend` _[TrackerBackend](#trackerbackend)_ | backend is which tracker the company runs. | Native | Enum: [Native Jira None] <br />Optional: \{\} <br /> |
 | `native` _[NativeTrackerSettings](#nativetrackersettings)_ | native is the policy of the engine's own tracker, for backend Native. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
@@ -2727,7 +3305,7 @@ _Appears in:_
 | `knowledge` _string array_ | knowledge are free-text references to knowledge the unit relies on.<br />They are not a read scope. Crewlet's `knowledge`. |  | MaxItems: 32 <br />items:MaxLength: 1024 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
 | `project` _string_ | project is the tracker project the unit files work in, by its key.<br />Crewlet requires a container key to be an upper-case letter followed<br />by 1 to 9 upper-case letters or digits, such as PLAT. Crewlet's<br />`project`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
 | `space` _string_ | space is the knowledge container the unit writes pages in, by its<br />key, which follows the same rule as project. Crewlet's `space`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
-| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are tool-server credentials every agent seat directly in this unit<br />inherits; a seat's own credentials win per variable. One entry per<br />server, keyed by its name. Crewlet's `mcp_env`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are tool-server credentials every agent seat directly in this unit<br />inherits; a seat's own credentials win per variable. One entry per<br />server, keyed by its name. Crewlet's `mcp_env`, a credential position.<br />Every value comes from a Secret: the engine provisions a credential<br />for one seat, and a unit's are every member's. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 
 
 #### UnitStatus
@@ -2831,6 +3409,7 @@ _Validation:_
 - Enum: [Always Addressed]
 
 _Appears in:_
+- [MattermostIntegration](#mattermostintegration)
 - [SlackIntegration](#slackintegration)
 
 | Field | Description |

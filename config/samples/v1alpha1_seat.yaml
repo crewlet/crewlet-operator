@@ -1,6 +1,7 @@
 # Nimbus's seats: the founder (a person), the CTO and a platform engineer
 # (agents). The Secrets each agent references hold its own credentials, so it
-# acts as itself on Slack, on GitHub and on the GitHub tool server.
+# acts as itself on Slack, on GitHub and on the GitHub tool server; on GitLab
+# it acts as the account the engine creates for it.
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat
 metadata:
@@ -75,6 +76,14 @@ spec:
             secretKeyRef:
               name: ana-github
               key: authorization
+    - name: gitlab
+      env:
+        # The GitLab Integration's engine mints this token for Ana's
+        # service account; no Secret holds it.
+        - name: GITLAB_TOKEN
+          valueFrom:
+            provisioned:
+              name: gitlab-token
   sandbox:
     mcpServerRefs:
       - name: github
@@ -84,6 +93,11 @@ spec:
           secretKeyRef:
             name: ana-github
             key: token
+      # The same token as the tool server's, for git in the sandbox.
+      - name: GITLAB_TOKEN
+        valueFrom:
+          provisioned:
+            name: gitlab-token
   integrations:
     slack:
       # Keys: botToken, signingSecret.

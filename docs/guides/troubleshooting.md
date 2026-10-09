@@ -95,7 +95,9 @@ conditions. `kubectl get engineclasses` shows it.
 | `ResolvedRefs` | True | `Resolved` | Every object and Secret key it references exists. |
 | | False | `RefNotFound` | It references an object that does not exist (a Unit, a Seat, an LLMProvider, an MCPServer); the message names it. |
 | | False | `Cycle` | A Unit's `parentRef` chain leads back to itself. |
-| | False | `HumanSeat` | A Schedule's `target.seatRef` names a Human seat, for whom the engine runs no turn. Target an Agent seat, or the person's unit with `fanOut: Each`. |
+| | False | `HumanSeat` | A Schedule's `target.seatRef`, a Datadog Integration's `routeTo.seatRef` or a GitLab Integration's `accessLevels` entry names a Human seat, for whom the engine runs no turn and creates no account. Name an Agent seat (a Schedule may target the person's unit with `fanOut: Each`). |
+| | False | `NoProvisioner` | A Seat names a provisioned credential, and no Integration of its company has `provisioning: Engine`, so nothing would create the value. Give the value from a Secret, or provision the vendor with the engine ([Connecting integrations](integrations.md#who-creates-the-seats-accounts)). |
+| | False | `NotExposed` | An LLMProvider runs a CLI in `mode: Agent`, whose runs call the seat's tools back through the company's public address, and the company has none. Give the class a webhooks route or the Company `spec.exposure.publicBaseURL`, or use `mode: Text`. |
 | | False | `ReferenceNotAllowed` | A string it renders into the document holds a `${NAME}` reference, which the engine would resolve from its own secret store and environment. The message names the place in the document. Give a credential with a Secret reference; in a sandbox command, write a variable as `$NAME`. |
 | | False | `SecretNotFound` | A Secret or key it references is missing. |
 | | False | `SecretTooLarge` | A value it references is over 64 KiB. |
@@ -113,7 +115,7 @@ conditions. `kubectl get engineclasses` shows it.
 | | Unknown | `PauseRefused` | The engine refused the operator's pause or resume; the message is the engine's. |
 | `Healthy` (Integration) | True | `CheckPassed` | The engine reports the vendor connected. |
 | | False | `CheckFailed` | The engine's check against the vendor failed; the message carries why (a revoked token, a missing scope). |
-| | False | `NotExposed` | The Company has no public address, so no webhook can reach it: the class's webhooks mode is `None`. |
+| | False | `NotExposed` | The Company has no public address, so no webhook can reach it: the class's webhooks mode is `None`. Mattermost and an Atlassian organization deliver no webhooks and never report it. |
 
 ## The data pod is not ready
 

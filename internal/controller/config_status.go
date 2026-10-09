@@ -18,12 +18,6 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/render"
 )
 
-// The engine's keys of the tools an Integration connects.
-const (
-	toolSlack  = "slack"
-	toolGitHub = "github"
-)
-
 // writeStatus records the reconcile's verdict: every part's status, then the
 // Company's conditions and status.config.
 func (run *configRun) writeStatus(ctx context.Context) error {
@@ -97,10 +91,10 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 		if o.Spec.Placement != nil && o.Spec.Placement.Pool != "" {
 			o.Status.Placement.Pool = o.Spec.Placement.Pool
 		}
-		if base != "" && vendors[toolSlack] {
+		if base != "" && vendors[render.VendorSlack] {
 			o.Status.Integrations.Slack.RequestURL = base + "/webhooks/slack/" + handle
 		}
-		if base != "" && vendors[toolGitHub] {
+		if base != "" && vendors[render.VendorGitHub] {
 			o.Status.Integrations.GitHub.WebhookURL = base + "/webhooks/github/" + handle
 		}
 	case *crewletaiv1alpha1.Unit:
@@ -108,12 +102,10 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 		o.Status.Depth = facts.depth
 		o.Status.Seats = new(facts.seats)
 	case *crewletaiv1alpha1.Integration:
-		vendor := vendorOf(o)
+		vendor := render.Vendor(o)
 		o.Status.WebhookURL = ""
-		if base != "" && vendor == toolGitHub {
-			// Slack has no company-wide address: each seat's app
-			// delivers to its own, in the Seat's status.
-			o.Status.WebhookURL = base + "/webhooks/github"
+		if base != "" && companyWebhook(vendor) {
+			o.Status.WebhookURL = base + "/webhooks/" + vendor
 		}
 		run.decideHealthy(p, vendor, base)
 	}
@@ -167,14 +159,44 @@ func (run *configRun) decideApplied(p *part) {
 	}
 }
 
+// companyWebhook reports whether a vendor delivers webhooks to one
+// company-wide route, /webhooks/<vendor>. Slack has none: each seat's app
+// delivers to its own, in the Seat's status. Mattermost delivers none (the
+// engine holds a websocket per bot), and an Atlassian organization is where
+// accounts are made, not a source of events.
+func companyWebhook(vendor string) bool {
+	switch vendor {
+	case render.VendorGitHub, render.VendorGitLab, render.VendorJira, render.VendorConfluence, render.VendorDatadog:
+		return true
+	}
+	return false
+}
+
+// needsInbound reports whether a vendor reaches the engine over webhooks,
+// and so cannot work without a public address.
+func needsInbound(vendor string) bool {
+	return vendor == render.VendorSlack || companyWebhook(vendor)
+}
+
+// healthTool is the key of the tool the engine reports a vendor under: Jira,
+// Confluence and the Atlassian organization are one tool, atlassian, whose
+// verdict covers all three.
+func healthTool(vendor string) string {
+	switch vendor {
+	case render.VendorJira, render.VendorConfluence:
+		return render.VendorAtlassian
+	}
+	return vendor
+}
+
 // decideHealthy sets an Integration's Healthy condition from the engine's
 // verdict on its tool. With no public address no webhook can arrive, which
-// is the verdict whatever the engine says; without a verdict read, the
-// condition stays as it was.
+// is the verdict whatever the engine says for a vendor that delivers them;
+// without a verdict read, the condition stays as it was.
 func (run *configRun) decideHealthy(p *part, vendor, base string) {
 	gen := p.obj.GetGeneration()
 	conditions := p.conditions()
-	if base == "" {
+	if base == "" && needsInbound(vendor) {
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionHealthy, false, crewletaiv1alpha1.ReasonNotExposed, fmt.Sprintf(
 			"Company %s has no public address (status.endpoints.publicBaseURL), so %s cannot deliver webhooks to its engine.",
 			run.company.Name, vendor))
@@ -183,45 +205,38 @@ func (run *configRun) decideHealthy(p *part, vendor, base string) {
 	if run.health == nil {
 		return
 	}
-	tool, ok := run.health[vendor]
+	key := healthTool(vendor)
+	tool, ok := run.health[key]
 	switch {
 	case !ok:
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionHealthy, false, crewletaiv1alpha1.ReasonCheckFailed,
-			fmt.Sprintf("The engine reports nothing about %s.", vendor))
+			fmt.Sprintf("The engine reports nothing about %s.", key))
 	case tool.State == engine.IntegrationConnected:
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionHealthy, true, crewletaiv1alpha1.ReasonCheckPassed,
-			fmt.Sprintf("The engine reports %s %s.", vendor, tool.Label))
+			fmt.Sprintf("The engine reports %s %s.", key, tool.Label))
 	case tool.State == engine.IntegrationNotInUse:
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionHealthy, false, crewletaiv1alpha1.ReasonCheckFailed,
 			fmt.Sprintf("The engine does not use %s: the revision it runs has no %s block.", vendor, vendor))
 	default:
 		// attention, not_connected, and any state a newer engine adds,
 		// which the engine's client says to read as not working.
-		message := fmt.Sprintf("The engine reports %s %s.", vendor, tool.Label)
+		message := fmt.Sprintf("The engine reports %s %s.", key, tool.Label)
 		if tool.Reason != "" {
-			message = fmt.Sprintf("The engine reports %s %s: %s", vendor, tool.Label, tool.Reason)
+			message = fmt.Sprintf("The engine reports %s %s: %s", key, tool.Label, tool.Reason)
 		}
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionHealthy, false, crewletaiv1alpha1.ReasonCheckFailed, message)
 	}
 }
 
-// vendors are the tools the company's Integrations connect.
+// vendors are the vendors the company's Integrations connect.
 func (run *configRun) vendors() map[string]bool {
 	out := map[string]bool{}
 	for _, p := range run.parts {
 		if in, ok := p.obj.(*crewletaiv1alpha1.Integration); ok {
-			out[vendorOf(in)] = true
+			out[render.Vendor(in)] = true
 		}
 	}
 	return out
-}
-
-// vendorOf is the engine's key of the tool an Integration connects.
-func vendorOf(in *crewletaiv1alpha1.Integration) string {
-	if in.Spec.Slack != nil {
-		return toolSlack
-	}
-	return toolGitHub
 }
 
 // unitFacts is what a Unit's status says about its place in the chart.

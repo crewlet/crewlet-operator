@@ -1,0 +1,69 @@
+# Coding CLIs as model providers: Claude Code on a subscription's headless
+# token running a seat's executor as its own agentic run in the company's
+# E2B sandbox, beside Codex on an exported login as a text model behind the
+# engine's tool loop, the reviewer's. Agent mode calls the seat's tools back
+# through the company's public address, so the case is exposed.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: forge
+spec:
+  engineClassName: basic
+  companyName: Forge
+  sandbox:
+    e2b:
+      apiKeySecretRef:
+        name: e2b
+        key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude-agent
+spec:
+  companyRef:
+    name: forge
+  type: CLIAgent
+  model: sonnet
+  cli:
+    agent: ClaudeCode
+    mode: Agent
+    runIn: E2B
+    loginName: claude
+    timeoutSeconds: 900
+    maxConcurrent: 2
+    auth:
+      mode: Subscription
+      tokenSecretRef:
+        name: claude-subscription
+        key: oauthToken
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: codex
+spec:
+  companyRef:
+    name: forge
+  type: CLIAgent
+  model: gpt-5-codex
+  cli:
+    agent: Codex
+    auth:
+      credentialBundleSecretRef:
+        name: codex-login
+        key: bundle
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: builder
+spec:
+  companyRef:
+    name: forge
+  goal: Ship the changes the team files.
+  llm:
+    default:
+      - name: claude-agent
+    review:
+      - name: codex

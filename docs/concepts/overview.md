@@ -22,7 +22,7 @@ the [API reference](../reference/api.md).
 | `Seat` | Namespace | One seat: an AI agent, or a person agents work with | One entry of `roles`, inside its unit |
 | `LLMProvider` | Namespace | A model a company's seats can run on | One entry of `providers.llm` |
 | `MCPServer` | Namespace | A tool server agents call | One entry of `mcp_servers` |
-| `Integration` | Namespace | A vendor the company is connected to (Slack, GitHub) | One block of `integrations` |
+| `Integration` | Namespace | A vendor the company is connected to (Slack, GitHub, GitLab, Mattermost, Jira, Confluence, Datadog, an Atlassian organization), and who creates the seats' accounts there | One block of `integrations` |
 | `Schedule` | Namespace | Recurring work of a seat or a unit, fired on a cron schedule: the company's CronJob | One entry of its seat's or unit's `schedules` |
 
 All eight are in the `crewlet` category, so one command lists a company:
@@ -80,8 +80,10 @@ in another namespace: the platform's own Secrets, in a namespace tenants
 cannot read.
 
 [`config/samples`](../../config/samples) is one complete example, Nimbus: a
-class, a company, two units, three seats (one a person), a model provider, a
-tool server, the Slack and GitHub integrations and two schedules.
+class, a company, two units, three seats (one a person), a model provider,
+two tool servers, the Slack, GitHub and GitLab integrations and two
+schedules. GitLab's accounts are the engine's to make, so a seat names its
+GitLab token as a provisioned value rather than a Secret.
 
 ### Identities that never change
 

@@ -30,6 +30,12 @@
 // names Owns accepts, so entries a person or a provisioner wrote under any
 // other name are never touched, whatever the operator's state says.
 //
+// A seat's credential the engine provisions is the one entry the document
+// names that the operator does not fill: ProvisionedName derives its name
+// (ProvisionedPrefix, never Prefix), the engine's provisioning writes it, and
+// Owns refuses it, so no Sync ever overwrites or collects what the engine
+// minted (ADR-0004).
+//
 // # Why the state is kept in a Secret
 //
 // The engine's listing carries names and metadata, never values, and reading

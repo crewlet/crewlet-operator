@@ -37,11 +37,13 @@ type MCPCredentialValue struct {
 	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9!#$%&'*+.^_|~-]+$`
 	Name string `json:"name,omitempty"`
 
-	// valueFrom is the Secret key the value is read from. For a header the
-	// Secret key holds the whole header value, scheme included (for example
-	// "Bearer <token>").
+	// valueFrom is where the value comes from: a Secret key, or, for a
+	// Seat's own credentials, the engine (provisioned). For a header the
+	// value is the whole header, scheme included (for example "Bearer
+	// <token>"); a provisioned value is the credential alone, so provision
+	// one for a variable rather than a header.
 	// +required
-	ValueFrom SecretValueSource `json:"valueFrom,omitzero"`
+	ValueFrom SeatCredentialSource `json:"valueFrom,omitzero"`
 }
 
 // MCPCredentials are the credentials one tool server is started with for a
@@ -164,10 +166,13 @@ type UnitSpec struct {
 	// mcp are tool-server credentials every agent seat directly in this unit
 	// inherits; a seat's own credentials win per variable. One entry per
 	// server, keyed by its name. Crewlet's `mcp_env`, a credential position.
+	// Every value comes from a Secret: the engine provisions a credential
+	// for one seat, and a unit's are every member's.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=16
+	// +kubebuilder:validation:XValidation:rule="self.all(c, c.env.all(v, !has(v.valueFrom.provisioned)))",message="a unit's credentials come from Secrets: the engine provisions a credential for one seat, so name it on the Seat"
 	MCP []MCPCredentials `json:"mcp,omitempty"`
 }
 

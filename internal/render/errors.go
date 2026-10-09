@@ -11,7 +11,9 @@ import (
 // RefError is a reference from one object to another that cannot be rendered
 // into the company document: the object named does not exist, the chain of
 // parents it starts loops, or it names something Crewlet would read as a
-// different object. The controller reports it on the object that holds the
+// different object, or something that cannot be there (a person where the
+// engine runs a turn, a provisioned credential nothing provisions, an
+// agent-mode CLI with no public address to call its tools back through). The controller reports it on the object that holds the
 // reference (Kind and Name), as ResolvedRefs=False with Reason, or
 // Accepted=False for a Conflict.
 //
@@ -26,8 +28,9 @@ type RefError struct {
 	Field string
 	// Reason is the condition reason the refusal is reported with:
 	// v1alpha1.ReasonRefNotFound, v1alpha1.ReasonCycle,
-	// v1alpha1.ReasonConflict, v1alpha1.ReasonReferenceNotAllowed or
-	// v1alpha1.ReasonHumanSeat.
+	// v1alpha1.ReasonConflict, v1alpha1.ReasonReferenceNotAllowed,
+	// v1alpha1.ReasonHumanSeat, v1alpha1.ReasonNoProvisioner or
+	// v1alpha1.ReasonNotExposed.
 	Reason string
 	// Message says what is wrong and what to do, for a condition message.
 	Message string

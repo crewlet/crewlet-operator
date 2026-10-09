@@ -83,7 +83,7 @@ func decodeSamples(namespace string) ([]client.Object, error) {
 
 // inputOf sorts objects into the input of a render.
 func inputOf(objects []client.Object) *render.Input {
-	in := &render.Input{StoreName: secretsync.StoreName}
+	in := &render.Input{StoreName: secretsync.StoreName, ProvisionedName: secretsync.ProvisionedName}
 	for _, obj := range objects {
 		switch o := obj.(type) {
 		case *crewletaiv1alpha1.EngineClass:

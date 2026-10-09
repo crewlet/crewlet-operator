@@ -6,12 +6,12 @@
 // spelling there. Engine tuning without a typed field passes through
 // Company.spec.engineConfig.
 //
-// No field holds a credential. Every position Crewlet marks as a credential is
-// filled from a Secret through a SecretKeyReference or a SecretReference
-// (NamespacedSecretKeyReference and NamespacedSecretReference on the
-// cluster-scoped EngineClass), or is not offered in v1alpha1: the credentials
-// of the integrations other than Slack and GitHub (see IntegrationSpec) and of
-// the cli-agent model provider (see LLMProviderType). docs/concepts/credentials.md
+// No field holds a credential. Every position Crewlet marks as a credential in
+// the company document is filled from a Secret through a SecretKeyReference or
+// a SecretReference (NamespacedSecretKeyReference and NamespacedSecretReference
+// on the cluster-scoped EngineClass), or, for a seat's account the engine
+// creates under an Integration with provisioning Engine, is a value the engine
+// mints into its own store (ProvisionedCredential). docs/concepts/credentials.md
 // in the repository maps every position to its field.
 //
 // +kubebuilder:object:generate=true

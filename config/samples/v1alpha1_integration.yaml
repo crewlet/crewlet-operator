@@ -1,7 +1,12 @@
-# Slack and GitHub for Nimbus. Slack needs no company-wide credential: each
-# seat brings its own app. GitHub's company-wide webhook route is verified
-# with the secret in nimbus-github under webhookSecret, and the engine
-# registers that webhook on the organization with the token under orgToken.
+# Slack, GitHub and GitLab for Nimbus. Slack needs no company-wide
+# credential: each seat brings its own app. GitHub's company-wide webhook
+# route is verified with the secret in nimbus-github under webhookSecret, and
+# the engine registers that webhook on the organization with the token under
+# orgToken. GitLab's accounts are the engine's to make (provisioning Engine):
+# with the group owner's token in nimbus-gitlab-admin it creates a service
+# account for each agent seat that names a provisioned GitLab token (see the
+# Seat ana), and registers the webhook, signed with the signing token in
+# nimbus-gitlab.
 apiVersion: crewlet.ai/v1alpha1
 kind: Integration
 metadata:
@@ -29,3 +34,24 @@ spec:
     provisioning:
       org: nimbus-hq
       orgWebhook: Auto
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: gitlab
+spec:
+  companyRef:
+    name: nimbus
+  provisioning: Engine
+  gitlab:
+    url: https://gitlab.nimbus.example
+    signingSecretRef:
+      name: nimbus-gitlab
+      key: signingSecret
+    engineProvisioning:
+      group: nimbus-hq
+      adminTokenSecretRef:
+        name: nimbus-gitlab-admin
+        key: token
+      accessLevel: Developer
+      groupWebhook: Auto

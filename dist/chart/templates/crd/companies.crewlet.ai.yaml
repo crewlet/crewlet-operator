@@ -324,6 +324,7 @@ spec:
                     description: backend is which knowledge base the company runs.
                     enum:
                     - Native
+                    - Confluence
                     - None
                     type: string
                   rootSpace:
@@ -896,6 +897,7 @@ spec:
                     description: backend is which tracker the company runs.
                     enum:
                     - Native
+                    - Jira
                     - None
                     type: string
                   native:

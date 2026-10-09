@@ -115,6 +115,57 @@ type SecretValueSource struct {
 	SecretKeyRef SecretKeyReference `json:"secretKeyRef,omitzero"`
 }
 
+// ProvisionedCredential is a seat's credential the engine creates: an
+// Integration with provisioning Engine (GitLab, Mattermost, Datadog,
+// Atlassian) makes the seat's account at the vendor, mints the account's
+// credential, and seals it in the engine's own secret store. The company
+// document refers to it by a name the operator derives from the seat's handle
+// and this name, and nothing else ever writes that store entry: the operator
+// pushes no value into it and deletes none it finds there.
+type ProvisionedCredential struct {
+	// name names the value among the seat's provisioned credentials. Every
+	// place a seat names the same provisioned name refers to one value, so
+	// a token given to a tool server's environment and to the seat's
+	// sandbox is one token; different names are different values, such as
+	// an account's token and its email address.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=32
+	// +kubebuilder:validation:Pattern=`^[a-z0-9][a-z0-9-]*$`
+	Name string `json:"name,omitempty"`
+}
+
+// SeatCredentialSource says where one of a seat's own credentials comes from:
+// a Secret key, or the engine, which provisions it (see
+// ProvisionedCredential).
+// +kubebuilder:validation:XValidation:rule="has(self.secretKeyRef) != has(self.provisioned)",message="exactly one of secretKeyRef and provisioned must be set"
+// +kubebuilder:validation:MinProperties=1
+type SeatCredentialSource struct {
+	// secretKeyRef selects the Secret key that holds the value.
+	// +optional
+	SecretKeyRef SecretKeyReference `json:"secretKeyRef,omitzero"`
+
+	// provisioned is a value the engine creates and keeps, under an
+	// Integration with provisioning Engine.
+	// +optional
+	Provisioned ProvisionedCredential `json:"provisioned,omitzero"`
+}
+
+// SeatEnvVar is a named credential of a seat delivered as an environment
+// variable: from a Secret, or provisioned by the engine.
+type SeatEnvVar struct {
+	// name is the variable's name.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
+	Name string `json:"name,omitempty"`
+
+	// valueFrom is where the value comes from.
+	// +required
+	ValueFrom SeatCredentialSource `json:"valueFrom,omitzero"`
+}
+
 // SecretEnvVar is a named credential delivered as an environment variable,
 // such as a tool server's API token. Crewlet treats every value in the
 // positions that use this type as a credential, so a literal value is not
@@ -493,8 +544,18 @@ const (
 	ReasonPublicBaseURLMissing = "PublicBaseURLMissing"
 
 	// ReasonNotExposed is Healthy=False on an integration that needs inbound
-	// delivery when the class's webhooks.mode is None.
+	// delivery when the company has no public address
+	// (status.endpoints.publicBaseURL), and ResolvedRefs=False on an
+	// LLMProvider of type CLIAgent in mode Agent then: its runs happen in a
+	// remote sandbox, which calls the seat's tools back through the engine's
+	// public address.
 	ReasonNotExposed = "NotExposed"
+
+	// ReasonNoProvisioner is ResolvedRefs=False on a Seat that names a
+	// provisioned credential while no Integration of its Company has
+	// provisioning Engine: nothing would create the value, and the seat's
+	// tool or chat app would start without it.
+	ReasonNoProvisioner = "NoProvisioner"
 
 	// ReasonValid is Accepted=True.
 	ReasonValid = "Valid"
@@ -538,7 +599,7 @@ const (
 
 	// ReasonConflict is Accepted=False when the object collides with
 	// another of its company in a way Crewlet refuses: two Integrations for
-	// one vendor; two Seats with one handle, one displayName or one contact
+	// one vendor (Jira, Confluence and Atlassian are three vendors); two Seats with one handle, one displayName or one contact
 	// account (contact.slackUserID or contact.githubLogin); two Units with
 	// one displayName; or an LLMProvider whose name is also the name of one
 	// of the EngineClass's platformLLMProviders the company uses, since both
@@ -562,7 +623,10 @@ const (
 	// ReasonHumanSeat is ResolvedRefs=False on a Schedule whose
 	// target.seatRef names a Human seat: the engine runs no turn for a
 	// person, so the schedule could never fire. Target an Agent seat, or the
-	// person's unit with fanOut Each.
+	// person's unit with fanOut Each. It is also ResolvedRefs=False on an
+	// Integration whose Datadog routeTo.seatRef or GitLab accessLevels entry
+	// names a Human seat, for whom the engine runs no turn and creates no
+	// account.
 	ReasonHumanSeat = "HumanSeat"
 
 	// ReasonSeatPaused is Paused=True: the engine holds the seat paused, as

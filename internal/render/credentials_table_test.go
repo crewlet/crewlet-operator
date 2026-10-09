@@ -63,16 +63,8 @@ type credentialSource struct {
 	When string
 }
 
-// Why the integrations v1alpha1 does not offer have no field.
+// Why the positions v1alpha1 does not offer have no field.
 const (
-	notOfferedGitLab     = "The GitLab integration is not offered yet."
-	notOfferedMattermost = "The Mattermost integration is not offered yet."
-	notOfferedJira       = "The Jira integration is not offered yet; so the tracker backend is Native or None."
-	notOfferedConfluence = "The Confluence integration is not offered yet; so the knowledge backend is Native or None."
-	notOfferedDatadog    = "The Datadog integration is not offered yet."
-	notOfferedAtlassian  = "The Atlassian organization integration is not offered yet."
-	notOfferedCLIAgent   = "The `cli-agent` provider type is not offered: the engine image ships no coding CLI, " +
-		"and a subscription login belongs to one machine, which a pod that can be rescheduled at any time is not."
 	notOfferedStreamToken = "The data pod runs Crewlet's embedded broker, which needs no token; an external NATS " +
 		"cluster (`stream.type: nats`), where Crewlet reads one, is not offered."
 )
@@ -85,6 +77,9 @@ const (
 	perHeader    = "one `SecretKeyReference` per header"
 	perEnvOrHead = "one `SecretKeyReference` per variable or header"
 	oneKey       = "`SecretKeyReference`"
+	// provisioned is a seat's credential the engine mints into its own
+	// store, which no Secret holds.
+	provisioned = "`ProvisionedCredential`: no Secret; the engine mints the value into its own store"
 )
 
 // githubWebhookSecret is the position of the GitHub organization
@@ -125,9 +120,17 @@ var credentialPositions = []credentialPosition{
 	}},
 	{Tier: tierCompany, Path: "roles[].mcp_env.*.*", Sources: []credentialSource{
 		{Field: "Seat.spec.mcp[].env[].valueFrom.secretKeyRef", Reference: perEnvOrHead},
+		{
+			Field: "Seat.spec.mcp[].env[].valueFrom.provisioned", Reference: provisioned,
+			When: "under an Integration with provisioning Engine (GitLab, Mattermost, Datadog, Atlassian)",
+		},
 	}},
 	{Tier: tierCompany, Path: "roles[].sandbox.env.*", Sources: []credentialSource{
 		{Field: "Seat.spec.sandbox.env[].valueFrom.secretKeyRef", Reference: perVariable},
+		{
+			Field: "Seat.spec.sandbox.env[].valueFrom.provisioned", Reference: provisioned,
+			When: "under an Integration with provisioning Engine",
+		},
 	}},
 	{Tier: tierCompany, Path: "roles[].sandbox.setup[].files.*", Sources: []credentialSource{
 		{Field: "Seat.spec.sandbox.setup[].files[].valueFrom.secretKeyRef", Reference: perFile},
@@ -163,23 +166,61 @@ var credentialPositions = []credentialPosition{
 		{Field: "Integration.spec.github.tokenSecretRef", Reference: oneKey},
 	}},
 
-	{Tier: tierCompany, Path: "integrations.gitlab.signing_secret", Unsupported: notOfferedGitLab},
-	{Tier: tierCompany, Path: "integrations.gitlab.token", Unsupported: notOfferedGitLab},
-	{Tier: tierCompany, Path: "integrations.gitlab.provisioning.admin_token", Unsupported: notOfferedGitLab},
-	{Tier: tierCompany, Path: "integrations.mattermost.provisioning.admin_token", Unsupported: notOfferedMattermost},
-	{Tier: tierCompany, Path: "roles[].integrations.mattermost.bot_token", Unsupported: notOfferedMattermost},
-	{Tier: tierCompany, Path: "integrations.jira.token", Unsupported: notOfferedJira},
-	{Tier: tierCompany, Path: "integrations.jira.webhook_secret", Unsupported: notOfferedJira},
-	{Tier: tierCompany, Path: "integrations.confluence.token", Unsupported: notOfferedConfluence},
-	{Tier: tierCompany, Path: "integrations.confluence.webhook_secret", Unsupported: notOfferedConfluence},
-	{Tier: tierCompany, Path: "integrations.confluence.webhook_token", Unsupported: notOfferedConfluence},
-	{Tier: tierCompany, Path: "integrations.datadog.webhook_token", Unsupported: notOfferedDatadog},
-	{Tier: tierCompany, Path: "integrations.datadog.provisioning.api_key", Unsupported: notOfferedDatadog},
-	{Tier: tierCompany, Path: "integrations.datadog.provisioning.app_key", Unsupported: notOfferedDatadog},
-	{Tier: tierCompany, Path: "integrations.atlassian.api_key", Unsupported: notOfferedAtlassian},
-	{Tier: tierCompany, Path: "providers.llm.*.cli.auth.token", Unsupported: notOfferedCLIAgent},
-	{Tier: tierCompany, Path: "providers.llm.*.cli.auth.credential_bundle", Unsupported: notOfferedCLIAgent},
-	{Tier: tierCompany, Path: "providers.llm.*.cli.env.*", Unsupported: notOfferedCLIAgent},
+	{Tier: tierCompany, Path: "integrations.gitlab.signing_secret", Sources: []credentialSource{
+		{Field: "Integration.spec.gitlab.signingSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.gitlab.token", Sources: []credentialSource{
+		{Field: "Integration.spec.gitlab.tokenSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.gitlab.provisioning.admin_token", Sources: []credentialSource{
+		{Field: "Integration.spec.gitlab.engineProvisioning.adminTokenSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.mattermost.provisioning.admin_token", Sources: []credentialSource{
+		{Field: "Integration.spec.mattermost.engineProvisioning.adminTokenSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "roles[].integrations.mattermost.bot_token", Sources: []credentialSource{
+		{Field: "Seat.spec.integrations.mattermost.botToken.secretKeyRef", Reference: oneKey},
+		{
+			Field: "Seat.spec.integrations.mattermost.botToken.provisioned", Reference: provisioned,
+			When: "under a Mattermost Integration with provisioning Engine",
+		},
+	}},
+	{Tier: tierCompany, Path: "integrations.jira.token", Sources: []credentialSource{
+		{Field: "Integration.spec.jira.tokenSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.jira.webhook_secret", Sources: []credentialSource{
+		{Field: "Integration.spec.jira.webhookSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.confluence.token", Sources: []credentialSource{
+		{Field: "Integration.spec.confluence.tokenSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.confluence.webhook_secret", Sources: []credentialSource{
+		{Field: "Integration.spec.confluence.webhookSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.confluence.webhook_token", Sources: []credentialSource{
+		{Field: "Integration.spec.confluence.webhookTokenSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.datadog.webhook_token", Sources: []credentialSource{
+		{Field: "Integration.spec.datadog.webhookTokenSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.datadog.provisioning.api_key", Sources: []credentialSource{
+		{Field: "Integration.spec.datadog.apiKeySecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.datadog.provisioning.app_key", Sources: []credentialSource{
+		{Field: "Integration.spec.datadog.appKeySecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "integrations.atlassian.api_key", Sources: []credentialSource{
+		{Field: "Integration.spec.atlassian.apiKeySecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "providers.llm.*.cli.auth.token", Sources: []credentialSource{
+		{Field: "LLMProvider.spec.cli.auth.tokenSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "providers.llm.*.cli.auth.credential_bundle", Sources: []credentialSource{
+		{Field: "LLMProvider.spec.cli.auth.credentialBundleSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "providers.llm.*.cli.env.*", Sources: []credentialSource{
+		{Field: "LLMProvider.spec.cli.env[].valueFrom.secretKeyRef", Reference: perVariable},
+	}},
 
 	{Tier: tierBootstrap, Path: "api.auth.tokens[].token", Sources: []credentialSource{
 		{Reference: "Secret `<company>-api-tokens`, which the operator generates once (or a platform supplies): " +

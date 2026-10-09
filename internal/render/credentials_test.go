@@ -510,11 +510,16 @@ func credentialTables() map[string]string {
 		}
 	}
 	flush()
-	return map[string]string{
-		sectionCovered:    strings.Join(covered, "\n"),
-		sectionNotOffered: strings.Join(notOffered, "\n"),
-		sectionTierA:      strings.Join(tierA, "\n"),
+	tables := map[string]string{
+		sectionCovered: strings.Join(covered, "\n"),
+		sectionTierA:   strings.Join(tierA, "\n"),
 	}
+	// With every company position covered there is no table of the ones
+	// that are not, and the page has no such section.
+	if len(notOffered) > 2 {
+		tables[sectionNotOffered] = strings.Join(notOffered, "\n")
+	}
+	return tables
 }
 
 // TestCredentialsDocListsThePositions holds docs/concepts/credentials.md to
@@ -527,7 +532,12 @@ func TestCredentialsDocListsThePositions(t *testing.T) {
 		t.Fatal(err)
 	}
 	lines := strings.Split(string(data), "\n")
-	for heading, want := range credentialTables() {
+	tables := credentialTables()
+	if _, ok := tables[sectionNotOffered]; !ok && slices.Contains(lines, sectionNotOffered) {
+		t.Errorf("%s has a section %q, and credentialPositions leaves no company position uncovered: remove it",
+			credentialsDoc, sectionNotOffered)
+	}
+	for heading, want := range tables {
 		start := slices.Index(lines, heading)
 		if start < 0 {
 			t.Errorf("%s has no section %q; it should hold this table:\n\n%s", credentialsDoc, heading, want)

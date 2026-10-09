@@ -6,6 +6,15 @@ integrations:
       org_webhook: auto
     token: ${K8S_NIMBUS_GITHUB_ORG_TOKEN_O4ARELY4DZXZ}
     webhook_secret: ${K8S_NIMBUS_GITHUB_WEBHOOK_SECRET_H2I5AHRDL2VE}
+  gitlab:
+    enabled: true
+    provisioning:
+      access_level: developer
+      admin_token: ${K8S_NIMBUS_GITLAB_ADMIN_TOKEN_XJYIJLJITPA4}
+      group: nimbus-hq
+      group_webhook: auto
+    signing_secret: ${K8S_NIMBUS_GITLAB_SIGNING_SECRET_XPR7PPZHAEFF}
+    url: https://gitlab.nimbus.example
   public_base_url: https://nimbus.hooks.example.com
   slack:
     typing_status: addressed
@@ -20,6 +29,13 @@ mcp_servers:
   tool_prefix: gh_
   transport: http
   url: https://api.githubcopilot.com/mcp/
+- args:
+  - mcp
+  - serve
+  command: glab
+  name: gitlab
+  shared: false
+  transport: stdio
 mission: Turn any hardware into cloud-native infrastructure.
 name: Nimbus
 policies:
@@ -109,6 +125,8 @@ units:
       mcp_env:
         github:
           Authorization: ${K8S_ANA_GITHUB_AUTHORIZATION_TWHVOQBEQ7JM}
+        gitlab:
+          GITLAB_TOKEN: ${PROVISIONED_ANA_GITLAB_TOKEN_ZXUWOCASQLKO}
       name: Ana (Platform Engineer)
       placement:
         labels:
@@ -119,6 +137,7 @@ units:
         enabled: true
         env:
           GITHUB_TOKEN: ${K8S_ANA_GITHUB_TOKEN_OI3SDKAPI3E5}
+          GITLAB_TOKEN: ${PROVISIONED_ANA_GITLAB_TOKEN_ZXUWOCASQLKO}
         mcp:
           servers:
           - github

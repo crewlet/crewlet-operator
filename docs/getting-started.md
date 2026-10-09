@@ -261,7 +261,7 @@ source, and the engine refuses any other change to it
 [`config/samples`](../config/samples) is one complete company, Nimbus: an
 `EngineClass` that routes webhooks through a Gateway, two `Unit`s, three
 `Seat`s (one of them a person) with their own Slack and GitHub credentials,
-an `MCPServer`, two `Integration`s and two `Schedule`s. On kind it shows what an object reports
+two `MCPServer`s, three `Integration`s and two `Schedule`s. On kind it shows what an object reports
 when what it needs is missing: there is no Gateway API, and none of the
 Secrets the samples reference exist. Point its class at the image you loaded
 first:

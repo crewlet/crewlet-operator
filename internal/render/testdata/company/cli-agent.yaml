@@ -1,0 +1,46 @@
+integrations:
+  public_base_url: https://cli-agent.hooks.example.com
+name: Forge
+providers:
+  llm:
+    claude-agent:
+      cli:
+        agent: claude-code
+        auth:
+          mode: subscription
+          token: ${K8S_CLAUDE_SUBSCRIPTION_OAUTH_TOKEN_5F3I3N4HVTAV}
+        max_concurrent: 2
+        mode: agent
+        run_in: e2b
+        state_dir: /var/lib/crewlet/llm-cli/claude
+        timeout_seconds: 900
+      model: sonnet
+      type: cli-agent
+    codex:
+      cli:
+        agent: codex
+        auth:
+          credential_bundle: ${K8S_CODEX_LOGIN_BUNDLE_C7GT3IPZJRP3}
+        state_dir: /var/lib/crewlet/llm-cli/codex
+      model: gpt-5-codex
+      type: cli-agent
+  llm_order:
+  - claude-agent
+  - codex
+  sandbox:
+    default_run_in: e2b
+    e2b:
+      api_key: ${K8S_E2B_API_KEY_GSEHAAV5THN5}
+roles:
+- goal: Ship the changes the team files.
+  handle: builder
+  kind: agent
+  llm:
+    default:
+    - claude-agent
+    review:
+    - codex
+  name: builder
+  placement:
+    labels:
+      crewlet.ai/pool: data

@@ -7,14 +7,9 @@ import (
 
 // LLMProviderType is which model API a provider speaks. It maps onto the
 // `type` of a Crewlet providers.llm entry: Anthropic is `anthropic`, OpenAI is
-// `openai` and OpenAICompatible is `openai-compatible`.
-//
-// Crewlet's fourth type, `cli-agent`, drives a coding CLI installed next to
-// the engine on a subscription login. It is not offered in v1alpha1: the
-// engine image ships no coding CLI, and its credentials (a subscription token
-// or an exported credential bundle) are per-node logins that a pod which can
-// be rescheduled at any time cannot hold.
-// +kubebuilder:validation:Enum=Anthropic;OpenAI;OpenAICompatible
+// `openai`, OpenAICompatible is `openai-compatible` and CLIAgent is
+// `cli-agent`.
+// +kubebuilder:validation:Enum=Anthropic;OpenAI;OpenAICompatible;CLIAgent
 type LLMProviderType string
 
 // The LLM provider types.
@@ -26,7 +21,185 @@ const (
 	// LLMProviderOpenAICompatible is any endpoint that speaks the OpenAI wire
 	// format: a gateway, an aggregator, a self-hosted inference server.
 	LLMProviderOpenAICompatible LLMProviderType = "OpenAICompatible"
+	// LLMProviderCLIAgent drives a coding CLI (Claude Code, Codex, ...) on a
+	// subscription login, installed in the engine's image: see
+	// LLMProviderSpec.cli.
+	LLMProviderCLIAgent LLMProviderType = "CLIAgent"
 )
+
+// CLIAgentName is which coding CLI a CLIAgent provider drives. It maps onto
+// Crewlet's cli.agent (ClaudeCode is `claude-code`, Codex is `codex`,
+// GeminiCLI is `gemini-cli`, QwenCode is `qwen-code`, OpenCode is `opencode`,
+// CursorAgent is `cursor-agent`, Copilot is `copilot`, Grok is `grok`,
+// MuseCode is `muse-code`, KimiCode is `kimi-code`, Hermes is `hermes`, Pi is
+// `pi`). Crewlet's `custom`, a CLI described wholly by profile overrides, is
+// not offered: the overrides name the binary and the arguments the engine's
+// pod runs.
+// +kubebuilder:validation:Enum=ClaudeCode;Codex;GeminiCLI;QwenCode;OpenCode;CursorAgent;Copilot;Grok;MuseCode;KimiCode;Hermes;Pi
+type CLIAgentName string
+
+// The coding CLIs.
+const (
+	CLIAgentClaudeCode  CLIAgentName = "ClaudeCode"
+	CLIAgentCodex       CLIAgentName = "Codex"
+	CLIAgentGeminiCLI   CLIAgentName = "GeminiCLI"
+	CLIAgentQwenCode    CLIAgentName = "QwenCode"
+	CLIAgentOpenCode    CLIAgentName = "OpenCode"
+	CLIAgentCursorAgent CLIAgentName = "CursorAgent"
+	CLIAgentCopilot     CLIAgentName = "Copilot"
+	CLIAgentGrok        CLIAgentName = "Grok"
+	CLIAgentMuseCode    CLIAgentName = "MuseCode"
+	CLIAgentKimiCode    CLIAgentName = "KimiCode"
+	CLIAgentHermes      CLIAgentName = "Hermes"
+	CLIAgentPi          CLIAgentName = "Pi"
+)
+
+// CLIAgentMode is how the engine uses the CLI. It maps onto Crewlet's
+// cli.mode (Text is `text`, Agent is `agent`).
+// +kubebuilder:validation:Enum=Text;Agent
+type CLIAgentMode string
+
+// The CLI agent modes.
+const (
+	// CLIAgentModeText drives the CLI as a text model behind the engine's
+	// own tool loop, as a process in the engine's pod.
+	CLIAgentModeText CLIAgentMode = "Text"
+	// CLIAgentModeAgent runs a seat's executor as the CLI's own agentic
+	// run, in a sandbox, with the seat's tools reached back through the
+	// engine's tool bridge.
+	CLIAgentModeAgent CLIAgentMode = "Agent"
+)
+
+// CLIAgentRunIn is where an Agent-mode run happens. It maps onto Crewlet's
+// cli.run_in (E2B is `e2b`). Crewlet's local cells, `direct` and `container`,
+// are not offered, as the Company's spec.sandbox does not offer them.
+// +kubebuilder:validation:Enum=E2B
+type CLIAgentRunIn string
+
+// The places an Agent-mode run happens.
+const (
+	// CLIAgentRunInE2B is the Company's E2B sandbox.
+	CLIAgentRunInE2B CLIAgentRunIn = "E2B"
+)
+
+// CLIAgentAuthMode is how a CLIAgent provider authenticates. It maps onto
+// Crewlet's cli.auth.mode (Subscription is `subscription`, APIKey is
+// `api-key`, InheritEnv is `inherit-env`).
+// +kubebuilder:validation:Enum=Subscription;APIKey;InheritEnv
+type CLIAgentAuthMode string
+
+// The CLI agent authentication modes.
+const (
+	// CLIAgentAuthSubscription signs the CLI in to a subscription with
+	// tokenSecretRef or credentialBundleSecretRef.
+	CLIAgentAuthSubscription CLIAgentAuthMode = "Subscription"
+	// CLIAgentAuthAPIKey gives the CLI the provider's apiKeySecretRefs
+	// key, billing the metered account.
+	CLIAgentAuthAPIKey CLIAgentAuthMode = "APIKey"
+	// CLIAgentAuthInheritEnv gives the CLI whichever of its token and key
+	// variables the engine container's own environment holds, such as a
+	// Company's spec.runtime.env.
+	CLIAgentAuthInheritEnv CLIAgentAuthMode = "InheritEnv"
+)
+
+// CLIAgentAuth is how a CLIAgent provider signs in. It maps onto Crewlet's
+// cli.auth.
+//
+// A subscription login is made at a terminal, by `crewlet llm login` or the
+// CLI's own command, and a pod has no terminal: Subscription signs in with a
+// headless token, such as the CLAUDE_CODE_OAUTH_TOKEN `claude setup-token`
+// mints, or with a credential bundle `crewlet llm export` wrote from a login
+// made elsewhere. A bundle is restored only while the provider's login on the
+// data volume is empty, so the refreshed login a running engine keeps there
+// wins over the bundle; a token never needs refreshing, which makes it the
+// better of the two wherever the CLI mints one.
+// +kubebuilder:validation:XValidation:rule="(has(self.mode) && self.mode != 'Subscription') || has(self.tokenSecretRef) || has(self.credentialBundleSecretRef)",message="a Subscription login needs tokenSecretRef or credentialBundleSecretRef: a pod has no terminal to log in at"
+// +kubebuilder:validation:XValidation:rule="!(has(self.mode) && self.mode != 'Subscription') || (!has(self.tokenSecretRef) && !has(self.credentialBundleSecretRef))",message="tokenSecretRef and credentialBundleSecretRef sign in to a subscription: they apply to mode Subscription only"
+// +kubebuilder:validation:MinProperties=1
+type CLIAgentAuth struct {
+	// mode is how the CLI signs in. Unset is Subscription. Crewlet's
+	// `mode`.
+	// +optional
+	Mode CLIAgentAuthMode `json:"mode,omitempty"`
+
+	// tokenSecretRef is the Secret key holding a long-lived subscription
+	// token the CLI mints for headless use. Crewlet's `token`, a credential
+	// position.
+	// +optional
+	TokenSecretRef SecretKeyReference `json:"tokenSecretRef,omitzero"`
+
+	// credentialBundleSecretRef is the Secret key holding a credential
+	// bundle `crewlet llm export` wrote. Crewlet's `credential_bundle`, a
+	// credential position.
+	// +optional
+	CredentialBundleSecretRef SecretKeyReference `json:"credentialBundleSecretRef,omitzero"`
+}
+
+// CLIAgentSettings is the coding CLI a CLIAgent provider drives. It maps onto
+// Crewlet's providers.llm entry's cli block.
+//
+// The CLI is a binary in the engine's image, which the official image does
+// not ship: a class running such a provider names an image derived from the
+// engine's with the CLI installed (docs/guides/cli-agents.md). Its login, and
+// the per-seat homes the CLI keeps, are on the data volume, so a restart or a
+// new pod keeps them.
+// +kubebuilder:validation:XValidation:rule="!has(self.runIn) || (has(self.mode) && self.mode == 'Agent')",message="runIn applies to mode Agent only: in mode Text the CLI is a process in the engine's pod"
+// +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'Agent' || self.agent in ['ClaudeCode', 'OpenCode']",message="mode Agent runs ClaudeCode or OpenCode: the engine has a sandbox runner for those two CLIs only"
+// +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'Agent' || (has(self.auth) && has(self.auth.mode) && self.auth.mode != 'Subscription') || (self.agent == 'ClaudeCode' && has(self.auth) && has(self.auth.tokenSecretRef))",message="a Subscription login reaches an Agent-mode run in a remote sandbox only as a headless token: give ClaudeCode auth.tokenSecretRef, or use auth mode APIKey"
+type CLIAgentSettings struct {
+	// agent is which CLI to drive. Crewlet's `agent`.
+	// +required
+	Agent CLIAgentName `json:"agent,omitempty"`
+
+	// mode is how the engine uses the CLI. Unset is Text. Crewlet's `mode`.
+	// +optional
+	Mode CLIAgentMode `json:"mode,omitempty"`
+
+	// runIn is where an Agent-mode run happens. Unset is the Company's
+	// sandbox, which is E2B. Crewlet's `run_in`.
+	// +optional
+	RunIn CLIAgentRunIn `json:"runIn,omitempty"`
+
+	// auth is how the CLI signs in.
+	// +required
+	Auth CLIAgentAuth `json:"auth,omitzero"`
+
+	// env is extra environment of every invocation of the CLI: the child
+	// gets an allowlisted environment, not the engine's, so a variable the
+	// CLI needs beyond that is given here. Crewlet's `env`, a credential
+	// position.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=32
+	Env []SecretEnvVar `json:"env,omitempty"`
+
+	// timeoutSeconds caps one invocation of the CLI, launch included. Unset
+	// takes Crewlet's default of 300. Crewlet's `timeout_seconds`.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
+
+	// maxConcurrent is how many CLI processes the provider runs at once;
+	// each takes 200 to 400 MB of the engine pod's memory. Unset takes
+	// Crewlet's default of 4. Crewlet's `max_concurrent`.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=64
+	MaxConcurrent int32 `json:"maxConcurrent,omitempty"`
+
+	// loginName names the login, and the per-seat homes, the provider
+	// keeps on the data volume. Providers of the company with the same
+	// loginName share one login, which is how several models run off one
+	// subscription; they must drive the same CLI. Unset is the provider's
+	// own metadata.name. Crewlet's `state_dir`, as
+	// /var/lib/crewlet/llm-cli/<loginName>.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9][a-z0-9-]*$`
+	LoginName string `json:"loginName,omitempty"`
+}
 
 // ReasoningEffort is how hard a model thinks. It maps onto Crewlet's
 // `reasoning_effort` (Low is `low`, XHigh is `xhigh`, and so on).
@@ -143,7 +316,11 @@ type LLMProviderSettings struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.reasoningEffort) || self.type == 'Anthropic' || (self.type == 'OpenAI' && has(self.reasoning) && self.reasoning)",message="reasoningEffort is sent to an OpenAI model only while reasoning is true, and never to an OpenAICompatible one"
 // +kubebuilder:validation:XValidation:rule="!has(self.reasoningBudgetTokens) || self.type == 'Anthropic'",message="reasoningBudgetTokens applies to type Anthropic only"
 // +kubebuilder:validation:XValidation:rule="self.type != 'OpenAICompatible' || has(self.baseURL)",message="baseURL is required for type OpenAICompatible, which has no default endpoint"
-// +kubebuilder:validation:XValidation:rule="self.type == 'OpenAICompatible' || has(self.apiKeySecretRefs)",message="apiKeySecretRefs needs at least one key for types Anthropic and OpenAI"
+// +kubebuilder:validation:XValidation:rule="self.type in ['OpenAICompatible', 'CLIAgent'] || has(self.apiKeySecretRefs)",message="apiKeySecretRefs needs at least one key for types Anthropic and OpenAI"
+// +kubebuilder:validation:XValidation:rule="(self.type == 'CLIAgent') == has(self.cli)",message="cli is required with type CLIAgent and not allowed otherwise"
+// +kubebuilder:validation:XValidation:rule="self.type != 'CLIAgent' || !(has(self.baseURL) || has(self.timeoutSeconds) || has(self.cooldowns))",message="baseURL, timeoutSeconds and cooldowns configure an HTTP client, and a CLIAgent provider runs a process: its timeout is cli.timeoutSeconds"
+// +kubebuilder:validation:XValidation:rule="self.type != 'CLIAgent' || !has(self.cli) || has(self.apiKeySecretRefs) == (has(self.cli.auth) && has(self.cli.auth.mode) && self.cli.auth.mode == 'APIKey')",message="a CLIAgent provider takes apiKeySecretRefs with cli.auth.mode APIKey, and only then"
+// +kubebuilder:validation:XValidation:rule="self.type != 'CLIAgent' || !has(self.apiKeySecretRefs) || self.apiKeySecretRefs.size() == 1",message="a CLIAgent provider gives its CLI one key: it rotates none"
 type LLMProviderSpec struct {
 	// companyRef names the Company this provider belongs to. Immutable.
 	// +required
@@ -159,12 +336,18 @@ type LLMProviderSpec struct {
 	// credential position: the values are pushed into the engine's secret
 	// store and the document refers to them by name only. Required for types
 	// Anthropic and OpenAI; an OpenAICompatible endpoint that needs no key
-	// may omit it.
+	// may omit it. A CLIAgent provider takes exactly one, with
+	// cli.auth.mode APIKey, which it gives the CLI.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=16
 	APIKeySecretRefs []SecretKeyReference `json:"apiKeySecretRefs,omitempty"`
+
+	// cli is the coding CLI a provider of type CLIAgent drives. Required
+	// for, and only for, type CLIAgent. Crewlet's `cli`.
+	// +optional
+	CLI CLIAgentSettings `json:"cli,omitzero"`
 }
 
 // LLMProviderStatus is what the operator observed about an LLMProvider.

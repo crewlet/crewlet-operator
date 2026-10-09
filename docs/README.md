@@ -15,6 +15,8 @@ so these pages describe what exists today and grow with it.
 |---|---|
 | [Installing the operator](guides/installing.md) | A production install with the Helm chart: prerequisites, the values that matter, the RBAC roles it adds, upgrades |
 | [Supplying credentials](guides/credentials.md) | Writing the Secret for each credential, rotating it, and what an object reports when one is missing |
+| [Connecting integrations](guides/integrations.md) | Slack, GitHub, GitLab, Mattermost, Jira, Confluence, Datadog and an Atlassian organization: each Integration, the seats' own credentials, and the accounts the engine creates |
+| [Running seats on a coding CLI](guides/cli-agents.md) | `CLIAgent` providers: an engine image with the CLI, a subscription login in a pod, text mode and agent mode |
 | [Exposure and network policy](guides/exposure.md) | Webhook routes through a Gateway, an Ingress or your own proxy, the public address vendors use, the internal API route, the network policy around each engine |
 | [Choosing a management policy](guides/management-policies.md) | Enforce, Observe and Seed: which to use, and how to move an engine under the operator |
 | [Hosting many tenants on the operator](guides/multi-tenancy.md) | A control plane that provisions tenants: a namespace each, server-side apply with a field manager, the status to read, credentials from an OAuth flow |

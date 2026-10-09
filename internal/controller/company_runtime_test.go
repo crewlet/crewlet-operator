@@ -1213,6 +1213,79 @@ var _ = Describe("Company runtime", func() {
 			Expect(company.Status.Endpoints.ExposedAPI).To(BeEmpty())
 		})
 
+		It("routes the tool bridge and tells the engine its address while a provider runs a CLI in mode Agent", func() {
+			class := newClass(gatewayWebhooks)
+			company := reconciled(newCompany(class.Name))
+			host := string(company.UID) + ".hooks.example.com"
+			paths := func() []string {
+				GinkgoHelper()
+				route := &gatewayv1.HTTPRoute{}
+				get(route, webhooksRoute)
+				Expect(route.Spec.Rules).To(HaveLen(1))
+				out := make([]string, 0, len(route.Spec.Rules[0].Matches))
+				for _, m := range route.Spec.Rules[0].Matches {
+					Expect(*m.Path.Type).To(Equal(gatewayv1.PathMatchPathPrefix))
+					out = append(out, *m.Path.Value)
+				}
+				return out
+			}
+			bridgeURL := func() []string {
+				GinkgoHelper()
+				var out []string
+				for _, e := range engine(statefulSet()).Env {
+					if e.Name == "CREWLET_MCP_BRIDGE_URL" {
+						out = append(out, e.Value)
+					}
+				}
+				return out
+			}
+			Expect(paths()).To(Equal([]string{webhooksPath}))
+			Expect(bridgeURL()).To(BeEmpty())
+
+			By("a provider of another company, and one of this company in mode Text, serving no bridge")
+			provider := func(name, company string, mode crewletaiv1alpha1.CLIAgentMode) *crewletaiv1alpha1.LLMProvider {
+				p := &crewletaiv1alpha1.LLMProvider{
+					Namespace: namespace,
+					Name:      name,
+					Spec: crewletaiv1alpha1.LLMProviderSpec{
+						CompanyRef: crewletaiv1alpha1.CompanyReference{Name: company},
+						LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
+							Type: crewletaiv1alpha1.LLMProviderCLIAgent, Model: "sonnet",
+						},
+						CLI: crewletaiv1alpha1.CLIAgentSettings{
+							Agent: crewletaiv1alpha1.CLIAgentClaudeCode,
+							Mode:  mode,
+							Auth: crewletaiv1alpha1.CLIAgentAuth{
+								TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: "claude", Key: "oauthToken"},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, p)).To(Succeed())
+				DeferCleanup(func() { Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, p))).To(Succeed()) })
+				return p
+			}
+			provider("other-agent", "another-company", crewletaiv1alpha1.CLIAgentModeAgent)
+			text := provider("claude-text", companyName, crewletaiv1alpha1.CLIAgentModeText)
+			company = reconciled(company)
+			Expect(paths()).To(Equal([]string{webhooksPath}))
+			Expect(bridgeURL()).To(BeEmpty())
+
+			By("switching this company's provider to mode Agent")
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(text), text)).To(Succeed())
+			text.Spec.CLI.Mode = crewletaiv1alpha1.CLIAgentModeAgent
+			Expect(k8sClient.Update(ctx, text)).To(Succeed())
+			company = reconciled(company)
+			Expect(paths()).To(Equal([]string{webhooksPath, bridgePath}))
+			Expect(bridgeURL()).To(Equal([]string{"https://" + host}))
+
+			By("deleting it")
+			Expect(k8sClient.Delete(ctx, text)).To(Succeed())
+			reconciled(company)
+			Expect(paths()).To(Equal([]string{webhooksPath}))
+			Expect(bridgeURL()).To(BeEmpty())
+		})
+
 		It("moves the route to an Ingress when the class does", func() {
 			class := newClass(gatewayWebhooks)
 			company := reconciled(newCompany(class.Name, func(c *crewletaiv1alpha1.Company) {

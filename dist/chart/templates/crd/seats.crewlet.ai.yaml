@@ -245,6 +245,81 @@ spec:
                         - FullAccess
                         type: string
                     type: object
+                  mattermost:
+                    description: mattermost is the seat's own Mattermost bot.
+                    properties:
+                      botToken:
+                        description: |-
+                          botToken is the bot account's personal access token: from a Secret,
+                          or provisioned by the engine under a Mattermost Integration with
+                          provisioning Engine, which creates the bot and mints the token.
+                          Crewlet's `bot_token`, a credential position.
+                        minProperties: 1
+                        properties:
+                          provisioned:
+                            description: |-
+                              provisioned is a value the engine creates and keeps, under an
+                              Integration with provisioning Engine.
+                            properties:
+                              name:
+                                description: |-
+                                  name names the value among the seat's provisioned credentials. Every
+                                  place a seat names the same provisioned name refers to one value, so
+                                  a token given to a tool server's environment and to the seat's
+                                  sandbox is one token; different names are different values, such as
+                                  an account's token and its email address.
+                                maxLength: 32
+                                minLength: 1
+                                pattern: ^[a-z0-9][a-z0-9-]*$
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          secretKeyRef:
+                            description: secretKeyRef selects the Secret key that
+                              holds the value.
+                            properties:
+                              key:
+                                description: key is the key within the Secret's data.
+                                maxLength: 253
+                                minLength: 1
+                                pattern: ^[-._a-zA-Z0-9]+$
+                                type: string
+                              name:
+                                description: name is the metadata.name of the Secret.
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        type: object
+                        x-kubernetes-validations:
+                        - message: exactly one of secretKeyRef and provisioned must
+                            be set
+                          rule: has(self.secretKeyRef) != has(self.provisioned)
+                      channel:
+                        description: |-
+                          channel is a channel, by its name (the URL slug), the engine adds the
+                          bot to when it provisions it, on top of the Integration's
+                          engineProvisioning.channels. Crewlet's `channel`.
+                        maxLength: 64
+                        minLength: 1
+                        pattern: ^[a-z0-9][a-z0-9_-]*$
+                        type: string
+                      username:
+                        description: |-
+                          username is the bot's username, for a bot that exists under a name
+                          other than the seat's handle (with the Integration's
+                          engineProvisioning.usernamePrefix before it). Crewlet's `username`.
+                        maxLength: 64
+                        minLength: 1
+                        pattern: ^[a-z0-9][a-z0-9._-]*$
+                        type: string
+                    required:
+                    - botToken
+                    type: object
                   slack:
                     description: slack is the seat's own Slack app.
                     properties:
@@ -565,10 +640,32 @@ spec:
                             type: string
                           valueFrom:
                             description: |-
-                              valueFrom is the Secret key the value is read from. For a header the
-                              Secret key holds the whole header value, scheme included (for example
-                              "Bearer <token>").
+                              valueFrom is where the value comes from: a Secret key, or, for a
+                              Seat's own credentials, the engine (provisioned). For a header the
+                              value is the whole header, scheme included (for example "Bearer
+                              <token>"); a provisioned value is the credential alone, so provision
+                              one for a variable rather than a header.
+                            minProperties: 1
                             properties:
+                              provisioned:
+                                description: |-
+                                  provisioned is a value the engine creates and keeps, under an
+                                  Integration with provisioning Engine.
+                                properties:
+                                  name:
+                                    description: |-
+                                      name names the value among the seat's provisioned credentials. Every
+                                      place a seat names the same provisioned name refers to one value, so
+                                      a token given to a tool server's environment and to the seat's
+                                      sandbox is one token; different names are different values, such as
+                                      an account's token and its email address.
+                                    maxLength: 32
+                                    minLength: 1
+                                    pattern: ^[a-z0-9][a-z0-9-]*$
+                                    type: string
+                                required:
+                                - name
+                                type: object
                               secretKeyRef:
                                 description: secretKeyRef selects the Secret key that
                                   holds the value.
@@ -590,9 +687,11 @@ spec:
                                 - key
                                 - name
                                 type: object
-                            required:
-                            - secretKeyRef
                             type: object
+                            x-kubernetes-validations:
+                            - message: exactly one of secretKeyRef and provisioned
+                                must be set
+                              rule: has(self.secretKeyRef) != has(self.provisioned)
                         required:
                         - name
                         - valueFrom
@@ -703,13 +802,14 @@ spec:
                   env:
                     description: |-
                       env is the environment of the seat's sandbox runs, for the external
-                      tokens its code work needs. Crewlet's `env`, a credential position.
+                      tokens its code work needs: from Secrets, or provisioned by the
+                      engine, such as the GitLab token a provisioning Integration mints for
+                      the seat, named as its tool server's is so both are one token.
+                      Crewlet's `env`, a credential position.
                     items:
                       description: |-
-                        SecretEnvVar is a named credential delivered as an environment variable,
-                        such as a tool server's API token. Crewlet treats every value in the
-                        positions that use this type as a credential, so a literal value is not
-                        accepted: the value always comes from a Secret.
+                        SeatEnvVar is a named credential of a seat delivered as an environment
+                        variable: from a Secret, or provisioned by the engine.
                       properties:
                         name:
                           description: name is the variable's name.
@@ -718,9 +818,28 @@ spec:
                           pattern: ^[A-Za-z_][A-Za-z0-9_]*$
                           type: string
                         valueFrom:
-                          description: valueFrom is the Secret key the value is read
-                            from.
+                          description: valueFrom is where the value comes from.
+                          minProperties: 1
                           properties:
+                            provisioned:
+                              description: |-
+                                provisioned is a value the engine creates and keeps, under an
+                                Integration with provisioning Engine.
+                              properties:
+                                name:
+                                  description: |-
+                                    name names the value among the seat's provisioned credentials. Every
+                                    place a seat names the same provisioned name refers to one value, so
+                                    a token given to a tool server's environment and to the seat's
+                                    sandbox is one token; different names are different values, such as
+                                    an account's token and its email address.
+                                  maxLength: 32
+                                  minLength: 1
+                                  pattern: ^[a-z0-9][a-z0-9-]*$
+                                  type: string
+                              required:
+                              - name
+                              type: object
                             secretKeyRef:
                               description: secretKeyRef selects the Secret key that
                                 holds the value.
@@ -741,9 +860,11 @@ spec:
                               - key
                               - name
                               type: object
-                          required:
-                          - secretKeyRef
                           type: object
+                          x-kubernetes-validations:
+                          - message: exactly one of secretKeyRef and provisioned must
+                              be set
+                            rule: has(self.secretKeyRef) != has(self.provisioned)
                       required:
                       - name
                       - valueFrom

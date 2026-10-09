@@ -56,7 +56,7 @@ func TestUnitValidation(t *testing.T) {
 			mutate: func(u *v1.Unit) {
 				c := mcpCredentials("github")
 				c.Env = append(c.Env, v1.MCPCredentialValue{
-					Name: "authorization", ValueFrom: fromSecret("platform-github", "authorization"),
+					Name: "authorization", ValueFrom: seatFromSecret("platform-github", "authorization"),
 				})
 				u.Spec.MCP = []v1.MCPCredentials{c}
 			},

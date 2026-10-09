@@ -125,3 +125,39 @@ func referenceHash(k secretref.Key) string {
 	sum := sha256.Sum256([]byte(k.Namespace + "\x00" + k.Name + "\x00" + k.Key))
 	return hashEncoding.EncodeToString(sum[:])[:hashLen]
 }
+
+// ProvisionedPrefix starts the name of every store entry a seat's provisioned
+// credential is kept in. It is not Prefix: those entries are the engine's
+// own, written by its provisioning when it mints a seat's credential, and
+// Sync must never overwrite or delete one.
+const ProvisionedPrefix = "PROVISIONED_"
+
+// MaxProvisionedNameLength is the longest name ProvisionedName returns.
+const MaxProvisionedNameLength = len(ProvisionedPrefix) + maxSecretPart + 1 + maxKeyPart + 1 + hashLen
+
+// ProvisionedName returns the name of the engine secret-store entry that
+// holds the credential the engine provisions for the seat with handle under
+// the provisioned name, and that the company document refers to as
+// ${ProvisionedName(handle, name)}.
+//
+// The engine's provisioning mints a seat's credential into whatever ${NAME}
+// the seat's own configuration holds where it looks for one, so the name is
+// the contract between the document and the engine: the operator chooses it
+// and the engine fills it. It is ProvisionedPrefix, the readable handle and
+// name, and a hash of both, so two seats, or two values of one seat, never
+// share an entry (handles a-b and a--b read the same once sanitised), and it
+// is a pure function of its arguments, so every render names the same entry
+// and a minted credential survives every reconcile, restart and upgrade of the
+// operator. Owns refuses every such name.
+func ProvisionedName(handle, name string) string {
+	var b strings.Builder
+	b.Grow(MaxProvisionedNameLength)
+	b.WriteString(ProvisionedPrefix)
+	b.WriteString(readable(handle, maxSecretPart))
+	b.WriteByte('_')
+	b.WriteString(readable(name, maxKeyPart))
+	b.WriteByte('_')
+	sum := sha256.Sum256([]byte(handle + "\x00" + name))
+	b.WriteString(hashEncoding.EncodeToString(sum[:])[:hashLen])
+	return b.String()
+}

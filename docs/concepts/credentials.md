@@ -16,8 +16,8 @@ The tables below are made from one table in the operator's tests
 (`internal/render/credentials_table_test.go`), and a test holds that table to
 the marks of the engine version the operator is built against, in both
 directions: a credential position Crewlet adds fails the operator's build
-until it is covered or listed as not offered, and so does a row for a
-position Crewlet no longer marks. Another holds the rule on a Company's
+until it is covered (or listed as not offered, with the reason), and so does
+a row for a position Crewlet no longer marks. Another holds the rule on a Company's
 `engineConfig` to the same marks: it must refuse every top-level block
 Crewlet holds a credential under, so a credential can never be written there
 as a literal.
@@ -58,6 +58,9 @@ and `<company>-bootstrap`.
 
 ## Covered in v1alpha1
 
+Every position of the company document is covered: each has a field that
+fills it with a reference.
+
 | Crewlet position | Field | Reference |
 |---|---|---|
 | `providers.llm.*.api_keys[]` | `LLMProvider.spec.apiKeySecretRefs` | one `SecretKeyReference` per key |
@@ -70,7 +73,9 @@ and `<company>-bootstrap`.
 | `mcp_servers[].headers.*` | `MCPServer.spec.headers[].valueFrom.secretKeyRef` | one `SecretKeyReference` per header |
 | `units[].mcp_env.*.*` | `Unit.spec.mcp[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable or header |
 | `roles[].mcp_env.*.*` | `Seat.spec.mcp[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable or header |
+| `roles[].mcp_env.*.*`, under an Integration with provisioning Engine (GitLab, Mattermost, Datadog, Atlassian) | `Seat.spec.mcp[].env[].valueFrom.provisioned` | `ProvisionedCredential`: no Secret; the engine mints the value into its own store |
 | `roles[].sandbox.env.*` | `Seat.spec.sandbox.env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
+| `roles[].sandbox.env.*`, under an Integration with provisioning Engine | `Seat.spec.sandbox.env[].valueFrom.provisioned` | `ProvisionedCredential`: no Secret; the engine mints the value into its own store |
 | `roles[].sandbox.setup[].files.*` | `Seat.spec.sandbox.setup[].files[].valueFrom.secretKeyRef` | one `SecretKeyReference` per file |
 | `roles[].sandbox.setup[].env.*` | `Seat.spec.sandbox.setup[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
 | `roles[].integrations.slack.bot_token` | `Seat.spec.integrations.slack.credentialsSecretRef` | `SecretReference`, key `botToken` (`SlackBotTokenKey`) |
@@ -79,32 +84,73 @@ and `<company>-bootstrap`.
 | `roles[].integrations.github.webhook_secret` | `Seat.spec.integrations.github.app.credentialsSecretRef` | `SecretReference`, key `webhookSecret` (`GitHubAppWebhookSecretKey`) |
 | `integrations.github.webhook_secret` | `Integration.spec.github.webhookSecretRef` | `SecretKeyReference` |
 | `integrations.github.token` | `Integration.spec.github.tokenSecretRef` | `SecretKeyReference` |
+| `integrations.gitlab.signing_secret` | `Integration.spec.gitlab.signingSecretRef` | `SecretKeyReference` |
+| `integrations.gitlab.token` | `Integration.spec.gitlab.tokenSecretRef` | `SecretKeyReference` |
+| `integrations.gitlab.provisioning.admin_token` | `Integration.spec.gitlab.engineProvisioning.adminTokenSecretRef` | `SecretKeyReference` |
+| `integrations.mattermost.provisioning.admin_token` | `Integration.spec.mattermost.engineProvisioning.adminTokenSecretRef` | `SecretKeyReference` |
+| `roles[].integrations.mattermost.bot_token` | `Seat.spec.integrations.mattermost.botToken.secretKeyRef` | `SecretKeyReference` |
+| `roles[].integrations.mattermost.bot_token`, under a Mattermost Integration with provisioning Engine | `Seat.spec.integrations.mattermost.botToken.provisioned` | `ProvisionedCredential`: no Secret; the engine mints the value into its own store |
+| `integrations.jira.token` | `Integration.spec.jira.tokenSecretRef` | `SecretKeyReference` |
+| `integrations.jira.webhook_secret` | `Integration.spec.jira.webhookSecretRef` | `SecretKeyReference` |
+| `integrations.confluence.token` | `Integration.spec.confluence.tokenSecretRef` | `SecretKeyReference` |
+| `integrations.confluence.webhook_secret` | `Integration.spec.confluence.webhookSecretRef` | `SecretKeyReference` |
+| `integrations.confluence.webhook_token` | `Integration.spec.confluence.webhookTokenSecretRef` | `SecretKeyReference` |
+| `integrations.datadog.webhook_token` | `Integration.spec.datadog.webhookTokenSecretRef` | `SecretKeyReference` |
+| `integrations.datadog.provisioning.api_key` | `Integration.spec.datadog.apiKeySecretRef` | `SecretKeyReference` |
+| `integrations.datadog.provisioning.app_key` | `Integration.spec.datadog.appKeySecretRef` | `SecretKeyReference` |
+| `integrations.atlassian.api_key` | `Integration.spec.atlassian.apiKeySecretRef` | `SecretKeyReference` |
+| `providers.llm.*.cli.auth.token` | `LLMProvider.spec.cli.auth.tokenSecretRef` | `SecretKeyReference` |
+| `providers.llm.*.cli.auth.credential_bundle` | `LLMProvider.spec.cli.auth.credentialBundleSecretRef` | `SecretKeyReference` |
+| `providers.llm.*.cli.env.*` | `LLMProvider.spec.cli.env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
 
 An `env` or `headers` entry takes its value from a Secret even when the value
 is not secret (a feature flag a tool server reads, say): Crewlet treats the
 whole list as credentials, and the API cannot tell one entry from another.
 Keep such settings in the same Secret as the tool's token.
 
-## Not offered in v1alpha1
+## Credentials the engine provisions
 
-These positions belong to features v1alpha1 does not offer. No field can fill
-them, and nothing can put a literal there either: they sit in the blocks
-`integrations`, `providers`, `mcp_servers`, `roles` and `units`, and the API
-server refuses a Company whose `spec.engineConfig` names any of those (or any
-other block a field of the API owns), so such a Company is never stored.
+An `Integration` with `provisioning: Engine` (GitLab, Mattermost, Datadog and
+an Atlassian organization) has the engine create each agent seat's account at
+the vendor, with the administrator credential the Integration references, and
+mint the account's credential itself. That value never exists in a Secret, so
+a seat names it as **provisioned** rather than with a `secretKeyRef`:
 
-| Crewlet position | Why it is not offered |
-|---|---|
-| `integrations.gitlab.signing_secret`, `integrations.gitlab.token`, `integrations.gitlab.provisioning.admin_token` | The GitLab integration is not offered yet. |
-| `integrations.mattermost.provisioning.admin_token`, `roles[].integrations.mattermost.bot_token` | The Mattermost integration is not offered yet. |
-| `integrations.jira.token`, `integrations.jira.webhook_secret` | The Jira integration is not offered yet; so the tracker backend is Native or None. |
-| `integrations.confluence.token`, `integrations.confluence.webhook_secret`, `integrations.confluence.webhook_token` | The Confluence integration is not offered yet; so the knowledge backend is Native or None. |
-| `integrations.datadog.webhook_token`, `integrations.datadog.provisioning.api_key`, `integrations.datadog.provisioning.app_key` | The Datadog integration is not offered yet. |
-| `integrations.atlassian.api_key` | The Atlassian organization integration is not offered yet. |
-| `providers.llm.*.cli.auth.token`, `providers.llm.*.cli.auth.credential_bundle`, `providers.llm.*.cli.env.*` | The `cli-agent` provider type is not offered: the engine image ships no coding CLI, and a subscription login belongs to one machine, which a pod that can be rescheduled at any time is not. |
+```yaml
+spec:
+  mcp:
+    - name: gitlab
+      env:
+        - name: GITLAB_TOKEN
+          valueFrom:
+            provisioned:
+              name: gitlab-token
+  sandbox:
+    env:
+      - name: GITLAB_TOKEN
+        valueFrom:
+          provisioned:
+            name: gitlab-token   # the same token as the tool server's
+```
 
-Each integration arrives as a new member of the `Integration` union, with a
-reference field for each of its credentials.
+A provisioned value is a reference, like a Secret's, to an entry of the
+engine's secret store, named for the seat's handle and the provisioned
+`name` (see [below](#names-in-the-engines-secret-store)). The engine finds
+the reference where its provisioning looks for a seat's credential (the
+GitLab, Datadog and Atlassian tool servers' variables, a seat's Mattermost
+bot token), mints the account's credential into that entry, and heals it on
+every reconcile pass; the operator never writes or deletes it. Every place a
+seat names one provisioned `name` is one value. A seat may name a provisioned
+value only while some Integration of its company has `provisioning: Engine`:
+otherwise nothing would create it, and the Seat reports
+`ResolvedRefs=False` with reason `NoProvisioner`. A Unit's credentials are
+every member's, so they always come from Secrets.
+
+Under `provisioning: External`, the default, the Integration holds no
+administrator credential, the engine creates nothing at the vendor, and
+every seat's credential is a Secret its Seat references.
+[Integrations](../guides/integrations.md) says, vendor by vendor, which
+variables the engine provisions.
 
 ## In the data pod's `crewlet.yaml`
 
@@ -197,6 +243,19 @@ deletes one once nothing references it. It never touches a name of any other
 shape, so credentials written into the store by hand or by Crewlet's own
 provisioning are left alone. A name the running configuration still
 references is kept until the next configuration is applied.
+
+A seat's provisioned credential has an entry of another shape, which the
+engine fills and the operator never writes or deletes:
+
+```
+PROVISIONED_<HANDLE>_<NAME>_<HASH>
+```
+
+The seat's handle and the provisioned `name` are written as above, and the
+hash is twelve base32 characters of the SHA-256 of both, so two seats, or
+two values of one seat, never share an entry. A seat keeps its handle for
+life, so its provisioned credentials keep their entries across every
+reconcile, restart and upgrade of the operator.
 
 The engine's listing carries names, never values, so to know which values
 changed the operator keeps a fingerprint of each value it wrote, in a Secret

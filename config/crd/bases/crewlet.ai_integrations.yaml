@@ -39,9 +39,12 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          Integration connects a company to a vendor (Slack, GitHub): the company-wide
-          settings and the credentials that verify the vendor's webhooks. Credentials
-          that belong to one seat, such as its own Slack app, are on the Seat.
+          Integration connects a company to a vendor (Slack, GitHub, GitLab,
+          Mattermost, Jira, Confluence, Datadog or an Atlassian organization): the
+          company-wide settings, the credentials that verify the vendor's webhooks,
+          and, where the engine creates the seats' accounts, the administrator
+          credential it creates them with. Credentials that belong to one seat, such
+          as its own Slack app or its GitLab token, are on the Seat.
         properties:
           apiVersion:
             description: |-
@@ -63,6 +66,42 @@ spec:
           spec:
             description: spec is the integration's desired state.
             properties:
+              atlassian:
+                description: atlassian connects an Atlassian Cloud organization.
+                properties:
+                  apiKeySecretRef:
+                    description: |-
+                      apiKeySecretRef is the Secret key holding an organization API key
+                      created without scopes: Atlassian refuses a scoped key the call that
+                      creates an account. Crewlet's `api_key`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  orgID:
+                    description: |-
+                      orgID is the organization's id, from admin.atlassian.com. Crewlet's
+                      `org_id`.
+                    maxLength: 64
+                    minLength: 1
+                    pattern: ^[A-Za-z0-9-]+$
+                    type: string
+                required:
+                - apiKeySecretRef
+                - orgID
+                type: object
               companyRef:
                 description: companyRef names the Company this integration belongs
                   to. Immutable.
@@ -79,6 +118,290 @@ spec:
                 x-kubernetes-validations:
                 - message: companyRef is immutable
                   rule: self == oldSelf
+              confluence:
+                description: confluence connects Confluence.
+                properties:
+                  cloudID:
+                    description: |-
+                      cloudID is an Atlassian Cloud site's id; requests go through
+                      Atlassian's API gateway. Crewlet's `cloud_id`.
+                    maxLength: 64
+                    minLength: 1
+                    pattern: ^[A-Za-z0-9-]+$
+                    type: string
+                  email:
+                    description: |-
+                      email is the account's address, for Confluence Cloud's basic
+                      authentication. Unset sends the token as a bearer token. Crewlet's
+                      `email`.
+                    maxLength: 254
+                    minLength: 3
+                    pattern: ^[^@\s]+@[^@\s]+$
+                    type: string
+                  siteURL:
+                    description: |-
+                      siteURL is the site's address as a browser opens it, for the links
+                      the engine hands people; needed with cloudID. Unset is url. Crewlet's
+                      `site_url`.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: siteURL must be an absolute http or https URL
+                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                    - message: 'siteURL may not hold a ${NAME} reference: the engine
+                        would resolve it from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                  tokenSecretRef:
+                    description: |-
+                      tokenSecretRef is the Secret key holding the API token (Cloud) or
+                      personal access token (Data Center) of the account a seat without a
+                      Confluence credential of its own searches as, which also reads the
+                      tool-skill pages. Crewlet's `token`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  url:
+                    description: |-
+                      url is a Data Center instance's or a Cloud site's base URL. Unset
+                      with cloudID unset, the company's Atlassian Integration discovers the
+                      site. Crewlet's `url`.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: url must be an absolute http or https URL
+                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                    - message: 'url may not hold a ${NAME} reference: the engine would
+                        resolve it from its own secret store and environment, which
+                        hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                  webhookSecretRef:
+                    description: |-
+                      webhookSecretRef is the Secret key holding the secret a Data Center
+                      instance signs webhook deliveries with. Required for Data Center.
+                      Crewlet's `webhook_secret`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  webhookTokenSecretRef:
+                    description: |-
+                      webhookTokenSecretRef is the Secret key holding the token a Confluence
+                      Cloud webhook carries in its delivery URL, Cloud signing nothing: at
+                      least 26 characters, random. Crewlet's `webhook_token`, a credential
+                      position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                required:
+                - tokenSecretRef
+                type: object
+                x-kubernetes-validations:
+                - message: 'url and cloudID are two ways to name one site: give one'
+                  rule: '!(has(self.url) && has(self.cloudID))'
+              datadog:
+                description: datadog connects Datadog.
+                properties:
+                  apiKeySecretRef:
+                    description: |-
+                      apiKeySecretRef is the Secret key holding an API key of the
+                      organization, which says which organization a call is for. Crewlet's
+                      `provisioning.api_key`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  appKeySecretRef:
+                    description: |-
+                      appKeySecretRef is the Secret key holding an application key, which
+                      says which user acts: one allowed to manage webhooks and service
+                      accounts. Crewlet's `provisioning.app_key`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  emailDomain:
+                    description: |-
+                      emailDomain is the domain the service accounts' addresses are built
+                      under; Datadog requires an address and never writes to it. Unset
+                      takes Crewlet's default, agents.crewlet.invalid. Crewlet's
+                      `provisioning.email_domain`.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$
+                    type: string
+                  handleTag:
+                    description: |-
+                      handleTag is the monitor tag key whose value names the seat an alert
+                      wakes, such as crewlet:sre-lead. Unset is crewlet. Crewlet's
+                      `handle_tag`.
+                    maxLength: 128
+                    minLength: 1
+                    pattern: ^[a-z][a-z0-9_./-]*$
+                    type: string
+                  role:
+                    description: |-
+                      role is the Datadog role each seat's service account is created
+                      with, by its name. Unset takes Crewlet's default, Datadog Read Only
+                      Role. Crewlet's `provisioning.role`.
+                    maxLength: 256
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: 'role may not hold a ${NAME} reference: the engine
+                        would resolve it from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                  routeTo:
+                    description: |-
+                      routeTo is where an alert goes whose monitor names no seat.
+                      Crewlet's `route_to`.
+                    minProperties: 1
+                    properties:
+                      dismiss:
+                        description: |-
+                          dismiss wakes nobody: only monitors that name a seat reach an agent,
+                          and the rest stay with whatever Datadog already does about them.
+                          Crewlet's `route_to: none`.
+                        type: boolean
+                      seatRef:
+                        description: |-
+                          seatRef names the agent Seat, in this namespace, the alert wakes.
+                          Crewlet's `route_to`, as the seat's handle.
+                        properties:
+                          name:
+                            description: name is the metadata.name of the referenced
+                              object.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    type: object
+                    x-kubernetes-validations:
+                    - message: 'give exactly one of seatRef and dismiss: true'
+                      rule: has(self.seatRef) != (has(self.dismiss) && self.dismiss)
+                  site:
+                    description: |-
+                      site is the region the organization, and so its keys, are in.
+                      Crewlet's `provisioning.site`.
+                    enum:
+                    - US1
+                    - US3
+                    - US5
+                    - EU1
+                    - AP1
+                    - AP2
+                    - US1FED
+                    type: string
+                  webhookName:
+                    description: |-
+                      webhookName is the name of the webhook the engine keeps at Datadog,
+                      and so the handle monitors write: @webhook-<name>. Unset is crewlet.
+                      Crewlet's `webhook_name`.
+                    maxLength: 128
+                    minLength: 1
+                    pattern: ^[^ @,]+$
+                    type: string
+                    x-kubernetes-validations:
+                    - message: 'webhookName may not hold a ${NAME} reference: the
+                        engine would resolve it from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                  webhookTokenSecretRef:
+                    description: |-
+                      webhookTokenSecretRef is the Secret key holding the token every
+                      delivery carries in its X-Crewlet-Token header: at least 26
+                      characters, random. Datadog signs nothing, so this token is the whole
+                      of the check. Crewlet's `webhook_token`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                required:
+                - apiKeySecretRef
+                - appKeySecretRef
+                - routeTo
+                - site
+                - webhookTokenSecretRef
+                type: object
               github:
                 description: github connects GitHub.
                 properties:
@@ -181,6 +504,443 @@ spec:
                 - message: 'provisioning needs tokenSecretRef: without an organization
                     token the engine registers no webhooks'
                   rule: '!has(self.provisioning) || has(self.tokenSecretRef)'
+              gitlab:
+                description: gitlab connects GitLab.
+                properties:
+                  engineProvisioning:
+                    description: |-
+                      engineProvisioning is how the engine creates the seats' accounts.
+                      Required with provisioning Engine, and not allowed with External.
+                    properties:
+                      accessLevel:
+                        description: |-
+                          accessLevel is the membership level of every seat's account. Unset
+                          takes Crewlet's default, Developer. Crewlet's `access_level`.
+                        enum:
+                        - Developer
+                        - Maintainer
+                        type: string
+                      accessLevels:
+                        description: |-
+                          accessLevels override accessLevel for single seats. Crewlet's
+                          `access_levels`.
+                        items:
+                          description: GitLabSeatAccess overrides the access level
+                            of one seat's service account.
+                          properties:
+                            accessLevel:
+                              description: accessLevel is the seat's membership level.
+                              enum:
+                              - Developer
+                              - Maintainer
+                              type: string
+                            name:
+                              description: |-
+                                name is the metadata.name of the Seat, in this namespace. Crewlet keys
+                                the override by the seat's handle, which the operator renders.
+                              maxLength: 253
+                              minLength: 1
+                              type: string
+                          required:
+                          - accessLevel
+                          - name
+                          type: object
+                        maxItems: 64
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      accountOwner:
+                        description: |-
+                          accountOwner is where the service accounts are created. Unset is
+                          Group. Crewlet's `mode`.
+                        enum:
+                        - Group
+                        - Instance
+                        type: string
+                      adminTokenSecretRef:
+                        description: |-
+                          adminTokenSecretRef is the Secret key holding a personal access token
+                          with the api scope of an Owner of the group (of an instance
+                          administrator, for accountOwner Instance), which creates and removes
+                          the service accounts. Crewlet's `admin_token`, a credential position.
+                        properties:
+                          key:
+                            description: key is the key within the Secret's data.
+                            maxLength: 253
+                            minLength: 1
+                            pattern: ^[-._a-zA-Z0-9]+$
+                            type: string
+                          name:
+                            description: name is the metadata.name of the Secret.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      group:
+                        description: |-
+                          group is the top-level group, by its path, the service accounts join
+                          and the webhook is registered on. Crewlet's `group`.
+                        maxLength: 255
+                        minLength: 1
+                        pattern: ^[A-Za-z0-9_.][A-Za-z0-9_./-]*$
+                        type: string
+                      groupWebhook:
+                        description: |-
+                          groupWebhook is whether one group hook replaces the per-project ones.
+                          Unset is Auto. Crewlet's `group_webhook`.
+                        enum:
+                        - Auto
+                        - Require
+                        - Never
+                        type: string
+                      projects:
+                        description: |-
+                          projects are projects, by path, the accounts also join, and the ones
+                          the webhook is registered on one by one when no group hook is.
+                          Crewlet's `projects`.
+                        items:
+                          maxLength: 255
+                          minLength: 1
+                          pattern: ^[A-Za-z0-9_.][A-Za-z0-9_./-]*$
+                          type: string
+                        maxItems: 128
+                        type: array
+                        x-kubernetes-list-type: set
+                      tokenScopes:
+                        description: |-
+                          tokenScopes are the scopes minted on each seat's token. Unset takes
+                          Crewlet's default, api. Crewlet's `token_scopes`.
+                        items:
+                          maxLength: 64
+                          minLength: 1
+                          pattern: ^[a-z_]+$
+                          type: string
+                        maxItems: 16
+                        type: array
+                        x-kubernetes-list-type: set
+                      usernamePrefix:
+                        description: |-
+                          usernamePrefix is put before each seat's handle to form its account's
+                          username, for a group shared with people. Crewlet's
+                          `username_prefix`.
+                        maxLength: 32
+                        minLength: 1
+                        pattern: ^[A-Za-z0-9_.-]+$
+                        type: string
+                    required:
+                    - adminTokenSecretRef
+                    - group
+                    type: object
+                  signingSecretRef:
+                    description: |-
+                      signingSecretRef is the Secret key holding the signing token every
+                      webhook delivery is verified against: whsec_ followed by the standard
+                      base64 of 32 bytes, the only form GitLab signs with (its "Generate
+                      signing token" button makes one). Crewlet's `signing_secret`, a
+                      credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  tokenSecretRef:
+                    description: |-
+                      tokenSecretRef is the Secret key holding a personal access token with
+                      the read_api scope, which the engine reads an issue's or merge
+                      request's participants with, so that everyone in a thread hears its
+                      activity. Unset routes to the people a delivery names only. Crewlet's
+                      `token`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  url:
+                    description: |-
+                      url is the instance's base URL, such as https://gitlab.com. Crewlet's
+                      `url`.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: url must be an absolute http or https URL
+                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                    - message: 'url may not hold a ${NAME} reference: the engine would
+                        resolve it from its own secret store and environment, which
+                        hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                  webhookName:
+                    description: |-
+                      webhookName is the name of the hooks the engine registers, which is
+                      how it tells its own from others on the instance: two deployments
+                      watching one instance need two names. Unset is crewlet. Crewlet's
+                      `webhook_name`.
+                    maxLength: 255
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: 'webhookName may not hold a ${NAME} reference: the
+                        engine would resolve it from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                required:
+                - signingSecretRef
+                - url
+                type: object
+              jira:
+                description: jira connects Jira.
+                properties:
+                  cloudID:
+                    description: |-
+                      cloudID is an Atlassian Cloud site's id; requests go through
+                      Atlassian's API gateway. Crewlet's `cloud_id`.
+                    maxLength: 64
+                    minLength: 1
+                    pattern: ^[A-Za-z0-9-]+$
+                    type: string
+                  email:
+                    description: |-
+                      email is the account's address, for Jira Cloud's basic
+                      authentication. Unset sends the token as a bearer token, as a service
+                      account and a Data Center personal access token want. Crewlet's
+                      `email`.
+                    maxLength: 254
+                    minLength: 3
+                    pattern: ^[^@\s]+@[^@\s]+$
+                    type: string
+                  siteURL:
+                    description: |-
+                      siteURL is the site's address as a browser opens it, for the links
+                      the engine hands people; needed with cloudID, whose gateway address
+                      opens nothing in a browser. Unset is url. Crewlet's `site_url`.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: siteURL must be an absolute http or https URL
+                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                    - message: 'siteURL may not hold a ${NAME} reference: the engine
+                        would resolve it from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                  tokenSecretRef:
+                    description: |-
+                      tokenSecretRef is the Secret key holding the API token (Cloud) or
+                      personal access token (Data Center) of an administrator account. The
+                      engine reads an issue's watchers with it, which no webhook carries,
+                      and registers the company's webhook. Crewlet's `token`, a credential
+                      position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  url:
+                    description: |-
+                      url is a Data Center instance's or a Cloud site's base URL. Unset
+                      with cloudID unset, the company's Atlassian Integration discovers the
+                      site. Crewlet's `url`.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: url must be an absolute http or https URL
+                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                    - message: 'url may not hold a ${NAME} reference: the engine would
+                        resolve it from its own secret store and environment, which
+                        hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                  webhookName:
+                    description: |-
+                      webhookName is the name of the webhook the engine registers, which is
+                      how it tells its own from others on the site: two deployments
+                      watching one site need two names. Unset is crewlet. Crewlet's
+                      `webhook_name`.
+                    maxLength: 255
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: 'webhookName may not hold a ${NAME} reference: the
+                        engine would resolve it from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                  webhookSecretRef:
+                    description: |-
+                      webhookSecretRef is the Secret key holding the secret webhook
+                      deliveries are signed with. Required for a Data Center instance, whose
+                      route answers none without it; on Cloud, webhooks the engine
+                      registers are signed with it, and the Forge relay needs none.
+                      Crewlet's `webhook_secret`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                required:
+                - tokenSecretRef
+                type: object
+                x-kubernetes-validations:
+                - message: 'url and cloudID are two ways to name one site: give one'
+                  rule: '!(has(self.url) && has(self.cloudID))'
+              mattermost:
+                description: mattermost connects Mattermost.
+                properties:
+                  engineProvisioning:
+                    description: |-
+                      engineProvisioning is how the engine creates the seats' bots.
+                      Required with provisioning Engine, and not allowed with External.
+                    properties:
+                      adminTokenSecretRef:
+                        description: |-
+                          adminTokenSecretRef is the Secret key holding a system
+                          administrator's personal access token, which creates and disables the
+                          bots. Crewlet's `admin_token`, a credential position.
+                        properties:
+                          key:
+                            description: key is the key within the Secret's data.
+                            maxLength: 253
+                            minLength: 1
+                            pattern: ^[-._a-zA-Z0-9]+$
+                            type: string
+                          name:
+                            description: name is the metadata.name of the Secret.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      channels:
+                        description: |-
+                          channels are channels, by name (the URL slug), every bot joins: a bot
+                          hears only the channels it is in. Crewlet's `channels`.
+                        items:
+                          maxLength: 64
+                          minLength: 1
+                          pattern: ^[a-z0-9][a-z0-9_-]*$
+                          type: string
+                        maxItems: 64
+                        type: array
+                        x-kubernetes-list-type: set
+                      displayNameSuffix:
+                        description: |-
+                          displayNameSuffix is put after each bot's display name, such as
+                          " (AI)", to tell agents from people at a glance. Crewlet's
+                          `display_name_suffix`.
+                        maxLength: 64
+                        minLength: 1
+                        type: string
+                        x-kubernetes-validations:
+                        - message: 'displayNameSuffix may not hold a ${NAME} reference:
+                            the engine would resolve it from its own secret store
+                            and environment, which hold credentials that are not this
+                            object''s to name'
+                          rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                      usernamePrefix:
+                        description: |-
+                          usernamePrefix is put before each seat's handle to form its bot's
+                          username, for a server shared with people. Crewlet's
+                          `username_prefix`.
+                        maxLength: 32
+                        minLength: 1
+                        pattern: ^[a-z0-9._-]+$
+                        type: string
+                    required:
+                    - adminTokenSecretRef
+                    type: object
+                  team:
+                    description: |-
+                      team is the team, by name (the URL slug), the bots belong to.
+                      Crewlet's `team`.
+                    maxLength: 64
+                    minLength: 1
+                    pattern: ^[a-z0-9][a-z0-9_-]*$
+                    type: string
+                  typingStatus:
+                    description: |-
+                      typingStatus is when a seat shows that it is typing. Unset takes
+                      Crewlet's default, Always; each indicator costs a request every few
+                      seconds while the seat works. Crewlet's `typing_status`.
+                    enum:
+                    - Always
+                    - Addressed
+                    type: string
+                  url:
+                    description: |-
+                      url is the server's base URL, such as https://chat.example.com: its
+                      Site URL, which the websocket, the REST calls and every link derive
+                      from. Crewlet's `url`.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: url must be an absolute http or https URL
+                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                    - message: 'url may not hold a ${NAME} reference: the engine would
+                        resolve it from its own secret store and environment, which
+                        hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                required:
+                - team
+                - url
+                type: object
+              provisioning:
+                description: |-
+                  provisioning is who creates the seats' accounts at the vendor. Unset
+                  is External.
+                enum:
+                - External
+                - Engine
+                type: string
               slack:
                 description: slack connects Slack.
                 properties:
@@ -243,10 +1003,37 @@ spec:
             - companyRef
             type: object
             x-kubernetes-validations:
-            - message: exactly one vendor (slack or github) must be set
-              rule: '[has(self.slack), has(self.github)].filter(x, x).size() == 1'
+            - message: exactly one vendor (slack, github, gitlab, mattermost, jira,
+                confluence, datadog or atlassian) must be set
+              rule: '[has(self.slack), has(self.github), has(self.gitlab), has(self.mattermost),
+                has(self.jira), has(self.confluence), has(self.datadog), has(self.atlassian)].filter(x,
+                x).size() == 1'
             - message: an Integration's vendor cannot change; create another Integration
               rule: has(self.slack) == has(oldSelf.slack) && has(self.github) == has(oldSelf.github)
+                && has(self.gitlab) == has(oldSelf.gitlab) && has(self.mattermost)
+                == has(oldSelf.mattermost) && has(self.jira) == has(oldSelf.jira)
+                && has(self.confluence) == has(oldSelf.confluence) && has(self.datadog)
+                == has(oldSelf.datadog) && has(self.atlassian) == has(oldSelf.atlassian)
+            - message: 'provisioning Engine applies to gitlab, mattermost, datadog
+                and atlassian: the engine creates no account and mints no credential
+                at Slack, GitHub, Jira or Confluence'
+              rule: '!has(self.provisioning) || self.provisioning != ''Engine'' ||
+                has(self.gitlab) || has(self.mattermost) || has(self.datadog) || has(self.atlassian)'
+            - message: 'datadog and atlassian need provisioning Engine: the engine
+                creates the seats'' accounts with the keys they reference whenever
+                it holds them'
+              rule: '!(has(self.datadog) || has(self.atlassian)) || (has(self.provisioning)
+                && self.provisioning == ''Engine'')'
+            - message: 'gitlab.engineProvisioning is required with provisioning Engine
+                and not allowed otherwise: it holds the administrator token the engine
+                creates the seats'' accounts with'
+              rule: '!has(self.gitlab) || has(self.gitlab.engineProvisioning) == (has(self.provisioning)
+                && self.provisioning == ''Engine'')'
+            - message: 'mattermost.engineProvisioning is required with provisioning
+                Engine and not allowed otherwise: it holds the administrator token
+                the engine creates the seats'' bots with'
+              rule: '!has(self.mattermost) || has(self.mattermost.engineProvisioning)
+                == (has(self.provisioning) && self.provisioning == ''Engine'')'
           status:
             description: status is the integration's observed state.
             minProperties: 1
@@ -325,8 +1112,12 @@ spec:
               webhookURL:
                 description: |-
                   webhookURL is the company-wide URL the vendor delivers webhooks to,
-                  when the company is exposed and the vendor has one. Per-seat URLs are
-                  in each Seat's status.
+                  when the company is exposed and the vendor has one:
+                  <publicBaseURL>/webhooks/<vendor> for GitHub, GitLab, Jira,
+                  Confluence (a Data Center instance's; Confluence Cloud delivers to
+                  <webhookURL>/<event>, a hook the engine registers per event) and
+                  Datadog. Slack, Mattermost and Atlassian have none; Slack's and
+                  GitHub's per-seat URLs are in each Seat's status.
                 maxLength: 2048
                 minLength: 1
                 type: string

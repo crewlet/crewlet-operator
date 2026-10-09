@@ -6,15 +6,16 @@ import (
 )
 
 // TrackerBackend is which work tracker a company runs. It maps onto Crewlet's
-// tracker.backend (Native is `native`, None is `none`). Crewlet's `jira`
-// backend arrives with the Jira integration.
-// +kubebuilder:validation:Enum=Native;None
+// tracker.backend (Native is `native`, Jira is `jira`, None is `none`).
+// +kubebuilder:validation:Enum=Native;Jira;None
 type TrackerBackend string
 
 // The tracker backends.
 const (
 	// TrackerNative is the engine's own tracker.
 	TrackerNative TrackerBackend = "Native"
+	// TrackerJira is Jira, connected by the company's Jira Integration.
+	TrackerJira TrackerBackend = "Jira"
 	// TrackerNone is a company with no tracker.
 	TrackerNone TrackerBackend = "None"
 )
@@ -48,15 +49,18 @@ type TrackerSettings struct {
 }
 
 // KnowledgeBackend is which knowledge base a company runs. It maps onto
-// Crewlet's knowledge.backend (Native is `native`, None is `none`). Crewlet's
-// `confluence` backend arrives with the Confluence integration.
-// +kubebuilder:validation:Enum=Native;None
+// Crewlet's knowledge.backend (Native is `native`, Confluence is
+// `confluence`, None is `none`).
+// +kubebuilder:validation:Enum=Native;Confluence;None
 type KnowledgeBackend string
 
 // The knowledge backends.
 const (
 	// KnowledgeNative is the engine's own knowledge base.
 	KnowledgeNative KnowledgeBackend = "Native"
+	// KnowledgeConfluence is Confluence, connected by the company's
+	// Confluence Integration.
+	KnowledgeConfluence KnowledgeBackend = "Confluence"
 	// KnowledgeNone is a company with no knowledge base.
 	KnowledgeNone KnowledgeBackend = "None"
 )

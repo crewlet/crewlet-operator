@@ -1,0 +1,288 @@
+# Connecting integrations
+
+An `Integration` connects a company to one vendor: Slack, GitHub, GitLab,
+Mattermost, Jira, Confluence, Datadog, or an Atlassian Cloud organization.
+Each renders one block of Crewlet's `integrations`, and a company has at
+most one per vendor. This guide shows each vendor's object, the credentials
+it takes, what the seats bring of their own, and where the engine wants to
+be told about the vendor. Crewlet's own pages
+([docs/integrations](https://github.com/crewlet/crewlet/tree/main/docs/integrations))
+describe what each integration does once connected.
+
+Every credential is a Secret reference ([Supplying credentials](credentials.md));
+[Credentials](../concepts/credentials.md) lists every position and the field
+that fills it.
+
+## Who creates the seats' accounts
+
+`spec.provisioning` says who creates each agent seat's account at the vendor:
+
+| `provisioning` | The seats' accounts | The Integration holds | A seat's credential |
+|---|---|---|---|
+| `External` (the default) | made by someone else: a person, or a platform's own flow | no administrator credential, so the engine creates, changes and removes nothing at the vendor | a Secret its Seat references |
+| `Engine` | made by the engine, and healed on every reconcile pass | the administrator credential the engine makes them with | a **provisioned** value: the engine mints it into its own store |
+
+The engine can create accounts at GitLab, Mattermost, Datadog and in an
+Atlassian Cloud organization, and only there: `Engine` on Slack, GitHub,
+Jira or Confluence is refused, since the engine mints no credential there.
+Datadog and Atlassian take `Engine` only: the engine creates the seats'
+accounts with the keys they reference whenever it holds them.
+
+A seat names a credential the engine provisions with `provisioned` where it
+would otherwise name a Secret key, in its tool servers' credentials
+(`spec.mcp`), its sandbox environment (`spec.sandbox.env`) and its
+Mattermost bot (`spec.integrations.mattermost.botToken`):
+
+```yaml
+valueFrom:
+  provisioned:
+    name: gitlab-token     # one value wherever this seat names it
+```
+
+The engine finds the value where its provisioning looks for a seat's
+credential, which differs by vendor (below). A provisioned value anywhere
+else is never filled. A seat names one only while an Integration of its
+company has `provisioning: Engine`; otherwise it reports
+`ResolvedRefs=False NoProvisioner`. A Unit's credentials always come from
+Secrets.
+
+## Where webhooks arrive
+
+Most vendors deliver webhooks to the company's public address
+(`Company.status.endpoints.publicBaseURL`, see
+[Exposure](exposure.md)). Each Integration's `status.webhookURL` is the
+exact address its vendor delivers to, `<publicBaseURL>/webhooks/<vendor>`:
+
+| Vendor | Webhooks | Registered by |
+|---|---|---|
+| Slack | per seat: `Seat.status.integrations.slack.requestURL` | you, in the seat's app |
+| GitHub | `status.webhookURL`, and per seat: `Seat.status.integrations.github.webhookURL` | the engine, with `tokenSecretRef`; each seat's app |
+| GitLab | `status.webhookURL` | the engine under `Engine`; you under `External` |
+| Jira | `status.webhookURL` | the engine, with the administrator token |
+| Confluence | `status.webhookURL` (Data Center), `status.webhookURL/<event>` (Cloud) | the engine, with the administrator token |
+| Datadog | `status.webhookURL` | the engine, with the organization's keys |
+| Mattermost | none: the engine holds a websocket per seat's bot | — |
+| Atlassian | none: the organization is where accounts are made | — |
+
+Without a public address an Integration whose vendor delivers webhooks
+reports `Healthy=False NotExposed`; Mattermost and Atlassian need none.
+`Healthy` is otherwise the engine's own check of the vendor. Jira,
+Confluence and the Atlassian organization are one tool to the engine,
+`atlassian`, so their three Integrations report one verdict.
+
+## GitLab
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: gitlab
+spec:
+  companyRef: {name: acme}
+  provisioning: Engine
+  gitlab:
+    url: https://gitlab.com
+    signingSecretRef: {name: acme-gitlab, key: signingSecret}   # whsec_...
+    tokenSecretRef: {name: acme-gitlab, key: readToken}         # optional, read_api
+    engineProvisioning:
+      group: acme
+      adminTokenSecretRef: {name: acme-gitlab-admin, key: token}
+      accessLevel: Developer
+      accessLevels:
+        - {name: lead, accessLevel: Maintainer}                 # by Seat name
+      groupWebhook: Auto
+```
+
+- `signingSecretRef` verifies every delivery. GitLab signs with a
+  `whsec_` token over 32 random bytes; its *Generate signing token* button
+  makes one, as does `printf 'whsec_%s' "$(openssl rand -base64 32)"`.
+- `tokenSecretRef`, a personal access token with `read_api`, lets the engine
+  read who takes part in an issue or a merge request. Without it a comment
+  reaches only the people its delivery names.
+- Under `Engine`, `adminTokenSecretRef` is a group Owner's personal access
+  token with the `api` scope (an instance administrator's, with
+  `accountOwner: Instance` on a self-managed instance). The engine creates a
+  service account per agent seat, adds it to the group and to `projects`,
+  and registers the webhook.
+
+A seat's GitLab identity is its token for the `MCPServer` named `gitlab`
+(Crewlet looks for the seat's GitLab credential there, under `GITLAB_TOKEN`,
+`GITLAB_PERSONAL_ACCESS_TOKEN`, `Private-Token` or `Authorization`):
+
+```yaml
+spec:                       # Seat lead
+  mcp:
+    - name: gitlab
+      env:
+        - name: GITLAB_TOKEN
+          valueFrom:
+            provisioned: {name: gitlab-token}   # under Engine; a secretKeyRef under External
+  sandbox:
+    env:
+      - name: GITLAB_TOKEN                      # the engine looks here too, for git
+        valueFrom:
+          provisioned: {name: gitlab-token}
+```
+
+A provisioned value is the credential alone, so provision a variable, such
+as `GITLAB_TOKEN` of a Stdio server, rather than an `Authorization` header,
+which would need a scheme in front of it.
+
+## Mattermost
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: mattermost
+spec:
+  companyRef: {name: acme}
+  provisioning: Engine
+  mattermost:
+    url: https://chat.acme.example
+    team: acme
+    typingStatus: Addressed
+    engineProvisioning:
+      adminTokenSecretRef: {name: acme-mattermost-admin, key: token}
+      usernamePrefix: agent-
+      channels: [town-square]
+      displayNameSuffix: " (AI)"
+```
+
+Each agent seat speaks as its own bot, whose one token covers the websocket,
+the REST calls and the Mattermost tool server:
+
+```yaml
+spec:                       # Seat lead
+  integrations:
+    mattermost:
+      botToken:
+        provisioned: {name: mattermost}   # under Engine; a secretKeyRef under External
+      channel: leads                      # a channel the engine adds the bot to
+  mcp:
+    - name: mattermost
+      env:
+        - name: MATTERMOST_TOKEN
+          valueFrom:
+            provisioned: {name: mattermost}   # the same token
+```
+
+Under `External` a bot made by hand, or by a platform, is a Secret key, and
+`username` names it when it is not the seat's handle.
+
+## Jira and Confluence
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: jira
+spec:
+  companyRef: {name: acme}
+  jira:
+    url: https://jira.acme.example          # or cloudID, with siteURL
+    tokenSecretRef: {name: acme-jira, key: token}
+    webhookSecretRef: {name: acme-jira, key: webhookSecret}
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: confluence
+spec:
+  companyRef: {name: acme}
+  confluence:
+    url: https://wiki.acme.example
+    tokenSecretRef: {name: acme-confluence, key: token}
+    webhookSecretRef: {name: acme-confluence, key: webhookSecret}        # Data Center
+    webhookTokenSecretRef: {name: acme-confluence, key: webhookToken}    # Cloud
+```
+
+`tokenSecretRef` is an administrator account's API token (Cloud, with
+`email` for basic authentication) or personal access token (Data Center):
+the engine reads an issue's watchers with Jira's and searches with
+Confluence's for a seat that has no credential of its own. A Data Center
+instance signs deliveries with `webhookSecretRef`, which it then requires;
+Confluence Cloud signs nothing, so its hooks carry `webhookTokenSecretRef`,
+at least 26 random characters, in their address. The Company runs them as
+its tracker and knowledge base with `spec.tracker.backend: Jira` and
+`spec.knowledge.backend: Confluence`.
+
+A seat's Jira and Confluence identity is one Atlassian account: its token
+for the `MCPServer` named `atlassian` (or a product's own server, `jira` or
+`confluence`), under `JIRA_API_TOKEN`, `CONFLUENCE_API_TOKEN` or
+`ATLASSIAN_API_TOKEN` (a Data Center personal access token under
+`JIRA_PERSONAL_TOKEN` or `CONFLUENCE_PERSONAL_TOKEN`), with its address
+under `JIRA_USERNAME`, `CONFLUENCE_USERNAME` or `ATLASSIAN_EMAIL`. Without an
+Atlassian Integration those come from Secrets.
+
+## An Atlassian Cloud organization
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: atlassian
+spec:
+  companyRef: {name: acme}
+  provisioning: Engine
+  atlassian:
+    orgID: 1a2b3c4d-...                               # from admin.atlassian.com
+    apiKeySecretRef: {name: acme-atlassian, key: apiKey}   # created without scopes
+```
+
+With the organization connected, the engine creates a service account per
+agent seat, grants it the Jira and Confluence sites, and mints its token; it
+also discovers the sites, so the Jira and Confluence Integrations may leave
+`url` and `cloudID` out. Each seat names the minted token and the account's
+address as two provisioned values:
+
+```yaml
+spec:                       # Seat lead
+  mcp:
+    - name: atlassian
+      env:
+        - {name: JIRA_API_TOKEN, valueFrom: {provisioned: {name: atlassian-token}}}
+        - {name: JIRA_USERNAME, valueFrom: {provisioned: {name: atlassian-email}}}
+        - {name: CONFLUENCE_API_TOKEN, valueFrom: {provisioned: {name: atlassian-token}}}
+        - {name: CONFLUENCE_USERNAME, valueFrom: {provisioned: {name: atlassian-email}}}
+```
+
+A Data Center deployment has no organization: leave this Integration out
+and give each seat its token from a Secret.
+
+## Datadog
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Integration
+metadata:
+  name: datadog
+spec:
+  companyRef: {name: acme}
+  provisioning: Engine
+  datadog:
+    webhookTokenSecretRef: {name: acme-datadog, key: webhookToken}   # 26+ random characters
+    routeTo:
+      seatRef: {name: sre-lead}       # or dismiss: true
+    site: EU1
+    apiKeySecretRef: {name: acme-datadog, key: apiKey}
+    appKeySecretRef: {name: acme-datadog, key: appKey}
+    role: Datadog Read Only Role
+```
+
+The engine registers the webhook at Datadog with the organization's keys, so
+monitors name it as `@webhook-crewlet` (`webhookName`). An alert wakes the
+seat its monitor's `crewlet:<handle>` tag names (`handleTag`), and
+`routeTo` the one an alert naming nobody wakes; a Human seat cannot be one.
+The engine also creates a service account, with `role`, for every agent seat
+whose credentials for the `MCPServer` named `datadog` name an application
+key (`DD_APP_KEY`, `DATADOG_APP_KEY` or `app_key`), and mints the key there:
+name it as provisioned.
+
+## Slack and GitHub
+
+Slack has no company-wide credential: each agent seat is its own app, in its
+Seat's `spec.integrations.slack`. GitHub's Integration holds the webhook
+secret of the company-wide route and an optional organization token, and
+each agent seat is its own GitHub App, in `spec.integrations.github`.
+[Supplying credentials](credentials.md#an-agents-slack-app) shows both.

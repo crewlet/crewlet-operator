@@ -308,7 +308,7 @@ var _ = Describe("Company config", Ordered, func() {
 	rendered := func(c *crewletaiv1alpha1.Company) *render.Document {
 		GinkgoHelper()
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(c), c)).To(Succeed())
-		in := &render.Input{Company: c, Class: class, StoreName: secretsync.StoreName, PublicBaseURL: c.Status.Endpoints.PublicBaseURL}
+		in := &render.Input{Company: c, Class: class, StoreName: secretsync.StoreName, ProvisionedName: secretsync.ProvisionedName, PublicBaseURL: c.Status.Endpoints.PublicBaseURL}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(class), class)).To(Succeed())
 		in.Units = listOf[crewletaiv1alpha1.Unit](&crewletaiv1alpha1.UnitList{}, namespace, c.Name)
 		in.Seats = listOf[crewletaiv1alpha1.Seat](&crewletaiv1alpha1.SeatList{}, namespace, c.Name)
@@ -389,7 +389,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(nimbus.Status.Config.AppliedHash).NotTo(BeEmpty())
 		Expect(nimbus.Status.Config.AppliedAt).NotTo(BeNil())
 		Expect(nimbus.Status.Config.Objects).To(Equal(crewletaiv1alpha1.AppliedObjectCounts{
-			Units: new(int32(2)), Seats: new(int32(3)), LLMProviders: new(int32(2)), MCPServers: new(int32(1)), Integrations: new(int32(2)),
+			Units: new(int32(2)), Seats: new(int32(3)), LLMProviders: new(int32(2)), MCPServers: new(int32(2)), Integrations: new(int32(3)),
 			Schedules: new(int32(2)),
 		}))
 		Expect(conditionOf(nimbus, crewletaiv1alpha1.ConditionSecretsSynced)(Default).Reason).To(Equal(crewletaiv1alpha1.ReasonSynced))
@@ -453,7 +453,7 @@ var _ = Describe("Company config", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				var state engine.IntegrationState
 				for _, t := range tools {
-					if t.Key == vendorOf(in) {
+					if t.Key == healthTool(render.Vendor(in)) {
 						state = t.State
 					}
 				}
@@ -466,8 +466,8 @@ var _ = Describe("Company config", Ordered, func() {
 				g.Expect(reasonOf(in, crewletaiv1alpha1.ConditionHealthy)(g)).To(Equal(want))
 			}).WithTimeout(settle).Should(Succeed())
 			want := ""
-			if vendorOf(in) == toolGitHub {
-				want = baseURL + "/webhooks/github"
+			if vendor := render.Vendor(in); companyWebhook(vendor) {
+				want = baseURL + "/webhooks/" + vendor
 			}
 			Expect(in.Status.WebhookURL).To(Equal(want))
 		}

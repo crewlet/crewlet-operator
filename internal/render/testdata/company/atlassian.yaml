@@ -1,0 +1,73 @@
+integrations:
+  atlassian:
+    api_key: ${K8S_ATLASSIAN_ORG_API_KEY_CAL6MRI4FVRT}
+    org_id: 4f3e2d1c-0b9a-8f7e-6d5c-4b3a2f1e0d9c
+  confluence:
+    email: admin@helix.example
+    token: ${K8S_CONFLUENCE_ADMIN_TOKEN_I5YZ7WBJFFIM}
+    webhook_token: ${K8S_CONFLUENCE_ADMIN_WEBHOOK_TOKEN_4RJM7KLAIPPX}
+  datadog:
+    enabled: true
+    handle_tag: owner
+    provisioning:
+      api_key: ${K8S_DATADOG_API_KEY_R2XMCNZGWCGX}
+      app_key: ${K8S_DATADOG_APP_KEY_IIXGXLWMGXWV}
+      email_domain: agents.helix.example
+      role: Datadog Standard Role
+      site: us5.datadoghq.com
+    route_to: none
+    webhook_name: helix
+    webhook_token: ${K8S_DATADOG_WEBHOOK_TOKEN_RVSQWVNFN224}
+  jira:
+    email: admin@helix.example
+    token: ${K8S_JIRA_ADMIN_TOKEN_JLX3NMD54PB2}
+    webhook_name: helix
+    webhook_secret: ${K8S_JIRA_ADMIN_WEBHOOK_SECRET_KHG55FUJ4KQV}
+  mattermost:
+    enabled: true
+    team: helix
+    typing_status: addressed
+    url: https://chat.helix.example
+  public_base_url: https://atlassian.hooks.example.com
+knowledge:
+  backend: confluence
+mcp_servers:
+- args:
+  - mcp-atlassian
+  command: uvx
+  name: atlassian
+  shared: false
+  transport: stdio
+name: Helix
+providers:
+  llm:
+    claude:
+      api_keys:
+      - ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+      model: claude-sonnet-5
+      type: anthropic
+  llm_order:
+  - claude
+roles:
+- goal: Triage the issues and the alerts nobody owns yet.
+  handle: triage
+  integrations:
+    mattermost:
+      bot_token: ${K8S_TRIAGE_MATTERMOST_BOT_TOKEN_GXVBDKKLZ7W7}
+      channel: ops
+      username: helix-triage
+  kind: agent
+  mcp_env:
+    atlassian:
+      CONFLUENCE_API_TOKEN: ${PROVISIONED_TRIAGE_ATLASSIAN_TOKEN_O7S5LR47DFCK}
+      CONFLUENCE_USERNAME: ${PROVISIONED_TRIAGE_ATLASSIAN_EMAIL_QRJKIZVI7O5D}
+      JIRA_API_TOKEN: ${PROVISIONED_TRIAGE_ATLASSIAN_TOKEN_O7S5LR47DFCK}
+      JIRA_USERNAME: ${PROVISIONED_TRIAGE_ATLASSIAN_EMAIL_QRJKIZVI7O5D}
+  name: triage
+  placement:
+    labels:
+      crewlet.ai/pool: data
+  project: OPS
+  space: OPS
+tracker:
+  backend: jira

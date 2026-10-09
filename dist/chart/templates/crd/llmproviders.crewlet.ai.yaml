@@ -75,7 +75,8 @@ spec:
                   credential position: the values are pushed into the engine's secret
                   store and the document refers to them by name only. Required for types
                   Anthropic and OpenAI; an OpenAICompatible endpoint that needs no key
-                  may omit it.
+                  may omit it. A CLIAgent provider takes exactly one, with
+                  cli.auth.mode APIKey, which it gives the CLI.
                 items:
                   description: |-
                     SecretKeyReference selects one key of a Secret in the referring object's
@@ -130,6 +131,207 @@ spec:
                     would resolve it from its own secret store and environment, which
                     hold credentials that are not this object''s to name'
                   rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+              cli:
+                description: |-
+                  cli is the coding CLI a provider of type CLIAgent drives. Required
+                  for, and only for, type CLIAgent. Crewlet's `cli`.
+                properties:
+                  agent:
+                    description: agent is which CLI to drive. Crewlet's `agent`.
+                    enum:
+                    - ClaudeCode
+                    - Codex
+                    - GeminiCLI
+                    - QwenCode
+                    - OpenCode
+                    - CursorAgent
+                    - Copilot
+                    - Grok
+                    - MuseCode
+                    - KimiCode
+                    - Hermes
+                    - Pi
+                    type: string
+                  auth:
+                    description: auth is how the CLI signs in.
+                    minProperties: 1
+                    properties:
+                      credentialBundleSecretRef:
+                        description: |-
+                          credentialBundleSecretRef is the Secret key holding a credential
+                          bundle `crewlet llm export` wrote. Crewlet's `credential_bundle`, a
+                          credential position.
+                        properties:
+                          key:
+                            description: key is the key within the Secret's data.
+                            maxLength: 253
+                            minLength: 1
+                            pattern: ^[-._a-zA-Z0-9]+$
+                            type: string
+                          name:
+                            description: name is the metadata.name of the Secret.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      mode:
+                        description: |-
+                          mode is how the CLI signs in. Unset is Subscription. Crewlet's
+                          `mode`.
+                        enum:
+                        - Subscription
+                        - APIKey
+                        - InheritEnv
+                        type: string
+                      tokenSecretRef:
+                        description: |-
+                          tokenSecretRef is the Secret key holding a long-lived subscription
+                          token the CLI mints for headless use. Crewlet's `token`, a credential
+                          position.
+                        properties:
+                          key:
+                            description: key is the key within the Secret's data.
+                            maxLength: 253
+                            minLength: 1
+                            pattern: ^[-._a-zA-Z0-9]+$
+                            type: string
+                          name:
+                            description: name is the metadata.name of the Secret.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                    type: object
+                    x-kubernetes-validations:
+                    - message: 'a Subscription login needs tokenSecretRef or credentialBundleSecretRef:
+                        a pod has no terminal to log in at'
+                      rule: (has(self.mode) && self.mode != 'Subscription') || has(self.tokenSecretRef)
+                        || has(self.credentialBundleSecretRef)
+                    - message: 'tokenSecretRef and credentialBundleSecretRef sign
+                        in to a subscription: they apply to mode Subscription only'
+                      rule: '!(has(self.mode) && self.mode != ''Subscription'') ||
+                        (!has(self.tokenSecretRef) && !has(self.credentialBundleSecretRef))'
+                  env:
+                    description: |-
+                      env is extra environment of every invocation of the CLI: the child
+                      gets an allowlisted environment, not the engine's, so a variable the
+                      CLI needs beyond that is given here. Crewlet's `env`, a credential
+                      position.
+                    items:
+                      description: |-
+                        SecretEnvVar is a named credential delivered as an environment variable,
+                        such as a tool server's API token. Crewlet treats every value in the
+                        positions that use this type as a credential, so a literal value is not
+                        accepted: the value always comes from a Secret.
+                      properties:
+                        name:
+                          description: name is the variable's name.
+                          maxLength: 128
+                          minLength: 1
+                          pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+                          type: string
+                        valueFrom:
+                          description: valueFrom is the Secret key the value is read
+                            from.
+                          properties:
+                            secretKeyRef:
+                              description: secretKeyRef selects the Secret key that
+                                holds the value.
+                              properties:
+                                key:
+                                  description: key is the key within the Secret's
+                                    data.
+                                  maxLength: 253
+                                  minLength: 1
+                                  pattern: ^[-._a-zA-Z0-9]+$
+                                  type: string
+                                name:
+                                  description: name is the metadata.name of the Secret.
+                                  maxLength: 253
+                                  minLength: 1
+                                  type: string
+                              required:
+                              - key
+                              - name
+                              type: object
+                          required:
+                          - secretKeyRef
+                          type: object
+                      required:
+                      - name
+                      - valueFrom
+                      type: object
+                    maxItems: 32
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  loginName:
+                    description: |-
+                      loginName names the login, and the per-seat homes, the provider
+                      keeps on the data volume. Providers of the company with the same
+                      loginName share one login, which is how several models run off one
+                      subscription; they must drive the same CLI. Unset is the provider's
+                      own metadata.name. Crewlet's `state_dir`, as
+                      /var/lib/crewlet/llm-cli/<loginName>.
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z0-9][a-z0-9-]*$
+                    type: string
+                  maxConcurrent:
+                    description: |-
+                      maxConcurrent is how many CLI processes the provider runs at once;
+                      each takes 200 to 400 MB of the engine pod's memory. Unset takes
+                      Crewlet's default of 4. Crewlet's `max_concurrent`.
+                    format: int32
+                    maximum: 64
+                    minimum: 1
+                    type: integer
+                  mode:
+                    description: mode is how the engine uses the CLI. Unset is Text.
+                      Crewlet's `mode`.
+                    enum:
+                    - Text
+                    - Agent
+                    type: string
+                  runIn:
+                    description: |-
+                      runIn is where an Agent-mode run happens. Unset is the Company's
+                      sandbox, which is E2B. Crewlet's `run_in`.
+                    enum:
+                    - E2B
+                    type: string
+                  timeoutSeconds:
+                    description: |-
+                      timeoutSeconds caps one invocation of the CLI, launch included. Unset
+                      takes Crewlet's default of 300. Crewlet's `timeout_seconds`.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                required:
+                - agent
+                - auth
+                type: object
+                x-kubernetes-validations:
+                - message: 'runIn applies to mode Agent only: in mode Text the CLI
+                    is a process in the engine''s pod'
+                  rule: '!has(self.runIn) || (has(self.mode) && self.mode == ''Agent'')'
+                - message: 'mode Agent runs ClaudeCode or OpenCode: the engine has
+                    a sandbox runner for those two CLIs only'
+                  rule: '!has(self.mode) || self.mode != ''Agent'' || self.agent in
+                    [''ClaudeCode'', ''OpenCode'']'
+                - message: 'a Subscription login reaches an Agent-mode run in a remote
+                    sandbox only as a headless token: give ClaudeCode auth.tokenSecretRef,
+                    or use auth mode APIKey'
+                  rule: '!has(self.mode) || self.mode != ''Agent'' || (has(self.auth)
+                    && has(self.auth.mode) && self.auth.mode != ''Subscription'')
+                    || (self.agent == ''ClaudeCode'' && has(self.auth) && has(self.auth.tokenSecretRef))'
               companyRef:
                 description: companyRef names the Company this provider belongs to.
                   Immutable.
@@ -223,6 +425,7 @@ spec:
                 - Anthropic
                 - OpenAI
                 - OpenAICompatible
+                - CLIAgent
                 type: string
             required:
             - companyRef
@@ -246,7 +449,21 @@ spec:
               rule: self.type != 'OpenAICompatible' || has(self.baseURL)
             - message: apiKeySecretRefs needs at least one key for types Anthropic
                 and OpenAI
-              rule: self.type == 'OpenAICompatible' || has(self.apiKeySecretRefs)
+              rule: self.type in ['OpenAICompatible', 'CLIAgent'] || has(self.apiKeySecretRefs)
+            - message: cli is required with type CLIAgent and not allowed otherwise
+              rule: (self.type == 'CLIAgent') == has(self.cli)
+            - message: 'baseURL, timeoutSeconds and cooldowns configure an HTTP client,
+                and a CLIAgent provider runs a process: its timeout is cli.timeoutSeconds'
+              rule: self.type != 'CLIAgent' || !(has(self.baseURL) || has(self.timeoutSeconds)
+                || has(self.cooldowns))
+            - message: a CLIAgent provider takes apiKeySecretRefs with cli.auth.mode
+                APIKey, and only then
+              rule: self.type != 'CLIAgent' || !has(self.cli) || has(self.apiKeySecretRefs)
+                == (has(self.cli.auth) && has(self.cli.auth.mode) && self.cli.auth.mode
+                == 'APIKey')
+            - message: 'a CLIAgent provider gives its CLI one key: it rotates none'
+              rule: self.type != 'CLIAgent' || !has(self.apiKeySecretRefs) || self.apiKeySecretRefs.size()
+                == 1
           status:
             description: status is the provider's observed state.
             minProperties: 1

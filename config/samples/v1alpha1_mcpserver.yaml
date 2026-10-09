@@ -1,5 +1,7 @@
-# GitHub's remote tool server. shared: false starts one instance per seat
-# with that seat's own Authorization header (see the Seat ana).
+# GitHub's remote tool server, and GitLab's own CLI as a local one.
+# shared: false starts one instance per seat with that seat's own credentials
+# (see the Seat ana): an Authorization header for GitHub, a GITLAB_TOKEN for
+# GitLab, which the engine mints.
 apiVersion: crewlet.ai/v1alpha1
 kind: MCPServer
 metadata:
@@ -12,3 +14,17 @@ spec:
   url: https://api.githubcopilot.com/mcp/
   toolPrefix: gh_
   requestTimeoutSeconds: 60
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: gitlab
+spec:
+  companyRef:
+    name: nimbus
+  transport: Stdio
+  shared: false
+  command: glab
+  args:
+    - mcp
+    - serve

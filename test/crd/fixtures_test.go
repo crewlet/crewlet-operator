@@ -70,9 +70,10 @@ const (
 	msgStdioCommand                = "command is required with transport Stdio and not allowed with HTTP"
 	msgStdioOnly                   = "args and env apply to transport Stdio only"
 	msgHTTPURL                     = "url is required with transport HTTP and not allowed with Stdio"
-	msgOneVendor                   = "exactly one vendor (slack or github) must be set"
-	msgCompanyRefFrozen            = "companyRef is immutable"
-	msgPauseDetails                = "pauseReason and stopRunning describe a pause: they apply only while paused is true"
+	msgOneVendor                   = "exactly one vendor (slack, github, gitlab, mattermost, jira, " +
+		"confluence, datadog or atlassian) must be set"
+	msgCompanyRefFrozen = "companyRef is immutable"
+	msgPauseDetails     = "pauseReason and stopRunning describe a pause: they apply only while paused is true"
 )
 
 func companyRef() v1.CompanyReference { return v1.CompanyReference{Name: companyName} }
@@ -83,6 +84,11 @@ func secretKey(name, key string) v1.SecretKeyReference {
 
 func fromSecret(name, key string) v1.SecretValueSource {
 	return v1.SecretValueSource{SecretKeyRef: secretKey(name, key)}
+}
+
+// seatFromSecret is a seat's or a unit's credential read from a Secret key.
+func seatFromSecret(name, key string) v1.SeatCredentialSource {
+	return v1.SeatCredentialSource{SecretKeyRef: secretKey(name, key)}
 }
 
 // engineClass is the smallest valid EngineClass. It is cluster-scoped, so the
@@ -183,7 +189,7 @@ func mcpCredentials(server string) v1.MCPCredentials {
 		Name: server,
 		Env: []v1.MCPCredentialValue{{
 			Name:      "Authorization",
-			ValueFrom: fromSecret(seatHandle+"-"+server, "authorization"),
+			ValueFrom: seatFromSecret(seatHandle+"-"+server, "authorization"),
 		}},
 	}
 }

@@ -531,6 +531,11 @@ func TestPlatformLLMProviders(t *testing.T) {
 			want:   msgBudgetTokens,
 		},
 		{
+			name:   "a platform CLIAgent provider is refused",
+			mutate: platform(v1.LLMProviderSettings{Type: v1.LLMProviderCLIAgent, Model: "sonnet"}, true),
+			want:   "a platform model provider speaks a model API",
+		},
+		{
 			name: "reasoningEffort on a platform OpenAI provider with reasoning is accepted",
 			mutate: platform(with(openAI, func(s *v1.LLMProviderSettings) {
 				s.Reasoning = new(true)
