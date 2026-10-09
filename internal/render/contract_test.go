@@ -356,3 +356,75 @@ func TestContractGettingStarted(t *testing.T) {
 	}
 	validate(t, env, "-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
 }
+
+// TestContractScheduleRefusalsReachTheSchedule has the engine's dry run
+// refuse each of a schedule's mistakes no API rule can see, and checks that
+// the document attributes every problem to the Schedule, which is what the
+// controller reports it on: the engine's place for each is inside the
+// schedule's entry of a role's or unit's schedules.
+func TestContractScheduleRefusalsReachTheSchedule(t *testing.T) {
+	const (
+		scheduleInventory = "inventory"
+		scheduleReport    = "weekly-report"
+	)
+	client := enginetest.Start(t).Client()
+	for _, c := range []struct {
+		name     string
+		mutate   func(*Input)
+		schedule string
+	}{
+		{
+			name:     "a cron field out of range",
+			mutate:   func(in *Input) { schedule(in, scheduleInventory).Spec.Schedule = "61 * * * *" },
+			schedule: scheduleInventory,
+		},
+		{
+			name:     "a day name the grammar does not have",
+			mutate:   func(in *Input) { schedule(in, scheduleInventory).Spec.Schedule = "0 9 * * MON-FRY" },
+			schedule: scheduleInventory,
+		},
+		{
+			name:     "a time zone the engine cannot load",
+			mutate:   func(in *Input) { schedule(in, scheduleInventory).Spec.TimeZone = "Mars/Olympus_Mons" },
+			schedule: scheduleInventory,
+		},
+		{
+			name:     "the host's own clock",
+			mutate:   func(in *Input) { schedule(in, scheduleInventory).Spec.TimeZone = "Local" },
+			schedule: scheduleInventory,
+		},
+		{
+			name:     "each, on a unit with no agent seat directly in it",
+			mutate:   func(in *Input) { schedule(in, scheduleInventory).Spec.Target.UnitRef.Name = "anvils" },
+			schedule: scheduleInventory,
+		},
+		{
+			name:     "lead, on a unit whose inherited lead is a person",
+			mutate:   func(in *Input) { unit(in, "rnd").Spec.LeadRef.Name = "wile" },
+			schedule: scheduleReport,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := companyCaseNamed(t, "org-chart").input(t)
+			c.mutate(in)
+			doc, err := Company(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = client.ApplyConfig(t.Context(), engine.ApplyRequest{Document: doc.YAML, DryRun: true})
+			verr, ok := errors.AsType[*engine.ValidationError](err)
+			if !ok {
+				t.Fatalf("the dry run answered %v, want a refusal", err)
+			}
+			if len(verr.Problems) == 0 {
+				t.Fatalf("the refusal names no problem: %v", verr)
+			}
+			want := ObjectRef{Kind: KindSchedule, Name: c.schedule}
+			for _, p := range verr.Problems {
+				if got, ok := doc.Attribute(PathOf(p.Segments)); !ok || got != want {
+					t.Errorf("the engine's problem at %q (%s) is attributed to %v, %v; want %v", p.Path, p.Message, got, ok, want)
+				}
+			}
+		})
+	}
+}

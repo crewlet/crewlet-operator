@@ -63,4 +63,11 @@ resources:
   kind: Integration
   path: github.com/crewlet/crewlet-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: crewlet.ai
+  kind: Schedule
+  path: github.com/crewlet/crewlet-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"

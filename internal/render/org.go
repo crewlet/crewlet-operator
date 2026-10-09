@@ -19,6 +19,9 @@ import (
 // keyChildren is the key a unit lists its child units under.
 const keyChildren = "children"
 
+// keySchedules is the key a role or a unit lists its schedules under.
+const keySchedules = "schedules"
+
 // org renders the top-level roles and units.
 func (r *renderer) org() ([]roleDoc, []unitDoc) {
 	children := map[string][]*v1alpha1.Unit{}
@@ -56,6 +59,7 @@ func (r *renderer) org() ([]roleDoc, []unitDoc) {
 
 	r.duplicateSeats()
 	r.duplicateUnits()
+	r.scheduleTargets()
 	t := tree{children: children, members: members}
 	return r.roles(Path{keyRoles}, rootSeats), r.unitList(Path{keyUnits}, roots, t)
 }
@@ -256,6 +260,7 @@ func (r *renderer) unit(at Path, u *v1alpha1.Unit, t tree) unitDoc {
 				"names Seat %s as the lead, which does not exist in namespace %s", lead, r.namespace()))
 		}
 	}
+	doc.Schedules = r.schedules(at, r.unitSchedules[u.Name])
 	doc.Roles = r.roles(append(slices.Clone(at), keyRoles), t.members[u.Name])
 	doc.Children = r.unitList(append(slices.Clone(at), keyChildren), t.children[u.Name], t)
 	return doc
@@ -267,13 +272,14 @@ func (r *renderer) roles(at Path, seats []*v1alpha1.Seat) []roleDoc {
 	})
 	out := make([]roleDoc, 0, len(seats))
 	for i, s := range seats {
-		r.source(append(slices.Clone(at), i), ObjectRef{Kind: KindSeat, Name: s.Name})
-		out = append(out, r.role(s))
+		seatAt := append(slices.Clone(at), i)
+		r.source(seatAt, ObjectRef{Kind: KindSeat, Name: s.Name})
+		out = append(out, r.role(seatAt, s))
 	}
 	return out
 }
 
-func (r *renderer) role(s *v1alpha1.Seat) roleDoc {
+func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 	spec := &s.Spec
 	doc := roleDoc{
 		Name:                 seatName(s),
@@ -342,7 +348,73 @@ func (r *renderer) role(s *v1alpha1.Seat) roleDoc {
 		}
 	}
 	doc.Integrations = r.roleIntegrations(&spec.Integrations)
+	doc.Schedules = r.schedules(at, r.seatSchedules[s.Name])
 	return doc
+}
+
+// scheduleTargets sorts the Schedules by the Seat or Unit they target, and
+// refuses those whose target cannot carry them: one that does not exist, and
+// a Human seat, which Crewlet refuses any schedule on because it runs no
+// turn for a person. That refusal is the Schedule's to report: the engine
+// would report it at the seat's schedules, which is the Seat's place in the
+// document.
+func (r *renderer) scheduleTargets() {
+	r.seatSchedules = map[string][]*v1alpha1.Schedule{}
+	r.unitSchedules = map[string][]*v1alpha1.Schedule{}
+	for _, sched := range sortedByName(r.in.Schedules) {
+		target := &sched.Spec.Target
+		if name := target.SeatRef.Name; name != "" {
+			seat := r.seats[name]
+			switch {
+			case seat == nil:
+				r.errs.notFound(KindSchedule, sched.Name, "spec.target.seatRef.name", fmt.Sprintf(
+					"names Seat %s, which does not exist in namespace %s", name, r.namespace()))
+			case seat.Spec.Kind == v1alpha1.SeatKindHuman:
+				r.errs.add(KindSchedule, sched.Name, "spec.target.seatRef.name", v1alpha1.ReasonHumanSeat, fmt.Sprintf(
+					"names Seat %s, a Human seat, and the engine runs no turn for a person: target an Agent seat, "+
+						"or a unit with fanOut Each", name))
+			default:
+				r.seatSchedules[name] = append(r.seatSchedules[name], sched)
+			}
+			continue
+		}
+		name := target.UnitRef.Name
+		if r.units[name] == nil {
+			r.errs.notFound(KindSchedule, sched.Name, "spec.target.unitRef.name", fmt.Sprintf(
+				"names Unit %s, which does not exist in namespace %s", name, r.namespace()))
+			continue
+		}
+		r.unitSchedules[name] = append(r.unitSchedules[name], sched)
+	}
+}
+
+// schedules renders the schedules of the role or unit at owner, in the
+// order scheduleTargets sorted them, by metadata.name.
+func (r *renderer) schedules(owner Path, schedules []*v1alpha1.Schedule) []scheduleDoc {
+	if len(schedules) == 0 {
+		return nil
+	}
+	out := make([]scheduleDoc, len(schedules))
+	for i, sched := range schedules {
+		r.source(append(slices.Clone(owner), keySchedules, i), ObjectRef{Kind: KindSchedule, Name: sched.Name})
+		spec := &sched.Spec
+		out[i] = scheduleDoc{
+			// The name is half the identity the engine claims each fire
+			// under, and a metadata.name never changes, so a fire is never
+			// claimed twice because a Schedule was edited.
+			Name:           sched.Name,
+			Cron:           spec.Schedule,
+			Task:           spec.Prompt,
+			Timezone:       spec.TimeZone,
+			Target:         scheduleFanOut(spec.Target.FanOut),
+			TimeoutSeconds: spec.TimeoutSeconds,
+			Catchup:        spec.CatchUp,
+		}
+		if spec.Suspend != nil && *spec.Suspend {
+			out[i].Enabled = new(false)
+		}
+	}
+	return out
 }
 
 func (r *renderer) roleIntegrations(in *v1alpha1.SeatIntegrations) roleIntegrationsDoc {

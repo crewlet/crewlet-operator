@@ -24,6 +24,7 @@ rules:
   - integrations
   - llmproviders
   - mcpservers
+  - schedules
   - seats
   - units
   verbs:

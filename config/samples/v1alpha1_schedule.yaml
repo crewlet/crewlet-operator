@@ -1,0 +1,32 @@
+# Nimbus's recurring work. The platform team's lead gathers a standup every
+# weekday morning, Berlin time; Ana checks CI every morning on the company's
+# clock. A Schedule's name is its name in the engine.
+apiVersion: crewlet.ai/v1alpha1
+kind: Schedule
+metadata:
+  name: platform-standup
+spec:
+  companyRef:
+    name: nimbus
+  target:
+    unitRef:
+      name: platform
+    fanOut: Lead
+  schedule: "0 9 * * 1-5"
+  timeZone: Europe/Berlin
+  prompt: Post a standup summary of yesterday's merged work to the team channel.
+  timeoutSeconds: 900
+  catchUp: false
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Schedule
+metadata:
+  name: ci-health
+spec:
+  companyRef:
+    name: nimbus
+  target:
+    seatRef:
+      name: ana
+  schedule: "30 7 * * *"
+  prompt: Check last night's CI runs and file a work item for every new failure.

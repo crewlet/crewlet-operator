@@ -41,6 +41,9 @@ const (
 	// sampleGitHub names both the GitHub MCPServer and the GitHub
 	// Integration.
 	sampleGitHub = "github"
+
+	schedulePlatformStandup = "platform-standup"
+	scheduleCIHealth        = "ci-health"
 )
 
 // objects is what a set of manifests holds, sorted into the slices an Input
@@ -104,6 +107,10 @@ func load(t *testing.T, files ...string) objects {
 				var i v1alpha1.Integration
 				decode(&i)
 				o.input.Integrations = append(o.input.Integrations, i)
+			case KindSchedule:
+				var s v1alpha1.Schedule
+				decode(&s)
+				o.input.Schedules = append(o.input.Schedules, s)
 			default:
 				t.Fatalf("%s: a manifest of kind %s", file, meta.Kind)
 			}

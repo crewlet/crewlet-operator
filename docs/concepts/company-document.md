@@ -24,6 +24,7 @@ handle, and model providers and tool servers by name.
 | `Integration` | `integrations.slack` or `integrations.github` |
 | `Unit` | one entry of `units`, or of its parent's `children` |
 | `Seat` | one entry of its Unit's `roles`, or of the top-level `roles` when it has no Unit |
+| `Schedule` | one entry of the `schedules` of the Seat's role or the Unit it targets, named by its `metadata.name` |
 
 `integrations.public_base_url` is the Company's public address, from
 `spec.exposure.publicBaseURL` or the class's `webhooks.hostname`, and is left
@@ -53,6 +54,39 @@ down, so a seat that needs a fallback names a chain. No provider may be named
 
 Each Seat's `spec.llm` becomes Crewlet's per-phase `llm` mapping, each chain
 naming providers by their key in `providers.llm`.
+
+### Schedules
+
+A Schedule is written into the entry of what it targets: a Seat's role, or a
+Unit. Within one, schedules are ordered by `metadata.name`, which is also the
+schedule's Crewlet `name`, half of the identity the engine claims each fire
+under; since a `metadata.name` never changes, editing a Schedule never lets a
+fire run twice.
+
+| Field | Crewlet's | Notes |
+|---|---|---|
+| `spec.schedule` | `cron` | Five fields. The API checks the shape; the engine's dry run checks each field's values against the grammar its scheduler evaluates with |
+| `spec.timeZone` | `timezone` | Unset fires on the company's clock (`timezone`, from the Company's `spec.timeZone`) |
+| `spec.prompt` | `task` | |
+| `spec.target.fanOut` | `target` | `each` or `lead`; a unit's schedule only. Unset is Crewlet's own default, `each` |
+| `spec.suspend: true` | `enabled: false` | Unset or `false` is left out: Crewlet's default fires the schedule |
+| `spec.timeoutSeconds` | `timeout_seconds` | Unset is Crewlet's default, 180 seconds |
+| `spec.catchUp` | `catchup` | Unset is Crewlet's default, `true` |
+
+Crewlet refuses a schedule on a person's seat, since it runs no turn for a
+person: a Schedule whose `target.seatRef` names a Human seat cannot be
+rendered, and reports `ResolvedRefs=False` with the reason `HumanSeat`. The
+mistakes only the engine can see — a cron value out of range, a zone it
+cannot load, `Each` on a unit with no agent seat directly in it, `Lead` on a
+unit whose lead is a person — are refused by its dry run at the schedule's
+own place in the document, and so reported on the Schedule.
+
+The engine does not report when a schedule last fired in a form a status
+field could carry: its record of the fires it dispatched is each node's own
+table, which the answering node serves, while the fleet's claim on each fire
+is internal to its coordination store. A Schedule therefore has no
+`lastScheduleTime`; the engine's dashboard (**Agents › Schedules**) shows
+each schedule's next fire and its history.
 
 ### Placement
 

@@ -23,8 +23,9 @@ the [API reference](../reference/api.md).
 | `LLMProvider` | Namespace | A model a company's seats can run on | One entry of `providers.llm` |
 | `MCPServer` | Namespace | A tool server agents call | One entry of `mcp_servers` |
 | `Integration` | Namespace | A vendor the company is connected to (Slack, GitHub) | One block of `integrations` |
+| `Schedule` | Namespace | Recurring work of a seat or a unit, fired on a cron schedule: the company's CronJob | One entry of its seat's or unit's `schedules` |
 
-All seven are in the `crewlet` category, so one command lists a company:
+All eight are in the `crewlet` category, so one command lists a company:
 
 ```bash
 kubectl get crewlet -n tenant-nimbus
@@ -50,6 +51,8 @@ graph LR
   M[MCPServer github]
   I1[Integration slack]
   I2[Integration github]
+  SCH1[Schedule platform-standup]
+  SCH2[Schedule ci-health]
   SEC[("Secret ana-slack")]
 
   C -- engineClassName --> EC
@@ -66,6 +69,8 @@ graph LR
   S1 -. llm .-> P
   S1 -. mcp .-> M
   S1 -. integrations.slack .-> SEC
+  SCH1 -- target.unitRef --> U2
+  SCH2 -- target.seatRef --> S1
 ```
 
 References stay inside the namespace. Several companies may share one, which
@@ -76,7 +81,7 @@ cannot read.
 
 [`config/samples`](../../config/samples) is one complete example, Nimbus: a
 class, a company, two units, three seats (one a person), a model provider, a
-tool server and the Slack and GitHub integrations.
+tool server, the Slack and GitHub integrations and two schedules.
 
 ### Identities that never change
 
@@ -178,7 +183,7 @@ Every object reports `status.conditions` with `observedGeneration`:
 |---|---|
 | `Company` | `Ready` (the summary), `Accepted`, `RuntimeReady`, `SecretsSynced`, `ConfigApplied`, `Exposed` |
 | `EngineClass` | `Accepted` |
-| `Unit`, `Seat`, `LLMProvider`, `MCPServer` | `Accepted`, `ResolvedRefs`, `Applied` |
+| `Unit`, `Seat`, `LLMProvider`, `MCPServer`, `Schedule` | `Accepted`, `ResolvedRefs`, `Applied` |
 | `Integration` | `Accepted`, `ResolvedRefs`, `Applied`, `Healthy` |
 
 A Company also reports the revision the engine runs, its endpoints and the

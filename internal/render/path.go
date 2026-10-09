@@ -86,6 +86,7 @@ const (
 	KindLLMProvider = "LLMProvider"
 	KindMCPServer   = "MCPServer"
 	KindIntegration = "Integration"
+	KindSchedule    = "Schedule"
 )
 
 // Source says that the part of a document at Path, and everything below it

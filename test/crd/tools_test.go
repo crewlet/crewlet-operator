@@ -231,4 +231,9 @@ func TestCompanyRefIsImmutable(t *testing.T) {
 			name: caseName, mutate: func(i *v1.Integration) { moveTo(&i.Spec.CompanyRef) }, want: msgCompanyRefFrozen,
 		}})
 	})
+	t.Run("Schedule", func(t *testing.T) {
+		runUpdateCases(t, unitSchedule, []updateCase[*v1.Schedule]{{
+			name: caseName, mutate: func(s *v1.Schedule) { moveTo(&s.Spec.CompanyRef) }, want: msgCompanyRefFrozen,
+		}})
+	})
 }

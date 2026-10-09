@@ -156,6 +156,21 @@ func slackIntegration(namespace, name string) *v1.Integration {
 	}
 }
 
+// unitSchedule is the smallest valid Schedule: a unit's, which each of its
+// agent seats runs.
+func unitSchedule(namespace, name string) *v1.Schedule {
+	return &v1.Schedule{
+		Namespace: namespace,
+		Name:      name,
+		Spec: v1.ScheduleSpec{
+			CompanyRef: companyRef(),
+			Target:     v1.ScheduleTarget{UnitRef: v1.LocalObjectReference{Name: unitName}},
+			Schedule:   "30 9 * * 1-5",
+			Prompt:     "Post your standup.",
+		},
+	}
+}
+
 func githubMember() v1.GitHubIntegration {
 	return v1.GitHubIntegration{WebhookSecretRef: secretKey(githubKeys, "webhookSecret")}
 }

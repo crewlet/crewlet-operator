@@ -26,7 +26,8 @@ type RefError struct {
 	Field string
 	// Reason is the condition reason the refusal is reported with:
 	// v1alpha1.ReasonRefNotFound, v1alpha1.ReasonCycle,
-	// v1alpha1.ReasonConflict or v1alpha1.ReasonReferenceNotAllowed.
+	// v1alpha1.ReasonConflict, v1alpha1.ReasonReferenceNotAllowed or
+	// v1alpha1.ReasonHumanSeat.
 	Reason string
 	// Message says what is wrong and what to do, for a condition message.
 	Message string

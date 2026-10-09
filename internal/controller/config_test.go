@@ -315,6 +315,7 @@ var _ = Describe("Company config", Ordered, func() {
 		in.LLMProviders = listOf[crewletaiv1alpha1.LLMProvider](&crewletaiv1alpha1.LLMProviderList{}, namespace, c.Name)
 		in.MCPServers = listOf[crewletaiv1alpha1.MCPServer](&crewletaiv1alpha1.MCPServerList{}, namespace, c.Name)
 		in.Integrations = listOf[crewletaiv1alpha1.Integration](&crewletaiv1alpha1.IntegrationList{}, namespace, c.Name)
+		in.Schedules = listOf[crewletaiv1alpha1.Schedule](&crewletaiv1alpha1.ScheduleList{}, namespace, c.Name)
 		doc, err := render.Company(in)
 		Expect(err).NotTo(HaveOccurred())
 		return doc
@@ -389,6 +390,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(nimbus.Status.Config.AppliedAt).NotTo(BeNil())
 		Expect(nimbus.Status.Config.Objects).To(Equal(crewletaiv1alpha1.AppliedObjectCounts{
 			Units: new(int32(2)), Seats: new(int32(3)), LLMProviders: new(int32(2)), MCPServers: new(int32(1)), Integrations: new(int32(2)),
+			Schedules: new(int32(2)),
 		}))
 		Expect(conditionOf(nimbus, crewletaiv1alpha1.ConditionSecretsSynced)(Default).Reason).To(Equal(crewletaiv1alpha1.ReasonSynced))
 
@@ -620,6 +622,64 @@ var _ = Describe("Company config", Ordered, func() {
 		By("taking the sandbox away again")
 		updateLive(coder, func(s *crewletaiv1alpha1.Seat) { s.Spec.Sandbox = nil })
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		runsRendered(e, c)
+	})
+
+	It("applies a Schedule into its seat's entry, reports what is wrong with one on it, and removes a deleted one", func() {
+		const name = "sched"
+		e := startEngine(name)
+		secret(name+"-llm", map[string]string{llmKey: "k"})
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
+		person := newSeat(namespace, name, "jo", func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.Kind = crewletaiv1alpha1.SeatKindHuman
+			s.Spec.Contact.SlackUserID = "U0JO"
+		})
+		standIn(c)
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+
+		By("adding a Schedule of a seat")
+		standup := &crewletaiv1alpha1.Schedule{
+			Namespace: namespace, Name: name + "-standup",
+			Spec: crewletaiv1alpha1.ScheduleSpec{
+				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
+				Target:     crewletaiv1alpha1.ScheduleTarget{SeatRef: crewletaiv1alpha1.LocalObjectReference{Name: name + "-ana"}},
+				Schedule:   "30 9 * * 1-5",
+				TimeZone:   "Europe/Berlin",
+				Prompt:     "Post your standup.",
+			},
+		}
+		Expect(k8sClient.Create(ctx, standup)).To(Succeed())
+		Eventually(reasonOf(standup, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
+		Expect(reasonOf(standup, crewletaiv1alpha1.ConditionResolvedRefs)(Default)).To(Equal(crewletaiv1alpha1.ReasonResolved))
+		active := runsRendered(e, c)
+		Expect(string(active.Document)).To(ContainSubstring("name: " + standup.Name))
+		Expect(c.Status.Config.Objects.Schedules).To(Equal(new(int32(1))))
+
+		By("giving it a cron expression of five fields the engine refuses")
+		updateLive(standup, func(s *crewletaiv1alpha1.Schedule) { s.Spec.Schedule = "61 9 * * 1-5" })
+		Eventually(reasonOf(standup, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInvalid))
+		Expect(conditionOf(standup, crewletaiv1alpha1.ConditionApplied)(Default).Message).To(ContainSubstring("cron"))
+		Expect(reasonOf(seat(name+"-ana"), crewletaiv1alpha1.ConditionApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonInRevision),
+			"the seat's own generation still runs; the Schedule is what holds the document back")
+
+		By("pointing it at a person, whom the engine runs no turn for")
+		updateLive(standup, func(s *crewletaiv1alpha1.Schedule) {
+			s.Spec.Schedule = "30 9 * * 1-5"
+			s.Spec.Target.SeatRef.Name = person.Name
+		})
+		Eventually(reasonOf(standup, crewletaiv1alpha1.ConditionResolvedRefs)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonHumanSeat))
+		Expect(conditionOf(standup, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Message).To(ContainSubstring(person.Name))
+
+		By("pointing it back, then deleting it")
+		updateLive(standup, func(s *crewletaiv1alpha1.Schedule) { s.Spec.Target.SeatRef.Name = name + "-ana" })
+		Eventually(reasonOf(standup, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
+		Expect(k8sClient.Delete(ctx, standup)).To(Succeed())
+		Eventually(func(g Gomega) {
+			active, err := e.Client().ActiveConfig(ctx)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(string(active.Document)).NotTo(ContainSubstring(standup.Name))
+		}).WithTimeout(settle).Should(Succeed())
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)
 	})

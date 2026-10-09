@@ -42,6 +42,10 @@ roles:
     labels:
       crewlet.ai/pool: data
   project: COS
+  schedules:
+  - cron: 0 8 * * MON
+    name: audit
+    task: Audit last week's decisions.
   space: COS
   workers:
   - researcher
@@ -94,6 +98,14 @@ units:
         placement:
           labels:
             crewlet.ai/pool: data
+      schedules:
+      - catchup: false
+        cron: 30 9 * * 1-5
+        name: alloys-standup
+        target: each
+        task: 'Post your standup: shipped yesterday, on today, blockers.'
+        timeout_seconds: 600
+        timezone: Asia/Tokyo
       type: squad
     id: metals
     name: metals
@@ -104,6 +116,20 @@ units:
       placement:
         labels:
           crewlet.ai/pool: data
+      schedules:
+      - catchup: true
+        cron: '*/15 * * * *'
+        enabled: false
+        name: smoke
+        task: Run the smoke tests and triage failures.
+    schedules:
+    - cron: 0 2 1 * *
+      name: inventory
+      task: Count the alloys in stock.
+    - cron: 0 16 * * 5
+      name: weekly-report
+      target: lead
+      task: Collect the week's progress from your reports and post a summary.
     type: team
   goals:
   - One patent a quarter

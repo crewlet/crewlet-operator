@@ -2,7 +2,8 @@
 
 The config reconciler keeps the company document a Company's engine runs
 equal to what the Company and its parts — the `Unit`, `Seat`, `LLMProvider`,
-`MCPServer` and `Integration` objects that name it in `spec.companyRef` —
+`MCPServer`, `Integration` and `Schedule` objects that name it in
+`spec.companyRef` —
 declare. This page describes what it does on every change, what each
 management policy lets it write, and how it reports the outcome on every
 object involved. [What the engine is given](company-document.md) describes

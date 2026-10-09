@@ -20,7 +20,8 @@ import (
 // The cache indexes the config reconciler looks objects up by.
 const (
 	// companyRefIndex indexes the parts of a company (Units, Seats,
-	// LLMProviders, MCPServers, Integrations) by spec.companyRef.name, so a
+	// LLMProviders, MCPServers, Integrations, Schedules) by
+	// spec.companyRef.name, so a
 	// reconcile lists a company's parts without listing the namespace.
 	companyRefIndex = "spec.companyRef.name"
 
@@ -131,6 +132,8 @@ func companyRefOf(obj client.Object) string {
 	case *crewletaiv1alpha1.MCPServer:
 		return o.Spec.CompanyRef.Name
 	case *crewletaiv1alpha1.Integration:
+		return o.Spec.CompanyRef.Name
+	case *crewletaiv1alpha1.Schedule:
 		return o.Spec.CompanyRef.Name
 	}
 	return ""
@@ -333,6 +336,7 @@ func partLists() []client.ObjectList {
 		&crewletaiv1alpha1.LLMProviderList{},
 		&crewletaiv1alpha1.MCPServerList{},
 		&crewletaiv1alpha1.IntegrationList{},
+		&crewletaiv1alpha1.ScheduleList{},
 	}
 }
 
@@ -357,6 +361,10 @@ func itemsOf(list client.ObjectList) []client.Object {
 			out = append(out, &l.Items[i])
 		}
 	case *crewletaiv1alpha1.IntegrationList:
+		for i := range l.Items {
+			out = append(out, &l.Items[i])
+		}
+	case *crewletaiv1alpha1.ScheduleList:
 		for i := range l.Items {
 			out = append(out, &l.Items[i])
 		}

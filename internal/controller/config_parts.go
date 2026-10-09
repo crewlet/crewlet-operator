@@ -16,8 +16,8 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/secretref"
 )
 
-// part is one part of a company (a Unit, Seat, LLMProvider, MCPServer or
-// Integration) in one reconcile: the object as read, and what the reconcile
+// part is one part of a company (a Unit, Seat, LLMProvider, MCPServer,
+// Integration or Schedule) in one reconcile: the object as read, and what the reconcile
 // found wrong with it. Its status is computed from those findings and written
 // at the end of the reconcile.
 type part struct {
@@ -62,6 +62,8 @@ func kindOf(obj client.Object) string {
 		return render.KindLLMProvider
 	case *crewletaiv1alpha1.MCPServer:
 		return render.KindMCPServer
+	case *crewletaiv1alpha1.Schedule:
+		return render.KindSchedule
 	default:
 		return render.KindIntegration
 	}
@@ -80,6 +82,8 @@ func (p *part) conditions() *[]metav1.Condition {
 		return &o.Status.Conditions
 	case *crewletaiv1alpha1.Integration:
 		return &o.Status.Conditions
+	case *crewletaiv1alpha1.Schedule:
+		return &o.Status.Conditions
 	}
 	return nil
 }
@@ -97,6 +101,8 @@ func (p *part) setObservedGeneration() {
 		o.Status.ObservedGeneration = gen
 	case *crewletaiv1alpha1.Integration:
 		o.Status.ObservedGeneration = gen
+	case *crewletaiv1alpha1.Schedule:
+		o.Status.ObservedGeneration = gen
 	}
 }
 
@@ -112,6 +118,8 @@ func statusOf(obj client.Object) any {
 	case *crewletaiv1alpha1.MCPServer:
 		return o.Status
 	case *crewletaiv1alpha1.Integration:
+		return o.Status
+	case *crewletaiv1alpha1.Schedule:
 		return o.Status
 	}
 	return nil

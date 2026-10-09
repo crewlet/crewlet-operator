@@ -133,7 +133,7 @@ func TestTenantProvisioner(t *testing.T) {
 		binding := func(ns, role string) *rbacv1.RoleBinding {
 			return &rbacv1.RoleBinding{
 				Namespace: ns, Name: "provisioner",
-				RoleRef:  rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: role},
+				RoleRef:  rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: clusterRoleKind, Name: role},
 				Subjects: []rbacv1.Subject{{Kind: "ServiceAccount", Name: provisionerName, Namespace: provisionerNS}},
 			}
 		}

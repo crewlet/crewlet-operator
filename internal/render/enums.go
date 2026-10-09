@@ -170,3 +170,13 @@ func objectBackend(b v1alpha1.ObjectBackend) string {
 	}
 	return ""
 }
+
+func scheduleFanOut(f v1alpha1.ScheduleFanOut) string {
+	switch f {
+	case v1alpha1.ScheduleFanOutEach:
+		return "each"
+	case v1alpha1.ScheduleFanOutLead:
+		return "lead"
+	}
+	return ""
+}

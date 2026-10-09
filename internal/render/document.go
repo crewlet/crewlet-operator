@@ -175,6 +175,7 @@ type unitDoc struct {
 	MCPEnv    map[string]map[string]string `json:"mcp_env,omitempty"`
 	Project   string                       `json:"project,omitempty"`
 	Space     string                       `json:"space,omitempty"`
+	Schedules []scheduleDoc                `json:"schedules,omitempty"`
 	Roles     []roleDoc                    `json:"roles,omitempty"`
 	Children  []unitDoc                    `json:"children,omitempty"`
 }
@@ -201,6 +202,21 @@ type roleDoc struct {
 	Integrations         roleIntegrationsDoc          `json:"integrations,omitzero"`
 	Project              string                       `json:"project,omitempty"`
 	Space                string                       `json:"space,omitempty"`
+	Schedules            []scheduleDoc                `json:"schedules,omitempty"`
+}
+
+// scheduleDoc is one entry of a role's or a unit's schedules. Enabled and
+// Catchup are pointers because Crewlet reads an absent toggle as its own
+// default (true) and an explicit false as a setting.
+type scheduleDoc struct {
+	Name           string `json:"name"`
+	Cron           string `json:"cron"`
+	Task           string `json:"task"`
+	Timezone       string `json:"timezone,omitempty"`
+	Target         string `json:"target,omitempty"`
+	Enabled        *bool  `json:"enabled,omitempty"`
+	TimeoutSeconds int32  `json:"timeout_seconds,omitempty"`
+	Catchup        *bool  `json:"catchup,omitempty"`
 }
 
 type contactDoc struct {

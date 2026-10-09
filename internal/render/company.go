@@ -36,6 +36,7 @@ type Input struct {
 	LLMProviders []v1alpha1.LLMProvider
 	MCPServers   []v1alpha1.MCPServer
 	Integrations []v1alpha1.Integration
+	Schedules    []v1alpha1.Schedule
 
 	// StoreName is the name of the engine secret-store entry that holds a
 	// referenced Secret key's value. The document refers to the value as
@@ -239,6 +240,11 @@ type renderer struct {
 	mcp       map[string]*v1alpha1.MCPServer
 	providers map[string]bool
 	platform  map[string]bool
+
+	// seatSchedules and unitSchedules are the Schedules whose target
+	// resolves, by the metadata.name of the Seat or Unit they target.
+	seatSchedules map[string][]*v1alpha1.Schedule
+	unitSchedules map[string][]*v1alpha1.Schedule
 
 	refs    map[secretref.Key]struct{}
 	sources []Source

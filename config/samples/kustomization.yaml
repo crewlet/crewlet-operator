@@ -8,4 +8,5 @@ resources:
 - v1alpha1_integration.yaml
 - v1alpha1_unit.yaml
 - v1alpha1_seat.yaml
+- v1alpha1_schedule.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

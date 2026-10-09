@@ -9,6 +9,7 @@ resources:
 - bases/crewlet.ai_llmproviders.yaml
 - bases/crewlet.ai_mcpservers.yaml
 - bases/crewlet.ai_integrations.yaml
+- bases/crewlet.ai_schedules.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

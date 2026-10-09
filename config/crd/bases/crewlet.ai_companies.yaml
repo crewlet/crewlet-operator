@@ -1069,6 +1069,11 @@ spec:
                         format: int32
                         minimum: 0
                         type: integer
+                      schedules:
+                        description: schedules is the number of Schedules.
+                        format: int32
+                        minimum: 0
+                        type: integer
                       seats:
                         description: seats is the number of Seats.
                         format: int32

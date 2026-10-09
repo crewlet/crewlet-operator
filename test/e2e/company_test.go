@@ -433,7 +433,7 @@ var ctx = context.Background()
 
 // crewletKinds are the namespaced crewlet.ai kinds, for kubectl.
 const crewletKinds = "companies.crewlet.ai,units.crewlet.ai,seats.crewlet.ai,llmproviders.crewlet.ai," +
-	"mcpservers.crewlet.ai,integrations.crewlet.ai"
+	"mcpservers.crewlet.ai,integrations.crewlet.ai,schedules.crewlet.ai"
 
 // dumpTenant prints what a failed spec needs to be understood: the tenant's
 // objects and their status, the data pod's description and the engine's and

@@ -29,7 +29,7 @@ cluster-scoped set of platform defaults and limits, in the way a
 `StorageClass` is), it creates and owns the engine's StatefulSet, storage,
 keyring and API tokens, Services, webhook routes and network policy. The
 second makes the engine's configuration match: it collects the `Unit`,
-`Seat`, `LLMProvider`, `MCPServer` and `Integration` objects that reference
+`Seat`, `LLMProvider`, `MCPServer`, `Integration` and `Schedule` objects that reference
 the company, renders them into the single company document Crewlet runs on,
 validates it with the engine, and applies it **whole or not at all** — one
 unresolved reference blocks the next revision and is reported on the object
@@ -46,7 +46,7 @@ plane writing objects programmatically, one namespace per tenant.
 ```mermaid
 flowchart LR
     platform["Platform admin"] -- EngineClass --> kapi[("Kubernetes API")]
-    users["kubectl, GitOps,<br/>or a provisioning control plane"] -- "Company, Unit, Seat,<br/>LLMProvider, MCPServer, Integration" --> kapi
+    users["kubectl, GitOps,<br/>or a provisioning control plane"] -- "Company, Unit, Seat,<br/>LLMProvider, MCPServer,<br/>Integration, Schedule" --> kapi
     users -- Secrets --> kapi
     kapi --> operator["crewlet-operator"]
     operator -- "StatefulSet, Services, routes,<br/>keyring, NetworkPolicy" --> engine["Crewlet engine<br/>(one per Company)"]

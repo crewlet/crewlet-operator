@@ -69,12 +69,14 @@ rules:
   - integrations
   - llmproviders
   - mcpservers
+  - schedules
   - seats
   - units
   - companies/status
   - integrations/status
   - llmproviders/status
   - mcpservers/status
+  - schedules/status
   - seats/status
   - units/status
   verbs:
@@ -124,6 +126,7 @@ rules:
   - integrations
   - llmproviders
   - mcpservers
+  - schedules
   - seats
   - units
   verbs:
@@ -142,6 +145,7 @@ rules:
   - integrations/status
   - llmproviders/status
   - mcpservers/status
+  - schedules/status
   - seats/status
   - units/status
   verbs:

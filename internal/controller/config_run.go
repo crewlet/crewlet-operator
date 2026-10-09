@@ -211,6 +211,8 @@ func (run *configRun) input() *render.Input {
 			in.MCPServers = append(in.MCPServers, *o)
 		case *crewletaiv1alpha1.Integration:
 			in.Integrations = append(in.Integrations, *o)
+		case *crewletaiv1alpha1.Schedule:
+			in.Schedules = append(in.Schedules, *o)
 		}
 	}
 	return in
@@ -860,7 +862,7 @@ func (run *configRun) summary(active *engine.ActiveConfig, diffs []render.Path, 
 
 // objectCounts is status.config.objects for the rendered document.
 func (run *configRun) objectCounts() crewletaiv1alpha1.AppliedObjectCounts {
-	var units, seats, providers, servers, integrations int32
+	var units, seats, providers, servers, integrations, schedules int32
 	for _, p := range run.parts {
 		switch p.ref.Kind {
 		case render.KindUnit:
@@ -873,6 +875,8 @@ func (run *configRun) objectCounts() crewletaiv1alpha1.AppliedObjectCounts {
 			servers++
 		case render.KindIntegration:
 			integrations++
+		case render.KindSchedule:
+			schedules++
 		}
 	}
 	if use := run.company.Spec.LLM.UsePlatformProviders; use != nil && *use {
@@ -882,6 +886,7 @@ func (run *configRun) objectCounts() crewletaiv1alpha1.AppliedObjectCounts {
 	}
 	return crewletaiv1alpha1.AppliedObjectCounts{
 		Units: new(units), Seats: new(seats), LLMProviders: new(providers), MCPServers: new(servers), Integrations: new(integrations),
+		Schedules: new(schedules),
 	}
 }
 

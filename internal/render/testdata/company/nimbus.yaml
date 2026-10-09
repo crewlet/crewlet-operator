@@ -122,8 +122,20 @@ units:
         mcp:
           servers:
           - github
+      schedules:
+      - cron: 30 7 * * *
+        name: ci-health
+        task: Check last night's CI runs and file a work item for every new failure.
       token_budget:
         day: 300000
+    schedules:
+    - catchup: false
+      cron: 0 9 * * 1-5
+      name: platform-standup
+      target: lead
+      task: Post a standup summary of yesterday's merged work to the team channel.
+      timeout_seconds: 900
+      timezone: Europe/Berlin
     space: PLAT
     type: team
   id: engineering

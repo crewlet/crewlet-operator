@@ -555,6 +555,12 @@ const (
 	// leads back to itself.
 	ReasonCycle = "Cycle"
 
+	// ReasonHumanSeat is ResolvedRefs=False on a Schedule whose
+	// target.seatRef names a Human seat: the engine runs no turn for a
+	// person, so the schedule could never fire. Target an Agent seat, or the
+	// person's unit with fanOut Each.
+	ReasonHumanSeat = "HumanSeat"
+
 	// ReasonCheckPassed is Healthy=True.
 	ReasonCheckPassed = "CheckPassed"
 

@@ -29,6 +29,7 @@ in the repository maps every position to its field.
 - [Integration](#integration)
 - [LLMProvider](#llmprovider)
 - [MCPServer](#mcpserver)
+- [Schedule](#schedule)
 - [Seat](#seat)
 - [Unit](#unit)
 
@@ -96,6 +97,7 @@ _Appears in:_
 | `llmProviders` _integer_ | llmProviders is the number of model providers, platform providers<br />included. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `mcpServers` _integer_ | mcpServers is the number of MCPServers. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `integrations` _integer_ | integrations is the number of Integrations. |  | Minimum: 0 <br />Optional: \{\} <br /> |
+| `schedules` _integer_ | schedules is the number of Schedules. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 
 
 #### ClassEnvVar
@@ -275,6 +277,7 @@ _Appears in:_
 - [IntegrationSpec](#integrationspec)
 - [LLMProviderSpec](#llmproviderspec)
 - [MCPServerSpec](#mcpserverspec)
+- [ScheduleSpec](#schedulespec)
 - [SeatSpec](#seatspec)
 - [UnitSpec](#unitspec)
 
@@ -1395,6 +1398,7 @@ documents, in the referring object's own namespace.
 
 _Appears in:_
 - [EngineSettings](#enginesettings)
+- [ScheduleTarget](#scheduletarget)
 - [SeatSandbox](#seatsandbox)
 - [SeatSpec](#seatspec)
 - [UnitSpec](#unitspec)
@@ -1965,6 +1969,118 @@ _Appears in:_
 | `env` _[SecretEnvVar](#secretenvvar) array_ | env is merged into the environment of the commands and of the run.<br />Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `brief` _string_ | brief tells the coding agent what this step made true about the<br />sandbox. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds caps each command of the step. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+
+
+#### Schedule
+
+
+
+Schedule is recurring work a seat or a unit owns, fired on a cron schedule:
+the CronJob of a company.
+
+The Schedule's metadata.name is the schedule's name in the engine, which
+is half of the identity the engine claims each fire under, so that a fire
+runs once however often the engine evaluates its minute. Two Schedules of
+one seat or unit therefore never share a name, and a fire is never run
+twice.
+
+A fire that comes due while its seat is paused is skipped, not queued.
+
+
+
+
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiVersion` _string_ | `crewlet.ai/v1alpha1` | | |
+| `kind` _string_ | `Schedule` | | |
+| `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Optional: \{\} <br /> |
+| `spec` _[ScheduleSpec](#schedulespec)_ | spec is the schedule's desired state. |  | Required: \{\} <br /> |
+| `status` _[ScheduleStatus](#schedulestatus)_ | status is the schedule's observed state. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+
+
+#### ScheduleFanOut
+
+_Underlying type:_ _string_
+
+ScheduleFanOut is who runs a schedule that targets a unit. It maps onto
+Crewlet's schedule `target` (Each is `each`, Lead is `lead`).
+
+_Validation:_
+- Enum: [Each Lead]
+
+_Appears in:_
+- [ScheduleTarget](#scheduletarget)
+
+| Field | Description |
+| --- | --- |
+| `Each` | ScheduleFanOutEach runs one task per agent seat directly in the unit:<br />never the seats of the units below it, and never a Human seat. Each<br />seat runs its own turn, so a slow one never holds up the others.<br /> |
+| `Lead` | ScheduleFanOutLead runs one task as the unit's lead: its leadRef, or,<br />unset, the lead it inherits from the units above it. It follows a<br />change of lead without a change to the Schedule.<br /> |
+
+
+#### ScheduleSpec
+
+
+
+ScheduleSpec is recurring work a seat or a unit owns: a task the engine
+hands its runner on a cron schedule, as a CronJob runs a Job. It renders to
+one entry of a Crewlet role's or unit's `schedules`, whose `name` is the
+Schedule's metadata.name.
+
+
+
+_Appears in:_
+- [Schedule](#schedule)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `companyRef` _[CompanyReference](#companyreference)_ | companyRef names the Company this schedule belongs to. Immutable. |  | Required: \{\} <br /> |
+| `target` _[ScheduleTarget](#scheduletarget)_ | target is the seat or the unit whose schedule this is. |  | MinProperties: 1 <br />Required: \{\} <br /> |
+| `schedule` _string_ | schedule is when the task fires: a standard cron expression of five<br />fields (minute, hour, day of month, month, day of week), such as<br />"30 9 * * 1-5", evaluated in timeZone. When both the day of month and<br />the day of week are restricted, a day matches if either does. The<br />engine's dry run checks each field's values. Crewlet's `cron`. |  | MaxLength: 256 <br />MinLength: 9 <br />Required: \{\} <br /> |
+| `timeZone` _string_ | timeZone is the IANA time zone the schedule is evaluated in, such as<br />Asia/Tokyo. Unset is the Company's spec.timeZone, which is UTC when<br />that is unset too. The engine refuses a zone it cannot load, and<br />Local, which would be whatever zone the engine's host is set to.<br />Crewlet's `timezone`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)*$` <br />Optional: \{\} <br /> |
+| `prompt` _string_ | prompt is the task the runner is handed each time the schedule fires,<br />such as "Post your standup: what shipped yesterday, what is next,<br />what blocks you." Crewlet's `task`. |  | MaxLength: 8192 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `suspend` _boolean_ | suspend keeps the schedule in the company without firing it. Unset<br />is false. Crewlet's `enabled`, inverted. |  | Optional: \{\} <br /> |
+| `timeoutSeconds` _integer_ | timeoutSeconds caps one scheduled turn's wall-clock time: a turn past<br />it starts no further round and ends failed. Unset is the engine's<br />default, 180 seconds. Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `catchUp` _boolean_ | catchUp says whether an engine that starts after missing a fire runs<br />the most recent missed one, when it is recent enough (half the<br />schedule's period, within the engine's catch-up bounds); older misses<br />are never run. Unset is true. Crewlet's `catchup`. |  | Optional: \{\} <br /> |
+
+
+#### ScheduleStatus
+
+
+
+ScheduleStatus is what the operator observed about a Schedule.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [Schedule](#schedule)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists), ResolvedRefs (the seat<br />or unit it targets exists, and a seat is an Agent) and Applied (the<br />schedule is in the revision the engine runs). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
+| `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+
+
+#### ScheduleTarget
+
+
+
+ScheduleTarget is whose recurring work a schedule is: one seat's, or a
+unit's. It decides which entry of the company document the schedule is
+rendered into: the seat's role, or the unit's.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [ScheduleSpec](#schedulespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `seatRef` _[LocalObjectReference](#localobjectreference)_ | seatRef names the Seat, in this namespace, whose schedule this is; it<br />always runs as that seat. The Seat must be an Agent: the engine runs<br />no turn for a person. Rendered into the seat's role `schedules`. |  | Optional: \{\} <br /> |
+| `unitRef` _[LocalObjectReference](#localobjectreference)_ | unitRef names the Unit, in this namespace, whose schedule this is;<br />fanOut says who in it runs it. A unit's schedule is not inherited by<br />the units below it. Rendered into the unit's `schedules`. |  | Optional: \{\} <br /> |
+| `fanOut` _[ScheduleFanOut](#schedulefanout)_ | fanOut is who in the unit runs it. Unset is Each. Crewlet's `target`.<br />The engine refuses a schedule that could never run while it is not<br />suspended: Each on a unit with no agent seat directly in it, and Lead<br />on a unit whose lead is a Human seat. |  | Enum: [Each Lead] <br />Optional: \{\} <br /> |
 
 
 #### Seat

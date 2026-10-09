@@ -205,3 +205,82 @@ spec:
       openWorld: false
   startupTimeoutSeconds: 30
   requestTimeoutSeconds: 120
+---
+# A unit's standup each of its agent seats runs, in another zone than the
+# company's, with every setting a schedule has.
+apiVersion: crewlet.ai/v1alpha1
+kind: Schedule
+metadata:
+  name: alloys-standup
+spec:
+  companyRef:
+    name: acme
+  target:
+    unitRef:
+      name: alloys
+    fanOut: Each
+  schedule: "30 9 * * 1-5"
+  timeZone: Asia/Tokyo
+  prompt: "Post your standup: shipped yesterday, on today, blockers."
+  suspend: false
+  timeoutSeconds: 600
+  catchUp: false
+---
+# A unit's report its inherited lead gathers.
+apiVersion: crewlet.ai/v1alpha1
+kind: Schedule
+metadata:
+  name: weekly-report
+spec:
+  companyRef:
+    name: acme
+  target:
+    unitRef:
+      name: metals
+    fanOut: Lead
+  schedule: "0 16 * * 5"
+  prompt: Collect the week's progress from your reports and post a summary.
+---
+# A unit's schedule with no fanOut: each agent seat directly in it.
+apiVersion: crewlet.ai/v1alpha1
+kind: Schedule
+metadata:
+  name: inventory
+spec:
+  companyRef:
+    name: acme
+  target:
+    unitRef:
+      name: metals
+  schedule: "0 2 1 * *"
+  prompt: Count the alloys in stock.
+---
+# A seat's own schedule, held without firing.
+apiVersion: crewlet.ai/v1alpha1
+kind: Schedule
+metadata:
+  name: smoke
+spec:
+  companyRef:
+    name: acme
+  target:
+    seatRef:
+      name: caster
+  schedule: "*/15 * * * *"
+  prompt: Run the smoke tests and triage failures.
+  suspend: true
+  catchUp: true
+---
+# A schedule of a seat outside every unit.
+apiVersion: crewlet.ai/v1alpha1
+kind: Schedule
+metadata:
+  name: audit
+spec:
+  companyRef:
+    name: acme
+  target:
+    seatRef:
+      name: assistant
+  schedule: "0 8 * * MON"
+  prompt: Audit last week's decisions.

@@ -35,7 +35,7 @@ const engineRetryInterval = 10 * time.Second
 
 // CompanyConfigReconciler keeps the company document a Company's engine runs
 // equal to what the Company and its parts (Units, Seats, LLMProviders,
-// MCPServers, Integrations) declare, as the Company's
+// MCPServers, Integrations, Schedules) declare, as the Company's
 // spec.config.managementPolicy says.
 //
 // It renders the whole document, pushes the Secret values it references
@@ -79,8 +79,8 @@ type CompanyConfigReconciler struct {
 // +kubebuilder:rbac:groups=crewlet.ai,resources=companies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=crewlet.ai,resources=companies/status,verbs=get;patch
 // +kubebuilder:rbac:groups=crewlet.ai,resources=engineclasses,verbs=get;list;watch
-// +kubebuilder:rbac:groups=crewlet.ai,resources=units;seats;llmproviders;mcpservers;integrations,verbs=get;list;watch
-// +kubebuilder:rbac:groups=crewlet.ai,resources=units/status;seats/status;llmproviders/status;mcpservers/status;integrations/status,verbs=get;patch
+// +kubebuilder:rbac:groups=crewlet.ai,resources=units;seats;llmproviders;mcpservers;integrations;schedules,verbs=get;list;watch
+// +kubebuilder:rbac:groups=crewlet.ai,resources=units/status;seats/status;llmproviders/status;mcpservers/status;integrations/status;schedules/status,verbs=get;patch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 
@@ -240,6 +240,8 @@ func itemsOfKind(list client.ObjectList) client.Object {
 		return &crewletaiv1alpha1.LLMProvider{}
 	case *crewletaiv1alpha1.MCPServerList:
 		return &crewletaiv1alpha1.MCPServer{}
+	case *crewletaiv1alpha1.ScheduleList:
+		return &crewletaiv1alpha1.Schedule{}
 	default:
 		return &crewletaiv1alpha1.Integration{}
 	}

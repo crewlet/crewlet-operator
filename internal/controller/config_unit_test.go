@@ -57,8 +57,15 @@ func decodeSamples(namespace string) ([]client.Object, error) {
 				obj = &crewletaiv1alpha1.MCPServer{}
 			case render.KindIntegration:
 				obj = &crewletaiv1alpha1.Integration{}
-			default:
+			case render.KindSchedule:
+				obj = &crewletaiv1alpha1.Schedule{}
+			case "":
+				// A manifest of comments only.
 				continue
+			default:
+				// Skipping it would leave the kind out of every spec that
+				// applies the samples, without any of them failing.
+				return nil, fmt.Errorf("%s: a sample of kind %s, which the tests do not decode", file, typeMeta.Kind)
 			}
 			// Strict, so a field the API does not have fails the test
 			// instead of vanishing.
@@ -93,6 +100,8 @@ func inputOf(objects []client.Object) *render.Input {
 			in.MCPServers = append(in.MCPServers, *o)
 		case *crewletaiv1alpha1.Integration:
 			in.Integrations = append(in.Integrations, *o)
+		case *crewletaiv1alpha1.Schedule:
+			in.Schedules = append(in.Schedules, *o)
 		}
 	}
 	return in

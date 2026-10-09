@@ -9,7 +9,7 @@ the reason of the first of `Accepted`, `RuntimeReady`, `Exposed` and
 kubectl get crewlet -n acme
 kubectl get company acme -n acme \
   -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}: {.message}{"\n"}{end}'
-kubectl get seats,units,llmproviders,mcpservers,integrations -n acme \
+kubectl get seats,units,llmproviders,mcpservers,integrations,schedules -n acme \
   -o jsonpath='{range .items[*]}{.kind}/{.metadata.name}{range .status.conditions[?(@.status!="True")]} {.type}={.status} {.reason}: {.message}{end}{"\n"}{end}'
 kubectl events -n acme --for company/acme
 ```
@@ -84,7 +84,7 @@ conditions. `kubectl get engineclasses` shows it.
 | | False | `GatewayAPINotInstalled` | The class routes through Gateways, and the cluster had no Gateway API when the operator started. Install it and restart the operator. |
 | | False | `GatewayNotFound` | A Gateway a route names with its namespace does not exist. A `parentRef` without a namespace is in each Company's namespace and is not checked here. |
 
-### Unit, Seat, LLMProvider, MCPServer, Integration
+### Unit, Seat, LLMProvider, MCPServer, Integration, Schedule
 
 | Condition | Status | Reason | What it means, and what to do |
 |---|---|---|---|
@@ -95,6 +95,7 @@ conditions. `kubectl get engineclasses` shows it.
 | `ResolvedRefs` | True | `Resolved` | Every object and Secret key it references exists. |
 | | False | `RefNotFound` | It references an object that does not exist (a Unit, a Seat, an LLMProvider, an MCPServer); the message names it. |
 | | False | `Cycle` | A Unit's `parentRef` chain leads back to itself. |
+| | False | `HumanSeat` | A Schedule's `target.seatRef` names a Human seat, for whom the engine runs no turn. Target an Agent seat, or the person's unit with `fanOut: Each`. |
 | | False | `ReferenceNotAllowed` | A string it renders into the document holds a `${NAME}` reference, which the engine would resolve from its own secret store and environment. The message names the place in the document. Give a credential with a Secret reference; in a sandbox command, write a variable as `$NAME`. |
 | | False | `SecretNotFound` | A Secret or key it references is missing. |
 | | False | `SecretTooLarge` | A value it references is over 64 KiB. |

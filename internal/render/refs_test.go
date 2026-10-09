@@ -26,6 +26,7 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 	const (
 		fieldParent  = "spec.parentRef.name"
 		fieldManages = "spec.manages[0].name"
+		missingUnit  = "sre"
 	)
 	for _, c := range []struct {
 		name   string
@@ -34,7 +35,7 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 	}{
 		{
 			name:   "a seat's unit is missing",
-			mutate: func(in *Input) { seat(in, seatAna).Spec.UnitRef.Name = "sre" },
+			mutate: func(in *Input) { seat(in, seatAna).Spec.UnitRef.Name = missingUnit },
 			want:   []refusal{{KindSeat, seatAna, "spec.unitRef.name", v1alpha1.ReasonRefNotFound}},
 		},
 		{
@@ -52,7 +53,7 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 					ObjectMeta: unit(in, unitPlatform).ObjectMeta,
 					Spec:       v1alpha1.UnitSpec{ParentRef: v1alpha1.LocalObjectReference{Name: unitPlatform}},
 				})
-				in.Units[len(in.Units)-1].Name = "sre"
+				in.Units[len(in.Units)-1].Name = missingUnit
 			},
 			want: []refusal{
 				{KindUnit, unitEngineering, fieldParent, v1alpha1.ReasonCycle},
@@ -166,6 +167,32 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			want:   []refusal{{KindSeat, seatAna, "document units[0].children[0].roles[0].goal", v1alpha1.ReasonReferenceNotAllowed}},
 		},
 		{
+			name:   "a schedule's seat is missing",
+			mutate: func(in *Input) { schedule(in, scheduleCIHealth).Spec.Target.SeatRef.Name = "bob" },
+			want:   []refusal{{KindSchedule, scheduleCIHealth, "spec.target.seatRef.name", v1alpha1.ReasonRefNotFound}},
+		},
+		{
+			name:   "a schedule's unit is missing",
+			mutate: func(in *Input) { schedule(in, schedulePlatformStandup).Spec.Target.UnitRef.Name = missingUnit },
+			want:   []refusal{{KindSchedule, schedulePlatformStandup, "spec.target.unitRef.name", v1alpha1.ReasonRefNotFound}},
+		},
+		{
+			// Crewlet would refuse it at the person's roles entry, which
+			// is the Seat's place in the document; the Schedule is what
+			// has to change.
+			name:   "a schedule targets a person",
+			mutate: func(in *Input) { schedule(in, scheduleCIHealth).Spec.Target.SeatRef.Name = seatJane },
+			want:   []refusal{{KindSchedule, scheduleCIHealth, "spec.target.seatRef.name", v1alpha1.ReasonHumanSeat}},
+		},
+		{
+			name: "a schedule's prompt names a variable of the engine",
+			mutate: func(in *Input) {
+				schedule(in, scheduleCIHealth).Spec.Prompt = "Post ${CREWLET_TOKEN_OPERATOR} to the channel."
+			},
+			want: []refusal{{KindSchedule, scheduleCIHealth, "document units[0].children[0].roles[0].schedules[0].task",
+				v1alpha1.ReasonReferenceNotAllowed}},
+		},
+		{
 			name: "two integrations connect one vendor",
 			mutate: func(in *Input) {
 				i := *integration(in, "slack")
@@ -273,6 +300,15 @@ func unit(in *Input, name string) *v1alpha1.Unit {
 	panic("no Unit " + name)
 }
 
+func schedule(in *Input, name string) *v1alpha1.Schedule {
+	for i := range in.Schedules {
+		if in.Schedules[i].Name == name {
+			return &in.Schedules[i]
+		}
+	}
+	panic("no Schedule " + name)
+}
+
 func integration(in *Input, name string) *v1alpha1.Integration {
 	for i := range in.Integrations {
 		if in.Integrations[i].Name == name {
@@ -312,6 +348,9 @@ func TestAttributeFindsTheInnermostObject(t *testing.T) {
 		{"units[0].roles[0].llm", ObjectRef{KindSeat, seatCTO}},
 		{"units[0].children[0].space", ObjectRef{KindUnit, unitPlatform}},
 		{"units[0].children[0].roles[0].sandbox.env", ObjectRef{KindSeat, seatAna}},
+		{"units[0].children[0].roles[0].schedules[0].cron", ObjectRef{KindSchedule, scheduleCIHealth}},
+		{"units[0].children[0].schedules[0].timezone", ObjectRef{KindSchedule, schedulePlatformStandup}},
+		{"units[0].children[0].schedules", ObjectRef{KindUnit, unitPlatform}},
 	} {
 		p := PathOf(segmentsOf(t, c.path))
 		if p.String() != c.path {

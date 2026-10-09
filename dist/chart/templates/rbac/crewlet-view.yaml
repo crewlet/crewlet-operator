@@ -29,6 +29,8 @@ rules:
   - llmproviders/status
   - mcpservers
   - mcpservers/status
+  - schedules
+  - schedules/status
   - seats
   - seats/status
   - units

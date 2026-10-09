@@ -837,6 +837,11 @@ type AppliedObjectCounts struct {
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	Integrations *int32 `json:"integrations,omitempty"`
+
+	// schedules is the number of Schedules.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	Schedules *int32 `json:"schedules,omitempty"`
 }
 
 // ConfigStatus is the revision of the company document the engine runs.

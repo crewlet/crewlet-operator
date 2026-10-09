@@ -60,7 +60,7 @@ func TestSamplesAreAccepted(t *testing.T) {
 		}
 	}
 	for _, kind := range []string{
-		kindEngineClass, kindCompany, "Unit", "Seat", "LLMProvider", "MCPServer", "Integration",
+		kindEngineClass, kindCompany, "Unit", "Seat", "LLMProvider", "MCPServer", "Integration", "Schedule",
 	} {
 		if kinds[kind] == 0 {
 			t.Errorf("config/samples has no %s", kind)
