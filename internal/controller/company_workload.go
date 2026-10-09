@@ -103,6 +103,18 @@ const preStopSleepSeconds = 5
 // in which the engine's watchdog ends a wedged process itself.
 const livenessFailureThreshold = 6
 
+// probePeriodSeconds is how often an engine's startup and readiness probes
+// ask: the period of the engine's own placement pass, so readiness follows a
+// seat pod's admission within one pass.
+const probePeriodSeconds = 5
+
+// dataPodStartupSeconds is how long a data pod's engine may take to answer
+// /health at all: five minutes, for a first start that extracts the store's
+// native library, migrates the store and creates the event stream's streams
+// and buckets (which the engine bounds by two minutes on a broker of one
+// member).
+const dataPodStartupSeconds = 300
+
 // workload is everything a data pod's template is built from.
 type workload struct {
 	image     string
@@ -436,46 +448,18 @@ func engineContainerOf(
 	if err != nil {
 		return nil, err
 	}
-	health := func(path string) *corev1ac.HTTPGetActionApplyConfiguration {
-		return corev1ac.HTTPGetAction().WithPath(path).WithPort(intstr.FromString(portName))
-	}
-	container := engineContainerBase(class, w.image, env).
-		WithPorts(corev1ac.ContainerPort().
-			WithName(portName).
-			WithContainerPort(render.APIPort).
-			WithProtocol(corev1.ProtocolTCP)).
+	// The first start extracts the store's native library and migrates
+	// the store; the startup probe gives it five minutes before the
+	// liveness probe may restart it. /ready answers 503 while the engine
+	// has no document, sheds load, or drains, which takes the pod out of
+	// the engine Service.
+	container := withProbes(engineContainerBase(class, w.image, env), dataPodStartupSeconds).
 		WithVolumeMounts(
 			corev1ac.VolumeMount().WithName(dataVolume).WithMountPath(render.DataDir),
 			corev1ac.VolumeMount().WithName(configVolumeName).WithMountPath(configDir).WithReadOnly(true),
 			corev1ac.VolumeMount().WithName("tmp").WithMountPath("/tmp"),
 			corev1ac.VolumeMount().WithName("home").WithMountPath(homeDir),
 		).
-		// The first start extracts the store's native library and migrates
-		// the store; the startup probe gives it five minutes before the
-		// liveness probe may restart it.
-		WithStartupProbe(corev1ac.Probe().
-			WithHTTPGet(health("/health")).
-			WithPeriodSeconds(5).
-			WithFailureThreshold(60)).
-		// /health answers 200 for as long as the process lives, through a
-		// drain too, so liveness never kills a pod that is finishing its
-		// turns. A minute of failures before a restart, as the engine's own
-		// deployment guide sets: its watchdog ends a process whose watched
-		// duty stalls for a seat lease's TTL (45 seconds) by itself, so
-		// liveness is the backstop for a process too wedged to do even
-		// that, and the Kubernetes default of three failures (30 seconds)
-		// would restart one the watchdog was about to judge.
-		WithLivenessProbe(corev1ac.Probe().
-			WithHTTPGet(health("/health")).
-			WithPeriodSeconds(10).
-			WithTimeoutSeconds(5).
-			WithFailureThreshold(livenessFailureThreshold)).
-		// /ready answers 503 while the engine has no document, sheds load,
-		// or drains, which takes the pod out of the engine Service.
-		WithReadinessProbe(corev1ac.Probe().
-			WithHTTPGet(health("/ready")).
-			WithPeriodSeconds(5).
-			WithTimeoutSeconds(5)).
 		WithLifecycle(corev1ac.Lifecycle().
 			WithPreStop(corev1ac.LifecycleHandler().
 				WithSleep(corev1ac.SleepAction().WithSeconds(preStopSleepSeconds))))
@@ -495,6 +479,43 @@ func engineContainerOf(
 		container.WithResources(resources)
 	}
 	return container, nil
+}
+
+// withProbes gives an engine container its HTTP port, render.APIPort, and
+// probes it there: /health for startup, for as long as startupSeconds, and
+// for liveness, and /ready for readiness. Every engine pod binds the port,
+// whatever its roles, and answers both probes on it; what /ready means
+// follows from its roles (see seatPodTemplate).
+func withProbes(container *corev1ac.ContainerApplyConfiguration, startupSeconds int32) *corev1ac.ContainerApplyConfiguration {
+	get := func(path string) *corev1ac.HTTPGetActionApplyConfiguration {
+		return corev1ac.HTTPGetAction().WithPath(path).WithPort(intstr.FromString(portName))
+	}
+	return container.
+		WithPorts(corev1ac.ContainerPort().
+			WithName(portName).
+			WithContainerPort(render.APIPort).
+			WithProtocol(corev1.ProtocolTCP)).
+		WithStartupProbe(corev1ac.Probe().
+			WithHTTPGet(get("/health")).
+			WithPeriodSeconds(probePeriodSeconds).
+			WithFailureThreshold(startupSeconds / probePeriodSeconds)).
+		// /health answers 200 for as long as the process lives, through a
+		// drain too, so liveness never kills a pod that is finishing its
+		// turns. A minute of failures before a restart, as the engine's own
+		// deployment guide sets: its watchdog ends a process whose watched
+		// duty stalls for a seat lease's TTL (45 seconds) by itself, so
+		// liveness is the backstop for a process too wedged to do even
+		// that, and the Kubernetes default of three failures (30 seconds)
+		// would restart one the watchdog was about to judge.
+		WithLivenessProbe(corev1ac.Probe().
+			WithHTTPGet(get("/health")).
+			WithPeriodSeconds(10).
+			WithTimeoutSeconds(5).
+			WithFailureThreshold(livenessFailureThreshold)).
+		WithReadinessProbe(corev1ac.Probe().
+			WithHTTPGet(get("/ready")).
+			WithPeriodSeconds(probePeriodSeconds).
+			WithTimeoutSeconds(5))
 }
 
 // engineContainerBase is what every engine container has in common: the

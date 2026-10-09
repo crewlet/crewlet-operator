@@ -124,7 +124,8 @@ func TestSeatPodEnvIsExactlyTheReferences(t *testing.T) {
 // object store the company recorded (the engine refuses to start a node that
 // names another), creates streams with the data pods' replica count, and
 // names the same backup owner. Each of those blocks must be the data pod's,
-// value for value; and a seat pod serves no API and holds no token.
+// value for value. A seat pod binds the data pods' API port for its probes
+// alone, and holds no token.
 func TestSeatPodSharesTheCompanysBlocksWithTheDataPod(t *testing.T) {
 	for _, c := range seatPodCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -150,9 +151,16 @@ func TestSeatPodSharesTheCompanysBlocksWithTheDataPod(t *testing.T) {
 					}
 				}
 			}
-			for path := range seatPodLeaves {
-				if strings.HasPrefix(path, "api.") {
-					t.Errorf("the seat pod's document sets %s; a seat pod serves no API", path)
+			// The listener its probes are served on, on the data pods'
+			// port, and nothing else of the API: no token, no reads.
+			for path, got := range seatPodLeaves {
+				if strings.HasPrefix(path, "api.") && path != "api.host" && path != "api.port" {
+					t.Errorf("the seat pod's document sets %s = %v; a seat pod serves only its probes", path, got)
+				}
+			}
+			for _, path := range []string{"api.host", "api.port"} {
+				if seatPodLeaves[path] != dataLeaves[path] {
+					t.Errorf("%s is %v on the seat pod and %v on the data pod", path, seatPodLeaves[path], dataLeaves[path])
 				}
 			}
 			for _, token := range []string{testTokens.Operator, testTokens.Access} {

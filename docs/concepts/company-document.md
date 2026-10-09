@@ -204,10 +204,12 @@ pods share one `crewlet.yaml`, kept like the data pod's in a Secret,
 | `secrets` | The company's keyring, as the data pod has it: the pod opens the company document and the secret store itself. |
 | `retention` | The class's `backupOwner`, as the data pod has it. |
 
-There is no `api` block and no API token: a node without the `ingress` role
-serves nothing, so a seat pod has no listener at all. The engine pinned by
-this operator serves no health or readiness endpoint on such a node either;
-a wedged one exits by itself.
+Its `api` block is `host: 0.0.0.0` and `port: 8080`, with no `auth` and no
+API token: a node without the `ingress` role serves only `/health` and
+`/ready` on its `api.port`, which the pod's probes ask, and refuses every
+other route as an unknown one. Without the port the engine would bind
+nothing, and nothing could tell a seat pod that has joined the fleet from
+one still starting ([Seat pools](runtime.md#seat-pools)).
 
 ## What blocks a document
 

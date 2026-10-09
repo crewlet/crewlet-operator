@@ -156,8 +156,9 @@ triage            nimbus    Agent          True      True    False    general   
 
 A Human seat is never run by the engine and has no `Ready`. On the Company,
 `status.topology.seatPools` counts each pool's pods and seats, and
-`SeatsPlaced` says whether every pool with a seat has a ready pod
-([Status](../concepts/runtime.md#status)). With the API token, the engine's
+`SeatsPlaced` says whether every pool with a seat has a ready pod: one that
+has joined the fleet and may claim seats, which its `/ready` says
+([Seat pools](../concepts/runtime.md#seat-pools)). With the API token, the engine's
 own `GET /fleet` lists every node, its roles and labels, and the holder of
 every seat.
 
@@ -167,7 +168,9 @@ every seat.
   its current template.
 - **Upgrades.** The data pod rolls first; the seat pods keep their template
   until it is ready, then every seat StatefulSet rolls at once. Pods are
-  replaced one at a time, a minute apart.
+  replaced one at a time: the next once the last is ready, so has joined the
+  fleet and may claim seats, and ten seconds after, while the others give
+  back to it what is past their share.
 - **Moving a seat to another pool** keeps it where it runs until a pod of
   the new pool is ready (the Seat reports `Applied=False`,
   `PlacementPending` meanwhile), then moves it with one release and one
@@ -210,12 +213,6 @@ operator could no longer tell which pool a pod serves.
 
 ## What the current engine does not do
 
-- **No probes on seat pods.** The pinned engine serves nothing, health and
-  readiness included, on a node without the `ingress` role, so Kubernetes
-  counts a seat pod ready as soon as its container runs. A wedged engine exits
-  by itself (with code 75), and `minReadySeconds: 60` paces rollouts instead
-  of a readiness probe. A seat pod that runs but never joins (its leaf cannot
-  reach the data pod) shows only in its log, and in its seats' `Ready`.
 - **One data pod.** A company has one broker member, so the data pod is a
   single point of failure; a highly available data tier comes later.
 - **No autoscaling.** There is no `/scale` subresource and the operator never

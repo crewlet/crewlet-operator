@@ -258,11 +258,11 @@ func (run *configRun) settlingSeats(ctx context.Context) ([]string, error) {
 		client.MatchingLabels{crewletaiv1alpha1.CompanyLabel: run.company.Name}); err != nil {
 		return nil, fmt.Errorf("listing the StatefulSets of Company %s/%s: %w", run.company.Namespace, run.company.Name, err)
 	}
-	// The ready pods of each of the company's StatefulSets that has one.
-	ready := map[string]int{}
+	// The company's StatefulSets that have a ready pod.
+	ready := map[string]bool{}
 	for i := range list.Items {
 		if sts := &list.Items[i]; metav1.IsControlledBy(sts, run.company) && sts.Status.ReadyReplicas > 0 {
-			ready[sts.Name] = int(sts.Status.ReadyReplicas)
+			ready[sts.Name] = true
 		}
 	}
 	var out []string
@@ -276,7 +276,7 @@ func (run *configRun) settlingSeats(ctx context.Context) ([]string, error) {
 			continue
 		}
 		workload := s.Status.Placement.Workload
-		if workload == "" || ready[workload] == 0 {
+		if workload == "" || !ready[workload] {
 			continue
 		}
 		placed[workload]++
@@ -291,18 +291,18 @@ func (run *configRun) settlingSeats(ctx context.Context) ([]string, error) {
 		held[workload][lease.Node] = append(held[workload][lease.Node], s.Status.Handle)
 	}
 	for _, workload := range slices.Sorted(maps.Keys(held)) {
-		// The pods the engine will share the seats among: those it counts
-		// live, or the StatefulSet's ready ones where more are, since a seat
-		// pod has no probe and is ready a moment before it joins the fleet.
-		pods := ready[workload]
+		// The pods the engine shares the seats among: those it counts live,
+		// one at least, since a pod of the StatefulSet holds seats. A seat
+		// pod's /ready requires its presence lease, so its ready pods say
+		// nothing the live ones do not.
 		var live int
 		for i := range run.fleet.Nodes {
 			if podOf(run.fleet.Nodes[i].ID, workload) {
 				live++
 			}
 		}
-		pods = max(pods, live)
-		share := (placed[workload] + pods - 1) / pods
+		live = max(live, 1)
+		share := (placed[workload] + live - 1) / live
 		for _, node := range slices.Sorted(maps.Keys(held[workload])) {
 			if seats := held[workload][node]; len(seats) > share {
 				out = append(out, seats...)

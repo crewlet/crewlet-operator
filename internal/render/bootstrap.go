@@ -28,8 +28,11 @@ const (
 	// scratch emptyDir. A data pod keeps its store, its snapshots and the
 	// event stream under it; a seat pod its scratch store.
 	DataDir = "/var/lib/crewlet"
-	// APIPort is the port the engine serves its API, dashboard and
-	// webhooks on. Only a data pod serves them.
+	// APIPort is the port of an engine's one HTTP listener. On a data pod,
+	// which has the ingress role, it carries the API, the dashboard, the
+	// webhooks and the probes; on a seat pod, which does not, only the
+	// probes (/health and /ready). It is 8080, the port the engine image
+	// documents with EXPOSE.
 	APIPort = 8080
 	// LeafPort is the port of a data pod's leaf listener, which the seat
 	// pods join the company's event stream through. It is open only when
@@ -138,9 +141,9 @@ type nodeDoc struct {
 }
 
 type apiDoc struct {
-	Host string     `json:"host"`
-	Port int        `json:"port"`
-	Auth apiAuthDoc `json:"auth"`
+	Host string      `json:"host"`
+	Port int         `json:"port"`
+	Auth *apiAuthDoc `json:"auth,omitempty"`
 }
 
 type apiAuthDoc struct {
@@ -276,7 +279,7 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 		API: &apiDoc{
 			Host: "0.0.0.0",
 			Port: APIPort,
-			Auth: apiAuthDoc{
+			Auth: &apiAuthDoc{
 				// Crewlet serves reads without a token by default, and its
 				// reads carry the seats' transcripts and memory. Every
 				// consumer of an operator-run engine has a token, so none
@@ -382,8 +385,18 @@ type SeatPodInput struct {
 // which every node checks against the one the company recorded and refuses
 // to start on another; the stream's replica count; and the backup owner the
 // data pods name. Those blocks are rendered by the same code as the data
-// pods'. It has no API block: a node without the ingress role serves
-// nothing, and holds no API token.
+// pods'.
+//
+// Its API block binds APIPort on every interface and holds no token: a node
+// without the ingress role serves only its probes there, /health and /ready,
+// which the kubelet reaches at the pod's own address and which are exempt
+// from authentication, and refuses every other route as it would an unknown
+// one. Leaving api.port unset would bind nothing at all, and leave the pod
+// with no probe to tell a seat pod that has joined the fleet and claims
+// seats from one that is still starting, or has lost the data pods. The
+// engine serves the agent-mode tool bridge on the same listener when
+// CREWLET_MCP_BRIDGE_URL is set, which the operator never sets on a seat
+// pod (see AgentModeBridgeUnsupported).
 //
 // A Shared pool's pods carry the pool's own placement label. A PerSeat pool's
 // carry the seat label with the seat's handle, which the document refers to
@@ -427,6 +440,7 @@ func SeatPodBootstrap(in *SeatPodInput) (*BootstrapDocument, error) {
 			Labels:        labels,
 			MaxConcurrent: in.Pool.MaxConcurrentTurns,
 		},
+		API: &apiDoc{Host: "0.0.0.0", Port: APIPort},
 		Store: storeDoc{
 			Path: DataDir + "/store/crewlet.db",
 			// Required on a node without the data role: what it keeps is

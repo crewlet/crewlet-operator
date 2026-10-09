@@ -125,7 +125,8 @@ pools, and which kind.
 | Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `TURSO_GO_CACHE_DIR` on the scratch volume; the class's and the Company's variables, as on a data pod | the same, and `CREWLET_SEAT: cy` |
 | Storage | one `emptyDir` at `/var/lib/crewlet`, of the class's `seatPools.defaults.scratchSizeLimit` (2Gi unless set), holding the scratch store, the store's native library, `/tmp` and `HOME`: the limit bounds what the processes the engine runs write too | the same |
 | Stopping | the pool's `terminationGracePeriodSeconds`, else the class's default, else five minutes: running turns finish, waiting ones are handed back, and the seats are released with their mailboxes for another pod to claim | the same |
-| Updates | `RollingUpdate`, `maxUnavailable: 1`, `podManagementPolicy: Parallel`, `minReadySeconds: 60` | the same |
+| Port and probes | 8080, the probes alone: `/health` for startup (up to six minutes) and liveness, `/ready` for readiness | the same |
+| Updates | `RollingUpdate`, `maxUnavailable: 1`, `podManagementPolicy: Parallel`, `minReadySeconds: 10` | the same |
 | Resources | the class's `seatPools.defaults.resources`: the class sizes every seat pod, as it sizes the data pods, and a Company chooses only how many its pools run, within `maxPods` | the same |
 
 A seat pod runs as a data pod does, under the `restricted` Pod Security
@@ -133,15 +134,58 @@ Standard, as the engine's ServiceAccount with no token mounted, scheduled by
 the class's `podTemplate`, and on the data pods' image: it never runs another
 version than the data pods.
 
-A seat pod has **no port and no probe**. The engine this operator pins serves
-nothing on a node without the `ingress` role, health and readiness included,
-so Kubernetes counts a seat pod ready as soon as its container runs, and a
-wedged engine exits by itself (with code 75) rather than wait for a liveness
-probe. `minReadySeconds` is what paces a rollout instead: the next pod is
-replaced only once the last one has run for a minute. Where the Kubernetes
-`MaxUnavailableStatefulSet` feature is on (the default from 1.37), pods that
-are already unavailable, such as seat pods crash-looping through a data pod
-outage, are all replaced at once; available ones still go one at a time.
+A seat pod binds **port 8080 for its probes and nothing else**. A node
+without the `ingress` role serves `/health` and `/ready` on its `api.port`
+and refuses every other route as an unknown one, with no API token to
+accept; the operator never sets the agent-mode tool bridge's address on a
+seat pod ([Running seats on a coding
+CLI](../guides/cli-agents.md#seat-pools)), so nothing else is
+mounted there. Nothing dials it but the kubelet, which probes the pod from
+its own node, and traffic from a pod's own node is not policed (Kubernetes
+documents it as always allowed, and Calico and Cilium hold to that; see
+[Network policy](#network-policy)): the seat pods' policy, which admits no
+pod at all, leaves the probes alone. The headless Service that governs the
+pods publishes no port.
+
+The probes are the data pod's: `/health` answers while the process is alive,
+through a drain, and liveness restarts it after a minute of failures, the
+backstop for a process too wedged for the engine's own watchdog to end
+(with code 75) within 45 seconds. Startup allows six minutes, the engine's
+own bounds on a seat pod's boot laid end to end: a minute for its leaf link
+to reach a data pod and five for what it provisions on the event stream,
+past either of which it exits by itself. `/ready` answers whether the pod is
+**doing its work**, and is `503`, its JSON body naming the first reason in
+`reason`, while it
+
+- is stopping (`draining`);
+- cannot reach the data pods' broker (`broker_unlinked`);
+- runs no company document yet (`unconfigured`);
+- cannot apply the revision its peers run (`shed`, `stuck`);
+- does not hold its presence lease, so the fleet does not count it
+  (`no_presence`);
+- was not admitted by its latest placement pass, every five seconds, to
+  claim seats (`admission_withheld`): no data pod has answered yet that its
+  copy of the company's records admits a seat, or the pod cannot serve the
+  seats it holds.
+
+A seat pod is ready, then, once it has joined the fleet and may claim seats,
+and a rollout replaces the next pod only after that and
+`minReadySeconds` (two placement passes, in which the pods already running
+give back to it what is past their share of the pool's seats). The engine
+would judge a node started in one of its maintenance modes without
+`admission_withheld`, since such a node claims no seat by design; the
+operator runs every engine in the normal mode, so on a seat pod the reason
+always means what it says.
+
+Where the Kubernetes `MaxUnavailableStatefulSet` feature is on (by default in
+1.35 and from 1.37), pods that are already unavailable count against
+`maxUnavailable`. From 1.37 the StatefulSet controller replaces those on an
+older template first; in 1.35 it waits for them to become ready, which a
+seat pod that only the new template would let join never does. So the
+operator itself deletes, while a seat StatefulSet rolls, each of its pods
+that is not ready on an older template (an unready seat pod holds no seat),
+and the controller starts it again on the new one; ready pods still go one
+at a time.
 
 A seat pool's objects are named `<company>-seats-<pool>`,
 `<company>-seat-<handle>` and `<company>-bootstrap-<pool>`, then a dash and
@@ -176,11 +220,14 @@ longer one keeps its first 43 characters before the hash. Each Seat's
   seat pods once those are ready: as many as each pool's `replicas` asks,
   and for a StatefulSet kept only for the running revision, or frozen while
   the Company is refused `PoolCapacityExceeded`, as many as it ran.
-- **A data pod outage.** A seat pod that cannot reach the estate for more
-  than a minute releases its seats, and one that restarts meanwhile
-  crash-loops; with Kubernetes' back-off it may take up to about five
-  minutes to rejoin after the data pod returns. One data pod is a single
-  point of failure for the whole company.
+- **A data pod outage.** Every seat pod turns unready (`broker_unlinked`,
+  or `admission_withheld` while no data pod admits it), and the Company
+  reports `SeatsPlaced=False`, `PoolEmpty`, for every pool. A seat pod that
+  cannot reach the estate for more than a minute releases its seats, and one
+  that restarts meanwhile crash-loops; with Kubernetes' back-off it may take
+  up to about five minutes to rejoin after the data pod returns. Liveness
+  does not restart a pod for the outage: `/health` answers while the process
+  runs. One data pod is a single point of failure for the whole company.
 
 ### A pool removed while seats still run in it
 
@@ -228,9 +275,10 @@ it is, and says so.
 A Shared pool's StatefulSet, and a PerSeat seat's with two pods, has a
 PodDisruptionBudget of `maxUnavailable: 1`, so a node drain takes one pod at
 a time while the others keep the seats; a PerSeat seat with one pod has
-nothing to keep and gets none. Pods that are not running may always be
-evicted (`unhealthyPodEvictionPolicy: AlwaysAllow`), so a crash-looping pod
-never holds up a drain. Moving seats between pods interrupts them: each move
+nothing to keep and gets none. Pods that are not ready may always be
+evicted (`unhealthyPodEvictionPolicy: AlwaysAllow`): an unready seat pod
+holds no seat (it cannot reach the data pods, is not admitted to claim, or
+crash-loops), so it never holds up a drain. Moving seats between pods interrupts them: each move
 releases the seat, starts its tool servers on the new pod and rehydrates its
 memory there.
 
@@ -359,7 +407,8 @@ Two more policies come with seat pools:
   `None` it also admits port 8080 from anywhere, which keeps the API as open
   as it is without a policy and closes only the broker.
 - `nimbus-seats` exists while the company runs seat pods. It selects them and
-  admits nothing: a seat pod serves nothing. Under `Isolated` it also holds
+  admits nothing: a seat pod serves no other pod, and the kubelet probes it
+  from its own node, which no policy polices. Under `Isolated` it also holds
   them to the data pods' egress, port 7422 of the data pods included.
 
 NetworkPolicies are additive: a pod two policies select is open to what
@@ -438,12 +487,13 @@ client waiting for a change to take effect checks.
 `status.topology` counts the pods: `data` the data pods', and `seatPools`
 each declared pool's, every seat's StatefulSet together for a PerSeat pool,
 with how many agent seats the pool runs. `SeatsPlaced` says whether every
-pool an agent seat is placed in, `data` included, has a ready pod:
+pool an agent seat is placed in, `data` included, has a ready pod (a seat
+pod is ready once it has joined the fleet and may claim seats):
 
 | Status | Reason | When |
 |---|---|---|
 | True | `AllPoolsServing` | Every pool with a seat has a ready pod. |
-| False | `PoolEmpty` | A pool with a seat has no ready pod: a Shared pool at zero replicas, a PerSeat seat's pods down, or pods not created yet because the data pods are not ready. The message names them; their seats' messages wait. |
+| False | `PoolEmpty` | A pool with a seat has no ready pod: a Shared pool at zero replicas, a PerSeat seat's pods down, pods that cannot reach or are not admitted by the data pods, or pods not created yet because the data pods are not ready. The message names them; their seats' messages wait. |
 | False | `RolloutBlocked` | Seat StatefulSets keep their template until the data pods are ready on theirs. |
 | False | `SeatPoolsNotAllowed`, `PoolCapacityExceeded` | The class runs none of the Company's seat pods, or keeps them as they are; see [What the class allows](#what-the-class-allows). |
 | False | `Suspended` | The Company is suspended. |

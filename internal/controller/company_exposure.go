@@ -561,8 +561,9 @@ func (r *CompanyReconciler) dataPodsOpenLeaf(ctx context.Context, c *crewletaiv1
 }
 
 // reconcileSeatsPolicy writes <c>-seats while the company runs seat pods, and
-// deletes it otherwise. A seat pod serves nothing (the engine binds no port
-// on a node without the ingress role), so it admits no connection at all.
+// deletes it otherwise. A seat pod serves no other pod (a node without the
+// ingress role answers only its probes, which the kubelet asks from the pod's
+// own node, which no policy polices), so it admits no connection at all.
 // Under the class's networkPolicy Isolated it also holds the seat pods to the
 // data pods' egress, and names the leaf listener they join through on its
 // own, so that narrowing the namespace's egress never cuts them off.

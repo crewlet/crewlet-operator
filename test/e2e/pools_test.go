@@ -173,7 +173,7 @@ var _ = Describe("Seat pools", Ordered, func() {
 			g.Expect(poolStatus(company, perSeatPool)).To(Equal([3]int32{1, 1, int32(len(soloSeats))}))
 		}).WithTimeout(engineReady).Should(Succeed())
 
-		By("finding the data pod Ready, and each seat pod running and available past its minReadySeconds")
+		By("finding the data pod Ready, and each seat pod Ready on its own /ready and available past its minReadySeconds")
 		pod := &corev1.Pod{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: poolsNamespace, Name: poolsDataPod}, pod)).To(Succeed())
 		Expect(podReady(pod)).To(BeTrue(), "the data pod is not Ready")
@@ -183,6 +183,18 @@ var _ = Describe("Seat pools", Ordered, func() {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: poolsNamespace, Name: name}, sts)).To(Succeed())
 				g.Expect(sts.Status.AvailableReplicas).To(Equal(replicas), "StatefulSet %s", name)
 			}).Should(Succeed())
+			for i := range replicas {
+				// Ready because the engine's /ready said so: it has joined
+				// the fleet and was admitted to claim seats. The kubelet
+				// reaches the probe from the pod's node, which the seats
+				// policy, admitting no pod, does not police.
+				seatPod := &corev1.Pod{}
+				key := types.NamespacedName{Namespace: poolsNamespace, Name: fmt.Sprintf("%s-%d", name, i)}
+				Expect(k8sClient.Get(ctx, key, seatPod)).To(Succeed())
+				Expect(seatPod.Spec.Containers[0].ReadinessProbe).NotTo(BeNil(), "seat pod %s has no readiness probe", seatPod.Name)
+				Expect(seatPod.Spec.Containers[0].ReadinessProbe.HTTPGet.Path).To(Equal("/ready"))
+				Expect(podReady(seatPod)).To(BeTrue(), "seat pod %s is not Ready", seatPod.Name)
+			}
 		}
 
 		By("reading the fleet from inside the cluster with the published token")
@@ -242,11 +254,25 @@ var _ = Describe("Seat pools", Ordered, func() {
 		By("refusing every other pod under Isolated")
 		refused()
 
-		By("refusing a connection to a seat pod, from the company's namespace and from another")
-		// A seat pod binds no port, so a refused connection to one says
-		// nothing. A pod labelled as the company's seat pod that does
-		// listen can be refused by the seats policy alone; the same
-		// listener without the labels, reached, is the control.
+		By("refusing a connection to a seat pod's probe port, which its kubelet reaches, from any namespace")
+		// The seat pod is Ready, so its kubelet reached /ready on 8080 from
+		// the pod's node: that is the control.
+		seatPod := &corev1.Pod{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: poolsNamespace, Name: soloPod}, seatPod)).To(Succeed())
+		Expect(podReady(seatPod)).To(BeTrue(), "seat pod %s is not Ready: the probe proves nothing", soloPod)
+		for name, namespace := range map[string]string{
+			"seat-probe-same-namespace":  poolsNamespace,
+			"seat-probe-other-namespace": poolsConsumerNamespace,
+		} {
+			url := fmt.Sprintf("http://%s:8080/health", seatPod.Status.PodIP)
+			Expect(httpProbe(namespace, name, url)).To(Equal(corev1.PodFailed),
+				"pod %s/%s reached seat pod %s's probe port", namespace, name, soloPod)
+		}
+
+		By("refusing a connection to a listener labelled as a seat pod, from the company's namespace and from another")
+		// A pod labelled as the company's seat pod that listens like the
+		// leaf can be refused by the seats policy alone; the same listener
+		// without the labels, reached, is the control.
 		plain := listenerPod("seat-listener-plain", nil)
 		labelled := listenerPod("seat-listener", seatLabels(poolsCompany))
 		Expect(leafProbe(poolsNamespace, "seat-listener-control", nil, plain)).To(Equal(corev1.PodSucceeded),
@@ -444,6 +470,21 @@ func leafProbe(namespace, name string, labels map[string]string, target string) 
 		`case "$out" in *INFO*) exit 0;; *) exit 1;; esac`
 	pod := curlPodWith(namespace, name, poolsAccessSecret, script)
 	pod.Labels = labels
+	pod.Spec.Containers[0].Env = nil
+	apply(pod)
+	return curlPhase(namespace, name)
+}
+
+// httpProbe runs a pod named name in namespace that asks url and succeeds
+// only on a 2xx answer; it returns how the pod ended. A refused or dropped
+// connection fails it.
+func httpProbe(namespace, name, url string) corev1.PodPhase {
+	GinkgoHelper()
+	_ = k8sClient.Delete(ctx, &corev1.Pod{Namespace: namespace, Name: name}, client.GracePeriodSeconds(0))
+	Eventually(func() bool {
+		return apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &corev1.Pod{}))
+	}).Should(BeTrue())
+	pod := curlPodWith(namespace, name, poolsAccessSecret, `curl -sSf --max-time 8 -o /dev/null "`+url+`"`)
 	pod.Spec.Containers[0].Env = nil
 	apply(pod)
 	return curlPhase(namespace, name)

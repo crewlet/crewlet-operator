@@ -174,6 +174,10 @@ var _ = Describe("Company seat pools", func() {
 		Expect(err).NotTo(HaveOccurred())
 		return result
 	}
+	// poolsOwnerIn is the specs' Company, as a key to reconcile.
+	poolsOwnerIn := func(namespace string) *crewletaiv1alpha1.Company {
+		return &crewletaiv1alpha1.Company{Namespace: namespace, Name: poolsCompany}
+	}
 	reconciled := func(company *crewletaiv1alpha1.Company) *crewletaiv1alpha1.Company {
 		GinkgoHelper()
 		reconcileOnce(company)
@@ -326,7 +330,7 @@ var _ = Describe("Company seat pools", func() {
 		Expect(*general.Spec.Replicas).To(Equal(int32(2)))
 		Expect(general.Spec.ServiceName).To(Equal(seatsService))
 		Expect(general.Spec.PodManagementPolicy).To(Equal(appsv1.ParallelPodManagement))
-		Expect(general.Spec.MinReadySeconds).To(Equal(int32(60)))
+		Expect(general.Spec.MinReadySeconds).To(Equal(int32(10)), "two of the engine's placement passes")
 		Expect(general.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable).To(Equal(new(intstr.FromInt32(1))))
 		Expect(general.Spec.VolumeClaimTemplates).To(BeEmpty())
 		Expect(general.Spec.Selector.MatchLabels).To(HaveKeyWithValue(render.PoolLabel, poolGeneral))
@@ -372,10 +376,16 @@ var _ = Describe("Company seat pools", func() {
 		container := pod.Spec.Containers[0]
 		Expect(container.Image).To(Equal(engineImageV020), "the seat pods run the data pods' image")
 		Expect(container.Args).To(Equal([]string{"run", "-config", "/etc/crewlet/crewlet.yaml"}))
-		Expect(container.Ports).To(BeEmpty(), "nothing listens on a seat pod")
-		Expect(container.LivenessProbe).To(BeNil())
-		Expect(container.ReadinessProbe).To(BeNil())
-		Expect(container.StartupProbe).To(BeNil())
+		Expect(container.Ports).To(Equal([]corev1.ContainerPort{{Name: portName, ContainerPort: render.APIPort, Protocol: corev1.ProtocolTCP}}),
+			"a seat pod listens for its probes on the port its Tier A binds, and on nothing else")
+		Expect(container.LivenessProbe.HTTPGet.Path).To(Equal("/health"))
+		Expect(container.LivenessProbe.HTTPGet.Port).To(Equal(intstr.FromString(portName)))
+		Expect(container.LivenessProbe.PeriodSeconds*container.LivenessProbe.FailureThreshold).To(BeNumerically(">", 45),
+			"liveness restarts the engine before its watchdog's 45 seconds")
+		Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/ready"), "ready once the pod has joined and may claim seats")
+		Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/health"))
+		Expect(container.StartupProbe.PeriodSeconds*container.StartupProbe.FailureThreshold).To(BeNumerically(">=", 360),
+			"the engine's own bounds on a leaf's boot: a minute for the link and five for the bring-up")
 		Expect(*container.SecurityContext.ReadOnlyRootFilesystem).To(BeTrue())
 		Expect(container.Env[:len(want.Env)]).To(Equal(want.Env))
 		Expect(container.Env).To(ContainElement(corev1.EnvVar{Name: "TURSO_GO_CACHE_DIR", Value: "/var/lib/crewlet/cache"}))
@@ -594,6 +604,66 @@ var _ = Describe("Company seat pools", func() {
 		for _, name := range []string{generalSet, batchSet, cySet} {
 			Expect(statefulSet(name).Spec.Template.Spec.Containers[0].Image).To(Equal(seatImageV030), "%s did not roll", name)
 		}
+	})
+
+	It("replaces a seat pod that is not ready on an older template, which a controller may wait on for ever", func() {
+		class := newClass()
+		running(class.Name)
+		rollOut(generalSet)
+		sts := statefulSet(generalSet)
+		// A pod of the StatefulSet, on a revision, ready or not.
+		pod := func(name, revision string, ready bool) *corev1.Pod {
+			GinkgoHelper()
+			labels := selectorFor(&crewletaiv1alpha1.Company{Name: poolsCompany}, componentSeats)
+			labels[render.PoolLabel] = poolGeneral
+			labels[appsv1.ControllerRevisionHashLabelKey] = revision
+			p := &corev1.Pod{
+				Namespace: namespace, Name: name, Labels: labels,
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1", Kind: "StatefulSet", Name: generalSet, UID: sts.UID, Controller: new(true),
+				}},
+				Spec: corev1.PodSpec{
+					ServiceAccountName:           engineName,
+					AutomountServiceAccountToken: new(false),
+					Containers:                   []corev1.Container{{Name: engineContainer, Image: engineImageV020}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, p)).To(Succeed())
+			status := corev1.ConditionFalse
+			if ready {
+				status = corev1.ConditionTrue
+			}
+			p.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: status}}
+			Expect(k8sClient.Status().Update(ctx, p)).To(Succeed())
+			return p
+		}
+		stale := pod(generalSet+"-0", "general-old", false)
+		serving := pod(generalSet+"-1", "general-old", true)
+		starting := pod(generalSet+"-2", "general-new", false)
+		rolling := func(observed int64) {
+			GinkgoHelper()
+			sts := statefulSet(generalSet)
+			sts.Status.ObservedGeneration = observed
+			sts.Status.CurrentRevision, sts.Status.UpdateRevision = "general-old", "general-new"
+			sts.Status.ReadyReplicas, sts.Status.AvailableReplicas = 1, 1
+			Expect(k8sClient.Status().Update(ctx, sts)).To(Succeed())
+		}
+
+		By("leaving every pod while the StatefulSet's status describes an older template")
+		rolling(sts.Generation - 1)
+		reconciled(poolsOwnerIn(namespace))
+		for _, p := range []*corev1.Pod{stale, serving, starting} {
+			get(&corev1.Pod{}, p.Name)
+		}
+
+		By("deleting only the pod that is unready on the older revision once it describes the current one")
+		rolling(sts.Generation)
+		reconciled(poolsOwnerIn(namespace))
+		Eventually(func() bool {
+			return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(stale), &corev1.Pod{}))
+		}).Should(BeTrue(), "the unready pod of the older revision is still there")
+		get(&corev1.Pod{}, serving.Name)
+		get(&corev1.Pod{}, starting.Name)
 	})
 
 	It("reports a seat pool held back on an older template whatever changed in it", func() {

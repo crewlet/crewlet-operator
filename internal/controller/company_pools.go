@@ -21,6 +21,7 @@ import (
 	metav1ac "k8s.io/client-go/applyconfigurations/meta/v1"
 	policyv1ac "k8s.io/client-go/applyconfigurations/policy/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/render"
@@ -31,11 +32,14 @@ import (
 // seat of a PerSeat pool (<c>-seat-<handle>). Each pod runs Crewlet with the
 // seats role alone, joins the company's event stream as a leaf of the data
 // pods, keeps a scratch store on an emptyDir it loses at every start, and
-// serves nothing: the pinned engine binds no port on a node without the
-// ingress role, so there is nothing for a probe to ask. A seat pod is
-// therefore ready as soon as its container runs, and minReadySeconds is what
-// paces a rollout instead: a pod counts as available, and the next is
-// replaced, only once it has run that long.
+// serves nothing but its probes. A node without the ingress role binds
+// api.port for /health and /ready alone, and its /ready answers whether it is
+// doing its work: linked to the data pods' broker, running the company
+// document, holding its presence lease and admitted by its latest placement
+// pass to claim seats. So a seat pod is ready once it has joined the fleet
+// and may take seats, and that is what a rollout waits on before it replaces
+// the next pod; minReadySeconds adds two placement passes on top
+// (seatPodMinReadySeconds).
 //
 // A StatefulSet rather than a Deployment, though the pods hold nothing: the
 // engine wants a node id that is distinct and stable across restarts, and a
@@ -56,12 +60,24 @@ const (
 	// and the native library under render.DataDir, /tmp and HOME, all
 	// under the pool's scratchSizeLimit.
 	scratchVolume = "scratch"
-	// seatPodMinReadySeconds is how long a seat pod must run before it
-	// counts as available. With no probe to say otherwise, it is the time
-	// a new pod takes to join the stream, adopt the company document and
-	// claim its first seats (a few seconds) with room to spare, so that a
-	// rollout replaces the next pod only once the last one has stayed up.
-	seatPodMinReadySeconds = 60
+	// seatPodMinReadySeconds is how long a seat pod must be ready before
+	// it counts as available, and a rollout replaces the next one: two of
+	// the engine's five-second placement passes. /ready turns 200 in the
+	// pass that admits the pod to claim; its peers, which now count it
+	// live, give back what is past their share of the pool's seats, and
+	// the pod claims those in the passes after. Without the pause the
+	// next pod would drain while the seats it holds still had one fewer
+	// place to go.
+	seatPodMinReadySeconds = 10
+	// seatPodStartupSeconds is how long a seat pod's engine may take to
+	// answer /health at all, which it does only once it has started: six
+	// minutes, the engine's own bounds on a leaf's boot laid end to end.
+	// It waits up to a minute for its leaf link to reach a data pod, then
+	// provisions what it uses on the company's event stream within five
+	// minutes, the bound the engine puts on a bring-up across a leaf link,
+	// whose cluster it cannot see the size of. Past either it exits by
+	// itself, so the kubelet never ends a boot the engine would finish.
+	seatPodStartupSeconds = 360
 )
 
 // seatWorkload is one StatefulSet of seat pods.
@@ -492,6 +508,9 @@ func (r *CompanyReconciler) writeSeatPool(
 		if sts.Status != nil {
 			w.status = statefulSetStatusOf(sts.Status)
 		}
+		if err := r.replaceUnreadyStalePods(ctx, c, sts); err != nil {
+			return err
+		}
 		if err := r.resumed(ctx, w); err != nil {
 			return err
 		}
@@ -500,6 +519,68 @@ func (r *CompanyReconciler) writeSeatPool(
 		}
 	}
 	return nil
+}
+
+// replaceUnreadyStalePods deletes, while a seat StatefulSet rolls to a new
+// template, those of its pods that still run an older one and are not
+// ready, for the StatefulSet controller to start again on the new one. sts
+// is the StatefulSet as the API server answered the operator's write.
+//
+// The controller itself does not, on every Kubernetes the operator runs on.
+// Where the MaxUnavailableStatefulSet feature is on (beta and on by default
+// in 1.35), it counts every unready pod against maxUnavailable, and with the
+// one pod a seat StatefulSet allows already unready it replaces nothing,
+// that pod included, until a release that deletes unready pods of an older
+// revision first (1.37). A seat pod is unready for reasons a new template
+// can be the cure for (an engine the data pods no longer admit, after they
+// moved to a new image), so there the rollout would wait for ever on the
+// pods it exists to replace. Deleting them is what a newer controller does,
+// and costs nothing: an unready seat pod holds no seat.
+//
+// Only once the StatefulSet's status describes its current generation: until
+// the controller has seen the new template, the revision it names as the
+// update is the old one, and the pods that run the new one would read as
+// stale.
+func (r *CompanyReconciler) replaceUnreadyStalePods(
+	ctx context.Context, c *crewletaiv1alpha1.Company, sts *appsv1ac.StatefulSetApplyConfiguration,
+) error {
+	status := sts.Status
+	if status == nil || sts.Generation == nil || value(status.ObservedGeneration) != *sts.Generation {
+		return nil
+	}
+	update := value(status.UpdateRevision)
+	if update == "" || update == value(status.CurrentRevision) {
+		return nil
+	}
+	pods := &corev1.PodList{}
+	if err := r.APIReader.List(ctx, pods, client.InNamespace(c.Namespace), client.MatchingLabels(sts.Spec.Selector.MatchLabels)); err != nil {
+		return fmt.Errorf("listing the pods of StatefulSet %s/%s: %w", c.Namespace, *sts.Name, err)
+	}
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		owner := metav1.GetControllerOf(pod)
+		if owner == nil || owner.Kind != "StatefulSet" || owner.Name != *sts.Name || !pod.DeletionTimestamp.IsZero() ||
+			pod.Labels[appsv1.ControllerRevisionHashLabelKey] == update || podReady(pod) {
+			continue
+		}
+		if err := r.Delete(ctx, pod, client.Preconditions{UID: &pod.UID}); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("deleting pod %s/%s, which is not ready on an older template of StatefulSet %s: %w",
+				pod.Namespace, pod.Name, *sts.Name, err)
+		}
+		logf.FromContext(ctx).Info("Deleted a seat pod that is not ready on an older template, for its StatefulSet to replace",
+			"pod", pod.Name, "statefulSet", *sts.Name, "updateRevision", update)
+	}
+	return nil
+}
+
+// podReady reports whether a pod's Ready condition is True.
+func podReady(pod *corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			return condition.Status == corev1.ConditionTrue
+		}
+	}
+	return false
 }
 
 // PodTemplateHashAnnotation records, on a seat StatefulSet, a hash of the pod
@@ -658,9 +739,24 @@ func (r *CompanyReconciler) applySeatStatefulSet(
 }
 
 // seatPodTemplate is a seat pod: the engine container with the seats role
-// alone, its scratch volume and its Tier A, and what the class adds. It has
-// no port and no probe, since the engine serves nothing on a node without
-// the ingress role.
+// alone, its scratch volume and its Tier A, and what the class adds.
+//
+// Its probes are the data pod's, on the same port, where the engine serves a
+// node without the ingress role nothing else. /ready is what makes them worth
+// having: it is 503 while the pod is draining, cannot reach the data pods'
+// broker (broker_unlinked), has no company document yet (unconfigured), cannot
+// apply the revision its peers run (shed, stuck), does not hold its presence
+// lease (no_presence), or was not admitted by its latest placement pass to
+// claim seats (admission_withheld: no data pod has answered that its copy of
+// the company's records admits a seat, or the pod cannot serve the seats it
+// holds). The operator runs every engine in the normal mode, never a
+// maintenance mode, so a seat pod is always judged on its admission; one the
+// data pods cannot admit is one that runs no seat, and reads so.
+//
+// Nothing dials a seat pod: the kubelet probes it from its own node, which a
+// NetworkPolicy does not filter, so the seats policy that admits no other pod
+// leaves the probes alone, and the headless Service that governs the pods
+// publishes no port.
 func seatPodTemplate(
 	c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 	w *seatWorkload, secret, image string, doc *render.BootstrapDocument, hash string,
@@ -675,7 +771,7 @@ func seatPodTemplate(
 	if err != nil {
 		return nil, err
 	}
-	container := engineContainerBase(class, image, env).
+	container := withProbes(engineContainerBase(class, image, env), seatPodStartupSeconds).
 		WithVolumeMounts(
 			corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath(render.DataDir),
 			corev1ac.VolumeMount().WithName(configVolumeName).WithMountPath(configDir).WithReadOnly(true),
@@ -713,9 +809,11 @@ func seatPodTemplate(
 // leave its seats with no pod: a Shared pool's, and a PerSeat seat's with a
 // standby. A PerSeat seat with one pod has nothing to keep and gets none.
 //
-// Crash-looping pods may always be evicted (AlwaysAllow): with no probe,
-// a seat pod is unhealthy only while its engine cannot start, and a budget
-// that held such a pod would hold up the drain for nothing.
+// Unready pods may always be evicted (AlwaysAllow): a seat pod is unready
+// while it is not doing its work (it cannot reach the data pods, is not
+// admitted to claim seats, or cannot start at all), so it holds no seat a
+// budget could protect, and a budget that held it would hold up the drain
+// for nothing.
 func (r *CompanyReconciler) reconcilePodDisruptionBudget(
 	ctx context.Context, c *crewletaiv1alpha1.Company, w *seatWorkload, replicas int32,
 ) error {

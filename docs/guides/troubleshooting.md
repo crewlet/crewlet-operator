@@ -178,12 +178,30 @@ kubectl logs acme-data-0 -n acme | grep -E 'WARN|ERROR' | tail
 Seat pods are created, and gain replicas, only while the data pod is ready on
 its current template, so a company whose data pod is not ready runs none;
 start with [The data pod is not ready](#the-data-pod-is-not-ready). A seat
-pod has no probe (the engine serves nothing on a node without the `ingress`
-role), so a pod that is `Running` is all Kubernetes knows; read its log:
+pod is ready once it has joined the company's fleet and may claim seats; one
+that runs and is not ready says why in the body of its `/ready`, which the
+kubelet does not show. Ask the pod itself, and read its log:
 
 ```bash
+kubectl port-forward -n acme pod/acme-seats-general-159f80d7-0 8080 &
+curl -s localhost:8080/ready
+# {"ready":false,"node":"acme-seats-general-159f80d7-0","configured":true,"draining":false,"posture":"serve","reason":"admission_withheld"}
 kubectl logs -n acme acme-seats-general-159f80d7-0
 ```
+
+| `reason` | What it means for a seat pod |
+|---|---|
+| `broker_unlinked` | Its leaf link to the data pod is down; `detail` says why. See below. |
+| `unconfigured` | No company document has reached it yet: it has just joined. |
+| `shed`, `stuck` | It cannot apply the revision the data pod runs; its log has `config_apply_failed`. |
+| `no_presence` | It does not hold its presence lease, so the fleet does not count it. |
+| `admission_withheld` | No data pod has answered that its copy of the company's records admits a seat (the data pod is starting, catching up, or unreachable), or the pod cannot serve the seats it holds. It claims nothing until then. |
+
+A seat pod restarted every six minutes, its events saying `Startup probe
+failed` with `connection refused` while its log shows it running, is on an
+engine older than crewlet 7ca18083e, which binds no port on a node without
+the `ingress` role; move the EngineClass's `engine.image` to the operator's
+engine version ([Engine image](installing.md#engine-image)).
 
 A seat pod that cannot join the data pod's leaf listener within a minute
 exits, and Kubernetes restarts it with a growing back-off: after a data pod

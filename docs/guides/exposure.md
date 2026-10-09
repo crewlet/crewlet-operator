@@ -224,8 +224,10 @@ operator create two more policies per company, under either mode:
 the company's own seat pods and from nothing else, since Crewlet's broker
 port takes any connection without authentication or TLS; and, while the
 company runs seat pods, `<company>-seats`, which admits no connection to a
-seat pod at all and, under `Isolated`, holds the seat pods to the egress
-above. NetworkPolicies are additive, so this isolation of the seat pods holds
+seat pod from any pod and, under `Isolated`, holds the seat pods to the egress
+above. A seat pod's probes (port 8080, `/health` and `/ready`) still answer
+its kubelet, whose traffic comes from the pod's own node, which a
+NetworkPolicy does not police. NetworkPolicies are additive, so this isolation of the seat pods holds
 only while no other policy selects them: do not add one that selects every
 pod of a tenant's namespace. A policy selects pods by label, so it cannot
 keep apart companies that share a namespace, whose pods anyone who creates

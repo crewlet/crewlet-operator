@@ -282,7 +282,8 @@ func TestPlacementSettlingIsPerSeat(t *testing.T) {
 // engine makes between two pods of one StatefulSet: when a pool gains a pod,
 // a pod holding more than its share of the pool's seats, ceil(seats / live
 // pods), sheds them for the new pod to claim, and the Seats must follow
-// before the next resync.
+// before the next resync. Live is the engine's count, not the StatefulSet's
+// ready pods.
 func TestSeatsPastAPodsShareAreSettling(t *testing.T) {
 	const (
 		workload = fleetWorkload
@@ -311,9 +312,11 @@ func TestSeatsPastAPodsShareAreSettling(t *testing.T) {
 		{"both seats on one of two pods", 2, &engine.Fleet{Nodes: nodes(2), Seats: leases("0", "0")}, []string{seatAna, seatBo}},
 		{"one seat on each of two pods", 2, &engine.Fleet{Nodes: nodes(2), Seats: leases("0", "1")}, nil},
 		{"both seats on the one pod", 1, &engine.Fleet{Nodes: nodes(1), Seats: leases("0", "0")}, nil},
-		// The StatefulSet's second pod is ready and has not joined yet: the
-		// engine will share the seats with it once it does.
-		{"both seats on one of two ready pods, one of them live", 2, &engine.Fleet{Nodes: nodes(1), Seats: leases("0", "0")}, []string{seatAna, seatBo}},
+		// A seat pod's /ready requires its presence lease, so a ready pod
+		// the fleet does not list live is a moment between two reads; the
+		// engine shares the seats among the pods it counts live, and the
+		// one it counts holds its whole share.
+		{"both seats on one of two ready pods, one of them live", 2, &engine.Fleet{Nodes: nodes(1), Seats: leases("0", "0")}, nil},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			run, ana := seatRun("")

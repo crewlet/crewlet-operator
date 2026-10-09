@@ -93,6 +93,12 @@ which Crewlet added at 51b8d06 (`v0.1.1-0.20261009013001-51b8d06db1b2`): on
 an older engine the data pod of every `Enforce` company restarts in a loop,
 its log ending in `unknown field: "company_writers" is not a setting`
 ([The data pod is not ready](troubleshooting.md#the-data-pod-is-not-ready)).
+A company's seat pods are probed on the port their `crewlet.yaml` binds for
+`/health` and `/ready` alone, which a node without the `ingress` role serves
+from crewlet 7ca18083e (`v0.1.1-0.20261009105611-7ca18083ecb5`): on an older
+engine a seat pod binds nothing, never passes its startup probe, and is
+restarted every six minutes
+([Seat pods do not run](troubleshooting.md#seat-pods-do-not-run)).
 
 ## Values worth setting
 
@@ -221,4 +227,7 @@ one a newer operator writes. The first release that sets
 later, and it restarts the data pod of every `Enforce` company once, since
 the setting is part of the `crewlet.yaml` the pod is given. Companies under
 `Observe` or `Seed` are given the same `crewlet.yaml` as before and do not
-restart.
+restart. The first release that probes seat pods is another: it needs
+crewlet 7ca18083e or later on every company that runs seat pools, and rolls
+their seat pods once (their `crewlet.yaml` gains `api.port`, and their pods
+the probes); the data pods do not restart for it.
