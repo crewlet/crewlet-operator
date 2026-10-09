@@ -110,8 +110,9 @@ watch it: restart the pod after changing one.
 A Company's `spec.topology.seatPools` are stateless pods that run seats:
 Crewlet with `node.roles: [seats]` alone, a scratch store deleted at every
 start, joined to the data pods' event stream as a NATS leaf. The class's
-`seatPools.policy` must be `Allowed`; its `allowPerSeat` and `maxPods` bound
-what a Company may run. Where each seat runs is decided by its `Seat`'s
+`seatPools.policy` must be `Allowed`, with a `maxPods`; its `allowPerSeat`
+and `maxPods` bound what a Company may run, and its
+`seatPools.defaults.resources` what each seat pod may take. Where each seat runs is decided by its `Seat`'s
 `spec.placement.pool` ([Placement](company-document.md#placement)).
 [Choosing where seats run](../guides/topology.md) says when a company needs
 pools, and which kind.
@@ -125,7 +126,7 @@ pools, and which kind.
 | Storage | one `emptyDir` at `/var/lib/crewlet`, of the class's `seatPools.defaults.scratchSizeLimit` (2Gi unless set), holding the scratch store, the store's native library, `/tmp` and `HOME`: the limit bounds what the processes the engine runs write too | the same |
 | Stopping | the pool's `terminationGracePeriodSeconds`, else the class's default, else five minutes: running turns finish, waiting ones are handed back, and the seats are released with their mailboxes for another pod to claim | the same |
 | Updates | `RollingUpdate`, `maxUnavailable: 1`, `podManagementPolicy: Parallel`, `minReadySeconds: 60` | the same |
-| Resources | the pool's `resources`, else the class's `seatPools.defaults.resources` | the same |
+| Resources | the class's `seatPools.defaults.resources`: the class sizes every seat pod, as it sizes the data pods, and a Company chooses only how many its pools run, within `maxPods` | the same |
 
 A seat pod runs as a data pod does, under the `restricted` Pod Security
 Standard, as the engine's ServiceAccount with no token mounted, scheduled by
@@ -195,8 +196,8 @@ a seat to it, and is deleted with its disruption budget and, once no
 StatefulSet of the pool is left, the pool's Secret, as soon as a revision
 that pins nothing to it runs. Meanwhile it still follows the data pods: it
 takes their new image and keyring once they are ready on them, with the
-resources, grace period and turns its pool had when the operator last wrote
-it (`crewlet.ai/seat-pool`), since a pod restarted from an image or a
+grace period and turns its pool had when the operator last wrote it, and
+the class's resources (`crewlet.ai/seat-pool`), since a pod restarted from an image or a
 keyring the data pods have left would not join them. A document that cannot be applied (a Seat
 still placed in the removed pool is refused `PoolNotFound`) therefore keeps
 the pool running with the revision that needs it. `SeatsPlaced` names the

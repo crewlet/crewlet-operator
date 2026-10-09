@@ -873,7 +873,7 @@ var _ = Describe("Company config", Ordered, func() {
 		pools := class.DeepCopy()
 		pools.ResourceVersion = ""
 		pools.Name = namespace + "-pools"
-		pools.Spec.SeatPools = crewletaiv1alpha1.SeatPoolSettings{Policy: crewletaiv1alpha1.SeatPoolsAllowed}
+		pools.Spec.SeatPools = crewletaiv1alpha1.SeatPoolSettings{Policy: crewletaiv1alpha1.SeatPoolsAllowed, MaxPods: 20}
 		Expect(k8sClient.Create(ctx, pools)).To(Succeed())
 		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, pools)).To(Succeed()) })
 		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce)
@@ -949,7 +949,7 @@ var _ = Describe("Company config", Ordered, func() {
 		pools := class.DeepCopy()
 		pools.ResourceVersion = ""
 		pools.Name = namespace + "-pinned"
-		pools.Spec.SeatPools = crewletaiv1alpha1.SeatPoolSettings{Policy: crewletaiv1alpha1.SeatPoolsAllowed, AllowPerSeat: new(true)}
+		pools.Spec.SeatPools = crewletaiv1alpha1.SeatPoolSettings{Policy: crewletaiv1alpha1.SeatPoolsAllowed, AllowPerSeat: new(true), MaxPods: 20}
 		Expect(k8sClient.Create(ctx, pools)).To(Succeed())
 		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, pools)).To(Succeed()) })
 		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce)
@@ -1010,7 +1010,7 @@ var _ = Describe("Company config", Ordered, func() {
 		pools := class.DeepCopy()
 		pools.ResourceVersion = ""
 		pools.Name = namespace + "-placed"
-		pools.Spec.SeatPools = crewletaiv1alpha1.SeatPoolSettings{Policy: crewletaiv1alpha1.SeatPoolsAllowed}
+		pools.Spec.SeatPools = crewletaiv1alpha1.SeatPoolSettings{Policy: crewletaiv1alpha1.SeatPoolsAllowed, MaxPods: 20}
 		Expect(k8sClient.Create(ctx, pools)).To(Succeed())
 		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, pools)).To(Succeed()) })
 		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce)

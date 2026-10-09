@@ -80,8 +80,9 @@ type PoolPlan struct {
 	// MaxConcurrentTurns is Crewlet's node.max_concurrent for each of the
 	// pool's pods; 0 leaves the engine's default.
 	MaxConcurrentTurns int32
-	// Resources are the engine container's, or nil for none. It is the
-	// object the Company or the class holds; treat it as read-only.
+	// Resources are the engine container's, or nil for none: the class's,
+	// which alone sizes a seat pod. It is the object the class holds; treat
+	// it as read-only.
 	Resources                     *corev1.ResourceRequirements
 	TerminationGracePeriodSeconds int64
 	ScratchSizeLimit              resource.Quantity
@@ -301,7 +302,7 @@ func PoolPlanOf(p *v1alpha1.SeatPool, defaults v1alpha1.SeatPoolDefaults) PoolPl
 		// defaulted it takes the same.
 		Replicas:                      1,
 		MaxConcurrentTurns:            cmp.Or(p.MaxConcurrentTurns, defaults.MaxConcurrentTurns),
-		Resources:                     cmp.Or(p.Resources, defaults.Resources),
+		Resources:                     defaults.Resources,
 		TerminationGracePeriodSeconds: cmp.Or(p.TerminationGracePeriodSeconds, defaults.TerminationGracePeriodSeconds, DefaultSeatPodTerminationGracePeriodSeconds),
 		ScratchSizeLimit:              resource.MustParse(DefaultSeatPodScratchSizeLimit),
 	}

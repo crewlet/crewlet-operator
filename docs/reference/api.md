@@ -2905,7 +2905,6 @@ _Appears in:_
 | `mode` _[SeatPoolMode](#seatpoolmode)_ | mode is how the pool runs its seats. | Shared | Enum: [Shared PerSeat] <br />Optional: \{\} <br /> |
 | `replicas` _integer_ | replicas is, for a Shared pool, how many pods it runs, 0 to 100: at 0<br />its seats run nowhere, and their messages wait for a pod. For a<br />PerSeat pool it is how many pods it runs for each of its seats, 1 or<br />2. | 1 | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 | `maxConcurrentTurns` _integer_ | maxConcurrentTurns is how many turns one of the pool's pods runs at<br />once: Crewlet's node.max_concurrent. Unset takes the class's<br />seatPools.defaults. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#resourcerequirements-v1-core)_ | resources are the compute resources of each of the pool's pods'<br />engine container. Unset takes the class's seatPools.defaults. |  | Optional: \{\} <br /> |
 | `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long one of the pool's pods may<br />take to stop, finishing its running turns: the engine puts no bound<br />of its own on that drain, so it must cover the longest turn. Unset<br />takes the class's seatPools.defaults, else 300. |  | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
 
 
@@ -2913,7 +2912,10 @@ _Appears in:_
 
 
 
-SeatPoolDefaults sizes the pods of a seat pool that does not size its own.
+SeatPoolDefaults sizes the pods of a seat pool that does not size its own,
+and the compute of every seat pod, which the class alone sets: a
+Company's pools choose how many pods they run, within maxPods, and the
+class what each of them may take, as it does for the data pods.
 
 _Validation:_
 - MinProperties: 1
@@ -2924,7 +2926,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `maxConcurrentTurns` _integer_ | maxConcurrentTurns is how many turns one seat pod runs at once: Crewlet's<br />node.max_concurrent. Unset takes the engine's default, 32. A seat runs<br />one turn at a time, so a pod never runs more turns at once than it<br />holds seats. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#resourcerequirements-v1-core)_ | resources are the compute resources of a seat pod's engine container.<br />Unset sets none. |  | Optional: \{\} <br /> |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#resourcerequirements-v1-core)_ | resources are the compute resources of every seat pod's engine<br />container. Unset sets none. |  | Optional: \{\} <br /> |
 | `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long a seat pod may take to stop.<br />A seat pod finishes its running turns before it exits, with no bound<br />of its own, so unset is five minutes, as for a data pod, rather than<br />the Kubernetes default of thirty seconds. |  | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
 | `scratchSizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | scratchSizeLimit caps the emptyDir a seat pod keeps its scratch store<br />in: a store the engine deletes at every start, its native library<br />(about 20 MB, extracted at every start) and the files of the<br />processes it runs (stdio MCP servers, git). A pod that writes more is<br />evicted. Unset is 2Gi. |  | Optional: \{\} <br /> |
 
@@ -2987,7 +2989,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `policy` _[SeatPoolPolicy](#seatpoolpolicy)_ | policy is whether the class's companies may declare seat pools.<br />Changing it restarts every data pod of the class, which opens or<br />closes the leaf listener. | Forbidden | Enum: [Forbidden Allowed] <br />Optional: \{\} <br /> |
 | `allowPerSeat` _boolean_ | allowPerSeat lets a Company declare a PerSeat pool, which runs one<br />pod (or two, a warm standby) for each seat placed in it. Each costs a<br />pod, and every pod's work grows with the number of seats of the<br />company, so it is off by default and meant for the few seats that<br />need a pod to themselves. It isolates a seat's compute and its<br />failures, not its credentials: every pod of a company can read the<br />company's whole secret store. |  | Optional: \{\} <br /> |
-| `maxPods` _integer_ | maxPods is the most seat pods a Company of the class may run, all of<br />its pools together: each Shared pool's replicas, and each PerSeat<br />pool's replicas for every seat placed in it. The data pods are not<br />counted. Unset is unlimited. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `maxPods` _integer_ | maxPods is the most seat pods a Company of the class may run, all of<br />its pools together: each Shared pool's replicas, and each PerSeat<br />pool's replicas for every seat placed in it. The data pods are not<br />counted. Required with policy Allowed: a class's companies size their<br />own pools, and only this bounds how many seat pods a company of the class runs. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `defaults` _[SeatPoolDefaults](#seatpooldefaults)_ | defaults size the pods of a pool that does not size its own. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 

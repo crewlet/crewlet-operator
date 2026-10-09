@@ -12,6 +12,7 @@ spec:
       size: 10Gi
   seatPools:
     policy: Allowed
+    maxPods: 6
   retention:
     backupOwner: platform-oncall
 ---

@@ -2610,8 +2610,8 @@ spec:
                         type: integer
                       resources:
                         description: |-
-                          resources are the compute resources of a seat pod's engine container.
-                          Unset sets none.
+                          resources are the compute resources of every seat pod's engine
+                          container. Unset sets none.
                         properties:
                           claims:
                             description: |-
@@ -2703,7 +2703,8 @@ spec:
                       maxPods is the most seat pods a Company of the class may run, all of
                       its pools together: each Shared pool's replicas, and each PerSeat
                       pool's replicas for every seat placed in it. The data pods are not
-                      counted. Unset is unlimited.
+                      counted. Required with policy Allowed: a class's companies size their
+                      own pools, and only this bounds how many seat pods a company of the class runs.
                     format: int32
                     minimum: 1
                     type: integer
@@ -2723,6 +2724,9 @@ spec:
                     only
                   rule: (has(self.policy) && self.policy == 'Allowed') || (!has(self.allowPerSeat)
                     && !has(self.maxPods) && !has(self.defaults))
+                - message: 'a class that allows seat pools caps them: set maxPods,
+                    the most seat pods one company may run'
+                  rule: '!has(self.policy) || self.policy != ''Allowed'' || has(self.maxPods)'
               serviceAccount:
                 description: |-
                   serviceAccount is what is added to each company's engine

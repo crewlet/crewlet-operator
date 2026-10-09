@@ -1,7 +1,6 @@
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -534,11 +533,6 @@ type SeatPool struct {
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	MaxConcurrentTurns int32 `json:"maxConcurrentTurns,omitempty"`
-
-	// resources are the compute resources of each of the pool's pods'
-	// engine container. Unset takes the class's seatPools.defaults.
-	// +optional
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
 	// terminationGracePeriodSeconds is how long one of the pool's pods may
 	// take to stop, finishing its running turns: the engine puts no bound

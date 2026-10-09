@@ -127,7 +127,10 @@ const (
 	SeatPoolsAllowed SeatPoolPolicy = "Allowed"
 )
 
-// SeatPoolDefaults sizes the pods of a seat pool that does not size its own.
+// SeatPoolDefaults sizes the pods of a seat pool that does not size its own,
+// and the compute of every seat pod, which the class alone sets: a
+// Company's pools choose how many pods they run, within maxPods, and the
+// class what each of them may take, as it does for the data pods.
 // +kubebuilder:validation:MinProperties=1
 type SeatPoolDefaults struct {
 	// maxConcurrentTurns is how many turns one seat pod runs at once: Crewlet's
@@ -138,8 +141,8 @@ type SeatPoolDefaults struct {
 	// +kubebuilder:validation:Minimum=1
 	MaxConcurrentTurns int32 `json:"maxConcurrentTurns,omitempty"`
 
-	// resources are the compute resources of a seat pod's engine container.
-	// Unset sets none.
+	// resources are the compute resources of every seat pod's engine
+	// container. Unset sets none.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
@@ -168,6 +171,7 @@ type SeatPoolDefaults struct {
 // data pods, keeps a scratch store it deletes at every start, and runs the
 // seats placed in its pool.
 // +kubebuilder:validation:XValidation:rule="(has(self.policy) && self.policy == 'Allowed') || (!has(self.allowPerSeat) && !has(self.maxPods) && !has(self.defaults))",message="allowPerSeat, maxPods and defaults apply to policy Allowed only"
+// +kubebuilder:validation:XValidation:rule="!has(self.policy) || self.policy != 'Allowed' || has(self.maxPods)",message="a class that allows seat pools caps them: set maxPods, the most seat pods one company may run"
 // +kubebuilder:validation:MinProperties=1
 type SeatPoolSettings struct {
 	// policy is whether the class's companies may declare seat pools.
@@ -190,7 +194,8 @@ type SeatPoolSettings struct {
 	// maxPods is the most seat pods a Company of the class may run, all of
 	// its pools together: each Shared pool's replicas, and each PerSeat
 	// pool's replicas for every seat placed in it. The data pods are not
-	// counted. Unset is unlimited.
+	// counted. Required with policy Allowed: a class's companies size their
+	// own pools, and only this bounds how many seat pods a company of the class runs.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	MaxPods int32 `json:"maxPods,omitempty"`

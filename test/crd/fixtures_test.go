@@ -77,6 +77,7 @@ const (
 	msgPauseDetails     = "pauseReason and stopRunning describe a pause: they apply only while paused is true"
 	msgPoolName         = `should match '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'`
 	msgPoolsAllowedOnly = "allowPerSeat, maxPods and defaults apply to policy Allowed only"
+	msgPoolsCapped      = "a class that allows seat pools caps them: set maxPods, the most seat pods one company may run"
 	msgScratchFloor     = "scratchSizeLimit must be at least 256Mi"
 	msgDataPoolName     = "data is the pool of the data pods"
 	msgPerSeatReplicas  = "a PerSeat pool runs 1 or 2 replicas for each seat"

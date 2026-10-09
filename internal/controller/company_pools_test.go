@@ -36,6 +36,9 @@ const (
 	seatsPolicy   = "nimbus-seats"
 	seatImageV030 = "ghcr.io/crewlet/crewlet:v0.3.0"
 	humanJane     = "jane"
+	// classMaxPods is the seat pods the specs' class allows a company: more
+	// than any spec runs, unless it sets its own.
+	classMaxPods = 20
 )
 
 var (
@@ -113,7 +116,9 @@ var _ = Describe("Company seat pools", func() {
 					Storage: crewletaiv1alpha1.DataStorage{Size: new(resource.MustParse("10Gi"))},
 				},
 				Retention: crewletaiv1alpha1.RetentionSettings{BackupOwner: "platform-oncall"},
-				SeatPools: crewletaiv1alpha1.SeatPoolSettings{Policy: crewletaiv1alpha1.SeatPoolsAllowed, AllowPerSeat: new(true)},
+				SeatPools: crewletaiv1alpha1.SeatPoolSettings{
+					Policy: crewletaiv1alpha1.SeatPoolsAllowed, AllowPerSeat: new(true), MaxPods: classMaxPods,
+				},
 			},
 		}
 		for _, m := range mutate {
@@ -607,9 +612,7 @@ var _ = Describe("Company seat pools", func() {
 		data.Status.ReadyReplicas, data.Status.AvailableReplicas = 0, 0
 		Expect(k8sClient.Status().Update(ctx, data)).To(Succeed())
 		updateCompany(company, func(c *crewletaiv1alpha1.Company) {
-			c.Spec.Topology.SeatPools[0].Resources = &corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
-			}
+			c.Spec.Topology.SeatPools[0].TerminationGracePeriodSeconds = 600
 		})
 		placed := condition(reconciled(company), crewletaiv1alpha1.ConditionSeatsPlaced)
 		Expect(placed.Reason).To(Equal(crewletaiv1alpha1.ReasonRolloutBlocked))
@@ -853,7 +856,7 @@ var _ = Describe("Company seat pools", func() {
 		Expect(placed.Message).To(ContainSubstring("spec.seatPools.maxPods"))
 
 		By("leaving what already runs as it is")
-		updateLive(class, func(c *crewletaiv1alpha1.EngineClass) { c.Spec.SeatPools.MaxPods = 0 })
+		updateLive(class, func(c *crewletaiv1alpha1.EngineClass) { c.Spec.SeatPools.MaxPods = classMaxPods })
 		reconciled(company)
 		Expect(seatSets()).To(ConsistOf(generalSet, batchSet, cySet))
 		updateLive(class, func(c *crewletaiv1alpha1.EngineClass) { c.Spec.SeatPools.MaxPods = 1 })

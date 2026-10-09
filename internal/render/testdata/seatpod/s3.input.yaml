@@ -13,6 +13,7 @@ spec:
       size: 10Gi
   seatPools:
     policy: Allowed
+    maxPods: 6
   objects:
     backend: S3
     s3:

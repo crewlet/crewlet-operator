@@ -471,7 +471,7 @@ func TestEngineClassSeatPools(t *testing.T) {
 	}
 	scratch := func(size string) func(*v1.EngineClass) {
 		return pools(v1.SeatPoolSettings{
-			Policy:   v1.SeatPoolsAllowed,
+			Policy: v1.SeatPoolsAllowed, MaxPods: 6,
 			Defaults: v1.SeatPoolDefaults{ScratchSizeLimit: new(resource.MustParse(size))},
 		})
 	}
@@ -515,12 +515,17 @@ func TestEngineClassSeatPools(t *testing.T) {
 			mutate: pools(v1.SeatPoolSettings{Policy: v1.SeatPoolsAllowed, MaxPods: -1}),
 			want:   "should be greater than or equal to 1",
 		},
+		{
+			name:   "Allowed without maxPods is refused",
+			mutate: pools(v1.SeatPoolSettings{Policy: v1.SeatPoolsAllowed, AllowPerSeat: new(true)}),
+			want:   msgPoolsCapped,
+		},
 		{name: "a scratch limit of 256Mi is accepted", mutate: scratch("256Mi")},
 		{name: "a scratch limit under 256Mi is refused", mutate: scratch("255Mi"), want: msgScratchFloor},
 		{
 			name: "a grace period under 30 seconds is refused",
 			mutate: pools(v1.SeatPoolSettings{
-				Policy:   v1.SeatPoolsAllowed,
+				Policy: v1.SeatPoolsAllowed, MaxPods: 6,
 				Defaults: v1.SeatPoolDefaults{TerminationGracePeriodSeconds: 10},
 			}),
 			want: "should be greater than or equal to 30",

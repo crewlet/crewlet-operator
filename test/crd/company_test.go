@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -281,9 +279,6 @@ func TestCompanyTopology(t *testing.T) {
 				c.Spec.Topology.SeatPools = []v1.SeatPool{
 					{
 						Name: poolName, Mode: v1.SeatPoolShared, Replicas: new(int32(3)), MaxConcurrentTurns: 4,
-						Resources: &corev1.ResourceRequirements{
-							Limits: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("3Gi")},
-						},
 						TerminationGracePeriodSeconds: 600,
 					},
 					pool("isolated", v1.SeatPoolPerSeat, 2),
