@@ -10,6 +10,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,8 +39,9 @@ const statusConflictRetry = 500 * time.Millisecond
 // CompanyReconciler reconciles Company objects. It decides whether a Company
 // is one the operator can act on (Accepted), and for an accepted one makes the
 // engine exist and be reachable: the keyring and API tokens, the bootstrap
-// document, the data StatefulSet, the Services, the routes and the network
-// policy (RuntimeReady, Exposed). It also owns the Ready summary.
+// document, the data StatefulSet, the seat pools' StatefulSets, the Services,
+// the routes and the network policies (RuntimeReady, Exposed, SeatsPlaced).
+// It also owns the Ready summary.
 //
 // The company document is not its concern: that is the config reconciler's,
 // which owns the SecretsSynced and ConfigApplied conditions and
@@ -83,6 +86,7 @@ type CompanyReconciler struct {
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;networkpolicies,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get
@@ -153,6 +157,12 @@ func (r *CompanyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, fmt.Errorf("updating the status of Company %s: %w", req.NamespacedName, err)
 	}
 	logf.FromContext(ctx).V(1).Info("Reconciled the Company", "ready", ready.Status, "reason", ready.Reason)
+	if runtime := meta.FindStatusCondition(company.Status.Conditions, crewletaiv1alpha1.ConditionRuntimeReady); runtime != nil &&
+		runtime.Reason == crewletaiv1alpha1.ReasonSuspending {
+		// The data pods stop once the seat pods are gone, which nothing
+		// the operator watches announces reliably: it does not watch Pods.
+		return ctrl.Result{RequeueAfter: drainPollInterval}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -351,8 +361,9 @@ func countOf[T any](items []T, company string, companyOf func(T) string) int32 {
 func (r *CompanyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	b := ctrl.NewControllerManagedBy(mgr).
 		For(&crewletaiv1alpha1.Company{}, builder.WithPredicates(predicate.Or[client.Object](
-			predicate.GenerationChangedPredicate{}, configAppliedChanged()))).
+			predicate.GenerationChangedPredicate{}, configReported()))).
 		Owns(&appsv1.StatefulSet{}).
+		Owns(&policyv1.PodDisruptionBudget{}, builder.OnlyMetadata).
 		Owns(&corev1.Service{}, builder.OnlyMetadata).
 		Owns(&corev1.ServiceAccount{}, builder.OnlyMetadata).
 		Owns(&corev1.Secret{}, builder.OnlyMetadata).
@@ -364,10 +375,11 @@ func (r *CompanyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// them (spec.allowedNamespaces).
 		WatchesMetadata(&corev1.Namespace{}, handler.EnqueueRequestsFromMapFunc(r.companiesInNamespace),
 			builder.WithPredicates(predicate.LabelChangedPredicate{})).
-		// Only how many there are matters to the limits, and companyRef is
-		// immutable, so an update (the config reconciler writing a part's
-		// status, a spec edit) cannot change what a Company is allowed.
-		Watches(&crewletaiv1alpha1.Seat{}, handler.EnqueueRequestsFromMapFunc(companyOfChild), builder.WithPredicates(createdOrDeleted())).
+		// How many there are matters to the limits, and where each agent
+		// seat is placed to the seat pools; companyRef is immutable, so no
+		// other update (the config reconciler writing a part's status, an
+		// edit of a goal) changes what a Company runs.
+		Watches(&crewletaiv1alpha1.Seat{}, handler.EnqueueRequestsFromMapFunc(companyOfChild), builder.WithPredicates(seatPlacementChanged())).
 		Watches(&crewletaiv1alpha1.MCPServer{}, handler.EnqueueRequestsFromMapFunc(companyOfChild), builder.WithPredicates(createdOrDeleted()))
 	// Without the Gateway API's CRDs a watch on HTTPRoutes would fail the
 	// manager's start; GatewayAPI is false there, and nothing reads them.
@@ -377,10 +389,12 @@ func (r *CompanyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return b.Named("company").Complete(r)
 }
 
-// configAppliedChanged passes a Company update that changes its
-// ConfigApplied condition, which the config reconciler writes and the Ready
-// summary depends on. The reconciler's own status writes do not pass it.
-func configAppliedChanged() predicate.Funcs {
+// configReported passes a Company update that changes what the config
+// reconciler reports and this reconciler acts on: the ConfigApplied
+// condition, which the Ready summary depends on, and
+// status.config.placement, which says which seat pods the running revision
+// still needs. The reconciler's own status writes do not pass it.
+func configReported() predicate.Funcs {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			old, ok := e.ObjectOld.(*crewletaiv1alpha1.Company)
@@ -390,6 +404,9 @@ func configAppliedChanged() predicate.Funcs {
 			updated, ok := e.ObjectNew.(*crewletaiv1alpha1.Company)
 			if !ok {
 				return false
+			}
+			if !equality.Semantic.DeepEqual(old.Status.Config.Placement, updated.Status.Config.Placement) {
+				return true
 			}
 			before := meta.FindStatusCondition(old.Status.Conditions, crewletaiv1alpha1.ConditionConfigApplied)
 			after := meta.FindStatusCondition(updated.Status.Conditions, crewletaiv1alpha1.ConditionConfigApplied)
@@ -406,6 +423,30 @@ func configAppliedChanged() predicate.Funcs {
 		},
 		CreateFunc:  func(event.CreateEvent) bool { return false },
 		DeleteFunc:  func(event.DeleteEvent) bool { return false },
+		GenericFunc: func(event.GenericEvent) bool { return false },
+	}
+}
+
+// seatPlacementChanged passes the creation and the deletion of a Seat, and an
+// update that can move it to another pool: of its placement, its kind (an
+// agent is placed, a person is not) or its handle (a PerSeat seat's pods are
+// named after it).
+func seatPlacementChanged() predicate.Funcs {
+	return predicate.Funcs{
+		CreateFunc: func(event.CreateEvent) bool { return true },
+		DeleteFunc: func(event.DeleteEvent) bool { return true },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			old, ok := e.ObjectOld.(*crewletaiv1alpha1.Seat)
+			if !ok {
+				return false
+			}
+			updated, ok := e.ObjectNew.(*crewletaiv1alpha1.Seat)
+			if !ok {
+				return false
+			}
+			return old.Spec.Placement != updated.Spec.Placement || old.Spec.Kind != updated.Spec.Kind ||
+				old.Spec.Handle != updated.Spec.Handle
+		},
 		GenericFunc: func(event.GenericEvent) bool { return false },
 	}
 }

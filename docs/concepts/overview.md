@@ -105,9 +105,12 @@ object.
 
 A Company runs on one data pod in v1alpha1: a StatefulSet with one replica
 and a volume, which holds the company's estate and also serves the API, runs
-every seat and runs the background workers. Its size, image and storage come
-from the `EngineClass`; `Company.spec.topology.data.replicas` is 1, the only
-value v1alpha1 admits. A company can be stopped with `spec.suspend` (its volume is kept), and
+the background workers and runs the seats placed on it. Its size, image and
+storage come from the `EngineClass`; `Company.spec.topology.data.replicas` is
+1, the only value v1alpha1 admits. Where the class allows it, the Company's
+`spec.topology.seatPools` add stateless seat pods beside the data pod, which
+run the seats placed in them and hold no data
+([Seat pools](runtime.md#seat-pools)). A company can be stopped with `spec.suspend` (its volume is kept), and
 `spec.deletionPolicy` says whether its volume outlives the Company (`Retain`,
 the default) or goes with it (`Delete`). [How a company's engine
 runs](runtime.md) lists every object the operator creates for it.

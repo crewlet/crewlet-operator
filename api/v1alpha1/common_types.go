@@ -284,10 +284,11 @@ const (
 	// whether its credentials work and its webhooks are registered.
 	ConditionHealthy = "Healthy"
 
-	// ConditionSeatsPlaced reports whether every seat pool a Company's
-	// agent seats are placed in has a ready pod to run them. It does not
-	// count towards Ready: a Shared pool scaled to zero parks its seats on
-	// purpose.
+	// ConditionSeatsPlaced reports whether every pool a Company's agent
+	// seats are placed in, data included, has a ready pod to run them, and
+	// whether the seat pools run what the Company and its class ask for. It
+	// does not count towards Ready: a Shared pool scaled to zero parks its
+	// seats on purpose.
 	ConditionSeatsPlaced = "SeatsPlaced"
 )
 
@@ -298,9 +299,16 @@ const (
 	// current revision.
 	ReasonAvailable = "Available"
 
-	// ReasonSuspended is Ready=False and RuntimeReady=False on a Company
-	// with spec.suspend set.
+	// ReasonSuspended is Ready=False, RuntimeReady=False and
+	// SeatsPlaced=False on a Company with spec.suspend set, once its pods
+	// are stopped (RuntimeReady) or are being stopped (Ready, SeatsPlaced).
 	ReasonSuspended = "Suspended"
+
+	// ReasonSuspending is RuntimeReady=False on a suspended Company whose
+	// seat pods are still stopping. Its data pods stop once they have: a
+	// stopping seat pod hands its last records to a data pod, the only kind
+	// that keeps them.
+	ReasonSuspending = "Suspending"
 
 	// ReasonConfigPending is Ready=False on a Company whose engine runs
 	// and is exposed while ConfigApplied has not been reported for the
@@ -594,10 +602,11 @@ const (
 	// Company's spec.topology.seatPools.
 	ReasonPoolNotFound = "PoolNotFound"
 
-	// ReasonSeatPoolsNotAllowed is ConfigApplied=False on a Company that
-	// declares spec.topology.seatPools while its EngineClass's
-	// spec.seatPools.policy is not Allowed: the class's data pods open no
-	// listener for seat pods to join through.
+	// ReasonSeatPoolsNotAllowed is ConfigApplied=False and
+	// SeatsPlaced=False on a Company that declares spec.topology.seatPools
+	// while its EngineClass's spec.seatPools.policy is not Allowed: the
+	// class's data pods open no listener for seat pods to join through, so
+	// the operator runs none.
 	ReasonSeatPoolsNotAllowed = "SeatPoolsNotAllowed"
 
 	// ReasonPerSeatNotAllowed is Applied=False on a Seat placed in a
@@ -607,8 +616,9 @@ const (
 
 	// ReasonPoolCapacityExceeded is Applied=False on each Seat placed in a
 	// PerSeat pool when the company's seat pods would number more than its
-	// EngineClass's spec.seatPools.maxPods, and ConfigApplied=False on a
-	// Company whose Shared pools alone run more.
+	// EngineClass's spec.seatPools.maxPods, and ConfigApplied=False and
+	// SeatsPlaced=False on a Company whose Shared pools alone run more: the
+	// operator then keeps the pools' pods as they are and starts no other.
 	ReasonPoolCapacityExceeded = "PoolCapacityExceeded"
 )
 

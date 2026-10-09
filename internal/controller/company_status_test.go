@@ -61,8 +61,8 @@ func TestReadyWaitsForTheDocumentOfTheCurrentGeneration(t *testing.T) {
 	}
 }
 
-func TestConfigAppliedChangedSeesANewGeneration(t *testing.T) {
-	changed := configAppliedChanged()
+func TestConfigReportedSeesANewGeneration(t *testing.T) {
+	changed := configReported()
 	at := func(generation int64) *crewletaiv1alpha1.Company {
 		return readyCompany(&metav1.Condition{
 			Status: metav1.ConditionTrue, Reason: crewletaiv1alpha1.ReasonApplied, Message: "m", ObservedGeneration: generation,
@@ -73,5 +73,10 @@ func TestConfigAppliedChangedSeesANewGeneration(t *testing.T) {
 	}
 	if changed.Update(event.UpdateEvent{ObjectOld: at(2), ObjectNew: at(2)}) {
 		t.Error("an unchanged ConfigApplied re-runs the Company")
+	}
+	moved := at(2)
+	moved.Status.Config.Placement = crewletaiv1alpha1.RevisionPlacement{Pools: []string{crewletaiv1alpha1.DataPool}}
+	if !changed.Update(event.UpdateEvent{ObjectOld: at(2), ObjectNew: moved}) {
+		t.Error("a revision that pins seats elsewhere does not re-run the Company, whose seat pods it decides")
 	}
 }

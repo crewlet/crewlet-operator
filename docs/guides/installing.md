@@ -28,8 +28,8 @@ Nothing else: there are no admission webhooks, so no cert-manager.
 
 A Company may live in any namespace, so the manager's ClusterRole lets it
 create, change and delete Secrets, ServiceAccounts, Services, StatefulSets,
-volume claims, NetworkPolicies and routes in every namespace, and read every
-Secret. RBAC cannot narrow that to the objects the operator makes, so the
+PodDisruptionBudgets, volume claims, NetworkPolicies and routes in every
+namespace, and read every Secret. RBAC cannot narrow that to the objects the operator makes, so the
 chart and `dist/install.yaml` also install a ValidatingAdmissionPolicy,
 `crewlet-operator-manager-writes`, which holds the manager's ServiceAccount
 to them: every object it writes, changes or deletes carries

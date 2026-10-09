@@ -101,7 +101,7 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 	if err := r.applyServiceAccount(ctx, c, class); err != nil {
 		return err
 	}
-	if err := r.applyServices(ctx, c); err != nil {
+	if err := r.applyServices(ctx, c, class); err != nil {
 		return err
 	}
 	exposed, err := r.reconcileExposure(ctx, c, class)
@@ -150,19 +150,55 @@ func (r *CompanyReconciler) reconcileWorkload(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 	in *workloadInputs,
 ) (metav1.Condition, error) {
-	keyring, tokens, platform := in.keyring, in.tokens, in.platform
 	existing, err := r.existingStatefulSet(ctx, c)
 	if err != nil {
 		return metav1.Condition{}, err
 	}
-
-	if in.hold != nil {
-		return r.holdBack(ctx, c, existing, in.hold.reason, in.hold.message)
+	pools, err := r.planSeatPools(ctx, c, class)
+	if err != nil {
+		return metav1.Condition{}, err
 	}
-
+	// What is held back holds the seat pods back with the data pods: they
+	// keep running what they run.
+	holdBack := func(reason, message string) (metav1.Condition, error) {
+		if err := r.reconcileSeatPools(ctx, c, class, pools, nil); err != nil {
+			return metav1.Condition{}, err
+		}
+		return r.holdBack(ctx, c, existing, reason, message)
+	}
+	if in.hold != nil {
+		return holdBack(in.hold.reason, in.hold.message)
+	}
 	if len(in.missing) > 0 {
-		return r.holdBack(ctx, c, existing, crewletaiv1alpha1.ReasonSecretNotFound,
+		return holdBack(crewletaiv1alpha1.ReasonSecretNotFound,
 			"The engine's pods cannot be given the values they read from Secrets: "+strings.Join(in.missing, "; ")+".")
+	}
+	return r.runWorkload(ctx, c, class, in, existing, pools)
+}
+
+// runWorkload is reconcileWorkload for a Company whose pods are not held
+// back: it writes the data pods' bootstrap Secret and StatefulSet, then the
+// seat pools after them.
+func (r *CompanyReconciler) runWorkload(
+	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
+	in *workloadInputs, existing *appsv1.StatefulSet, pools *seatPlan,
+) (metav1.Condition, error) {
+	keyring, tokens, platform := in.keyring, in.tokens, in.platform
+	// A suspended company stops its seat pods first, and its data pods
+	// only once they are gone.
+	seatPodsLeft := false
+	if suspended(c) {
+		left, err := r.stopSeatPods(ctx, c)
+		if err != nil {
+			return metav1.Condition{}, err
+		}
+		seatPodsLeft = left
+	}
+	holdBack := func(reason, message string) (metav1.Condition, error) {
+		if err := r.reconcileSeatPools(ctx, c, class, pools, nil); err != nil {
+			return metav1.Condition{}, err
+		}
+		return r.holdBack(ctx, c, existing, reason, message)
 	}
 	bootstrap, err := render.Bootstrap(&render.BootstrapInput{
 		Company:    c,
@@ -173,7 +209,7 @@ func (r *CompanyReconciler) reconcileWorkload(
 		VolumeSize: dataVolumeSize(existing, class),
 	})
 	if err != nil {
-		return r.holdBack(ctx, c, existing, crewletaiv1alpha1.ReasonKeyringInvalid,
+		return holdBack(crewletaiv1alpha1.ReasonKeyringInvalid,
 			fmt.Sprintf("Secret %s/%s is not a keyring the engine can use: %s. The operator never rewrites a keyring, since the "+
 				"engine's sealed data opens only with its keys: repair the Secret, setting the annotation %s to the id of the key "+
 				"that seals new writes.", keyring.Namespace, keyring.Name, err, KeyringActiveKeyAnnotation))
@@ -186,6 +222,9 @@ func (r *CompanyReconciler) reconcileWorkload(
 	image, refusal := engineImage(c, class, versionFloor(c, claims))
 	if refusal != nil {
 		if existing == nil {
+			if err := r.reconcileSeatPools(ctx, c, class, pools, nil); err != nil {
+				return metav1.Condition{}, err
+			}
 			if suspended(c) {
 				return suspendedCondition("Once it resumes, its pods are held back: " + refusal.message), nil
 			}
@@ -198,7 +237,11 @@ func (r *CompanyReconciler) reconcileWorkload(
 	if err != nil {
 		return metav1.Condition{}, err
 	}
-	sts, err := r.applyStatefulSet(ctx, c, class, existing, &workload{
+	replicas := dataReplicas(c)
+	if seatPodsLeft && existing != nil {
+		replicas = value(existing.Spec.Replicas)
+	}
+	sts, err := r.applyStatefulSet(ctx, c, class, existing, replicas, &workload{
 		image:         image,
 		bootstrap:     bootstrap,
 		bootstrapHash: bootstrapHash,
@@ -211,8 +254,19 @@ func (r *CompanyReconciler) reconcileWorkload(
 	if err := r.recordVersionOnClaims(ctx, c, claims); err != nil {
 		return metav1.Condition{}, err
 	}
+	if err := r.reconcileSeatPools(ctx, c, class, pools, &seatInputs{
+		keyring:   keyring,
+		objects:   in.objects,
+		platform:  platform,
+		image:     *sts.Spec.Template.Spec.Containers[0].Image,
+		dataReady: progress.ready && *sts.Spec.Replicas > 0,
+	}); err != nil {
+		return metav1.Condition{}, err
+	}
 
 	switch {
+	case seatPodsLeft:
+		return suspendingCondition(), nil
 	case suspended(c):
 		// The StatefulSet was just applied with no replicas, whatever was
 		// refused.
@@ -229,39 +283,58 @@ func (r *CompanyReconciler) reconcileWorkload(
 	}
 }
 
-// holdBack leaves the data StatefulSet as it is, except that a suspended
-// Company's is scaled to zero: suspending is how a platform stops an engine,
-// and it must work while something else is wrong. The scale is the one change
-// that needs nothing rendered. A suspended Company reports Suspended, which is
-// what its pods are, and says what will hold them back once it resumes.
+// holdBack leaves the StatefulSets as they are, except that a suspended
+// Company's are scaled to zero, its seat pods' first: suspending is how a
+// platform stops an engine, and it must work while something else is wrong.
+// The scale is the one change that needs nothing rendered. A suspended
+// Company reports Suspended once its pods are stopped (Suspending until
+// then), and says what will hold them back once it resumes.
 func (r *CompanyReconciler) holdBack(
 	ctx context.Context, c *crewletaiv1alpha1.Company, existing *appsv1.StatefulSet, reason, message string,
 ) (metav1.Condition, error) {
 	if suspended(c) {
-		if err := r.scaleToZero(ctx, c, existing); err != nil {
-			return metav1.Condition{}, err
+		stopped, err := r.stopEngine(ctx, c, existing)
+		if err != nil || !stopped {
+			return suspendingCondition(), err
 		}
 		return suspendedCondition("Once it resumes, its pods are held back: " + message), nil
 	}
 	return runtimeCondition(metav1.ConditionFalse, reason, message), nil
 }
 
-// stop scales a suspended Company's data StatefulSet to zero when nothing
-// else of its runtime can be reconciled (it is not accepted), and records
-// RuntimeReady=Suspended, which is then true: Ready reads its claim that the
-// engine is stopped from that condition.
+// stop stops a suspended Company's pods when nothing else of its runtime can
+// be reconciled (it is not accepted), and records RuntimeReady=Suspended once
+// they are, which is then true: Ready reads its claim that the engine is
+// stopped from that condition.
 func (r *CompanyReconciler) stop(ctx context.Context, c *crewletaiv1alpha1.Company) error {
 	existing, err := r.existingStatefulSet(ctx, c)
 	if err != nil {
 		return err
 	}
-	if err := r.scaleToZero(ctx, c, existing); err != nil {
+	stopped, err := r.stopEngine(ctx, c, existing)
+	if err != nil {
 		return err
 	}
 	condition := suspendedCondition("")
+	if !stopped {
+		condition = suspendingCondition()
+	}
 	condition.ObservedGeneration = c.Generation
 	meta.SetStatusCondition(&c.Status.Conditions, condition)
 	return nil
+}
+
+// stopEngine scales a Company's seat StatefulSets to zero and, once no seat
+// pod is left, its data StatefulSet: a stopping seat pod hands its last
+// records to a data pod, the only kind that keeps them, so the data pods
+// outlive the seat pods' drain. It reports whether the data pods were
+// stopped.
+func (r *CompanyReconciler) stopEngine(ctx context.Context, c *crewletaiv1alpha1.Company, data *appsv1.StatefulSet) (bool, error) {
+	left, err := r.stopSeatPods(ctx, c)
+	if err != nil || left {
+		return false, err
+	}
+	return true, r.scaleToZero(ctx, c, data)
 }
 
 // scaleToZero sets the replicas of a data StatefulSet the Company controls to
@@ -277,6 +350,13 @@ func (r *CompanyReconciler) scaleToZero(ctx context.Context, c *crewletaiv1alpha
 		return fmt.Errorf("scaling StatefulSet %s/%s to zero: %w", sts.Namespace, sts.Name, err)
 	}
 	return nil
+}
+
+// suspendingCondition is RuntimeReady for a suspended Company whose seat pods
+// are still stopping, before its data pods stop.
+func suspendingCondition() metav1.Condition {
+	return runtimeCondition(metav1.ConditionFalse, crewletaiv1alpha1.ReasonSuspending,
+		"The Company is suspended: its seat pods are stopping, and its data pods stop once they have.")
 }
 
 // suspendedCondition is RuntimeReady for a suspended Company whose data
@@ -336,7 +416,7 @@ func (r *CompanyReconciler) apply(
 func (r *CompanyReconciler) mayWrite(ctx context.Context, c *crewletaiv1alpha1.Company, gvk schema.GroupVersionKind, name string) error {
 	var obj client.Object
 	if gvk == statefulSetGVK {
-		sts, err := r.existingStatefulSet(ctx, c)
+		sts, err := r.statefulSetNamed(ctx, c.Namespace, name)
 		if err != nil || sts == nil {
 			return err
 		}
@@ -397,6 +477,9 @@ func (e *nameConflictError) message() string {
 // finalize stops a deleted Company's engine and settles its data volumes,
 // then lets the deletion finish.
 //
+//  0. Every seat StatefulSet is deleted, and the operator waits until every
+//     seat pod is gone: a seat pod drains on SIGTERM, handing its last
+//     records to a data pod, so the data pods must still run.
 //  1. The data StatefulSet is deleted and the operator waits until it and
 //     every data pod are gone. Each pod drains on SIGTERM: running turns
 //     finish, waiting ones are handed back. The Company's other objects stay
@@ -422,6 +505,17 @@ func (r *CompanyReconciler) finalize(ctx context.Context, c *crewletaiv1alpha1.C
 	}
 	log := logf.FromContext(ctx)
 	retain := c.Spec.DeletionPolicy == crewletaiv1alpha1.DeletionPolicyRetain
+
+	// The seat pods go first: each drains into a data pod, which keeps
+	// what it hands over, so the data pods outlive them.
+	left, err := r.deleteSeatPools(ctx, c)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if left {
+		log.V(1).Info("Waiting for the seat pods to stop")
+		return ctrl.Result{RequeueAfter: drainPollInterval}, nil
+	}
 
 	sts, err := r.existingStatefulSet(ctx, c)
 	if err != nil {

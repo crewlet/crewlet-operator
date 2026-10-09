@@ -211,6 +211,18 @@ gateway:
   proxyNamespaces: [envoy-gateway-system]
 ```
 
+A class that allows seat pools (`seatPools.policy: Allowed`) also has the
+operator create two more policies per company, under either mode:
+`<company>-broker`, which admits the data pods' leaf listener (port 7422) from
+the company's own seat pods and from nothing else, since Crewlet's broker
+port takes any connection without authentication or TLS; and, while the
+company runs seat pods, `<company>-seats`, which admits no connection to a
+seat pod at all and, under `Isolated`, holds the seat pods to the egress
+above. NetworkPolicies are additive, so this isolation of the seat pods holds
+only while no other policy selects them: do not add one that selects every
+pod of a tenant's namespace. See [Network
+policy](../concepts/runtime.md#network-policy).
+
 The policy holds only on a CNI that enforces NetworkPolicy, egress included
 (Calico, Cilium, Antrea, and kind's kindnet on a kernel with nftables' queue
 support). Some Gateway implementations

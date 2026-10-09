@@ -785,6 +785,10 @@ var _ = Describe("Company config", Ordered, func() {
 		By("blocking the seat that can run, and recording where it is placed")
 		Eventually(reasonOf(shared, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonBlocked))
 		Expect(shared.Status.Placement.Pool).To(Equal(poolGeneral))
+		Expect(shared.Status.Placement.Workload).To(Equal(name + "-seats-general"))
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(alone), alone)).To(Succeed())
+		Expect(alone.Status.Placement.Pool).To(Equal(poolIsolated))
+		Expect(alone.Status.Placement.Workload).To(BeEmpty(), "the class runs no pod for a seat it refuses its pool")
 		// The Company's status is written after its parts'.
 		Eventually(func(g Gomega) metav1.ConditionStatus {
 			return conditionOf(c, crewletaiv1alpha1.ConditionConfigApplied)(g).Status

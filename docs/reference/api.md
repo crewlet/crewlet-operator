@@ -2173,6 +2173,14 @@ spec.placement.pool names it, or when it is the Company's defaultSeatPool
 and the Seat names no pool. The class's spec.seatPools.policy must be
 Allowed.
 
+The operator runs a Shared pool as the StatefulSet <company>-seats-<name>,
+and each seat of a PerSeat pool as <company>-seat-<handle>, started only
+once the data pods are ready and rolled only after them. The pods have no
+port and no probe: the engine serves nothing, health and readiness
+included, on a node without the ingress role, so a pod counts as ready as
+soon as its container runs, and a rollout is paced by a minReadySeconds of
+60 instead.
+
 
 
 _Appears in:_
@@ -2185,7 +2193,7 @@ _Appears in:_
 | `replicas` _integer_ | replicas is, for a Shared pool, how many pods it runs, 0 to 100: at 0<br />its seats run nowhere, and their messages wait for a pod. For a<br />PerSeat pool it is how many pods it runs for each of its seats, 1 or<br />2. | 1 | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 | `maxConcurrentTurns` _integer_ | maxConcurrentTurns is how many turns one of the pool's pods runs at<br />once: Crewlet's node.max_concurrent. Unset takes the class's<br />seatPools.defaults. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#resourcerequirements-v1-core)_ | resources are the compute resources of each of the pool's pods'<br />engine container. Unset takes the class's seatPools.defaults. |  | Optional: \{\} <br /> |
-| `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long one of the pool's pods may<br />take to stop, finishing its running turns. Unset takes the class's<br />seatPools.defaults. |  | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
+| `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long one of the pool's pods may<br />take to stop, finishing its running turns: the engine puts no bound<br />of its own on that drain, so it must cover the longest turn. Unset<br />takes the class's seatPools.defaults, else 300. |  | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
 
 
 #### SeatPoolDefaults

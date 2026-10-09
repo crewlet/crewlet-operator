@@ -216,8 +216,13 @@ Besides the conditions:
   together, because the engine keeps running the previous revision until it
   has applied the new one, and for good if that apply fails; once the engine
   reports the new revision's epoch applied, the record is its pins alone.
+  The runtime reconciler reads it to keep a seat pool's pods running for as
+  long as the running revision pins a seat to them ([A pool removed while
+  seats still run in it](runtime.md#a-pool-removed-while-seats-still-run-in-it)).
 - **Seat**: its handle, its identity in the engine (`seatID`, derived from
-  the company name and the handle), the pool that runs it, and the addresses
+  the company name and the handle), the pool that runs it and the
+  StatefulSet whose pods do (`status.placement.workload`; unset while the
+  class runs no pod for it), and the addresses
   its own vendor apps deliver to: `<publicBaseURL>/webhooks/slack/<handle>`
   and `<publicBaseURL>/webhooks/github/<handle>`, set as soon as the Company
   has the vendor's Integration and a public address.
@@ -244,4 +249,6 @@ part; the runtime reconciler writes the rest of the Company's status. Both
 write the Company's status with a JSON merge patch under an optimistic lock:
 a write that conflicts with the other's is retried on a fresh read of the
 Company, so neither overwrites a field of the other's. A change of
-`ConfigApplied` makes the runtime reconciler recompute `Ready`.
+`ConfigApplied` makes the runtime reconciler recompute `Ready`, and a change
+of `status.config.placement` makes it delete the seat pods no running revision
+needs any more.

@@ -18,7 +18,8 @@ keeps the engine's live configuration equal to what the resources say.
 > document, with the Secret values it references, as its management policy
 > says, and cleans up after it as its deletion policy says. The e2e suite
 > proves that on kind with the pinned Crewlet engine built from source. It
-> runs one data pod per company; highly available companies come later.
+> runs one data pod per company, and the seat pools a company declares as
+> stateless pods beside it; highly available companies come later.
 
 ## How it works
 

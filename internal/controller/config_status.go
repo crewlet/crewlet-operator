@@ -93,6 +93,12 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 		}
 		o.Status.SeatID = render.SeatID(run.company.Spec.CompanyName, handle)
 		o.Status.Placement.Pool = render.SeatPool(run.company, o)
+		// The StatefulSet that runs the seat, unless none does: the pool
+		// is not declared, or the class runs no seat pods (none at all,
+		// or none for this seat).
+		if o.Status.Placement.Pool == crewletaiv1alpha1.DataPool || (run.class != nil && leafOpen(run.class) && len(p.unplaceable) == 0) {
+			o.Status.Placement.Workload = seatWorkloadName(run.company, o.Status.Placement.Pool, handle)
+		}
 		if base != "" && vendors[toolSlack] {
 			o.Status.Integrations.Slack.RequestURL = base + "/webhooks/slack/" + handle
 		}

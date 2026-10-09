@@ -1,6 +1,7 @@
-# The manager's ClusterRole lets it write Secrets, ServiceAccounts, Services
-# and StatefulSets in every namespace, since a Company may live in any. RBAC
-# cannot say "only the ones the operator made", so whoever took over the
+# The manager's ClusterRole lets it write Secrets, ServiceAccounts, Services,
+# StatefulSets and PodDisruptionBudgets in every namespace, since a Company
+# may live in any. RBAC cannot say "only the ones the operator made", so
+# whoever took over the
 # manager's token could otherwise mint a token Secret for any ServiceAccount,
 # or run any pod as any ServiceAccount. This policy holds the manager to the
 # objects it makes: each carries app.kubernetes.io/managed-by=crewlet-operator,
@@ -31,6 +32,10 @@ spec:
     - apiGroups: [apps]
       apiVersions: ["*"]
       resources: [statefulsets]
+      operations: [CREATE, UPDATE, DELETE]
+    - apiGroups: [policy]
+      apiVersions: ["*"]
+      resources: [poddisruptionbudgets]
       operations: [CREATE, UPDATE, DELETE]
     - apiGroups: [networking.k8s.io]
       apiVersions: ["*"]

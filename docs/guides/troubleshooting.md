@@ -34,13 +34,14 @@ with your last change yet.
 | | False | `LimitExceeded` | The company has more Seats or MCPServers than the class's `limits` allow. Remove some or move to a larger class. Nothing new is applied meanwhile. |
 | `RuntimeReady` | True | `PodsReady` | The data pod runs the current template and is ready. |
 | | False | `PodsNotReady` | The data pod is missing, starting or failing its readiness check. See [The data pod is not ready](#the-data-pod-is-not-ready). |
-| | False | `Suspended` | `spec.suspend` is set. |
+| | False | `Suspended` | `spec.suspend` is set, and the engine's pods are stopped. |
+| | False | `Suspending` | `spec.suspend` is set, and the seat pods are still stopping; the data pod stops once they have. Seat pods finish their running turns first, for up to their grace period. |
 | | False | `DowngradeRefused` | The image asked for is an older version than the data was last written by; the engine migrates forward only. The pod keeps the newer image; every other change still applies. |
 | | False | `VersionOverrideNotAllowed` | `spec.runtime.version` is set and the class's `engine.allowVersionOverride` is not. |
 | | False | `KeyringInvalid` | The `<company>-keyring` Secret is not a keyring the engine can open. The operator never rewrites it: repair it from a backup, keeping the key ids, and set `crewlet.ai/active-key-id` to the key that seals new writes. The pod is held as it is. |
 | | False | `KeyringMissing` | The `<company>-keyring` Secret is gone while the company's data StatefulSet or volume claims exist. A new keyring could not open the data, so none is generated. Restore the Secret from a backup, with its `crewlet.ai/active-key-id` annotation; or, to discard the data, delete the data volume claims, after which a new keyring is generated. The pod is held as it is. |
 | | False | `PreviousCompanyObjects` | The keyring or tokens Secret of an earlier Company of the same name, deleted with `deletionPolicy: Delete`, has not been removed by the garbage collector yet. The pod starts once it is gone; nothing to do unless it stays, in which case check that the garbage collector runs. |
-| | False | `NameConflict` | An object the operator writes for the Company (a Service, Secret, ConfigMap, ServiceAccount, StatefulSet or NetworkPolicy named after it) exists and is someone else's. The message names it. The operator never changes or adopts it: rename or delete it, or give the Company another name. The pod is held as it is. |
+| | False | `NameConflict` | An object the operator writes for the Company (a Service, Secret, ConfigMap, ServiceAccount, StatefulSet, PodDisruptionBudget or NetworkPolicy named after it) exists and is someone else's. The message names it. The operator never changes or adopts it: rename or delete it, or give the Company another name. The pod is held as it is. |
 | | False | `SecretNotFound` | A Secret the pods are given values from is missing: one the class references (telemetry headers, `podTemplate.spec.env`) in the platform's namespace, or the Company's own object-store keys (`spec.objects.credentialsSecretRef`). The pod is held as it is. |
 | | False | `APITokensInvalid` | `<company>-api-tokens`, as a platform supplied it, lacks a token or holds one shorter than 43 characters or outside base64, base64url and hex. Repair it, or delete it to have the operator generate it. The pod is held as it is. |
 | `Exposed` | True | `RouteAccepted` | Every route the class asks for was accepted. |
@@ -55,6 +56,12 @@ with your last change yet.
 | | False | `EngineUnavailable` | Writing to the store failed; the message says why. Retried. |
 | | False | `NameConflict` | A Secret `<company>-secret-sync`, where the operator keeps what it pushed, exists and is someone else's. Rename or delete it; nothing is applied meanwhile. |
 | | Unknown | `NotManaged` | The management policy keeps the operator out of the store (`Observe`; `Seed` once seeded). |
+| `SeatsPlaced` | True | `AllPoolsServing` | Every pool an agent seat is placed in, `data` included, has a ready pod. Not part of `Ready`. |
+| | False | `PoolEmpty` | A pool with a seat has no ready pod: a Shared pool at zero replicas, a PerSeat seat's pods down, or seat pods not created yet because the data pod is not ready. Their seats' messages wait. See [Seat pods do not run](#seat-pods-do-not-run). |
+| | False | `RolloutBlocked` | The seat pods keep their template until the data pod is ready on its new one; they roll right after it. |
+| | False | `SeatPoolsNotAllowed` | The class does not allow seat pools, so the operator runs none, and the seats placed in them run nowhere. |
+| | False | `PoolCapacityExceeded` | The Shared pools' replicas alone pass the class's `seatPools.maxPods`; the operator keeps the seat pods as they are and starts none. Lower the replicas. |
+| | False | `Suspended` | The Company is suspended. |
 | `EngineHealthy` | True | `NoAlarms` | The engine raises no alarm. |
 | | False | `Alarms` | The engine raises alarms; the message names the one standing longest. `backup_age` and `trim_blocked` mean it has no recent verified backup and trims no log: see [Backups](../concepts/runtime.md#backups). |
 | | Unknown | `AlarmsNotReported` | The engine has not evaluated its alarms yet, or could not be asked. |
@@ -149,6 +156,33 @@ kubectl logs acme-data-0 -n acme | grep -E 'WARN|ERROR' | tail
 - **`Pending`**: the volume claim is not bound (no default StorageClass, or
   the class's `storageClassName` does not exist), or no node fits the class's
   resources, tolerations or affinity.
+
+## Seat pods do not run
+
+Seat pods are created, and gain replicas, only while the data pod is ready on
+its current template, so a company whose data pod is not ready runs none;
+start with [The data pod is not ready](#the-data-pod-is-not-ready). A seat
+pod has no probe (the engine serves nothing on a node without the `ingress`
+role), so a pod that is `Running` is all Kubernetes knows; read its log:
+
+```bash
+kubectl logs -n acme acme-seats-general-0
+```
+
+A seat pod that cannot join the data pod's leaf listener within a minute
+exits, and Kubernetes restarts it with a growing back-off: after a data pod
+outage, a seat pod can take up to about five minutes to rejoin. A leaf that
+never joins is usually stopped by a NetworkPolicy: `<company>-broker` admits
+the company's own seat pods to port 7422 of its data pod, and a policy of
+yours that selects the data pod or the seat pods may refuse what it admits
+by adding isolation of its own.
+
+A seat whose pool runs pods but that still runs nowhere is pinned to a label
+no pod carries; its Seat's `status.placement` says which pool and
+StatefulSet should run it. After a pool is removed, its StatefulSet keeps
+running until a revision that pins no seat to it runs: `SeatsPlaced` names it,
+and the Company's `status.config.placement` says what the running revision
+pins.
 
 ## The operator cannot reach the engine
 

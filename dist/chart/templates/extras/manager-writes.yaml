@@ -47,6 +47,16 @@ spec:
       resources:
       - statefulsets
     - apiGroups:
+      - policy
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - poddisruptionbudgets
+    - apiGroups:
       - networking.k8s.io
       apiVersions:
       - '*'

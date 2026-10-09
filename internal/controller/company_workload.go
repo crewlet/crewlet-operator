@@ -32,8 +32,10 @@ import (
 const (
 	// engineContainer is the name of the engine's container in a data pod.
 	engineContainer = "engine"
-	// configDir is where the bootstrap Secret's crewlet.yaml is mounted.
-	configDir = "/etc/crewlet"
+	// configDir is where the bootstrap Secret's crewlet.yaml is mounted,
+	// from the volume configVolumeName.
+	configDir        = "/etc/crewlet"
+	configVolumeName = "config"
 	// configFile is the key of the bootstrap Secret that holds Tier A, and
 	// the file name it is mounted under.
 	configFile = "crewlet.yaml"
@@ -143,8 +145,11 @@ func (r *CompanyReconciler) applyServiceAccount(
 // the StatefulSet's headless governing Service: it gives each data pod a
 // stable DNS name, published before the pod is ready, because an engine with
 // no document yet answers /ready with 503 and the operator must reach it to
-// apply the first one.
-func (r *CompanyReconciler) applyServices(ctx context.Context, c *crewletaiv1alpha1.Company) error {
+// apply the first one. The seat pods join the data pods' leaf listener by the
+// same names, which is why <c>-data also names the leaf port while the class
+// opens it: a seat pod that starts while a data pod is not ready yet waits
+// for it rather than failing to resolve it.
+func (r *CompanyReconciler) applyServices(ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass) error {
 	port := corev1ac.ServicePort().
 		WithName(portName).
 		WithProtocol(corev1.ProtocolTCP).
@@ -160,6 +165,14 @@ func (r *CompanyReconciler) applyServices(ctx context.Context, c *crewletaiv1alp
 	if err := r.apply(ctx, c, serviceGVK, engineServiceName(c), engine); err != nil {
 		return err
 	}
+	ports := []*corev1ac.ServicePortApplyConfiguration{port}
+	if leafOpen(class) {
+		ports = append(ports, corev1ac.ServicePort().
+			WithName(leafPortName).
+			WithProtocol(corev1.ProtocolTCP).
+			WithPort(render.LeafPort).
+			WithTargetPort(intstr.FromString(leafPortName)))
+	}
 	data := corev1ac.Service(dataServiceName(c), c.Namespace).
 		WithLabels(labelsFor(c, componentData)).
 		WithOwnerReferences(ownerReference(c)).
@@ -167,7 +180,7 @@ func (r *CompanyReconciler) applyServices(ctx context.Context, c *crewletaiv1alp
 			WithClusterIP(corev1.ClusterIPNone).
 			WithPublishNotReadyAddresses(true).
 			WithSelector(selectorFor(c, componentData)).
-			WithPorts(port))
+			WithPorts(ports...))
 	return r.apply(ctx, c, serviceGVK, dataServiceName(c), data)
 }
 
@@ -175,7 +188,7 @@ func (r *CompanyReconciler) applyServices(ctx context.Context, c *crewletaiv1alp
 // server answered, status included.
 func (r *CompanyReconciler) applyStatefulSet(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
-	existing *appsv1.StatefulSet, w *workload,
+	existing *appsv1.StatefulSet, replicas int32, w *workload,
 ) (*appsv1ac.StatefulSetApplyConfiguration, error) {
 	pod, err := podTemplate(c, class, w)
 	if err != nil {
@@ -186,7 +199,7 @@ func (r *CompanyReconciler) applyStatefulSet(
 		whenDeleted = appsv1.DeletePersistentVolumeClaimRetentionPolicyType
 	}
 	spec := appsv1ac.StatefulSetSpec().
-		WithReplicas(dataReplicas(c)).
+		WithReplicas(replicas).
 		WithServiceName(dataServiceName(c)).
 		WithSelector(metav1ac.LabelSelector().WithMatchLabels(selectorFor(c, componentData))).
 		// Parallel: the data pods hold no ordinal-ordered state between
@@ -263,20 +276,64 @@ func dataClaim(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClas
 func podTemplate(
 	c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, w *workload,
 ) (*corev1ac.PodTemplateSpecApplyConfiguration, error) {
-	overlay := class.Spec.PodTemplate
-
-	labels := labelsFor(c, componentData)
-	maps.Copy(labels, overlay.Metadata.Labels)
-	annotations := maps.Clone(overlay.Metadata.Annotations)
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-	annotations[BootstrapHashAnnotation] = w.bootstrapHash
-
 	container, err := engineContainerOf(c, class, w)
 	if err != nil {
 		return nil, err
 	}
+	spec, err := enginePodSpec(c, class, class.Spec.Data.TerminationGracePeriodSeconds)
+	if err != nil {
+		return nil, err
+	}
+	spec.WithContainers(container).
+		WithVolumes(
+			configVolume(bootstrapSecretName(c)),
+			// The root filesystem is read-only; the engine and what it
+			// spawns (git, stdio MCP servers, CLI agents) write their
+			// scratch files under /tmp and their state under HOME.
+			corev1ac.Volume().WithName("tmp").WithEmptyDir(corev1ac.EmptyDirVolumeSource()),
+			corev1ac.Volume().WithName("home").WithEmptyDir(corev1ac.EmptyDirVolumeSource()),
+		)
+	labels, annotations := enginePodMetadata(class, labelsFor(c, componentData), w.bootstrapHash)
+	return corev1ac.PodTemplateSpec().
+		WithLabels(labels).
+		WithAnnotations(annotations).
+		WithSpec(spec), nil
+}
+
+// enginePodMetadata are the labels and annotations of an engine pod: the
+// class's, then the operator's own over them, and the bootstrap hash that
+// rolls the pods when what they read at start changes. The class may not use
+// the operator's label prefixes, so its labels never change a selector's.
+func enginePodMetadata(class *crewletaiv1alpha1.EngineClass, own map[string]string, hash string) (labels, annotations map[string]string) {
+	overlay := class.Spec.PodTemplate.Metadata
+	labels = maps.Clone(overlay.Labels)
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	maps.Copy(labels, own)
+	annotations = maps.Clone(overlay.Annotations)
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	annotations[BootstrapHashAnnotation] = hash
+	return labels, annotations
+}
+
+// configVolume mounts a bootstrap Secret's crewlet.yaml, readable by the
+// engine user alone, since it holds credentials.
+func configVolume(secret string) *corev1ac.VolumeApplyConfiguration {
+	return corev1ac.Volume().WithName(configVolumeName).WithSecret(corev1ac.SecretVolumeSource().
+		WithSecretName(secret).
+		WithItems(corev1ac.KeyToPath().WithKey(configFile).WithPath(configFile)).
+		WithDefaultMode(configFileMode))
+}
+
+// enginePodSpec is what every engine pod, data or seat, has in common: the
+// engine's ServiceAccount, with no token mounted, its security context, and
+// where the class schedules it. The caller adds the containers and volumes.
+func enginePodSpec(
+	c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, gracePeriodSeconds int64,
+) (*corev1ac.PodSpecApplyConfiguration, error) {
 	spec := corev1ac.PodSpec().
 		WithServiceAccountName(serviceAccountName(c)).
 		WithAutomountServiceAccountToken(false).
@@ -285,7 +342,7 @@ func podTemplate(
 		// is read as configuration (${VAR}) and should hold only what the
 		// operator and the class put there.
 		WithEnableServiceLinks(false).
-		WithTerminationGracePeriodSeconds(class.Spec.Data.TerminationGracePeriodSeconds).
+		WithTerminationGracePeriodSeconds(gracePeriodSeconds).
 		WithSecurityContext(corev1ac.PodSecurityContext().
 			WithRunAsNonRoot(true).
 			WithRunAsUser(engineUID).
@@ -295,24 +352,12 @@ func podTemplate(
 			// recursive walk of a large estate on every start.
 			WithFSGroup(engineUID).
 			WithFSGroupChangePolicy(corev1.FSGroupChangeOnRootMismatch).
-			WithSeccompProfile(corev1ac.SeccompProfile().WithType(corev1.SeccompProfileTypeRuntimeDefault))).
-		WithContainers(container).
-		WithVolumes(
-			corev1ac.Volume().WithName("config").WithSecret(corev1ac.SecretVolumeSource().
-				WithSecretName(bootstrapSecretName(c)).
-				WithItems(corev1ac.KeyToPath().WithKey(configFile).WithPath(configFile)).
-				WithDefaultMode(configFileMode)),
-			// The root filesystem is read-only; the engine and what it
-			// spawns (git, stdio MCP servers, CLI agents) write their
-			// scratch files under /tmp and their state under HOME.
-			corev1ac.Volume().WithName("tmp").WithEmptyDir(corev1ac.EmptyDirVolumeSource()),
-			corev1ac.Volume().WithName("home").WithEmptyDir(corev1ac.EmptyDirVolumeSource()),
-		)
+			WithSeccompProfile(corev1ac.SeccompProfile().WithType(corev1.SeccompProfileTypeRuntimeDefault)))
 
 	for _, s := range class.Spec.Engine.ImagePullSecrets {
 		spec.WithImagePullSecrets(corev1ac.LocalObjectReference().WithName(s.Name))
 	}
-	ps := overlay.Spec
+	ps := class.Spec.PodTemplate.Spec
 	if len(ps.NodeSelector) > 0 {
 		spec.WithNodeSelector(ps.NodeSelector)
 	}
@@ -343,38 +388,35 @@ func podTemplate(
 		}
 		spec.WithTopologySpreadConstraints(constraint)
 	}
-
-	return corev1ac.PodTemplateSpec().
-		WithLabels(labels).
-		WithAnnotations(annotations).
-		WithSpec(spec), nil
+	return spec, nil
 }
 
 // engineContainerOf is the engine container of a data pod.
 func engineContainerOf(
 	c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, w *workload,
 ) (*corev1ac.ContainerApplyConfiguration, error) {
-	env, err := engineEnv(c, class, w)
+	env, err := engineEnv(c, class, &engineEnvironment{
+		bootstrap:   w.bootstrap.Env,
+		secret:      bootstrapSecretName(c),
+		statefulSet: dataStatefulSetName(c),
+		// On the data volume, so a restart does not extract the store's
+		// 20 MB native library again.
+		tursoCache: render.DataDir + "/cache",
+	})
 	if err != nil {
 		return nil, err
 	}
 	health := func(path string) *corev1ac.HTTPGetActionApplyConfiguration {
 		return corev1ac.HTTPGetAction().WithPath(path).WithPort(intstr.FromString(portName))
 	}
-	container := corev1ac.Container().
-		WithName(engineContainer).
-		WithImage(w.image).
-		// The image's entrypoint is the crewlet binary under an init
-		// process; these are its arguments.
-		WithArgs("run", "-config", configDir+"/"+configFile).
+	container := engineContainerBase(class, w.image, env).
 		WithPorts(corev1ac.ContainerPort().
 			WithName(portName).
 			WithContainerPort(render.APIPort).
 			WithProtocol(corev1.ProtocolTCP)).
-		WithEnv(env...).
 		WithVolumeMounts(
 			corev1ac.VolumeMount().WithName(dataVolume).WithMountPath(render.DataDir),
-			corev1ac.VolumeMount().WithName("config").WithMountPath(configDir).WithReadOnly(true),
+			corev1ac.VolumeMount().WithName(configVolumeName).WithMountPath(configDir).WithReadOnly(true),
 			corev1ac.VolumeMount().WithName("tmp").WithMountPath("/tmp"),
 			corev1ac.VolumeMount().WithName("home").WithMountPath(homeDir),
 		).
@@ -400,14 +442,14 @@ func engineContainerOf(
 			WithTimeoutSeconds(5)).
 		WithLifecycle(corev1ac.Lifecycle().
 			WithPreStop(corev1ac.LifecycleHandler().
-				WithSleep(corev1ac.SleepAction().WithSeconds(preStopSleepSeconds)))).
-		WithSecurityContext(corev1ac.SecurityContext().
-			WithRunAsNonRoot(true).
-			WithAllowPrivilegeEscalation(false).
-			WithReadOnlyRootFilesystem(true).
-			WithCapabilities(corev1ac.Capabilities().WithDrop(corev1.Capability("ALL"))))
-	if p := class.Spec.Engine.ImagePullPolicy; p != "" {
-		container.WithImagePullPolicy(p)
+				WithSleep(corev1ac.SleepAction().WithSeconds(preStopSleepSeconds))))
+	// The leaf listener the seat pods join through, which the bootstrap
+	// document opens when the class allows seat pools.
+	if leafOpen(class) {
+		container.WithPorts(corev1ac.ContainerPort().
+			WithName(leafPortName).
+			WithContainerPort(render.LeafPort).
+			WithProtocol(corev1.ProtocolTCP))
 	}
 	if r := class.Spec.Data.Resources; r != nil {
 		resources, err := applyConfigOf[corev1ac.ResourceRequirementsApplyConfiguration](r)
@@ -419,16 +461,54 @@ func engineContainerOf(
 	return container, nil
 }
 
-// engineEnv is the engine container's environment: what the bootstrap
+// engineContainerBase is what every engine container has in common: the
+// image, the command line, the environment and a security context that
+// leaves the process nothing to escalate to.
+func engineContainerBase(
+	class *crewletaiv1alpha1.EngineClass, image string, env []*corev1ac.EnvVarApplyConfiguration,
+) *corev1ac.ContainerApplyConfiguration {
+	container := corev1ac.Container().
+		WithName(engineContainer).
+		WithImage(image).
+		// The image's entrypoint is the crewlet binary under an init
+		// process; these are its arguments.
+		WithArgs("run", "-config", configDir+"/"+configFile).
+		WithEnv(env...).
+		WithSecurityContext(corev1ac.SecurityContext().
+			WithRunAsNonRoot(true).
+			WithAllowPrivilegeEscalation(false).
+			WithReadOnlyRootFilesystem(true).
+			WithCapabilities(corev1ac.Capabilities().WithDrop(corev1.Capability("ALL"))))
+	if p := class.Spec.Engine.ImagePullPolicy; p != "" {
+		container.WithImagePullPolicy(p)
+	}
+	return container
+}
+
+// engineEnvironment is what an engine container's environment is made of
+// beyond the class and the Company.
+type engineEnvironment struct {
+	// bootstrap is what the pod's bootstrap document refers to.
+	bootstrap []corev1.EnvVar
+	// secret is the bootstrap Secret that holds the class's values for the
+	// environment (platformValues).
+	secret string
+	// statefulSet names the pod's StatefulSet in the telemetry attributes.
+	statefulSet string
+	// tursoCache is where the store extracts its native library.
+	tursoCache string
+}
+
+// engineEnv is an engine container's environment: what the bootstrap
 // document references, then the operator's own settings, then the class's
 // and the Company's variables. Kubernetes expands $(VAR) only from variables
 // listed earlier, which the telemetry attributes rely on.
 func engineEnv(
-	c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, w *workload,
+	c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, e *engineEnvironment,
 ) ([]*corev1ac.EnvVarApplyConfiguration, error) {
 	var env []*corev1ac.EnvVarApplyConfiguration
-	for i := range w.bootstrap.Env {
-		v, err := applyConfigOf[corev1ac.EnvVarApplyConfiguration](&w.bootstrap.Env[i])
+	for i := range e.bootstrap {
+		v, err := applyConfigOf[corev1ac.EnvVarApplyConfiguration](&e.bootstrap[i])
 		if err != nil {
 			return nil, err
 		}
@@ -446,9 +526,7 @@ func engineEnv(
 		// Set rather than left to the image's user database, which an
 		// image built on another base may not have for the engine's uid.
 		literal(envHome, homeDir),
-		// On the data volume, so a restart does not extract the store's
-		// 20 MB native library again.
-		literal(envTursoCache, render.DataDir+"/cache"),
+		literal(envTursoCache, e.tursoCache),
 	)
 
 	if t := class.Spec.Telemetry; t.OTLPEndpoint != "" {
@@ -456,9 +534,9 @@ func engineEnv(
 			literal(envOTLPEndpoint, t.OTLPEndpoint),
 			literal(envOTLPProtocol, "http/protobuf"),
 			literal(envOTELResourceAtt, fmt.Sprintf("k8s.namespace.name=%s,k8s.statefulset.name=%s,k8s.pod.name=$(%s)",
-				c.Namespace, dataStatefulSetName(c), render.EnvNodeID)))
+				c.Namespace, e.statefulSet, render.EnvNodeID)))
 		if t.HeadersSecretRef.Name != "" {
-			env = append(env, fromSecret(envOTLPHeaders, bootstrapSecretName(c), platformKeyOTLPHeaders))
+			env = append(env, fromSecret(envOTLPHeaders, e.secret, platformKeyOTLPHeaders))
 		}
 	}
 
@@ -468,7 +546,7 @@ func engineEnv(
 		case v.Value != nil:
 			env = append(env, literal(v.Name, *v.Value))
 		default:
-			env = append(env, fromSecret(v.Name, bootstrapSecretName(c), platformKeyEnvPrefix+v.Name))
+			env = append(env, fromSecret(v.Name, e.secret, platformKeyEnvPrefix+v.Name))
 		}
 	}
 	for _, v := range c.Spec.Runtime.Env {
@@ -503,8 +581,14 @@ func applyConfigOf[T any](v any) (*T, error) {
 // so when it has none the API server is asked: a StatefulSet of that name
 // someone else created must be found, to be left alone.
 func (r *CompanyReconciler) existingStatefulSet(ctx context.Context, c *crewletaiv1alpha1.Company) (*appsv1.StatefulSet, error) {
+	return r.statefulSetNamed(ctx, c.Namespace, dataStatefulSetName(c))
+}
+
+// statefulSetNamed returns the StatefulSet of that name, or nil when there is
+// none; see existingStatefulSet.
+func (r *CompanyReconciler) statefulSetNamed(ctx context.Context, namespace, name string) (*appsv1.StatefulSet, error) {
 	sts := &appsv1.StatefulSet{}
-	key := types.NamespacedName{Namespace: c.Namespace, Name: dataStatefulSetName(c)}
+	key := types.NamespacedName{Namespace: namespace, Name: name}
 	err := r.Get(ctx, key, sts)
 	if apierrors.IsNotFound(err) {
 		err = r.APIReader.Get(ctx, key, sts)
@@ -513,7 +597,7 @@ func (r *CompanyReconciler) existingStatefulSet(ctx context.Context, c *crewleta
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("reading StatefulSet %s/%s: %w", c.Namespace, dataStatefulSetName(c), err)
+		return nil, fmt.Errorf("reading StatefulSet %s/%s: %w", namespace, name, err)
 	}
 	return sts, nil
 }

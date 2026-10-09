@@ -486,6 +486,14 @@ const (
 // spec.placement.pool names it, or when it is the Company's defaultSeatPool
 // and the Seat names no pool. The class's spec.seatPools.policy must be
 // Allowed.
+//
+// The operator runs a Shared pool as the StatefulSet <company>-seats-<name>,
+// and each seat of a PerSeat pool as <company>-seat-<handle>, started only
+// once the data pods are ready and rolled only after them. The pods have no
+// port and no probe: the engine serves nothing, health and readiness
+// included, on a node without the ingress role, so a pod counts as ready as
+// soon as its container runs, and a rollout is paced by a minReadySeconds of
+// 60 instead.
 // +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'PerSeat' || !has(self.replicas) || (self.replicas >= 1 && self.replicas <= 2)",message="a PerSeat pool runs 1 or 2 replicas for each seat: a second pod is a warm standby, and the seat is never held by more than one"
 type SeatPool struct {
 	// name identifies the pool: a DNS label of at most 20 characters, other
@@ -527,8 +535,9 @@ type SeatPool struct {
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
 	// terminationGracePeriodSeconds is how long one of the pool's pods may
-	// take to stop, finishing its running turns. Unset takes the class's
-	// seatPools.defaults.
+	// take to stop, finishing its running turns: the engine puts no bound
+	// of its own on that drain, so it must cover the longest turn. Unset
+	// takes the class's seatPools.defaults, else 300.
 	// +optional
 	// +kubebuilder:validation:Minimum=30
 	// +kubebuilder:validation:Maximum=3600
