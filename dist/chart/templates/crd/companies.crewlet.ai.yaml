@@ -403,6 +403,37 @@ spec:
                 maxLength: 2048
                 minLength: 1
                 type: string
+              objects:
+                description: objects is the company's own access to its class's object
+                  store.
+                minProperties: 1
+                properties:
+                  credentialsSecretRef:
+                    description: |-
+                      credentialsSecretRef is a Secret, in the Company's namespace, holding
+                      the keys accessKeyID and secretAccessKey (S3AccessKeyIDKey,
+                      S3SecretAccessKeyKey) the engine reaches its class's S3 bucket with:
+                      Crewlet's store.objects.s3.access_key_id and secret_access_key. Used
+                      only while the class's objects.backend is S3.
+
+                      Issue them per company, with a policy that admits the company's own
+                      prefix of the bucket only (the class's objects.s3.prefix, expanded):
+                      they are written into the engine pod's crewlet.yaml, and code the
+                      tenant runs in the pod (a stdio MCP server, a sandbox setup command)
+                      can read them. Unset uses the pod's own credentials through the SDK's
+                      default chain: a workload identity bound through the class's
+                      serviceAccount.annotations, which every company of the class shares
+                      unless it is scoped per tenant.
+                    properties:
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               policies:
                 description: |-
                   policies are company-wide rules every seat's prompt carries. Crewlet's

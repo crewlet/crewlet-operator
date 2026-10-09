@@ -372,12 +372,25 @@ func createdOrDeleted() predicate.Funcs {
 //     (platformValues), so that rotating a platform credential reaches every
 //     engine that uses it;
 //   - the Company whose keyring or API tokens it is by name, which matters
-//     when the Secret is supplied by another controller and so not owned.
+//     when the Secret is supplied by another controller and so not owned;
+//   - the Companies of its namespace whose spec.objects.credentialsSecretRef
+//     names it.
 func (r *CompanyReconciler) companiesOfSecret(ctx context.Context, obj client.Object) []reconcile.Request {
 	var requests []reconcile.Request
 	for _, suffix := range []string{"-keyring", "-api-tokens"} {
 		if company, ok := strings.CutSuffix(obj.GetName(), suffix); ok && company != "" {
 			requests = append(requests, reconcile.Request{Namespace: obj.GetNamespace(), Name: company})
+		}
+	}
+	companies := &crewletaiv1alpha1.CompanyList{}
+	if err := r.List(ctx, companies, client.InNamespace(obj.GetNamespace())); err != nil {
+		// See companiesOfClass.
+		logf.FromContext(ctx).Error(err, "Failed to list the Companies a Secret change affects", "secret", client.ObjectKeyFromObject(obj))
+		return requests
+	}
+	for i := range companies.Items {
+		if companies.Items[i].Spec.Objects.CredentialsSecretRef.Name == obj.GetName() {
+			requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&companies.Items[i])})
 		}
 	}
 	classes := &crewletaiv1alpha1.EngineClassList{}
@@ -401,9 +414,6 @@ func (r *CompanyReconciler) companiesOfSecret(ctx context.Context, obj client.Ob
 // matter here: a spurious reconcile is cheap, a missed one is not.
 func referencesPlatformSecret(class *crewletaiv1alpha1.EngineClass, namespace, name string) bool {
 	is := func(ns, n string) bool { return ns == namespace && n == name }
-	if ref := class.Spec.Objects.S3.CredentialsSecretRef; is(ref.Namespace, ref.Name) {
-		return true
-	}
 	if ref := class.Spec.Telemetry.HeadersSecretRef; is(ref.Namespace, ref.Name) {
 		return true
 	}

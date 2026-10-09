@@ -241,6 +241,23 @@ _Appears in:_
 | `usePlatformProviders` _boolean_ | usePlatformProviders adds the EngineClass's platformLLMProviders to the<br />company, so seats can run on models the platform provides. |  | Optional: \{\} <br /> |
 
 
+#### CompanyObjects
+
+
+
+CompanyObjects is a company's own access to its class's object store.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [CompanySpec](#companyspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `credentialsSecretRef` _[SecretReference](#secretreference)_ | credentialsSecretRef is a Secret, in the Company's namespace, holding<br />the keys accessKeyID and secretAccessKey (S3AccessKeyIDKey,<br />S3SecretAccessKeyKey) the engine reaches its class's S3 bucket with:<br />Crewlet's store.objects.s3.access_key_id and secret_access_key. Used<br />only while the class's objects.backend is S3.<br />Issue them per company, with a policy that admits the company's own<br />prefix of the bucket only (the class's objects.s3.prefix, expanded):<br />they are written into the engine pod's crewlet.yaml, and code the<br />tenant runs in the pod (a stdio MCP server, a sandbox setup command)<br />can read them. Unset uses the pod's own credentials through the SDK's<br />default chain: a workload identity bound through the class's<br />serviceAccount.annotations, which every company of the class shares<br />unless it is scoped per tenant. |  | Optional: \{\} <br /> |
+
+
 #### CompanyReference
 
 
@@ -316,6 +333,7 @@ _Appears in:_
 | `topology` _[CompanyTopology](#companytopology)_ | topology is how the engine is laid out in pods. | \{ data:map[replicas:1] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `exposure` _[CompanyExposure](#companyexposure)_ | exposure overrides how the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `runtime` _[CompanyRuntime](#companyruntime)_ | runtime is the company's bounded overrides of its class. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `objects` _[CompanyObjects](#companyobjects)_ | objects is the company's own access to its class's object store. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `suspend` _boolean_ | suspend stops the engine and keeps its data volumes; setting it back<br />to false starts it again. It takes effect whatever else is wrong with<br />the Company, even while it is not Accepted. The Company reports<br />Ready=False with the reason Suspended meanwhile. Vendors keep delivering webhooks meanwhile,<br />and some disable a subscription after a long run of failed deliveries. |  | Optional: \{\} <br /> |
 | `deletionPolicy` _[DeletionPolicy](#deletionpolicy)_ | deletionPolicy is what happens to the data volumes when the Company is<br />deleted. With Retain the keyring Secret is kept as well, since the<br />volumes cannot be read without it. | Retain | Enum: [Retain Delete] <br />Optional: \{\} <br /> |
 
@@ -779,7 +797,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `annotations` _object (keys:string, values:string)_ | annotations are added to the ServiceAccount, for a workload identity<br />that is bound through one: eks.amazonaws.com/role-arn for IRSA,<br />iam.gke.io/gcp-service-account for GKE Workload Identity. That is how<br />the engine reaches an S3 bucket without credentialsSecretRef. |  | MaxProperties: 16 <br />Optional: \{\} <br /> |
+| `annotations` _object (keys:string, values:string)_ | annotations are added to the ServiceAccount, for a workload identity<br />that is bound through one: eks.amazonaws.com/role-arn for IRSA,<br />iam.gke.io/gcp-service-account for GKE Workload Identity. That is how<br />the engine reaches an S3 bucket when its Company names no<br />spec.objects.credentialsSecretRef. The same annotations go on every<br />company's ServiceAccount, so the identity is every tenant's: scope it<br />per tenant (a role per company, or a session policy limited to the<br />company's prefix), or give each Company keys of its own instead. |  | MaxProperties: 16 <br />Optional: \{\} <br /> |
 
 
 #### EngineSettings
@@ -1618,24 +1636,6 @@ _Appears in:_
 | `key` _string_ | key is the key within the Secret's data. |  | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[-._a-zA-Z0-9]+$` <br />Required: \{\} <br /> |
 
 
-#### NamespacedSecretReference
-
-
-
-NamespacedSecretReference names a whole Secret in a named namespace. Like
-NamespacedSecretKeyReference it is used only by the cluster-scoped
-EngineClass; the field that holds it documents the keys the Secret must
-carry.
-
-
-
-_Appears in:_
-- [S3ObjectSettings](#s3objectsettings)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `namespace` _string_ | namespace is the namespace the Secret is in. |  | MaxLength: 63 <br />MinLength: 1 <br />Required: \{\} <br /> |
-| `name` _string_ | name is the metadata.name of the Secret. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
 
 
 #### NamespacedSecretValueSource
@@ -1805,6 +1805,12 @@ S3ObjectSettings is the S3-compatible bucket a class's companies keep their
 files in. Each field maps onto the same-named field of Crewlet's
 store.objects.s3.
 
+The bucket's credentials are each Company's own (its
+spec.objects.credentialsSecretRef), not the class's: whatever reaches a
+company's engine pod is readable by code the tenant runs there (a stdio
+MCP server, a sandbox setup command), so a key the class shared would let
+every tenant read and write every other tenant's files.
+
 
 
 _Appears in:_
@@ -1817,7 +1823,6 @@ _Appears in:_
 | `bucket` _string_ | bucket is the bucket's name. |  | MaxLength: 63 <br />MinLength: 3 <br />Required: \{\} <br /> |
 | `prefix` _string_ | prefix is prepended to every key, so that one bucket holds many<br />companies. It is a template: \{\{namespace\}\}, \{\{name\}\} and \{\{uid\}\} are<br />replaced by the Company's namespace, name and UID, and the result must<br />differ between companies, so it must contain \{\{uid\}\}, or both<br />\{\{namespace\}\} and \{\{name\}\}. The default keys files by namespace and<br />name, which is also what the data volumes are named by: a Company<br />re-created under its old name after a Retain deletion finds both its<br />estate and its files again. | \{\{namespace\}\}/\{\{name\}\}/ | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `pathStyle` _boolean_ | pathStyle addresses the bucket in the URL path rather than in the host<br />name; MinIO and most self-hosted gateways need it. |  | Optional: \{\} <br /> |
-| `credentialsSecretRef` _[NamespacedSecretReference](#namespacedsecretreference)_ | credentialsSecretRef is a Secret holding the keys accessKeyID and<br />secretAccessKey (S3AccessKeyIDKey, S3SecretAccessKeyKey). Unset uses<br />the pod's own credentials through the SDK's default chain: a workload<br />identity (EKS Pod Identity, or IRSA and GKE Workload Identity with the<br />class's spec.serviceAccount.annotations) or the node's role. The engine reads object-store credentials<br />from its environment, so the operator copies the two values into a<br />Secret it owns in each Company's namespace and references them from the<br />pod; the values never appear in the pod template. |  | Optional: \{\} <br /> |
 
 
 #### SandboxFile
@@ -2216,6 +2221,7 @@ field that holds the reference documents the keys the Secret must carry.
 
 
 _Appears in:_
+- [CompanyObjects](#companyobjects)
 - [CompanyStatus](#companystatus)
 - [GitHubApp](#githubapp)
 - [SlackSeatIntegration](#slackseatintegration)

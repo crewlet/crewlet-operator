@@ -148,6 +148,12 @@ const (
 // S3ObjectSettings is the S3-compatible bucket a class's companies keep their
 // files in. Each field maps onto the same-named field of Crewlet's
 // store.objects.s3.
+//
+// The bucket's credentials are each Company's own (its
+// spec.objects.credentialsSecretRef), not the class's: whatever reaches a
+// company's engine pod is readable by code the tenant runs there (a stdio
+// MCP server, a sandbox setup command), so a key the class shared would let
+// every tenant read and write every other tenant's files.
 type S3ObjectSettings struct {
 	// endpoint is the S3 API's base URL. Unset is Amazon S3's own endpoint
 	// for the region.
@@ -190,17 +196,6 @@ type S3ObjectSettings struct {
 	// name; MinIO and most self-hosted gateways need it.
 	// +optional
 	PathStyle *bool `json:"pathStyle,omitempty"`
-
-	// credentialsSecretRef is a Secret holding the keys accessKeyID and
-	// secretAccessKey (S3AccessKeyIDKey, S3SecretAccessKeyKey). Unset uses
-	// the pod's own credentials through the SDK's default chain: a workload
-	// identity (EKS Pod Identity, or IRSA and GKE Workload Identity with the
-	// class's spec.serviceAccount.annotations) or the node's role. The engine reads object-store credentials
-	// from its environment, so the operator copies the two values into a
-	// Secret it owns in each Company's namespace and references them from the
-	// pod; the values never appear in the pod template.
-	// +optional
-	CredentialsSecretRef NamespacedSecretReference `json:"credentialsSecretRef,omitzero"`
 }
 
 // ObjectSettings is where a class's companies keep their files.
@@ -618,7 +613,11 @@ type EngineServiceAccount struct {
 	// annotations are added to the ServiceAccount, for a workload identity
 	// that is bound through one: eks.amazonaws.com/role-arn for IRSA,
 	// iam.gke.io/gcp-service-account for GKE Workload Identity. That is how
-	// the engine reaches an S3 bucket without credentialsSecretRef.
+	// the engine reaches an S3 bucket when its Company names no
+	// spec.objects.credentialsSecretRef. The same annotations go on every
+	// company's ServiceAccount, so the identity is every tenant's: scope it
+	// per tenant (a role per company, or a session policy limited to the
+	// company's prefix), or give each Company keys of its own instead.
 	// +optional
 	// +kubebuilder:validation:MaxProperties=16
 	Annotations map[string]string `json:"annotations,omitempty"`

@@ -462,10 +462,11 @@ const (
 
 	// ReasonSecretNotFound is ResolvedRefs=False (or SecretsSynced=False)
 	// when a referenced Secret or Secret key does not exist, and
-	// RuntimeReady=False when a Secret the EngineClass references for the
-	// engine's pods (objects.s3.credentialsSecretRef,
-	// telemetry.headersSecretRef, a podTemplate.spec.env valueFrom) does not,
-	// or when the company's API tokens Secret lacks a token.
+	// RuntimeReady=False when a Secret the engine's pods are given values
+	// from does not: one the EngineClass references (telemetry.headersSecretRef,
+	// a podTemplate.spec.env valueFrom), the Company's
+	// spec.objects.credentialsSecretRef, or the company's API tokens Secret
+	// when it lacks a token.
 	ReasonSecretNotFound = "SecretNotFound"
 
 	// ReasonConflict is Accepted=False when the object collides with
@@ -510,8 +511,8 @@ const (
 	// webhook deliveries, in the same Secret.
 	GitHubAppWebhookSecretKey = "webhookSecret"
 
-	// S3AccessKeyIDKey holds the access key id, in the Secret named by an
-	// EngineClass's spec.objects.s3.credentialsSecretRef.
+	// S3AccessKeyIDKey holds the access key id, in the Secret named by a
+	// Company's spec.objects.credentialsSecretRef.
 	S3AccessKeyIDKey = "accessKeyID"
 	// S3SecretAccessKeyKey holds the secret access key, in the same Secret.
 	S3SecretAccessKeyKey = "secretAccessKey"

@@ -46,9 +46,7 @@ const (
 )
 
 // The keys of the bootstrap Secret beyond configFile that hold the values
-// the engine's environment reads from it. The class's S3 keys are read under
-// the names of the class's Secret (v1alpha1.S3AccessKeyIDKey,
-// v1alpha1.S3SecretAccessKeyKey) and written into crewlet.yaml instead.
+// the engine's environment reads from it.
 const (
 	platformKeyOTLPHeaders = "otlpHeaders"
 	// platformKeyEnvPrefix is followed by the name of a class env variable
@@ -279,8 +277,7 @@ func (r *CompanyReconciler) applyAPIAccess(ctx context.Context, c *crewletaiv1al
 // platformValue is one value the engine's pods are given from a Secret the
 // EngineClass references in the platform's namespace.
 type platformValue struct {
-	// key is the key of the bootstrap Secret that holds it, or the S3 key's
-	// own name for the object store's credentials.
+	// key is the key of the bootstrap Secret that holds it.
 	key string
 	// from is the Secret key it is copied from.
 	from crewletaiv1alpha1.NamespacedSecretKeyReference
@@ -289,24 +286,13 @@ type platformValue struct {
 }
 
 // platformValues lists what a class gives each of its companies' engines
-// from the platform's Secrets: the S3 credentials, the telemetry headers and
-// the env values that come from Secrets, except a variable the Company's own
+// from the platform's Secrets: the telemetry headers and the env values that
+// come from Secrets, except a variable the Company's own
 // runtime.env replaces. They are copied rather than referenced because a pod
 // reads Secrets from its own namespace only. The copy is the tenant's to
 // read: whatever reaches an engine pod reaches code the tenant runs there.
 func platformValues(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass) []platformValue {
 	var values []platformValue
-	if s3 := class.Spec.Objects.S3; class.Spec.Objects.Backend == crewletaiv1alpha1.ObjectBackendS3 &&
-		s3.CredentialsSecretRef.Name != "" {
-		ref := s3.CredentialsSecretRef
-		for _, key := range []string{crewletaiv1alpha1.S3AccessKeyIDKey, crewletaiv1alpha1.S3SecretAccessKeyKey} {
-			values = append(values, platformValue{
-				key:   key,
-				from:  crewletaiv1alpha1.NamespacedSecretKeyReference{Namespace: ref.Namespace, Name: ref.Name, Key: key},
-				field: "spec.objects.s3.credentialsSecretRef",
-			})
-		}
-	}
 	if ref := class.Spec.Telemetry.HeadersSecretRef; ref.Name != "" {
 		values = append(values, platformValue{key: platformKeyOTLPHeaders, from: ref, field: "spec.telemetry.headersSecretRef"})
 	}
@@ -364,6 +350,39 @@ func (r *CompanyReconciler) readPlatformValues(
 	}
 	// Two keys of one missing Secret say the same thing twice.
 	return data, slices.Compact(missing), nil
+}
+
+// readObjectCredentials reads the keys the Company's
+// spec.objects.credentialsSecretRef names, for its class's S3 bucket: nil
+// when the class keeps files elsewhere or the Company names no Secret, which
+// leaves the engine to the pod's own identity. It returns what it could not
+// read; the caller holds the pods back then.
+func (r *CompanyReconciler) readObjectCredentials(
+	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
+) (creds *render.S3Credentials, missing []string, err error) {
+	ref := c.Spec.Objects.CredentialsSecretRef
+	if class.Spec.Objects.Backend != crewletaiv1alpha1.ObjectBackendS3 || ref.Name == "" {
+		return nil, nil, nil
+	}
+	at := types.NamespacedName{Namespace: c.Namespace, Name: ref.Name}
+	secret := &corev1.Secret{}
+	if err := r.APIReader.Get(ctx, at, secret); apierrors.IsNotFound(err) {
+		return nil, []string{fmt.Sprintf("Secret %s (spec.objects.credentialsSecretRef) does not exist", at)}, nil
+	} else if err != nil {
+		return nil, nil, fmt.Errorf("reading Secret %s, which spec.objects.credentialsSecretRef names: %w", at, err)
+	}
+	for _, key := range []string{crewletaiv1alpha1.S3AccessKeyIDKey, crewletaiv1alpha1.S3SecretAccessKeyKey} {
+		if len(secret.Data[key]) == 0 {
+			missing = append(missing, fmt.Sprintf("Secret %s (spec.objects.credentialsSecretRef) has no key %s", at, key))
+		}
+	}
+	if len(missing) > 0 {
+		return nil, missing, nil
+	}
+	return &render.S3Credentials{
+		AccessKeyID:     string(secret.Data[crewletaiv1alpha1.S3AccessKeyIDKey]),
+		SecretAccessKey: string(secret.Data[crewletaiv1alpha1.S3SecretAccessKeyKey]),
+	}, nil, nil
 }
 
 // orphanKeyring removes the Company from the owners of its keyring Secret, so

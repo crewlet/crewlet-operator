@@ -559,6 +559,27 @@ const (
 	DeletionPolicyDelete DeletionPolicy = "Delete"
 )
 
+// CompanyObjects is a company's own access to its class's object store.
+// +kubebuilder:validation:MinProperties=1
+type CompanyObjects struct {
+	// credentialsSecretRef is a Secret, in the Company's namespace, holding
+	// the keys accessKeyID and secretAccessKey (S3AccessKeyIDKey,
+	// S3SecretAccessKeyKey) the engine reaches its class's S3 bucket with:
+	// Crewlet's store.objects.s3.access_key_id and secret_access_key. Used
+	// only while the class's objects.backend is S3.
+	//
+	// Issue them per company, with a policy that admits the company's own
+	// prefix of the bucket only (the class's objects.s3.prefix, expanded):
+	// they are written into the engine pod's crewlet.yaml, and code the
+	// tenant runs in the pod (a stdio MCP server, a sandbox setup command)
+	// can read them. Unset uses the pod's own credentials through the SDK's
+	// default chain: a workload identity bound through the class's
+	// serviceAccount.annotations, which every company of the class shares
+	// unless it is scoped per tenant.
+	// +optional
+	CredentialsSecretRef SecretReference `json:"credentialsSecretRef,omitzero"`
+}
+
 // CompanySpec is a company: the engine that runs it and the company-wide part
 // of its document. Its units, seats, model providers, tool servers and
 // integrations are objects of their own that name the Company in their
@@ -690,6 +711,10 @@ type CompanySpec struct {
 	// runtime is the company's bounded overrides of its class.
 	// +optional
 	Runtime CompanyRuntime `json:"runtime,omitzero"`
+
+	// objects is the company's own access to its class's object store.
+	// +optional
+	Objects CompanyObjects `json:"objects,omitzero"`
 
 	// suspend stops the engine and keeps its data volumes; setting it back
 	// to false starts it again. It takes effect whatever else is wrong with

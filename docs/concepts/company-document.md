@@ -90,8 +90,8 @@ is at least `7Gi`.
 It holds the node's credentials as values: the two API tokens (the
 operator's own, and the one published for consumers in
 `status.apiAccessSecretRef`), every key of the secret store's keyring, and
-the object store's keys when the class's `objects.s3` names a
-`credentialsSecretRef`. That is why it lives in a Secret,
+the object store's keys when the class keeps files in S3 and the Company
+names its own (`spec.objects.credentialsSecretRef`). That is why it lives in a Secret,
 `<company>-bootstrap`, and why the pod mounts that one key of it, readable
 by the engine's user alone. Its one reference is `${CREWLET_NODE_ID}`, the
 pod's name and the node's stable identity, which the pod's environment

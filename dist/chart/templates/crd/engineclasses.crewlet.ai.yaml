@@ -658,32 +658,6 @@ spec:
                         maxLength: 63
                         minLength: 3
                         type: string
-                      credentialsSecretRef:
-                        description: |-
-                          credentialsSecretRef is a Secret holding the keys accessKeyID and
-                          secretAccessKey (S3AccessKeyIDKey, S3SecretAccessKeyKey). Unset uses
-                          the pod's own credentials through the SDK's default chain: a workload
-                          identity (EKS Pod Identity, or IRSA and GKE Workload Identity with the
-                          class's spec.serviceAccount.annotations) or the node's role. The engine reads object-store credentials
-                          from its environment, so the operator copies the two values into a
-                          Secret it owns in each Company's namespace and references them from the
-                          pod; the values never appear in the pod template.
-                        properties:
-                          name:
-                            description: name is the metadata.name of the Secret.
-                            maxLength: 253
-                            minLength: 1
-                            type: string
-                          namespace:
-                            description: namespace is the namespace the Secret is
-                              in.
-                            maxLength: 63
-                            minLength: 1
-                            type: string
-                        required:
-                        - name
-                        - namespace
-                        type: object
                       endpoint:
                         description: |-
                           endpoint is the S3 API's base URL. Unset is Amazon S3's own endpoint
@@ -2220,7 +2194,11 @@ spec:
                       annotations are added to the ServiceAccount, for a workload identity
                       that is bound through one: eks.amazonaws.com/role-arn for IRSA,
                       iam.gke.io/gcp-service-account for GKE Workload Identity. That is how
-                      the engine reaches an S3 bucket without credentialsSecretRef.
+                      the engine reaches an S3 bucket when its Company names no
+                      spec.objects.credentialsSecretRef. The same annotations go on every
+                      company's ServiceAccount, so the identity is every tenant's: scope it
+                      per tenant (a role per company, or a session policy limited to the
+                      company's prefix), or give each Company keys of its own instead.
                     maxProperties: 16
                     type: object
                 type: object

@@ -1,5 +1,5 @@
-# An S3-compatible bucket shared by every company of the class, reached with
-# keys the platform provides.
+# An S3-compatible bucket shared by every company of the class, each company
+# reaching its own prefix with keys of its own.
 apiVersion: crewlet.ai/v1alpha1
 kind: EngineClass
 metadata:
@@ -18,9 +18,6 @@ spec:
       bucket: crewlet-tenants
       prefix: "tenants/{{uid}}/"
       pathStyle: true
-      credentialsSecretRef:
-        namespace: crewlet-system
-        name: tenant-bucket
   retention:
     backupOwner: storage-team
 ---
@@ -30,3 +27,6 @@ metadata:
   name: nimbus
 spec:
   companyName: Nimbus
+  objects:
+    credentialsSecretRef:
+      name: nimbus-objects

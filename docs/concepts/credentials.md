@@ -75,22 +75,27 @@ document. The operator handles them without a field:
   dashboard) is published in the Secret named by
   `Company.status.apiAccessSecretRef`; the operator uses a token of its own,
   so revoking the consumers' token never locks the operator out.
-- **Object-store keys** (`EngineClass.spec.objects.s3.credentialsSecretRef`,
-  keys `accessKeyID` and `secretAccessKey`), **telemetry headers**
-  (`EngineClass.spec.telemetry.headersSecretRef`) and **class-wide
-  environment variables from a Secret**
+- **Object-store keys** are each company's own:
+  `Company.spec.objects.credentialsSecretRef`, keys `accessKeyID` and
+  `secretAccessKey`, in the company's namespace, for the class's S3 bucket.
+  Issue them per company, limited to the company's prefix of the bucket. The
+  operator writes them into the pod's `crewlet.yaml`, with the keyring and
+  the API tokens, in the Secret it owns for the engine's pod,
+  `<company>-bootstrap`. Without them the engine reaches the bucket with the
+  pod's own identity: EKS Pod Identity, the node's role, or a workload
+  identity bound through the ServiceAccount's annotations
+  (`EngineClass.spec.serviceAccount.annotations`, such as
+  `eks.amazonaws.com/role-arn` or `iam.gke.io/gcp-service-account`), which
+  every company of the class shares unless the identity is scoped per
+  tenant.
+- **Telemetry headers** (`EngineClass.spec.telemetry.headersSecretRef`) and
+  **class-wide environment variables from a Secret**
   (`EngineClass.spec.podTemplate.spec.env[].valueFrom`) are copied by the
-  operator into the Secret it owns in the company's namespace for the
-  engine's pod, `<company>-bootstrap`, so the values never appear in a pod
-  template: the object-store keys into the pod's `crewlet.yaml`, with the
-  keyring and the API tokens, and the others for the engine's environment,
-  which reads them from that Secret. No credential of the engine's own is an
-  environment variable, since the engine resolves a `${NAME}` in its company
-  document from its environment. Without `credentialsSecretRef` the engine
-  reaches the bucket with the pod's own identity: EKS Pod Identity, the
-  node's role, or a workload identity bound through the ServiceAccount's
-  annotations (`EngineClass.spec.serviceAccount.annotations`, such as
-  `eks.amazonaws.com/role-arn` or `iam.gke.io/gcp-service-account`).
+  operator into `<company>-bootstrap` too, and the engine's environment
+  reads them from there, so the values never appear in a pod template. No
+  credential of the engine's own is an environment variable, since the
+  engine resolves a `${NAME}` in its company document from its
+  environment.
 - **Platform wiring** goes in the engine's environment: what every company
   of a class shares in `EngineClass.spec.podTemplate.spec.env` (from a
   Secret in the platform's namespace), and what is one company's own in

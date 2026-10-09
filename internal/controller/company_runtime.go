@@ -97,6 +97,11 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 		return err
 	}
 	missing = append(missing, platformMissing...)
+	objects, objectsMissing, err := r.readObjectCredentials(ctx, c, class)
+	if err != nil {
+		return err
+	}
+	missing = append(missing, objectsMissing...)
 	if err := r.applyServiceAccount(ctx, c, class); err != nil {
 		return err
 	}
@@ -113,13 +118,28 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 		return err
 	}
 
-	runtimeReady, err := r.reconcileWorkload(ctx, c, class, keyring, tokens, platform, missing, hold)
+	runtimeReady, err := r.reconcileWorkload(ctx, c, class, &workloadInputs{keyring, tokens, objects, platform, missing, hold})
 	if err != nil {
 		return err
 	}
 	runtimeReady.ObservedGeneration = c.Generation
 	meta.SetStatusCondition(&c.Status.Conditions, runtimeReady)
 	return nil
+}
+
+// workloadInputs is what the data pods are started from, as
+// reconcileRuntimeObjects read it.
+type workloadInputs struct {
+	keyring, tokens *corev1.Secret
+	// objects are the S3 keys of the Company's own, or nil.
+	objects *render.S3Credentials
+	// platform are the class's values for the engine's environment, keyed
+	// as the bootstrap Secret holds them.
+	platform map[string][]byte
+	// missing are the values that could not be read; hold is why the pods
+	// are held back otherwise.
+	missing []string
+	hold    *held
 }
 
 // reconcileWorkload writes the bootstrap Secret and the data StatefulSet and
@@ -132,27 +152,28 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 // the pods keep the image they run, and every other change still applies.
 func (r *CompanyReconciler) reconcileWorkload(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
-	keyring, tokens *corev1.Secret, platform map[string][]byte, missing []string, hold *held,
+	in *workloadInputs,
 ) (metav1.Condition, error) {
+	keyring, tokens, platform := in.keyring, in.tokens, in.platform
 	existing, err := r.existingStatefulSet(ctx, c)
 	if err != nil {
 		return metav1.Condition{}, err
 	}
 
-	if hold != nil {
-		return r.holdBack(ctx, c, existing, hold.reason, hold.message)
+	if in.hold != nil {
+		return r.holdBack(ctx, c, existing, in.hold.reason, in.hold.message)
 	}
 
-	if len(missing) > 0 {
+	if len(in.missing) > 0 {
 		return r.holdBack(ctx, c, existing, crewletaiv1alpha1.ReasonSecretNotFound,
-			"The engine's pods cannot be given the values they read from Secrets: "+strings.Join(missing, "; ")+".")
+			"The engine's pods cannot be given the values they read from Secrets: "+strings.Join(in.missing, "; ")+".")
 	}
 	bootstrap, err := render.Bootstrap(&render.BootstrapInput{
 		Company:    c,
 		Class:      class,
 		Keyring:    keyringOf(keyring),
 		Tokens:     tokensOf(tokens),
-		Objects:    objectCredentials(platform),
+		Objects:    in.objects,
 		VolumeSize: dataVolumeSize(existing, class),
 	})
 	if err != nil {

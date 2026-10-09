@@ -98,13 +98,8 @@ type workload struct {
 func (r *CompanyReconciler) applyBootstrap(
 	ctx context.Context, c *crewletaiv1alpha1.Company, doc *render.BootstrapDocument, platform map[string][]byte,
 ) (string, error) {
-	data := map[string][]byte{configFile: doc.YAML}
-	for key, value := range platform {
-		// The S3 keys are in crewlet.yaml already.
-		if key != crewletaiv1alpha1.S3AccessKeyIDKey && key != crewletaiv1alpha1.S3SecretAccessKeyKey {
-			data[key] = value
-		}
-	}
+	data := maps.Clone(platform)
+	data[configFile] = doc.YAML
 	secret := corev1ac.Secret(bootstrapSecretName(c), c.Namespace).
 		WithLabels(labelsFor(c, componentData)).
 		WithOwnerReferences(ownerReference(c)).
@@ -125,16 +120,6 @@ func hashOf(data map[string][]byte) string {
 		h.Write(data[key])
 	}
 	return hex.EncodeToString(h.Sum(nil))
-}
-
-// objectCredentials are the class's S3 keys among the platform values, or
-// nil when the class gives none.
-func objectCredentials(platform map[string][]byte) *render.S3Credentials {
-	id, ok := platform[crewletaiv1alpha1.S3AccessKeyIDKey]
-	if !ok {
-		return nil
-	}
-	return &render.S3Credentials{AccessKeyID: string(id), SecretAccessKey: string(platform[crewletaiv1alpha1.S3SecretAccessKeyKey])}
 }
 
 // applyServiceAccount writes the engine's ServiceAccount. The engine does not

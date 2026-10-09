@@ -174,14 +174,32 @@ in the same Secret as the token.
 ### What the platform supplies
 
 An `EngineClass` may reference Secrets in the platform's own namespace for the
-engine's pods: S3 credentials for the object store
-(`objects.s3.credentialsSecretRef`, keys `accessKeyID` and
-`secretAccessKey`), telemetry headers (`telemetry.headersSecretRef`) and
+engine's pods: telemetry headers (`telemetry.headersSecretRef`) and
 class-wide environment variables (`podTemplate.spec.env[].valueFrom`). The
 operator copies those values into the Secret it owns in each company's
 namespace for the engine's pod (`<company>-bootstrap`), because a pod can
-read only Secrets in its own namespace: the S3 keys into the pod's
-`crewlet.yaml`, the others for the engine's environment. A Company's own `spec.runtime.env` reads Secrets in its
+read only Secrets in its own namespace.
+
+The keys of a class's S3 bucket are each company's own, in its namespace:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata: {name: acme-objects, namespace: acme}
+stringData:
+  accessKeyID: AKIA...          # a key whose policy admits the company's prefix only
+  secretAccessKey: ...
+---
+# Company acme
+spec:
+  objects:
+    credentialsSecretRef: {name: acme-objects}
+```
+
+Issue them per company, with a policy that admits only the company's prefix
+of the bucket (the class's `objects.s3.prefix`, expanded): a key the class
+shared would let every tenant read and write every other tenant's files,
+because whatever reaches an engine pod reaches code the tenant runs there. A Company's own `spec.runtime.env` reads Secrets in its
 namespace directly.
 
 ## Rotating a credential

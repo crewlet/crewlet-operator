@@ -55,6 +55,7 @@ const (
 	dataName           = "nimbus-data"
 	dataClaimName      = "data-nimbus-data-0"
 	bootstrapName      = "nimbus-bootstrap"
+	objectsSecret      = "nimbus-objects"
 )
 
 // newReconciler is the Company reconciler as the manager builds it, on a
@@ -867,12 +868,16 @@ var _ = Describe("Company runtime", func() {
 			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 			platform = ns.Name
 		})
+		// ownObjectKeys gives the Company keys of its own for its class's
+		// bucket.
+		ownObjectKeys := func(c *crewletaiv1alpha1.Company) {
+			c.Spec.Objects.CredentialsSecretRef = crewletaiv1alpha1.SecretReference{Name: objectsSecret}
+		}
 		s3Class := func(c *crewletaiv1alpha1.EngineClass) {
 			c.Spec.Objects = crewletaiv1alpha1.ObjectSettings{
 				Backend: crewletaiv1alpha1.ObjectBackendS3,
 				S3: crewletaiv1alpha1.S3ObjectSettings{
 					Region: "eu-central-1", Bucket: "tenants",
-					CredentialsSecretRef: crewletaiv1alpha1.NamespacedSecretReference{Namespace: platform, Name: "s3"},
 				},
 			}
 			c.Spec.Telemetry = crewletaiv1alpha1.TelemetrySettings{
@@ -887,16 +892,17 @@ var _ = Describe("Company runtime", func() {
 			}
 		}
 
-		It("holds the pods back until the platform's Secrets exist, then gives the pods their values", func() {
+		It("holds the pods back until the Secrets they read exist, then gives the pods their values", func() {
 			class := newClass(s3Class)
-			company := reconciled(newCompany(class.Name))
+			company := reconciled(newCompany(class.Name, ownObjectKeys))
 			runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
 			Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonSecretNotFound))
-			Expect(runtimeReady.Message).To(ContainSubstring(platform + "/s3"))
+			Expect(runtimeReady.Message).To(ContainSubstring(platform + "/" + otlpSecret))
+			Expect(runtimeReady.Message).To(ContainSubstring(namespace + "/" + objectsSecret))
 			absent(&appsv1.StatefulSet{}, dataName)
 			absent(&corev1.Secret{}, bootstrapName)
 
-			Expect(k8sClient.Create(ctx, &corev1.Secret{Namespace: platform, Name: "s3", Data: map[string][]byte{
+			Expect(k8sClient.Create(ctx, &corev1.Secret{Namespace: namespace, Name: objectsSecret, Data: map[string][]byte{
 				crewletaiv1alpha1.S3AccessKeyIDKey: []byte("AKIA"), crewletaiv1alpha1.S3SecretAccessKeyKey: []byte("s3cr3t"),
 			}})).To(Succeed())
 			Expect(k8sClient.Create(ctx, &corev1.Secret{Namespace: platform, Name: otlpSecret, Data: map[string][]byte{
@@ -962,9 +968,9 @@ var _ = Describe("Company runtime", func() {
 			Expect(string(bootstrap.Data[configFile])).NotTo(ContainSubstring("AKIA"))
 		})
 
-		It("maps a Secret to the Companies whose class copies it, or whose keyring or tokens it is", func() {
+		It("maps a Secret to the Companies whose class or own object keys read it, or whose keyring or tokens it is", func() {
 			class := newClass(s3Class)
-			newCompany(class.Name)
+			newCompany(class.Name, ownObjectKeys)
 			companiesOf := func(secretNamespace, name string) []reconcile.Request {
 				var got []reconcile.Request
 				for _, req := range newReconciler().companiesOfSecret(ctx, &corev1.Secret{Namespace: secretNamespace, Name: name}) {
@@ -979,6 +985,7 @@ var _ = Describe("Company runtime", func() {
 			Expect(companiesOf(namespace, otlpSecret)).To(BeEmpty())
 			Expect(companiesOf(namespace, tokensName)).To(ConsistOf(nimbus))
 			Expect(companiesOf(namespace, keyringName)).To(ConsistOf(nimbus))
+			Expect(companiesOf(namespace, objectsSecret)).To(ConsistOf(nimbus))
 		})
 	})
 
