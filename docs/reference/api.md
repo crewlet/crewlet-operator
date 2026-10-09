@@ -1900,7 +1900,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | name identifies the step in logs and failure messages. |  | MaxLength: 63 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `files` _[SandboxFile](#sandboxfile) array_ | files are written into the sandbox before the commands run. Crewlet's<br />`files`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
-| `commands` _string array_ | commands are shell commands run in order; one that exits non-zero<br />fails the sandbox. |  | MaxItems: 32 <br />items:MaxLength: 4096 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
+| `commands` _string array_ | commands are shell commands run in order; one that exits non-zero<br />fails the sandbox. Crewlet's `commands`. Crewlet substitutes every<br />$\{NAME\} in them (NAME an identifier) from the engine's own secret<br />store and environment before the sandbox runs them, so $\{HOME\} would be<br />the engine's, not the sandbox's, and the API refuses $\{NAME\}: write a<br />sandbox variable as $NAME. Parameter expansions such as $\{1:-x\} are<br />not substituted and are allowed. |  | MaxItems: 32 <br />items:MaxLength: 4096 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
 | `env` _[SecretEnvVar](#secretenvvar) array_ | env is merged into the environment of the commands and of the run.<br />Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `brief` _string_ | brief tells the coding agent what this step made true about the<br />sandbox. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds caps each command of the step. |  | Minimum: 1 <br />Optional: \{\} <br /> |

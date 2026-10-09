@@ -780,7 +780,12 @@ spec:
                         commands:
                           description: |-
                             commands are shell commands run in order; one that exits non-zero
-                            fails the sandbox.
+                            fails the sandbox. Crewlet's `commands`. Crewlet substitutes every
+                            ${NAME} in them (NAME an identifier) from the engine's own secret
+                            store and environment before the sandbox runs them, so ${HOME} would be
+                            the engine's, not the sandbox's, and the API refuses ${NAME}: write a
+                            sandbox variable as $NAME. Parameter expansions such as ${1:-x} are
+                            not substituted and are allowed.
                           items:
                             maxLength: 4096
                             minLength: 1
@@ -788,6 +793,12 @@ spec:
                           maxItems: 32
                           type: array
                           x-kubernetes-list-type: atomic
+                          x-kubernetes-validations:
+                          - message: 'commands may not hold a ${NAME} reference: the
+                              engine would resolve it from its own secret store and
+                              environment, which hold credentials that are not this
+                              object''s to name'
+                            rule: self.all(x, !x.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]'))
                         env:
                           description: |-
                             env is merged into the environment of the commands and of the run.

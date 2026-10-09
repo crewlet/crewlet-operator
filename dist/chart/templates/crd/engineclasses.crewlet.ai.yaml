@@ -781,6 +781,10 @@ spec:
                       x-kubernetes-validations:
                       - message: baseURL must be an absolute http or https URL
                         rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                      - message: 'baseURL may not hold a ${NAME} reference: the engine
+                          would resolve it from its own secret store and environment,
+                          which hold credentials that are not this object''s to name'
+                        rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                     claudeModel:
                       description: |-
                         claudeModel names the Claude model whose request shape an Anthropic
@@ -789,6 +793,11 @@ spec:
                       maxLength: 256
                       minLength: 1
                       type: string
+                      x-kubernetes-validations:
+                      - message: 'claudeModel may not hold a ${NAME} reference: the
+                          engine would resolve it from its own secret store and environment,
+                          which hold credentials that are not this object''s to name'
+                        rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                     cooldowns:
                       description: |-
                         cooldowns is how long a failing key is set aside. Crewlet's
@@ -819,6 +828,11 @@ spec:
                       maxLength: 256
                       minLength: 1
                       type: string
+                      x-kubernetes-validations:
+                      - message: 'model may not hold a ${NAME} reference: the engine
+                          would resolve it from its own secret store and environment,
+                          which hold credentials that are not this object''s to name'
+                        rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                     name:
                       description: |-
                         name is the provider's name. Seats and the Company's model order refer

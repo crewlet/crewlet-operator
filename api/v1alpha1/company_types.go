@@ -188,6 +188,7 @@ type EmbeddingSettings struct {
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="model may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
 	Model string `json:"model,omitempty"`
 
 	// apiKeySecretRef is the Secret key holding the API key. Crewlet's
@@ -204,6 +205,7 @@ type EmbeddingSettings struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() in ['http', 'https']",message="baseURL must be an absolute http or https URL"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="baseURL may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
 	BaseURL string `json:"baseURL,omitempty"`
 
 	// dimensions is the vector width. Unset takes the model's own width,
@@ -280,12 +282,18 @@ type SandboxSetupStep struct {
 	Files []SandboxFile `json:"files,omitempty"`
 
 	// commands are shell commands run in order; one that exits non-zero
-	// fails the sandbox.
+	// fails the sandbox. Crewlet's `commands`. Crewlet substitutes every
+	// ${NAME} in them (NAME an identifier) from the engine's own secret
+	// store and environment before the sandbox runs them, so ${HOME} would be
+	// the engine's, not the sandbox's, and the API refuses ${NAME}: write a
+	// sandbox variable as $NAME. Parameter expansions such as ${1:-x} are
+	// not substituted and are allowed.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MaxItems=32
 	// +kubebuilder:validation:items:MinLength=1
 	// +kubebuilder:validation:items:MaxLength=4096
+	// +kubebuilder:validation:XValidation:rule="self.all(x, !x.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]'))",message="commands may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
 	Commands []string `json:"commands,omitempty"`
 
 	// env is merged into the environment of the commands and of the run.
@@ -322,6 +330,7 @@ type E2BSandbox struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="domain may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
 	Domain string `json:"domain,omitempty"`
 
 	// template is the sandbox template, which also fixes each sandbox's CPU,
@@ -329,6 +338,7 @@ type E2BSandbox struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="template may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
 	Template string `json:"template,omitempty"`
 }
 
@@ -461,6 +471,7 @@ type CompanyExposure struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() == 'https' && url(self).getHostname() != ''",message="publicBaseURL must be an absolute https URL"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="publicBaseURL may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
 	PublicBaseURL string `json:"publicBaseURL,omitempty"`
 }
 

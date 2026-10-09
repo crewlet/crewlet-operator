@@ -484,6 +484,15 @@ const (
 	// other object.
 	ReasonConflict = "Conflict"
 
+	// ReasonReferenceNotAllowed is ResolvedRefs=False on an object (or
+	// ConfigApplied=False on a Company, for its own fields and engineConfig)
+	// that holds a ${NAME} reference in a field the operator renders into the
+	// company document. Crewlet resolves one from the engine's own secret
+	// store and environment in many fields that hold no credential (an MCP
+	// server's url, a sandbox setup command), so it would name values that
+	// are not the object's. A credential is given with a Secret reference.
+	ReasonReferenceNotAllowed = "ReferenceNotAllowed"
+
 	// ReasonCycle is ResolvedRefs=False on a Unit whose parentRef chain
 	// leads back to itself.
 	ReasonCycle = "Cycle"

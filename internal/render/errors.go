@@ -25,8 +25,8 @@ type RefError struct {
 	// spec.unitRef.name.
 	Field string
 	// Reason is the condition reason the refusal is reported with:
-	// v1alpha1.ReasonRefNotFound, v1alpha1.ReasonCycle or
-	// v1alpha1.ReasonConflict.
+	// v1alpha1.ReasonRefNotFound, v1alpha1.ReasonCycle,
+	// v1alpha1.ReasonConflict or v1alpha1.ReasonReferenceNotAllowed.
 	Reason string
 	// Message says what is wrong and what to do, for a condition message.
 	Message string

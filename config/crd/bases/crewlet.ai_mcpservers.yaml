@@ -71,6 +71,11 @@ spec:
                 maxItems: 64
                 type: array
                 x-kubernetes-list-type: atomic
+                x-kubernetes-validations:
+                - message: 'args may not hold a ${NAME} reference: the engine would
+                    resolve it from its own secret store and environment, which hold
+                    credentials that are not this object''s to name'
+                  rule: self.all(x, !x.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]'))
               command:
                 description: |-
                   command is the executable a Stdio server is launched with. Crewlet's
@@ -78,6 +83,11 @@ spec:
                 maxLength: 1024
                 minLength: 1
                 type: string
+                x-kubernetes-validations:
+                - message: 'command may not hold a ${NAME} reference: the engine would
+                    resolve it from its own secret store and environment, which hold
+                    credentials that are not this object''s to name'
+                  rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
               companyRef:
                 description: companyRef names the Company this server belongs to.
                   Immutable.
@@ -294,6 +304,10 @@ spec:
                 x-kubernetes-validations:
                 - message: url must be an absolute http or https URL
                   rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                - message: 'url may not hold a ${NAME} reference: the engine would
+                    resolve it from its own secret store and environment, which hold
+                    credentials that are not this object''s to name'
+                  rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
             required:
             - companyRef
             type: object

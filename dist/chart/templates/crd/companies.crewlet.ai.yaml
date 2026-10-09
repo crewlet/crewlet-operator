@@ -148,6 +148,10 @@ spec:
                     x-kubernetes-validations:
                     - message: baseURL must be an absolute http or https URL
                       rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                    - message: 'baseURL may not hold a ${NAME} reference: the engine
+                        would resolve it from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   dimensions:
                     description: |-
                       dimensions is the vector width. Unset takes the model's own width,
@@ -184,6 +188,11 @@ spec:
                     maxLength: 256
                     minLength: 1
                     type: string
+                    x-kubernetes-validations:
+                    - message: 'model may not hold a ${NAME} reference: the engine
+                        would resolve it from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   type:
                     default: OpenAI
                     description: type is which embeddings API the provider speaks.
@@ -282,6 +291,10 @@ spec:
                     - message: publicBaseURL must be an absolute https URL
                       rule: isURL(self) && url(self).getScheme() == 'https' && url(self).getHostname()
                         != ''
+                    - message: 'publicBaseURL may not hold a ${NAME} reference: the
+                        engine would resolve it from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                 type: object
               integrations:
                 description: integrations is company-wide integration behaviour.
@@ -607,6 +620,12 @@ spec:
                         maxLength: 253
                         minLength: 1
                         type: string
+                        x-kubernetes-validations:
+                        - message: 'domain may not hold a ${NAME} reference: the engine
+                            would resolve it from its own secret store and environment,
+                            which hold credentials that are not this object''s to
+                            name'
+                          rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                       template:
                         description: |-
                           template is the sandbox template, which also fixes each sandbox's CPU,
@@ -614,6 +633,12 @@ spec:
                         maxLength: 253
                         minLength: 1
                         type: string
+                        x-kubernetes-validations:
+                        - message: 'template may not hold a ${NAME} reference: the
+                            engine would resolve it from its own secret store and
+                            environment, which hold credentials that are not this
+                            object''s to name'
+                          rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                     required:
                     - apiKeySecretRef
                     type: object
@@ -636,7 +661,12 @@ spec:
                         commands:
                           description: |-
                             commands are shell commands run in order; one that exits non-zero
-                            fails the sandbox.
+                            fails the sandbox. Crewlet's `commands`. Crewlet substitutes every
+                            ${NAME} in them (NAME an identifier) from the engine's own secret
+                            store and environment before the sandbox runs them, so ${HOME} would be
+                            the engine's, not the sandbox's, and the API refuses ${NAME}: write a
+                            sandbox variable as $NAME. Parameter expansions such as ${1:-x} are
+                            not substituted and are allowed.
                           items:
                             maxLength: 4096
                             minLength: 1
@@ -644,6 +674,12 @@ spec:
                           maxItems: 32
                           type: array
                           x-kubernetes-list-type: atomic
+                          x-kubernetes-validations:
+                          - message: 'commands may not hold a ${NAME} reference: the
+                              engine would resolve it from its own secret store and
+                              environment, which hold credentials that are not this
+                              object''s to name'
+                            rule: self.all(x, !x.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]'))
                         env:
                           description: |-
                             env is merged into the environment of the commands and of the run.

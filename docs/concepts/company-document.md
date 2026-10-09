@@ -128,6 +128,19 @@ the reference:
 | `Company` | `spec.llm.order` names a provider that does not exist or is not offered to it | `RefNotFound` |
 | `LLMProvider` | its name is also the name of a platform provider the company uses | `Conflict` |
 | `Integration` | another Integration of the company, earlier by name, connects the same vendor | `Conflict` |
+| any, the `Company` included | a string it renders into the document, `engineConfig` included, holds a `${NAME}` reference | `ReferenceNotAllowed` |
+
+The last row is the operator's, not Crewlet's. Crewlet resolves a `${NAME}`
+from the engine's secret store and then its environment in many fields that
+hold no credential (an MCP server's `url`, a provider's `base_url`, a
+sandbox setup command, a skill variable), so a reference an object holds
+itself would name values that are not its own: the class's platform model
+keys in the store, or the engine's environment. The only references in a
+rendered document are the ones the operator writes for a Secret key the
+object references. The API server already refuses a `${NAME}` in the typed
+fields Crewlet is known to expand; the render check covers every other
+string. A sandbox setup command keeps shell syntax Crewlet leaves alone,
+such as `$HOME` and `${1:-x}`.
 
 Everything else Crewlet checks itself, when the operator dry-runs the
 rendered document. Crewlet locates each problem by its path in the document

