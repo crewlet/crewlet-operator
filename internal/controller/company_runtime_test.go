@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -19,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -1254,5 +1257,38 @@ var _ = Describe("Company status writes", func() {
 		applied := meta.FindStatusCondition(company.Status.Conditions, crewletaiv1alpha1.ConditionConfigApplied)
 		Expect(applied).NotTo(BeNil())
 		Expect(applied.ObservedGeneration).To(Equal(read.Generation), "claims a generation that was never rendered")
+	})
+
+	It("reconciles a Company again, without an error, when its status write conflicts", func() {
+		class := &crewletaiv1alpha1.EngineClass{
+			Name: namespace,
+			Spec: crewletaiv1alpha1.EngineClassSpec{
+				Engine: crewletaiv1alpha1.EngineSettings{Image: engineImageV020},
+				Data: crewletaiv1alpha1.DataPodSettings{
+					Storage: crewletaiv1alpha1.DataStorage{Size: new(resource.MustParse("10Gi"))},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, class)).To(Succeed())
+		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, class)).To(Succeed()) })
+		company := &crewletaiv1alpha1.Company{
+			Namespace: namespace, Name: companyName,
+			Spec: crewletaiv1alpha1.CompanySpec{CompanyName: companyDisplayName, EngineClassName: class.Name},
+		}
+		Expect(k8sClient.Create(ctx, company)).To(Succeed())
+
+		// The other reconciler's write lands between this one's read and
+		// its write.
+		conflicting, err := client.NewWithWatch(cfg, client.Options{Scheme: k8sClient.Scheme()})
+		Expect(err).NotTo(HaveOccurred())
+		r := newReconciler()
+		r.Client = interceptor.NewClient(conflicting, interceptor.Funcs{
+			SubResourcePatch: func(_ context.Context, _ client.Client, _ string, obj client.Object, _ client.Patch, _ ...client.SubResourcePatchOption) error {
+				return apierrors.NewConflict(crewletaiv1alpha1.GroupVersion.WithResource("companies").GroupResource(), obj.GetName(), errors.New("the object has been modified"))
+			},
+		})
+		result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(company)})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 	})
 })

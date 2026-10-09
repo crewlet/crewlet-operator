@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -26,6 +27,11 @@ import (
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 )
+
+// statusConflictRetry is how soon a Company whose status write conflicted is
+// reconciled again: long enough for the cache to have caught up with the
+// write that conflicted, which is usually the config reconciler's.
+const statusConflictRetry = 500 * time.Millisecond
 
 // CompanyReconciler reconciles Company objects. It decides whether a Company
 // is one the operator can act on (Accepted), and for an accepted one makes the
@@ -130,6 +136,13 @@ func (r *CompanyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// retry, rather than drop a condition the config reconciler wrote since
 	// the Company was read: a merge patch replaces the whole list.
 	if err := r.Status().Patch(ctx, company, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		if apierrors.IsConflict(err) {
+			// Routine, with two reconcilers writing one status: the
+			// Company changed since the cache served it. Not an error,
+			// which would log a stack trace and back off.
+			logf.FromContext(ctx).V(1).Info("The Company changed while it was reconciled; reconciling it again")
+			return ctrl.Result{RequeueAfter: statusConflictRetry}, nil
+		}
 		return ctrl.Result{}, fmt.Errorf("updating the status of Company %s: %w", req.NamespacedName, err)
 	}
 	logf.FromContext(ctx).V(1).Info("Reconciled the Company", "ready", ready.Status, "reason", ready.Reason)
