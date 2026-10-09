@@ -515,8 +515,8 @@ type SeatPlacementStatus struct {
 	Workload string `json:"workload,omitempty"`
 
 	// node is the engine node, a pod's name, that holds the seat's lease
-	// and runs it, as the engine last reported. Unset while no node holds
-	// it.
+	// and runs it, as the engine's GET /fleet last reported. Unset while no
+	// node holds it.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=64
@@ -541,8 +541,9 @@ type SeatStatus struct {
 	// conditions are Accepted (the Company exists, and no other Seat has the
 	// handle, the name or a contact account; Conflict names the other),
 	// ResolvedRefs (the unit, the providers, the tool servers and
-	// every Secret key exist) and Applied (the seat is in the revision the
-	// engine runs).
+	// every Secret key exist), Applied (the seat is in the revision the
+	// engine runs) and, on an Agent seat, Ready (an engine node holds the
+	// seat's lease and runs it: LeaseHeld, or Unplaced).
 	// +optional
 	// +listType=map
 	// +listMapKey=type
@@ -599,6 +600,9 @@ type SeatStatus struct {
 // +kubebuilder:printcolumn:name="Kind",type=string,JSONPath=`.spec.kind`
 // +kubebuilder:printcolumn:name="Unit",type=string,JSONPath=`.spec.unitRef.name`
 // +kubebuilder:printcolumn:name="Applied",type=string,JSONPath=`.status.conditions[?(@.type=="Applied")].status`
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
+// +kubebuilder:printcolumn:name="Pool",type=string,JSONPath=`.status.placement.pool`,priority=1
+// +kubebuilder:printcolumn:name="Node",type=string,JSONPath=`.status.placement.node`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:validation:XValidation:rule="has(self.spec.handle) || self.metadata.name.matches('^[a-z0-9][a-z0-9-]{0,62}$')",message="without spec.handle the Seat's name is its handle: lowercase letters, digits and '-', starting with a letter or digit, at most 63 characters",fieldPath=".spec.handle"
 // +kubebuilder:validation:XValidation:rule="(has(self.spec.handle) ? self.spec.handle : self.metadata.name) == (has(oldSelf.spec.handle) ? oldSelf.spec.handle : oldSelf.metadata.name)",message="the seat's handle is immutable: the seat's identity and memory are derived from it",fieldPath=".spec.handle"

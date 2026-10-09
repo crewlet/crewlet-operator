@@ -6,6 +6,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
@@ -65,8 +66,9 @@ type CompanyConfigReconciler struct {
 	// at again with nothing having changed. Zero is driftCheckInterval.
 	ResyncInterval time.Duration
 
-	changes changeClock
-	pending pendingApplies
+	changes  changeClock
+	pending  pendingApplies
+	settling placementSettling
 	// now is the clock the apply deadline is measured with; nil is the
 	// wall clock.
 	now func() time.Time
@@ -82,6 +84,7 @@ type CompanyConfigReconciler struct {
 // +kubebuilder:rbac:groups=crewlet.ai,resources=units;seats;llmproviders;mcpservers;integrations,verbs=get;list;watch
 // +kubebuilder:rbac:groups=crewlet.ai,resources=units/status;seats/status;llmproviders/status;mcpservers/status;integrations/status,verbs=get;patch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 
 // Reconcile brings a Company's document in its engine to what its objects
@@ -92,6 +95,7 @@ func (r *CompanyConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if apierrors.IsNotFound(err) {
 			r.changes.forget(req.NamespacedName)
 			r.pending.forget(req.NamespacedName)
+			r.settling.forget(req.NamespacedName)
 			return ctrl.Result{}, r.orphan(ctx, req.NamespacedName)
 		}
 		return ctrl.Result{}, fmt.Errorf("reading Company %s: %w", req.NamespacedName, err)
@@ -101,6 +105,7 @@ func (r *CompanyConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		// left to keep.
 		r.changes.forget(req.NamespacedName)
 		r.pending.forget(req.NamespacedName)
+		r.settling.forget(req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 	// Before anything is rendered: a burst is often an object and what it
@@ -123,7 +128,12 @@ func (r *CompanyConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			err = fmt.Errorf("%w; and %w", err, statusErr)
 		}
 	}
-	return result, err
+	if err != nil {
+		return result, err
+	}
+	// After the status is written: which seats are settling depends on
+	// their Applied condition as decided.
+	return run.placementResync(ctx, result)
 }
 
 func (r *CompanyConfigReconciler) resyncInterval() time.Duration {
@@ -247,10 +257,12 @@ func itemsOfKind(list client.ObjectList) client.Object {
 
 // engineStateChanged passes a Company update that changes what decides
 // whether, and where, its document can be applied: whether it is Accepted
-// and why not,
-// the state of its engine's pods (RuntimeReady), and the public base URL the
-// document carries. These are status fields the runtime reconciler writes;
-// the config reconciler's own status writes change none of them.
+// and why not, the state of its engine's pods (RuntimeReady), and the public
+// base URL the document carries; and a change of its pods' counts
+// (status.topology), after which the engine moves seats: a pod that comes up
+// takes seats, one that goes down leaves its seats unplaced, which the Seats'
+// Ready reports. These are status fields the runtime reconciler writes; the
+// config reconciler's own status writes change none of them.
 func engineStateChanged() predicate.Funcs {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
@@ -262,7 +274,8 @@ func engineStateChanged() predicate.Funcs {
 			if !ok {
 				return false
 			}
-			if old.Status.Endpoints.PublicBaseURL != updated.Status.Endpoints.PublicBaseURL {
+			if old.Status.Endpoints.PublicBaseURL != updated.Status.Endpoints.PublicBaseURL ||
+				!equality.Semantic.DeepEqual(old.Status.Topology, updated.Status.Topology) {
 				return true
 			}
 			// The whole of Accepted, not only its status: the parts'

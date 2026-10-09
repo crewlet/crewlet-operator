@@ -2159,7 +2159,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `pool` _string_ | pool is the pool of pods that runs the seat: spec.placement.pool, or<br />the Company's spec.topology.defaultSeatPool. The seat is rendered with<br />role.placement.labels \{crewlet.ai/pool: <pool>\}, which only the pool's<br />pods carry, or, in a PerSeat pool, \{crewlet.ai/seat: <handle>\}, which<br />only the seat's own pods carry. |  | MaxLength: 20 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `workload` _string_ | workload is the name of the StatefulSet whose pods may run the seat:<br />the data pods', the Shared pool's, or the seat's own in a PerSeat<br />pool. |  | MaxLength: 63 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `node` _string_ | node is the engine node, a pod's name, that holds the seat's lease<br />and runs it, as the engine last reported. Unset while no node holds<br />it. |  | MaxLength: 64 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `node` _string_ | node is the engine node, a pod's name, that holds the seat's lease<br />and runs it, as the engine's GET /fleet last reported. Unset while no<br />node holds it. |  | MaxLength: 64 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### SeatPool
@@ -2375,7 +2375,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists, and no other Seat has the<br />handle, the name or a contact account; Conflict names the other),<br />ResolvedRefs (the unit, the providers, the tool servers and<br />every Secret key exist) and Applied (the seat is in the revision the<br />engine runs). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists, and no other Seat has the<br />handle, the name or a contact account; Conflict names the other),<br />ResolvedRefs (the unit, the providers, the tool servers and<br />every Secret key exist), Applied (the seat is in the revision the<br />engine runs) and, on an Agent seat, Ready (an engine node holds the<br />seat's lease and runs it: LeaseHeld, or Unplaced). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `handle` _string_ | handle is the seat's handle: spec.handle, or the metadata.name. |  | MaxLength: 63 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `seatID` _string_ | seatID is the seat's identity in the engine, derived from the company<br />name and the handle, so that callers need not derive it themselves.<br />Unset for a Human seat, which the engine does not run and gives no<br />identity, and for a seat whose handle another Seat derives too. |  | MaxLength: 36 <br />MinLength: 36 <br />Optional: \{\} <br /> |

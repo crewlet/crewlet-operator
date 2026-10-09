@@ -89,6 +89,9 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 		// vendor apps of its own. A handle two Seats derive is neither
 		// seat's identity.
 		if o.Spec.Kind == crewletaiv1alpha1.SeatKindHuman || p.handleTaken {
+			// The engine leases no Human seat, and the seat a handle two
+			// Seats derive is neither's to report.
+			meta.RemoveStatusCondition(&o.Status.Conditions, crewletaiv1alpha1.ConditionReady)
 			break
 		}
 		o.Status.SeatID = render.SeatID(run.company.Spec.CompanyName, handle)
@@ -99,6 +102,7 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 		if o.Status.Placement.Pool == crewletaiv1alpha1.DataPool || (run.class != nil && leafOpen(run.class) && len(p.unplaceable) == 0) {
 			o.Status.Placement.Workload = seatWorkloadName(run.company, o.Status.Placement.Pool, handle)
 		}
+		run.decideReady(p, o)
 		if base != "" && vendors[toolSlack] {
 			o.Status.Integrations.Slack.RequestURL = base + "/webhooks/slack/" + handle
 		}

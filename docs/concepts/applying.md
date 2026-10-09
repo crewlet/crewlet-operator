@@ -23,9 +23,16 @@ A Company is looked at again when:
   through an index of every reference in their specs, so it never holds a
   Secret's value in memory longer than one reconcile;
 - its EngineClass's platform model providers change, when it uses them;
+- the runtime reconciler reports a change in the company's pods
+  (`status.topology`), after which the engine moves seats between them;
 - five minutes have passed with no change, to find edits made through the
   engine's own API or dashboard, which nothing announces, and to refresh the
-  integrations' health.
+  integrations' health and where each seat runs. While a seat of the running
+  revision is not yet held by a pod of its own StatefulSet although one of
+  them is ready, the engine is placing it, and the operator looks every
+  fifteen seconds instead, for at most three minutes: the engine claims a few
+  seats every five seconds, and a seat whose pod was killed waits out its
+  45-second lease first.
 
 **Changes are coalesced.** A platform that provisions a company writes its
 objects one request at a time, and each revision is a permanent entry in the
@@ -200,6 +207,7 @@ is never written to; the Company reports `Seeded` all the same, saying so.
 | every part | `Accepted` | `True` once its Company exists; `False` with `CompanyNotFound`, or `Conflict` when it collides with another object of its company. |
 | every part | `ResolvedRefs` | `False` with `RefNotFound`, `Cycle`, `PoolNotFound`, `SecretNotFound` or `SecretTooLarge`, saying what it references that is missing. |
 | every part | `Applied` | `True`, `InRevision`, naming the revision, with the generation that revision was rendered from as its `observedGeneration`, once the engine has applied it. `False` with the part's own problem (`Invalid`, `RefNotFound`, a Seat's `PerSeatNotAllowed` or `PoolCapacityExceeded`, ...), `Blocked` when another object keeps the document from being applied, `Applying` while the engine applies the revision, or `ApplyFailed` when it did not. A part whose current generation already runs keeps `True` meanwhile: only what changed is held back. |
+| Seat (agent) | `Ready` | Whether an engine pod holds the seat's lease and runs it, as the engine's `GET /fleet` reports, read each time the operator reaches the engine: `True`, `LeaseHeld`, naming the pod (and saying so when it is not a pod of the seat's StatefulSet yet, while the engine moves it); `False`, `Unplaced`, while no pod holds it, saying why: the seat is not in the revision the engine runs, its pool runs no pod, or the engine has not claimed it yet; `False`, `Suspended`; `Unknown`, `EngineUnavailable`, when the fleet could not be read. Unchanged while the operator does not reach the engine. A Human seat has none. |
 | Integration | `Healthy` | The engine's own verdict on the vendor: `True`, `CheckPassed`, when it reports the tool connected; `False`, `CheckFailed`, with the engine's reason otherwise; `False`, `NotExposed` while the Company has no public address, since no webhook can reach the engine. |
 
 Besides the conditions:
@@ -222,7 +230,8 @@ Besides the conditions:
 - **Seat**: its handle, its identity in the engine (`seatID`, derived from
   the company name and the handle), the pool that runs it and the
   StatefulSet whose pods do (`status.placement.workload`; unset while the
-  class runs no pod for it), and the addresses
+  class runs no pod for it), the pod whose engine holds it
+  (`status.placement.node`, unset while none does), and the addresses
   its own vendor apps deliver to: `<publicBaseURL>/webhooks/slack/<handle>`
   and `<publicBaseURL>/webhooks/github/<handle>`, set as soon as the Company
   has the vendor's Integration and a public address.

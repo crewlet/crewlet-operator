@@ -58,6 +58,11 @@ type configRun struct {
 	// reconcile did not read it.
 	health map[string]engine.IntegrationStatus
 
+	// fleet is the engine's GET /fleet once this reconcile has read it, and
+	// fleetErr why it could not; both nil when it did not try (fleetOf).
+	fleet    *engine.Fleet
+	fleetErr error
+
 	// rendered is where the rendered document pins its seats, and running
 	// where the document the engine runs or is applying does, once this
 	// reconcile has found out; see recordPlacement.
@@ -134,6 +139,7 @@ func (run *configRun) reconcile(ctx context.Context) (ctrl.Result, error) {
 			return ctrl.Result{}, fmt.Errorf("rendering the document of Company %s/%s: %w", c.Namespace, c.Name, err)
 		}
 		run.refused(refusals)
+		run.lookAtFleet(ctx)
 		return ctrl.Result{}, nil
 	}
 	run.doc = doc
@@ -150,6 +156,9 @@ func (run *configRun) reconcile(ctx context.Context) (ctrl.Result, error) {
 	// Under Observe nothing is pushed, so they are never read.
 	if run.policy() == crewletaiv1alpha1.ManagementPolicyEnforce {
 		if blocked, err := run.resolveSecrets(ctx); blocked || err != nil {
+			if blocked {
+				run.lookAtFleet(ctx)
+			}
 			return ctrl.Result{}, err
 		}
 	}
@@ -173,10 +182,14 @@ func (run *configRun) reconcile(ctx context.Context) (ctrl.Result, error) {
 		if !run.writeRefused(err) {
 			run.unavailable(err)
 		}
+		_, _ = run.fleetOf(ctx, eng)
 		return ctrl.Result{RequeueAfter: engineRetryInterval}, nil
 	}
 	health, healthErr := run.readHealth(ctx, eng)
-	return run.verifyApplied(ctx, eng, health, healthErr, result), nil
+	result = run.verifyApplied(ctx, eng, health, healthErr, result)
+	// For the seats' placement, if the verification did not need it.
+	_, _ = run.fleetOf(ctx, eng)
+	return result, nil
 }
 
 // resolveSecrets reads the values of every Secret key the document

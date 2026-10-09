@@ -846,6 +846,64 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(pins).To(Equal(render.Placement{Pools: []string{crewletaiv1alpha1.DataPool, poolGeneral}}), "the record is not what the engine runs")
 	})
 
+	It("reports the engine node that holds each agent seat, and a seat no node may run as unplaced", func() {
+		const name = "placed"
+		node := name + "-data-0"
+		// The engine as the company's data pod runs it: named after the pod,
+		// labelled for the seats placed on the data pods.
+		startEngine(name, enginetest.WithNode(node, map[string]string{render.PoolLabel: crewletaiv1alpha1.DataPool}))
+		secret(name+"-llm", map[string]string{llmKey: "k"})
+
+		pools := class.DeepCopy()
+		pools.ResourceVersion = ""
+		pools.Name = namespace + "-placed"
+		pools.Spec.SeatPools = crewletaiv1alpha1.SeatPoolSettings{Policy: crewletaiv1alpha1.SeatPoolsAllowed}
+		Expect(k8sClient.Create(ctx, pools)).To(Succeed())
+		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, pools)).To(Succeed()) })
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce)
+		updateLive(c, func(c *crewletaiv1alpha1.Company) {
+			c.Spec.EngineClassName = pools.Name
+			c.Spec.Topology.SeatPools = []crewletaiv1alpha1.SeatPool{{Name: poolGeneral, Mode: crewletaiv1alpha1.SeatPoolShared}}
+		})
+		ana := newSeat(namespace, name, "ana")
+		bo := newSeat(namespace, name, "bo", func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.Placement = crewletaiv1alpha1.SeatPlacement{Pool: poolGeneral}
+		})
+		jane := &crewletaiv1alpha1.Seat{
+			Namespace: namespace, Name: name + "-jane",
+			Spec: crewletaiv1alpha1.SeatSpec{
+				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
+				Kind:       crewletaiv1alpha1.SeatKindHuman,
+				Contact:    crewletaiv1alpha1.SeatContact{GitHubLogin: name + "-jane"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, jane)).To(Succeed())
+		standIn(c)
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+
+		By("naming the data pod that holds the seat placed on the data pods")
+		Eventually(reasonOf(ana, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonLeaseHeld))
+		Expect(ana.Status.Placement.Node).To(Equal(node))
+		Expect(conditionOf(ana, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring("Engine node " + node + " holds the seat"))
+
+		By("reporting the seat of a pool no engine node runs as unplaced, with no node")
+		Eventually(reasonOf(bo, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonUnplaced))
+		Expect(conditionOf(bo, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring(name + "-seats-general"))
+		Expect(bo.Status.Placement.Node).To(BeEmpty())
+
+		By("giving a human seat, which the engine does not lease, no Ready")
+		Eventually(reasonOf(jane, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
+		Consistently(func(g Gomega) *metav1.Condition {
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(jane), jane)).To(Succeed())
+			return meta.FindStatusCondition(jane.Status.Conditions, crewletaiv1alpha1.ConditionReady)
+		}).WithTimeout(3 * time.Second).Should(BeNil())
+
+		By("reporting every agent seat of a suspended company as not running")
+		updateLive(c, func(c *crewletaiv1alpha1.Company) { c.Spec.Suspend = new(true) })
+		Eventually(reasonOf(ana, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonSuspended))
+		Expect(ana.Status.Placement.Node).To(BeEmpty())
+	})
+
 	It("refuses two Seats of one handle on both, and gives neither the handle's identity", func() {
 		const name = "twins"
 		e := startEngine(name)

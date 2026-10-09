@@ -117,6 +117,10 @@ conditions. `kubectl get engineclasses` shows it.
 | | False | `ApplyFailed` | Its current generation is in a revision the engine did not apply; the Company's `ConfigApplied` says why. |
 | | False | `Drifted` | Under `Observe`, the engine's document differs from this object's part. |
 | | False | `NotManaged` | Under `Seed`, the engine owns the document; changes to this object are not applied. |
+| `Ready` (agent Seat) | True | `LeaseHeld` | An engine pod holds the seat and runs it; `status.placement.node` names the pod. The message says so when the pod is not one of the seat's StatefulSet yet: the engine moves it there once it runs the revision that places it. |
+| | False | `Unplaced` | No engine pod holds the seat; its messages wait. The message says why: the seat is not in the revision the engine runs yet (see `Applied`); its pool runs no pod (see the Company's `SeatsPlaced`, and [A seat runs nowhere](#a-seat-runs-nowhere)); or a pod that may run it is up and the engine has not claimed it yet, which takes seconds. |
+| | False | `Suspended` | The Company is suspended. |
+| | Unknown | `EngineUnavailable` | The operator could not read the engine's fleet; the message says why, and the Company's `ConfigApplied` usually does too. `status.placement.node` is what the engine said last. |
 | `Healthy` (Integration) | True | `CheckPassed` | The engine reports the vendor connected. |
 | | False | `CheckFailed` | The engine's check against the vendor failed; the message carries why (a revoked token, a missing scope). |
 | | False | `NotExposed` | The Company has no public address, so no webhook can reach it: the class's webhooks mode is `None`. |
@@ -177,12 +181,36 @@ the company's own seat pods to port 7422 of its data pod, and a policy of
 yours that selects the data pod or the seat pods may refuse what it admits
 by adding isolation of its own.
 
-A seat whose pool runs pods but that still runs nowhere is pinned to a label
-no pod carries; its Seat's `status.placement` says which pool and
-StatefulSet should run it. After a pool is removed, its StatefulSet keeps
-running until a revision that pins no seat to it runs: `SeatsPlaced` names it,
-and the Company's `status.config.placement` says what the running revision
-pins.
+After a pool is removed, its StatefulSet keeps running until a revision that
+pins no seat to it runs: `SeatsPlaced` names it, and the Company's
+`status.config.placement` says what the running revision pins.
+
+## A seat runs nowhere
+
+A Seat with `Ready=False Unplaced` is held by no engine pod, and its messages
+wait for one. Its `status.placement` says which pool and StatefulSet should
+run it; the engine's own view is its `GET /fleet`, with the API token
+(`nodes` lists every engine pod with its labels, `seats` the holder of every
+seat, `unplaceable` the seats no running pod may take):
+
+```bash
+kubectl get seat triage -n acme -o jsonpath='{.status.placement}{"\n"}'
+kubectl get statefulset acme-seats-general -n acme
+```
+
+- **The StatefulSet has no ready pod**: a Shared pool at zero replicas, a
+  PerSeat seat's pod restarting, or seat pods not started because the data
+  pod is not ready ([Seat pods do not run](#seat-pods-do-not-run)). The seat
+  runs once a pod does.
+- **The pods run, and the message says the engine has not claimed it yet**: a
+  pod that has just started claims no seat before a data pod reports its copy
+  of the company current, then a few every five seconds; a seat whose pod
+  was killed waits out its 45-second lease. The operator looks again every
+  fifteen seconds while this lasts. After three minutes it is no longer
+  settling: read the pods' logs for `seats_unplaceable` and for errors
+  joining the data pod.
+- **The seat is not in the revision the engine runs**: its `Applied`
+  condition says why.
 
 ## The operator cannot reach the engine
 

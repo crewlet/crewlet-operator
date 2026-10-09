@@ -242,6 +242,10 @@ const (
 	// is the reason of the first of those that is not True, in that order,
 	// except that a suspended Company reports Suspended. Generic health
 	// checks (kstatus, Argo CD, Flux) read this one.
+	//
+	// On an agent Seat, Ready reports whether an engine node holds the
+	// seat's lease and so runs it: LeaseHeld, or Unplaced while no node
+	// does, as the engine's GET /fleet reports.
 	ConditionReady = "Ready"
 
 	// ConditionRuntimeReady reports whether a Company's engine pods exist,
@@ -301,7 +305,8 @@ const (
 
 	// ReasonSuspended is Ready=False, RuntimeReady=False and
 	// SeatsPlaced=False on a Company with spec.suspend set, once its pods
-	// are stopped (RuntimeReady) or are being stopped (Ready, SeatsPlaced).
+	// are stopped (RuntimeReady) or are being stopped (Ready, SeatsPlaced),
+	// and Ready=False on each of its agent Seats.
 	ReasonSuspended = "Suspended"
 
 	// ReasonSuspending is RuntimeReady=False on a suspended Company whose
@@ -437,7 +442,9 @@ const (
 	// ReasonEngineUnavailable is ConfigApplied=False while the operator
 	// cannot reach the company's engine or its token: the data pod has not
 	// started, does not answer, or refuses the operator's token. The message
-	// carries what failed.
+	// carries what failed. It is also Ready=Unknown on an agent Seat when the
+	// engine's fleet could not be read: whether a node holds the seat is not
+	// known then.
 	ReasonEngineUnavailable = "EngineUnavailable"
 
 	// ReasonWriteRefused is ConfigApplied=False when the engine refuses the
@@ -593,9 +600,15 @@ const (
 	ReasonRolloutBlocked = "RolloutBlocked"
 
 	// ReasonUnplaced is Ready=False on an agent Seat that no engine node
-	// holds: its pool has no ready pod, or the engine has not placed it
-	// yet. Its messages wait for a node.
+	// holds: its pool has no pod running the engine, the seat is not in the
+	// revision the engine runs, or the engine has not placed it yet. Its
+	// messages wait for a node.
 	ReasonUnplaced = "Unplaced"
+
+	// ReasonLeaseHeld is Ready=True on an agent Seat whose lease an engine
+	// node holds, which therefore runs it; status.placement.node names the
+	// node, a pod's name.
+	ReasonLeaseHeld = "LeaseHeld"
 
 	// ReasonPoolNotFound is ResolvedRefs=False on a Seat whose
 	// spec.placement.pool is neither data nor the name of one of its

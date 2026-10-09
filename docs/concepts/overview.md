@@ -179,9 +179,10 @@ Every object reports `status.conditions` with `observedGeneration`:
 
 | Kind | Conditions |
 |---|---|
-| `Company` | `Ready` (the summary), `Accepted`, `RuntimeReady`, `SecretsSynced`, `ConfigApplied`, `Exposed` |
+| `Company` | `Ready` (the summary), `Accepted`, `RuntimeReady`, `SecretsSynced`, `ConfigApplied`, `Exposed`, `EngineHealthy`, `SeatsPlaced` |
 | `EngineClass` | `Accepted` |
-| `Unit`, `Seat`, `LLMProvider`, `MCPServer` | `Accepted`, `ResolvedRefs`, `Applied` |
+| `Seat` | `Accepted`, `ResolvedRefs`, `Applied`, and on an agent seat `Ready`: whether an engine pod holds it |
+| `Unit`, `LLMProvider`, `MCPServer` | `Accepted`, `ResolvedRefs`, `Applied` |
 | `Integration` | `Accepted`, `ResolvedRefs`, `Applied`, `Healthy` |
 
 A Company also reports the revision the engine runs, its endpoints and the
@@ -189,7 +190,7 @@ Secret holding a token for its API (`status.apiAccessSecretRef`, key
 `token`). The endpoints are base URLs to append a path to: `api` inside the
 cluster, `exposedAPI` through the class's API route when it has one, and
 `publicBaseURL` for vendors' webhooks. A Seat reports its handle, its identity
-in the engine and the addresses its vendor apps must deliver to
+in the engine, the pod that runs it and the addresses its vendor apps must deliver to
 (`<publicBaseURL>/webhooks/slack/<handle>` and
 `<publicBaseURL>/webhooks/github/<handle>`). They are set as soon as the
 company has the vendor's Integration and a public address, before the seat

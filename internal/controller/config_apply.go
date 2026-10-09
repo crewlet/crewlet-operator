@@ -139,7 +139,7 @@ func (run *configRun) verifyApplied(
 	// before it makes it, so its posture reads diverged for as long as an
 	// apply that will succeed takes. Only the record of an attempt that
 	// ended does.
-	fleet, err := eng.Fleet(ctx)
+	fleet, err := run.fleetOf(ctx, eng)
 	if err != nil {
 		run.unavailable(err)
 		run.applied = appliedVerdict{}

@@ -34,6 +34,17 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Applied")].status
       name: Applied
       type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.placement.pool
+      name: Pool
+      priority: 1
+      type: string
+    - jsonPath: .status.placement.node
+      name: Node
+      priority: 1
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -1016,8 +1027,9 @@ spec:
                   conditions are Accepted (the Company exists, and no other Seat has the
                   handle, the name or a contact account; Conflict names the other),
                   ResolvedRefs (the unit, the providers, the tool servers and
-                  every Secret key exist) and Applied (the seat is in the revision the
-                  engine runs).
+                  every Secret key exist), Applied (the seat is in the revision the
+                  engine runs) and, on an Agent seat, Ready (an engine node holds the
+                  seat's lease and runs it: LeaseHeld, or Unplaced).
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -1137,8 +1149,8 @@ spec:
                   node:
                     description: |-
                       node is the engine node, a pod's name, that holds the seat's lease
-                      and runs it, as the engine last reported. Unset while no node holds
-                      it.
+                      and runs it, as the engine's GET /fleet last reported. Unset while no
+                      node holds it.
                     maxLength: 64
                     minLength: 1
                     type: string

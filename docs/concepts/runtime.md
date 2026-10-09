@@ -398,6 +398,12 @@ pool an agent seat is placed in, `data` included, has a ready pod:
 seats on purpose. Its message also names the seat StatefulSets kept for the
 running revision, and how many Seats are refused a pool.
 
+Which pod runs each seat is the engine's to decide, and each agent Seat
+reports what the engine says: `status.placement.node` names the pod that holds
+its lease, and its `Ready` is `True` (`LeaseHeld`) while one does and `False`
+(`Unplaced`) while none does ([What each object
+reports](applying.md#what-each-object-reports)).
+
 `EngineHealthy` is the engine's own alarm table, read from its `/health` each
 time the config reconciler reaches it: `True` (`NoAlarms`), `False` (`Alarms`,
 with how many and the one standing longest) or `Unknown`
