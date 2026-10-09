@@ -67,17 +67,17 @@ breaks one of them is a vulnerability and should be reported as above.
   listener, a port of its own, is routed publicly. The engine serves there
   only the routes outside parties call without an operator credential: the
   vendors' webhooks under `/webhooks/`, each verified by the vendor's
-  signature or shared token, and a remote sandbox's telemetry (`/otlp/`, while
-  the class sends telemetry to a collector) and tool bridge (`/mcp/`, while
-  an `LLMProvider` of the company runs a coding CLI in `mode: Agent`), each
-  call carrying a token the engine signed for that one run. It answers
+  signature or shared token, and a remote sandbox's telemetry (`/otlp/`,
+  while the class sends telemetry to a collector) and tool bridge (`/mcp/`,
+  while an `LLMProvider` of the company runs a coding CLI in `mode: Agent`),
+  each call carrying a token the engine signed for that one run. It answers
   every other path, the admin API and the probes included, as one nothing
   serves. The engine's API, dashboard, configuration, secrets and setup
-  endpoints are on another port, which stays on the cluster network, where a NetworkPolicy (when the
-  engine class enables isolation) limits who can reach them, unless the
-  EngineClass routes the whole API (`exposure.api`) through a Gateway or an
-  Ingress of your own, which should be internal. Your CNI must enforce
-  NetworkPolicy for that layer to exist.
+  endpoints are on another port, which stays on the cluster network, where a
+  NetworkPolicy (when the engine class enables isolation) limits who can
+  reach them, unless the EngineClass routes the whole API (`exposure.api`)
+  through a Gateway or an Ingress of your own, which should be internal.
+  Your CNI must enforce NetworkPolicy for that layer to exist.
 - **The data pods' leaf listener is unauthenticated.** While a company may
   run seat pools, its data pods listen on port 7422 for the seat pods to
   join the event stream, with no authentication and no TLS; whoever connects

@@ -161,15 +161,15 @@ kubectl logs acme-data-0 -n acme | grep -E 'WARN|ERROR' | tail
 - **The pod restarts** (`kubectl get pod` shows restarts): the engine refused
   its own configuration at boot, and the first lines of the previous log say
   why (`kubectl logs acme-data-0 -n acme --previous`).
-- **The pod restarts, and the previous log ends in `unknown field: "…" is not
-  a setting`**, such as `api.auth.company_writers: unknown field:
+- **The pod restarts, and the previous log ends in `unknown field: "…" is
+  not a setting`**, such as `api.auth.company_writers: unknown field:
   "company_writers" is not a setting`: the engine is older than the one the
   operator is built against, and refuses a setting the operator writes into
   its `crewlet.yaml` (`company_writers` is set under `Enforce`, and needs
   crewlet 51b8d06 or later; `api.public`, the public listener, is set on
-  every data pod, and needs crewlet 7670e6592 or later). Move the EngineClass's `engine.image` to the
-  operator's engine version ([Engine image](installing.md#engine-image));
-  the data pod rolls to it and starts.
+  every data pod, and needs crewlet 7670e6592 or later). Move the
+  EngineClass's `engine.image` to the operator's engine version ([Engine
+  image](installing.md#engine-image)); the data pod rolls to it and starts.
 - **`Pending`**: the volume claim is not bound (no default StorageClass, or
   the class's `storageClassName` does not exist), or no node fits the class's
   resources, tolerations or affinity.

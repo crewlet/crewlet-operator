@@ -80,8 +80,8 @@ Two cases are refused rather than guessed at:
 | Image | The class's `engine.image`; with `engine.allowVersionOverride`, its tag replaced by the Company's `spec.runtime.version`. |
 | Command | `crewlet run -config /etc/crewlet/crewlet.yaml`, the bootstrap Secret's `crewlet.yaml` mounted read-only, readable by the engine's user alone (mode `0440`, group `fsGroup`). |
 | Storage | One volume claim per pod (`data-nimbus-data-0`) at `/var/lib/crewlet`, from the class's `data.storage`: the store, the event stream (three quarters of the volume, [sized from the claim](company-document.md#the-data-pods-crewletyaml)), and the store's native library cache (`TURSO_GO_CACHE_DIR`), so a restart does not extract it again. |
-| Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the Company's public address, while an LLMProvider of the company runs a CLI in `mode: Agent` (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`; then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). |
-| Ports | 8080, the API, dashboard and webhooks; and 7422, the leaf listener seat pods join the event stream through, while the class's `seatPools.policy` is `Allowed`. The headless Service `nimbus-data` names both. |
+| Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the Company's public address, while an LLMProvider of the company runs a CLI in `mode: Agent` (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`, and with them `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, the Company's public address, while the Company has one (see [Exposure](#exposure)); then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). |
+| Ports | 8080 (`http`), the API, the dashboard and the probes; 8081 (`public`), the public listener: the webhooks, and a remote sandbox's `/otlp/` and `/mcp/`; and 7422 (`leaf`), the leaf listener seat pods join the event stream through, while the class's `seatPools.policy` is `Allowed`. The headless Service `nimbus-data` names 8080 and 7422; `nimbus-engine` names 8080 and 8081. |
 | Probes | `/health` for startup (up to five minutes for the first start) and liveness (a minute of failures before a restart, longer than the 45 seconds in which the engine's watchdog ends a wedged process itself), `/ready` for readiness. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
 | Stopping | A five-second `preStop` sleep, so the endpoint is gone from the Services and Gateways before the engine drains, and the class's `data.terminationGracePeriodSeconds` (default five minutes) for the drain: running turns finish, waiting ones are handed back. |
 | Updates | `RollingUpdate` with `maxUnavailable: 1`, `podManagementPolicy: Parallel`. |
@@ -122,7 +122,7 @@ pools, and which kind.
 | StatefulSet | `nimbus-seats-general-c53f6a26` | `nimbus-seat-cy-8ae373fd`, one for each seat placed in the pool |
 | Replicas | the pool's `replicas`, 0 to 100 | the pool's `replicas`, 1 or 2 (a warm standby) |
 | Selector | `crewlet.ai/pool: general`, and no `crewlet.ai/seat` label | `crewlet.ai/seat: cy` |
-| Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `TURSO_GO_CACHE_DIR` on the scratch volume; the class's and the Company's variables, as on a data pod | the same, and `CREWLET_SEAT: cy` |
+| Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `TURSO_GO_CACHE_DIR` on the scratch volume; the OpenTelemetry variables and `CREWLET_SANDBOX_OTEL_RECEIVER_URL` as on a data pod (never `CREWLET_MCP_BRIDGE_URL`); the class's and the Company's variables, as on a data pod | the same, and `CREWLET_SEAT: cy` |
 | Storage | one `emptyDir` at `/var/lib/crewlet`, of the class's `seatPools.defaults.scratchSizeLimit` (2Gi unless set), holding the scratch store, the store's native library, `/tmp` and `HOME`: the limit bounds what the processes the engine runs write too | the same |
 | Stopping | the pool's `terminationGracePeriodSeconds`, else the class's default, else five minutes: running turns finish, waiting ones are handed back, and the seats are released with their mailboxes for another pod to claim | the same |
 | Port and probes | 8080, the probes alone: `/health` for startup (up to six minutes) and liveness, `/ready` for readiness | the same |
@@ -385,10 +385,11 @@ The public address is also where a remote sandbox calls the engine back:
   the node that runs the seat, which only the single data pod is: the engine
   would serve the bridge on a seat pod too, but nothing publishes an address
   of one, so a seat in a seat pool whose work runs on such a provider is
-  refused (`AgentModeBridgeUnsupported`, see [Seat pools](../guides/cli-agents.md#seat-pools)),
-  and the variable is given to the data pod alone. With no such provider
-  the bridge is not mounted; adding or removing one changes the pod's
-  environment, so the data pod rolls.
+  refused (`AgentModeBridgeUnsupported`, see [Seat
+  pools](../guides/cli-agents.md#seat-pools)), and the variable is given to
+  the data pod alone. With no such provider the bridge is not mounted;
+  adding or removing one changes the pod's environment, so the data pod
+  rolls.
 - While the class sends the engine's telemetry to a collector
   (`spec.telemetry`), every engine pod is given the public address as
   `CREWLET_SANDBOX_OTEL_RECEIVER_URL`: a remote sandbox's coding agent
@@ -403,14 +404,14 @@ address once the route is accepted: `https://` when the Ingress has TLS or a
 Gateway listener the route attaches to is HTTPS. `status.endpoints.api` is
 always the in-cluster address, `http://<name>-engine.<namespace>.svc:8080`.
 
-`status.endpoints.dashboardBaseURL` is where people reach the dashboard:
-the Company's `spec.exposure.dashboardBaseURL`, else the API route's
-address on the same scheme as `exposedAPI`, without waiting for the route
-to be accepted, since a flip of acceptance would otherwise apply a new
-revision of the company document. The engine builds every link its agents compose for a person on it (Crewlet's
-`integrations.dashboard_base_url`), and never on the public address, whose
-listener serves no dashboard. With neither, no link is composed, and the
-`Exposed` condition's message says so.
+`status.endpoints.dashboardBaseURL` is where people reach the dashboard: the
+Company's `spec.exposure.dashboardBaseURL`, else the API route's address on
+the same scheme as `exposedAPI`, without waiting for the route to be
+accepted, since a flip of acceptance would otherwise apply a new revision of
+the company document. The engine builds every link its agents compose for a
+person on it (Crewlet's `integrations.dashboard_base_url`), and never on the
+public address, whose listener serves no dashboard. With neither, no link is
+composed, and the `Exposed` condition's message says so.
 
 The `Exposed` condition is `True` with the reason `RouteAccepted` once every
 route exists and was accepted: an HTTPRoute when each Gateway it names reports

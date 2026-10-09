@@ -319,8 +319,9 @@ The public port, 8081, only from where webhooks arrive: `exposure.webhooks`'
 `webhooks.mode: None` nothing is admitted to it.
 
 So a webhook's proxy reaches no admin route, and an API consumer cannot
-reach the port published to the internet. Everything else, other tenants
-and the tenant's own other pods included, is refused. Name your consumers in the class, by namespace and pod labels:
+reach the port published to the internet. Everything else, other tenants and
+the tenant's own other pods included, is refused. Name your consumers in the
+class, by namespace and pod labels:
 
 ```yaml
 spec:
@@ -376,21 +377,21 @@ gateway:
 
 A class that allows seat pools (`seatPools.policy: Allowed`) also has the
 operator create two more policies per company, under either mode:
-`<company>-broker`, which admits the data pods' leaf listener (port 7422) from
-the company's own seat pods and from nothing else, since Crewlet's broker
-port takes any connection without authentication or TLS (under `None` it
-also admits ports 8080 and 8081 from anywhere, so the data pods stay as open
-as they are without a policy); and, while the
-company runs seat pods, `<company>-seats`, which admits no connection to a
-seat pod from any pod and, under `Isolated`, holds the seat pods to the egress
-above. A seat pod's probes (port 8080, `/health` and `/ready`) still answer
-its kubelet, whose traffic comes from the pod's own node, which a
-NetworkPolicy does not police. NetworkPolicies are additive, so this isolation of the seat pods holds
-only while no other policy selects them: do not add one that selects every
-pod of a tenant's namespace. A policy selects pods by label, so it cannot
-keep apart companies that share a namespace, whose pods anyone who creates
-pods there can label as either's: give each company a namespace of its own
-where that matters, and see [Network
+`<company>-broker`, which admits the data pods' leaf listener (port 7422)
+from the company's own seat pods and from nothing else, since Crewlet's
+broker port takes any connection without authentication or TLS (under `None`
+it also admits ports 8080 and 8081 from anywhere, so the data pods stay as
+open as they are without a policy); and, while the company runs seat pods,
+`<company>-seats`, which admits no connection to a seat pod from any pod
+and, under `Isolated`, holds the seat pods to the egress above. A seat pod's
+probes (port 8080, `/health` and `/ready`) still answer its kubelet, whose
+traffic comes from the pod's own node, which a NetworkPolicy does not
+police. NetworkPolicies are additive, so this isolation of the seat pods
+holds only while no other policy selects them: do not add one that selects
+every pod of a tenant's namespace. A policy selects pods by label, so it
+cannot keep apart companies that share a namespace, whose pods anyone who
+creates pods there can label as either's: give each company a namespace of
+its own where that matters, and see [Network
 policy](../concepts/runtime.md#network-policy) for what no NetworkPolicy
 governs (the node's own traffic, `hostNetwork` pods) and for the leaf link's
 lack of encryption.

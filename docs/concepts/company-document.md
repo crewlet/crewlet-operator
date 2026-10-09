@@ -27,19 +27,20 @@ handle, and model providers and tool servers by name.
 | `Schedule` | one entry of the `schedules` of the Seat's role or the Unit it targets, named by its `metadata.name` |
 
 `integrations.public_base_url` is the Company's public address, from
-`spec.exposure.publicBaseURL` or the class's `webhooks.hostname`, and is left
-out while the company has none. It is where vendors and sandboxes reach the
-engine, and it reaches the engine's public listener alone, which serves the
-webhooks and the sandbox endpoints and no dashboard.
+`spec.exposure.publicBaseURL` or the class's `webhooks.hostname`, and is
+left out while the company has none. It is where vendors and sandboxes reach
+the engine, and it reaches the engine's public listener alone, which serves
+the webhooks and the sandbox endpoints and no dashboard.
 `integrations.dashboard_base_url` is the address people reach the engine's
 dashboard at, `status.endpoints.dashboardBaseURL`: the Company's
 `spec.exposure.dashboardBaseURL`, or the address of the class's API route,
-whether or not that route has been accepted yet. Every link the engine composes for a person (a tool
-skill's `${crewlet_base_url}`, a page change's notification) is built on it.
-It is left out while the company has neither: the engine then composes no
-link for a person, and a skill's `${crewlet_base_url}` stays as written.
-Neither is ever the other: Crewlet does not fall back from one to the other,
-since on a deployment with a public listener the two are different sockets
+whether or not that route has been accepted yet. Every link the engine
+composes for a person (a tool skill's `${crewlet_base_url}`, a page change's
+notification) is built on it. It is left out while the company has neither:
+the engine then composes no link for a person, and a skill's
+`${crewlet_base_url}` stays as written. Neither is ever the other: Crewlet
+does not fall back from one to the other, since on a deployment with a
+public listener the two are different sockets
 ([Exposure](runtime.md#exposure)).
 
 ### Names and identities
@@ -218,12 +219,12 @@ pods share one `crewlet.yaml`, kept like the data pod's in a Secret,
 | `secrets` | The company's keyring, as the data pod has it: the pod opens the company document and the secret store itself. |
 | `retention` | The class's `backupOwner`, as the data pod has it. |
 
-Its `api` block is `host: 0.0.0.0` and `port: 8080`, with no `auth`, no
-API token and no `public` listener: a node without the `ingress` role serves only `/health` and
-`/ready` on its `api.port`, which the pod's probes ask, and refuses every
-other route as an unknown one. Without the port the engine would bind
-nothing, and nothing could tell a seat pod that has joined the fleet from
-one still starting ([Seat pools](runtime.md#seat-pools)).
+Its `api` block is `host: 0.0.0.0` and `port: 8080`, with no `auth`, no API
+token and no `public` listener: a node without the `ingress` role serves
+only `/health` and `/ready` on its `api.port`, which the pod's probes ask,
+and refuses every other route as an unknown one. Without the port the engine
+would bind nothing, and nothing could tell a seat pod that has joined the
+fleet from one still starting ([Seat pools](runtime.md#seat-pools)).
 
 ## What blocks a document
 

@@ -157,8 +157,8 @@ triage            nimbus    Agent          True      True    False    general   
 A Human seat is never run by the engine and has no `Ready`. On the Company,
 `status.topology.seatPools` counts each pool's pods and seats, and
 `SeatsPlaced` says whether every pool with a seat has a ready pod: one that
-has joined the fleet and may claim seats, which its `/ready` says
-([Seat pools](../concepts/runtime.md#seat-pools)). With the API token, the engine's
+has joined the fleet and may claim seats, which its `/ready` says ([Seat
+pools](../concepts/runtime.md#seat-pools)). With the API token, the engine's
 own `GET /fleet` lists every node, its roles and labels, and the holder of
 every seat.
 
