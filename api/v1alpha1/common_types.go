@@ -727,10 +727,12 @@ const (
 	ReasonPerSeatNotAllowed = "PerSeatNotAllowed"
 
 	// ReasonPoolCapacityExceeded is Applied=False on each Seat placed in a
-	// PerSeat pool when the company's seat pods would number more than its
-	// EngineClass's spec.seatPools.maxPods, and ConfigApplied=False and
-	// SeatsPlaced=False on a Company whose Shared pools alone run more: the
-	// operator then keeps the pools' pods as they are and starts no other.
+	// PerSeat pool that the company's seat pods cannot admit within its
+	// EngineClass's spec.seatPools.maxPods (the seats already running in
+	// pods of their own are admitted first, then the older ones), and
+	// ConfigApplied=False and SeatsPlaced=False on a Company whose Shared
+	// pools alone run more: the operator then keeps the pools' pods as
+	// they are and starts no other.
 	ReasonPoolCapacityExceeded = "PoolCapacityExceeded"
 
 	// ReasonAgentModeBridgeUnsupported is Applied=False on a Seat placed in

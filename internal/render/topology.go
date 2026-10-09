@@ -241,10 +241,19 @@ func planTopology(c *v1alpha1.Company, class *v1alpha1.EngineClass, seats []v1al
 // checkCapacity holds the pools to the class's seatPools.maxPods. The Shared
 // pools are the Company's own choice and run whatever seats they hold, so
 // when they alone pass the cap the Company is refused. Otherwise the PerSeat
-// seats are admitted oldest first (by creation, then by handle), each with its
-// pool's pods, for as long as the cap holds, and each seat past it is refused:
-// the refusal is on the seats whose pods would pass the cap, which removing
-// brings the company back under it, never on the ones already running.
+// seats are admitted in one order, each with its pool's pods, until the first
+// that does not fit; that seat and every seat after it are refused, so the
+// refused seats are always a tail of the order and never a younger seat
+// slipped in behind an older one in a smaller pool.
+//
+// The order puts first the seats the running revision already runs in pods of
+// their own (status.config.placement.seats), then the rest, each group oldest
+// first (by creation, then by handle). Creation alone is not the seat that
+// pushed the company over the cap: an old Seat moved into a full PerSeat pool
+// is older than the seat running there, and admitting it first would refuse
+// the running seat, which changed nothing, and plan pods for the one that
+// cannot run, while the running seat's pods are kept for the revision that
+// still pins it. Refusing the newcomer blames the change.
 func checkCapacity(c *v1alpha1.Company, class *v1alpha1.EngineClass, t *Topology, perSeat map[string][]*v1alpha1.Seat, errs *refErrors) {
 	limit := int(class.Spec.SeatPools.MaxPods)
 	if limit == 0 {
@@ -272,21 +281,42 @@ func checkCapacity(c *v1alpha1.Company, class *v1alpha1.EngineClass, t *Topology
 			queue = append(queue, placed{seat: s, pool: name})
 		}
 	}
+	running := c.Status.Config.Placement.Seats
+	// newcomer is 0 for a seat the running revision runs in its own pods and
+	// 1 for any other, so the running ones sort first.
+	newcomer := func(s *v1alpha1.Seat) int {
+		if slices.Contains(running, SeatHandle(s)) {
+			return 0
+		}
+		return 1
+	}
 	slices.SortStableFunc(queue, func(a, b placed) int {
-		return cmp.Or(a.seat.CreationTimestamp.Compare(b.seat.CreationTimestamp.Time),
+		return cmp.Or(cmp.Compare(newcomer(a.seat), newcomer(b.seat)),
+			a.seat.CreationTimestamp.Compare(b.seat.CreationTimestamp.Time),
 			strings.Compare(SeatHandle(a.seat), SeatHandle(b.seat)))
 	})
 	pods := shared
+	var first *v1alpha1.Seat
 	for _, q := range queue {
 		pool := t.Pool(q.pool)
-		if pods+int(pool.Replicas) <= limit {
+		switch {
+		case first == nil && pods+int(pool.Replicas) <= limit:
 			pods += int(pool.Replicas)
 			continue
+		case first == nil:
+			first = q.seat
+			errs.add(KindSeat, q.seat.Name, "spec.placement.pool", v1alpha1.ReasonPoolCapacityExceeded, fmt.Sprintf(
+				"places the seat in PerSeat pool %s, which runs %d pods for it; the company's seat pods would number %d with "+
+					"them, and EngineClass %s allows %d (spec.seatPools.maxPods): the seats already running in pods of their "+
+					"own, then the older seats, take the rest",
+				q.pool, pool.Replicas, pods+int(pool.Replicas), class.Name, limit))
+		default:
+			errs.add(KindSeat, q.seat.Name, "spec.placement.pool", v1alpha1.ReasonPoolCapacityExceeded, fmt.Sprintf(
+				"places the seat in PerSeat pool %s, and comes after Seat %s, which already takes the company past "+
+					"EngineClass %s's %d seat pods (spec.seatPools.maxPods): the seats already running in pods of their "+
+					"own, then the older seats, are admitted first",
+				q.pool, first.Name, class.Name, limit))
 		}
-		errs.add(KindSeat, q.seat.Name, "spec.placement.pool", v1alpha1.ReasonPoolCapacityExceeded, fmt.Sprintf(
-			"places the seat in PerSeat pool %s, which runs %d pods for it; the company's seat pods would number %d with "+
-				"them, and EngineClass %s allows %d (spec.seatPools.maxPods): the seats placed before it take the rest",
-			q.pool, pool.Replicas, pods+int(pool.Replicas), class.Name, limit))
 		// Refused, so placed nowhere: the plan runs no pod for it.
 		pool.Seats = slices.DeleteFunc(pool.Seats, func(h string) bool { return h == SeatHandle(q.seat) })
 	}

@@ -324,7 +324,7 @@ func TestPlacementRefusals(t *testing.T) {
 			// general's 2 pods and ana's 2 are 4.
 			name:    "a PerSeat seat whose pods pass maxPods",
 			mutate:  func(in *Input) { in.Class.Spec.SeatPools.MaxPods = 3 },
-			want:    []string{"Seat/ana spec.placement.pool PoolCapacityExceeded"},
+			want:    []string{anaOverCap},
 			planned: anaRefused,
 		},
 		{
@@ -367,6 +367,13 @@ func TestPlacementRefusals(t *testing.T) {
 		})
 	}
 }
+
+// The refusals of seats ana and eve, whose PerSeat pods the class's maxPods
+// does not admit.
+const (
+	anaOverCap = "Seat/ana spec.placement.pool PoolCapacityExceeded"
+	eveOverCap = "Seat/eve spec.placement.pool PoolCapacityExceeded"
+)
 
 // anaPerSeatNotAllowed is the refusal of seat ana, in the seat-pools
 // company's PerSeat pool, under a class that allows no PerSeat pool.
@@ -411,19 +418,19 @@ func TestPerSeatCapacityRefusesOnlyTheSeatsPastIt(t *testing.T) {
 		{
 			name:    "the newest seat passes the cap",
 			created: map[string]metav1.Time{seatAna: at(0), seatEve: at(5)},
-			want:    []string{"Seat/eve spec.placement.pool PoolCapacityExceeded"},
+			want:    []string{eveOverCap},
 			planned: "batch:dee data:cy general:bo isolated:ana",
 		},
 		{
 			name:    "an older seat comes first whatever its handle",
 			created: map[string]metav1.Time{seatAna: at(5), seatEve: at(0)},
-			want:    []string{"Seat/ana spec.placement.pool PoolCapacityExceeded"},
+			want:    []string{anaOverCap},
 			planned: "batch:dee data:cy general:bo isolated:eve",
 		},
 		{
 			name:    "seats created together, by handle",
 			created: map[string]metav1.Time{seatAna: at(0), seatEve: at(0)},
-			want:    []string{"Seat/eve spec.placement.pool PoolCapacityExceeded"},
+			want:    []string{eveOverCap},
 			planned: "batch:dee data:cy general:bo isolated:ana",
 		},
 	} {
@@ -473,5 +480,86 @@ func TestAHeldSeatKeepsItsRunningPin(t *testing.T) {
 	}
 	if !maps.Equal(got[seatBo], running) || len(got) != 4 {
 		t.Errorf("RolePlacements read %v, want the four agent seats' pins", got)
+	}
+}
+
+// TestPerSeatCapacityAdmitsTheRunningSeatsFirst holds the order the PerSeat
+// seats are admitted in to the one that blames the change: the seats the
+// running revision already runs in pods of their own come before every other,
+// however old, and the first seat that does not fit ends the admission, so a
+// seat behind it in a smaller pool is refused too rather than slipped in.
+func TestPerSeatCapacityAdmitsTheRunningSeatsFirst(t *testing.T) {
+	const (
+		seatEve  = "eve"
+		poolSolo = "solo"
+	)
+	at := func(minute int) metav1.Time { return metav1.NewTime(time.Date(2026, 10, 9, 8, minute, 0, 0, time.UTC)) }
+	for _, c := range []struct {
+		name    string
+		mutate  func(*Input)
+		want    []string
+		planned string
+	}{
+		{
+			// cy is older than ana, and moved into isolated while ana runs
+			// there: general's 2 pods and ana's 2 are 4, cy's would make 6.
+			name: "an older seat moved into a full pool beside a running one",
+			mutate: func(in *Input) {
+				in.Company.Status.Config.Placement.Seats = []string{seatAna}
+				seatNamed(in, seatCy).Spec.Placement.Pool = poolIsolated
+				seatNamed(in, seatCy).CreationTimestamp = at(0)
+				seatNamed(in, seatAna).CreationTimestamp = at(5)
+			},
+			want:    []string{"Seat/cy spec.placement.pool PoolCapacityExceeded"},
+			planned: "batch:dee data: general:bo isolated:ana",
+		},
+		{
+			// The control: with nothing running in pods of its own, the
+			// older seat comes first.
+			name: "the same seats before either runs",
+			mutate: func(in *Input) {
+				seatNamed(in, seatCy).Spec.Placement.Pool = poolIsolated
+				seatNamed(in, seatCy).CreationTimestamp = at(0)
+				seatNamed(in, seatAna).CreationTimestamp = at(5)
+			},
+			want:    []string{anaOverCap},
+			planned: "batch:dee data: general:bo isolated:cy",
+		},
+		{
+			// ana's 2 make 4; cy's 2 would make 6 and are refused; eve's
+			// one pod would fit in 5, and is refused all the same.
+			name: "the first seat that does not fit ends the admission",
+			mutate: func(in *Input) {
+				in.Company.Spec.Topology.SeatPools = append(in.Company.Spec.Topology.SeatPools, v1alpha1.SeatPool{
+					Name: poolSolo, Mode: v1alpha1.SeatPoolPerSeat, Replicas: new(int32(1)),
+				})
+				eve := seatNamed(in, seatAna).DeepCopy()
+				eve.Name = seatEve
+				eve.Spec.Placement.Pool = poolSolo
+				eve.CreationTimestamp = at(10)
+				in.Seats = append(in.Seats, *eve)
+				seatNamed(in, seatAna).CreationTimestamp = at(0)
+				seatNamed(in, seatCy).Spec.Placement.Pool = poolIsolated
+				seatNamed(in, seatCy).CreationTimestamp = at(5)
+			},
+			want: []string{
+				"Seat/cy spec.placement.pool PoolCapacityExceeded",
+				eveOverCap,
+			},
+			planned: "batch:dee data: general:bo isolated:ana solo:",
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := companyCaseNamed(t, "seat-pools").input(t)
+			in.Class.Spec.SeatPools.MaxPods = 5
+			c.mutate(in)
+			plan, err := PlanTopology(in.Company, in.Class, in.Seats)
+			if got := refusalsOf(err); !slices.Equal(got, c.want) {
+				t.Errorf("refused %v (%v), want %v", got, err, c.want)
+			}
+			if got := planText(plan); got != c.planned {
+				t.Errorf("planned %q, want %q", got, c.planned)
+			}
+		})
 	}
 }
