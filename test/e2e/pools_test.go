@@ -3,6 +3,8 @@
 package e2e
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os/exec"
 	"strings"
@@ -45,11 +47,19 @@ const (
 	placed = 3 * time.Minute
 )
 
+// scopedName is the name of an object of one of the company's pools or seats:
+// the company, the kind, the pool or handle, and eight hexadecimal digits of
+// a SHA-256 of the four joined by '/' (no salt for a StatefulSet).
+func scopedName(kind, value string) string {
+	sum := sha256.Sum256([]byte(poolsCompany + "/" + kind + "/" + value + "/"))
+	return poolsCompany + "-" + kind + "-" + value + "-" + hex.EncodeToString(sum[:4])
+}
+
 // The company's objects, by the names the docs give.
 var (
 	poolsDataPod      = poolsCompany + "-data-0"
-	sharedStatefulSet = poolsCompany + "-seats-" + sharedPool
-	soloStatefulSet   = poolsCompany + "-seat-ed"
+	sharedStatefulSet = scopedName("seats", sharedPool)
+	soloStatefulSet   = scopedName("seat", "ed")
 	soloPod           = soloStatefulSet + "-0"
 	poolsAccessSecret = poolsCompany + "-api-access"
 

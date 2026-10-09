@@ -929,7 +929,7 @@ var _ = Describe("Company config", Ordered, func() {
 		By("blocking the seat that can run, and recording where it is placed")
 		Eventually(reasonOf(shared, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonBlocked))
 		Expect(shared.Status.Placement.Pool).To(Equal(poolGeneral))
-		Expect(shared.Status.Placement.Workload).To(Equal(name + "-seats-general"))
+		Expect(shared.Status.Placement.Workload).To(Equal(sharedPoolStatefulSetName(c, poolGeneral)))
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(alone), alone)).To(Succeed())
 		Expect(alone.Status.Placement.Pool).To(Equal(poolIsolated))
 		Expect(alone.Status.Placement.Workload).To(BeEmpty(), "the class runs no pod for a seat it refuses its pool")
@@ -981,13 +981,13 @@ var _ = Describe("Company config", Ordered, func() {
 		By("keeping a moving seat pinned to its own pods while its new pool has no ready pod")
 		updateLive(cy, func(s *crewletaiv1alpha1.Seat) { s.Spec.Placement.Pool = poolGeneral })
 		Eventually(reasonOf(cy, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonPlacementPending))
-		Expect(conditionOf(cy, crewletaiv1alpha1.ConditionApplied)(Default).Message).To(ContainSubstring(name + "-seats-general"))
+		Expect(conditionOf(cy, crewletaiv1alpha1.ConditionApplied)(Default).Message).To(ContainSubstring(sharedPoolStatefulSetName(c, poolGeneral)))
 		Consistently(placement).WithTimeout(3 * time.Second).Should(Equal(crewletaiv1alpha1.RevisionPlacement{
 			Pools: []string{crewletaiv1alpha1.DataPool, poolGeneral}, Seats: []string{name + "-cy"},
 		}))
 
 		By("dropping a seat's own pods from the record once a revision that places it elsewhere is applied")
-		readyStatefulSet(c, name+"-seats-general")
+		readyStatefulSet(c, sharedPoolStatefulSetName(c, poolGeneral))
 		Eventually(placement).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.RevisionPlacement{
 			Pools: []string{crewletaiv1alpha1.DataPool, poolGeneral},
 		}))
@@ -1041,7 +1041,7 @@ var _ = Describe("Company config", Ordered, func() {
 
 		By("reporting the seat of a pool no engine node runs as unplaced, with no node")
 		Eventually(reasonOf(bo, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonUnplaced))
-		Expect(conditionOf(bo, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring(name + "-seats-general"))
+		Expect(conditionOf(bo, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring(sharedPoolStatefulSetName(c, poolGeneral)))
 		Expect(bo.Status.Placement.Node).To(BeEmpty())
 
 		By("giving a human seat, which the engine does not lease, no Ready")

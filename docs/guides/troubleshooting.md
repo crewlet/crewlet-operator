@@ -181,7 +181,7 @@ pod has no probe (the engine serves nothing on a node without the `ingress`
 role), so a pod that is `Running` is all Kubernetes knows; read its log:
 
 ```bash
-kubectl logs -n acme acme-seats-general-0
+kubectl logs -n acme acme-seats-general-159f80d7-0
 ```
 
 A seat pod that cannot join the data pod's leaf listener within a minute
@@ -206,7 +206,7 @@ seat, `unplaceable` the seats no running pod may take):
 
 ```bash
 kubectl get seat triage -n acme -o jsonpath='{.status.placement}{"\n"}'
-kubectl get statefulset acme-seats-general -n acme
+kubectl get statefulset acme-seats-general-159f80d7 -n acme
 ```
 
 - **The StatefulSet has no ready pod**: a Shared pool at zero replicas, a

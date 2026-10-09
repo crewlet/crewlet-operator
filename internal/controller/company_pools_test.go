@@ -30,45 +30,65 @@ import (
 // pool specs run: Nimbus, with a Shared pool general of two pods, a Shared
 // pool batch at zero, and a PerSeat pool isolated.
 const (
-	poolsCompany      = "nimbus"
-	seatsService      = "nimbus-seats"
-	generalSet        = "nimbus-seats-general"
-	batchSet          = "nimbus-seats-batch"
-	cySet             = "nimbus-seat-cy"
-	generalBootstrap  = "nimbus-bootstrap-general"
-	isolatedBootstrap = "nimbus-bootstrap-isolated-perseat"
-	brokerPolicy      = "nimbus-broker"
-	seatsPolicy       = "nimbus-seats"
-	seatImageV030     = "ghcr.io/crewlet/crewlet:v0.3.0"
-	humanJane         = "jane"
+	poolsCompany  = "nimbus"
+	seatsService  = "nimbus-seats"
+	brokerPolicy  = "nimbus-broker"
+	seatsPolicy   = "nimbus-seats"
+	seatImageV030 = "ghcr.io/crewlet/crewlet:v0.3.0"
+	humanJane     = "jane"
 )
 
-func TestBoundedNameKeepsAStatefulSetsPodsLabelled(t *testing.T) {
-	company := &crewletaiv1alpha1.Company{Name: strings.Repeat("c", 47)}
-	pool := strings.Repeat("p", 20)
-	handle := strings.Repeat("h", 63)
+var (
+	poolsOwner        = &crewletaiv1alpha1.Company{Name: poolsCompany}
+	generalSet        = sharedPoolStatefulSetName(poolsOwner, poolGeneral)
+	batchSet          = sharedPoolStatefulSetName(poolsOwner, poolBatch)
+	cySet             = perSeatStatefulSetName(poolsOwner, "cy")
+	generalBootstrap  = poolBootstrapName(poolsOwner, poolGeneral, crewletaiv1alpha1.SeatPoolShared)
+	batchBootstrap    = poolBootstrapName(poolsOwner, poolBatch, crewletaiv1alpha1.SeatPoolShared)
+	isolatedBootstrap = poolBootstrapName(poolsOwner, poolIsolated, crewletaiv1alpha1.SeatPoolPerSeat)
+)
+
+// TestScopedNamesAreTheCompanysOwn holds the names of a Company's seat pool
+// objects to what their pods' labels hold, and apart from every name another
+// Company of the namespace gives its own objects: a pool or a handle that
+// spells another Company's fixed suffix must not take that Company's name.
+func TestScopedNamesAreTheCompanysOwn(t *testing.T) {
+	long := &crewletaiv1alpha1.Company{Name: strings.Repeat("c", 47)}
+	a := &crewletaiv1alpha1.Company{Name: "a"}
 	names := map[string]string{
-		"a Shared pool":                    sharedPoolStatefulSetName(company, pool),
-		"a PerSeat seat":                   perSeatStatefulSetName(company, handle),
-		"another pool of the same start":   sharedPoolStatefulSetName(company, pool[:19]+"q"),
-		"a short one":                      sharedPoolStatefulSetName(&crewletaiv1alpha1.Company{Name: "nimbus"}, "general"),
-		"a cut that would end with a dash": boundedName(strings.Repeat("a", 42) + "-" + strings.Repeat("b", 20)),
+		"a long Shared pool":             sharedPoolStatefulSetName(long, strings.Repeat("p", 20)),
+		"a long PerSeat seat":            perSeatStatefulSetName(long, strings.Repeat("h", 63)),
+		"another pool of the same start": sharedPoolStatefulSetName(long, strings.Repeat("p", 19)+"q"),
+		"a cut that would end with '-'":  perSeatStatefulSetName(&crewletaiv1alpha1.Company{Name: strings.Repeat("a", 33)}, "b-"+strings.Repeat("c", 20)),
+		"a short one":                    sharedPoolStatefulSetName(poolsOwner, poolGeneral),
+		"a pool named keyring":           poolBootstrapName(a, "keyring", crewletaiv1alpha1.SeatPoolShared),
+		"the same pool, PerSeat":         poolBootstrapName(a, "keyring", crewletaiv1alpha1.SeatPoolPerSeat),
+		"a seat named data":              perSeatStatefulSetName(a, "data"),
+		"a pool named data":              sharedPoolStatefulSetName(a, "data"),
+	}
+	taken := map[string]string{
+		"Company a-bootstrap's keyring": keyringSecretName(&crewletaiv1alpha1.Company{Name: "a-bootstrap"}),
+		"Company a-seat's data pods":    dataStatefulSetName(&crewletaiv1alpha1.Company{Name: "a-seat"}),
+		"Company a-seats's data pods":   dataStatefulSetName(&crewletaiv1alpha1.Company{Name: "a-seats"}),
 	}
 	seen := map[string]string{}
+	for what, name := range taken {
+		seen[name] = what
+	}
 	for what, name := range names {
 		if len(name) > maxStatefulSetName {
-			t.Errorf("%s's StatefulSet %s has %d characters, over %d", what, name, len(name), maxStatefulSetName)
+			t.Errorf("%s's name %s has %d characters, over %d", what, name, len(name), maxStatefulSetName)
 		}
 		if strings.Contains(name, "--") || strings.HasSuffix(name, "-") {
-			t.Errorf("%s's StatefulSet %s is not a DNS label", what, name)
+			t.Errorf("%s's name %s is not a DNS label", what, name)
 		}
 		if other, ok := seen[name]; ok {
-			t.Errorf("%s and %s share the StatefulSet %s", what, other, name)
+			t.Errorf("%s and %s share the name %s", what, other, name)
 		}
 		seen[name] = what
 	}
-	if got := names["a short one"]; got != "nimbus-seats-general" {
-		t.Errorf("a name that fits is %s, want it unchanged", got)
+	if got := names["a short one"]; !strings.HasPrefix(got, "nimbus-seats-general-") {
+		t.Errorf("a name that fits is %s, want it readable", got)
 	}
 }
 
@@ -639,7 +659,7 @@ var _ = Describe("Company seat pools", func() {
 	It("stops the seat pods before the data pods when suspended, and starts them after when resumed", func() {
 		class := newClass()
 		company := running(class.Name)
-		pod := seatPod("nimbus-seats-general-0")
+		pod := seatPod(generalSet + "-0")
 		updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Suspend = new(true) })
 
 		By("scaling every seat pool to zero and keeping the data pods while a seat pod stops")
@@ -675,7 +695,7 @@ var _ = Describe("Company seat pools", func() {
 	It("stops the seat pods first when a Company that is not accepted is suspended", func() {
 		class := newClass()
 		company := running(class.Name)
-		pod := seatPod("nimbus-seat-cy-0")
+		pod := seatPod(cySet + "-0")
 		Expect(k8sClient.Delete(ctx, class)).To(Succeed())
 		updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Suspend = new(true) })
 		company = reconciled(company)
@@ -777,7 +797,7 @@ var _ = Describe("Company seat pools", func() {
 		get(&corev1.Service{}, seatsService)
 		get(&networkingv1.NetworkPolicy{}, seatsPolicy)
 		get(&corev1.Secret{}, generalBootstrap)
-		absent(&corev1.Secret{}, "nimbus-bootstrap-batch")
+		absent(&corev1.Secret{}, batchBootstrap)
 		placed := condition(company, crewletaiv1alpha1.ConditionSeatsPlaced)
 		Expect(placed.Reason).To(Equal(crewletaiv1alpha1.ReasonSeatPoolsNotAllowed))
 		Expect(placed.Message).To(ContainSubstring("keep running"))
@@ -894,7 +914,7 @@ var _ = Describe("Company seat pools", func() {
 	It("deletes the seat pods before the data pods when the Company is deleted", func() {
 		class := newClass()
 		company := running(class.Name)
-		pod := seatPod("nimbus-seats-general-0")
+		pod := seatPod(generalSet + "-0")
 		Expect(k8sClient.Delete(ctx, company)).To(Succeed())
 
 		result := reconcileOnce(company)

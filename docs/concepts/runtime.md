@@ -32,10 +32,10 @@ Company, so it is deleted with it. For a Company `nimbus`:
 | HTTPRoute or Ingress `nimbus-webhooks`, `nimbus-api` | The routes the class asks for; see [Exposure](#exposure). |
 | NetworkPolicy `nimbus-engine` | With the class's `networkPolicy.mode: Isolated`; see [Network policy](#network-policy). |
 | NetworkPolicy `nimbus-broker` | While the class's `seatPools.policy` is `Allowed`, whatever its `networkPolicy` says: who may reach the data pods' leaf listener; see [Network policy](#network-policy). |
-| Secret `nimbus-bootstrap-<pool>` | A seat pool's `crewlet.yaml` ([A seat pod's `crewlet.yaml`](company-document.md#a-seat-pods-crewletyaml)), with the class's environment values as in `nimbus-bootstrap`. One per pool, a PerSeat pool's seats included. |
-| StatefulSet `nimbus-seats-<pool>`, `nimbus-seat-<handle>` | A Shared pool's pods, and a PerSeat seat's own; see [Seat pools](#seat-pools). |
+| Secret `nimbus-bootstrap-<pool>-<hash>` | A seat pool's `crewlet.yaml` ([A seat pod's `crewlet.yaml`](company-document.md#a-seat-pods-crewletyaml)), with the class's environment values as in `nimbus-bootstrap`. One per pool, a PerSeat pool's seats included. |
+| StatefulSet `nimbus-seats-<pool>-<hash>`, `nimbus-seat-<handle>-<hash>` | A Shared pool's pods, and a PerSeat seat's own; see [Seat pools](#seat-pools). |
 | Service `nimbus-seats` | Headless, with no port: the seat StatefulSets' governing Service. |
-| PodDisruptionBudget `nimbus-seats-<pool>`, `nimbus-seat-<handle>` | `maxUnavailable: 1` for each Shared pool, and for each PerSeat seat with two pods. |
+| PodDisruptionBudget `nimbus-seats-<pool>-<hash>`, `nimbus-seat-<handle>-<hash>` | `maxUnavailable: 1` for each Shared pool, and for each PerSeat seat with two pods. |
 | NetworkPolicy `nimbus-seats` | While the company runs seat pods: no connection reaches one. |
 
 The operator writes an object only if it does not exist or the Company
@@ -118,7 +118,7 @@ pools, and which kind.
 
 | | Shared pool `general` | PerSeat pool, seat `cy` |
 |---|---|---|
-| StatefulSet | `nimbus-seats-general` | `nimbus-seat-cy`, one for each seat placed in the pool |
+| StatefulSet | `nimbus-seats-general-c53f6a26` | `nimbus-seat-cy-8ae373fd`, one for each seat placed in the pool |
 | Replicas | the pool's `replicas`, 0 to 100 | the pool's `replicas`, 1 or 2 (a warm standby) |
 | Selector | `crewlet.ai/pool: general`, and no `crewlet.ai/seat` label | `crewlet.ai/seat: cy` |
 | Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `TURSO_GO_CACHE_DIR` on the scratch volume; the class's and the Company's variables, as on a data pod | the same, and `CREWLET_SEAT: cy` |
@@ -142,11 +142,15 @@ replaced only once the last one has run for a minute. Where the Kubernetes
 are already unavailable, such as seat pods crash-looping through a data pod
 outage, are all replaced at once; available ones still go one at a time.
 
-StatefulSet names are held to 52 characters, the most a StatefulSet's pods'
-`controller-revision-hash` label leaves room for: a longer
-`<company>-seats-<pool>` or `<company>-seat-<handle>` keeps its first 43
-characters, a dash and eight hexadecimal digits of a hash of the whole name,
-so two names that start alike stay apart. Each Seat's
+A seat pool's objects are named `<company>-seats-<pool>`,
+`<company>-seat-<handle>` and `<company>-bootstrap-<pool>`, then a dash and
+eight hexadecimal digits of a hash of the Company's name, the kind of object
+and the pool or handle. The hash keeps a pool or a handle from spelling
+another Company's fixed name in a shared namespace (a pool named `keyring`
+of Company `a` would otherwise make `a-bootstrap-keyring`, Company
+`a-bootstrap`'s keyring). Names are held to 52 characters, the most a
+StatefulSet's pods' `controller-revision-hash` label leaves room for: a
+longer one keeps its first 43 characters before the hash. Each Seat's
 `status.placement.workload` names the StatefulSet that runs it.
 
 ### The seat pods follow the data pods

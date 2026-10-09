@@ -37,7 +37,7 @@ const (
 // derived from the Company's name, which the API server holds to a DNS label
 // of at most 47 characters, so that the data StatefulSet's name stays within
 // the 52 characters its pods' controller-revision-hash label leaves room for;
-// the seat pools' StatefulSets are held to it by boundedName.
+// the seat pools' objects are named by scopedName.
 func keyringSecretName(c *crewletaiv1alpha1.Company) string   { return c.Name + "-keyring" }
 func apiTokensSecretName(c *crewletaiv1alpha1.Company) string { return c.Name + "-api-tokens" }
 func apiAccessSecretName(c *crewletaiv1alpha1.Company) string { return c.Name + "-api-access" }
@@ -60,22 +60,19 @@ func seatsServiceName(c *crewletaiv1alpha1.Company) string    { return c.Name + 
 // whose mode changed under its name has one Secret per mode while the
 // running revision still pins a seat to its pods of the old one.
 func poolBootstrapName(c *crewletaiv1alpha1.Company, pool string, mode crewletaiv1alpha1.SeatPoolMode) string {
-	if mode == crewletaiv1alpha1.SeatPoolPerSeat {
-		return c.Name + "-bootstrap-" + pool + "-perseat"
-	}
-	return c.Name + "-bootstrap-" + pool
+	return scopedName(c, "bootstrap", pool, string(mode))
 }
 
 // sharedPoolStatefulSetName is the StatefulSet of a Shared pool's pods.
 func sharedPoolStatefulSetName(c *crewletaiv1alpha1.Company, pool string) string {
-	return boundedName(c.Name + "-seats-" + pool)
+	return scopedName(c, "seats", pool, "")
 }
 
 // perSeatStatefulSetName is the StatefulSet of one seat's pods in a PerSeat
 // pool. It is named after the seat and not the pool, so a seat that moves
 // from one PerSeat pool to another keeps its pods' names and identities.
 func perSeatStatefulSetName(c *crewletaiv1alpha1.Company, handle string) string {
-	return boundedName(c.Name + "-seat-" + handle)
+	return scopedName(c, "seat", handle, "")
 }
 
 // seatWorkloadName is the StatefulSet whose pods run a seat placed in pool:
@@ -103,19 +100,29 @@ func seatWorkloadName(c *crewletaiv1alpha1.Company, pool, handle string) string 
 // up to ten characters, and a label value holds 63.
 const maxStatefulSetName = 52
 
-// boundedName is a StatefulSet's name, or, when that is longer than
-// maxStatefulSetName, its start and eight hexadecimal digits of a hash of
-// the whole, so that two names cut to the same start stay apart. A
-// Company's name (at most 47 characters) leaves a seat pool's or a seat's
-// StatefulSet too little room otherwise: a pool's name is up to 20, a
-// handle up to 63.
-func boundedName(name string) string {
-	if len(name) <= maxStatefulSetName {
-		return name
-	}
-	sum := sha256.Sum256([]byte(name))
+// scopedName is the name of an object the operator makes for one pool or seat
+// of a Company: the Company's name, kind and value, then eight hexadecimal
+// digits of a hash of the Company's name, kind, value and salt, the start cut
+// so that the whole fits maxStatefulSetName (a Company's name is up to 47
+// characters, a pool's 20, a handle 63).
+//
+// The hash is what keeps the name the Company's own. Without it a pool or a
+// handle could spell another Company's fixed name in the same namespace:
+// Company a's pool keyring would make a-bootstrap-keyring, Company
+// a-bootstrap's keyring Secret, and its seat data a-seat-data, Company
+// a-seat's data StatefulSet, and whichever Company came first would leave the
+// other stuck on a name it does not control. A fixed name ends in a word, and
+// a scoped one in the hash, so the two never meet; two scoped names meet only
+// where their hashes do, over inputs that differ.
+func scopedName(c *crewletaiv1alpha1.Company, kind, value, salt string) string {
+	// '/' is in no Kubernetes name, so the input is unambiguous.
+	sum := sha256.Sum256([]byte(c.Name + "/" + kind + "/" + value + "/" + salt))
 	suffix := hex.EncodeToString(sum[:4])
-	return strings.TrimRight(name[:maxStatefulSetName-len(suffix)-1], "-") + "-" + suffix
+	start := c.Name + "-" + kind + "-" + value
+	if room := maxStatefulSetName - len(suffix) - 1; len(start) > room {
+		start = strings.TrimRight(start[:room], "-")
+	}
+	return start + "-" + suffix
 }
 
 // apiURL is the in-cluster base URL of a Company's engine API: its engine

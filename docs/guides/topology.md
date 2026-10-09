@@ -131,9 +131,9 @@ kubectl get seats -n nimbus -o wide
 ```
 
 ```
-NAME              COMPANY   KIND    UNIT   APPLIED   READY   POOL       NODE                            AGE
-release-manager   nimbus    Agent          True      True    isolated   nimbus-seat-release-manager-0   3d
-triage            nimbus    Agent          True      True    general    nimbus-seats-general-1          3d
+NAME              COMPANY   KIND    UNIT   APPLIED   READY   POOL       NODE                                     AGE
+release-manager   nimbus    Agent          True      True    isolated   nimbus-seat-release-manager-89b42764-0   3d
+triage            nimbus    Agent          True      True    general    nimbus-seats-general-c53f6a26-1          3d
 ```
 
 | Seat field | What it says |

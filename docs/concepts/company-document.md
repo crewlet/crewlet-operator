@@ -190,7 +190,7 @@ A seat pool's pods hold no data: they run seats and nothing else
 (`node.roles: [seats]`), and need no company document, since they take the
 one the data pod runs from the company's coordination store. Each pool's
 pods share one `crewlet.yaml`, kept like the data pod's in a Secret,
-`<company>-bootstrap-<pool>` ([Seat pools](runtime.md#seat-pools)):
+`<company>-bootstrap-<pool>-<hash>` ([Seat pools](runtime.md#seat-pools)):
 
 | Block | What it holds, and why |
 |---|---|

@@ -491,8 +491,10 @@ const (
 // and the Seat names no pool. The class's spec.seatPools.policy must be
 // Allowed.
 //
-// The operator runs a Shared pool as the StatefulSet <company>-seats-<name>,
-// and each seat of a PerSeat pool as <company>-seat-<handle>, started only
+// The operator runs a Shared pool as the StatefulSet
+// <company>-seats-<name>-<hash>, and each seat of a PerSeat pool as
+// <company>-seat-<handle>-<hash> (the hash keeps the name the Company's own
+// in a namespace another Company shares), started only
 // once the data pods are ready and rolled only after them. The pods have no
 // port and no probe: the engine serves nothing, health and readiness
 // included, on a node without the ingress role, so a pod counts as ready as
