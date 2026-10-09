@@ -40,6 +40,9 @@ type part struct {
 	// drifted are the places its part of the document differs from what
 	// the engine runs (Observe).
 	drifted []string
+	// pause is what the reconcile found about a Seat's pause, nil when it
+	// did not read it (see syncPauses).
+	pause *pauseVerdict
 }
 
 func newPart(obj client.Object) *part {

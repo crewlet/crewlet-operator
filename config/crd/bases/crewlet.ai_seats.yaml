@@ -31,6 +31,9 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Applied")].status
       name: Applied
       type: string
+    - jsonPath: .status.conditions[?(@.type=="Paused")].status
+      name: Paused
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -41,10 +44,8 @@ spec:
           Seat is one seat of a company's org chart: an AI agent the engine runs, or a
           person agents work with.
 
-          v1alpha1 has no way to pause a seat while keeping it in the chart. Crewlet
-          pauses a seat through its API rather than its company document, and a
-          paused field arrives with the operator's use of that API; until then,
-          Company's spec.suspend stops the whole engine.
+          spec.paused pauses an agent seat while keeping it in the chart; Company's
+          spec.suspend stops the whole engine instead.
 
           Unless spec.handle is set, the Seat's metadata.name is its handle and must
           follow the handle's rules: lowercase letters, digits and '-', starting with
@@ -620,6 +621,32 @@ spec:
                 x-kubernetes-list-map-keys:
                 - name
                 x-kubernetes-list-type: map
+              pauseReason:
+                description: |-
+                  pauseReason is why the seat is paused, shown on the seat and in its
+                  feed in the engine. Only with paused true. The engine keeps the
+                  reason a pause was taken with, so a reason changed while the seat
+                  stays paused shows from the seat's next pause on. Crewlet's pause
+                  `reason`.
+                maxLength: 500
+                minLength: 1
+                type: string
+              paused:
+                description: |-
+                  paused says whether the seat may take work. True pauses it: it starts
+                  no new turn, the mail it is sent waits on its inbox in order, and its
+                  schedules' fires are skipped rather than queued; the turn it is on
+                  finishes first unless stopRunning is set. False resumes it, and what
+                  waited is delivered first. Unset leaves the seat's pause to the people
+                  who run the company in the engine's dashboard: the operator reports a
+                  pause they take, and never lifts it.
+
+                  A pause is not part of the company document. Crewlet keeps it in its
+                  coordination store, changed through its operator catalogue's
+                  pause_seat and resume_seat tools, which the operator calls under the
+                  Company's Enforce policy whenever the seat's pause differs from this
+                  field; under Observe and Seed it only reports the difference.
+                type: boolean
               placement:
                 description: placement is where the seat runs.
                 properties:
@@ -935,6 +962,14 @@ spec:
                 minLength: 2
                 pattern: ^[A-Z][A-Z0-9]{1,9}$
                 type: string
+              stopRunning:
+                description: |-
+                  stopRunning ends the turn the seat is on at its next round when it is
+                  paused, rather than letting the turn finish; the stopped turn is not
+                  run again. Only with paused true. Setting it on a seat already paused
+                  stops the turn it is on then; unsetting it changes nothing, since a
+                  stopped turn stays stopped. Crewlet's pause `stop_running`.
+                type: boolean
               tokenBudget:
                 description: |-
                   tokenBudget caps the tokens this seat may spend per window, on top of
@@ -996,11 +1031,16 @@ spec:
               rule: self.kind != 'Agent' || (!has(self.contact) && !has(self.availability))
             - message: 'a Human seat is never run by the engine: llm, tokenBudget,
                 workers, learningEnabled, mcp, sandbox, integrations, behavioralGuidelines,
-                project, space and placement apply to Agent seats only'
+                project, space, placement and paused apply to Agent seats only'
               rule: self.kind != 'Human' || !(has(self.llm) || has(self.tokenBudget)
                 || has(self.workers) || has(self.learningEnabled) || has(self.mcp)
                 || has(self.sandbox) || has(self.integrations) || has(self.behavioralGuidelines)
-                || has(self.project) || has(self.space) || has(self.placement))
+                || has(self.project) || has(self.space) || has(self.placement) ||
+                has(self.paused))
+            - message: 'pauseReason and stopRunning describe a pause: they apply only
+                while paused is true'
+              rule: (!has(self.pauseReason) && !has(self.stopRunning)) || (has(self.paused)
+                && self.paused)
           status:
             description: status is the seat's observed state.
             minProperties: 1
@@ -1010,8 +1050,9 @@ spec:
                   conditions are Accepted (the Company exists, and no other Seat has the
                   handle, the name or a contact account; Conflict names the other),
                   ResolvedRefs (the unit, the providers, the tool servers and
-                  every Secret key exist) and Applied (the seat is in the revision the
-                  engine runs).
+                  every Secret key exist), Applied (the seat is in the revision the
+                  engine runs) and, for an Agent seat the engine runs, Paused (whether
+                  the engine holds it paused, and whether that is what spec.paused asks).
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -1122,6 +1163,35 @@ spec:
                 format: int64
                 minimum: 1
                 type: integer
+              pause:
+                description: |-
+                  pause is the seat's pause while the engine holds it paused, whoever
+                  paused it: the operator, for spec.paused, or a person in the engine's
+                  dashboard. Unset while the seat takes work.
+                minProperties: 1
+                properties:
+                  pausedAt:
+                    description: pausedAt is when the seat was paused, to the second.
+                    format: date-time
+                    type: string
+                  pausedBy:
+                    description: |-
+                      pausedBy is who paused the seat: the seat of the person whose engine
+                      token paused it, or the token's id when no seat is bound to it. A
+                      pause the operator took is its token's, operator.
+                    maxLength: 256
+                    minLength: 1
+                    type: string
+                  reason:
+                    description: reason is why, in the pauser's words.
+                    maxLength: 500
+                    minLength: 1
+                    type: string
+                  stopRunning:
+                    description: stopRunning is whether the pause also ended the turn
+                      the seat was on.
+                    type: boolean
+                type: object
               placement:
                 description: |-
                   placement is where the engine runs the seat. Unset for a Human seat,

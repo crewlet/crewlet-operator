@@ -72,6 +72,7 @@ const (
 	msgHTTPURL                     = "url is required with transport HTTP and not allowed with Stdio"
 	msgOneVendor                   = "exactly one vendor (slack or github) must be set"
 	msgCompanyRefFrozen            = "companyRef is immutable"
+	msgPauseDetails                = "pauseReason and stopRunning describe a pause: they apply only while paused is true"
 )
 
 func companyRef() v1.CompanyReference { return v1.CompanyReference{Name: companyName} }

@@ -106,6 +106,11 @@ conditions. `kubectl get engineclasses` shows it.
 | | False | `ApplyFailed` | Its current generation is in a revision the engine did not apply; the Company's `ConfigApplied` says why. |
 | | False | `Drifted` | Under `Observe`, the engine's document differs from this object's part. |
 | | False | `NotManaged` | Under `Seed`, the engine owns the document; changes to this object are not applied. |
+| `Paused` (Agent Seat) | True | `SeatPaused` | The engine holds the seat paused: it starts no new turn and its mail waits. The message and `status.pause` say who paused it, when and why. To let it work, set `spec.paused: false` (or, with `spec.paused` unset, resume it in the engine's dashboard). |
+| | False | `SeatRunning` | The engine runs the seat. |
+| | True or False | `PauseNotManaged` | The seat's pause differs from `spec.paused`, and the Company's policy is `Observe` or `Seed`, under which the operator changes no pause. |
+| | Unknown | `PauseUnknown` | The engine may or may not have recorded the operator's pause or resume, or did not answer; the operator asks again in ten seconds. |
+| | Unknown | `PauseRefused` | The engine refused the operator's pause or resume; the message is the engine's. |
 | `Healthy` (Integration) | True | `CheckPassed` | The engine reports the vendor connected. |
 | | False | `CheckFailed` | The engine's check against the vendor failed; the message carries why (a revoked token, a missing scope). |
 | | False | `NotExposed` | The Company has no public address, so no webhook can reach it: the class's webhooks mode is `None`. |

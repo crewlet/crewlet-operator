@@ -92,6 +92,16 @@ Rotating a Secret is not applied under Seed either: rotate the credential
 through the engine's own secret store (`crewlet secrets set`, or the
 dashboard).
 
+## Seat pauses
+
+A seat's pause is kept outside the document, in the engine's coordination
+store, and the policies apply to it only through `Seat.spec.paused`. Under
+`Enforce`, a Seat that sets `spec.paused` owns its pause: the operator pauses
+or resumes the seat to match, and undoes a change made in the dashboard. A
+Seat that leaves it unset leaves the pause to the dashboard under every
+policy, and reports it. `Observe` and `Seed` change no pause.
+[Pausing a seat](../concepts/applying.md#pausing-a-seat) has the details.
+
 ## Switching policies
 
 The policy may change at any time. Whether the engine refuses edits from

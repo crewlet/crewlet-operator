@@ -399,3 +399,44 @@ func TestEngineHealthyReportsTheEnginesAlarms(t *testing.T) {
 		})
 	}
 }
+
+// TestSyncPauseChangesNoPauseItDoesNotOwn runs the decision of one seat's
+// pause with no engine to call: under Observe and Seed, and for a Seat that
+// leaves spec.paused unset under any policy, the operator only reports what
+// the engine holds, and a call would reach the nil client and fail the test.
+func TestSyncPauseChangesNoPauseItDoesNotOwn(t *testing.T) {
+	paused := engine.SeatPause{Paused: true, By: "jane", At: time.Date(2026, 6, 8, 7, 30, 2, 0, time.UTC), Reason: "Looking"}
+	for _, c := range []struct {
+		name   string
+		policy crewletaiv1alpha1.ManagementPolicy
+		want   *bool
+		state  engine.SeatPause
+		status metav1.ConditionStatus
+		reason string
+	}{
+		{"unset, paused by a person, under Enforce", crewletaiv1alpha1.ManagementPolicyEnforce, nil, paused,
+			metav1.ConditionTrue, crewletaiv1alpha1.ReasonSeatPaused},
+		{"unset, running, under Enforce", crewletaiv1alpha1.ManagementPolicyEnforce, nil, engine.SeatPause{},
+			metav1.ConditionFalse, crewletaiv1alpha1.ReasonSeatRunning},
+		{"paused as asked, under Enforce", crewletaiv1alpha1.ManagementPolicyEnforce, new(true), paused,
+			metav1.ConditionTrue, crewletaiv1alpha1.ReasonSeatPaused},
+		{"asked to run, paused, under Observe", crewletaiv1alpha1.ManagementPolicyObserve, new(false), paused,
+			metav1.ConditionTrue, crewletaiv1alpha1.ReasonPauseNotManaged},
+		{"asked to pause, running, under Seed", crewletaiv1alpha1.ManagementPolicySeed, new(true), engine.SeatPause{},
+			metav1.ConditionFalse, crewletaiv1alpha1.ReasonPauseNotManaged},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			run := &configRun{company: &crewletaiv1alpha1.Company{Spec: crewletaiv1alpha1.CompanySpec{
+				Config: crewletaiv1alpha1.ConfigSettings{ManagementPolicy: c.policy},
+			}}}
+			seat := &crewletaiv1alpha1.Seat{Name: "jo", Spec: crewletaiv1alpha1.SeatSpec{Paused: c.want}}
+			got, again := run.syncPause(t.Context(), nil, seat, c.state)
+			if got.status != c.status || got.reason != c.reason || again != 0 {
+				t.Fatalf("syncPause() = %+v, %s; want %s %s", got, again, c.status, c.reason)
+			}
+			if got.status == metav1.ConditionTrue && got.pause != c.state {
+				t.Errorf("the verdict reports the pause %+v, want the engine's %+v", got.pause, c.state)
+			}
+		})
+	}
+}

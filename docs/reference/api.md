@@ -2090,10 +2090,8 @@ _Appears in:_
 Seat is one seat of a company's org chart: an AI agent the engine runs, or a
 person agents work with.
 
-v1alpha1 has no way to pause a seat while keeping it in the chart. Crewlet
-pauses a seat through its API rather than its company document, and a
-paused field arrives with the operator's use of that API; until then,
-Company's spec.suspend stops the whole engine.
+spec.paused pauses an agent seat while keeping it in the chart; Company's
+spec.suspend stops the whole engine instead.
 
 Unless spec.handle is set, the Seat's metadata.name is its handle and must
 follow the handle's rules: lowercase letters, digits and '-', starting with
@@ -2217,6 +2215,26 @@ _Appears in:_
 | `sandbox` _[LLMProviderReference](#llmproviderreference) array_ | sandbox is the chain the coding agent in the seat's sandbox runs on.<br />Crewlet's `sandbox`. |  | MaxItems: 8 <br />MinItems: 1 <br />Optional: \{\} <br /> |
 
 
+#### SeatPauseStatus
+
+
+
+SeatPauseStatus is a seat's pause, as the engine reports it.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [SeatStatus](#seatstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `pausedBy` _string_ | pausedBy is who paused the seat: the seat of the person whose engine<br />token paused it, or the token's id when no seat is bound to it. A<br />pause the operator took is its token's, operator. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `pausedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#time-v1-meta)_ | pausedAt is when the seat was paused, to the second. |  | Optional: \{\} <br /> |
+| `reason` _string_ | reason is why, in the pauser's words. |  | MaxLength: 500 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `stopRunning` _boolean_ | stopRunning is whether the pause also ended the turn the seat was on. |  | Optional: \{\} <br /> |
+
+
 #### SeatPlacement
 
 
@@ -2305,6 +2323,9 @@ _Appears in:_
 | `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are the seat's own tool-server credentials, which make it act as<br />itself on each server. They are merged over its unit's, per variable.<br />One entry per server, keyed by its name. Crewlet's `mcp_env`, a<br />credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `sandbox` _[SeatSandbox](#seatsandbox)_ | sandbox gives the seat a sandbox to run code in. Unset gives it none. |  | Optional: \{\} <br /> |
 | `placement` _[SeatPlacement](#seatplacement)_ | placement is where the seat runs. |  | Optional: \{\} <br /> |
+| `paused` _boolean_ | paused says whether the seat may take work. True pauses it: it starts<br />no new turn, the mail it is sent waits on its inbox in order, and its<br />schedules' fires are skipped rather than queued; the turn it is on<br />finishes first unless stopRunning is set. False resumes it, and what<br />waited is delivered first. Unset leaves the seat's pause to the people<br />who run the company in the engine's dashboard: the operator reports a<br />pause they take, and never lifts it.<br />A pause is not part of the company document. Crewlet keeps it in its<br />coordination store, changed through its operator catalogue's<br />pause_seat and resume_seat tools, which the operator calls under the<br />Company's Enforce policy whenever the seat's pause differs from this<br />field; under Observe and Seed it only reports the difference. |  | Optional: \{\} <br /> |
+| `pauseReason` _string_ | pauseReason is why the seat is paused, shown on the seat and in its<br />feed in the engine. Only with paused true. The engine keeps the<br />reason a pause was taken with, so a reason changed while the seat<br />stays paused shows from the seat's next pause on. Crewlet's pause<br />`reason`. |  | MaxLength: 500 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `stopRunning` _boolean_ | stopRunning ends the turn the seat is on at its next round when it is<br />paused, rather than letting the turn finish; the stopped turn is not<br />run again. Only with paused true. Setting it on a seat already paused<br />stops the turn it is on then; unsetting it changes nothing, since a<br />stopped turn stays stopped. Crewlet's pause `stop_running`. |  | Optional: \{\} <br /> |
 | `integrations` _[SeatIntegrations](#seatintegrations)_ | integrations is the seat's own identity on the company's<br />integrations. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `project` _string_ | project is the tracker project a seat outside every unit owns, by its<br />key; a seat in a unit takes its unit's. Crewlet requires a container<br />key to be an upper-case letter followed by 1 to 9 upper-case letters or<br />digits, such as LEAD. Crewlet's `project`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
 | `space` _string_ | space is the knowledge container a seat outside every unit owns, by<br />its key, which follows the same rule as project; a seat in a unit<br />takes its unit's. Crewlet's `space`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
@@ -2326,12 +2347,13 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists, and no other Seat has the<br />handle, the name or a contact account; Conflict names the other),<br />ResolvedRefs (the unit, the providers, the tool servers and<br />every Secret key exist) and Applied (the seat is in the revision the<br />engine runs). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists, and no other Seat has the<br />handle, the name or a contact account; Conflict names the other),<br />ResolvedRefs (the unit, the providers, the tool servers and<br />every Secret key exist), Applied (the seat is in the revision the<br />engine runs) and, for an Agent seat the engine runs, Paused (whether<br />the engine holds it paused, and whether that is what spec.paused asks). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `handle` _string_ | handle is the seat's handle: spec.handle, or the metadata.name. |  | MaxLength: 63 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `seatID` _string_ | seatID is the seat's identity in the engine, derived from the company<br />name and the handle, so that callers need not derive it themselves.<br />Unset for a Human seat, which the engine does not run and gives no<br />identity, and for a seat whose handle another Seat derives too. |  | MaxLength: 36 <br />MinLength: 36 <br />Optional: \{\} <br /> |
 | `placement` _[SeatPlacementStatus](#seatplacementstatus)_ | placement is where the engine runs the seat. Unset for a Human seat,<br />which the engine does not run. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `integrations` _[SeatIntegrationsStatus](#seatintegrationsstatus)_ | integrations is the addresses the seat's vendor apps must use. Unset<br />for a Human seat, which has no vendor apps of its own. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `pause` _[SeatPauseStatus](#seatpausestatus)_ | pause is the seat's pause while the engine holds it paused, whoever<br />paused it: the operator, for spec.paused, or a person in the engine's<br />dashboard. Unset while the seat takes work. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### SecretEnvVar

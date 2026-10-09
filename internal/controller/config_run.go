@@ -33,7 +33,9 @@ type configRun struct {
 	company *crewletaiv1alpha1.Company
 	class   *crewletaiv1alpha1.EngineClass
 	parts   []*part
-	doc     *render.Document
+	// eng is the client of the Company's engine, once resolved.
+	eng *engine.Client
+	doc *render.Document
 	// desired is the store entries the document calls for, once read.
 	desired *secretsync.Desired
 
@@ -98,10 +100,39 @@ type appliedVerdict struct {
 
 // reconcile decides the Company's and its parts' conditions and, as the
 // management policy allows, writes the document and its Secret values into
-// the engine. An error is one to retry with backoff: the API server did not
-// answer. Everything about the objects, and an engine that cannot be reached,
-// is a condition.
+// the engine, and its seats' pauses. An error is one to retry with backoff:
+// the API server did not answer. Everything about the objects, and an engine
+// that cannot be reached, is a condition.
 func (run *configRun) reconcile(ctx context.Context) (ctrl.Result, error) {
+	result, err := run.reconcileDocument(ctx)
+	if err != nil || !run.engineRuns() {
+		return result, err
+	}
+	// Whatever became of the document: a pause is not in it (see
+	// syncPauses).
+	eng := run.eng
+	if eng == nil {
+		// The document did not get as far as the engine (an object of it
+		// is refused, or a Secret is missing), and its conditions say so.
+		var resolveErr error
+		if eng, resolveErr = run.Engines.Engine(ctx, run.company); resolveErr != nil {
+			logf.FromContext(ctx).V(1).Info("No engine to read the seats' pauses from", "error", resolveErr.Error())
+			return result, nil
+		}
+	}
+	return run.syncPauses(ctx, eng, result), nil
+}
+
+// engineRuns reports whether the Company has an engine to talk to: it is
+// accepted, with a class, not suspended, and its runtime is set up.
+func (run *configRun) engineRuns() bool {
+	c := run.company
+	return run.class != nil && meta.IsStatusConditionTrue(c.Status.Conditions, crewletaiv1alpha1.ConditionAccepted) &&
+		!suspended(c) && meta.FindStatusCondition(c.Status.Conditions, crewletaiv1alpha1.ConditionRuntimeReady) != nil
+}
+
+// reconcileDocument is reconcile's part for the company document.
+func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error) {
 	c := run.company
 	if !meta.IsStatusConditionTrue(c.Status.Conditions, crewletaiv1alpha1.ConditionAccepted) {
 		// The runtime reconciler says why; its status write brings the
@@ -154,6 +185,7 @@ func (run *configRun) reconcile(ctx context.Context) (ctrl.Result, error) {
 		run.unavailable(err)
 		return ctrl.Result{RequeueAfter: engineRetryInterval}, nil
 	}
+	run.eng = eng
 	result, err := run.converge(ctx, eng)
 	if err != nil {
 		if isAPIServerError(err) {

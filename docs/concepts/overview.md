@@ -117,6 +117,12 @@ value v1alpha1 admits. A company can be stopped with `spec.suspend` (its volume 
 the default) or goes with it (`Delete`). [How a company's engine
 runs](runtime.md) lists every object the operator creates for it.
 
+A seat can be paused without leaving the chart: `Seat.spec.paused: true`
+stops it taking work until it is set back, the way a person pauses it in the
+engine's dashboard. A pause is not part of the document, and the operator
+owns it only for a Seat that sets the field; see
+[Pausing a seat](applying.md#pausing-a-seat).
+
 Vendors deliver webhooks to the company's public address, which the class
 derives from a host name template (`{{uid}}.hooks.example.com`) or which the
 Company states itself (`spec.exposure.publicBaseURL`). Only the path
@@ -183,7 +189,8 @@ Every object reports `status.conditions` with `observedGeneration`:
 |---|---|
 | `Company` | `Ready` (the summary), `Accepted`, `RuntimeReady`, `SecretsSynced`, `ConfigApplied`, `Exposed` |
 | `EngineClass` | `Accepted` |
-| `Unit`, `Seat`, `LLMProvider`, `MCPServer`, `Schedule` | `Accepted`, `ResolvedRefs`, `Applied` |
+| `Unit`, `LLMProvider`, `MCPServer`, `Schedule` | `Accepted`, `ResolvedRefs`, `Applied` |
+| `Seat` | `Accepted`, `ResolvedRefs`, `Applied`, and `Paused` for an Agent seat the engine runs |
 | `Integration` | `Accepted`, `ResolvedRefs`, `Applied`, `Healthy` |
 
 A Company also reports the revision the engine runs, its endpoints and the

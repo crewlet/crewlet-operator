@@ -30,3 +30,4 @@ like any other change.
 |---|---|---|
 | [0001](0001-name-store-entries-by-their-secret-reference.md) | Name every store entry the operator owns by its Secret reference | `TestCompanyRefsAreExactlyThePointers`, `TestStoreNameIsDeterministic`, `TestOwnsOnlyTheOperatorsNames`, `TestSyncCollectsOnlyTheOperatorsNames` |
 | [0002](0002-test-against-the-real-pinned-engine.md) | Test against the real, pinned engine, and fail without it | `TestBinaryFailsWithoutTheEngine` |
+| [0003](0003-own-a-seats-pause-only-where-the-seat-asks.md) | Own a seat's pause only where its Seat sets `spec.paused` | `TestSyncPauseChangesNoPauseItDoesNotOwn`, the config suite's pause spec |

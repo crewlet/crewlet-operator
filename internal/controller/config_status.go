@@ -79,6 +79,7 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 	base := run.company.Status.Endpoints.PublicBaseURL
 	switch o := p.obj.(type) {
 	case *crewletaiv1alpha1.Seat:
+		decidePause(p, o)
 		handle := render.SeatHandle(o)
 		o.Status.Handle = handle
 		o.Status.SeatID = ""

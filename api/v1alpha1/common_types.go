@@ -280,6 +280,10 @@ const (
 	// engine runs.
 	ConditionApplied = "Applied"
 
+	// ConditionPaused reports whether the engine holds an agent seat
+	// paused: True while it does, whoever paused it.
+	ConditionPaused = "Paused"
+
 	// ConditionHealthy reports what the engine says about an integration:
 	// whether its credentials work and its webhooks are registered.
 	ConditionHealthy = "Healthy"
@@ -560,6 +564,31 @@ const (
 	// person, so the schedule could never fire. Target an Agent seat, or the
 	// person's unit with fanOut Each.
 	ReasonHumanSeat = "HumanSeat"
+
+	// ReasonSeatPaused is Paused=True: the engine holds the seat paused, as
+	// spec.paused asks or, with spec.paused unset, because a person paused
+	// it. The message and status.pause say who paused it, when and why.
+	ReasonSeatPaused = "SeatPaused"
+
+	// ReasonSeatRunning is Paused=False: the engine runs the seat, as
+	// spec.paused asks or, with it unset, because nobody has it paused.
+	ReasonSeatRunning = "SeatRunning"
+
+	// ReasonPauseNotManaged is Paused=True or False when the seat's pause
+	// differs from spec.paused and the Company's management policy is
+	// Observe or Seed, under which the operator changes no pause; the
+	// condition's status is the engine's.
+	ReasonPauseNotManaged = "PauseNotManaged"
+
+	// ReasonPauseUnknown is Paused=Unknown after the engine answered that it
+	// may or may not have recorded the operator's pause or resume. The
+	// operator asks again shortly; a second call changes nothing if the
+	// first was recorded.
+	ReasonPauseUnknown = "PauseUnknown"
+
+	// ReasonPauseRefused is Paused=Unknown when the engine refused the
+	// operator's pause or resume; the message is the engine's.
+	ReasonPauseRefused = "PauseRefused"
 
 	// ReasonCheckPassed is Healthy=True.
 	ReasonCheckPassed = "CheckPassed"

@@ -191,6 +191,53 @@ Company reports `ConfigApplied=True` with the reason `Seeded`, and every part
 applied. An engine that already had a document when the Company was created
 is never written to; the Company reports `Seeded` all the same, saying so.
 
+## Pausing a seat
+
+A seat's pause is not part of the company document. Crewlet keeps it in its
+coordination store, where a person puts it from the engine's dashboard to
+stop an agent taking work without taking it out of the chart: a paused seat
+starts no new turn, the mail it is sent waits on its inbox in order, and its
+schedules' fires are skipped rather than queued; resuming it delivers what
+waited. `Seat.spec.paused` is how the objects say the same:
+
+```yaml
+spec:                       # Seat ana
+  paused: true
+  pauseReason: Deploy freeze until the incident review   # optional
+  stopRunning: true                                      # optional: end the turn it is on now
+```
+
+On every look at the engine, whatever became of the document, the operator
+reads which seats the engine holds paused, from its roster (`GET /agents`, the
+account its dashboard draws), and, under `Enforce`, makes each Seat that sets
+`spec.paused` match it: it calls the engine's `pause_seat` or `resume_seat`
+tool, over the engine's operator catalogue (`/operator/mcp`), with its own
+token. Both are no-ops on a seat already in the state asked for, so a second
+call changes nothing; a call the engine may or may not have recorded is made
+again ten seconds later.
+
+**Who owns a pause.** Only a Seat that sets `spec.paused`, and only under
+`Enforce`. A pause or resume made in the dashboard of such a seat is undone on
+the operator's next look, at most five minutes later, with a `Drifted`
+event on the Seat. A Seat that leaves `spec.paused` unset owns nothing, under
+any policy: the operator reports a pause a person takes and never lifts it.
+Reading unset as "not paused" would make the operator lift every pause a
+person takes in the dashboard of an operator-run company within minutes,
+and a pause is the control a person reaches for when an agent misbehaves —
+the reason the engine keeps it out of the document, which `Enforce` makes the
+operator's. Under `Observe` and `Seed` the operator changes no pause; a Seat
+whose pause differs from its `spec.paused` reports so.
+
+The engine keeps the reason a pause was taken with: a `pauseReason` changed
+while the seat stays paused shows from its next pause on. Setting
+`stopRunning` on a seat already paused ends the turn it is on then; unsetting
+it changes nothing, since a stopped turn is not run again.
+
+The engine knows no seat it does not run, so a Seat created with
+`paused: true` is paused once the revision that adds it is applied, a few
+seconds after. A Human seat has no pause: the engine takes no work for a
+person that a pause could hold.
+
 ## What each object reports
 
 | Object | Condition | When |
@@ -201,6 +248,7 @@ is never written to; the Company reports `Seeded` all the same, saying so.
 | every part | `Accepted` | `True` once its Company exists; `False` with `CompanyNotFound`, or `Conflict` when it collides with another object of its company. |
 | every part | `ResolvedRefs` | `False` with `RefNotFound`, `Cycle`, `SecretNotFound` or `SecretTooLarge`, saying what it references that is missing. |
 | every part | `Applied` | `True`, `InRevision`, naming the revision, with the generation that revision was rendered from as its `observedGeneration`, once the engine has applied it. `False` with the part's own problem (`Invalid`, `RefNotFound`, ...), `Blocked` when another object keeps the document from being applied, `Applying` while the engine applies the revision, or `ApplyFailed` when it did not. A part whose current generation already runs keeps `True` meanwhile: only what changed is held back. |
+| Seat (Agent) | `Paused` | Whether the engine holds the seat paused, once it runs the seat: `True`, `SeatPaused`, naming who paused it, when and why; `False`, `SeatRunning`; with `PauseNotManaged` instead when the pause differs from `spec.paused` under `Observe` or `Seed`. `Unknown`, `PauseUnknown`, while a pause or resume the engine may or may not have recorded is retried; `Unknown`, `PauseRefused`, with the engine's words when it refused one. |
 | Integration | `Healthy` | The engine's own verdict on the vendor: `True`, `CheckPassed`, when it reports the tool connected; `False`, `CheckFailed`, with the engine's reason otherwise; `False`, `NotExposed` while the Company has no public address, since no webhook can reach the engine. |
 
 Besides the conditions:
@@ -213,14 +261,18 @@ Besides the conditions:
   the company name and the handle), the pool that runs it, and the addresses
   its own vendor apps deliver to: `<publicBaseURL>/webhooks/slack/<handle>`
   and `<publicBaseURL>/webhooks/github/<handle>`, set as soon as the Company
-  has the vendor's Integration and a public address.
+  has the vendor's Integration and a public address. While the engine holds
+  it paused, `status.pause` says who paused it, when, why, and whether its
+  running turn was stopped.
 - **Unit**: its depth in the chart (`0` at the top; unset for a Unit outside
   it) and how many Seats are directly in it.
 - **Integration**: the company-wide address the vendor delivers to, for
   GitHub `<publicBaseURL>/webhooks/github`. Slack has none: each seat's app
   has its own.
 
-Every event the config reconciler records is on the Company: `Activated`
+Every event the config reconciler records is on the Company, but a seat's
+pause, which is recorded on the Seat (`SeatPaused`, `SeatResumed`, and
+`Drifted` when it undid a change made in the engine): `Activated`
 with the revision, its epoch and its summary, `Applied` once the engine has
 applied it, `ApplyFailed` when it did not, `SecretsSynced` with the store
 entries it wrote and deleted, `Drifted`, `Invalid` with the engine's problems,

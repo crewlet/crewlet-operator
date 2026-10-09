@@ -16,13 +16,15 @@ cmd/main.go           the manager
 internal/controller/  reconcilers: two keyed by Company, the runtime one
                       (Accepted; the engine's Secrets, StatefulSet,
                       Services, routes and NetworkPolicy) and the config one
-                      (the company document, the secret store, the parts'
-                      status); and the EngineClass one (its Accepted: the
-                      Secrets and Gateways it names exist); the other kinds
+                      (the company document, the secret store, the seats'
+                      pauses, the parts' status); and the EngineClass one
+                      (its Accepted: the Secrets and Gateways it names
+                      exist); the other kinds
                       are reconciled through the Company they reference
   testdata/gateway-api/  the Gateway API CRDs envtest installs
                       (make gateway-api-crds)
-internal/engine/      typed client for the Crewlet engine's REST API;
+internal/engine/      typed client for the Crewlet engine's API (REST, and
+                      the pause tools of its operator catalogue over MCP);
   enginetest/         runs the real pinned engine (bin/crewlet) for a test
 internal/render/      pure render of the crewlet.ai objects into the company
                       document (Tier B) and a data pod's crewlet.yaml (Tier A)

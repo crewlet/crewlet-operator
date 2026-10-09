@@ -684,6 +684,66 @@ var _ = Describe("Company config", Ordered, func() {
 		runsRendered(e, c)
 	})
 
+	It("pauses and resumes a Seat as spec.paused asks, undoes a person's change to it, and reports a pause it does not own", func() {
+		const name = "pause"
+		e := startEngine(name)
+		secret(name+"-llm", map[string]string{llmKey: "k"})
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana", "bo")
+		ana, bo := seat(name+"-ana"), seat(name+"-bo")
+		standIn(c)
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		// A person, through the engine's own API with a token of their own.
+		person := engine.New(e.URL, e.AccessToken)
+		enginePause := func(handle string) func(Gomega) engine.SeatPause {
+			return func(g Gomega) engine.SeatPause {
+				pauses, err := e.Client().SeatPauses(ctx)
+				g.Expect(err).NotTo(HaveOccurred())
+				return pauses[handle]
+			}
+		}
+
+		By("reporting a seat nobody paused as running")
+		Eventually(reasonOf(ana, crewletaiv1alpha1.ConditionPaused)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonSeatRunning))
+		Expect(ana.Status.Pause).To(BeZero())
+
+		By("pausing a Seat that asks to be")
+		updateLive(ana, func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.Paused = new(true)
+			s.Spec.PauseReason = "Deploy freeze"
+		})
+		Eventually(reasonOf(ana, crewletaiv1alpha1.ConditionPaused)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonSeatPaused))
+		Expect(ana.Status.Pause.PausedBy).To(Equal(enginetest.OperatorTokenID))
+		Expect(ana.Status.Pause.Reason).To(Equal("Deploy freeze"))
+		Expect(ana.Status.Pause.PausedAt).NotTo(BeNil())
+		Expect(enginePause(name + "-ana")(Default).Paused).To(BeTrue())
+		Expect(revisions(e)).To(HaveLen(1), "a pause is not a revision of the document")
+
+		By("pausing it again after a person resumed it in the engine")
+		_, err := person.ResumeSeat(ctx, name+"-ana")
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(func(g Gomega) bool { return enginePause(name + "-ana")(g).Paused }).WithTimeout(settle).Should(BeTrue())
+		Eventually(func() []string { return log.of(ana.Name) }).WithTimeout(settle).
+			Should(ContainElement(HavePrefix("Warning Drifted")))
+
+		By("reporting, and leaving alone, a pause a person takes of a Seat that does not set spec.paused")
+		_, err = person.PauseSeat(ctx, name+"-bo", "Looking into a bad answer", false)
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(reasonOf(bo, crewletaiv1alpha1.ConditionPaused)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonSeatPaused))
+		Expect(bo.Status.Pause.PausedBy).To(Equal(enginetest.AccessTokenID))
+		Expect(bo.Status.Pause.Reason).To(Equal("Looking into a bad answer"))
+		Consistently(func(g Gomega) bool { return enginePause(name + "-bo")(g).Paused }).WithTimeout(3 * time.Second).Should(BeTrue())
+
+		By("resuming the Seat that asks to be")
+		updateLive(ana, func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.Paused = new(false)
+			s.Spec.PauseReason = ""
+		})
+		Eventually(reasonOf(ana, crewletaiv1alpha1.ConditionPaused)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonSeatRunning))
+		Expect(ana.Status.Pause).To(BeZero())
+		Expect(enginePause(name + "-ana")(Default).Paused).To(BeFalse())
+		Expect(log.of(ana.Name)).To(ContainElement("Normal SeatResumed Resumed the seat in the engine, as spec.paused asks."))
+	})
+
 	It("overwrites an edit made through the engine's API under Enforce, and says so", func() {
 		const name = "enforce"
 		e := startEngine(name)

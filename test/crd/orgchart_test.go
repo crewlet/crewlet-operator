@@ -93,6 +93,9 @@ func fullAgent(s *v1.Seat) {
 		MCPServerRefs: []v1.LocalObjectReference{{Name: "github"}},
 	}
 	s.Spec.Placement = &v1.SeatPlacement{}
+	s.Spec.Paused = new(true)
+	s.Spec.PauseReason = "Deploy freeze until the incident review"
+	s.Spec.StopRunning = new(true)
 	s.Spec.Integrations = v1.SeatIntegrations{
 		Slack: v1.SlackSeatIntegration{CredentialsSecretRef: v1.SecretReference{Name: "ana-slack"}},
 		GitHub: v1.GitHubSeatIntegration{
@@ -219,6 +222,47 @@ func TestSeatValidation(t *testing.T) {
 			name:   "placement on a human seat is refused",
 			mutate: asHuman(func(s *v1.Seat) { s.Spec.Placement = &v1.SeatPlacement{} }),
 			want:   msgHumanForbidden,
+		},
+		{
+			name:   "paused on a human seat is refused",
+			mutate: asHuman(func(s *v1.Seat) { s.Spec.Paused = new(false) }),
+			want:   msgHumanForbidden,
+		},
+
+		// Pauses.
+		{name: "a seat asked to run is accepted", mutate: func(s *v1.Seat) { s.Spec.Paused = new(false) }},
+		{
+			name:   "a pause reason without a pause is refused",
+			mutate: func(s *v1.Seat) { s.Spec.PauseReason = "Deploy freeze" },
+			want:   msgPauseDetails,
+		},
+		{
+			name: "a pause reason on a seat asked to run is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Paused = new(false)
+				s.Spec.PauseReason = "Deploy freeze"
+			},
+			want: msgPauseDetails,
+		},
+		{
+			name:   "stopRunning without a pause is refused",
+			mutate: func(s *v1.Seat) { s.Spec.StopRunning = new(false) },
+			want:   msgPauseDetails,
+		},
+		{
+			name: "a pause reason of the engine's bound in characters is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Paused = new(true)
+				s.Spec.PauseReason = strings.Repeat("é", 500)
+			},
+		},
+		{
+			name: "a pause reason past the engine's bound is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Paused = new(true)
+				s.Spec.PauseReason = strings.Repeat("é", 501)
+			},
+			want: "spec.pauseReason: Too long",
 		},
 
 		// Placement, models, credentials.

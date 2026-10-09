@@ -10,12 +10,14 @@
 // settles its data volumes on deletion.
 //
 // The other namespaced kinds in crewlet.ai (Unit, Seat, LLMProvider,
-// MCPServer, Integration) are parts of a company, rendered with it into the
+// MCPServer, Integration, Schedule) are parts of a company, rendered with it into the
 // company document the engine runs; they have no reconciler of their own. The
 // config reconciler, keyed by Company like the first, keeps that document
 // equal to the objects as the Company's management policy says: it renders it,
 // pushes the Secret values it references into the engine's secret store, has
 // the engine dry-run it and applies it as one revision, or reports on the
-// object at fault why it cannot. It owns the Company's SecretsSynced and
-// ConfigApplied conditions and status.config, and the status of every part.
+// object at fault why it cannot. It also pauses and resumes each Seat as its
+// spec.paused says, a pause being kept outside the document (see
+// syncPauses). It owns the Company's SecretsSynced and ConfigApplied
+// conditions and status.config, and the status of every part.
 package controller

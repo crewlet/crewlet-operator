@@ -291,7 +291,8 @@ type SeatContact struct {
 // one entry of Crewlet's roles, nested under its unit's.
 // +kubebuilder:validation:XValidation:rule="self.kind != 'Human' || has(self.contact)",message="a Human seat needs contact: how agents reach the person"
 // +kubebuilder:validation:XValidation:rule="self.kind != 'Agent' || (!has(self.contact) && !has(self.availability))",message="contact and availability apply to Human seats only"
-// +kubebuilder:validation:XValidation:rule="self.kind != 'Human' || !(has(self.llm) || has(self.tokenBudget) || has(self.workers) || has(self.learningEnabled) || has(self.mcp) || has(self.sandbox) || has(self.integrations) || has(self.behavioralGuidelines) || has(self.project) || has(self.space) || has(self.placement))",message="a Human seat is never run by the engine: llm, tokenBudget, workers, learningEnabled, mcp, sandbox, integrations, behavioralGuidelines, project, space and placement apply to Agent seats only"
+// +kubebuilder:validation:XValidation:rule="self.kind != 'Human' || !(has(self.llm) || has(self.tokenBudget) || has(self.workers) || has(self.learningEnabled) || has(self.mcp) || has(self.sandbox) || has(self.integrations) || has(self.behavioralGuidelines) || has(self.project) || has(self.space) || has(self.placement) || has(self.paused))",message="a Human seat is never run by the engine: llm, tokenBudget, workers, learningEnabled, mcp, sandbox, integrations, behavioralGuidelines, project, space, placement and paused apply to Agent seats only"
+// +kubebuilder:validation:XValidation:rule="(!has(self.pauseReason) && !has(self.stopRunning)) || (has(self.paused) && self.paused)",message="pauseReason and stopRunning describe a pause: they apply only while paused is true"
 type SeatSpec struct {
 	// companyRef names the Company this seat belongs to. Immutable.
 	// +required
@@ -422,6 +423,40 @@ type SeatSpec struct {
 	// +optional
 	Placement *SeatPlacement `json:"placement,omitempty"`
 
+	// paused says whether the seat may take work. True pauses it: it starts
+	// no new turn, the mail it is sent waits on its inbox in order, and its
+	// schedules' fires are skipped rather than queued; the turn it is on
+	// finishes first unless stopRunning is set. False resumes it, and what
+	// waited is delivered first. Unset leaves the seat's pause to the people
+	// who run the company in the engine's dashboard: the operator reports a
+	// pause they take, and never lifts it.
+	//
+	// A pause is not part of the company document. Crewlet keeps it in its
+	// coordination store, changed through its operator catalogue's
+	// pause_seat and resume_seat tools, which the operator calls under the
+	// Company's Enforce policy whenever the seat's pause differs from this
+	// field; under Observe and Seed it only reports the difference.
+	// +optional
+	Paused *bool `json:"paused,omitempty"`
+
+	// pauseReason is why the seat is paused, shown on the seat and in its
+	// feed in the engine. Only with paused true. The engine keeps the
+	// reason a pause was taken with, so a reason changed while the seat
+	// stays paused shows from the seat's next pause on. Crewlet's pause
+	// `reason`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=500
+	PauseReason string `json:"pauseReason,omitempty"`
+
+	// stopRunning ends the turn the seat is on at its next round when it is
+	// paused, rather than letting the turn finish; the stopped turn is not
+	// run again. Only with paused true. Setting it on a seat already paused
+	// stops the turn it is on then; unsetting it changes nothing, since a
+	// stopped turn stays stopped. Crewlet's pause `stop_running`.
+	// +optional
+	StopRunning *bool `json:"stopRunning,omitempty"`
+
 	// integrations is the seat's own identity on the company's
 	// integrations.
 	// +optional
@@ -502,6 +537,32 @@ type SeatPlacementStatus struct {
 	Pool string `json:"pool,omitempty"`
 }
 
+// SeatPauseStatus is a seat's pause, as the engine reports it.
+// +kubebuilder:validation:MinProperties=1
+type SeatPauseStatus struct {
+	// pausedBy is who paused the seat: the seat of the person whose engine
+	// token paused it, or the token's id when no seat is bound to it. A
+	// pause the operator took is its token's, operator.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+	PausedBy string `json:"pausedBy,omitempty"`
+
+	// pausedAt is when the seat was paused, to the second.
+	// +optional
+	PausedAt *metav1.Time `json:"pausedAt,omitempty"`
+
+	// reason is why, in the pauser's words.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=500
+	Reason string `json:"reason,omitempty"`
+
+	// stopRunning is whether the pause also ended the turn the seat was on.
+	// +optional
+	StopRunning *bool `json:"stopRunning,omitempty"`
+}
+
 // SeatIntegrationsStatus is the addresses a seat's vendor apps must use.
 // +kubebuilder:validation:MinProperties=1
 type SeatIntegrationsStatus struct {
@@ -520,8 +581,9 @@ type SeatStatus struct {
 	// conditions are Accepted (the Company exists, and no other Seat has the
 	// handle, the name or a contact account; Conflict names the other),
 	// ResolvedRefs (the unit, the providers, the tool servers and
-	// every Secret key exist) and Applied (the seat is in the revision the
-	// engine runs).
+	// every Secret key exist), Applied (the seat is in the revision the
+	// engine runs) and, for an Agent seat the engine runs, Paused (whether
+	// the engine holds it paused, and whether that is what spec.paused asks).
 	// +optional
 	// +listType=map
 	// +listMapKey=type
@@ -557,15 +619,19 @@ type SeatStatus struct {
 	// for a Human seat, which has no vendor apps of its own.
 	// +optional
 	Integrations SeatIntegrationsStatus `json:"integrations,omitzero"`
+
+	// pause is the seat's pause while the engine holds it paused, whoever
+	// paused it: the operator, for spec.paused, or a person in the engine's
+	// dashboard. Unset while the seat takes work.
+	// +optional
+	Pause SeatPauseStatus `json:"pause,omitzero"`
 }
 
 // Seat is one seat of a company's org chart: an AI agent the engine runs, or a
 // person agents work with.
 //
-// v1alpha1 has no way to pause a seat while keeping it in the chart. Crewlet
-// pauses a seat through its API rather than its company document, and a
-// paused field arrives with the operator's use of that API; until then,
-// Company's spec.suspend stops the whole engine.
+// spec.paused pauses an agent seat while keeping it in the chart; Company's
+// spec.suspend stops the whole engine instead.
 //
 // Unless spec.handle is set, the Seat's metadata.name is its handle and must
 // follow the handle's rules: lowercase letters, digits and '-', starting with
@@ -578,6 +644,7 @@ type SeatStatus struct {
 // +kubebuilder:printcolumn:name="Kind",type=string,JSONPath=`.spec.kind`
 // +kubebuilder:printcolumn:name="Unit",type=string,JSONPath=`.spec.unitRef.name`
 // +kubebuilder:printcolumn:name="Applied",type=string,JSONPath=`.status.conditions[?(@.type=="Applied")].status`
+// +kubebuilder:printcolumn:name="Paused",type=string,JSONPath=`.status.conditions[?(@.type=="Paused")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:validation:XValidation:rule="has(self.spec.handle) || self.metadata.name.matches('^[a-z0-9][a-z0-9-]{0,62}$')",message="without spec.handle the Seat's name is its handle: lowercase letters, digits and '-', starting with a letter or digit, at most 63 characters",fieldPath=".spec.handle"
 // +kubebuilder:validation:XValidation:rule="(has(self.spec.handle) ? self.spec.handle : self.metadata.name) == (has(oldSelf.spec.handle) ? oldSelf.spec.handle : oldSelf.metadata.name)",message="the seat's handle is immutable: the seat's identity and memory are derived from it",fieldPath=".spec.handle"
