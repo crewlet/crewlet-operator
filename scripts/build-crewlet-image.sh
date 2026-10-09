@@ -6,7 +6,7 @@
 #   scripts/build-crewlet-image.sh <version> <image>
 #
 # <version> is a Go module version of github.com/crewlet/crewlet: a release
-# tag (v0.2.0) or a pseudo-version (v0.1.1-0.20261009013001-51b8d06db1b2),
+# tag (v0.2.0) or a pseudo-version (v0.1.1-0.20261009124511-edca773ceeb1),
 # whose last twelve hex digits name the commit. The Makefile passes
 # CREWLET_VERSION, so the image the e2e suite runs is the engine every other
 # suite tests against.
