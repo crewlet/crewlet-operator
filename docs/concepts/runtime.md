@@ -198,10 +198,16 @@ still placed in the removed pool is refused `PoolNotFound`) therefore keeps
 the pool running with the revision that needs it. `SeatsPlaced` names the
 StatefulSets kept that way.
 
-A seat moved into a PerSeat pool is pinned to its own pods by the next
-revision, which the config reconciler applies while the operator creates the
-StatefulSet: the seat waits, unplaced and with its messages queued, until
-the new pod has started.
+A seat moved to another pool keeps running where it runs until a pod of its
+new pool is ready: the config reconciler keeps it pinned where the revision
+the engine runs pins it, reports `Applied=False`, reason `PlacementPending`,
+on the Seat, and moves the pin with the first revision it writes once the
+StatefulSet of the new pool (the seat's own, for a PerSeat pool) has a ready
+pod. The old pods stay for as long as that revision pins the seat to them,
+so the move is one release and one claim, a turn boundary apart, rather than
+a seat held by nobody while the new pod is scheduled, pulled and started. A
+pool that never gets a ready pod (one at `replicas: 0`) keeps the seat where
+it is, and says so.
 
 ### What the class allows
 

@@ -168,6 +168,13 @@ func (run *configRun) decideApplied(p *part) {
 			setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, crewletaiv1alpha1.ReasonApplyFailed, verdict.message)
 		}
 	}
+	// Whatever became of the rest of it, a Seat whose pin is held where it
+	// runs does not run where its spec places it. Only a document the
+	// operator wrote holds a pin.
+	written := verdict.kind == appliedInRevision || verdict.kind == appliedPending || verdict.kind == appliedFailed
+	if written && p.moving != "" {
+		setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, crewletaiv1alpha1.ReasonPlacementPending, p.moving)
+	}
 }
 
 // companyWebhook reports whether a vendor delivers webhooks to one

@@ -79,6 +79,9 @@ type configRun struct {
 	// placement is what status.config.placement becomes once this reconcile
 	// writes the status; nil leaves it as it is.
 	placement *placementUpdate
+	// holding is whether doc keeps a moving seat pinned where it runs (see
+	// holdMoves).
+	holding bool
 }
 
 // appliedKind is what a reconcile found out about whether the parts are in
@@ -230,6 +233,7 @@ func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error
 	health, healthErr := run.readHealth(ctx, eng)
 	result = run.verifyApplied(ctx, eng, health, healthErr, result)
 	run.narrowPlacement(ctx, eng, health, healthErr)
+	result = run.holdResync(result)
 	// For the seats' placement, if the verification did not need it.
 	_, _ = run.fleetOf(ctx, eng)
 	return result, nil
@@ -348,6 +352,9 @@ func (run *configRun) enforce(
 	ctx context.Context, eng *engine.Client, desired secretsync.Desired, active *engine.ActiveConfig,
 ) (ctrl.Result, error) {
 	c := run.company
+	if err := run.holdMoves(ctx, active); err != nil {
+		return ctrl.Result{}, err
+	}
 	stateRef := types.NamespacedName{Namespace: c.Namespace, Name: secretSyncStateName(c)}
 	state, err := secretsync.LoadState(ctx, run.APIReader, stateRef, c)
 	if notOwned, ok := errors.AsType[*secretsync.NotOwnedError](err); ok {

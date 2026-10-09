@@ -35,6 +35,7 @@ type placedUnit struct {
 }
 
 type placedRole struct {
+	Handle    string `json:"handle"`
 	Placement *struct {
 		Labels map[string]string `json:"labels"`
 	} `json:"placement"`
@@ -78,4 +79,32 @@ func PlacementOf(document []byte) (Placement, error) {
 	p.Pools = slices.Compact(p.Pools)
 	p.Seats = slices.Compact(p.Seats)
 	return p, nil
+}
+
+// RolePlacements reads the role.placement labels of every role a company
+// document pins by labels, by the role's handle, at the top level and in
+// units nested to any depth.
+func RolePlacements(document []byte) (map[string]map[string]string, error) {
+	var doc placedDoc
+	if err := yaml.Unmarshal(document, &doc); err != nil {
+		return nil, fmt.Errorf("reading the placements of a company document: %w", err)
+	}
+	out := map[string]map[string]string{}
+	add := func(roles []placedRole) {
+		for _, r := range roles {
+			if r.Handle != "" && r.Placement != nil && len(r.Placement.Labels) > 0 {
+				out[r.Handle] = r.Placement.Labels
+			}
+		}
+	}
+	var walk func([]placedUnit)
+	walk = func(units []placedUnit) {
+		for _, u := range units {
+			add(u.Roles)
+			walk(u.Children)
+		}
+	}
+	add(doc.Roles)
+	walk(doc.Units)
+	return out, nil
 }

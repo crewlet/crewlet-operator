@@ -48,6 +48,14 @@ type Input struct {
 	// spec.exposure.publicBaseURL, or the one the class's webhooks.hostname
 	// derives. Empty when the company is not exposed.
 	PublicBaseURL string
+
+	// HeldPlacements are the role.placement labels to render for the agent
+	// seats, by handle, that keep running where the revision the engine runs
+	// pins them while the pods of the pool they move to start: the pin
+	// moves with the first revision after those pods are up, so that the
+	// seat is never pinned to pods that are not there. A seat not named is
+	// pinned where it is placed.
+	HeldPlacements map[string]map[string]string
 }
 
 // Document is a rendered company document.

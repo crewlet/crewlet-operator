@@ -448,3 +448,30 @@ func TestPerSeatCapacityRefusesOnlyTheSeatsPastIt(t *testing.T) {
 		})
 	}
 }
+
+// TestAHeldSeatKeepsItsRunningPin renders a seat whose move is held back with
+// the pin it runs under, and every other seat where it is placed: the
+// controller holds a seat's pin until its new pool has a ready pod.
+func TestAHeldSeatKeepsItsRunningPin(t *testing.T) {
+	in := companyCaseNamed(t, "seat-pools").input(t)
+	running := map[string]string{SeatLabel: seatAna}
+	in.HeldPlacements = map[string]map[string]string{seatBo: running}
+	doc, err := Company(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	placements := rolePlacements(t, doc.YAML)
+	if !maps.Equal(placements[seatBo], running) {
+		t.Errorf("held seat bo is pinned to %v, want %v", placements[seatBo], running)
+	}
+	if want := map[string]string{PoolLabel: poolBatch}; !maps.Equal(placements[seatDee], want) {
+		t.Errorf("seat dee, not held, is pinned to %v, want %v", placements[seatDee], want)
+	}
+	got, err := RolePlacements(doc.YAML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !maps.Equal(got[seatBo], running) || len(got) != 4 {
+		t.Errorf("RolePlacements read %v, want the four agent seats' pins", got)
+	}
+}

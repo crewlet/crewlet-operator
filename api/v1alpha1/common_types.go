@@ -748,6 +748,13 @@ const (
 	// login on its own: a vendor that rotates refresh tokens then logs the
 	// whole company out.
 	ReasonCLIAuthNotPortable = "CLIAuthNotPortable"
+
+	// ReasonPlacementPending is Applied=False on an agent Seat placed in a
+	// pool other than the one the revision the engine runs pins it to,
+	// while that pool's StatefulSet has no ready pod: the operator keeps the
+	// seat pinned where it runs, so that it is never pinned to pods that are
+	// not there, and moves the pin with the first revision after one is.
+	ReasonPlacementPending = "PlacementPending"
 )
 
 // The keys a Secret must carry where a field references the whole Secret

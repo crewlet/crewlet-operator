@@ -157,6 +157,10 @@ every seat.
 - **Upgrades.** The data pod rolls first; the seat pods keep their template
   until it is ready, then every seat StatefulSet rolls at once. Pods are
   replaced one at a time, a minute apart.
+- **Moving a seat to another pool** keeps it where it runs until a pod of
+  the new pool is ready (the Seat reports `Applied=False`,
+  `PlacementPending` meanwhile), then moves it with one release and one
+  claim.
 - **Scaling a Shared pool** moves seats onto new pods, and off pods that go.
   A stopping pod finishes its running turns, hands back the waiting ones and
   releases its seats, so give a pool a `terminationGracePeriodSeconds` longer

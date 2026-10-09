@@ -14,6 +14,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -977,11 +978,20 @@ var _ = Describe("Company config", Ordered, func() {
 			Pools: []string{crewletaiv1alpha1.DataPool, poolGeneral}, Seats: []string{name + "-cy"},
 		}))
 
-		By("dropping a seat's own pods from the record once a revision that places it elsewhere is applied")
+		By("keeping a moving seat pinned to its own pods while its new pool has no ready pod")
 		updateLive(cy, func(s *crewletaiv1alpha1.Seat) { s.Spec.Placement.Pool = poolGeneral })
+		Eventually(reasonOf(cy, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonPlacementPending))
+		Expect(conditionOf(cy, crewletaiv1alpha1.ConditionApplied)(Default).Message).To(ContainSubstring(name + "-seats-general"))
+		Consistently(placement).WithTimeout(3 * time.Second).Should(Equal(crewletaiv1alpha1.RevisionPlacement{
+			Pools: []string{crewletaiv1alpha1.DataPool, poolGeneral}, Seats: []string{name + "-cy"},
+		}))
+
+		By("dropping a seat's own pods from the record once a revision that places it elsewhere is applied")
+		readyStatefulSet(c, name+"-seats-general")
 		Eventually(placement).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.RevisionPlacement{
 			Pools: []string{crewletaiv1alpha1.DataPool, poolGeneral},
 		}))
+		Eventually(reasonOf(cy, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
 		active, err := e.Client().ActiveConfig(ctx)
 		Expect(err).NotTo(HaveOccurred())
 		pins, err := render.PlacementOf(active.Document)
@@ -1207,4 +1217,29 @@ func sampleParts(namespace string) ([]client.Object, *crewletaiv1alpha1.EngineCl
 	}
 	Expect(class).NotTo(BeNil())
 	return parts, class
+}
+
+// readyStatefulSet stands in for the runtime reconciler and the StatefulSet
+// controller: a seat StatefulSet of the Company's, of that name, labelled as
+// the operator labels it (its cache holds no other), with a ready pod.
+func readyStatefulSet(c *crewletaiv1alpha1.Company, name string) {
+	GinkgoHelper()
+	labels := selectorFor(c, componentSeats)
+	sts := &appsv1.StatefulSet{
+		Namespace: c.Namespace, Name: name, Labels: labelsFor(c, componentSeats),
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: crewletaiv1alpha1.GroupVersion.String(), Kind: render.KindCompany, Name: c.Name, UID: c.UID,
+			Controller: new(true), BlockOwnerDeletion: new(true),
+		}},
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: labels},
+			Template: corev1.PodTemplateSpec{
+				Labels: labels,
+				Spec:   corev1.PodSpec{Containers: []corev1.Container{{Name: engineContainer, Image: "ghcr.io/crewlet/crewlet:v0.1.0"}}},
+			},
+		},
+	}
+	Expect(k8sClient.Create(ctx, sts)).To(Succeed())
+	sts.Status = appsv1.StatefulSetStatus{Replicas: 1, ReadyReplicas: 1}
+	Expect(k8sClient.Status().Update(ctx, sts)).To(Succeed())
 }

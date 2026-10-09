@@ -319,6 +319,9 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 	// well as a data pod.
 	pool := SeatPool(r.in.Company, s)
 	doc.Placement = &placementDoc{Labels: r.topology.Placement(pool, doc.Handle)}
+	if held, ok := r.in.HeldPlacements[doc.Handle]; ok {
+		doc.Placement = &placementDoc{Labels: held}
+	}
 	if r.topology.Places(pool, doc.Handle) {
 		r.seatPodProviders(s, pool)
 	}

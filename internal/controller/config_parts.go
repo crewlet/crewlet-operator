@@ -51,6 +51,10 @@ type part struct {
 	// drifted are the places its part of the document differs from what
 	// the engine runs (Observe).
 	drifted []string
+	// moving says why a Seat stays pinned where the revision the engine
+	// runs pins it, while the pods of the pool it moves to start (see
+	// holdMoves); empty when it is pinned where it is placed.
+	moving string
 	// pause is what the reconcile found about a Seat's pause, nil when it
 	// did not read it (see syncPauses).
 	pause *pauseVerdict
