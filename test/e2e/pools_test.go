@@ -247,13 +247,21 @@ var _ = Describe("Seat pools", Ordered, func() {
 		By("refusing every other pod under Isolated")
 		refused()
 
-		By("refusing a connection to a seat pod, even from the company's own seat pods")
-		seatPod := &corev1.Pod{}
-		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: poolsNamespace, Name: soloPod}, seatPod)).To(Succeed())
-		for _, port := range []int{7422, 8080} {
-			target := fmt.Sprintf("%s:%d", seatPod.Status.PodIP, port)
-			Expect(leafProbe(poolsNamespace, fmt.Sprintf("seat-pod-%d", port), seatLabels(poolsCompany), target)).
-				To(Equal(corev1.PodFailed), "a connection to seat pod %s reached it", target)
+		By("refusing a connection to a seat pod, from the company's namespace and from another")
+		// A seat pod binds no port, so a refused connection to one says
+		// nothing. A pod labelled as the company's seat pod that does
+		// listen can be refused by the seats policy alone; the same
+		// listener without the labels, reached, is the control.
+		plain := listenerPod("seat-listener-plain", nil)
+		labelled := listenerPod("seat-listener", seatLabels(poolsCompany))
+		Expect(leafProbe(poolsNamespace, "seat-listener-control", nil, plain)).To(Equal(corev1.PodSucceeded),
+			"the listener without seat labels was not reached: the probe proves nothing")
+		for name, namespace := range map[string]string{
+			"seat-listener-same-namespace":  poolsNamespace,
+			"seat-listener-other-namespace": poolsConsumerNamespace,
+		} {
+			Expect(leafProbe(namespace, name, nil, labelled)).To(Equal(corev1.PodFailed),
+				"pod %s/%s reached a pod labelled as the company's seat pod", namespace, name)
 		}
 
 		By("refusing every other pod under None, which keeps the broker's policy")
@@ -444,6 +452,31 @@ func leafProbe(namespace, name string, labels map[string]string, target string) 
 	pod.Spec.Containers[0].Env = nil
 	apply(pod)
 	return curlPhase(namespace, name)
+}
+
+// listenerPod runs a pod named name, with labels, in the pools namespace that
+// answers every TCP connection on port 7422 with an INFO line, as the leaf
+// listener does, and returns its address (host:port) once it runs. The pod
+// is deleted when the spec ends.
+func listenerPod(name string, labels map[string]string) string {
+	GinkgoHelper()
+	pod := curlPodWith(poolsNamespace, name, poolsAccessSecret, "")
+	pod.Labels = labels
+	pod.Spec.Containers[0].Env = nil
+	pod.Spec.Containers[0].Command = []string{"nc", "-lk", "-p", "7422", "-e", "echo", "INFO"}
+	apply(pod)
+	DeferCleanup(func() {
+		Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, pod, client.GracePeriodSeconds(0)))).To(Succeed())
+	})
+	var address string
+	Eventually(func(g Gomega) {
+		running := &corev1.Pod{}
+		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), running)).To(Succeed())
+		g.Expect(running.Status.Phase).To(Equal(corev1.PodRunning))
+		g.Expect(running.Status.PodIP).NotTo(BeEmpty())
+		address = fmt.Sprintf("%s:7422", running.Status.PodIP)
+	}).Should(Succeed())
+	return address
 }
 
 // setPoolsNetworkPolicy sets the pools class's networkPolicy.mode and waits
