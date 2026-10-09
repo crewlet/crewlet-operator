@@ -129,13 +129,12 @@ var _ = Describe("Company controller in a manager", Ordered, func() {
 		Eventually(conditionOf(crewletaiv1alpha1.ConditionRuntimeReady)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
 
 		By("following the StatefulSet's status, as its controller would report it")
-		sts := &appsv1.StatefulSet{}
-		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: dataName}, sts)).To(Succeed())
-		sts.Status = appsv1.StatefulSetStatus{
-			ObservedGeneration: sts.Generation, Replicas: 1, ReadyReplicas: 1, AvailableReplicas: 1,
-			UpdatedReplicas: 1, CurrentReplicas: 1, CurrentRevision: "r1", UpdateRevision: "r1",
-		}
-		Expect(k8sClient.Status().Update(ctx, sts)).To(Succeed())
+		updateStatusLive(&appsv1.StatefulSet{Namespace: namespace, Name: dataName}, func(sts *appsv1.StatefulSet) {
+			sts.Status = appsv1.StatefulSetStatus{
+				ObservedGeneration: sts.Generation, Replicas: 1, ReadyReplicas: 1, AvailableReplicas: 1,
+				UpdatedReplicas: 1, CurrentReplicas: 1, CurrentRevision: "r1", UpdateRevision: "r1",
+			}
+		})
 		Eventually(conditionOf(crewletaiv1alpha1.ConditionRuntimeReady)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonPodsReady))
 		Expect(conditionOf(crewletaiv1alpha1.ConditionReady)(Default)).To(Equal(crewletaiv1alpha1.ReasonConfigPending))
 
@@ -261,18 +260,19 @@ var _ = Describe("Company and config controllers in one manager", Ordered, func(
 		Eventually(func() error {
 			return k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: dataStatefulSetName(company)}, sts)
 		}).WithTimeout(settle).Should(Succeed())
-		sts.Status = appsv1.StatefulSetStatus{
-			ObservedGeneration: sts.Generation, Replicas: 1, ReadyReplicas: 1, AvailableReplicas: 1,
-			UpdatedReplicas: 1, CurrentReplicas: 1, CurrentRevision: "r1", UpdateRevision: "r1",
-		}
-		Expect(k8sClient.Status().Update(ctx, sts)).To(Succeed())
+		updateStatusLive(sts, func(sts *appsv1.StatefulSet) {
+			sts.Status = appsv1.StatefulSetStatus{
+				ObservedGeneration: sts.Generation, Replicas: 1, ReadyReplicas: 1, AvailableReplicas: 1,
+				UpdatedReplicas: 1, CurrentReplicas: 1, CurrentRevision: "r1", UpdateRevision: "r1",
+			}
+		})
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(company), company)).To(Succeed())
 		readyAt(company.Generation)
 
 		By("changing the spec, which the engine takes as a new revision")
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(company), company)).To(Succeed())
-		company.Spec.Mission = "Answer every customer within a day."
-		Expect(k8sClient.Update(ctx, company)).To(Succeed())
+		updateLive(company, func(c *crewletaiv1alpha1.Company) {
+			c.Spec.Mission = "Answer every customer within a day."
+		})
 		readyAt(company.Generation)
 
 		By("releasing the Company when it is deleted")

@@ -519,9 +519,7 @@ var _ = Describe("Company config", Ordered, func() {
 		hash := c.Status.Config.AppliedHash
 
 		By("rewriting the Secret")
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(key), key)).To(Succeed())
-		key.Data = map[string][]byte{llmKey: []byte("second")}
-		Expect(k8sClient.Update(ctx, key)).To(Succeed())
+		updateLive(key, func(s *corev1.Secret) { s.Data = map[string][]byte{llmKey: []byte("second")} })
 		Eventually(func() string { return storedValue(e, storeName) }).WithTimeout(settle).Should(Equal("second"))
 		Eventually(func() []revision { return revisions(e) }).WithTimeout(settle).Should(HaveLen(2),
 			"the engine reads a rotated value only when a revision activates")
@@ -535,9 +533,7 @@ var _ = Describe("Company config", Ordered, func() {
 
 		By("changing only the Secret's labels")
 		updatedAt := storeListing(e)[storeName].UpdatedAt
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(key), key)).To(Succeed())
-		key.Labels = map[string]string{"rotated-by": "a-test"}
-		Expect(k8sClient.Update(ctx, key)).To(Succeed())
+		updateLive(key, func(s *corev1.Secret) { s.Labels = map[string]string{"rotated-by": "a-test"} })
 		Consistently(func() []revision { return revisions(e) }).WithTimeout(3 * quietPeriod).Should(HaveLen(2))
 		Expect(storeListing(e)[storeName].UpdatedAt).To(Equal(updatedAt), "an unchanged value is not written again")
 	})
@@ -564,10 +560,9 @@ var _ = Describe("Company config", Ordered, func() {
 		Eventually(func(g Gomega) string {
 			return conditionOf(provider, crewletaiv1alpha1.ConditionResolvedRefs)(g).Message
 		}).WithTimeout(settle).Should(ContainSubstring(`has no key "` + llmKey + `"`))
-		s := &corev1.Secret{Namespace: namespace, Name: name + "-llm"}
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(s), s)).To(Succeed())
-		s.Data = map[string][]byte{llmKey: []byte("k")}
-		Expect(k8sClient.Update(ctx, s)).To(Succeed())
+		updateLive(&corev1.Secret{Namespace: namespace, Name: name + "-llm"}, func(s *corev1.Secret) {
+			s.Data = map[string][]byte{llmKey: []byte("k")}
+		})
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)
 	})
@@ -615,9 +610,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(log.of(name)).To(ContainElement(HavePrefix("Warning Invalid")))
 
 		By("taking the sandbox away again")
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(coder), coder)).To(Succeed())
-		coder.Spec.Sandbox = nil
-		Expect(k8sClient.Update(ctx, coder)).To(Succeed())
+		updateLive(coder, func(s *crewletaiv1alpha1.Seat) { s.Spec.Sandbox = nil })
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)

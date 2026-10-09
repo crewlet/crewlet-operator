@@ -11,6 +11,7 @@ import (
 
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -90,3 +91,33 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })
+
+// updateLive writes mutate's change to obj as the API server holds it,
+// reading it again and retrying when the write conflicts. A spec that runs a
+// manager shares its objects with the controllers, which write their status
+// and metadata at moments of their own choosing; a Get followed by a plain
+// Update loses that race now and then with a 409 Conflict, which says
+// nothing about the code under test. RetryOnConflict rather than Eventually,
+// so that any other error still fails the spec at once.
+func updateLive[T client.Object](obj T, mutate func(T)) {
+	GinkgoHelper()
+	Expect(retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+			return err
+		}
+		mutate(obj)
+		return k8sClient.Update(ctx, obj)
+	})).To(Succeed())
+}
+
+// updateStatusLive is updateLive for the status subresource.
+func updateStatusLive[T client.Object](obj T, mutate func(T)) {
+	GinkgoHelper()
+	Expect(retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+			return err
+		}
+		mutate(obj)
+		return k8sClient.Status().Update(ctx, obj)
+	})).To(Succeed())
+}
