@@ -254,11 +254,26 @@ docker-buildx: ## Build and push the manager image for every platform in PLATFOR
 	trap '"$(CONTAINER_TOOL)" buildx rm $(BUILDX_BUILDER)' EXIT; \
 		"$(CONTAINER_TOOL)" buildx build --builder $(BUILDX_BUILDER) --push --platform=$(PLATFORMS) --tag ${IMG} .
 
+# kustomize-build-img renders config/default with the manager image set to
+# IMG. `kustomize edit set image` rewrites the kustomization it runs in, so it
+# runs in a throwaway copy of config/: run in config/manager itself, every
+# deploy with a local IMG (the e2e suite's, for one) left a tracked file
+# modified, one commit away from shipping that image as the default and
+# failing verify-generated in every clone. A copy rather than an overlay that
+# names config/default as a resource, because kustomize refuses an absolute
+# resource path and a relative one from a temporary directory is not portable.
+define kustomize-build-img
+tmp="$$(mktemp -d)"; \
+trap 'rm -rf "$$tmp"' EXIT; \
+cp -R config "$$tmp/config" && \
+(cd "$$tmp/config/manager" && "$(KUSTOMIZE)" edit set image controller=${IMG}) && \
+"$(KUSTOMIZE)" build "$$tmp/config/default"
+endef
+
 .PHONY: build-installer
-build-installer: manifests generate kustomize ## Render CRDs and the manager deployment into dist/install.yaml.
+build-installer: manifests generate kustomize ## Render CRDs and the manager deployment with image IMG into dist/install.yaml.
 	mkdir -p dist
-	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG}
-	"$(KUSTOMIZE)" build config/default > dist/install.yaml
+	@$(kustomize-build-img) > dist/install.yaml
 
 ##@ Deployment
 
@@ -276,8 +291,7 @@ uninstall: manifests kustomize kubectl ## Uninstall the CRDs; ignore-not-found=t
 
 .PHONY: deploy
 deploy: manifests kustomize kubectl ## Deploy the manager (image IMG) to the cluster of the current kubeconfig.
-	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG}
-	"$(KUSTOMIZE)" build config/default | "$(KUBECTL)" apply --server-side -f -
+	@$(kustomize-build-img) | "$(KUBECTL)" apply --server-side -f -
 
 .PHONY: undeploy
 undeploy: kustomize kubectl ## Remove the manager; ignore-not-found=true tolerates missing objects.

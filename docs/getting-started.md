@@ -47,9 +47,9 @@ make install deploy IMG=crewlet-operator:dev
 make helm-deploy IMG=crewlet-operator:dev HELM_EXTRA_ARGS="--set manager.replicas=1"
 ```
 
-`make deploy` records the image in `config/manager/kustomization.yaml`; do
-not commit that change. The chart runs two replicas with leader election by
-default; one is plenty on a laptop.
+`make deploy` sets the image on a throwaway copy of `config/`, so the tree is
+left as it was. The chart runs two replicas with leader election by default;
+one is plenty on a laptop.
 
 ```bash
 bin/kubectl -n crewlet-operator-system rollout status deploy/crewlet-operator-controller-manager
