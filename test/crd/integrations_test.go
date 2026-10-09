@@ -18,6 +18,7 @@ const (
 	msgUnitProvisioned = "a unit's credentials come from Secrets"
 	msgURLScheme       = "url must be an absolute http or https URL"
 	msgURLReference    = "url may not hold a ${NAME} reference"
+	msgSiteURL         = "siteURL must be an absolute http or https URL"
 )
 
 // The names the vendor fixtures share.
@@ -128,6 +129,11 @@ func TestIntegrationVendors(t *testing.T) {
 					mutate: func(i *v1.Integration) { i.Spec.GitLab.SigningSecretRef = v1.SecretKeyReference{} },
 					want:   "spec.gitlab.signingSecretRef: Required value",
 				},
+				{
+					name:   "a hook name naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) { i.Spec.GitLab.WebhookName = "nimbus-${HOOK}" },
+					want:   "webhookName" + msgReference,
+				},
 			},
 		},
 		{
@@ -198,6 +204,17 @@ func TestIntegrationVendors(t *testing.T) {
 					want:   msgMattermostEng,
 				},
 				{
+					name: "a display name suffix naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) {
+						i.Spec.Provisioning = v1.IntegrationProvisioningEngine
+						i.Spec.Mattermost.EngineProvisioning = v1.MattermostEngineProvisioning{
+							AdminTokenSecretRef: secretKey("mattermost-admin", "token"),
+							DisplayNameSuffix:   " (${SUFFIX})",
+						}
+					},
+					want: "displayNameSuffix" + msgReference,
+				},
+				{
 					name:   "a team that is no slug is refused",
 					mutate: func(i *v1.Integration) { i.Spec.Mattermost.Team = "Nimbus HQ" },
 					want:   "spec.mattermost.team: Invalid value",
@@ -232,6 +249,21 @@ func TestIntegrationVendors(t *testing.T) {
 					mutate: func(i *v1.Integration) { i.Spec.Provisioning = v1.IntegrationProvisioningEngine },
 					want:   msgEngineVendors,
 				},
+				{
+					name:   "a siteURL that is no URL is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Jira.SiteURL = "nimbus.atlassian.net" },
+					want:   msgSiteURL,
+				},
+				{
+					name:   "a siteURL naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Jira.SiteURL = "https://${JIRA_HOST}" },
+					want:   "siteURL" + msgReference,
+				},
+				{
+					name:   "a webhook name naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Jira.WebhookName = "nimbus-${HOOK}" },
+					want:   "webhookName" + msgReference,
+				},
 			},
 		},
 		{
@@ -253,6 +285,20 @@ func TestIntegrationVendors(t *testing.T) {
 					name:   "no token is refused",
 					mutate: func(i *v1.Integration) { i.Spec.Confluence.TokenSecretRef = v1.SecretKeyReference{} },
 					want:   "spec.confluence.tokenSecretRef: Required value",
+				},
+				{
+					name:   "a siteURL is accepted",
+					mutate: func(i *v1.Integration) { i.Spec.Confluence.SiteURL = "https://nimbus.atlassian.net" },
+				},
+				{
+					name:   "a siteURL that is no URL is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Confluence.SiteURL = "nimbus.atlassian.net" },
+					want:   msgSiteURL,
+				},
+				{
+					name:   "a siteURL naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Confluence.SiteURL = "https://${WIKI_HOST}" },
+					want:   "siteURL" + msgReference,
 				},
 			},
 		},
@@ -299,6 +345,16 @@ func TestIntegrationVendors(t *testing.T) {
 					name:   "a webhook name with an @ is refused",
 					mutate: func(i *v1.Integration) { i.Spec.Datadog.WebhookName = "@webhook-crewlet" },
 					want:   "spec.datadog.webhookName: Invalid value",
+				},
+				{
+					name:   "a webhook name naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Datadog.WebhookName = "crewlet-${HOOK}" },
+					want:   "webhookName" + msgReference,
+				},
+				{
+					name:   "a role naming a variable of the engine is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Datadog.Role = "${DATADOG_ROLE}" },
+					want:   "role" + msgReference,
 				},
 			},
 		},
