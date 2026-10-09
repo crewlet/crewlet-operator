@@ -40,16 +40,19 @@ with your last change yet.
 | | False | `KeyringInvalid` | The `<company>-keyring` Secret is not a keyring the engine can open. The operator never rewrites it: repair it from a backup, keeping the key ids, and set `crewlet.ai/active-key-id` to the key that seals new writes. The pod is held as it is. |
 | | False | `KeyringMissing` | The `<company>-keyring` Secret is gone while the company's data StatefulSet or volume claims exist. A new keyring could not open the data, so none is generated. Restore the Secret from a backup, with its `crewlet.ai/active-key-id` annotation; or, to discard the data, delete the data volume claims, after which a new keyring is generated. The pod is held as it is. |
 | | False | `PreviousCompanyObjects` | The keyring or tokens Secret of an earlier Company of the same name, deleted with `deletionPolicy: Delete`, has not been removed by the garbage collector yet. The pod starts once it is gone; nothing to do unless it stays, in which case check that the garbage collector runs. |
+| | False | `NameConflict` | An object the operator writes for the Company (a Service, Secret, ConfigMap, ServiceAccount, StatefulSet or NetworkPolicy named after it) exists and is someone else's. The message names it. The operator never changes or adopts it: rename or delete it, or give the Company another name. The pod is held as it is. |
 | | False | `SecretNotFound` | A Secret the class references for the pods (S3 credentials, telemetry headers, `podTemplate.spec.env`) is missing in the platform's namespace, or `<company>-api-tokens` lacks a token. The pod is held as it is. |
 | `Exposed` | True | `RouteAccepted` | Every route the class asks for was accepted. |
 | | True | `NoRoutes` | The class routes nothing (webhooks `None` or `External`, API `ClusterInternal`). |
 | | False | `RouteNotAccepted` | A Gateway has not attached the HTTPRoute, or the Ingress controller has not published an address. The message carries the controller's own reason; a Gateway listener's `allowedRoutes` that does not admit the tenant's namespace is the usual cause. |
+| | False | `NameConflict` | An HTTPRoute or Ingress of the route's name (`<company>-webhooks`, `<company>-api`) exists and is someone else's; rename or delete it. |
 | | False | `GatewayAPINotInstalled` | The class routes through Gateways and the cluster had no Gateway API when the operator started. Install it and restart the operator. |
 | | False | `PublicBaseURLMissing` | The class's webhooks mode is `External` and the Company has no `spec.exposure.publicBaseURL`. |
 | `SecretsSynced` | True | `Synced` | The engine's secret store holds every referenced value. |
 | | False | `SecretNotFound` | A referenced Secret or key is missing; the message names each. |
 | | False | `SecretTooLarge` | A value is over the 64 KiB the store accepts. |
 | | False | `EngineUnavailable` | Writing to the store failed; the message says why. Retried. |
+| | False | `NameConflict` | A Secret `<company>-secret-sync`, where the operator keeps what it pushed, exists and is someone else's. Rename or delete it; nothing is applied meanwhile. |
 | | Unknown | `NotManaged` | The management policy keeps the operator out of the store (`Observe`; `Seed` once seeded). |
 | `ConfigApplied` | True | `Applied` | The engine runs the rendered document; `status.config.revisionID` names the revision. |
 | | True | `DriftCorrected` | Under `Enforce`, someone changed the document in the engine and the operator applied the rendered one over it. A `Drifted` event names what differed. |

@@ -415,6 +415,17 @@ const (
 	// installing the Gateway API.
 	ReasonGatewayAPINotInstalled = "GatewayAPINotInstalled"
 
+	// ReasonNameConflict is RuntimeReady=False (or Exposed=False, for a
+	// route) when an object the operator would write for a Company exists
+	// and is not the Company's: a Service, Secret, ConfigMap, ServiceAccount,
+	// StatefulSet, NetworkPolicy, HTTPRoute or Ingress of the derived name
+	// that someone else created. The operator neither changes nor adopts it;
+	// the message names it. Rename or delete it, or give the Company another
+	// name. It is also SecretsSynced=False and ConfigApplied=False when the
+	// Secret <company>-secret-sync, where the operator keeps what it pushed
+	// into the engine's secret store, is someone else's.
+	ReasonNameConflict = "NameConflict"
+
 	// ReasonPublicBaseURLMissing is Exposed=False when the class's
 	// webhooks.mode is External and the Company does not state its address
 	// in spec.exposure.publicBaseURL.

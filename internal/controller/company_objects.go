@@ -41,7 +41,7 @@ func dataServiceName(c *crewletaiv1alpha1.Company) string     { return c.Name + 
 func dataStatefulSetName(c *crewletaiv1alpha1.Company) string { return c.Name + "-data" }
 func webhooksRouteName(c *crewletaiv1alpha1.Company) string   { return c.Name + "-webhooks" }
 func apiRouteName(c *crewletaiv1alpha1.Company) string        { return c.Name + "-api" }
-func networkPolicyName(c *crewletaiv1alpha1.Company) string   { return c.Name }
+func networkPolicyName(c *crewletaiv1alpha1.Company) string   { return c.Name + "-engine" }
 
 // apiURL is the in-cluster base URL of a Company's engine API: its engine
 // Service, which routes to ready data pods only. The namespace-qualified

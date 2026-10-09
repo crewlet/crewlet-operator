@@ -19,6 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
+	metav1ac "k8s.io/client-go/applyconfigurations/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -50,6 +52,7 @@ const (
 	internalGateway    = "internal"
 	otlpSecret         = "otlp"
 	platformTokenVar   = "PLATFORM_TOKEN"
+	webhooksHostname   = "{{uid}}.hooks.example.com"
 )
 
 // newReconciler is the Company reconciler as the manager builds it, on a
@@ -331,7 +334,7 @@ var _ = Describe("Company runtime", func() {
 
 		By("isolating the data pods")
 		policy := &networkingv1.NetworkPolicy{}
-		get(policy, companyName)
+		get(policy, engineName)
 		ownedByCompany(policy, company)
 		Expect(policy.Spec.PodSelector.MatchLabels).To(Equal(dataSelector))
 		Expect(policy.Spec.PolicyTypes).To(Equal([]networkingv1.PolicyType{networkingv1.PolicyTypeIngress}))
@@ -371,7 +374,7 @@ var _ = Describe("Company runtime", func() {
 			c.Spec.Exposure.Webhooks = crewletaiv1alpha1.WebhookExposure{
 				Mode:     crewletaiv1alpha1.WebhookExposureGateway,
 				Gateway:  crewletaiv1alpha1.GatewayExposure{ParentRefs: []crewletaiv1alpha1.GatewayParentReference{{Namespace: gatewayNamespace, Name: publicGateway}}},
-				Hostname: "{{uid}}.hooks.example.com",
+				Hostname: webhooksHostname,
 			}
 			c.Spec.Telemetry = crewletaiv1alpha1.TelemetrySettings{OTLPEndpoint: "http://collector.observability:4318"}
 		})
@@ -380,22 +383,25 @@ var _ = Describe("Company runtime", func() {
 		})
 		reconciled(company)
 
-		objects := map[string]client.Object{
-			keyringName:             &corev1.Secret{},
-			tokensName:              &corev1.Secret{},
-			accessName:              &corev1.Secret{},
-			"nimbus-bootstrap-data": &corev1.ConfigMap{},
-			engineName:              &corev1.Service{},
-			"nimbus-data":           &corev1.Service{},
-			webhooksRoute:           &gatewayv1.HTTPRoute{},
-			companyName:             &networkingv1.NetworkPolicy{},
+		objects := []struct {
+			name string
+			obj  client.Object
+		}{
+			{keyringName, &corev1.Secret{}},
+			{tokensName, &corev1.Secret{}},
+			{accessName, &corev1.Secret{}},
+			{"nimbus-bootstrap-data", &corev1.ConfigMap{}},
+			{engineName, &corev1.Service{}},
+			{"nimbus-data", &corev1.Service{}},
+			{webhooksRoute, &gatewayv1.HTTPRoute{}},
+			{engineName, &networkingv1.NetworkPolicy{}},
 		}
 		versions := func() map[string]string {
 			GinkgoHelper()
 			out := map[string]string{}
-			for name, obj := range objects {
-				get(obj, name)
-				out[fmt.Sprintf("%T/%s", obj, name)] = obj.GetResourceVersion()
+			for _, o := range objects {
+				get(o.obj, o.name)
+				out[fmt.Sprintf("%T/%s", o.obj, o.name)] = o.obj.GetResourceVersion()
 			}
 			out["StatefulSet"] = statefulSet().ResourceVersion
 			sa := &corev1.ServiceAccount{}
@@ -908,7 +914,7 @@ var _ = Describe("Company runtime", func() {
 				Gateway: crewletaiv1alpha1.GatewayExposure{ParentRefs: []crewletaiv1alpha1.GatewayParentReference{
 					{Namespace: gatewayNamespace, Name: publicGateway},
 				}},
-				Hostname: "{{uid}}.hooks.example.com",
+				Hostname: webhooksHostname,
 			}
 		}
 		// accept stands in for the Gateway's controller.
@@ -954,7 +960,7 @@ var _ = Describe("Company runtime", func() {
 
 			By("admitting the Gateway's namespace to the engine's port")
 			policy := &networkingv1.NetworkPolicy{}
-			get(policy, companyName)
+			get(policy, engineName)
 			Expect(policy.Spec.Ingress[0].From).To(ContainElement(networkingv1.NetworkPolicyPeer{
 				NamespaceSelector: &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{
 					Key: corev1.LabelMetadataName, Operator: metav1.LabelSelectorOpIn, Values: []string{gatewayNamespace},
@@ -1014,7 +1020,7 @@ var _ = Describe("Company runtime", func() {
 			Expect(condition(company, crewletaiv1alpha1.ConditionExposed).Reason).To(Equal(crewletaiv1alpha1.ReasonRouteNotAccepted))
 
 			policy := &networkingv1.NetworkPolicy{}
-			get(policy, companyName)
+			get(policy, engineName)
 			Expect(policy.Spec.Ingress[0].From).To(ContainElement(networkingv1.NetworkPolicyPeer{
 				NamespaceSelector: &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{
 					Key: corev1.LabelMetadataName, Operator: metav1.LabelSelectorOpIn, Values: []string{"ingress-nginx"},
@@ -1099,13 +1105,97 @@ var _ = Describe("Company runtime", func() {
 		})
 	})
 
+	Context("objects of its names that it does not own", func() {
+		// unchanged checks that the operator neither wrote obj nor made it
+		// the Company's, so the garbage collector will not take it either.
+		unchanged := func(obj client.Object) {
+			GinkgoHelper()
+			before := obj.GetResourceVersion()
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), obj)).To(Succeed())
+			Expect(obj.GetResourceVersion()).To(Equal(before), "%T %s was written", obj, obj.GetName())
+			Expect(obj.GetOwnerReferences()).To(BeEmpty())
+		}
+
+		It("leaves a namespace's own NetworkPolicy of the policy's name alone, and says so", func() {
+			class := newClass()
+			denyAll := &networkingv1.NetworkPolicy{
+				Namespace: namespace, Name: engineName,
+				Spec: networkingv1.NetworkPolicySpec{PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress}},
+			}
+			Expect(k8sClient.Create(ctx, denyAll)).To(Succeed())
+			company := reconciled(newCompany(class.Name))
+			unchanged(denyAll)
+			runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+			Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonNameConflict))
+			Expect(runtimeReady.Message).To(ContainSubstring("NetworkPolicy " + namespace + "/" + engineName))
+			absent(&appsv1.StatefulSet{}, "nimbus-data")
+		})
+
+		It("leaves a user's Service and Secret of the derived names alone", func() {
+			class := newClass()
+			service := &corev1.Service{
+				Namespace: namespace, Name: engineName,
+				Spec: corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 443}}},
+			}
+			Expect(k8sClient.Create(ctx, service)).To(Succeed())
+			access := &corev1.Secret{Namespace: namespace, Name: accessName, Data: map[string][]byte{crewletaiv1alpha1.APIAccessTokenKey: []byte("mine")}}
+			Expect(k8sClient.Create(ctx, access)).To(Succeed())
+
+			company := reconciled(newCompany(class.Name))
+			unchanged(access)
+			Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonNameConflict))
+			Expect(k8sClient.Delete(ctx, access)).To(Succeed())
+			company = reconciled(company)
+			unchanged(service)
+			runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+			Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonNameConflict))
+			Expect(runtimeReady.Message).To(ContainSubstring("Service " + namespace + "/" + engineName))
+		})
+
+		It("reports a route of another owner as not exposed, and runs the engine", func() {
+			class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+				c.Spec.Exposure.Webhooks = crewletaiv1alpha1.WebhookExposure{
+					Mode:     crewletaiv1alpha1.WebhookExposureGateway,
+					Gateway:  crewletaiv1alpha1.GatewayExposure{ParentRefs: []crewletaiv1alpha1.GatewayParentReference{{Namespace: gatewayNamespace, Name: publicGateway}}},
+					Hostname: webhooksHostname,
+				}
+			})
+			route := &gatewayv1.HTTPRoute{Namespace: namespace, Name: webhooksRoute}
+			Expect(k8sClient.Create(ctx, route)).To(Succeed())
+			company := reconciled(newCompany(class.Name))
+			unchanged(route)
+			exposed := condition(company, crewletaiv1alpha1.ConditionExposed)
+			Expect(exposed.Status).To(Equal(metav1.ConditionFalse))
+			Expect(exposed.Reason).To(Equal(crewletaiv1alpha1.ReasonNameConflict))
+			Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+		})
+
+		It("takes over what an earlier Company of the same name left", func() {
+			class := newClass()
+			// Written as the operator wrote it for that Company: with
+			// server-side apply, under the operator's field manager.
+			left := corev1ac.Service(engineName, namespace).
+				WithOwnerReferences(metav1ac.OwnerReference().
+					WithAPIVersion(crewletaiv1alpha1.GroupVersion.String()).WithKind("Company").WithName(companyName).
+					WithUID("0e4d7c1a-5b8e-4a3e-9d8f-1c2b3a4d5e6f").WithController(true)).
+				WithSpec(corev1ac.ServiceSpec().WithPorts(corev1ac.ServicePort().WithName("https").WithPort(443)))
+			Expect(k8sClient.Apply(ctx, left, client.FieldOwner(FieldOwner))).To(Succeed())
+			company := reconciled(newCompany(class.Name))
+			service := &corev1.Service{}
+			get(service, engineName)
+			ownedByCompany(service, company)
+			Expect(service.OwnerReferences).To(HaveLen(1), "the earlier Company would still own it")
+			Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+		})
+	})
+
 	It("removes the network policy when the class stops isolating the engine", func() {
 		class := newClass()
 		company := reconciled(newCompany(class.Name))
-		get(&networkingv1.NetworkPolicy{}, companyName)
+		get(&networkingv1.NetworkPolicy{}, engineName)
 		updateClass(class, func(c *crewletaiv1alpha1.EngineClass) { c.Spec.NetworkPolicy = crewletaiv1alpha1.NetworkPolicyNone })
 		reconciled(company)
-		absent(&networkingv1.NetworkPolicy{}, companyName)
+		absent(&networkingv1.NetworkPolicy{}, engineName)
 	})
 
 	Context("deletion", func() {

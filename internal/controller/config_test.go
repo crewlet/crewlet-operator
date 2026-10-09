@@ -564,6 +564,22 @@ var _ = Describe("Company config", Ordered, func() {
 		runsRendered(e, c)
 	})
 
+	It("neither reads nor overwrites a secret sync state Secret it did not create", func() {
+		const name = "squatted"
+		e := startEngine(name)
+		mine := secret(name+"-secret-sync", map[string]string{"note": "a Secret of the namespace's own"})
+		secret(name+"-llm", map[string]string{llmKey: "k"})
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce)
+		standIn(c)
+		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionSecretsSynced)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonNameConflict))
+		Expect(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonNameConflict))
+		got := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(mine), got)).To(Succeed())
+		Expect(got.Data).To(Equal(map[string][]byte{"note": []byte("a Secret of the namespace's own")}))
+		Expect(got.OwnerReferences).To(BeEmpty())
+		Expect(storeListing(e)).To(BeEmpty(), "pushed values without a record of them")
+	})
+
 	It("reports a document the engine refuses on the Seat at fault and keeps the last good revision", func() {
 		const name = "invalid"
 		e := startEngine(name)

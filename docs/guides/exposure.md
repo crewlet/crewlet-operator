@@ -142,7 +142,7 @@ accepted. Every request still needs a token.
 ## Network policy
 
 With `networkPolicy: Isolated`, the default, the operator creates a
-NetworkPolicy `<company>` that admits traffic to the engine's port only from:
+NetworkPolicy `<company>-engine` that admits traffic to the engine's port only from:
 
 - the operator's own namespace, so it can apply documents;
 - namespaces labelled `crewlet.ai/api-consumer: "true"`, for your platform's

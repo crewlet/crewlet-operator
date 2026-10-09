@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -41,6 +42,14 @@ func company() *crewletaiv1alpha1.Company {
 	return c
 }
 
+// controllerRef is a controller reference to the Company nimbus of the UID
+// given.
+func controllerRef(uid types.UID) metav1.OwnerReference {
+	return metav1.OwnerReference{
+		APIVersion: crewletaiv1alpha1.GroupVersion.String(), Kind: "Company", Name: nimbusNS, UID: uid, Controller: new(true),
+	}
+}
+
 func stateSecret(t *testing.T, c client.Client) *corev1.Secret {
 	t.Helper()
 	s := &corev1.Secret{}
@@ -53,7 +62,7 @@ func stateSecret(t *testing.T, c client.Client) *corev1.Secret {
 // TestLoadStateWithoutASecretIsEmpty: a company's first sync has no state,
 // and must push every name.
 func TestLoadStateWithoutASecretIsEmpty(t *testing.T) {
-	state, err := LoadState(context.Background(), newStateClient(t), stateRef)
+	state, err := LoadState(context.Background(), newStateClient(t), stateRef, company())
 	if err != nil {
 		t.Fatalf("LoadState: %v", err)
 	}
@@ -79,7 +88,7 @@ func TestSaveStateRoundTrips(t *testing.T) {
 	if err := SaveState(ctx, c, stateRef, owner, state); err != nil {
 		t.Fatalf("SaveState: %v", err)
 	}
-	loaded, err := LoadState(ctx, c, stateRef)
+	loaded, err := LoadState(ctx, c, stateRef, owner)
 	if err != nil {
 		t.Fatalf("LoadState: %v", err)
 	}
@@ -136,6 +145,7 @@ func TestLoadStateStartsOverFromAnEditedSecret(t *testing.T) {
 	edited := func(data map[string][]byte) *corev1.Secret {
 		s := &corev1.Secret{Data: data}
 		s.Namespace, s.Name = stateRef.Namespace, stateRef.Name
+		s.OwnerReferences = []metav1.OwnerReference{controllerRef(company().UID)}
 		return s
 	}
 
@@ -145,7 +155,7 @@ func TestLoadStateStartsOverFromAnEditedSecret(t *testing.T) {
 			if key != nil {
 				data[fingerprintKeyField] = key
 			}
-			state, err := LoadState(ctx, newStateClient(t, edited(data)), stateRef)
+			state, err := LoadState(ctx, newStateClient(t, edited(data)), stateRef, company())
 			if err != nil {
 				t.Fatalf("LoadState: %v", err)
 			}
@@ -162,7 +172,7 @@ func TestLoadStateStartsOverFromAnEditedSecret(t *testing.T) {
 			nameB:               fp[:10],
 			foreignName:         fp,
 		}
-		state, err := LoadState(ctx, newStateClient(t, edited(data)), stateRef)
+		state, err := LoadState(ctx, newStateClient(t, edited(data)), stateRef, company())
 		if err != nil {
 			t.Fatalf("LoadState: %v", err)
 		}
@@ -244,5 +254,33 @@ func TestDigestFollowsTheValues(t *testing.T) {
 	}
 	if first.Digest(names) == first.Digest([]string{a}) {
 		t.Error("the digest of fewer names is the digest of all of them")
+	}
+}
+
+// TestLoadStateRefusesASecretTheCompanyDoesNotControl: a Secret of the
+// state's name that someone else created, or that an earlier Company of the
+// name controlled, is neither read nor overwritten; the error names its
+// controller so the caller can tell the two apart.
+func TestLoadStateRefusesASecretTheCompanyDoesNotControl(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		owners     []metav1.OwnerReference
+		controller bool
+	}{
+		{name: "a Secret with no controller"},
+		{name: "an earlier Company's", owners: []metav1.OwnerReference{controllerRef("6f1c1a5e-0000-4000-8000-0000000000ff")}, controller: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &corev1.Secret{Data: map[string][]byte{fingerprintKeyField: bytes.Repeat([]byte{1}, fingerprintKeyLen)}}
+			s.Namespace, s.Name, s.OwnerReferences = stateRef.Namespace, stateRef.Name, tc.owners
+			_, err := LoadState(context.Background(), newStateClient(t, s), stateRef, company())
+			notOwned, ok := errors.AsType[*NotOwnedError](err)
+			if !ok {
+				t.Fatalf("LoadState() error = %v, want a *NotOwnedError", err)
+			}
+			if (notOwned.Controller != nil) != tc.controller {
+				t.Errorf("Controller = %+v", notOwned.Controller)
+			}
+		})
 	}
 }

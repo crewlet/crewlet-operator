@@ -263,7 +263,7 @@ func (r *CompanyReconciler) applyAPIAccess(ctx context.Context, c *crewletaiv1al
 			crewletaiv1alpha1.APIAccessTokenKey: tokens.Data[render.TokenAccess],
 			crewletaiv1alpha1.APIAccessURLKey:   []byte(apiURL(c)),
 		})
-	return r.apply(ctx, secret, "Secret", apiAccessSecretName(c), c.Namespace)
+	return r.apply(ctx, c, secretGVK, apiAccessSecretName(c), secret)
 }
 
 // platformValue is one value the engine's pods read from the Secret
@@ -371,7 +371,7 @@ func (r *CompanyReconciler) applyPlatformSecret(
 		WithOwnerReferences(ownerReference(c)).
 		WithType(corev1.SecretTypeOpaque).
 		WithData(data)
-	if err := r.apply(ctx, secret, "Secret", platformSecretName(c), c.Namespace); err != nil {
+	if err := r.apply(ctx, c, secretGVK, platformSecretName(c), secret); err != nil {
 		return "", nil, err
 	}
 	return *secret.ResourceVersion, nil, nil

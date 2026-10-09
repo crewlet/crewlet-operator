@@ -266,7 +266,22 @@ func (run *configRun) enforce(
 ) (ctrl.Result, error) {
 	c := run.company
 	stateRef := types.NamespacedName{Namespace: c.Namespace, Name: secretSyncStateName(c)}
-	state, err := secretsync.LoadState(ctx, run.APIReader, stateRef)
+	state, err := secretsync.LoadState(ctx, run.APIReader, stateRef, c)
+	if notOwned, ok := errors.AsType[*secretsync.NotOwnedError](err); ok {
+		// The state of an earlier Company of this name, which the garbage
+		// collector is about to delete, describes another engine's store:
+		// start over, and take the Secret over with the next save. Anyone
+		// else's Secret is left alone, and nothing is applied.
+		if notOwned.Controller == nil || !isPreviousCompany(notOwned.Controller, c) {
+			run.secretsSynced = &metav1.Condition{
+				Type: crewletaiv1alpha1.ConditionSecretsSynced, Status: metav1.ConditionFalse,
+				Reason: crewletaiv1alpha1.ReasonNameConflict, Message: capitalize(notOwned.Error()) + ".",
+			}
+			run.block(crewletaiv1alpha1.ReasonNameConflict, capitalize(notOwned.Error())+".")
+			return ctrl.Result{}, nil
+		}
+		state, err = secretsync.State{}, nil
+	}
 	if err != nil {
 		return ctrl.Result{}, err
 	}

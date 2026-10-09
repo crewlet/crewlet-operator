@@ -90,7 +90,7 @@ func (r *CompanyReconciler) applyBootstrap(ctx context.Context, c *crewletaiv1al
 		WithLabels(labelsFor(c, componentData)).
 		WithOwnerReferences(ownerReference(c)).
 		WithData(map[string]string{configFile: string(doc.YAML)})
-	return r.apply(ctx, cm, "ConfigMap", bootstrapConfigName(c), c.Namespace)
+	return r.apply(ctx, c, configMapGVK, bootstrapConfigName(c), cm)
 }
 
 // applyServiceAccount writes the engine's ServiceAccount. The engine does not
@@ -106,7 +106,7 @@ func (r *CompanyReconciler) applyServiceAccount(
 	if a := class.Spec.ServiceAccount.Annotations; len(a) > 0 {
 		sa.WithAnnotations(a)
 	}
-	return r.apply(ctx, sa, "ServiceAccount", serviceAccountName(c), c.Namespace)
+	return r.apply(ctx, c, serviceAccountGVK, serviceAccountName(c), sa)
 }
 
 // applyServices writes the company's two Services. <c>-engine routes to
@@ -128,7 +128,7 @@ func (r *CompanyReconciler) applyServices(ctx context.Context, c *crewletaiv1alp
 			WithType(corev1.ServiceTypeClusterIP).
 			WithSelector(selectorFor(c, componentData)).
 			WithPorts(port))
-	if err := r.apply(ctx, engine, "Service", engineServiceName(c), c.Namespace); err != nil {
+	if err := r.apply(ctx, c, serviceGVK, engineServiceName(c), engine); err != nil {
 		return err
 	}
 	data := corev1ac.Service(dataServiceName(c), c.Namespace).
@@ -139,7 +139,7 @@ func (r *CompanyReconciler) applyServices(ctx context.Context, c *crewletaiv1alp
 			WithPublishNotReadyAddresses(true).
 			WithSelector(selectorFor(c, componentData)).
 			WithPorts(port))
-	return r.apply(ctx, data, "Service", dataServiceName(c), c.Namespace)
+	return r.apply(ctx, c, serviceGVK, dataServiceName(c), data)
 }
 
 // applyStatefulSet writes the data StatefulSet and returns it as the API
@@ -194,7 +194,7 @@ func (r *CompanyReconciler) applyStatefulSet(
 		WithLabels(labelsFor(c, componentData)).
 		WithOwnerReferences(ownerReference(c)).
 		WithSpec(spec)
-	if err := r.apply(ctx, sts, "StatefulSet", dataStatefulSetName(c), c.Namespace); err != nil {
+	if err := r.apply(ctx, c, statefulSetGVK, dataStatefulSetName(c), sts); err != nil {
 		return nil, err
 	}
 	return sts, nil

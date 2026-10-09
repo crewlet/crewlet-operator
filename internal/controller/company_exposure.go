@@ -3,10 +3,12 @@ package controller
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -34,13 +36,16 @@ const (
 	apiPath      = "/"
 )
 
-// The kinds the operator may have to delete when the class stops asking for
-// them.
+// The kinds of the objects the operator writes for a Company.
 var (
-	secretGVK        = corev1.SchemeGroupVersion.WithKind("Secret")
-	ingressGVK       = networkingv1.SchemeGroupVersion.WithKind("Ingress")
-	networkPolicyGVK = networkingv1.SchemeGroupVersion.WithKind("NetworkPolicy")
-	httpRouteGVK     = schema.GroupVersionKind{Group: gatewayv1.GroupName, Version: gatewayv1.GroupVersion.Version, Kind: "HTTPRoute"}
+	secretGVK         = corev1.SchemeGroupVersion.WithKind("Secret")
+	configMapGVK      = corev1.SchemeGroupVersion.WithKind("ConfigMap")
+	serviceGVK        = corev1.SchemeGroupVersion.WithKind("Service")
+	serviceAccountGVK = corev1.SchemeGroupVersion.WithKind("ServiceAccount")
+	statefulSetGVK    = appsv1.SchemeGroupVersion.WithKind("StatefulSet")
+	ingressGVK        = networkingv1.SchemeGroupVersion.WithKind("Ingress")
+	networkPolicyGVK  = networkingv1.SchemeGroupVersion.WithKind("NetworkPolicy")
+	httpRouteGVK      = schema.GroupVersionKind{Group: gatewayv1.GroupName, Version: gatewayv1.GroupVersion.Version, Kind: "HTTPRoute"}
 )
 
 // GatewayAPIInstalled reports whether the cluster serves Gateway API
@@ -186,6 +191,8 @@ func (r *CompanyReconciler) reconcileRoute(ctx context.Context, c *crewletaiv1al
 			return nil, err
 		}
 	}
+	var state *routeState
+	var err error
 	switch {
 	case rt.gateway != nil:
 		if !r.GatewayAPI {
@@ -195,12 +202,18 @@ func (r *CompanyReconciler) reconcileRoute(ctx context.Context, c *crewletaiv1al
 					"install the Gateway API and restart the operator.", rt.what),
 			}, nil
 		}
-		return r.applyHTTPRoute(ctx, c, rt)
+		state, err = r.applyHTTPRoute(ctx, c, rt)
 	case rt.ingress != nil:
-		return r.applyIngress(ctx, c, rt)
+		state, err = r.applyIngress(ctx, c, rt)
 	default:
 		return nil, nil
 	}
+	// A route someone else owns is a fact about the routes, so it is
+	// reported as the Company not being exposed, and the engine still runs.
+	if conflict, ok := errors.AsType[*nameConflictError](err); ok {
+		return &routeState{reason: crewletaiv1alpha1.ReasonNameConflict, message: conflict.message()}, nil
+	}
+	return state, err
 }
 
 // applyHTTPRoute writes a route as a Gateway API HTTPRoute and reads whether
@@ -228,7 +241,7 @@ func (r *CompanyReconciler) applyHTTPRoute(ctx context.Context, c *crewletaiv1al
 		WithLabels(labelsFor(c, rt.component)).
 		WithOwnerReferences(ownerReference(c)).
 		WithSpec(spec)
-	if err := r.apply(ctx, httpRoute, "HTTPRoute", rt.name, c.Namespace); err != nil {
+	if err := r.apply(ctx, c, httpRouteGVK, rt.name, httpRoute); err != nil {
 		return nil, err
 	}
 
@@ -338,7 +351,7 @@ func (r *CompanyReconciler) applyIngress(ctx context.Context, c *crewletaiv1alph
 	if len(rt.ingress.Annotations) > 0 {
 		ingress.WithAnnotations(rt.ingress.Annotations)
 	}
-	if err := r.apply(ctx, ingress, "Ingress", rt.name, c.Namespace); err != nil {
+	if err := r.apply(ctx, c, ingressGVK, rt.name, ingress); err != nil {
 		return nil, err
 	}
 	if ingress.Status == nil || ingress.Status.LoadBalancer == nil || len(ingress.Status.LoadBalancer.Ingress) == 0 {
@@ -399,7 +412,7 @@ func (r *CompanyReconciler) reconcileNetworkPolicy(
 					WithProtocol(corev1.ProtocolTCP).
 					WithPort(intstr.FromInt32(render.APIPort))).
 				WithFrom(peers...)))
-	return r.apply(ctx, policy, "NetworkPolicy", networkPolicyName(c), c.Namespace)
+	return r.apply(ctx, c, networkPolicyGVK, networkPolicyName(c), policy)
 }
 
 // routeNamespaces are the namespaces routed traffic reaches the data pods

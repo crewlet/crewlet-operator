@@ -28,7 +28,17 @@ Company, so it is deleted with it. For a Company `nimbus`:
 | Service `nimbus-engine` | ClusterIP on port 8080, routing to ready data pods. The routes and `status.endpoints.api` point at it. |
 | Service `nimbus-data` | Headless, the StatefulSet's governing Service, publishing each data pod's address before it is ready. |
 | HTTPRoute or Ingress `nimbus-webhooks`, `nimbus-api` | The routes the class asks for; see [Exposure](#exposure). |
-| NetworkPolicy `nimbus` | With the class's `networkPolicy: Isolated`; see [Network policy](#network-policy). |
+| NetworkPolicy `nimbus-engine` | With the class's `networkPolicy: Isolated`; see [Network policy](#network-policy). |
+
+The operator writes an object only if it does not exist or the Company
+controls it. An object of one of these names that someone else created (a
+namespace's own `nimbus-engine` Service, a default-deny policy that happens to
+share the name) is left alone: the operator would otherwise rewrite it and,
+through the owner reference it adds, have the garbage collector delete it with
+the Company. The Company reports `RuntimeReady=False` (`Exposed=False` for a
+route), reason `NameConflict`, naming the object; rename or delete it, or give
+the Company another name. Objects an earlier Company of the same name left
+behind are taken over.
 
 The keyring and the tokens are the only objects the operator generates rather
 than derives. If a Secret of that name already exists it is used as it is: one

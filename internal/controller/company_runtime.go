@@ -3,7 +3,9 @@ package controller
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -13,6 +15,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -36,6 +40,32 @@ const drainPollInterval = 5 * time.Second
 // An error is one to retry (the API server did not answer, a write
 // conflicted); everything about the Company or its class is a condition.
 func (r *CompanyReconciler) reconcileRuntime(
+	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
+) error {
+	err := r.reconcileRuntimeObjects(ctx, c, class)
+	conflict, ok := errors.AsType[*nameConflictError](err)
+	if !ok {
+		return err
+	}
+	// An object the Company does not own stops the runtime where it was
+	// met; the pods are held back as they are, and the condition names the
+	// object.
+	existing, err := r.existingStatefulSet(ctx, c)
+	if err != nil {
+		return err
+	}
+	runtimeReady, err := r.holdBack(ctx, c, existing, crewletaiv1alpha1.ReasonNameConflict, conflict.message())
+	if err != nil {
+		return err
+	}
+	runtimeReady.ObservedGeneration = c.Generation
+	meta.SetStatusCondition(&c.Status.Conditions, runtimeReady)
+	return nil
+}
+
+// reconcileRuntimeObjects writes the objects of an accepted Company's
+// runtime, in order; see reconcileRuntime.
+func (r *CompanyReconciler) reconcileRuntimeObjects(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 ) error {
 	keyring, keyringHeld, err := r.ensureKeyring(ctx, c)
@@ -246,14 +276,100 @@ func capitalize(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-// apply writes an object with server-side apply, as the operator's field
-// manager, taking over any field another manager set on it. The response,
-// status included, is decoded into obj.
-func (r *CompanyReconciler) apply(ctx context.Context, obj runtime.ApplyConfiguration, kind, name, namespace string) error {
+// apply writes an object of the Company's with server-side apply, as the
+// operator's field manager, taking over any field another manager set on it.
+// The response, status included, is decoded into obj.
+//
+// It first makes sure the object is the Company's to write: one of that name
+// that the Company does not control is someone else's (a user's Service, a
+// namespace's default-deny NetworkPolicy), and taking it over would rewrite
+// it and, through the owner reference the apply adds, have the garbage
+// collector delete it with the Company. The operator would then be a
+// confused deputy for anyone allowed to write Companies but not those
+// objects. It is left alone and reported (*nameConflictError), as the
+// Deployment and ReplicaSet controllers refuse to adopt an object another
+// controller owns. The one object of another owner taken over is one an
+// earlier Company of the same name controlled: it was deleted, the garbage
+// collector is about to delete the object, and the apply replaces the owner
+// reference with this Company's.
+func (r *CompanyReconciler) apply(
+	ctx context.Context, c *crewletaiv1alpha1.Company, gvk schema.GroupVersionKind, name string, obj runtime.ApplyConfiguration,
+) error {
+	if err := r.mayWrite(ctx, c, gvk, name); err != nil {
+		return err
+	}
 	if err := r.Apply(ctx, obj, client.FieldOwner(FieldOwner), client.ForceOwnership); err != nil {
-		return fmt.Errorf("applying %s %s/%s: %w", kind, namespace, name, err)
+		return fmt.Errorf("applying %s %s/%s: %w", gvk.Kind, c.Namespace, name, err)
 	}
 	return nil
+}
+
+// mayWrite returns a *nameConflictError unless the object of that kind and
+// name does not exist, or is the Company's (see apply). It reads metadata
+// only, from the informer the kind is watched with; the StatefulSet, the one
+// kind cached whole, is read as itself, so that no second informer is started
+// for it. An object an earlier Company of the name controlled is released
+// from it first: the apply adds this Company as the controller, and an object
+// may have only one.
+func (r *CompanyReconciler) mayWrite(ctx context.Context, c *crewletaiv1alpha1.Company, gvk schema.GroupVersionKind, name string) error {
+	var obj client.Object
+	if gvk == statefulSetGVK {
+		sts, err := r.existingStatefulSet(ctx, c)
+		if err != nil || sts == nil {
+			return err
+		}
+		obj = sts
+	} else {
+		m := &metav1.PartialObjectMetadata{}
+		m.SetGroupVersionKind(gvk)
+		if err := r.Get(ctx, types.NamespacedName{Namespace: c.Namespace, Name: name}, m); err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil
+			}
+			return fmt.Errorf("reading %s %s/%s: %w", gvk.Kind, c.Namespace, name, err)
+		}
+		obj = m
+	}
+	if metav1.IsControlledBy(obj, c) {
+		return nil
+	}
+	owner := metav1.GetControllerOf(obj)
+	if owner == nil || !isPreviousCompany(owner, c) {
+		controller := "no controller"
+		if owner != nil {
+			controller = "the controller " + owner.Kind + " " + owner.Name
+		}
+		return &nameConflictError{kind: gvk.Kind, namespace: c.Namespace, name: name, company: c.Name, controller: controller}
+	}
+	release := &metav1.PartialObjectMetadata{}
+	release.SetGroupVersionKind(gvk)
+	release.Namespace, release.Name = obj.GetNamespace(), obj.GetName()
+	release.ResourceVersion = obj.GetResourceVersion()
+	release.OwnerReferences = obj.GetOwnerReferences()
+	base := release.DeepCopy()
+	release.OwnerReferences = slices.DeleteFunc(slices.Clone(release.OwnerReferences),
+		func(o metav1.OwnerReference) bool { return o.UID == owner.UID })
+	// A merge patch replaces the whole list; the optimistic lock makes it
+	// fail rather than drop a reference added since the read.
+	if err := r.Patch(ctx, release, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})); err != nil {
+		return fmt.Errorf("releasing %s %s/%s from an earlier Company %s: %w", gvk.Kind, c.Namespace, name, c.Name, err)
+	}
+	return nil
+}
+
+// nameConflictError is an object the operator would write for a Company that
+// exists and is not the Company's.
+type nameConflictError struct {
+	kind, namespace, name, company, controller string
+}
+
+func (e *nameConflictError) Error() string { return e.message() }
+
+// message is the condition message: what exists, and what to do.
+func (e *nameConflictError) message() string {
+	return fmt.Sprintf("%s %s/%s exists with %s, and the operator writes an object of that name for Company %s: "+
+		"it changes or adopts no object it did not create. Rename or delete that %s, or give the Company another name.",
+		e.kind, e.namespace, e.name, e.controller, e.company, e.kind)
 }
 
 // finalize stops a deleted Company's engine and settles its data volumes,

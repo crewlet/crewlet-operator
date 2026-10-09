@@ -14,6 +14,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
 	metav1ac "k8s.io/client-go/applyconfigurations/meta/v1"
@@ -118,13 +119,20 @@ func newFingerprintKey() []byte {
 // over is one push of each value, which leaves the store as it was. For the
 // same reason an entry that is not a well-formed fingerprint of a name the
 // operator owns is dropped, and its name pushed again.
-func LoadState(ctx context.Context, r client.Reader, ref types.NamespacedName) (State, error) {
+//
+// A Secret of that name that owner does not control is not the operator's to
+// read or to overwrite: LoadState returns a *NotOwnedError, which names its
+// controller, and SaveState must not be called.
+func LoadState(ctx context.Context, r client.Reader, ref types.NamespacedName, owner client.Object) (State, error) {
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, ref, secret); err != nil {
 		if apierrors.IsNotFound(err) {
 			return State{}, nil
 		}
 		return State{}, fmt.Errorf("reading the secret sync state %s: %w", ref, err)
+	}
+	if !metav1.IsControlledBy(secret, owner) {
+		return State{}, &NotOwnedError{Ref: ref, Controller: metav1.GetControllerOf(secret)}
 	}
 	key := secret.Data[fingerprintKeyField]
 	if len(key) != fingerprintKeyLen {
@@ -137,6 +145,24 @@ func LoadState(ctx context.Context, r client.Reader, ref types.NamespacedName) (
 		}
 	}
 	return s, nil
+}
+
+// NotOwnedError is a state Secret that exists and that the owner LoadState
+// was given does not control: someone else's Secret of the name the operator
+// keeps its state under.
+type NotOwnedError struct {
+	Ref types.NamespacedName
+	// Controller is the Secret's controller, nil when it has none.
+	Controller *metav1.OwnerReference
+}
+
+func (e *NotOwnedError) Error() string {
+	controller := "no controller"
+	if e.Controller != nil {
+		controller = "the controller " + e.Controller.Kind + " " + e.Controller.Name
+	}
+	return fmt.Sprintf("Secret %s, where the secret sync keeps its state, exists with %s: "+
+		"the operator neither reads nor overwrites a Secret it did not create; rename or delete it", e.Ref, controller)
 }
 
 // SaveState writes s into the Secret ref, creating it if needed, owned by
