@@ -149,13 +149,16 @@ func SeatPool(c *v1alpha1.Company, s *v1alpha1.Seat) string {
 // whose pods alone pass maxPods (ReasonPoolCapacityExceeded). Company refuses
 // the document for the same reasons, so a topology that fails here is never
 // one the engine runs.
+//
+// The plan is returned with the error, never nil: every pool the Company
+// declares, with the seats placed in it, less each Seat refused on its own
+// (the refusals of the Company itself refuse no Seat). The runtime reconciler
+// sizes the pools' pods from it while the document is blocked, since the
+// revision the engine keeps running still needs them.
 func PlanTopology(c *v1alpha1.Company, class *v1alpha1.EngineClass, seats []v1alpha1.Seat) (*Topology, error) {
 	var errs refErrors
 	t := planTopology(c, class, seats, &errs)
-	if err := errs.err(); err != nil {
-		return nil, err
-	}
-	return t, nil
+	return t, errs.err()
 }
 
 // planTopology is PlanTopology recording its refusals in errs, so that a
@@ -259,6 +262,8 @@ func checkCapacity(c *v1alpha1.Company, class *v1alpha1.EngineClass, t *Topology
 					"together, and EngineClass %s allows %d (spec.seatPools.maxPods)",
 				name, pool.Replicas, total, class.Name, limit))
 		}
+		// Refused, so placed nowhere: the plan runs no pod for them.
+		pool.Seats = nil
 	}
 }
 

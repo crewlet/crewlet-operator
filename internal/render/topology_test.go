@@ -273,51 +273,68 @@ func refusalsOf(err error) []string {
 // TestPlacementRefusals covers every seat that cannot run where it is
 // placed, and every topology the class does not admit. Each is refused
 // both when the topology is planned (for the workloads) and when the document
-// is rendered, on the object a person has to change.
+// is rendered, on the object a person has to change. The plan still comes
+// with the refusal, less every Seat refused on its own: the runtime runs the
+// pools from it while the document is blocked.
 func TestPlacementRefusals(t *testing.T) {
+	const (
+		// Every seat where the seat-pools company places it.
+		everySeat = "batch:dee data:cy general:bo isolated:ana"
+		// Every seat but ana, refused its PerSeat pool.
+		anaRefused = "batch:dee data:cy general:bo isolated:"
+	)
 	for _, c := range []struct {
-		name   string
-		mutate func(*Input)
-		want   []string
+		name    string
+		mutate  func(*Input)
+		want    []string
+		planned string
 	}{
 		{
 			name: "a seat in a pool the company does not declare",
 			mutate: func(in *Input) {
 				seatNamed(in, seatDee).Spec.Placement.Pool = "nowhere"
 			},
-			want: []string{"Seat/dee spec.placement.pool PoolNotFound"},
+			want:    []string{"Seat/dee spec.placement.pool PoolNotFound"},
+			planned: "batch: data:cy general:bo isolated:ana",
 		},
 		{
+			// The Company is refused, not its Seats.
 			name: "seat pools under a class that forbids them",
 			mutate: func(in *Input) {
 				in.Class.Spec.SeatPools = v1alpha1.SeatPoolSettings{Policy: v1alpha1.SeatPoolsForbidden}
 			},
-			want: []string{"Company/nimbus spec.topology.seatPools SeatPoolsNotAllowed"},
+			want:    []string{"Company/nimbus spec.topology.seatPools SeatPoolsNotAllowed"},
+			planned: everySeat,
 		},
 		{
-			name:   "seat pools under a class that says nothing about them",
-			mutate: func(in *Input) { in.Class.Spec.SeatPools = v1alpha1.SeatPoolSettings{} },
-			want:   []string{"Company/nimbus spec.topology.seatPools SeatPoolsNotAllowed"},
+			name:    "seat pools under a class that says nothing about them",
+			mutate:  func(in *Input) { in.Class.Spec.SeatPools = v1alpha1.SeatPoolSettings{} },
+			want:    []string{"Company/nimbus spec.topology.seatPools SeatPoolsNotAllowed"},
+			planned: everySeat,
 		},
 		{
-			name:   "a seat in a PerSeat pool under a class that does not allow one",
-			mutate: func(in *Input) { in.Class.Spec.SeatPools.AllowPerSeat = nil },
-			want:   []string{"Seat/ana spec.placement.pool PerSeatNotAllowed"},
+			name:    "a seat in a PerSeat pool under a class that does not allow one",
+			mutate:  func(in *Input) { in.Class.Spec.SeatPools.AllowPerSeat = nil },
+			want:    []string{"Seat/ana spec.placement.pool PerSeatNotAllowed"},
+			planned: anaRefused,
 		},
 		{
 			// general's 2 pods and ana's 2 are 4.
-			name:   "a PerSeat seat whose pods pass maxPods",
-			mutate: func(in *Input) { in.Class.Spec.SeatPools.MaxPods = 3 },
-			want:   []string{"Seat/ana spec.placement.pool PoolCapacityExceeded"},
+			name:    "a PerSeat seat whose pods pass maxPods",
+			mutate:  func(in *Input) { in.Class.Spec.SeatPools.MaxPods = 3 },
+			want:    []string{"Seat/ana spec.placement.pool PoolCapacityExceeded"},
+			planned: anaRefused,
 		},
 		{
-			name:   "Shared pools whose pods alone pass maxPods",
-			mutate: func(in *Input) { in.Class.Spec.SeatPools.MaxPods = 1 },
-			want:   []string{"Company/nimbus spec.topology.seatPools PoolCapacityExceeded"},
+			name:    "Shared pools whose pods alone pass maxPods",
+			mutate:  func(in *Input) { in.Class.Spec.SeatPools.MaxPods = 1 },
+			want:    []string{"Company/nimbus spec.topology.seatPools PoolCapacityExceeded"},
+			planned: everySeat,
 		},
 		{
-			name:   "pods exactly at maxPods",
-			mutate: func(in *Input) { in.Class.Spec.SeatPools.MaxPods = 4 },
+			name:    "pods exactly at maxPods",
+			mutate:  func(in *Input) { in.Class.Spec.SeatPools.MaxPods = 4 },
+			planned: everySeat,
 		},
 		{
 			// A seat refused for its pool takes no pod, so ana's two do not
@@ -327,13 +344,14 @@ func TestPlacementRefusals(t *testing.T) {
 				in.Class.Spec.SeatPools.AllowPerSeat = nil
 				in.Class.Spec.SeatPools.MaxPods = 2
 			},
-			want: []string{"Seat/ana spec.placement.pool PerSeatNotAllowed"},
+			want:    []string{"Seat/ana spec.placement.pool PerSeatNotAllowed"},
+			planned: anaRefused,
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			in := companyCaseNamed(t, "seat-pools").input(t)
 			c.mutate(in)
-			_, planErr := PlanTopology(in.Company, in.Class, in.Seats)
+			plan, planErr := PlanTopology(in.Company, in.Class, in.Seats)
 			_, renderErr := Company(in)
 			for what, err := range map[string]error{"PlanTopology": planErr, "Company": renderErr} {
 				got := refusalsOf(err)
@@ -341,8 +359,23 @@ func TestPlacementRefusals(t *testing.T) {
 					t.Errorf("%s refused %v (%v), want %v", what, got, err, c.want)
 				}
 			}
+			if got := planText(plan); got != c.planned {
+				t.Errorf("planned %q, want %q", got, c.planned)
+			}
 		})
 	}
+}
+
+// planText is each pool of a plan, data included, with its seats, by pool
+// name: "data:cy general:bo,dee".
+func planText(t *Topology) string {
+	pools := make([]string, 0, 1+len(t.Pools))
+	pools = append(pools, poolData+":"+strings.Join(t.DataSeats, ","))
+	for i := range t.Pools {
+		pools = append(pools, t.Pools[i].Name+":"+strings.Join(t.Pools[i].Seats, ","))
+	}
+	slices.Sort(pools)
+	return strings.Join(pools, " ")
 }
 
 // seatNamed is the Seat of that name in an input.
