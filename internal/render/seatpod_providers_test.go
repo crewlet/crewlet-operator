@@ -9,7 +9,8 @@ import (
 
 // TestSeatPodProviders holds a seat placed in a seat pool to the providers a
 // seat pod can serve: no agent-mode CLI where the executor runs it, since a
-// seat pod serves no tool bridge for its runs to call back through, and no
+// seat pod serves no tool bridge for its runs to call back through (only the
+// head of the executor's chain runs as one), and no
 // CLI signed in with a credential bundle, which every seat pod would restore
 // and refresh on its own. A seat on the data pods may run on either, and an
 // agent-mode CLI in a phase that only makes text calls is no bridge's
@@ -42,12 +43,21 @@ func TestSeatPodProviders(t *testing.T) {
 			want: []string{"Seat/bo spec.llm.default[0].name AgentModeBridgeUnsupported"},
 		},
 		{
-			name: "an agent-mode executor behind another provider in a PerSeat pool",
+			// Crewlet runs only the head of the executor's chain as an
+			// agentic run; a fallback behind it is a text call.
+			name: "an agent-mode CLI behind another provider in a PerSeat pool",
 			mutate: func(in *Input) {
 				agent(in)
 				seatNamed(in, seatAna).Spec.LLM.Default = append(chain("claude"), chain(providerCLI)...)
 			},
-			want: []string{"Seat/ana spec.llm.default[1].name AgentModeBridgeUnsupported"},
+		},
+		{
+			name: "an agent-mode executor ahead of another provider in a PerSeat pool",
+			mutate: func(in *Input) {
+				agent(in)
+				seatNamed(in, seatAna).Spec.LLM.Default = append(chain(providerCLI), chain("claude")...)
+			},
+			want: []string{"Seat/ana spec.llm.default[0].name AgentModeBridgeUnsupported"},
 		},
 		{
 			name: "an agent-mode executor on the data pods",

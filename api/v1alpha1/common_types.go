@@ -736,7 +736,9 @@ const (
 	ReasonPoolCapacityExceeded = "PoolCapacityExceeded"
 
 	// ReasonAgentModeBridgeUnsupported is Applied=False on a Seat placed in
-	// a seat pool whose executor runs on a CLIAgent provider in mode Agent.
+	// a seat pool whose executor runs on a CLIAgent provider in mode Agent:
+	// one at the head of its executor's chain, the only entry Crewlet runs
+	// as an agentic run (a fallback behind it is a text call).
 	// An agent-mode run calls the seat's tools back through the tool bridge
 	// of the engine node that holds the seat, and a seat pod serves none:
 	// the engine refuses agent mode on a node with no bridge URL, and the

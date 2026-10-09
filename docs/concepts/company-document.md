@@ -223,7 +223,7 @@ the reference:
 | `Seat` | `spec.placement.pool` is neither `data` nor one of the Company's `spec.topology.seatPools` | `PoolNotFound` |
 | `Seat` | it is placed in a PerSeat pool, and the class does not set `seatPools.allowPerSeat` (reported on `Applied`) | `PerSeatNotAllowed` |
 | `Seat` | it is placed in a PerSeat pool, and the company's seat pods, its own included, would number more than the class's `seatPools.maxPods` with the PerSeat seats admitted before it: those the running revision already runs in pods of their own, then the older ones; every seat after the first refused is refused too (reported on `Applied`) | `PoolCapacityExceeded` |
-| `Seat` | it is placed in a seat pool, and its executor's chain names a `CLIAgent` provider in `mode: Agent`, whose runs call back into a tool bridge a seat pod does not serve (reported on `Applied`) | `AgentModeBridgeUnsupported` |
+| `Seat` | it is placed in a seat pool, and its executor's chain starts with a `CLIAgent` provider in `mode: Agent` (the one entry Crewlet runs as an agentic run), whose runs call back into a tool bridge a seat pod does not serve (reported on `Applied`) | `AgentModeBridgeUnsupported` |
 | `Seat` | it is placed in a seat pool, and a chain of it names a `CLIAgent` provider signed in with a credential bundle, which every seat pod would restore and refresh on its own (reported on `Applied`) | `CLIAuthNotPortable` |
 | `Company` | it declares `spec.topology.seatPools`, and its class's `seatPools.policy` is not `Allowed` | `SeatPoolsNotAllowed` |
 | `Company` | its Shared pools' replicas alone number more than the class's `seatPools.maxPods` | `PoolCapacityExceeded` |

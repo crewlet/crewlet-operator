@@ -36,15 +36,18 @@ import (
 // pool runs on that a seat pod cannot serve.
 func (r *renderer) seatPodProviders(s *v1alpha1.Seat, pool string) {
 	llm := &s.Spec.LLM
-	// The executor is the one phase an agent-mode provider runs as its own
-	// agentic run; every other phase calls it as a text model.
-	for _, link := range r.chainOf(llm.Default, "spec.llm.default") {
-		if cli := r.cliProviders[link.provider]; cli != nil && cli.Mode == v1alpha1.CLIAgentModeAgent {
-			r.errs.add(KindSeat, s.Name, link.field, v1alpha1.ReasonAgentModeBridgeUnsupported, fmt.Sprintf(
-				"runs the seat's work on LLMProvider %s, a CLI in mode Agent, and places the seat in seat pool %s: an "+
-					"agent-mode run calls the seat's tools back through the engine pod that holds the seat, and a seat "+
-					"pod serves no tool bridge. Place the seat in data, or run it on a provider in mode Text",
-				link.provider, pool))
+	// Crewlet decides a turn's runtime from the head of the executor's chain
+	// alone (Registry.Head): an agent-mode CLI there runs the turn as its own
+	// agentic run. Anywhere else, behind the head or in another phase, it is
+	// reached as a text model, which a seat pod serves like any other.
+	if head, ok := r.executorHead(llm.Default, "spec.llm.default"); ok {
+		if cli := r.cliProviders[head.provider]; cli != nil && cli.Mode == v1alpha1.CLIAgentModeAgent {
+			r.errs.add(KindSeat, s.Name, head.field, v1alpha1.ReasonAgentModeBridgeUnsupported, fmt.Sprintf(
+				"runs the seat's work on LLMProvider %s, a CLI in mode Agent at the head of its executor's chain, and "+
+					"places the seat in seat pool %s: an agent-mode run calls the seat's tools back through the engine "+
+					"pod that holds the seat, and a seat pod serves no tool bridge. Place the seat in data, or put a "+
+					"provider in mode Text at the head of the chain",
+				head.provider, pool))
 		}
 	}
 	phases := []struct {
@@ -105,6 +108,32 @@ func (r *renderer) chainOf(refs []v1alpha1.LLMProviderReference, field string) [
 		}
 	}
 	return out
+}
+
+// executorHead is the LLMProvider at the head of a seat's executor chain, the
+// one Crewlet may run as an agentic run, with the field that names it: the
+// first entry of refs that resolves, or with no refs the head of the
+// document's llm_order. ok is false when the head is a platform provider,
+// which drives no CLI, or when nothing resolves (each such entry is refused
+// on its own).
+func (r *renderer) executorHead(refs []v1alpha1.LLMProviderReference, field string) (chainLink, bool) {
+	if len(refs) == 0 {
+		head, ok := r.orderHead()
+		return chainLink{provider: head, field: "spec.llm"}, ok
+	}
+	for i, ref := range refs {
+		switch cmp.Or(ref.Kind, v1alpha1.LLMProviderKindLLMProvider) {
+		case v1alpha1.LLMProviderKindLLMProvider:
+			if r.providers[ref.Name] {
+				return chainLink{provider: ref.Name, field: fmt.Sprintf("%s[%d].name", field, i)}, true
+			}
+		case v1alpha1.LLMProviderKindPlatform:
+			if r.usesPlatformProviders() && r.platform[ref.Name] {
+				return chainLink{}, false
+			}
+		}
+	}
+	return chainLink{}, false
 }
 
 // orderHead is the LLMProvider a seat with no chain runs on: the head of the

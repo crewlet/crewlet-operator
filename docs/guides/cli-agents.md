@@ -138,11 +138,13 @@ CLI it cannot do:
 - **Agent mode.** A run calls the seat's tools back through the tool bridge
   of the very pod that holds the seat, on an address the sandbox reaches; the
   operator gives the data pod the company's public address for it, and a
-  seat pod has neither a bridge nor an address. A seat in a seat pool whose
-  executor's chain (`spec.llm.default`, or the Company's first provider when
-  the seat names none) holds a provider in `mode: Agent` is refused with
-  `Applied=False`, `AgentModeBridgeUnsupported`. The same provider in another
-  phase's chain is a text call, and is fine.
+  seat pod has neither a bridge nor an address. Crewlet runs a turn in agent
+  mode only when the HEAD of the executor's chain is in `mode: Agent`, so a
+  seat in a seat pool whose executor's chain (`spec.llm.default`, or the
+  Company's first provider when the seat names none) starts with such a
+  provider is refused with `Applied=False`, `AgentModeBridgeUnsupported`. The
+  same provider behind another in that chain, or in another phase's chain, is
+  a text call, and is fine.
 - **A credential bundle.** The login lives under the CLI's state directory,
   which on a seat pod is its scratch volume, so every seat pod restores the
   bundle at each start and then refreshes the login on its own, beside the
