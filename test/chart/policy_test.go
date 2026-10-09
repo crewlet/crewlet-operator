@@ -36,6 +36,26 @@ func expect(t *testing.T, err error, want string) {
 	}
 }
 
+// awaitGrant retries a write RBAC refuses until it is allowed, and fails on
+// any other answer: the API server's authorizer learns of a RoleBinding from
+// a watch, so a request right after the binding is created can still be
+// judged without it. The deadline is the bound on that delay, not on the
+// grant: a write still forbidden after it was never granted.
+func awaitGrant(t *testing.T, write func() error) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		err := write()
+		if err == nil {
+			return
+		}
+		if !strings.Contains(err.Error(), "forbidden") || time.Now().After(deadline) {
+			t.Fatalf("refused, want allowed: %v", err)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
 // awaitPolicy retries a write the policy named refuses until it is refused:
 // the API server compiles a new ValidatingAdmissionPolicy in the
 // background, and a request that arrives first is not checked against it.
@@ -143,7 +163,7 @@ func TestTenantProvisioner(t *testing.T) {
 		expect(t, p.Create(ctx, binding(tenant.Name, "admin")), "binds only the ClusterRole "+tenantAccessRole)
 		expect(t, p.Create(ctx, binding(tenant.Name, tenantAccessRole)), "")
 
-		expect(t, p.Create(ctx, secret(tenant.Name, corev1.SecretTypeOpaque)), "")
+		awaitGrant(t, func() error { return p.Create(ctx, secret(tenant.Name, corev1.SecretTypeOpaque)) })
 		token := secret(tenant.Name, corev1.SecretTypeServiceAccountToken)
 		token.Name = "token"
 		token.Annotations = map[string]string{corev1.ServiceAccountNameKey: defaultSA}
