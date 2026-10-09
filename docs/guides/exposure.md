@@ -227,8 +227,13 @@ company runs seat pods, `<company>-seats`, which admits no connection to a
 seat pod at all and, under `Isolated`, holds the seat pods to the egress
 above. NetworkPolicies are additive, so this isolation of the seat pods holds
 only while no other policy selects them: do not add one that selects every
-pod of a tenant's namespace. See [Network
-policy](../concepts/runtime.md#network-policy).
+pod of a tenant's namespace. A policy selects pods by label, so it cannot
+keep apart companies that share a namespace, whose pods anyone who creates
+pods there can label as either's: give each company a namespace of its own
+where that matters, and see [Network
+policy](../concepts/runtime.md#network-policy) for what no NetworkPolicy
+governs (the node's own traffic, `hostNetwork` pods) and for the leaf link's
+lack of encryption.
 
 The policy holds only on a CNI that enforces NetworkPolicy, egress included
 (Calico, Cilium, Antrea, and kind's kindnet on a kernel with nftables' queue

@@ -354,10 +354,9 @@ Two more policies come with seat pools:
   takes or is held back. Crewlet's leaf listener accepts any
   connection, with no authentication and no TLS, and whoever joins it reads
   and writes the company's whole event stream. It selects the data pods and
-  admits port 7422 only from this company's seat pods, which it selects by
-  the company's label, since companies may share a namespace. Under `None`
-  it also admits port 8080 from anywhere, which keeps the API as open as it
-  is without a policy and closes only the broker.
+  admits port 7422 only from pods labelled as this company's seat pods. Under
+  `None` it also admits port 8080 from anywhere, which keeps the API as open
+  as it is without a policy and closes only the broker.
 - `nimbus-seats` exists while the company runs seat pods. It selects them and
   admits nothing: a seat pod serves nothing. Under `Isolated` it also holds
   them to the data pods' egress, port 7422 of the data pods included.
@@ -366,6 +365,19 @@ NetworkPolicies are additive: a pod two policies select is open to what
 either admits. That is why `nimbus-engine` and `nimbus-broker` select the data
 pods alone and never a seat pod, and why the isolation of the seat pods holds
 only while no policy of anyone else's selects them.
+
+**The namespace is the trust boundary.** A policy selects pods by their
+labels, and whoever can create a pod in the namespace can give it a seat
+pod's labels and join the company's event stream; they can also mount the
+company's keyring Secret into it and open its secret store, which no policy
+governs. Companies that must not read each other's streams and secrets need
+namespaces of their own, or a namespace where nobody but the operator creates
+pods. Two more limits hold for every NetworkPolicy, on most CNIs (Calico and
+Cilium among them): traffic from the node itself, and from `hostNetwork` pods
+on the data pod's node, is not policed. And the leaf link carries the event
+stream (turn transcripts, tool results) unencrypted over the pod network:
+where that network is not trusted, run a CNI that encrypts it (WireGuard or
+IPsec, as Calico and Cilium offer).
 A CNI that enforces NetworkPolicy is required for any of this to hold. Some
 Gateway implementations deliver traffic from the node rather than from a pod
 (Cilium's, for example), which no NetworkPolicy can admit by namespace; with

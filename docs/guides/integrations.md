@@ -28,6 +28,19 @@ Jira or Confluence is refused, since the engine mints no credential there.
 Datadog and Atlassian take `Engine` only: the engine creates the seats'
 accounts with the keys they reference whenever it holds them.
 
+**An administrator credential is readable by everything the company runs.**
+Under `Engine` the Integration's administrator token or organization keys go
+into the company's secret store, which every engine pod of the company opens
+(the data pod and each seat pod hold its keyring), and so does every process
+that runs as the engine: its stdio MCP servers, a coding CLI, the code a seat
+runs. A seat steered by a prompt injection, or a compromised MCP package, is
+then one step from administering the vendor. Give the provisioner the
+narrowest credential it accepts: a GitLab group Owner's token rather than an
+instance administrator's, an Atlassian API key scoped to the organization's
+user management, Datadog keys of a service account limited to what
+provisioning needs. [Credentials](../concepts/credentials.md) says where each
+one goes.
+
 A seat names a credential the engine provisions with `provisioned` where it
 would otherwise name a Secret key, in its tool servers' credentials
 (`spec.mcp`), its sandbox environment (`spec.sandbox.env`) and its
