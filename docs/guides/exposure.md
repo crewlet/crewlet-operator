@@ -47,9 +47,12 @@ spec:
 
 The operator creates an HTTPRoute `<company>-webhooks` in each company's
 namespace, attached to the Gateway, for the expanded host name. The template
-must contain `{{uid}}`, or both `{{namespace}}` and `{{name}}`, so that no two
-companies share a host; `{{uid}}` keeps the address stable for the Company's
-lifetime and reveals nothing about the tenant. Point a wildcard DNS record
+must contain `{{uid}}`, or `{{name}}` and `{{namespace}}` joined by a `.`, so
+that no two companies share a host. A `-` between them is refused: names and
+namespaces hold dashes, so `{{namespace}}-{{name}}` is `team-a-b-web` for both
+`team-a`/`b-web` and `team-a-b`/`web`, and whichever route came first would
+receive the other tenant's deliveries. `{{uid}}` keeps the address stable for
+the Company's lifetime and reveals nothing about the tenant. Point a wildcard DNS record
 (`*.hooks.example.com`) and a wildcard certificate at the Gateway.
 
 The Gateway's listener must admit routes from the tenants' namespaces
@@ -132,7 +135,7 @@ spec:
       gateway:
         parentRefs:
           - {namespace: gateway-system, name: internal}
-      hostname: "{{namespace}}-{{name}}.crewlet.internal.example.com"
+      hostname: "{{name}}.{{namespace}}.crewlet.internal.example.com"
 ```
 
 The route `<company>-api` carries every path, so put it only on a listener

@@ -125,6 +125,28 @@ func TestEngineClassObjects(t *testing.T) {
 		},
 		{name: "a prefix every company shares is refused", mutate: s3("crewlet/"), want: msgPrefixUnique},
 		{name: "a prefix naming only the namespace is refused", mutate: s3("{{namespace}}/"), want: msgPrefixUnique},
+		// Names and namespaces hold '-': team-a/b-web and team-a-b/web would
+		// both be team-a-b-web.
+		{
+			name:   "a prefix joining namespace and name by '-' is refused",
+			mutate: s3("{{namespace}}-{{name}}/"),
+			want:   msgPrefixUnique,
+		},
+		{
+			name:   "a prefix joining name and namespace by '-' is refused",
+			mutate: s3("{{name}}-{{namespace}}/"),
+			want:   msgPrefixUnique,
+		},
+		{name: "a prefix joining namespace and name by '.' is accepted", mutate: s3("tenants/{{namespace}}.{{name}}/")},
+		{name: "a prefix joining name and namespace by '/' is accepted", mutate: s3("{{name}}/{{namespace}}/")},
+		{name: "a prefix by UID is accepted", mutate: s3("{{uid}}/")},
+		// Without the '/', nimbus/web's prefix starts nimbus/web-2's.
+		{
+			name:   "a prefix that does not end with '/' is refused",
+			mutate: s3("{{namespace}}/{{name}}"),
+			want:   msgPrefixSlash,
+		},
+		{name: "a UID prefix that does not end with '/' is refused", mutate: s3("crewlet-{{uid}}"), want: msgPrefixSlash},
 		{
 			name: "an S3 endpoint that is not a URL is refused",
 			mutate: func(c *v1.EngineClass) {
@@ -209,6 +231,24 @@ func TestEngineClassExposure(t *testing.T) {
 			want:   msgHostnameUnique,
 		},
 		{
+			name:   "a hostname joining namespace and name by '-' is refused",
+			mutate: gatewayHost("{{namespace}}-{{name}}.hooks.example.com"),
+			want:   msgHostnameUnique,
+		},
+		{
+			name:   "a hostname joining name and namespace by '-' is refused",
+			mutate: gatewayHost("{{name}}-{{namespace}}.hooks.example.com"),
+			want:   msgHostnameUnique,
+		},
+		{
+			name:   "a hostname joining name and namespace by '.' is accepted",
+			mutate: gatewayHost("{{name}}.{{namespace}}.hooks.example.com"),
+		},
+		{
+			name:   "a hostname joining namespace and name by '.' is accepted",
+			mutate: gatewayHost("{{namespace}}.{{name}}.hooks.example.com"),
+		},
+		{
 			name:   "a hostname that is no DNS name is refused",
 			mutate: gatewayHost("{{uid}}.Hooks_Example.com"),
 			want:   msgHostnameDNS,
@@ -243,6 +283,11 @@ func TestEngineClassExposure(t *testing.T) {
 		{
 			name:   "an API hostname every company shares is refused",
 			mutate: apiGatewayHost("api.example.com"),
+			want:   msgHostnameUnique,
+		},
+		{
+			name:   "an API hostname joining namespace and name by '-' is refused",
+			mutate: apiGatewayHost("{{namespace}}-{{name}}.api.example.com"),
 			want:   msgHostnameUnique,
 		},
 		{

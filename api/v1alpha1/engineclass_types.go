@@ -176,20 +176,24 @@ type S3ObjectSettings struct {
 	// +kubebuilder:validation:MaxLength=63
 	Bucket string `json:"bucket,omitempty"`
 
-	// prefix is prepended to every key, so that one bucket holds many
-	// companies. It is a template: {{namespace}}, {{name}} and {{uid}} are
-	// replaced by the Company's namespace, name and UID, and the result must
-	// differ between companies, so it must contain {{uid}}, or both
-	// {{namespace}} and {{name}}. The default keys files by namespace and
-	// name, which is also what the data volumes are named by: a Company
-	// re-created under its old name after a Retain deletion finds both its
-	// estate and its files again.
+	// prefix is Crewlet's store.objects.s3.prefix, prepended to every key as
+	// it is, so that one bucket holds many companies. It is a template:
+	// {{namespace}}, {{name}} and {{uid}} are replaced by the Company's
+	// namespace, name and UID, and the result must differ between
+	// companies, so it must contain {{uid}}, or {{namespace}} and {{name}}
+	// joined by a '/' or '.', which neither can hold (with a '-' between
+	// them, team-a/b-web and team-a-b/web would share keys); and it ends
+	// with '/', so that no company's prefix starts another's. The default
+	// keys files by namespace and name, which is also what the data volumes
+	// are named by: a Company re-created under its old name after a Retain
+	// deletion finds both its estate and its files again.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
 	// +default="{{namespace}}/{{name}}/"
 	// +kubebuilder:validation:XValidation:rule="!self.replace('{{namespace}}', '').replace('{{name}}', '').replace('{{uid}}', '').contains('{' + '{')",message="prefix may use only the variables {{namespace}}, {{name}} and {{uid}}"
-	// +kubebuilder:validation:XValidation:rule="self.contains('{{uid}}') || (self.contains('{{namespace}}') && self.contains('{{name}}'))",message="prefix must contain {{uid}}, or both {{namespace}} and {{name}}, so that companies sharing the bucket do not share keys"
+	// +kubebuilder:validation:XValidation:rule="self.contains('{{uid}}') || ['/', '.'].exists(sep, self.contains('{{name}}' + sep + '{{namespace}}') || self.contains('{{namespace}}' + sep + '{{name}}'))",message="prefix must contain {{uid}}, or {{namespace}} and {{name}} joined by a '/' or '.', so that companies sharing the bucket do not share keys: names and namespaces hold '-', so {{namespace}}-{{name}} is team-a-b-web for both team-a/b-web and team-a-b/web"
+	// +kubebuilder:validation:XValidation:rule="self.endsWith('/')",message="prefix must end with '/', so that no company's prefix is the start of another's and a listing of one company's keys never returns another's"
 	Prefix string `json:"prefix,omitempty"`
 
 	// pathStyle addresses the bucket in the URL path rather than in the host
@@ -362,13 +366,15 @@ type WebhookExposure struct {
 	// {{uid}}: the host name is public, and a UID says nothing about the
 	// tenant where a name can; and a UID is never reused, so a vendor still
 	// configured for a deleted company can never reach a company created
-	// later under the same name. The template must contain {{uid}}, or both
-	// {{namespace}} and {{name}}, so that no two companies share a host name.
+	// later under the same name. The template must contain {{uid}}, or
+	// {{name}} and {{namespace}} joined by a '.', which neither can hold, so
+	// that no two companies share a host name: with a '-' between them,
+	// team-a/b-web and team-a-b/web would.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:XValidation:rule="!self.replace('{{namespace}}', '').replace('{{name}}', '').replace('{{uid}}', '').contains('{' + '{')",message="hostname may use only the variables {{namespace}}, {{name}} and {{uid}}"
-	// +kubebuilder:validation:XValidation:rule="self.contains('{{uid}}') || (self.contains('{{namespace}}') && self.contains('{{name}}'))",message="hostname must contain {{uid}}, or both {{namespace}} and {{name}}, so that no two companies share a host name"
+	// +kubebuilder:validation:XValidation:rule="self.contains('{{uid}}') || self.contains('{{name}}.{{namespace}}') || self.contains('{{namespace}}.{{name}}')",message="hostname must contain {{uid}}, or {{name}} and {{namespace}} joined by a '.', so that no two companies share a host name: names and namespaces hold '-', so {{namespace}}-{{name}} is team-a-b-web for both team-a/b-web and team-a-b/web"
 	// +kubebuilder:validation:XValidation:rule="self.replace('{{namespace}}', 'n').replace('{{name}}', 'n').replace('{{uid}}', 'u').matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')",message="hostname must be a lowercase DNS name once its variables are replaced"
 	Hostname string `json:"hostname,omitempty"`
 }
@@ -418,7 +424,7 @@ type APIExposure struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:XValidation:rule="!self.replace('{{namespace}}', '').replace('{{name}}', '').replace('{{uid}}', '').contains('{' + '{')",message="hostname may use only the variables {{namespace}}, {{name}} and {{uid}}"
-	// +kubebuilder:validation:XValidation:rule="self.contains('{{uid}}') || (self.contains('{{namespace}}') && self.contains('{{name}}'))",message="hostname must contain {{uid}}, or both {{namespace}} and {{name}}, so that no two companies share a host name"
+	// +kubebuilder:validation:XValidation:rule="self.contains('{{uid}}') || self.contains('{{name}}.{{namespace}}') || self.contains('{{namespace}}.{{name}}')",message="hostname must contain {{uid}}, or {{name}} and {{namespace}} joined by a '.', so that no two companies share a host name: names and namespaces hold '-', so {{namespace}}-{{name}} is team-a-b-web for both team-a/b-web and team-a-b/web"
 	// +kubebuilder:validation:XValidation:rule="self.replace('{{namespace}}', 'n').replace('{{name}}', 'n').replace('{{uid}}', 'u').matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')",message="hostname must be a lowercase DNS name once its variables are replaced"
 	Hostname string `json:"hostname,omitempty"`
 }
