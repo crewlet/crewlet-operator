@@ -1,8 +1,11 @@
 # Coding CLIs as model providers: Claude Code on a subscription's headless
 # token running a seat's executor as its own agentic run in the company's
 # E2B sandbox, beside Codex on an exported login as a text model behind the
-# engine's tool loop, the reviewer's. Agent mode calls the seat's tools back
-# through the company's public address, so the case is exposed.
+# engine's tool loop, the reviewer's, and Hermes, the delegated workers',
+# signed in with no login of its own: its model provider's key in cli.env,
+# a ${NAME} Crewlet passes to the Hermes process untouched. Agent mode calls
+# the seat's tools back through the company's public address, so the case is
+# exposed.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -55,6 +58,26 @@ spec:
         key: bundle
 ---
 apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: hermes
+spec:
+  companyRef:
+    name: forge
+  type: CLIAgent
+  model: anthropic/claude-sonnet-4.5
+  cli:
+    agent: Hermes
+    auth:
+      mode: Subscription
+    env:
+      - name: OPENROUTER_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: openrouter
+            key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
 kind: Seat
 metadata:
   name: builder
@@ -67,3 +90,5 @@ spec:
       - name: claude-agent
     review:
       - name: codex
+    subagent:
+      - name: hermes

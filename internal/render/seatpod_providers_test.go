@@ -12,7 +12,8 @@ import (
 // seat pod serves no tool bridge for its runs to call back through (only the
 // head of the executor's chain runs as one), and no
 // CLI signed in with a credential bundle, which every seat pod would restore
-// and refresh on its own. A seat on the data pods may run on either, and an
+// and refresh on its own; a key in env, Hermes's sign-in, is as portable as
+// a token. A seat on the data pods may run on either, and an
 // agent-mode CLI in a phase that only makes text calls is no bridge's
 // business.
 func TestSeatPodProviders(t *testing.T) {
@@ -110,6 +111,22 @@ func TestSeatPodProviders(t *testing.T) {
 			mutate: func(in *Input) {
 				bundled(in)
 				seatNamed(in, seatCy).Spec.LLM.Default = chain(providerCLI)
+			},
+		},
+		{
+			// A key in env is a ${NAME} each pod resolves from the
+			// fleet's store, and nothing refreshes it.
+			name: "Hermes on a key in env in a pool",
+			mutate: func(in *Input) {
+				p := cliProvider(v1alpha1.CLIAgentModeText)
+				p.Spec.CLI.Agent = v1alpha1.CLIAgentHermes
+				p.Spec.CLI.Auth = v1alpha1.CLIAgentAuth{Mode: v1alpha1.CLIAgentAuthSubscription}
+				p.Spec.CLI.Env = []v1alpha1.SecretEnvVar{{
+					Name:      "OPENROUTER_API_KEY",
+					ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "openrouter"}},
+				}}
+				in.LLMProviders = append(in.LLMProviders, p)
+				seatNamed(in, seatBo).Spec.LLM.Default = chain(providerCLI)
 			},
 		},
 		{

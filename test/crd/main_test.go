@@ -11,6 +11,7 @@ package crd_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -32,6 +34,10 @@ import (
 var (
 	ctx       = context.Background()
 	k8sClient client.Client
+	// installedCRDs is what envtest installed, read back from the API
+	// server: a case that has to cover every value of an enum reads the
+	// enum here, so a value added later is covered without a second list.
+	installedCRDs []*apiextensionsv1.CustomResourceDefinition
 )
 
 func TestMain(m *testing.M) {
@@ -83,6 +89,7 @@ func run(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	installedCRDs = testEnv.CRDs
 	return m.Run()
 }
 
@@ -95,6 +102,41 @@ func newNamespace(t *testing.T) string {
 		t.Fatalf("creating a namespace: %v", err)
 	}
 	return ns.Name
+}
+
+// enumOf is the enum the installed CRD named crd declares at path, a field
+// path under its first version's schema root (such as "spec", "cli",
+// "agent"). It fails the test where the field or its enum is missing, so a
+// case built over it never runs over nothing.
+func enumOf(t *testing.T, crd string, path ...string) []string {
+	t.Helper()
+	for _, c := range installedCRDs {
+		if c.Name != crd {
+			continue
+		}
+		node := c.Spec.Versions[0].Schema.OpenAPIV3Schema
+		for _, field := range path {
+			child, ok := node.Properties[field]
+			if !ok {
+				t.Fatalf("%s has no field %s", crd, strings.Join(path, "."))
+			}
+			node = &child
+		}
+		var values []string
+		for _, v := range node.Enum {
+			var s string
+			if err := json.Unmarshal(v.Raw, &s); err != nil {
+				t.Fatalf("%s %s: enum value %s: %v", crd, strings.Join(path, "."), v.Raw, err)
+			}
+			values = append(values, s)
+		}
+		if len(values) == 0 {
+			t.Fatalf("%s %s declares no enum", crd, strings.Join(path, "."))
+		}
+		return values
+	}
+	t.Fatalf("no CRD %s was installed", crd)
+	return nil
 }
 
 // expect checks the API server's answer: want "" means the object must be

@@ -25,9 +25,20 @@ providers:
         state_dir: /var/lib/crewlet/llm-cli/codex
       model: gpt-5-codex
       type: cli-agent
+    hermes:
+      cli:
+        agent: hermes
+        auth:
+          mode: subscription
+        env:
+          OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
+        state_dir: /var/lib/crewlet/llm-cli/hermes
+      model: anthropic/claude-sonnet-4.5
+      type: cli-agent
   llm_order:
   - claude-agent
   - codex
+  - hermes
   sandbox:
     default_run_in: e2b
     e2b:
@@ -41,6 +52,8 @@ roles:
     - claude-agent
     review:
     - codex
+    subagent:
+    - hermes
   name: builder
   placement:
     labels:

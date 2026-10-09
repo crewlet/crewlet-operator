@@ -148,6 +148,18 @@ the CLI signed in to nothing: so CLIAgentSettings holds tokenSecretRef to
 the CLIs with a token variable and mode APIKey to the CLIs with a key
 variable.
 
+Hermes is the one CLI a Subscription provider may sign in with neither:
+it fronts many model providers, each with a key variable of its own, so
+Crewlet's profile for it names none, and it documents the provider's key
+in the cli block's env as Hermes's metered sign-in. Under Subscription
+Crewlet drops only the key variable a profile names, so that env reaches
+the Hermes process untouched. Which variable is a key is Hermes's to
+know, so the API asks only that env name one; a Hermes with neither a
+login nor env is signed in to nothing, and refused. Every other CLI keeps
+to a token or a bundle: a CLI with a key variable has it dropped from a
+Subscription login's environment, and takes its key through mode APIKey.
+The rule is CLIAgentSettings's, which sees the agent and env beside auth.
+
 _Validation:_
 - MinProperties: 1
 
@@ -185,7 +197,7 @@ _Appears in:_
 
 | Field | Description |
 | --- | --- |
-| `Subscription` | CLIAgentAuthSubscription signs the CLI in to a subscription with<br />tokenSecretRef or credentialBundleSecretRef.<br /> |
+| `Subscription` | CLIAgentAuthSubscription signs the CLI in to a subscription with<br />tokenSecretRef or credentialBundleSecretRef, or signs Hermes in with<br />its model provider's key in the cli block's env.<br /> |
 | `APIKey` | CLIAgentAuthAPIKey gives the CLI the provider's apiKeySecretRefs<br />key, billing the metered account.<br /> |
 
 
@@ -286,7 +298,7 @@ _Appears in:_
 | `mode` _[CLIAgentMode](#cliagentmode)_ | mode is how the engine uses the CLI. Unset is Text. Crewlet's `mode`. |  | Enum: [Text Agent] <br />Optional: \{\} <br /> |
 | `runIn` _[CLIAgentRunIn](#cliagentrunin)_ | runIn is where an Agent-mode run happens. Unset is the Company's<br />sandbox, which is E2B. Crewlet's `run_in`. |  | Enum: [E2B] <br />Optional: \{\} <br /> |
 | `auth` _[CLIAgentAuth](#cliagentauth)_ | auth is how the CLI signs in. |  | MinProperties: 1 <br />Required: \{\} <br /> |
-| `env` _[SecretEnvVar](#secretenvvar) array_ | env is extra environment of every invocation of the CLI: the child<br />gets an allowlisted environment, not the engine's, so a variable the<br />CLI needs beyond that is given here. Crewlet's `env`, a credential<br />position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `env` _[SecretEnvVar](#secretenvvar) array_ | env is extra environment of every invocation of the CLI: the child<br />gets an allowlisted environment, not the engine's, so a variable the<br />CLI needs beyond that is given here. It is how Hermes signs in under<br />auth mode Subscription with no login of its own: its model provider's<br />key, such as OPENROUTER_API_KEY. Crewlet's `env`, a credential<br />position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds caps one invocation of the CLI, launch included. Unset<br />takes Crewlet's default of 300. Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many CLI processes the provider runs at once;<br />each takes 200 to 400 MB of the engine pod's memory. Unset takes<br />Crewlet's default of 4. Crewlet's `max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 | `loginName` _string_ | loginName names the login, and the per-seat homes, the provider<br />keeps on the data volume. Providers of the company with the same<br />loginName share one login, which is how several models run off one<br />subscription; they must drive the same CLI. Unset is the provider's<br />own metadata.name. Crewlet's `state_dir`, as<br />/var/lib/crewlet/llm-cli/<loginName>. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9-]*$` <br />Optional: \{\} <br /> |

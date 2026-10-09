@@ -52,18 +52,63 @@ takes 200 to 400 MB, so size the class's `data.resources` for
 
 A subscription login is made at a terminal, by `crewlet llm login` or the
 CLI's own command, and a pod has none. `cli.auth` therefore takes the login
-from a Secret, in one of two forms:
+from a Secret, in one of two forms, or, for Hermes alone, takes none and
+signs in with a key in `cli.env`:
 
-| `auth` | What the Secret holds | Use it when |
+| Sign-in | What the Secret holds | Use it when |
 |---|---|---|
-| `tokenSecretRef` | a long-lived headless token the CLI mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the CLI is Claude Code, the one CLI whose Crewlet profile names a token variable: it never needs refreshing, and it is the only subscription login an agent-mode run can carry |
-| `credentialBundleSecretRef` | a bundle of the CLI's credential files, from `crewlet llm export <key>` on a machine where you logged in | any other CLI: they mint no token Crewlet hands on |
+| `auth.tokenSecretRef` | a long-lived headless token the CLI mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the CLI is Claude Code, the one CLI whose Crewlet profile names a token variable: it never needs refreshing, and it is the only subscription login an agent-mode run can carry |
+| `auth.credentialBundleSecretRef` | a bundle of the CLI's credential files, from `crewlet llm export <key>` on a machine where you logged in | any other CLI: they mint no token Crewlet hands on |
+| `env`, with `auth.mode: Subscription` | the key of the model provider Hermes runs on, in the variable Hermes reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the CLI is Hermes: with its model provider's key in its environment, it needs no login |
 
-A provider names one of the two: given both, which login the CLI acts on
-would be its own choice between its environment and its files, so the API
-server refuses the pair. Crewlet hands a token to a CLI only through the
+A provider names one of the two logins: given both, which login the CLI acts
+on would be its own choice between its environment and its files, so the
+API server refuses the pair. Crewlet hands a token to a CLI only through the
 variable its profile names and drops it for every other CLI, so the API
-server refuses `tokenSecretRef` on any agent but `ClaudeCode`.
+server refuses `tokenSecretRef` on any agent but `ClaudeCode`. A
+Subscription provider that names neither is refused, with one exception:
+
+- **Hermes on a key in `env`.** Hermes fronts many model providers, each
+  with a key variable of its own, so Crewlet's profile for it names none,
+  and passes the CLI's `env` to it untouched, which is the route its profile
+  documents for a metered key. The API server asks only that `env` name at
+  least one variable, since which variable is a key is Hermes's to know: a
+  Hermes with neither a login nor `env` is signed in to nothing, and is
+  refused. Write `auth.mode: Subscription` explicitly, as `auth` may not be
+  empty. A key in `env` is a `${NAME}` the engine resolves from its
+  encrypted store, so it never refreshes and runs on a seat pod too. Beside
+  a credential bundle it is a second sign-in, which Hermes settles by its
+  own rules rather than by the order you wrote them in: a variable the
+  bundle's `.env` also sets takes the file's value, since Hermes loads its
+  home's `.env` over its environment, while a model provider's key in
+  `env` wins over an OAuth login in the bundle's `auth.json`, so Hermes
+  runs on the metered key and the subscription goes unused. Name only the
+  sign-in you mean Hermes to use.
+- **Every other CLI** keeps to a token or a bundle. A CLI whose profile names
+  a key variable has that variable dropped from a Subscription login's
+  environment, so a key in `env` never reaches it: give it the key with
+  `auth.mode: APIKey` instead.
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: hermes
+spec:
+  companyRef: {name: acme}
+  type: CLIAgent
+  model: anthropic/claude-sonnet-4.5   # an OpenRouter model id: OPENROUTER_API_KEY selects OpenRouter
+  cli:
+    agent: Hermes
+    auth:
+      mode: Subscription
+    env:
+      - name: OPENROUTER_API_KEY
+        valueFrom:
+          secretKeyRef: {name: openrouter, key: apiKey}
+```
+
+For Claude Code, on a headless token:
 
 ```bash
 claude setup-token          # on your machine: prints the token
@@ -114,7 +159,8 @@ nothing, so the API server refuses the mode for them:
 | `Copilot` | `GITHUB_TOKEN` |
 | `Grok` | `XAI_API_KEY` |
 | `MuseCode` | `META_API_KEY` |
-| `OpenCode`, `CursorAgent`, `KimiCode`, `Hermes`, `Pi` | no: sign them in with `credentialBundleSecretRef` |
+| `OpenCode`, `CursorAgent`, `KimiCode`, `Pi` | no: sign them in with `credentialBundleSecretRef` |
+| `Hermes` | no: sign it in with its model provider's key in `env`, or with `credentialBundleSecretRef` |
 
 ## Text mode and agent mode
 
@@ -186,8 +232,9 @@ does for a CLI it cannot do:
   pods hold at each refresh, and logs them out. A seat in a seat pool that
   runs on a provider with `credentialBundleSecretRef`, in any phase, is
   refused with `Applied=False`, `CLIAuthNotPortable`: sign it in with
-  `tokenSecretRef` (Claude Code) or `auth.mode: APIKey` (a CLI the table
-  above gives a key variable), or place the seat in `data`.
+  `tokenSecretRef` (Claude Code), `auth.mode: APIKey` (a CLI the table
+  above gives a key variable) or, for Hermes, its model provider's key in
+  `env`, or place the seat in `data`.
 
 ## What v1alpha1 does not offer
 
@@ -203,5 +250,5 @@ any field of the company document from its environment too, so whoever can
 write such a field can have the engine send the value anywhere. The operator
 puts no credential of the engine's own into its environment for the same
 reason ([Credentials](../concepts/credentials.md)); `tokenSecretRef`,
-`credentialBundleSecretRef` and `auth.mode: APIKey` take the login from a
-Secret instead.
+`credentialBundleSecretRef`, `auth.mode: APIKey` and a Hermes key in `env`
+take the login from a Secret instead.

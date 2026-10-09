@@ -52,8 +52,13 @@ func validate(t *testing.T, env map[string]string, args ...string) {
 	if !got.Valid || len(got.Problems) > 0 || err != nil {
 		t.Errorf("crewlet validate refused the document (exit %v):\n%s\n%s", err, stdout, stderr)
 	}
-	if strings.Contains(stderr, "config_reference_unresolved") {
-		t.Errorf("a reference resolved to nothing:\n%s", stderr)
+	// A CLI's env is resolved where the engine builds the provider, and
+	// one that resolves to nothing is only logged there too: for a Hermes
+	// signed in through its env, that is a CLI with no key.
+	for _, unresolved := range []string{"config_reference_unresolved", "cli_agent_env_unresolved"} {
+		if strings.Contains(stderr, unresolved) {
+			t.Errorf("a reference resolved to nothing:\n%s", stderr)
+		}
 	}
 	// A warning is a document Crewlet runs but doubts: a lead or a manages
 	// entry naming nobody, a backup nobody owns. Every rendered document

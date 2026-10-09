@@ -34,7 +34,9 @@ import (
 // would restore it at each start and then refresh it on its own, beside the
 // data pod: a vendor that rotates refresh tokens retires the token the
 // others hold at each refresh, and logs the company out. A headless token
-// (tokenSecretRef) or an API key never refreshes, and is portable.
+// (tokenSecretRef), an API key, or the model provider's key a Hermes reads
+// from cli.env never refreshes, and is portable: a ${NAME} every pod resolves
+// from the fleet's encrypted store.
 
 // seatPodProviders refuses the providers an agent seat placed in seat pool
 // pool runs on that a seat pod cannot serve.
@@ -82,8 +84,8 @@ func (r *renderer) seatPodProviders(s *v1alpha1.Seat, pool string) {
 				"runs on LLMProvider %s, whose CLI signs in with a credential bundle, and places the seat in seat pool %s: "+
 					"a seat pod keeps the login on a volume it loses at every start, restores the bundle each time and "+
 					"refreshes it on its own, which logs every pod out once the vendor rotates the refresh token. Sign "+
-					"the CLI in with cli.auth.tokenSecretRef (ClaudeCode) or auth mode APIKey in place of the bundle, "+
-					"or place the seat in data",
+					"the CLI in with cli.auth.tokenSecretRef (ClaudeCode), auth mode APIKey, or for Hermes its model "+
+					"provider's key in cli.env, in place of the bundle, or place the seat in data",
 				link.provider, pool))
 		}
 	}

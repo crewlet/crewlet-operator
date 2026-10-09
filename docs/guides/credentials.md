@@ -184,7 +184,9 @@ says how it is named.
 ### A coding CLI's login
 
 A `CLIAgent` provider signs its CLI in with a headless subscription token or
-with a credential bundle `crewlet llm export` wrote, each a Secret key:
+with a credential bundle `crewlet llm export` wrote, each a Secret key; with
+`auth.mode: APIKey`, with the provider's `apiKeySecretRefs` key; or, for
+Hermes, with its model provider's key in `cli.env`:
 
 ```yaml
 spec:                       # LLMProvider claude-code
