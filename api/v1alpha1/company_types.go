@@ -468,7 +468,8 @@ type CompanyExposure struct {
 	// overriding the one the class's webhooks.hostname derives. Required when
 	// the class's webhooks.mode is External, where something outside the
 	// operator (a relay, an API gateway) forwards its /webhooks/ path to the
-	// engine. Crewlet's integrations.public_base_url.
+	// engine. A trailing '/' is dropped, as Crewlet drops it. Crewlet's
+	// integrations.public_base_url.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048

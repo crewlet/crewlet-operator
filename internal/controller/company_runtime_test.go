@@ -1236,6 +1236,13 @@ var _ = Describe("Company runtime", func() {
 			Expect(company.Status.Endpoints.PublicBaseURL).To(Equal("https://relay.example.com/nimbus"))
 			absent(&gatewayv1.HTTPRoute{}, webhooksRoute)
 			absent(&networkingv1.Ingress{}, webhooksRoute)
+
+			By("dropping a trailing '/', as the engine does from the base of its own addresses")
+			updateCompany(company, func(c *crewletaiv1alpha1.Company) {
+				c.Spec.Exposure.PublicBaseURL = "https://relay.example.com/nimbus//"
+			})
+			company = reconciled(company)
+			Expect(company.Status.Endpoints.PublicBaseURL).To(Equal("https://relay.example.com/nimbus"))
 		})
 
 		It("routes the whole API through an internal Gateway and reports its HTTPS address", func() {

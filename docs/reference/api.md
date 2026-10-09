@@ -204,7 +204,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `publicBaseURL` _string_ | publicBaseURL is the HTTPS address vendors deliver webhooks to,<br />overriding the one the class's webhooks.hostname derives. Required when<br />the class's webhooks.mode is External, where something outside the<br />operator (a relay, an API gateway) forwards its /webhooks/ path to the<br />engine. Crewlet's integrations.public_base_url. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `publicBaseURL` _string_ | publicBaseURL is the HTTPS address vendors deliver webhooks to,<br />overriding the one the class's webhooks.hostname derives. Required when<br />the class's webhooks.mode is External, where something outside the<br />operator (a relay, an API gateway) forwards its /webhooks/ path to the<br />engine. A trailing '/' is dropped, as Crewlet drops it. Crewlet's<br />integrations.public_base_url. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### CompanyIntegrationSettings

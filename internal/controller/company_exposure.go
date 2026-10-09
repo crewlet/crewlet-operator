@@ -117,11 +117,15 @@ func (r *CompanyReconciler) reconcileExposure(
 	// fixed by the class and the Company alone, and a platform reads it to
 	// configure vendor apps before anything is reachable. Under mode None
 	// nothing is public, and a publicBaseURL the Company states is unused.
+	// A trailing '/' is dropped, as Crewlet drops it from the base it builds
+	// its own webhook addresses on: the addresses published from this one
+	// must be the engine's, without a '//' before webhooks/.
+	stated := strings.TrimRight(c.Spec.Exposure.PublicBaseURL, "/")
 	switch exposure.Webhooks.Mode {
 	case crewletaiv1alpha1.WebhookExposureGateway, crewletaiv1alpha1.WebhookExposureIngress:
-		c.Status.Endpoints.PublicBaseURL = cmp.Or(c.Spec.Exposure.PublicBaseURL, "https://"+webhooks.hostname)
+		c.Status.Endpoints.PublicBaseURL = cmp.Or(stated, "https://"+webhooks.hostname)
 	case crewletaiv1alpha1.WebhookExposureExternal:
-		c.Status.Endpoints.PublicBaseURL = c.Spec.Exposure.PublicBaseURL
+		c.Status.Endpoints.PublicBaseURL = stated
 	case crewletaiv1alpha1.WebhookExposureNone:
 		c.Status.Endpoints.PublicBaseURL = ""
 	}
