@@ -205,9 +205,26 @@ func (r *CompanyConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	return b.
 		WatchesMetadata(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.companiesOfSecret)).
-		Watches(&crewletaiv1alpha1.EngineClass{}, handler.EnqueueRequestsFromMapFunc(r.companiesOfClass), specChanged).
+		// Moving the default-class annotation changes no generation, and
+		// changes the class of every Company that names none.
+		Watches(&crewletaiv1alpha1.EngineClass{}, handler.EnqueueRequestsFromMapFunc(r.companiesOfClass),
+			builder.WithPredicates(predicate.Or[client.Object](predicate.GenerationChangedPredicate{}, defaultClassChanged()))).
 		Named("companyconfig").
 		Complete(r)
+}
+
+// defaultClassChanged passes an EngineClass update that sets, removes or
+// changes the DefaultEngineClassAnnotation.
+func defaultClassChanged() predicate.Funcs {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return e.ObjectOld.GetAnnotations()[crewletaiv1alpha1.DefaultEngineClassAnnotation] !=
+				e.ObjectNew.GetAnnotations()[crewletaiv1alpha1.DefaultEngineClassAnnotation]
+		},
+		CreateFunc:  func(event.CreateEvent) bool { return false },
+		DeleteFunc:  func(event.DeleteEvent) bool { return false },
+		GenericFunc: func(event.GenericEvent) bool { return false },
+	}
 }
 
 // itemsOfKind returns an empty object of the kind a list partLists returned

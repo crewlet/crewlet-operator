@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/yaml"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -264,5 +265,25 @@ func TestDataPodURL(t *testing.T) {
 	c.Namespace, c.Name = "tenant-3f2a", "nimbus"
 	if got, want := dataPodURL(c), "http://nimbus-data-0.nimbus-data.tenant-3f2a.svc:8080"; got != want {
 		t.Errorf("dataPodURL() = %s, want %s", got, want)
+	}
+}
+
+func TestMovingTheDefaultClassReachesTheDocument(t *testing.T) {
+	class := func(isDefault string) *crewletaiv1alpha1.EngineClass {
+		c := &crewletaiv1alpha1.EngineClass{}
+		if isDefault != "" {
+			c.Annotations = map[string]string{crewletaiv1alpha1.DefaultEngineClassAnnotation: isDefault}
+		}
+		return c
+	}
+	p := defaultClassChanged()
+	if !p.Update(event.UpdateEvent{ObjectOld: class(""), ObjectNew: class("true")}) {
+		t.Error("a class made the default does not re-run the Companies that name none")
+	}
+	if !p.Update(event.UpdateEvent{ObjectOld: class("true"), ObjectNew: class("")}) {
+		t.Error("a class that stops being the default does not re-run the Companies that name none")
+	}
+	if p.Update(event.UpdateEvent{ObjectOld: class("true"), ObjectNew: class("true")}) {
+		t.Error("an unchanged annotation re-runs Companies")
 	}
 }
