@@ -41,8 +41,8 @@ Seat pools are worth their cost when a company needs one of these:
 - **A pod that can fail without stopping the company**: a seat pod that runs
   out of memory or wedges costs the seats on it, which another pod of the
   pool takes over, while the data pod keeps serving.
-- **Limits, a node pool or egress of its own for a few seats**: a PerSeat
-  pool gives each of its seats its own pods.
+- **Compute and failures of its own for a few seats**: a PerSeat pool gives
+  each of its seats its own pods, each of the class's seat pod size.
 
 ## Shared and PerSeat pools
 
@@ -51,7 +51,7 @@ Seat pools are worth their cost when a company needs one of these:
 | Pods | `replicas` of them, 0 to 100, for all the seats placed in the pool | 1 or 2 for each seat placed in the pool |
 | Which pod runs a seat | the engine spreads the pool's seats evenly over its pods that run, and moves them when a pod comes or goes | the seat's own pods; with 2, the second is a warm standby that takes the seat when the first stops |
 | Scaling | change `replicas`; at 0 the pool's seats run nowhere and their messages wait | none: one pod (or two) per seat |
-| The class must set | `seatPools.policy: Allowed` | that, and `seatPools.allowPerSeat: true` |
+| The class must set | `seatPools.policy: Allowed` and a `maxPods` | that, and `seatPools.allowPerSeat: true` |
 
 Every seat pod of the company counts against the class's `seatPools.maxPods`.
 Seats are placed with their `Seat`'s `spec.placement.pool`, or the Company's
@@ -64,7 +64,7 @@ metadata:
   name: nimbus
   namespace: nimbus
 spec:
-  engineClassName: pro        # seatPools.policy: Allowed, allowPerSeat: true
+  engineClassName: pro        # seatPools: {policy: Allowed, allowPerSeat: true, maxPods: 6}
   companyName: Nimbus
   topology:
     seatPools:
@@ -97,7 +97,7 @@ and the engine then runs on each PerSeat pod its own seat and no other.
 
 | It gives the seat | It does not give it |
 |---|---|
-| Kubernetes CPU and memory limits of its own, and a node pool, tolerations or affinity through the class's `podTemplate` | **Credential isolation.** Every node of a company holds the keyring and reads the whole secret store, and resolves every seat's vendor identities. A seat pod that is compromised can reach every credential of the company, its own seat's or not. Treat every pod of a company as holding all of its secrets. |
+| CPU and memory of its own: a pod of the class's seat pod size (`seatPools.defaults.resources`) that no other seat's work shares | **Credential isolation.** Every node of a company holds the keyring and reads the whole secret store, and resolves every seat's vendor identities. A seat pod that is compromised can reach every credential of the company, its own seat's or not. Treat every pod of a company as holding all of its secrets. |
 | A filesystem and processes of its own: other seats' tool servers and coding agents do not run beside it | Speed: the seat still takes one batch of messages at a time. |
 | A failure of its own: an out-of-memory kill or a wedged engine costs this seat alone | Continuity at `replicas: 1`: while its pod restarts, the seat runs nowhere and its messages wait. `replicas: 2` keeps a standby. |
 
@@ -117,8 +117,19 @@ The cost grows with pods times seats, not with pods alone:
 
 That is why the class allows no pools unless it says so, allows no PerSeat
 pool unless it says so, and caps a company's seat pods with `maxPods`.
-PerSeat is for the few seats that need isolation, a zone or egress of their
+PerSeat is for the few seats whose compute or failures need a pod of their
 own, not a default for every agent.
+
+A PerSeat pod is no network or scheduling boundary of its own. Every seat
+pod of a company is selected by the one `<company>-seats` NetworkPolicy and
+scheduled by the class's one `podTemplate` (its node selector, tolerations,
+affinity and topology spread apply to the data pods and every seat pod
+alike, so a required anti-affinity among `app.kubernetes.io/name: crewlet`
+pods allows no more engine pods than nodes). NetworkPolicies only add: under
+the class's `networkPolicy.mode: Isolated`, `<company>-seats` already admits
+the egress the engine needs, and a policy of a tenant's own cannot narrow it
+for one seat. Only under `mode: None` does a tenant's NetworkPolicy that
+selects `crewlet.ai/seat: <handle>` narrow that seat's egress.
 
 ## Where each seat runs now
 
