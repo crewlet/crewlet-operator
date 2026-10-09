@@ -593,6 +593,11 @@ func (run *configRun) refused(refusals []*render.RefError) {
 		case ref.Reason == crewletaiv1alpha1.ReasonConflict:
 			target.conflicts = append(target.conflicts, finding)
 			target.handleTaken = target.handleTaken || (ref.Kind == render.KindSeat && ref.Field == "spec.handle")
+		case ref.Reason == crewletaiv1alpha1.ReasonPerSeatNotAllowed || ref.Reason == crewletaiv1alpha1.ReasonPoolCapacityExceeded:
+			if target.unplaceableReason == "" {
+				target.unplaceableReason = ref.Reason
+			}
+			target.unplaceable = append(target.unplaceable, finding)
 		default:
 			if target.unresolvedReason == "" {
 				target.unresolvedReason = ref.Reason

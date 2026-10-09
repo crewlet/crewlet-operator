@@ -41,7 +41,7 @@ ten seconds at most; the operator then applies what it has.
 ```mermaid
 flowchart TD
     collect["collect the Company's parts"] --> rendered{"render"}
-    rendered -- "a reference does not resolve" --> refs["ResolvedRefs=False on the part<br/>(Accepted=False for a Conflict)"]
+    rendered -- "a reference does not resolve" --> refs["ResolvedRefs=False on the part<br/>(Accepted=False for a Conflict,<br/>Applied=False for a pool the class does not admit)"]
     rendered --> secrets{"read the referenced Secret keys"}
     secrets -- "missing or too large" --> missing["SecretsSynced=False on the Company<br/>ResolvedRefs=False on the part"]
     secrets --> push["push changed values into the<br/>engine's secret store"]
@@ -195,11 +195,11 @@ is never written to; the Company reports `Seeded` all the same, saying so.
 | Object | Condition | When |
 |---|---|---|
 | Company | `SecretsSynced` | `True`, `Synced`, once the store holds every referenced value. `False`, `SecretNotFound` or `SecretTooLarge`, naming each Secret and key; `False`, `EngineUnavailable` when a write to the store failed; `Unknown`, `NotManaged` under Observe, and under Seed once seeded. |
-| Company | `ConfigApplied` | `True` with `Applied`, `DriftCorrected`, `InSync` or `Seeded`, once the engine reports the revision's epoch applied. `False` with `Applying` while it applies it, `ApplyFailed` when it did not; otherwise with the reason of whatever blocks the document: `RefNotFound`, `Cycle`, `Conflict`, `SecretNotFound`, `SecretTooLarge`, `Invalid` (the engine's own words), `Drifted` (Observe), `WriteRefused` (the engine refuses the operator's own token a change to the document) or `EngineUnavailable`. |
+| Company | `ConfigApplied` | `True` with `Applied`, `DriftCorrected`, `InSync` or `Seeded`, once the engine reports the revision's epoch applied. `False` with `Applying` while it applies it, `ApplyFailed` when it did not; otherwise with the reason of whatever blocks the document: `RefNotFound`, `Cycle`, `Conflict`, `PoolNotFound`, `PerSeatNotAllowed`, `PoolCapacityExceeded`, `SeatPoolsNotAllowed`, `SecretNotFound`, `SecretTooLarge`, `Invalid` (the engine's own words), `Drifted` (Observe), `WriteRefused` (the engine refuses the operator's own token a change to the document) or `EngineUnavailable`. |
 | Company | `EngineHealthy` | The engine's alarm table, read each time the engine is reached: `True`, `NoAlarms`; `False`, `Alarms`, naming the one standing longest; `Unknown`, `AlarmsNotReported`, before the engine has evaluated them. Not part of `Ready`. |
 | every part | `Accepted` | `True` once its Company exists; `False` with `CompanyNotFound`, or `Conflict` when it collides with another object of its company. |
-| every part | `ResolvedRefs` | `False` with `RefNotFound`, `Cycle`, `SecretNotFound` or `SecretTooLarge`, saying what it references that is missing. |
-| every part | `Applied` | `True`, `InRevision`, naming the revision, with the generation that revision was rendered from as its `observedGeneration`, once the engine has applied it. `False` with the part's own problem (`Invalid`, `RefNotFound`, ...), `Blocked` when another object keeps the document from being applied, `Applying` while the engine applies the revision, or `ApplyFailed` when it did not. A part whose current generation already runs keeps `True` meanwhile: only what changed is held back. |
+| every part | `ResolvedRefs` | `False` with `RefNotFound`, `Cycle`, `PoolNotFound`, `SecretNotFound` or `SecretTooLarge`, saying what it references that is missing. |
+| every part | `Applied` | `True`, `InRevision`, naming the revision, with the generation that revision was rendered from as its `observedGeneration`, once the engine has applied it. `False` with the part's own problem (`Invalid`, `RefNotFound`, a Seat's `PerSeatNotAllowed` or `PoolCapacityExceeded`, ...), `Blocked` when another object keeps the document from being applied, `Applying` while the engine applies the revision, or `ApplyFailed` when it did not. A part whose current generation already runs keeps `True` meanwhile: only what changed is held back. |
 | Integration | `Healthy` | The engine's own verdict on the vendor: `True`, `CheckPassed`, when it reports the tool connected; `False`, `CheckFailed`, with the engine's reason otherwise; `False`, `NotExposed` while the Company has no public address, since no webhook can reach the engine. |
 
 Besides the conditions:

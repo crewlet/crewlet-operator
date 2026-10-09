@@ -35,6 +35,12 @@ type part struct {
 	// of the first.
 	unresolved       []string
 	unresolvedReason string
+	// unplaceable are why a Seat cannot run in the pool it is placed in,
+	// which its class does not let the company run it in, with the reason
+	// of the first. Its references resolve; the document is refused all
+	// the same.
+	unplaceable       []string
+	unplaceableReason string
 	// invalid are the engine's refusals of its part of the document.
 	invalid []string
 	// drifted are the places its part of the document differs from what
@@ -120,7 +126,7 @@ func statusOf(obj client.Object) any {
 // hasProblem reports whether the part itself keeps the document from being
 // applied, as opposed to being blocked by another one.
 func (p *part) hasProblem() bool {
-	return len(p.conflicts) > 0 || len(p.unresolved) > 0 || len(p.invalid) > 0
+	return len(p.conflicts) > 0 || len(p.unresolved) > 0 || len(p.unplaceable) > 0 || len(p.invalid) > 0
 }
 
 // inRevision reports whether the part's current generation is in the
