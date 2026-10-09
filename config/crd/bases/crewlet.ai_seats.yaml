@@ -1007,8 +1007,9 @@ spec:
             properties:
               conditions:
                 description: |-
-                  conditions are Accepted (the Company exists and no other Seat has the
-                  handle), ResolvedRefs (the unit, the providers, the tool servers and
+                  conditions are Accepted (the Company exists, and no other Seat has the
+                  handle, the name or a contact account; Conflict names the other),
+                  ResolvedRefs (the unit, the providers, the tool servers and
                   every Secret key exist) and Applied (the seat is in the revision the
                   engine runs).
                 items:
@@ -1076,8 +1077,9 @@ spec:
                 minLength: 1
                 type: string
               integrations:
-                description: integrations is the addresses the seat's vendor apps
-                  must use.
+                description: |-
+                  integrations is the addresses the seat's vendor apps must use. Unset
+                  for a Human seat, which has no vendor apps of its own.
                 minProperties: 1
                 properties:
                   github:
@@ -1139,6 +1141,8 @@ spec:
                 description: |-
                   seatID is the seat's identity in the engine, derived from the company
                   name and the handle, so that callers need not derive it themselves.
+                  Unset for a Human seat, which the engine does not run and gives no
+                  identity, and for a seat whose handle another Seat derives too.
                 maxLength: 36
                 minLength: 36
                 type: string

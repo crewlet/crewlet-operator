@@ -28,6 +28,9 @@ type part struct {
 
 	// conflicts are why the part is not Accepted.
 	conflicts []string
+	// handleTaken is a Seat whose handle another Seat derives too, which
+	// therefore has no identity of its own in the engine.
+	handleTaken bool
 	// unresolved are why its references do not resolve, with the reason
 	// of the first.
 	unresolved       []string

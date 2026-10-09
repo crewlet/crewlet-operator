@@ -414,7 +414,10 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(ana.Status.Integrations.GitHub.WebhookURL).To(Equal(baseURL + "/webhooks/github/ana"))
 		jane := seat("jane")
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(jane), jane)).To(Succeed())
+		Expect(jane.Status.Handle).To(Equal("jane"))
 		Expect(jane.Status.Placement).To(BeZero(), "the engine does not run a Human seat")
+		Expect(jane.Status.SeatID).To(BeEmpty(), "the engine gives a Human seat no agent id")
+		Expect(jane.Status.Integrations).To(BeZero(), "a Human seat has no vendor apps of its own")
 
 		// The samples' two Units: a department, and a team in it.
 		engineering := &crewletaiv1alpha1.Unit{Namespace: namespace, Name: "engineering"}
@@ -732,6 +735,25 @@ var _ = Describe("Company config", Ordered, func() {
 		Eventually(reasonOf(lost, crewletaiv1alpha1.ConditionResolvedRefs)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonRefNotFound))
 		Expect(conditionOf(lost, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Message).To(ContainSubstring("Unit nowhere"))
 		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonRefNotFound))
+		_, err := e.Client().ActiveConfig(ctx)
+		Expect(err).To(MatchError(engine.ErrNoActiveRevision))
+	})
+
+	It("refuses two Seats of one handle on both, and gives neither the handle's identity", func() {
+		const name = "twins"
+		e := startEngine(name)
+		secret(name+"-llm", map[string]string{llmKey: "k"})
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce)
+		first := newSeat(namespace, name, "first", func(s *crewletaiv1alpha1.Seat) { s.Spec.Handle = "twin" })
+		second := newSeat(namespace, name, "second", func(s *crewletaiv1alpha1.Seat) { s.Spec.Handle = "twin" })
+		standIn(c)
+		for _, s := range []*crewletaiv1alpha1.Seat{first, second} {
+			Eventually(reasonOf(s, crewletaiv1alpha1.ConditionAccepted)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonConflict))
+			Expect(conditionOf(s, crewletaiv1alpha1.ConditionAccepted)(Default).Message).To(ContainSubstring(`shares the handle "twin"`))
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(s), s)).To(Succeed())
+			Expect(s.Status.SeatID).To(BeEmpty(), "Seat %s was given the identity of a handle it shares", s.Name)
+		}
+		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonConflict))
 		_, err := e.Client().ActiveConfig(ctx)
 		Expect(err).To(MatchError(engine.ErrNoActiveRevision))
 	})

@@ -3,6 +3,7 @@ package render
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -50,8 +51,151 @@ func (r *renderer) org() ([]roleDoc, []unitDoc) {
 		}
 	}
 
+	r.duplicateSeats()
+	r.duplicateUnits()
 	t := tree{children: children, members: members}
 	return r.roles(Path{keyRoles}, rootSeats), r.unitList(Path{keyUnits}, roots, t)
+}
+
+// duplicateSeats refuses Seats that would share an identity in the engine,
+// on every Seat involved, as Crewlet's own validation would refuse the
+// document: a handle, a name, or a contact account two Seats claim. Each is
+// compared as Crewlet compares it.
+func (r *renderer) duplicateSeats() {
+	seats := slices.SortedFunc(maps.Values(r.seats), byName)
+	for _, g := range groupBy(seats, SeatHandle) {
+		conflict(&r.errs, KindSeat, g, "spec.handle", func(others string) string {
+			return fmt.Sprintf("shares the handle %q with %s. The handle is the seat's identity in the engine "+
+				"(its inbox, its agent id, its accounts), so give each Seat its own spec.handle", g.key, others)
+		})
+	}
+	for _, g := range groupBy(seats, func(s *v1alpha1.Seat) string { return strings.TrimSpace(seatName(s)) }) {
+		// Seats that share a handle and set no displayName share their
+		// name because of it, which the handle's refusal already says.
+		if sameHandle(g.members) {
+			continue
+		}
+		conflict(&r.errs, KindSeat, g, "spec.displayName", func(others string) string {
+			return fmt.Sprintf("shares the name %q with %s. A unit's lead and a manages entry name a seat by its name "+
+				"and reach only the first of that name, so give each Seat its own spec.displayName", g.key, others)
+		})
+	}
+	contact := []struct {
+		field string
+		value func(*v1alpha1.Seat) string
+	}{
+		{"spec.contact.slackUserID", func(s *v1alpha1.Seat) string { return strings.TrimSpace(s.Spec.Contact.SlackUserID) }},
+		// Crewlet folds a GitHub login, which GitHub compares without case.
+		{"spec.contact.githubLogin", func(s *v1alpha1.Seat) string {
+			return strings.ToLower(strings.TrimSpace(s.Spec.Contact.GitHubLogin))
+		}},
+	}
+	for _, f := range contact {
+		for _, g := range groupBy(seats, f.value) {
+			conflict(&r.errs, KindSeat, g, f.field, func(others string) string {
+				return fmt.Sprintf("claims the account %q, as %s does. An inbound message reaches only one of the seats "+
+					"that claim an account, so give each Seat its own", g.key, others)
+			})
+		}
+	}
+}
+
+// duplicateUnits refuses Units that would answer to one key in the engine,
+// on every Unit involved. A Unit answers to its name (spec.displayName, or
+// metadata.name) and to its id (metadata.name), and Crewlet compares every
+// key without case, a name against another Unit's id as well: Unit
+// platform-team named "Platform" and Unit platform collide.
+func (r *renderer) duplicateUnits() {
+	type claim struct {
+		key  string
+		unit *v1alpha1.Unit
+	}
+	var claims []claim
+	for _, u := range slices.SortedFunc(maps.Values(r.units), byName) {
+		claims = append(claims, claim{strings.ToLower(strings.TrimSpace(unitName(u))), u})
+		if id := strings.ToLower(u.Name); id != claims[len(claims)-1].key {
+			claims = append(claims, claim{id, u})
+		}
+	}
+	byKey := map[string][]*v1alpha1.Unit{}
+	var keys []string
+	for _, c := range claims {
+		if _, seen := byKey[c.key]; !seen {
+			keys = append(keys, c.key)
+		}
+		byKey[c.key] = append(byKey[c.key], c.unit)
+	}
+	for _, key := range keys {
+		g := group[*v1alpha1.Unit]{key: key, members: byKey[key]}
+		if len(g.members) < 2 {
+			continue
+		}
+		conflict(&r.errs, KindUnit, g, "spec.displayName", func(others string) string {
+			return fmt.Sprintf("answers to %q, as %s does. A Unit answers to its displayName and its name, "+
+				"compared without case, and work filed under the key reaches only one of them, so give each Unit "+
+				"a displayName of its own", key, others)
+		})
+	}
+}
+
+// group is the objects that share one key.
+type group[T any] struct {
+	key     string
+	members []T
+}
+
+// groupBy groups items by key, in the order the keys are first met, and
+// returns the groups of more than one; an empty key is no claim.
+func groupBy[T any](items []T, key func(T) string) []group[T] {
+	index := map[string]int{}
+	var groups []group[T]
+	for _, item := range items {
+		k := key(item)
+		if k == "" {
+			continue
+		}
+		i, seen := index[k]
+		if !seen {
+			i = len(groups)
+			index[k] = i
+			groups = append(groups, group[T]{key: k})
+		}
+		groups[i].members = append(groups[i].members, item)
+	}
+	return slices.DeleteFunc(groups, func(g group[T]) bool { return len(g.members) < 2 })
+}
+
+// conflict refuses every member of g, each with a message naming the others.
+func conflict[T interface{ GetName() string }](
+	errs *refErrors, kind string, g group[T], field string, message func(others string) string,
+) {
+	for _, member := range g.members {
+		var others []string
+		for _, o := range g.members {
+			if o.GetName() != member.GetName() {
+				others = append(others, o.GetName())
+			}
+		}
+		names := kind + " " + others[0]
+		if len(others) > 1 {
+			names = kind + "s " + strings.Join(others, ", ")
+		}
+		errs.add(kind, member.GetName(), field, v1alpha1.ReasonConflict, message(names))
+	}
+}
+
+// byName orders objects by metadata.name.
+func byName[T interface{ GetName() string }](a, b T) int {
+	return strings.Compare(a.GetName(), b.GetName())
+}
+
+func sameHandle(seats []*v1alpha1.Seat) bool {
+	for _, s := range seats[1:] {
+		if SeatHandle(s) != SeatHandle(seats[0]) {
+			return false
+		}
+	}
+	return true
 }
 
 // tree is the org chart indexed by parent: each Unit's child Units and its

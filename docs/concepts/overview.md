@@ -94,8 +94,9 @@ company's name and the seat's handle. The API makes both immutable:
 
 Crewlet also refuses some collisions between objects, which the API server
 cannot see because each object is validated on its own: two Seats with one
-handle, one `displayName` or one contact account; two Units with one
-`displayName`; two Integrations for one vendor; and an `LLMProvider` named
+handle, one `displayName` or one contact account; two Units that answer to
+one key (a Unit answers to its `displayName` and its name, compared without
+case); two Integrations for one vendor; and an `LLMProvider` named
 like a platform provider of the class. The operator reports each on the
 object as `Accepted=False` with the reason `Conflict`, naming the other
 object.

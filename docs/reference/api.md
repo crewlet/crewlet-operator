@@ -2002,8 +2002,9 @@ a letter or digit, at most 63 characters. The handle cannot change.
 
 SeatContact is how agents reach a person: their accounts on the company's
 surfaces. It maps onto Crewlet's role `contact`. Crewlet refuses two seats
-that claim one account, so a Seat whose slackUserID or githubLogin another
-Seat of the company already claims is reported as a Conflict.
+that claim one account, so a Seat whose slackUserID or githubLogin (in any
+case: GitHub logins are compared without it) another Seat of the company
+already claims is reported as a Conflict.
 
 _Validation:_
 - MinProperties: 1
@@ -2209,12 +2210,12 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists and no other Seat has the<br />handle), ResolvedRefs (the unit, the providers, the tool servers and<br />every Secret key exist) and Applied (the seat is in the revision the<br />engine runs). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists, and no other Seat has the<br />handle, the name or a contact account; Conflict names the other),<br />ResolvedRefs (the unit, the providers, the tool servers and<br />every Secret key exist) and Applied (the seat is in the revision the<br />engine runs). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `handle` _string_ | handle is the seat's handle: spec.handle, or the metadata.name. |  | MaxLength: 63 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `seatID` _string_ | seatID is the seat's identity in the engine, derived from the company<br />name and the handle, so that callers need not derive it themselves. |  | MaxLength: 36 <br />MinLength: 36 <br />Optional: \{\} <br /> |
+| `seatID` _string_ | seatID is the seat's identity in the engine, derived from the company<br />name and the handle, so that callers need not derive it themselves.<br />Unset for a Human seat, which the engine does not run and gives no<br />identity, and for a seat whose handle another Seat derives too. |  | MaxLength: 36 <br />MinLength: 36 <br />Optional: \{\} <br /> |
 | `placement` _[SeatPlacementStatus](#seatplacementstatus)_ | placement is where the engine runs the seat. Unset for a Human seat,<br />which the engine does not run. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `integrations` _[SeatIntegrationsStatus](#seatintegrationsstatus)_ | integrations is the addresses the seat's vendor apps must use. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `integrations` _[SeatIntegrationsStatus](#seatintegrationsstatus)_ | integrations is the addresses the seat's vendor apps must use. Unset<br />for a Human seat, which has no vendor apps of its own. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### SecretEnvVar
@@ -2578,7 +2579,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `companyRef` _[CompanyReference](#companyreference)_ | companyRef names the Company this unit belongs to. Immutable. |  | Required: \{\} <br /> |
-| `displayName` _string_ | displayName is the unit's name as people read it, in prompts and on<br />boards. Unset is the Unit's metadata.name. The metadata.name itself is<br />the unit's stable id, which survives a rename. Crewlet's `name`; the<br />metadata.name is Crewlet's `id`. Crewlet refuses two units with one<br />name, so a Unit whose displayName (or, unset, metadata.name) another<br />Unit of the company already uses is reported as a Conflict. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `displayName` _string_ | displayName is the unit's name as people read it, in prompts and on<br />boards. Unset is the Unit's metadata.name. The metadata.name itself is<br />the unit's stable id, which survives a rename. Crewlet's `name`; the<br />metadata.name is Crewlet's `id`. Crewlet refuses two units that<br />answer to one key, and a unit answers to its name and to its id,<br />compared without case: a Unit whose displayName (or, unset,<br />metadata.name) is another Unit's displayName or metadata.name, in any<br />case, is reported as a Conflict. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `type` _[UnitType](#unittype)_ | type is an informational label. Crewlet's `type`. |  | Enum: [Division Department Group Team Squad Pod Guild Chapter Unit] <br />Optional: \{\} <br /> |
 | `parentRef` _[LocalObjectReference](#localobjectreference)_ | parentRef names the Unit this one belongs to. Unset makes it a<br />top-level unit. A parent that does not exist, or a chain of parents<br />that leads back to this unit, is reported on this Unit. |  | Optional: \{\} <br /> |
 | `leadRef` _[LocalObjectReference](#localobjectreference)_ | leadRef names the Seat that leads the unit. Unset inherits the<br />parent's lead. Crewlet's `lead`. |  | Optional: \{\} <br /> |

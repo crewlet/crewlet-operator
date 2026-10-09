@@ -81,15 +81,21 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 	case *crewletaiv1alpha1.Seat:
 		handle := render.SeatHandle(o)
 		o.Status.Handle = handle
-		o.Status.SeatID = render.SeatID(run.company.Spec.CompanyName, handle)
+		o.Status.SeatID = ""
 		o.Status.Placement = crewletaiv1alpha1.SeatPlacementStatus{}
-		if o.Spec.Kind != crewletaiv1alpha1.SeatKindHuman {
-			o.Status.Placement.Pool = render.DataPool
-			if o.Spec.Placement != nil && o.Spec.Placement.Pool != "" {
-				o.Status.Placement.Pool = o.Spec.Placement.Pool
-			}
-		}
 		o.Status.Integrations = crewletaiv1alpha1.SeatIntegrationsStatus{}
+		// Crewlet derives an agent id for an Agent seat only (a Human seat
+		// has none, not a zero one), and only an Agent seat may have
+		// vendor apps of its own. A handle two Seats derive is neither
+		// seat's identity.
+		if o.Spec.Kind == crewletaiv1alpha1.SeatKindHuman || p.handleTaken {
+			break
+		}
+		o.Status.SeatID = render.SeatID(run.company.Spec.CompanyName, handle)
+		o.Status.Placement.Pool = render.DataPool
+		if o.Spec.Placement != nil && o.Spec.Placement.Pool != "" {
+			o.Status.Placement.Pool = o.Spec.Placement.Pool
+		}
 		if base != "" && vendors[toolSlack] {
 			o.Status.Integrations.Slack.RequestURL = base + "/webhooks/slack/" + handle
 		}

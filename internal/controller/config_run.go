@@ -578,6 +578,7 @@ func (run *configRun) refused(refusals []*render.RefError) {
 		case target == nil:
 		case ref.Reason == crewletaiv1alpha1.ReasonConflict:
 			target.conflicts = append(target.conflicts, finding)
+			target.handleTaken = target.handleTaken || (ref.Kind == render.KindSeat && ref.Field == "spec.handle")
 		default:
 			if target.unresolvedReason == "" {
 				target.unresolvedReason = ref.Reason

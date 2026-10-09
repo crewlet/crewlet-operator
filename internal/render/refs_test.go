@@ -18,6 +18,9 @@ import (
 // objects the API server cannot check, each broken on its own in an
 // otherwise valid company. Each refusal must name the object and the field
 // that hold the reference, with the reason the controller reports it with.
+// fieldDisplayName is where a Seat's or Unit's name is set.
+const fieldDisplayName = "spec.displayName"
+
 func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 	type refusal struct{ kind, name, field, reason string }
 	const (
@@ -170,6 +173,61 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 				in.Integrations = append(in.Integrations, i)
 			},
 			want: []refusal{{KindIntegration, "slack-2", "spec.slack", v1alpha1.ReasonConflict}},
+		},
+
+		// What Crewlet's own validation refuses as duplicates is refused
+		// on every object involved, compared as Crewlet compares it.
+		{
+			name:   "two seats derive one handle",
+			mutate: func(in *Input) { seat(in, seatAna).Spec.Handle = seatCTO },
+			want: []refusal{
+				{KindSeat, seatAna, "spec.handle", v1alpha1.ReasonConflict},
+				{KindSeat, seatCTO, "spec.handle", v1alpha1.ReasonConflict},
+			},
+		},
+		{
+			name:   "two seats carry one name",
+			mutate: func(in *Input) { seat(in, seatAna).Spec.DisplayName = "Agent CTO" },
+			want: []refusal{
+				{KindSeat, seatAna, fieldDisplayName, v1alpha1.ReasonConflict},
+				{KindSeat, seatCTO, fieldDisplayName, v1alpha1.ReasonConflict},
+			},
+		},
+		{
+			name: "two seats claim one Slack account",
+			mutate: func(in *Input) {
+				seat(in, seatAna).Spec.Contact.SlackUserID = " U0FOUNDER"
+			},
+			want: []refusal{
+				{KindSeat, seatAna, "spec.contact.slackUserID", v1alpha1.ReasonConflict},
+				{KindSeat, seatJane, "spec.contact.slackUserID", v1alpha1.ReasonConflict},
+			},
+		},
+		{
+			name: "two seats claim one GitHub login, in another case",
+			mutate: func(in *Input) {
+				seat(in, seatAna).Spec.Contact.GitHubLogin = "Jane-Founder"
+			},
+			want: []refusal{
+				{KindSeat, seatAna, "spec.contact.githubLogin", v1alpha1.ReasonConflict},
+				{KindSeat, seatJane, "spec.contact.githubLogin", v1alpha1.ReasonConflict},
+			},
+		},
+		{
+			name:   "two units carry one name, in another case",
+			mutate: func(in *Input) { unit(in, unitPlatform).Spec.DisplayName = "ENGINEERING" },
+			want: []refusal{
+				{KindUnit, unitEngineering, fieldDisplayName, v1alpha1.ReasonConflict},
+				{KindUnit, unitPlatform, fieldDisplayName, v1alpha1.ReasonConflict},
+			},
+		},
+		{
+			name:   "a unit is named as another unit's id",
+			mutate: func(in *Input) { unit(in, unitEngineering).Spec.DisplayName = "Platform" },
+			want: []refusal{
+				{KindUnit, unitEngineering, fieldDisplayName, v1alpha1.ReasonConflict},
+				{KindUnit, unitPlatform, fieldDisplayName, v1alpha1.ReasonConflict},
+			},
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {

@@ -266,8 +266,9 @@ type SeatIntegrations struct {
 
 // SeatContact is how agents reach a person: their accounts on the company's
 // surfaces. It maps onto Crewlet's role `contact`. Crewlet refuses two seats
-// that claim one account, so a Seat whose slackUserID or githubLogin another
-// Seat of the company already claims is reported as a Conflict.
+// that claim one account, so a Seat whose slackUserID or githubLogin (in any
+// case: GitHub logins are compared without it) another Seat of the company
+// already claims is reported as a Conflict.
 // +kubebuilder:validation:MinProperties=1
 type SeatContact struct {
 	// slackUserID is the person's Slack member id, such as U0123ABCD.
@@ -516,8 +517,9 @@ type SeatIntegrationsStatus struct {
 // SeatStatus is what the operator observed about a Seat.
 // +kubebuilder:validation:MinProperties=1
 type SeatStatus struct {
-	// conditions are Accepted (the Company exists and no other Seat has the
-	// handle), ResolvedRefs (the unit, the providers, the tool servers and
+	// conditions are Accepted (the Company exists, and no other Seat has the
+	// handle, the name or a contact account; Conflict names the other),
+	// ResolvedRefs (the unit, the providers, the tool servers and
 	// every Secret key exist) and Applied (the seat is in the revision the
 	// engine runs).
 	// +optional
@@ -539,6 +541,8 @@ type SeatStatus struct {
 
 	// seatID is the seat's identity in the engine, derived from the company
 	// name and the handle, so that callers need not derive it themselves.
+	// Unset for a Human seat, which the engine does not run and gives no
+	// identity, and for a seat whose handle another Seat derives too.
 	// +optional
 	// +kubebuilder:validation:MinLength=36
 	// +kubebuilder:validation:MaxLength=36
@@ -549,7 +553,8 @@ type SeatStatus struct {
 	// +optional
 	Placement SeatPlacementStatus `json:"placement,omitzero"`
 
-	// integrations is the addresses the seat's vendor apps must use.
+	// integrations is the addresses the seat's vendor apps must use. Unset
+	// for a Human seat, which has no vendor apps of its own.
 	// +optional
 	Integrations SeatIntegrationsStatus `json:"integrations,omitzero"`
 }
