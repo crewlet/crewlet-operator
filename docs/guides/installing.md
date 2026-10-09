@@ -243,4 +243,12 @@ company has a public address, its seat pods too (their environment gains
 `CREWLET_SANDBOX_OTEL_RECEIVER_URL`). The webhooks' route moves to the
 public port as the operator reconciles each company, a moment before the
 data pod that serves it has restarted, so deliveries are refused (`503`) for
-that restart; vendors retry them.
+that restart; vendors retry them. A class with `exposure.webhooks.mode:
+External` needs its forwarder moved by hand: re-point it from
+`<company>-engine:8080` to port 8081 (`public`), and under
+`networkPolicy.mode: Isolated` move its peer from `networkPolicy.apiConsumers`
+to `exposure.webhooks.external.forwarders`, which such a class now requires,
+dropping it from `apiConsumers` unless it also calls the admin API. Until
+then every webhook is answered `404` (port 8080 serves none) or refused by
+the policy ([From outside the
+operator](exposure.md#from-outside-the-operator)).

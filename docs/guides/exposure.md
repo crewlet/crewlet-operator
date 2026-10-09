@@ -152,7 +152,10 @@ spec:                       # Company
 Never forward to port 8080: that is the admin API, and it answers a webhook
 `404` anyway. Under `networkPolicy.mode: Isolated`, name the pods that
 forward (a tunnel's or a relay's pods in the cluster) in the class, so the
-policy admits them to the public port and to nothing else:
+policy admits them to the public port and to nothing else. The class is
+refused without them, since the policy would then refuse everything
+forwarded, and refused with them under any other mode, which has no policy
+to admit them to:
 
 ```yaml
 spec:                       # EngineClass
@@ -171,6 +174,17 @@ A forwarder whose traffic does not come from a pod (a load balancer of your
 own that delivers from the nodes or from outside the cluster) cannot be
 admitted by namespace; isolate those engines with your CNI's own policy and
 `networkPolicy.mode: None`.
+
+Releases before the public listener had the forwarder deliver to
+`<company>-engine:8080`, and admitted it under `Isolated` by listing it in
+`networkPolicy.apiConsumers`. On upgrading to a release with the public
+listener, re-point the forwarder to port 8081 (`public`), and move its peer
+from `apiConsumers` to `exposure.webhooks.external.forwarders`, dropping it
+from `apiConsumers` unless it also calls the admin API: `apiConsumers` now
+admits port 8080 alone, and port 8080 answers every webhook `404`. An
+`External` class under `Isolated` without `forwarders` keeps running as it
+is (the API server does not judge an unchanged object against a rule added
+since), but a change to its spec is refused until it names them.
 
 A Company may set `publicBaseURL` under the other modes too, when the
 address vendors use differs from the route's host (a CDN in front of the
@@ -198,7 +212,11 @@ spec:
 
 The route `<company>-api` carries every path of the API port (8080): the
 API, the dashboard and the probes, and none of the public routes, which
-that port does not serve. Put it only on a listener that is not public.
+that port does not serve. Put it only on a listener that is not public. Its
+host name must differ from the webhooks' (the class is refused otherwise):
+both routes take every path of their host, so on one host the Gateway or
+Ingress controller would pick which port answers, and the public host could
+serve the admin API.
 `status.endpoints.exposedAPI` is its address once accepted. Every request
 still needs a token.
 

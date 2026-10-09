@@ -513,13 +513,13 @@ spec:
                           forwarders:
                             description: |-
                               forwarders are the pods that forward webhooks to the engine's public
-                              port: a tunnel's or a relay's pods in the cluster. Under networkPolicy
-                              Isolated they are admitted to that port and to nothing else of the
-                              engine; without them the policy refuses every request forwarded from
-                              a pod. A forwarder outside the pod network (a load balancer of your
-                              own that sends traffic from the nodes or from outside the cluster)
-                              cannot be admitted by namespace: isolate those engines with your
-                              CNI's own policy and networkPolicy.mode None.
+                              port: a tunnel's or a relay's pods in the cluster. They are required
+                              under networkPolicy Isolated, which admits them to that port and to
+                              nothing else of the engine, and refused under any other mode, which
+                              has no policy to admit them to. A forwarder outside the pod network (a
+                              load balancer of your own that sends traffic from the nodes or from
+                              outside the cluster) cannot be admitted by namespace: isolate those
+                              engines with your CNI's own policy and networkPolicy.mode None.
                             items:
                               description: |-
                                 NetworkPolicyPeer is the pods its podSelector selects in the namespaces
@@ -811,6 +811,12 @@ spec:
                       rule: 'self.mode in [''Gateway'', ''Ingress''] ? has(self.hostname)
                         : !has(self.hostname)'
                 type: object
+                x-kubernetes-validations:
+                - message: 'webhooks.hostname and api.hostname must differ: both routes
+                    take every path of their host, and the public host must reach
+                    the public listener alone'
+                  rule: '!has(self.webhooks) || !has(self.api) || !has(self.webhooks.hostname)
+                    || !has(self.api.hostname) || self.webhooks.hostname != self.api.hostname'
               limits:
                 description: limits caps what a company may declare.
                 minProperties: 1
@@ -2958,6 +2964,18 @@ spec:
               rule: self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress)
                 || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress)
                 || has(self.exposure.api.ingress.controllerNamespaces)))
+            - message: 'networkPolicy Isolated with External webhooks needs webhooks.external.forwarders:
+                without them the policy refuses everything forwarded to the public
+                port'
+              rule: '!has(self.networkPolicy) || !has(self.networkPolicy.mode) ||
+                self.networkPolicy.mode != ''Isolated'' || !has(self.exposure) ||
+                !has(self.exposure.webhooks) || !has(self.exposure.webhooks.mode)
+                || self.exposure.webhooks.mode != ''External'' || has(self.exposure.webhooks.external)'
+            - message: 'webhooks.external.forwarders apply to networkPolicy mode Isolated
+                only: no other mode has a policy to admit them to'
+              rule: '!has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.external)
+                || (has(self.networkPolicy) && has(self.networkPolicy.mode) && self.networkPolicy.mode
+                == ''Isolated'')'
           status:
             description: status is the class's observed state.
             minProperties: 1

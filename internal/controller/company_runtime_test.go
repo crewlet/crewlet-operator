@@ -1161,7 +1161,7 @@ var _ = Describe("Company runtime", func() {
 
 			By("wiring the sandbox telemetry receiver at the company's public address once it has one")
 			updateClass(class, func(c *crewletaiv1alpha1.EngineClass) {
-				c.Spec.Exposure.Webhooks = crewletaiv1alpha1.WebhookExposure{Mode: crewletaiv1alpha1.WebhookExposureExternal}
+				c.Spec.Exposure.Webhooks = externalWebhooks()
 			})
 			updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Exposure.PublicBaseURL = relayURL })
 			reconciled(company)
@@ -1409,7 +1409,7 @@ var _ = Describe("Company runtime", func() {
 
 		It("needs the Company's address when webhooks are forwarded from outside", func() {
 			class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
-				c.Spec.Exposure.Webhooks = crewletaiv1alpha1.WebhookExposure{Mode: crewletaiv1alpha1.WebhookExposureExternal}
+				c.Spec.Exposure.Webhooks = externalWebhooks()
 			})
 			company := reconciled(newCompany(class.Name))
 			exposed := condition(company, crewletaiv1alpha1.ConditionExposed)
@@ -1433,25 +1433,19 @@ var _ = Describe("Company runtime", func() {
 			company = reconciled(company)
 			Expect(company.Status.Endpoints.PublicBaseURL).To(Equal(relayURL))
 
-			By("admitting nothing to the public port until the class names its forwarders")
+			By("admitting the class's forwarders to the public port, and to nothing else")
 			policy := &networkingv1.NetworkPolicy{}
-			get(policy, engineName)
-			for _, rule := range ingressRules(policy) {
-				Expect(rule).To(HavePrefix("TCP/8080 "))
-			}
-			tunnel := metav1.LabelSelector{MatchLabels: map[string]string{corev1.LabelMetadataName: "tunnel"}}
-			updateClass(class, func(c *crewletaiv1alpha1.EngineClass) {
-				c.Spec.Exposure.Webhooks.External.Forwarders = []crewletaiv1alpha1.NetworkPolicyPeer{{
-					NamespaceSelector: &tunnel,
-					PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{"app": "cloudflared"}},
-				}}
-			})
-			reconciled(company)
 			get(policy, engineName)
 			Expect(ingressRules(policy)).To(ContainElement(
 				"TCP/8081 from pods {app=cloudflared} in namespaces {kubernetes.io/metadata.name=tunnel}"))
 			Expect(ingressRules(policy)).NotTo(ContainElement(
 				"TCP/8080 from pods {app=cloudflared} in namespaces {kubernetes.io/metadata.name=tunnel}"), "a forwarder reaches the admin API")
+			for _, rule := range ingressRules(policy) {
+				if strings.HasPrefix(rule, "TCP/8081 ") {
+					Expect(rule).To(Equal("TCP/8081 from pods {app=cloudflared} in namespaces {kubernetes.io/metadata.name=tunnel}"),
+						"the public port admits more than the forwarders")
+				}
+			}
 		})
 
 		It("routes the whole API through an internal Gateway and reports its HTTPS address", func() {
@@ -1848,3 +1842,15 @@ var _ = Describe("Company status writes", func() {
 		Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 	})
 })
+
+// externalWebhooks is webhooks forwarded from outside the operator, by a
+// tunnel's pods, which networkPolicy Isolated admits by name.
+func externalWebhooks() crewletaiv1alpha1.WebhookExposure {
+	return crewletaiv1alpha1.WebhookExposure{
+		Mode: crewletaiv1alpha1.WebhookExposureExternal,
+		External: crewletaiv1alpha1.ExternalExposure{Forwarders: []crewletaiv1alpha1.NetworkPolicyPeer{{
+			NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{corev1.LabelMetadataName: "tunnel"}},
+			PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{"app": "cloudflared"}},
+		}}},
+	}
+}

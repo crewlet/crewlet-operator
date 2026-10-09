@@ -1200,7 +1200,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `forwarders` _[NetworkPolicyPeer](#networkpolicypeer) array_ | forwarders are the pods that forward webhooks to the engine's public<br />port: a tunnel's or a relay's pods in the cluster. Under networkPolicy<br />Isolated they are admitted to that port and to nothing else of the<br />engine; without them the policy refuses every request forwarded from<br />a pod. A forwarder outside the pod network (a load balancer of your<br />own that sends traffic from the nodes or from outside the cluster)<br />cannot be admitted by namespace: isolate those engines with your<br />CNI's own policy and networkPolicy.mode None. |  | MaxItems: 16 <br />MinItems: 1 <br />Optional: \{\} <br /> |
+| `forwarders` _[NetworkPolicyPeer](#networkpolicypeer) array_ | forwarders are the pods that forward webhooks to the engine's public<br />port: a tunnel's or a relay's pods in the cluster. They are required<br />under networkPolicy Isolated, which admits them to that port and to<br />nothing else of the engine, and refused under any other mode, which<br />has no policy to admit them to. A forwarder outside the pod network (a<br />load balancer of your own that sends traffic from the nodes or from<br />outside the cluster) cannot be admitted by namespace: isolate those<br />engines with your CNI's own policy and networkPolicy.mode None. |  | MaxItems: 16 <br />MinItems: 1 <br />Optional: \{\} <br /> |
 
 
 #### GatewayExposure

@@ -195,8 +195,28 @@ func TestEngineClassExposure(t *testing.T) {
 			}),
 		},
 		{
-			name:   "External webhooks need nothing more",
+			name: "External webhooks without forwarders and no network policy are accepted",
+			mutate: func(c *v1.EngineClass) {
+				c.Spec.NetworkPolicy = v1.NetworkPolicySettings{Mode: v1.NetworkPolicyNone}
+				c.Spec.Exposure.Webhooks = v1.WebhookExposure{Mode: v1.WebhookExposureExternal}
+			},
+		},
+		{
+			// Under Isolated the public port admits only where webhooks
+			// arrive from; with no forwarder named it admits nobody.
+			name:   "Isolated External webhooks without forwarders are refused",
 			mutate: webhooks(v1.WebhookExposure{Mode: v1.WebhookExposureExternal}),
+			want:   "networkPolicy Isolated with External webhooks needs webhooks.external.forwarders",
+		},
+		{
+			name: "forwarders with no network policy are refused",
+			mutate: func(c *v1.EngineClass) {
+				c.Spec.NetworkPolicy = v1.NetworkPolicySettings{Mode: v1.NetworkPolicyNone}
+				c.Spec.Exposure.Webhooks = v1.WebhookExposure{Mode: v1.WebhookExposureExternal, External: v1.ExternalExposure{
+					Forwarders: []v1.NetworkPolicyPeer{{NamespaceSelector: &metav1.LabelSelector{}}},
+				}}
+			},
+			want: "webhooks.external.forwarders apply to networkPolicy mode Isolated only",
 		},
 		{
 			name: "External webhooks with their forwarders are accepted",
@@ -284,6 +304,23 @@ func TestEngineClassExposure(t *testing.T) {
 
 		// The API's exposure follows the same rules as the webhooks'.
 		{name: "a Gateway API route is accepted", mutate: apiGatewayHost(apiHost)},
+		{
+			name: "a Gateway API route beside the webhooks' on another host is accepted",
+			mutate: func(c *v1.EngineClass) {
+				gatewayHost(webhookHost)(c)
+				apiGatewayHost(apiHost)(c)
+			},
+		},
+		{
+			// Both routes take every path of their host: on one host,
+			// which listener answers would be the Gateway's choice.
+			name: "a Gateway API route on the webhooks' host is refused",
+			mutate: func(c *v1.EngineClass) {
+				gatewayHost(webhookHost)(c)
+				apiGatewayHost(webhookHost)(c)
+			},
+			want: "webhooks.hostname and api.hostname must differ",
+		},
 		{
 			name:   "an API Gateway without gateway is refused",
 			mutate: api(v1.APIExposure{Mode: v1.APIExposureGateway, Hostname: apiHost}),

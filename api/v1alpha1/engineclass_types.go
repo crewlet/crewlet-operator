@@ -491,13 +491,13 @@ type WebhookExposure struct {
 // +kubebuilder:validation:MinProperties=1
 type ExternalExposure struct {
 	// forwarders are the pods that forward webhooks to the engine's public
-	// port: a tunnel's or a relay's pods in the cluster. Under networkPolicy
-	// Isolated they are admitted to that port and to nothing else of the
-	// engine; without them the policy refuses every request forwarded from
-	// a pod. A forwarder outside the pod network (a load balancer of your
-	// own that sends traffic from the nodes or from outside the cluster)
-	// cannot be admitted by namespace: isolate those engines with your
-	// CNI's own policy and networkPolicy.mode None.
+	// port: a tunnel's or a relay's pods in the cluster. They are required
+	// under networkPolicy Isolated, which admits them to that port and to
+	// nothing else of the engine, and refused under any other mode, which
+	// has no policy to admit them to. A forwarder outside the pod network (a
+	// load balancer of your own that sends traffic from the nodes or from
+	// outside the cluster) cannot be admitted by namespace: isolate those
+	// engines with your CNI's own policy and networkPolicy.mode None.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MinItems=1
@@ -557,6 +557,7 @@ type APIExposure struct {
 
 // ExposureSettings is how a class's companies are reached.
 // +kubebuilder:validation:MinProperties=1
+// +kubebuilder:validation:XValidation:rule="!has(self.webhooks) || !has(self.api) || !has(self.webhooks.hostname) || !has(self.api.hostname) || self.webhooks.hostname != self.api.hostname",message="webhooks.hostname and api.hostname must differ: both routes take every path of their host, and the public host must reach the public listener alone"
 type ExposureSettings struct {
 	// webhooks is how vendors' webhooks reach the engine.
 	// +optional
@@ -874,6 +875,8 @@ type RetentionSettings struct {
 // EngineClassSpec is the defaults and guard rails a platform sets once for
 // every Company that names the class, the way a StorageClass does for volumes.
 // +kubebuilder:validation:XValidation:rule="self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress) || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress) || has(self.exposure.api.ingress.controllerNamespaces)))",message="networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces: without them the policy refuses everything the Ingress forwards"
+// +kubebuilder:validation:XValidation:rule="!has(self.networkPolicy) || !has(self.networkPolicy.mode) || self.networkPolicy.mode != 'Isolated' || !has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.mode) || self.exposure.webhooks.mode != 'External' || has(self.exposure.webhooks.external)",message="networkPolicy Isolated with External webhooks needs webhooks.external.forwarders: without them the policy refuses everything forwarded to the public port"
+// +kubebuilder:validation:XValidation:rule="!has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.external) || (has(self.networkPolicy) && has(self.networkPolicy.mode) && self.networkPolicy.mode == 'Isolated')",message="webhooks.external.forwarders apply to networkPolicy mode Isolated only: no other mode has a policy to admit them to"
 type EngineClassSpec struct {
 	// allowedNamespaces selects, by their labels, the namespaces whose
 	// Companies may run with this class, as a Gateway's
