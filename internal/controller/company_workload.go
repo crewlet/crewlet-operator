@@ -18,6 +18,7 @@ import (
 	appsv1ac "k8s.io/client-go/applyconfigurations/apps/v1"
 	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
 	metav1ac "k8s.io/client-go/applyconfigurations/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/render"
@@ -522,9 +523,9 @@ type imageRefusal struct {
 // engineImage is the image a Company's data pods should run: the class's,
 // with the tag replaced by spec.runtime.version when the class allows it.
 // It refuses an override the class does not allow, and a version older than
-// the one the data pods last ran ready (status.engine.version), since the
-// engine migrates its data forward only.
-func engineImage(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass) (string, *imageRefusal) {
+// floor, the newest the company's data was run ready on (versionFloor), since
+// the engine migrates its data forward only.
+func engineImage(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, floor string) (string, *imageRefusal) {
 	image := class.Spec.Engine.Image
 	if version := c.Spec.Runtime.Version; version != "" {
 		if a := class.Spec.Engine.AllowVersionOverride; a == nil || !*a {
@@ -537,7 +538,6 @@ func engineImage(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineCl
 		image = withTag(image, version)
 	}
 
-	floor := c.Status.Engine.Version
 	if floor == "" {
 		return image, nil
 	}
@@ -554,12 +554,85 @@ func engineImage(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineCl
 	if want.LessThan(ran) {
 		return "", &imageRefusal{
 			reason: crewletaiv1alpha1.ReasonDowngradeRefused,
-			message: fmt.Sprintf("The engine image %s is older than %s, which the data pods last ran: the engine migrates its "+
+			message: fmt.Sprintf("The engine image %s is older than %s, which the company's data was last run on: the engine migrates its "+
 				"data forward only. Run %s or later; to go back, restore the data volume from a backup taken before the upgrade.",
 				image, floor, floor),
 		}
 	}
 	return image, nil
+}
+
+// EngineVersionAnnotation is set on each data volume claim to the newest
+// engine version its data pod ran ready on. It is the downgrade floor that
+// survives with the data: status.engine.version holds the same, but a status
+// is lost when a Company is created again over Retained volumes, or restored
+// from a backup that drops it (Velero does not restore a custom resource's
+// status by default), and a version older than the one that migrated the data
+// would then be run against it.
+const EngineVersionAnnotation = "crewlet.ai/engine-version"
+
+// versionFloor is the newest of status.engine.version and the claims'
+// EngineVersionAnnotation, by semantic version; values that are not one are
+// ignored, as engineImage ignores them.
+func versionFloor(c *crewletaiv1alpha1.Company, claims []metav1.PartialObjectMetadata) string {
+	floor := c.Status.Engine.Version
+	newest := semver(floor)
+	for i := range claims {
+		v := claims[i].Annotations[EngineVersionAnnotation]
+		if parsed := semver(v); parsed != nil && (newest == nil || newest.LessThan(parsed)) {
+			floor, newest = v, parsed
+		}
+	}
+	return floor
+}
+
+// semver parses a semantic version, or returns nil for anything else.
+func semver(s string) *utilversion.Version {
+	v, err := utilversion.ParseSemantic(s)
+	if err != nil {
+		return nil
+	}
+	return v
+}
+
+// cachedDataClaims lists the metadata of a Company's data volume claims from
+// the cache (CacheOptions keeps the operator's).
+func (r *CompanyReconciler) cachedDataClaims(ctx context.Context, c *crewletaiv1alpha1.Company) ([]metav1.PartialObjectMetadata, error) {
+	claims := &metav1.PartialObjectMetadataList{}
+	claims.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PersistentVolumeClaimList"))
+	if err := r.List(ctx, claims, client.InNamespace(c.Namespace), client.MatchingLabels(selectorFor(c, componentData))); err != nil {
+		return nil, fmt.Errorf("listing the data volume claims of Company %s/%s: %w", c.Namespace, c.Name, err)
+	}
+	return claims.Items, nil
+}
+
+// recordVersionOnClaims sets EngineVersionAnnotation on every data volume
+// claim to status.engine.version, once that is newer than what the claim
+// says: only a version the pods ran ready on is recorded, as in the status.
+func (r *CompanyReconciler) recordVersionOnClaims(
+	ctx context.Context, c *crewletaiv1alpha1.Company, claims []metav1.PartialObjectMetadata,
+) error {
+	// A tag that is no version cannot be ordered (see engineImage), so it
+	// sets no floor.
+	recorded := semver(c.Status.Engine.Version)
+	if recorded == nil {
+		return nil
+	}
+	for i := range claims {
+		claim := &claims[i]
+		if on := semver(claim.Annotations[EngineVersionAnnotation]); on != nil && !on.LessThan(recorded) {
+			continue
+		}
+		base := claim.DeepCopy()
+		if claim.Annotations == nil {
+			claim.Annotations = map[string]string{}
+		}
+		claim.Annotations[EngineVersionAnnotation] = c.Status.Engine.Version
+		if err := r.Patch(ctx, claim, client.MergeFrom(base), client.FieldOwner(FieldOwner)); err != nil {
+			return fmt.Errorf("recording the engine version on PersistentVolumeClaim %s/%s: %w", claim.Namespace, claim.Name, err)
+		}
+	}
+	return nil
 }
 
 // withTag replaces the tag of an image reference by tag. The API server has

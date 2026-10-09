@@ -816,7 +816,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `image` _string_ | image is the engine image the data pods last ran on, recorded once<br />every data pod ran it and was ready. A rollout that has not finished<br />leaves the previous image here. |  | MaxLength: 512 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `version` _string_ | version is the tag of that image, such as v0.14.2; unset for an image<br />pinned by digest alone. The engine migrates its data forward only, so<br />the operator refuses to roll the data pods to an image whose tag is an<br />older semantic version than this one (RuntimeReady=False,<br />DowngradeRefused). A version that never became ready is never<br />recorded, so a rollout that failed can still be taken back. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `version` _string_ | version is the tag of that image, such as v0.14.2; unset for an image<br />pinned by digest alone. The engine migrates its data forward only, so<br />the operator refuses to roll the data pods to an image whose tag is an<br />older semantic version than this one (RuntimeReady=False,<br />DowngradeRefused). The operator also records it on each data volume<br />claim (the annotation crewlet.ai/engine-version), which keeps the floor<br />when this status is lost. A version that never became ready is never<br />recorded, so a rollout that failed can still be taken back. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### EnvVar

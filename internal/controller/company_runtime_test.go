@@ -54,6 +54,7 @@ const (
 	platformTokenVar   = "PLATFORM_TOKEN"
 	webhooksHostname   = "{{uid}}.hooks.example.com"
 	dataName           = "nimbus-data"
+	dataClaimName      = "data-nimbus-data-0"
 )
 
 // newReconciler is the Company reconciler as the manager builds it, on a
@@ -526,7 +527,7 @@ var _ = Describe("Company runtime", func() {
 		before := statefulSet().Spec.Template.Annotations
 		claim := &corev1.PersistentVolumeClaim{
 			Namespace: namespace,
-			Name:      "data-nimbus-data-0",
+			Name:      dataClaimName,
 			Labels:    selectorFor(company, componentData),
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -775,6 +776,39 @@ var _ = Describe("Company runtime", func() {
 			company = reconciled(company)
 			Expect(engine(statefulSet()).Image).To(Equal("ghcr.io/crewlet/crewlet:v0.4.0"))
 			Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+		})
+
+		It("keeps the floor on the data volume claims when the status is lost", func() {
+			class := newClass(overridable)
+			company := reconciled(newCompany(class.Name, version("v0.3.0")))
+			claim := &corev1.PersistentVolumeClaim{
+				Namespace: namespace,
+				Name:      dataClaimName,
+				Labels:    labelsFor(company, componentData),
+				Spec: corev1.PersistentVolumeClaimSpec{
+					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, claim)).To(Succeed())
+			rollOut()
+			company = reconciled(company)
+			Expect(company.Status.Engine.Version).To(Equal("v0.3.0"))
+			get(claim, claim.Name)
+			Expect(claim.Annotations).To(HaveKeyWithValue(EngineVersionAnnotation, "v0.3.0"))
+
+			By("losing the status, as a restore from a backup does")
+			base := company.DeepCopy()
+			company.Status.Engine = crewletaiv1alpha1.EngineStatus{}
+			Expect(k8sClient.Status().Patch(ctx, company, client.MergeFrom(base))).To(Succeed())
+			updateCompany(company, version("v0.2.9"))
+			company = reconciled(company)
+			runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+			Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonDowngradeRefused))
+			Expect(runtimeReady.Message).To(ContainSubstring("v0.3.0"))
+			Expect(engine(statefulSet()).Image).To(Equal("ghcr.io/crewlet/crewlet:v0.3.0"))
 		})
 
 		It("lets a version that never became ready be taken back", func() {
@@ -1222,7 +1256,7 @@ var _ = Describe("Company runtime", func() {
 			GinkgoHelper()
 			claim := &corev1.PersistentVolumeClaim{
 				Namespace: namespace,
-				Name:      "data-nimbus-data-0",
+				Name:      dataClaimName,
 				Labels:    selectorFor(&crewletaiv1alpha1.Company{Name: companyName}, componentData),
 				Spec: corev1.PersistentVolumeClaimSpec{
 					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},

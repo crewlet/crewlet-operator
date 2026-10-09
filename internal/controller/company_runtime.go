@@ -165,7 +165,11 @@ func (r *CompanyReconciler) reconcileWorkload(
 				capitalize(err.Error()), KeyringActiveKeyAnnotation))
 	}
 
-	image, refusal := engineImage(c, class)
+	claims, err := r.cachedDataClaims(ctx, c)
+	if err != nil {
+		return metav1.Condition{}, err
+	}
+	image, refusal := engineImage(c, class, versionFloor(c, claims))
 	if refusal != nil {
 		if existing == nil {
 			if suspended(c) {
@@ -189,6 +193,9 @@ func (r *CompanyReconciler) reconcileWorkload(
 	}
 	progress := rolloutOf(sts)
 	recordRollout(c, sts, progress.ready)
+	if err := r.recordVersionOnClaims(ctx, c, claims); err != nil {
+		return metav1.Condition{}, err
+	}
 
 	switch {
 	case suspended(c):

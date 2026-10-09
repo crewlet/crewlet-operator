@@ -105,8 +105,12 @@ existing company keeps its volume.
 
 The engine migrates its data forward only. The operator records the image the
 data pod last ran *and was ready on* in `status.engine.image`, and its tag in
-`status.engine.version`. A Company or class that asks for an image whose tag is
-an older semantic version is refused with `RuntimeReady=False`, reason
+`status.engine.version`, and records that version on each data volume claim
+as the annotation `crewlet.ai/engine-version`, which outlives the status: a
+Company created again over retained volumes, or restored from a backup that
+dropped its status, still knows what its data was last run on. A Company or
+class that asks for an image whose tag is older, as a semantic version, than
+the newest of the two is refused with `RuntimeReady=False`, reason
 `DowngradeRefused`; the pod keeps running the newer image, and every other
 change still applies. A version that never became ready is never recorded, so
 an upgrade that failed can be taken back. Tags that are not versions (`latest`)

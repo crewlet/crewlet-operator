@@ -722,7 +722,9 @@ type EngineStatus struct {
 	// pinned by digest alone. The engine migrates its data forward only, so
 	// the operator refuses to roll the data pods to an image whose tag is an
 	// older semantic version than this one (RuntimeReady=False,
-	// DowngradeRefused). A version that never became ready is never
+	// DowngradeRefused). The operator also records it on each data volume
+	// claim (the annotation crewlet.ai/engine-version), which keeps the floor
+	// when this status is lost. A version that never became ready is never
 	// recorded, so a rollout that failed can still be taken back.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
