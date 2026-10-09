@@ -365,10 +365,6 @@ const (
 	// its EngineClass's spec.allowedNamespaces does not select.
 	ReasonClassNotAllowed = "ClassNotAllowed"
 
-	// ReasonReplicasNotAllowed is Accepted=False on a Company whose
-	// spec.topology.data.replicas is not in its class's allowedReplicas.
-	ReasonReplicasNotAllowed = "ReplicasNotAllowed"
-
 	// ReasonLimitExceeded is Accepted=False on a Company whose children
 	// exceed a limit of its EngineClass.
 	ReasonLimitExceeded = "LimitExceeded"
