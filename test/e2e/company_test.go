@@ -127,7 +127,7 @@ var _ = Describe("Company", Ordered, func() {
 		Expect(company.Status.Config.RevisionID).NotTo(BeEmpty(), "ConfigApplied=True names no revision")
 		Expect(company.Status.Config.Objects).To(Equal(v1.AppliedObjectCounts{
 			Units: new(int32(1)), Seats: new(int32(2)), LLMProviders: new(int32(1)),
-			MCPServers: new(int32(0)), Integrations: new(int32(0)),
+			MCPServers: new(int32(0)), Integrations: new(int32(0)), Schedules: new(int32(0)),
 		}))
 		Expect(company.Status.Endpoints.API).To(Equal(engineURL))
 		Expect(company.Status.APIAccessSecretRef.Name).To(Equal(accessSecret))
