@@ -79,10 +79,14 @@ document. The operator handles them without a field:
   keys `accessKeyID` and `secretAccessKey`), **telemetry headers**
   (`EngineClass.spec.telemetry.headersSecretRef`) and **class-wide
   environment variables from a Secret**
-  (`EngineClass.spec.podTemplate.spec.env[].valueFrom`) are read by the engine
-  from its environment. The operator copies them into a Secret it owns in the
-  company's namespace and references that Secret from the pod, so the values
-  never appear in a pod template. Without `credentialsSecretRef` the engine
+  (`EngineClass.spec.podTemplate.spec.env[].valueFrom`) are copied by the
+  operator into the Secret it owns in the company's namespace for the
+  engine's pod, `<company>-bootstrap`, so the values never appear in a pod
+  template: the object-store keys into the pod's `crewlet.yaml`, with the
+  keyring and the API tokens, and the others for the engine's environment,
+  which reads them from that Secret. No credential of the engine's own is an
+  environment variable, since the engine resolves a `${NAME}` in its company
+  document from its environment. Without `credentialsSecretRef` the engine
   reaches the bucket with the pod's own identity: EKS Pod Identity, the
   node's role, or a workload identity bound through the ServiceAccount's
   annotations (`EngineClass.spec.serviceAccount.annotations`, such as

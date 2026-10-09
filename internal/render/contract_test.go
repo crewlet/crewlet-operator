@@ -4,14 +4,21 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	"sigs.k8s.io/yaml"
 
+	"github.com/crewlet/crewlet-operator/internal/engine"
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 	"github.com/crewlet/crewlet-operator/internal/secretref"
 	"github.com/crewlet/crewlet-operator/internal/secretsync"
@@ -89,23 +96,11 @@ func write(t *testing.T, name string, data []byte) string {
 	return file
 }
 
-// testKeyMaterial is a keyring key: base64 of 32 bytes, which is what
-// Crewlet checks the material is. Its value is irrelevant.
-const testKeyMaterial = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
-
-// bootstrapEnv answers every variable a Tier A's pod is given, with a
-// dummy of the right shape.
+// bootstrapEnv answers every variable a Tier A's pod is given: its name.
 func bootstrapEnv(doc *BootstrapDocument) map[string]string {
 	env := map[string]string{}
 	for _, e := range doc.Env {
-		switch {
-		case e.Name == EnvNodeID:
-			env[e.Name] = "nimbus-data-0"
-		case strings.HasPrefix(e.Name, envSecretKeyPrefix):
-			env[e.Name] = testKeyMaterial
-		default:
-			env[e.Name] = "dummy-" + strings.ToLower(e.Name)
-		}
+		env[e.Name] = "nimbus-data-0"
 	}
 	return env
 }
@@ -183,4 +178,80 @@ func TestContractCompany(t *testing.T) {
 // dummyCredential is a stand-in value for a referenced Secret key.
 func dummyCredential(k secretref.Key) string {
 	return "dummy-" + k.Name + "-" + k.Key
+}
+
+// TestContractNoCredentialLeavesThroughAReference runs the engine as the
+// operator configures a data pod (the rendered Tier A, and only the pod's
+// name in its environment) and applies a company document that names the
+// variables the operator once put the credentials in, in a field that is no
+// credential: an MCP server's URL, which the engine expands from its secret
+// store and then from its environment before it connects. The engine must
+// reach the server with none of its credentials in the request.
+func TestContractNoCredentialLeavesThroughAReference(t *testing.T) {
+	type request struct{ url, header, body string }
+	requests := make(chan request, 64)
+	listener := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		requests <- request{url: r.URL.String(), header: fmt.Sprint(r.Header), body: string(body)}
+		http.Error(w, "not an MCP server", http.StatusNotFound)
+	}))
+	t.Cleanup(listener.Close)
+
+	tokens := APITokens{Operator: "operator-" + strings.Repeat("o", 40), Access: "access-" + strings.Repeat("a", 40)}
+	in := bootstrapCases()[0].input(t)
+	in.Tokens = tokens
+	tierA, err := Bootstrap(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tierA.Env) != 1 || tierA.Env[0].Name != EnvNodeID {
+		t.Fatalf("the pod's environment is %v; this test gives the engine its name alone", tierA.Env)
+	}
+	e := enginetest.Start(t, enginetest.WithTierA(tokens.Operator, tokens.Access, func(port int, dir string) []byte {
+		// The data pod's paths and address, moved into the test's
+		// directory and onto the loopback interface.
+		var doc map[string]any
+		if err := yaml.Unmarshal(tierA.YAML, &doc); err != nil {
+			t.Fatal(err)
+		}
+		api := doc["api"].(map[string]any)
+		api["host"], api["port"] = "127.0.0.1", port
+		doc["store"].(map[string]any)["path"] = filepath.Join(dir, "store", "crewlet.db")
+		doc["stream"].(map[string]any)["store_dir"] = filepath.Join(dir, "stream")
+		out, err := yaml.Marshal(doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}, EnvNodeID+"=nimbus-data-0"))
+
+	// Every variable a credential has ever been given to the engine in.
+	url := listener.URL + "/mcp/${CREWLET_TOKEN_OPERATOR}/${CREWLET_TOKEN_ACCESS}/${CREWLET_SECRET_KEY_K1}/" +
+		"${CREWLET_S3_ACCESS_KEY_ID}/${CREWLET_S3_SECRET_ACCESS_KEY}"
+	company := fmt.Appendf(nil, "name: Nimbus\nmcp_servers:\n  - name: probe\n    transport: http\n    url: %q\n", url)
+	if _, err := e.Client().ApplyConfig(t.Context(), engine.ApplyRequest{Document: company, CreateOnly: true, Summary: "a probe for leaked credentials"}); err != nil {
+		t.Fatalf("applying the company document: %v", err)
+	}
+
+	select {
+	case got := <-requests:
+		seen := []request{got}
+		for drained := false; !drained; {
+			select {
+			case r := <-requests:
+				seen = append(seen, r)
+			case <-time.After(time.Second):
+				drained = true
+			}
+		}
+		for _, r := range seen {
+			for _, credential := range []string{tokens.Operator, tokens.Access, testKeyMaterial} {
+				if strings.Contains(r.url+r.header+r.body, credential) {
+					t.Errorf("the engine sent a credential to the MCP server's URL: %+v", r)
+				}
+			}
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the engine never reached the MCP server, so the test proves nothing")
+	}
 }

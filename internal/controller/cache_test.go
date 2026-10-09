@@ -30,7 +30,7 @@ func TestCacheKeepsNoSecretValue(t *testing.T) {
 		Name: "slack",
 		Annotations: map[string]string{
 			corev1.LastAppliedConfigAnnotation: `{"data":{"botToken":"eG94Yi0x"}}`,
-			"team":                             "platform",
+			"team":                             "growth",
 		},
 		ManagedFields: []metav1.ManagedFieldsEntry{{Manager: "kubectl"}},
 	}
@@ -42,7 +42,7 @@ func TestCacheKeepsNoSecretValue(t *testing.T) {
 	if _, kept := got.Annotations[corev1.LastAppliedConfigAnnotation]; kept {
 		t.Error("the last-applied-configuration annotation, which holds the Secret's data, is cached")
 	}
-	if got.Annotations["team"] != "platform" {
+	if got.Annotations["team"] != "growth" {
 		t.Errorf("annotations = %v: an annotation of the user's own was dropped", got.Annotations)
 	}
 	if got.ManagedFields != nil {

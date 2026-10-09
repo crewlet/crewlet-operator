@@ -16,6 +16,10 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/secretsync"
 )
 
+// testKeyMaterial is a keyring key: base64 of 32 bytes, which is what
+// Crewlet checks the material is. Its value is irrelevant.
+const testKeyMaterial = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+
 var update = flag.Bool("update", false, "rewrite the golden files under testdata from the current render")
 
 // testNamespace is the namespace every namespaced test object is in, and

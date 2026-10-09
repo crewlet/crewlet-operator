@@ -44,7 +44,6 @@ const (
 	keyringName        = "nimbus-keyring"
 	tokensName         = "nimbus-api-tokens"
 	accessName         = "nimbus-api-access"
-	platformName       = "nimbus-platform"
 	engineName         = "nimbus-engine"
 	webhooksRoute      = "nimbus-webhooks"
 	gatewayNamespace   = "gateways"
@@ -55,6 +54,7 @@ const (
 	webhooksHostname   = "{{uid}}.hooks.example.com"
 	dataName           = "nimbus-data"
 	dataClaimName      = "data-nimbus-data-0"
+	bootstrapName      = "nimbus-bootstrap"
 )
 
 // newReconciler is the Company reconciler as the manager builds it, on a
@@ -188,15 +188,18 @@ var _ = Describe("Company runtime", func() {
 		Expect(k8sClient.Status().Update(ctx, sts)).To(Succeed())
 	}
 	// expectedBootstrap is what render.Bootstrap makes of the Company and its
-	// class with a keyring of the given key ids.
-	expectedBootstrap := func(company *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, active string, ids ...string) *render.BootstrapDocument {
+	// class, with the keyring and tokens the Company's Secrets hold.
+	expectedBootstrap := func(company *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass) *render.BootstrapDocument {
 		GinkgoHelper()
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(class), class)).To(Succeed())
+		keyring, tokens := &corev1.Secret{}, &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: company.Namespace, Name: keyringName}, keyring)).To(Succeed())
+		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: company.Namespace, Name: tokensName}, tokens)).To(Succeed())
 		doc, err := render.Bootstrap(&render.BootstrapInput{
 			Company: company,
 			Class:   class,
-			Keyring: render.Keyring{ActiveKeyID: active, KeyIDs: ids},
-			Secrets: render.BootstrapSecrets{Keyring: keyringName, APITokens: tokensName, Objects: platformName},
+			Keyring: keyringOf(keyring),
+			Tokens:  tokensOf(tokens),
 			// Every data StatefulSet here is created from newClass's
 			// volume, and keeps it when the class changes later.
 			VolumeSize: resource.MustParse("10Gi"),
@@ -248,12 +251,14 @@ var _ = Describe("Company runtime", func() {
 		Expect(company.Status.APIAccessSecretRef.Name).To(Equal(accessName))
 		Expect(company.Status.Endpoints.API).To(Equal("http://nimbus-engine." + namespace + ".svc:8080"))
 
-		By("rendering the bootstrap document into a ConfigMap")
-		want := expectedBootstrap(company, class, "key-1", "key-1")
-		bootstrap := &corev1.ConfigMap{}
-		get(bootstrap, "nimbus-bootstrap-data")
+		By("rendering the bootstrap document, credentials included, into a Secret")
+		want := expectedBootstrap(company, class)
+		bootstrap := &corev1.Secret{}
+		get(bootstrap, bootstrapName)
 		ownedByCompany(bootstrap, company)
-		Expect(bootstrap.Data).To(Equal(map[string]string{"crewlet.yaml": string(want.YAML)}))
+		Expect(bootstrap.Data).To(Equal(map[string][]byte{configFile: want.YAML}))
+		Expect(string(want.YAML)).To(ContainSubstring(string(tokens.Data[render.TokenOperator])))
+		Expect(string(want.YAML)).To(ContainSubstring(string(keyring.Data["key-1"])))
 
 		By("creating a ServiceAccount whose token is never mounted")
 		sa := &corev1.ServiceAccount{}
@@ -302,8 +307,7 @@ var _ = Describe("Company runtime", func() {
 
 		pod := sts.Spec.Template
 		Expect(pod.Labels).To(HaveKeyWithValue(crewletaiv1alpha1.CompanyLabel, companyName))
-		Expect(pod.Annotations).To(HaveKeyWithValue(BootstrapHashAnnotation, want.Hash))
-		Expect(pod.Annotations).To(HaveKey(SecretsVersionAnnotation))
+		Expect(pod.Annotations).To(HaveKeyWithValue(BootstrapHashAnnotation, hashOf(bootstrap.Data)))
 		Expect(pod.Spec.ServiceAccountName).To(Equal(engineName))
 		Expect(*pod.Spec.AutomountServiceAccountToken).To(BeFalse())
 		Expect(*pod.Spec.EnableServiceLinks).To(BeFalse())
@@ -328,11 +332,22 @@ var _ = Describe("Company runtime", func() {
 		Expect(container.Env).To(ContainElement(corev1.EnvVar{Name: "TURSO_GO_CACHE_DIR", Value: "/var/lib/crewlet/cache"}))
 		for _, env := range container.Env {
 			Expect(env.Name).NotTo(HavePrefix("OTEL_"), "no telemetry without a class's telemetry")
+			// The engine expands ${NAME} in its company document from
+			// its environment: no credential may be there.
+			Expect(env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil).To(BeTrue(),
+				"%s reads Secret %v into the engine's environment", env.Name, env.ValueFrom)
 		}
 		Expect(container.VolumeMounts).To(ContainElements(
 			corev1.VolumeMount{Name: "data", MountPath: "/var/lib/crewlet"},
 			corev1.VolumeMount{Name: "config", MountPath: "/etc/crewlet", ReadOnly: true},
 		))
+		Expect(pod.Spec.Volumes).To(ContainElement(corev1.Volume{Name: "config",
+			Secret: &corev1.SecretVolumeSource{
+				SecretName:  bootstrapName,
+				Items:       []corev1.KeyToPath{{Key: configFile, Path: configFile}},
+				DefaultMode: new(int32(0o440)),
+			},
+		}))
 
 		By("isolating the data pods")
 		policy := &networkingv1.NetworkPolicy{}
@@ -392,7 +407,7 @@ var _ = Describe("Company runtime", func() {
 			{keyringName, &corev1.Secret{}},
 			{tokensName, &corev1.Secret{}},
 			{accessName, &corev1.Secret{}},
-			{"nimbus-bootstrap-data", &corev1.ConfigMap{}},
+			{bootstrapName, &corev1.Secret{}},
 			{engineName, &corev1.Service{}},
 			{dataName, &corev1.Service{}},
 			{webhooksRoute, &gatewayv1.HTTPRoute{}},
@@ -457,9 +472,10 @@ var _ = Describe("Company runtime", func() {
 		Expect(keyring.Data).To(Equal(kept.Data))
 		Expect(keyring.Annotations).To(HaveKeyWithValue(KeyringActiveKeyAnnotation, "k7"))
 
-		bootstrap := &corev1.ConfigMap{}
-		get(bootstrap, "nimbus-bootstrap-data")
-		Expect(bootstrap.Data["crewlet.yaml"]).To(Equal(string(expectedBootstrap(company, class, "k7", "k6", "k7").YAML)))
+		bootstrap := &corev1.Secret{}
+		get(bootstrap, bootstrapName)
+		Expect(bootstrap.Data[configFile]).To(Equal(expectedBootstrap(company, class).YAML))
+		Expect(string(bootstrap.Data[configFile])).To(ContainSubstring("active_key_id: k7"))
 	})
 
 	It("uses API tokens another controller supplies as they are, and holds the pods back while one is missing", func() {
@@ -722,29 +738,40 @@ var _ = Describe("Company runtime", func() {
 		Expect(engine(after).Image).To(Equal("ghcr.io/crewlet/crewlet:v0.3.0"))
 		Expect(engine(after).Resources.Requests).To(HaveKeyWithValue(corev1.ResourceMemory, resource.MustParse("1Gi")))
 		Expect(after.Spec.Template.Spec.Tolerations).To(ConsistOf(corev1.Toleration{Key: "crewlet.ai/tenant", Operator: corev1.TolerationOpExists}))
-		Expect(after.Spec.Template.Annotations[BootstrapHashAnnotation]).To(Equal(expectedBootstrap(company, class, "key-1", "key-1").Hash))
+		bootstrap := &corev1.Secret{}
+		get(bootstrap, bootstrapName)
+		Expect(bootstrap.Data[configFile]).To(Equal(expectedBootstrap(company, class).YAML))
+		Expect(after.Spec.Template.Annotations[BootstrapHashAnnotation]).To(Equal(hashOf(bootstrap.Data)))
 		Expect(after.Spec.Template.Annotations[BootstrapHashAnnotation]).NotTo(Equal(before.Spec.Template.Annotations[BootstrapHashAnnotation]))
 		Expect(after.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests.Storage().String()).To(Equal("10Gi"))
-		bootstrap := &corev1.ConfigMap{}
-		get(bootstrap, "nimbus-bootstrap-data")
-		Expect(bootstrap.Data["crewlet.yaml"]).To(ContainSubstring("store_max_bytes: 8053063680"),
+		Expect(string(bootstrap.Data[configFile])).To(ContainSubstring("store_max_bytes: 8053063680"),
 			"the event stream is three quarters of the 10Gi volume the pod keeps, not of the class's new 50Gi")
 	})
 
-	It("rolls the pods when a Secret their environment reads changes", func() {
+	It("rolls the pods when a value they read at start changes, and only then", func() {
 		class := newClass()
 		reconciled(newCompany(class.Name))
-		before := statefulSet().Spec.Template.Annotations[SecretsVersionAnnotation]
+		hash := func() string { return statefulSet().Spec.Template.Annotations[BootstrapHashAnnotation] }
+		before := hash()
+		company := &crewletaiv1alpha1.Company{}
+		get(company, companyName)
 
+		By("labelling the keyring, which changes nothing the pods read")
+		keyring := &corev1.Secret{}
+		get(keyring, keyringName)
+		keyring.Labels["backup.example.com/schedule"] = "daily"
+		Expect(k8sClient.Update(ctx, keyring)).To(Succeed())
+		reconciled(company)
+		Expect(hash()).To(Equal(before), "a label rolled the pods")
+
+		By("replacing the access token")
 		tokens := &corev1.Secret{}
 		get(tokens, tokensName)
 		tokens.Data[render.TokenAccess] = []byte("revoked-and-replaced-by-hand")
 		Expect(k8sClient.Update(ctx, tokens)).To(Succeed())
-		company := &crewletaiv1alpha1.Company{}
-		get(company, companyName)
 		reconciled(company)
 
-		Expect(statefulSet().Spec.Template.Annotations[SecretsVersionAnnotation]).NotTo(Equal(before))
+		Expect(hash()).NotTo(Equal(before))
 		access := &corev1.Secret{}
 		get(access, accessName)
 		Expect(string(access.Data[crewletaiv1alpha1.APIAccessTokenKey])).To(Equal("revoked-and-replaced-by-hand"))
@@ -860,14 +887,14 @@ var _ = Describe("Company runtime", func() {
 			}
 		}
 
-		It("holds the pods back until the platform's Secrets exist, then copies them into the Company's namespace", func() {
+		It("holds the pods back until the platform's Secrets exist, then gives the pods their values", func() {
 			class := newClass(s3Class)
 			company := reconciled(newCompany(class.Name))
 			runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
 			Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonSecretNotFound))
 			Expect(runtimeReady.Message).To(ContainSubstring(platform + "/s3"))
 			absent(&appsv1.StatefulSet{}, dataName)
-			absent(&corev1.Secret{}, platformName)
+			absent(&corev1.Secret{}, bootstrapName)
 
 			Expect(k8sClient.Create(ctx, &corev1.Secret{Namespace: platform, Name: "s3", Data: map[string][]byte{
 				crewletaiv1alpha1.S3AccessKeyIDKey: []byte("AKIA"), crewletaiv1alpha1.S3SecretAccessKeyKey: []byte("s3cr3t"),
@@ -877,49 +904,62 @@ var _ = Describe("Company runtime", func() {
 			}})).To(Succeed())
 			company = reconciled(company)
 
-			copied := &corev1.Secret{}
-			get(copied, platformName)
-			ownedByCompany(copied, company)
-			Expect(copied.Data).To(Equal(map[string][]byte{
-				crewletaiv1alpha1.S3AccessKeyIDKey:     []byte("AKIA"),
-				crewletaiv1alpha1.S3SecretAccessKeyKey: []byte("s3cr3t"),
-				"otlpHeaders":                          []byte("authorization=Bearer x"),
-				"env." + platformTokenVar:              []byte("platform-token"),
-			}))
+			By("writing the object store's keys into crewlet.yaml, and the environment's values beside it")
+			bootstrap := &corev1.Secret{}
+			get(bootstrap, bootstrapName)
+			ownedByCompany(bootstrap, company)
+			Expect(bootstrap.Data).To(HaveLen(3))
+			Expect(bootstrap.Data).To(HaveKeyWithValue("otlpHeaders", []byte("authorization=Bearer x")))
+			Expect(bootstrap.Data).To(HaveKeyWithValue("env."+platformTokenVar, []byte("platform-token")))
+			Expect(string(bootstrap.Data[configFile])).To(ContainSubstring("access_key_id: AKIA"))
+			Expect(string(bootstrap.Data[configFile])).To(ContainSubstring("secret_access_key: s3cr3t"))
 
-			fromPlatform := func(key string) *corev1.EnvVarSource {
-				return &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Name: platformName, Key: key}}
+			fromBootstrap := func(key string) *corev1.EnvVarSource {
+				return &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Name: bootstrapName, Key: key}}
 			}
 			sts := statefulSet()
 			Expect(engine(sts).Env).To(ContainElements(
-				corev1.EnvVar{Name: render.EnvS3AccessKeyID, ValueFrom: fromPlatform(crewletaiv1alpha1.S3AccessKeyIDKey)},
 				corev1.EnvVar{Name: "OTEL_EXPORTER_OTLP_ENDPOINT", Value: "https://otlp.example.com"},
-				corev1.EnvVar{Name: "OTEL_EXPORTER_OTLP_HEADERS", ValueFrom: fromPlatform("otlpHeaders")},
+				corev1.EnvVar{Name: "OTEL_EXPORTER_OTLP_HEADERS", ValueFrom: fromBootstrap("otlpHeaders")},
 				corev1.EnvVar{Name: "PLATFORM_URL", Value: "https://platform.example.com"},
-				corev1.EnvVar{Name: platformTokenVar, ValueFrom: fromPlatform("env." + platformTokenVar)},
+				corev1.EnvVar{Name: platformTokenVar, ValueFrom: fromBootstrap("env." + platformTokenVar)},
 			))
-			Expect(sts.Spec.Template.Annotations[SecretsVersionAnnotation]).To(ContainSubstring("platform=" + copied.ResourceVersion))
+			for _, e := range engine(sts).Env {
+				Expect(e.Name).NotTo(HavePrefix("CREWLET_S3_"), "the object store's keys are in the engine's environment")
+			}
+			Expect(sts.Spec.Template.Annotations[BootstrapHashAnnotation]).To(Equal(hashOf(bootstrap.Data)))
 			Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+
+			By("rolling the pods when a platform value changes")
+			before := sts.Spec.Template.Annotations[BootstrapHashAnnotation]
+			headers := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: platform, Name: otlpSecret}, headers)).To(Succeed())
+			headers.Data["headers"] = []byte("authorization=Bearer y")
+			Expect(k8sClient.Update(ctx, headers)).To(Succeed())
+			reconciled(company)
+			Expect(statefulSet().Spec.Template.Annotations[BootstrapHashAnnotation]).NotTo(Equal(before))
 
 			By("letting the Company's own variable replace the class's")
 			updateCompany(company, func(c *crewletaiv1alpha1.Company) {
 				c.Spec.Runtime.Env = []crewletaiv1alpha1.EnvVar{{Name: platformTokenVar, Value: new("mine")}}
 			})
 			reconciled(company)
-			get(copied, platformName)
-			Expect(copied.Data).NotTo(HaveKey("env." + platformTokenVar))
+			get(bootstrap, bootstrapName)
+			Expect(bootstrap.Data).NotTo(HaveKey("env." + platformTokenVar))
 			env := engine(statefulSet()).Env
 			Expect(env).To(ContainElement(corev1.EnvVar{Name: platformTokenVar, Value: "mine"}))
 			Expect(slices.ContainsFunc(env, func(e corev1.EnvVar) bool { return e.Name == platformTokenVar && e.ValueFrom != nil })).To(BeFalse())
 
-			By("deleting the copy when the class stops asking for it")
+			By("dropping the values when the class stops giving them")
 			updateClass(class, func(c *crewletaiv1alpha1.EngineClass) {
 				c.Spec.Objects = crewletaiv1alpha1.ObjectSettings{Backend: crewletaiv1alpha1.ObjectBackendNATS}
 				c.Spec.Telemetry = crewletaiv1alpha1.TelemetrySettings{}
 				c.Spec.PodTemplate.Spec.Env = nil
 			})
 			reconciled(company)
-			absent(&corev1.Secret{}, platformName)
+			get(bootstrap, bootstrapName)
+			Expect(bootstrap.Data).To(HaveLen(1))
+			Expect(string(bootstrap.Data[configFile])).NotTo(ContainSubstring("AKIA"))
 		})
 
 		It("maps a Secret to the Companies whose class copies it, or whose keyring or tokens it is", func() {

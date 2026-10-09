@@ -21,8 +21,7 @@ Company, so it is deleted with it. For a Company `nimbus`:
 | Secret `nimbus-keyring` | The keyring of the engine's encrypted secret store: one key per keyring key, named by the key's id (`key-1`), holding base64 of 32 random bytes, the form `crewlet secrets keygen` prints. The annotation `crewlet.ai/active-key-id` names the key that seals new writes. Generated once and never rewritten. |
 | Secret `nimbus-api-tokens` | Two bearer tokens for the engine's API, `operator` (the operator's own, never handed out) and `access` (for the company's consumers). Generated once and never rewritten. |
 | Secret `nimbus-api-access` | For consumers: the `access` token under `token` and the API's in-cluster URL under `url`. `status.apiAccessSecretRef` names it. |
-| Secret `nimbus-platform` | Copies of the values the EngineClass takes from the platform's own Secrets: the S3 credentials, the telemetry headers, and `podTemplate.spec.env` values from Secrets. Created only when the class has any. |
-| ConfigMap `nimbus-bootstrap-data` | The data pod's `crewlet.yaml`, rendered as [What the engine is given](company-document.md#the-data-pods-crewletyaml) describes. It holds `${VAR}` references only, never a value. |
+| Secret `nimbus-bootstrap` | The data pod's `crewlet.yaml`, rendered as [What the engine is given](company-document.md#the-data-pods-crewletyaml) describes, with the keyring, the API tokens and the object store's keys in it; and the values the EngineClass takes from the platform's own Secrets for the engine's environment (the telemetry headers, `podTemplate.spec.env` values from Secrets), under `otlpHeaders` and `env.<NAME>`. |
 | ServiceAccount `nimbus-engine` | The engine's identity, carrying the class's `serviceAccount.annotations` for a workload identity. Its token is never mounted: the engine does not call the Kubernetes API. |
 | StatefulSet `nimbus-data` | The data pod. |
 | Service `nimbus-engine` | ClusterIP on port 8080, routing to ready data pods. The routes and `status.endpoints.api` point at it. |
@@ -70,9 +69,9 @@ Two cases are refused rather than guessed at:
 | | |
 |---|---|
 | Image | The class's `engine.image`; with `engine.allowVersionOverride`, its tag replaced by the Company's `spec.runtime.version`. |
-| Command | `crewlet run -config /etc/crewlet/crewlet.yaml`, the bootstrap ConfigMap mounted read-only. |
+| Command | `crewlet run -config /etc/crewlet/crewlet.yaml`, the bootstrap Secret's `crewlet.yaml` mounted read-only, readable by the engine's user alone (mode `0440`, group `fsGroup`). |
 | Storage | One volume claim per pod (`data-nimbus-data-0`) at `/var/lib/crewlet`, from the class's `data.storage`: the store, the event stream (three quarters of the volume, [sized from the claim](company-document.md#the-data-pods-crewletyaml)), and the store's native library cache (`TURSO_GO_CACHE_DIR`), so a restart does not extract it again. |
-| Environment | Exactly the variables the bootstrap document references, each from a Secret or the pod's name; `HOME`; the OpenTelemetry variables when the class sets `telemetry`; then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. |
+| Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; the OpenTelemetry variables when the class sets `telemetry`; then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). |
 | Probes | `/health` for startup (up to five minutes for the first start) and liveness, `/ready` for readiness. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
 | Stopping | A five-second `preStop` sleep, so the endpoint is gone from the Services and Gateways before the engine drains, and the class's `data.terminationGracePeriodSeconds` (default five minutes) for the drain: running turns finish, waiting ones are handed back. |
 | Updates | `RollingUpdate` with `maxUnavailable: 1`, `podManagementPolicy: Parallel`. |
@@ -86,14 +85,15 @@ the processes it spawns (git, stdio MCP servers, coding agents) write to the
 latter two, which are `emptyDir` volumes, and `HOME` is set explicitly so an
 image built on another base still has a writable one.
 
-The pod template carries two annotations that roll the pod when what it reads
-at start changes: `crewlet.ai/bootstrap-hash`, the hash of `crewlet.yaml`, and
-`crewlet.ai/secrets-version`, the `resourceVersion`s of the keyring, token and
-platform Secrets. Kubernetes reads a Secret into an environment variable only
-when the container starts, so a token or platform credential that changes
-takes effect by a rollout. A Secret the Company's own `runtime.env` references
-is read the same way, but the operator does not watch it: restart the pod after
-changing one.
+The pod template carries the annotation `crewlet.ai/bootstrap-hash`, the hash
+of the bootstrap Secret's data, which rolls the pod when what it reads at
+start changes: a token, a keyring key, the object store's keys, a platform
+value, or the document itself. Kubernetes reads a Secret into an environment
+variable, and the engine its `crewlet.yaml`, only when the container starts.
+It hashes the values rather than naming the Secrets' versions, so a label or
+an annotation written to a Secret restarts nothing. A Secret the Company's own
+`runtime.env` references is read the same way, but the operator does not
+watch it: restart the pod after changing one.
 
 ## Changes, versions and suspension
 

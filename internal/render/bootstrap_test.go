@@ -1,6 +1,7 @@
 package render
 
 import (
+	"maps"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -11,8 +12,12 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// testSecrets are the operator-owned Secrets every bootstrap case reads.
-var testSecrets = BootstrapSecrets{Keyring: "nimbus-keyring", APITokens: "nimbus-api-tokens", Objects: "nimbus-objects"}
+// testTokens are the API tokens every bootstrap case is rendered with, and
+// testObjects the S3 keys of the cases whose class names none of its own.
+var (
+	testTokens  = APITokens{Operator: "test-operator-token", Access: "test-access-token"}
+	testObjects = S3Credentials{AccessKeyID: "test-access-key-id", SecretAccessKey: "test-secret-access-key"}
+)
 
 // The keyring of the rotation case: rotatedKey seals, and staleKey, an id
 // YAML would read as a date unless it is quoted, still opens what it sealed.
@@ -21,16 +26,25 @@ const (
 	staleKey   = "2026-01-01"
 )
 
+// otherKeyMaterial is a second key's material, so the rotation case's keys
+// differ.
+const otherKeyMaterial = "ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA="
+
 type bootstrapCase struct {
 	name    string
 	keyring Keyring
+	objects *S3Credentials
 }
 
 func bootstrapCases() []bootstrapCase {
 	return []bootstrapCase{
-		{name: "nats", keyring: Keyring{ActiveKeyID: "k1", KeyIDs: []string{"k1"}}},
-		{name: "s3", keyring: Keyring{ActiveKeyID: rotatedKey, KeyIDs: []string{rotatedKey, staleKey}}},
-		{name: "s3-workload-identity", keyring: Keyring{ActiveKeyID: "k1", KeyIDs: []string{"k1"}}},
+		{name: "nats", keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}},
+		{
+			name:    "s3",
+			keyring: Keyring{ActiveKeyID: rotatedKey, Keys: map[string]string{rotatedKey: testKeyMaterial, staleKey: otherKeyMaterial}},
+			objects: &testObjects,
+		},
+		{name: "s3-workload-identity", keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}},
 	}
 }
 
@@ -38,7 +52,7 @@ func (c bootstrapCase) input(t *testing.T) *BootstrapInput {
 	t.Helper()
 	o := load(t, filepath.Join("testdata", "bootstrap", c.name+".input.yaml"))
 	return &BootstrapInput{
-		Company: o.company, Class: o.class, Keyring: c.keyring, Secrets: testSecrets,
+		Company: o.company, Class: o.class, Keyring: c.keyring, Tokens: testTokens, Objects: c.objects,
 		VolumeSize: *o.class.Spec.Data.Storage.Size,
 	}
 }
@@ -83,9 +97,6 @@ func TestBootstrapEnvIsExactlyTheReferences(t *testing.T) {
 			given := make([]string, 0, len(doc.Env))
 			for _, e := range doc.Env {
 				given = append(given, e.Name)
-				if e.Value != "" || e.ValueFrom == nil {
-					t.Errorf("%s has a literal value: every variable must come from a Secret or the pod", e.Name)
-				}
 			}
 			if !slices.Equal(referenced, given) {
 				t.Errorf("the document refers to %v, the pod is given %v", referenced, given)
@@ -94,41 +105,36 @@ func TestBootstrapEnvIsExactlyTheReferences(t *testing.T) {
 	}
 }
 
-// TestBootstrapEnvReadsTheOperatorSecrets pins where each credential comes
-// from: the runtime reconciler creates these Secrets, under these keys.
-func TestBootstrapEnvReadsTheOperatorSecrets(t *testing.T) {
-	doc, err := Bootstrap(bootstrapCases()[1].input(t))
+// TestBootstrapKeepsEveryCredentialOutOfTheEnvironment: the engine resolves
+// a ${NAME} in its company document from its environment, so a credential
+// in the environment is one a writer of that document can have the engine
+// send anywhere. Every credential is in the document, which the operator
+// keeps in a Secret, and the environment holds the pod's name alone.
+func TestBootstrapKeepsEveryCredentialOutOfTheEnvironment(t *testing.T) {
+	c := bootstrapCases()[1]
+	doc, err := Bootstrap(c.input(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string][2]string{
-		"CREWLET_SECRET_KEY_2026_01_01": {testSecrets.Keyring, staleKey},
-		"CREWLET_SECRET_KEY_2026_10_B":  {testSecrets.Keyring, rotatedKey},
-		EnvTokenOperator:                {testSecrets.APITokens, TokenOperator},
-		EnvTokenAccess:                  {testSecrets.APITokens, TokenAccess},
-		EnvS3AccessKeyID:                {testSecrets.Objects, "accessKeyID"},
-		EnvS3SecretAccessKey:            {testSecrets.Objects, "secretAccessKey"},
+	credentials := slices.Concat(
+		[]string{testTokens.Operator, testTokens.Access, testObjects.AccessKeyID, testObjects.SecretAccessKey},
+		slices.Collect(maps.Values(c.keyring.Keys)))
+	for _, credential := range credentials {
+		if !strings.Contains(string(doc.YAML), credential) {
+			t.Errorf("the document does not hold the credential %q", credential)
+		}
 	}
 	for _, e := range doc.Env {
-		if e.Name == EnvNodeID {
-			if e.ValueFrom.FieldRef == nil || e.ValueFrom.FieldRef.FieldPath != "metadata.name" {
-				t.Errorf("%s = %+v, want the pod's name", e.Name, e.ValueFrom)
-			}
-			continue
+		if e.Name != EnvNodeID || e.Value != "" || e.ValueFrom == nil || e.ValueFrom.FieldRef == nil ||
+			e.ValueFrom.FieldRef.FieldPath != "metadata.name" {
+			t.Errorf("the pod's environment holds %+v; it must hold the pod's name alone", e)
 		}
-		ref := e.ValueFrom.SecretKeyRef
-		if ref == nil || [2]string{ref.Name, ref.Key} != want[e.Name] {
-			t.Errorf("%s reads %+v, want Secret %v", e.Name, ref, want[e.Name])
-		}
-		delete(want, e.Name)
-	}
-	if len(want) > 0 {
-		t.Errorf("the pod is not given %v", want)
 	}
 }
 
 // TestBootstrapRefusesAKeyringItCannotReference covers the keyring Secret's
-// ids, which come from a Secret anyone allowed to edit it can change.
+// ids and material, which come from a Secret anyone allowed to edit it can
+// change.
 func TestBootstrapRefusesAKeyringItCannotReference(t *testing.T) {
 	for _, c := range []struct {
 		name    string
@@ -136,9 +142,10 @@ func TestBootstrapRefusesAKeyringItCannotReference(t *testing.T) {
 		want    string
 	}{
 		{"no keys", Keyring{}, "holds no key"},
-		{"active key missing", Keyring{ActiveKeyID: "k2", KeyIDs: []string{"k1"}}, `no key "k2"`},
-		{"not a key id", Keyring{ActiveKeyID: "k1", KeyIDs: []string{"k1", "k:2"}}, `"k:2"`},
-		{"one variable for two keys", Keyring{ActiveKeyID: "k-1", KeyIDs: []string{"k-1", "k.1"}}, "CREWLET_SECRET_KEY_K_1"},
+		{"active key missing", Keyring{ActiveKeyID: "k2", Keys: map[string]string{"k1": testKeyMaterial}}, `no key "k2"`},
+		{"not a key id", Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial, "k:2": testKeyMaterial}}, `"k:2"`},
+		{"not base64", Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": "material"}}, `"k1" is not base64 of 32 bytes`},
+		{"a short key", Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": "c2hvcnQ="}}, `"k1" is not base64 of 32 bytes`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			in := bootstrapCases()[0].input(t)

@@ -92,7 +92,7 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 	c.Status.APIAccessSecretRef = crewletaiv1alpha1.SecretReference{Name: apiAccessSecretName(c)}
 	c.Status.Endpoints.API = apiURL(c)
 
-	platformVersion, platformMissing, err := r.applyPlatformSecret(ctx, c, class)
+	platform, platformMissing, err := r.readPlatformValues(ctx, c, class)
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,7 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 		return err
 	}
 
-	runtimeReady, err := r.reconcileWorkload(ctx, c, class, keyring, tokens, platformVersion, missing, hold)
+	runtimeReady, err := r.reconcileWorkload(ctx, c, class, keyring, tokens, platform, missing, hold)
 	if err != nil {
 		return err
 	}
@@ -122,8 +122,8 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 	return nil
 }
 
-// reconcileWorkload writes the bootstrap ConfigMap and the data StatefulSet
-// and returns the RuntimeReady condition.
+// reconcileWorkload writes the bootstrap Secret and the data StatefulSet and
+// returns the RuntimeReady condition.
 //
 // What cannot be rendered (a keyring the engine could not open or that is
 // gone, a platform Secret that is missing) holds the pods back: the StatefulSet keeps running
@@ -132,7 +132,7 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 // the pods keep the image they run, and every other change still applies.
 func (r *CompanyReconciler) reconcileWorkload(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
-	keyring, tokens *corev1.Secret, platformVersion string, missing []string, hold *held,
+	keyring, tokens *corev1.Secret, platform map[string][]byte, missing []string, hold *held,
 ) (metav1.Condition, error) {
 	existing, err := r.existingStatefulSet(ctx, c)
 	if err != nil {
@@ -148,21 +148,18 @@ func (r *CompanyReconciler) reconcileWorkload(
 			"The engine's pods cannot be given the values they read from Secrets: "+strings.Join(missing, "; ")+".")
 	}
 	bootstrap, err := render.Bootstrap(&render.BootstrapInput{
-		Company: c,
-		Class:   class,
-		Keyring: keyringOf(keyring),
-		Secrets: render.BootstrapSecrets{
-			Keyring:   keyring.Name,
-			APITokens: tokens.Name,
-			Objects:   platformSecretName(c),
-		},
+		Company:    c,
+		Class:      class,
+		Keyring:    keyringOf(keyring),
+		Tokens:     tokensOf(tokens),
+		Objects:    objectCredentials(platform),
 		VolumeSize: dataVolumeSize(existing, class),
 	})
 	if err != nil {
 		return r.holdBack(ctx, c, existing, crewletaiv1alpha1.ReasonKeyringInvalid,
-			fmt.Sprintf("%s. The operator never rewrites a keyring, since the engine's sealed data opens only with its keys: "+
-				"repair the Secret, setting the annotation %s to the id of the key that seals new writes.",
-				capitalize(err.Error()), KeyringActiveKeyAnnotation))
+			fmt.Sprintf("Secret %s/%s is not a keyring the engine can use: %s. The operator never rewrites a keyring, since the "+
+				"engine's sealed data opens only with its keys: repair the Secret, setting the annotation %s to the id of the key "+
+				"that seals new writes.", keyring.Namespace, keyring.Name, err, KeyringActiveKeyAnnotation))
 	}
 
 	claims, err := r.cachedDataClaims(ctx, c)
@@ -180,13 +177,14 @@ func (r *CompanyReconciler) reconcileWorkload(
 		image = runningImage(existing)
 	}
 
-	if err := r.applyBootstrap(ctx, c, bootstrap); err != nil {
+	bootstrapHash, err := r.applyBootstrap(ctx, c, bootstrap, platform)
+	if err != nil {
 		return metav1.Condition{}, err
 	}
 	sts, err := r.applyStatefulSet(ctx, c, class, existing, &workload{
-		image:          image,
-		bootstrap:      bootstrap,
-		secretsVersion: secretsVersion(keyring, tokens, platformVersion),
+		image:         image,
+		bootstrap:     bootstrap,
+		bootstrapHash: bootstrapHash,
 	})
 	if err != nil {
 		return metav1.Condition{}, err

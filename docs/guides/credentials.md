@@ -178,9 +178,10 @@ engine's pods: S3 credentials for the object store
 (`objects.s3.credentialsSecretRef`, keys `accessKeyID` and
 `secretAccessKey`), telemetry headers (`telemetry.headersSecretRef`) and
 class-wide environment variables (`podTemplate.spec.env[].valueFrom`). The
-operator copies those values into a Secret it owns in each company's
-namespace (`<company>-platform`), because a pod can read only Secrets in its
-own namespace. A Company's own `spec.runtime.env` reads Secrets in its
+operator copies those values into the Secret it owns in each company's
+namespace for the engine's pod (`<company>-bootstrap`), because a pod can
+read only Secrets in its own namespace: the S3 keys into the pod's
+`crewlet.yaml`, the others for the engine's environment. A Company's own `spec.runtime.env` reads Secrets in its
 namespace directly.
 
 ## Rotating a credential

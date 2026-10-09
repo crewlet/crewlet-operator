@@ -27,7 +27,6 @@ const (
 	componentAPI      = "api"
 	componentWebhooks = "webhooks"
 	componentKeyring  = "keyring"
-	componentPlatform = "platform"
 )
 
 // The names of the objects the operator creates for a Company. Every one is
@@ -37,8 +36,7 @@ const (
 func keyringSecretName(c *crewletaiv1alpha1.Company) string   { return c.Name + "-keyring" }
 func apiTokensSecretName(c *crewletaiv1alpha1.Company) string { return c.Name + "-api-tokens" }
 func apiAccessSecretName(c *crewletaiv1alpha1.Company) string { return c.Name + "-api-access" }
-func platformSecretName(c *crewletaiv1alpha1.Company) string  { return c.Name + "-platform" }
-func bootstrapConfigName(c *crewletaiv1alpha1.Company) string { return c.Name + "-bootstrap-data" }
+func bootstrapSecretName(c *crewletaiv1alpha1.Company) string { return c.Name + "-bootstrap" }
 func serviceAccountName(c *crewletaiv1alpha1.Company) string  { return c.Name + "-engine" }
 func engineServiceName(c *crewletaiv1alpha1.Company) string   { return c.Name + "-engine" }
 func dataServiceName(c *crewletaiv1alpha1.Company) string     { return c.Name + "-data" }

@@ -3,8 +3,8 @@
 A Crewlet engine reads two documents: the **company document** (Crewlet's
 Tier B: the company, its org chart, models, tools and integrations), which
 the operator applies over the engine's API, and the data pod's
-**`crewlet.yaml`** (Tier A: how the node boots), which the operator mounts
-into the pod. The operator renders both from the `crewlet.ai` objects. This
+**`crewlet.yaml`** (Tier A: how the node boots), which the operator keeps in
+a Secret and mounts into the pod. The operator renders both from the `crewlet.ai` objects. This
 page says what they contain, so that what the engine reports can be traced
 back to an object.
 
@@ -87,15 +87,23 @@ last one is refused with `insufficient storage resources available`. Crewlet
 needs at least 5 GiB for the stream, so an EngineClass's `data.storage.size`
 is at least `7Gi`.
 
-It holds no credential either. It refers to environment variables, which the
-pod reads from Secrets the operator owns in the Company's namespace:
+It holds the node's credentials as values: the two API tokens (the
+operator's own, and the one published for consumers in
+`status.apiAccessSecretRef`), every key of the secret store's keyring, and
+the object store's keys when the class's `objects.s3` names a
+`credentialsSecretRef`. That is why it lives in a Secret,
+`<company>-bootstrap`, and why the pod mounts that one key of it, readable
+by the engine's user alone. Its one reference is `${CREWLET_NODE_ID}`, the
+pod's name and the node's stable identity, which the pod's environment
+carries.
 
-| Variable | Holds |
-|---|---|
-| `CREWLET_NODE_ID` | the pod's name, the node's stable identity |
-| `CREWLET_TOKEN_OPERATOR`, `CREWLET_TOKEN_ACCESS` | the API tokens: the operator's own, and the one published for consumers in `status.apiAccessSecretRef` |
-| `CREWLET_SECRET_KEY_<ID>` | each key of the secret store's keyring |
-| `CREWLET_S3_ACCESS_KEY_ID`, `CREWLET_S3_SECRET_ACCESS_KEY` | the object store's keys, when the class's `objects.s3` names a `credentialsSecretRef` |
+None of these credentials is an environment variable, on purpose. Crewlet
+resolves a `${NAME}` in the company document from its secret store and then
+from its process environment, and it does so in fields that hold no
+credential as well, such as an MCP server's `url` or a model provider's
+`base_url`. A credential in the engine's environment would be one anyone who
+can write such a field, or hold the API's access token, could have the
+engine send to a server of their choosing.
 
 The engine's API answers no read without a token
 (`api.auth.allow_anonymous_read: false`): its reads include every seat's

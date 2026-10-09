@@ -3,9 +3,9 @@ api:
     allow_anonymous_read: false
     tokens:
     - id: operator
-      token: ${CREWLET_TOKEN_OPERATOR}
+      token: test-operator-token
     - id: access
-      token: ${CREWLET_TOKEN_ACCESS}
+      token: test-access-token
   host: 0.0.0.0
   port: 8080
 coordination:
@@ -25,20 +25,20 @@ secrets:
   active_key_id: 2026-10.b
   keys:
   - id: "2026-01-01"
-    material: ${CREWLET_SECRET_KEY_2026_01_01}
+    material: ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=
   - id: 2026-10.b
-    material: ${CREWLET_SECRET_KEY_2026_10_B}
+    material: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
 store:
   objects:
     backend: s3
     s3:
-      access_key_id: ${CREWLET_S3_ACCESS_KEY_ID}
+      access_key_id: test-access-key-id
       bucket: crewlet-tenants
       endpoint: https://minio.storage.example
       path_style: true
       prefix: tenants/3f2a9c1e-6b1d-4e7a-9a52-0c8d5f1e2b47/
       region: us-east-1
-      secret_access_key: ${CREWLET_S3_SECRET_ACCESS_KEY}
+      secret_access_key: test-secret-access-key
   path: /var/lib/crewlet/store/crewlet.db
 stream:
   replicas: 1

@@ -122,6 +122,27 @@ type Option func(*options)
 
 type options struct {
 	company []byte
+	tierA   *tierAOption
+}
+
+// tierAOption is a Tier A of the caller's (WithTierA).
+type tierAOption struct {
+	operator, access string
+	render           func(port int, dir string) []byte
+	env              []string
+}
+
+// WithTierA runs the engine on a Tier A of the caller's instead of
+// enginetest's own: render returns it for the port Start chose and the
+// engine's working directory, and it must serve the API on 127.0.0.1 at that
+// port with operator and access as the tokens of OperatorTokenID and
+// AccessTokenID. env is the engine's environment beyond PATH and HOME,
+// exactly; none of enginetest's own variables is set. It is how a test runs
+// the engine as the operator configures a data pod.
+func WithTierA(operator, access string, render func(port int, dir string) []byte, env ...string) Option {
+	return func(o *options) {
+		o.tierA = &tierAOption{operator: operator, access: access, render: render, env: env}
+	}
 }
 
 // WithCompany seeds the engine with document as its first company revision
@@ -163,9 +184,16 @@ func Start(t T, opts ...Option) *Engine {
 		"ENGINETEST_SECRET_KEY=" + randomKey(t),
 	}
 
+	render := tierA
+	if custom := o.tierA; custom != nil {
+		e.OperatorToken, e.AccessToken = custom.operator, custom.access
+		env = append([]string{"PATH=" + os.Getenv("PATH"), "HOME=" + dir}, custom.env...)
+		render = func(port int) []byte { return custom.render(port, dir) }
+	}
+
 	for attempt := 1; ; attempt++ {
 		port := freePort(t)
-		writeFile(t, filepath.Join(dir, "crewlet.yaml"), tierA(port))
+		writeFile(t, filepath.Join(dir, "crewlet.yaml"), render(port))
 		e.URL = "http://127.0.0.1:" + strconv.Itoa(port)
 		err := e.run(t, bin, args, env, o.company != nil)
 		if err == nil {

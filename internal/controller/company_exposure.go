@@ -39,7 +39,6 @@ const (
 // The kinds of the objects the operator writes for a Company.
 var (
 	secretGVK         = corev1.SchemeGroupVersion.WithKind("Secret")
-	configMapGVK      = corev1.SchemeGroupVersion.WithKind("ConfigMap")
 	serviceGVK        = corev1.SchemeGroupVersion.WithKind("Service")
 	serviceAccountGVK = corev1.SchemeGroupVersion.WithKind("ServiceAccount")
 	statefulSetGVK    = appsv1.SchemeGroupVersion.WithKind("StatefulSet")

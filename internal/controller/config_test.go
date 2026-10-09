@@ -418,7 +418,7 @@ var _ = Describe("Company config", Ordered, func() {
 
 		// The samples' two Units: a department, and a team in it.
 		engineering := &crewletaiv1alpha1.Unit{Namespace: namespace, Name: "engineering"}
-		platform := &crewletaiv1alpha1.Unit{Namespace: namespace, Name: componentPlatform}
+		platform := &crewletaiv1alpha1.Unit{Namespace: namespace, Name: "platform"}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(engineering), engineering)).To(Succeed())
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(platform), platform)).To(Succeed())
 		Expect(engineering.Status.Depth).To(Equal(new(int32(0))))

@@ -2,9 +2,12 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -29,11 +32,14 @@ import (
 const (
 	// engineContainer is the name of the engine's container in a data pod.
 	engineContainer = "engine"
-	// configDir is where the bootstrap ConfigMap is mounted.
+	// configDir is where the bootstrap Secret's crewlet.yaml is mounted.
 	configDir = "/etc/crewlet"
-	// configFile is the key of the bootstrap ConfigMap that holds Tier A,
-	// and the file name it is mounted under.
+	// configFile is the key of the bootstrap Secret that holds Tier A, and
+	// the file name it is mounted under.
 	configFile = "crewlet.yaml"
+	// configFileMode lets the engine user read crewlet.yaml through the
+	// pod's fsGroup and nobody else, since it holds credentials.
+	configFileMode int32 = 0o440
 	// homeDir is the engine user's home in Crewlet's image, where the CLI
 	// agents and the git the sandbox recipes drive keep their state.
 	homeDir = "/home/crewlet"
@@ -46,17 +52,18 @@ const (
 	portName = "http"
 )
 
-// The pod template annotations that roll the data pods when what they read
-// at start changes.
+// BootstrapHashAnnotation is the pod template annotation that rolls the
+// data pods when what they read at start changes: the hash of the bootstrap
+// Secret's data, crewlet.yaml and the values the environment reads from it.
+// Kubernetes reads a Secret into an environment variable, and the engine its
+// crewlet.yaml, only when the container starts.
 //
-//nolint:gosec // G101 reads "secrets" in a name as a credential; the annotation holds resourceVersions, never a value.
-const (
-	// BootstrapHashAnnotation is the hash of the data pods' crewlet.yaml.
-	BootstrapHashAnnotation = "crewlet.ai/bootstrap-hash"
-	// SecretsVersionAnnotation names the resourceVersions of the Secrets the
-	// engine's environment reads.
-	SecretsVersionAnnotation = "crewlet.ai/secrets-version"
-)
+// It hashes the values rather than naming the Secrets' resourceVersions, so
+// that a write that changes nothing the pods read (a label, a policy
+// engine's annotation) does not restart the engine. A hash of the data says
+// nothing about a value: the data holds the keyring's keys, so it cannot be
+// guessed at without them.
+const BootstrapHashAnnotation = "crewlet.ai/bootstrap-hash"
 
 // The environment variables the operator sets on the engine beyond those
 // render.Bootstrap lists.
@@ -80,18 +87,54 @@ const preStopSleepSeconds = 5
 type workload struct {
 	image     string
 	bootstrap *render.BootstrapDocument
-	// secretsVersion is the SecretsVersionAnnotation's value.
-	secretsVersion string
+	// bootstrapHash is the BootstrapHashAnnotation's value.
+	bootstrapHash string
 }
 
-// applyBootstrap writes the ConfigMap that holds the data pods' crewlet.yaml.
-// It holds ${VAR} references only, so it is a ConfigMap and not a Secret.
-func (r *CompanyReconciler) applyBootstrap(ctx context.Context, c *crewletaiv1alpha1.Company, doc *render.BootstrapDocument) error {
-	cm := corev1ac.ConfigMap(bootstrapConfigName(c), c.Namespace).
+// applyBootstrap writes the Secret the data pods start from: their
+// crewlet.yaml, which holds the keyring, the API tokens and the object
+// store's keys, and the class's values the engine's environment reads
+// (platform). It returns the hash of its data, for BootstrapHashAnnotation.
+func (r *CompanyReconciler) applyBootstrap(
+	ctx context.Context, c *crewletaiv1alpha1.Company, doc *render.BootstrapDocument, platform map[string][]byte,
+) (string, error) {
+	data := map[string][]byte{configFile: doc.YAML}
+	for key, value := range platform {
+		// The S3 keys are in crewlet.yaml already.
+		if key != crewletaiv1alpha1.S3AccessKeyIDKey && key != crewletaiv1alpha1.S3SecretAccessKeyKey {
+			data[key] = value
+		}
+	}
+	secret := corev1ac.Secret(bootstrapSecretName(c), c.Namespace).
 		WithLabels(labelsFor(c, componentData)).
 		WithOwnerReferences(ownerReference(c)).
-		WithData(map[string]string{configFile: string(doc.YAML)})
-	return r.apply(ctx, c, configMapGVK, bootstrapConfigName(c), cm)
+		WithType(corev1.SecretTypeOpaque).
+		WithData(data)
+	if err := r.apply(ctx, c, secretGVK, bootstrapSecretName(c), secret); err != nil {
+		return "", err
+	}
+	return hashOf(data), nil
+}
+
+// hashOf is the hex-encoded SHA-256 of a Secret's data, its keys in order.
+func hashOf(data map[string][]byte) string {
+	h := sha256.New()
+	for _, key := range slices.Sorted(maps.Keys(data)) {
+		// Lengths first, so that no two different maps hash alike.
+		h.Write(fmt.Appendf(nil, "%d:%s%d:", len(key), key, len(data[key])))
+		h.Write(data[key])
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// objectCredentials are the class's S3 keys among the platform values, or
+// nil when the class gives none.
+func objectCredentials(platform map[string][]byte) *render.S3Credentials {
+	id, ok := platform[crewletaiv1alpha1.S3AccessKeyIDKey]
+	if !ok {
+		return nil
+	}
+	return &render.S3Credentials{AccessKeyID: string(id), SecretAccessKey: string(platform[crewletaiv1alpha1.S3SecretAccessKeyKey])}
 }
 
 // applyServiceAccount writes the engine's ServiceAccount. The engine does not
@@ -243,8 +286,7 @@ func podTemplate(
 	if annotations == nil {
 		annotations = map[string]string{}
 	}
-	annotations[BootstrapHashAnnotation] = w.bootstrap.Hash
-	annotations[SecretsVersionAnnotation] = w.secretsVersion
+	annotations[BootstrapHashAnnotation] = w.bootstrapHash
 
 	container, err := engineContainerOf(c, class, w)
 	if err != nil {
@@ -271,8 +313,10 @@ func podTemplate(
 			WithSeccompProfile(corev1ac.SeccompProfile().WithType(corev1.SeccompProfileTypeRuntimeDefault))).
 		WithContainers(container).
 		WithVolumes(
-			corev1ac.Volume().WithName("config").WithConfigMap(corev1ac.ConfigMapVolumeSource().
-				WithName(bootstrapConfigName(c))),
+			corev1ac.Volume().WithName("config").WithSecret(corev1ac.SecretVolumeSource().
+				WithSecretName(bootstrapSecretName(c)).
+				WithItems(corev1ac.KeyToPath().WithKey(configFile).WithPath(configFile)).
+				WithDefaultMode(configFileMode)),
 			// The root filesystem is read-only; the engine and what it
 			// spawns (git, stdio MCP servers, CLI agents) write their
 			// scratch files under /tmp and their state under HOME.
@@ -429,7 +473,7 @@ func engineEnv(
 			literal(envOTELResourceAtt, fmt.Sprintf("k8s.namespace.name=%s,k8s.statefulset.name=%s,k8s.pod.name=$(%s)",
 				c.Namespace, dataStatefulSetName(c), render.EnvNodeID)))
 		if t.HeadersSecretRef.Name != "" {
-			env = append(env, fromSecret(envOTLPHeaders, platformSecretName(c), platformKeyOTLPHeaders))
+			env = append(env, fromSecret(envOTLPHeaders, bootstrapSecretName(c), platformKeyOTLPHeaders))
 		}
 	}
 
@@ -439,7 +483,7 @@ func engineEnv(
 		case v.Value != nil:
 			env = append(env, literal(v.Name, *v.Value))
 		default:
-			env = append(env, fromSecret(v.Name, platformSecretName(c), platformKeyEnvPrefix+v.Name))
+			env = append(env, fromSecret(v.Name, bootstrapSecretName(c), platformKeyEnvPrefix+v.Name))
 		}
 	}
 	for _, v := range c.Spec.Runtime.Env {

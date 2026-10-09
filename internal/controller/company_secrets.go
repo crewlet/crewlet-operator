@@ -45,9 +45,10 @@ const (
 	apiTokenBytes = 32
 )
 
-// The keys of the Secret <company>-platform beyond the S3 keys (which keep
-// the names of the class's Secret, v1alpha1.S3AccessKeyIDKey and
-// v1alpha1.S3SecretAccessKeyKey, as render.BootstrapSecrets.Objects expects).
+// The keys of the bootstrap Secret beyond configFile that hold the values
+// the engine's environment reads from it. The class's S3 keys are read under
+// the names of the class's Secret (v1alpha1.S3AccessKeyIDKey,
+// v1alpha1.S3SecretAccessKeyKey) and written into crewlet.yaml instead.
 const (
 	platformKeyOTLPHeaders = "otlpHeaders"
 	// platformKeyEnvPrefix is followed by the name of a class env variable
@@ -242,11 +243,20 @@ func missingTokens(tokens *corev1.Secret) []string {
 }
 
 // keyringOf reads the keys a keyring Secret holds. render.Bootstrap refuses
-// a keyring it cannot reference, which is reported as KeyringInvalid.
+// a keyring the engine could not use, which is reported as KeyringInvalid.
 func keyringOf(secret *corev1.Secret) render.Keyring {
-	return render.Keyring{
-		ActiveKeyID: secret.Annotations[KeyringActiveKeyAnnotation],
-		KeyIDs:      slices.Sorted(maps.Keys(secret.Data)),
+	keys := make(map[string]string, len(secret.Data))
+	for id, material := range secret.Data {
+		keys[id] = string(material)
+	}
+	return render.Keyring{ActiveKeyID: secret.Annotations[KeyringActiveKeyAnnotation], Keys: keys}
+}
+
+// tokensOf reads the API tokens a tokens Secret holds.
+func tokensOf(secret *corev1.Secret) render.APITokens {
+	return render.APITokens{
+		Operator: string(secret.Data[render.TokenOperator]),
+		Access:   string(secret.Data[render.TokenAccess]),
 	}
 }
 
@@ -266,11 +276,11 @@ func (r *CompanyReconciler) applyAPIAccess(ctx context.Context, c *crewletaiv1al
 	return r.apply(ctx, c, secretGVK, apiAccessSecretName(c), secret)
 }
 
-// platformValue is one value the engine's pods read from the Secret
-// <company>-platform, copied from a Secret the EngineClass references in the
-// platform's namespace.
+// platformValue is one value the engine's pods are given from a Secret the
+// EngineClass references in the platform's namespace.
 type platformValue struct {
-	// key is the key of <company>-platform that holds it.
+	// key is the key of the bootstrap Secret that holds it, or the S3 key's
+	// own name for the object store's credentials.
 	key string
 	// from is the Secret key it is copied from.
 	from crewletaiv1alpha1.NamespacedSecretKeyReference
@@ -278,12 +288,12 @@ type platformValue struct {
 	field string
 }
 
-// platformValues lists what a class copies into each of its companies'
-// namespaces: the S3 credentials, the telemetry headers and the env values
-// that come from Secrets, except a variable the Company's own runtime.env
-// replaces. They are copied rather than referenced because a pod reads Secrets
-// from its own namespace only, and the platform's namespace is not readable
-// from a tenant's.
+// platformValues lists what a class gives each of its companies' engines
+// from the platform's Secrets: the S3 credentials, the telemetry headers and
+// the env values that come from Secrets, except a variable the Company's own
+// runtime.env replaces. They are copied rather than referenced because a pod
+// reads Secrets from its own namespace only. The copy is the tenant's to
+// read: whatever reaches an engine pod reaches code the tenant runs there.
 func platformValues(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass) []platformValue {
 	var values []platformValue
 	if s3 := class.Spec.Objects.S3; class.Spec.Objects.Backend == crewletaiv1alpha1.ObjectBackendS3 &&
@@ -319,25 +329,17 @@ func overridden(c *crewletaiv1alpha1.Company, name string) bool {
 	return slices.ContainsFunc(c.Spec.Runtime.Env, func(e crewletaiv1alpha1.EnvVar) bool { return e.Name == name })
 }
 
-// applyPlatformSecret copies the class's values into the Secret
-// <company>-platform, or deletes that Secret when the class has none.
-//
-// It returns whether the Secret exists afterwards, its resourceVersion (which
-// changes exactly when a copied value does, and rolls the pods that read
-// them), and what it could not copy. When something is missing it changes
-// nothing: the copy the pods run with is kept rather than emptied, and the
-// caller holds the pods back until the platform repairs its Secret.
-func (r *CompanyReconciler) applyPlatformSecret(
+// readPlatformValues reads the values the class gives each of its companies'
+// engines from the platform's Secrets, keyed as platformValue.key: the
+// bootstrap Secret holds them, so the pods never read the platform's
+// namespace. It returns what it could not read; the caller holds the pods
+// back then, rather than start them with a value missing.
+func (r *CompanyReconciler) readPlatformValues(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
-) (version string, missing []string, err error) {
-	values := platformValues(c, class)
-	if len(values) == 0 {
-		return "", nil, r.deleteControlled(ctx, c, secretGVK, platformSecretName(c))
-	}
-
-	data := map[string][]byte{}
+) (data map[string][]byte, missing []string, err error) {
+	data = map[string][]byte{}
 	sources := map[types.NamespacedName]*corev1.Secret{}
-	for _, v := range values {
+	for _, v := range platformValues(c, class) {
 		at := types.NamespacedName{Namespace: v.from.Namespace, Name: v.from.Name}
 		source, read := sources[at]
 		if !read {
@@ -345,7 +347,7 @@ func (r *CompanyReconciler) applyPlatformSecret(
 			if err := r.APIReader.Get(ctx, at, source); apierrors.IsNotFound(err) {
 				source = nil
 			} else if err != nil {
-				return "", nil, fmt.Errorf("reading Secret %s, which EngineClass %s references: %w", at, class.Name, err)
+				return nil, nil, fmt.Errorf("reading Secret %s, which EngineClass %s references: %w", at, class.Name, err)
 			}
 			sources[at] = source
 		}
@@ -361,20 +363,7 @@ func (r *CompanyReconciler) applyPlatformSecret(
 		data[v.key] = value
 	}
 	// Two keys of one missing Secret say the same thing twice.
-	missing = slices.Compact(missing)
-	if len(missing) > 0 {
-		return "", missing, nil
-	}
-
-	secret := corev1ac.Secret(platformSecretName(c), c.Namespace).
-		WithLabels(labelsFor(c, componentPlatform)).
-		WithOwnerReferences(ownerReference(c)).
-		WithType(corev1.SecretTypeOpaque).
-		WithData(data)
-	if err := r.apply(ctx, c, secretGVK, platformSecretName(c), secret); err != nil {
-		return "", nil, err
-	}
-	return *secret.ResourceVersion, nil, nil
+	return data, slices.Compact(missing), nil
 }
 
 // orphanKeyring removes the Company from the owners of its keyring Secret, so
@@ -400,15 +389,4 @@ func (r *CompanyReconciler) orphanKeyring(ctx context.Context, c *crewletaiv1alp
 		return fmt.Errorf("keeping the keyring Secret %s/%s: %w", c.Namespace, secret.Name, err)
 	}
 	return nil
-}
-
-// secretsVersion is the pod template annotation that rolls the data pods when
-// a Secret their environment reads changes: Kubernetes reads a secretKeyRef
-// once, when the container starts. It names resourceVersions, never values.
-func secretsVersion(keyring, tokens *corev1.Secret, platform string) string {
-	parts := []string{"keyring=" + keyring.ResourceVersion, "api-tokens=" + tokens.ResourceVersion}
-	if platform != "" {
-		parts = append(parts, "platform="+platform)
-	}
-	return strings.Join(parts, ",")
 }

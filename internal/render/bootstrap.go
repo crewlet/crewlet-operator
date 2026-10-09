@@ -3,9 +3,12 @@ package render
 import (
 	"cmp"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -31,7 +34,7 @@ const (
 
 // The API tokens of an engine. Each id is recorded by Crewlet as the author
 // of the revisions written with the token, and is also the key that holds
-// the token in the Secret BootstrapSecrets.APITokens names.
+// the token in the company's API tokens Secret.
 const (
 	// TokenOperator is the operator's own token. It is never handed out, so
 	// revoking a consumer's token never locks the operator out.
@@ -41,29 +44,25 @@ const (
 	TokenAccess = "access"
 )
 
-// Environment variables a data pod's Tier A refers to.
-//
-//nolint:gosec // G101 reads the names as credentials; they are the names of variables whose values come from Secrets.
-const (
-	EnvNodeID            = "CREWLET_NODE_ID"
-	EnvTokenOperator     = "CREWLET_TOKEN_OPERATOR"
-	EnvTokenAccess       = "CREWLET_TOKEN_ACCESS"
-	EnvS3AccessKeyID     = "CREWLET_S3_ACCESS_KEY_ID"
-	EnvS3SecretAccessKey = "CREWLET_S3_SECRET_ACCESS_KEY"
-	// envSecretKeyPrefix is followed by a keyring key's id, upper-cased,
-	// with '.' and '-' turned into '_'.
-	envSecretKeyPrefix = "CREWLET_SECRET_KEY_"
-)
+// EnvNodeID is the one environment variable a data pod's Tier A refers to:
+// the pod's name, which the Downward API gives it. Every credential of Tier A
+// is written into the document itself instead, which is kept in a Secret;
+// see Bootstrap for why none is an environment variable.
+const EnvNodeID = "CREWLET_NODE_ID"
 
 // BootstrapInput is what a data pod's Tier A is rendered from.
 type BootstrapInput struct {
 	Company *v1alpha1.Company
 	Class   *v1alpha1.EngineClass
-	// Keyring is the keys the company's keyring Secret holds.
+	// Keyring is the company's keyring, read from its keyring Secret.
 	Keyring Keyring
-	// Secrets names the Secrets, in the Company's namespace, that the pod's
-	// environment reads the document's references from.
-	Secrets BootstrapSecrets
+	// Tokens are the engine's API tokens, read from the company's API
+	// tokens Secret.
+	Tokens APITokens
+	// Objects are the keys of the class's S3 bucket, or nil to have the
+	// engine use the pod's own credentials (a workload identity). Read only
+	// when the class's objects.backend is S3.
+	Objects *S3Credentials
 	// VolumeSize is the capacity the data pod's volume claim requests: the
 	// data StatefulSet's own claim template once it exists, which a later
 	// change of the class does not move, and the class's data.storage.size
@@ -77,38 +76,32 @@ type BootstrapInput struct {
 // a restart.
 type Keyring struct {
 	ActiveKeyID string
-	// KeyIDs are the keys' ids, each also the key that holds the key's
-	// material (base64 of 32 random bytes) in the Secret
-	// BootstrapSecrets.Keyring names.
-	KeyIDs []string
+	// Keys maps each key's id to its material: base64 of 32 random bytes,
+	// as `crewlet secrets keygen` prints it.
+	Keys map[string]string
 }
 
-// BootstrapSecrets names the Secrets the operator owns in a Company's
-// namespace that a data pod's environment is read from.
-type BootstrapSecrets struct {
-	// Keyring holds the keyring, one key per Keyring.KeyIDs entry.
-	Keyring string
-	// APITokens holds the API tokens under TokenOperator and TokenAccess.
-	APITokens string
-	// Objects holds the S3 credentials under v1alpha1.S3AccessKeyIDKey and
-	// v1alpha1.S3SecretAccessKeyKey, copied from the class's
-	// spec.objects.s3.credentialsSecretRef. Read only when the class sets
-	// one.
-	Objects string
+// APITokens are the engine's two bearer tokens (TokenOperator, TokenAccess).
+type APITokens struct {
+	Operator, Access string
+}
+
+// S3Credentials are the keys the engine reaches an S3 bucket with.
+type S3Credentials struct {
+	AccessKeyID, SecretAccessKey string
 }
 
 // BootstrapDocument is a rendered Tier A.
 type BootstrapDocument struct {
-	// YAML is the crewlet.yaml of the data pods. It holds ${VAR}
-	// references only, never a credential.
+	// YAML is the crewlet.yaml of the data pods. It holds the keyring, the
+	// API tokens and the object store's keys, so it is kept in a Secret and
+	// never anywhere else.
 	YAML []byte
-	// Hash is the hex-encoded SHA-256 of YAML, for the pod template
-	// annotation that rolls the pods when the document changes.
+	// Hash is the hex-encoded SHA-256 of YAML.
 	Hash string
-	// Env is every environment variable YAML refers to, sorted by name:
-	// exactly what the data pod's engine container must be given for the
-	// references to resolve. None carries a literal credential; each reads
-	// a Secret or the pod's own metadata.
+	// Env is every environment variable YAML refers to: exactly what the
+	// data pod's engine container must be given for the references to
+	// resolve. It carries no credential; it is the pod's own name.
 	Env []corev1.EnvVar
 }
 
@@ -205,6 +198,10 @@ var keyIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 // defaultS3Prefix is the API's default for spec.objects.s3.prefix.
 const defaultS3Prefix = "{{namespace}}/{{name}}/"
 
+// keyringKeyBytes is the size of an AES-256 key, the only size Crewlet's
+// keyring accepts.
+const keyringKeyBytes = 32
+
 // Bootstrap renders the Tier A of a company's data pods in the v1alpha1
 // topology: one data pod that holds the estate, serves the API, runs every
 // seat and runs the workers.
@@ -215,11 +212,19 @@ const defaultS3Prefix = "{{namespace}}/{{name}}/"
 // is persisted on the data volume, and the pod carries the data pool's
 // placement label that every agent seat is pinned to.
 //
-// It fails only when the keyring cannot be referenced: no keys, an active key
-// it does not hold, or ids that are not valid key ids or that name one
-// environment variable twice.
+// The credentials are written into the document as literals, never as
+// ${VAR} references to the pod's environment. Crewlet resolves a ${NAME} in
+// the company document (Tier B) from its secret store and then from its
+// process environment, in fields that are not credentials too (an MCP
+// server's URL, a provider's base URL), so a credential in the environment
+// is one anyone who can write such a field, or hold the API's access token,
+// can have the engine send anywhere. A file is read once, at start.
+//
+// It fails only when the keyring cannot be used: no keys, an active key it
+// does not hold, an id that is not a valid key id, or material that is not
+// base64 of 32 bytes.
 func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
-	keyring, keyEnv, err := keyringOf(in.Keyring, in.Secrets.Keyring)
+	keyring, err := keyringOf(in.Keyring)
 	if err != nil {
 		return nil, err
 	}
@@ -228,10 +233,7 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 		{Name: EnvNodeID, ValueFrom: &corev1.EnvVarSource{
 			FieldRef: &corev1.ObjectFieldSelector{APIVersion: "v1", FieldPath: "metadata.name"},
 		}},
-		secretEnv(EnvTokenOperator, in.Secrets.APITokens, TokenOperator),
-		secretEnv(EnvTokenAccess, in.Secrets.APITokens, TokenAccess),
 	}
-	env = append(env, keyEnv...)
 
 	doc := bootstrapDoc{
 		Node: nodeDoc{
@@ -253,8 +255,8 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 				// exempt from authentication either way.
 				AllowAnonymousRead: false,
 				Tokens: []apiTokenDoc{
-					{ID: TokenOperator, Token: "${" + EnvTokenOperator + "}"},
-					{ID: TokenAccess, Token: "${" + EnvTokenAccess + "}"},
+					{ID: TokenOperator, Token: in.Tokens.Operator},
+					{ID: TokenAccess, Token: in.Tokens.Access},
 				},
 			},
 		},
@@ -297,12 +299,9 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 		}
 		// Without credentials the engine uses the SDK's default chain: the
 		// pod's workload identity or the node's role.
-		if s3.CredentialsSecretRef.Name != "" {
-			doc.Store.Objects.S3.AccessKeyID = "${" + EnvS3AccessKeyID + "}"
-			doc.Store.Objects.S3.SecretAccessKey = "${" + EnvS3SecretAccessKey + "}"
-			env = append(env,
-				secretEnv(EnvS3AccessKeyID, in.Secrets.Objects, v1alpha1.S3AccessKeyIDKey),
-				secretEnv(EnvS3SecretAccessKey, in.Secrets.Objects, v1alpha1.S3SecretAccessKeyKey))
+		if creds := in.Objects; creds != nil {
+			doc.Store.Objects.S3.AccessKeyID = creds.AccessKeyID
+			doc.Store.Objects.S3.SecretAccessKey = creds.SecretAccessKey
 		}
 	}
 
@@ -314,44 +313,33 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 	if err != nil {
 		return nil, fmt.Errorf("converting the bootstrap document to YAML: %w", err)
 	}
-	slices.SortFunc(env, func(a, b corev1.EnvVar) int { return strings.Compare(a.Name, b.Name) })
 	sum := sha256.Sum256(out)
 	return &BootstrapDocument{YAML: out, Hash: hex.EncodeToString(sum[:]), Env: env}, nil
 }
 
-// keyringOf renders the keyring block and the environment its references
-// read. The ids come from a Secret, which anyone allowed to edit it can
-// change, so they are checked here rather than trusted.
-func keyringOf(k Keyring, secret string) (keyringDoc, []corev1.EnvVar, error) {
-	if len(k.KeyIDs) == 0 {
-		return keyringDoc{}, nil, fmt.Errorf("the keyring Secret %s holds no key: the engine needs one to seal its secret store", secret)
+// keyringOf renders the keyring block. The keys come from a Secret, which
+// anyone allowed to edit it can change, or a platform supplies, so they are
+// checked here rather than trusted: a key the engine could not use would be
+// found only when the engine refuses to start, or, for a short key, never.
+func keyringOf(k Keyring) (keyringDoc, error) {
+	if len(k.Keys) == 0 {
+		return keyringDoc{}, errors.New("the keyring holds no key: the engine needs one to seal its secret store")
 	}
-	if !slices.Contains(k.KeyIDs, k.ActiveKeyID) {
-		return keyringDoc{}, nil, fmt.Errorf("the keyring Secret %s holds no key %q, which is the active one", secret, k.ActiveKeyID)
+	if _, ok := k.Keys[k.ActiveKeyID]; !ok {
+		return keyringDoc{}, fmt.Errorf("the keyring holds no key %q, which is the active one", k.ActiveKeyID)
 	}
-	ids := slices.Sorted(slices.Values(k.KeyIDs))
 	doc := keyringDoc{ActiveKeyID: k.ActiveKeyID}
-	env := make([]corev1.EnvVar, 0, len(ids))
-	owner := map[string]string{}
-	for _, id := range ids {
+	for _, id := range slices.Sorted(maps.Keys(k.Keys)) {
 		if !keyIDPattern.MatchString(id) {
-			return keyringDoc{}, nil, fmt.Errorf("the keyring Secret %s holds a key %q: a key id holds only letters, digits, '.', '_' and '-'", secret, id)
+			return keyringDoc{}, fmt.Errorf("the keyring holds a key %q: a key id holds only letters, digits, '.', '_' and '-'", id)
 		}
-		name := envSecretKeyPrefix + strings.NewReplacer(".", "_", "-", "_").Replace(strings.ToUpper(id))
-		if other, taken := owner[name]; taken {
-			return keyringDoc{}, nil, fmt.Errorf("the keyring Secret %s holds keys %q and %q, which would both be read from %s: rename one", secret, other, id, name)
+		material := strings.TrimSpace(k.Keys[id])
+		if key, err := base64.StdEncoding.DecodeString(material); err != nil || len(key) != keyringKeyBytes {
+			return keyringDoc{}, fmt.Errorf("the keyring's key %q is not base64 of %d bytes, the form `crewlet secrets keygen` prints", id, keyringKeyBytes)
 		}
-		owner[name] = id
-		doc.Keys = append(doc.Keys, secretKeyDoc{ID: id, Material: "${" + name + "}"})
-		env = append(env, secretEnv(name, secret, id))
+		doc.Keys = append(doc.Keys, secretKeyDoc{ID: id, Material: material})
 	}
-	return doc, env, nil
-}
-
-func secretEnv(name, secret, key string) corev1.EnvVar {
-	return corev1.EnvVar{Name: name, ValueFrom: &corev1.EnvVarSource{
-		SecretKeyRef: &corev1.SecretKeySelector{Name: secret, Key: key},
-	}}
+	return doc, nil
 }
 
 // ExpandTemplate replaces the variables of an EngineClass template (an S3

@@ -3,9 +3,9 @@ api:
     allow_anonymous_read: false
     tokens:
     - id: operator
-      token: ${CREWLET_TOKEN_OPERATOR}
+      token: test-operator-token
     - id: access
-      token: ${CREWLET_TOKEN_ACCESS}
+      token: test-access-token
   host: 0.0.0.0
   port: 8080
 coordination:
@@ -25,7 +25,7 @@ secrets:
   active_key_id: k1
   keys:
   - id: k1
-    material: ${CREWLET_SECRET_KEY_K1}
+    material: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
 store:
   objects:
     backend: nats

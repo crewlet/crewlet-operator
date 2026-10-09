@@ -72,7 +72,7 @@ type CompanyReconciler struct {
 // +kubebuilder:rbac:groups=crewlet.ai,resources=companies/finalizers,verbs=update
 // +kubebuilder:rbac:groups=crewlet.ai,resources=engineclasses,verbs=get;list;watch
 // +kubebuilder:rbac:groups=crewlet.ai,resources=seats;mcpservers,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources=secrets;configmaps;services;serviceaccounts,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups="",resources=secrets;services;serviceaccounts,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=list;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;patch;delete
@@ -302,7 +302,6 @@ func (r *CompanyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			predicate.GenerationChangedPredicate{}, configAppliedChanged()))).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}, builder.OnlyMetadata).
-		Owns(&corev1.ConfigMap{}, builder.OnlyMetadata).
 		Owns(&corev1.ServiceAccount{}, builder.OnlyMetadata).
 		Owns(&corev1.Secret{}, builder.OnlyMetadata).
 		Owns(&networkingv1.Ingress{}, builder.OnlyMetadata).
