@@ -69,6 +69,20 @@ with your last change yet.
 | | False | `ApplyFailed` | The engine did not apply the revision, and keeps running the one it applied last. The message carries the engine's status, its posture (`isolated` on a single node, `shed` or `stuck` beside peers that applied it) and its own account of the failure; see [The engine did not apply a revision](#the-engine-did-not-apply-a-revision). |
 | | False | `EngineUnavailable` | The operator cannot reach the engine or is refused by it. Retried every ten seconds; see [The operator cannot reach the engine](#the-operator-cannot-reach-the-engine). |
 
+### EngineClass
+
+`Accepted` checks what the class's schema cannot: that the objects it names
+in other namespaces exist. It is advisory; Companies of a class that is not
+accepted still run, and report what the problem does to them on their own
+conditions. `kubectl get engineclasses` shows it.
+
+| Condition | Status | Reason | What it means, and what to do |
+|---|---|---|---|
+| `Accepted` | True | `Valid` | Every Secret, Secret key and Gateway the class names exists. |
+| | False | `SecretNotFound` | A Secret the class references (a platform model provider's key, the telemetry headers, a pod environment value) does not exist or lacks the key; the message names each, never a value. Create it in the namespace the reference names. |
+| | False | `GatewayAPINotInstalled` | The class routes through Gateways, and the cluster had no Gateway API when the operator started. Install it and restart the operator. |
+| | False | `GatewayNotFound` | A Gateway a route names with its namespace does not exist. A `parentRef` without a namespace is in each Company's namespace and is not checked here. |
+
 ### Unit, Seat, LLMProvider, MCPServer, Integration
 
 | Condition | Status | Reason | What it means, and what to do |

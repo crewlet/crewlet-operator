@@ -22,8 +22,9 @@ keeps the engine's live configuration equal to what the resources say.
 
 ## How it works
 
-The operator runs two reconcilers for every `Company`. The first
-makes the engine exist: from the `Company` and the `EngineClass` it names (a
+The operator runs two reconcilers for every `Company`, and a third that
+checks each `EngineClass`. The first makes the engine exist: from the
+`Company` and the `EngineClass` it names (a
 cluster-scoped set of platform defaults and limits, in the way a
 `StorageClass` is), it creates and owns the engine's StatefulSet, storage,
 keyring and API tokens, Services, webhook routes and network policy. The

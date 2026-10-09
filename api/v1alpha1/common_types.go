@@ -458,10 +458,10 @@ const (
 	// carries what the controller reported.
 	ReasonRouteNotAccepted = "RouteNotAccepted"
 
-	// ReasonGatewayAPINotInstalled is Exposed=False when the class routes
-	// through Gateways and the cluster has no Gateway API (no HTTPRoute
-	// kind). The operator checks once, when it starts: restart it after
-	// installing the Gateway API.
+	// ReasonGatewayAPINotInstalled is Exposed=False, and Accepted=False on
+	// the EngineClass, when the class routes through Gateways and the
+	// cluster has no Gateway API (no HTTPRoute kind). The operator checks
+	// once, when it starts: restart it after installing the Gateway API.
 	ReasonGatewayAPINotInstalled = "GatewayAPINotInstalled"
 
 	// ReasonNameConflict is RuntimeReady=False (or Exposed=False, for a
@@ -486,6 +486,11 @@ const (
 
 	// ReasonValid is Accepted=True.
 	ReasonValid = "Valid"
+
+	// ReasonGatewayNotFound is Accepted=False on an EngineClass whose
+	// Gateway route names a Gateway, with its namespace, that does not
+	// exist.
+	ReasonGatewayNotFound = "GatewayNotFound"
 
 	// ReasonResolved is ResolvedRefs=True.
 	ReasonResolved = "Resolved"
@@ -514,7 +519,9 @@ const (
 	// RuntimeReady=False when a Secret the engine's pods are given values
 	// from does not: one the EngineClass references (telemetry.headersSecretRef,
 	// a podTemplate.spec.env valueFrom) or the Company's
-	// spec.objects.credentialsSecretRef.
+	// spec.objects.credentialsSecretRef. On an EngineClass it is
+	// Accepted=False when a Secret or key the class references does not
+	// exist.
 	ReasonSecretNotFound = "SecretNotFound"
 
 	// ReasonConflict is Accepted=False when the object collides with

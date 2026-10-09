@@ -666,7 +666,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions has Accepted: whether the class is one the operator can run<br />companies with. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions has Accepted: whether the objects the class names in other<br />namespaces exist, which its schema cannot check. It is False with<br />SecretNotFound when a Secret or key the class references does not<br />exist, GatewayAPINotInstalled when it routes through Gateways on a<br />cluster without the Gateway API, and GatewayNotFound when a Gateway<br />a route names with its namespace does not exist. Companies of a class<br />that is not accepted still run, and report what the problem does to<br />them on their own conditions. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 
 

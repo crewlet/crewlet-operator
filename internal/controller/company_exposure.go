@@ -301,8 +301,9 @@ func parentAccepted(route *gatewayv1ac.HTTPRouteApplyConfiguration, gateway type
 
 // gatewaysServeHTTPS reports whether a route's Gateways terminate TLS for
 // it: whether a listener the route can attach to is HTTPS. It reads the
-// Gateways uncached: the operator does not watch Gateways, and reads them
-// only once a route was accepted.
+// Gateways uncached: the operator's cache holds Gateways as metadata only
+// (for the EngineClass reconciler), and their listeners are read only once a
+// route was accepted.
 func (r *CompanyReconciler) gatewaysServeHTTPS(
 	ctx context.Context, c *crewletaiv1alpha1.Company, exposure *crewletaiv1alpha1.GatewayExposure,
 ) (bool, error) {

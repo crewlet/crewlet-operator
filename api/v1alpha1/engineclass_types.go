@@ -820,8 +820,14 @@ type EngineClassSpec struct {
 // EngineClassStatus is what the operator observed about an EngineClass.
 // +kubebuilder:validation:MinProperties=1
 type EngineClassStatus struct {
-	// conditions has Accepted: whether the class is one the operator can run
-	// companies with.
+	// conditions has Accepted: whether the objects the class names in other
+	// namespaces exist, which its schema cannot check. It is False with
+	// SecretNotFound when a Secret or key the class references does not
+	// exist, GatewayAPINotInstalled when it routes through Gateways on a
+	// cluster without the Gateway API, and GatewayNotFound when a Gateway
+	// a route names with its namespace does not exist. Companies of a class
+	// that is not accepted still run, and report what the problem does to
+	// them on their own conditions.
 	// +optional
 	// +listType=map
 	// +listMapKey=type

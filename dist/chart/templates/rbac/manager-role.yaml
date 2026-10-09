@@ -78,6 +78,7 @@ rules:
   - crewlet.ai
   resources:
   - companies/status
+  - engineclasses/status
   - integrations/status
   - llmproviders/status
   - mcpservers/status
@@ -112,6 +113,8 @@ rules:
   - gateways
   verbs:
   - get
+  - list
+  - watch
 - apiGroups:
   - gateway.networking.k8s.io
   resources:
