@@ -212,8 +212,9 @@ func (r *CompanyReconciler) planSeatPools(
 // last written from (a spec.topology.seatPools entry, as JSON). The Company may
 // drop or change the pool while the revision the engine runs still pins a
 // seat to its pods; the StatefulSet is then kept, and keeps following the
-// data pods (a new image, a new keyring), which takes a template, which takes
-// the pool's resources, grace period and turns.
+// data pods (a new image, a new keyring), which takes a template: the grace
+// period and turns recorded here, and the class's current
+// seatPools.defaults.resources, which alone size a seat pod.
 const SeatPoolAnnotation = "crewlet.ai/seat-pool"
 
 // keptPlan is how a kept seat StatefulSet runs: its SeatPoolAnnotation's pool,

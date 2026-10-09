@@ -196,9 +196,10 @@ a seat to it, and is deleted with its disruption budget and, once no
 StatefulSet of the pool is left, the pool's Secret, as soon as a revision
 that pins nothing to it runs. Meanwhile it still follows the data pods: it
 takes their new image and keyring once they are ready on them, with the
-grace period and turns its pool had when the operator last wrote it, and
-the class's resources (`crewlet.ai/seat-pool`), since a pod restarted from an image or a
-keyring the data pods have left would not join them. A document that cannot be applied (a Seat
+grace period and turns its pool had when the operator last wrote it (the
+annotation `crewlet.ai/seat-pool` records them), and the class's current
+resources, since a pod restarted from an image or a keyring the data pods
+have left would not join them. A document that cannot be applied (a Seat
 still placed in the removed pool is refused `PoolNotFound`) therefore keeps
 the pool running with the revision that needs it. `SeatsPlaced` names the
 StatefulSets kept that way.

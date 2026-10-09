@@ -14,10 +14,13 @@ api/                  separate Go module github.com/crewlet/crewlet-operator/api
   v1alpha1/           the crewlet.ai types, markers, generated deepcopy
 cmd/main.go           the manager
 internal/controller/  reconcilers: two keyed by Company, the runtime one
-                      (Accepted; the engine's Secrets, StatefulSet,
-                      Services, routes and NetworkPolicy) and the config one
+                      (Accepted; the engine's Secrets, data StatefulSet,
+                      Services, routes and NetworkPolicies, and the seat
+                      pools' StatefulSets, Secrets, PodDisruptionBudgets
+                      and broker and seats policies) and the config one
                       (the company document, the secret store, the seats'
-                      pauses, the parts' status); and the EngineClass one
+                      pauses and where each seat runs, from GET /fleet,
+                      the parts' status); and the EngineClass one
                       (its Accepted: the Secrets and Gateways it names
                       exist); the other kinds
                       are reconciled through the Company they reference
@@ -27,7 +30,8 @@ internal/engine/      typed client for the Crewlet engine's API (REST, and
                       the pause tools of its operator catalogue over MCP);
   enginetest/         runs the real pinned engine (bin/crewlet) for a test
 internal/render/      pure render of the crewlet.ai objects into the company
-                      document (Tier B) and a data pod's crewlet.yaml (Tier A)
+                      document (Tier B) and a data or seat pod's
+                      crewlet.yaml (Tier A)
 internal/secretref/   the identity of one referenced Secret key
 internal/secretsync/  pushes referenced Secret values into the engine's
                       encrypted store under StoreName; render writes the
