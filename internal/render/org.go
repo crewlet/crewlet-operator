@@ -302,10 +302,7 @@ func (r *renderer) role(s *v1alpha1.Seat) roleDoc {
 		return doc
 	}
 
-	pool := DataPool
-	if spec.Placement != nil && spec.Placement.Pool != "" {
-		pool = spec.Placement.Pool
-	}
+	pool := cmp.Or(spec.Placement.Pool, r.in.Company.Spec.Topology.DefaultSeatPool, DataPool)
 	// Every agent seat is pinned, even while every seat runs on the data
 	// pods: an unpinned seat may land on any pod that runs seats, and the
 	// pin is what keeps it where its pool says once there is more than

@@ -159,13 +159,15 @@ type SeatSandbox struct {
 
 // SeatPlacement is where a seat runs.
 type SeatPlacement struct {
-	// pool is the pool of pods that runs the seat. In v1alpha1 every seat
-	// runs on the company's data pod, whose pool is data.
-	// +optional
-	// +default="data"
+	// pool is the pool of pods that runs the seat: data, the company's data
+	// pods, or the name of one of the Company's spec.topology.seatPools.
+	// The seat is pinned to the pool with Crewlet's role.placement, which
+	// the engine never widens: while the pool runs no pod, the seat runs
+	// nowhere and its messages wait for one.
+	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=20
-	// +kubebuilder:validation:XValidation:rule="self == 'data'",message="v1alpha1 runs every seat on the company's data pod: pool must be data"
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 	Pool string `json:"pool,omitempty"`
 }
 
@@ -418,9 +420,10 @@ type SeatSpec struct {
 	// +optional
 	Sandbox *SeatSandbox `json:"sandbox,omitempty"`
 
-	// placement is where the seat runs.
+	// placement is where the seat runs. Unset runs it in the Company's
+	// spec.topology.defaultSeatPool.
 	// +optional
-	Placement *SeatPlacement `json:"placement,omitempty"`
+	Placement SeatPlacement `json:"placement,omitzero"`
 
 	// integrations is the seat's own identity on the company's
 	// integrations.
@@ -494,12 +497,30 @@ type GitHubSeatStatus struct {
 // +kubebuilder:validation:MinProperties=1
 type SeatPlacementStatus struct {
 	// pool is the pool of pods that runs the seat: spec.placement.pool, or
-	// data. The seat is rendered with role.placement.labels
-	// {crewlet.ai/pool: <pool>}, which only the pool's pods carry.
+	// the Company's spec.topology.defaultSeatPool. The seat is rendered with
+	// role.placement.labels {crewlet.ai/pool: <pool>}, which only the pool's
+	// pods carry, or, in a PerSeat pool, {crewlet.ai/seat: <handle>}, which
+	// only the seat's own pods carry.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=20
 	Pool string `json:"pool,omitempty"`
+
+	// workload is the name of the StatefulSet whose pods may run the seat:
+	// the data pods', the Shared pool's, or the seat's own in a PerSeat
+	// pool.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	Workload string `json:"workload,omitempty"`
+
+	// node is the engine node, a pod's name, that holds the seat's lease
+	// and runs it, as the engine last reported. Unset while no node holds
+	// it.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=64
+	Node string `json:"node,omitempty"`
 }
 
 // SeatIntegrationsStatus is the addresses a seat's vendor apps must use.

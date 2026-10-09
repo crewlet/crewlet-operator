@@ -886,7 +886,162 @@ spec:
                         minimum: 1
                         type: integer
                     type: object
+                  defaultSeatPool:
+                    default: data
+                    description: |-
+                      defaultSeatPool is the pool of every agent seat whose Seat names no
+                      spec.placement.pool: data, or the name of a Shared pool of seatPools.
+                    maxLength: 20
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    type: string
+                  seatPools:
+                    description: |-
+                      seatPools are stateless pods that run seats. They need the class's
+                      spec.seatPools.policy Allowed, and together run at most its maxPods
+                      pods.
+                    items:
+                      description: |-
+                        SeatPool is a set of stateless pods that run seats: they hold no data, join
+                        the company's event stream through the data pods, and keep a scratch store
+                        they delete at every start. A seat runs in it when its Seat's
+                        spec.placement.pool names it, or when it is the Company's defaultSeatPool
+                        and the Seat names no pool. The class's spec.seatPools.policy must be
+                        Allowed.
+                      properties:
+                        maxConcurrentTurns:
+                          description: |-
+                            maxConcurrentTurns is how many turns one of the pool's pods runs at
+                            once: Crewlet's node.max_concurrent. Unset takes the class's
+                            seatPools.defaults.
+                          format: int32
+                          minimum: 1
+                          type: integer
+                        mode:
+                          default: Shared
+                          description: mode is how the pool runs its seats.
+                          enum:
+                          - Shared
+                          - PerSeat
+                          type: string
+                        name:
+                          description: |-
+                            name identifies the pool: a DNS label of at most 20 characters, other
+                            than data, which is the data pods' pool. It names the pool's pods and
+                            is the value of the crewlet.ai/pool label a Shared pool's seats are
+                            pinned to.
+                          maxLength: 20
+                          minLength: 1
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                          type: string
+                          x-kubernetes-validations:
+                          - message: 'data is the pool of the data pods, which spec.topology.data
+                              sizes: name the pool something else'
+                            rule: self != 'data'
+                        replicas:
+                          default: 1
+                          description: |-
+                            replicas is, for a Shared pool, how many pods it runs, 0 to 100: at 0
+                            its seats run nowhere, and their messages wait for a pod. For a
+                            PerSeat pool it is how many pods it runs for each of its seats, 1 or
+                            2.
+                          format: int32
+                          maximum: 100
+                          minimum: 0
+                          type: integer
+                        resources:
+                          description: |-
+                            resources are the compute resources of each of the pool's pods'
+                            engine container. Unset takes the class's seatPools.defaults.
+                          properties:
+                            claims:
+                              description: |-
+                                Claims lists the names of resources, defined in spec.resourceClaims,
+                                that are used by this container.
+
+                                This field depends on the
+                                DynamicResourceAllocation feature gate.
+
+                                This field is immutable. It can only be set for containers.
+                              items:
+                                description: ResourceClaim references one entry in
+                                  PodSpec.ResourceClaims.
+                                properties:
+                                  name:
+                                    description: |-
+                                      Name must match the name of one entry in pod.spec.resourceClaims of
+                                      the Pod where this field is used. It makes that resource available
+                                      inside a container.
+                                    type: string
+                                  request:
+                                    description: |-
+                                      Request is the name chosen for a request in the referenced claim.
+                                      If empty, everything from the claim is made available, otherwise
+                                      only the result of this request.
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              type: array
+                              x-kubernetes-list-map-keys:
+                              - name
+                              x-kubernetes-list-type: map
+                            limits:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              description: |-
+                                Limits describes the maximum amount of compute resources allowed.
+                                More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                              type: object
+                            requests:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              description: |-
+                                Requests describes the minimum amount of compute resources required.
+                                If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                              type: object
+                          type: object
+                        terminationGracePeriodSeconds:
+                          description: |-
+                            terminationGracePeriodSeconds is how long one of the pool's pods may
+                            take to stop, finishing its running turns. Unset takes the class's
+                            seatPools.defaults.
+                          format: int64
+                          maximum: 3600
+                          minimum: 30
+                          type: integer
+                      required:
+                      - name
+                      type: object
+                      x-kubernetes-validations:
+                      - message: 'a PerSeat pool runs 1 or 2 replicas for each seat:
+                          a second pod is a warm standby, and the seat is never held
+                          by more than one'
+                        rule: '!has(self.mode) || self.mode != ''PerSeat'' || !has(self.replicas)
+                          || (self.replicas >= 1 && self.replicas <= 2)'
+                    maxItems: 8
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
                 type: object
+                x-kubernetes-validations:
+                - message: 'defaultSeatPool must be data or the name of a Shared pool
+                    of seatPools: every seat that names no pool runs there, and a
+                    PerSeat default would give each of them a pod of its own'
+                  rule: '!has(self.defaultSeatPool) || self.defaultSeatPool == ''data''
+                    || (has(self.seatPools) && self.seatPools.exists(p, p.name ==
+                    self.defaultSeatPool && (!has(p.mode) || p.mode == ''Shared'')))'
               tracker:
                 description: tracker is which work tracker the company runs.
                 minProperties: 1
@@ -964,7 +1119,7 @@ spec:
                 description: |-
                   conditions are Ready (the summary), Accepted, RuntimeReady,
                   SecretsSynced, ConfigApplied and Exposed, which Ready summarizes, and
-                  EngineHealthy, which it does not.
+                  EngineHealthy and SeatsPlaced, which it does not.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -1186,6 +1341,57 @@ spec:
                         minimum: 0
                         type: integer
                     type: object
+                  seatPools:
+                    description: seatPools is the state of each seat pool's pods.
+                    items:
+                      description: SeatPoolStatus is the state of one seat pool's
+                        pods.
+                      properties:
+                        mode:
+                          description: mode is how the pool runs its seats.
+                          enum:
+                          - Shared
+                          - PerSeat
+                          type: string
+                        name:
+                          description: name is the pool's name.
+                          maxLength: 20
+                          minLength: 1
+                          type: string
+                        readyReplicas:
+                          description: readyReplicas is the number of the pool's pods
+                            that are ready.
+                          format: int32
+                          minimum: 0
+                          type: integer
+                        replicas:
+                          description: |-
+                            replicas is the number of the pool's pods, every seat's together for
+                            a PerSeat pool.
+                          format: int32
+                          minimum: 0
+                          type: integer
+                        seats:
+                          description: seats is the number of agent seats placed in
+                            the pool.
+                          format: int32
+                          minimum: 0
+                          type: integer
+                        updatedReplicas:
+                          description: |-
+                            updatedReplicas is the number of the pool's pods that run the
+                            current pod template.
+                          format: int32
+                          minimum: 0
+                          type: integer
+                      required:
+                      - name
+                      type: object
+                    maxItems: 8
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
                 type: object
             type: object
         required:

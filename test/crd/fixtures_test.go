@@ -22,6 +22,7 @@ const (
 	githubServer  = "https://api.githubcopilot.com/mcp/"
 	platformKeyNS = "crewlet-system"
 	containerKey  = "PLAT"
+	poolName      = "general"
 )
 
 // The kinds the tests that apply manifests treat specially.
@@ -72,6 +73,12 @@ const (
 	msgHTTPURL                     = "url is required with transport HTTP and not allowed with Stdio"
 	msgOneVendor                   = "exactly one vendor (slack or github) must be set"
 	msgCompanyRefFrozen            = "companyRef is immutable"
+	msgPoolName                    = `should match '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'`
+	msgPoolsAllowedOnly            = "allowPerSeat, maxPods and defaults apply to policy Allowed only"
+	msgScratchFloor                = "scratchSizeLimit must be at least 256Mi"
+	msgDataPoolName                = "data is the pool of the data pods"
+	msgPerSeatReplicas             = "a PerSeat pool runs 1 or 2 replicas for each seat"
+	msgDefaultSeatPool             = "defaultSeatPool must be data or the name of a Shared pool of seatPools"
 )
 
 func companyRef() v1.CompanyReference { return v1.CompanyReference{Name: companyName} }

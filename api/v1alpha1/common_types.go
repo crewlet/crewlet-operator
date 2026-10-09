@@ -283,6 +283,12 @@ const (
 	// ConditionHealthy reports what the engine says about an integration:
 	// whether its credentials work and its webhooks are registered.
 	ConditionHealthy = "Healthy"
+
+	// ConditionSeatsPlaced reports whether every seat pool a Company's
+	// agent seats are placed in has a ready pod to run them. It does not
+	// count towards Ready: a Shared pool scaled to zero parks its seats on
+	// purpose.
+	ConditionSeatsPlaced = "SeatsPlaced"
 )
 
 // Condition reasons. A reason is a CamelCase word or phrase that a program can
@@ -561,6 +567,49 @@ const (
 	// ReasonCheckFailed is Healthy=False; the message carries what the
 	// engine's integration check found.
 	ReasonCheckFailed = "CheckFailed"
+
+	// ReasonAllPoolsServing is SeatsPlaced=True: every pool an agent seat
+	// is placed in has a ready pod.
+	ReasonAllPoolsServing = "AllPoolsServing"
+
+	// ReasonPoolEmpty is SeatsPlaced=False while a pool an agent seat is
+	// placed in has no ready pod: a Shared pool at zero replicas, or a
+	// PerSeat seat's pods down. Its seats run nowhere meanwhile; their
+	// messages wait. The message names the pools.
+	ReasonPoolEmpty = "PoolEmpty"
+
+	// ReasonRolloutBlocked is SeatsPlaced=False while the seat pools keep
+	// their previous pod template because the data pods have not finished
+	// rolling to the current one: seat pods follow the data pods, never
+	// lead them.
+	ReasonRolloutBlocked = "RolloutBlocked"
+
+	// ReasonUnplaced is Ready=False on an agent Seat that no engine node
+	// holds: its pool has no ready pod, or the engine has not placed it
+	// yet. Its messages wait for a node.
+	ReasonUnplaced = "Unplaced"
+
+	// ReasonPoolNotFound is ResolvedRefs=False on a Seat whose
+	// spec.placement.pool is neither data nor the name of one of its
+	// Company's spec.topology.seatPools.
+	ReasonPoolNotFound = "PoolNotFound"
+
+	// ReasonSeatPoolsNotAllowed is ConfigApplied=False on a Company that
+	// declares spec.topology.seatPools while its EngineClass's
+	// spec.seatPools.policy is not Allowed: the class's data pods open no
+	// listener for seat pods to join through.
+	ReasonSeatPoolsNotAllowed = "SeatPoolsNotAllowed"
+
+	// ReasonPerSeatNotAllowed is Applied=False on a Seat placed in a
+	// PerSeat pool while its EngineClass does not set
+	// spec.seatPools.allowPerSeat.
+	ReasonPerSeatNotAllowed = "PerSeatNotAllowed"
+
+	// ReasonPoolCapacityExceeded is Applied=False on each Seat placed in a
+	// PerSeat pool when the company's seat pods would number more than its
+	// EngineClass's spec.seatPools.maxPods, and ConfigApplied=False on a
+	// Company whose Shared pools alone run more.
+	ReasonPoolCapacityExceeded = "PoolCapacityExceeded"
 )
 
 // The keys a Secret must carry where a field references the whole Secret

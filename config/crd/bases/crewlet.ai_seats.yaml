@@ -621,20 +621,23 @@ spec:
                 - name
                 x-kubernetes-list-type: map
               placement:
-                description: placement is where the seat runs.
+                description: |-
+                  placement is where the seat runs. Unset runs it in the Company's
+                  spec.topology.defaultSeatPool.
                 properties:
                   pool:
-                    default: data
                     description: |-
-                      pool is the pool of pods that runs the seat. In v1alpha1 every seat
-                      runs on the company's data pod, whose pool is data.
+                      pool is the pool of pods that runs the seat: data, the company's data
+                      pods, or the name of one of the Company's spec.topology.seatPools.
+                      The seat is pinned to the pool with Crewlet's role.placement, which
+                      the engine never widens: while the pool runs no pod, the seat runs
+                      nowhere and its messages wait for one.
                     maxLength: 20
                     minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                     type: string
-                    x-kubernetes-validations:
-                    - message: 'v1alpha1 runs every seat on the company''s data pod:
-                        pool must be data'
-                      rule: self == 'data'
+                required:
+                - pool
                 type: object
               project:
                 description: |-
@@ -1128,12 +1131,30 @@ spec:
                   which the engine does not run.
                 minProperties: 1
                 properties:
+                  node:
+                    description: |-
+                      node is the engine node, a pod's name, that holds the seat's lease
+                      and runs it, as the engine last reported. Unset while no node holds
+                      it.
+                    maxLength: 64
+                    minLength: 1
+                    type: string
                   pool:
                     description: |-
                       pool is the pool of pods that runs the seat: spec.placement.pool, or
-                      data. The seat is rendered with role.placement.labels
-                      {crewlet.ai/pool: <pool>}, which only the pool's pods carry.
+                      the Company's spec.topology.defaultSeatPool. The seat is rendered with
+                      role.placement.labels {crewlet.ai/pool: <pool>}, which only the pool's
+                      pods carry, or, in a PerSeat pool, {crewlet.ai/seat: <handle>}, which
+                      only the seat's own pods carry.
                     maxLength: 20
+                    minLength: 1
+                    type: string
+                  workload:
+                    description: |-
+                      workload is the name of the StatefulSet whose pods may run the seat:
+                      the data pods', the Shared pool's, or the seat's own in a PerSeat
+                      pool.
+                    maxLength: 63
                     minLength: 1
                     type: string
                 type: object

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -92,10 +93,7 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 			break
 		}
 		o.Status.SeatID = render.SeatID(run.company.Spec.CompanyName, handle)
-		o.Status.Placement.Pool = render.DataPool
-		if o.Spec.Placement != nil && o.Spec.Placement.Pool != "" {
-			o.Status.Placement.Pool = o.Spec.Placement.Pool
-		}
+		o.Status.Placement.Pool = cmp.Or(o.Spec.Placement.Pool, run.company.Spec.Topology.DefaultSeatPool, render.DataPool)
 		if base != "" && vendors[toolSlack] {
 			o.Status.Integrations.Slack.RequestURL = base + "/webhooks/slack/" + handle
 		}

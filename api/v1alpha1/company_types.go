@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -459,15 +460,110 @@ type DataTopology struct {
 	Replicas int32 `json:"replicas,omitempty"`
 }
 
-// CompanyTopology is how a company's engine is laid out in pods. In v1alpha1
-// it is one data pod that serves the API, runs every seat and runs the
-// background workers.
+// DataPool is the name of the pool of a company's data pods. A seat placed in
+// it runs on the data pods; no seat pool may take the name.
+const DataPool = "data"
+
+// SeatPoolMode is how a seat pool runs the seats placed in it.
+// +kubebuilder:validation:Enum=Shared;PerSeat
+type SeatPoolMode string
+
+// The seat pool modes.
+const (
+	// SeatPoolShared runs replicas pods that share the pool's seats between
+	// them: each takes an even share, and a pod that stops hands its seats
+	// to the others.
+	SeatPoolShared SeatPoolMode = "Shared"
+	// SeatPoolPerSeat runs replicas pods for each seat placed in the pool,
+	// each holding that seat alone. It needs the class's
+	// seatPools.allowPerSeat.
+	SeatPoolPerSeat SeatPoolMode = "PerSeat"
+)
+
+// SeatPool is a set of stateless pods that run seats: they hold no data, join
+// the company's event stream through the data pods, and keep a scratch store
+// they delete at every start. A seat runs in it when its Seat's
+// spec.placement.pool names it, or when it is the Company's defaultSeatPool
+// and the Seat names no pool. The class's spec.seatPools.policy must be
+// Allowed.
+// +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'PerSeat' || !has(self.replicas) || (self.replicas >= 1 && self.replicas <= 2)",message="a PerSeat pool runs 1 or 2 replicas for each seat: a second pod is a warm standby, and the seat is never held by more than one"
+type SeatPool struct {
+	// name identifies the pool: a DNS label of at most 20 characters, other
+	// than data, which is the data pods' pool. It names the pool's pods and
+	// is the value of the crewlet.ai/pool label a Shared pool's seats are
+	// pinned to.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=20
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	// +kubebuilder:validation:XValidation:rule="self != 'data'",message="data is the pool of the data pods, which spec.topology.data sizes: name the pool something else"
+	Name string `json:"name,omitempty"`
+
+	// mode is how the pool runs its seats.
+	// +optional
+	// +default="Shared"
+	Mode SeatPoolMode `json:"mode,omitempty"`
+
+	// replicas is, for a Shared pool, how many pods it runs, 0 to 100: at 0
+	// its seats run nowhere, and their messages wait for a pod. For a
+	// PerSeat pool it is how many pods it runs for each of its seats, 1 or
+	// 2.
+	// +optional
+	// +default=1
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// maxConcurrentTurns is how many turns one of the pool's pods runs at
+	// once: Crewlet's node.max_concurrent. Unset takes the class's
+	// seatPools.defaults.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	MaxConcurrentTurns int32 `json:"maxConcurrentTurns,omitempty"`
+
+	// resources are the compute resources of each of the pool's pods'
+	// engine container. Unset takes the class's seatPools.defaults.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// terminationGracePeriodSeconds is how long one of the pool's pods may
+	// take to stop, finishing its running turns. Unset takes the class's
+	// seatPools.defaults.
+	// +optional
+	// +kubebuilder:validation:Minimum=30
+	// +kubebuilder:validation:Maximum=3600
+	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds,omitempty"`
+}
+
+// CompanyTopology is how a company's engine is laid out in pods: one data pod
+// that holds the estate, serves the API and runs the background workers, and
+// the seat pools, stateless pods that run the seats placed in them. Without
+// seat pools every seat runs on the data pod.
 // +kubebuilder:validation:MinProperties=1
+// +kubebuilder:validation:XValidation:rule="!has(self.defaultSeatPool) || self.defaultSeatPool == 'data' || (has(self.seatPools) && self.seatPools.exists(p, p.name == self.defaultSeatPool && (!has(p.mode) || p.mode == 'Shared')))",message="defaultSeatPool must be data or the name of a Shared pool of seatPools: every seat that names no pool runs there, and a PerSeat default would give each of them a pod of its own"
 type CompanyTopology struct {
 	// data is the pods that hold the estate.
 	// +optional
 	// +default={"replicas": 1}
 	Data DataTopology `json:"data,omitzero"`
+
+	// defaultSeatPool is the pool of every agent seat whose Seat names no
+	// spec.placement.pool: data, or the name of a Shared pool of seatPools.
+	// +optional
+	// +default="data"
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=20
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	DefaultSeatPool string `json:"defaultSeatPool,omitempty"`
+
+	// seatPools are stateless pods that run seats. They need the class's
+	// spec.seatPools.policy Allowed, and together run at most its maxPods
+	// pods.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=8
+	SeatPools []SeatPool `json:"seatPools,omitempty"`
 }
 
 // CompanyExposure overrides how a company is reached.
@@ -800,12 +896,54 @@ type DataTopologyStatus struct {
 	UpdatedReplicas *int32 `json:"updatedReplicas,omitempty"`
 }
 
+// SeatPoolStatus is the state of one seat pool's pods.
+type SeatPoolStatus struct {
+	// name is the pool's name.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=20
+	Name string `json:"name,omitempty"`
+
+	// mode is how the pool runs its seats.
+	// +optional
+	Mode SeatPoolMode `json:"mode,omitempty"`
+
+	// replicas is the number of the pool's pods, every seat's together for
+	// a PerSeat pool.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// readyReplicas is the number of the pool's pods that are ready.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	ReadyReplicas *int32 `json:"readyReplicas,omitempty"`
+
+	// updatedReplicas is the number of the pool's pods that run the
+	// current pod template.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	UpdatedReplicas *int32 `json:"updatedReplicas,omitempty"`
+
+	// seats is the number of agent seats placed in the pool.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	Seats *int32 `json:"seats,omitempty"`
+}
+
 // TopologyStatus is the state of a company's pods.
 // +kubebuilder:validation:MinProperties=1
 type TopologyStatus struct {
 	// data is the state of the data pods.
 	// +optional
 	Data DataTopologyStatus `json:"data,omitzero"`
+
+	// seatPools is the state of each seat pool's pods.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=8
+	SeatPools []SeatPoolStatus `json:"seatPools,omitempty"`
 }
 
 // AppliedObjectCounts is how many objects of each kind the applied revision
@@ -917,7 +1055,7 @@ type CompanyEndpoints struct {
 type CompanyStatus struct {
 	// conditions are Ready (the summary), Accepted, RuntimeReady,
 	// SecretsSynced, ConfigApplied and Exposed, which Ready summarizes, and
-	// EngineHealthy, which it does not.
+	// EngineHealthy and SeatsPlaced, which it does not.
 	// +optional
 	// +listType=map
 	// +listMapKey=type
