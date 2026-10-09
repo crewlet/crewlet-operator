@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,6 +57,11 @@ type configRun struct {
 	// health is the engine's verdict on each tool, by key; nil when the
 	// reconcile did not read it.
 	health map[string]engine.IntegrationStatus
+
+	// rendered is where the rendered document pins its seats, and running
+	// where the document the engine runs or is applying does, once this
+	// reconcile has found out; see recordPlacement.
+	rendered, running *crewletaiv1alpha1.RevisionPlacement
 }
 
 // appliedKind is what a reconcile found out about whether the parts are in
@@ -131,6 +137,11 @@ func (run *configRun) reconcile(ctx context.Context) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 	run.doc = doc
+	rendered, err := revisionPlacement(doc.YAML)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	run.rendered = &rendered
 
 	// Read before the engine is reached, so that a missing Secret is
 	// reported while the engine is still starting. Under Seed the values
@@ -236,7 +247,9 @@ func (run *configRun) converge(ctx context.Context, eng *engine.Client) (ctrl.Re
 		case policy == crewletaiv1alpha1.ManagementPolicyObserve:
 			return run.observe(ctx, eng, active)
 		case policy == crewletaiv1alpha1.ManagementPolicySeed && active != nil:
-			run.seeded(active)
+			if err := run.seeded(active); err != nil {
+				return ctrl.Result{}, err
+			}
 			return ctrl.Result{RequeueAfter: run.resyncInterval()}, nil
 		default:
 			if run.desired == nil {
@@ -438,6 +451,7 @@ func (run *configRun) inSync(active *engine.ActiveConfig) {
 		config.Objects = run.objectCounts()
 		run.config = config
 	}
+	run.recordPlacement(*run.rendered, false)
 	// The reason of the last write (Applied, DriftCorrected) stays until
 	// the next one: it is what that write did.
 	if current := meta.FindStatusCondition(run.company.Status.Conditions, crewletaiv1alpha1.ConditionConfigApplied); current != nil &&
@@ -466,6 +480,7 @@ func (run *configRun) recordApply(
 		AppliedAt:   &now,
 		Objects:     run.objectCounts(),
 	}
+	run.recordPlacement(*run.rendered, false)
 	condition := metav1.Condition{
 		Type: crewletaiv1alpha1.ConditionConfigApplied, Status: metav1.ConditionTrue, Reason: crewletaiv1alpha1.ReasonApplied,
 		Message: fmt.Sprintf("Applied the rendered document as revision %s.", applied.RevisionID),
@@ -517,6 +532,7 @@ func (run *configRun) observe(ctx context.Context, eng *engine.Client, active *e
 		if run.company.Status.Config.RevisionID != active.RevisionID {
 			run.config = &crewletaiv1alpha1.ConfigStatus{RevisionID: active.RevisionID, Objects: run.objectCounts()}
 		}
+		run.recordPlacement(*run.rendered, false)
 		run.configApplied = &metav1.Condition{
 			Type: crewletaiv1alpha1.ConditionConfigApplied, Status: metav1.ConditionTrue, Reason: crewletaiv1alpha1.ReasonInSync,
 			Message: fmt.Sprintf("The engine runs the rendered document as revision %s.", active.RevisionID),
@@ -525,6 +541,15 @@ func (run *configRun) observe(ctx context.Context, eng *engine.Client, active *e
 		return ctrl.Result{RequeueAfter: run.resyncInterval()}, nil
 	}
 
+	// The engine's own document runs, and nothing the operator does moves
+	// it: its pins are what the pods must serve.
+	running := crewletaiv1alpha1.RevisionPlacement{}
+	if active != nil {
+		if running, err = revisionPlacement(active.Document); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	run.recordPlacement(running, true)
 	message := "The engine runs no company document; under the Company's Observe policy the operator does not write one."
 	revision := ""
 	if active != nil {
@@ -556,7 +581,12 @@ func (run *configRun) observe(ctx context.Context, eng *engine.Client, active *e
 
 // seeded records a Seed company whose engine has a document: from now on
 // the engine owns it.
-func (run *configRun) seeded(active *engine.ActiveConfig) {
+func (run *configRun) seeded(active *engine.ActiveConfig) error {
+	running, err := revisionPlacement(active.Document)
+	if err != nil {
+		return err
+	}
+	run.recordPlacement(running, false)
 	recorded := run.company.Status.Config.RevisionID
 	message := fmt.Sprintf("The engine had a company document (revision %s) before the operator seeded one; "+
 		"under the Company's Seed policy the operator leaves it to the engine.", active.RevisionID)
@@ -572,6 +602,7 @@ func (run *configRun) seeded(active *engine.ActiveConfig) {
 		"The Company's Seed policy handed the document, and the secret store, to the engine once it was seeded.")
 	run.applied = appliedVerdict{kind: appliedNotManaged, message: "Under the Company's Seed policy the engine owns the document, " +
 		"so changes to this object are not applied."}
+	return nil
 }
 
 func notManaged(conditionType, message string) *metav1.Condition {
@@ -951,4 +982,89 @@ const (
 // which never repeat a value.
 func (run *configRun) event(eventType, reason, action, note string, args ...any) {
 	run.Recorder.Eventf(run.company, nil, eventType, reason, action, note, args...)
+}
+
+// The most pins status.config.placement holds of each kind: the MaxItems of
+// RevisionPlacement's lists.
+const (
+	maxPlacedPools = 64
+	maxPlacedSeats = 1024
+)
+
+// The values a pin must have to name one of a company's pods: a seat pool's
+// name, and a seat's handle, as the API admits them.
+var (
+	poolNamePattern   = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+	seatHandlePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+)
+
+// revisionPlacement reads where a company document pins its seats, as
+// status.config.placement records it: only a value that can name one of the
+// company's pods, and at most as many as the status holds.
+func revisionPlacement(document []byte) (crewletaiv1alpha1.RevisionPlacement, error) {
+	p, err := render.PlacementOf(document)
+	if err != nil {
+		return crewletaiv1alpha1.RevisionPlacement{}, err
+	}
+	return boundedPlacement(p.Pools, p.Seats), nil
+}
+
+// boundedPlacement keeps the pools and seats that can name a company's pods,
+// sorted, the first in that order where there are more than the status
+// holds. Under Enforce no document pins more: a company's pools are at most
+// eight, and a seat beyond the thousandth in a PerSeat pool would be the
+// thousandth pod. Under Observe or Seed the engine's own document may say
+// anything; a pod pinned only by a seat beyond the bound is then kept for as
+// long as the Company places the seat in it.
+func boundedPlacement(pools, seats []string) crewletaiv1alpha1.RevisionPlacement {
+	keep := func(values []string, pattern *regexp.Regexp, maxLength, maxItems int) []string {
+		var out []string
+		for _, v := range values {
+			if len(v) <= maxLength && pattern.MatchString(v) {
+				out = append(out, v)
+			}
+		}
+		slices.Sort(out)
+		out = slices.Compact(out)
+		return out[:min(len(out), maxItems)]
+	}
+	placement := crewletaiv1alpha1.RevisionPlacement{
+		Pools: keep(pools, poolNamePattern, 20, maxPlacedPools),
+		Seats: keep(seats, seatHandlePattern, 63, maxPlacedSeats),
+	}
+	if len(placement.Pools) == 0 {
+		placement.Pools = nil
+	}
+	if len(placement.Seats) == 0 {
+		placement.Seats = nil
+	}
+	return placement
+}
+
+// recordPlacement records where the document the engine runs pins its seats.
+//
+// A revision the operator activates, or finds activated, runs only once the
+// engine has applied it, and the engine keeps running the previous one if
+// the apply fails. Until it is applied (exact is false) the record is
+// therefore the union of what it already held and the new document's pins,
+// so that no pod the previous revision still needs goes; settled narrows it
+// to the document alone (exact) once the engine reports the epoch applied.
+// A document the operator wrote nothing for, under Observe, is recorded
+// exactly at once.
+func (run *configRun) recordPlacement(placement crewletaiv1alpha1.RevisionPlacement, exact bool) {
+	recorded := run.company.Status.Config.Placement
+	if !exact {
+		running := placement
+		run.running = &running
+		placement = boundedPlacement(slices.Concat(recorded.Pools, placement.Pools), slices.Concat(recorded.Seats, placement.Seats))
+	}
+	config := run.config
+	if config == nil {
+		if equality.Semantic.DeepEqual(recorded, placement) {
+			return
+		}
+		config = run.company.Status.Config.DeepCopy()
+	}
+	config.Placement = placement
+	run.config = config
 }

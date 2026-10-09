@@ -421,6 +421,7 @@ _Appears in:_
 | `appliedHash` _string_ | appliedHash is the hash of the rendered document and of the values<br />of the Secret keys it references, as last applied: a change to<br />either is applied as a new revision, since the engine reads a<br />rotated value only when a revision activates. The values enter it<br />only as keyed fingerprints, so it reveals nothing about them. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `appliedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#time-v1-meta)_ | appliedAt is when the operator last applied a revision. |  | Optional: \{\} <br /> |
 | `objects` _[AppliedObjectCounts](#appliedobjectcounts)_ | objects counts the objects the revision was rendered from. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `placement` _[RevisionPlacement](#revisionplacement)_ | placement is where the revision the engine runs pins its agent seats,<br />read from the engine's document under every management policy. The<br />operator keeps a seat pool's pods running while the running revision<br />pins a seat to them, even after the pool or the seat's placement is<br />gone from the spec: a pod stopped while its seat is still pinned to<br />it would leave the seat held by nobody, and a blocked document keeps<br />the last good revision running. Once a revision that pins nothing to<br />them runs, the pods are deleted. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### ContainerWebhookMode
@@ -1872,6 +1873,27 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `backupOwner` _string_ | backupOwner names whoever is responsible for backing up the companies'<br />data volumes; the engine warns while none is named. Crewlet's<br />retention.backup_owner. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
+
+
+#### RevisionPlacement
+
+
+
+RevisionPlacement is where a revision of the company document pins its
+agent seats: the values of the two placement labels its roles name. Only
+values that can name one of the company's pods are recorded: a pool name
+and a seat handle.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [ConfigStatus](#configstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `pools` _string array_ | pools are the values of the crewlet.ai/pool placement label: data,<br />and each Shared pool a seat is pinned to. |  | MaxItems: 64 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
+| `seats` _string array_ | seats are the values of the crewlet.ai/seat placement label: the<br />handle of each seat pinned to its own pods in a PerSeat pool. A<br />revision that pins more seats than the list holds records the first<br />in handle order; the pods of the others are kept only while their<br />seats stay in a PerSeat pool. |  | MaxItems: 1024 <br />items:MaxLength: 63 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9][a-z0-9-]*$` <br />Optional: \{\} <br /> |
 
 
 #### S3ObjectSettings

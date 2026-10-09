@@ -760,16 +760,16 @@ var _ = Describe("Company config", Ordered, func() {
 			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(c), c)).To(Succeed())
 			c.Spec.EngineClassName = pools.Name
 			c.Spec.Topology.SeatPools = []crewletaiv1alpha1.SeatPool{
-				{Name: "general", Mode: crewletaiv1alpha1.SeatPoolShared},
-				{Name: "isolated", Mode: crewletaiv1alpha1.SeatPoolPerSeat},
+				{Name: poolGeneral, Mode: crewletaiv1alpha1.SeatPoolShared},
+				{Name: poolIsolated, Mode: crewletaiv1alpha1.SeatPoolPerSeat},
 			}
 			g.Expect(k8sClient.Update(ctx, c)).To(Succeed())
 		}).WithTimeout(settle).Should(Succeed())
 		placed := func(pool string) func(*crewletaiv1alpha1.Seat) {
 			return func(s *crewletaiv1alpha1.Seat) { s.Spec.Placement = crewletaiv1alpha1.SeatPlacement{Pool: pool} }
 		}
-		shared := newSeat(namespace, name, "shared", placed("general"))
-		alone := newSeat(namespace, name, "alone", placed("isolated"))
+		shared := newSeat(namespace, name, "shared", placed(poolGeneral))
+		alone := newSeat(namespace, name, "alone", placed(poolIsolated))
 		lost := newSeat(namespace, name, "lost", placed("nowhere"))
 		standIn(c)
 
@@ -784,13 +784,62 @@ var _ = Describe("Company config", Ordered, func() {
 
 		By("blocking the seat that can run, and recording where it is placed")
 		Eventually(reasonOf(shared, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonBlocked))
-		Expect(shared.Status.Placement.Pool).To(Equal("general"))
+		Expect(shared.Status.Placement.Pool).To(Equal(poolGeneral))
 		// The Company's status is written after its parts'.
 		Eventually(func(g Gomega) metav1.ConditionStatus {
 			return conditionOf(c, crewletaiv1alpha1.ConditionConfigApplied)(g).Status
 		}).WithTimeout(settle).Should(Equal(metav1.ConditionFalse))
 		_, err := e.Client().ActiveConfig(ctx)
 		Expect(err).To(MatchError(engine.ErrNoActiveRevision))
+	})
+
+	It("records where the revision the engine runs pins the seats, for the runtime to keep their pods", func() {
+		const name = "pinned"
+		e := startEngine(name)
+		secret(name+"-llm", map[string]string{llmKey: "k"})
+
+		pools := class.DeepCopy()
+		pools.ResourceVersion = ""
+		pools.Name = namespace + "-pinned"
+		pools.Spec.SeatPools = crewletaiv1alpha1.SeatPoolSettings{Policy: crewletaiv1alpha1.SeatPoolsAllowed, AllowPerSeat: new(true)}
+		Expect(k8sClient.Create(ctx, pools)).To(Succeed())
+		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, pools)).To(Succeed()) })
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce)
+		updateLive(c, func(c *crewletaiv1alpha1.Company) {
+			c.Spec.EngineClassName = pools.Name
+			c.Spec.Topology.SeatPools = []crewletaiv1alpha1.SeatPool{
+				{Name: poolGeneral, Mode: crewletaiv1alpha1.SeatPoolShared},
+				{Name: poolIsolated, Mode: crewletaiv1alpha1.SeatPoolPerSeat},
+			}
+		})
+		placed := func(pool string) func(*crewletaiv1alpha1.Seat) {
+			return func(s *crewletaiv1alpha1.Seat) { s.Spec.Placement = crewletaiv1alpha1.SeatPlacement{Pool: pool} }
+		}
+		newSeat(namespace, name, "ana")
+		newSeat(namespace, name, "bo", placed(poolGeneral))
+		cy := newSeat(namespace, name, "cy", placed(poolIsolated))
+		standIn(c)
+		placement := func(g Gomega) crewletaiv1alpha1.RevisionPlacement {
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(c), c)).To(Succeed())
+			return c.Status.Config.Placement
+		}
+
+		By("recording each pool a seat runs in, and each seat of a PerSeat pool")
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		Eventually(placement).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.RevisionPlacement{
+			Pools: []string{crewletaiv1alpha1.DataPool, poolGeneral}, Seats: []string{name + "-cy"},
+		}))
+
+		By("dropping a seat's own pods from the record once a revision that places it elsewhere is applied")
+		updateLive(cy, func(s *crewletaiv1alpha1.Seat) { s.Spec.Placement.Pool = poolGeneral })
+		Eventually(placement).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.RevisionPlacement{
+			Pools: []string{crewletaiv1alpha1.DataPool, poolGeneral},
+		}))
+		active, err := e.Client().ActiveConfig(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		pins, err := render.PlacementOf(active.Document)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(pins).To(Equal(render.Placement{Pools: []string{crewletaiv1alpha1.DataPool, poolGeneral}}), "the record is not what the engine runs")
 	})
 
 	It("refuses two Seats of one handle on both, and gives neither the handle's identity", func() {

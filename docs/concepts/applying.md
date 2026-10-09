@@ -207,7 +207,15 @@ Besides the conditions:
 - **Company** `status.config`: the revision the engine runs the rendered
   document as, its activation epoch, `appliedHash`, when the operator last
   applied, and how many objects of each kind it was rendered from (platform
-  model providers included).
+  model providers included). `status.config.placement` is where the document
+  the engine runs pins its agent seats: every value of `crewlet.ai/pool`
+  (`data` and the Shared pools that run a seat) and of `crewlet.ai/seat` (each
+  seat of a PerSeat pool). It is read from the engine's own document under
+  every policy, so under Observe and Seed too. While the engine applies a
+  new revision the record is the previous revision's pins and the new one's
+  together, because the engine keeps running the previous revision until it
+  has applied the new one, and for good if that apply fails; once the engine
+  reports the new revision's epoch applied, the record is its pins alone.
 - **Seat**: its handle, its identity in the engine (`seatID`, derived from
   the company name and the handle), the pool that runs it, and the addresses
   its own vendor apps deliver to: `<publicBaseURL>/webhooks/slack/<handle>`

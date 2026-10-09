@@ -1014,6 +1014,47 @@ type ConfigStatus struct {
 	// objects counts the objects the revision was rendered from.
 	// +optional
 	Objects AppliedObjectCounts `json:"objects,omitzero"`
+
+	// placement is where the revision the engine runs pins its agent seats,
+	// read from the engine's document under every management policy. The
+	// operator keeps a seat pool's pods running while the running revision
+	// pins a seat to them, even after the pool or the seat's placement is
+	// gone from the spec: a pod stopped while its seat is still pinned to
+	// it would leave the seat held by nobody, and a blocked document keeps
+	// the last good revision running. Once a revision that pins nothing to
+	// them runs, the pods are deleted.
+	// +optional
+	Placement RevisionPlacement `json:"placement,omitzero"`
+}
+
+// RevisionPlacement is where a revision of the company document pins its
+// agent seats: the values of the two placement labels its roles name. Only
+// values that can name one of the company's pods are recorded: a pool name
+// and a seat handle.
+// +kubebuilder:validation:MinProperties=1
+type RevisionPlacement struct {
+	// pools are the values of the crewlet.ai/pool placement label: data,
+	// and each Shared pool a seat is pinned to.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=20
+	// +kubebuilder:validation:items:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	Pools []string `json:"pools,omitempty"`
+
+	// seats are the values of the crewlet.ai/seat placement label: the
+	// handle of each seat pinned to its own pods in a PerSeat pool. A
+	// revision that pins more seats than the list holds records the first
+	// in handle order; the pods of the others are kept only while their
+	// seats stay in a PerSeat pool.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=1024
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=63
+	// +kubebuilder:validation:items:Pattern=`^[a-z0-9][a-z0-9-]*$`
+	Seats []string `json:"seats,omitempty"`
 }
 
 // CompanyEndpoints is where a company is reached. Every address is a base URL

@@ -1238,6 +1238,46 @@ spec:
                         minimum: 0
                         type: integer
                     type: object
+                  placement:
+                    description: |-
+                      placement is where the revision the engine runs pins its agent seats,
+                      read from the engine's document under every management policy. The
+                      operator keeps a seat pool's pods running while the running revision
+                      pins a seat to them, even after the pool or the seat's placement is
+                      gone from the spec: a pod stopped while its seat is still pinned to
+                      it would leave the seat held by nobody, and a blocked document keeps
+                      the last good revision running. Once a revision that pins nothing to
+                      them runs, the pods are deleted.
+                    minProperties: 1
+                    properties:
+                      pools:
+                        description: |-
+                          pools are the values of the crewlet.ai/pool placement label: data,
+                          and each Shared pool a seat is pinned to.
+                        items:
+                          maxLength: 20
+                          minLength: 1
+                          pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                          type: string
+                        maxItems: 64
+                        type: array
+                        x-kubernetes-list-type: set
+                      seats:
+                        description: |-
+                          seats are the values of the crewlet.ai/seat placement label: the
+                          handle of each seat pinned to its own pods in a PerSeat pool. A
+                          revision that pins more seats than the list holds records the first
+                          in handle order; the pods of the others are kept only while their
+                          seats stay in a PerSeat pool.
+                        items:
+                          maxLength: 63
+                          minLength: 1
+                          pattern: ^[a-z0-9][a-z0-9-]*$
+                          type: string
+                        maxItems: 1024
+                        type: array
+                        x-kubernetes-list-type: set
+                    type: object
                   revisionID:
                     description: |-
                       revisionID is the engine's id of the last revision the operator saw

@@ -178,6 +178,11 @@ func (run *configRun) settled(key types.NamespacedName, target int64, revision s
 	if remembered, ok := run.pending.settle(key, target); ok {
 		run.configApplied = &remembered
 	}
+	// The engine runs this document now, and no earlier one: its pins
+	// alone are what the pods must serve.
+	if run.running != nil {
+		run.recordPlacement(*run.running, true)
+	}
 	current := meta.FindStatusCondition(run.company.Status.Conditions, crewletaiv1alpha1.ConditionConfigApplied)
 	if run.wrote || (current != nil &&
 		(current.Reason == crewletaiv1alpha1.ReasonApplying || current.Reason == crewletaiv1alpha1.ReasonApplyFailed)) {
