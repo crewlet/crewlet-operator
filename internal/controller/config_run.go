@@ -43,6 +43,8 @@ type configRun struct {
 	configApplied *metav1.Condition
 	engineHealthy *metav1.Condition
 	config        *crewletaiv1alpha1.ConfigStatus
+	// wrote is whether this reconcile activated a revision.
+	wrote bool
 
 	// objectsChecked and secretsChecked are whether the reconcile got as
 	// far as resolving the parts' references to other objects, and to
@@ -76,12 +78,21 @@ const (
 	appliedObserved
 	// appliedNotManaged is a document the engine owns (Seed, once seeded).
 	appliedNotManaged
+	// appliedPending is a revision activated and not applied yet: the
+	// parts whose current generation the engine runs already stay in
+	// revision, the others are applying.
+	appliedPending
+	// appliedFailed is a revision the engine did not apply: the parts
+	// whose current generation the engine runs already stay in revision,
+	// the others are not applied.
+	appliedFailed
 )
 
 type appliedVerdict struct {
 	kind     appliedKind
 	revision string
-	// message says why, for appliedBlocked and appliedNotManaged.
+	// message says why, for appliedBlocked, appliedNotManaged and
+	// appliedFailed.
 	message string
 }
 
@@ -151,8 +162,8 @@ func (run *configRun) reconcile(ctx context.Context) (ctrl.Result, error) {
 		run.unavailable(err)
 		return ctrl.Result{RequeueAfter: engineRetryInterval}, nil
 	}
-	run.readHealth(ctx, eng)
-	return result, nil
+	health, healthErr := run.readHealth(ctx, eng)
+	return run.verifyApplied(ctx, eng, health, healthErr, result), nil
 }
 
 // resolveSecrets reads the values of every Secret key the document
@@ -448,6 +459,7 @@ func (run *configRun) recordApply(
 	applied engine.ApplyResult, hash string, drifted bool, active *engine.ActiveConfig, diffs []render.Path, summary string,
 ) {
 	now := metav1.Now()
+	run.wrote = true
 	run.config = &crewletaiv1alpha1.ConfigStatus{
 		RevisionID:  applied.RevisionID,
 		Epoch:       new(applied.Epoch),
@@ -477,8 +489,10 @@ func (run *configRun) recordApply(
 				"under the Enforce policy revision %s replaced it.", active.RevisionID, placesOf(diffs), applied.RevisionID)
 	}
 	run.configApplied = &condition
-	run.event(corev1.EventTypeNormal, crewletaiv1alpha1.ReasonApplied, "ApplyConfig", "Applied revision %s (%s).",
-		applied.RevisionID, summary)
+	// Activated, not applied: the engine applies it asynchronously, and
+	// verifyApplied records the Applied event once it has.
+	run.event(corev1.EventTypeNormal, "Activated", "ApplyConfig", "Activated revision %s as epoch %d (%s).",
+		applied.RevisionID, applied.Epoch, summary)
 	if len(applied.Warnings) > 0 {
 		run.event(corev1.EventTypeWarning, "EngineWarnings", "ApplyConfig", "The engine runs revision %s with warnings: %s",
 			applied.RevisionID, sentences(applied.Warnings))
@@ -841,25 +855,27 @@ func (run *configRun) objectCounts() crewletaiv1alpha1.AppliedObjectCounts {
 	}
 }
 
-// readHealth reads the engine's verdict on each tool, for the Integrations'
-// Healthy condition. A failure leaves Healthy as it was: it is the engine's
-// view, and the next look reads it again.
-func (run *configRun) readHealth(ctx context.Context, eng *engine.Client) {
-	health, err := eng.Health(ctx)
-	if err != nil {
-		logf.FromContext(ctx).V(1).Info("Failed to read the engine's health", "error", err.Error())
+// readHealth reads the engine's /health, for the EngineHealthy condition and
+// for verifyApplied, and its verdict on each tool, for the Integrations'
+// Healthy condition. A failure to read the tools leaves Healthy as it was:
+// it is the engine's view, and the next look reads it again.
+func (run *configRun) readHealth(ctx context.Context, eng *engine.Client) (engine.Health, error) {
+	health, healthErr := eng.Health(ctx)
+	if healthErr != nil {
+		logf.FromContext(ctx).V(1).Info("Failed to read the engine's health", "error", healthErr.Error())
 	}
-	run.engineHealthy = engineHealthy(health.Alarms, err)
+	run.engineHealthy = engineHealthy(health.Alarms, healthErr)
 
 	tools, err := eng.Integrations(ctx)
 	if err != nil {
 		logf.FromContext(ctx).V(1).Info("Failed to read the engine's integration status", "error", err.Error())
-		return
+		return health, healthErr
 	}
 	run.health = make(map[string]engine.IntegrationStatus, len(tools))
 	for _, t := range tools {
 		run.health[t.Key] = t
 	}
+	return health, healthErr
 }
 
 // engineHealthy is the EngineHealthy condition for the alarms an engine

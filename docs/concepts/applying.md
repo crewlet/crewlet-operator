@@ -82,6 +82,19 @@ flowchart TD
    The revision's summary is `crewlet-operator:` followed by the objects
    whose part of the document changed. A write that loses a race with
    another writer is started over once from a fresh read.
+   The write activates the revision and returns its activation epoch; the
+   engine applies it afterwards, on its own loop, and runs the previous
+   revision until it has. So the Company reports `ConfigApplied=False` with
+   the reason `Applying` until the engine's `/health` reports that epoch
+   applied (the operator looks every two seconds; it usually takes
+   milliseconds), and only then `True`. When the engine records the attempt
+   as failed, or has neither applied nor failed the epoch 72 seconds after
+   the write (four of its 18-second polls), the Company reports
+   `ConfigApplied=False ApplyFailed` with the engine's status, posture and
+   account of the failure, and an `ApplyFailed` event; the engine keeps
+   running the revision it applied last. The same check runs on every later
+   look, so an engine that fails a revision someone activates afterwards is
+   reported too.
 7. **Clean up** the store: every entry of the operator's shape that the new
    document does not reference is deleted. Entries of any other name — one a
    person wrote with `crewlet secrets set`, say — are never touched.
@@ -168,11 +181,11 @@ is never written to; the Company reports `Seeded` all the same, saying so.
 | Object | Condition | When |
 |---|---|---|
 | Company | `SecretsSynced` | `True`, `Synced`, once the store holds every referenced value. `False`, `SecretNotFound` or `SecretTooLarge`, naming each Secret and key; `False`, `EngineUnavailable` when a write to the store failed; `Unknown`, `NotManaged` under Observe, and under Seed once seeded. |
-| Company | `ConfigApplied` | `True` with `Applied`, `DriftCorrected`, `InSync` or `Seeded`. `False` with the reason of whatever blocks the document: `RefNotFound`, `Cycle`, `Conflict`, `SecretNotFound`, `SecretTooLarge`, `Invalid` (the engine's own words), `Drifted` (Observe) or `EngineUnavailable`. |
+| Company | `ConfigApplied` | `True` with `Applied`, `DriftCorrected`, `InSync` or `Seeded`, once the engine reports the revision's epoch applied. `False` with `Applying` while it applies it, `ApplyFailed` when it did not; otherwise with the reason of whatever blocks the document: `RefNotFound`, `Cycle`, `Conflict`, `SecretNotFound`, `SecretTooLarge`, `Invalid` (the engine's own words), `Drifted` (Observe) or `EngineUnavailable`. |
 | Company | `EngineHealthy` | The engine's alarm table, read each time the engine is reached: `True`, `NoAlarms`; `False`, `Alarms`, naming the one standing longest; `Unknown`, `AlarmsNotReported`, before the engine has evaluated them. Not part of `Ready`. |
 | every part | `Accepted` | `True` once its Company exists; `False` with `CompanyNotFound`, or `Conflict` when it collides with another object of its company. |
 | every part | `ResolvedRefs` | `False` with `RefNotFound`, `Cycle`, `SecretNotFound` or `SecretTooLarge`, saying what it references that is missing. |
-| every part | `Applied` | `True`, `InRevision`, naming the revision, with the generation that revision was rendered from as its `observedGeneration`. `False` with the part's own problem (`Invalid`, `RefNotFound`, ...), or `Blocked` when another object keeps the document from being applied. A part whose current generation already runs keeps `True` meanwhile: only what changed is held back. |
+| every part | `Applied` | `True`, `InRevision`, naming the revision, with the generation that revision was rendered from as its `observedGeneration`, once the engine has applied it. `False` with the part's own problem (`Invalid`, `RefNotFound`, ...), `Blocked` when another object keeps the document from being applied, `Applying` while the engine applies the revision, or `ApplyFailed` when it did not. A part whose current generation already runs keeps `True` meanwhile: only what changed is held back. |
 | Integration | `Healthy` | The engine's own verdict on the vendor: `True`, `CheckPassed`, when it reports the tool connected; `False`, `CheckFailed`, with the engine's reason otherwise; `False`, `NotExposed` while the Company has no public address, since no webhook can reach the engine. |
 
 Besides the conditions:
@@ -192,9 +205,11 @@ Besides the conditions:
   GitHub `<publicBaseURL>/webhooks/github`. Slack has none: each seat's app
   has its own.
 
-Every event the config reconciler records is on the Company: `Applied` with
-the revision and its summary, `SecretsSynced` with the store entries it wrote
-and deleted, `Drifted`, `Invalid` with the engine's problems, and
+Every event the config reconciler records is on the Company: `Activated`
+with the revision, its epoch and its summary, `Applied` once the engine has
+applied it, `ApplyFailed` when it did not, `SecretsSynced` with the store
+entries it wrote and deleted, `Drifted`, `Invalid` with the engine's problems,
+and
 `EngineWarnings` when the engine applied a revision it has something to say
 about. Events, conditions and logs name Secrets, keys and store entries,
 never a value.

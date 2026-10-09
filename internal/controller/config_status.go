@@ -154,6 +154,15 @@ func (run *configRun) decideApplied(p *part) {
 		}
 	case appliedNotManaged:
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, crewletaiv1alpha1.ReasonNotManaged, verdict.message)
+	case appliedPending:
+		if !p.inRevision() {
+			setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, crewletaiv1alpha1.ReasonApplying,
+				fmt.Sprintf("In revision %s, which the engine is applying.", verdict.revision))
+		}
+	case appliedFailed:
+		if !p.inRevision() {
+			setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, crewletaiv1alpha1.ReasonApplyFailed, verdict.message)
+		}
 	}
 }
 

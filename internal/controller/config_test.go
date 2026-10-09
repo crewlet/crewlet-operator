@@ -379,6 +379,10 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(history[0].Summary).To(HavePrefix("crewlet-operator: Company/nimbus"))
 		Expect(nimbus.Status.Config.RevisionID).To(Equal(active.RevisionID))
 		Expect(nimbus.Status.Config.Epoch).NotTo(BeNil())
+		health, err := e.Client().Health(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(health.AppliedEpoch).To(BeNumerically(">=", *nimbus.Status.Config.Epoch),
+			"ConfigApplied is True while the engine has not applied the epoch the write returned")
 		Expect(nimbus.Status.Config.AppliedHash).NotTo(BeEmpty())
 		Expect(nimbus.Status.Config.AppliedAt).NotTo(BeNil())
 		Expect(nimbus.Status.Config.Objects).To(Equal(crewletaiv1alpha1.AppliedObjectCounts{
@@ -466,7 +470,9 @@ var _ = Describe("Company config", Ordered, func() {
 
 		By("recording the apply, with no Secret value in any event")
 		events := log.of(name)
-		Expect(events).To(ContainElement(HavePrefix("Normal Applied Applied revision " + active.RevisionID)))
+		Expect(events).To(ContainElement(HavePrefix("Normal Activated Activated revision " + active.RevisionID + " as epoch")))
+		Expect(events).To(ContainElement("Normal Applied The engine applied revision " + active.RevisionID +
+			fmt.Sprintf(" (epoch %d).", *nimbus.Status.Config.Epoch)))
 		Expect(events).To(ContainElement(HavePrefix("Normal SecretsSynced")))
 		for _, ev := range events {
 			for _, value := range values {

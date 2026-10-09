@@ -33,13 +33,6 @@ const driftCheckInterval = 5 * time.Minute
 // the pod is not ready, and does not become ready, until it has a document.
 const engineRetryInterval = 10 * time.Second
 
-// applyPollInterval is how soon the config reconciler looks again after it
-// applied a revision. The engine activates a revision when the write returns
-// and applies it asynchronously, and the integrations' state it reports is
-// the applied revision's, so the first look right after a write would read
-// the previous one.
-const applyPollInterval = 2 * time.Second
-
 // CompanyConfigReconciler keeps the company document a Company's engine runs
 // equal to what the Company and its parts (Units, Seats, LLMProviders,
 // MCPServers, Integrations) declare, as the Company's
@@ -73,6 +66,10 @@ type CompanyConfigReconciler struct {
 	ResyncInterval time.Duration
 
 	changes changeClock
+	pending pendingApplies
+	// now is the clock the apply deadline is measured with; nil is the
+	// wall clock.
+	now func() time.Time
 }
 
 // Writes are patches, never updates. Secrets are read with get (values,
@@ -94,6 +91,7 @@ func (r *CompanyConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if err := r.Get(ctx, req.NamespacedName, company); err != nil {
 		if apierrors.IsNotFound(err) {
 			r.changes.forget(req.NamespacedName)
+			r.pending.forget(req.NamespacedName)
 			return ctrl.Result{}, r.orphan(ctx, req.NamespacedName)
 		}
 		return ctrl.Result{}, fmt.Errorf("reading Company %s: %w", req.NamespacedName, err)
@@ -102,6 +100,7 @@ func (r *CompanyConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		// The runtime reconciler stops the engine; there is no document
 		// left to keep.
 		r.changes.forget(req.NamespacedName)
+		r.pending.forget(req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 	// Before anything is rendered: a burst is often an object and what it

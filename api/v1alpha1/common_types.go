@@ -372,8 +372,26 @@ const (
 	// ReasonSynced is SecretsSynced=True.
 	ReasonSynced = "Synced"
 
-	// ReasonApplied is ConfigApplied=True.
+	// ReasonApplied is ConfigApplied=True: the engine reports the epoch of
+	// the revision the operator activated applied.
 	ReasonApplied = "Applied"
+
+	// ReasonApplying is ConfigApplied=False after the operator activated a
+	// revision and before the engine reports it applied: the engine applies
+	// a revision asynchronously, and runs the previous one meanwhile. It is
+	// also Applied=False on each child whose current generation is in that
+	// revision and not in the one the engine ran before.
+	ReasonApplying = "Applying"
+
+	// ReasonApplyFailed is ConfigApplied=False when the engine did not apply
+	// the revision it was given: it recorded the attempt as failed, or did
+	// not report the revision's epoch applied within a minute and twelve
+	// seconds. The engine keeps running the revision it applied last; the
+	// message carries its status, posture and own account of the failure,
+	// and an ApplyFailed event is recorded. It is also Applied=False on
+	// each child whose current generation is not in the revision the
+	// engine runs.
+	ReasonApplyFailed = "ApplyFailed"
 
 	// ReasonDriftCorrected is ConfigApplied=True after the operator
 	// overwrote a revision someone else made under the Enforce policy.

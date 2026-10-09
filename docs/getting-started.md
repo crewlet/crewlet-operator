@@ -204,14 +204,15 @@ bin/kubectl get seats -n acme \
 
 Edit an object and the operator applies the whole document again as a new
 revision, once two seconds have passed without another change. The Seat's
-`Applied` condition then names the new revision and the Seat's new
-generation:
+`Applied` condition takes the Seat's new generation, says `Applying` while
+the engine applies the revision, and then names it:
 
 ```bash
 bin/kubectl patch seat dev -n acme --type merge \
   -p '{"spec":{"goal":"Build what the lead decides, with tests."}}'
 bin/kubectl wait seat dev -n acme --timeout=1m \
   --for=jsonpath='{.status.conditions[?(@.type=="Applied")].observedGeneration}'=2
+bin/kubectl wait seat dev -n acme --timeout=1m --for=condition=Applied
 bin/kubectl get seat dev -n acme \
   -o jsonpath='{.status.conditions[?(@.type=="Applied")].message}{"\n"}'
 ```

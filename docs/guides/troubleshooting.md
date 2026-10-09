@@ -58,13 +58,15 @@ with your last change yet.
 | `EngineHealthy` | True | `NoAlarms` | The engine raises no alarm. |
 | | False | `Alarms` | The engine raises alarms; the message names the one standing longest. `backup_age` and `trim_blocked` mean it has no recent verified backup and trims no log: see [Backups](../concepts/runtime.md#backups). |
 | | Unknown | `AlarmsNotReported` | The engine has not evaluated its alarms yet, or could not be asked. |
-| `ConfigApplied` | True | `Applied` | The engine runs the rendered document; `status.config.revisionID` names the revision. |
+| `ConfigApplied` | True | `Applied` | The engine runs the rendered document: it reports the epoch of the revision `status.config.revisionID` names applied. |
 | | True | `DriftCorrected` | Under `Enforce`, someone changed the document in the engine and the operator applied the rendered one over it. A `Drifted` event names what differed. |
 | | True | `InSync` | Under `Observe`, the engine runs exactly the rendered document. |
 | | True | `Seeded` | Under `Seed`, the engine has a document and owns it from now on. |
 | | False | `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `SecretNotFound`, `SecretTooLarge` | An object of the company keeps the document from rendering. The object at fault reports the same reason; fix it there. |
 | | False | `Invalid` | The engine's dry run refused the document, in its own words. Each problem is also reported on the object that rendered it, as `Applied=False Invalid`. |
 | | False | `Drifted` | Under `Observe`, the engine runs another document; the message names the places that differ. |
+| | False | `Applying` | The operator activated the revision and the engine has not applied it yet; it runs the previous one meanwhile. Usually gone within seconds; it turns into `ApplyFailed` when the engine fails the revision or has not applied it 72 seconds after the write. |
+| | False | `ApplyFailed` | The engine did not apply the revision, and keeps running the one it applied last. The message carries the engine's status, its posture (`isolated` on a single node, `shed` or `stuck` beside peers that applied it) and its own account of the failure; see [The engine did not apply a revision](#the-engine-did-not-apply-a-revision). |
 | | False | `EngineUnavailable` | The operator cannot reach the engine or is refused by it. Retried every ten seconds; see [The operator cannot reach the engine](#the-operator-cannot-reach-the-engine). |
 
 ### Unit, Seat, LLMProvider, MCPServer, Integration
@@ -84,6 +86,8 @@ with your last change yet.
 | `Applied` | True | `InRevision` | It is in the revision the engine runs, which the message names; the condition's `observedGeneration` is the generation that revision holds. |
 | | False | `Invalid` | The engine refused its part of the document; the message is the engine's. |
 | | False | `Blocked` | It is fine, and another object keeps the document from being applied (a document is applied whole). Fix the object the Company's `ConfigApplied` names. A part whose current generation already runs keeps `True` meanwhile. |
+| | False | `Applying` | Its current generation is in a revision the engine is applying. |
+| | False | `ApplyFailed` | Its current generation is in a revision the engine did not apply; the Company's `ConfigApplied` says why. |
 | | False | `Drifted` | Under `Observe`, the engine's document differs from this object's part. |
 | | False | `NotManaged` | Under `Seed`, the engine owns the document; changes to this object are not applied. |
 | `Healthy` (Integration) | True | `CheckPassed` | The engine reports the vendor connected. |
@@ -109,7 +113,8 @@ kubectl logs acme-data-0 -n acme | grep -E 'WARN|ERROR' | tail
   Give the company a larger volume.
 - **`config_apply_failed`**: the revision was stored but this node could not
   start it; the message says why. The engine keeps running the previous
-  revision.
+  revision, and the Company reports `ConfigApplied=False ApplyFailed` (see
+  [The engine did not apply a revision](#the-engine-did-not-apply-a-revision)).
 - **The pod restarts** (`kubectl get pod` shows restarts): the engine refused
   its own configuration at boot, and the first lines of the previous log say
   why (`kubectl logs acme-data-0 -n acme --previous`).
@@ -133,10 +138,41 @@ requests to `http://<company>-data-0.<company>-data.<namespace>.svc:8080` fail:
 - The `<company>-api-tokens` Secret was changed by hand and the pod has not
   restarted yet: it rolls on its own once the operator sees the change.
 
+## The engine did not apply a revision
+
+`ConfigApplied=False ApplyFailed` means the engine stored and activated the
+revision the operator wrote and then could not apply it, or never did. It
+keeps serving the revision it applied last; the dry run accepted the new one,
+so what failed is something only applying it meets on this engine: a
+subsystem it could not start (the native tracker, the code sandbox, the
+inbound edge), or a rule that needs the data pod's own configuration. The
+condition's message carries the engine's account of the failure, its
+`status` and its `posture`:
+
+- `isolated`: the only node, or every node, failed the revision. It keeps
+  serving and stays ready, and retries the revision three times at most.
+- `shed` or `stuck`: peers applied it and this node cannot; it refuses new
+  work and fails `/ready` (`stuck` once out of retries).
+
+Read the log for `config_apply_failed`, fix the cause in the objects (or in
+the class, for the pod's own configuration), and the next change is a new
+revision the engine tries afresh. When the message says the engine neither
+applied nor failed the revision within 72 seconds, the engine is not
+polling its activation pointer at all; its log says why, and a restart of the
+data pod is the usual remedy.
+
+```bash
+kubectl logs acme-data-0 -n acme | grep -E 'config_apply_failed|reconcile_tick_failed' | tail
+kubectl get events -n acme --field-selector involvedObject.name=acme,reason=ApplyFailed
+```
+
 ## Changes are not applied
 
 - The object's `Applied` condition is `Blocked`: another object keeps the
   document back; the Company's `ConfigApplied` message names it.
+- The object's `Applied` condition is `Applying` for more than a few seconds,
+  or `ApplyFailed`: see
+  [The engine did not apply a revision](#the-engine-did-not-apply-a-revision).
 - The Company is under `Observe` or `Seed`
   ([Choosing a management policy](management-policies.md)).
 - A Secret change that leaves the value as it was writes nothing; a change to
