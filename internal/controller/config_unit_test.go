@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
+	"github.com/crewlet/crewlet-operator/internal/engine"
 	"github.com/crewlet/crewlet-operator/internal/render"
 	"github.com/crewlet/crewlet-operator/internal/secretref"
 	"github.com/crewlet/crewlet-operator/internal/secretsync"
@@ -342,5 +344,49 @@ func TestEngineStateChangedSeesWhyACompanyIsRefused(t *testing.T) {
 		ObjectNew: with(crewletaiv1alpha1.ConditionConfigApplied, crewletaiv1alpha1.ReasonApplied),
 	}) {
 		t.Error("the config reconciler's own condition re-runs it")
+	}
+}
+
+// TestEngineHealthyReportsTheEnginesAlarms pins the EngineHealthy condition:
+// unknown until the engine has looked, and pointing at backups when that is
+// what it raises.
+func TestEngineHealthyReportsTheEnginesAlarms(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		alarms  *engine.Alarms
+		err     error
+		status  metav1.ConditionStatus
+		reason  string
+		message string
+	}{
+		{
+			name: "unreachable", err: fmt.Errorf("dial tcp: connection refused"),
+			status: metav1.ConditionUnknown, reason: crewletaiv1alpha1.ReasonAlarmsNotReported, message: "connection refused",
+		},
+		{
+			name:   "not evaluated yet",
+			status: metav1.ConditionUnknown, reason: crewletaiv1alpha1.ReasonAlarmsNotReported, message: "not evaluated",
+		},
+		{
+			name: "none", alarms: &engine.Alarms{},
+			status: metav1.ConditionTrue, reason: crewletaiv1alpha1.ReasonNoAlarms, message: "no alarm",
+		},
+		{
+			name: "no backup", alarms: &engine.Alarms{Count: 5, Worst: "backup_age"},
+			status: metav1.ConditionFalse, reason: crewletaiv1alpha1.ReasonAlarms, message: "`crewlet backup`",
+		},
+		{
+			name: "another", alarms: &engine.Alarms{Count: 1, Worst: "objects_missing"},
+			status: metav1.ConditionFalse, reason: crewletaiv1alpha1.ReasonAlarms, message: "objects_missing has stood longest",
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got := engineHealthy(c.alarms, c.err)
+			if got.Type != crewletaiv1alpha1.ConditionEngineHealthy || got.Status != c.status || got.Reason != c.reason ||
+				!strings.Contains(got.Message, c.message) {
+				t.Errorf("got %s=%s %s %q, want %s %s containing %q",
+					got.Type, got.Status, got.Reason, got.Message, c.status, c.reason, c.message)
+			}
+		})
 	}
 }

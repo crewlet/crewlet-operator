@@ -147,14 +147,32 @@ func (c *Client) Ready(ctx context.Context) error {
 	return resp.refusal()
 }
 
+// Health returns what the engine's /health says about the answering node:
+// the activation epoch it has applied and its standing alarms.
+func (c *Client) Health(ctx context.Context) (Health, error) {
+	var answer struct {
+		AppliedEpoch int64 `json:"applied_epoch"`
+		Alarms       *struct {
+			Count int    `json:"count"`
+			Worst string `json:"worst"`
+		} `json:"alarms"`
+	}
+	if err := c.call(ctx, request{method: http.MethodGet, path: "/health"}, http.StatusOK, &answer); err != nil {
+		return Health{}, err
+	}
+	h := Health{AppliedEpoch: answer.AppliedEpoch}
+	if a := answer.Alarms; a != nil {
+		h.Alarms = &Alarms{Count: a.Count, Worst: a.Worst}
+	}
+	return h, nil
+}
+
 // ActiveConfig returns the company document the engine runs, redacted, with
 // its revision. Before the first apply it fails with ErrNoActiveRevision.
 func (c *Client) ActiveConfig(ctx context.Context) (ActiveConfig, error) {
 	// THE EPOCH FIRST: see ActiveConfig.Epoch for why the order matters.
-	var health struct {
-		AppliedEpoch int64 `json:"applied_epoch"`
-	}
-	if err := c.call(ctx, request{method: http.MethodGet, path: "/health"}, http.StatusOK, &health); err != nil {
+	health, err := c.Health(ctx)
+	if err != nil {
 		return ActiveConfig{}, err
 	}
 	resp, err := c.roundTrip(ctx, request{

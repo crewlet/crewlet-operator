@@ -41,6 +41,7 @@ type configRun struct {
 	// one as it was, and status.config when it changed it.
 	secretsSynced *metav1.Condition
 	configApplied *metav1.Condition
+	engineHealthy *metav1.Condition
 	config        *crewletaiv1alpha1.ConfigStatus
 
 	// objectsChecked and secretsChecked are whether the reconcile got as
@@ -844,6 +845,12 @@ func (run *configRun) objectCounts() crewletaiv1alpha1.AppliedObjectCounts {
 // Healthy condition. A failure leaves Healthy as it was: it is the engine's
 // view, and the next look reads it again.
 func (run *configRun) readHealth(ctx context.Context, eng *engine.Client) {
+	health, err := eng.Health(ctx)
+	if err != nil {
+		logf.FromContext(ctx).V(1).Info("Failed to read the engine's health", "error", err.Error())
+	}
+	run.engineHealthy = engineHealthy(health.Alarms, err)
+
 	tools, err := eng.Integrations(ctx)
 	if err != nil {
 		logf.FromContext(ctx).V(1).Info("Failed to read the engine's integration status", "error", err.Error())
@@ -854,6 +861,39 @@ func (run *configRun) readHealth(ctx context.Context, eng *engine.Client) {
 		run.health[t.Key] = t
 	}
 }
+
+// engineHealthy is the EngineHealthy condition for the alarms an engine
+// reports, or for the error that kept it from reporting them.
+func engineHealthy(alarms *engine.Alarms, err error) *metav1.Condition {
+	c := &metav1.Condition{Type: crewletaiv1alpha1.ConditionEngineHealthy}
+	switch {
+	case err != nil:
+		c.Status, c.Reason = metav1.ConditionUnknown, crewletaiv1alpha1.ReasonAlarmsNotReported
+		c.Message = "The engine's health could not be read: " + err.Error()
+	case alarms == nil:
+		c.Status, c.Reason = metav1.ConditionUnknown, crewletaiv1alpha1.ReasonAlarmsNotReported
+		c.Message = "The engine has not evaluated its alarms yet."
+	case alarms.Count == 0:
+		c.Status, c.Reason = metav1.ConditionTrue, crewletaiv1alpha1.ReasonNoAlarms
+		c.Message = "The engine raises no alarm."
+	default:
+		c.Status, c.Reason = metav1.ConditionFalse, crewletaiv1alpha1.ReasonAlarms
+		c.Message = fmt.Sprintf("The engine raises %d alarm(s); %s has stood longest.", alarms.Count, alarms.Worst)
+		if alarms.Worst == alarmBackupAge || alarms.Worst == alarmTrimBlocked {
+			c.Message += " The engine trims its logs only behind a recent verified backup, and refuses " +
+				"ordinary writes once a log reaches its ceiling: take one with `crewlet backup` in the data pod " +
+				"(docs/concepts/runtime.md, \"Backups\")."
+		}
+	}
+	return c
+}
+
+// The engine's alarms about backups, which every operator-run company
+// raises until a backup is taken.
+const (
+	alarmBackupAge   = "backup_age"
+	alarmTrimBlocked = "trim_blocked"
+)
 
 // event records an event on the Company. Its note never carries a Secret
 // value: every caller passes names, revisions and the engine's own words,

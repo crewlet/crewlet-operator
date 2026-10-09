@@ -907,7 +907,8 @@ type CompanyEndpoints struct {
 // +kubebuilder:validation:MinProperties=1
 type CompanyStatus struct {
 	// conditions are Ready (the summary), Accepted, RuntimeReady,
-	// SecretsSynced, ConfigApplied and Exposed.
+	// SecretsSynced, ConfigApplied and Exposed, which Ready summarizes, and
+	// EngineHealthy, which it does not.
 	// +optional
 	// +listType=map
 	// +listMapKey=type

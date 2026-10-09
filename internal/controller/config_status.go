@@ -270,14 +270,14 @@ func unitTree(parts []*part) map[string]unitFacts {
 // has not been rendered, and claiming it was would let Ready report it
 // applied. The generation change queues the Company again.
 func (run *configRun) patchCompanyStatus(ctx context.Context) error {
-	if run.secretsSynced == nil && run.configApplied == nil && run.config == nil {
+	if run.secretsSynced == nil && run.configApplied == nil && run.engineHealthy == nil && run.config == nil {
 		return nil
 	}
 	company := run.company
 	generation := company.Generation
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		base := company.DeepCopy()
-		for _, c := range []*metav1.Condition{run.secretsSynced, run.configApplied} {
+		for _, c := range []*metav1.Condition{run.secretsSynced, run.configApplied, run.engineHealthy} {
 			if c == nil {
 				continue
 			}

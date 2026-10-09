@@ -256,6 +256,14 @@ const (
 	// document rendered from the Company and its children.
 	ConditionConfigApplied = "ConfigApplied"
 
+	// ConditionEngineHealthy reports whether the engine raises any alarm
+	// (its /health alarm table): backup_age and trim_blocked, which say the
+	// engine has no recent verified backup and so trims none of its logs,
+	// are the ones an operator-run company meets first. It does not count
+	// towards Ready: an engine with an alarm still runs the company, but
+	// one whose logs reach their ceiling refuses ordinary writes.
+	ConditionEngineHealthy = "EngineHealthy"
+
 	// ConditionExposed reports whether the routes the EngineClass asks for
 	// exist and were accepted.
 	ConditionExposed = "Exposed"
@@ -314,6 +322,17 @@ const (
 	// every value the engine has sealed depends on it; the message says
 	// what to repair.
 	ReasonKeyringInvalid = "KeyringInvalid"
+
+	// ReasonNoAlarms is EngineHealthy=True: the engine raises no alarm.
+	ReasonNoAlarms = "NoAlarms"
+
+	// ReasonAlarms is EngineHealthy=False: the engine raises alarms; the
+	// message says how many and names the one standing longest.
+	ReasonAlarms = "Alarms"
+
+	// ReasonAlarmsNotReported is EngineHealthy=Unknown: the engine has not
+	// evaluated its alarms yet, or could not be asked.
+	ReasonAlarmsNotReported = "AlarmsNotReported"
 
 	// ReasonAPITokensInvalid is RuntimeReady=False when the company's API
 	// tokens Secret, as another controller supplies it, lacks a token or

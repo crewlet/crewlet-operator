@@ -229,7 +229,7 @@ other:
 |---|---|
 | `conditions` `Accepted`, `RuntimeReady`, `Exposed`, `Ready` | the runtime reconciler (this page) |
 | `observedGeneration`, `engine`, `topology`, `endpoints`, `apiAccessSecretRef` | the runtime reconciler |
-| `conditions` `SecretsSynced`, `ConfigApplied`; `config` | the config reconciler, which [applies the company document](applying.md) |
+| `conditions` `SecretsSynced`, `ConfigApplied`, `EngineHealthy`; `config` | the config reconciler, which [applies the company document](applying.md) |
 
 `Ready` is `True` when `Accepted`, `RuntimeReady`, `Exposed` and
 `ConfigApplied` all are. Otherwise its reason is the reason of the first of
@@ -238,6 +238,38 @@ not been reported for the Company's current generation; a suspended Company
 reports `Suspended`. So `Ready=True` with an `observedGeneration` equal to
 `metadata.generation` means the engine runs the document of that generation,
 which is what a client waiting for a change to take effect checks.
+
+`EngineHealthy` is the engine's own alarm table, read from its `/health` each
+time the config reconciler reaches it: `True` (`NoAlarms`), `False` (`Alarms`,
+with how many and the one standing longest) or `Unknown`
+(`AlarmsNotReported`, before the engine has evaluated them). `Ready` does not
+include it: an engine with an alarm still runs the company.
+
+## Backups
+
+The operator takes no backup, and Crewlet needs them for more than recovery:
+it trims its logs (the work tracker, the knowledge base's pages and
+vectors, usage) only behind a verified backup younger than its
+`stream.tracker_retention.backup_max_age`, 24 hours by default, which the
+operator leaves as it is. Without one the logs grow until they reach the
+ceilings the data volume is sized for, and the engine then refuses ordinary
+writes. A new company raises the `backup_age` and `trim_blocked` alarms from
+the start, which `EngineHealthy=False Alarms` shows.
+
+Take backups through the engine, which is the only process that can read its
+estate. `crewlet backup` writes a verified copy into a directory on the data
+pod's volume, without stopping the engine:
+
+```bash
+kubectl exec -n acme acme-data-0 -- crewlet backup -config /etc/crewlet/crewlet.yaml \
+  -url http://127.0.0.1:8080 -dir /var/lib/crewlet/backups/$(date -u +%Y-%m-%dT%H-%M)
+```
+
+Run it at least daily. Copy each backup off the volume (`kubectl cp`), since
+one on the volume it protects survives nothing that loses the volume, and
+delete old ones from the volume: they count against its size. Back up the `<company>-keyring` Secret with the volume's copies: one
+opens nothing without the other. Crewlet's own guide, *Backups & Restore*,
+covers what a backup holds and how to restore one.
 
 ## Reaching the engine
 

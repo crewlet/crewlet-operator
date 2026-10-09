@@ -369,6 +369,9 @@ var _ = Describe("Company config", Ordered, func() {
 
 		By("waiting for the document to be applied")
 		applied(nimbus, crewletaiv1alpha1.ReasonApplied)
+		By("reporting the engine's alarms")
+		Eventually(reasonOf(nimbus, crewletaiv1alpha1.ConditionEngineHealthy)).WithTimeout(settle).
+			Should(BeElementOf(crewletaiv1alpha1.ReasonNoAlarms, crewletaiv1alpha1.ReasonAlarms, crewletaiv1alpha1.ReasonAlarmsNotReported))
 		active := runsRendered(e, nimbus)
 		history := revisions(e)
 		Expect(history).To(HaveLen(1), "one write, the whole document")

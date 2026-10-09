@@ -957,7 +957,8 @@ spec:
               conditions:
                 description: |-
                   conditions are Ready (the summary), Accepted, RuntimeReady,
-                  SecretsSynced, ConfigApplied and Exposed.
+                  SecretsSynced, ConfigApplied and Exposed, which Ready summarizes, and
+                  EngineHealthy, which it does not.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.

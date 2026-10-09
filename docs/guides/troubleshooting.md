@@ -56,6 +56,9 @@ with your last change yet.
 | | False | `EngineUnavailable` | Writing to the store failed; the message says why. Retried. |
 | | False | `NameConflict` | A Secret `<company>-secret-sync`, where the operator keeps what it pushed, exists and is someone else's. Rename or delete it; nothing is applied meanwhile. |
 | | Unknown | `NotManaged` | The management policy keeps the operator out of the store (`Observe`; `Seed` once seeded). |
+| `EngineHealthy` | True | `NoAlarms` | The engine raises no alarm. |
+| | False | `Alarms` | The engine raises alarms; the message names the one standing longest. `backup_age` and `trim_blocked` mean it has no recent verified backup and trims no log: see [Backups](../concepts/runtime.md#backups). |
+| | Unknown | `AlarmsNotReported` | The engine has not evaluated its alarms yet, or could not be asked. |
 | `ConfigApplied` | True | `Applied` | The engine runs the rendered document; `status.config.revisionID` names the revision. |
 | | True | `DriftCorrected` | Under `Enforce`, someone changed the document in the engine and the operator applied the rendered one over it. A `Drifted` event names what differed. |
 | | True | `InSync` | Under `Observe`, the engine runs exactly the rendered document. |

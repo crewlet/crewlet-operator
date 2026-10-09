@@ -706,3 +706,34 @@ func TestRedirectsAreNotFollowed(t *testing.T) {
 		})
 	}
 }
+
+// TestHealthReadsTheAlarms pins the alarm table the operator reports on the
+// Company: absent until the engine has evaluated it, and a real zero after.
+func TestHealthReadsTheAlarms(t *testing.T) {
+	for _, c := range []struct {
+		name, body string
+		want       *engine.Alarms
+	}{
+		{name: "not evaluated yet", body: `{"status":"ok","applied_epoch":2}`},
+		{name: "none firing", body: `{"applied_epoch":2,"alarms":{"count":0}}`, want: &engine.Alarms{}},
+		{
+			name: "firing", body: `{"applied_epoch":2,"alarms":{"count":3,"worst":"backup_age"}}`,
+			want: &engine.Alarms{Count: 3, Worst: "backup_age"},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			f.handle("GET /health", answer(http.StatusOK, c.body))
+			got, err := f.client().Health(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.AppliedEpoch != 2 {
+				t.Errorf("AppliedEpoch = %d, want 2", got.AppliedEpoch)
+			}
+			if (got.Alarms == nil) != (c.want == nil) || (c.want != nil && *got.Alarms != *c.want) {
+				t.Errorf("Alarms = %+v, want %+v", got.Alarms, c.want)
+			}
+		})
+	}
+}

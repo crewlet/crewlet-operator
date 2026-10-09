@@ -15,6 +15,9 @@ the same on a laptop, from source.
   ([Exposure and network policy](exposure.md#network-policy)).
 - A default StorageClass, or the one your EngineClasses name, that provisions
   `ReadWriteOnce` volumes of at least 7Gi.
+- A way to take each company's backups: the operator takes none, and the
+  engine trims its logs only behind a recent one, refusing writes once they
+  are full ([Backups](../concepts/runtime.md#backups)).
 - For webhook routes: the Gateway API and an implementation of it, or an
   Ingress controller ([Exposure](exposure.md)). The operator detects the
   Gateway API when it starts.

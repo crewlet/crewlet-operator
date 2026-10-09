@@ -23,6 +23,26 @@ type ActiveConfig struct {
 	Document []byte
 }
 
+// Health is what an engine's /health says about the node that answered.
+type Health struct {
+	// AppliedEpoch is the activation epoch the node has applied.
+	AppliedEpoch int64
+
+	// Alarms is the node's standing alarms, nil before the engine has
+	// first evaluated them or on a node that keeps no state log: neither
+	// has looked, which is not the same as no alarm.
+	Alarms *Alarms
+}
+
+// Alarms is how many of a node's alarms are firing, and which has stood
+// longest, such as backup_age or trim_blocked.
+type Alarms struct {
+	// Count is how many are firing; zero is a real zero.
+	Count int
+	// Worst names the one firing longest; empty when none is.
+	Worst string
+}
+
 // ApplyRequest is one write of the whole company document.
 type ApplyRequest struct {
 	// Document is the company document, YAML (or JSON, which is YAML). It
