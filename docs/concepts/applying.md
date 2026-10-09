@@ -214,14 +214,20 @@ spec:                       # Seat ana
   stopRunning: true                                      # optional: end the turn it is on now
 ```
 
-On every look at the engine, whatever became of the document, the operator
-reads which seats the engine holds paused, from its roster (`GET /agents`, the
-account its dashboard draws), and, under `Enforce`, makes each Seat that sets
-`spec.paused` match it: it calls the engine's `pause_seat` or `resume_seat`
-tool, over the engine's operator catalogue (`/operator/mcp`), with its own
-token. Both are no-ops on a seat already in the state asked for, so a second
-call changes nothing; a call the engine may or may not have recorded is made
-again ten seconds later.
+On every look at the engine, whatever became of the document, the operator,
+under `Enforce`, calls the engine's `pause_seat` or `resume_seat` tool for
+each Seat that sets `spec.paused`, over the engine's operator catalogue
+(`/operator/mcp`), with its own token. Both are no-ops on a seat already in
+the state asked for, and both answer with the pause as the engine's
+coordination store records it, which is what the Seat then reports. The
+operator does not decide from the engine's roster (`GET /agents`, the
+account its dashboard draws) whether to call: the roster is moved by the
+announcement of each pause and resume, and a node that missed one would
+report the brake held when it is not. It reads the roster for the Seats
+that do not own their pause, whose pause it only reports, and to know which
+seats the engine runs at all. A call the engine may or may not have
+recorded, or refused (the record changed under it, say), is made again ten
+seconds later, and so is every owned pause while the roster cannot be read.
 
 **Who owns a pause.** Only a Seat that sets `spec.paused`, and only under
 `Enforce`. A pause or resume made in the dashboard of such a seat is undone on
@@ -241,9 +247,20 @@ while the seat stays paused shows from its next pause on. Setting
 it changes nothing, since a stopped turn is not run again.
 
 The engine knows no seat it does not run, so a Seat created with
-`paused: true` is paused once the revision that adds it is applied, a few
-seconds after. A Human seat has no pause: the engine takes no work for a
-person that a pause could hold.
+`paused: true` is paused once the revision that adds it is applied: the
+operator looks again every two seconds while the engine applies it, and
+pauses the seat on the first look that finds it. In the seconds between, the
+seat runs: a Seat created again under a handle whose durable inbox kept
+messages can start on them before the pause lands. Pause it in the engine's
+dashboard first, or create it with `paused: true` in a revision that holds
+nothing else back, where that matters.
+
+A pause outlives its Seat: the engine keeps the record, which never expires,
+when a Seat with `spec.paused: true` is deleted, and a later Seat with the
+same handle starts paused even with `spec.paused` unset, which leaves the
+pause to the dashboard. Create it with `spec.paused: false`, or resume it in
+the dashboard, to start it running. A Human seat has no pause: the engine
+takes no work for a person that a pause could hold.
 
 ## What each object reports
 
@@ -256,7 +273,7 @@ person that a pause could hold.
 | every part | `ResolvedRefs` | `False` with `RefNotFound`, `Cycle`, `PoolNotFound`, `SecretNotFound` or `SecretTooLarge`, saying what it references that is missing. |
 | every part | `Applied` | `True`, `InRevision`, naming the revision, with the generation that revision was rendered from as its `observedGeneration`, once the engine has applied it. `False` with the part's own problem (`Invalid`, `RefNotFound`, a Seat's `PerSeatNotAllowed`, `PoolCapacityExceeded`, `AgentModeBridgeUnsupported` or `CLIAuthNotPortable`, ...), a Seat's `PlacementPending` while it stays where it runs until a pod of the pool it moves to is ready, `Blocked` when another object keeps the document from being applied, `Applying` while the engine applies the revision, or `ApplyFailed` when it did not. A part whose current generation already runs keeps `True` meanwhile: only what changed is held back. |
 | Seat (agent) | `Ready` | Whether an engine pod holds the seat's lease and runs it, as the engine's `GET /fleet` reports, read each time the operator reaches the engine: `True`, `LeaseHeld`, naming the pod (and saying so when it is not a pod of the seat's StatefulSet yet, while the engine moves it); `False`, `Unplaced`, while no pod holds it, saying why: the seat is not in the revision the engine runs, its pool runs no pod, or the engine has not claimed it yet; `False`, `Suspended`; `Unknown`, `EngineUnavailable`, when the fleet could not be read. Unchanged while the operator does not reach the engine. A Human seat has none. |
-| Seat (Agent) | `Paused` | Whether the engine holds the seat paused, once it runs the seat: `True`, `SeatPaused`, naming who paused it, when and why; `False`, `SeatRunning`; with `PauseNotManaged` instead when the pause differs from `spec.paused` under `Observe` or `Seed`. `Unknown`, `PauseUnknown`, while a pause or resume the engine may or may not have recorded is retried; `Unknown`, `PauseRefused`, with the engine's words when it refused one. |
+| Seat (Agent) | `Paused` | Whether the engine holds the seat paused, once it runs the seat: `True`, `SeatPaused`, naming who paused it, when and why; `False`, `SeatRunning`; with `PauseNotManaged` instead when the pause differs from `spec.paused` under `Observe` or `Seed`. `Unknown`, `PauseUnknown`, while a pause or resume the engine may or may not have recorded is retried; `Unknown`, `PauseRefused`, with the engine's words when it refused one, which is asked for again ten seconds later. None while the engine runs no seat of the Seat's (not in its revision, or a handle another Seat derives too). |
 | Integration | `Healthy` | The engine's own verdict on the vendor: `True`, `CheckPassed`, when it reports the tool connected; `False`, `CheckFailed`, with the engine's reason otherwise; `False`, `NotExposed` while the Company has no public address, since no webhook can reach the engine. |
 
 Besides the conditions:

@@ -47,34 +47,75 @@ type pauseVerdict struct {
 	pause engine.SeatPause
 }
 
-// syncPauses reads which of the company's seats the engine holds paused and,
-// under Enforce, pauses or resumes each Seat whose spec.paused says otherwise.
-// It records a verdict on every agent Seat the engine runs and returns result,
-// sooner when a call should be made again. An engine that cannot be read
-// leaves every Paused condition as it was: the document's own conditions say
-// why the engine did not answer.
+// syncPauses reconciles the pause of every agent Seat of the company and
+// returns result, sooner when a call should be made again.
+//
+// A Seat that owns its pause (spec.paused set, under Enforce) is paused or
+// resumed on every look, whatever the engine's roster says: both tools change
+// nothing on a seat already as asked, and answer with the coordination
+// store's own record of the pause. The roster (GET /agents) is the engine's
+// dashboard projection, moved by the announcement of each change, so a node
+// that missed one reports a pause that is not the record's, and the brake
+// would read as held when it is not. The roster is read to report the pause
+// of a Seat that does not own it, and to tell which seats the engine runs at
+// all: a seat it does not run has no pause to take. A roster that cannot be
+// read leaves those Seats' Paused conditions as they were.
 func (run *configRun) syncPauses(ctx context.Context, eng *engine.Client, result ctrl.Result) ctrl.Result {
-	pauses, err := eng.SeatPauses(ctx)
-	if err != nil {
-		logf.FromContext(ctx).V(1).Info("Failed to read the engine's seat pauses", "error", err.Error())
-		return result
+	pauses, rosterErr := eng.SeatPauses(ctx)
+	if rosterErr != nil {
+		logf.FromContext(ctx).V(1).Info("Failed to read the engine's seat pauses", "error", rosterErr.Error())
 	}
+	enforce := run.policy() == crewletaiv1alpha1.ManagementPolicyEnforce
 	var retry time.Duration
+	soon := func(d time.Duration) {
+		if d > 0 && (retry == 0 || d < retry) {
+			retry = d
+		}
+	}
 	for _, p := range run.parts {
 		seat, ok := p.obj.(*crewletaiv1alpha1.Seat)
-		if !ok || seat.Spec.Kind == crewletaiv1alpha1.SeatKindHuman || p.handleTaken {
+		if !ok || seat.Spec.Kind == crewletaiv1alpha1.SeatKindHuman {
+			continue
+		}
+		if p.handleTaken {
+			// The seat a handle two Seats derive is neither's to report.
+			p.pauseGone = true
 			continue
 		}
 		state, listed := pauses[render.SeatHandle(seat)]
-		if !listed {
+		owned := enforce && seat.Spec.Paused != nil
+		switch {
+		case rosterErr == nil && !listed:
 			// Not in the revision the engine runs yet, or no longer: there
-			// is no seat of the engine's to pause.
-			continue
+			// is no seat of the engine's to pause. A Seat that asks to be
+			// paused is looked at again as soon as the revision that adds
+			// it can be applied, for the pause to follow it closely.
+			p.pauseGone = true
+			if owned && *seat.Spec.Paused {
+				// While the revision applies, at its own pace; once it
+				// runs, until the roster, which follows it, lists the seat.
+				switch run.applied.kind {
+				case appliedPending:
+					soon(applyPollInterval)
+				case appliedInRevision:
+					soon(engineRetryInterval)
+				case appliedUnknown, appliedBlocked, appliedObserved, appliedNotManaged, appliedFailed:
+					// No revision that adds the seat is on its way.
+				}
+			}
+		case owned:
+			verdict, again := run.syncPause(ctx, eng, seat, state)
+			p.pause = &verdict
+			soon(again)
+		case rosterErr != nil:
+		default:
+			verdict, _ := run.syncPause(ctx, eng, seat, state)
+			p.pause = &verdict
 		}
-		verdict, again := run.syncPause(ctx, eng, seat, state)
-		p.pause = &verdict
-		if again > 0 && (retry == 0 || again < retry) {
-			retry = again
+		if owned && rosterErr != nil {
+			// The pause was taken or lifted all the same; the roster that
+			// says whether the engine runs the seat is read again soon.
+			soon(engineRetryInterval)
 		}
 	}
 	if retry > 0 && (result.RequeueAfter == 0 || retry < result.RequeueAfter) {
@@ -83,27 +124,29 @@ func (run *configRun) syncPauses(ctx context.Context, eng *engine.Client, result
 	return result
 }
 
-// syncPause decides one seat's pause from what the engine holds, calling the
-// engine when Enforce has it differ from the Seat; again is how soon to look
-// once more, zero for the reconcile's own interval.
+// syncPause decides one seat's pause: for a Seat that owns its pause, from
+// the engine's answer to the call that makes it so; otherwise from state, the
+// roster's account of it. again is how soon to look once more, zero for the
+// reconcile's own interval.
 func (run *configRun) syncPause(
 	ctx context.Context, eng *engine.Client, seat *crewletaiv1alpha1.Seat, state engine.SeatPause,
 ) (verdict pauseVerdict, again time.Duration) {
 	want := seat.Spec.Paused
-	handle := render.SeatHandle(seat)
 	stop := seat.Spec.StopRunning != nil && *seat.Spec.StopRunning
-	differs := want != nil && (*want != state.Paused || (*want && stop && !state.StopRunning))
 	switch {
-	case !differs:
+	case want == nil:
 		return reported(state), 0
 	case run.policy() != crewletaiv1alpha1.ManagementPolicyEnforce:
 		v := reported(state)
-		v.reason = crewletaiv1alpha1.ReasonPauseNotManaged
-		v.message += fmt.Sprintf(" spec.paused asks for it to be %s; under the Company's %s policy the operator changes no pause.",
-			pausedWord(*want, stop), run.policy())
+		if *want != state.Paused || (*want && stop && !state.StopRunning) {
+			v.reason = crewletaiv1alpha1.ReasonPauseNotManaged
+			v.message += fmt.Sprintf(" spec.paused asks for it to be %s; under the Company's %s policy the operator changes no pause.",
+				pausedWord(*want, stop), run.policy())
+		}
 		return v, 0
 	}
 
+	handle := render.SeatHandle(seat)
 	var answer engine.PauseResult
 	var err error
 	if *want {
@@ -120,17 +163,19 @@ func (run *configRun) syncPause(
 				changeWord(*want), engineRetryInterval, err),
 		}, engineRetryInterval
 	case errors.As(err, &refused):
+		// A refusal is often contention (the record lost to other writers
+		// several times in a row), which the next call wins: a brake asked
+		// for is asked for again soon rather than at the next resync.
 		return pauseVerdict{
 			status: metav1.ConditionUnknown, reason: crewletaiv1alpha1.ReasonPauseRefused,
-			message: fmt.Sprintf("The engine refused the operator's %s of the seat: %s", changeWord(*want), refused.Message),
-		}, 0
+			message: fmt.Sprintf("The engine refused the operator's %s of the seat, which it asks for again in %s: %s",
+				changeWord(*want), engineRetryInterval, refused.Message),
+		}, engineRetryInterval
 	case err != nil:
-		// The engine did not answer: the call is made again on the next
-		// look, which an engine that cannot be reached brings soon.
 		logf.FromContext(ctx).V(1).Info("Failed to change a seat's pause", "seat", seat.Name, "error", err.Error())
 		return pauseVerdict{
 			status: metav1.ConditionUnknown, reason: crewletaiv1alpha1.ReasonPauseUnknown,
-			message: fmt.Sprintf("The operator's %s of the seat did not reach the engine; it tries again in %s: %s.",
+			message: fmt.Sprintf("The operator's %s of the seat may not have reached the engine; it tries again in %s: %s.",
 				changeWord(*want), engineRetryInterval, err),
 		}, engineRetryInterval
 	}
@@ -208,9 +253,17 @@ func changeWord(paused bool) string {
 
 // decidePause sets a Seat's Paused condition and status.pause from the
 // reconcile's verdict. A Human seat has neither: the engine takes no work for
-// a person that a pause could hold. A Seat with no verdict keeps what it had.
+// a person that a pause could hold; nor has a Seat the engine runs no seat of
+// (not in its revision, or a handle another Seat takes too). A Seat with no
+// verdict keeps what it had.
 func decidePause(p *part, seat *crewletaiv1alpha1.Seat) {
 	if seat.Spec.Kind == crewletaiv1alpha1.SeatKindHuman {
+		meta.RemoveStatusCondition(&seat.Status.Conditions, crewletaiv1alpha1.ConditionPaused)
+		seat.Status.Pause = crewletaiv1alpha1.SeatPauseStatus{}
+		return
+	}
+	if p.pauseGone {
+		// The engine runs no seat of this Seat's: it holds no pause of it.
 		meta.RemoveStatusCondition(&seat.Status.Conditions, crewletaiv1alpha1.ConditionPaused)
 		seat.Status.Pause = crewletaiv1alpha1.SeatPauseStatus{}
 		return

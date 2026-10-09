@@ -56,8 +56,10 @@ type part struct {
 	// holdMoves); empty when it is pinned where it is placed.
 	moving string
 	// pause is what the reconcile found about a Seat's pause, nil when it
-	// did not read it (see syncPauses).
-	pause *pauseVerdict
+	// did not read it (see syncPauses); pauseGone is a Seat the engine runs
+	// no seat of, whose Paused condition goes.
+	pause     *pauseVerdict
+	pauseGone bool
 }
 
 func newPart(obj client.Object) *part {

@@ -418,8 +418,6 @@ func TestSyncPauseChangesNoPauseItDoesNotOwn(t *testing.T) {
 			metav1.ConditionTrue, crewletaiv1alpha1.ReasonSeatPaused},
 		{"unset, running, under Enforce", crewletaiv1alpha1.ManagementPolicyEnforce, nil, engine.SeatPause{},
 			metav1.ConditionFalse, crewletaiv1alpha1.ReasonSeatRunning},
-		{"paused as asked, under Enforce", crewletaiv1alpha1.ManagementPolicyEnforce, new(true), paused,
-			metav1.ConditionTrue, crewletaiv1alpha1.ReasonSeatPaused},
 		{"asked to run, paused, under Observe", crewletaiv1alpha1.ManagementPolicyObserve, new(false), paused,
 			metav1.ConditionTrue, crewletaiv1alpha1.ReasonPauseNotManaged},
 		{"asked to pause, running, under Seed", crewletaiv1alpha1.ManagementPolicySeed, new(true), engine.SeatPause{},
