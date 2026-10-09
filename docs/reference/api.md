@@ -396,7 +396,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `managementPolicy` _[ManagementPolicy](#managementpolicy)_ | managementPolicy says who owns the document. | Enforce | Enum: [Enforce Observe Seed] <br />Optional: \{\} <br /> |
+| `managementPolicy` _[ManagementPolicy](#managementpolicy)_ | managementPolicy says who owns the document. Under Enforce the data<br />pod's crewlet.yaml sets Crewlet's api.auth.company_writers to the<br />operator's own token, so the engine refuses every other token a change<br />to the document; under Observe and Seed it sets none. The engine reads<br />crewlet.yaml only at start, so changing the policy to or from Enforce<br />restarts the data pod. | Enforce | Enum: [Enforce Observe Seed] <br />Optional: \{\} <br /> |
 
 
 #### ConfigStatus
@@ -1613,9 +1613,9 @@ _Appears in:_
 
 | Field | Description |
 | --- | --- |
-| `Enforce` | ManagementPolicyEnforce makes the operator the document's only<br />writer: a revision made some other way (the dashboard, the API) is<br />reported and overwritten.<br /> |
-| `Observe` | ManagementPolicyObserve renders and compares, and never writes; a<br />difference is reported only.<br /> |
-| `Seed` | ManagementPolicySeed writes the document once, into an engine that<br />has none, and then leaves it to the engine and its dashboard. Changes<br />to the Company's children are ignored afterwards and say so in their<br />status.<br /> |
+| `Enforce` | ManagementPolicyEnforce makes the operator the document's only<br />writer. The engine refuses every other token a change to the document<br />(403 config_managed), the published access token included, and its<br />dashboard shows the document read-only; a revision made some other way<br />all the same (the engine's own writes, or one made before the data pod<br />restarted onto the policy) is reported and overwritten.<br /> |
+| `Observe` | ManagementPolicyObserve renders and compares, and never writes; a<br />difference is reported only. The engine's own users may change the<br />document.<br /> |
+| `Seed` | ManagementPolicySeed writes the document once, into an engine that<br />has none, and then leaves it to the engine and its dashboard, whose<br />users may change it. Changes to the Company's children are ignored<br />afterwards and say so in their status.<br /> |
 
 
 #### NamespacedSecretKeyReference

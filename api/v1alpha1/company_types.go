@@ -411,23 +411,32 @@ type ManagementPolicy string
 // The management policies.
 const (
 	// ManagementPolicyEnforce makes the operator the document's only
-	// writer: a revision made some other way (the dashboard, the API) is
-	// reported and overwritten.
+	// writer. The engine refuses every other token a change to the document
+	// (403 config_managed), the published access token included, and its
+	// dashboard shows the document read-only; a revision made some other way
+	// all the same (the engine's own writes, or one made before the data pod
+	// restarted onto the policy) is reported and overwritten.
 	ManagementPolicyEnforce ManagementPolicy = "Enforce"
 	// ManagementPolicyObserve renders and compares, and never writes; a
-	// difference is reported only.
+	// difference is reported only. The engine's own users may change the
+	// document.
 	ManagementPolicyObserve ManagementPolicy = "Observe"
 	// ManagementPolicySeed writes the document once, into an engine that
-	// has none, and then leaves it to the engine and its dashboard. Changes
-	// to the Company's children are ignored afterwards and say so in their
-	// status.
+	// has none, and then leaves it to the engine and its dashboard, whose
+	// users may change it. Changes to the Company's children are ignored
+	// afterwards and say so in their status.
 	ManagementPolicySeed ManagementPolicy = "Seed"
 )
 
 // ConfigSettings is how the operator manages a company's document.
 // +kubebuilder:validation:MinProperties=1
 type ConfigSettings struct {
-	// managementPolicy says who owns the document.
+	// managementPolicy says who owns the document. Under Enforce the data
+	// pod's crewlet.yaml sets Crewlet's api.auth.company_writers to the
+	// operator's own token, so the engine refuses every other token a change
+	// to the document; under Observe and Seed it sets none. The engine reads
+	// crewlet.yaml only at start, so changing the policy to or from Enforce
+	// restarts the data pod.
 	// +optional
 	// +default="Enforce"
 	ManagementPolicy ManagementPolicy `json:"managementPolicy,omitempty"`

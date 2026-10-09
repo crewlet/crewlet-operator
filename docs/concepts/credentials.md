@@ -25,7 +25,11 @@ uses is readable by the company's tenant:
   data volume with the keyring the pod holds.
 - The access token the Company publishes (`status.apiAccessSecretRef`) is
   the engine's administrator: Crewlet has no token scopes, and its API
-  reveals any value in the secret store to that token.
+  reveals any value in the secret store to that token and lets it write
+  one. Under `Enforce` the engine refuses it a change to the company
+  document, since the data pod's `crewlet.yaml` names the operator's token
+  the document's only writer (`api.auth.company_writers`); a value the
+  document references can still be replaced through the secret store.
 
 So a credential an `EngineClass` gives its companies (a platform model key,
 telemetry headers, a class env value) is every tenant's. Give a class only

@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	"sigs.k8s.io/yaml"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/render"
@@ -878,6 +879,59 @@ var _ = Describe("Company runtime", func() {
 		access := &corev1.Secret{}
 		get(access, accessName)
 		Expect(string(access.Data[crewletaiv1alpha1.APIAccessTokenKey])).To(Equal(replaced))
+	})
+
+	It("names the operator the document's only writer under Enforce, and rolls the pods when that changes", func() {
+		class := newClass()
+		company := reconciled(newCompany(class.Name))
+		Expect(company.Spec.Config.ManagementPolicy).To(Equal(crewletaiv1alpha1.ManagementPolicyEnforce), "the API's default")
+		hash := func() string { return statefulSet().Spec.Template.Annotations[BootstrapHashAnnotation] }
+		// writers is api.auth.company_writers in the crewlet.yaml the
+		// pods start from, and the hash the pod template carries is of
+		// that Secret.
+		writers := func() []string {
+			GinkgoHelper()
+			bootstrap := &corev1.Secret{}
+			get(bootstrap, bootstrapName)
+			Expect(bootstrap.Data[configFile]).To(Equal(expectedBootstrap(company, class).YAML))
+			Expect(hash()).To(Equal(hashOf(bootstrap.Data)))
+			var tierA struct {
+				API struct {
+					Auth struct {
+						CompanyWriters []string `json:"company_writers"`
+					} `json:"auth"`
+				} `json:"api"`
+			}
+			Expect(yaml.Unmarshal(bootstrap.Data[configFile], &tierA)).To(Succeed())
+			return tierA.API.Auth.CompanyWriters
+		}
+		Expect(writers()).To(Equal([]string{render.TokenOperator}))
+		enforced := hash()
+
+		By("observing, which lets the engine's own users write and restarts the engine to say so")
+		updateCompany(company, func(c *crewletaiv1alpha1.Company) {
+			c.Spec.Config.ManagementPolicy = crewletaiv1alpha1.ManagementPolicyObserve
+		})
+		company = reconciled(company)
+		Expect(writers()).To(BeEmpty())
+		observed := hash()
+		Expect(observed).NotTo(Equal(enforced))
+
+		By("seeding, whose crewlet.yaml is Observe's, so the pods are left running")
+		updateCompany(company, func(c *crewletaiv1alpha1.Company) {
+			c.Spec.Config.ManagementPolicy = crewletaiv1alpha1.ManagementPolicySeed
+		})
+		company = reconciled(company)
+		Expect(writers()).To(BeEmpty())
+		Expect(hash()).To(Equal(observed))
+
+		By("enforcing again")
+		updateCompany(company, func(c *crewletaiv1alpha1.Company) {
+			c.Spec.Config.ManagementPolicy = crewletaiv1alpha1.ManagementPolicyEnforce
+		})
+		company = reconciled(company)
+		Expect(writers()).To(Equal([]string{render.TokenOperator}))
+		Expect(hash()).To(Equal(enforced))
 	})
 
 	Context("the engine version", func() {

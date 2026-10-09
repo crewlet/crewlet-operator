@@ -93,7 +93,13 @@ spec:
                 properties:
                   managementPolicy:
                     default: Enforce
-                    description: managementPolicy says who owns the document.
+                    description: |-
+                      managementPolicy says who owns the document. Under Enforce the data
+                      pod's crewlet.yaml sets Crewlet's api.auth.company_writers to the
+                      operator's own token, so the engine refuses every other token a change
+                      to the document; under Observe and Seed it sets none. The engine reads
+                      crewlet.yaml only at start, so changing the policy to or from Enforce
+                      restarts the data pod.
                     enum:
                     - Enforce
                     - Observe

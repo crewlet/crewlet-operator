@@ -1,0 +1,23 @@
+# A company whose document the operator does not enforce (Seed): its Tier A
+# names no company writer, so the engine's own users may change it.
+apiVersion: crewlet.ai/v1alpha1
+kind: EngineClass
+metadata:
+  name: basic
+spec:
+  engine:
+    image: ghcr.io/crewlet/crewlet:v0.1.0
+  data:
+    storage:
+      size: 10Gi
+  retention:
+    backupOwner: platform-oncall
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: nimbus
+spec:
+  companyName: Nimbus
+  config:
+    managementPolicy: Seed

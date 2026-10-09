@@ -89,7 +89,8 @@ Two more suites are not part of `make check`:
   checks it from the outside: that it runs and serves metrics, and that a
   company runs end to end — its engine becomes ready and is given its
   document and Secret values, a consumer its class admits reads the API with
-  the published token and a pod of another namespace is refused, an edited Seat becomes a new revision, and deleting the Company
+  the published token, is refused a change to the document the operator
+  enforces, and a pod of another namespace is refused, an edited Seat becomes a new revision, and deleting the Company
   keeps or deletes its volume and keyring as its `deletionPolicy` says. Then
   it deletes the cluster, unless the suite failed: the cluster is left for a
   look, and `make cleanup-test-e2e` deletes it. CI runs it on every pull

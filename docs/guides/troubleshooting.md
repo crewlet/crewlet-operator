@@ -68,6 +68,7 @@ with your last change yet.
 | | False | `Applying` | The operator activated the revision and the engine has not applied it yet; it runs the previous one meanwhile. Usually gone within seconds; it turns into `ApplyFailed` when the engine fails the revision or has not applied it 72 seconds after the write. |
 | | False | `ApplyFailed` | The engine did not apply the revision, and keeps running the one it applied last. The message carries the engine's status, its posture (`isolated` on a single node, `shed` or `stuck` beside peers that applied it) and its own account of the failure; see [The engine did not apply a revision](#the-engine-did-not-apply-a-revision). |
 | | False | `EngineUnavailable` | The operator cannot reach the engine or is refused by it. Retried every ten seconds; see [The operator cannot reach the engine](#the-operator-cannot-reach-the-engine). |
+| | False | `WriteRefused` | The engine refuses the operator's own token a change to the document (`403 config_managed`): its `api.auth.company_writers` names other tokens. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
 
 ### EngineClass
 
@@ -152,6 +153,28 @@ requests to `http://<company>-data-0.<company>-data.<namespace>.svc:8080` fail:
 - The `<company>-api-tokens` Secret was changed by hand and the pod has not
   restarted yet: it rolls on its own once the operator sees the change.
 
+## The engine refuses a change to the document
+
+Under `Enforce` the engine lets only the operator's token change the company
+document: a change made with any other token, the published access token
+included, is answered `403 config_managed`, and the engine's dashboard shows
+the document read-only. That is the policy working, not a fault. Change the
+objects, or switch the Company to `Observe` or `Seed` to hand the document to
+the dashboard ([Choosing a management policy](management-policies.md)); the
+switch restarts the data pod, and the dashboard may edit again once it has.
+
+`ConfigApplied=False WriteRefused` is the other direction: the engine refuses
+the operator's own token, so its `crewlet.yaml` names writers the operator did
+not render. The operator renders `<company>-bootstrap` from the Company alone
+and writes it back when it differs, so this is an engine that has not
+restarted since the Secret changed, or an image whose entrypoint reads another
+`crewlet.yaml`. The message names the writers the engine reported.
+
+```bash
+kubectl get secret acme-bootstrap -n acme -o jsonpath='{.data.crewlet\.yaml}' | base64 -d | grep -A2 company_writers
+kubectl rollout restart statefulset/acme-data -n acme
+```
+
 ## The engine did not apply a revision
 
 `ConfigApplied=False ApplyFailed` means the engine stored and activated the
@@ -189,6 +212,9 @@ kubectl get events -n acme --field-selector involvedObject.name=acme,reason=Appl
   [The engine did not apply a revision](#the-engine-did-not-apply-a-revision).
 - The Company is under `Observe` or `Seed`
   ([Choosing a management policy](management-policies.md)).
+- A change made in the engine's dashboard or API under `Enforce` is refused,
+  not lost: see
+  [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document).
 - A Secret change that leaves the value as it was writes nothing; a change to
   a value is applied as a new revision.
 - Changes are coalesced: the operator waits for two quiet seconds after the

@@ -130,6 +130,7 @@ type apiDoc struct {
 type apiAuthDoc struct {
 	AllowAnonymousRead bool          `json:"allow_anonymous_read"`
 	Tokens             []apiTokenDoc `json:"tokens"`
+	CompanyWriters     []string      `json:"company_writers,omitempty"`
 }
 
 type apiTokenDoc struct {
@@ -258,6 +259,7 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 					{ID: TokenOperator, Token: in.Tokens.Operator},
 					{ID: TokenAccess, Token: in.Tokens.Access},
 				},
+				CompanyWriters: companyWriters(ManagementPolicyOf(in.Company)),
 			},
 		},
 		Store: storeDoc{
@@ -315,6 +317,43 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 	}
 	sum := sha256.Sum256(out)
 	return &BootstrapDocument{YAML: out, Hash: hex.EncodeToString(sum[:]), Env: env}, nil
+}
+
+// companyWriters is api.auth.company_writers for a management policy: the
+// token ids the engine lets change the company document, nil for every
+// token.
+//
+// Under Enforce the operator is the document's only writer and overwrites any
+// other revision, so an edit made with the access token, or in the dashboard
+// it is signed into, would last until the next reconcile and nothing would
+// say so. Naming the operator's own token as the only writer has the engine
+// refuse that edit when it is made (403 config_managed), and its dashboard
+// draws the document read-only. The engine's own writes (a provisioning pass
+// recording what it found at a vendor) are not judged by the list, and drift
+// correction still overwrites them.
+//
+// Observe names no writer: the operator never writes there, and the people
+// running the engine are the document's owners, so a list would lock out the
+// only writers it has. Seed names none either: it hands the document to the
+// engine's own users after the first write, which is the whole point of it.
+//
+// The engine reads Tier A only at start, so a change of policy is a change
+// of the bootstrap Secret, whose hash rolls the data pod: the new list holds
+// from the restart on.
+func companyWriters(policy v1alpha1.ManagementPolicy) []string {
+	if policy == v1alpha1.ManagementPolicyEnforce {
+		return []string{TokenOperator}
+	}
+	return nil
+}
+
+// ManagementPolicyOf is a Company's spec.config.managementPolicy, with the
+// API's default for a Company read before the API server defaulted it.
+func ManagementPolicyOf(c *v1alpha1.Company) v1alpha1.ManagementPolicy {
+	if p := c.Spec.Config.ManagementPolicy; p != "" {
+		return p
+	}
+	return v1alpha1.ManagementPolicyEnforce
 }
 
 // keyringOf renders the keyring block. The keys come from a Secret, which

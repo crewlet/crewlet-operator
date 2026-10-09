@@ -426,6 +426,14 @@ const (
 	// carries what failed.
 	ReasonEngineUnavailable = "EngineUnavailable"
 
+	// ReasonWriteRefused is ConfigApplied=False when the engine refuses the
+	// operator's token a change to the company document: the engine's Tier A
+	// (api.auth.company_writers) names other tokens as the document's
+	// writers. The operator renders that list itself, naming its own token
+	// under Enforce, so the engine runs a crewlet.yaml the operator did not
+	// write. The message names the writers the engine reported.
+	ReasonWriteRefused = "WriteRefused"
+
 	// ReasonInvalid is Applied=False (or ConfigApplied=False) when the
 	// engine's dry run refuses the rendered document; the message carries
 	// the engine's own words.

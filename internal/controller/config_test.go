@@ -233,10 +233,12 @@ var _ = Describe("Company config", Ordered, func() {
 		}).WithTimeout(settle).Should(Succeed())
 	}
 
-	// startEngine starts the engine a Company's document goes to.
-	startEngine := func(company string) *enginetest.Engine {
+	// startEngine starts the engine a Company's document goes to. The
+	// engine's document is not managed unless opts say so, as the data pod's
+	// is not until it restarts onto a crewlet.yaml that makes it so.
+	startEngine := func(company string, opts ...enginetest.Option) *enginetest.Engine {
 		GinkgoHelper()
-		e := enginetest.Start(GinkgoT())
+		e := enginetest.Start(GinkgoT(), opts...)
 		engines.set(types.NamespacedName{Namespace: namespace, Name: company}, e)
 		return e
 	}
@@ -756,6 +758,49 @@ var _ = Describe("Company config", Ordered, func() {
 			Expect(s.Status.SeatID).To(BeEmpty(), "Seat %s was given the identity of a handle it shares", s.Name)
 		}
 		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonConflict))
+		_, err := e.Client().ActiveConfig(ctx)
+		Expect(err).To(MatchError(engine.ErrNoActiveRevision))
+	})
+
+	It("applies the document through an engine that names the operator its only writer, which refuses every other token", func() {
+		const name = "managed"
+		e := startEngine(name, enginetest.WithCompanyWriters(enginetest.OperatorTokenID))
+		secret(name+"-llm", map[string]string{llmKey: "k1"})
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
+		standIn(c)
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		Expect(reasonOf(c, crewletaiv1alpha1.ConditionSecretsSynced)(Default)).To(Equal(crewletaiv1alpha1.ReasonSynced))
+		first := runsRendered(e, c)
+
+		By("refusing a person's edit, which therefore never has to be overwritten")
+		access := engine.New(e.URL, e.AccessToken)
+		edited := regexp.MustCompile(`goal: .*`).ReplaceAll(first.Document, []byte("goal: A person's goal"))
+		_, err := access.ApplyConfig(ctx, engine.ApplyRequest{Document: edited, Summary: "a person's edit", IfMatch: first.RevisionID})
+		Expect(err).To(MatchError(engine.ErrConfigManaged))
+
+		By("applying the operator's own next revision")
+		newSeat(namespace, name, "bo")
+		Eventually(reasonOf(seat(name+"-bo"), crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
+		Expect(revisions(e)).To(HaveLen(2))
+		for _, r := range revisions(e) {
+			Expect(r.CreatedBy).To(Equal(enginetest.OperatorTokenID))
+		}
+		runsRendered(e, c)
+	})
+
+	It("reports an engine that refuses the operator's token a write as WriteRefused, and writes nothing", func() {
+		const name = "foreign-writer"
+		e := startEngine(name, enginetest.WithCompanyWriters(enginetest.AccessTokenID))
+		secret(name+"-llm", map[string]string{llmKey: "k1"})
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
+		standIn(c)
+		applied(c, crewletaiv1alpha1.ReasonWriteRefused)
+		got := conditionOf(c, crewletaiv1alpha1.ConditionConfigApplied)(Default)
+		Expect(got.Status).To(Equal(metav1.ConditionFalse))
+		Expect(got.Message).To(ContainSubstring("api.auth.company_writers names " + enginetest.AccessTokenID))
+		Expect(got.Message).To(ContainSubstring(name + "-bootstrap"))
+		Expect(reasonOf(seat(name+"-ana"), crewletaiv1alpha1.ConditionApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonBlocked))
+		Expect(log.of(name)).To(ContainElement(HavePrefix("Warning WriteRefused")))
 		_, err := e.Client().ActiveConfig(ctx)
 		Expect(err).To(MatchError(engine.ErrNoActiveRevision))
 	})

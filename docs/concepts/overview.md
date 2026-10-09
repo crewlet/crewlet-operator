@@ -157,7 +157,7 @@ operator did not make:
 
 | Policy | What the operator does | For |
 |---|---|---|
-| `Enforce` (default) | It is the document's only writer. A revision made some other way is reported and overwritten with the rendered one. | GitOps; a platform that hosts tenants |
+| `Enforce` (default) | It is the document's only writer: the engine refuses every other token a change to it, and its dashboard shows it read-only. A revision made some other way all the same is reported and overwritten with the rendered one. | GitOps; a platform that hosts tenants |
 | `Observe` | It renders the document and compares it with the engine's, and never writes. A difference is reported only. | Migrating an engine that already runs; trying the operator out |
 | `Seed` | It writes the document once, into an engine that has none, and then leaves it to the engine and its dashboard. Later changes to the Company's units, seats and other objects are ignored, and their status says so. | Self-hosters who prefer to work in the dashboard |
 

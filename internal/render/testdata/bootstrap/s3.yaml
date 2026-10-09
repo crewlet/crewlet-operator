@@ -1,6 +1,8 @@
 api:
   auth:
     allow_anonymous_read: false
+    company_writers:
+    - operator
     tokens:
     - id: operator
       token: test-operator-token

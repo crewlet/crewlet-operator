@@ -159,7 +159,9 @@ func (run *configRun) reconcile(ctx context.Context) (ctrl.Result, error) {
 		if isAPIServerError(err) {
 			return ctrl.Result{}, err
 		}
-		run.unavailable(err)
+		if !run.writeRefused(err) {
+			run.unavailable(err)
+		}
 		return ctrl.Result{RequeueAfter: engineRetryInterval}, nil
 	}
 	health, healthErr := run.readHealth(ctx, eng)
@@ -216,10 +218,7 @@ func (run *configRun) input() *render.Input {
 
 // policy is the Company's management policy.
 func (run *configRun) policy() crewletaiv1alpha1.ManagementPolicy {
-	if p := run.company.Spec.Config.ManagementPolicy; p != "" {
-		return p
-	}
-	return crewletaiv1alpha1.ManagementPolicyEnforce
+	return render.ManagementPolicyOf(run.company)
 }
 
 // converge does what the management policy says with the engine's document.
@@ -743,6 +742,33 @@ func (run *configRun) unavailable(err error) {
 		Reason:  crewletaiv1alpha1.ReasonEngineUnavailable,
 		Message: fmt.Sprintf("The operator's request to the company's engine failed, and it tries again in %s: %s.", engineRetryInterval, err),
 	}
+}
+
+// writeRefused records an engine that refuses the operator's token a change
+// to the company document (engine.ErrConfigManaged), and reports false for any
+// other error. The operator renders the engine's api.auth.company_writers
+// itself and names its own token under Enforce, so this is an engine started
+// from a crewlet.yaml the operator did not write, which no retry of the write
+// changes: it is reported as that rather than as an engine that is down.
+func (run *configRun) writeRefused(err error) bool {
+	var apiErr *engine.APIError
+	if !errors.Is(err, engine.ErrConfigManaged) || !errors.As(err, &apiErr) {
+		return false
+	}
+	writers := "no token the engine named"
+	if len(apiErr.ManagedBy) > 0 {
+		writers = strings.Join(apiErr.ManagedBy, ", ")
+	}
+	message := fmt.Sprintf("The engine refuses the operator's token (id %q) a change to the company document: its "+
+		"api.auth.company_writers names %s. The operator renders that list into the data pod's crewlet.yaml (Secret %s), "+
+		"naming its own token under Enforce, so the engine runs a crewlet.yaml the operator did not write: check that "+
+		"Secret and that the data pod has restarted since it changed.", render.TokenOperator, writers, bootstrapSecretName(run.company))
+	if current := meta.FindStatusCondition(run.company.Status.Conditions, crewletaiv1alpha1.ConditionConfigApplied); current == nil ||
+		current.Reason != crewletaiv1alpha1.ReasonWriteRefused {
+		run.event(corev1.EventTypeWarning, crewletaiv1alpha1.ReasonWriteRefused, "ApplyConfig", "%s", message)
+	}
+	run.block(crewletaiv1alpha1.ReasonWriteRefused, message)
+	return true
 }
 
 // part returns the part ref names, or nil.

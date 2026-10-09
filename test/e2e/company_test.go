@@ -160,11 +160,35 @@ var _ = Describe("Company", Ordered, func() {
 		Expect(string(access.Data[v1.APIAccessURLKey])).To(Equal(engineURL))
 
 		By("reading the active company document with the token")
-		apply(curlPod(consumerNamespace, readConfig))
-		Expect(curlPhase(consumerNamespace)).To(Equal(corev1.PodSucceeded), "the consumer's request did not succeed")
+		apply(curlPod(consumerNamespace, curlPodName, readConfig))
+		Expect(curlPhase(consumerNamespace, curlPodName)).To(Equal(corev1.PodSucceeded),
+			"the consumer's request did not succeed")
 		out, err := utils.Run(exec.Command("kubectl", "logs", curlPodName, "-n", consumerNamespace))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(out).To(ContainSubstring("Acme"), "the engine's active document is not the company's")
+	})
+
+	It("refuses the published token a change to the document the operator enforces, and keeps the document", func() {
+		before := getCompany().Status.Config.RevisionID
+
+		By("replacing the company document with the token, as a person in the engine's dashboard would")
+		const editPod = "edit-config"
+		apply(curlPod(consumerNamespace, editPod, editConfig))
+		Expect(curlPhase(consumerNamespace, editPod)).To(Equal(corev1.PodSucceeded),
+			"the consumer's requests did not complete")
+		out, err := utils.Run(exec.Command("kubectl", "logs", editPod, "-n", consumerNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(out).To(ContainSubstring("status=403"), "the engine did not refuse the edit")
+		Expect(out).To(ContainSubstring(`"config_managed"`))
+		Expect(out).To(ContainSubstring("Acme"), "the document read after the refusal is not the company's")
+		Expect(out).NotTo(ContainSubstring("Edited by hand"))
+
+		By("finding the operator's revision still the one the engine runs")
+		Consistently(func(g Gomega) {
+			company := getCompany()
+			g.Expect(company.Status.Config.RevisionID).To(Equal(before))
+			g.Expect(conditionStatus(company.Status.Conditions, v1.ConditionConfigApplied)).To(Equal(metav1.ConditionTrue))
+		}).WithTimeout(10 * time.Second).Should(Succeed())
 	})
 
 	// The engine's NetworkPolicy at work, which needs a CNI that enforces
@@ -172,8 +196,8 @@ var _ = Describe("Company", Ordered, func() {
 	// support (CONFIG_NFT_QUEUE).
 	It("refuses a pod of a namespace the class does not admit, token or not", func() {
 		copyAccessSecret(outsiderNamespace)
-		apply(curlPod(outsiderNamespace, readConfig))
-		Expect(curlPhase(outsiderNamespace)).To(Equal(corev1.PodFailed),
+		apply(curlPod(outsiderNamespace, curlPodName, readConfig))
+		Expect(curlPhase(outsiderNamespace, curlPodName)).To(Equal(corev1.PodFailed),
 			"a pod in a namespace the engine's NetworkPolicy does not admit reached its API")
 	})
 
@@ -460,14 +484,22 @@ func copyAccessSecret(namespace string) *corev1.Secret {
 	return access
 }
 
-// curlPodName is the name of the pod curlPod makes.
+// curlPodName is the name of the pod that reads the company document.
 const curlPodName = "read-config"
 
-// curlPod is a pod in namespace that runs script with curl, with the API
-// access Secret's token and URL in its environment as TOKEN and URL.
-func curlPod(namespace, script string) *corev1.Pod {
+// editConfig, run as the consumer, tries to replace the company document
+// with the published token and then reads it back. The engine refuses the
+// change before it reads the body, so the body is one line; curl prints the
+// answer and its status, and the document read afterwards.
+const editConfig = `curl -sS --max-time 20 -X PUT -H "Authorization: Bearer ${TOKEN}" ` +
+	`-H "X-Summary: an edit the operator would overwrite" -H "Content-Type: application/yaml" ` +
+	`--data-binary "name: Edited by hand" -w "\nstatus=%{http_code}\n" "${URL}/config" && ` + readConfig
+
+// curlPod is a pod named name in namespace that runs script with curl, with
+// the API access Secret's token and URL in its environment as TOKEN and URL.
+func curlPod(namespace, name, script string) *corev1.Pod {
 	return &corev1.Pod{
-		Namespace: namespace, Name: curlPodName,
+		Namespace: namespace, Name: name,
 		Spec: corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
 			SecurityContext: &corev1.PodSecurityContext{
@@ -493,12 +525,13 @@ func curlPod(namespace, script string) *corev1.Pod {
 	}
 }
 
-// curlPhase waits for curlPod's pod in namespace to finish and returns how.
-func curlPhase(namespace string) corev1.PodPhase {
+// curlPhase waits for the curlPod named name in namespace to finish and
+// returns how.
+func curlPhase(namespace, name string) corev1.PodPhase {
 	GinkgoHelper()
 	pod := &corev1.Pod{}
 	Eventually(func(g Gomega) {
-		g.Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: curlPodName}, pod)).To(Succeed())
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, pod)).To(Succeed())
 		g.Expect(pod.Status.Phase).To(BeElementOf(corev1.PodSucceeded, corev1.PodFailed), "the pod has not finished")
 	}).Should(Succeed())
 	return pod.Status.Phase

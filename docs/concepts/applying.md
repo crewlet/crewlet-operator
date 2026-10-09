@@ -126,12 +126,25 @@ the cluster (`make run`) cannot reach any engine.
 
 ### Enforce (the default)
 
-The operator is the document's only writer. On every look it compares the
-engine's active document with the rendered one; when they differ and the
-engine runs a revision the operator did not write — an edit made in the
-dashboard, a revision someone applied with the API, a document the engine
-had before the Company was created — it applies the rendered document over
-it, records a `Drifted` event naming the revision and the places that
+The operator is the document's only writer, and the engine enforces it: the
+data pod's `crewlet.yaml` sets Crewlet's `api.auth.company_writers` to the id
+of the operator's own token, `operator`, so the engine refuses every other
+token any change to the document — a `PUT` or `PATCH` of `/config`, an entity
+write, a revert, a `/setup` connect, and the dry run of each — with
+`403 config_managed`, and its dashboard shows the document read-only. Reads,
+`POST /config/reload` and the secret store stay open to every token, which is
+how a person rotates a leaked credential; see
+[Crewlet's managed configuration](https://github.com/crewlet/crewlet/blob/main/docs/concepts/configuration.md#managed-configuration).
+Under `Observe` and `Seed` the list is not set, since the engine's own users
+own the document there. The engine reads `crewlet.yaml` only at start, so a
+switch to or from `Enforce` restarts the data pod.
+
+On every look the operator compares the engine's active document with the
+rendered one; when they differ and the engine runs a revision the operator
+did not write — one the engine recorded itself, such as a provisioning pass
+writing down what it discovered at a vendor, a revision made before the data
+pod restarted onto `Enforce`, a document the engine had before the Company
+was created — it applies the rendered document over it, records a `Drifted` event naming the revision and the places that
 differed, and reports `ConfigApplied=True` with the reason `DriftCorrected`
 until its next write.
 
@@ -181,7 +194,7 @@ is never written to; the Company reports `Seeded` all the same, saying so.
 | Object | Condition | When |
 |---|---|---|
 | Company | `SecretsSynced` | `True`, `Synced`, once the store holds every referenced value. `False`, `SecretNotFound` or `SecretTooLarge`, naming each Secret and key; `False`, `EngineUnavailable` when a write to the store failed; `Unknown`, `NotManaged` under Observe, and under Seed once seeded. |
-| Company | `ConfigApplied` | `True` with `Applied`, `DriftCorrected`, `InSync` or `Seeded`, once the engine reports the revision's epoch applied. `False` with `Applying` while it applies it, `ApplyFailed` when it did not; otherwise with the reason of whatever blocks the document: `RefNotFound`, `Cycle`, `Conflict`, `SecretNotFound`, `SecretTooLarge`, `Invalid` (the engine's own words), `Drifted` (Observe) or `EngineUnavailable`. |
+| Company | `ConfigApplied` | `True` with `Applied`, `DriftCorrected`, `InSync` or `Seeded`, once the engine reports the revision's epoch applied. `False` with `Applying` while it applies it, `ApplyFailed` when it did not; otherwise with the reason of whatever blocks the document: `RefNotFound`, `Cycle`, `Conflict`, `SecretNotFound`, `SecretTooLarge`, `Invalid` (the engine's own words), `Drifted` (Observe), `WriteRefused` (the engine refuses the operator's own token a change to the document) or `EngineUnavailable`. |
 | Company | `EngineHealthy` | The engine's alarm table, read each time the engine is reached: `True`, `NoAlarms`; `False`, `Alarms`, naming the one standing longest; `Unknown`, `AlarmsNotReported`, before the engine has evaluated them. Not part of `Ready`. |
 | every part | `Accepted` | `True` once its Company exists; `False` with `CompanyNotFound`, or `Conflict` when it collides with another object of its company. |
 | every part | `ResolvedRefs` | `False` with `RefNotFound`, `Cycle`, `SecretNotFound` or `SecretTooLarge`, saying what it references that is missing. |

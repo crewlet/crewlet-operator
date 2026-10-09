@@ -251,7 +251,10 @@ bin/kubectl port-forward -n acme svc/acme-engine 8080:8080
 ```
 
 Open <http://localhost:8080>; when the dashboard asks for a token, paste the
-one printed above.
+one printed above. The dashboard shows the company's configuration read-only:
+under the default management policy, `Enforce`, the objects are its only
+source, and the engine refuses any other change to it
+([Choosing a management policy](guides/management-policies.md)).
 
 ## The full example
 

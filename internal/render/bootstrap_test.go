@@ -1,6 +1,8 @@
 package render
 
 import (
+	"cmp"
+	"fmt"
 	"maps"
 	"path/filepath"
 	"regexp"
@@ -10,6 +12,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/yaml"
+
+	"github.com/crewlet/crewlet-operator/api/v1alpha1"
 )
 
 // testTokens are the API tokens every bootstrap case is rendered with, and
@@ -45,6 +49,10 @@ func bootstrapCases() []bootstrapCase {
 			objects: &testObjects,
 		},
 		{name: "s3-workload-identity", keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}},
+		// The nats case's company leaves managementPolicy to its default,
+		// Enforce; these two set the others.
+		{name: "observe", keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}},
+		{name: "seed", keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}},
 	}
 }
 
@@ -168,6 +176,50 @@ func TestBootstrapPlacesTheDataPodInTheDataPool(t *testing.T) {
 	}
 	if got := flatten(t, doc.YAML)["node.labels."+PoolLabel]; got != DataPool {
 		t.Fatalf("node.labels[%s] = %v, want %s", PoolLabel, got, DataPool)
+	}
+}
+
+// TestBootstrapNamesTheOperatorTheOnlyWriterUnderEnforce pins
+// api.auth.company_writers per management policy: under Enforce the
+// operator's own token alone may change the company document, so the engine
+// refuses an edit the operator would overwrite; under Observe and Seed the
+// engine's own users own the document, and no list stands in their way.
+func TestBootstrapNamesTheOperatorTheOnlyWriterUnderEnforce(t *testing.T) {
+	for _, c := range []struct {
+		policy v1alpha1.ManagementPolicy
+		want   []string
+	}{
+		{policy: "", want: []string{TokenOperator}},
+		{policy: v1alpha1.ManagementPolicyEnforce, want: []string{TokenOperator}},
+		{policy: v1alpha1.ManagementPolicyObserve},
+		{policy: v1alpha1.ManagementPolicySeed},
+	} {
+		t.Run(cmp.Or(string(c.policy), "unset"), func(t *testing.T) {
+			in := bootstrapCases()[0].input(t)
+			in.Company.Spec.Config.ManagementPolicy = c.policy
+			doc, err := Bootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got struct {
+				API struct {
+					Auth map[string]any `json:"auth"`
+				} `json:"api"`
+			}
+			if err := yaml.Unmarshal(doc.YAML, &got); err != nil {
+				t.Fatal(err)
+			}
+			writers, present := got.API.Auth["company_writers"]
+			if c.want == nil {
+				if present {
+					t.Fatalf("api.auth.company_writers = %v under %q, want it absent", writers, c.policy)
+				}
+				return
+			}
+			if fmt.Sprint(writers) != fmt.Sprint(c.want) {
+				t.Fatalf("api.auth.company_writers = %v under %q, want %v", writers, c.policy, c.want)
+			}
+		})
 	}
 }
 

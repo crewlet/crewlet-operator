@@ -114,6 +114,14 @@ The engine's API answers no read without a token
 conversations and memory, and every consumer of an operator-run engine has a
 token. Health probes and vendors' webhooks need none.
 
+Under the management policy `Enforce` it also names the operator's token the
+company document's only writer (`api.auth.company_writers: [operator]`), so the
+engine refuses every other token a change to the document, which the
+operator would otherwise overwrite at its next look. Under `Observe` and
+`Seed` the list is absent: there the engine's own users own the document. The
+pod reads `crewlet.yaml` only at start, so changing the policy to or from
+`Enforce` restarts it ([Switching policies](../guides/management-policies.md#switching-policies)).
+
 ## What blocks a document
 
 A document is applied whole or not at all, so one object that cannot be
