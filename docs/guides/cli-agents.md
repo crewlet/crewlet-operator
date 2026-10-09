@@ -74,8 +74,9 @@ spec:
 ```
 
 The login, and the homes the CLI keeps for each seat, live on the data
-volume, under `/var/lib/crewlet/llm-cli/<loginName>`, so a restarted pod
-keeps them. That matters for a bundle: the engine restores one only while
+volume, under `/var/lib/crewlet/llm-cli/<loginName>`, so a restarted data pod
+keeps them; a seat pod keeps them on a scratch volume it loses at every start
+(see [Seat pools](#seat-pools)). That matters for a bundle: the engine restores one only while
 the login there is empty, so the login the running engine refreshed wins
 over the bundle in the Secret, whose refresh token the vendor may have
 retired since. A bundle restored over a newer login is how a vendor that
@@ -127,6 +128,29 @@ spec:                       # LLMProvider claude-agent
 
 A seat runs on it by naming it in `spec.llm.default`; see the Seat's
 `spec.llm` in the [API reference](../reference/api.md).
+
+## Seat pools
+
+A seat placed in a [seat pool](topology.md) runs on a seat pod, which keeps
+nothing between starts and serves no port. Two things a data pod does for a
+CLI it cannot do:
+
+- **Agent mode.** A run calls the seat's tools back through the tool bridge
+  of the very pod that holds the seat, on an address the sandbox reaches; the
+  operator gives the data pod the company's public address for it, and a
+  seat pod has neither a bridge nor an address. A seat in a seat pool whose
+  executor's chain (`spec.llm.default`, or the Company's first provider when
+  the seat names none) holds a provider in `mode: Agent` is refused with
+  `Applied=False`, `AgentModeBridgeUnsupported`. The same provider in another
+  phase's chain is a text call, and is fine.
+- **A credential bundle.** The login lives under the CLI's state directory,
+  which on a seat pod is its scratch volume, so every seat pod restores the
+  bundle at each start and then refreshes the login on its own, beside the
+  data pod. A vendor that rotates refresh tokens retires the token the other
+  pods hold at each refresh, and logs them out. A seat in a seat pool that
+  runs on a provider with `credentialBundleSecretRef`, in any phase, is
+  refused with `Applied=False`, `CLIAuthNotPortable`: sign it in with
+  `tokenSecretRef` or `auth.mode: APIKey`, or place the seat in `data`.
 
 ## What v1alpha1 does not offer
 

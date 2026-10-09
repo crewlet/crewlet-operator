@@ -677,6 +677,11 @@ func (run *configRun) refused(refusals []*render.RefError) {
 				target.unplaceableReason = ref.Reason
 			}
 			target.unplaceable = append(target.unplaceable, finding)
+		case ref.Reason == crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported || ref.Reason == crewletaiv1alpha1.ReasonCLIAuthNotPortable:
+			if target.unrunnableReason == "" {
+				target.unrunnableReason = ref.Reason
+			}
+			target.unrunnable = append(target.unrunnable, finding)
 		default:
 			if target.unresolvedReason == "" {
 				target.unresolvedReason = ref.Reason

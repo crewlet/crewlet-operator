@@ -315,7 +315,7 @@ func TestPlacementRefusals(t *testing.T) {
 		{
 			name:    "a seat in a PerSeat pool under a class that does not allow one",
 			mutate:  func(in *Input) { in.Class.Spec.SeatPools.AllowPerSeat = nil },
-			want:    []string{"Seat/ana spec.placement.pool PerSeatNotAllowed"},
+			want:    []string{anaPerSeatNotAllowed},
 			planned: anaRefused,
 		},
 		{
@@ -344,7 +344,7 @@ func TestPlacementRefusals(t *testing.T) {
 				in.Class.Spec.SeatPools.AllowPerSeat = nil
 				in.Class.Spec.SeatPools.MaxPods = 2
 			},
-			want:    []string{"Seat/ana spec.placement.pool PerSeatNotAllowed"},
+			want:    []string{anaPerSeatNotAllowed},
 			planned: anaRefused,
 		},
 	} {
@@ -365,6 +365,10 @@ func TestPlacementRefusals(t *testing.T) {
 		})
 	}
 }
+
+// anaPerSeatNotAllowed is the refusal of seat ana, in the seat-pools
+// company's PerSeat pool, under a class that allows no PerSeat pool.
+const anaPerSeatNotAllowed = "Seat/ana spec.placement.pool PerSeatNotAllowed"
 
 // planText is each pool of a plan, data included, with its seats, by pool
 // name: "data:cy general:bo,dee".

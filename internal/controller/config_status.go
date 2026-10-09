@@ -137,6 +137,8 @@ func (run *configRun) decideApplied(p *part) {
 			setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, p.unresolvedReason, sentences(p.unresolved))
 		case len(p.unplaceable) > 0:
 			setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, p.unplaceableReason, sentences(p.unplaceable))
+		case len(p.unrunnable) > 0:
+			setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, p.unrunnableReason, sentences(p.unrunnable))
 		case len(p.invalid) > 0:
 			setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, crewletaiv1alpha1.ReasonInvalid, sentences(p.invalid))
 		case p.inRevision():

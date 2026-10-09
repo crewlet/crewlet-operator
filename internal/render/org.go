@@ -317,7 +317,11 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 	// Every agent seat is pinned, those on the data pods included: an
 	// unpinned seat may land on any pod that runs seats, a seat pool's as
 	// well as a data pod.
-	doc.Placement = &placementDoc{Labels: r.topology.Placement(SeatPool(r.in.Company, s), doc.Handle)}
+	pool := SeatPool(r.in.Company, s)
+	doc.Placement = &placementDoc{Labels: r.topology.Placement(pool, doc.Handle)}
+	if r.topology.Places(pool, doc.Handle) {
+		r.seatPodProviders(s, pool)
+	}
 
 	doc.LLM = phaseLLMDoc{
 		Default:   r.chain(s, "default", spec.LLM.Default),

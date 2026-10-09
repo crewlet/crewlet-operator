@@ -116,6 +116,14 @@ func (t *Topology) Pool(name string) *PoolPlan {
 	return nil
 }
 
+// Places reports whether the plan runs the seat handle on the pods of seat
+// pool pool: the pool is one of the Company's, and the seat is not refused
+// it. The data pods are no seat pool.
+func (t *Topology) Places(pool, handle string) bool {
+	p := t.Pool(pool)
+	return p != nil && slices.Contains(p.Seats, handle)
+}
+
 // Placement is the role.placement labels of an agent seat placed in pool:
 // the pool's own label, or in a PerSeat pool the seat's. They are literal
 // values: Crewlet expands no ${NAME} in a Tier B placement, so a pin can only

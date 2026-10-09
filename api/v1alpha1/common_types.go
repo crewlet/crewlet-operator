@@ -732,6 +732,22 @@ const (
 	// SeatsPlaced=False on a Company whose Shared pools alone run more: the
 	// operator then keeps the pools' pods as they are and starts no other.
 	ReasonPoolCapacityExceeded = "PoolCapacityExceeded"
+
+	// ReasonAgentModeBridgeUnsupported is Applied=False on a Seat placed in
+	// a seat pool whose executor runs on a CLIAgent provider in mode Agent.
+	// An agent-mode run calls the seat's tools back through the tool bridge
+	// of the engine node that holds the seat, and a seat pod serves none:
+	// the engine refuses agent mode on a node with no bridge URL, and the
+	// company's public address reaches the data pods only.
+	ReasonAgentModeBridgeUnsupported = "AgentModeBridgeUnsupported"
+
+	// ReasonCLIAuthNotPortable is Applied=False on a Seat placed in a seat
+	// pool that runs on a CLIAgent provider signed in with a credential
+	// bundle. A seat pod keeps the CLI's login on its scratch volume, so the
+	// bundle is restored at every start, and every pod refreshes the one
+	// login on its own: a vendor that rotates refresh tokens then logs the
+	// whole company out.
+	ReasonCLIAuthNotPortable = "CLIAuthNotPortable"
 )
 
 // The keys a Secret must carry where a field references the whole Secret

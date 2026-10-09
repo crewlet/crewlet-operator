@@ -1,0 +1,133 @@
+package render
+
+import (
+	"cmp"
+	"fmt"
+	"slices"
+
+	"github.com/crewlet/crewlet-operator/api/v1alpha1"
+)
+
+// What a seat pod cannot do that a data pod does: run a CLIAgent provider
+// whose runs call back into the node that holds the seat, or keep a CLI
+// login it was given as a credential bundle.
+//
+// A seat pod binds no port: the pinned engine serves nothing on a node
+// without the ingress role, and the operator gives a seat pod neither an
+// api.port nor CREWLET_MCP_BRIDGE_URL. An agent-mode run calls the seat's
+// tools through the tool bridge of the very node that opened its session
+// (Crewlet's docs/concepts/code-sandbox.md, "The tool bridge"), and the
+// company's public address reaches the data pods only, so the engine refuses
+// agent mode for a seat on a seat pod at run time, after the revision is
+// applied and while the Seat reports Applied. Giving every seat pod a bridge
+// of its own would give it a listener reachable from the sandbox, a route and
+// an address of its own; until the operator does, the seat is refused here,
+// where the refusal is reported before anything runs.
+//
+// A CLI's login lives under its state directory, which on a data pod is the
+// data volume and on a seat pod the scratch volume it loses at every start.
+// A credential bundle is restored only into an empty login, so every seat pod
+// would restore it at each start and then refresh it on its own, beside the
+// data pod: a vendor that rotates refresh tokens retires the token the
+// others hold at each refresh, and logs the company out. A headless token
+// (tokenSecretRef) or an API key never refreshes, and is portable.
+
+// seatPodProviders refuses the providers an agent seat placed in seat pool
+// pool runs on that a seat pod cannot serve.
+func (r *renderer) seatPodProviders(s *v1alpha1.Seat, pool string) {
+	llm := &s.Spec.LLM
+	// The executor is the one phase an agent-mode provider runs as its own
+	// agentic run; every other phase calls it as a text model.
+	for _, link := range r.chainOf(llm.Default, "spec.llm.default") {
+		if cli := r.cliProviders[link.provider]; cli != nil && cli.Mode == v1alpha1.CLIAgentModeAgent {
+			r.errs.add(KindSeat, s.Name, link.field, v1alpha1.ReasonAgentModeBridgeUnsupported, fmt.Sprintf(
+				"runs the seat's work on LLMProvider %s, a CLI in mode Agent, and places the seat in seat pool %s: an "+
+					"agent-mode run calls the seat's tools back through the engine pod that holds the seat, and a seat "+
+					"pod serves no tool bridge. Place the seat in data, or run it on a provider in mode Text",
+				link.provider, pool))
+		}
+	}
+	phases := []struct {
+		refs  []v1alpha1.LLMProviderReference
+		field string
+	}{
+		{llm.Default, "spec.llm.default"},
+		{llm.Review, "spec.llm.review"},
+		{llm.Subagent, "spec.llm.subagent"},
+		{llm.Auxiliary, "spec.llm.auxiliary"},
+		{llm.Judge, "spec.llm.judge"},
+		{llm.Sandbox, "spec.llm.sandbox"},
+	}
+	var refused []string
+	for _, phase := range phases {
+		refs, field := phase.refs, phase.field
+		if len(refs) == 0 {
+			// A phase left unset runs on the default chain.
+			refs, field = llm.Default, "spec.llm.default"
+		}
+		for _, link := range r.chainOf(refs, field) {
+			cli := r.cliProviders[link.provider]
+			if cli == nil || cli.Auth.CredentialBundleSecretRef.Name == "" || slices.Contains(refused, link.provider) {
+				continue
+			}
+			refused = append(refused, link.provider)
+			r.errs.add(KindSeat, s.Name, link.field, v1alpha1.ReasonCLIAuthNotPortable, fmt.Sprintf(
+				"runs on LLMProvider %s, whose CLI signs in with a credential bundle, and places the seat in seat pool %s: "+
+					"a seat pod keeps the login on a volume it loses at every start, restores the bundle each time and "+
+					"refreshes it on its own, which logs every pod out once the vendor rotates the refresh token. Give "+
+					"the provider cli.auth.tokenSecretRef or auth mode APIKey, or place the seat in data",
+				link.provider, pool))
+		}
+	}
+}
+
+// chainLink is one provider of a seat's chain, and the field that names it.
+type chainLink struct {
+	provider string
+	field    string
+}
+
+// chainOf is the LLMProviders a chain names, with the field of each; an empty
+// chain is the one provider a seat with no chain runs on, the head of the
+// document's llm_order. Platform providers are left out: none drives a CLI.
+func (r *renderer) chainOf(refs []v1alpha1.LLMProviderReference, field string) []chainLink {
+	if len(refs) == 0 {
+		head, ok := r.orderHead()
+		if !ok {
+			return nil
+		}
+		return []chainLink{{provider: head, field: "spec.llm"}}
+	}
+	var out []chainLink
+	for i, ref := range refs {
+		if cmp.Or(ref.Kind, v1alpha1.LLMProviderKindLLMProvider) == v1alpha1.LLMProviderKindLLMProvider && r.providers[ref.Name] {
+			out = append(out, chainLink{provider: ref.Name, field: fmt.Sprintf("%s[%d].name", field, i)})
+		}
+	}
+	return out
+}
+
+// orderHead is the LLMProvider a seat with no chain runs on: the head of the
+// document's llm_order, as providersDoc writes it (the first of the Company's
+// spec.llm.order that resolves, else its own providers by name), when it is
+// one of the Company's own. ok is false when it is a platform provider, or
+// when there is none.
+func (r *renderer) orderHead() (string, bool) {
+	for _, ref := range r.in.Company.Spec.LLM.Order {
+		switch cmp.Or(ref.Kind, v1alpha1.LLMProviderKindLLMProvider) {
+		case v1alpha1.LLMProviderKindLLMProvider:
+			if r.providers[ref.Name] {
+				return ref.Name, true
+			}
+		case v1alpha1.LLMProviderKindPlatform:
+			if r.usesPlatformProviders() && r.platform[ref.Name] {
+				return "", false
+			}
+		}
+	}
+	own := sortedByName(r.in.LLMProviders)
+	if len(own) == 0 {
+		return "", false
+	}
+	return own[0].Name, true
+}

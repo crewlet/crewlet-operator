@@ -69,7 +69,7 @@ with your last change yet.
 | | True | `DriftCorrected` | Under `Enforce`, someone changed the document in the engine and the operator applied the rendered one over it. A `Drifted` event names what differed. |
 | | True | `InSync` | Under `Observe`, the engine runs exactly the rendered document. |
 | | True | `Seeded` | Under `Seed`, the engine has a document and owns it from now on. |
-| | False | `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `SecretNotFound`, `SecretTooLarge`, `PoolNotFound`, `PerSeatNotAllowed` | An object of the company keeps the document from rendering. The object at fault reports the same reason; fix it there. |
+| | False | `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `SecretNotFound`, `SecretTooLarge`, `PoolNotFound`, `PerSeatNotAllowed`, `AgentModeBridgeUnsupported`, `CLIAuthNotPortable` | An object of the company keeps the document from rendering. The object at fault reports the same reason; fix it there. |
 | | False | `SeatPoolsNotAllowed` | The Company declares `spec.topology.seatPools`, and its class's `seatPools.policy` is not `Allowed`. Remove the pools, or run the company with a class that allows them. |
 | | False | `PoolCapacityExceeded` | The company's seat pods would number more than its class's `seatPools.maxPods`: its Shared pools' replicas alone (the message says so; lower them), or with the pods of its PerSeat seats, each of which reports it too. |
 | | False | `Invalid` | The engine's dry run refused the document, in its own words. Each problem is also reported on the object that rendered it, as `Applied=False Invalid`. |
@@ -115,6 +115,8 @@ conditions. `kubectl get engineclasses` shows it.
 | | False | `Invalid` | The engine refused its part of the document; the message is the engine's. |
 | | False | `PerSeatNotAllowed` | A Seat is placed in a PerSeat pool, and its Company's class does not set `seatPools.allowPerSeat`. Place it in `data` or a Shared pool. |
 | | False | `PoolCapacityExceeded` | A Seat is placed in a PerSeat pool, and its pods would take the company's seat pods past the class's `seatPools.maxPods`. Place it in a Shared pool, or lower a pool's replicas. |
+| | False | `AgentModeBridgeUnsupported` | A Seat is placed in a seat pool, and its work runs on a `CLIAgent` provider in `mode: Agent`, whose runs call the seat's tools back through a tool bridge a seat pod does not serve. Place it in `data`, or run its executor on a provider in `mode: Text` ([Seat pools](cli-agents.md#seat-pools)). |
+| | False | `CLIAuthNotPortable` | A Seat is placed in a seat pool, and runs on a `CLIAgent` provider signed in with a credential bundle, which every seat pod would restore and refresh on its own. Give the provider `tokenSecretRef` or `auth.mode: APIKey`, or place the seat in `data`. |
 | | False | `Blocked` | It is fine, and another object keeps the document from being applied (a document is applied whole). Fix the object the Company's `ConfigApplied` names. A part whose current generation already runs keeps `True` meanwhile. |
 | | False | `Applying` | Its current generation is in a revision the engine is applying. |
 | | False | `ApplyFailed` | Its current generation is in a revision the engine did not apply; the Company's `ConfigApplied` says why. |

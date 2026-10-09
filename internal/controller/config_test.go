@@ -883,6 +883,9 @@ var _ = Describe("Company config", Ordered, func() {
 				{Name: poolGeneral, Mode: crewletaiv1alpha1.SeatPoolShared},
 				{Name: poolIsolated, Mode: crewletaiv1alpha1.SeatPoolPerSeat},
 			}
+			// The seats with no chain of their own run on the provider
+			// that reaches no model, never on the agent-mode CLI below.
+			c.Spec.LLM.Order = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-llm"}}
 			g.Expect(k8sClient.Update(ctx, c)).To(Succeed())
 		}).WithTimeout(settle).Should(Succeed())
 		placed := func(pool string) func(*crewletaiv1alpha1.Seat) {
@@ -891,6 +894,20 @@ var _ = Describe("Company config", Ordered, func() {
 		shared := newSeat(namespace, name, "shared", placed(poolGeneral))
 		alone := newSeat(namespace, name, "alone", placed(poolIsolated))
 		lost := newSeat(namespace, name, "lost", placed("nowhere"))
+		Expect(k8sClient.Create(ctx, &crewletaiv1alpha1.LLMProvider{
+			Namespace: namespace, Name: name + "-agent",
+			Spec: crewletaiv1alpha1.LLMProviderSpec{
+				CompanyRef:          crewletaiv1alpha1.CompanyReference{Name: name},
+				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{Type: crewletaiv1alpha1.LLMProviderCLIAgent, Model: "sonnet"},
+				CLI: crewletaiv1alpha1.CLIAgentSettings{
+					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Mode: crewletaiv1alpha1.CLIAgentModeAgent,
+					Auth: crewletaiv1alpha1.CLIAgentAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
+				},
+			},
+		})).To(Succeed())
+		bridged := newSeat(namespace, name, "bridged", placed(poolGeneral), func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-agent"}}
+		})
 		standIn(c)
 
 		By("refusing the seat in a pool the company does not declare as a reference that does not resolve")
@@ -901,6 +918,12 @@ var _ = Describe("Company config", Ordered, func() {
 		Eventually(reasonOf(alone, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonPerSeatNotAllowed))
 		Expect(conditionOf(alone, crewletaiv1alpha1.ConditionApplied)(Default).Message).To(ContainSubstring("spec.seatPools.allowPerSeat"))
 		Expect(conditionOf(alone, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue))
+
+		By("refusing the seat whose executor runs a CLI in agent mode on a seat pod, which serves no tool bridge")
+		Eventually(reasonOf(bridged, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
+			Should(Equal(crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported))
+		Expect(conditionOf(bridged, crewletaiv1alpha1.ConditionApplied)(Default).Message).To(ContainSubstring("LLMProvider " + name + "-agent, a CLI in mode Agent"))
+		Expect(conditionOf(bridged, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue))
 
 		By("blocking the seat that can run, and recording where it is placed")
 		Eventually(reasonOf(shared, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonBlocked))

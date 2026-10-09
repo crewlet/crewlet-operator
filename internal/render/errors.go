@@ -14,12 +14,13 @@ import (
 // different object or something that cannot be there (a person where the
 // engine runs a turn, a provisioned credential nothing provisions, an
 // agent-mode CLI with no public address to call its tools back through), or it
-// places a seat in a pool the company's EngineClass does not let it run. The
-// controller reports it on the object that holds the reference (Kind and
-// Name), as ResolvedRefs=False with Reason, as Accepted=False for a Conflict,
-// or as Applied=False for a pool the class does not admit
-// (PerSeatNotAllowed, PoolCapacityExceeded); a refusal of the Company itself
-// is reported on its ConfigApplied.
+// places a seat in a pool the company's EngineClass does not let it run, or
+// whose pods cannot serve the providers it runs on. The controller reports it
+// on the object that holds the reference (Kind and Name), as ResolvedRefs=False
+// with Reason, as Accepted=False for a Conflict, or as Applied=False for a pool
+// the class does not admit (PerSeatNotAllowed, PoolCapacityExceeded) or cannot
+// serve the seat (AgentModeBridgeUnsupported, CLIAuthNotPortable); a refusal
+// of the Company itself is reported on its ConfigApplied.
 //
 // The company document is applied whole or not at all, so one RefError
 // blocks the whole render.
@@ -36,8 +37,9 @@ type RefError struct {
 	// v1alpha1.ReasonHumanSeat, v1alpha1.ReasonNoProvisioner,
 	// v1alpha1.ReasonNotExposed, or for a placement
 	// v1alpha1.ReasonPoolNotFound, v1alpha1.ReasonPerSeatNotAllowed,
-	// v1alpha1.ReasonPoolCapacityExceeded or
-	// v1alpha1.ReasonSeatPoolsNotAllowed.
+	// v1alpha1.ReasonPoolCapacityExceeded, v1alpha1.ReasonSeatPoolsNotAllowed,
+	// v1alpha1.ReasonAgentModeBridgeUnsupported or
+	// v1alpha1.ReasonCLIAuthNotPortable.
 	Reason string
 	// Message says what is wrong and what to do, for a condition message.
 	Message string

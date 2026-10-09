@@ -251,6 +251,8 @@ type renderer struct {
 	mcp       map[string]*v1alpha1.MCPServer
 	providers map[string]bool
 	platform  map[string]bool
+	// cli are the CLIAgent providers' cli blocks, by name.
+	cliProviders map[string]*v1alpha1.CLIAgentSettings
 
 	// seatSchedules and unitSchedules are the Schedules whose target
 	// resolves, by the metadata.name of the Seat or Unit they target.
@@ -269,15 +271,16 @@ type renderer struct {
 
 func newRenderer(in *Input) *renderer {
 	r := &renderer{
-		in:          in,
-		owner:       ObjectRef{Kind: KindCompany, Name: in.Company.Name},
-		units:       map[string]*v1alpha1.Unit{},
-		seats:       map[string]*v1alpha1.Seat{},
-		mcp:         map[string]*v1alpha1.MCPServer{},
-		providers:   map[string]bool{},
-		platform:    map[string]bool{},
-		refs:        map[secretref.Key]struct{}{},
-		provisioned: map[string]struct{}{},
+		in:           in,
+		owner:        ObjectRef{Kind: KindCompany, Name: in.Company.Name},
+		units:        map[string]*v1alpha1.Unit{},
+		seats:        map[string]*v1alpha1.Seat{},
+		mcp:          map[string]*v1alpha1.MCPServer{},
+		providers:    map[string]bool{},
+		platform:     map[string]bool{},
+		cliProviders: map[string]*v1alpha1.CLIAgentSettings{},
+		refs:         map[secretref.Key]struct{}{},
+		provisioned:  map[string]struct{}{},
 	}
 	for i := range in.Units {
 		r.units[in.Units[i].Name] = &in.Units[i]
@@ -289,7 +292,11 @@ func newRenderer(in *Input) *renderer {
 		r.mcp[in.MCPServers[i].Name] = &in.MCPServers[i]
 	}
 	for i := range in.LLMProviders {
-		r.providers[in.LLMProviders[i].Name] = true
+		p := &in.LLMProviders[i]
+		r.providers[p.Name] = true
+		if p.Spec.Type == v1alpha1.LLMProviderCLIAgent {
+			r.cliProviders[p.Name] = &p.Spec.CLI
+		}
 	}
 	if r.usesPlatformProviders() {
 		for i := range in.Class.Spec.PlatformLLMProviders {
