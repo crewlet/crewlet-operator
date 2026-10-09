@@ -62,8 +62,11 @@ type SecretReference struct {
 
 // NamespacedSecretKeyReference selects one key of a Secret in a named
 // namespace. Only the cluster-scoped EngineClass uses it: a platform-owned
-// credential (a managed LLM key, an object-store key) lives in a namespace the
-// platform controls, never in a tenant's.
+// value (a managed LLM key, telemetry headers) lives in a namespace the
+// platform controls rather than in each tenant's. The value itself still
+// reaches every tenant that runs with it (see the field that references
+// it); the namespace keeps tenants from the platform's Secret, not from the
+// value.
 type NamespacedSecretKeyReference struct {
 	// namespace is the namespace the Secret is in.
 	// +required
@@ -184,7 +187,9 @@ type NamespacedSecretValueSource struct {
 // the platform's own API. A value from a Secret is copied by the operator into
 // a Secret it owns in each Company's namespace and referenced from the pod, as
 // telemetry headers are, so the value never appears in the pod template and the
-// platform's Secret never has to be readable from a tenant namespace.
+// platform's Secret never has to be readable from a tenant namespace. The
+// value is in every tenant's engine pod all the same, where code the tenant
+// runs can read it: put nothing here a tenant must not hold.
 // +kubebuilder:validation:XValidation:rule="has(self.value) != has(self.valueFrom)",message="exactly one of value and valueFrom must be set"
 type ClassEnvVar struct {
 	// name is the variable's name.

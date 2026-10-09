@@ -107,7 +107,9 @@ pods of every Company of the class: platform wiring such as the address of
 the platform's own API. A value from a Secret is copied by the operator into
 a Secret it owns in each Company's namespace and referenced from the pod, as
 telemetry headers are, so the value never appears in the pod template and the
-platform's Secret never has to be readable from a tenant namespace.
+platform's Secret never has to be readable from a tenant namespace. The
+value is in every tenant's engine pod all the same, where code the tenant
+runs can read it: put nothing here a tenant must not hold.
 
 
 
@@ -238,7 +240,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `order` _[LLMProviderReference](#llmproviderreference) array_ | order is the providers' precedence: a seat that names no provider for<br />a phase falls back to the first one here. The providers it leaves out<br />follow it: the company's LLMProviders by name, then the platform<br />providers by name. Crewlet's providers.llm_order. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
-| `usePlatformProviders` _boolean_ | usePlatformProviders adds the EngineClass's platformLLMProviders to the<br />company, so seats can run on models the platform provides. |  | Optional: \{\} <br /> |
+| `usePlatformProviders` _boolean_ | usePlatformProviders adds the EngineClass's platformLLMProviders to the<br />company, so seats can run on models the platform provides. Their keys<br />are pushed into the company's engine, where the tenant can read them<br />(see the class's platformLLMProviders). |  | Optional: \{\} <br /> |
 
 
 #### CompanyObjects
@@ -358,7 +360,7 @@ _Appears in:_
 | `topology` _[TopologyStatus](#topologystatus)_ | topology is the state of the company's pods. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `config` _[ConfigStatus](#configstatus)_ | config is the revision the engine runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `endpoints` _[CompanyEndpoints](#companyendpoints)_ | endpoints is where the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `apiAccessSecretRef` _[SecretReference](#secretreference)_ | apiAccessSecretRef names the Secret, in the Company's namespace, that<br />holds a bearer token for the engine's API under the key token<br />(APIAccessTokenKey) and the API's in-cluster base URL under the key<br />url (APIAccessURLKey). It is<br />for the company's consumers (a control plane, a dashboard); the<br />operator uses a token of its own, so revoking this one never locks the<br />operator out. |  | Optional: \{\} <br /> |
+| `apiAccessSecretRef` _[SecretReference](#secretreference)_ | apiAccessSecretRef names the Secret, in the Company's namespace, that<br />holds a bearer token for the engine's API under the key token<br />(APIAccessTokenKey) and the API's in-cluster base URL under the key<br />url (APIAccessURLKey). It is for the company's consumers (a control<br />plane, a dashboard); the operator uses a token of its own, so revoking<br />this one never locks the operator out.<br />The token is the engine's administrator: Crewlet has no token scopes,<br />so whoever holds it can rewrite the company document and reveal every<br />value in the engine's secret store, the class's platform model keys<br />included. Grant read on this Secret only to whoever may do that, by<br />resourceNames: read on every Secret of the namespace also exposes<br /><company>-api-tokens, <company>-keyring and <company>-bootstrap. |  | Optional: \{\} <br /> |
 
 
 #### CompanyTopology
@@ -761,7 +763,7 @@ _Appears in:_
 | `topologySpreadConstraints` _[TopologySpreadConstraint](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#topologyspreadconstraint-v1-core) array_ | topologySpreadConstraints spread engine pods across topology domains. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `runtimeClassName` _string_ | runtimeClassName is the RuntimeClass engine pods run with, for example<br />a sandboxed runtime such as gVisor. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `priorityClassName` _string_ | priorityClassName is the PriorityClass of engine pods. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `env` _[ClassEnvVar](#classenvvar) array_ | env adds environment variables to the engine container of every<br />Company of the class: platform wiring that is the same for all of<br />them, such as the address of the platform's own API. A Company's<br />spec.runtime.env is merged over it by name. The same names are<br />refused as there: those starting with CREWLET_ or OTEL_, and<br />ANTHROPIC_API_KEY and OPENAI_API_KEY. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `env` _[ClassEnvVar](#classenvvar) array_ | env adds environment variables to the engine container of every<br />Company of the class: platform wiring that is the same for all of<br />them, such as the address of the platform's own API. Every value,<br />one from a Secret included, reaches every tenant of the class: code<br />the tenant runs in the engine's pod can read its environment. A Company's<br />spec.runtime.env is merged over it by name. The same names are<br />refused as there: those starting with CREWLET_ or OTEL_, and<br />ANTHROPIC_API_KEY and OPENAI_API_KEY. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 
 
 #### EnginePodTemplate
@@ -1619,8 +1621,11 @@ _Appears in:_
 
 NamespacedSecretKeyReference selects one key of a Secret in a named
 namespace. Only the cluster-scoped EngineClass uses it: a platform-owned
-credential (a managed LLM key, an object-store key) lives in a namespace the
-platform controls, never in a tenant's.
+value (a managed LLM key, telemetry headers) lives in a namespace the
+platform controls rather than in each tenant's. The value itself still
+reaches every tenant that runs with it (see the field that references
+it); the namespace keeps tenants from the platform's Secret, not from the
+value.
 
 
 
@@ -1734,8 +1739,15 @@ _Appears in:_
 
 PlatformLLMProvider is a model provider the platform offers to every
 Company of a class that sets spec.llm.usePlatformProviders. Its keys live in
-a namespace the platform controls and are pushed straight into each opted-in
-engine's secret store, so a tenant never holds them.
+a namespace the platform controls and are pushed into the secret store of
+each opted-in company's engine.
+
+That store is the tenant's to read: the engine's API reveals any value in
+it to whoever holds the company's access token (status.apiAccessSecretRef
+of the Company), and code the tenant runs in the engine's pod can open it
+with the keyring the pod holds. So every opted-in tenant can read these
+keys. Offer keys you would give each of them: one per tenant, or the
+per-tenant virtual keys of an LLM gateway, never the platform's own.
 
 
 
@@ -2367,9 +2379,13 @@ _Appears in:_
 
 
 
-TelemetrySettings sends the engine's traces to an OpenTelemetry collector.
-The engine reads its exporter configuration from the standard OTEL_*
-environment variables, which the operator sets from these fields.
+TelemetrySettings sends the engine's traces and metrics to an OpenTelemetry
+collector. The engine reads its exporter configuration from the standard
+OTEL_* environment variables, which the operator sets from these fields;
+with an endpoint set, Crewlet exports metrics as well as traces, and the
+two cannot be turned off separately (OTEL_ names are the operator's, so
+OTEL_METRICS_EXPORTER cannot be set in env). Code a sandbox runs exports
+nothing: v1alpha1 does not wire Crewlet's sandbox telemetry receiver.
 
 
 
@@ -2379,7 +2395,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `otlpEndpoint` _string_ | otlpEndpoint is the collector's OTLP/HTTP endpoint<br />(OTEL_EXPORTER_OTLP_ENDPOINT). |  | MaxLength: 2048 <br />MinLength: 1 <br />Required: \{\} <br /> |
-| `headersSecretRef` _[NamespacedSecretKeyReference](#namespacedsecretkeyreference)_ | headersSecretRef is a Secret key holding the headers sent to the<br />collector, in the OTEL_EXPORTER_OTLP_HEADERS format<br />(key1=value1,key2=value2), usually to authenticate. The operator copies<br />the value into a Secret it owns in each Company's namespace and<br />references it from the pod; the value never appears in the pod<br />template. |  | Optional: \{\} <br /> |
+| `headersSecretRef` _[NamespacedSecretKeyReference](#namespacedsecretkeyreference)_ | headersSecretRef is a Secret key holding the headers sent to the<br />collector, in the OTEL_EXPORTER_OTLP_HEADERS format<br />(key1=value1,key2=value2), usually to authenticate. The operator copies<br />the value into a Secret it owns in each Company's namespace and<br />references it from the pod; the value never appears in the pod<br />template. It is in the engine's environment, which code the tenant<br />runs in the pod can read, so it reaches every tenant of the class: use<br />a credential that may only write telemetry, scoped per tenant where<br />the collector allows it. |  | Optional: \{\} <br /> |
 
 
 #### TokenBudget

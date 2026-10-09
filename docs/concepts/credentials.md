@@ -14,6 +14,28 @@ document. Rewriting a Secret rotates its value without restarting the engine.
 Secrets referenced from a namespaced object are in that object's namespace;
 those referenced from an `EngineClass` name their namespace.
 
+## Who can read a value
+
+By reference does not mean out of the tenant's reach. A value the engine
+uses is readable by the company's tenant:
+
+- The engine runs the tenant's code (a `Stdio` MCP server, sandbox setup
+  commands, agents' tool calls) as its own user, which can read the
+  engine's environment and `crewlet.yaml` and open the secret store on the
+  data volume with the keyring the pod holds.
+- The access token the Company publishes (`status.apiAccessSecretRef`) is
+  the engine's administrator: Crewlet has no token scopes, and its API
+  reveals any value in the secret store to that token.
+
+So a credential an `EngineClass` gives its companies (a platform model key,
+telemetry headers, a class env value) is every tenant's. Give a class only
+what each tenant may hold: per-tenant keys, or per-tenant virtual keys from
+an LLM gateway. Object-store keys are a Company's own
+(`spec.objects.credentialsSecretRef`) for that reason. In the tenant's
+namespace, grant `get` on `<company>-api-access` by `resourceNames`: read on
+every Secret there also exposes `<company>-api-tokens`, `<company>-keyring`
+and `<company>-bootstrap`.
+
 ## Covered in v1alpha1
 
 | Crewlet position | Field | Reference |

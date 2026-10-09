@@ -717,8 +717,15 @@ spec:
                   description: |-
                     PlatformLLMProvider is a model provider the platform offers to every
                     Company of a class that sets spec.llm.usePlatformProviders. Its keys live in
-                    a namespace the platform controls and are pushed straight into each opted-in
-                    engine's secret store, so a tenant never holds them.
+                    a namespace the platform controls and are pushed into the secret store of
+                    each opted-in company's engine.
+
+                    That store is the tenant's to read: the engine's API reveals any value in
+                    it to whoever holds the company's access token (status.apiAccessSecretRef
+                    of the Company), and code the tenant runs in the engine's pod can open it
+                    with the keyring the pod holds. So every opted-in tenant can read these
+                    keys. Offer keys you would give each of them: one per tenant, or the
+                    per-tenant virtual keys of an LLM gateway, never the platform's own.
                   properties:
                     apiKeySecretRefs:
                       description: |-
@@ -728,8 +735,11 @@ spec:
                         description: |-
                           NamespacedSecretKeyReference selects one key of a Secret in a named
                           namespace. Only the cluster-scoped EngineClass uses it: a platform-owned
-                          credential (a managed LLM key, an object-store key) lives in a namespace the
-                          platform controls, never in a tenant's.
+                          value (a managed LLM key, telemetry headers) lives in a namespace the
+                          platform controls rather than in each tenant's. The value itself still
+                          reaches every tenant that runs with it (see the field that references
+                          it); the namespace keeps tenants from the platform's Secret, not from the
+                          value.
                         properties:
                           key:
                             description: key is the key within the Secret's data.
@@ -1843,7 +1853,9 @@ spec:
                         description: |-
                           env adds environment variables to the engine container of every
                           Company of the class: platform wiring that is the same for all of
-                          them, such as the address of the platform's own API. A Company's
+                          them, such as the address of the platform's own API. Every value,
+                          one from a Secret included, reaches every tenant of the class: code
+                          the tenant runs in the engine's pod can read its environment. A Company's
                           spec.runtime.env is merged over it by name. The same names are
                           refused as there: those starting with CREWLET_ or OTEL_, and
                           ANTHROPIC_API_KEY and OPENAI_API_KEY.
@@ -1854,7 +1866,9 @@ spec:
                             the platform's own API. A value from a Secret is copied by the operator into
                             a Secret it owns in each Company's namespace and referenced from the pod, as
                             telemetry headers are, so the value never appears in the pod template and the
-                            platform's Secret never has to be readable from a tenant namespace.
+                            platform's Secret never has to be readable from a tenant namespace. The
+                            value is in every tenant's engine pod all the same, where code the tenant
+                            runs can read it: put nothing here a tenant must not hold.
                           properties:
                             name:
                               description: name is the variable's name.
@@ -2225,7 +2239,10 @@ spec:
                       (key1=value1,key2=value2), usually to authenticate. The operator copies
                       the value into a Secret it owns in each Company's namespace and
                       references it from the pod; the value never appears in the pod
-                      template.
+                      template. It is in the engine's environment, which code the tenant
+                      runs in the pod can read, so it reaches every tenant of the class: use
+                      a credential that may only write telemetry, scoped per tenant where
+                      the collector allows it.
                     properties:
                       key:
                         description: key is the key within the Secret's data.

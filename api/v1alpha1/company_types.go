@@ -152,7 +152,9 @@ type CompanyLLMSettings struct {
 	Order []LLMProviderReference `json:"order,omitempty"`
 
 	// usePlatformProviders adds the EngineClass's platformLLMProviders to the
-	// company, so seats can run on models the platform provides.
+	// company, so seats can run on models the platform provides. Their keys
+	// are pushed into the company's engine, where the tenant can read them
+	// (see the class's platformLLMProviders).
 	// +optional
 	UsePlatformProviders *bool `json:"usePlatformProviders,omitempty"`
 }
@@ -924,10 +926,16 @@ type CompanyStatus struct {
 	// apiAccessSecretRef names the Secret, in the Company's namespace, that
 	// holds a bearer token for the engine's API under the key token
 	// (APIAccessTokenKey) and the API's in-cluster base URL under the key
-	// url (APIAccessURLKey). It is
-	// for the company's consumers (a control plane, a dashboard); the
-	// operator uses a token of its own, so revoking this one never locks the
-	// operator out.
+	// url (APIAccessURLKey). It is for the company's consumers (a control
+	// plane, a dashboard); the operator uses a token of its own, so revoking
+	// this one never locks the operator out.
+	//
+	// The token is the engine's administrator: Crewlet has no token scopes,
+	// so whoever holds it can rewrite the company document and reveal every
+	// value in the engine's secret store, the class's platform model keys
+	// included. Grant read on this Secret only to whoever may do that, by
+	// resourceNames: read on every Secret of the namespace also exposes
+	// <company>-api-tokens, <company>-keyring and <company>-bootstrap.
 	// +optional
 	APIAccessSecretRef SecretReference `json:"apiAccessSecretRef,omitzero"`
 }

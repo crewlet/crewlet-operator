@@ -511,7 +511,9 @@ type EnginePodSpec struct {
 
 	// env adds environment variables to the engine container of every
 	// Company of the class: platform wiring that is the same for all of
-	// them, such as the address of the platform's own API. A Company's
+	// them, such as the address of the platform's own API. Every value,
+	// one from a Secret included, reaches every tenant of the class: code
+	// the tenant runs in the engine's pod can read its environment. A Company's
 	// spec.runtime.env is merged over it by name. The same names are
 	// refused as there: those starting with CREWLET_ or OTEL_, and
 	// ANTHROPIC_API_KEY and OPENAI_API_KEY.
@@ -538,8 +540,15 @@ type EnginePodTemplate struct {
 
 // PlatformLLMProvider is a model provider the platform offers to every
 // Company of a class that sets spec.llm.usePlatformProviders. Its keys live in
-// a namespace the platform controls and are pushed straight into each opted-in
-// engine's secret store, so a tenant never holds them.
+// a namespace the platform controls and are pushed into the secret store of
+// each opted-in company's engine.
+//
+// That store is the tenant's to read: the engine's API reveals any value in
+// it to whoever holds the company's access token (status.apiAccessSecretRef
+// of the Company), and code the tenant runs in the engine's pod can open it
+// with the keyring the pod holds. So every opted-in tenant can read these
+// keys. Offer keys you would give each of them: one per tenant, or the
+// per-tenant virtual keys of an LLM gateway, never the platform's own.
 // +kubebuilder:validation:XValidation:rule="!has(self.claudeModel) || self.type == 'Anthropic'",message="claudeModel applies to type Anthropic only"
 // +kubebuilder:validation:XValidation:rule="!has(self.reasoning) || self.type == 'OpenAI'",message="reasoning applies to type OpenAI only; an Anthropic model's thinking depth is reasoningEffort"
 // +kubebuilder:validation:XValidation:rule="!has(self.reasoningEffort) || self.type == 'Anthropic' || (self.type == 'OpenAI' && has(self.reasoning) && self.reasoning)",message="reasoningEffort is sent to an OpenAI model only while reasoning is true, and never to an OpenAICompatible one"
@@ -584,9 +593,13 @@ type EngineLimits struct {
 	MaxMCPServers *int32 `json:"maxMCPServers,omitempty"`
 }
 
-// TelemetrySettings sends the engine's traces to an OpenTelemetry collector.
-// The engine reads its exporter configuration from the standard OTEL_*
-// environment variables, which the operator sets from these fields.
+// TelemetrySettings sends the engine's traces and metrics to an OpenTelemetry
+// collector. The engine reads its exporter configuration from the standard
+// OTEL_* environment variables, which the operator sets from these fields;
+// with an endpoint set, Crewlet exports metrics as well as traces, and the
+// two cannot be turned off separately (OTEL_ names are the operator's, so
+// OTEL_METRICS_EXPORTER cannot be set in env). Code a sandbox runs exports
+// nothing: v1alpha1 does not wire Crewlet's sandbox telemetry receiver.
 type TelemetrySettings struct {
 	// otlpEndpoint is the collector's OTLP/HTTP endpoint
 	// (OTEL_EXPORTER_OTLP_ENDPOINT).
@@ -601,7 +614,10 @@ type TelemetrySettings struct {
 	// (key1=value1,key2=value2), usually to authenticate. The operator copies
 	// the value into a Secret it owns in each Company's namespace and
 	// references it from the pod; the value never appears in the pod
-	// template.
+	// template. It is in the engine's environment, which code the tenant
+	// runs in the pod can read, so it reaches every tenant of the class: use
+	// a credential that may only write telemetry, scoped per tenant where
+	// the collector allows it.
 	// +optional
 	HeadersSecretRef NamespacedSecretKeyReference `json:"headersSecretRef,omitzero"`
 }
