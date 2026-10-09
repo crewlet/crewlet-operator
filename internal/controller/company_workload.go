@@ -98,6 +98,11 @@ const (
 // away.
 const preStopSleepSeconds = 5
 
+// livenessFailureThreshold is how many failed /health probes, ten seconds
+// apart, restart an engine container: a minute, longer than the 45 seconds
+// in which the engine's watchdog ends a wedged process itself.
+const livenessFailureThreshold = 6
+
 // workload is everything a data pod's template is built from.
 type workload struct {
 	image     string
@@ -454,11 +459,17 @@ func engineContainerOf(
 			WithFailureThreshold(60)).
 		// /health answers 200 for as long as the process lives, through a
 		// drain too, so liveness never kills a pod that is finishing its
-		// turns.
+		// turns. A minute of failures before a restart, as the engine's own
+		// deployment guide sets: its watchdog ends a process whose watched
+		// duty stalls for a seat lease's TTL (45 seconds) by itself, so
+		// liveness is the backstop for a process too wedged to do even
+		// that, and the Kubernetes default of three failures (30 seconds)
+		// would restart one the watchdog was about to judge.
 		WithLivenessProbe(corev1ac.Probe().
 			WithHTTPGet(health("/health")).
 			WithPeriodSeconds(10).
-			WithTimeoutSeconds(5)).
+			WithTimeoutSeconds(5).
+			WithFailureThreshold(livenessFailureThreshold)).
 		// /ready answers 503 while the engine has no document, sheds load,
 		// or drains, which takes the pod out of the engine Service.
 		WithReadinessProbe(corev1ac.Probe().

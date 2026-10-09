@@ -366,6 +366,8 @@ var _ = Describe("Company runtime", func() {
 		Expect(*container.SecurityContext.ReadOnlyRootFilesystem).To(BeTrue())
 		Expect(container.SecurityContext.Capabilities.Drop).To(Equal([]corev1.Capability{"ALL"}))
 		Expect(container.LivenessProbe.HTTPGet.Path).To(Equal("/health"))
+		Expect(container.LivenessProbe.PeriodSeconds*container.LivenessProbe.FailureThreshold).To(BeNumerically(">", 45),
+			"liveness restarts the engine before its watchdog's 45 seconds")
 		Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/health"))
 		Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/ready"))
 		Expect(container.Lifecycle.PreStop.Sleep.Seconds).To(BeNumerically(">", 0))
