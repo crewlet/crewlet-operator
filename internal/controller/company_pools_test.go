@@ -449,9 +449,9 @@ var _ = Describe("Company seat pools", func() {
 		}))
 		engineSvc := &corev1.Service{}
 		get(engineSvc, engineName)
-		Expect(engineSvc.Spec.Ports).To(HaveLen(2), "the engine Service routes the leaf listener")
+		Expect(engineSvc.Spec.Ports).To(HaveLen(2), "the engine Service must route the API and the public listener and never the leaf port, which only the headless data Service names")
 		for _, port := range engineSvc.Spec.Ports {
-			Expect(port.Name).To(BeElementOf(portName, publicPortName), "the engine Service routes the leaf listener")
+			Expect(port.Name).To(BeElementOf(portName, publicPortName), "the engine Service must route the API and the public listener and never the leaf port, which only the headless data Service names")
 		}
 
 		By("creating no seat pod while the data pod is not ready")

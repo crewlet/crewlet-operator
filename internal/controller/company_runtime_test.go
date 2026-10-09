@@ -421,7 +421,7 @@ var _ = Describe("Company runtime", func() {
 			"liveness restarts the engine before its watchdog's 45 seconds")
 		Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/health"))
 		Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/ready"))
-		Expect(container.ReadinessProbe.HTTPGet.Port).To(Equal(intstr.FromString("http")), "probed on the public port, which serves no probe")
+		Expect(container.ReadinessProbe.HTTPGet.Port).To(Equal(intstr.FromString("http")), "the readiness probe asks a port other than http, such as the public one, which serves no probe")
 		Expect(container.Ports).To(ConsistOf(
 			corev1.ContainerPort{Name: portName, ContainerPort: 8080, Protocol: corev1.ProtocolTCP},
 			corev1.ContainerPort{Name: publicPortName, ContainerPort: 8081, Protocol: corev1.ProtocolTCP},
