@@ -182,6 +182,43 @@ func TestBootstrapPlacesTheDataPodInTheDataPool(t *testing.T) {
 	}
 }
 
+// TestBootstrapServesOutsidePartiesOnTheirOwnListener pins the data pod's
+// two listeners: the admin API on APIPort and the routes outside parties
+// call on PublicPort, opened on every data pod whatever its class routes,
+// so that a class's exposure never decides which routes the admin port
+// serves; and a seat pod, which serves no public route, opens none.
+func TestBootstrapServesOutsidePartiesOnTheirOwnListener(t *testing.T) {
+	for _, c := range bootstrapCases() {
+		t.Run(c.name, func(t *testing.T) {
+			doc, err := Bootstrap(c.input(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			leaves := flatten(t, doc.YAML)
+			if got := leaves["api.port"]; fmt.Sprint(got) != fmt.Sprint(APIPort) {
+				t.Errorf("api.port = %v, want %d", got, APIPort)
+			}
+			if got := leaves["api.public.port"]; fmt.Sprint(got) != fmt.Sprint(PublicPort) {
+				t.Errorf("api.public.port = %v, want %d: the webhooks would share the admin API's listener", got, PublicPort)
+			}
+		})
+	}
+	for _, c := range seatPodCases() {
+		t.Run("seat pod "+c.name, func(t *testing.T) {
+			in, _ := c.input(t)
+			doc, err := SeatPodBootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for key := range flatten(t, doc.YAML) {
+				if strings.HasPrefix(key, "api.public") {
+					t.Errorf("a seat pod's Tier A sets %s: it serves no public route", key)
+				}
+			}
+		})
+	}
+}
+
 // TestBootstrapNamesTheOperatorTheOnlyWriterUnderEnforce pins
 // api.auth.company_writers per management policy: under Enforce the
 // operator's own token alone may change the company document, so the engine

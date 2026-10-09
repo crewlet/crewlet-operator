@@ -210,7 +210,10 @@ document. The operator handles them without a field:
   reads them from there, so the values never appear in a pod template. No
   credential of the engine's own is an environment variable, since the
   engine resolves a `${NAME}` in its company document from its
-  environment.
+  environment. The telemetry headers never reach a sandbox either: a remote
+  sandbox exports its telemetry to the engine's public listener with a
+  token signed for its one run (`CREWLET_SANDBOX_OTEL_RECEIVER_URL`), and
+  the engine adds the headers when it forwards to the collector.
 - **Platform wiring** goes in the engine's environment: what every company
   of a class shares in `EngineClass.spec.podTemplate.spec.env` (from a
   Secret in the platform's namespace), and what is one company's own in

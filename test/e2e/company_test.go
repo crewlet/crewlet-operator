@@ -6,6 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"os/exec"
 	"strings"
 	"time"
@@ -61,6 +64,9 @@ var (
 
 	// engineURL is the engine API's in-cluster address.
 	engineURL = fmt.Sprintf("http://%s.%s.svc:8080", engineService, tenantNamespace)
+	// publicURL is the in-cluster address of the engine's public listener,
+	// the port the webhooks' route reaches.
+	publicURL = fmt.Sprintf("http://%s.%s.svc:8081", engineService, tenantNamespace)
 )
 
 var _ = Describe("Company", Ordered, func() {
@@ -163,6 +169,67 @@ var _ = Describe("Company", Ordered, func() {
 		out, err := utils.Run(exec.Command("kubectl", "logs", curlPodName, "-n", consumerNamespace))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(out).To(ContainSubstring("Acme"), "the engine's active document is not the company's")
+
+		By("being sent to the public listener for a webhook, which the API port does not serve")
+		const webhookPod = "webhook-on-api"
+		apply(curlPod(consumerNamespace, webhookPod,
+			`curl -sS --max-time 20 -X POST -w "\nstatus=%{http_code}\n" "${URL}/webhooks/gitlab"`))
+		Expect(curlPhase(consumerNamespace, webhookPod)).To(Equal(corev1.PodSucceeded),
+			"the consumer's request did not complete")
+		out, err = utils.Run(exec.Command("kubectl", "logs", webhookPod, "-n", consumerNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(out).To(ContainSubstring("status=404"), "the API port served a webhook")
+		Expect(out).To(ContainSubstring("api.public"), "the engine runs no public listener to send the vendor to")
+	})
+
+	It("serves the public listener the routes outside parties call, and nothing else", func() {
+		// Through the kubelet into the pod's own network namespace, which
+		// no NetworkPolicy polices: this is the engine's split, not the
+		// policy's.
+		local := freePort()
+		forward := exec.CommandContext(ctx, "kubectl", "port-forward", "-n", tenantNamespace,
+			"pod/"+dataPod, fmt.Sprintf("%d:8081", local))
+		Expect(forward.Start()).To(Succeed())
+		DeferCleanup(func() {
+			_ = forward.Process.Kill()
+			_ = forward.Wait()
+		})
+		ask := func(g Gomega, method, path string) (int, string) {
+			req, err := http.NewRequestWithContext(ctx, method, fmt.Sprintf("http://127.0.0.1:%d%s", local, path), nil)
+			g.Expect(err).NotTo(HaveOccurred())
+			resp, err := http.DefaultClient.Do(req)
+			g.Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = resp.Body.Close() }()
+			body, err := io.ReadAll(resp.Body)
+			g.Expect(err).NotTo(HaveOccurred())
+			return resp.StatusCode, string(body)
+		}
+		Eventually(func(g Gomega) {
+			// The admin API is a path nothing serves, and nothing says a
+			// port is behind it.
+			status, body := ask(g, http.MethodGet, "/config")
+			g.Expect(status).To(Equal(http.StatusNotFound))
+			g.Expect(body).To(ContainSubstring("no_route"))
+			g.Expect(body).NotTo(ContainSubstring("api.public"))
+			// No probe is public.
+			status, _ = ask(g, http.MethodGet, "/health")
+			g.Expect(status).To(Equal(http.StatusNotFound))
+			// A webhook route is served: it refuses a delivery for a
+			// vendor the company has not connected, rather than not being
+			// there.
+			status, body = ask(g, http.MethodPost, "/webhooks/gitlab")
+			g.Expect(status).NotTo(Equal(http.StatusNotFound), "the public listener does not serve the webhooks: %s", body)
+		}).WithTimeout(time.Minute).Should(Succeed())
+	})
+
+	// The engine's NetworkPolicy at work, as below: a consumer of the API is
+	// admitted to the API port alone, and the public port admits only where
+	// the class's webhooks arrive from, which under webhooks None is nowhere.
+	It("does not admit an API consumer to the public listener", func() {
+		const publicPod = "public-from-consumer"
+		apply(curlPod(consumerNamespace, publicPod, `curl -sS --max-time 10 -o /dev/null "`+publicURL+`/webhooks/gitlab"`))
+		Expect(curlPhase(consumerNamespace, publicPod)).To(Equal(corev1.PodFailed),
+			"an API consumer reached the engine's public listener")
 	})
 
 	It("refuses the published token a change to the document the operator enforces, and keeps the document", func() {
@@ -508,6 +575,18 @@ func copyAccessSecret(namespace string) *corev1.Secret {
 	apply(restrictedNamespace(namespace))
 	apply(&corev1.Secret{Namespace: namespace, Name: accessSecret, Data: access.Data})
 	return access
+}
+
+// freePort is a TCP port of this host nothing listens on, for a
+// port-forward.
+func freePort() int {
+	GinkgoHelper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	Expect(err).NotTo(HaveOccurred())
+	defer func() { _ = l.Close() }()
+	addr, ok := l.Addr().(*net.TCPAddr)
+	Expect(ok).To(BeTrue())
+	return addr.Port
 }
 
 // curlPodName is the name of the pod that reads the company document.

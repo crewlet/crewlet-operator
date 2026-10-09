@@ -143,6 +143,52 @@ func TestContractSeatPod(t *testing.T) {
 	}
 }
 
+// TestContractRefusesListenersThatCannotOpen proves the gate that keeps the
+// data pod's listeners apart is live: a Tier A whose public listener shares
+// a port with the API or the leaf listener, or that opens it beside no API
+// port on an ingress node, is refused by the engine, so a change of
+// PublicPort, APIPort or LeafPort that let two meet would fail
+// TestContractBootstrap rather than a pod at boot. No object the operator
+// reads sets any of the three, which is why nothing is checked at render.
+func TestContractRefusesListenersThatCannotOpen(t *testing.T) {
+	// The case whose class allows seat pools, whose data pod opens the
+	// leaf listener too.
+	var in *BootstrapInput
+	for _, c := range bootstrapCases() {
+		if candidate := c.input(t); SeatPoolsAllowed(candidate.Class) {
+			in = candidate
+		}
+	}
+	if in == nil {
+		t.Fatal("no bootstrap case allows seat pools")
+	}
+	doc, err := Bootstrap(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(doc.YAML), "leaf:") {
+		t.Fatalf("the seat-pools case opens no leaf listener:\n%s", doc.YAML)
+	}
+	for _, c := range []struct {
+		name, from, to string
+	}{
+		{"public on the API port", fmt.Sprintf("public:\n    port: %d", PublicPort), fmt.Sprintf("public:\n    port: %d", APIPort)},
+		{"public on the leaf port", fmt.Sprintf("public:\n    port: %d", PublicPort), fmt.Sprintf("public:\n    port: %d", LeafPort)},
+		{"public beside no API port", fmt.Sprintf("  port: %d\n  public:", APIPort), "  port: 0\n  public:"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if !strings.Contains(string(doc.YAML), c.from) {
+				t.Fatalf("the rendered Tier A holds no %q:\n%s", c.from, doc.YAML)
+			}
+			mutated := strings.Replace(string(doc.YAML), c.from, c.to, 1)
+			got, stdout, _, _ := verdict(t, bootstrapEnv(doc), "-tier", "bootstrap", write(t, "crewlet.yaml", []byte(mutated)))
+			if got.Valid || !strings.Contains(stdout, "api.public.port") {
+				t.Fatalf("crewlet validate did not refuse api.public.port:\n%s\n%s", mutated, stdout)
+			}
+		})
+	}
+}
+
 // TestContractSeatPoolsCompany validates the document of a company that
 // places seats in every kind of pool with the Tier A of its data pod, which
 // listens for the seat pods: the pins are labels the engine accepts beside

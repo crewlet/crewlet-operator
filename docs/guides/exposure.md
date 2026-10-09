@@ -1,12 +1,21 @@
 # Exposure and network policy
 
-A company's engine serves everything on one port, 8080: its API, its
-dashboard, and the routes vendors deliver webhooks to. Only the webhooks
-need to be reachable from the internet, and only they are routed there. This
-guide sets up the webhook routes, the public address vendors are given, an
-internal route to the API, and the network policy around each engine. The
-objects involved are described in
+A company's engine listens on two ports. Port 8080 serves its API, its
+dashboard and its probes; port 8081, its **public listener**, serves only the
+routes outside parties call, each of which authenticates itself without an
+operator credential: vendors' webhooks (`/webhooks/`), and a remote
+sandbox's telemetry (`/otlp/{token}`) and tool calls (`/mcp/{token}`), with a
+token signed for its one run in the path. Only the public listener needs to
+be reachable from the internet, and only it is routed there. This guide sets
+up the webhook routes, the public address vendors are given, an internal
+route to the API, and the network policy around each engine. The objects involved are described in
 [How a company's engine runs](../concepts/runtime.md#exposure).
+
+The split is the engine's own (Crewlet's `api.public`): the public listener
+answers every other path, `/config` and `/health` included, as a path
+nothing serves, whatever credential is sent, and the API port answers a
+public route with `404` and a hint naming the public listener. Every data
+pod opens both ports, whatever its class routes.
 
 All of it is the platform's choice, made once per `EngineClass` in
 `spec.exposure` and `spec.networkPolicy`; a Company only states its own
@@ -21,16 +30,34 @@ address when the class leaves that to it.
 | `External` | Something outside the operator (a CDN, a tunnel, a load balancer you manage) forwards to the engine | the Company's `spec.exposure.publicBaseURL`, which is then required |
 | `None` (the default) | Nothing reaches the engine from outside: development, or companies whose integrations deliver no webhooks (Mattermost, an Atlassian organization) | none; integrations that need inbound delivery report `Healthy=False NotExposed` |
 
-Whatever the mode, only the path prefix `/webhooks/` is routed, and `/mcp/`
-beside it while an `LLMProvider` of the company runs a CLI in `mode: Agent`:
-that run happens in a remote sandbox, which calls the seat's tools back
-through the engine's tool bridge there, each call carrying a token signed for
-its one run ([Running seats on a coding CLI](cli-agents.md)). The operator
-then gives the engine the public address as the bridge's
-(`CREWLET_MCP_BRIDGE_URL`); under `External`, forward `/mcp/` as well. The
-address appears in the Company's `status.endpoints.publicBaseURL`, and each
-Seat's and Integration's status carries the exact URL to register with the
-vendor.
+Whatever the mode, the route sends every path of its host to the public
+listener (the engine Service's port `public`, 8081), and never to the API
+port. It names no path prefix: the listener itself is the boundary, and
+Crewlet decides which routes are public from one list of its own, so a
+route that repeated `/webhooks/`, `/otlp/` and `/mcp/` would add no
+protection the listener does not give (the admin API is not on that port to
+be reached by any path) and would be a second list to keep in step, which a
+Crewlet release serving a new public route would outgrow with nothing to
+say so. What the public listener serves depends on what the engine is given:
+
+- `/webhooks/`: always. A delivery for a vendor the company has not
+  connected is refused (`503`).
+- `/mcp/{token}`, the tool bridge, while an `LLMProvider` of the company runs
+  a CLI in `mode: Agent`: that run happens in a remote sandbox, which calls
+  the seat's tools back through it ([Running seats on a coding
+  CLI](cli-agents.md)). The operator then gives the engine the public address
+  as the bridge's (`CREWLET_MCP_BRIDGE_URL`); without one the engine mounts
+  no bridge and `/mcp/` is a path nothing serves.
+- `/otlp/{token}`, the sandbox telemetry receiver, while the class sends the
+  engine's telemetry to a collector (`spec.telemetry`): a remote sandbox's
+  coding agent exports its traces there, and the engine forwards them to the
+  collector with the class's headers, which never enter the sandbox. The
+  operator gives the engine the public address as the receiver's
+  (`CREWLET_SANDBOX_OTEL_RECEIVER_URL`).
+
+The address appears in the Company's `status.endpoints.publicBaseURL`, and
+each Seat's and Integration's status carries the exact URL to register with
+the vendor.
 
 ### Through a Gateway
 
@@ -110,16 +137,39 @@ annotations.
 
 ### From outside the operator
 
-With `mode: External` the operator creates no route. Forward
-`https://<your address>/webhooks/` to the Service
-`<company>-engine.<namespace>.svc:8080`, keeping the path, and give each
-Company its address:
+With `mode: External` the operator creates no route. Forward everything
+under `https://<your address>/` to the public port of the Service
+`<company>-engine.<namespace>.svc:8081` (port name `public`), keeping the
+path, and give each Company its address:
 
 ```yaml
 spec:                       # Company
   exposure:
     publicBaseURL: https://acme.hooks.example.com
 ```
+
+Never forward to port 8080: that is the admin API, and it answers a webhook
+`404` anyway. Under `networkPolicy.mode: Isolated`, name the pods that
+forward (a tunnel's or a relay's pods in the cluster) in the class, so the
+policy admits them to the public port and to nothing else:
+
+```yaml
+spec:                       # EngineClass
+  exposure:
+    webhooks:
+      mode: External
+      external:
+        forwarders:
+          - namespaceSelector:
+              matchLabels: {kubernetes.io/metadata.name: tunnel}
+            podSelector:
+              matchLabels: {app: cloudflared}
+```
+
+A forwarder whose traffic does not come from a pod (a load balancer of your
+own that delivers from the nodes or from outside the cluster) cannot be
+admitted by namespace; isolate those engines with your CNI's own policy and
+`networkPolicy.mode: None`.
 
 A Company may set `publicBaseURL` under the other modes too, when the
 address vendors use differs from the route's host (a CDN in front of the
@@ -145,26 +195,35 @@ spec:
       hostname: "{{name}}.{{namespace}}.crewlet.internal.example.com"
 ```
 
-The route `<company>-api` carries every path, so put it only on a listener
-that is not public. `status.endpoints.exposedAPI` is its address once
-accepted. Every request still needs a token.
+The route `<company>-api` carries every path of the API port (8080): the
+API, the dashboard and the probes, and none of the public routes, which
+that port does not serve. Put it only on a listener that is not public.
+`status.endpoints.exposedAPI` is its address once accepted. Every request
+still needs a token.
 
 ## Network policy
 
 With `networkPolicy.mode: Isolated`, the default, the operator creates a
 NetworkPolicy `<company>-engine` around the company's data pods. It admits
-traffic to the engine's port only from:
+each of the engine's two ports from its own sources and from nothing else.
+The API port, 8080, only from:
 
 - the operator's own pods (its namespace, and the pod labels its
   `--operator-pod-labels` flag names), so it can apply documents;
 - the class's `networkPolicy.apiConsumers`, for your platform's components
   that call the engines' APIs;
-- the namespaces routed traffic arrives from: each Gateway route's
-  `gateway.proxyNamespaces` (the Gateways' own namespaces when unset) and each
-  Ingress route's `ingress.controllerNamespaces`.
+- the namespaces the API's route arrives from: `exposure.api`'s
+  `gateway.proxyNamespaces` (its Gateways' own namespaces when unset) or
+  `ingress.controllerNamespaces`.
 
-Everything else, other tenants and the tenant's own other pods included, is
-refused. Name your consumers in the class, by namespace and pod labels:
+The public port, 8081, only from where webhooks arrive: `exposure.webhooks`'
+`gateway.proxyNamespaces` (its Gateways' own namespaces when unset),
+`ingress.controllerNamespaces`, or `external.forwarders`. Under
+`webhooks.mode: None` nothing is admitted to it.
+
+So a webhook's proxy reaches no admin route, and an API consumer cannot
+reach the port published to the internet. Everything else, other tenants
+and the tenant's own other pods included, is refused. Name your consumers in the class, by namespace and pod labels:
 
 ```yaml
 spec:
@@ -222,7 +281,9 @@ A class that allows seat pools (`seatPools.policy: Allowed`) also has the
 operator create two more policies per company, under either mode:
 `<company>-broker`, which admits the data pods' leaf listener (port 7422) from
 the company's own seat pods and from nothing else, since Crewlet's broker
-port takes any connection without authentication or TLS; and, while the
+port takes any connection without authentication or TLS (under `None` it
+also admits ports 8080 and 8081 from anywhere, so the data pods stay as open
+as they are without a policy); and, while the
 company runs seat pods, `<company>-seats`, which admits no connection to a
 seat pod from any pod and, under `Isolated`, holds the seat pods to the egress
 above. A seat pod's probes (port 8080, `/health` and `/ready`) still answer

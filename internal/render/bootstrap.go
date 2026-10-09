@@ -28,12 +28,37 @@ const (
 	// scratch emptyDir. A data pod keeps its store, its snapshots and the
 	// event stream under it; a seat pod its scratch store.
 	DataDir = "/var/lib/crewlet"
-	// APIPort is the port of an engine's one HTTP listener. On a data pod,
-	// which has the ingress role, it carries the API, the dashboard, the
-	// webhooks and the probes; on a seat pod, which does not, only the
-	// probes (/health and /ready). It is 8080, the port the engine image
-	// documents with EXPOSE.
+	// APIPort is the port of an engine's private HTTP listener, api.port. On
+	// a data pod, which has the ingress role, it carries the API, the
+	// dashboard and the probes, and none of the routes outside parties call,
+	// which are PublicPort's; on a seat pod, which does not have the role,
+	// only the probes (/health and /ready). It is 8080, the port the engine
+	// image documents with EXPOSE.
 	APIPort = 8080
+	// PublicPort is the port of a data pod's public listener, api.public:
+	// the routes outside parties call without an operator credential, and
+	// nothing else — the vendors' webhooks and app landings (/webhooks/),
+	// and a remote sandbox's per-run telemetry (/otlp/{token}) and tool
+	// bridge (/mcp/{token}), each admitted by a provider signature or a
+	// token signed for its one run. Crewlet decides which routes are public
+	// from one list of its own, and answers every other route there as a
+	// path nothing serves, so the address published to the internet cannot
+	// reach the admin API whatever path a route or a proxy forwards.
+	//
+	// Every data pod opens it, whether or not its class routes anything to
+	// it: which routes the engine serves where is then a fact about the pod
+	// that the class's exposure cannot change, a class that starts or stops
+	// routing webhooks restarts no engine (Tier A is read only at start),
+	// and a pod nothing routes to serves its public routes to nobody,
+	// which is what the class's NetworkPolicy and the absence of a route
+	// already make of them.
+	//
+	// It is 8081: plain HTTP like APIPort, beside it, and none of the ports
+	// an engine pod binds otherwise (APIPort, LeafPort, the embedded
+	// broker's cluster route port 6222, which no pod opens in v1alpha1).
+	// Crewlet's validator refuses a Tier A whose listeners share a port, and
+	// the contract tests run it over every document rendered here.
+	PublicPort = 8081
 	// LeafPort is the port of a data pod's leaf listener, which the seat
 	// pods join the company's event stream through. It is open only when
 	// the class's seatPools.policy is Allowed. Like every port of
@@ -141,9 +166,16 @@ type nodeDoc struct {
 }
 
 type apiDoc struct {
-	Host string      `json:"host"`
-	Port int         `json:"port"`
-	Auth *apiAuthDoc `json:"auth,omitempty"`
+	Host   string        `json:"host"`
+	Port   int           `json:"port"`
+	Public *apiPublicDoc `json:"public,omitempty"`
+	Auth   *apiAuthDoc   `json:"auth,omitempty"`
+}
+
+// apiPublicDoc is api.public. Its host is left to the engine's default,
+// every interface, which a pod needs to be reached at its own address.
+type apiPublicDoc struct {
+	Port int `json:"port"`
 }
 
 type apiAuthDoc struct {
@@ -240,7 +272,8 @@ const keyringKeyBytes = 32
 
 // Bootstrap renders the Tier A of a company's data pods in the v1alpha1
 // topology: one data pod that holds the estate, serves the API, runs the
-// workers and runs the seats placed in the pool data.
+// workers and runs the seats placed in the pool data. It serves the API on
+// APIPort and the routes outside parties call on PublicPort alone.
 //
 // The document is shaped for a fleet from the first start, so that seat pods
 // can join without migrating anything: coordination is the replicated
@@ -277,8 +310,9 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 			Labels: map[string]string{PoolLabel: v1alpha1.DataPool},
 		},
 		API: &apiDoc{
-			Host: "0.0.0.0",
-			Port: APIPort,
+			Host:   "0.0.0.0",
+			Port:   APIPort,
+			Public: &apiPublicDoc{Port: PublicPort},
 			Auth: &apiAuthDoc{
 				// Crewlet serves reads without a token by default, and its
 				// reads carry the seats' transcripts and memory. Every
@@ -394,9 +428,10 @@ type SeatPodInput struct {
 // one. Leaving api.port unset would bind nothing at all, and leave the pod
 // with no probe to tell a seat pod that has joined the fleet and claims
 // seats from one that is still starting, or has lost the data pods. The
-// engine serves the agent-mode tool bridge on the same listener when
-// CREWLET_MCP_BRIDGE_URL is set, which the operator never sets on a seat
-// pod (see AgentModeBridgeUnsupported).
+// engine would serve the agent-mode tool bridge, its one public route, on
+// the same listener when CREWLET_MCP_BRIDGE_URL is set, which the operator
+// never sets on a seat pod (see AgentModeBridgeUnsupported); so it opens no
+// public listener (api.public) either, which would serve nothing.
 //
 // A Shared pool's pods carry the pool's own placement label. A PerSeat pool's
 // carry the seat label with the seat's handle, which the document refers to

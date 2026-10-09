@@ -310,7 +310,10 @@ var _ = Describe("Company seat pools", func() {
 		}))
 		engineSvc := &corev1.Service{}
 		get(engineSvc, engineName)
-		Expect(engineSvc.Spec.Ports).To(HaveLen(1), "the engine Service routes the API alone")
+		Expect(engineSvc.Spec.Ports).To(HaveLen(2), "the engine Service routes the leaf listener")
+		for _, port := range engineSvc.Spec.Ports {
+			Expect(port.Name).To(BeElementOf(portName, publicPortName), "the engine Service routes the leaf listener")
+		}
 
 		By("creating no seat pod while the data pod is not ready")
 		Expect(seatSets()).To(BeEmpty())
@@ -892,7 +895,7 @@ var _ = Describe("Company seat pools", func() {
 		data = statefulSet(dataName)
 		Expect(data.Spec.Template.Annotations[BootstrapHashAnnotation]).NotTo(Equal(hash), "closing the leaf listener does not roll the data pods")
 		Expect(data.Spec.Template.Annotations).NotTo(HaveKey(LeafListenerAnnotation))
-		Expect(data.Spec.Template.Spec.Containers[0].Ports).To(HaveLen(1))
+		Expect(data.Spec.Template.Spec.Containers[0].Ports).NotTo(ContainElement(HaveField("Name", "leaf")))
 		dataSvc := &corev1.Service{}
 		get(dataSvc, dataName)
 		Expect(dataSvc.Spec.Ports).To(HaveLen(1))
@@ -907,7 +910,8 @@ var _ = Describe("Company seat pools", func() {
 		listening := dataPod("nimbus-data-0", true)
 		updateLive(class, func(c *crewletaiv1alpha1.EngineClass) { c.Spec.SeatPools = crewletaiv1alpha1.SeatPoolSettings{} })
 		reconciled(company)
-		Expect(statefulSet(dataName).Spec.Template.Spec.Containers[0].Ports).To(HaveLen(1), "the next template still listens")
+		Expect(statefulSet(dataName).Spec.Template.Spec.Containers[0].Ports).NotTo(ContainElement(HaveField("Name", "leaf")),
+			"the next template still listens")
 		get(&networkingv1.NetworkPolicy{}, brokerPolicy)
 
 		By("deleting it once the pod is replaced by one that does not listen")
@@ -967,17 +971,19 @@ var _ = Describe("Company seat pools", func() {
 		get(&policyv1.PodDisruptionBudget{}, generalSet)
 	})
 
-	It("admits the API port beside the broker's when the class does not isolate the engine", func() {
+	It("admits the API and public ports beside the broker's when the class does not isolate the engine", func() {
 		class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
 			c.Spec.NetworkPolicy = crewletaiv1alpha1.NetworkPolicySettings{Mode: crewletaiv1alpha1.NetworkPolicyNone}
 		})
-		running(class.Name)
+		company := running(class.Name)
 		absent(&networkingv1.NetworkPolicy{}, engineName)
 		broker := &networkingv1.NetworkPolicy{}
 		get(broker, brokerPolicy)
-		Expect(broker.Spec.Ingress).To(HaveLen(2))
-		Expect(broker.Spec.Ingress[1].Ports[0].Port.IntValue()).To(Equal(8080))
-		Expect(broker.Spec.Ingress[1].From).To(BeEmpty(), "the API port is as open as it was without the policy")
+		Expect(ingressRules(broker)).To(ConsistOf(
+			"TCP/7422 from pods {"+metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: selectorFor(company, componentSeats)})+"} in the policy's namespace",
+			"TCP/8080 from anywhere",
+			"TCP/8081 from anywhere",
+		), "the API and public ports are as open as they were without the policy")
 		seats := &networkingv1.NetworkPolicy{}
 		get(seats, seatsPolicy)
 		Expect(seats.Spec.PolicyTypes).To(Equal([]networkingv1.PolicyType{networkingv1.PolicyTypeIngress}))

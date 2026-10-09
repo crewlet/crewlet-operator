@@ -27,7 +27,7 @@ Company, so it is deleted with it. For a Company `nimbus`:
 | Secret `nimbus-secret-sync` | What the config reconciler last pushed into the engine's secret store: a keyed fingerprint of each value, never the value, by which it decides what to push or remove next ([Applying the document](applying.md)). |
 | ServiceAccount `nimbus-engine` | The engine's identity, carrying the class's `serviceAccount.annotations` for a workload identity. Its token is never mounted: the engine does not call the Kubernetes API. |
 | StatefulSet `nimbus-data` | The data pod. |
-| Service `nimbus-engine` | ClusterIP on port 8080, routing to ready data pods. The routes and `status.endpoints.api` point at it. |
+| Service `nimbus-engine` | ClusterIP routing to ready data pods, with two ports: `http` (8080), the engine's API, dashboard and probes, which `status.endpoints.api` and the API's route point at; and `public` (8081), the engine's public listener, which the webhooks' route points at. |
 | Service `nimbus-data` | Headless, the StatefulSet's governing Service, publishing each data pod's address before it is ready. |
 | HTTPRoute or Ingress `nimbus-webhooks`, `nimbus-api` | The routes the class asks for; see [Exposure](#exposure). |
 | NetworkPolicy `nimbus-engine` | With the class's `networkPolicy.mode: Isolated`; see [Network policy](#network-policy). |
@@ -134,7 +134,8 @@ Standard, as the engine's ServiceAccount with no token mounted, scheduled by
 the class's `podTemplate`, and on the data pods' image: it never runs another
 version than the data pods.
 
-A seat pod binds **port 8080 for its probes and nothing else**. A node
+A seat pod binds **port 8080 for its probes and nothing else**, and no
+public listener. A node
 without the `ingress` role serves `/health` and `/ready` on its `api.port`
 and refuses every other route as an unknown one, with no API token to
 accept; the operator never sets the agent-mode tool bridge's address on a
@@ -329,36 +330,59 @@ scales the pod to zero meanwhile.
 
 ## Exposure
 
-Vendors deliver webhooks to `/webhooks/`. Everything else the engine serves on
-port 8080 (its configuration, its secret store, the dashboard) stays inside the
-cluster unless the class routes the API through an internal gateway.
+A data pod's engine listens on two ports. Port 8080 (`api.port`) serves its
+API, its configuration and secret store, the dashboard and the probes, and
+stays inside the cluster unless the class routes the API through an
+internal gateway. Port 8081 (`api.public`), the **public listener**, serves
+only the routes outside parties call without an operator credential:
+vendors' webhooks under `/webhooks/`, and a remote sandbox's per-run
+telemetry (`/otlp/{token}`) and tool bridge (`/mcp/{token}`). Crewlet
+decides which routes are public, from one list of its own; the public
+listener answers every other path as one nothing serves, and port 8080
+answers a public route with `404` and a hint naming the public listener.
+Every data pod opens both, whatever its class routes, so a class that
+starts or stops routing webhooks restarts no engine.
 
 | Class `exposure.webhooks.mode` | What the operator creates | `status.endpoints.publicBaseURL` |
 |---|---|---|
-| `Gateway` | HTTPRoute `<name>-webhooks` on the class's Gateways: the expanded `hostname`, path prefix `/webhooks/` only (and `/mcp/`, below), to the engine Service | `spec.exposure.publicBaseURL`, else `https://<hostname>` |
-| `Ingress` | Ingress `<name>-webhooks`: the class's IngressClass, annotations and TLS Secret, the expanded `hostname`, path prefix `/webhooks/` only (and `/mcp/`, below) | the same |
-| `External` | Nothing: something outside the operator forwards `/webhooks/` (and `/mcp/`, below) to `<name>-engine:8080` | `spec.exposure.publicBaseURL`, which is required |
+| `Gateway` | HTTPRoute `<name>-webhooks` on the class's Gateways: the expanded `hostname`, every path, to the engine Service's port `public` | `spec.exposure.publicBaseURL`, else `https://<hostname>` |
+| `Ingress` | Ingress `<name>-webhooks`: the class's IngressClass, annotations and TLS Secret, the expanded `hostname`, every path, to port `public` | the same |
+| `External` | Nothing: something outside the operator forwards to `<name>-engine:8081` | `spec.exposure.publicBaseURL`, which is required |
 | `None` | Nothing | unset |
 
-While an LLMProvider of the company runs a CLI in `mode: Agent`, the
-webhooks' route also sends the path prefix `/mcp/` to the engine, and the
-engine is given the public address as `CREWLET_MCP_BRIDGE_URL`. That is the
-engine's tool bridge: an agent-mode run happens in a remote sandbox and calls
-the seat's own tools back there, each request carrying a token signed for its
-one run, which expires with it. Crewlet requires the address to reach the
-node that runs the seat, which only the single data pod is: the engine would
-serve the bridge on a seat pod too, but nothing publishes an address of one,
-so a seat in a seat pool whose work runs on such a provider is
-refused (`AgentModeBridgeUnsupported`, see [Seat pools](../guides/cli-agents.md#seat-pools)),
-and the variable is given to the data pod alone. With no such provider
-the bridge is neither mounted nor routed; adding or removing one changes the
-pod's environment, so the data pod rolls.
+The route names no path prefix. The public listener is the boundary: the
+admin API is not on its port to be reached by any path, and a route that
+repeated the engine's list of public prefixes would only be a second list,
+which a Crewlet release that serves a new public route would outgrow with
+nothing to say so ([Exposure and network policy](../guides/exposure.md)).
 
-`exposure.api.mode` `Gateway` or `Ingress` creates `<name>-api` the same way
-for every path, and `status.endpoints.exposedAPI` is its address once the route
-is accepted: `https://` when the Ingress has TLS or a Gateway listener the
-route attaches to is HTTPS. `status.endpoints.api` is always the in-cluster
-address, `http://<name>-engine.<namespace>.svc:8080`.
+The public address is also where a remote sandbox calls the engine back:
+
+- While an LLMProvider of the company runs a CLI in `mode: Agent`, the
+  engine is given the public address as `CREWLET_MCP_BRIDGE_URL` and mounts
+  its tool bridge: an agent-mode run happens in a remote sandbox and calls
+  the seat's own tools back there, each request carrying a token signed for
+  its one run, which expires with it. Crewlet requires the address to reach
+  the node that runs the seat, which only the single data pod is: the engine
+  would serve the bridge on a seat pod too, but nothing publishes an address
+  of one, so a seat in a seat pool whose work runs on such a provider is
+  refused (`AgentModeBridgeUnsupported`, see [Seat pools](../guides/cli-agents.md#seat-pools)),
+  and the variable is given to the data pod alone. With no such provider
+  the bridge is not mounted; adding or removing one changes the pod's
+  environment, so the data pod rolls.
+- While the class sends the engine's telemetry to a collector
+  (`spec.telemetry`), every engine pod is given the public address as
+  `CREWLET_SANDBOX_OTEL_RECEIVER_URL`: a remote sandbox's coding agent
+  exports its traces to `/otlp/{token}` there, with a token signed for its
+  run, and the engine forwards them to the collector with the class's
+  headers, which never enter the sandbox. Any engine pod of the company
+  verifies the token, since all share the keyring.
+
+`exposure.api.mode` `Gateway` or `Ingress` creates `<name>-api` the same way,
+for every path of port `http`, and `status.endpoints.exposedAPI` is its
+address once the route is accepted: `https://` when the Ingress has TLS or a
+Gateway listener the route attaches to is HTTPS. `status.endpoints.api` is
+always the in-cluster address, `http://<name>-engine.<namespace>.svc:8080`.
 
 The `Exposed` condition is `True` with the reason `RouteAccepted` once every
 route exists and was accepted: an HTTPRoute when each Gateway it names reports
@@ -382,12 +406,16 @@ traffic to port 8080 only from:
 
 - the operator's own pods, so it can reach the engines it configures;
 - the class's `networkPolicy.apiConsumers`, for a platform's own components;
-- the namespaces the class's routes arrive from: each Gateway route's
+- the namespaces the API's route arrives from: `exposure.api`'s
   `gateway.proxyNamespaces`, or the namespaces of its Gateways when unset
-  (right for implementations that run a proxy beside each Gateway), and each
-  Ingress route's `ingress.controllerNamespaces`, which `Isolated` requires.
+  (right for implementations that run a proxy beside each Gateway), or its
+  `ingress.controllerNamespaces`, which `Isolated` requires;
 
-Everything else is refused. Outward, the engine, which runs code its tenant
+and to port 8081 only from where the webhooks' route arrives from: the same
+fields of `exposure.webhooks`, or its `external.forwarders`. Neither port
+admits the other's sources, so a webhook's proxy reaches no admin route and
+an API consumer cannot reach the port published to the internet. Everything
+else is refused. Outward, the engine, which runs code its tenant
 supplies, may reach DNS, the pods of its own namespace, the class's
 `networkPolicy.egress.to`, and every address but the cloud metadata
 endpoints and the class's `networkPolicy.egress.exceptCIDRs`, where the
@@ -405,8 +433,9 @@ Two more policies come with seat pools:
   connection, with no authentication and no TLS, and whoever joins it reads
   and writes the company's whole event stream. It selects the data pods and
   admits port 7422 only from pods labelled as this company's seat pods. Under
-  `None` it also admits port 8080 from anywhere, which keeps the API as open
-  as it is without a policy and closes only the broker.
+  `None` it also admits ports 8080 and 8081 from anywhere, which keeps the
+  API and the public listener as open as they are without a policy and
+  closes only the broker.
 - `nimbus-seats` exists while the company runs seat pods. It selects them and
   admits nothing: a seat pod serves no other pod, and the kubelet probes it
   from its own node, which no policy polices. Under `Isolated` it also holds

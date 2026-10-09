@@ -577,11 +577,12 @@ type CompanyTopology struct {
 // CompanyExposure overrides how a company is reached.
 // +kubebuilder:validation:MinProperties=1
 type CompanyExposure struct {
-	// publicBaseURL is the HTTPS address vendors deliver webhooks to,
-	// overriding the one the class's webhooks.hostname derives. Required when
-	// the class's webhooks.mode is External, where something outside the
-	// operator (a relay, an API gateway) forwards its /webhooks/ path to the
-	// engine. A trailing '/' is dropped, as Crewlet drops it. Crewlet's
+	// publicBaseURL is the HTTPS address vendors deliver webhooks to, and a
+	// remote sandbox calls the engine back on, overriding the one the class's
+	// webhooks.hostname derives. Required when the class's webhooks.mode is
+	// External, where something outside the operator (a relay, an API
+	// gateway) forwards it to the engine's public listener. A trailing '/'
+	// is dropped, as Crewlet drops it. Crewlet's
 	// integrations.public_base_url.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
@@ -1095,9 +1096,10 @@ type CompanyEndpoints struct {
 
 	// publicBaseURL is the address vendors deliver webhooks to, when the
 	// company has one: spec.exposure.publicBaseURL, or https://<hostname>
-	// from the class's webhooks.hostname. Every vendor route is a path under
-	// it, such as /webhooks/forge for an Atlassian Forge relay. Unset while
-	// the class's webhooks.mode is None, which exposes nothing.
+	// from the class's webhooks.hostname. It reaches the engine's public
+	// listener, and every vendor route is a path under it, such as
+	// /webhooks/forge for an Atlassian Forge relay. Unset while the class's
+	// webhooks.mode is None, which exposes nothing.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048

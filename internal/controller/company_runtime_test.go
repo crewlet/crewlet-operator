@@ -104,6 +104,53 @@ func egressRules(policy *networkingv1.NetworkPolicy) []string {
 	return out
 }
 
+// relayURL is the public address a Company states when something outside the
+// operator forwards its webhooks.
+const relayURL = "https://relay.example.com/nimbus"
+
+// ingressRules is a NetworkPolicy's ingress as one line per port and peer,
+// such as "TCP/8081 from pods {any} in namespaces {...}", and "TCP/8080 from
+// anywhere" for a rule that names no peer.
+func ingressRules(policy *networkingv1.NetworkPolicy) []string {
+	var out []string
+	for _, rule := range policy.Spec.Ingress {
+		for _, p := range rule.Ports {
+			port := fmt.Sprintf("%s/%s", *p.Protocol, p.Port)
+			if len(rule.From) == 0 {
+				out = append(out, port+" from anywhere")
+			}
+			for _, peer := range rule.From {
+				if peer.NamespaceSelector == nil {
+					out = append(out, fmt.Sprintf("%s from pods {%s} in the policy's namespace", port, selectorText(peer.PodSelector)))
+					continue
+				}
+				out = append(out, fmt.Sprintf("%s from pods {%s} in namespaces {%s}",
+					port, selectorText(peer.PodSelector), selectorText(peer.NamespaceSelector)))
+			}
+		}
+	}
+	return out
+}
+
+// fromNamespaces is how ingressRules writes a peer of every pod in the
+// namespaces named.
+func fromNamespaces(port int, names ...string) string {
+	return fmt.Sprintf("TCP/%d from pods {any} in namespaces {%s}", port, selectorText(&metav1.LabelSelector{
+		MatchExpressions: []metav1.LabelSelectorRequirement{{Key: corev1.LabelMetadataName, Operator: metav1.LabelSelectorOpIn, Values: names}},
+	}))
+}
+
+// envNamed is the values of the variables of that name in an environment.
+func envNamed(env []corev1.EnvVar, name string) []string {
+	var out []string
+	for _, e := range env {
+		if e.Name == name {
+			out = append(out, e.Value)
+		}
+	}
+	return out
+}
+
 // selectorText is a peer's selector as text; "any" for one that is unset or
 // empty, which a NetworkPolicy peer reads as selecting everything.
 func selectorText(s *metav1.LabelSelector) string {
@@ -321,9 +368,13 @@ var _ = Describe("Company runtime", func() {
 		ownedByCompany(engineSvc, company)
 		Expect(engineSvc.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
 		Expect(engineSvc.Spec.Selector).To(Equal(dataSelector))
-		Expect(engineSvc.Spec.Ports).To(HaveLen(1))
+		Expect(engineSvc.Spec.Ports).To(HaveLen(2))
+		Expect(engineSvc.Spec.Ports[0].Name).To(Equal("http"))
 		Expect(engineSvc.Spec.Ports[0].Port).To(Equal(int32(8080)))
 		Expect(engineSvc.Spec.Ports[0].TargetPort).To(Equal(intstr.FromString("http")))
+		Expect(engineSvc.Spec.Ports[1].Name).To(Equal(publicPortName))
+		Expect(engineSvc.Spec.Ports[1].Port).To(Equal(int32(8081)))
+		Expect(engineSvc.Spec.Ports[1].TargetPort).To(Equal(intstr.FromString(publicPortName)))
 		dataSvc := &corev1.Service{}
 		get(dataSvc, dataName)
 		Expect(dataSvc.Spec.ClusterIP).To(Equal(corev1.ClusterIPNone))
@@ -370,6 +421,11 @@ var _ = Describe("Company runtime", func() {
 			"liveness restarts the engine before its watchdog's 45 seconds")
 		Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/health"))
 		Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/ready"))
+		Expect(container.ReadinessProbe.HTTPGet.Port).To(Equal(intstr.FromString("http")), "probed on the public port, which serves no probe")
+		Expect(container.Ports).To(ConsistOf(
+			corev1.ContainerPort{Name: portName, ContainerPort: 8080, Protocol: corev1.ProtocolTCP},
+			corev1.ContainerPort{Name: publicPortName, ContainerPort: 8081, Protocol: corev1.ProtocolTCP},
+		))
 		Expect(container.Lifecycle.PreStop.Sleep.Seconds).To(BeNumerically(">", 0))
 		// The environment starts with exactly what the bootstrap document
 		// references, wired as render says.
@@ -377,6 +433,7 @@ var _ = Describe("Company runtime", func() {
 		Expect(container.Env).To(ContainElement(corev1.EnvVar{Name: "TURSO_GO_CACHE_DIR", Value: "/var/lib/crewlet/cache"}))
 		for _, env := range container.Env {
 			Expect(env.Name).NotTo(HavePrefix("OTEL_"), "no telemetry without a class's telemetry")
+			Expect(env.Name).NotTo(BeElementOf("CREWLET_SANDBOX_OTEL_RECEIVER_URL", "CREWLET_MCP_BRIDGE_URL"))
 			// The engine expands ${NAME} in its company document from
 			// its environment: no credential may be there.
 			Expect(env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil).To(BeTrue(),
@@ -400,17 +457,13 @@ var _ = Describe("Company runtime", func() {
 		ownedByCompany(policy, company)
 		Expect(policy.Spec.PodSelector.MatchLabels).To(Equal(dataSelector))
 		Expect(policy.Spec.PolicyTypes).To(Equal([]networkingv1.PolicyType{networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress}))
-		Expect(policy.Spec.Ingress).To(HaveLen(1))
-		rule := policy.Spec.Ingress[0]
-		Expect(rule.Ports).To(HaveLen(1))
-		Expect(rule.Ports[0].Port.IntValue()).To(Equal(8080))
-		// The operator's pods, and not the rest of its namespace.
-		Expect(rule.From).To(ConsistOf(networkingv1.NetworkPolicyPeer{
-			NamespaceSelector: &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{
+		// The operator's pods, and not the rest of its namespace, to the
+		// API port alone; nothing to the public port, which nothing routes.
+		Expect(ingressRules(policy)).To(ConsistOf(fmt.Sprintf("TCP/8080 from pods {%s} in namespaces {%s}",
+			selectorText(&metav1.LabelSelector{MatchLabels: operatorPodLabels}),
+			selectorText(&metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{
 				Key: corev1.LabelMetadataName, Operator: metav1.LabelSelectorOpIn, Values: []string{operatorNamespace},
-			}}},
-			PodSelector: &metav1.LabelSelector{MatchLabels: operatorPodLabels},
-		}))
+			}}}))))
 		By("letting the engine reach DNS, its own namespace and outside the cluster, but no metadata endpoint")
 		Expect(egressRules(policy)).To(ConsistOf(
 			"ports UDP/53 TCP/53",
@@ -454,11 +507,10 @@ var _ = Describe("Company runtime", func() {
 
 		policy := &networkingv1.NetworkPolicy{}
 		get(policy, engineName)
-		Expect(policy.Spec.Ingress[0].From).To(ContainElement(networkingv1.NetworkPolicyPeer{
-			NamespaceSelector: &platform,
-			PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{"app": "control-plane"}},
-		}))
-		Expect(policy.Spec.Ingress[0].From).To(HaveLen(2), "admits more than the operator and the class's consumer")
+		Expect(ingressRules(policy)).To(ConsistOf(
+			HavePrefix("TCP/8080 from pods {"+selectorText(&metav1.LabelSelector{MatchLabels: operatorPodLabels})),
+			"TCP/8080 from pods {app=control-plane} in namespaces {kubernetes.io/metadata.name=platform}",
+		), "admits more than the operator and the class's consumer to the API port, or a consumer to the public port")
 		Expect(egressRules(policy)).To(ConsistOf(
 			"ports UDP/53 TCP/53",
 			"to pods {any} in the policy's namespace",
@@ -1102,6 +1154,16 @@ var _ = Describe("Company runtime", func() {
 			Expect(k8sClient.Update(ctx, headers)).To(Succeed())
 			reconciled(company)
 			Expect(statefulSet().Spec.Template.Annotations[BootstrapHashAnnotation]).NotTo(Equal(before))
+			Expect(envNamed(engine(statefulSet()).Env, "CREWLET_SANDBOX_OTEL_RECEIVER_URL")).To(BeEmpty(),
+				"a sandbox is given a receiver while the company has no address it could reach")
+
+			By("wiring the sandbox telemetry receiver at the company's public address once it has one")
+			updateClass(class, func(c *crewletaiv1alpha1.EngineClass) {
+				c.Spec.Exposure.Webhooks = crewletaiv1alpha1.WebhookExposure{Mode: crewletaiv1alpha1.WebhookExposureExternal}
+			})
+			updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Exposure.PublicBaseURL = relayURL })
+			reconciled(company)
+			Expect(envNamed(engine(statefulSet()).Env, "CREWLET_SANDBOX_OTEL_RECEIVER_URL")).To(Equal([]string{relayURL}))
 
 			By("letting the Company's own variable replace the class's")
 			updateCompany(company, func(c *crewletaiv1alpha1.Company) {
@@ -1123,6 +1185,8 @@ var _ = Describe("Company runtime", func() {
 			reconciled(company)
 			get(bootstrap, bootstrapName)
 			Expect(bootstrap.Data).To(HaveLen(1))
+			Expect(envNamed(engine(statefulSet()).Env, "CREWLET_SANDBOX_OTEL_RECEIVER_URL")).To(BeEmpty(),
+				"a receiver with no collector to forward to")
 			Expect(string(bootstrap.Data[configFile])).NotTo(ContainSubstring("AKIA"))
 		})
 
@@ -1173,7 +1237,7 @@ var _ = Describe("Company runtime", func() {
 			Expect(k8sClient.Status().Update(ctx, route)).To(Succeed())
 		}
 
-		It("routes only /webhooks/ through the class's Gateways", func() {
+		It("routes the class's Gateways to the engine's public listener alone", func() {
 			class := newClass(gatewayWebhooks)
 			company := reconciled(newCompany(class.Name))
 			host := string(company.UID) + ".hooks.example.com"
@@ -1188,24 +1252,24 @@ var _ = Describe("Company runtime", func() {
 			Expect(route.Spec.Rules).To(HaveLen(1))
 			Expect(route.Spec.Rules[0].Matches).To(HaveLen(1))
 			Expect(*route.Spec.Rules[0].Matches[0].Path.Type).To(Equal(gatewayv1.PathMatchPathPrefix))
-			Expect(*route.Spec.Rules[0].Matches[0].Path.Value).To(Equal("/webhooks/"))
+			Expect(*route.Spec.Rules[0].Matches[0].Path.Value).To(Equal("/"),
+				"the public listener draws the line between public routes and the rest")
 			Expect(route.Spec.Rules[0].BackendRefs).To(HaveLen(1))
 			Expect(string(route.Spec.Rules[0].BackendRefs[0].Name)).To(Equal(engineName))
-			Expect(*route.Spec.Rules[0].BackendRefs[0].Port).To(Equal(gatewayv1.PortNumber(8080)))
+			Expect(*route.Spec.Rules[0].BackendRefs[0].Port).To(Equal(gatewayv1.PortNumber(8081)),
+				"the webhooks' route reaches the admin API's port")
 
 			Expect(company.Status.Endpoints.PublicBaseURL).To(Equal("https://" + host))
 			exposed := condition(company, crewletaiv1alpha1.ConditionExposed)
 			Expect(exposed.Status).To(Equal(metav1.ConditionFalse))
 			Expect(exposed.Reason).To(Equal(crewletaiv1alpha1.ReasonRouteNotAccepted))
 
-			By("admitting the Gateway's namespace to the engine's port")
+			By("admitting the Gateway's namespace to the public port, and not to the API's")
 			policy := &networkingv1.NetworkPolicy{}
 			get(policy, engineName)
-			Expect(policy.Spec.Ingress[0].From).To(ContainElement(networkingv1.NetworkPolicyPeer{
-				NamespaceSelector: &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{
-					Key: corev1.LabelMetadataName, Operator: metav1.LabelSelectorOpIn, Values: []string{gatewayNamespace},
-				}}},
-			}))
+			Expect(ingressRules(policy)).To(ContainElement(fromNamespaces(8081, gatewayNamespace)))
+			Expect(ingressRules(policy)).NotTo(ContainElement(fromNamespaces(8080, gatewayNamespace)))
+			Expect(ingressRules(policy)).To(HaveLen(2), "the operator to the API port, the Gateway to the public port")
 
 			accept(webhooksRoute, gatewayNamespace, publicGateway)
 			company = reconciled(company)
@@ -1215,7 +1279,7 @@ var _ = Describe("Company runtime", func() {
 			Expect(company.Status.Endpoints.ExposedAPI).To(BeEmpty())
 		})
 
-		It("routes the tool bridge and tells the engine its address while a provider runs a CLI in mode Agent", func() {
+		It("tells the engine the tool bridge's address while a provider runs a CLI in mode Agent", func() {
 			class := newClass(gatewayWebhooks)
 			company := reconciled(newCompany(class.Name))
 			host := string(company.UID) + ".hooks.example.com"
@@ -1233,15 +1297,11 @@ var _ = Describe("Company runtime", func() {
 			}
 			bridgeURL := func() []string {
 				GinkgoHelper()
-				var out []string
-				for _, e := range engine(statefulSet()).Env {
-					if e.Name == "CREWLET_MCP_BRIDGE_URL" {
-						out = append(out, e.Value)
-					}
-				}
-				return out
+				return envNamed(engine(statefulSet()).Env, "CREWLET_MCP_BRIDGE_URL")
 			}
-			Expect(paths()).To(Equal([]string{webhooksPath}))
+			// The route is the same either way: the engine mounts the
+			// bridge on its public listener only when given its address.
+			Expect(paths()).To(Equal([]string{"/"}))
 			Expect(bridgeURL()).To(BeEmpty())
 
 			By("a provider of another company, and one of this company in mode Text, serving no bridge")
@@ -1270,7 +1330,7 @@ var _ = Describe("Company runtime", func() {
 			provider("other-agent", "another-company", crewletaiv1alpha1.CLIAgentModeAgent)
 			text := provider("claude-text", companyName, crewletaiv1alpha1.CLIAgentModeText)
 			company = reconciled(company)
-			Expect(paths()).To(Equal([]string{webhooksPath}))
+			Expect(paths()).To(Equal([]string{"/"}))
 			Expect(bridgeURL()).To(BeEmpty())
 
 			By("switching this company's provider to mode Agent")
@@ -1278,13 +1338,13 @@ var _ = Describe("Company runtime", func() {
 			text.Spec.CLI.Mode = crewletaiv1alpha1.CLIAgentModeAgent
 			Expect(k8sClient.Update(ctx, text)).To(Succeed())
 			company = reconciled(company)
-			Expect(paths()).To(Equal([]string{webhooksPath, bridgePath}))
+			Expect(paths()).To(Equal([]string{"/"}))
 			Expect(bridgeURL()).To(Equal([]string{"https://" + host}))
 
 			By("deleting it")
 			Expect(k8sClient.Delete(ctx, text)).To(Succeed())
 			reconciled(company)
-			Expect(paths()).To(Equal([]string{webhooksPath}))
+			Expect(paths()).To(Equal([]string{"/"}))
 			Expect(bridgeURL()).To(BeEmpty())
 		})
 
@@ -1321,9 +1381,9 @@ var _ = Describe("Company runtime", func() {
 				Host: host,
 				HTTP: &networkingv1.HTTPIngressRuleValue{
 					Paths: []networkingv1.HTTPIngressPath{{
-						Path: "/webhooks/", PathType: &prefix,
+						Path: "/", PathType: &prefix,
 						Backend: networkingv1.IngressBackend{Service: &networkingv1.IngressServiceBackend{
-							Name: engineName, Port: networkingv1.ServiceBackendPort{Number: 8080},
+							Name: engineName, Port: networkingv1.ServiceBackendPort{Number: 8081},
 						}},
 					}},
 				},
@@ -1334,11 +1394,9 @@ var _ = Describe("Company runtime", func() {
 
 			policy := &networkingv1.NetworkPolicy{}
 			get(policy, engineName)
-			Expect(policy.Spec.Ingress[0].From).To(ContainElement(networkingv1.NetworkPolicyPeer{
-				NamespaceSelector: &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{
-					Key: corev1.LabelMetadataName, Operator: metav1.LabelSelectorOpIn, Values: []string{"ingress-nginx"},
-				}}},
-			}))
+			Expect(ingressRules(policy)).To(ContainElement(fromNamespaces(8081, "ingress-nginx")))
+			Expect(ingressRules(policy)).NotTo(ContainElement(fromNamespaces(8081, gatewayNamespace)), "the Gateway's namespace outlived its route")
+			Expect(ingressRules(policy)).NotTo(ContainElement(fromNamespaces(8080, "ingress-nginx")))
 
 			// The Ingress controller publishes the address it serves on.
 			ingress.Status.LoadBalancer.Ingress = []networkingv1.IngressLoadBalancerIngress{{IP: "203.0.113.10"}}
@@ -1357,12 +1415,12 @@ var _ = Describe("Company runtime", func() {
 			Expect(exposed.Reason).To(Equal(crewletaiv1alpha1.ReasonPublicBaseURLMissing))
 			Expect(condition(company, crewletaiv1alpha1.ConditionReady).Reason).NotTo(Equal(crewletaiv1alpha1.ReasonAvailable))
 
-			updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Exposure.PublicBaseURL = "https://relay.example.com/nimbus" })
+			updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Exposure.PublicBaseURL = relayURL })
 			company = reconciled(company)
 			exposed = condition(company, crewletaiv1alpha1.ConditionExposed)
 			Expect(exposed.Status).To(Equal(metav1.ConditionTrue))
 			Expect(exposed.Reason).To(Equal(crewletaiv1alpha1.ReasonNoRoutes))
-			Expect(company.Status.Endpoints.PublicBaseURL).To(Equal("https://relay.example.com/nimbus"))
+			Expect(company.Status.Endpoints.PublicBaseURL).To(Equal(relayURL))
 			absent(&gatewayv1.HTTPRoute{}, webhooksRoute)
 			absent(&networkingv1.Ingress{}, webhooksRoute)
 
@@ -1371,7 +1429,27 @@ var _ = Describe("Company runtime", func() {
 				c.Spec.Exposure.PublicBaseURL = "https://relay.example.com/nimbus//"
 			})
 			company = reconciled(company)
-			Expect(company.Status.Endpoints.PublicBaseURL).To(Equal("https://relay.example.com/nimbus"))
+			Expect(company.Status.Endpoints.PublicBaseURL).To(Equal(relayURL))
+
+			By("admitting nothing to the public port until the class names its forwarders")
+			policy := &networkingv1.NetworkPolicy{}
+			get(policy, engineName)
+			for _, rule := range ingressRules(policy) {
+				Expect(rule).To(HavePrefix("TCP/8080 "))
+			}
+			tunnel := metav1.LabelSelector{MatchLabels: map[string]string{corev1.LabelMetadataName: "tunnel"}}
+			updateClass(class, func(c *crewletaiv1alpha1.EngineClass) {
+				c.Spec.Exposure.Webhooks.External.Forwarders = []crewletaiv1alpha1.NetworkPolicyPeer{{
+					NamespaceSelector: &tunnel,
+					PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{"app": "cloudflared"}},
+				}}
+			})
+			reconciled(company)
+			get(policy, engineName)
+			Expect(ingressRules(policy)).To(ContainElement(
+				"TCP/8081 from pods {app=cloudflared} in namespaces {kubernetes.io/metadata.name=tunnel}"))
+			Expect(ingressRules(policy)).NotTo(ContainElement(
+				"TCP/8080 from pods {app=cloudflared} in namespaces {kubernetes.io/metadata.name=tunnel}"), "a forwarder reaches the admin API")
 		})
 
 		It("routes the whole API through an internal Gateway and reports its HTTPS address", func() {
@@ -1397,7 +1475,14 @@ var _ = Describe("Company runtime", func() {
 			route := &gatewayv1.HTTPRoute{}
 			get(route, "nimbus-api")
 			Expect(*route.Spec.Rules[0].Matches[0].Path.Value).To(Equal("/"))
+			Expect(*route.Spec.Rules[0].BackendRefs[0].Port).To(Equal(gatewayv1.PortNumber(8080)))
 			Expect(company.Status.Endpoints.ExposedAPI).To(BeEmpty(), "set before the route was accepted")
+
+			By("admitting the internal Gateway's namespace to the API port, and not to the public port")
+			policy := &networkingv1.NetworkPolicy{}
+			get(policy, engineName)
+			Expect(ingressRules(policy)).To(ContainElement(fromNamespaces(8080, namespace)))
+			Expect(ingressRules(policy)).NotTo(ContainElement(fromNamespaces(8081, namespace)))
 
 			accept("nimbus-api", namespace, internalGateway)
 			company = reconciled(company)

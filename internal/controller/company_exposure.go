@@ -29,19 +29,21 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/render"
 )
 
-// The paths a route sends to the engine. Vendors need /webhooks/ only; the
-// engine's admin API (/config, /secrets, ...) shares the port and is never
-// routed publicly. The tool bridge, /mcp/, is routed beside the webhooks
-// while the company has an Agent-mode CLI provider: its runs happen in a
-// remote sandbox, which calls the seat's tools back there, admitted by a
-// token signed for the one run in the path itself, as a webhook is admitted
-// by its signature. A path prefix matches whole path segments in both the
-// Gateway API and Ingress, so /webhooks/ does not match /webhooksx.
-const (
-	webhooksPath = "/webhooks/"
-	bridgePath   = "/mcp/"
-	apiPath      = "/"
-)
+// routedPath is the one path prefix a route sends to the engine: every path,
+// to the one port the route is for.
+//
+// The webhooks' route reaches the engine's public listener (render.PublicPort)
+// and nothing else, and that listener is where the line between public and
+// private is drawn: Crewlet serves there only the routes outside parties call
+// without an operator credential (/webhooks/, /otlp/{token}, /mcp/{token}),
+// decided from one list of its own, and answers any other path as one
+// nothing serves. Repeating those prefixes in the route would add no
+// boundary the listener does not already hold, since the admin API is not on
+// that port to be reached by any path; it would add a second list, which a
+// Crewlet release that serves a new public route outgrows silently, its
+// callers refused at the proxy as if they had the wrong address. The API's
+// route reaches the API port, which serves no public route.
+const routedPath = "/"
 
 // The kinds of the objects the operator writes for a Company.
 var (
@@ -77,9 +79,10 @@ type route struct {
 	what      string
 	name      string
 	component string
-	paths     []string
-	gateway   *crewletaiv1alpha1.GatewayExposure
-	ingress   *crewletaiv1alpha1.IngressExposure
+	// port is the engine Service's port the route sends to.
+	port    int32
+	gateway *crewletaiv1alpha1.GatewayExposure
+	ingress *crewletaiv1alpha1.IngressExposure
 	// hostname is the expanded host name template.
 	hostname string
 }
@@ -95,16 +98,12 @@ type routeState struct {
 
 // reconcileExposure writes the routes the class asks for, deletes those it no
 // longer asks for, sets the Company's public base URL and exposed API
-// endpoint, and returns the Exposed condition. With bridge the webhooks'
-// route sends the tool bridge's path to the engine too.
+// endpoint, and returns the Exposed condition.
 func (r *CompanyReconciler) reconcileExposure(
-	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, bridge bool,
+	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 ) (metav1.Condition, error) {
 	exposure := class.Spec.Exposure
-	webhooks := route{what: "webhooks", name: webhooksRouteName(c), component: componentWebhooks, paths: []string{webhooksPath}}
-	if bridge {
-		webhooks.paths = append(webhooks.paths, bridgePath)
-	}
+	webhooks := route{what: "webhooks", name: webhooksRouteName(c), component: componentWebhooks, port: render.PublicPort}
 	if exposure.Webhooks.Mode == crewletaiv1alpha1.WebhookExposureGateway {
 		webhooks.gateway = &exposure.Webhooks.Gateway
 	}
@@ -114,7 +113,7 @@ func (r *CompanyReconciler) reconcileExposure(
 	if exposure.Webhooks.Hostname != "" {
 		webhooks.hostname = render.ExpandTemplate(exposure.Webhooks.Hostname, c)
 	}
-	api := route{what: "API", name: apiRouteName(c), component: componentAPI, paths: []string{apiPath}}
+	api := route{what: "API", name: apiRouteName(c), component: componentAPI, port: render.APIPort}
 	if exposure.API.Mode == crewletaiv1alpha1.APIExposureGateway {
 		api.gateway = &exposure.API.Gateway
 	}
@@ -238,11 +237,9 @@ func (r *CompanyReconciler) applyHTTPRoute(ctx context.Context, c *crewletaiv1al
 	rule := gatewayv1ac.HTTPRouteRule().
 		WithBackendRefs(gatewayv1ac.HTTPBackendRef().
 			WithName(gatewayv1.ObjectName(engineServiceName(c))).
-			WithPort(render.APIPort))
-	for _, path := range rt.paths {
-		rule.WithMatches(gatewayv1ac.HTTPRouteMatch().
-			WithPath(gatewayv1ac.HTTPPathMatch().WithType(gatewayv1.PathMatchPathPrefix).WithValue(path)))
-	}
+			WithPort(rt.port)).
+		WithMatches(gatewayv1ac.HTTPRouteMatch().
+			WithPath(gatewayv1ac.HTTPPathMatch().WithType(gatewayv1.PathMatchPathPrefix).WithValue(routedPath)))
 	spec := gatewayv1ac.HTTPRouteSpec().
 		WithHostnames(gatewayv1.Hostname(rt.hostname)).
 		WithRules(rule)
@@ -344,16 +341,14 @@ func (r *CompanyReconciler) gatewaysServeHTTPS(
 // its own; it counts as accepted once its controller published an address
 // for it.
 func (r *CompanyReconciler) applyIngress(ctx context.Context, c *crewletaiv1alpha1.Company, rt *route) (*routeState, error) {
-	paths := networkingv1ac.HTTPIngressRuleValue()
-	for _, path := range rt.paths {
-		paths.WithPaths(networkingv1ac.HTTPIngressPath().
-			WithPath(path).
+	paths := networkingv1ac.HTTPIngressRuleValue().
+		WithPaths(networkingv1ac.HTTPIngressPath().
+			WithPath(routedPath).
 			WithPathType(networkingv1.PathTypePrefix).
 			WithBackend(networkingv1ac.IngressBackend().
 				WithService(networkingv1ac.IngressServiceBackend().
 					WithName(engineServiceName(c)).
-					WithPort(networkingv1ac.ServiceBackendPort().WithNumber(render.APIPort)))))
-	}
+					WithPort(networkingv1ac.ServiceBackendPort().WithNumber(rt.port)))))
 	spec := networkingv1ac.IngressSpec().
 		WithRules(networkingv1ac.IngressRule().
 			WithHost(rt.hostname).
@@ -412,9 +407,15 @@ func (r *CompanyReconciler) reconcileNetworkPolicy(
 // the data pods admit, and <c>-seats could no longer deny them every
 // connection.
 //
-// Ingress is the engine's API port only, from the operator's pods, the
-// class's Gateway proxies or Ingress controller, and the class's
-// apiConsumers. Egress is engineEgress.
+// Ingress is two ports, each from its own peers: the API port from the
+// operator's pods, the Gateway proxies or Ingress controller of the class's
+// API route, and the class's apiConsumers; the public port from where the
+// webhooks' route arrives from alone (its Gateway proxies or Ingress
+// controller, or the class's external forwarders). Neither admits the
+// other's peers: a webhook's proxy reaches no admin route, and an API
+// consumer has no business on the port published to the internet. A rule
+// with no peer is left out rather than written empty, which would admit
+// every source. Egress is engineEgress.
 func (r *CompanyReconciler) reconcileEnginePolicy(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 ) error {
@@ -429,31 +430,45 @@ func (r *CompanyReconciler) reconcileEnginePolicy(
 				WithOperator(metav1.LabelSelectorOpIn).
 				WithValues(names...)))
 	}
-	var from []*networkingv1ac.NetworkPolicyPeerApplyConfiguration
+	exposure := &class.Spec.Exposure
+	var api []*networkingv1ac.NetworkPolicyPeerApplyConfiguration
 	// Outside the cluster (make run) the operator has no namespace, and its
 	// requests do not come from a pod a policy could admit anyway. Its pods
 	// only, and not its whole namespace: other workloads may share it.
 	if r.OperatorNamespace != "" {
-		from = append(from, namespaceIn(r.OperatorNamespace).
+		api = append(api, namespaceIn(r.OperatorNamespace).
 			WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(r.OperatorPodLabels)))
 	}
-	if routed := routeNamespaces(c, class); len(routed) > 0 {
-		from = append(from, namespaceIn(routed...))
+	if routed := apiRouteNamespaces(c, &exposure.API); len(routed) > 0 {
+		api = append(api, namespaceIn(routed...))
 	}
 	for i := range settings.APIConsumers {
-		from = append(from, peerOf(&settings.APIConsumers[i]))
+		api = append(api, peerOf(&settings.APIConsumers[i]))
+	}
+	var public []*networkingv1ac.NetworkPolicyPeerApplyConfiguration
+	if routed := webhookRouteNamespaces(c, &exposure.Webhooks); len(routed) > 0 {
+		public = append(public, namespaceIn(routed...))
+	}
+	for i := range exposure.Webhooks.External.Forwarders {
+		public = append(public, peerOf(&exposure.Webhooks.External.Forwarders[i]))
 	}
 
+	spec := networkingv1ac.NetworkPolicySpec().
+		WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(selectorFor(c, componentData))).
+		WithPolicyTypes(networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress).
+		WithEgress(engineEgress(&settings)...)
+	for _, rule := range []struct {
+		port  int32
+		peers []*networkingv1ac.NetworkPolicyPeerApplyConfiguration
+	}{{render.APIPort, api}, {render.PublicPort, public}} {
+		if len(rule.peers) > 0 {
+			spec.WithIngress(networkingv1ac.NetworkPolicyIngressRule().WithPorts(tcpPort(rule.port)).WithFrom(rule.peers...))
+		}
+	}
 	policy := networkingv1ac.NetworkPolicy(networkPolicyName(c), c.Namespace).
 		WithLabels(labelsFor(c, componentData)).
 		WithOwnerReferences(ownerReference(c)).
-		WithSpec(networkingv1ac.NetworkPolicySpec().
-			WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(selectorFor(c, componentData))).
-			WithPolicyTypes(networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress).
-			WithIngress(networkingv1ac.NetworkPolicyIngressRule().
-				WithPorts(tcpPort(render.APIPort)).
-				WithFrom(from...)).
-			WithEgress(engineEgress(&settings)...))
+		WithSpec(spec)
 	return r.apply(ctx, c, networkPolicyGVK, networkPolicyName(c), policy)
 }
 
@@ -505,9 +520,9 @@ func engineEgress(settings *crewletaiv1alpha1.NetworkPolicySettings) []*networki
 //
 // It selects the data pods for ingress, and a pod any policy selects for
 // ingress is denied every connection no policy admits: so without the class's
-// isolation (<c>-engine, under Isolated) it admits the API port from anywhere
-// as well, which leaves the data pods as open as they were and closes only the
-// broker.
+// isolation (<c>-engine, under Isolated) it admits the API port and the public
+// port from anywhere as well, which leaves the data pods as open as they were
+// and closes only the broker.
 func (r *CompanyReconciler) reconcileBrokerPolicy(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 ) error {
@@ -529,7 +544,7 @@ func (r *CompanyReconciler) reconcileBrokerPolicy(
 				WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(selectorFor(c, componentSeats)))),
 	}
 	if class.Spec.NetworkPolicy.Mode != crewletaiv1alpha1.NetworkPolicyIsolated {
-		rules = append(rules, networkingv1ac.NetworkPolicyIngressRule().WithPorts(tcpPort(render.APIPort)))
+		rules = append(rules, networkingv1ac.NetworkPolicyIngressRule().WithPorts(tcpPort(render.APIPort), tcpPort(render.PublicPort)))
 	}
 	policy := networkingv1ac.NetworkPolicy(brokerPolicyName(c), c.Namespace).
 		WithLabels(labelsFor(c, componentData)).
@@ -652,33 +667,53 @@ func selectorOf(s *metav1.LabelSelector) *metav1ac.LabelSelectorApplyConfigurati
 	return out
 }
 
-// routeNamespaces are the namespaces routed traffic reaches the data pods
-// from: each Gateway route's proxyNamespaces (or its Gateways' namespaces),
-// and each Ingress route's controllerNamespaces. Sorted and without
-// repetition, so the policy does not change with the order they are listed in.
-func routeNamespaces(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass) []string {
+// webhookRouteNamespaces are the namespaces the webhooks' route reaches the
+// data pods' public port from; see routeNamespaces.
+func webhookRouteNamespaces(c *crewletaiv1alpha1.Company, w *crewletaiv1alpha1.WebhookExposure) []string {
+	switch w.Mode {
+	case crewletaiv1alpha1.WebhookExposureGateway:
+		return routeNamespaces(c, &w.Gateway, nil)
+	case crewletaiv1alpha1.WebhookExposureIngress:
+		return routeNamespaces(c, nil, w.Ingress)
+	case crewletaiv1alpha1.WebhookExposureExternal, crewletaiv1alpha1.WebhookExposureNone:
+		// No route: an External forwarder is admitted as a peer of its own
+		// (external.forwarders), and under None nothing arrives.
+	}
+	return nil
+}
+
+// apiRouteNamespaces are the namespaces the API's route reaches the data
+// pods' API port from; see routeNamespaces.
+func apiRouteNamespaces(c *crewletaiv1alpha1.Company, a *crewletaiv1alpha1.APIExposure) []string {
+	switch a.Mode {
+	case crewletaiv1alpha1.APIExposureGateway:
+		return routeNamespaces(c, &a.Gateway, nil)
+	case crewletaiv1alpha1.APIExposureIngress:
+		return routeNamespaces(c, nil, a.Ingress)
+	case crewletaiv1alpha1.APIExposureClusterInternal:
+		// No route: the API's callers are the operator and apiConsumers.
+	}
+	return nil
+}
+
+// routeNamespaces are the namespaces one route's traffic reaches the data
+// pods from: a Gateway route's proxyNamespaces (or its Gateways'
+// namespaces), or an Ingress route's controllerNamespaces. Sorted and
+// without repetition, so the policy does not change with the order they are
+// listed in.
+func routeNamespaces(
+	c *crewletaiv1alpha1.Company, gateway *crewletaiv1alpha1.GatewayExposure, ingress *crewletaiv1alpha1.IngressExposure,
+) []string {
 	var names []string
-	gateway := func(g *crewletaiv1alpha1.GatewayExposure) {
-		if len(g.ProxyNamespaces) > 0 {
-			names = append(names, g.ProxyNamespaces...)
-			return
-		}
-		for _, p := range g.ParentRefs {
+	switch {
+	case gateway != nil && len(gateway.ProxyNamespaces) > 0:
+		names = append(names, gateway.ProxyNamespaces...)
+	case gateway != nil:
+		for _, p := range gateway.ParentRefs {
 			names = append(names, cmp.Or(p.Namespace, c.Namespace))
 		}
-	}
-	exposure := class.Spec.Exposure
-	if exposure.Webhooks.Mode == crewletaiv1alpha1.WebhookExposureGateway {
-		gateway(&exposure.Webhooks.Gateway)
-	}
-	if exposure.Webhooks.Mode == crewletaiv1alpha1.WebhookExposureIngress {
-		names = append(names, exposure.Webhooks.Ingress.ControllerNamespaces...)
-	}
-	if exposure.API.Mode == crewletaiv1alpha1.APIExposureGateway {
-		gateway(&exposure.API.Gateway)
-	}
-	if exposure.API.Mode == crewletaiv1alpha1.APIExposureIngress {
-		names = append(names, exposure.API.Ingress.ControllerNamespaces...)
+	case ingress != nil:
+		names = append(names, ingress.ControllerNamespaces...)
 	}
 	slices.Sort(names)
 	return slices.Compact(names)

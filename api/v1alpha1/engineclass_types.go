@@ -347,8 +347,9 @@ type GatewayExposure struct {
 
 	// proxyNamespaces are the namespaces the pods that carry the Gateways'
 	// traffic run in. Under networkPolicy Isolated they are admitted to the
-	// engine's port; nothing else outside the operator and the API consumers
-	// is. Unset is the namespaces of parentRefs, which is right for
+	// one port of the engine the route reaches: the public listener for the
+	// webhooks' route, the API port for the API's. Unset is the namespaces
+	// of parentRefs, which is right for
 	// implementations that run a proxy beside each Gateway (Istio, for
 	// example); implementations with a shared data plane run it elsewhere
 	// (Envoy Gateway in envoy-gateway-system, for example) and need it named
@@ -398,8 +399,10 @@ type IngressExposure struct {
 	TLS IngressTLS `json:"tls,omitzero"`
 
 	// controllerNamespaces are the namespaces the Ingress controller's pods
-	// run in. Under networkPolicy Isolated they are admitted to the engine's
-	// port, and they are required there: an Ingress does not say which pods
+	// run in. Under networkPolicy Isolated they are admitted to the one port
+	// of the engine the Ingress reaches (the public listener for the
+	// webhooks' Ingress, the API port for the API's), and they are required
+	// there: an Ingress does not say which pods
 	// serve it, and without them the policy would refuse every request the
 	// Ingress forwards.
 	// +optional
@@ -418,26 +421,31 @@ type WebhookExposureMode string
 
 // The webhook exposure modes.
 const (
-	// WebhookExposureGateway routes the public hostname's /webhooks/ path to
-	// the engine with an HTTPRoute.
+	// WebhookExposureGateway routes the public hostname to the engine's
+	// public listener with an HTTPRoute.
 	WebhookExposureGateway WebhookExposureMode = "Gateway"
 	// WebhookExposureIngress does the same with an Ingress.
 	WebhookExposureIngress WebhookExposureMode = "Ingress"
 	// WebhookExposureExternal creates nothing public: something outside the
-	// operator (a relay, an API gateway) forwards to the engine's Service,
-	// and each Company states the address it is reached on in
-	// spec.exposure.publicBaseURL.
+	// operator (a relay, an API gateway) forwards to the public port of the
+	// engine's Service, and each Company states the address it is reached
+	// on in spec.exposure.publicBaseURL.
 	WebhookExposureExternal WebhookExposureMode = "External"
 	// WebhookExposureNone exposes nothing; integrations that need inbound
 	// delivery report that they are not exposed.
 	WebhookExposureNone WebhookExposureMode = "None"
 )
 
-// WebhookExposure is how vendors' webhooks reach a company's engine. Only the
-// path prefix /webhooks/ is ever exposed by it: the engine's admin API shares
-// its port and must not be public.
+// WebhookExposure is how vendors' webhooks, and the calls a remote sandbox
+// makes back to the engine, reach a company's engine. Whatever the mode, they
+// reach the engine's public listener (Crewlet's api.public), a port of its
+// own that serves only the routes outside parties call without an operator
+// credential (/webhooks/, /otlp/{token}, /mcp/{token}) and answers every
+// other path as one nothing serves; the admin API, the dashboard and the
+// probes are on the API port, which this never reaches.
 // +kubebuilder:validation:XValidation:rule="self.mode == 'Gateway' ? has(self.gateway) : !has(self.gateway)",message="gateway is required with mode Gateway and not allowed otherwise"
 // +kubebuilder:validation:XValidation:rule="self.mode == 'Ingress' ? has(self.ingress) : !has(self.ingress)",message="ingress is required with mode Ingress and not allowed otherwise"
+// +kubebuilder:validation:XValidation:rule="self.mode == 'External' || !has(self.external)",message="external is allowed with mode External only"
 // +kubebuilder:validation:XValidation:rule="self.mode in ['Gateway', 'Ingress'] ? has(self.hostname) : !has(self.hostname)",message="hostname is required with modes Gateway and Ingress and not allowed otherwise"
 // +kubebuilder:validation:MinProperties=1
 type WebhookExposure struct {
@@ -453,6 +461,10 @@ type WebhookExposure struct {
 	// ingress is the Ingress settings, for mode Ingress.
 	// +optional
 	Ingress *IngressExposure `json:"ingress,omitempty"`
+
+	// external is where the forwarder runs, for mode External.
+	// +optional
+	External ExternalExposure `json:"external,omitzero"`
 
 	// hostname is the public host name of each company, as a template:
 	// {{namespace}}, {{name}} and {{uid}} are replaced by the Company's
@@ -472,6 +484,25 @@ type WebhookExposure struct {
 	// +kubebuilder:validation:XValidation:rule="self.contains('{{uid}}') || self.contains('{{name}}.{{namespace}}') || self.contains('{{namespace}}.{{name}}')",message="hostname must contain {{uid}}, or {{name}} and {{namespace}} joined by a '.', so that no two companies share a host name: names and namespaces hold '-', so {{namespace}}-{{name}} is team-a-b-web for both team-a/b-web and team-a-b/web"
 	// +kubebuilder:validation:XValidation:rule="self.replace('{{namespace}}', 'n').replace('{{name}}', 'n').replace('{{uid}}', 'u').matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')",message="hostname must be a lowercase DNS name once its variables are replaced"
 	Hostname string `json:"hostname,omitempty"`
+}
+
+// ExternalExposure is where the forwarder of a class's webhooks runs, when
+// something outside the operator forwards them (webhooks.mode External).
+// +kubebuilder:validation:MinProperties=1
+type ExternalExposure struct {
+	// forwarders are the pods that forward webhooks to the engine's public
+	// port: a tunnel's or a relay's pods in the cluster. Under networkPolicy
+	// Isolated they are admitted to that port and to nothing else of the
+	// engine; without them the policy refuses every request forwarded from
+	// a pod. A forwarder outside the pod network (a load balancer of your
+	// own that sends traffic from the nodes or from outside the cluster)
+	// cannot be admitted by namespace: isolate those engines with your
+	// CNI's own policy and networkPolicy.mode None.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=16
+	Forwarders []NetworkPolicyPeer `json:"forwarders,omitempty"`
 }
 
 // APIExposureMode is how a company's engine API is reached from outside its
@@ -549,7 +580,9 @@ type NetworkPolicySettings struct {
 	Mode NetworkPolicyMode `json:"mode,omitempty"`
 
 	// apiConsumers are the pods admitted to the engine's API port besides
-	// the operator and the class's Gateway proxies or Ingress controller:
+	// the operator and the Gateway proxies or Ingress controller of the
+	// class's API route, and to nothing else of the engine (the public
+	// port, which the webhooks reach, admits only where they arrive from):
 	// the platform's own components (a control plane, a dashboard) that
 	// call the engines of this class's companies. Each holds an access
 	// token, which the engine still requires.
@@ -621,9 +654,12 @@ type NetworkPolicyMode string
 // The network policy modes.
 const (
 	// NetworkPolicyIsolated admits traffic to the engine's API port only
-	// from the operator's pods, from the namespaces the class's Gateway
-	// proxies or Ingress controller run in (gateway.proxyNamespaces,
-	// ingress.controllerNamespaces), and from the class's apiConsumers; and
+	// from the operator's pods, from the namespaces the Gateway proxies or
+	// Ingress controller of the class's API route run in
+	// (gateway.proxyNamespaces, ingress.controllerNamespaces), and from the
+	// class's apiConsumers; to its public port only from where the webhooks'
+	// route arrives from (the same fields of exposure.webhooks, or
+	// webhooks.external.forwarders); and
 	// lets the engine connect only as networkPolicy.egress says. It needs a
 	// CNI that enforces NetworkPolicy, egress included.
 	NetworkPolicyIsolated NetworkPolicyMode = "Isolated"
@@ -779,8 +815,12 @@ type EngineLimits struct {
 // OTEL_* environment variables, which the operator sets from these fields;
 // with an endpoint set, Crewlet exports metrics as well as traces, and the
 // two cannot be turned off separately (OTEL_ names are the operator's, so
-// OTEL_METRICS_EXPORTER cannot be set in env). Code a sandbox runs exports
-// nothing: v1alpha1 does not wire Crewlet's sandbox telemetry receiver.
+// OTEL_METRICS_EXPORTER cannot be set in env). While a Company has a public
+// address (status.endpoints.publicBaseURL), the operator also wires Crewlet's
+// sandbox telemetry receiver there (CREWLET_SANDBOX_OTEL_RECEIVER_URL): code
+// a remote sandbox runs exports to the engine's public listener with a token
+// signed for its one run, and the engine forwards it to this collector with
+// the headers below, which never enter the sandbox.
 type TelemetrySettings struct {
 	// otlpEndpoint is the collector's OTLP/HTTP endpoint
 	// (OTEL_EXPORTER_OTLP_ENDPOINT).

@@ -52,6 +52,9 @@ const (
 	dataVolume = "data"
 	// portName names the API port on the pods and the Services.
 	portName = "http"
+	// publicPortName names the public port (render.PublicPort) on the data
+	// pods and the engine Service.
+	publicPortName = "public"
 )
 
 // BootstrapHashAnnotation is the pod template annotation that rolls the
@@ -89,6 +92,7 @@ const (
 	envOTLPHeaders     = "OTEL_EXPORTER_OTLP_HEADERS"
 	envOTELResourceAtt = "OTEL_RESOURCE_ATTRIBUTES"
 	envMCPBridgeURL    = "CREWLET_MCP_BRIDGE_URL"
+	envOTelReceiverURL = "CREWLET_SANDBOX_OTEL_RECEIVER_URL"
 )
 
 // preStopSleepSeconds is how long a stopping data pod keeps serving before
@@ -174,11 +178,13 @@ func (r *CompanyReconciler) applyServiceAccount(
 }
 
 // applyServices writes the company's two Services. <c>-engine routes to
-// ready data pods and backs the routes and status.endpoints.api. <c>-data is
-// the StatefulSet's headless governing Service: it gives each data pod a
-// stable DNS name, published before the pod is ready, because an engine with
-// no document yet answers /ready with 503 and the operator must reach it to
-// apply the first one. The seat pods join the data pods' leaf listener by the
+// ready data pods and backs the routes and status.endpoints.api: its port
+// http is the engine's API, which the API's route reaches, and its port
+// public the engine's public listener, which the webhooks' route reaches.
+// <c>-data is the StatefulSet's headless governing Service: it gives each
+// data pod a stable DNS name, published before the pod is ready, because an
+// engine with no document yet answers /ready with 503 and the operator must
+// reach it to apply the first one. The seat pods join the data pods' leaf listener by the
 // same names, which is why <c>-data also names the leaf port while the class
 // opens it: a seat pod that starts while a data pod is not ready yet waits
 // for it rather than failing to resolve it.
@@ -194,7 +200,11 @@ func (r *CompanyReconciler) applyServices(ctx context.Context, c *crewletaiv1alp
 		WithSpec(corev1ac.ServiceSpec().
 			WithType(corev1.ServiceTypeClusterIP).
 			WithSelector(selectorFor(c, componentData)).
-			WithPorts(port))
+			WithPorts(port, corev1ac.ServicePort().
+				WithName(publicPortName).
+				WithProtocol(corev1.ProtocolTCP).
+				WithPort(render.PublicPort).
+				WithTargetPort(intstr.FromString(publicPortName))))
 	if err := r.apply(ctx, c, serviceGVK, engineServiceName(c), engine); err != nil {
 		return err
 	}
@@ -463,8 +473,13 @@ func engineContainerOf(
 		WithLifecycle(corev1ac.Lifecycle().
 			WithPreStop(corev1ac.LifecycleHandler().
 				WithSleep(corev1ac.SleepAction().WithSeconds(preStopSleepSeconds))))
-	// The leaf listener the seat pods join through, which the bootstrap
-	// document opens when render.LeafOpen says so.
+	// The public listener, which every data pod's bootstrap document opens,
+	// and the leaf listener the seat pods join through, which it opens when
+	// render.LeafOpen says so.
+	container.WithPorts(corev1ac.ContainerPort().
+		WithName(publicPortName).
+		WithContainerPort(render.PublicPort).
+		WithProtocol(corev1.ProtocolTCP))
 	if render.LeafOpen(c, class) {
 		container.WithPorts(corev1ac.ContainerPort().
 			WithName(leafPortName).
@@ -601,6 +616,18 @@ func engineEnv(
 				c.Namespace, e.statefulSet, render.EnvNodeID)))
 		if t.HeadersSecretRef.Name != "" {
 			env = append(env, fromSecret(envOTLPHeaders, e.secret, platformKeyOTLPHeaders))
+		}
+		// Crewlet's sandbox telemetry receiver: a remote sandbox exports to
+		// the engine's public listener, the one port it can reach, with a
+		// token signed for its run, and the engine forwards to the
+		// collector above with its headers, which never enter the box.
+		// Every pod is given it, a seat pod's too: the pod that launches a
+		// run mints its endpoint, under the company's address, and the data
+		// pod that address reaches verifies it with the keyring every pod
+		// shares. Without a collector there is nothing to forward to, and
+		// without a public address nothing a sandbox could reach.
+		if public := c.Status.Endpoints.PublicBaseURL; public != "" {
+			env = append(env, literal(envOTelReceiverURL, public))
 		}
 	}
 

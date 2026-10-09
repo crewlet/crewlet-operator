@@ -8,6 +8,8 @@ api:
       token: test-access-token
   host: 0.0.0.0
   port: 8080
+  public:
+    port: 8081
 coordination:
   type: embedded-kv
 node:

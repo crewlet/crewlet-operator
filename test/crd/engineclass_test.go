@@ -199,6 +199,22 @@ func TestEngineClassExposure(t *testing.T) {
 			mutate: webhooks(v1.WebhookExposure{Mode: v1.WebhookExposureExternal}),
 		},
 		{
+			name: "External webhooks with their forwarders are accepted",
+			mutate: webhooks(v1.WebhookExposure{Mode: v1.WebhookExposureExternal, External: v1.ExternalExposure{
+				Forwarders: []v1.NetworkPolicyPeer{{NamespaceSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"kubernetes.io/metadata.name": "tunnel"},
+				}}},
+			}}),
+		},
+		{
+			name: "external with mode Gateway is refused",
+			mutate: webhooks(v1.WebhookExposure{
+				Mode: v1.WebhookExposureGateway, Gateway: gatewayExposure(), Hostname: webhookHost,
+				External: v1.ExternalExposure{Forwarders: []v1.NetworkPolicyPeer{{NamespaceSelector: &metav1.LabelSelector{}}}},
+			}),
+			want: "external is allowed with mode External only",
+		},
+		{
 			name:   "Gateway without gateway is refused",
 			mutate: webhooks(v1.WebhookExposure{Mode: v1.WebhookExposureGateway, Hostname: webhookHost}),
 			want:   msgGatewayMode,

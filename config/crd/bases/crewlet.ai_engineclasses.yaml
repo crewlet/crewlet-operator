@@ -376,8 +376,9 @@ spec:
                             description: |-
                               proxyNamespaces are the namespaces the pods that carry the Gateways'
                               traffic run in. Under networkPolicy Isolated they are admitted to the
-                              engine's port; nothing else outside the operator and the API consumers
-                              is. Unset is the namespaces of parentRefs, which is right for
+                              one port of the engine the route reaches: the public listener for the
+                              webhooks' route, the API port for the API's. Unset is the namespaces
+                              of parentRefs, which is right for
                               implementations that run a proxy beside each Gateway (Istio, for
                               example); implementations with a shared data plane run it elsewhere
                               (Envoy Gateway in envoy-gateway-system, for example) and need it named
@@ -437,8 +438,10 @@ spec:
                           controllerNamespaces:
                             description: |-
                               controllerNamespaces are the namespaces the Ingress controller's pods
-                              run in. Under networkPolicy Isolated they are admitted to the engine's
-                              port, and they are required there: an Ingress does not say which pods
+                              run in. Under networkPolicy Isolated they are admitted to the one port
+                              of the engine the Ingress reaches (the public listener for the
+                              webhooks' Ingress, the API port for the API's), and they are required
+                              there: an Ingress does not say which pods
                               serve it, and without them the policy would refuse every request the
                               Ingress forwards.
                             items:
@@ -502,6 +505,134 @@ spec:
                     description: webhooks is how vendors' webhooks reach the engine.
                     minProperties: 1
                     properties:
+                      external:
+                        description: external is where the forwarder runs, for mode
+                          External.
+                        minProperties: 1
+                        properties:
+                          forwarders:
+                            description: |-
+                              forwarders are the pods that forward webhooks to the engine's public
+                              port: a tunnel's or a relay's pods in the cluster. Under networkPolicy
+                              Isolated they are admitted to that port and to nothing else of the
+                              engine; without them the policy refuses every request forwarded from
+                              a pod. A forwarder outside the pod network (a load balancer of your
+                              own that sends traffic from the nodes or from outside the cluster)
+                              cannot be admitted by namespace: isolate those engines with your
+                              CNI's own policy and networkPolicy.mode None.
+                            items:
+                              description: |-
+                                NetworkPolicyPeer is the pods its podSelector selects in the namespaces
+                                its namespaceSelector selects, as a NetworkPolicy peer that sets both.
+                              properties:
+                                namespaceSelector:
+                                  description: |-
+                                    namespaceSelector selects namespaces by their labels; an empty one
+                                    selects every namespace. Select a namespace by name with the label
+                                    kubernetes.io/metadata.name, which the API server sets on every
+                                    namespace.
+                                  properties:
+                                    matchExpressions:
+                                      description: matchExpressions is a list of label
+                                        selector requirements. The requirements are
+                                        ANDed.
+                                      items:
+                                        description: |-
+                                          A label selector requirement is a selector that contains values, a key, and an operator that
+                                          relates the key and values.
+                                        properties:
+                                          key:
+                                            description: key is the label key that
+                                              the selector applies to.
+                                            type: string
+                                          operator:
+                                            description: |-
+                                              operator represents a key's relationship to a set of values.
+                                              Valid operators are In, NotIn, Exists and DoesNotExist.
+                                            type: string
+                                          values:
+                                            description: |-
+                                              values is an array of string values. If the operator is In or NotIn,
+                                              the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                              the values array must be empty. This array is replaced during a strategic
+                                              merge patch.
+                                            items:
+                                              type: string
+                                            type: array
+                                            x-kubernetes-list-type: atomic
+                                        required:
+                                        - key
+                                        - operator
+                                        type: object
+                                      type: array
+                                      x-kubernetes-list-type: atomic
+                                    matchLabels:
+                                      additionalProperties:
+                                        type: string
+                                      description: |-
+                                        matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                        map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                        operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                      type: object
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                                podSelector:
+                                  description: |-
+                                    podSelector selects pods in those namespaces by their labels. Unset
+                                    selects every pod in them.
+                                  properties:
+                                    matchExpressions:
+                                      description: matchExpressions is a list of label
+                                        selector requirements. The requirements are
+                                        ANDed.
+                                      items:
+                                        description: |-
+                                          A label selector requirement is a selector that contains values, a key, and an operator that
+                                          relates the key and values.
+                                        properties:
+                                          key:
+                                            description: key is the label key that
+                                              the selector applies to.
+                                            type: string
+                                          operator:
+                                            description: |-
+                                              operator represents a key's relationship to a set of values.
+                                              Valid operators are In, NotIn, Exists and DoesNotExist.
+                                            type: string
+                                          values:
+                                            description: |-
+                                              values is an array of string values. If the operator is In or NotIn,
+                                              the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                              the values array must be empty. This array is replaced during a strategic
+                                              merge patch.
+                                            items:
+                                              type: string
+                                            type: array
+                                            x-kubernetes-list-type: atomic
+                                        required:
+                                        - key
+                                        - operator
+                                        type: object
+                                      type: array
+                                      x-kubernetes-list-type: atomic
+                                    matchLabels:
+                                      additionalProperties:
+                                        type: string
+                                      description: |-
+                                        matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                        map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                        operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                      type: object
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              required:
+                              - namespaceSelector
+                              type: object
+                            maxItems: 16
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: atomic
+                        type: object
                       gateway:
                         description: gateway is the Gateways to attach to, for mode
                           Gateway.
@@ -544,8 +675,9 @@ spec:
                             description: |-
                               proxyNamespaces are the namespaces the pods that carry the Gateways'
                               traffic run in. Under networkPolicy Isolated they are admitted to the
-                              engine's port; nothing else outside the operator and the API consumers
-                              is. Unset is the namespaces of parentRefs, which is right for
+                              one port of the engine the route reaches: the public listener for the
+                              webhooks' route, the API port for the API's. Unset is the namespaces
+                              of parentRefs, which is right for
                               implementations that run a proxy beside each Gateway (Istio, for
                               example); implementations with a shared data plane run it elsewhere
                               (Envoy Gateway in envoy-gateway-system, for example) and need it named
@@ -614,8 +746,10 @@ spec:
                           controllerNamespaces:
                             description: |-
                               controllerNamespaces are the namespaces the Ingress controller's pods
-                              run in. Under networkPolicy Isolated they are admitted to the engine's
-                              port, and they are required there: an Ingress does not say which pods
+                              run in. Under networkPolicy Isolated they are admitted to the one port
+                              of the engine the Ingress reaches (the public listener for the
+                              webhooks' Ingress, the API port for the API's), and they are required
+                              there: an Ingress does not say which pods
                               serve it, and without them the policy would refuse every request the
                               Ingress forwards.
                             items:
@@ -670,6 +804,8 @@ spec:
                     - message: ingress is required with mode Ingress and not allowed
                         otherwise
                       rule: 'self.mode == ''Ingress'' ? has(self.ingress) : !has(self.ingress)'
+                    - message: external is allowed with mode External only
+                      rule: self.mode == 'External' || !has(self.external)
                     - message: hostname is required with modes Gateway and Ingress
                         and not allowed otherwise
                       rule: 'self.mode in [''Gateway'', ''Ingress''] ? has(self.hostname)
@@ -704,7 +840,9 @@ spec:
                   apiConsumers:
                     description: |-
                       apiConsumers are the pods admitted to the engine's API port besides
-                      the operator and the class's Gateway proxies or Ingress controller:
+                      the operator and the Gateway proxies or Ingress controller of the
+                      class's API route, and to nothing else of the engine (the public
+                      port, which the webhooks reach, admits only where they arrive from):
                       the platform's own components (a control plane, a dashboard) that
                       call the engines of this class's companies. Each holds an access
                       token, which the engine still requires.

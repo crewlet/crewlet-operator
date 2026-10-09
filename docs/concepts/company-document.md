@@ -28,7 +28,9 @@ handle, and model providers and tool servers by name.
 
 `integrations.public_base_url` is the Company's public address, from
 `spec.exposure.publicBaseURL` or the class's `webhooks.hostname`, and is left
-out while the company has none.
+out while the company has none. It is where vendors and sandboxes reach the
+engine, and it reaches the engine's public listener alone, which serves the
+webhooks and the sandbox endpoints and no dashboard.
 
 ### Names and identities
 
@@ -128,7 +130,9 @@ fills it.
 
 ## The data pod's `crewlet.yaml`
 
-The data pod holds the company's estate, serves the API on port 8080, runs
+The data pod holds the company's estate, serves the API on port 8080
+(`api.port`) and the routes outside parties call on port 8081 (`api.public`,
+which every data pod opens, whatever its class routes), runs
 the background workers and runs the seats placed in `data` (`node.roles:
 [data, ingress, seats, workers]`, `node.labels: {crewlet.ai/pool: data}`).
 Its `crewlet.yaml` is shaped for a company that adds seat pods, so that
@@ -204,8 +208,8 @@ pods share one `crewlet.yaml`, kept like the data pod's in a Secret,
 | `secrets` | The company's keyring, as the data pod has it: the pod opens the company document and the secret store itself. |
 | `retention` | The class's `backupOwner`, as the data pod has it. |
 
-Its `api` block is `host: 0.0.0.0` and `port: 8080`, with no `auth` and no
-API token: a node without the `ingress` role serves only `/health` and
+Its `api` block is `host: 0.0.0.0` and `port: 8080`, with no `auth`, no
+API token and no `public` listener: a node without the `ingress` role serves only `/health` and
 `/ready` on its `api.port`, which the pod's probes ask, and refuses every
 other route as an unknown one. Without the port the engine would bind
 nothing, and nothing could tell a seat pod that has joined the fleet from

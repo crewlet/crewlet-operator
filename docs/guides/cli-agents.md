@@ -139,8 +139,8 @@ CLI must be in the engine's image either way. In agent mode:
 - The run calls the seat's own tools back through the engine's tool bridge.
   While any LLMProvider of the company is in agent mode, the operator gives
   the engine its public address as the bridge's
-  (`CREWLET_MCP_BRIDGE_URL`) and routes `/mcp/` beside `/webhooks/`
-  ([Exposure](exposure.md)). A company with no public address cannot run
+  (`CREWLET_MCP_BRIDGE_URL`), and the engine serves the bridge on its public
+  listener, beside the webhooks ([Exposure](exposure.md)). A company with no public address cannot run
   one: the LLMProvider reports `ResolvedRefs=False NotExposed`.
 
 ```yaml

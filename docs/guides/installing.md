@@ -99,6 +99,11 @@ from crewlet 7ca18083e (`v0.1.1-0.20261009105611-7ca18083ecb5`): on an older
 engine a seat pod binds nothing, never passes its startup probe, and is
 restarted every six minutes
 ([Seat pods do not run](troubleshooting.md#seat-pods-do-not-run)).
+Every data pod opens Crewlet's public listener (`api.public`), the port its
+webhooks are routed to ([Exposure](exposure.md)), which Crewlet added at
+7670e6592 (`v0.1.1-0.20261009103854-7670e6592e66`): on an older engine every
+data pod restarts in a loop, its log ending in
+`api.public: unknown field: "public" is not a setting`.
 
 ## Values worth setting
 
@@ -230,4 +235,12 @@ the setting is part of the `crewlet.yaml` the pod is given. Companies under
 restart. The first release that probes seat pods is another: it needs
 crewlet 7ca18083e or later on every company that runs seat pools, and rolls
 their seat pods once (their `crewlet.yaml` gains `api.port`, and their pods
-the probes); the data pods do not restart for it.
+the probes); the data pods do not restart for it. The first release that
+opens the public listener is a third: it needs crewlet 7670e6592 or later on
+every company, and rolls every data pod once (its `crewlet.yaml` gains
+`api.public`), and, where the class sends telemetry to a collector and the
+company has a public address, its seat pods too (their environment gains
+`CREWLET_SANDBOX_OTEL_RECEIVER_URL`). The webhooks' route moves to the
+public port as the operator reconciles each company, a moment before the
+data pod that serves it has restarted, so deliveries are refused (`503`) for
+that restart; vendors retry them.

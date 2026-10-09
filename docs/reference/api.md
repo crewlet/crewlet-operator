@@ -381,7 +381,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `api` _string_ | api is the in-cluster base URL of the engine's API: the company's<br />Service, for callers inside the cluster. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `exposedAPI` _string_ | exposedAPI is the base URL of the engine's API through the class's<br />exposure.api, for callers outside the cluster: https://<hostname><br />when the route terminates TLS (the Ingress has tls, or the Gateway<br />listener the route attaches to is HTTPS), http://<hostname> otherwise,<br />with the hostname template expanded. Set only while exposure.api.mode<br />is Gateway or Ingress and the route has been accepted. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `publicBaseURL` _string_ | publicBaseURL is the address vendors deliver webhooks to, when the<br />company has one: spec.exposure.publicBaseURL, or https://<hostname><br />from the class's webhooks.hostname. Every vendor route is a path under<br />it, such as /webhooks/forge for an Atlassian Forge relay. Unset while<br />the class's webhooks.mode is None, which exposes nothing. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `publicBaseURL` _string_ | publicBaseURL is the address vendors deliver webhooks to, when the<br />company has one: spec.exposure.publicBaseURL, or https://<hostname><br />from the class's webhooks.hostname. It reaches the engine's public<br />listener, and every vendor route is a path under it, such as<br />/webhooks/forge for an Atlassian Forge relay. Unset while the class's<br />webhooks.mode is None, which exposes nothing. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### CompanyExposure
@@ -398,7 +398,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `publicBaseURL` _string_ | publicBaseURL is the HTTPS address vendors deliver webhooks to,<br />overriding the one the class's webhooks.hostname derives. Required when<br />the class's webhooks.mode is External, where something outside the<br />operator (a relay, an API gateway) forwards its /webhooks/ path to the<br />engine. A trailing '/' is dropped, as Crewlet drops it. Crewlet's<br />integrations.public_base_url. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `publicBaseURL` _string_ | publicBaseURL is the HTTPS address vendors deliver webhooks to, and a<br />remote sandbox calls the engine back on, overriding the one the class's<br />webhooks.hostname derives. Required when the class's webhooks.mode is<br />External, where something outside the operator (a relay, an API<br />gateway) forwards it to the engine's public listener. A trailing '/'<br />is dropped, as Crewlet drops it. Crewlet's<br />integrations.public_base_url. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### CompanyIntegrationSettings
@@ -1183,6 +1183,24 @@ _Appears in:_
 | `api` _[APIExposure](#apiexposure)_ | api is how the engine's API is reached. | \{ mode:ClusterInternal \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
+#### ExternalExposure
+
+
+
+ExternalExposure is where the forwarder of a class's webhooks runs, when
+something outside the operator forwards them (webhooks.mode External).
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [WebhookExposure](#webhookexposure)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `forwarders` _[NetworkPolicyPeer](#networkpolicypeer) array_ | forwarders are the pods that forward webhooks to the engine's public<br />port: a tunnel's or a relay's pods in the cluster. Under networkPolicy<br />Isolated they are admitted to that port and to nothing else of the<br />engine; without them the policy refuses every request forwarded from<br />a pod. A forwarder outside the pod network (a load balancer of your<br />own that sends traffic from the nodes or from outside the cluster)<br />cannot be admitted by namespace: isolate those engines with your<br />CNI's own policy and networkPolicy.mode None. |  | MaxItems: 16 <br />MinItems: 1 <br />Optional: \{\} <br /> |
+
+
 #### GatewayExposure
 
 
@@ -1198,7 +1216,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `parentRefs` _[GatewayParentReference](#gatewayparentreference) array_ | parentRefs are the Gateways the HTTPRoute attaches to. |  | MaxItems: 8 <br />MinItems: 1 <br />Required: \{\} <br /> |
-| `proxyNamespaces` _string array_ | proxyNamespaces are the namespaces the pods that carry the Gateways'<br />traffic run in. Under networkPolicy Isolated they are admitted to the<br />engine's port; nothing else outside the operator and the API consumers<br />is. Unset is the namespaces of parentRefs, which is right for<br />implementations that run a proxy beside each Gateway (Istio, for<br />example); implementations with a shared data plane run it elsewhere<br />(Envoy Gateway in envoy-gateway-system, for example) and need it named<br />here. |  | MaxItems: 8 <br />MinItems: 1 <br />items:MaxLength: 63 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
+| `proxyNamespaces` _string array_ | proxyNamespaces are the namespaces the pods that carry the Gateways'<br />traffic run in. Under networkPolicy Isolated they are admitted to the<br />one port of the engine the route reaches: the public listener for the<br />webhooks' route, the API port for the API's. Unset is the namespaces<br />of parentRefs, which is right for<br />implementations that run a proxy beside each Gateway (Istio, for<br />example); implementations with a shared data plane run it elsewhere<br />(Envoy Gateway in envoy-gateway-system, for example) and need it named<br />here. |  | MaxItems: 8 <br />MinItems: 1 <br />items:MaxLength: 63 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
 
 
 #### GatewayParentReference
@@ -1471,7 +1489,7 @@ _Appears in:_
 | `className` _string_ | className is the IngressClass. Unset uses the cluster's default class. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `annotations` _object (keys:string, values:string)_ | annotations are added to the Ingress, for the controller that serves it<br />or a certificate controller. |  | MaxProperties: 32 <br />Optional: \{\} <br /> |
 | `tls` _[IngressTLS](#ingresstls)_ | tls terminates TLS on the Ingress. Unset serves plain HTTP, which is<br />right only behind something else that terminates TLS: vendors deliver<br />webhooks over HTTPS only. |  | Optional: \{\} <br /> |
-| `controllerNamespaces` _string array_ | controllerNamespaces are the namespaces the Ingress controller's pods<br />run in. Under networkPolicy Isolated they are admitted to the engine's<br />port, and they are required there: an Ingress does not say which pods<br />serve it, and without them the policy would refuse every request the<br />Ingress forwards. |  | MaxItems: 8 <br />MinItems: 1 <br />items:MaxLength: 63 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
+| `controllerNamespaces` _string array_ | controllerNamespaces are the namespaces the Ingress controller's pods<br />run in. Under networkPolicy Isolated they are admitted to the one port<br />of the engine the Ingress reaches (the public listener for the<br />webhooks' Ingress, the API port for the API's), and they are required<br />there: an Ingress does not say which pods<br />serve it, and without them the policy would refuse every request the<br />Ingress forwards. |  | MaxItems: 8 <br />MinItems: 1 <br />items:MaxLength: 63 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
 
 
 #### IngressTLS
@@ -2244,7 +2262,7 @@ _Appears in:_
 
 | Field | Description |
 | --- | --- |
-| `Isolated` | NetworkPolicyIsolated admits traffic to the engine's API port only<br />from the operator's pods, from the namespaces the class's Gateway<br />proxies or Ingress controller run in (gateway.proxyNamespaces,<br />ingress.controllerNamespaces), and from the class's apiConsumers; and<br />lets the engine connect only as networkPolicy.egress says. It needs a<br />CNI that enforces NetworkPolicy, egress included.<br /> |
+| `Isolated` | NetworkPolicyIsolated admits traffic to the engine's API port only<br />from the operator's pods, from the namespaces the Gateway proxies or<br />Ingress controller of the class's API route run in<br />(gateway.proxyNamespaces, ingress.controllerNamespaces), and from the<br />class's apiConsumers; to its public port only from where the webhooks'<br />route arrives from (the same fields of exposure.webhooks, or<br />webhooks.external.forwarders); and<br />lets the engine connect only as networkPolicy.egress says. It needs a<br />CNI that enforces NetworkPolicy, egress included.<br /> |
 | `None` | NetworkPolicyNone creates no NetworkPolicy.<br /> |
 
 
@@ -2258,6 +2276,7 @@ its namespaceSelector selects, as a NetworkPolicy peer that sets both.
 
 
 _Appears in:_
+- [ExternalExposure](#externalexposure)
 - [NetworkPolicyEgress](#networkpolicyegress)
 - [NetworkPolicySettings](#networkpolicysettings)
 
@@ -2283,7 +2302,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `mode` _[NetworkPolicyMode](#networkpolicymode)_ | mode is whether the operator restricts the engine's traffic. | Isolated | Enum: [Isolated None] <br />Optional: \{\} <br /> |
-| `apiConsumers` _[NetworkPolicyPeer](#networkpolicypeer) array_ | apiConsumers are the pods admitted to the engine's API port besides<br />the operator and the class's Gateway proxies or Ingress controller:<br />the platform's own components (a control plane, a dashboard) that<br />call the engines of this class's companies. Each holds an access<br />token, which the engine still requires. |  | MaxItems: 16 <br />MinItems: 1 <br />Optional: \{\} <br /> |
+| `apiConsumers` _[NetworkPolicyPeer](#networkpolicypeer) array_ | apiConsumers are the pods admitted to the engine's API port besides<br />the operator and the Gateway proxies or Ingress controller of the<br />class's API route, and to nothing else of the engine (the public<br />port, which the webhooks reach, admits only where they arrive from):<br />the platform's own components (a control plane, a dashboard) that<br />call the engines of this class's companies. Each holds an access<br />token, which the engine still requires. |  | MaxItems: 16 <br />MinItems: 1 <br />Optional: \{\} <br /> |
 | `egress` _[NetworkPolicyEgress](#networkpolicyegress)_ | egress narrows where the engine may connect to. The engine runs code<br />the tenant supplies (stdio MCP servers, sandbox commands, what its<br />agents write), so under Isolated its pods may reach DNS, the pods of<br />their own namespace, and every address outside the cluster except the<br />cloud metadata endpoints (169.254.169.254, fd00:ec2::254), which hand<br />out the node's credentials. What else is in the cluster is<br />unreachable only if listed in exceptCIDRs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
@@ -3345,8 +3364,12 @@ collector. The engine reads its exporter configuration from the standard
 OTEL_* environment variables, which the operator sets from these fields;
 with an endpoint set, Crewlet exports metrics as well as traces, and the
 two cannot be turned off separately (OTEL_ names are the operator's, so
-OTEL_METRICS_EXPORTER cannot be set in env). Code a sandbox runs exports
-nothing: v1alpha1 does not wire Crewlet's sandbox telemetry receiver.
+OTEL_METRICS_EXPORTER cannot be set in env). While a Company has a public
+address (status.endpoints.publicBaseURL), the operator also wires Crewlet's
+sandbox telemetry receiver there (CREWLET_SANDBOX_OTEL_RECEIVER_URL): code
+a remote sandbox runs exports to the engine's public listener with a token
+signed for its one run, and the engine forwards it to this collector with
+the headers below, which never enter the sandbox.
 
 
 
@@ -3543,9 +3566,13 @@ _Appears in:_
 
 
 
-WebhookExposure is how vendors' webhooks reach a company's engine. Only the
-path prefix /webhooks/ is ever exposed by it: the engine's admin API shares
-its port and must not be public.
+WebhookExposure is how vendors' webhooks, and the calls a remote sandbox
+makes back to the engine, reach a company's engine. Whatever the mode, they
+reach the engine's public listener (Crewlet's api.public), a port of its
+own that serves only the routes outside parties call without an operator
+credential (/webhooks/, /otlp/{token}, /mcp/{token}) and answers every
+other path as one nothing serves; the admin API, the dashboard and the
+probes are on the API port, which this never reaches.
 
 _Validation:_
 - MinProperties: 1
@@ -3558,6 +3585,7 @@ _Appears in:_
 | `mode` _[WebhookExposureMode](#webhookexposuremode)_ | mode is how webhooks reach the engine. | None | Enum: [Gateway Ingress External None] <br />Optional: \{\} <br /> |
 | `gateway` _[GatewayExposure](#gatewayexposure)_ | gateway is the Gateways to attach to, for mode Gateway. |  | Optional: \{\} <br /> |
 | `ingress` _[IngressExposure](#ingressexposure)_ | ingress is the Ingress settings, for mode Ingress. |  | Optional: \{\} <br /> |
+| `external` _[ExternalExposure](#externalexposure)_ | external is where the forwarder runs, for mode External. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `hostname` _string_ | hostname is the public host name of each company, as a template:<br />\{\{namespace\}\}, \{\{name\}\} and \{\{uid\}\} are replaced by the Company's<br />namespace, name and UID. The result is the company's public base URL,<br />https://<hostname>, which every vendor is told to deliver to. Prefer<br />\{\{uid\}\}: the host name is public, and a UID says nothing about the<br />tenant where a name can; and a UID is never reused, so a vendor still<br />configured for a deleted company can never reach a company created<br />later under the same name. The template must contain \{\{uid\}\}, or<br />\{\{name\}\} and \{\{namespace\}\} joined by a '.', which neither can hold, so<br />that no two companies share a host name: with a '-' between them,<br />team-a/b-web and team-a-b/web would. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
@@ -3575,9 +3603,9 @@ _Appears in:_
 
 | Field | Description |
 | --- | --- |
-| `Gateway` | WebhookExposureGateway routes the public hostname's /webhooks/ path to<br />the engine with an HTTPRoute.<br /> |
+| `Gateway` | WebhookExposureGateway routes the public hostname to the engine's<br />public listener with an HTTPRoute.<br /> |
 | `Ingress` | WebhookExposureIngress does the same with an Ingress.<br /> |
-| `External` | WebhookExposureExternal creates nothing public: something outside the<br />operator (a relay, an API gateway) forwards to the engine's Service,<br />and each Company states the address it is reached on in<br />spec.exposure.publicBaseURL.<br /> |
+| `External` | WebhookExposureExternal creates nothing public: something outside the<br />operator (a relay, an API gateway) forwards to the public port of the<br />engine's Service, and each Company states the address it is reached<br />on in spec.exposure.publicBaseURL.<br /> |
 | `None` | WebhookExposureNone exposes nothing; integrations that need inbound<br />delivery report that they are not exposed.<br /> |
 
 

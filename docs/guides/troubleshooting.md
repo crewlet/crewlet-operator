@@ -166,7 +166,8 @@ kubectl logs acme-data-0 -n acme | grep -E 'WARN|ERROR' | tail
   "company_writers" is not a setting`: the engine is older than the one the
   operator is built against, and refuses a setting the operator writes into
   its `crewlet.yaml` (`company_writers` is set under `Enforce`, and needs
-  crewlet 51b8d06 or later). Move the EngineClass's `engine.image` to the
+  crewlet 51b8d06 or later; `api.public`, the public listener, is set on
+  every data pod, and needs crewlet 7670e6592 or later). Move the EngineClass's `engine.image` to the
   operator's engine version ([Engine image](installing.md#engine-image));
   the data pod rolls to it and starts.
 - **`Pending`**: the volume claim is not bound (no default StorageClass, or
@@ -337,6 +338,23 @@ vendor has the address the status gives (`Seat.status.integrations`,
 `publicBaseURL` changes only with the class's host name template or the
 Company's own `spec.exposure.publicBaseURL`.
 [Exposure and network policy](exposure.md) covers the routes.
+
+Webhooks reach the engine's public listener, port 8081 of the
+`<company>-engine` Service (port name `public`), never port 8080:
+
+- **The vendor reports `404` with a body naming `api.public`**: the delivery
+  reached port 8080, the API, which does not serve webhooks. Under
+  `External`, forward to port 8081.
+- **The vendor reports `404 no_route` with a generic hint**: the delivery
+  reached the public listener on a path that is not a public route, such as
+  a webhook URL registered by hand with a typo; compare it with the URL the
+  status gives.
+- **The vendor's requests time out** under `networkPolicy.mode: Isolated`:
+  the policy `<company>-engine` admits port 8081 only from where the class
+  says webhooks arrive (`gateway.proxyNamespaces`, the Gateways' namespaces,
+  `ingress.controllerNamespaces`, or `external.forwarders`). An `External`
+  forwarder must be listed in `exposure.webhooks.external.forwarders`;
+  `networkPolicy.apiConsumers` admits port 8080 only.
 
 ## Collecting what to report
 

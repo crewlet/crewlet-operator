@@ -104,11 +104,7 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 	if err := r.applyServices(ctx, c, class); err != nil {
 		return err
 	}
-	bridge, err := r.toolBridge(ctx, c)
-	if err != nil {
-		return err
-	}
-	exposed, err := r.reconcileExposure(ctx, c, class, bridge)
+	exposed, err := r.reconcileExposure(ctx, c, class)
 	if err != nil {
 		return err
 	}
@@ -118,6 +114,10 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 		return err
 	}
 
+	bridge, err := r.toolBridge(ctx, c)
+	if err != nil {
+		return err
+	}
 	var bridgeURL string
 	if bridge {
 		bridgeURL = c.Status.Endpoints.PublicBaseURL
@@ -608,8 +608,9 @@ func (r *CompanyReconciler) deleteDataVolumes(ctx context.Context, c *crewletaiv
 // toolBridge reports whether the company's engine serves its tool bridge: it
 // does while an LLMProvider of the company runs a CLI in mode Agent, whose
 // runs happen in a remote sandbox and call the seat's tools back through it.
-// Without one the bridge stays unrouted and unmounted, so no company exposes
-// a path it does not use.
+// Without one the engine is given no CREWLET_MCP_BRIDGE_URL and mounts no
+// bridge, so its public listener answers /mcp/ as a path nothing serves:
+// no company serves a route it does not use.
 func (r *CompanyReconciler) toolBridge(ctx context.Context, c *crewletaiv1alpha1.Company) (bool, error) {
 	var providers crewletaiv1alpha1.LLMProviderList
 	if err := r.List(ctx, &providers, client.InNamespace(c.Namespace)); err != nil {
