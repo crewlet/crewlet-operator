@@ -10,42 +10,48 @@ package render
 // makes itself, or why v1alpha1 offers no way to fill it. A test runs the
 // pinned engine's schema and holds the table to its marks in both directions,
 // so a credential position Crewlet adds fails the build until it is answered
-// here, and one it stops marking fails until its row goes; the same test
-// holds docs/concepts/credentials.md to the table, and the CRDs to every
+// here, and one it stops marking fails until its row goes; the same tests
+// hold docs/concepts/credentials.md to the table, and the CRDs to every
 // field it names. A hand-kept list was what this replaced, and nothing told
 // it when the engine moved.
+//
+// It is test code because only tests and the page read it: the renderer
+// fills each position from its own field, and a table in the manager that
+// nothing in the manager reads would be dead weight in every binary.
 
-// CredentialTier is the document a credential position is in.
-type CredentialTier string
+// credentialTier is the document a credential position is in.
+type credentialTier string
 
 // The two documents.
 const (
-	// TierCompany is the company document (Crewlet's Tier B), rendered by
+	// tierCompany is the company document (Crewlet's Tier B), rendered by
 	// Company and applied through the engine's API.
-	TierCompany CredentialTier = "company"
-	// TierBootstrap is a data pod's crewlet.yaml (Crewlet's Tier A),
+	tierCompany credentialTier = "company"
+	// tierBootstrap is a data pod's crewlet.yaml (Crewlet's Tier A),
 	// rendered by Bootstrap and kept in a Secret.
-	TierBootstrap CredentialTier = "bootstrap"
+	tierBootstrap credentialTier = "bootstrap"
 )
 
-// CredentialPosition is one position Crewlet marks as a credential.
-type CredentialPosition struct {
-	Tier CredentialTier
+// credentialPosition is one position Crewlet marks as a credential.
+type credentialPosition struct {
+	Tier credentialTier
 	// Path is the position as Crewlet's schema places it: keys joined by
 	// dots, `[]` for every element of a list and `*` for every value of a
-	// map. A role's positions are written from `roles[]` wherever the org
-	// chart puts the role, `units[].roles[]` included, since a Seat fills
-	// them the same way in either place.
+	// map. The org chart nests, so its positions are written from the entry
+	// they belong to, since a Seat or a Unit fills them the same way at any
+	// depth: a role's from `roles[]`, `units[].roles[]` and
+	// `units[].children[].roles[]` included, and a unit's from `units[]`,
+	// a child unit's `units[].children[]` (at any depth) included.
 	Path string
 	// Sources fill the position; more than one when it is filled in more
 	// than one way. Empty when Unsupported says why nothing does.
-	Sources []CredentialSource
+	Sources []credentialSource
 	// Unsupported says why v1alpha1 offers no way to fill the position.
 	Unsupported string
 }
 
-// CredentialSource is one way a position is filled.
-type CredentialSource struct {
+// credentialSource is one way a position is filled.
+type credentialSource struct {
 	// Field is the crewlet.ai field that references the Secret, as
 	// Kind.path with `[]` for every element of a list; empty for a Secret
 	// the operator makes itself.
@@ -81,108 +87,113 @@ const (
 	oneKey       = "`SecretKeyReference`"
 )
 
-// CredentialPositions are every credential position of both documents, in
+// githubWebhookSecret is the position of the GitHub organization
+// integration's webhook secret, which the refs and render tests also name as
+// the place in the document it is rendered at; it has no index to differ by.
+const githubWebhookSecret = "integrations.github.webhook_secret"
+
+// credentialPositions are every credential position of both documents, in
 // the order docs/concepts/credentials.md lists them.
-var CredentialPositions = []CredentialPosition{
-	{Tier: TierCompany, Path: "providers.llm.*.api_keys[]", Sources: []CredentialSource{
+var credentialPositions = []credentialPosition{
+	{Tier: tierCompany, Path: "providers.llm.*.api_keys[]", Sources: []credentialSource{
 		{Field: "LLMProvider.spec.apiKeySecretRefs", Reference: perKey},
 		{
 			Field: "EngineClass.spec.platformLLMProviders[].apiKeySecretRefs", Reference: "one `NamespacedSecretKeyReference` per key",
 			When: "for a model the platform provides",
 		},
 	}},
-	{Tier: TierCompany, Path: "providers.embeddings.api_key", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: "providers.embeddings.api_key", Sources: []credentialSource{
 		{Field: "Company.spec.embeddings.apiKeySecretRef", Reference: oneKey},
 	}},
-	{Tier: TierCompany, Path: "providers.sandbox.e2b.api_key", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: "providers.sandbox.e2b.api_key", Sources: []credentialSource{
 		{Field: "Company.spec.sandbox.e2b.apiKeySecretRef", Reference: oneKey},
 	}},
-	{Tier: TierCompany, Path: "providers.sandbox.setup[].files.*", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: "providers.sandbox.setup[].files.*", Sources: []credentialSource{
 		{Field: "Company.spec.sandbox.setup[].files[].valueFrom.secretKeyRef", Reference: perFile},
 	}},
-	{Tier: TierCompany, Path: "providers.sandbox.setup[].env.*", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: "providers.sandbox.setup[].env.*", Sources: []credentialSource{
 		{Field: "Company.spec.sandbox.setup[].env[].valueFrom.secretKeyRef", Reference: perVariable},
 	}},
-	{Tier: TierCompany, Path: "mcp_servers[].env.*", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: "mcp_servers[].env.*", Sources: []credentialSource{
 		{Field: "MCPServer.spec.env[].valueFrom.secretKeyRef", Reference: perVariable},
 	}},
-	{Tier: TierCompany, Path: "mcp_servers[].headers.*", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: "mcp_servers[].headers.*", Sources: []credentialSource{
 		{Field: "MCPServer.spec.headers[].valueFrom.secretKeyRef", Reference: perHeader},
 	}},
-	{Tier: TierCompany, Path: "units[].mcp_env.*.*", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: "units[].mcp_env.*.*", Sources: []credentialSource{
 		{Field: "Unit.spec.mcp[].env[].valueFrom.secretKeyRef", Reference: perEnvOrHead},
 	}},
-	{Tier: TierCompany, Path: "roles[].mcp_env.*.*", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: "roles[].mcp_env.*.*", Sources: []credentialSource{
 		{Field: "Seat.spec.mcp[].env[].valueFrom.secretKeyRef", Reference: perEnvOrHead},
 	}},
-	{Tier: TierCompany, Path: "roles[].sandbox.env.*", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: "roles[].sandbox.env.*", Sources: []credentialSource{
 		{Field: "Seat.spec.sandbox.env[].valueFrom.secretKeyRef", Reference: perVariable},
 	}},
-	{Tier: TierCompany, Path: "roles[].sandbox.setup[].files.*", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: "roles[].sandbox.setup[].files.*", Sources: []credentialSource{
 		{Field: "Seat.spec.sandbox.setup[].files[].valueFrom.secretKeyRef", Reference: perFile},
 	}},
-	{Tier: TierCompany, Path: "roles[].sandbox.setup[].env.*", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: "roles[].sandbox.setup[].env.*", Sources: []credentialSource{
 		{Field: "Seat.spec.sandbox.setup[].env[].valueFrom.secretKeyRef", Reference: perVariable},
 	}},
-	{Tier: TierCompany, Path: "roles[].integrations.slack.bot_token", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: "roles[].integrations.slack.bot_token", Sources: []credentialSource{
 		{Field: "Seat.spec.integrations.slack.credentialsSecretRef", Reference: "`SecretReference`, key `botToken` (`SlackBotTokenKey`)"},
 	}},
-	{Tier: TierCompany, Path: "roles[].integrations.slack.signing_secret", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: "roles[].integrations.slack.signing_secret", Sources: []credentialSource{
 		{
 			Field:     "Seat.spec.integrations.slack.credentialsSecretRef",
 			Reference: "`SecretReference`, key `signingSecret` (`SlackSigningSecretKey`)",
 		},
 	}},
-	{Tier: TierCompany, Path: "roles[].integrations.github.private_key", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: "roles[].integrations.github.private_key", Sources: []credentialSource{
 		{
 			Field:     "Seat.spec.integrations.github.app.credentialsSecretRef",
 			Reference: "`SecretReference`, key `privateKey` (`GitHubAppPrivateKeyKey`)",
 		},
 	}},
-	{Tier: TierCompany, Path: "roles[].integrations.github.webhook_secret", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: "roles[].integrations.github.webhook_secret", Sources: []credentialSource{
 		{
 			Field:     "Seat.spec.integrations.github.app.credentialsSecretRef",
 			Reference: "`SecretReference`, key `webhookSecret` (`GitHubAppWebhookSecretKey`)",
 		},
 	}},
-	{Tier: TierCompany, Path: "integrations.github.webhook_secret", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: githubWebhookSecret, Sources: []credentialSource{
 		{Field: "Integration.spec.github.webhookSecretRef", Reference: oneKey},
 	}},
-	{Tier: TierCompany, Path: "integrations.github.token", Sources: []CredentialSource{
+	{Tier: tierCompany, Path: "integrations.github.token", Sources: []credentialSource{
 		{Field: "Integration.spec.github.tokenSecretRef", Reference: oneKey},
 	}},
 
-	{Tier: TierCompany, Path: "integrations.gitlab.signing_secret", Unsupported: notOfferedGitLab},
-	{Tier: TierCompany, Path: "integrations.gitlab.token", Unsupported: notOfferedGitLab},
-	{Tier: TierCompany, Path: "integrations.gitlab.provisioning.admin_token", Unsupported: notOfferedGitLab},
-	{Tier: TierCompany, Path: "integrations.mattermost.provisioning.admin_token", Unsupported: notOfferedMattermost},
-	{Tier: TierCompany, Path: "roles[].integrations.mattermost.bot_token", Unsupported: notOfferedMattermost},
-	{Tier: TierCompany, Path: "integrations.jira.token", Unsupported: notOfferedJira},
-	{Tier: TierCompany, Path: "integrations.jira.webhook_secret", Unsupported: notOfferedJira},
-	{Tier: TierCompany, Path: "integrations.confluence.token", Unsupported: notOfferedConfluence},
-	{Tier: TierCompany, Path: "integrations.confluence.webhook_secret", Unsupported: notOfferedConfluence},
-	{Tier: TierCompany, Path: "integrations.confluence.webhook_token", Unsupported: notOfferedConfluence},
-	{Tier: TierCompany, Path: "integrations.datadog.webhook_token", Unsupported: notOfferedDatadog},
-	{Tier: TierCompany, Path: "integrations.datadog.provisioning.api_key", Unsupported: notOfferedDatadog},
-	{Tier: TierCompany, Path: "integrations.datadog.provisioning.app_key", Unsupported: notOfferedDatadog},
-	{Tier: TierCompany, Path: "integrations.atlassian.api_key", Unsupported: notOfferedAtlassian},
-	{Tier: TierCompany, Path: "providers.llm.*.cli.auth.token", Unsupported: notOfferedCLIAgent},
-	{Tier: TierCompany, Path: "providers.llm.*.cli.auth.credential_bundle", Unsupported: notOfferedCLIAgent},
-	{Tier: TierCompany, Path: "providers.llm.*.cli.env.*", Unsupported: notOfferedCLIAgent},
+	{Tier: tierCompany, Path: "integrations.gitlab.signing_secret", Unsupported: notOfferedGitLab},
+	{Tier: tierCompany, Path: "integrations.gitlab.token", Unsupported: notOfferedGitLab},
+	{Tier: tierCompany, Path: "integrations.gitlab.provisioning.admin_token", Unsupported: notOfferedGitLab},
+	{Tier: tierCompany, Path: "integrations.mattermost.provisioning.admin_token", Unsupported: notOfferedMattermost},
+	{Tier: tierCompany, Path: "roles[].integrations.mattermost.bot_token", Unsupported: notOfferedMattermost},
+	{Tier: tierCompany, Path: "integrations.jira.token", Unsupported: notOfferedJira},
+	{Tier: tierCompany, Path: "integrations.jira.webhook_secret", Unsupported: notOfferedJira},
+	{Tier: tierCompany, Path: "integrations.confluence.token", Unsupported: notOfferedConfluence},
+	{Tier: tierCompany, Path: "integrations.confluence.webhook_secret", Unsupported: notOfferedConfluence},
+	{Tier: tierCompany, Path: "integrations.confluence.webhook_token", Unsupported: notOfferedConfluence},
+	{Tier: tierCompany, Path: "integrations.datadog.webhook_token", Unsupported: notOfferedDatadog},
+	{Tier: tierCompany, Path: "integrations.datadog.provisioning.api_key", Unsupported: notOfferedDatadog},
+	{Tier: tierCompany, Path: "integrations.datadog.provisioning.app_key", Unsupported: notOfferedDatadog},
+	{Tier: tierCompany, Path: "integrations.atlassian.api_key", Unsupported: notOfferedAtlassian},
+	{Tier: tierCompany, Path: "providers.llm.*.cli.auth.token", Unsupported: notOfferedCLIAgent},
+	{Tier: tierCompany, Path: "providers.llm.*.cli.auth.credential_bundle", Unsupported: notOfferedCLIAgent},
+	{Tier: tierCompany, Path: "providers.llm.*.cli.env.*", Unsupported: notOfferedCLIAgent},
 
-	{Tier: TierBootstrap, Path: "api.auth.tokens[].token", Sources: []CredentialSource{
+	{Tier: tierBootstrap, Path: "api.auth.tokens[].token", Sources: []credentialSource{
 		{Reference: "Secret `<company>-api-tokens`, which the operator generates once (or a platform supplies): " +
 			"key `operator` for the operator's own token, `access` for the one published in `status.apiAccessSecretRef`"},
 	}},
-	{Tier: TierBootstrap, Path: "secrets.keys[].material", Sources: []CredentialSource{
+	{Tier: tierBootstrap, Path: "secrets.keys[].material", Sources: []credentialSource{
 		{Reference: "Secret `<company>-keyring`, which the operator generates once (or a platform supplies): " +
 			"one key per keyring key, the annotation `crewlet.ai/active-key-id` naming the one that seals"},
 	}},
-	{Tier: TierBootstrap, Path: "store.objects.s3.secret_access_key", Sources: []CredentialSource{
+	{Tier: tierBootstrap, Path: "store.objects.s3.secret_access_key", Sources: []credentialSource{
 		{
 			Field:     "Company.spec.objects.credentialsSecretRef",
 			Reference: "`SecretReference`, key `secretAccessKey` (`S3SecretAccessKeyKey`); unset, the pod's own identity",
 		},
 	}},
-	{Tier: TierBootstrap, Path: "stream.token", Unsupported: notOfferedStreamToken},
+	{Tier: tierBootstrap, Path: "stream.token", Unsupported: notOfferedStreamToken},
 }

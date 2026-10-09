@@ -206,7 +206,7 @@ func units(v any) {
 			continue
 		}
 		roles(unit[keyRoles])
-		units(unit["children"])
+		units(unit[keyChildren])
 	}
 }
 

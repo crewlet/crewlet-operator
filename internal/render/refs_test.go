@@ -305,7 +305,7 @@ func TestAttributeFindsTheInnermostObject(t *testing.T) {
 		{"providers.llm.anthropic.api_keys[0]", ObjectRef{KindLLMProvider, "anthropic"}},
 		{"providers.llm.platform-claude.model", ObjectRef{KindEngineClass, "standard"}},
 		{"mcp_servers[0].url", ObjectRef{KindMCPServer, sampleGitHub}},
-		{"integrations.github.webhook_secret", ObjectRef{KindIntegration, sampleGitHub}},
+		{githubWebhookSecret, ObjectRef{KindIntegration, sampleGitHub}},
 		{"integrations.slack.typing_status", ObjectRef{KindIntegration, "slack"}},
 		{"roles[0].contact", ObjectRef{KindSeat, seatJane}},
 		{"units[0].lead", ObjectRef{KindUnit, unitEngineering}},

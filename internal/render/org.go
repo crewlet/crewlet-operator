@@ -16,6 +16,9 @@ import (
 // seats by handle, so the document never depends on the order objects were
 // listed in.
 
+// keyChildren is the key a unit lists its child units under.
+const keyChildren = "children"
+
 // org renders the top-level roles and units.
 func (r *renderer) org() ([]roleDoc, []unitDoc) {
 	children := map[string][]*v1alpha1.Unit{}
@@ -254,7 +257,7 @@ func (r *renderer) unit(at Path, u *v1alpha1.Unit, t tree) unitDoc {
 		}
 	}
 	doc.Roles = r.roles(append(slices.Clone(at), keyRoles), t.members[u.Name])
-	doc.Children = r.unitList(append(slices.Clone(at), "children"), t.children[u.Name], t)
+	doc.Children = r.unitList(append(slices.Clone(at), keyChildren), t.children[u.Name], t)
 	return doc
 }
 

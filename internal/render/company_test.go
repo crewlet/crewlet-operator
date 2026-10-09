@@ -141,6 +141,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"mcp_servers[1].env.LINEAR_API_KEY", "tenant-nimbus/linear[apiKey]"},
 		{"mcp_servers[0].headers.X-Org", "tenant-nimbus/github-mcp[org]"},
 		{"units[0].mcp_env.linear.LINEAR_TEAM_TOKEN", "tenant-nimbus/engineering-linear[token]"},
+		{"units[0].children[0].mcp_env.linear.LINEAR_TEAM_TOKEN", "tenant-nimbus/platform-linear[token]"},
 		{"units[0].roles[0].mcp_env.github.Authorization", "tenant-nimbus/coder-github[authorization]"},
 		{"units[0].roles[0].sandbox.env.GITHUB_TOKEN", "tenant-nimbus/coder-github[token]"},
 		{"units[0].roles[0].sandbox.setup[0].files./root/.npmrc", "tenant-nimbus/coder-sandbox[npmrc]"},
@@ -149,7 +150,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"units[0].roles[0].integrations.slack.signing_secret", "tenant-nimbus/coder-slack[signingSecret]"},
 		{"units[0].roles[0].integrations.github.private_key", "tenant-nimbus/coder-github-app[privateKey]"},
 		{"units[0].roles[0].integrations.github.webhook_secret", "tenant-nimbus/coder-github-app[webhookSecret]"},
-		{"integrations.github.webhook_secret", "tenant-nimbus/github-org[webhookSecret]"},
+		{githubWebhookSecret, "tenant-nimbus/github-org[webhookSecret]"},
 		{"integrations.github.token", "tenant-nimbus/github-org[token]"},
 	}
 	byKey := map[string]secretref.Key{}
@@ -171,7 +172,7 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		t.Errorf("the document references %d keys, the test names %d positions: name the new one here", len(doc.Refs), len(positions))
 	}
 
-	// Every position CredentialPositions says the API covers is filled
+	// Every position credentialPositions says the API covers is filled
 	// here, and every reference the document holds is at one of them.
 	var referenced []Path
 	visitLeaves(t, doc.YAML, func(at Path, v any) {
@@ -179,16 +180,16 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 			return
 		}
 		referenced = append(referenced, at)
-		if position, ok := positionOf(TierCompany, at); !ok || position.Unsupported != "" {
-			t.Errorf("%s holds a reference, and CredentialPositions lists no covered position there", at)
+		if position, ok := positionOf(tierCompany, at); !ok || position.Unsupported != "" {
+			t.Errorf("%s holds a reference, and credentialPositions lists no covered position there", at)
 		}
 	})
-	for _, position := range CredentialPositions {
-		if position.Tier != TierCompany || position.Unsupported != "" {
+	for _, position := range credentialPositions {
+		if position.Tier != tierCompany || position.Unsupported != "" {
 			continue
 		}
 		if !slices.ContainsFunc(referenced, func(p Path) bool { return matchesPosition(position.Path, p) }) {
-			t.Errorf("CredentialPositions covers %s, and the secret-positions case fills it nowhere: add it there", position.Path)
+			t.Errorf("credentialPositions covers %s, and the secret-positions case fills it nowhere: add it there", position.Path)
 		}
 	}
 }

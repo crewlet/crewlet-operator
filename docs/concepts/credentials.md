@@ -8,15 +8,19 @@ it. The list is Crewlet's own: the positions its JSON Schema marks
 `"x-crewlet-secret": true` (`crewlet schema company`, `crewlet schema
 bootstrap`), which are the fields its configuration masks on every read. A
 position is written as the schema places it: `[]` is every element of a list
-and `*` every value of a map, and a seat's positions are written from
-`roles[]` wherever the org chart puts the seat.
+and `*` every value of a map. The org chart nests, so a seat's positions are
+written from `roles[]` wherever the chart puts the seat, and a unit's from
+`units[]` however deep among other units' `children[]` it sits.
 
-The tables below are made from one table in the operator's source
-(`internal/render/credentials.go`), and a test holds that table to the marks
-of the engine version the operator is built against, in both directions: a
-credential position Crewlet adds fails the operator's build until it is
-covered or listed as not offered, and so does a row for a position Crewlet
-no longer marks.
+The tables below are made from one table in the operator's tests
+(`internal/render/credentials_table_test.go`), and a test holds that table to
+the marks of the engine version the operator is built against, in both
+directions: a credential position Crewlet adds fails the operator's build
+until it is covered or listed as not offered, and so does a row for a
+position Crewlet no longer marks. Another holds the rule on a Company's
+`engineConfig` to the same marks: it must refuse every top-level block
+Crewlet holds a credential under, so a credential can never be written there
+as a literal.
 
 How references work is explained in
 [How the operator models a company](overview.md#credentials-by-reference-never-by-value).

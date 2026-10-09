@@ -3,6 +3,7 @@ package render
 import (
 	"bytes"
 	"encoding/json"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,7 +11,12 @@ import (
 	"strings"
 	"testing"
 
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
+	celvalidation "k8s.io/apiextensions-apiserver/pkg/apiserver/schema/cel"
+	"k8s.io/apimachinery/pkg/util/validation/field"
+	celconfig "k8s.io/apiserver/pkg/apis/cel"
 	"sigs.k8s.io/yaml"
 
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
@@ -20,10 +26,9 @@ import (
 // position.
 const secretMark = "x-crewlet-secret"
 
-// schemaMarks runs the pinned engine's `crewlet schema <tier>` and returns
-// every position it marks as a credential, written as CredentialPosition.Path
-// is.
-func schemaMarks(t *testing.T, tier CredentialTier) []string {
+// engineSchema runs the pinned engine's `crewlet schema <tier>` and returns
+// the JSON Schema it prints.
+func engineSchema(t *testing.T, tier credentialTier) map[string]any {
 	t.Helper()
 	//nolint:gosec // G204: the binary is the engine under test, chosen by whoever runs the tests.
 	cmd := exec.CommandContext(t.Context(), enginetest.Binary(t), "schema", string(tier))
@@ -38,9 +43,23 @@ func schemaMarks(t *testing.T, tier CredentialTier) []string {
 	if err := json.Unmarshal(out, &schema); err != nil {
 		t.Fatalf("crewlet schema %s printed no JSON: %v", tier, err)
 	}
-	defs, _ := schema["$defs"].(map[string]any)
+	return schema
+}
 
-	marks := map[string]bool{}
+// markedLocations returns the location of every node of schema that carries
+// secretMark, as segments: a property's key, `[]` for a list's elements and
+// `*` for a map's values. Sorted, each once.
+//
+// A location is where a value sits in the document, so the walk follows what
+// places a value (properties, patternProperties, items, prefixItems,
+// additionalProperties) and what describes the value already placed there
+// (a $ref, the branches of allOf, anyOf and oneOf, and an if's then and
+// else). It does not enter `if` or `not`: those are what a value is tested
+// against, never a place one sits, so a mark there marks nothing.
+func markedLocations(t *testing.T, schema map[string]any) [][]string {
+	t.Helper()
+	defs, _ := schema["$defs"].(map[string]any)
+	marks := map[string][]string{}
 	var walk func(node any, at []string, inside map[string]bool)
 	walk = func(node any, at []string, inside map[string]bool) {
 		n, ok := node.(map[string]any)
@@ -49,19 +68,20 @@ func schemaMarks(t *testing.T, tier CredentialTier) []string {
 		}
 		if mark, ok := n[secretMark]; ok {
 			if mark != true {
-				t.Errorf("%s: %s is %v; Crewlet documents true as its only value", positionPath(at), secretMark, mark)
+				t.Errorf("%s: %s is %v; Crewlet documents true as its only value", strings.Join(at, "."), secretMark, mark)
 			}
-			marks[positionPath(at)] = true
+			marks[strings.Join(at, "\x00")] = slices.Clone(at)
 		}
 		if ref, ok := n["$ref"].(string); ok {
 			name := strings.TrimPrefix(ref, "#/$defs/")
 			def, ok := defs[name]
 			if !ok {
-				t.Fatalf("crewlet schema %s: %s refers to %s, which it does not define", tier, positionPath(at), ref)
+				t.Fatalf("%s refers to %s, which the schema does not define", strings.Join(at, "."), ref)
 			}
 			// A definition met again inside itself is the recursion of the
 			// org chart (a unit's children are units); its positions were
-			// collected where it was first entered.
+			// collected where it was first entered, and orgPosition writes
+			// a child's from there.
 			if !inside[name] {
 				walk(def, at, withName(inside, name))
 			}
@@ -80,17 +100,36 @@ func schemaMarks(t *testing.T, tier CredentialTier) []string {
 				walk(sub, append(slices.Clone(at), key), inside)
 			}
 		}
+		if patterns, ok := n["patternProperties"].(map[string]any); ok {
+			for _, sub := range patterns {
+				walk(sub, append(slices.Clone(at), "*"), inside)
+			}
+		}
+		prefix, _ := n["prefixItems"].([]any)
+		for _, sub := range prefix {
+			walk(sub, append(slices.Clone(at), "[]"), inside)
+		}
 		walk(n["items"], append(slices.Clone(at), "[]"), inside)
 		walk(n["additionalProperties"], append(slices.Clone(at), "*"), inside)
 	}
 	walk(schema, nil, map[string]bool{})
 
-	paths := make([]string, 0, len(marks))
-	for p := range marks {
-		paths = append(paths, p)
+	locations := slices.Collect(maps.Values(marks))
+	slices.SortFunc(locations, slices.Compare)
+	return locations
+}
+
+// schemaMarks returns every position the pinned engine's schema of tier
+// marks as a credential, written as credentialPosition.Path is.
+func schemaMarks(t *testing.T, tier credentialTier) []string {
+	t.Helper()
+	locations := markedLocations(t, engineSchema(t, tier))
+	paths := make([]string, 0, len(locations))
+	for _, at := range locations {
+		paths = append(paths, positionPath(at))
 	}
 	slices.Sort(paths)
-	return paths
+	return slices.Compact(paths)
 }
 
 func withName(set map[string]bool, name string) map[string]bool {
@@ -102,18 +141,30 @@ func withName(set map[string]bool, name string) map[string]bool {
 	return out
 }
 
-// positionPath writes a schema location as CredentialPosition.Path: from the
-// last `roles[]` on, since a role's positions are the same wherever the org
-// chart places it.
-func positionPath(at []string) string {
+// orgPosition writes a location in the org chart from the entry it belongs
+// to, since a Seat or a Unit fills its positions the same way at any depth:
+// from the last `roles[]` on, and otherwise from the unit, written `units[]`,
+// however deep among `children[]` it sits.
+func orgPosition(at []string) []string {
 	for i := len(at) - 2; i >= 0; i-- {
 		if at[i] == keyRoles && at[i+1] == "[]" {
-			at = at[i:]
-			break
+			return at[i:]
 		}
 	}
+	if len(at) < 2 || at[0] != keyUnits || at[1] != "[]" {
+		return at
+	}
+	i := 2
+	for i+1 < len(at) && at[i] == keyChildren && at[i+1] == "[]" {
+		i += 2
+	}
+	return append([]string{keyUnits, "[]"}, at[i:]...)
+}
+
+// positionPath writes a schema location as credentialPosition.Path.
+func positionPath(at []string) string {
 	var b strings.Builder
-	for _, segment := range at {
+	for _, segment := range orgPosition(at) {
 		if segment != "[]" && b.Len() > 0 {
 			b.WriteByte('.')
 		}
@@ -122,35 +173,196 @@ func positionPath(at []string) string {
 	return b.String()
 }
 
-// TestCredentialPositionsAreTheEnginesMarks holds CredentialPositions to the
+// TestMarkedLocationsFollowsEveryPlacingConstruct holds the walk to a
+// schema that puts a mark under each construct it follows, and one under
+// each it must not: the engine's generator emits only some of them today, so
+// without this a construct the walk mishandled would pass unseen until
+// Crewlet first marked a position under it, and then miss it.
+func TestMarkedLocationsFollowsEveryPlacingConstruct(t *testing.T) {
+	mark := map[string]any{secretMark: true}
+	object := func(properties map[string]any) map[string]any { return map[string]any{"properties": properties} }
+	unit := map[string]any{"items": map[string]any{"$ref": "#/$defs/Unit"}}
+	const branches = "branches"
+	schema := object(map[string]any{
+		"plain": mark,
+		"all":   map[string]any{"allOf": []any{map[string]any{}, mark}},
+		"any":   map[string]any{"anyOf": []any{mark}},
+		"one":   map[string]any{"oneOf": []any{mark}},
+		branches: map[string]any{
+			"if":   object(map[string]any{"tested": mark}),
+			"then": mark,
+			"else": object(map[string]any{"other": mark}),
+		},
+		"negated":  map[string]any{"not": mark},
+		"list":     map[string]any{"items": mark},
+		"tuple":    map[string]any{"prefixItems": []any{map[string]any{}, mark}},
+		"map":      map[string]any{"additionalProperties": mark},
+		"patterns": map[string]any{"patternProperties": map[string]any{"^x-": mark}},
+		keyUnits:   unit,
+	})
+	schema["$defs"] = map[string]any{"Unit": object(map[string]any{"token": mark, keyChildren: unit})}
+	want := [][]string{
+		{"all"},
+		{"any"},
+		{branches},
+		{branches, "other"},
+		{"list", "[]"},
+		{"map", "*"},
+		{"one"},
+		{"patterns", "*"},
+		{"plain"},
+		{"tuple", "[]"},
+		{keyUnits, "[]", "token"},
+	}
+	if got := markedLocations(t, schema); !slices.EqualFunc(got, want, slices.Equal) {
+		t.Errorf("the walk found the marks at\n%v\nwant\n%v", got, want)
+	}
+}
+
+// TestOrgPositionsAreWrittenFromTheirEntry: a role's and a unit's positions
+// are written the same at every depth of the org chart, so one row answers
+// each wherever the chart puts it.
+func TestOrgPositionsAreWrittenFromTheirEntry(t *testing.T) {
+	// A credential of a role's sandbox, and of a unit's MCP server.
+	roleEnv := Path{"sandbox", "env", "TOKEN"}
+	unitEnv := Path{"mcp_env", "linear", "TOKEN"}
+	const rolePosition, unitPosition = "roles[].sandbox.env.TOKEN", "units[].mcp_env.linear.TOKEN"
+	at := slices.Concat[Path]
+	for _, c := range []struct {
+		at   Path
+		want string
+	}{
+		{at(Path{keyRoles, 0}, roleEnv), rolePosition},
+		{at(Path{keyUnits, 0, keyRoles, 1}, roleEnv), rolePosition},
+		{at(Path{keyUnits, 0, keyChildren, 2, keyChildren, 0, keyRoles, 1}, roleEnv), rolePosition},
+		{at(Path{keyUnits, 0}, unitEnv), unitPosition},
+		{at(Path{keyUnits, 0, keyChildren, 0}, unitEnv), unitPosition},
+		{at(Path{keyUnits, 1, keyChildren, 0, keyChildren, 3}, unitEnv), unitPosition},
+		{Path{keyProviders, "llm", "a", "api_keys", 0}, "providers.llm.a.api_keys[]"},
+		// children only nests units: elsewhere it is an ordinary key.
+		{Path{keyMCPServers, 0, keyChildren, 0, "env", "X"}, "mcp_servers[].children[].env.X"},
+	} {
+		if got := positionPath(segments(c.at)); got != c.want {
+			t.Errorf("%s is written %s, want %s", c.at, got, c.want)
+		}
+	}
+	if _, ok := positionOf(tierCompany, at(Path{keyUnits, 0, keyChildren, 0}, unitEnv)); !ok {
+		t.Error("a child unit's MCP credential is not the position units[].mcp_env.*.*")
+	}
+}
+
+// TestCredentialPositionsAreTheEnginesMarks holds credentialPositions to the
 // positions the pinned engine marks as credentials, in both directions: a
 // position Crewlet adds must be answered (a field, or why there is none), and
 // a row for a position Crewlet no longer marks is a stale claim.
 func TestCredentialPositionsAreTheEnginesMarks(t *testing.T) {
-	for _, tier := range []CredentialTier{TierCompany, TierBootstrap} {
+	for _, tier := range []credentialTier{tierCompany, tierBootstrap} {
 		t.Run(string(tier), func(t *testing.T) {
 			marked := schemaMarks(t, tier)
 			if len(marked) == 0 {
 				t.Fatalf("crewlet schema %s marks no position, so this test would prove nothing", tier)
 			}
 			var listed []string
-			for _, p := range CredentialPositions {
+			for _, p := range credentialPositions {
 				if p.Tier == tier {
 					listed = append(listed, p.Path)
 				}
 			}
 			for _, p := range marked {
 				if !slices.Contains(listed, p) {
-					t.Errorf("Crewlet marks %s as a credential, and CredentialPositions does not list it: "+
+					t.Errorf("Crewlet marks %s as a credential, and credentialPositions does not list it: "+
 						"name the field that fills it, or why v1alpha1 offers none", p)
 				}
 			}
 			for _, p := range listed {
 				if !slices.Contains(marked, p) {
-					t.Errorf("CredentialPositions lists %s, which Crewlet does not mark as a credential: remove the row", p)
+					t.Errorf("credentialPositions lists %s, which Crewlet does not mark as a credential: remove the row", p)
 				}
 			}
 		})
+	}
+}
+
+// engineConfigRefusal is the start of the message of the CEL rule on
+// Company.spec.engineConfig that keeps it off the blocks that hold
+// credentials.
+const engineConfigRefusal = "engineConfig may not set"
+
+// engineConfigValidator runs the CEL rules of Company.spec.engineConfig as
+// the generated CRD states them, with the validator the API server runs.
+func engineConfigValidator(t *testing.T) func(entries ...any) field.ErrorList {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "config", "crd", "bases", "crewlet.ai_companies.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var crd apiextensionsv1.CustomResourceDefinition
+	if err := yaml.Unmarshal(data, &crd); err != nil {
+		t.Fatal(err)
+	}
+	var node *apiextensionsv1.JSONSchemaProps
+	for _, v := range crd.Spec.Versions {
+		if v.Name == "v1alpha1" {
+			spec := v.Schema.OpenAPIV3Schema.Properties["spec"]
+			engineConfig, ok := spec.Properties["engineConfig"]
+			if ok {
+				node = &engineConfig
+			}
+		}
+	}
+	if node == nil {
+		t.Fatal("the Company CRD has no v1alpha1 spec.engineConfig")
+	}
+	var internal apiextensions.JSONSchemaProps
+	if err := apiextensionsv1.Convert_v1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(node, &internal, nil); err != nil {
+		t.Fatal(err)
+	}
+	structural, err := structuralschema.NewStructural(&internal)
+	if err != nil {
+		t.Fatalf("spec.engineConfig is not a structural schema: %v", err)
+	}
+	validator := celvalidation.NewValidator(structural, false, celconfig.PerCallLimit)
+	if validator == nil {
+		t.Fatal("spec.engineConfig carries no CEL rule")
+	}
+	return func(entries ...any) field.ErrorList {
+		errs, _ := validator.Validate(t.Context(), field.NewPath("spec", "engineConfig"), structural, entries, nil,
+			celconfig.RuntimeCELCostBudget)
+		return errs
+	}
+}
+
+// TestEngineConfigCannotNameACredentialBlock: engineConfig passes a
+// top-level block of the company document through as written, so it may
+// never name a block Crewlet holds a credential under, or a literal could
+// reach the document past every reference this API makes. The CRD's rule
+// keeps a list of the blocks it refuses; this holds that list to the
+// top-level key of every position the pinned engine's schema marks, so a
+// credential Crewlet adds under another block fails here until the rule
+// refuses that block too.
+func TestEngineConfigCannotNameACredentialBlock(t *testing.T) {
+	validate := engineConfigValidator(t)
+	var blocks []string
+	for _, at := range markedLocations(t, engineSchema(t, tierCompany)) {
+		blocks = append(blocks, at[0])
+	}
+	slices.Sort(blocks)
+	blocks = slices.Compact(blocks)
+	if len(blocks) == 0 {
+		t.Fatal("crewlet schema company marks no position, so this test would prove nothing")
+	}
+	entry := func(block string) map[string]any { return map[string]any{"name": block, "value": map[string]any{}} }
+	for _, block := range blocks {
+		errs := validate(entry(block))
+		if !slices.ContainsFunc(errs, func(e *field.Error) bool { return strings.HasPrefix(e.Detail, engineConfigRefusal) }) {
+			t.Errorf("Crewlet holds a credential under %s, and the CRD lets engineConfig set it (%v): "+
+				"add it to the rule on Company.spec.engineConfig", block, errs)
+		}
+	}
+	// A block that holds none is let through, so the refusals above are
+	// the rule's and not a validator that refuses everything.
+	if errs := validate(entry("turn_engine")); len(errs) > 0 {
+		t.Errorf("engineConfig may not set turn_engine, which holds no credential: %v", errs)
 	}
 }
 
@@ -159,7 +371,7 @@ func TestCredentialPositionsAreTheEnginesMarks(t *testing.T) {
 // of the sources of one position, all but one say when they apply.
 func TestCredentialPositionsAreEachAnsweredOnce(t *testing.T) {
 	seen := map[string]bool{}
-	for _, p := range CredentialPositions {
+	for _, p := range credentialPositions {
 		key := string(p.Tier) + " " + p.Path
 		if seen[key] {
 			t.Errorf("%s is listed twice", key)
@@ -183,7 +395,7 @@ func TestCredentialPositionsAreEachAnsweredOnce(t *testing.T) {
 	}
 }
 
-// TestCredentialFieldsAreTheAPIs holds every field CredentialPositions names
+// TestCredentialFieldsAreTheAPIs holds every field credentialPositions names
 // to the generated CRDs, so a renamed or removed field fails here rather than
 // leaving the table, and the page made from it, pointing at nothing.
 func TestCredentialFieldsAreTheAPIs(t *testing.T) {
@@ -208,7 +420,7 @@ func TestCredentialFieldsAreTheAPIs(t *testing.T) {
 		}
 	}
 
-	for _, p := range CredentialPositions {
+	for _, p := range credentialPositions {
 		for _, s := range p.Sources {
 			if s.Field == "" {
 				continue
@@ -245,7 +457,7 @@ func TestCredentialFieldsAreTheAPIs(t *testing.T) {
 // credentialsDoc is the page that lists the positions, for people.
 var credentialsDoc = filepath.Join("..", "..", "docs", "concepts", "credentials.md")
 
-// The page's sections, each holding one table made from CredentialPositions.
+// The page's sections, each holding one table made from credentialPositions.
 const (
 	sectionCovered    = "## Covered in v1alpha1"
 	sectionNotOffered = "## Not offered in v1alpha1"
@@ -266,12 +478,12 @@ func credentialTables() map[string]string {
 		}
 		group = nil
 	}
-	for _, p := range CredentialPositions {
+	for _, p := range credentialPositions {
 		position := "`" + p.Path + "`"
 		switch {
-		case p.Tier == TierBootstrap && p.Unsupported != "":
+		case p.Tier == tierBootstrap && p.Unsupported != "":
 			tierA = append(tierA, "| "+position+" | Not offered. "+p.Unsupported+" |")
-		case p.Tier == TierBootstrap:
+		case p.Tier == tierBootstrap:
 			for _, s := range p.Sources {
 				from := s.Reference
 				if s.Field != "" {
@@ -306,7 +518,7 @@ func credentialTables() map[string]string {
 }
 
 // TestCredentialsDocListsThePositions holds docs/concepts/credentials.md to
-// CredentialPositions: each of its three tables is exactly the rows the table
+// credentialPositions: each of its three tables is exactly the rows the table
 // makes, so the page a user reads lists what the engine marks and what the
 // operator fills it from, and nothing else.
 func TestCredentialsDocListsThePositions(t *testing.T) {
@@ -333,21 +545,30 @@ func TestCredentialsDocListsThePositions(t *testing.T) {
 			}
 		}
 		if got := strings.Join(table, "\n"); got != want {
-			t.Errorf("the table under %q in %s is not the one CredentialPositions makes; it should read:\n\n%s\n\nIt reads:\n\n%s",
+			t.Errorf("the table under %q in %s is not the one credentialPositions makes; it should read:\n\n%s\n\nIt reads:\n\n%s",
 				heading, credentialsDoc, want, got)
 		}
 	}
 }
 
-// matchesPosition reports whether the place p in a rendered document is the
-// position pattern (a CredentialPosition.Path).
-func matchesPosition(pattern string, p Path) bool {
-	for i := len(p) - 2; i >= 0; i-- {
-		if _, index := p[i+1].(int); index && p[i] == keyRoles {
-			p = p[i:]
-			break
+// segments writes a place in a rendered document as a schema location:
+// `[]` for every index.
+func segments(p Path) []string {
+	out := make([]string, len(p))
+	for i, segment := range p {
+		switch s := segment.(type) {
+		case int:
+			out[i] = "[]"
+		case string:
+			out[i] = s
 		}
 	}
+	return out
+}
+
+// matchesPosition reports whether the place p in a rendered document is the
+// position pattern (a credentialPosition.Path).
+func matchesPosition(pattern string, p Path) bool {
 	var want []string
 	for part := range strings.SplitSeq(pattern, ".") {
 		name, list := strings.CutSuffix(part, "[]")
@@ -356,22 +577,12 @@ func matchesPosition(pattern string, p Path) bool {
 			want = append(want, "[]")
 		}
 	}
-	if len(want) != len(p) {
-		return false
-	}
-	for i, segment := range p {
-		switch s := segment.(type) {
-		case int:
-			if want[i] != "[]" {
-				return false
-			}
-		case string:
-			if want[i] == "[]" || (want[i] != "*" && want[i] != s) {
-				return false
-			}
+	return slices.EqualFunc(want, orgPosition(segments(p)), func(want, got string) bool {
+		if want == "*" {
+			return got != "[]"
 		}
-	}
-	return true
+		return want == got
+	})
 }
 
 // visitLeaves calls visit with every scalar of a document and its place.
@@ -400,13 +611,13 @@ func visitLeaves(t *testing.T, document []byte, visit func(Path, any)) {
 }
 
 // positionOf is the credential position of tier that p is, if it is one.
-func positionOf(tier CredentialTier, p Path) (CredentialPosition, bool) {
-	for _, position := range CredentialPositions {
+func positionOf(tier credentialTier, p Path) (credentialPosition, bool) {
+	for _, position := range credentialPositions {
 		if position.Tier == tier && matchesPosition(position.Path, p) {
 			return position, true
 		}
 	}
-	return CredentialPosition{}, false
+	return credentialPosition{}, false
 }
 
 // TestBootstrapCredentialsSitOnlyAtMarkedPositions uses the engine's own
@@ -438,10 +649,10 @@ func TestBootstrapCredentialsSitOnlyAtMarkedPositions(t *testing.T) {
 			placed := 0
 			visitLeaves(t, doc.YAML, func(p Path, v any) {
 				value, _ := v.(string)
-				position, marked := positionOf(TierBootstrap, p)
+				position, marked := positionOf(tierBootstrap, p)
 				switch {
 				case marked && position.Unsupported != "":
-					t.Errorf("%s is filled, and CredentialPositions says v1alpha1 offers nothing to fill it with", p)
+					t.Errorf("%s is filled, and credentialPositions says v1alpha1 offers nothing to fill it with", p)
 				case marked && !slices.Contains(credentials, value):
 					t.Errorf("%s, a credential position, holds something other than a credential the operator was given", p)
 				case marked:
