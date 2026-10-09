@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"strings"
 	"time"
@@ -15,11 +16,13 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/test/utils"
@@ -216,6 +219,51 @@ var _ = Describe("Seat pools", Ordered, func() {
 		expectSeatsFollowTheFleet()
 	})
 
+	// The data pod's leaf listener takes any connection, with no
+	// authentication: <company>-broker is what keeps it the company's.
+	It("admits the company's own seat pods to the data pod's leaf listener", func() {
+		Expect(leafProbe(poolsNamespace, "leaf-own", seatLabels(poolsCompany), leafAddress)).To(Equal(corev1.PodSucceeded),
+			"a pod labelled as the company's seat pod did not join the leaf listener: the probe proves nothing")
+	})
+
+	// NetworkPolicy at work, which needs a CNI that enforces it (see the
+	// company specs' "refuses a pod of a namespace the class does not
+	// admit").
+	It("does not admit another pod to the leaf listener, under Isolated or None, nor a connection to a seat pod", func() {
+		refused := func() {
+			GinkgoHelper()
+			for name, probe := range map[string]struct {
+				namespace string
+				labels    map[string]string
+			}{
+				"leaf-other-namespace": {poolsConsumerNamespace, seatLabels(poolsCompany)},
+				"leaf-unlabelled":      {poolsNamespace, nil},
+				"leaf-another-company": {poolsNamespace, seatLabels("another")},
+			} {
+				Expect(leafProbe(probe.namespace, name, probe.labels, leafAddress)).To(Equal(corev1.PodFailed),
+					"pod %s/%s joined the company's leaf listener", probe.namespace, name)
+			}
+		}
+		By("refusing every other pod under Isolated")
+		refused()
+
+		By("refusing a connection to a seat pod, even from the company's own seat pods")
+		seatPod := &corev1.Pod{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: poolsNamespace, Name: soloPod}, seatPod)).To(Succeed())
+		for _, port := range []int{7422, 8080} {
+			target := fmt.Sprintf("%s:%d", seatPod.Status.PodIP, port)
+			Expect(leafProbe(poolsNamespace, fmt.Sprintf("seat-pod-%d", port), seatLabels(poolsCompany), target)).
+				To(Equal(corev1.PodFailed), "a connection to seat pod %s reached it", target)
+		}
+
+		By("refusing every other pod under None, which keeps the broker's policy")
+		setPoolsNetworkPolicy(v1.NetworkPolicyNone)
+		DeferCleanup(setPoolsNetworkPolicy, v1.NetworkPolicyIsolated)
+		refused()
+		Expect(leafProbe(poolsNamespace, "leaf-own-none", seatLabels(poolsCompany), leafAddress)).
+			To(Equal(corev1.PodSucceeded), "the company's own seat pod was refused under None")
+	})
+
 	It("rebalances the Shared pool's seats onto a pod it gains", func() {
 		By("scaling the Shared pool to three pods")
 		applyPoolsCompany(3)
@@ -362,4 +410,58 @@ func expectSeatsFollowTheFleet() {
 // dumpPools prints what a failed spec of the pools needs to be understood.
 func dumpPools() {
 	dumpNamespace(poolsNamespace, poolsDataPod, sharedStatefulSet+"-0", soloPod)
+}
+
+// leafAddress is the data pod's leaf listener, as a seat pod dials it.
+var leafAddress = fmt.Sprintf("%s.%s-data.%s.svc:%d", poolsDataPod, poolsCompany, poolsNamespace, 7422)
+
+// seatLabels are the labels the operator gives company's seat pods, which
+// <company>-broker admits by.
+func seatLabels(company string) map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name": "crewlet", "app.kubernetes.io/instance": company,
+		"app.kubernetes.io/component": "seats", v1.CompanyLabel: company,
+	}
+}
+
+// leafProbe runs a pod named name, with labels, in namespace, that opens a TCP
+// connection to target (host:port) and succeeds only if a NATS server
+// answers on it with its INFO line, as the leaf listener does at once; it
+// returns how the pod ended. A refused or dropped connection fails it.
+func leafProbe(namespace, name string, labels map[string]string, target string) corev1.PodPhase {
+	GinkgoHelper()
+	_ = k8sClient.Delete(ctx, &corev1.Pod{Namespace: namespace, Name: name}, client.GracePeriodSeconds(0))
+	Eventually(func() bool {
+		return apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &corev1.Pod{}))
+	}).Should(BeTrue())
+	// curl's telnet:// opens a bare TCP connection and prints what the
+	// server sends; the sleep keeps its input open while the INFO line
+	// arrives.
+	script := `out=$( (sleep 3) | curl -sS --max-time 8 "telnet://` + target + `" 2>&1 ); echo "$out"; ` +
+		`case "$out" in *INFO*) exit 0;; *) exit 1;; esac`
+	pod := curlPodWith(namespace, name, poolsAccessSecret, script)
+	pod.Labels = labels
+	pod.Spec.Containers[0].Env = nil
+	apply(pod)
+	return curlPhase(namespace, name)
+}
+
+// setPoolsNetworkPolicy sets the pools class's networkPolicy.mode and waits
+// for the operator to have acted on it: <company>-engine exists under
+// Isolated alone.
+func setPoolsNetworkPolicy(mode v1.NetworkPolicyMode) {
+	GinkgoHelper()
+	class := &v1.EngineClass{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: poolsClassName}, class)).To(Succeed())
+	class.Spec.NetworkPolicy.Mode = mode
+	Expect(k8sClient.Update(ctx, class)).To(Succeed())
+	Eventually(func(g Gomega) {
+		key := types.NamespacedName{Namespace: poolsNamespace, Name: poolsCompany + "-engine"}
+		err := k8sClient.Get(ctx, key, &networkingv1.NetworkPolicy{})
+		if mode == v1.NetworkPolicyIsolated {
+			g.Expect(err).NotTo(HaveOccurred())
+			return
+		}
+		g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "the engine's NetworkPolicy is still there under %s", mode)
+	}).Should(Succeed())
 }

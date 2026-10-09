@@ -91,7 +91,10 @@ Two more suites are not part of `make check`:
   document and Secret values, a consumer its class admits reads the API with
   the published token, is refused a change to the document the operator
   enforces, and a pod of another namespace is refused, an edited Seat becomes a new revision, and deleting the Company
-  keeps or deletes its volume and keyring as its `deletionPolicy` says. Then
+  keeps or deletes its volume and keyring as its `deletionPolicy` says; and
+  that a company's seat pools run, the engine places each seat in its own
+  pool, and the data pod's leaf listener admits the company's own seat pods
+  and no other pod. Then
   it deletes the cluster, unless the suite failed: the cluster is left for a
   look, and `make cleanup-test-e2e` deletes it. CI runs it on every pull
   request. The engine image
