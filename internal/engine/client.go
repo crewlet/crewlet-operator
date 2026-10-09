@@ -1,6 +1,8 @@
-// Package engine is a typed client for the REST API of a Crewlet engine: its
+// Package engine is a typed client for the API of a Crewlet engine: its
 // probes, the company document under /config, the encrypted secret store under
-// /secrets, and the integration status under /integrations.
+// /secrets, the integration status under /integrations, and its seats' pauses,
+// read from its roster and changed through the pause tools of its operator
+// catalogue over MCP (see SeatPauses).
 //
 // It speaks the engine's API as the engine documents it
 // (docs/reference/api-endpoints.md in github.com/crewlet/crewlet) and maps
