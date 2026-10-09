@@ -79,6 +79,16 @@ The image is built from the crewlet module at that version, checked against
 the Go checksum database, with crewlet's own Dockerfile; pin it by digest in
 the class.
 
+Never run an older engine than that. The operator writes the data pod's
+`crewlet.yaml` in the settings its engine version knows, and an engine
+refuses a setting it does not know when it starts. Under `Enforce`, the
+default management policy, the operator sets Crewlet's
+`api.auth.company_writers` ([Enforce](../concepts/applying.md#enforce-the-default)),
+which Crewlet added at 51b8d06 (`v0.1.1-0.20261009013001-51b8d06db1b2`): on
+an older engine the data pod of every `Enforce` company restarts in a loop,
+its log ending in `unknown field: "company_writers" is not a setting`
+([The data pod is not ready](troubleshooting.md#the-data-pod-is-not-ready)).
+
 ## Values worth setting
 
 Object names below are those of a release named `crewlet-operator`; the
@@ -196,3 +206,14 @@ The chart's CRDs are ordinary templates rather than files in `crds/`, so
 restarts an engine only when the new release changes what its pod is given.
 A new engine version is a change of the EngineClass's `engine.image`: each
 company's data pod rolls to it as the operator reconciles that company.
+
+When the new release is built against a newer engine (its `CREWLET_VERSION`),
+move every EngineClass's `engine.image` to that engine first, let the
+companies roll, and upgrade the operator after: a newer engine runs the
+`crewlet.yaml` an older operator wrote, and an older engine may refuse the
+one a newer operator writes. The first release that sets
+`api.auth.company_writers` is such a release: it needs crewlet 51b8d06 or
+later, and it restarts the data pod of every `Enforce` company once, since
+the setting is part of the `crewlet.yaml` the pod is given. Companies under
+`Observe` or `Seed` are given the same `crewlet.yaml` as before and do not
+restart.

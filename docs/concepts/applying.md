@@ -144,9 +144,10 @@ rendered one; when they differ and the engine runs a revision the operator
 did not write — one the engine recorded itself, such as a provisioning pass
 writing down what it discovered at a vendor, a revision made before the data
 pod restarted onto `Enforce`, a document the engine had before the Company
-was created — it applies the rendered document over it, records a `Drifted` event naming the revision and the places that
-differed, and reports `ConfigApplied=True` with the reason `DriftCorrected`
-until its next write.
+was created — it applies the rendered document over it, records a
+`Drifted` event naming the revision and the places that differed, and
+reports `ConfigApplied=True` with the reason `DriftCorrected` until its next
+write.
 
 A revision the engine activates on its own with the same content — a reload
 after a credential was minted — is not drift: the operator adopts its id in
