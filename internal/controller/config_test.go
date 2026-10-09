@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
 	"net/http"
 	"regexp"
@@ -43,6 +44,43 @@ const llmKey = "apiKey"
 type testEngines struct {
 	mu      sync.Mutex
 	engines map[types.NamespacedName]*enginetest.Engine
+	// applies, for a Company, is called with each document the reconciler
+	// writes to its engine (a dry run is no write), before the engine sees
+	// it: what the cluster holds at that moment is what a spec asserts.
+	applies map[types.NamespacedName]func(document []byte)
+}
+
+// watchApplies calls hook with each document the reconciler writes to the
+// Company's engine, before the engine has it.
+func (t *testEngines) watchApplies(key types.NamespacedName, hook func(document []byte)) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.applies == nil {
+		t.applies = map[types.NamespacedName]func([]byte){}
+	}
+	t.applies[key] = hook
+}
+
+// applyWatch hands each PUT /config that is not a dry run to hook, then sends
+// it on.
+type applyWatch struct {
+	base http.RoundTripper
+	hook func(document []byte)
+}
+
+func (w *applyWatch) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Method == http.MethodPut && req.URL.Path == "/config" && req.URL.Query().Get("dry_run") == "" && req.GetBody != nil {
+		body, err := req.GetBody()
+		if err != nil {
+			return nil, err
+		}
+		document, err := io.ReadAll(body)
+		if err != nil {
+			return nil, err
+		}
+		w.hook(document)
+	}
+	return w.base.RoundTrip(req)
 }
 
 func (t *testEngines) set(key types.NamespacedName, e *enginetest.Engine) {
@@ -60,6 +98,11 @@ func (t *testEngines) Engine(_ context.Context, c *crewletaiv1alpha1.Company) (*
 	e, ok := t.engines[client.ObjectKeyFromObject(c)]
 	if !ok {
 		return nil, fmt.Errorf("no engine runs for Company %s/%s", c.Namespace, c.Name)
+	}
+	if hook, ok := t.applies[client.ObjectKeyFromObject(c)]; ok {
+		hc := engine.NewHTTPClient()
+		hc.Transport = &applyWatch{base: hc.Transport, hook: hook}
+		return engine.New(e.URL, e.OperatorToken, engine.WithHTTPClient(hc)), nil
 	}
 	return e.Client(), nil
 }
@@ -966,6 +1009,50 @@ var _ = Describe("Company config", Ordered, func() {
 		newSeat(namespace, name, "ana")
 		newSeat(namespace, name, "bo", placed(poolGeneral))
 		cy := newSeat(namespace, name, "cy", placed(poolIsolated))
+		// Each document the engine is sent must find its pins in the
+		// record already: written after the apply, the record would leave a
+		// moment when the runtime sees a pool the engine is about to need
+		// pinned by nothing, and deletes its pods.
+		var (
+			mu         sync.Mutex
+			writes     int
+			unrecorded []string
+		)
+		// The key, not c: the hook runs on the reconciler's goroutine while
+		// the spec reads c over again.
+		key := client.ObjectKeyFromObject(c)
+		engines.watchApplies(key, func(document []byte) {
+			mu.Lock()
+			defer mu.Unlock()
+			writes++
+			pins, err := render.PlacementOf(document)
+			if err != nil {
+				unrecorded = append(unrecorded, err.Error())
+				return
+			}
+			held := &crewletaiv1alpha1.Company{}
+			if err := k8sClient.Get(ctx, key, held); err != nil {
+				unrecorded = append(unrecorded, err.Error())
+				return
+			}
+			recorded := held.Status.Config.Placement
+			for _, pool := range pins.Pools {
+				if !slices.Contains(recorded.Pools, pool) {
+					unrecorded = append(unrecorded, "pool "+pool)
+				}
+			}
+			for _, seat := range pins.Seats {
+				if !slices.Contains(recorded.Seats, seat) {
+					unrecorded = append(unrecorded, "seat "+seat)
+				}
+			}
+		})
+		DeferCleanup(func() {
+			mu.Lock()
+			defer mu.Unlock()
+			Expect(writes).To(BeNumerically(">=", 2), "the spec writes two revisions")
+			Expect(unrecorded).To(BeEmpty(), "pins the record did not hold when the engine was sent the document that pins them")
+		})
 		standIn(c)
 		placement := func(g Gomega) crewletaiv1alpha1.RevisionPlacement {
 			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(c), c)).To(Succeed())
