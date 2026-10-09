@@ -317,7 +317,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `engineClassName` _string_ | engineClassName is the EngineClass the company runs with. Unset uses<br />the class annotated crewlet.ai/is-default-class=true.<br />Choosing a class is not access-controlled, as choosing a StorageClass<br />is not: whoever may write a Company may name any class, including one<br />that offers platformLLMProviders or larger limits. A platform whose<br />tenants write their own Companies restricts the choice with an<br />admission policy (a ValidatingAdmissionPolicy over<br />spec.engineClassName, for example). |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `engineClassName` _string_ | engineClassName is the EngineClass the company runs with. Unset uses<br />the class annotated crewlet.ai/is-default-class=true.<br />Whoever may write a Company may name any class, including one that<br />offers platformLLMProviders or larger limits; a class admits only the<br />namespaces its spec.allowedNamespaces selects, and a Company in any<br />other is not accepted (ClassNotAllowed). |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `companyName` _string_ | companyName is the company's name. Crewlet derives every seat's<br />identity from it and the seat's handle, so it cannot be changed: a new<br />name would orphan every seat's memory. Crewlet's `name`. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `mission` _string_ | mission is one line on what the company is for; every seat's prompt<br />carries it. Crewlet's `mission`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `vision` _string_ | vision is a longer statement of where the company is going. Crewlet's<br />`vision`. |  | MaxLength: 8192 <br />MinLength: 1 <br />Optional: \{\} <br /> |
@@ -607,8 +607,8 @@ engines: the image, the size of the data pods, how companies are exposed,
 and limits. A Company names one in spec.engineClassName; in a multi-tenant platform, a service tier
 usually maps to a class.
 
-Like a StorageClass, a class is not access-controlled: anyone who may write
-a Company may name any class (see the Company's spec.engineClassName).
+Anyone who may write a Company may name any class; a class admits the
+namespaces its spec.allowedNamespaces selects, and no others.
 
 
 
@@ -637,6 +637,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
+| `allowedNamespaces` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#labelselector-v1-meta)_ | allowedNamespaces selects, by their labels, the namespaces whose<br />Companies may run with this class, as a Gateway's<br />allowedRoutes.namespaces.selector does; a Company in any other<br />namespace is not accepted (Accepted=False, ClassNotAllowed). Unset, or<br />an empty selector, admits every namespace.<br />Running with a class is a privilege, and any subject that may write a<br />Company may name any class: the class carries the platform's Secrets<br />it references (platform model keys, telemetry headers, env values)<br />into each of its companies' namespaces and engines, its workload<br />identity onto the engine ServiceAccount, and its scheduling onto the<br />platform's nodes. A class with any of those should name the<br />namespaces it is for. To select namespaces by name, match the label<br />kubernetes.io/metadata.name, which the API server sets on every<br />namespace. |  | Optional: \{\} <br /> |
 | `engine` _[EngineSettings](#enginesettings)_ | engine is the engine image. |  | Required: \{\} <br /> |
 | `data` _[DataPodSettings](#datapodsettings)_ | data sizes the pods that hold each company's estate. |  | Required: \{\} <br /> |
 | `stream` _[StreamSettings](#streamsettings)_ | stream is how each company's event stream runs. | \{ mode:Embedded \} | MinProperties: 1 <br />Optional: \{\} <br /> |

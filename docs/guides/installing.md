@@ -67,10 +67,21 @@ So whoever may edit a namespace may run a company in it, with the same
 limits on what it costs that the namespace's other workloads have
 (ResourceQuotas apply to the engine's pod and volume). EngineClasses are not
 in either role: they are the platform's, written by its administrators.
-Naming one in a Company is not access-controlled, as naming a StorageClass is
-not, so whoever may write a Company may choose any class; where that matters
-(a class with platform-provided models, say), restrict `spec.engineClassName`
-with a ValidatingAdmissionPolicy.
+Whoever may write a Company may name any class, and the class brings what it
+references with it: the platform's model keys, telemetry headers and env
+values, the workload identity on the engine's ServiceAccount, and its
+scheduling onto the platform's nodes. A class that carries any of that should
+admit only the namespaces it is for, with `spec.allowedNamespaces`, a
+namespace label selector; a Company elsewhere reports `Accepted=False
+ClassNotAllowed`. Select by a label only the platform can set: a namespace's
+editors cannot change its labels, since Namespaces are cluster-scoped.
+
+The reverse holds too: **writing EngineClasses is as good as reading any
+Secret in the cluster.** A class may reference a Secret in any namespace
+(model keys, telemetry headers, env values), and the operator copies it into
+each of its companies' namespaces or engines, where the class's author can
+read it through a Company of their own. Grant the `engineclass-editor-role`
+helper only to whoever may read every Secret.
 
 ### A tenant provisioner
 

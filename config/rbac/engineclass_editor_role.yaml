@@ -4,6 +4,10 @@
 # Grants permissions to create, update, and delete resources within the crewlet.ai.
 # This role is intended for users who need to manage these resources
 # but should not control RBAC or manage permissions for others.
+#
+# Writing an EngineClass is as good as reading any Secret in the cluster: a
+# class may reference a Secret in any namespace, and the operator copies it
+# into its companies' namespaces and engines. Grant it only to whoever may.
 
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

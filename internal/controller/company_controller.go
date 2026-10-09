@@ -13,6 +13,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -74,6 +75,7 @@ type CompanyReconciler struct {
 // +kubebuilder:rbac:groups=crewlet.ai,resources=seats;mcpservers,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets;services;serviceaccounts,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=list;delete
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;networkpolicies,verbs=get;list;watch;create;patch;delete
@@ -163,8 +165,52 @@ func (r *CompanyReconciler) accept(
 	if refused != nil {
 		return nil, *refused, nil
 	}
+	refused, err = r.namespaceAllowed(ctx, company, class)
+	if err != nil {
+		return nil, metav1.Condition{}, err
+	}
+	if refused != nil {
+		return class, *refused, nil
+	}
 	condition, err := r.withinLimits(ctx, company, class)
 	return class, condition, err
+}
+
+// namespaceAllowed returns the Accepted=False condition of a Company whose
+// namespace its class's spec.allowedNamespaces does not select, or nil.
+func (r *CompanyReconciler) namespaceAllowed(
+	ctx context.Context, company *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
+) (*metav1.Condition, error) {
+	if class.Spec.AllowedNamespaces == nil {
+		return nil, nil
+	}
+	selector, err := metav1.LabelSelectorAsSelector(class.Spec.AllowedNamespaces)
+	if err != nil {
+		// The API server does not check a selector in a custom resource.
+		// One that cannot be read admits nothing: the class's author meant
+		// to restrict it.
+		return classNotAllowed(fmt.Sprintf("EngineClass %s's spec.allowedNamespaces is not a valid label selector (%v), "+
+			"so it admits no namespace until it is corrected.", class.Name, err)), nil
+	}
+	ns := &metav1.PartialObjectMetadata{}
+	ns.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Namespace"))
+	if err := r.Get(ctx, types.NamespacedName{Name: company.Namespace}, ns); err != nil {
+		return nil, fmt.Errorf("reading Namespace %s: %w", company.Namespace, err)
+	}
+	if selector.Matches(labels.Set(ns.Labels)) {
+		return nil, nil
+	}
+	return classNotAllowed(fmt.Sprintf("EngineClass %s does not admit Companies in namespace %s: its labels do not match "+
+		"the class's spec.allowedNamespaces (%s). Name another class, or have the platform admit the namespace.",
+		class.Name, company.Namespace, selector)), nil
+}
+
+func classNotAllowed(message string) *metav1.Condition {
+	return &metav1.Condition{
+		Status:  metav1.ConditionFalse,
+		Reason:  crewletaiv1alpha1.ReasonClassNotAllowed,
+		Message: message,
+	}
 }
 
 // withinLimits returns the Accepted condition of a Company whose class
@@ -287,7 +333,8 @@ func countOf[T any](items []T, company string, companyOf func(T) string) int32 {
 // ConfigApplied condition the config reconciler writes (Ready summarises it),
 // and by changes to what it owns. Its acceptance and its engine also depend on
 // objects it does not own: the EngineClasses (one may appear, disappear,
-// change, or become the default), the Seats and MCPServers its limits count,
+// change, or become the default), the labels of its namespace, which the
+// class may admit by, the Seats and MCPServers its limits count,
 // the platform's Secrets its class copies into its namespace, and a keyring
 // or tokens Secret another controller supplies. Each of those enqueues the
 // Companies it can affect.
@@ -308,6 +355,10 @@ func (r *CompanyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&networkingv1.NetworkPolicy{}, builder.OnlyMetadata).
 		WatchesMetadata(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.companiesOfSecret)).
 		Watches(&crewletaiv1alpha1.EngineClass{}, handler.EnqueueRequestsFromMapFunc(r.companiesOfClass)).
+		// A namespace's labels decide whether its Companies' classes admit
+		// them (spec.allowedNamespaces).
+		WatchesMetadata(&corev1.Namespace{}, handler.EnqueueRequestsFromMapFunc(r.companiesInNamespace),
+			builder.WithPredicates(predicate.LabelChangedPredicate{})).
 		// Only how many there are matters to the limits, and companyRef is
 		// immutable, so an update (the config reconciler writing a part's
 		// status, a spec edit) cannot change what a Company is allowed.
@@ -441,6 +492,21 @@ func (r *CompanyReconciler) companiesOfClass(ctx context.Context, obj client.Obj
 		if c.Spec.EngineClassName == "" || c.Spec.EngineClassName == obj.GetName() {
 			requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(c)})
 		}
+	}
+	return requests
+}
+
+// companiesInNamespace maps a Namespace to the Companies in it.
+func (r *CompanyReconciler) companiesInNamespace(ctx context.Context, obj client.Object) []reconcile.Request {
+	companies := &crewletaiv1alpha1.CompanyList{}
+	if err := r.List(ctx, companies, client.InNamespace(obj.GetName())); err != nil {
+		// As in companiesOfClass: the cache fails only before it is synced.
+		logf.FromContext(ctx).Error(err, "Failed to list the Companies of a Namespace", "namespace", obj.GetName())
+		return nil
+	}
+	requests := make([]reconcile.Request, 0, len(companies.Items))
+	for i := range companies.Items {
+		requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&companies.Items[i])})
 	}
 	return requests
 }

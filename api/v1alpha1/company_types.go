@@ -602,12 +602,10 @@ type CompanySpec struct {
 	// engineClassName is the EngineClass the company runs with. Unset uses
 	// the class annotated crewlet.ai/is-default-class=true.
 	//
-	// Choosing a class is not access-controlled, as choosing a StorageClass
-	// is not: whoever may write a Company may name any class, including one
-	// that offers platformLLMProviders or larger limits. A platform whose
-	// tenants write their own Companies restricts the choice with an
-	// admission policy (a ValidatingAdmissionPolicy over
-	// spec.engineClassName, for example).
+	// Whoever may write a Company may name any class, including one that
+	// offers platformLLMProviders or larger limits; a class admits only the
+	// namespaces its spec.allowedNamespaces selects, and a Company in any
+	// other is not accepted (ClassNotAllowed).
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253

@@ -660,6 +660,24 @@ type RetentionSettings struct {
 // every Company that names the class, the way a StorageClass does for volumes.
 // +kubebuilder:validation:XValidation:rule="self.networkPolicy != 'Isolated' || ((!has(self.exposure.webhooks.ingress) || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress) || has(self.exposure.api.ingress.controllerNamespaces)))",message="networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces: without them the policy refuses everything the Ingress forwards"
 type EngineClassSpec struct {
+	// allowedNamespaces selects, by their labels, the namespaces whose
+	// Companies may run with this class, as a Gateway's
+	// allowedRoutes.namespaces.selector does; a Company in any other
+	// namespace is not accepted (Accepted=False, ClassNotAllowed). Unset, or
+	// an empty selector, admits every namespace.
+	//
+	// Running with a class is a privilege, and any subject that may write a
+	// Company may name any class: the class carries the platform's Secrets
+	// it references (platform model keys, telemetry headers, env values)
+	// into each of its companies' namespaces and engines, its workload
+	// identity onto the engine ServiceAccount, and its scheduling onto the
+	// platform's nodes. A class with any of those should name the
+	// namespaces it is for. To select namespaces by name, match the label
+	// kubernetes.io/metadata.name, which the API server sets on every
+	// namespace.
+	// +optional
+	AllowedNamespaces *metav1.LabelSelector `json:"allowedNamespaces,omitempty"`
+
 	// engine is the engine image.
 	// +required
 	Engine EngineSettings `json:"engine,omitzero"`
@@ -741,8 +759,8 @@ type EngineClassStatus struct {
 // and limits. A Company names one in spec.engineClassName; in a multi-tenant platform, a service tier
 // usually maps to a class.
 //
-// Like a StorageClass, a class is not access-controlled: anyone who may write
-// a Company may name any class (see the Company's spec.engineClassName).
+// Anyone who may write a Company may name any class; a class admits the
+// namespaces its spec.allowedNamespaces selects, and no others.
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

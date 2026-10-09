@@ -342,6 +342,10 @@ const (
 	// is the default.
 	ReasonEngineClassNotFound = "EngineClassNotFound"
 
+	// ReasonClassNotAllowed is Accepted=False on a Company in a namespace
+	// its EngineClass's spec.allowedNamespaces does not select.
+	ReasonClassNotAllowed = "ClassNotAllowed"
+
 	// ReasonReplicasNotAllowed is Accepted=False on a Company whose
 	// spec.topology.data.replicas is not in its class's allowedReplicas.
 	ReasonReplicasNotAllowed = "ReplicasNotAllowed"

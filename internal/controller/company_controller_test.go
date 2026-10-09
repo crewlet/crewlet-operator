@@ -52,7 +52,7 @@ var _ = Describe("Company controller", Ordered, func() {
 	// newClass creates an EngineClass and deletes it when the spec ends:
 	// classes are cluster-scoped, so one spec's default class would otherwise
 	// be every later spec's too.
-	newClass := func(name string, isDefault bool, limits crewletaiv1alpha1.EngineLimits) {
+	newClass := func(name string, isDefault bool, limits crewletaiv1alpha1.EngineLimits, mutate ...func(*crewletaiv1alpha1.EngineClass)) {
 		GinkgoHelper()
 		class := &crewletaiv1alpha1.EngineClass{
 			Name: name,
@@ -66,6 +66,9 @@ var _ = Describe("Company controller", Ordered, func() {
 		}
 		if isDefault {
 			class.Annotations = map[string]string{crewletaiv1alpha1.DefaultEngineClassAnnotation: "true"}
+		}
+		for _, m := range mutate {
+			m(class)
 		}
 		Expect(k8sClient.Create(ctx, class)).To(Succeed())
 		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, class)).To(Succeed()) })
@@ -177,6 +180,50 @@ var _ = Describe("Company controller", Ordered, func() {
 		})
 	})
 
+	Context("the class's allowed namespaces", func() {
+		restricted := func(name string, selector *metav1.LabelSelector) {
+			GinkgoHelper()
+			newClass(name, false, crewletaiv1alpha1.EngineLimits{}, func(c *crewletaiv1alpha1.EngineClass) {
+				c.Spec.AllowedNamespaces = selector
+			})
+		}
+		labelNamespace := func(key, value string) {
+			GinkgoHelper()
+			ns := &corev1.Namespace{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: namespace}, ns)).To(Succeed())
+			ns.Labels[key] = value
+			Expect(k8sClient.Update(ctx, ns)).To(Succeed())
+		}
+
+		It("refuse a Company in a namespace the class does not select, and accept it once it does", func() {
+			restricted("tenants-only", &metav1.LabelSelector{MatchLabels: map[string]string{"example.com/tier": "pro"}})
+			company := newCompany("outsider", "tenants-only")
+			condition := accepted(company)
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal(crewletaiv1alpha1.ReasonClassNotAllowed))
+			Expect(condition.Message).To(ContainSubstring("does not admit Companies in namespace " + namespace))
+
+			labelNamespace("example.com/tier", "pro")
+			Expect(accepted(company).Status).To(Equal(metav1.ConditionTrue))
+		})
+
+		It("select a namespace by name through kubernetes.io/metadata.name", func() {
+			restricted("by-name", &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{
+				Key: corev1.LabelMetadataName, Operator: metav1.LabelSelectorOpIn, Values: []string{namespace},
+			}}})
+			Expect(accepted(newCompany("selected-by-name", "by-name")).Status).To(Equal(metav1.ConditionTrue))
+		})
+
+		It("admit no namespace while the selector cannot be read", func() {
+			restricted("broken", &metav1.LabelSelector{MatchExpressions: []metav1.LabelSelectorRequirement{{
+				Key: "example.com/tier", Operator: "Near",
+			}}})
+			condition := accepted(newCompany("anyone", "broken"))
+			Expect(condition.Reason).To(Equal(crewletaiv1alpha1.ReasonClassNotAllowed))
+			Expect(condition.Message).To(ContainSubstring("not a valid label selector"))
+		})
+	})
+
 	// A request can outlive its object: the workqueue still holds the key of
 	// a Company deleted since it was queued, and that is not an error.
 	It("reconciles a Company that no longer exists", func() {
@@ -200,6 +247,22 @@ var _ = Describe("Company controller event mapping", func() {
 		want := []reconcile.Request{{Namespace: tenant, Name: nimbus}}
 		Expect(companyOfChild(ctx, seat)).To(Equal(want))
 		Expect(companyOfChild(ctx, server)).To(Equal(want))
+	})
+
+	It("maps a Namespace to the Companies in it", func() {
+		ns := &corev1.Namespace{GenerateName: "namespace-mapping-"}
+		Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+		for _, name := range []string{"one", "two"} {
+			Expect(k8sClient.Create(ctx, &crewletaiv1alpha1.Company{
+				Namespace: ns.Name,
+				Name:      name,
+				Spec:      crewletaiv1alpha1.CompanySpec{CompanyName: companyDisplayName},
+			})).To(Succeed())
+		}
+		Expect(newReconciler().companiesInNamespace(ctx, ns)).To(ConsistOf(
+			reconcile.Request{Namespace: ns.Name, Name: "one"},
+			reconcile.Request{Namespace: ns.Name, Name: "two"},
+		))
 	})
 
 	It("maps an EngineClass to the Companies that name it or name none", func() {

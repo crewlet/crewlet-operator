@@ -30,6 +30,7 @@ with your last change yet.
 | | False | any other | The reason of the first condition below that is not True. |
 | `Accepted` | True | `Valid` | The class exists and the company is within its limits. |
 | | False | `EngineClassNotFound` | `spec.engineClassName` names no class, or it is unset and there is not exactly one class annotated `crewlet.ai/is-default-class: "true"`. Create the class or name one. |
+| | False | `ClassNotAllowed` | The class's `spec.allowedNamespaces` does not select the Company's namespace (or is not a valid selector; the message says which). Name another class, or have the platform label the namespace. |
 | | False | `ReplicasNotAllowed` | `spec.topology.data.replicas` is not in the class's `data.allowedReplicas`. |
 | | False | `LimitExceeded` | The company has more Seats or MCPServers than the class's `limits` allow. Remove some or move to a larger class. Nothing new is applied meanwhile. |
 | `RuntimeReady` | True | `PodsReady` | The data pod runs the current template and is ready. |
