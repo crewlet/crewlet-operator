@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 	"testing"
@@ -50,6 +51,144 @@ var (
 	batchBootstrap    = poolBootstrapName(poolsOwner, poolBatch, crewletaiv1alpha1.SeatPoolShared)
 	isolatedBootstrap = poolBootstrapName(poolsOwner, poolIsolated, crewletaiv1alpha1.SeatPoolPerSeat)
 )
+
+// setReady writes a pod's Ready condition, as its kubelet would, last
+// changed at since.
+func setReady(p *corev1.Pod, ready bool, since time.Time) {
+	GinkgoHelper()
+	status := corev1.ConditionFalse
+	if ready {
+		status = corev1.ConditionTrue
+	}
+	p.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: status, LastTransitionTime: metav1.NewTime(since)}}
+	Expect(k8sClient.Status().Update(ctx, p)).To(Succeed())
+}
+
+// TestStaleUnreadyPodTakesOneAtATime holds the operator's replacement of a
+// seat pod that is unready on an older template to what the StatefulSet's
+// own rollout would do: an unready seat pod may still hold seats, so it
+// takes one pod at a time, the highest ordinal first, never while the pool
+// is already short of a pod, and never a pod that is only briefly unready.
+func TestStaleUnreadyPodTakesOneAtATime(t *testing.T) {
+	const (
+		set     = "nimbus-seats-general"
+		older   = "rev-older"
+		update  = "rev-update"
+		another = "nimbus-seats-another"
+	)
+	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	long := staleUnreadyGrace + time.Minute
+	type spec struct {
+		ordinal     int
+		revision    string
+		ready       bool
+		since       time.Duration
+		terminating bool
+		owner       string
+		noReady     bool
+	}
+	pod := func(s spec) corev1.Pod {
+		p := corev1.Pod{
+			Name:              fmt.Sprintf("%s-%d", set, s.ordinal),
+			Labels:            map[string]string{appsv1.ControllerRevisionHashLabelKey: s.revision},
+			CreationTimestamp: metav1.NewTime(now.Add(-s.since)),
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "apps/v1", Kind: "StatefulSet", Name: cmp.Or(s.owner, set), Controller: new(true),
+			}},
+		}
+		if s.terminating {
+			p.DeletionTimestamp = new(metav1.NewTime(now))
+		}
+		if !s.noReady {
+			status := corev1.ConditionFalse
+			if s.ready {
+				status = corev1.ConditionTrue
+			}
+			p.Status.Conditions = []corev1.PodCondition{{
+				Type: corev1.PodReady, Status: status, LastTransitionTime: metav1.NewTime(now.Add(-s.since)),
+			}}
+		}
+		return p
+	}
+	for _, tc := range []struct {
+		name     string
+		replicas int32
+		pods     []spec
+		want     string
+		wait     time.Duration
+	}{
+		{
+			name: "one stale pod unready past the grace is replaced", replicas: 2,
+			pods: []spec{{0, older, false, long, false, "", false}, {1, older, true, long, false, "", false}},
+			want: set + "-0",
+		},
+		{
+			name: "of two stale unready pods only the highest ordinal goes", replicas: 3,
+			pods: []spec{{0, older, false, long, false, "", false}, {1, older, true, long, false, "", false}, {2, older, false, long, false, "", false}},
+			want: set + "-2",
+		},
+		{
+			name: "a pod unready for less than the grace is kept, and waited on", replicas: 2,
+			pods: []spec{{0, older, false, 10 * time.Second, false, "", false}, {1, older, true, long, false, "", false}},
+			wait: staleUnreadyGrace - 10*time.Second,
+		},
+		{
+			name: "past the grace a lower ordinal goes while a higher one is still within it", replicas: 2,
+			pods: []spec{{0, older, false, long, false, "", false}, {1, older, false, 10 * time.Second, false, "", false}},
+			want: set + "-0", wait: staleUnreadyGrace - 10*time.Second,
+		},
+		{
+			name: "an unready pod of the update revision blocks every deletion", replicas: 2,
+			pods: []spec{{0, older, false, long, false, "", false}, {1, update, false, long, false, "", false}},
+		},
+		{
+			name: "a pod of the update revision ready for less than minReadySeconds is waited on", replicas: 2,
+			pods: []spec{{0, older, false, long, false, "", false}, {1, update, true, 3 * time.Second, false, "", false}},
+			wait: seatPodMinReadySeconds*time.Second - 3*time.Second,
+		},
+		{
+			name: "a pod of the update revision available unblocks the next", replicas: 2,
+			pods: []spec{{0, older, false, long, false, "", false}, {1, update, true, time.Minute, false, "", false}},
+			want: set + "-0",
+		},
+		{
+			name: "a terminating pod blocks every deletion", replicas: 2,
+			pods: []spec{{0, older, false, long, false, "", false}, {1, older, true, long, true, "", false}},
+		},
+		{
+			name: "a missing replica blocks every deletion", replicas: 3,
+			pods: []spec{{0, older, false, long, false, "", false}, {1, older, true, long, false, "", false}},
+		},
+		{
+			name: "ready stale pods are left to the controller", replicas: 2,
+			pods: []spec{{0, older, true, long, false, "", false}, {1, older, true, long, false, "", false}},
+		},
+		{
+			name: "a pod of another StatefulSet is not this one's", replicas: 1,
+			pods: []spec{{0, older, true, long, false, "", false}, {5, older, false, long, false, another, false}},
+		},
+		{
+			name: "a pod with no Ready condition counts from its creation", replicas: 1,
+			pods: []spec{{0, older, false, long, false, "", true}},
+			want: set + "-0",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pods := make([]corev1.Pod, 0, len(tc.pods))
+			for _, s := range tc.pods {
+				pods = append(pods, pod(s))
+			}
+			got, wait := staleUnreadyPod(pods, set, tc.replicas, update, now)
+			name := ""
+			if got != nil {
+				name = got.Name
+			}
+			if name != tc.want || wait != tc.wait {
+				t.Errorf("staleUnreadyPod = %q, wait %s; want %q, wait %s", name, wait, tc.want, tc.wait)
+			}
+		})
+	}
+}
 
 // TestScopedNamesAreTheCompanysOwn holds the names of a Company's seat pool
 // objects to what their pods' labels hold, and apart from every name another
@@ -609,13 +748,14 @@ var _ = Describe("Company seat pools", func() {
 		}
 	})
 
-	It("replaces a seat pod that is not ready on an older template, which a controller may wait on for ever", func() {
+	It("replaces a seat pod that is not ready on an older template, which a controller may wait on for ever, one at a time", func() {
 		class := newClass()
 		running(class.Name)
 		rollOut(generalSet)
 		sts := statefulSet(generalSet)
-		// A pod of the StatefulSet, on a revision, ready or not.
-		pod := func(name, revision string, ready bool) *corev1.Pod {
+		// A pod of the StatefulSet, on a revision, not ready since the
+		// time given.
+		pod := func(name, revision string, since time.Time) *corev1.Pod {
 			GinkgoHelper()
 			labels := selectorFor(&crewletaiv1alpha1.Company{Name: poolsCompany}, componentSeats)
 			labels[render.PoolLabel] = poolGeneral
@@ -632,41 +772,48 @@ var _ = Describe("Company seat pools", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, p)).To(Succeed())
-			status := corev1.ConditionFalse
-			if ready {
-				status = corev1.ConditionTrue
-			}
-			p.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: status}}
-			Expect(k8sClient.Status().Update(ctx, p)).To(Succeed())
+			setReady(p, false, since)
 			return p
 		}
-		stale := pod(generalSet+"-0", "general-old", false)
-		serving := pod(generalSet+"-1", "general-old", true)
-		starting := pod(generalSet+"-2", "general-new", false)
+		longAgo := time.Now().Add(-2 * staleUnreadyGrace)
+		stale := pod(generalSet+"-0", "general-old", longAgo)
+		staler := pod(generalSet+"-1", "general-old", longAgo)
+		starting := pod(generalSet+"-2", "general-new", longAgo)
+		blip := pod(generalSet+"-3", "general-old", time.Now())
 		rolling := func(observed int64) {
 			GinkgoHelper()
 			sts := statefulSet(generalSet)
 			sts.Status.ObservedGeneration = observed
 			sts.Status.CurrentRevision, sts.Status.UpdateRevision = "general-old", "general-new"
-			sts.Status.ReadyReplicas, sts.Status.AvailableReplicas = 1, 1
+			sts.Status.ReadyReplicas, sts.Status.AvailableReplicas = 0, 0
 			Expect(k8sClient.Status().Update(ctx, sts)).To(Succeed())
+		}
+		present := func(pods ...*corev1.Pod) {
+			GinkgoHelper()
+			for _, p := range pods {
+				get(&corev1.Pod{}, p.Name)
+			}
 		}
 
 		By("leaving every pod while the StatefulSet's status describes an older template")
 		rolling(sts.Generation - 1)
 		reconciled(poolsOwnerIn(namespace))
-		for _, p := range []*corev1.Pod{stale, serving, starting} {
-			get(&corev1.Pod{}, p.Name)
-		}
+		present(stale, staler, starting, blip)
 
-		By("deleting only the pod that is unready on the older revision once it describes the current one")
+		By("leaving every pod while a pod of the update revision is not available, which is the one maxUnavailable allows")
 		rolling(sts.Generation)
 		reconciled(poolsOwnerIn(namespace))
+		present(stale, staler, starting, blip)
+
+		By("deleting the highest ordinal unready on the older revision past the grace, and only that one, once it is")
+		setReady(starting, true, longAgo)
+		result := reconcileOnce(poolsOwnerIn(namespace))
 		Eventually(func() bool {
-			return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(stale), &corev1.Pod{}))
+			return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(staler), &corev1.Pod{}))
 		}).Should(BeTrue(), "the unready pod of the older revision is still there")
-		get(&corev1.Pod{}, serving.Name)
-		get(&corev1.Pod{}, starting.Name)
+		present(stale, starting, blip)
+		Expect(result.RequeueAfter).To(BeNumerically(">", time.Duration(0)), "nothing looks again once the briefly unready pod passes the grace")
+		Expect(result.RequeueAfter).To(BeNumerically("<=", staleUnreadyGrace))
 	})
 
 	It("reports a seat pool held back on an older template whatever changed in it", func() {

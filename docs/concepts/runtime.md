@@ -178,15 +178,33 @@ would judge a node started in one of its maintenance modes without
 operator runs every engine in the normal mode, so on a seat pod the reason
 always means what it says.
 
-Where the Kubernetes `MaxUnavailableStatefulSet` feature is on (by default in
-1.35 and from 1.37), pods that are already unavailable count against
-`maxUnavailable`. From 1.37 the StatefulSet controller replaces those on an
-older template first; in 1.35 it waits for them to become ready, which a
-seat pod that only the new template would let join never does. So the
-operator itself deletes, while a seat StatefulSet rolls, each of its pods
-that is not ready on an older template (an unready seat pod holds no seat),
-and the controller starts it again on the new one; ready pods still go one
-at a time.
+A seat pod that is not ready may still hold seats: one its placement pass
+does not admit keeps what it holds, and one that lost its link or its
+presence keeps its leases until they lapse. Stopping it drains it, which
+hands back what it holds. The StatefulSet controller replaces an unready pod
+of an older template like any other, except on the releases that turned the
+`MaxUnavailableStatefulSet` feature gate on by default before it was fixed:
+there the controller counts unavailable pods against `maxUnavailable` and
+then replaces none of them
+([kubernetes#137409](https://github.com/kubernetes/kubernetes/issues/137409)).
+
+| Kubernetes | `MaxUnavailableStatefulSet` | An unready pod of an older template |
+|---|---|---|
+| 1.34 | off by default | replaced by the controller |
+| 1.35.0 to 1.35.3 | on by default | never replaced: the rollout waits for ever |
+| 1.35.4 and later 1.35 patches, 1.36 | off by default | replaced by the controller |
+| 1.37 | on by default, with the fix | replaced by the controller |
+
+A seat pod that only the new template would let join never becomes ready,
+so on the releases that wait the rollout would never end. The operator
+therefore deletes, while a seat StatefulSet rolls, one of its pods that has
+not been ready on an older template for 45 seconds (a seat lease's TTL in
+the engine, so that a brief blip never qualifies), and the controller starts
+it again on the new one. It takes the highest ordinal first, as the
+controller does, one at a time, and none while a pod of the StatefulSet is
+terminating or missing or a pod of the new template is not yet available:
+no more pods are down at once than the `maxUnavailable` of one the rollout
+itself allows. Ready pods are left to the controller.
 
 A seat pool's objects are named `<company>-seats-<pool>`,
 `<company>-seat-<handle>` and `<company>-bootstrap-<pool>`, then a dash and
@@ -277,11 +295,12 @@ A Shared pool's StatefulSet, and a PerSeat seat's with two pods, has a
 PodDisruptionBudget of `maxUnavailable: 1`, so a node drain takes one pod at
 a time while the others keep the seats; a PerSeat seat with one pod has
 nothing to keep and gets none. Pods that are not ready may always be
-evicted (`unhealthyPodEvictionPolicy: AlwaysAllow`): an unready seat pod
-holds no seat (it cannot reach the data pods, is not admitted to claim, or
-crash-loops), so it never holds up a drain. Moving seats between pods interrupts them: each move
-releases the seat, starts its tool servers on the new pod and rehydrates its
-memory there.
+evicted (`unhealthyPodEvictionPolicy: AlwaysAllow`). Such a pod may still
+hold seats, but an eviction drains it like any stop, which hands them
+back, and a budget that counted it would hold up a node drain for as long
+as the pod stays unready, for ever for one that cannot start. Moving seats
+between pods interrupts them: each move releases the seat, starts its tool
+servers on the new pod and rehydrates its memory there.
 
 ## Changes, versions and suspension
 
