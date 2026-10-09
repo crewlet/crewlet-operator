@@ -139,12 +139,13 @@ func (run *configRun) verifyApplied(
 	// before it makes it, so its posture reads diverged for as long as an
 	// apply that will succeed takes. Only the record of an attempt that
 	// ended does.
-	record, err := eng.LastApply(ctx)
+	fleet, err := run.fleetOf(ctx, eng)
 	if err != nil {
 		run.unavailable(err)
 		run.applied = appliedVerdict{}
 		return ctrl.Result{RequeueAfter: engineRetryInterval}
 	}
+	record := fleet.LastApply()
 	switch {
 	case record.Status.Failed() && record.Epoch >= target && record.Epoch > health.AppliedEpoch:
 		account := record.Error
@@ -177,6 +178,11 @@ func (run *configRun) verifyApplied(
 func (run *configRun) settled(key types.NamespacedName, target int64, revision string) {
 	if remembered, ok := run.pending.settle(key, target); ok {
 		run.configApplied = &remembered
+	}
+	// The engine runs this document now, and no earlier one: its pins
+	// alone are what the pods must serve.
+	if run.running != nil {
+		run.recordPlacement(*run.running, true)
 	}
 	current := meta.FindStatusCondition(run.company.Status.Conditions, crewletaiv1alpha1.ConditionConfigApplied)
 	if run.wrote || (current != nil &&

@@ -314,15 +314,10 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 		return doc
 	}
 
-	pool := DataPool
-	if spec.Placement != nil && spec.Placement.Pool != "" {
-		pool = spec.Placement.Pool
-	}
-	// Every agent seat is pinned, even while every seat runs on the data
-	// pods: an unpinned seat may land on any pod that runs seats, and the
-	// pin is what keeps it where its pool says once there is more than
-	// one kind of pod.
-	doc.Placement = &placementDoc{Labels: map[string]string{PoolLabel: pool}}
+	// Every agent seat is pinned, those on the data pods included: an
+	// unpinned seat may land on any pod that runs seats, a seat pool's as
+	// well as a data pod.
+	doc.Placement = &placementDoc{Labels: r.topology.Placement(SeatPool(r.in.Company, s), doc.Handle)}
 
 	doc.LLM = phaseLLMDoc{
 		Default:   r.chain(s, "default", spec.LLM.Default),

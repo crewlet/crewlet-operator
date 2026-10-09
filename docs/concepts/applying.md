@@ -24,9 +24,16 @@ A Company is looked at again when:
   through an index of every reference in their specs, so it never holds a
   Secret's value in memory longer than one reconcile;
 - its EngineClass's platform model providers change, when it uses them;
+- the runtime reconciler reports a change in the company's pods
+  (`status.topology`), after which the engine moves seats between them;
 - five minutes have passed with no change, to find edits made through the
   engine's own API or dashboard, which nothing announces, and to refresh the
-  integrations' health.
+  integrations' health and where each seat runs. While a seat of the running
+  revision is not yet held by a pod of its own StatefulSet although one of
+  them is ready, the engine is placing it, and the operator looks every
+  fifteen seconds instead, for at most three minutes: the engine claims a few
+  seats every five seconds, and a seat whose pod was killed waits out its
+  45-second lease first.
 
 **Changes are coalesced.** A platform that provisions a company writes its
 objects one request at a time, and each revision is a permanent entry in the
@@ -42,7 +49,7 @@ ten seconds at most; the operator then applies what it has.
 ```mermaid
 flowchart TD
     collect["collect the Company's parts"] --> rendered{"render"}
-    rendered -- "a reference does not resolve" --> refs["ResolvedRefs=False on the part<br/>(Accepted=False for a Conflict)"]
+    rendered -- "a reference does not resolve" --> refs["ResolvedRefs=False on the part<br/>(Accepted=False for a Conflict,<br/>Applied=False for a pool the class does not admit)"]
     rendered --> secrets{"read the referenced Secret keys"}
     secrets -- "missing or too large" --> missing["SecretsSynced=False on the Company<br/>ResolvedRefs=False on the part"]
     secrets --> push["push changed values into the<br/>engine's secret store"]
@@ -243,11 +250,12 @@ person that a pause could hold.
 | Object | Condition | When |
 |---|---|---|
 | Company | `SecretsSynced` | `True`, `Synced`, once the store holds every referenced value. `False`, `SecretNotFound` or `SecretTooLarge`, naming each Secret and key; `False`, `EngineUnavailable` when a write to the store failed; `Unknown`, `NotManaged` under Observe, and under Seed once seeded. |
-| Company | `ConfigApplied` | `True` with `Applied`, `DriftCorrected`, `InSync` or `Seeded`, once the engine reports the revision's epoch applied. `False` with `Applying` while it applies it, `ApplyFailed` when it did not; otherwise with the reason of whatever blocks the document: `RefNotFound`, `Cycle`, `Conflict`, `SecretNotFound`, `SecretTooLarge`, `Invalid` (the engine's own words), `Drifted` (Observe), `WriteRefused` (the engine refuses the operator's own token a change to the document) or `EngineUnavailable`. |
+| Company | `ConfigApplied` | `True` with `Applied`, `DriftCorrected`, `InSync` or `Seeded`, once the engine reports the revision's epoch applied. `False` with `Applying` while it applies it, `ApplyFailed` when it did not; otherwise with the reason of whatever blocks the document: `RefNotFound`, `Cycle`, `Conflict`, `PoolNotFound`, `PerSeatNotAllowed`, `PoolCapacityExceeded`, `SeatPoolsNotAllowed`, `SecretNotFound`, `SecretTooLarge`, `Invalid` (the engine's own words), `Drifted` (Observe), `WriteRefused` (the engine refuses the operator's own token a change to the document) or `EngineUnavailable`. |
 | Company | `EngineHealthy` | The engine's alarm table, read each time the engine is reached: `True`, `NoAlarms`; `False`, `Alarms`, naming the one standing longest; `Unknown`, `AlarmsNotReported`, before the engine has evaluated them. Not part of `Ready`. |
 | every part | `Accepted` | `True` once its Company exists; `False` with `CompanyNotFound`, or `Conflict` when it collides with another object of its company. |
-| every part | `ResolvedRefs` | `False` with `RefNotFound`, `Cycle`, `SecretNotFound` or `SecretTooLarge`, saying what it references that is missing. |
-| every part | `Applied` | `True`, `InRevision`, naming the revision, with the generation that revision was rendered from as its `observedGeneration`, once the engine has applied it. `False` with the part's own problem (`Invalid`, `RefNotFound`, ...), `Blocked` when another object keeps the document from being applied, `Applying` while the engine applies the revision, or `ApplyFailed` when it did not. A part whose current generation already runs keeps `True` meanwhile: only what changed is held back. |
+| every part | `ResolvedRefs` | `False` with `RefNotFound`, `Cycle`, `PoolNotFound`, `SecretNotFound` or `SecretTooLarge`, saying what it references that is missing. |
+| every part | `Applied` | `True`, `InRevision`, naming the revision, with the generation that revision was rendered from as its `observedGeneration`, once the engine has applied it. `False` with the part's own problem (`Invalid`, `RefNotFound`, a Seat's `PerSeatNotAllowed` or `PoolCapacityExceeded`, ...), `Blocked` when another object keeps the document from being applied, `Applying` while the engine applies the revision, or `ApplyFailed` when it did not. A part whose current generation already runs keeps `True` meanwhile: only what changed is held back. |
+| Seat (agent) | `Ready` | Whether an engine pod holds the seat's lease and runs it, as the engine's `GET /fleet` reports, read each time the operator reaches the engine: `True`, `LeaseHeld`, naming the pod (and saying so when it is not a pod of the seat's StatefulSet yet, while the engine moves it); `False`, `Unplaced`, while no pod holds it, saying why: the seat is not in the revision the engine runs, its pool runs no pod, or the engine has not claimed it yet; `False`, `Suspended`; `Unknown`, `EngineUnavailable`, when the fleet could not be read. Unchanged while the operator does not reach the engine. A Human seat has none. |
 | Seat (Agent) | `Paused` | Whether the engine holds the seat paused, once it runs the seat: `True`, `SeatPaused`, naming who paused it, when and why; `False`, `SeatRunning`; with `PauseNotManaged` instead when the pause differs from `spec.paused` under `Observe` or `Seed`. `Unknown`, `PauseUnknown`, while a pause or resume the engine may or may not have recorded is retried; `Unknown`, `PauseRefused`, with the engine's words when it refused one. |
 | Integration | `Healthy` | The engine's own verdict on the vendor: `True`, `CheckPassed`, when it reports the tool connected; `False`, `CheckFailed`, with the engine's reason otherwise; `False`, `NotExposed` while the Company has no public address, since no webhook can reach the engine. |
 
@@ -256,9 +264,23 @@ Besides the conditions:
 - **Company** `status.config`: the revision the engine runs the rendered
   document as, its activation epoch, `appliedHash`, when the operator last
   applied, and how many objects of each kind it was rendered from (platform
-  model providers included).
+  model providers included). `status.config.placement` is where the document
+  the engine runs pins its agent seats: every value of `crewlet.ai/pool`
+  (`data` and the Shared pools that run a seat) and of `crewlet.ai/seat` (each
+  seat of a PerSeat pool). It is read from the engine's own document under
+  every policy, so under Observe and Seed too. While the engine applies a
+  new revision the record is the previous revision's pins and the new one's
+  together, because the engine keeps running the previous revision until it
+  has applied the new one, and for good if that apply fails; once the engine
+  reports the new revision's epoch applied, the record is its pins alone.
+  The runtime reconciler reads it to keep a seat pool's pods running for as
+  long as the running revision pins a seat to them ([A pool removed while
+  seats still run in it](runtime.md#a-pool-removed-while-seats-still-run-in-it)).
 - **Seat**: its handle, its identity in the engine (`seatID`, derived from
-  the company name and the handle), the pool that runs it, and the addresses
+  the company name and the handle), the pool that runs it and the
+  StatefulSet whose pods do (`status.placement.workload`; unset while the
+  class runs no pod for it), the pod whose engine holds it
+  (`status.placement.node`, unset while none does), and the addresses
   its own vendor apps deliver to: `<publicBaseURL>/webhooks/slack/<handle>`
   and `<publicBaseURL>/webhooks/github/<handle>`, set as soon as the Company
   has the vendor's Integration and a public address. While the engine holds
@@ -289,4 +311,6 @@ part; the runtime reconciler writes the rest of the Company's status. Both
 write the Company's status with a JSON merge patch under an optimistic lock:
 a write that conflicts with the other's is retried on a fresh read of the
 Company, so neither overwrites a field of the other's. A change of
-`ConfigApplied` makes the runtime reconciler recompute `Ready`.
+`ConfigApplied` makes the runtime reconciler recompute `Ready`, and a change
+of `status.config.placement` makes it delete the seat pods no running revision
+needs any more.

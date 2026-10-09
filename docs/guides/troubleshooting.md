@@ -34,13 +34,14 @@ with your last change yet.
 | | False | `LimitExceeded` | The company has more Seats or MCPServers than the class's `limits` allow. Remove some or move to a larger class. Nothing new is applied meanwhile. |
 | `RuntimeReady` | True | `PodsReady` | The data pod runs the current template and is ready. |
 | | False | `PodsNotReady` | The data pod is missing, starting or failing its readiness check. See [The data pod is not ready](#the-data-pod-is-not-ready). |
-| | False | `Suspended` | `spec.suspend` is set. |
+| | False | `Suspended` | `spec.suspend` is set, and the engine's pods are stopped. |
+| | False | `Suspending` | `spec.suspend` is set, and the seat pods are still stopping; the data pod stops once they have. Seat pods finish their running turns first, for up to their grace period. |
 | | False | `DowngradeRefused` | The image asked for is an older version than the data was last written by; the engine migrates forward only. The pod keeps the newer image; every other change still applies. |
 | | False | `VersionOverrideNotAllowed` | `spec.runtime.version` is set and the class's `engine.allowVersionOverride` is not. |
 | | False | `KeyringInvalid` | The `<company>-keyring` Secret is not a keyring the engine can open. The operator never rewrites it: repair it from a backup, keeping the key ids, and set `crewlet.ai/active-key-id` to the key that seals new writes. The pod is held as it is. |
 | | False | `KeyringMissing` | The `<company>-keyring` Secret is gone while the company's data StatefulSet or volume claims exist. A new keyring could not open the data, so none is generated. Restore the Secret from a backup, with its `crewlet.ai/active-key-id` annotation; or, to discard the data, delete the data volume claims, after which a new keyring is generated. The pod is held as it is. |
 | | False | `PreviousCompanyObjects` | The keyring or tokens Secret of an earlier Company of the same name, deleted with `deletionPolicy: Delete`, has not been removed by the garbage collector yet. The pod starts once it is gone; nothing to do unless it stays, in which case check that the garbage collector runs. |
-| | False | `NameConflict` | An object the operator writes for the Company (a Service, Secret, ConfigMap, ServiceAccount, StatefulSet or NetworkPolicy named after it) exists and is someone else's. The message names it. The operator never changes or adopts it: rename or delete it, or give the Company another name. The pod is held as it is. |
+| | False | `NameConflict` | An object the operator writes for the Company (a Service, Secret, ConfigMap, ServiceAccount, StatefulSet, PodDisruptionBudget or NetworkPolicy named after it) exists and is someone else's. The message names it. The operator never changes or adopts it: rename or delete it, or give the Company another name. The pod is held as it is. |
 | | False | `SecretNotFound` | A Secret the pods are given values from is missing: one the class references (telemetry headers, `podTemplate.spec.env`) in the platform's namespace, or the Company's own object-store keys (`spec.objects.credentialsSecretRef`). The pod is held as it is. |
 | | False | `APITokensInvalid` | `<company>-api-tokens`, as a platform supplied it, lacks a token or holds one shorter than 43 characters or outside base64, base64url and hex. Repair it, or delete it to have the operator generate it. The pod is held as it is. |
 | `Exposed` | True | `RouteAccepted` | Every route the class asks for was accepted. |
@@ -55,6 +56,12 @@ with your last change yet.
 | | False | `EngineUnavailable` | Writing to the store failed; the message says why. Retried. |
 | | False | `NameConflict` | A Secret `<company>-secret-sync`, where the operator keeps what it pushed, exists and is someone else's. Rename or delete it; nothing is applied meanwhile. |
 | | Unknown | `NotManaged` | The management policy keeps the operator out of the store (`Observe`; `Seed` once seeded). |
+| `SeatsPlaced` | True | `AllPoolsServing` | Every pool an agent seat is placed in, `data` included, has a ready pod. Not part of `Ready`. |
+| | False | `PoolEmpty` | A pool with a seat has no ready pod: a Shared pool at zero replicas, a PerSeat seat's pods down, or seat pods not created yet because the data pod is not ready. Their seats' messages wait. See [Seat pods do not run](#seat-pods-do-not-run). |
+| | False | `RolloutBlocked` | The seat pods keep their template until the data pod is ready on its new one; they roll right after it. |
+| | False | `SeatPoolsNotAllowed` | The class does not allow seat pools, so the operator runs none, and the seats placed in them run nowhere. |
+| | False | `PoolCapacityExceeded` | The Shared pools' replicas alone pass the class's `seatPools.maxPods`; the operator keeps the seat pods as they are and starts none. Lower the replicas. |
+| | False | `Suspended` | The Company is suspended. |
 | `EngineHealthy` | True | `NoAlarms` | The engine raises no alarm. |
 | | False | `Alarms` | The engine raises alarms; the message names the one standing longest. `backup_age` and `trim_blocked` mean it has no recent verified backup and trims no log: see [Backups](../concepts/runtime.md#backups). |
 | | Unknown | `AlarmsNotReported` | The engine has not evaluated its alarms yet, or could not be asked. |
@@ -62,7 +69,9 @@ with your last change yet.
 | | True | `DriftCorrected` | Under `Enforce`, someone changed the document in the engine and the operator applied the rendered one over it. A `Drifted` event names what differed. |
 | | True | `InSync` | Under `Observe`, the engine runs exactly the rendered document. |
 | | True | `Seeded` | Under `Seed`, the engine has a document and owns it from now on. |
-| | False | `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `SecretNotFound`, `SecretTooLarge` | An object of the company keeps the document from rendering. The object at fault reports the same reason; fix it there. |
+| | False | `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `SecretNotFound`, `SecretTooLarge`, `PoolNotFound`, `PerSeatNotAllowed` | An object of the company keeps the document from rendering. The object at fault reports the same reason; fix it there. |
+| | False | `SeatPoolsNotAllowed` | The Company declares `spec.topology.seatPools`, and its class's `seatPools.policy` is not `Allowed`. Remove the pools, or run the company with a class that allows them. |
+| | False | `PoolCapacityExceeded` | The company's seat pods would number more than its class's `seatPools.maxPods`: its Shared pools' replicas alone (the message says so; lower them), or with the pods of its PerSeat seats, each of which reports it too. |
 | | False | `Invalid` | The engine's dry run refused the document, in its own words. Each problem is also reported on the object that rendered it, as `Applied=False Invalid`. |
 | | False | `Drifted` | Under `Observe`, the engine runs another document; the message names the places that differ. |
 | | False | `Applying` | The operator activated the revision and the engine has not applied it yet; it runs the previous one meanwhile. Usually gone within seconds; it turns into `ApplyFailed` when the engine fails the revision or has not applied it 72 seconds after the write. |
@@ -95,6 +104,7 @@ conditions. `kubectl get engineclasses` shows it.
 | `ResolvedRefs` | True | `Resolved` | Every object and Secret key it references exists. |
 | | False | `RefNotFound` | It references an object that does not exist (a Unit, a Seat, an LLMProvider, an MCPServer); the message names it. |
 | | False | `Cycle` | A Unit's `parentRef` chain leads back to itself. |
+| | False | `PoolNotFound` | A Seat's `spec.placement.pool` is neither `data` nor one of its Company's `spec.topology.seatPools`. |
 | | False | `HumanSeat` | A Schedule's `target.seatRef`, a Datadog Integration's `routeTo.seatRef` or a GitLab Integration's `accessLevels` entry names a Human seat, for whom the engine runs no turn and creates no account. Name an Agent seat (a Schedule may target the person's unit with `fanOut: Each`). |
 | | False | `NoProvisioner` | A Seat names a provisioned credential, and no Integration of its company has `provisioning: Engine`, so nothing would create the value. Give the value from a Secret, or provision the vendor with the engine ([Connecting integrations](integrations.md#who-creates-the-seats-accounts)). |
 | | False | `NotExposed` | An LLMProvider runs a CLI in `mode: Agent`, whose runs call the seat's tools back through the company's public address, and the company has none. Give the class a webhooks route or the Company `spec.exposure.publicBaseURL`, or use `mode: Text`. |
@@ -103,6 +113,8 @@ conditions. `kubectl get engineclasses` shows it.
 | | False | `SecretTooLarge` | A value it references is over 64 KiB. |
 | `Applied` | True | `InRevision` | It is in the revision the engine runs, which the message names; the condition's `observedGeneration` is the generation that revision holds. |
 | | False | `Invalid` | The engine refused its part of the document; the message is the engine's. |
+| | False | `PerSeatNotAllowed` | A Seat is placed in a PerSeat pool, and its Company's class does not set `seatPools.allowPerSeat`. Place it in `data` or a Shared pool. |
+| | False | `PoolCapacityExceeded` | A Seat is placed in a PerSeat pool, and its pods would take the company's seat pods past the class's `seatPools.maxPods`. Place it in a Shared pool, or lower a pool's replicas. |
 | | False | `Blocked` | It is fine, and another object keeps the document from being applied (a document is applied whole). Fix the object the Company's `ConfigApplied` names. A part whose current generation already runs keeps `True` meanwhile. |
 | | False | `Applying` | Its current generation is in a revision the engine is applying. |
 | | False | `ApplyFailed` | Its current generation is in a revision the engine did not apply; the Company's `ConfigApplied` says why. |
@@ -113,6 +125,10 @@ conditions. `kubectl get engineclasses` shows it.
 | | True or False | `PauseNotManaged` | The seat's pause differs from `spec.paused`, and the Company's policy is `Observe` or `Seed`, under which the operator changes no pause. |
 | | Unknown | `PauseUnknown` | The engine may or may not have recorded the operator's pause or resume, or did not answer; the operator asks again in ten seconds. |
 | | Unknown | `PauseRefused` | The engine refused the operator's pause or resume; the message is the engine's. |
+| `Ready` (agent Seat) | True | `LeaseHeld` | An engine pod holds the seat and runs it; `status.placement.node` names the pod. The message says so when the pod is not one of the seat's StatefulSet yet: the engine moves it there once it runs the revision that places it. |
+| | False | `Unplaced` | No engine pod holds the seat; its messages wait. The message says why: the seat is not in the revision the engine runs yet (see `Applied`); its pool runs no pod (see the Company's `SeatsPlaced`, and [A seat runs nowhere](#a-seat-runs-nowhere)); or a pod that may run it is up and the engine has not claimed it yet, which takes seconds. |
+| | False | `Suspended` | The Company is suspended. |
+| | Unknown | `EngineUnavailable` | The operator could not read the engine's fleet; the message says why, and the Company's `ConfigApplied` usually does too. `status.placement.node` is what the engine said last. |
 | `Healthy` (Integration) | True | `CheckPassed` | The engine reports the vendor connected. |
 | | False | `CheckFailed` | The engine's check against the vendor failed; the message carries why (a revoked token, a missing scope). |
 | | False | `NotExposed` | The Company has no public address, so no webhook can reach it: the class's webhooks mode is `None`. Mattermost and an Atlassian organization deliver no webhooks and never report it. |
@@ -152,6 +168,57 @@ kubectl logs acme-data-0 -n acme | grep -E 'WARN|ERROR' | tail
 - **`Pending`**: the volume claim is not bound (no default StorageClass, or
   the class's `storageClassName` does not exist), or no node fits the class's
   resources, tolerations or affinity.
+
+## Seat pods do not run
+
+Seat pods are created, and gain replicas, only while the data pod is ready on
+its current template, so a company whose data pod is not ready runs none;
+start with [The data pod is not ready](#the-data-pod-is-not-ready). A seat
+pod has no probe (the engine serves nothing on a node without the `ingress`
+role), so a pod that is `Running` is all Kubernetes knows; read its log:
+
+```bash
+kubectl logs -n acme acme-seats-general-0
+```
+
+A seat pod that cannot join the data pod's leaf listener within a minute
+exits, and Kubernetes restarts it with a growing back-off: after a data pod
+outage, a seat pod can take up to about five minutes to rejoin. A leaf that
+never joins is usually stopped by a NetworkPolicy: `<company>-broker` admits
+the company's own seat pods to port 7422 of its data pod, and a policy of
+yours that selects the data pod or the seat pods may refuse what it admits
+by adding isolation of its own.
+
+After a pool is removed, its StatefulSet keeps running until a revision that
+pins no seat to it runs: `SeatsPlaced` names it, and the Company's
+`status.config.placement` says what the running revision pins.
+
+## A seat runs nowhere
+
+A Seat with `Ready=False Unplaced` is held by no engine pod, and its messages
+wait for one. Its `status.placement` says which pool and StatefulSet should
+run it; the engine's own view is its `GET /fleet`, with the API token
+(`nodes` lists every engine pod with its labels, `seats` the holder of every
+seat, `unplaceable` the seats no running pod may take):
+
+```bash
+kubectl get seat triage -n acme -o jsonpath='{.status.placement}{"\n"}'
+kubectl get statefulset acme-seats-general -n acme
+```
+
+- **The StatefulSet has no ready pod**: a Shared pool at zero replicas, a
+  PerSeat seat's pod restarting, or seat pods not started because the data
+  pod is not ready ([Seat pods do not run](#seat-pods-do-not-run)). The seat
+  runs once a pod does.
+- **The pods run, and the message says the engine has not claimed it yet**: a
+  pod that has just started claims no seat before a data pod reports its copy
+  of the company current, then a few every five seconds; a seat whose pod
+  was killed waits out its 45-second lease. The operator looks again every
+  fifteen seconds while this lasts. After three minutes it is no longer
+  settling: read the pods' logs for `seats_unplaceable` and for errors
+  joining the data pod.
+- **The seat is not in the revision the engine runs**: its `Applied`
+  condition says why.
 
 ## The operator cannot reach the engine
 

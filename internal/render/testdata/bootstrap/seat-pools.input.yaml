@@ -1,0 +1,23 @@
+# A class that lets its companies run seat pools: its data pods open the leaf
+# listener from their first start, whether or not the company has a pool.
+apiVersion: crewlet.ai/v1alpha1
+kind: EngineClass
+metadata:
+  name: pools
+spec:
+  engine:
+    image: ghcr.io/crewlet/crewlet:v0.1.0
+  data:
+    storage:
+      size: 10Gi
+  seatPools:
+    policy: Allowed
+  retention:
+    backupOwner: platform-oncall
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: nimbus
+spec:
+  companyName: Nimbus

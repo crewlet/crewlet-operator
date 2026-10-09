@@ -112,9 +112,13 @@ object.
 
 A Company runs on one data pod in v1alpha1: a StatefulSet with one replica
 and a volume, which holds the company's estate and also serves the API, runs
-every seat and runs the background workers. Its size, image and storage come
-from the `EngineClass`; `Company.spec.topology.data.replicas` is 1, the only
-value v1alpha1 admits. A company can be stopped with `spec.suspend` (its volume is kept), and
+the background workers and runs the seats placed on it. Its size, image and
+storage come from the `EngineClass`; `Company.spec.topology.data.replicas` is
+1, the only value v1alpha1 admits. Where the class allows it, the Company's
+`spec.topology.seatPools` add stateless seat pods beside the data pod, which
+run the seats placed in them and hold no data
+([Seat pools](runtime.md#seat-pools); [Choosing where seats
+run](../guides/topology.md) says when a company needs them). A company can be stopped with `spec.suspend` (its volume is kept), and
 `spec.deletionPolicy` says whether its volume outlives the Company (`Retain`,
 the default) or goes with it (`Delete`). [How a company's engine
 runs](runtime.md) lists every object the operator creates for it.
@@ -189,10 +193,10 @@ Every object reports `status.conditions` with `observedGeneration`:
 
 | Kind | Conditions |
 |---|---|
-| `Company` | `Ready` (the summary), `Accepted`, `RuntimeReady`, `SecretsSynced`, `ConfigApplied`, `Exposed` |
+| `Company` | `Ready` (the summary), `Accepted`, `RuntimeReady`, `SecretsSynced`, `ConfigApplied`, `Exposed`, `EngineHealthy`, `SeatsPlaced` |
 | `EngineClass` | `Accepted` |
 | `Unit`, `LLMProvider`, `MCPServer`, `Schedule` | `Accepted`, `ResolvedRefs`, `Applied` |
-| `Seat` | `Accepted`, `ResolvedRefs`, `Applied`, and `Paused` for an Agent seat the engine runs |
+| `Seat` | `Accepted`, `ResolvedRefs`, `Applied`, and on an Agent seat `Ready` (whether an engine pod holds it) and, once the engine runs it, `Paused` |
 | `Integration` | `Accepted`, `ResolvedRefs`, `Applied`, `Healthy` |
 
 A Company also reports the revision the engine runs, its endpoints and the
@@ -200,7 +204,7 @@ Secret holding a token for its API (`status.apiAccessSecretRef`, key
 `token`). The endpoints are base URLs to append a path to: `api` inside the
 cluster, `exposedAPI` through the class's API route when it has one, and
 `publicBaseURL` for vendors' webhooks. A Seat reports its handle, its identity
-in the engine and the addresses its vendor apps must deliver to
+in the engine, the pod that runs it and the addresses its vendor apps must deliver to
 (`<publicBaseURL>/webhooks/slack/<handle>` and
 `<publicBaseURL>/webhooks/github/<handle>`). They are set as soon as the
 company has the vendor's Integration and a public address, before the seat

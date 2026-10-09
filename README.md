@@ -18,7 +18,10 @@ keeps the engine's live configuration equal to what the resources say.
 > document, with the Secret values it references, as its management policy
 > says, and cleans up after it as its deletion policy says. The e2e suite
 > proves that on kind with the pinned Crewlet engine built from source. It
-> runs one data pod per company; highly available companies come later.
+> runs one data pod per company, and the seat pools a company declares as
+> stateless pods beside it, Shared or one pod per seat, and reports on each
+> Seat which pod the engine runs it on; highly available companies come
+> later.
 
 ## How it works
 
@@ -90,7 +93,8 @@ everything again.
 - [docs/getting-started.md](docs/getting-started.md) — running the operator
   and a company on a local cluster
 - [docs/guides/](docs/README.md#guides) — installing, credentials, exposure,
-  management policies, hosting many tenants on the operator, troubleshooting
+  management policies, choosing where seats run, hosting many tenants on the
+  operator, troubleshooting
 - [docs/concepts/overview.md](docs/concepts/overview.md) — the kinds, how
   they relate, credentials and management policies
 - [docs/reference/api.md](docs/reference/api.md) — the `crewlet.ai` API

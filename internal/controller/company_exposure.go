@@ -12,6 +12,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,7 +51,9 @@ var (
 	statefulSetGVK    = appsv1.SchemeGroupVersion.WithKind("StatefulSet")
 	ingressGVK        = networkingv1.SchemeGroupVersion.WithKind("Ingress")
 	networkPolicyGVK  = networkingv1.SchemeGroupVersion.WithKind("NetworkPolicy")
-	httpRouteGVK      = schema.GroupVersionKind{Group: gatewayv1.GroupName, Version: gatewayv1.GroupVersion.Version, Kind: "HTTPRoute"}
+	// The seat pools' disruption budgets.
+	podDisruptionBudgetGVK = policyv1.SchemeGroupVersion.WithKind("PodDisruptionBudget")
+	httpRouteGVK           = schema.GroupVersionKind{Group: gatewayv1.GroupName, Version: gatewayv1.GroupVersion.Version, Kind: "HTTPRoute"}
 )
 
 // GatewayAPIInstalled reports whether the cluster serves Gateway API
@@ -388,20 +391,31 @@ func (r *CompanyReconciler) applyIngress(ctx context.Context, c *crewletaiv1alph
 	}, nil
 }
 
-// reconcileNetworkPolicy writes the NetworkPolicy around the company's data
+// reconcileNetworkPolicy writes the NetworkPolicies around the company's data
+// pods: the class's isolation (<c>-engine) under networkPolicy Isolated, and
+// the broker's (<c>-broker) whenever the data pods open a port of the broker.
+// Each is deleted while it is not called for.
+func (r *CompanyReconciler) reconcileNetworkPolicy(
+	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
+) error {
+	if err := r.reconcileEnginePolicy(ctx, c, class); err != nil {
+		return err
+	}
+	return r.reconcileBrokerPolicy(ctx, c, class)
+}
+
+// reconcileEnginePolicy writes the NetworkPolicy around the company's data
 // pods under the class's networkPolicy Isolated, and deletes it otherwise.
 //
-// It selects the data pods only, so that a policy for other pods of the
-// company can be added beside it: NetworkPolicies are additive, and one that
-// selected every pod would open them all to what the data pods admit.
+// It selects the data pods only, never the seat pods: NetworkPolicies are
+// additive, so one that selected the seat pods too would open them to what
+// the data pods admit, and <c>-seats could no longer deny them every
+// connection.
 //
 // Ingress is the engine's API port only, from the operator's pods, the
 // class's Gateway proxies or Ingress controller, and the class's
-// apiConsumers. Egress is DNS, the pods of the Company's namespace, every
-// address but the cloud metadata endpoints and the class's exceptCIDRs, and
-// the class's egress.to peers: the engine runs code the tenant supplies, and
-// the metadata endpoint hands out the node's credentials to whatever asks.
-func (r *CompanyReconciler) reconcileNetworkPolicy(
+// apiConsumers. Egress is engineEgress.
+func (r *CompanyReconciler) reconcileEnginePolicy(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 ) error {
 	settings := class.Spec.NetworkPolicy
@@ -430,12 +444,31 @@ func (r *CompanyReconciler) reconcileNetworkPolicy(
 		from = append(from, peerOf(&settings.APIConsumers[i]))
 	}
 
+	policy := networkingv1ac.NetworkPolicy(networkPolicyName(c), c.Namespace).
+		WithLabels(labelsFor(c, componentData)).
+		WithOwnerReferences(ownerReference(c)).
+		WithSpec(networkingv1ac.NetworkPolicySpec().
+			WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(selectorFor(c, componentData))).
+			WithPolicyTypes(networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress).
+			WithIngress(networkingv1ac.NetworkPolicyIngressRule().
+				WithPorts(tcpPort(render.APIPort)).
+				WithFrom(from...)).
+			WithEgress(engineEgress(&settings)...))
+	return r.apply(ctx, c, networkPolicyGVK, networkPolicyName(c), policy)
+}
+
+// engineEgress is where an engine pod may connect under networkPolicy
+// Isolated: DNS, the pods of the Company's namespace, every address but the
+// cloud metadata endpoints and the class's exceptCIDRs, and the class's
+// egress.to peers. The engine runs code the tenant supplies, and the metadata
+// endpoint hands out the node's credentials to whatever asks.
+func engineEgress(settings *crewletaiv1alpha1.NetworkPolicySettings) []*networkingv1ac.NetworkPolicyEgressRuleApplyConfiguration {
 	egress := []*networkingv1ac.NetworkPolicyEgressRuleApplyConfiguration{
 		// DNS, wherever the cluster's resolver runs (a kube-system
 		// Service, or a node-local cache on a link-local address).
 		networkingv1ac.NetworkPolicyEgressRule().WithPorts(
 			networkingv1ac.NetworkPolicyPort().WithProtocol(corev1.ProtocolUDP).WithPort(intstr.FromInt32(dnsPort)),
-			networkingv1ac.NetworkPolicyPort().WithProtocol(corev1.ProtocolTCP).WithPort(intstr.FromInt32(dnsPort))),
+			tcpPort(dnsPort)),
 		// The tenant's own namespace: what it runs beside the engine
 		// (an MCP server, a database) is the tenant's to reach.
 		networkingv1ac.NetworkPolicyEgressRule().WithTo(
@@ -453,20 +486,84 @@ func (r *CompanyReconciler) reconcileNetworkPolicy(
 		}
 		egress = append(egress, networkingv1ac.NetworkPolicyEgressRule().WithTo(to...))
 	}
+	return egress
+}
 
-	policy := networkingv1ac.NetworkPolicy(networkPolicyName(c), c.Namespace).
+// reconcileBrokerPolicy writes <c>-broker while the data pods open the leaf
+// listener (the class allows seat pools), whatever the class's networkPolicy
+// says, and deletes it otherwise. Crewlet's broker accepts any connection on
+// that port, with no authentication and no TLS, and whoever joins it reads
+// and writes the company's whole event stream; with companies sharing a
+// cluster, and sometimes a namespace, only a policy keeps another's pods off
+// it. It admits the leaf port from this company's seat pods alone, selected
+// by the company's label.
+//
+// It selects the data pods for ingress, and a pod any policy selects for
+// ingress is denied every connection no policy admits: so without the class's
+// isolation (<c>-engine, under Isolated) it admits the API port from anywhere
+// as well, which leaves the data pods as open as they were and closes only the
+// broker.
+func (r *CompanyReconciler) reconcileBrokerPolicy(
+	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
+) error {
+	if !leafOpen(class) {
+		return r.deleteControlled(ctx, c, networkPolicyGVK, brokerPolicyName(c))
+	}
+	rules := []*networkingv1ac.NetworkPolicyIngressRuleApplyConfiguration{
+		networkingv1ac.NetworkPolicyIngressRule().
+			WithPorts(tcpPort(render.LeafPort)).
+			WithFrom(networkingv1ac.NetworkPolicyPeer().
+				WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(selectorFor(c, componentSeats)))),
+	}
+	if class.Spec.NetworkPolicy.Mode != crewletaiv1alpha1.NetworkPolicyIsolated {
+		rules = append(rules, networkingv1ac.NetworkPolicyIngressRule().WithPorts(tcpPort(render.APIPort)))
+	}
+	policy := networkingv1ac.NetworkPolicy(brokerPolicyName(c), c.Namespace).
 		WithLabels(labelsFor(c, componentData)).
 		WithOwnerReferences(ownerReference(c)).
 		WithSpec(networkingv1ac.NetworkPolicySpec().
 			WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(selectorFor(c, componentData))).
-			WithPolicyTypes(networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress).
-			WithIngress(networkingv1ac.NetworkPolicyIngressRule().
-				WithPorts(networkingv1ac.NetworkPolicyPort().
-					WithProtocol(corev1.ProtocolTCP).
-					WithPort(intstr.FromInt32(render.APIPort))).
-				WithFrom(from...)).
-			WithEgress(egress...))
-	return r.apply(ctx, c, networkPolicyGVK, networkPolicyName(c), policy)
+			WithPolicyTypes(networkingv1.PolicyTypeIngress).
+			WithIngress(rules...))
+	return r.apply(ctx, c, networkPolicyGVK, brokerPolicyName(c), policy)
+}
+
+// reconcileSeatsPolicy writes <c>-seats while the company runs seat pods, and
+// deletes it otherwise. A seat pod serves nothing (the engine binds no port
+// on a node without the ingress role), so it admits no connection at all.
+// Under the class's networkPolicy Isolated it also holds the seat pods to the
+// data pods' egress, and names the leaf listener they join through on its
+// own, so that narrowing the namespace's egress never cuts them off.
+//
+// The isolation holds only while no other policy selects the seat pods,
+// which is why <c>-engine and <c>-broker select the data pods alone.
+func (r *CompanyReconciler) reconcileSeatsPolicy(
+	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, running bool,
+) error {
+	if !running {
+		return r.deleteControlled(ctx, c, networkPolicyGVK, seatsPolicyName(c))
+	}
+	spec := networkingv1ac.NetworkPolicySpec().
+		WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(selectorFor(c, componentSeats))).
+		WithPolicyTypes(networkingv1.PolicyTypeIngress)
+	if settings := &class.Spec.NetworkPolicy; settings.Mode == crewletaiv1alpha1.NetworkPolicyIsolated {
+		leaf := networkingv1ac.NetworkPolicyEgressRule().
+			WithPorts(tcpPort(render.LeafPort)).
+			WithTo(networkingv1ac.NetworkPolicyPeer().
+				WithPodSelector(metav1ac.LabelSelector().WithMatchLabels(selectorFor(c, componentData))))
+		spec.WithPolicyTypes(networkingv1.PolicyTypeEgress).
+			WithEgress(append([]*networkingv1ac.NetworkPolicyEgressRuleApplyConfiguration{leaf}, engineEgress(settings)...)...)
+	}
+	policy := networkingv1ac.NetworkPolicy(seatsPolicyName(c), c.Namespace).
+		WithLabels(labelsFor(c, componentSeats)).
+		WithOwnerReferences(ownerReference(c)).
+		WithSpec(spec)
+	return r.apply(ctx, c, networkPolicyGVK, seatsPolicyName(c), policy)
+}
+
+// tcpPort is a NetworkPolicy port of TCP.
+func tcpPort(port int32) *networkingv1ac.NetworkPolicyPortApplyConfiguration {
+	return networkingv1ac.NetworkPolicyPort().WithProtocol(corev1.ProtocolTCP).WithPort(intstr.FromInt32(port))
 }
 
 // The address space an engine may reach, and the cloud metadata endpoints

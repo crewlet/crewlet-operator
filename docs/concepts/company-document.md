@@ -2,11 +2,11 @@
 
 A Crewlet engine reads two documents: the **company document** (Crewlet's
 Tier B: the company, its org chart, models, tools and integrations), which
-the operator applies over the engine's API, and the data pod's
-**`crewlet.yaml`** (Tier A: how the node boots), which the operator keeps in
-a Secret and mounts into the pod. The operator renders both from the `crewlet.ai` objects. This
-page says what they contain, so that what the engine reports can be traced
-back to an object.
+the operator applies over the engine's API, and each engine pod's
+**`crewlet.yaml`** (Tier A: how the node boots), a data pod's or a seat
+pool's, which the operator keeps in a Secret and mounts into the pod. The
+operator renders them from the `crewlet.ai` objects. This page says what they
+contain, so that what the engine reports can be traced back to an object.
 
 Both documents are rendered deterministically: the same objects always give
 the same bytes, whatever order the API server lists them in. Keys are
@@ -90,12 +90,30 @@ each schedule's next fire and its history.
 
 ### Placement
 
-Every agent seat is rendered with `placement: {labels: {crewlet.ai/pool:
-data}}`, and the data pod carries the label `crewlet.ai/pool: data`. In
-v1alpha1 every seat runs on the data pod, so the pin changes nothing today;
-it is what will keep a seat on its own pool once a company can run more than
-one kind of pod. Human seats are never run by the engine and have no
-placement.
+Every agent seat runs in a pool: the one its Seat's `spec.placement.pool`
+names, or else the Company's `spec.topology.defaultSeatPool` (`data` unless
+it says otherwise). `data` is the data pods; any other pool is one of the
+Company's `spec.topology.seatPools`, stateless pods that run seats and hold
+nothing (see [A seat pod's `crewlet.yaml`](#a-seat-pods-crewletyaml)). Each
+agent seat is rendered with Crewlet's `role.placement`, a hard pin: the engine
+runs the seat only on a node carrying every label it names, and never widens
+it, so a seat whose pool has no pod runs nowhere and its messages wait.
+
+| The seat is placed in | Its `placement` | The `node.labels` of the pods that run it |
+|---|---|---|
+| `data` | `{labels: {crewlet.ai/pool: data}}` | the data pods: `{crewlet.ai/pool: data}` |
+| a Shared pool `P` | `{labels: {crewlet.ai/pool: P}}` | every pod of `P`: `{crewlet.ai/pool: P}` |
+| a PerSeat pool, as seat `h` | `{labels: {crewlet.ai/seat: h}}` | the seat's own pods: `{crewlet.ai/seat: h}` |
+
+Every pod that runs seats carries exactly one of these labels, so each pod is
+in exactly one of Crewlet's placement groups. That is what makes the pins
+hold: Crewlet gives a node a share of every group it matches and fills the
+sum from whichever seats it reaches first, so a pod matching two groups could
+fill itself from one and leave a seat of the other held by nobody, with no
+warning. For the same reason every agent seat is pinned, those on the data
+pods included: an unpinned seat could land on any pod that runs seats. Pins
+are literal values, since Crewlet expands no `${NAME}` in a placement. Human
+seats are never run by the engine and have no placement.
 
 ### Credentials
 
@@ -108,11 +126,21 @@ fills it.
 ## The data pod's `crewlet.yaml`
 
 The data pod holds the company's estate, serves the API on port 8080, runs
-every seat and runs the background workers (`node.roles: [data, ingress,
-seats, workers]`). Its `crewlet.yaml` is already shaped for a company that
-later adds pods of other kinds, so that adding them moves nothing on the
-data pod's disk: coordination is Crewlet's replicated `embedded-kv`, and the
-event stream is persisted on the data volume under `/var/lib/crewlet`.
+the background workers and runs the seats placed in `data` (`node.roles:
+[data, ingress, seats, workers]`, `node.labels: {crewlet.ai/pool: data}`).
+Its `crewlet.yaml` is shaped for a company that adds seat pods, so that
+adding them moves nothing on the data pod's disk: coordination is Crewlet's
+replicated `embedded-kv`, and the event stream is persisted on the data
+volume under `/var/lib/crewlet`.
+
+When the EngineClass's `seatPools.policy` is `Allowed`, the data pod also
+opens the leaf listener seat pods join the event stream through
+(`stream.leaf.port: 7422`), from its first start and whether or not the
+Company has a pool yet: the class decides it, not the Company, so a company
+that adds its first pool restarts nothing, and a class that changes its
+policy restarts its companies' data pods. Like every port of Crewlet's
+embedded broker, the listener accepts any connection that reaches it, with no
+authentication and no TLS.
 
 The event stream is given three quarters of the data volume
 (`stream.store_max_bytes`), measured from the size the pod's volume claim
@@ -156,6 +184,28 @@ operator would otherwise overwrite at its next look. Under `Observe` and
 pod reads `crewlet.yaml` only at start, so changing the policy to or from
 `Enforce` restarts it ([Switching policies](../guides/management-policies.md#switching-policies)).
 
+## A seat pod's `crewlet.yaml`
+
+A seat pool's pods hold no data: they run seats and nothing else
+(`node.roles: [seats]`), and need no company document, since they take the
+one the data pod runs from the company's coordination store. Each pool's
+pods share one `crewlet.yaml`, kept like the data pod's in a Secret,
+`<company>-bootstrap-<pool>` ([Seat pools](runtime.md#seat-pools)):
+
+| Block | What it holds, and why |
+|---|---|
+| `node` | `id: ${CREWLET_NODE_ID}`, the pod's name; the pool's placement label, `crewlet.ai/pool: <pool>` for a Shared pool and `crewlet.ai/seat: ${CREWLET_SEAT}` for a PerSeat pool, whose pods are each given their seat's handle in `CREWLET_SEAT`; and `max_concurrent`, the pool's `maxConcurrentTurns` or the class's `seatPools.defaults.maxConcurrentTurns`, left to the engine's default of 32 when neither says. |
+| `store` | `scratch: true`: the store at `/var/lib/crewlet/store/crewlet.db` is deleted at every start. It is a cache of the pod's seats' memory and its working rows, rebuilt from the event stream when the pod claims a seat; the pod's tracker and audit records go to a data pod. `objects` is the data pod's block, value for value: every node checks the object store it names against the one the company recorded and refuses to start on another. |
+| `stream` | `type: embedded` with `leaf.urls`, one `nats-leaf://` URL on port 7422 for every data pod, by its name in the data StatefulSet's headless Service: the pod's broker joins the data pods' as a leaf, with JetStream off, holding nothing and voting in nothing, through any member that answers. `replicas` is the data pod's, since a leaf that is first to use a stream creates it on the members with its own count. |
+| `coordination` | `embedded-kv`, over the same link. |
+| `secrets` | The company's keyring, as the data pod has it: the pod opens the company document and the secret store itself. |
+| `retention` | The class's `backupOwner`, as the data pod has it. |
+
+There is no `api` block and no API token: a node without the `ingress` role
+serves nothing, so a seat pod has no listener at all. The engine pinned by
+this operator serves no health or readiness endpoint on such a node either;
+a wedged one exits by itself.
+
 ## What blocks a document
 
 A document is applied whole or not at all, so one object that cannot be
@@ -170,6 +220,11 @@ the reference:
 | `Seat` | a `spec.llm` entry names a platform provider the class does not offer, or the Company does not set `spec.llm.usePlatformProviders` | `RefNotFound` |
 | `Seat` | a `manages` entry names a Unit whose name is also a Seat's | `Conflict` |
 | `Seat` | it names a provisioned credential and no Integration of the company has `provisioning: Engine` | `NoProvisioner` |
+| `Seat` | `spec.placement.pool` is neither `data` nor one of the Company's `spec.topology.seatPools` | `PoolNotFound` |
+| `Seat` | it is placed in a PerSeat pool, and the class does not set `seatPools.allowPerSeat` (reported on `Applied`) | `PerSeatNotAllowed` |
+| `Seat` | it is placed in a PerSeat pool, and the company's seat pods, its own included, would number more than the class's `seatPools.maxPods` (reported on `Applied`) | `PoolCapacityExceeded` |
+| `Company` | it declares `spec.topology.seatPools`, and its class's `seatPools.policy` is not `Allowed` | `SeatPoolsNotAllowed` |
+| `Company` | its Shared pools' replicas alone number more than the class's `seatPools.maxPods` | `PoolCapacityExceeded` |
 | `Unit` | `parentRef`, `leadRef` or a `spec.mcp` entry names an object that does not exist | `RefNotFound` |
 | `Unit` | its chain of parents leads back to it | `Cycle` |
 | `Company` | `spec.llm.order` names a provider that does not exist or is not offered to it | `RefNotFound` |

@@ -76,8 +76,8 @@ type DataStorage struct {
 }
 
 // DataPodSettings sizes the pods that hold a company's estate. In v1alpha1 a
-// company runs exactly one data pod, which also serves the API, runs every
-// seat and runs the background workers.
+// company runs exactly one data pod, which also serves the API, runs the
+// background workers and runs every seat placed in the pool data.
 type DataPodSettings struct {
 	// allowedReplicas is the set of data-pod counts a Company of this class
 	// may choose in spec.topology.data.replicas. v1alpha1 runs exactly one
@@ -108,6 +108,96 @@ type DataPodSettings struct {
 	// +kubebuilder:validation:Maximum=3600
 	// +default=300
 	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds,omitempty"`
+}
+
+// SeatPoolPolicy is whether a class's companies may run seats on pods of
+// their own, outside the data pods.
+// +kubebuilder:validation:Enum=Forbidden;Allowed
+type SeatPoolPolicy string
+
+// The seat pool policies.
+const (
+	// SeatPoolsForbidden runs every seat on the data pods. A Company of the
+	// class may declare no spec.topology.seatPools.
+	SeatPoolsForbidden SeatPoolPolicy = "Forbidden"
+	// SeatPoolsAllowed lets a Company declare seat pools, and opens the
+	// leaf listener its seat pods join the company's event stream through
+	// on every data pod of the class, from the data pod's first start, so
+	// that a company adding its first pool restarts nothing.
+	SeatPoolsAllowed SeatPoolPolicy = "Allowed"
+)
+
+// SeatPoolDefaults sizes the pods of a seat pool that does not size its own.
+// +kubebuilder:validation:MinProperties=1
+type SeatPoolDefaults struct {
+	// maxConcurrentTurns is how many turns one seat pod runs at once: Crewlet's
+	// node.max_concurrent. Unset takes the engine's default, 32. A seat runs
+	// one turn at a time, so a pod never runs more turns at once than it
+	// holds seats.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	MaxConcurrentTurns int32 `json:"maxConcurrentTurns,omitempty"`
+
+	// resources are the compute resources of a seat pod's engine container.
+	// Unset sets none.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// terminationGracePeriodSeconds is how long a seat pod may take to stop.
+	// A seat pod finishes its running turns before it exits, with no bound
+	// of its own, so unset is five minutes, as for a data pod, rather than
+	// the Kubernetes default of thirty seconds.
+	// +optional
+	// +kubebuilder:validation:Minimum=30
+	// +kubebuilder:validation:Maximum=3600
+	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds,omitempty"`
+
+	// scratchSizeLimit caps the emptyDir a seat pod keeps its scratch store
+	// in: a store the engine deletes at every start, its native library
+	// (about 20 MB, extracted at every start) and the files of the
+	// processes it runs (stdio MCP servers, git). A pod that writes more is
+	// evicted. Unset is 2Gi.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('256Mi'))",message="scratchSizeLimit must be at least 256Mi: the engine extracts its native library of about 20 MB there at every start, beside its scratch store and the files of the processes it runs"
+	ScratchSizeLimit *resource.Quantity `json:"scratchSizeLimit,omitempty"`
+}
+
+// SeatPoolSettings is whether, and how far, a class's companies may run seats
+// on stateless pods of their own (a Company's spec.topology.seatPools). A seat
+// pod holds no data: it joins the company's event stream as a NATS leaf of the
+// data pods, keeps a scratch store it deletes at every start, and runs the
+// seats placed in its pool.
+// +kubebuilder:validation:XValidation:rule="(has(self.policy) && self.policy == 'Allowed') || (!has(self.allowPerSeat) && !has(self.maxPods) && !has(self.defaults))",message="allowPerSeat, maxPods and defaults apply to policy Allowed only"
+// +kubebuilder:validation:MinProperties=1
+type SeatPoolSettings struct {
+	// policy is whether the class's companies may declare seat pools.
+	// Changing it restarts every data pod of the class, which opens or
+	// closes the leaf listener.
+	// +optional
+	// +default="Forbidden"
+	Policy SeatPoolPolicy `json:"policy,omitempty"`
+
+	// allowPerSeat lets a Company declare a PerSeat pool, which runs one
+	// pod (or two, a warm standby) for each seat placed in it. Each costs a
+	// pod, and every pod's work grows with the number of seats of the
+	// company, so it is off by default and meant for the few seats that
+	// need a pod to themselves. It isolates a seat's compute and its
+	// failures, not its credentials: every pod of a company can read the
+	// company's whole secret store.
+	// +optional
+	AllowPerSeat *bool `json:"allowPerSeat,omitempty"`
+
+	// maxPods is the most seat pods a Company of the class may run, all of
+	// its pools together: each Shared pool's replicas, and each PerSeat
+	// pool's replicas for every seat placed in it. The data pods are not
+	// counted. Unset is unlimited.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	MaxPods int32 `json:"maxPods,omitempty"`
+
+	// defaults size the pods of a pool that does not size its own.
+	// +optional
+	Defaults SeatPoolDefaults `json:"defaults,omitzero"`
 }
 
 // StreamMode is where a company's event stream runs.
@@ -765,6 +855,12 @@ type EngineClassSpec struct {
 	// data sizes the pods that hold each company's estate.
 	// +required
 	Data DataPodSettings `json:"data,omitzero"`
+
+	// seatPools is whether each company may run seats on stateless pods of
+	// its own, and how many.
+	// +optional
+	// +default={"policy": "Forbidden"}
+	SeatPools SeatPoolSettings `json:"seatPools,omitzero"`
 
 	// stream is how each company's event stream runs.
 	// +optional

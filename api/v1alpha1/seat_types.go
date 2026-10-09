@@ -162,13 +162,15 @@ type SeatSandbox struct {
 
 // SeatPlacement is where a seat runs.
 type SeatPlacement struct {
-	// pool is the pool of pods that runs the seat. In v1alpha1 every seat
-	// runs on the company's data pod, whose pool is data.
-	// +optional
-	// +default="data"
+	// pool is the pool of pods that runs the seat: data, the company's data
+	// pods, or the name of one of the Company's spec.topology.seatPools.
+	// The seat is pinned to the pool with Crewlet's role.placement, which
+	// the engine never widens: while the pool runs no pod, the seat runs
+	// nowhere and its messages wait for one.
+	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=20
-	// +kubebuilder:validation:XValidation:rule="self == 'data'",message="v1alpha1 runs every seat on the company's data pod: pool must be data"
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 	Pool string `json:"pool,omitempty"`
 }
 
@@ -459,9 +461,10 @@ type SeatSpec struct {
 	// +optional
 	Sandbox *SeatSandbox `json:"sandbox,omitempty"`
 
-	// placement is where the seat runs.
+	// placement is where the seat runs. Unset runs it in the Company's
+	// spec.topology.defaultSeatPool.
 	// +optional
-	Placement *SeatPlacement `json:"placement,omitempty"`
+	Placement SeatPlacement `json:"placement,omitzero"`
 
 	// paused says whether the seat may take work. True pauses it: it starts
 	// no new turn, the mail it is sent waits on its inbox in order, and its
@@ -569,12 +572,30 @@ type GitHubSeatStatus struct {
 // +kubebuilder:validation:MinProperties=1
 type SeatPlacementStatus struct {
 	// pool is the pool of pods that runs the seat: spec.placement.pool, or
-	// data. The seat is rendered with role.placement.labels
-	// {crewlet.ai/pool: <pool>}, which only the pool's pods carry.
+	// the Company's spec.topology.defaultSeatPool. The seat is rendered with
+	// role.placement.labels {crewlet.ai/pool: <pool>}, which only the pool's
+	// pods carry, or, in a PerSeat pool, {crewlet.ai/seat: <handle>}, which
+	// only the seat's own pods carry.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=20
 	Pool string `json:"pool,omitempty"`
+
+	// workload is the name of the StatefulSet whose pods may run the seat:
+	// the data pods', the Shared pool's, or the seat's own in a PerSeat
+	// pool.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	Workload string `json:"workload,omitempty"`
+
+	// node is the engine node, a pod's name, that holds the seat's lease
+	// and runs it, as the engine's GET /fleet last reported. Unset while no
+	// node holds it.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=64
+	Node string `json:"node,omitempty"`
 }
 
 // SeatPauseStatus is a seat's pause, as the engine reports it.
@@ -622,8 +643,10 @@ type SeatStatus struct {
 	// handle, the name or a contact account; Conflict names the other),
 	// ResolvedRefs (the unit, the providers, the tool servers and
 	// every Secret key exist), Applied (the seat is in the revision the
-	// engine runs) and, for an Agent seat the engine runs, Paused (whether
-	// the engine holds it paused, and whether that is what spec.paused asks).
+	// engine runs) and, on an Agent seat, Ready (an engine node holds the
+	// seat's lease and runs it: LeaseHeld, or Unplaced) and, once the
+	// engine runs it, Paused (whether the engine holds it paused, and
+	// whether that is what spec.paused asks).
 	// +optional
 	// +listType=map
 	// +listMapKey=type
@@ -684,7 +707,10 @@ type SeatStatus struct {
 // +kubebuilder:printcolumn:name="Kind",type=string,JSONPath=`.spec.kind`
 // +kubebuilder:printcolumn:name="Unit",type=string,JSONPath=`.spec.unitRef.name`
 // +kubebuilder:printcolumn:name="Applied",type=string,JSONPath=`.status.conditions[?(@.type=="Applied")].status`
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 // +kubebuilder:printcolumn:name="Paused",type=string,JSONPath=`.status.conditions[?(@.type=="Paused")].status`
+// +kubebuilder:printcolumn:name="Pool",type=string,JSONPath=`.status.placement.pool`,priority=1
+// +kubebuilder:printcolumn:name="Node",type=string,JSONPath=`.status.placement.node`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:validation:XValidation:rule="has(self.spec.handle) || self.metadata.name.matches('^[a-z0-9][a-z0-9-]{0,62}$')",message="without spec.handle the Seat's name is its handle: lowercase letters, digits and '-', starting with a letter or digit, at most 63 characters",fieldPath=".spec.handle"
 // +kubebuilder:validation:XValidation:rule="(has(self.spec.handle) ? self.spec.handle : self.metadata.name) == (has(oldSelf.spec.handle) ? oldSelf.spec.handle : oldSelf.metadata.name)",message="the seat's handle is immutable: the seat's identity and memory are derived from it",fieldPath=".spec.handle"

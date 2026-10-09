@@ -69,10 +69,7 @@ var _ = Describe("Company", Ordered, func() {
 
 	BeforeAll(func() {
 		By("creating the tenant's namespace, enforcing the restricted Pod Security Standard")
-		apply(&corev1.Namespace{
-			Name:   tenantNamespace,
-			Labels: map[string]string{"pod-security.kubernetes.io/enforce": "restricted"},
-		})
+		apply(restrictedNamespace(tenantNamespace))
 
 		By("creating an EngineClass that runs the engine image built from source")
 		apply(&v1.EngineClass{
@@ -281,11 +278,6 @@ var _ = Describe("Company", Ordered, func() {
 // applies a document without reaching its model providers.
 func applyCompany(deletion v1.DeletionPolicy) {
 	GinkgoHelper()
-	apply(&corev1.Secret{
-		Namespace: tenantNamespace, Name: providerSecret,
-		//nolint:gosec // G101: a dummy key; the engine stores it and never sends it, since nothing calls the provider.
-		StringData: map[string]string{"apiKey": "e2e-not-a-real-key"},
-	})
 	apply(&v1.Company{
 		Namespace: tenantNamespace, Name: companyName,
 		Spec: v1.CompanySpec{
@@ -295,18 +287,7 @@ func applyCompany(deletion v1.DeletionPolicy) {
 			DeletionPolicy:  deletion,
 		},
 	})
-	apply(&v1.LLMProvider{
-		Namespace: tenantNamespace, Name: "gateway",
-		Spec: v1.LLMProviderSpec{
-			CompanyRef: v1.CompanyReference{Name: companyName},
-			LLMProviderSettings: v1.LLMProviderSettings{
-				Type:    v1.LLMProviderOpenAICompatible,
-				Model:   "e2e-model",
-				BaseURL: fmt.Sprintf("http://model-gateway.%s.svc:8080/v1", tenantNamespace),
-			},
-			APIKeySecretRefs: []v1.SecretKeyReference{{Name: providerSecret, Key: "apiKey"}},
-		},
-	})
+	applyProvider(tenantNamespace, companyName)
 	apply(&v1.Unit{
 		Namespace: tenantNamespace, Name: "engineering",
 		Spec: v1.UnitSpec{
@@ -330,8 +311,47 @@ func seat(name, displayName, goal string) *v1.Seat {
 			DisplayName: displayName,
 			UnitRef:     v1.LocalObjectReference{Name: "engineering"},
 			Goal:        goal,
-			LLM:         v1.SeatLLM{Default: []v1.LLMProviderReference{{Name: "gateway"}}},
+			LLM:         v1.SeatLLM{Default: []v1.LLMProviderReference{{Name: providerName}}},
 		},
+	}
+}
+
+// providerName is the model provider of the suite's companies.
+const providerName = "gateway"
+
+// applyProvider writes a company's OpenAI-compatible model provider and the
+// Secret holding its key. The provider's address is never called: the engine
+// validates and applies a document without reaching its model providers.
+func applyProvider(namespace, company string) {
+	GinkgoHelper()
+	const keyField = "apiKey"
+	// A dummy key: the engine stores it and never sends it, since nothing
+	// calls the provider.
+	apply(&corev1.Secret{
+		Namespace: namespace, Name: providerSecret,
+		StringData: map[string]string{keyField: "e2e-not-a-real-key"},
+	})
+	apply(&v1.LLMProvider{
+		Namespace: namespace, Name: providerName,
+		Spec: v1.LLMProviderSpec{
+			CompanyRef: v1.CompanyReference{Name: company},
+			LLMProviderSettings: v1.LLMProviderSettings{
+				Type:    v1.LLMProviderOpenAICompatible,
+				Model:   "e2e-model",
+				BaseURL: fmt.Sprintf("http://model-gateway.%s.svc:8080/v1", namespace),
+			},
+			APIKeySecretRefs: []v1.SecretKeyReference{{Name: providerSecret, Key: keyField}},
+		},
+	})
+}
+
+// restrictedNamespace is a namespace, as a platform gives each tenant, that
+// enforces the restricted Pod Security Standard the engine is built to run
+// under.
+func restrictedNamespace(name string) *corev1.Namespace {
+	return &corev1.Namespace{
+		Name:   name,
+		Labels: map[string]string{"pod-security.kubernetes.io/enforce": "restricted"},
 	}
 }
 
@@ -438,20 +458,29 @@ const crewletKinds = "companies.crewlet.ai,units.crewlet.ai,seats.crewlet.ai,llm
 // dumpTenant prints what a failed spec needs to be understood: the tenant's
 // objects and their status, the data pod's description and the engine's and
 // the operator's logs.
-func dumpTenant() {
-	commands := [][]string{
+func dumpTenant() { dumpNamespace(tenantNamespace, dataPod) }
+
+// dumpNamespace prints a namespace's crewlet.ai objects and the objects the
+// operator makes, its events, the description and log of each pod named, and
+// the operator's log.
+func dumpNamespace(ns string, pods ...string) {
+	const get, logs = "get", "logs"
+	commands := make([][]string, 0, 3+2*len(pods))
+	commands = append(commands,
 		// The kinds by name, not by their category: kubectl may still hold
 		// a discovery cache from before the CRDs were installed.
-		{"get", crewletKinds + ",statefulsets,pods,services,pvc,secrets,configmaps,networkpolicies", "-o", "wide"},
-		{"get", crewletKinds, "-o", "yaml"},
-		{"events"},
-		{"describe", "pod", dataPod},
-		{"logs", dataPod, "--tail=200"},
+		[]string{get, crewletKinds + ",statefulsets,pods,services,pvc,secrets,configmaps,networkpolicies," +
+			"poddisruptionbudgets", "-o", "wide"},
+		[]string{get, crewletKinds, "-o", "yaml"},
+		[]string{"events"},
+	)
+	for _, pod := range pods {
+		commands = append(commands, []string{"describe", "pod", pod}, []string{logs, pod, "--tail=200"})
 	}
 	for _, args := range commands {
-		dump(append(args, "-n", tenantNamespace)...)
+		dump(append(args, "-n", ns)...)
 	}
-	dump("logs", "deploy/crewlet-operator-controller-manager", "-n", namespace, "--tail=300")
+	dump(logs, "deploy/crewlet-operator-controller-manager", "-n", namespace, "--tail=300")
 }
 
 // dump prints what a kubectl command prints, or why it failed.
@@ -476,10 +505,7 @@ func copyAccessSecret(namespace string) *corev1.Secret {
 	GinkgoHelper()
 	access := &corev1.Secret{}
 	Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: tenantNamespace, Name: accessSecret}, access)).To(Succeed())
-	apply(&corev1.Namespace{
-		Name:   namespace,
-		Labels: map[string]string{"pod-security.kubernetes.io/enforce": "restricted"},
-	})
+	apply(restrictedNamespace(namespace))
 	apply(&corev1.Secret{Namespace: namespace, Name: accessSecret, Data: access.Data})
 	return access
 }
@@ -498,6 +524,12 @@ const editConfig = `curl -sS --max-time 20 -X PUT -H "Authorization: Bearer ${TO
 // curlPod is a pod named name in namespace that runs script with curl, with
 // the API access Secret's token and URL in its environment as TOKEN and URL.
 func curlPod(namespace, name, script string) *corev1.Pod {
+	return curlPodWith(namespace, name, accessSecret, script)
+}
+
+// curlPodWith is a curlPod that reads the token and URL from the API access
+// Secret named secret.
+func curlPodWith(namespace, name, secret, script string) *corev1.Pod {
 	return &corev1.Pod{
 		Namespace: namespace, Name: name,
 		Spec: corev1.PodSpec{
@@ -512,8 +544,8 @@ func curlPod(namespace, name, script string) *corev1.Pod {
 				Image:   curlImage,
 				Command: []string{"/bin/sh", "-c", script},
 				Env: []corev1.EnvVar{
-					secretEnv("TOKEN", accessSecret, v1.APIAccessTokenKey),
-					secretEnv("URL", accessSecret, v1.APIAccessURLKey),
+					secretEnv("TOKEN", secret, v1.APIAccessTokenKey),
+					secretEnv("URL", secret, v1.APIAccessURLKey),
 				},
 				SecurityContext: &corev1.SecurityContext{
 					AllowPrivilegeEscalation: new(false),

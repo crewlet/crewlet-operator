@@ -2576,6 +2576,153 @@ spec:
                 required:
                 - backupOwner
                 type: object
+              seatPools:
+                default:
+                  policy: Forbidden
+                description: |-
+                  seatPools is whether each company may run seats on stateless pods of
+                  its own, and how many.
+                minProperties: 1
+                properties:
+                  allowPerSeat:
+                    description: |-
+                      allowPerSeat lets a Company declare a PerSeat pool, which runs one
+                      pod (or two, a warm standby) for each seat placed in it. Each costs a
+                      pod, and every pod's work grows with the number of seats of the
+                      company, so it is off by default and meant for the few seats that
+                      need a pod to themselves. It isolates a seat's compute and its
+                      failures, not its credentials: every pod of a company can read the
+                      company's whole secret store.
+                    type: boolean
+                  defaults:
+                    description: defaults size the pods of a pool that does not size
+                      its own.
+                    minProperties: 1
+                    properties:
+                      maxConcurrentTurns:
+                        description: |-
+                          maxConcurrentTurns is how many turns one seat pod runs at once: Crewlet's
+                          node.max_concurrent. Unset takes the engine's default, 32. A seat runs
+                          one turn at a time, so a pod never runs more turns at once than it
+                          holds seats.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      resources:
+                        description: |-
+                          resources are the compute resources of a seat pod's engine container.
+                          Unset sets none.
+                        properties:
+                          claims:
+                            description: |-
+                              Claims lists the names of resources, defined in spec.resourceClaims,
+                              that are used by this container.
+
+                              This field depends on the
+                              DynamicResourceAllocation feature gate.
+
+                              This field is immutable. It can only be set for containers.
+                            items:
+                              description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                              properties:
+                                name:
+                                  description: |-
+                                    Name must match the name of one entry in pod.spec.resourceClaims of
+                                    the Pod where this field is used. It makes that resource available
+                                    inside a container.
+                                  type: string
+                                request:
+                                  description: |-
+                                    Request is the name chosen for a request in the referenced claim.
+                                    If empty, everything from the claim is made available, otherwise
+                                    only the result of this request.
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
+                          limits:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Limits describes the maximum amount of compute resources allowed.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                          requests:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            description: |-
+                              Requests describes the minimum amount of compute resources required.
+                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            type: object
+                        type: object
+                      scratchSizeLimit:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: |-
+                          scratchSizeLimit caps the emptyDir a seat pod keeps its scratch store
+                          in: a store the engine deletes at every start, its native library
+                          (about 20 MB, extracted at every start) and the files of the
+                          processes it runs (stdio MCP servers, git). A pod that writes more is
+                          evicted. Unset is 2Gi.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                        x-kubernetes-validations:
+                        - message: 'scratchSizeLimit must be at least 256Mi: the engine
+                            extracts its native library of about 20 MB there at every
+                            start, beside its scratch store and the files of the processes
+                            it runs'
+                          rule: '!quantity(string(self)).isLessThan(quantity(''256Mi''))'
+                      terminationGracePeriodSeconds:
+                        description: |-
+                          terminationGracePeriodSeconds is how long a seat pod may take to stop.
+                          A seat pod finishes its running turns before it exits, with no bound
+                          of its own, so unset is five minutes, as for a data pod, rather than
+                          the Kubernetes default of thirty seconds.
+                        format: int64
+                        maximum: 3600
+                        minimum: 30
+                        type: integer
+                    type: object
+                  maxPods:
+                    description: |-
+                      maxPods is the most seat pods a Company of the class may run, all of
+                      its pools together: each Shared pool's replicas, and each PerSeat
+                      pool's replicas for every seat placed in it. The data pods are not
+                      counted. Unset is unlimited.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  policy:
+                    default: Forbidden
+                    description: |-
+                      policy is whether the class's companies may declare seat pools.
+                      Changing it restarts every data pod of the class, which opens or
+                      closes the leaf listener.
+                    enum:
+                    - Forbidden
+                    - Allowed
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: allowPerSeat, maxPods and defaults apply to policy Allowed
+                    only
+                  rule: (has(self.policy) && self.policy == 'Allowed') || (!has(self.allowPerSeat)
+                    && !has(self.maxPods) && !has(self.defaults))
               serviceAccount:
                 description: |-
                   serviceAccount is what is added to each company's engine

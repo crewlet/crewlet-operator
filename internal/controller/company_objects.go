@@ -1,7 +1,10 @@
 package controller
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"strings"
 
 	metav1ac "k8s.io/client-go/applyconfigurations/meta/v1"
 
@@ -24,6 +27,7 @@ const managedByLabel = "app.kubernetes.io/managed-by"
 // (app.kubernetes.io/component).
 const (
 	componentData     = "data"
+	componentSeats    = "seats"
 	componentAPI      = "api"
 	componentWebhooks = "webhooks"
 	componentKeyring  = "keyring"
@@ -32,7 +36,8 @@ const (
 // The names of the objects the operator creates for a Company. Every one is
 // derived from the Company's name, which the API server holds to a DNS label
 // of at most 47 characters, so that the data StatefulSet's name stays within
-// the 52 characters its pods' controller-revision-hash label leaves room for.
+// the 52 characters its pods' controller-revision-hash label leaves room for;
+// the seat pools' StatefulSets are held to it by boundedName.
 func keyringSecretName(c *crewletaiv1alpha1.Company) string   { return c.Name + "-keyring" }
 func apiTokensSecretName(c *crewletaiv1alpha1.Company) string { return c.Name + "-api-tokens" }
 func apiAccessSecretName(c *crewletaiv1alpha1.Company) string { return c.Name + "-api-access" }
@@ -44,6 +49,68 @@ func dataStatefulSetName(c *crewletaiv1alpha1.Company) string { return c.Name + 
 func webhooksRouteName(c *crewletaiv1alpha1.Company) string   { return c.Name + "-webhooks" }
 func apiRouteName(c *crewletaiv1alpha1.Company) string        { return c.Name + "-api" }
 func networkPolicyName(c *crewletaiv1alpha1.Company) string   { return c.Name + "-engine" }
+func brokerPolicyName(c *crewletaiv1alpha1.Company) string    { return c.Name + "-broker" }
+func seatsPolicyName(c *crewletaiv1alpha1.Company) string     { return c.Name + "-seats" }
+func seatsServiceName(c *crewletaiv1alpha1.Company) string    { return c.Name + "-seats" }
+
+// poolBootstrapName is the Secret a seat pool's pods start from. A PerSeat
+// pool's seats share it: their document is the same, and each seat's
+// StatefulSet gives its pods their seat in the environment.
+func poolBootstrapName(c *crewletaiv1alpha1.Company, pool string) string {
+	return c.Name + "-bootstrap-" + pool
+}
+
+// sharedPoolStatefulSetName is the StatefulSet of a Shared pool's pods.
+func sharedPoolStatefulSetName(c *crewletaiv1alpha1.Company, pool string) string {
+	return boundedName(c.Name + "-seats-" + pool)
+}
+
+// perSeatStatefulSetName is the StatefulSet of one seat's pods in a PerSeat
+// pool. It is named after the seat and not the pool, so a seat that moves
+// from one PerSeat pool to another keeps its pods' names and identities.
+func perSeatStatefulSetName(c *crewletaiv1alpha1.Company, handle string) string {
+	return boundedName(c.Name + "-seat-" + handle)
+}
+
+// seatWorkloadName is the StatefulSet whose pods run a seat placed in pool:
+// the data pods', a Shared pool's, or the seat's own in a PerSeat pool; empty
+// for a pool the Company does not declare.
+func seatWorkloadName(c *crewletaiv1alpha1.Company, pool, handle string) string {
+	if pool == crewletaiv1alpha1.DataPool {
+		return dataStatefulSetName(c)
+	}
+	for i := range c.Spec.Topology.SeatPools {
+		p := &c.Spec.Topology.SeatPools[i]
+		switch {
+		case p.Name != pool:
+		case p.Mode == crewletaiv1alpha1.SeatPoolPerSeat:
+			return perSeatStatefulSetName(c, handle)
+		default:
+			return sharedPoolStatefulSetName(c, pool)
+		}
+	}
+	return ""
+}
+
+// maxStatefulSetName is the longest a StatefulSet's name may be: its pods
+// carry a controller-revision-hash label of the name, a dash and a hash of
+// up to ten characters, and a label value holds 63.
+const maxStatefulSetName = 52
+
+// boundedName is a StatefulSet's name, or, when that is longer than
+// maxStatefulSetName, its start and eight hexadecimal digits of a hash of
+// the whole, so that two names cut to the same start stay apart. A
+// Company's name (at most 47 characters) leaves a seat pool's or a seat's
+// StatefulSet too little room otherwise: a pool's name is up to 20, a
+// handle up to 63.
+func boundedName(name string) string {
+	if len(name) <= maxStatefulSetName {
+		return name
+	}
+	sum := sha256.Sum256([]byte(name))
+	suffix := hex.EncodeToString(sum[:4])
+	return strings.TrimRight(name[:maxStatefulSetName-len(suffix)-1], "-") + "-" + suffix
+}
 
 // apiURL is the in-cluster base URL of a Company's engine API: its engine
 // Service, which routes to ready data pods only. The namespace-qualified

@@ -405,7 +405,7 @@ func TestEngineHealthyReportsTheEnginesAlarms(t *testing.T) {
 // leaves spec.paused unset under any policy, the operator only reports what
 // the engine holds, and a call would reach the nil client and fail the test.
 func TestSyncPauseChangesNoPauseItDoesNotOwn(t *testing.T) {
-	paused := engine.SeatPause{Paused: true, By: "jane", At: time.Date(2026, 6, 8, 7, 30, 2, 0, time.UTC), Reason: "Looking"}
+	paused := engine.SeatPause{Paused: true, By: humanJane, At: time.Date(2026, 6, 8, 7, 30, 2, 0, time.UTC), Reason: "Looking"}
 	for _, c := range []struct {
 		name   string
 		policy crewletaiv1alpha1.ManagementPolicy

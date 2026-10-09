@@ -84,13 +84,20 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 		// vendor apps of its own. A handle two Seats derive is neither
 		// seat's identity.
 		if o.Spec.Kind == crewletaiv1alpha1.SeatKindHuman || p.handleTaken {
+			// The engine leases no Human seat, and the seat a handle two
+			// Seats derive is neither's to report.
+			meta.RemoveStatusCondition(&o.Status.Conditions, crewletaiv1alpha1.ConditionReady)
 			break
 		}
 		o.Status.SeatID = render.SeatID(run.company.Spec.CompanyName, handle)
-		o.Status.Placement.Pool = render.DataPool
-		if o.Spec.Placement != nil && o.Spec.Placement.Pool != "" {
-			o.Status.Placement.Pool = o.Spec.Placement.Pool
+		o.Status.Placement.Pool = render.SeatPool(run.company, o)
+		// The StatefulSet that runs the seat, unless none does: the pool
+		// is not declared, or the class runs no seat pods (none at all,
+		// or none for this seat).
+		if o.Status.Placement.Pool == crewletaiv1alpha1.DataPool || (run.class != nil && leafOpen(run.class) && len(p.unplaceable) == 0) {
+			o.Status.Placement.Workload = seatWorkloadName(run.company, o.Status.Placement.Pool, handle)
 		}
+		run.decideReady(p, o)
 		if base != "" && vendors[render.VendorSlack] {
 			o.Status.Integrations.Slack.RequestURL = base + "/webhooks/slack/" + handle
 		}
@@ -128,6 +135,8 @@ func (run *configRun) decideApplied(p *part) {
 			setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, crewletaiv1alpha1.ReasonConflict, sentences(p.conflicts))
 		case len(p.unresolved) > 0:
 			setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, p.unresolvedReason, sentences(p.unresolved))
+		case len(p.unplaceable) > 0:
+			setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, p.unplaceableReason, sentences(p.unplaceable))
 		case len(p.invalid) > 0:
 			setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, crewletaiv1alpha1.ReasonInvalid, sentences(p.invalid))
 		case p.inRevision():

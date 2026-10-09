@@ -106,3 +106,22 @@ func TestCompanyWritersRefuseWhatWouldIgnoreThem(t *testing.T) {
 		})
 	}
 }
+
+// TestNodeRefusesACallersTierA: WithNode writes the node block of
+// enginetest's own Tier A; with WithTierA the engine would run the caller's
+// node instead while the test believed otherwise, so Start fails the test
+// before it runs anything.
+func TestNodeRefusesACallersTierA(t *testing.T) {
+	defer func() {
+		msg, ok := recover().(fatal)
+		if !ok {
+			t.Fatal("Start ran an engine with WithTierA and WithNode")
+		}
+		if !strings.Contains(string(msg), "WithTierA and WithNode do not combine") {
+			t.Errorf("Start failed with %q, which does not say the two options do not combine", msg)
+		}
+	}()
+	enginetest.Start(fatalT{t}, enginetest.WithNode("n", nil), enginetest.WithTierA("operator-token", "access-token", func(int, string) []byte {
+		panic(fatal("Start rendered the caller's Tier A, which ignores the node"))
+	}))
+}

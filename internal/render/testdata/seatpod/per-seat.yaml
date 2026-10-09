@@ -1,0 +1,27 @@
+coordination:
+  type: embedded-kv
+node:
+  id: ${CREWLET_NODE_ID}
+  labels:
+    crewlet.ai/seat: ${CREWLET_SEAT}
+  max_concurrent: 4
+  roles:
+  - seats
+retention:
+  backup_owner: platform-oncall
+secrets:
+  active_key_id: k1
+  keys:
+  - id: k1
+    material: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+store:
+  objects:
+    backend: nats
+  path: /var/lib/crewlet/store/crewlet.db
+  scratch: true
+stream:
+  leaf:
+    urls:
+    - nats-leaf://nimbus-data-0.nimbus-data.tenant-nimbus.svc:7422
+  replicas: 1
+  type: embedded

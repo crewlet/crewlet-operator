@@ -1,0 +1,44 @@
+name: Nimbus
+providers:
+  llm:
+    claude:
+      api_keys:
+      - ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+      model: claude-sonnet-5
+      type: anthropic
+  llm_order:
+  - claude
+roles:
+- goal: Keep CI green.
+  handle: ana
+  kind: agent
+  name: ana
+  placement:
+    labels:
+      crewlet.ai/seat: ana
+- goal: Answer support email.
+  handle: bo
+  kind: agent
+  name: bo
+  placement:
+    labels:
+      crewlet.ai/pool: general
+- goal: Write the weekly report.
+  handle: cy
+  kind: agent
+  name: cy
+  placement:
+    labels:
+      crewlet.ai/pool: data
+- goal: Reindex the archive.
+  handle: dee
+  kind: agent
+  name: dee
+  placement:
+    labels:
+      crewlet.ai/pool: batch
+- contact:
+    slack_user_id: U0JANE
+  handle: jane
+  kind: human
+  name: jane

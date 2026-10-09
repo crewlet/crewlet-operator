@@ -534,7 +534,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Ready (the summary), Accepted, RuntimeReady,<br />SecretsSynced, ConfigApplied and Exposed, which Ready summarizes, and<br />EngineHealthy, which it does not. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Ready (the summary), Accepted, RuntimeReady,<br />SecretsSynced, ConfigApplied and Exposed, which Ready summarizes, and<br />EngineHealthy and SeatsPlaced, which it does not. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `engine` _[EngineStatus](#enginestatus)_ | engine is what runs the company. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `topology` _[TopologyStatus](#topologystatus)_ | topology is the state of the company's pods. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -547,9 +547,10 @@ _Appears in:_
 
 
 
-CompanyTopology is how a company's engine is laid out in pods. In v1alpha1
-it is one data pod that serves the API, runs every seat and runs the
-background workers.
+CompanyTopology is how a company's engine is laid out in pods: one data pod
+that holds the estate, serves the API and runs the background workers, and
+the seat pools, stateless pods that run the seats placed in them. Without
+seat pools every seat runs on the data pod.
 
 _Validation:_
 - MinProperties: 1
@@ -560,6 +561,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `data` _[DataTopology](#datatopology)_ | data is the pods that hold the estate. | \{ replicas:1 \} | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `defaultSeatPool` _string_ | defaultSeatPool is the pool of every agent seat whose Seat names no<br />spec.placement.pool: data, or the name of a Shared pool of seatPools. | data | MaxLength: 20 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
+| `seatPools` _[SeatPool](#seatpool) array_ | seatPools are stateless pods that run seats. They need the class's<br />spec.seatPools.policy Allowed, and together run at most its maxPods<br />pods. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 
 
 #### ConfigSettings
@@ -598,6 +601,7 @@ _Appears in:_
 | `appliedHash` _string_ | appliedHash is the hash of the rendered document and of the values<br />of the Secret keys it references, as last applied: a change to<br />either is applied as a new revision, since the engine reads a<br />rotated value only when a revision activates. The values enter it<br />only as keyed fingerprints, so it reveals nothing about them. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `appliedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#time-v1-meta)_ | appliedAt is when the operator last applied a revision. |  | Optional: \{\} <br /> |
 | `objects` _[AppliedObjectCounts](#appliedobjectcounts)_ | objects counts the objects the revision was rendered from. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `placement` _[RevisionPlacement](#revisionplacement)_ | placement is where the revision the engine runs pins its agent seats,<br />read from the engine's document under every management policy. The<br />operator keeps a seat pool's pods running while the running revision<br />pins a seat to them, even after the pool or the seat's placement is<br />gone from the spec: a pod stopped while its seat is still pinned to<br />it would leave the seat held by nobody, and a blocked document keeps<br />the last good revision running. Once a revision that pins nothing to<br />them runs, the pods are deleted. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### ConfluenceIntegration
@@ -654,8 +658,8 @@ _Appears in:_
 
 
 DataPodSettings sizes the pods that hold a company's estate. In v1alpha1 a
-company runs exactly one data pod, which also serves the API, runs every
-seat and runs the background workers.
+company runs exactly one data pod, which also serves the API, runs the
+background workers and runs every seat placed in the pool data.
 
 
 
@@ -922,6 +926,7 @@ _Appears in:_
 | `allowedNamespaces` _[LabelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#labelselector-v1-meta)_ | allowedNamespaces selects, by their labels, the namespaces whose<br />Companies may run with this class, as a Gateway's<br />allowedRoutes.namespaces.selector does; a Company in any other<br />namespace is not accepted (Accepted=False, ClassNotAllowed). Unset, or<br />an empty selector, admits every namespace.<br />Running with a class is a privilege, and any subject that may write a<br />Company may name any class: the class carries the platform's Secrets<br />it references (platform model keys, telemetry headers, env values)<br />into each of its companies' namespaces and engines, its workload<br />identity onto the engine ServiceAccount, and its scheduling onto the<br />platform's nodes. A class with any of those should name the<br />namespaces it is for. To select namespaces by name, match the label<br />kubernetes.io/metadata.name, which the API server sets on every<br />namespace. |  | Optional: \{\} <br /> |
 | `engine` _[EngineSettings](#enginesettings)_ | engine is the engine image. |  | Required: \{\} <br /> |
 | `data` _[DataPodSettings](#datapodsettings)_ | data sizes the pods that hold each company's estate. |  | Required: \{\} <br /> |
+| `seatPools` _[SeatPoolSettings](#seatpoolsettings)_ | seatPools is whether each company may run seats on stateless pods of<br />its own, and how many. | \{ policy:Forbidden \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `stream` _[StreamSettings](#streamsettings)_ | stream is how each company's event stream runs. | \{ mode:Embedded \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `objects` _[ObjectSettings](#objectsettings)_ | objects is where each company's files are kept. | \{ backend:NATS \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `exposure` _[ExposureSettings](#exposuresettings)_ | exposure is how each company is reached from outside its namespace. | \{ api:map[mode:ClusterInternal] webhooks:map[mode:None] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -2402,6 +2407,27 @@ _Appears in:_
 | `backupOwner` _string_ | backupOwner names whoever is responsible for backing up the companies'<br />data volumes; the engine warns while none is named. Crewlet's<br />retention.backup_owner. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 
 
+#### RevisionPlacement
+
+
+
+RevisionPlacement is where a revision of the company document pins its
+agent seats: the values of the two placement labels its roles name. Only
+values that can name one of the company's pods are recorded: a pool name
+and a seat handle.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [ConfigStatus](#configstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `pools` _string array_ | pools are the values of the crewlet.ai/pool placement label: data,<br />and each Shared pool a seat is pinned to. |  | MaxItems: 64 <br />items:MaxLength: 20 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
+| `seats` _string array_ | seats are the values of the crewlet.ai/seat placement label: the<br />handle of each seat pinned to its own pods in a PerSeat pool. A<br />revision that pins more seats than the list holds records the first<br />in handle order; the pods of the others are kept only while their<br />seats stay in a PerSeat pool. |  | MaxItems: 1024 <br />items:MaxLength: 63 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9][a-z0-9-]*$` <br />Optional: \{\} <br /> |
+
+
 #### S3ObjectSettings
 
 
@@ -2818,7 +2844,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `pool` _string_ | pool is the pool of pods that runs the seat. In v1alpha1 every seat<br />runs on the company's data pod, whose pool is data. | data | MaxLength: 20 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `pool` _string_ | pool is the pool of pods that runs the seat: data, the company's data<br />pods, or the name of one of the Company's spec.topology.seatPools.<br />The seat is pinned to the pool with Crewlet's role.placement, which<br />the engine never widens: while the pool runs no pod, the seat runs<br />nowhere and its messages wait for one. |  | MaxLength: 20 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Required: \{\} <br /> |
 
 
 #### SeatPlacementStatus
@@ -2835,7 +2861,146 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `pool` _string_ | pool is the pool of pods that runs the seat: spec.placement.pool, or<br />data. The seat is rendered with role.placement.labels<br />\{crewlet.ai/pool: <pool>\}, which only the pool's pods carry. |  | MaxLength: 20 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `pool` _string_ | pool is the pool of pods that runs the seat: spec.placement.pool, or<br />the Company's spec.topology.defaultSeatPool. The seat is rendered with<br />role.placement.labels \{crewlet.ai/pool: <pool>\}, which only the pool's<br />pods carry, or, in a PerSeat pool, \{crewlet.ai/seat: <handle>\}, which<br />only the seat's own pods carry. |  | MaxLength: 20 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `workload` _string_ | workload is the name of the StatefulSet whose pods may run the seat:<br />the data pods', the Shared pool's, or the seat's own in a PerSeat<br />pool. |  | MaxLength: 63 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `node` _string_ | node is the engine node, a pod's name, that holds the seat's lease<br />and runs it, as the engine's GET /fleet last reported. Unset while no<br />node holds it. |  | MaxLength: 64 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+
+
+#### SeatPool
+
+
+
+SeatPool is a set of stateless pods that run seats: they hold no data, join
+the company's event stream through the data pods, and keep a scratch store
+they delete at every start. A seat runs in it when its Seat's
+spec.placement.pool names it, or when it is the Company's defaultSeatPool
+and the Seat names no pool. The class's spec.seatPools.policy must be
+Allowed.
+
+The operator runs a Shared pool as the StatefulSet <company>-seats-<name>,
+and each seat of a PerSeat pool as <company>-seat-<handle>, started only
+once the data pods are ready and rolled only after them. The pods have no
+port and no probe: the engine serves nothing, health and readiness
+included, on a node without the ingress role, so a pod counts as ready as
+soon as its container runs, and a rollout is paced by a minReadySeconds of
+60 instead.
+
+
+
+_Appears in:_
+- [CompanyTopology](#companytopology)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name identifies the pool: a DNS label of at most 20 characters, other<br />than data, which is the data pods' pool. It names the pool's pods and<br />is the value of the crewlet.ai/pool label a Shared pool's seats are<br />pinned to. |  | MaxLength: 20 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Required: \{\} <br /> |
+| `mode` _[SeatPoolMode](#seatpoolmode)_ | mode is how the pool runs its seats. | Shared | Enum: [Shared PerSeat] <br />Optional: \{\} <br /> |
+| `replicas` _integer_ | replicas is, for a Shared pool, how many pods it runs, 0 to 100: at 0<br />its seats run nowhere, and their messages wait for a pod. For a<br />PerSeat pool it is how many pods it runs for each of its seats, 1 or<br />2. | 1 | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `maxConcurrentTurns` _integer_ | maxConcurrentTurns is how many turns one of the pool's pods runs at<br />once: Crewlet's node.max_concurrent. Unset takes the class's<br />seatPools.defaults. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#resourcerequirements-v1-core)_ | resources are the compute resources of each of the pool's pods'<br />engine container. Unset takes the class's seatPools.defaults. |  | Optional: \{\} <br /> |
+| `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long one of the pool's pods may<br />take to stop, finishing its running turns: the engine puts no bound<br />of its own on that drain, so it must cover the longest turn. Unset<br />takes the class's seatPools.defaults, else 300. |  | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
+
+
+#### SeatPoolDefaults
+
+
+
+SeatPoolDefaults sizes the pods of a seat pool that does not size its own.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [SeatPoolSettings](#seatpoolsettings)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `maxConcurrentTurns` _integer_ | maxConcurrentTurns is how many turns one seat pod runs at once: Crewlet's<br />node.max_concurrent. Unset takes the engine's default, 32. A seat runs<br />one turn at a time, so a pod never runs more turns at once than it<br />holds seats. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#resourcerequirements-v1-core)_ | resources are the compute resources of a seat pod's engine container.<br />Unset sets none. |  | Optional: \{\} <br /> |
+| `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long a seat pod may take to stop.<br />A seat pod finishes its running turns before it exits, with no bound<br />of its own, so unset is five minutes, as for a data pod, rather than<br />the Kubernetes default of thirty seconds. |  | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
+| `scratchSizeLimit` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | scratchSizeLimit caps the emptyDir a seat pod keeps its scratch store<br />in: a store the engine deletes at every start, its native library<br />(about 20 MB, extracted at every start) and the files of the<br />processes it runs (stdio MCP servers, git). A pod that writes more is<br />evicted. Unset is 2Gi. |  | Optional: \{\} <br /> |
+
+
+#### SeatPoolMode
+
+_Underlying type:_ _string_
+
+SeatPoolMode is how a seat pool runs the seats placed in it.
+
+_Validation:_
+- Enum: [Shared PerSeat]
+
+_Appears in:_
+- [SeatPool](#seatpool)
+- [SeatPoolStatus](#seatpoolstatus)
+
+| Field | Description |
+| --- | --- |
+| `Shared` | SeatPoolShared runs replicas pods that share the pool's seats between<br />them: each takes an even share, and a pod that stops hands its seats<br />to the others.<br /> |
+| `PerSeat` | SeatPoolPerSeat runs replicas pods for each seat placed in the pool,<br />each holding that seat alone. It needs the class's<br />seatPools.allowPerSeat.<br /> |
+
+
+#### SeatPoolPolicy
+
+_Underlying type:_ _string_
+
+SeatPoolPolicy is whether a class's companies may run seats on pods of
+their own, outside the data pods.
+
+_Validation:_
+- Enum: [Forbidden Allowed]
+
+_Appears in:_
+- [SeatPoolSettings](#seatpoolsettings)
+
+| Field | Description |
+| --- | --- |
+| `Forbidden` | SeatPoolsForbidden runs every seat on the data pods. A Company of the<br />class may declare no spec.topology.seatPools.<br /> |
+| `Allowed` | SeatPoolsAllowed lets a Company declare seat pools, and opens the<br />leaf listener its seat pods join the company's event stream through<br />on every data pod of the class, from the data pod's first start, so<br />that a company adding its first pool restarts nothing.<br /> |
+
+
+#### SeatPoolSettings
+
+
+
+SeatPoolSettings is whether, and how far, a class's companies may run seats
+on stateless pods of their own (a Company's spec.topology.seatPools). A seat
+pod holds no data: it joins the company's event stream as a NATS leaf of the
+data pods, keeps a scratch store it deletes at every start, and runs the
+seats placed in its pool.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [EngineClassSpec](#engineclassspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `policy` _[SeatPoolPolicy](#seatpoolpolicy)_ | policy is whether the class's companies may declare seat pools.<br />Changing it restarts every data pod of the class, which opens or<br />closes the leaf listener. | Forbidden | Enum: [Forbidden Allowed] <br />Optional: \{\} <br /> |
+| `allowPerSeat` _boolean_ | allowPerSeat lets a Company declare a PerSeat pool, which runs one<br />pod (or two, a warm standby) for each seat placed in it. Each costs a<br />pod, and every pod's work grows with the number of seats of the<br />company, so it is off by default and meant for the few seats that<br />need a pod to themselves. It isolates a seat's compute and its<br />failures, not its credentials: every pod of a company can read the<br />company's whole secret store. |  | Optional: \{\} <br /> |
+| `maxPods` _integer_ | maxPods is the most seat pods a Company of the class may run, all of<br />its pools together: each Shared pool's replicas, and each PerSeat<br />pool's replicas for every seat placed in it. The data pods are not<br />counted. Unset is unlimited. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `defaults` _[SeatPoolDefaults](#seatpooldefaults)_ | defaults size the pods of a pool that does not size its own. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+
+
+#### SeatPoolStatus
+
+
+
+SeatPoolStatus is the state of one seat pool's pods.
+
+
+
+_Appears in:_
+- [TopologyStatus](#topologystatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name is the pool's name. |  | MaxLength: 20 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `mode` _[SeatPoolMode](#seatpoolmode)_ | mode is how the pool runs its seats. |  | Enum: [Shared PerSeat] <br />Optional: \{\} <br /> |
+| `replicas` _integer_ | replicas is the number of the pool's pods, every seat's together for<br />a PerSeat pool. |  | Minimum: 0 <br />Optional: \{\} <br /> |
+| `readyReplicas` _integer_ | readyReplicas is the number of the pool's pods that are ready. |  | Minimum: 0 <br />Optional: \{\} <br /> |
+| `updatedReplicas` _integer_ | updatedReplicas is the number of the pool's pods that run the<br />current pod template. |  | Minimum: 0 <br />Optional: \{\} <br /> |
+| `seats` _integer_ | seats is the number of agent seats placed in the pool. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 
 
 #### SeatSandbox
@@ -2892,7 +3057,7 @@ _Appears in:_
 | `learningEnabled` _boolean_ | learningEnabled overrides the company's learning setting for this<br />seat: false stops reflection after the seat's turns. Unset inherits.<br />Crewlet's `learning_enabled`. |  | Optional: \{\} <br /> |
 | `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are the seat's own tool-server credentials, which make it act as<br />itself on each server. They are merged over its unit's, per variable.<br />One entry per server, keyed by its name. Crewlet's `mcp_env`, a<br />credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `sandbox` _[SeatSandbox](#seatsandbox)_ | sandbox gives the seat a sandbox to run code in. Unset gives it none. |  | Optional: \{\} <br /> |
-| `placement` _[SeatPlacement](#seatplacement)_ | placement is where the seat runs. |  | Optional: \{\} <br /> |
+| `placement` _[SeatPlacement](#seatplacement)_ | placement is where the seat runs. Unset runs it in the Company's<br />spec.topology.defaultSeatPool. |  | Optional: \{\} <br /> |
 | `paused` _boolean_ | paused says whether the seat may take work. True pauses it: it starts<br />no new turn, the mail it is sent waits on its inbox in order, and its<br />schedules' fires are skipped rather than queued; the turn it is on<br />finishes first unless stopRunning is set. False resumes it, and what<br />waited is delivered first. Unset leaves the seat's pause to the people<br />who run the company in the engine's dashboard: the operator reports a<br />pause they take, and never lifts it.<br />A pause is not part of the company document. Crewlet keeps it in its<br />coordination store, changed through its operator catalogue's<br />pause_seat and resume_seat tools, which the operator calls under the<br />Company's Enforce policy whenever the seat's pause differs from this<br />field; under Observe and Seed it only reports the difference. |  | Optional: \{\} <br /> |
 | `pauseReason` _string_ | pauseReason is why the seat is paused, shown on the seat and in its<br />feed in the engine. Only with paused true. The engine keeps the<br />reason a pause was taken with, so a reason changed while the seat<br />stays paused shows from the seat's next pause on. Crewlet's pause<br />`reason`. |  | MaxLength: 500 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `stopRunning` _boolean_ | stopRunning ends the turn the seat is on at its next round when it is<br />paused, rather than letting the turn finish; the stopped turn is not<br />run again. Only with paused true. Setting it on a seat already paused<br />stops the turn it is on then; unsetting it changes nothing, since a<br />stopped turn stays stopped. Crewlet's pause `stop_running`. |  | Optional: \{\} <br /> |
@@ -2917,7 +3082,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists, and no other Seat has the<br />handle, the name or a contact account; Conflict names the other),<br />ResolvedRefs (the unit, the providers, the tool servers and<br />every Secret key exist), Applied (the seat is in the revision the<br />engine runs) and, for an Agent seat the engine runs, Paused (whether<br />the engine holds it paused, and whether that is what spec.paused asks). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Accepted (the Company exists, and no other Seat has the<br />handle, the name or a contact account; Conflict names the other),<br />ResolvedRefs (the unit, the providers, the tool servers and<br />every Secret key exist), Applied (the seat is in the revision the<br />engine runs) and, on an Agent seat, Ready (an engine node holds the<br />seat's lease and runs it: LeaseHeld, or Unplaced) and, once the<br />engine runs it, Paused (whether the engine holds it paused, and<br />whether that is what spec.paused asks). |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `handle` _string_ | handle is the seat's handle: spec.handle, or the metadata.name. |  | MaxLength: 63 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `seatID` _string_ | seatID is the seat's identity in the engine, derived from the company<br />name and the handle, so that callers need not derive it themselves.<br />Unset for a Human seat, which the engine does not run and gives no<br />identity, and for a seat whose handle another Seat derives too. |  | MaxLength: 36 <br />MinLength: 36 <br />Optional: \{\} <br /> |
@@ -3214,6 +3379,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `data` _[DataTopologyStatus](#datatopologystatus)_ | data is the state of the data pods. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `seatPools` _[SeatPoolStatus](#seatpoolstatus) array_ | seatPools is the state of each seat pool's pods. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 
 
 #### TrackerBackend

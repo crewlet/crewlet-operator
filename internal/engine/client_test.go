@@ -31,6 +31,11 @@ const (
 	unconfigured = "unconfigured"
 
 	baseRevision = "rev-1"
+
+	// poolLabel and dataPool are the placement label the operator gives a
+	// data pod, and its value.
+	poolLabel = "crewlet.ai/pool"
+	dataPool  = "data"
 )
 
 // rolesOneLLM is the path of the second seat's llm, as segments.
@@ -785,28 +790,100 @@ func TestHealthReadsThePosture(t *testing.T) {
 	}
 }
 
-// TestLastApplyReadsTheAnsweringNodesRecord pins which row of /fleet is the
-// answering node's (this_node), what a failed attempt carries, and that a
-// node the fleet does not list has recorded nothing.
-func TestLastApplyReadsTheAnsweringNodesRecord(t *testing.T) {
-	const fleet = `{"this_node":"node-1","nodes":[
-		{"id":"node-0","config_epoch":9,"config_revision_id":"r9","config_status":"ok","config_error":""},
-		{"id":"node-1","config_epoch":9,"config_revision_id":"r9","config_status":"error","config_error":"engine: apply: no such provider"}]}`
+// TestFleetReadsNodesAndSeatLeases pins the read of /fleet as the engine
+// writes it: each node's roles, broker, labels and apply record, which node
+// holds each seat since when, and the handles of the seats no node may run.
+func TestFleetReadsNodesAndSeatLeases(t *testing.T) {
+	const fleet = `{
+  "nodes": [
+    {"id": "nimbus-data-0", "roles": ["data", "ingress", "seats", "workers"], "broker": "member",
+     "labels": {"crewlet.ai/pool": "data"}, "owner": "nimbus-data-0:8f2a", "protocol": 4, "seats": 1, "expires_in": 41,
+     "config_epoch": 7, "config_status": "ok", "config_error": "", "config_revision_id": "r7",
+     "config_reported_at": "2026-09-23T08:02:11.482Z", "in_flight": 0, "draining": false},
+    {"id": "nimbus-seats-general-0", "roles": ["seats"], "broker": "leaf",
+     "labels": {"crewlet.ai/pool": "general"}, "owner": "nimbus-seats-general-0:11aa", "protocol": 4, "seats": 1,
+     "expires_in": 40, "config_epoch": 7, "config_status": "error", "config_error": "engine: apply: no such provider",
+     "config_revision_id": "r7", "config_reported_at": ""}
+  ],
+  "seats": [
+    {"handle": "ana", "node": "nimbus-data-0", "owner": "nimbus-data-0:8f2a", "epoch": 4, "expires_in": 41,
+     "acquired_at": "2026-09-23T08:02:11.482Z"},
+    {"handle": "bo", "node": "nimbus-seats-general-0", "owner": "nimbus-seats-general-0:11aa", "epoch": 2,
+     "expires_in": 40, "acquired_at": ""}
+  ],
+  "duties": [{"duty": "maintenance", "node": "nimbus-data-0", "expires_in": 41}],
+  "unplaceable": [{"handle": "cy", "placement": {"Node": "", "Labels": {"crewlet.ai/seat": "cy"}}}],
+  "unmanned_roles": [],
+  "this_node": "nimbus-seats-general-0",
+  "target_epoch": 7,
+  "activation": {"epoch": 7, "revision_id": "r7", "at": "2026-09-23T08:00:00Z", "summary": "crewlet-operator"}
+}`
 	f := newFakeEngine(t)
 	f.handle("GET /fleet", answer(http.StatusOK, fleet))
-	got, err := f.client().LastApply(context.Background())
+	got, err := f.client().Fleet(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := engine.ApplyRecord{Epoch: 9, RevisionID: "r9", Status: engine.ApplyError, Error: "engine: apply: no such provider"}
-	if got != want || !got.Status.Failed() {
-		t.Fatalf("LastApply() = %+v, want %+v, failed", got, want)
+	if got.ThisNode != "nimbus-seats-general-0" || got.TargetEpoch != 7 || len(got.UnmannedRoles) != 0 {
+		t.Errorf("Fleet() = this node %q, target %d, unmanned %v", got.ThisNode, got.TargetEpoch, got.UnmannedRoles)
+	}
+	data, ok := got.Node("nimbus-data-0")
+	if !ok || data.Broker != engine.BrokerMember || data.Seats != 1 || data.Labels[poolLabel] != dataPool ||
+		!slices.Equal(data.Roles, []string{dataPool, "ingress", "seats", "workers"}) ||
+		data.Apply != (engine.ApplyRecord{Epoch: 7, RevisionID: "r7", Status: engine.ApplyOK}) {
+		t.Errorf("Node(nimbus-data-0) = %+v, %t", data, ok)
+	}
+	if _, ok := got.Node("nimbus-data-1"); ok {
+		t.Error("Node(nimbus-data-1) found a node the fleet does not list")
+	}
+	ana, ok := got.Holder("ana")
+	if want := time.Date(2026, 9, 23, 8, 2, 11, 482_000_000, time.UTC); !ok || ana.Node != "nimbus-data-0" || ana.Epoch != 4 ||
+		!ana.AcquiredAt.Equal(want) {
+		t.Errorf("Holder(ana) = %+v, %t, want nimbus-data-0 at epoch 4 since %s", ana, ok, want)
+	}
+	if bo, ok := got.Holder("bo"); !ok || bo.Node != "nimbus-seats-general-0" || !bo.AcquiredAt.IsZero() {
+		t.Errorf("Holder(bo) = %+v, %t, want nimbus-seats-general-0 with no tenure", bo, ok)
+	}
+	if _, ok := got.Holder("cy"); ok || !slices.Equal(got.Unplaceable, []string{"cy"}) {
+		t.Errorf("cy: held %t, unplaceable %v; want held by nobody and unplaceable", ok, got.Unplaceable)
+	}
+	// The answering node's own record, failed.
+	record := got.LastApply()
+	if want := (engine.ApplyRecord{Epoch: 7, RevisionID: "r7", Status: engine.ApplyError, Error: "engine: apply: no such provider"}); record != want ||
+		!record.Status.Failed() {
+		t.Errorf("LastApply() = %+v, want %+v, failed", record, want)
+	}
+}
+
+// TestFleetLastApplyOfAnUnlistedNodeIsNone pins that a node the fleet does
+// not list yet has recorded nothing, rather than another node's record.
+func TestFleetLastApplyOfAnUnlistedNodeIsNone(t *testing.T) {
+	f := newFakeEngine(t)
+	f.handle("GET /fleet", answer(http.StatusOK, `{"this_node":"node-2","nodes":[{"id":"node-0","config_status":"error"}]}`))
+	got, err := f.client().Fleet(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record := got.LastApply(); record != (engine.ApplyRecord{}) || record.Status.Failed() {
+		t.Fatalf("LastApply() of an unlisted node = %+v, want the zero record", record)
+	}
+}
+
+// TestFleetRefusals pins that a fleet the engine cannot read, or one it
+// describes with a tenure that is not a time, is an error and never an
+// empty fleet: an empty one would read as every seat unplaced.
+func TestFleetRefusals(t *testing.T) {
+	unavailable := newFakeEngine(t)
+	unavailable.handle("GET /fleet", answer(http.StatusServiceUnavailable, `{"error":"unavailable","message":"the lease table could not be read"}`))
+	if got, err := unavailable.client().Fleet(context.Background()); err == nil {
+		t.Errorf("Fleet() of an engine answering 503 = %+v, want an error", got)
+	} else if apiErr, ok := errors.AsType[*engine.APIError](err); !ok || apiErr.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("Fleet() of an engine answering 503 = %v, want an *APIError with status 503", err)
 	}
 
-	unlisted := newFakeEngine(t)
-	unlisted.handle("GET /fleet", answer(http.StatusOK, `{"this_node":"node-2","nodes":[{"id":"node-0","config_status":"error"}]}`))
-	got, err = unlisted.client().LastApply(context.Background())
-	if err != nil || got != (engine.ApplyRecord{}) || got.Status.Failed() {
-		t.Fatalf("LastApply() of an unlisted node = %+v, %v, want the zero record", got, err)
+	malformed := newFakeEngine(t)
+	malformed.handle("GET /fleet", answer(http.StatusOK, `{"this_node":"n","seats":[{"handle":"ana","node":"n","acquired_at":"yesterday"}]}`))
+	if got, err := malformed.client().Fleet(context.Background()); err == nil || !strings.Contains(err.Error(), "acquired_at") {
+		t.Errorf("Fleet() with a malformed acquired_at = %+v, %v, want an error naming acquired_at", got, err)
 	}
 }

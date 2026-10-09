@@ -3,6 +3,7 @@ package crd_test
 import (
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,6 +48,7 @@ func TestEngineClassDefaults(t *testing.T) {
 		{"exposure.webhooks.mode", s.Exposure.Webhooks.Mode, v1.WebhookExposureNone},
 		{"exposure.api.mode", s.Exposure.API.Mode, v1.APIExposureClusterInternal},
 		{"networkPolicy.mode", s.NetworkPolicy.Mode, v1.NetworkPolicyIsolated},
+		{"seatPools", s.SeatPools, v1.SeatPoolSettings{Policy: v1.SeatPoolsForbidden}},
 	} {
 		if !equal(c.got, c.want) {
 			t.Errorf("%s defaulted to %v, want %v", c.field, c.got, c.want)
@@ -459,6 +461,69 @@ func TestEngineClassPods(t *testing.T) {
 			name:   "OPENAI_API_KEY is refused",
 			mutate: classEnv(v1.ClassEnvVar{Name: "OPENAI_API_KEY", ValueFrom: platformKey}),
 			want:   msgProviderKeyEnv,
+		},
+	})
+}
+
+func TestEngineClassSeatPools(t *testing.T) {
+	pools := func(p v1.SeatPoolSettings) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) { c.Spec.SeatPools = p }
+	}
+	scratch := func(size string) func(*v1.EngineClass) {
+		return pools(v1.SeatPoolSettings{
+			Policy:   v1.SeatPoolsAllowed,
+			Defaults: v1.SeatPoolDefaults{ScratchSizeLimit: new(resource.MustParse(size))},
+		})
+	}
+	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
+		{
+			name: "every setting under Allowed is accepted",
+			mutate: pools(v1.SeatPoolSettings{
+				Policy:       v1.SeatPoolsAllowed,
+				AllowPerSeat: new(true),
+				MaxPods:      6,
+				Defaults: v1.SeatPoolDefaults{
+					MaxConcurrentTurns: 4,
+					Resources: &corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("1Gi")},
+					},
+					TerminationGracePeriodSeconds: 600,
+					ScratchSizeLimit:              new(resource.MustParse("4Gi")),
+				},
+			}),
+		},
+		{name: "Forbidden alone is accepted", mutate: pools(v1.SeatPoolSettings{Policy: v1.SeatPoolsForbidden})},
+		{
+			name:   "allowPerSeat under Forbidden is refused",
+			mutate: pools(v1.SeatPoolSettings{Policy: v1.SeatPoolsForbidden, AllowPerSeat: new(true)}),
+			want:   msgPoolsAllowedOnly,
+		},
+		{
+			name:   "maxPods under Forbidden is refused",
+			mutate: pools(v1.SeatPoolSettings{Policy: v1.SeatPoolsForbidden, MaxPods: 6}),
+			want:   msgPoolsAllowedOnly,
+		},
+		{
+			// The policy defaults to Forbidden, so a class that sets only
+			// a limit has pools it does not allow.
+			name:   "defaults with no policy are refused",
+			mutate: pools(v1.SeatPoolSettings{Defaults: v1.SeatPoolDefaults{MaxConcurrentTurns: 4}}),
+			want:   msgPoolsAllowedOnly,
+		},
+		{
+			name:   "a negative maxPods is refused",
+			mutate: pools(v1.SeatPoolSettings{Policy: v1.SeatPoolsAllowed, MaxPods: -1}),
+			want:   "should be greater than or equal to 1",
+		},
+		{name: "a scratch limit of 256Mi is accepted", mutate: scratch("256Mi")},
+		{name: "a scratch limit under 256Mi is refused", mutate: scratch("255Mi"), want: msgScratchFloor},
+		{
+			name: "a grace period under 30 seconds is refused",
+			mutate: pools(v1.SeatPoolSettings{
+				Policy:   v1.SeatPoolsAllowed,
+				Defaults: v1.SeatPoolDefaults{TerminationGracePeriodSeconds: 10},
+			}),
+			want: "should be greater than or equal to 30",
 		},
 	})
 }

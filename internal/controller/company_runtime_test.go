@@ -382,9 +382,9 @@ var _ = Describe("Company runtime", func() {
 		}
 		Expect(container.VolumeMounts).To(ContainElements(
 			corev1.VolumeMount{Name: "data", MountPath: "/var/lib/crewlet"},
-			corev1.VolumeMount{Name: "config", MountPath: "/etc/crewlet", ReadOnly: true},
+			corev1.VolumeMount{Name: configVolumeName, MountPath: "/etc/crewlet", ReadOnly: true},
 		))
-		Expect(pod.Spec.Volumes).To(ContainElement(corev1.Volume{Name: "config",
+		Expect(pod.Spec.Volumes).To(ContainElement(corev1.Volume{Name: configVolumeName,
 			Secret: &corev1.SecretVolumeSource{
 				SecretName:  bootstrapName,
 				Items:       []corev1.KeyToPath{{Key: configFile, Path: configFile}},
@@ -1639,7 +1639,7 @@ var _ = Describe("Company runtime event filters", func() {
 			}
 			return c
 		}
-		changed := configAppliedChanged()
+		changed := configReported()
 		update := func(old, updated *crewletaiv1alpha1.Company) bool {
 			return changed.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated})
 		}

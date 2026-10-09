@@ -20,16 +20,24 @@ import (
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
 )
 
-// What a data pod looks like from the inside. The runtime reconciler mounts
-// the data volume and opens the port the document names, so both are
+// What an engine pod looks like from the inside. The runtime reconciler
+// mounts the volume and opens the ports the documents name, so they are
 // constants the two share rather than strings each spells.
 const (
-	// DataDir is where a data pod's volume is mounted. The store, its
-	// snapshots and the event stream all live under it.
+	// DataDir is where a data pod's volume is mounted, and a seat pod's
+	// scratch emptyDir. A data pod keeps its store, its snapshots and the
+	// event stream under it; a seat pod its scratch store.
 	DataDir = "/var/lib/crewlet"
 	// APIPort is the port the engine serves its API, dashboard and
-	// webhooks on.
+	// webhooks on. Only a data pod serves them.
 	APIPort = 8080
+	// LeafPort is the port of a data pod's leaf listener, which the seat
+	// pods join the company's event stream through. It is open only when
+	// the class's seatPools.policy is Allowed. Like every port of
+	// Crewlet's embedded broker it accepts any connection that reaches it,
+	// with no authentication and no TLS, so only a NetworkPolicy keeps
+	// another tenant's pods off it.
+	LeafPort = 7422
 )
 
 // The API tokens of an engine. Each id is recorded by Crewlet as the author
@@ -44,11 +52,18 @@ const (
 	TokenAccess = "access"
 )
 
-// EnvNodeID is the one environment variable a data pod's Tier A refers to:
-// the pod's name, which the Downward API gives it. Every credential of Tier A
-// is written into the document itself instead, which is kept in a Secret;
-// see Bootstrap for why none is an environment variable.
-const EnvNodeID = "CREWLET_NODE_ID"
+// The environment variables a Tier A refers to. Every credential of Tier A is
+// written into the document itself instead, which is kept in a Secret; see
+// Bootstrap for why none is an environment variable.
+const (
+	// EnvNodeID is the pod's name, which the Downward API gives it: the
+	// node's identity, on every engine pod.
+	EnvNodeID = "CREWLET_NODE_ID"
+	// EnvSeat is the handle of the one seat a PerSeat pool's pod runs. Its
+	// Tier A carries it in node.labels as a reference, so the pool's pods
+	// share one document and each StatefulSet gives its pods their seat.
+	EnvSeat = "CREWLET_SEAT"
+)
 
 // BootstrapInput is what a data pod's Tier A is rendered from.
 type BootstrapInput struct {
@@ -107,7 +122,7 @@ type BootstrapDocument struct {
 
 type bootstrapDoc struct {
 	Node         nodeDoc         `json:"node"`
-	API          apiDoc          `json:"api"`
+	API          *apiDoc         `json:"api,omitempty"`
 	Store        storeDoc        `json:"store"`
 	Stream       streamDoc       `json:"stream"`
 	Coordination coordinationDoc `json:"coordination"`
@@ -116,9 +131,10 @@ type bootstrapDoc struct {
 }
 
 type nodeDoc struct {
-	ID     string            `json:"id"`
-	Roles  []string          `json:"roles"`
-	Labels map[string]string `json:"labels"`
+	ID            string            `json:"id"`
+	Roles         []string          `json:"roles"`
+	Labels        map[string]string `json:"labels"`
+	MaxConcurrent int32             `json:"max_concurrent,omitempty"`
 }
 
 type apiDoc struct {
@@ -140,6 +156,7 @@ type apiTokenDoc struct {
 
 type storeDoc struct {
 	Path    string     `json:"path"`
+	Scratch bool       `json:"scratch,omitempty"`
 	Objects objectsDoc `json:"objects"`
 }
 
@@ -159,11 +176,26 @@ type s3Doc struct {
 }
 
 type streamDoc struct {
-	Type          string `json:"type"`
-	StoreDir      string `json:"store_dir"`
-	StoreMaxBytes int64  `json:"store_max_bytes"`
-	Replicas      int    `json:"replicas"`
+	Type          string   `json:"type"`
+	StoreDir      string   `json:"store_dir,omitempty"`
+	StoreMaxBytes int64    `json:"store_max_bytes,omitempty"`
+	Replicas      int      `json:"replicas"`
+	Leaf          *leafDoc `json:"leaf,omitempty"`
 }
+
+// leafDoc is stream.leaf: a member's listener (port) or a leaf's members
+// (urls), never both.
+type leafDoc struct {
+	Port int      `json:"port,omitempty"`
+	URLs []string `json:"urls,omitempty"`
+}
+
+// streamReplicas is how many copies of each stream the broker keeps: one, on
+// the one data pod v1alpha1 runs. A seat pod names the same count, because a
+// leaf that uses a stream first creates it with its own count on the
+// members, and a node configured for more replicas than an existing stream
+// has refuses to start.
+const streamReplicas = 1
 
 // The engine's event stream is given streamShareNumerator /
 // streamShareDenominator of the data volume: three quarters, the share
@@ -204,14 +236,17 @@ const defaultS3Prefix = "{{namespace}}/{{name}}/"
 const keyringKeyBytes = 32
 
 // Bootstrap renders the Tier A of a company's data pods in the v1alpha1
-// topology: one data pod that holds the estate, serves the API, runs every
-// seat and runs the workers.
+// topology: one data pod that holds the estate, serves the API, runs the
+// workers and runs the seats placed in the pool data.
 //
-// The document is already shaped for a fleet, so that stateless seat pods can
-// join later without migrating anything: coordination is the replicated
+// The document is shaped for a fleet from the first start, so that seat pods
+// can join without migrating anything: coordination is the replicated
 // embedded-kv (Crewlet refuses `local` once a second node exists), the stream
 // is persisted on the data volume, and the pod carries the data pool's
-// placement label that every agent seat is pinned to.
+// placement label. When the class allows seat pools it also opens the leaf
+// listener the seat pods join through (LeafPort), whether or not the company
+// has a pool yet: the class, not the Company, decides it, so a company that
+// adds its first pool restarts nothing.
 //
 // The credentials are written into the document as literals, never as
 // ${VAR} references to the pod's environment. Crewlet resolves a ${NAME} in
@@ -230,12 +265,6 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 		return nil, err
 	}
 
-	env := []corev1.EnvVar{
-		{Name: EnvNodeID, ValueFrom: &corev1.EnvVarSource{
-			FieldRef: &corev1.ObjectFieldSelector{APIVersion: "v1", FieldPath: "metadata.name"},
-		}},
-	}
-
 	doc := bootstrapDoc{
 		Node: nodeDoc{
 			// The pod's name, stable across restarts in a StatefulSet, is
@@ -243,9 +272,9 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 			// its id would be orphaned by an id that changed.
 			ID:     "${" + EnvNodeID + "}",
 			Roles:  []string{"data", "ingress", "seats", "workers"},
-			Labels: map[string]string{PoolLabel: DataPool},
+			Labels: map[string]string{PoolLabel: v1alpha1.DataPool},
 		},
-		API: apiDoc{
+		API: &apiDoc{
 			Host: "0.0.0.0",
 			Port: APIPort,
 			Auth: apiAuthDoc{
@@ -264,7 +293,7 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 		},
 		Store: storeDoc{
 			Path:    DataDir + "/store/crewlet.db",
-			Objects: objectsDoc{Backend: objectBackend(in.Class.Spec.Objects.Backend)},
+			Objects: objectsOf(in.Company, in.Class, in.Objects),
 		},
 		Stream: streamDoc{
 			Type: "embedded",
@@ -283,30 +312,149 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 			// storage resources available". The claim's size is the space
 			// this engine was promised, so the share is taken of that.
 			StoreMaxBytes: in.VolumeSize.Value() / streamShareDenominator * streamShareNumerator,
-			Replicas:      1,
+			Replicas:      streamReplicas,
 		},
 		Coordination: coordinationDoc{Type: "embedded-kv"},
 		Secrets:      keyring,
 		Retention:    retentionDoc{BackupOwner: in.Class.Spec.Retention.BackupOwner},
 	}
+	if in.Class.Spec.SeatPools.Policy == v1alpha1.SeatPoolsAllowed {
+		doc.Stream.Leaf = &leafDoc{Port: LeafPort}
+	}
+	return encodeBootstrap(&doc, []corev1.EnvVar{nodeIDEnv()})
+}
 
-	if in.Class.Spec.Objects.Backend == v1alpha1.ObjectBackendS3 {
-		s3 := in.Class.Spec.Objects.S3
-		doc.Store.Objects.S3 = &s3Doc{
-			Endpoint:  s3.Endpoint,
-			Region:    s3.Region,
-			Bucket:    s3.Bucket,
-			Prefix:    ExpandTemplate(cmp.Or(s3.Prefix, defaultS3Prefix), in.Company),
-			PathStyle: s3.PathStyle != nil && *s3.PathStyle,
-		}
-		// Without credentials the engine uses the SDK's default chain: the
-		// pod's workload identity or the node's role.
-		if creds := in.Objects; creds != nil {
-			doc.Store.Objects.S3.AccessKeyID = creds.AccessKeyID
-			doc.Store.Objects.S3.SecretAccessKey = creds.SecretAccessKey
-		}
+// SeatPodInput is what the Tier A of a seat pool's pods is rendered from.
+type SeatPodInput struct {
+	Company *v1alpha1.Company
+	Class   *v1alpha1.EngineClass
+	// Pool is the pool, as PlanTopology planned it.
+	Pool *PoolPlan
+	// Seat is the handle of the seat the pods run, for a PerSeat pool, and
+	// empty for a Shared pool. It is not in the document, which a PerSeat
+	// pool's pods share, but in the environment it gives them (EnvSeat).
+	Seat string
+	// Keyring is the company's keyring, as for the data pods.
+	Keyring Keyring
+	// Objects are the keys of the class's S3 bucket, as for the data pods.
+	Objects *S3Credentials
+	// DataMembers are the DNS names of every data pod, such as
+	// nimbus-data-0.nimbus-data.tenant-nimbus.svc: the pods' names in the
+	// data StatefulSet's headless Service, which resolve while the pod
+	// runs, ready or not.
+	DataMembers []string
+}
+
+// SeatPodBootstrap renders the Tier A of a seat pool's pods: a node with the
+// seats role alone, which holds no data. Its store is scratch, deleted at
+// every start; it joins the company's event stream as a NATS leaf of the data
+// pods, with JetStream off, holding nothing and voting in nothing; and it
+// takes the company document from coordination, so it is given none.
+//
+// What it shares with the company it must share exactly: the keyring, since it
+// opens the company document and the secret store itself; the object store,
+// which every node checks against the one the company recorded and refuses
+// to start on another; the stream's replica count; and the backup owner the
+// data pods name. Those blocks are rendered by the same code as the data
+// pods'. It has no API block: a node without the ingress role serves
+// nothing, and holds no API token.
+//
+// A Shared pool's pods carry the pool's own placement label. A PerSeat pool's
+// carry the seat label with the seat's handle, which the document refers to
+// as ${CREWLET_SEAT}, so one document serves the whole pool and each seat's
+// StatefulSet gives its pods their seat through Env. Like the data pods',
+// the document holds the keyring and the object store's keys as values, and
+// is kept in a Secret.
+//
+// It fails when the keyring cannot be used, as Bootstrap does, when no data
+// member is given, and when Seat does not match the pool's mode.
+func SeatPodBootstrap(in *SeatPodInput) (*BootstrapDocument, error) {
+	keyring, err := keyringOf(in.Keyring)
+	if err != nil {
+		return nil, err
+	}
+	if len(in.DataMembers) == 0 {
+		return nil, errors.New("a seat pod joins the company's event stream through a data pod, and no data pod was given")
+	}
+	env := []corev1.EnvVar{nodeIDEnv()}
+	labels := map[string]string{PoolLabel: in.Pool.Name}
+	switch {
+	case in.Pool.Mode == v1alpha1.SeatPoolPerSeat && in.Seat == "":
+		return nil, fmt.Errorf("the pods of PerSeat pool %s run one seat each, and no seat was given", in.Pool.Name)
+	case in.Pool.Mode == v1alpha1.SeatPoolPerSeat:
+		labels = map[string]string{SeatLabel: "${" + EnvSeat + "}"}
+		env = append(env, corev1.EnvVar{Name: EnvSeat, Value: in.Seat})
+	case in.Seat != "":
+		return nil, fmt.Errorf("the pods of Shared pool %s share its seats, and were given seat %s of their own", in.Pool.Name, in.Seat)
 	}
 
+	urls := make([]string, len(in.DataMembers))
+	for i, host := range in.DataMembers {
+		// Any one that answers will do; listing every member lets the
+		// leaf rejoin through another when one is down.
+		urls[i] = fmt.Sprintf("nats-leaf://%s:%d", host, LeafPort)
+	}
+	doc := bootstrapDoc{
+		Node: nodeDoc{
+			ID:            "${" + EnvNodeID + "}",
+			Roles:         []string{"seats"},
+			Labels:        labels,
+			MaxConcurrent: in.Pool.MaxConcurrentTurns,
+		},
+		Store: storeDoc{
+			Path: DataDir + "/store/crewlet.db",
+			// Required on a node without the data role: what it keeps is
+			// a cache of its seats' memory and its working rows, rebuilt
+			// from the stream when it claims a seat.
+			Scratch: true,
+			Objects: objectsOf(in.Company, in.Class, in.Objects),
+		},
+		Stream: streamDoc{
+			Type:     "embedded",
+			Replicas: streamReplicas,
+			Leaf:     &leafDoc{URLs: urls},
+		},
+		Coordination: coordinationDoc{Type: "embedded-kv"},
+		Secrets:      keyring,
+		Retention:    retentionDoc{BackupOwner: in.Class.Spec.Retention.BackupOwner},
+	}
+	return encodeBootstrap(&doc, env)
+}
+
+// nodeIDEnv gives an engine container its pod's name, its node id.
+func nodeIDEnv() corev1.EnvVar {
+	return corev1.EnvVar{Name: EnvNodeID, ValueFrom: &corev1.EnvVarSource{
+		FieldRef: &corev1.ObjectFieldSelector{APIVersion: "v1", FieldPath: "metadata.name"},
+	}}
+}
+
+// objectsOf is store.objects, which every node of a company must render
+// alike: Crewlet records the store the company's files are in and refuses to
+// start a node that names another.
+func objectsOf(c *v1alpha1.Company, class *v1alpha1.EngineClass, creds *S3Credentials) objectsDoc {
+	doc := objectsDoc{Backend: objectBackend(class.Spec.Objects.Backend)}
+	if class.Spec.Objects.Backend != v1alpha1.ObjectBackendS3 {
+		return doc
+	}
+	s3 := class.Spec.Objects.S3
+	doc.S3 = &s3Doc{
+		Endpoint:  s3.Endpoint,
+		Region:    s3.Region,
+		Bucket:    s3.Bucket,
+		Prefix:    ExpandTemplate(cmp.Or(s3.Prefix, defaultS3Prefix), c),
+		PathStyle: s3.PathStyle != nil && *s3.PathStyle,
+	}
+	// Without credentials the engine uses the SDK's default chain: the
+	// pod's workload identity or the node's role.
+	if creds != nil {
+		doc.S3.AccessKeyID = creds.AccessKeyID
+		doc.S3.SecretAccessKey = creds.SecretAccessKey
+	}
+	return doc
+}
+
+// encodeBootstrap encodes a Tier A, with the environment it refers to.
+func encodeBootstrap(doc *bootstrapDoc, env []corev1.EnvVar) (*BootstrapDocument, error) {
 	encoded, err := json.Marshal(doc)
 	if err != nil {
 		return nil, fmt.Errorf("encoding the bootstrap document: %w", err)

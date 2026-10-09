@@ -2,7 +2,9 @@
 
 For every accepted `Company` the operator runs one Crewlet engine: a
 StatefulSet with one data pod, which holds the company's estate, serves the
-engine's API, runs every seat and runs the background workers. This page
+engine's API, runs the background workers and runs the seats placed on it;
+and, when the Company declares seat pools and its class allows them,
+StatefulSets of stateless seat pods that run the other seats. This page
 describes what the operator creates for it, how it is reached, how it changes,
 and what happens when the Company is suspended or deleted.
 
@@ -29,6 +31,12 @@ Company, so it is deleted with it. For a Company `nimbus`:
 | Service `nimbus-data` | Headless, the StatefulSet's governing Service, publishing each data pod's address before it is ready. |
 | HTTPRoute or Ingress `nimbus-webhooks`, `nimbus-api` | The routes the class asks for; see [Exposure](#exposure). |
 | NetworkPolicy `nimbus-engine` | With the class's `networkPolicy.mode: Isolated`; see [Network policy](#network-policy). |
+| NetworkPolicy `nimbus-broker` | While the class's `seatPools.policy` is `Allowed`, whatever its `networkPolicy` says: who may reach the data pods' leaf listener; see [Network policy](#network-policy). |
+| Secret `nimbus-bootstrap-<pool>` | A seat pool's `crewlet.yaml` ([A seat pod's `crewlet.yaml`](company-document.md#a-seat-pods-crewletyaml)), with the class's environment values as in `nimbus-bootstrap`. One per pool, a PerSeat pool's seats included. |
+| StatefulSet `nimbus-seats-<pool>`, `nimbus-seat-<handle>` | A Shared pool's pods, and a PerSeat seat's own; see [Seat pools](#seat-pools). |
+| Service `nimbus-seats` | Headless, with no port: the seat StatefulSets' governing Service. |
+| PodDisruptionBudget `nimbus-seats-<pool>`, `nimbus-seat-<handle>` | `maxUnavailable: 1` for each Shared pool, and for each PerSeat seat with two pods. |
+| NetworkPolicy `nimbus-seats` | While the company runs seat pods: no connection reaches one. |
 
 The operator writes an object only if it does not exist or the Company
 controls it. An object of one of these names that someone else created (a
@@ -73,6 +81,7 @@ Two cases are refused rather than guessed at:
 | Command | `crewlet run -config /etc/crewlet/crewlet.yaml`, the bootstrap Secret's `crewlet.yaml` mounted read-only, readable by the engine's user alone (mode `0440`, group `fsGroup`). |
 | Storage | One volume claim per pod (`data-nimbus-data-0`) at `/var/lib/crewlet`, from the class's `data.storage`: the store, the event stream (three quarters of the volume, [sized from the claim](company-document.md#the-data-pods-crewletyaml)), and the store's native library cache (`TURSO_GO_CACHE_DIR`), so a restart does not extract it again. |
 | Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the Company's public address, while an LLMProvider of the company runs a CLI in `mode: Agent` (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`; then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). |
+| Ports | 8080, the API, dashboard and webhooks; and 7422, the leaf listener seat pods join the event stream through, while the class's `seatPools.policy` is `Allowed`. The headless Service `nimbus-data` names both. |
 | Probes | `/health` for startup (up to five minutes for the first start) and liveness, `/ready` for readiness. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
 | Stopping | A five-second `preStop` sleep, so the endpoint is gone from the Services and Gateways before the engine drains, and the class's `data.terminationGracePeriodSeconds` (default five minutes) for the drain: running turns finish, waiting ones are handed back. |
 | Updates | `RollingUpdate` with `maxUnavailable: 1`, `podManagementPolicy: Parallel`. |
@@ -95,6 +104,113 @@ It hashes the values rather than naming the Secrets' versions, so a label or
 an annotation written to a Secret restarts nothing. A Secret the Company's own
 `runtime.env` references is read the same way, but the operator does not
 watch it: restart the pod after changing one.
+
+## Seat pools
+
+A Company's `spec.topology.seatPools` are stateless pods that run seats:
+Crewlet with `node.roles: [seats]` alone, a scratch store deleted at every
+start, joined to the data pods' event stream as a NATS leaf. The class's
+`seatPools.policy` must be `Allowed`; its `allowPerSeat` and `maxPods` bound
+what a Company may run. Where each seat runs is decided by its `Seat`'s
+`spec.placement.pool` ([Placement](company-document.md#placement)).
+[Choosing where seats run](../guides/topology.md) says when a company needs
+pools, and which kind.
+
+| | Shared pool `general` | PerSeat pool, seat `cy` |
+|---|---|---|
+| StatefulSet | `nimbus-seats-general` | `nimbus-seat-cy`, one for each seat placed in the pool |
+| Replicas | the pool's `replicas`, 0 to 100 | the pool's `replicas`, 1 or 2 (a warm standby) |
+| Selector | `crewlet.ai/pool: general`, and no `crewlet.ai/seat` label | `crewlet.ai/seat: cy` |
+| Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `TURSO_GO_CACHE_DIR` on the scratch volume; the class's and the Company's variables, as on a data pod | the same, and `CREWLET_SEAT: cy` |
+| Storage | one `emptyDir` at `/var/lib/crewlet`, of the class's `seatPools.defaults.scratchSizeLimit` (2Gi unless set), holding the scratch store, the store's native library, `/tmp` and `HOME`: the limit bounds what the processes the engine runs write too | the same |
+| Stopping | the pool's `terminationGracePeriodSeconds`, else the class's default, else five minutes: running turns finish, waiting ones are handed back, and the seats are released with their mailboxes for another pod to claim | the same |
+| Updates | `RollingUpdate`, `maxUnavailable: 1`, `podManagementPolicy: Parallel`, `minReadySeconds: 60` | the same |
+| Resources | the pool's `resources`, else the class's `seatPools.defaults.resources` | the same |
+
+A seat pod runs as a data pod does, under the `restricted` Pod Security
+Standard, as the engine's ServiceAccount with no token mounted, scheduled by
+the class's `podTemplate`, and on the data pods' image: it never runs another
+version than the data pods.
+
+A seat pod has **no port and no probe**. The engine this operator pins serves
+nothing on a node without the `ingress` role, health and readiness included,
+so Kubernetes counts a seat pod ready as soon as its container runs, and a
+wedged engine exits by itself (with code 75) rather than wait for a liveness
+probe. `minReadySeconds` is what paces a rollout instead: the next pod is
+replaced only once the last one has run for a minute. Where the Kubernetes
+`MaxUnavailableStatefulSet` feature is on (the default from 1.37), pods that
+are already unavailable, such as seat pods crash-looping through a data pod
+outage, are all replaced at once; available ones still go one at a time.
+
+StatefulSet names are held to 52 characters, the most a StatefulSet's pods'
+`controller-revision-hash` label leaves room for: a longer
+`<company>-seats-<pool>` or `<company>-seat-<handle>` keeps its first 43
+characters, a dash and eight hexadecimal digits of a hash of the whole name,
+so two names that start alike stay apart. Each Seat's
+`status.placement.workload` names the StatefulSet that runs it.
+
+### The seat pods follow the data pods
+
+- **Start.** A seat StatefulSet is created, and a pool gains pods, only while
+  every data pod is ready and runs the current template: a leaf that finds
+  no data pod to join within a minute fails to start. Taking pods away
+  never waits.
+- **Upgrade.** A change that rolls the data pods (an image, the keyring, the
+  class's `seatPools.policy`) rolls them first. The seat StatefulSets keep
+  their template, and their Secrets, until every data pod is ready on the
+  new one, and then every seat StatefulSet takes its new template in the
+  same reconcile. Meanwhile the Company reports `SeatsPlaced=False`, reason
+  `RolloutBlocked`. A change to a pool alone rolls its pods at once.
+- **Suspension.** `spec.suspend` scales every seat StatefulSet to zero, and
+  the data StatefulSet only once no seat pod is left: a stopping seat pod
+  hands its last records to a data pod, the only kind that keeps them.
+  Resuming starts the data pods, and the seat pods once those are ready.
+- **A data pod outage.** A seat pod that cannot reach the estate for more
+  than a minute releases its seats, and one that restarts meanwhile
+  crash-loops; with Kubernetes' back-off it may take up to about five
+  minutes to rejoin after the data pod returns. One data pod is a single
+  point of failure for the whole company.
+
+### A pool removed while seats still run in it
+
+The engine places a seat only on a pod whose labels match its pin, never
+anywhere else, so a pod stopped while its seat is still pinned to it leaves
+the seat held by nobody until another revision moves it. The config
+reconciler records where the revision the engine runs pins its seats, in
+`status.config.placement` ([What each object
+reports](applying.md#what-each-object-reports)). A seat StatefulSet the
+Company no longer asks for, because its pool was removed or its seat moved
+elsewhere, keeps running, exactly as it is, for as long as that record pins a
+seat to it, and is deleted with its disruption budget and, once no
+StatefulSet of the pool is left, the pool's Secret, as soon as a revision
+that pins nothing to it runs. A document that cannot be applied (a Seat
+still placed in the removed pool is refused `PoolNotFound`) therefore keeps
+the pool running with the revision that needs it. `SeatsPlaced` names the
+StatefulSets kept that way.
+
+A seat moved into a PerSeat pool is pinned to its own pods by the next
+revision, which the config reconciler applies while the operator creates the
+StatefulSet: the seat waits, unplaced and with its messages queued, until
+the new pod has started.
+
+### What the class allows
+
+| The class | What the operator runs |
+|---|---|
+| `seatPools.policy` is not `Allowed` | No seat pod, pinned or not: the data pods open no leaf listener for one to join. The Company reports `SeatsPlaced=False`, `SeatPoolsNotAllowed`, and its document is refused. Changing the policy rolls the data pods, which open or close the listener. |
+| A Seat in a PerSeat pool without `allowPerSeat`, or one whose pods would pass `maxPods` | No pod for that seat; the Seat reports `Applied=False`. |
+| `maxPods` that the Shared pools' replicas alone pass | Every seat StatefulSet stays as it is, and none is created: `SeatsPlaced=False`, `PoolCapacityExceeded`. |
+
+### Disruptions
+
+A Shared pool's StatefulSet, and a PerSeat seat's with two pods, has a
+PodDisruptionBudget of `maxUnavailable: 1`, so a node drain takes one pod at
+a time while the others keep the seats; a PerSeat seat with one pod has
+nothing to keep and gets none. Pods that are not running may always be
+evicted (`unhealthyPodEvictionPolicy: AlwaysAllow`), so a crash-looping pod
+never holds up a drain. Moving seats between pods interrupts them: each move
+releases the seat, starts its tool servers on the new pod and rehydrates its
+memory there.
 
 ## Changes, versions and suspension
 
@@ -121,9 +237,12 @@ are not compared. `spec.runtime.version` on a class without
 
 `spec.suspend: true` scales the StatefulSet to zero and keeps the volume claim
 (the StatefulSet's retention policy keeps claims on scale-down whatever
-`deletionPolicy` says). The Company reports `Ready=False` and
-`RuntimeReady=False`, both with the reason `Suspended`. Setting it back starts
-the engine on the same volume. Suspending takes effect whatever else is wrong
+`deletionPolicy` says). A company with seat pools stops them first, and its
+data pods only once no seat pod is left ([The seat pods follow the data
+pods](#the-seat-pods-follow-the-data-pods)): meanwhile `RuntimeReady` is
+`False` with the reason `Suspending`. Once the data pods are stopped the
+Company reports `Ready=False` and `RuntimeReady=False`, both with the reason
+`Suspended`. Setting it back starts the engine on the same volume. Suspending takes effect whatever else is wrong
 with the Company: one that is not `Accepted` (its class is gone, or it is over
 its class's limits) is still scaled to zero, so a tenant cannot keep a
 suspended engine running by breaking its own Company. `Ready` says the engine
@@ -199,6 +318,25 @@ supplies, may reach DNS, the pods of its own namespace, the class's
 `networkPolicy.egress.to`, and every address but the cloud metadata
 endpoints and the class's `networkPolicy.egress.exceptCIDRs`, where the
 cluster's own networks belong ([Network policy](../guides/exposure.md#network-policy)).
+
+Two more policies come with seat pools:
+
+- `nimbus-broker` exists while the class's `seatPools.policy` is `Allowed`,
+  **whatever `networkPolicy.mode` says**: Crewlet's leaf listener accepts any
+  connection, with no authentication and no TLS, and whoever joins it reads
+  and writes the company's whole event stream. It selects the data pods and
+  admits port 7422 only from this company's seat pods, which it selects by
+  the company's label, since companies may share a namespace. Under `None`
+  it also admits port 8080 from anywhere, which keeps the API as open as it
+  is without a policy and closes only the broker.
+- `nimbus-seats` exists while the company runs seat pods. It selects them and
+  admits nothing: a seat pod serves nothing. Under `Isolated` it also holds
+  them to the data pods' egress, port 7422 of the data pods included.
+
+NetworkPolicies are additive: a pod two policies select is open to what
+either admits. That is why `nimbus-engine` and `nimbus-broker` select the data
+pods alone and never a seat pod, and why the isolation of the seat pods holds
+only while no policy of anyone else's selects them.
 A CNI that enforces NetworkPolicy is required for any of this to hold. Some
 Gateway implementations deliver traffic from the node rather than from a pod
 (Cilium's, for example), which no NetworkPolicy can admit by namespace; with
@@ -210,18 +348,20 @@ own policy.
 A Company carries the finalizer `crewlet.ai/company`. When it is deleted, the
 operator:
 
-1. deletes the data StatefulSet and waits until no data pod is left, each
+1. deletes every seat StatefulSet and waits until no seat pod is left, each
+   draining into a data pod as on any stop; then
+2. deletes the data StatefulSet and waits until no data pod is left, each
    draining as on any stop. Under `Retain` the StatefulSet is deleted with
    the `Orphan` propagation policy and the operator deletes its pods itself:
    a claim the StatefulSet controller made while the policy was `Delete`
    carries an owner reference to the StatefulSet until that controller next
    syncs, and a background deletion would have the garbage collector delete
    the claim with it. Orphaning releases every claim first;
-2. settles the data volume claims as `spec.deletionPolicy` says: `Delete`
+3. settles the data volume claims as `spec.deletionPolicy` says: `Delete`
    deletes them; `Retain` (the default) keeps them, and releases the keyring
    Secret from the Company so it is kept too, since the volumes cannot be read
    without it;
-3. removes the finalizer, after which Kubernetes deletes the rest.
+4. removes the finalizer, after which Kubernetes deletes the rest.
 
 A Company created again with the same name and namespace after a `Retain`
 deletion adopts the kept keyring and finds its volume, and with it its estate.
@@ -238,7 +378,7 @@ other:
 
 | Field | Written by |
 |---|---|
-| `conditions` `Accepted`, `RuntimeReady`, `Exposed`, `Ready` | the runtime reconciler (this page) |
+| `conditions` `Accepted`, `RuntimeReady`, `Exposed`, `SeatsPlaced`, `Ready` | the runtime reconciler (this page) |
 | `observedGeneration`, `engine`, `topology`, `endpoints`, `apiAccessSecretRef` | the runtime reconciler |
 | `conditions` `SecretsSynced`, `ConfigApplied`, `EngineHealthy`; `config` | the config reconciler, which [applies the company document](applying.md) |
 
@@ -252,6 +392,29 @@ the epoch of the operator's revision applied, not when the write returns
 `Ready=True` with an `observedGeneration` equal to `metadata.generation`
 means the engine runs the document of that generation, which is what a
 client waiting for a change to take effect checks.
+
+`status.topology` counts the pods: `data` the data pods', and `seatPools`
+each declared pool's, every seat's StatefulSet together for a PerSeat pool,
+with how many agent seats the pool runs. `SeatsPlaced` says whether every
+pool an agent seat is placed in, `data` included, has a ready pod:
+
+| Status | Reason | When |
+|---|---|---|
+| True | `AllPoolsServing` | Every pool with a seat has a ready pod. |
+| False | `PoolEmpty` | A pool with a seat has no ready pod: a Shared pool at zero replicas, a PerSeat seat's pods down, or pods not created yet because the data pods are not ready. The message names them; their seats' messages wait. |
+| False | `RolloutBlocked` | Seat StatefulSets keep their template until the data pods are ready on theirs. |
+| False | `SeatPoolsNotAllowed`, `PoolCapacityExceeded` | The class runs none of the Company's seat pods, or keeps them as they are; see [What the class allows](#what-the-class-allows). |
+| False | `Suspended` | The Company is suspended. |
+
+`SeatsPlaced` is not part of `Ready`: a Shared pool scaled to zero parks its
+seats on purpose. Its message also names the seat StatefulSets kept for the
+running revision, and how many Seats are refused a pool.
+
+Which pod runs each seat is the engine's to decide, and each agent Seat
+reports what the engine says: `status.placement.node` names the pod that holds
+its lease, and its `Ready` is `True` (`LeaseHeld`) while one does and `False`
+(`Unplaced`) while none does ([What each object
+reports](applying.md#what-each-object-reports)).
 
 `EngineHealthy` is the engine's own alarm table, read from its `/health` each
 time the config reconciler reaches it: `True` (`NoAlarms`), `False` (`Alarms`,

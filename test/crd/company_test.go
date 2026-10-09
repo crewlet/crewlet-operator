@@ -2,9 +2,12 @@ package crd_test
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -29,6 +32,7 @@ func TestCompanyDefaults(t *testing.T) {
 	}{
 		{"config.managementPolicy", s.Config.ManagementPolicy, v1.ManagementPolicyEnforce},
 		{"topology.data.replicas", s.Topology.Data.Replicas, int32(1)},
+		{"topology.defaultSeatPool", s.Topology.DefaultSeatPool, v1.DataPool},
 		{"deletionPolicy", s.DeletionPolicy, v1.DeletionPolicyRetain},
 	} {
 		if !equal(d.got, d.want) {
@@ -241,6 +245,115 @@ func TestCompanyValidation(t *testing.T) {
 // block another field or object owns. Those blocks are the only ones that hold
 // credentials, so the API server refusing them is what keeps a literal
 // credential from ever being stored in a Company.
+// TestCompanySeatPoolDefaults: a pool that says nothing else is a Shared
+// pool of one pod.
+func TestCompanySeatPoolDefaults(t *testing.T) {
+	c := company(newNamespace(t), companyName)
+	c.Spec.Topology.SeatPools = []v1.SeatPool{{Name: poolName}}
+	if err := k8sClient.Create(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	got := &v1.Company{}
+	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(c), got); err != nil {
+		t.Fatal(err)
+	}
+	pool := got.Spec.Topology.SeatPools[0]
+	if pool.Mode != v1.SeatPoolShared || pool.Replicas == nil || *pool.Replicas != 1 {
+		t.Errorf("a pool that sets nothing defaulted to mode %q, replicas %v; want Shared and 1", pool.Mode, pool.Replicas)
+	}
+}
+
+func TestCompanyTopology(t *testing.T) {
+	pool := func(name string, mode v1.SeatPoolMode, replicas int32) v1.SeatPool {
+		return v1.SeatPool{Name: name, Mode: mode, Replicas: new(replicas)}
+	}
+	topology := func(defaultPool string, pools ...v1.SeatPool) func(*v1.Company) {
+		return func(c *v1.Company) {
+			c.Spec.Topology.DefaultSeatPool = defaultPool
+			c.Spec.Topology.SeatPools = pools
+		}
+	}
+	runCreateCases(t, company, []createCase[*v1.Company]{
+		{
+			name: "every kind of pool, with a Shared default, is accepted",
+			mutate: func(c *v1.Company) {
+				c.Spec.Topology.DefaultSeatPool = poolName
+				c.Spec.Topology.SeatPools = []v1.SeatPool{
+					{
+						Name: poolName, Mode: v1.SeatPoolShared, Replicas: new(int32(3)), MaxConcurrentTurns: 4,
+						Resources: &corev1.ResourceRequirements{
+							Limits: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("3Gi")},
+						},
+						TerminationGracePeriodSeconds: 600,
+					},
+					pool("isolated", v1.SeatPoolPerSeat, 2),
+					pool("parked", v1.SeatPoolShared, 0),
+				}
+			},
+		},
+		{name: "the data pool as the default with no pools is accepted", mutate: topology(v1.DataPool)},
+		{
+			name:   "a pool named data is refused",
+			mutate: topology(v1.DataPool, pool(v1.DataPool, v1.SeatPoolShared, 1)),
+			want:   msgDataPoolName,
+		},
+		{
+			name:   "a pool name that is not a DNS label is refused",
+			mutate: topology(v1.DataPool, pool("General", v1.SeatPoolShared, 1)),
+			want:   msgPoolName,
+		},
+		{
+			name:   "a pool name of 21 characters is refused",
+			mutate: topology(v1.DataPool, pool(strings.Repeat("p", 21), v1.SeatPoolShared, 1)),
+			want:   "may not be more than 20 bytes",
+		},
+		{
+			name:   "two pools of one name are refused",
+			mutate: topology(v1.DataPool, pool(poolName, v1.SeatPoolShared, 1), pool(poolName, v1.SeatPoolPerSeat, 1)),
+			want:   msgDuplicate,
+		},
+		{
+			name: "nine pools are refused",
+			mutate: func(c *v1.Company) {
+				for i := range 9 {
+					c.Spec.Topology.SeatPools = append(c.Spec.Topology.SeatPools, pool(fmt.Sprintf("p%d", i), v1.SeatPoolShared, 1))
+				}
+			},
+			want: "Too many: 9: must have at most 8 items",
+		},
+		{
+			name:   "a Shared pool of 101 pods is refused",
+			mutate: topology(v1.DataPool, pool(poolName, v1.SeatPoolShared, 101)),
+			want:   "should be less than or equal to 100",
+		},
+		{
+			name:   "a PerSeat pool of 3 pods per seat is refused",
+			mutate: topology(v1.DataPool, pool("isolated", v1.SeatPoolPerSeat, 3)),
+			want:   msgPerSeatReplicas,
+		},
+		{
+			name:   "a PerSeat pool of no pods per seat is refused",
+			mutate: topology(v1.DataPool, pool("isolated", v1.SeatPoolPerSeat, 0)),
+			want:   msgPerSeatReplicas,
+		},
+		{
+			name:   "a default naming no pool is refused",
+			mutate: topology(poolName, pool("other", v1.SeatPoolShared, 1)),
+			want:   msgDefaultSeatPool,
+		},
+		{
+			name:   "a default naming a pool with no pools at all is refused",
+			mutate: topology(poolName),
+			want:   msgDefaultSeatPool,
+		},
+		{
+			name:   "a default naming a PerSeat pool is refused",
+			mutate: topology("isolated", pool("isolated", v1.SeatPoolPerSeat, 1)),
+			want:   msgDefaultSeatPool,
+		},
+	})
+}
+
 func TestCompanyEngineConfigReservedKeys(t *testing.T) {
 	reserved := []string{
 		"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge",

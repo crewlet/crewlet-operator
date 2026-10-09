@@ -92,7 +92,7 @@ func fullAgent(s *v1.Seat) {
 		MaxTurns:      new(int32(0)),
 		MCPServerRefs: []v1.LocalObjectReference{{Name: "github"}},
 	}
-	s.Spec.Placement = &v1.SeatPlacement{}
+	s.Spec.Placement = v1.SeatPlacement{Pool: poolName}
 	s.Spec.Paused = new(true)
 	s.Spec.PauseReason = "Deploy freeze until the incident review"
 	s.Spec.StopRunning = new(true)
@@ -220,7 +220,7 @@ func TestSeatValidation(t *testing.T) {
 		},
 		{
 			name:   "placement on a human seat is refused",
-			mutate: asHuman(func(s *v1.Seat) { s.Spec.Placement = &v1.SeatPlacement{} }),
+			mutate: asHuman(func(s *v1.Seat) { s.Spec.Placement = v1.SeatPlacement{Pool: v1.DataPool} }),
 			want:   msgHumanForbidden,
 		},
 		{
@@ -267,9 +267,20 @@ func TestSeatValidation(t *testing.T) {
 
 		// Placement, models, credentials.
 		{
-			name:   "a pool other than data is refused",
-			mutate: func(s *v1.Seat) { s.Spec.Placement = &v1.SeatPlacement{Pool: "general"} },
-			want:   "v1alpha1 runs every seat on the company's data pod: pool must be data",
+			// Whether the Company declares the pool is the render's to
+			// say; the API server sees one object at a time.
+			name:   "the data pool is accepted",
+			mutate: func(s *v1.Seat) { s.Spec.Placement = v1.SeatPlacement{Pool: v1.DataPool} },
+		},
+		{
+			name:   "a pool that is not a DNS label is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Placement = v1.SeatPlacement{Pool: "General_Pool"} },
+			want:   msgPoolName,
+		},
+		{
+			name:   "a pool name of 21 characters is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Placement = v1.SeatPlacement{Pool: strings.Repeat("p", 21)} },
+			want:   "may not be more than 20 bytes",
 		},
 		{
 			name:   "a provider twice in one chain is refused",
