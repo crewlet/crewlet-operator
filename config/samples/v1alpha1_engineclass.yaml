@@ -10,8 +10,11 @@ metadata:
     crewlet.ai/is-default-class: "true"
 spec:
   engine:
-    # Crewlet publishes its engine image here from each release tag; name the
-    # release your platform runs, or pin it by digest.
+    # The engine image your platform runs, pinned by digest in production.
+    # It must be the engine this operator release is built against (the
+    # Makefile's CREWLET_VERSION, named in the release's notes); until Crewlet
+    # tags a release that carries it, build it with `make crewlet-image` and
+    # push it to your registry (docs/guides/installing.md, "Engine image").
     image: ghcr.io/crewlet/crewlet:v0.1.0
     allowVersionOverride: false
   data:

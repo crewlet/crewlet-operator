@@ -62,6 +62,23 @@ IMG=<your registry>/crewlet-operator:<tag>`.
 The chart installs the CRDs and keeps them on uninstall (`crd.keep`), since
 deleting a CRD deletes every company declared with it.
 
+### Engine image
+
+Each EngineClass names the engine image its companies run
+(`spec.engine.image`). An operator release is built and tested against one
+engine version, the Makefile's `CREWLET_VERSION`, which its release notes
+name; run that engine. Crewlet has not yet tagged a release that carries it, so build the image from
+a checkout of the operator at the release's tag and push it to your registry:
+
+```bash
+make crewlet-image CREWLET_IMG=<your registry>/crewlet:<CREWLET_VERSION>
+docker push <your registry>/crewlet:<CREWLET_VERSION>
+```
+
+The image is built from the crewlet module at that version, checked against
+the Go checksum database, with crewlet's own Dockerfile; pin it by digest in
+the class.
+
 ## Values worth setting
 
 Object names below are those of a release named `crewlet-operator`; the

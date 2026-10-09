@@ -55,6 +55,10 @@ nothing, so a mistaken tag costs only its deletion.
    release is slower), and that the pull request titles since the last
    tag read as release notes (`gh pr list --state merged --base main`); fix a
    title before tagging, because the notes are generated from them.
+   Once the Release is published, add a line to its notes naming the engine
+   it is built against, the Makefile's `CREWLET_VERSION` at the tag
+   (`grep '^CREWLET_VERSION' Makefile`), which installers build or pull
+   (docs/guides/installing.md, "Engine image").
 2. Choose the version. While the API is `v1alpha1`, releases are `v0.Y.Z`:
    bump `Y` for anything that changes the API or behaviour, `Z` for fixes.
 3. Tag `main` and push the tag:
