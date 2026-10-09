@@ -39,6 +39,7 @@ func companyCases() []companyCase {
 		{name: "platform-providers"},
 		{name: "platform-providers-off"},
 		{name: "secret-positions", exposed: true},
+		{name: "seat-pools"},
 	}
 }
 

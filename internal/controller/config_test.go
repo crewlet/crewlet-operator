@@ -418,7 +418,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(ana), ana)).To(Succeed())
 		Expect(ana.Status.Handle).To(Equal("ana"))
 		Expect(ana.Status.SeatID).To(Equal(render.SeatID("Nimbus", "ana")))
-		Expect(ana.Status.Placement.Pool).To(Equal(render.DataPool))
+		Expect(ana.Status.Placement.Pool).To(Equal(crewletaiv1alpha1.DataPool))
 		Expect(ana.Status.Integrations.Slack.RequestURL).To(Equal(baseURL + "/webhooks/slack/ana"))
 		Expect(ana.Status.Integrations.GitHub.WebhookURL).To(Equal(baseURL + "/webhooks/github/ana"))
 		jane := seat("jane")

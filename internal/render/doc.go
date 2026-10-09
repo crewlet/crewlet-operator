@@ -1,7 +1,9 @@
-// Package render turns the crewlet.ai custom resources into the two documents
-// a Crewlet engine reads: the company document (Crewlet's Tier B, applied over
-// the engine's /config API) and a data pod's crewlet.yaml (Tier A, mounted
-// into the pod).
+// Package render turns the crewlet.ai custom resources into the documents a
+// Crewlet engine reads: the company document (Crewlet's Tier B, applied over
+// the engine's /config API) and each engine pod's crewlet.yaml (Tier A,
+// mounted into the pod), a data pod's or a seat pool's. It also decides where
+// each agent seat runs (PlanTopology), which both the company document and
+// the seat pools' workloads are made from.
 //
 // Everything here is a pure function over values. The package holds no
 // client, reads no Secret and does no I/O, so the same objects always render
@@ -15,20 +17,22 @@
 // tags as a credential is rendered as a whole ${NAME} reference, where NAME is
 // the engine secret-store entry the caller chose for the referenced Secret
 // key (Input.StoreName), and the key is listed in Document.Refs so the secret
-// sync knows which values to push. A Tier A document refers to environment
-// variables the pod receives from Secrets; BootstrapDocument.Env lists exactly
-// those.
+// sync knows which values to push. A Tier A document is the exception: it
+// holds the node's own credentials as values and is kept in a Secret (see
+// Bootstrap for why), and refers only to the pod's name and a PerSeat pod's
+// seat, which BootstrapDocument.Env lists.
 //
 // # What render refuses, and what it leaves to the engine
 //
 // The API server has already enforced every OpenAPI and CEL rule of the
 // objects, and render trusts that rather than repeating it. What no single
 // object's validation can see is a reference to another object: a Seat whose
-// Unit does not exist, a chain of parent Units that loops. Those are refused
-// here with a *RefError naming the object and field that hold the reference,
-// so the controller can report it on that object. Everything else Crewlet
-// refuses is left to the engine's dry run, whose problems name a path in the
-// rendered document; Document.Attribute maps such a path, read with PathOf
-// from the engine client's *engine.ValidationError, back to the object that
-// produced it.
+// Unit does not exist, a chain of parent Units that loops, a Seat placed in a
+// pool its Company does not declare or its EngineClass does not admit. Those
+// are refused here with a *RefError naming the object and field that hold
+// the reference, so the controller can report it on that object. Everything
+// else Crewlet refuses is left to the engine's dry run, whose problems name a
+// path in the rendered document; Document.Attribute maps such a path, read
+// with PathOf from the engine client's *engine.ValidationError, back to the
+// object that produced it.
 package render

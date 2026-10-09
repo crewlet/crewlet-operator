@@ -53,6 +53,9 @@ func bootstrapCases() []bootstrapCase {
 		// Enforce; these two set the others.
 		{name: "observe", keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}},
 		{name: "seed", keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}},
+		// A class that allows seat pools: the data pod opens its leaf
+		// listener.
+		{name: "seat-pools", keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}},
 	}
 }
 
@@ -174,8 +177,8 @@ func TestBootstrapPlacesTheDataPodInTheDataPool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := flatten(t, doc.YAML)["node.labels."+PoolLabel]; got != DataPool {
-		t.Fatalf("node.labels[%s] = %v, want %s", PoolLabel, got, DataPool)
+	if got := flatten(t, doc.YAML)["node.labels."+PoolLabel]; got != v1alpha1.DataPool {
+		t.Fatalf("node.labels[%s] = %v, want %s", PoolLabel, got, v1alpha1.DataPool)
 	}
 }
 

@@ -1,0 +1,116 @@
+# A company that runs its seats in every kind of place: on the data pod, in a
+# Shared pool (the company's default), in a Shared pool parked at zero pods,
+# and in a PerSeat pool of their own.
+apiVersion: crewlet.ai/v1alpha1
+kind: EngineClass
+metadata:
+  name: pools
+spec:
+  engine:
+    image: ghcr.io/crewlet/crewlet:v0.1.0
+  data:
+    storage:
+      size: 10Gi
+  seatPools:
+    policy: Allowed
+    allowPerSeat: true
+    maxPods: 6
+    defaults:
+      maxConcurrentTurns: 4
+      terminationGracePeriodSeconds: 600
+      scratchSizeLimit: 4Gi
+  retention:
+    backupOwner: platform-oncall
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: nimbus
+spec:
+  engineClassName: pools
+  companyName: Nimbus
+  topology:
+    defaultSeatPool: general
+    seatPools:
+      - name: general
+        mode: Shared
+        replicas: 2
+      - name: isolated
+        mode: PerSeat
+        replicas: 2
+      - name: batch
+        mode: Shared
+        replicas: 0
+        maxConcurrentTurns: 8
+        terminationGracePeriodSeconds: 120
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude
+spec:
+  companyRef:
+    name: nimbus
+  type: Anthropic
+  model: claude-sonnet-5
+  apiKeySecretRefs:
+    - name: anthropic
+      key: apiKey
+---
+# In the PerSeat pool: two pods of its own, one a warm standby.
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: ana
+spec:
+  companyRef:
+    name: nimbus
+  goal: Keep CI green.
+  placement:
+    pool: isolated
+---
+# Names no pool: the company's default, general.
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: bo
+spec:
+  companyRef:
+    name: nimbus
+  goal: Answer support email.
+---
+# On the data pod.
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: cy
+spec:
+  companyRef:
+    name: nimbus
+  goal: Write the weekly report.
+  placement:
+    pool: data
+---
+# In the pool parked at zero pods: its messages wait for one.
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: dee
+spec:
+  companyRef:
+    name: nimbus
+  goal: Reindex the archive.
+  placement:
+    pool: batch
+---
+# A person: the engine never runs them, so they are in no pool.
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: jane
+spec:
+  companyRef:
+    name: nimbus
+  kind: Human
+  contact:
+    slackUserID: U0JANE

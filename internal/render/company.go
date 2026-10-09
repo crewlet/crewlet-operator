@@ -16,15 +16,6 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/secretref"
 )
 
-// PoolLabel is the node label that places seats. Every agent seat is
-// rendered with role.placement {labels: {PoolLabel: <its pool>}}, and every
-// pod that runs seats carries exactly one such label in its Tier A
-// node.labels, so each pod matches exactly one placement group.
-const PoolLabel = "crewlet.ai/pool"
-
-// DataPool is the pool of a company's data pods, the only pool in v1alpha1.
-const DataPool = "data"
-
 // Input is everything a company document is rendered from: a Company, its
 // EngineClass, and the objects whose spec.companyRef names the Company. The
 // slices may be in any order; the document does not depend on it.
@@ -240,6 +231,10 @@ type renderer struct {
 	providers map[string]bool
 	platform  map[string]bool
 
+	// topology is where each agent seat runs, which its role.placement
+	// pins it to.
+	topology *Topology
+
 	refs    map[secretref.Key]struct{}
 	sources []Source
 	errs    refErrors
@@ -273,6 +268,7 @@ func newRenderer(in *Input) *renderer {
 			r.platform[in.Class.Spec.PlatformLLMProviders[i].Name] = true
 		}
 	}
+	r.topology = planTopology(in.Company, in.Class, in.Seats, &r.errs)
 	return r
 }
 

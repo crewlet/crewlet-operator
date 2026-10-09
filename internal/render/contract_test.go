@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -99,11 +100,13 @@ func write(t *testing.T, name string, data []byte) string {
 	return file
 }
 
-// bootstrapEnv answers every variable a Tier A's pod is given: its name.
+// bootstrapEnv answers every variable a Tier A's pod is given: the value the
+// pod is given, or for its name, which the Downward API gives it,
+// nimbus-data-0.
 func bootstrapEnv(doc *BootstrapDocument) map[string]string {
 	env := map[string]string{}
 	for _, e := range doc.Env {
-		env[e.Name] = "nimbus-data-0"
+		env[e.Name] = cmp.Or(e.Value, "nimbus-data-0")
 	}
 	return env
 }
@@ -119,6 +122,51 @@ func TestContractBootstrap(t *testing.T) {
 			validate(t, bootstrapEnv(doc), "-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML))
 		})
 	}
+}
+
+// TestContractSeatPod validates the Tier A of every kind of seat pod on its
+// own: a Shared pool's, a PerSeat seat's (its seat label a reference the
+// pod's environment answers), and one naming an S3 object store. The engine
+// refuses a node without the data role whose store is not scratch, that
+// keeps a stream of its own, that is a member rather than a leaf, or that
+// runs ingress or workers.
+func TestContractSeatPod(t *testing.T) {
+	for _, c := range seatPodCases() {
+		t.Run(c.name, func(t *testing.T) {
+			in, _ := c.input(t)
+			doc, err := SeatPodBootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			validate(t, bootstrapEnv(doc), "-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML))
+		})
+	}
+}
+
+// TestContractSeatPoolsCompany validates the document of a company that
+// places seats in every kind of pool with the Tier A of its data pod, which
+// listens for the seat pods: the pins are labels the engine accepts beside
+// the node that serves the company.
+func TestContractSeatPoolsCompany(t *testing.T) {
+	in := companyCaseNamed(t, "seat-pools").input(t)
+	doc, err := Company(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	boot := bootstrapCases()[0].input(t)
+	boot.Company, boot.Class = in.Company, in.Class
+	tierA, err := Bootstrap(boot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(tierA.YAML), "leaf:") {
+		t.Fatalf("the data pod of a class that allows pools opens no leaf listener:\n%s", tierA.YAML)
+	}
+	env := bootstrapEnv(tierA)
+	for _, k := range doc.Refs {
+		env[secretsync.StoreName(k)] = dummyCredential(k)
+	}
+	validate(t, env, "-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
 }
 
 // TestContractStreamFloor ties the API's floor on data.storage.size to

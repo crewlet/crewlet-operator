@@ -10,10 +10,13 @@ import (
 
 // RefError is a reference from one object to another that cannot be rendered
 // into the company document: the object named does not exist, the chain of
-// parents it starts loops, or it names something Crewlet would read as a
-// different object. The controller reports it on the object that holds the
-// reference (Kind and Name), as ResolvedRefs=False with Reason, or
-// Accepted=False for a Conflict.
+// parents it starts loops, it names something Crewlet would read as a
+// different object, or it places a seat in a pool the company's EngineClass
+// does not let it run. The controller reports it on the object that holds the
+// reference (Kind and Name), as ResolvedRefs=False with Reason, as
+// Accepted=False for a Conflict, or as Applied=False for a pool the class
+// does not admit (PerSeatNotAllowed, PoolCapacityExceeded); a refusal of the
+// Company itself is reported on its ConfigApplied.
 //
 // The company document is applied whole or not at all, so one RefError
 // blocks the whole render.
@@ -26,7 +29,10 @@ type RefError struct {
 	Field string
 	// Reason is the condition reason the refusal is reported with:
 	// v1alpha1.ReasonRefNotFound, v1alpha1.ReasonCycle,
-	// v1alpha1.ReasonConflict or v1alpha1.ReasonReferenceNotAllowed.
+	// v1alpha1.ReasonConflict, v1alpha1.ReasonReferenceNotAllowed, or for a
+	// placement v1alpha1.ReasonPoolNotFound, v1alpha1.ReasonPerSeatNotAllowed,
+	// v1alpha1.ReasonPoolCapacityExceeded or
+	// v1alpha1.ReasonSeatPoolsNotAllowed.
 	Reason string
 	// Message says what is wrong and what to do, for a condition message.
 	Message string

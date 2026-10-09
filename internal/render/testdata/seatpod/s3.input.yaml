@@ -1,0 +1,38 @@
+# A Shared pool of a company whose class keeps files in S3: the seat pods
+# name the same bucket, prefix and keys as the data pods, or the engine
+# refuses to start them.
+apiVersion: crewlet.ai/v1alpha1
+kind: EngineClass
+metadata:
+  name: bucket
+spec:
+  engine:
+    image: ghcr.io/crewlet/crewlet:v0.1.0
+  data:
+    storage:
+      size: 10Gi
+  seatPools:
+    policy: Allowed
+  objects:
+    backend: S3
+    s3:
+      endpoint: https://minio.storage.example
+      region: us-east-1
+      bucket: crewlet-tenants
+      prefix: "tenants/{{uid}}/"
+      pathStyle: true
+  retention:
+    backupOwner: storage-team
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: nimbus
+spec:
+  companyName: Nimbus
+  objects:
+    credentialsSecretRef:
+      name: nimbus-objects
+  topology:
+    seatPools:
+      - name: general
