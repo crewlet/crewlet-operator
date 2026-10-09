@@ -165,7 +165,12 @@ every seat.
 - **Suspension and deletion** stop the seat pods first and the data pod
   after them.
 - **Removing a pool** keeps its pods running for as long as the revision the
-  engine runs places a seat in it.
+  engine runs places a seat in it, at the size they are, still following the
+  data pod's image and keyring.
+- **A class that stops allowing pools** refuses the company's next revision
+  while it declares any, and keeps the pods and the data pod's listener that
+  the running revision needs, until a revision that runs every seat on the
+  data pod is applied.
 
 [The seat pods follow the data pods](../concepts/runtime.md#the-seat-pods-follow-the-data-pods)
 has the details.

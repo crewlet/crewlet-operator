@@ -172,6 +172,7 @@ func (r *CompanyReconciler) reconcileWorkload(
 	// What is held back holds the seat pods back with the data pods: they
 	// keep running what they run.
 	holdBack := func(reason, message string) (metav1.Condition, error) {
+		recordDataStatus(c, existing)
 		if err := r.reconcileSeatPools(ctx, c, class, pools, nil); err != nil {
 			return metav1.Condition{}, err
 		}
@@ -206,6 +207,7 @@ func (r *CompanyReconciler) runWorkload(
 		seatPodsLeft = left
 	}
 	holdBack := func(reason, message string) (metav1.Condition, error) {
+		recordDataStatus(c, existing)
 		if err := r.reconcileSeatPools(ctx, c, class, pools, nil); err != nil {
 			return metav1.Condition{}, err
 		}
@@ -233,6 +235,7 @@ func (r *CompanyReconciler) runWorkload(
 	image, refusal := engineImage(c, class, versionFloor(c, claims))
 	if refusal != nil {
 		if existing == nil {
+			recordDataStatus(c, existing)
 			if err := r.reconcileSeatPools(ctx, c, class, pools, nil); err != nil {
 				return metav1.Condition{}, err
 			}

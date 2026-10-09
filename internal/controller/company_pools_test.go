@@ -36,7 +36,7 @@ const (
 	batchSet          = "nimbus-seats-batch"
 	cySet             = "nimbus-seat-cy"
 	generalBootstrap  = "nimbus-bootstrap-general"
-	isolatedBootstrap = "nimbus-bootstrap-isolated"
+	isolatedBootstrap = "nimbus-bootstrap-isolated-perseat"
 	brokerPolicy      = "nimbus-broker"
 	seatsPolicy       = "nimbus-seats"
 	seatImageV030     = "ghcr.io/crewlet/crewlet:v0.3.0"
@@ -231,8 +231,27 @@ var _ = Describe("Company seat pools", func() {
 			Spec: corev1.PodSpec{
 				ServiceAccountName:           engineName,
 				AutomountServiceAccountToken: new(false),
-				Containers:                   []corev1.Container{{Name: "engine", Image: engineImageV020}},
+				Containers:                   []corev1.Container{{Name: engineContainer, Image: engineImageV020}},
 			},
+		}
+		Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+		return pod
+	}
+	// dataPod stands in for a data pod, opening the leaf listener as its
+	// template said when it was made or not.
+	dataPod := func(name string, leaf bool) *corev1.Pod {
+		GinkgoHelper()
+		pod := &corev1.Pod{
+			Namespace: namespace, Name: name,
+			Labels: selectorFor(&crewletaiv1alpha1.Company{Name: poolsCompany}, componentData),
+			Spec: corev1.PodSpec{
+				ServiceAccountName:           engineName,
+				AutomountServiceAccountToken: new(false),
+				Containers:                   []corev1.Container{{Name: engineContainer, Image: engineImageV020}},
+			},
+		}
+		if leaf {
+			pod.Annotations = map[string]string{LeafListenerAnnotation: leafListenerOpen}
 		}
 		Expect(k8sClient.Create(ctx, pod)).To(Succeed())
 		return pod
@@ -254,6 +273,7 @@ var _ = Describe("Company seat pools", func() {
 		Expect(data.Spec.Template.Spec.Containers[0].Ports).To(ContainElement(corev1.ContainerPort{
 			Name: "leaf", ContainerPort: 7422, Protocol: corev1.ProtocolTCP,
 		}))
+		Expect(data.Spec.Template.Annotations).To(HaveKeyWithValue(LeafListenerAnnotation, leafListenerOpen))
 		dataSvc := &corev1.Service{}
 		get(dataSvc, dataName)
 		Expect(dataSvc.Spec.Ports).To(ContainElement(corev1.ServicePort{
@@ -551,6 +571,55 @@ var _ = Describe("Company seat pools", func() {
 		}
 	})
 
+	It("reports a seat pool held back on an older template whatever changed in it", func() {
+		class := newClass()
+		company := running(class.Name, func(c *crewletaiv1alpha1.Company) {
+			c.Spec.Topology.DefaultSeatPool = poolGeneral
+			c.Spec.Topology.SeatPools[2].Replicas = new(int32(1))
+		})
+		for _, name := range []string{generalSet, batchSet, cySet} {
+			rollOut(name)
+		}
+		Expect(condition(reconciled(company), crewletaiv1alpha1.ConditionSeatsPlaced).Reason).To(Equal(crewletaiv1alpha1.ReasonAllPoolsServing))
+
+		// The data pod stops being ready, as it does while it restarts.
+		data := statefulSet(dataName)
+		data.Status.ReadyReplicas, data.Status.AvailableReplicas = 0, 0
+		Expect(k8sClient.Status().Update(ctx, data)).To(Succeed())
+		updateCompany(company, func(c *crewletaiv1alpha1.Company) {
+			c.Spec.Topology.SeatPools[0].Resources = &corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
+			}
+		})
+		placed := condition(reconciled(company), crewletaiv1alpha1.ConditionSeatsPlaced)
+		Expect(placed.Reason).To(Equal(crewletaiv1alpha1.ReasonRolloutBlocked))
+		Expect(placed.Message).To(ContainSubstring(generalSet))
+		Expect(placed.Message).NotTo(ContainSubstring(batchSet), "batch's template did not change")
+	})
+
+	It("reports the data pods as they are while it holds them back", func() {
+		class := newClass()
+		company := running(class.Name, func(c *crewletaiv1alpha1.Company) { c.Spec.Topology.SeatPools[2].Replicas = new(int32(1)) })
+		for _, name := range []string{generalSet, batchSet, cySet} {
+			rollOut(name)
+		}
+		Expect(condition(reconciled(company), crewletaiv1alpha1.ConditionSeatsPlaced).Reason).To(Equal(crewletaiv1alpha1.ReasonAllPoolsServing))
+
+		By("holding the pods back for a keyring that is gone, while the data pod stops being ready")
+		data := statefulSet(dataName)
+		data.Status.ReadyReplicas, data.Status.AvailableReplicas = 0, 0
+		Expect(k8sClient.Status().Update(ctx, data)).To(Succeed())
+		keyring := &corev1.Secret{}
+		get(keyring, keyringName)
+		Expect(k8sClient.Delete(ctx, keyring)).To(Succeed())
+		company = reconciled(company)
+		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Status).To(Equal(metav1.ConditionFalse))
+		Expect(company.Status.Topology.Data.ReadyReplicas).To(Equal(new(int32(0))))
+		placed := condition(company, crewletaiv1alpha1.ConditionSeatsPlaced)
+		Expect(placed.Reason).To(Equal(crewletaiv1alpha1.ReasonPoolEmpty), "ana's data pod is not ready")
+		Expect(placed.Message).To(ContainSubstring("seats of data"))
+	})
+
 	It("adds pods to a pool only while the data pods are ready, and takes them away at once", func() {
 		class := newClass()
 		company := running(class.Name)
@@ -626,13 +695,13 @@ var _ = Describe("Company seat pools", func() {
 		pinned(company, crewletaiv1alpha1.RevisionPlacement{Pools: []string{crewletaiv1alpha1.DataPool, poolGeneral, poolBatch}, Seats: []string{"cy"}})
 		general := statefulSet(generalSet)
 
-		By("keeping general, as it is, while the revision that runs pins bo to it")
+		By("keeping general, at its size, while the revision that runs pins bo to it")
 		updateCompany(company, func(c *crewletaiv1alpha1.Company) {
 			c.Spec.Topology.SeatPools = c.Spec.Topology.SeatPools[1:]
 			c.Spec.Topology.SeatPools[0].Replicas = new(int32(1))
 		})
 		company = reconciled(company)
-		Expect(statefulSet(generalSet).ResourceVersion).To(Equal(general.ResourceVersion))
+		Expect(statefulSet(generalSet).Spec).To(Equal(general.Spec), "a kept StatefulSet changed with nothing for it to follow")
 		get(&corev1.Secret{}, generalBootstrap)
 		get(&policyv1.PodDisruptionBudget{}, generalSet)
 		Expect(condition(company, crewletaiv1alpha1.ConditionSeatsPlaced).Message).To(ContainSubstring(generalSet + " keep running"))
@@ -646,6 +715,36 @@ var _ = Describe("Company seat pools", func() {
 		reconciled(company)
 		get(&appsv1.StatefulSet{}, cySet)
 		get(&corev1.Secret{}, isolatedBootstrap)
+
+		By("following the data pods to a new image, at the size it keeps")
+		updateLive(class, func(c *crewletaiv1alpha1.EngineClass) { c.Spec.Engine.Image = seatImageV030 })
+		reconciled(company)
+		Expect(statefulSet(generalSet).Spec.Template.Spec.Containers[0].Image).To(Equal(engineImageV020), "general rolled before the data pods")
+		rollOut(dataName)
+		reconciled(company)
+		// cy kept the one pod isolated was resized to before it moved.
+		kept := map[string]int32{generalSet: 2, cySet: 1}
+		for name, replicas := range kept {
+			sts := statefulSet(name)
+			Expect(sts.Spec.Template.Spec.Containers[0].Image).To(Equal(seatImageV030), "%s keeps an image the data pods left", name)
+			Expect(*sts.Spec.Replicas).To(Equal(replicas), "%s was resized", name)
+		}
+
+		By("running a kept StatefulSet as many pods again after a suspension")
+		updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Suspend = new(true) })
+		reconciled(company)
+		reconciled(company)
+		Expect(*statefulSet(generalSet).Spec.Replicas).To(BeZero())
+		Expect(*statefulSet(dataName).Spec.Replicas).To(BeZero())
+		updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Suspend = new(false) })
+		reconciled(company)
+		rollOut(dataName)
+		reconciled(company)
+		for name, replicas := range kept {
+			sts := statefulSet(name)
+			Expect(*sts.Spec.Replicas).To(Equal(replicas), "%s stayed stopped after the Company resumed", name)
+			Expect(sts.Annotations).NotTo(HaveKey(SuspendedReplicasAnnotation))
+		}
 
 		By("deleting both once a revision that pins nothing to them runs")
 		pinned(company, crewletaiv1alpha1.RevisionPlacement{Pools: []string{crewletaiv1alpha1.DataPool, poolBatch}})
@@ -665,27 +764,64 @@ var _ = Describe("Company seat pools", func() {
 		Expect(seatSets()).To(ConsistOf(batchSet, cySet))
 	})
 
-	It("runs no seat pod, pinned or not, and opens no broker port under a class that forbids seat pools", func() {
+	It("keeps the pods the running revision pins, and their listener, when the class stops allowing seat pools", func() {
 		class := newClass()
 		company := running(class.Name)
-		pinned(company, crewletaiv1alpha1.RevisionPlacement{Pools: []string{poolGeneral}, Seats: []string{"cy"}})
+		pinned(company, crewletaiv1alpha1.RevisionPlacement{Pools: []string{crewletaiv1alpha1.DataPool, poolGeneral}, Seats: []string{"cy"}})
 		hash := statefulSet(dataName).Spec.Template.Annotations[BootstrapHashAnnotation]
 		updateLive(class, func(c *crewletaiv1alpha1.EngineClass) { c.Spec.SeatPools = crewletaiv1alpha1.SeatPoolSettings{} })
 		company = reconciled(company)
 
+		By("keeping the StatefulSets the revision the engine runs pins a seat to, and no other")
+		Expect(seatSets()).To(ConsistOf(generalSet, cySet))
+		get(&corev1.Service{}, seatsService)
+		get(&networkingv1.NetworkPolicy{}, seatsPolicy)
+		get(&corev1.Secret{}, generalBootstrap)
+		absent(&corev1.Secret{}, "nimbus-bootstrap-batch")
+		placed := condition(company, crewletaiv1alpha1.ConditionSeatsPlaced)
+		Expect(placed.Reason).To(Equal(crewletaiv1alpha1.ReasonSeatPoolsNotAllowed))
+		Expect(placed.Message).To(ContainSubstring("keep running"))
+
+		By("keeping the data pods' leaf listener open for them, and its policy")
+		data := statefulSet(dataName)
+		Expect(data.Spec.Template.Annotations[BootstrapHashAnnotation]).To(Equal(hash), "the data pods rolled while seats are pinned to seat pods")
+		Expect(data.Spec.Template.Annotations).To(HaveKeyWithValue(LeafListenerAnnotation, leafListenerOpen))
+		get(&networkingv1.NetworkPolicy{}, brokerPolicy)
+
+		By("closing all of it once a revision that pins every seat to the data pods runs")
+		pinned(company, crewletaiv1alpha1.RevisionPlacement{Pools: []string{crewletaiv1alpha1.DataPool}})
+		company = reconciled(company)
 		Expect(seatSets()).To(BeEmpty())
 		absent(&corev1.Service{}, seatsService)
-		absent(&networkingv1.NetworkPolicy{}, brokerPolicy)
 		absent(&networkingv1.NetworkPolicy{}, seatsPolicy)
 		absent(&corev1.Secret{}, generalBootstrap)
-		data := statefulSet(dataName)
+		absent(&networkingv1.NetworkPolicy{}, brokerPolicy)
+		data = statefulSet(dataName)
 		Expect(data.Spec.Template.Annotations[BootstrapHashAnnotation]).NotTo(Equal(hash), "closing the leaf listener does not roll the data pods")
+		Expect(data.Spec.Template.Annotations).NotTo(HaveKey(LeafListenerAnnotation))
 		Expect(data.Spec.Template.Spec.Containers[0].Ports).To(HaveLen(1))
 		dataSvc := &corev1.Service{}
 		get(dataSvc, dataName)
 		Expect(dataSvc.Spec.Ports).To(HaveLen(1))
-		placed := condition(company, crewletaiv1alpha1.ConditionSeatsPlaced)
-		Expect(placed.Reason).To(Equal(crewletaiv1alpha1.ReasonSeatPoolsNotAllowed))
+		Expect(condition(company, crewletaiv1alpha1.ConditionSeatsPlaced).Reason).To(Equal(crewletaiv1alpha1.ReasonSeatPoolsNotAllowed))
+	})
+
+	It("keeps the broker's policy while a data pod that listens runs, whatever its next template says", func() {
+		class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.NetworkPolicy = crewletaiv1alpha1.NetworkPolicySettings{Mode: crewletaiv1alpha1.NetworkPolicyNone}
+		})
+		company := running(class.Name)
+		listening := dataPod("nimbus-data-0", true)
+		updateLive(class, func(c *crewletaiv1alpha1.EngineClass) { c.Spec.SeatPools = crewletaiv1alpha1.SeatPoolSettings{} })
+		reconciled(company)
+		Expect(statefulSet(dataName).Spec.Template.Spec.Containers[0].Ports).To(HaveLen(1), "the next template still listens")
+		get(&networkingv1.NetworkPolicy{}, brokerPolicy)
+
+		By("deleting it once the pod is replaced by one that does not listen")
+		gone(listening)
+		dataPod("nimbus-data-0", false)
+		reconciled(company)
+		absent(&networkingv1.NetworkPolicy{}, brokerPolicy)
 	})
 
 	It("keeps the pools as they are, and starts no pod, while the Shared pools pass the class's maxPods", func() {
@@ -704,6 +840,17 @@ var _ = Describe("Company seat pools", func() {
 		updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Topology.SeatPools[0].Replicas = new(int32(5)) })
 		reconciled(company)
 		Expect(*statefulSet(generalSet).Spec.Replicas).To(Equal(int32(2)))
+
+		By("following the data pods all the same, at the sizes they keep")
+		updateLive(class, func(c *crewletaiv1alpha1.EngineClass) { c.Spec.Engine.Image = seatImageV030 })
+		reconciled(company)
+		rollOut(dataName)
+		reconciled(company)
+		for name, replicas := range map[string]int32{generalSet: 2, batchSet: 0, cySet: 2} {
+			sts := statefulSet(name)
+			Expect(sts.Spec.Template.Spec.Containers[0].Image).To(Equal(seatImageV030), "%s keeps an image the data pods left", name)
+			Expect(*sts.Spec.Replicas).To(Equal(replicas), "%s was resized while the Company is refused", name)
+		}
 	})
 
 	It("runs no pod for a seat its class refuses a PerSeat pool, nor one past maxPods", func() {

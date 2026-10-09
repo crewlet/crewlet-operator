@@ -55,8 +55,14 @@ func seatsServiceName(c *crewletaiv1alpha1.Company) string    { return c.Name + 
 
 // poolBootstrapName is the Secret a seat pool's pods start from. A PerSeat
 // pool's seats share it: their document is the same, and each seat's
-// StatefulSet gives its pods their seat in the environment.
-func poolBootstrapName(c *crewletaiv1alpha1.Company, pool string) string {
+// StatefulSet gives its pods their seat in the environment. A Shared pool's
+// document differs (its pods carry the pool's label, not a seat's), so a pool
+// whose mode changed under its name has one Secret per mode while the
+// running revision still pins a seat to its pods of the old one.
+func poolBootstrapName(c *crewletaiv1alpha1.Company, pool string, mode crewletaiv1alpha1.SeatPoolMode) string {
+	if mode == crewletaiv1alpha1.SeatPoolPerSeat {
+		return c.Name + "-bootstrap-" + pool + "-perseat"
+	}
 	return c.Name + "-bootstrap-" + pool
 }
 

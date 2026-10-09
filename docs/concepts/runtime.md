@@ -160,11 +160,17 @@ so two names that start alike stay apart. Each Seat's
   their template, and their Secrets, until every data pod is ready on the
   new one, and then every seat StatefulSet takes its new template in the
   same reconcile. Meanwhile the Company reports `SeatsPlaced=False`, reason
-  `RolloutBlocked`. A change to a pool alone rolls its pods at once.
+  `RolloutBlocked`, naming each seat StatefulSet whose template differs from
+  the one it would be given now, whatever differs in it. A change to a pool
+  alone rolls its pods at once.
 - **Suspension.** `spec.suspend` scales every seat StatefulSet to zero, and
   the data StatefulSet only once no seat pod is left: a stopping seat pod
   hands its last records to a data pod, the only kind that keeps them.
-  Resuming starts the data pods, and the seat pods once those are ready.
+  Each seat StatefulSet records how many pods it ran
+  (`crewlet.ai/suspended-replicas`). Resuming starts the data pods, and the
+  seat pods once those are ready: as many as each pool's `replicas` asks,
+  and for a StatefulSet kept only for the running revision, or frozen while
+  the Company is refused `PoolCapacityExceeded`, as many as it ran.
 - **A data pod outage.** A seat pod that cannot reach the estate for more
   than a minute releases its seats, and one that restarts meanwhile
   crash-loops; with Kubernetes' back-off it may take up to about five
@@ -180,10 +186,14 @@ reconciler records where the revision the engine runs pins its seats, in
 `status.config.placement` ([What each object
 reports](applying.md#what-each-object-reports)). A seat StatefulSet the
 Company no longer asks for, because its pool was removed or its seat moved
-elsewhere, keeps running, exactly as it is, for as long as that record pins a
-seat to it, and is deleted with its disruption budget and, once no
+elsewhere, keeps running, at the size it is, for as long as that record pins
+a seat to it, and is deleted with its disruption budget and, once no
 StatefulSet of the pool is left, the pool's Secret, as soon as a revision
-that pins nothing to it runs. A document that cannot be applied (a Seat
+that pins nothing to it runs. Meanwhile it still follows the data pods: it
+takes their new image and keyring once they are ready on them, with the
+resources, grace period and turns its pool had when the operator last wrote
+it (`crewlet.ai/seat-pool`), since a pod restarted from an image or a
+keyring the data pods have left would not join them. A document that cannot be applied (a Seat
 still placed in the removed pool is refused `PoolNotFound`) therefore keeps
 the pool running with the revision that needs it. `SeatsPlaced` names the
 StatefulSets kept that way.
@@ -197,9 +207,9 @@ the new pod has started.
 
 | The class | What the operator runs |
 |---|---|
-| `seatPools.policy` is not `Allowed` | No seat pod, pinned or not: the data pods open no leaf listener for one to join. The Company reports `SeatsPlaced=False`, `SeatPoolsNotAllowed`, and its document is refused. Changing the policy rolls the data pods, which open or close the listener. |
+| `seatPools.policy` is not `Allowed` | No new seat pod, and the Company's document is refused while it declares pools: `SeatsPlaced=False`, `SeatPoolsNotAllowed`. The engine keeps running its last revision, so the seat StatefulSets that revision pins seats to keep running, and the data pods keep their leaf listener open for them, until a revision that pins every seat to the data pods runs; then the seat pods go and the data pods roll to close the listener. A company with no seat pinned to a seat pod has its data pods rolled at once: changing the policy opens or closes the listener. |
 | A Seat in a PerSeat pool without `allowPerSeat`, or one whose pods would pass `maxPods` | No pod for that seat; the Seat reports `Applied=False`. |
-| `maxPods` that the Shared pools' replicas alone pass | Every seat StatefulSet stays as it is, and none is created: `SeatsPlaced=False`, `PoolCapacityExceeded`. |
+| `maxPods` that the Shared pools' replicas alone pass | Every seat StatefulSet keeps its size, and none is created: `SeatsPlaced=False`, `PoolCapacityExceeded`. Their pods still follow the data pods' image and keyring. |
 
 ### Disruptions
 
@@ -324,8 +334,13 @@ cluster's own networks belong ([Network policy](../guides/exposure.md#network-po
 
 Two more policies come with seat pools:
 
-- `nimbus-broker` exists while the class's `seatPools.policy` is `Allowed`,
-  **whatever `networkPolicy.mode` says**: Crewlet's leaf listener accepts any
+- `nimbus-broker` exists while a data pod opens the leaf listener, **whatever
+  `networkPolicy.mode` says**: while the data pods' template opens it (the
+  class allows seat pools, or the running revision still pins a seat to a
+  seat pod), and for as long as any data pod that runs, or is stopping, was
+  started from a template that opened it (the pod's annotation
+  `crewlet.ai/leaf-listener: open`), however long the rollout that closes it
+  takes or is held back. Crewlet's leaf listener accepts any
   connection, with no authentication and no TLS, and whoever joins it reads
   and writes the company's whole event stream. It selects the data pods and
   admits port 7422 only from this company's seat pods, which it selects by

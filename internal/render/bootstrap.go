@@ -243,10 +243,9 @@ const keyringKeyBytes = 32
 // can join without migrating anything: coordination is the replicated
 // embedded-kv (Crewlet refuses `local` once a second node exists), the stream
 // is persisted on the data volume, and the pod carries the data pool's
-// placement label. When the class allows seat pools it also opens the leaf
-// listener the seat pods join through (LeafPort), whether or not the company
-// has a pool yet: the class, not the Company, decides it, so a company that
-// adds its first pool restarts nothing.
+// placement label. It also opens the leaf listener the seat pods join through
+// (LeafPort) when LeafOpen says so: the class, not the Company, decides it, so
+// a company that adds its first pool restarts nothing.
 //
 // The credentials are written into the document as literals, never as
 // ${VAR} references to the pod's environment. Crewlet resolves a ${NAME} in
@@ -318,10 +317,37 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 		Secrets:      keyring,
 		Retention:    retentionDoc{BackupOwner: in.Class.Spec.Retention.BackupOwner},
 	}
-	if in.Class.Spec.SeatPools.Policy == v1alpha1.SeatPoolsAllowed {
+	if LeafOpen(in.Company, in.Class) {
 		doc.Stream.Leaf = &leafDoc{Port: LeafPort}
 	}
 	return encodeBootstrap(&doc, []corev1.EnvVar{nodeIDEnv()})
+}
+
+// LeafOpen reports whether a company's data pods open the leaf listener its
+// seat pods join through: while its class allows seat pools, whether or not
+// the company has one yet, so that a company's first pool restarts nothing;
+// and, once the class stops allowing them, for as long as the revision the
+// engine runs pins a seat to a seat pod (the Company's
+// status.config.placement). The engine keeps running that revision while the
+// Company's next one is refused for its pools, and closing the listener under
+// it would leave every seat it pins held by nobody until each tenant edited
+// its Seats.
+func LeafOpen(c *v1alpha1.Company, class *v1alpha1.EngineClass) bool {
+	return SeatPoolsAllowed(class) || PinsSeatPods(c)
+}
+
+// SeatPoolsAllowed reports whether a class lets its companies run seat pods
+// at all.
+func SeatPoolsAllowed(class *v1alpha1.EngineClass) bool {
+	return class.Spec.SeatPools.Policy == v1alpha1.SeatPoolsAllowed
+}
+
+// PinsSeatPods reports whether the revision the Company's engine runs, as its
+// status.config.placement records it, pins a seat to a pod other than a data
+// pod: to a Shared pool's, or to a seat's own.
+func PinsSeatPods(c *v1alpha1.Company) bool {
+	pins := c.Status.Config.Placement
+	return len(pins.Seats) > 0 || slices.ContainsFunc(pins.Pools, func(pool string) bool { return pool != v1alpha1.DataPool })
 }
 
 // SeatPodInput is what the Tier A of a seat pool's pods is rendered from.

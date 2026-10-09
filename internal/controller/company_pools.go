@@ -2,9 +2,11 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -62,31 +64,51 @@ const (
 	seatPodMinReadySeconds = 60
 )
 
-// leafOpen reports whether a class's data pods open the leaf listener: when
-// it allows seat pools at all, whether or not a company has one yet, so that
-// a company's first pool restarts nothing.
-func leafOpen(class *crewletaiv1alpha1.EngineClass) bool {
-	return class.Spec.SeatPools.Policy == crewletaiv1alpha1.SeatPoolsAllowed
-}
-
 // seatWorkload is one StatefulSet of seat pods.
 type seatWorkload struct {
 	name string
 	// pool is the pool's name, and seat the handle of a PerSeat pool's
 	// seat (empty for a Shared pool).
 	pool, seat string
-	// plan is the pool as planned; nil for a StatefulSet kept only because
-	// the running revision pins a seat to it.
+	// plan is how the pool runs its pods: as the Company's spec plans it,
+	// for a StatefulSet the plan wants; as it was planned when the operator
+	// last wrote the StatefulSet (SeatPoolAnnotation), for one kept only
+	// because the running revision pins a seat to it.
 	plan *render.PoolPlan
+	// kept is a StatefulSet the plan does not want, which the running
+	// revision pins a seat to.
+	kept bool
 	// existing is the StatefulSet as it is, or nil.
 	existing *appsv1.StatefulSet
 	// status is the StatefulSet's status after the reconcile: as the apply
 	// answered, or as it was.
 	status appsv1.StatefulSetStatus
 	// blocked is an existing StatefulSet that keeps an older template while
-	// the data pods roll; pending one not created yet while they are not
-	// ready.
+	// the data pods roll; pending one not created yet, while they are not
+	// ready or while the Company is refused for its pools.
 	blocked, pending bool
+}
+
+// replicas is how many pods the StatefulSet runs, and whether it may be
+// created: what the plan sizes it at, unless the Company's pools are frozen
+// (refused for passing the class's maxPods) or it is kept, when it stays at
+// the size it is, as it was before a suspension stopped it.
+func (w *seatWorkload) replicas(frozen bool) (int32, bool) {
+	if !w.kept && !frozen {
+		return w.plan.Replicas, true
+	}
+	if w.existing == nil {
+		return 0, false
+	}
+	return restoredReplicas(w.existing), true
+}
+
+// secretName is the Secret the workload's pods start from: one per pool and
+// mode, since a PerSeat pool's seats share their document and a Shared pool
+// of the same name, which a revision can still pin a seat to after the pool
+// changed mode, does not.
+func (w *seatWorkload) secretName(c *crewletaiv1alpha1.Company) string {
+	return poolBootstrapName(c, w.pool, w.plan.Mode)
 }
 
 // seatPlan is what a Company's seat pools should be, against what they are.
@@ -94,10 +116,12 @@ type seatPlan struct {
 	// topology is the plan render made.
 	topology *render.Topology
 	// allowed is whether the class allows seat pools: while it does not,
-	// the data pods open no listener to join, and no seat pod runs.
+	// the operator starts no seat pod, and keeps only those the revision the
+	// engine runs pins a seat to, for which the data pods keep their
+	// listener open (render.LeafOpen).
 	allowed bool
 	// refusal is the Company's own refusal (its Shared pools pass maxPods),
-	// which keeps every pool as it is; nil when there is none.
+	// which freezes every pool at the size it is; nil when there is none.
 	refusal *render.RefError
 	// refusedSeats counts the Seats refused a pool on their own.
 	refusedSeats int
@@ -115,11 +139,14 @@ func (p *seatPlan) running() bool {
 
 // planSeatPools works out which seat StatefulSets a Company runs: those its
 // plan places a seat in, sized by the plan, and those the revision the engine
-// runs still pins a seat to (status.config.placement), kept as they are. The
-// rest are stale. A class that allows no seat pools runs none, pinned or not:
-// its data pods have no listener for them to join. A Seat refused a pool
-// takes no pod; a Company whose Shared pools alone pass the class's maxPods
-// keeps every pool as it is (refusal).
+// runs still pins a seat to (status.config.placement), kept at the size they
+// are. The rest are stale. A class that allows no seat pools plans none, and
+// keeps the pinned ones all the same: the engine keeps running the revision
+// that pins seats to them while the Company's next one is refused for its
+// pools, and the data pods keep their listener open for them for as long
+// (render.LeafOpen). A Seat refused a pool takes no pod; a Company whose
+// Shared pools alone pass the class's maxPods keeps every pool at the size
+// it is (refusal).
 func (r *CompanyReconciler) planSeatPools(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 ) (*seatPlan, error) {
@@ -133,7 +160,7 @@ func (r *CompanyReconciler) planSeatPools(
 	}
 	ours := slices.DeleteFunc(seats.Items, func(s crewletaiv1alpha1.Seat) bool { return s.Spec.CompanyRef.Name != c.Name })
 	topology, err := render.PlanTopology(c, class, ours)
-	plan := &seatPlan{topology: topology, allowed: leafOpen(class)}
+	plan := &seatPlan{topology: topology, allowed: render.SeatPoolsAllowed(class)}
 	for _, refusal := range render.RefErrors(err) {
 		switch {
 		case refusal.Kind != render.KindCompany:
@@ -169,13 +196,81 @@ func (r *CompanyReconciler) planSeatPools(
 		if seat != "" {
 			pinned = slices.Contains(pins.Seats, seat)
 		}
-		if !plan.allowed || !pinned {
+		if !pinned {
 			plan.stale = append(plan.stale, sts)
 			continue
 		}
-		plan.kept = append(plan.kept, &seatWorkload{name: name, pool: pool, seat: seat, existing: sts, status: sts.Status})
+		kept := keptPlan(sts, pool, seat, class)
+		plan.kept = append(plan.kept, &seatWorkload{
+			name: name, pool: pool, seat: seat, plan: &kept, kept: true, existing: sts, status: sts.Status,
+		})
 	}
 	return plan, nil
+}
+
+// SeatPoolAnnotation records, on a seat StatefulSet, the pool spec it was
+// last written from (a spec.topology.seatPools entry, as JSON). The Company may
+// drop or change the pool while the revision the engine runs still pins a
+// seat to its pods; the StatefulSet is then kept, and keeps following the
+// data pods (a new image, a new keyring), which takes a template, which takes
+// the pool's resources, grace period and turns.
+const SeatPoolAnnotation = "crewlet.ai/seat-pool"
+
+// keptPlan is how a kept seat StatefulSet runs: its SeatPoolAnnotation's pool,
+// resolved against the class's defaults as they are now. A StatefulSet
+// without a readable one (its annotation was edited away) runs its pool's
+// mode on the class's defaults alone.
+func keptPlan(sts *appsv1.StatefulSet, pool, seat string, class *crewletaiv1alpha1.EngineClass) render.PoolPlan {
+	spec := crewletaiv1alpha1.SeatPool{Name: pool, Mode: crewletaiv1alpha1.SeatPoolShared}
+	if seat != "" {
+		spec.Mode = crewletaiv1alpha1.SeatPoolPerSeat
+	}
+	var recorded crewletaiv1alpha1.SeatPool
+	if raw, ok := sts.Annotations[SeatPoolAnnotation]; ok && json.Unmarshal([]byte(raw), &recorded) == nil &&
+		recorded.Name == pool && (recorded.Mode == crewletaiv1alpha1.SeatPoolPerSeat) == (seat != "") {
+		spec = recorded
+	}
+	return render.PoolPlanOf(&spec, class.Spec.SeatPools.Defaults)
+}
+
+// seatPoolSpec is SeatPoolAnnotation's value for a workload: the Company's
+// spec of its pool, or for a kept workload the one it recorded.
+func seatPoolSpec(c *crewletaiv1alpha1.Company, w *seatWorkload) (string, error) {
+	spec := crewletaiv1alpha1.SeatPool{Name: w.pool, Mode: w.plan.Mode}
+	if w.kept {
+		if raw, ok := w.existing.Annotations[SeatPoolAnnotation]; ok {
+			return raw, nil
+		}
+	} else {
+		for i := range c.Spec.Topology.SeatPools {
+			if c.Spec.Topology.SeatPools[i].Name == w.pool {
+				spec = c.Spec.Topology.SeatPools[i]
+			}
+		}
+	}
+	raw, err := json.Marshal(spec)
+	if err != nil {
+		return "", fmt.Errorf("encoding seat pool %s: %w", w.pool, err)
+	}
+	return string(raw), nil
+}
+
+// SuspendedReplicasAnnotation records, on a seat StatefulSet a suspension
+// scaled to zero, how many pods it ran. A StatefulSet the plan sizes takes
+// its size from the plan when the Company resumes; one kept for the running
+// revision, or frozen while the Company is refused for its pools, has nothing
+// else to take it from.
+const SuspendedReplicasAnnotation = "crewlet.ai/suspended-replicas"
+
+// restoredReplicas is how many pods an existing seat StatefulSet runs once
+// the Company runs: what it ran before a suspension, or what it runs.
+func restoredReplicas(sts *appsv1.StatefulSet) int32 {
+	if raw, ok := sts.Annotations[SuspendedReplicasAnnotation]; ok {
+		if n, err := strconv.ParseInt(raw, 10, 32); err == nil && n >= 0 {
+			return int32(n)
+		}
+	}
+	return value(sts.Spec.Replicas)
 }
 
 // seatStatefulSets are the StatefulSets of seat pods the Company controls, by
@@ -198,14 +293,28 @@ func (r *CompanyReconciler) seatStatefulSets(ctx context.Context, c *crewletaiv1
 // reports whether any seat pod is still there, stopping or not. It needs
 // nothing rendered, so a suspended Company stops whatever else is wrong. The
 // operator does not watch Pods, so a caller that waits for them polls.
+//
+// Each StatefulSet keeps how many pods it ran (SuspendedReplicasAnnotation),
+// for one the Company's plan no longer sizes to run as many again when the
+// Company resumes.
 func (r *CompanyReconciler) stopSeatPods(ctx context.Context, c *crewletaiv1alpha1.Company) (bool, error) {
 	existing, err := r.seatStatefulSets(ctx, c)
 	if err != nil {
 		return false, err
 	}
 	for _, name := range slices.Sorted(maps.Keys(existing)) {
-		if err := r.scaleToZero(ctx, c, existing[name]); err != nil {
-			return false, err
+		sts := existing[name]
+		if value(sts.Spec.Replicas) == 0 {
+			continue
+		}
+		base := sts.DeepCopy()
+		if sts.Annotations == nil {
+			sts.Annotations = map[string]string{}
+		}
+		sts.Annotations[SuspendedReplicasAnnotation] = strconv.Itoa(int(value(sts.Spec.Replicas)))
+		sts.Spec.Replicas = new(int32(0))
+		if err := r.Patch(ctx, sts, client.MergeFrom(base), client.FieldOwner(FieldOwner)); err != nil {
+			return false, fmt.Errorf("scaling StatefulSet %s/%s to zero: %w", sts.Namespace, sts.Name, err)
 		}
 	}
 	return r.seatPodsLeft(ctx, c)
@@ -257,6 +366,12 @@ func (r *CompanyReconciler) reconcileSeatPools(
 }
 
 // writeSeatPools is the writing half of reconcileSeatPools.
+//
+// Every StatefulSet that stays, wanted or kept, follows the data pods: it
+// takes their image and keyring once they are ready on their template, and
+// its pool's Secret is written for it. What the plan cannot change while the
+// Company is refused for its pools (frozen) is their size: none is created,
+// and each keeps the pods it runs.
 func (r *CompanyReconciler) writeSeatPools(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, plan *seatPlan, in *seatInputs,
 ) error {
@@ -281,44 +396,42 @@ func (r *CompanyReconciler) writeSeatPools(
 		return err
 	}
 
-	// The pools whose Secret stays: every pool that runs a StatefulSet,
-	// and the pool of each one kept, whose pods may restart from it.
-	pools := map[string]bool{}
-	for _, w := range plan.kept {
-		pools[w.pool] = true
-	}
-	if plan.refusal != nil || suspended(c) {
-		// Over the class's maxPods, or stopped: what runs stays as it is.
-		for _, w := range plan.wanted {
-			pools[w.pool] = true
-		}
-		return r.deleteSeatSecrets(ctx, c, pools)
-	}
-
-	byPool := map[string][]*seatWorkload{}
+	// One Secret per pool and mode, written once for the StatefulSets that
+	// start from it, the wanted ones' first.
 	var order []string
-	for _, w := range plan.wanted {
-		if byPool[w.pool] == nil {
-			order = append(order, w.pool)
+	bySecret := map[string][]*seatWorkload{}
+	for _, w := range slices.Concat(plan.wanted, plan.kept) {
+		name := w.secretName(c)
+		if bySecret[name] == nil {
+			order = append(order, name)
 		}
-		byPool[w.pool] = append(byPool[w.pool], w)
+		bySecret[name] = append(bySecret[name], w)
 	}
-	for _, pool := range order {
-		pools[pool] = true
-		if err := r.writeSeatPool(ctx, c, class, byPool[pool], in); err != nil {
+	keep := map[string]bool{}
+	for _, name := range order {
+		keep[name] = true
+	}
+	if suspended(c) {
+		// Stopped by stopSeatPods; what starts them again stays.
+		return r.deleteSeatSecrets(ctx, c, keep)
+	}
+	for _, name := range order {
+		if err := r.writeSeatPool(ctx, c, class, name, bySecret[name], in, plan.refusal != nil); err != nil {
 			return err
 		}
 	}
-	return r.deleteSeatSecrets(ctx, c, pools)
+	return r.deleteSeatSecrets(ctx, c, keep)
 }
 
-// writeSeatPool writes one pool's Secret and StatefulSets: every one while
-// the data pods are ready on the current template, and otherwise none, only
-// taking away pods the pool no longer runs.
+// writeSeatPool writes one Secret of a pool and the StatefulSets that start
+// from it: every one while the data pods are ready on the current template,
+// and otherwise none, only taking away pods a pool no longer runs.
 func (r *CompanyReconciler) writeSeatPool(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
-	workloads []*seatWorkload, in *seatInputs,
+	secret string, workloads []*seatWorkload, in *seatInputs, frozen bool,
 ) error {
+	// The document is the first workload's pool's: a wanted one's, as the
+	// Company plans it, whenever the pool is still planned.
 	pool := workloads[0].plan
 	members := make([]string, c.Spec.Topology.Data.Replicas)
 	for i := range members {
@@ -335,52 +448,104 @@ func (r *CompanyReconciler) writeSeatPool(
 		if err != nil {
 			// The data pods were started from the same keyring, which
 			// render accepted for them.
-			return fmt.Errorf("rendering the bootstrap document of seat pool %s: %w", pool.Name, err)
+			return fmt.Errorf("rendering the bootstrap document of seat pool %s: %w", w.pool, err)
 		}
 		if data == nil {
-			// One document serves the pool: a PerSeat pool's seats
+			// One document serves the Secret: a PerSeat pool's seats
 			// differ only in the environment.
 			data = maps.Clone(in.platform)
 			data[configFile] = doc.YAML
 			hash = hashOf(data)
 		}
-		if !in.dataReady {
-			if err := r.holdSeatWorkload(ctx, w, in.image, hash); err != nil {
+		pod, err := seatPodTemplate(c, class, w, secret, in.image, doc, hash)
+		if err != nil {
+			return err
+		}
+		templateHash, err := podTemplateHash(pod)
+		if err != nil {
+			return err
+		}
+		replicas, create := w.replicas(frozen)
+		if !in.dataReady || !create {
+			if err := r.holdSeatWorkload(ctx, w, templateHash, frozen); err != nil {
 				return err
 			}
 			continue
 		}
 		if !written {
-			if err := r.applySeatSecret(ctx, c, pool.Name, data); err != nil {
+			if err := r.applySeatSecret(ctx, c, secret, w.pool, data); err != nil {
 				return err
 			}
 			written = true
 		}
-		sts, err := r.applySeatStatefulSet(ctx, c, class, w, in.image, doc, hash)
+		spec, err := seatPoolSpec(c, w)
+		if err != nil {
+			return err
+		}
+		sts, err := r.applySeatStatefulSet(ctx, c, w, replicas, pod, map[string]string{
+			PodTemplateHashAnnotation: templateHash, SeatPoolAnnotation: spec,
+		})
 		if err != nil {
 			return err
 		}
 		if sts.Status != nil {
 			w.status = statefulSetStatusOf(sts.Status)
 		}
-		if err := r.reconcilePodDisruptionBudget(ctx, c, w); err != nil {
+		if err := r.resumed(ctx, w); err != nil {
+			return err
+		}
+		if err := r.reconcilePodDisruptionBudget(ctx, c, w, replicas); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+// PodTemplateHashAnnotation records, on a seat StatefulSet, a hash of the pod
+// template the operator last wrote into it: whether a StatefulSet held back
+// while the data pods roll keeps an older template is whether the template it
+// would be given now hashes otherwise.
+const PodTemplateHashAnnotation = "crewlet.ai/pod-template-hash"
+
+// podTemplateHash is PodTemplateHashAnnotation's value for a template.
+func podTemplateHash(pod *corev1ac.PodTemplateSpecApplyConfiguration) (string, error) {
+	raw, err := json.Marshal(pod)
+	if err != nil {
+		return "", fmt.Errorf("encoding a seat pod template: %w", err)
+	}
+	return hashOf(map[string][]byte{"template": raw}), nil
+}
+
+// resumed drops SuspendedReplicasAnnotation from a StatefulSet that runs
+// again, so that a later scale of it is not undone at the next suspension.
+func (r *CompanyReconciler) resumed(ctx context.Context, w *seatWorkload) error {
+	if w.existing == nil {
+		return nil
+	}
+	if _, ok := w.existing.Annotations[SuspendedReplicasAnnotation]; !ok {
+		return nil
+	}
+	base := w.existing.DeepCopy()
+	delete(w.existing.Annotations, SuspendedReplicasAnnotation)
+	if err := r.Patch(ctx, w.existing, client.MergeFrom(base), client.FieldOwner(FieldOwner)); err != nil {
+		return fmt.Errorf("recording that StatefulSet %s/%s runs again: %w", w.existing.Namespace, w.existing.Name, err)
+	}
+	return nil
+}
+
 // holdSeatWorkload leaves a seat StatefulSet on its template while the data
 // pods are not ready on theirs, and creates none: it only takes away the
-// pods a pool no longer runs. It notes whether the StatefulSet waits for a
-// template (blocked) or to be created (pending).
-func (r *CompanyReconciler) holdSeatWorkload(ctx context.Context, w *seatWorkload, image, hash string) error {
+// pods a pool the plan sizes no longer runs. It notes whether the StatefulSet
+// waits for a template (blocked) or to be created (pending).
+func (r *CompanyReconciler) holdSeatWorkload(ctx context.Context, w *seatWorkload, templateHash string, frozen bool) error {
 	if w.existing == nil {
 		w.pending = true
 		return nil
 	}
-	template := &w.existing.Spec.Template
-	w.blocked = runningImage(w.existing) != image || template.Annotations[BootstrapHashAnnotation] != hash
+	w.blocked = w.existing.Annotations[PodTemplateHashAnnotation] != templateHash
+	if w.kept || frozen {
+		return nil
+	}
 	if current := value(w.existing.Spec.Replicas); w.plan.Replicas < current {
 		base := w.existing.DeepCopy()
 		w.existing.Spec.Replicas = new(w.plan.Replicas)
@@ -392,19 +557,19 @@ func (r *CompanyReconciler) holdSeatWorkload(ctx context.Context, w *seatWorkloa
 }
 
 // applySeatSecret writes the Secret a seat pool's pods start from.
-func (r *CompanyReconciler) applySeatSecret(ctx context.Context, c *crewletaiv1alpha1.Company, pool string, data map[string][]byte) error {
+func (r *CompanyReconciler) applySeatSecret(ctx context.Context, c *crewletaiv1alpha1.Company, name, pool string, data map[string][]byte) error {
 	labels := labelsFor(c, componentSeats)
 	labels[render.PoolLabel] = pool
-	secret := corev1ac.Secret(poolBootstrapName(c, pool), c.Namespace).
+	secret := corev1ac.Secret(name, c.Namespace).
 		WithLabels(labels).
 		WithOwnerReferences(ownerReference(c)).
 		WithType(corev1.SecretTypeOpaque).
 		WithData(data)
-	return r.apply(ctx, c, secretGVK, poolBootstrapName(c, pool), secret)
+	return r.apply(ctx, c, secretGVK, name, secret)
 }
 
-// deleteSeatSecrets deletes the seat pools' Secrets of every pool but those
-// given. The cache holds Secrets as metadata, which is all this reads.
+// deleteSeatSecrets deletes the seat pools' Secrets of the Company but those
+// named. The cache holds Secrets as metadata, which is all this reads.
 func (r *CompanyReconciler) deleteSeatSecrets(ctx context.Context, c *crewletaiv1alpha1.Company, keep map[string]bool) error {
 	secrets := &metav1.PartialObjectMetadataList{}
 	secrets.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("SecretList"))
@@ -413,7 +578,7 @@ func (r *CompanyReconciler) deleteSeatSecrets(ctx context.Context, c *crewletaiv
 	}
 	for i := range secrets.Items {
 		secret := &secrets.Items[i]
-		if keep[secret.Labels[render.PoolLabel]] {
+		if keep[secret.Name] {
 			continue
 		}
 		if err := r.deleteIfControlled(ctx, c, secret); err != nil {
@@ -463,21 +628,18 @@ func seatWorkloadSelector(c *crewletaiv1alpha1.Company, w *seatWorkload) *metav1
 			WithOperator(metav1.LabelSelectorOpDoesNotExist))
 }
 
-// applySeatStatefulSet writes one seat StatefulSet and returns it as the API
-// server answered, status included.
+// applySeatStatefulSet writes one seat StatefulSet, with the pod template
+// given, and returns it as the API server answered, status included.
 func (r *CompanyReconciler) applySeatStatefulSet(
-	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
-	w *seatWorkload, image string, doc *render.BootstrapDocument, hash string,
+	ctx context.Context, c *crewletaiv1alpha1.Company, w *seatWorkload, replicas int32,
+	pod *corev1ac.PodTemplateSpecApplyConfiguration, annotations map[string]string,
 ) (*appsv1ac.StatefulSetApplyConfiguration, error) {
-	pod, err := seatPodTemplate(c, class, w, image, doc, hash)
-	if err != nil {
-		return nil, err
-	}
 	sts := appsv1ac.StatefulSet(w.name, c.Namespace).
 		WithLabels(seatWorkloadLabels(c, w)).
+		WithAnnotations(annotations).
 		WithOwnerReferences(ownerReference(c)).
 		WithSpec(appsv1ac.StatefulSetSpec().
-			WithReplicas(w.plan.Replicas).
+			WithReplicas(replicas).
 			WithServiceName(seatsServiceName(c)).
 			WithSelector(seatWorkloadSelector(c, w)).
 			// Parallel: no seat pod waits on another to start or stop.
@@ -500,11 +662,11 @@ func (r *CompanyReconciler) applySeatStatefulSet(
 // the ingress role.
 func seatPodTemplate(
 	c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
-	w *seatWorkload, image string, doc *render.BootstrapDocument, hash string,
+	w *seatWorkload, secret, image string, doc *render.BootstrapDocument, hash string,
 ) (*corev1ac.PodTemplateSpecApplyConfiguration, error) {
 	env, err := engineEnv(c, class, &engineEnvironment{
 		bootstrap:   doc.Env,
-		secret:      poolBootstrapName(c, w.pool),
+		secret:      secret,
 		statefulSet: w.name,
 		// On the scratch volume: the pod starts with an empty one anyway.
 		tursoCache: render.DataDir + "/cache",
@@ -534,7 +696,7 @@ func seatPodTemplate(
 	}
 	spec.WithContainers(container).
 		WithVolumes(
-			configVolume(poolBootstrapName(c, w.pool)),
+			configVolume(secret),
 			corev1ac.Volume().WithName(scratchVolume).WithEmptyDir(corev1ac.EmptyDirVolumeSource().
 				WithSizeLimit(w.plan.ScratchSizeLimit)),
 		)
@@ -553,8 +715,10 @@ func seatPodTemplate(
 // Crash-looping pods may always be evicted (AlwaysAllow): with no probe,
 // a seat pod is unhealthy only while its engine cannot start, and a budget
 // that held such a pod would hold up the drain for nothing.
-func (r *CompanyReconciler) reconcilePodDisruptionBudget(ctx context.Context, c *crewletaiv1alpha1.Company, w *seatWorkload) error {
-	if w.plan.Mode == crewletaiv1alpha1.SeatPoolPerSeat && w.plan.Replicas < 2 {
+func (r *CompanyReconciler) reconcilePodDisruptionBudget(
+	ctx context.Context, c *crewletaiv1alpha1.Company, w *seatWorkload, replicas int32,
+) error {
+	if w.plan.Mode == crewletaiv1alpha1.SeatPoolPerSeat && replicas < 2 {
 		return r.deleteControlled(ctx, c, podDisruptionBudgetGVK, w.name)
 	}
 	pdb := policyv1ac.PodDisruptionBudget(w.name, c.Namespace).
@@ -624,11 +788,13 @@ func seatsPlaced(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineCl
 		return notPlaced(crewletaiv1alpha1.ReasonSuspended, "The Company is suspended: no pod runs its seats.")
 	case !plan.allowed && len(c.Spec.Topology.SeatPools) > 0:
 		return notPlaced(crewletaiv1alpha1.ReasonSeatPoolsNotAllowed, fmt.Sprintf(
-			"EngineClass %s does not allow seat pools (spec.seatPools.policy), so the data pods open no listener for seat pods "+
-				"to join and the operator runs none: the seats placed in the Company's pools run nowhere.", class.Name))
+			"EngineClass %s does not allow seat pools (spec.seatPools.policy), so the operator starts no seat pod and the "+
+				"Company's next revision is refused. The pods the revision the engine runs pins seats to keep running, and the "+
+				"data pods keep their listener open for them, until a revision that pins no seat to a seat pool runs.", class.Name))
 	case plan.refusal != nil:
 		return notPlaced(crewletaiv1alpha1.ReasonPoolCapacityExceeded, fmt.Sprintf(
-			"%s: %s. The operator keeps the seat pools' pods as they are and starts no other.", plan.refusal.Field, plan.refusal.Message))
+			"%s: %s. The operator keeps each seat pool at the size it is and starts no other; their pods still follow the "+
+				"data pods' image and keyring.", plan.refusal.Field, plan.refusal.Message))
 	}
 
 	// Every pool with a seat, data included, by what serves it.

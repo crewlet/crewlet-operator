@@ -67,6 +67,18 @@ const (
 // guessed at without them.
 const BootstrapHashAnnotation = "crewlet.ai/bootstrap-hash"
 
+// LeafListenerAnnotation marks a data pod whose engine opens the leaf
+// listener (render.LeafPort), with the value leafListenerOpen. It is how the
+// operator knows what the pods that run open, rather than what their next
+// template will: the listener accepts any connection, with no
+// authentication, so the NetworkPolicy that guards it (<c>-broker) stays
+// until no running data pod opens it, however long a rollout that closes it
+// takes or is held back.
+const LeafListenerAnnotation = "crewlet.ai/leaf-listener"
+
+// leafListenerOpen is LeafListenerAnnotation's value.
+const leafListenerOpen = "open"
+
 // The environment variables the operator sets on the engine beyond those
 // render.Bootstrap lists.
 const (
@@ -170,7 +182,7 @@ func (r *CompanyReconciler) applyServices(ctx context.Context, c *crewletaiv1alp
 		return err
 	}
 	ports := []*corev1ac.ServicePortApplyConfiguration{port}
-	if leafOpen(class) {
+	if render.LeafOpen(c, class) {
 		ports = append(ports, corev1ac.ServicePort().
 			WithName(leafPortName).
 			WithProtocol(corev1.ProtocolTCP).
@@ -298,6 +310,9 @@ func podTemplate(
 			corev1ac.Volume().WithName("home").WithEmptyDir(corev1ac.EmptyDirVolumeSource()),
 		)
 	labels, annotations := enginePodMetadata(class, labelsFor(c, componentData), w.bootstrapHash)
+	if render.LeafOpen(c, class) {
+		annotations[LeafListenerAnnotation] = leafListenerOpen
+	}
 	return corev1ac.PodTemplateSpec().
 		WithLabels(labels).
 		WithAnnotations(annotations).
@@ -454,8 +469,8 @@ func engineContainerOf(
 			WithPreStop(corev1ac.LifecycleHandler().
 				WithSleep(corev1ac.SleepAction().WithSeconds(preStopSleepSeconds))))
 	// The leaf listener the seat pods join through, which the bootstrap
-	// document opens when the class allows seat pools.
-	if leafOpen(class) {
+	// document opens when render.LeafOpen says so.
+	if render.LeafOpen(c, class) {
 		container.WithPorts(corev1ac.ContainerPort().
 			WithName(leafPortName).
 			WithContainerPort(render.LeafPort).
@@ -838,6 +853,20 @@ func recordRollout(c *crewletaiv1alpha1.Company, sts *appsv1ac.StatefulSetApplyC
 	}
 	image := *sts.Spec.Template.Spec.Containers[0].Image
 	c.Status.Engine = crewletaiv1alpha1.EngineStatus{Image: image, Version: tagOf(image)}
+}
+
+// recordDataStatus records the data StatefulSet's pods in
+// status.topology.data as they are, for a reconcile that holds them back and
+// so writes nothing that would answer with them: the seat pools' report reads
+// whether a data pod is ready from there. No StatefulSet is no pod.
+func recordDataStatus(c *crewletaiv1alpha1.Company, sts *appsv1.StatefulSet) {
+	var s appsv1.StatefulSetStatus
+	if sts != nil {
+		s = sts.Status
+	}
+	c.Status.Topology.Data = crewletaiv1alpha1.DataTopologyStatus{
+		Replicas: new(s.Replicas), ReadyReplicas: new(s.ReadyReplicas), UpdatedReplicas: new(s.UpdatedReplicas),
+	}
 }
 
 // runtimeCondition is a RuntimeReady condition.

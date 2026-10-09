@@ -248,3 +248,61 @@ func TestBootstrapBoundsTheStreamByTheVolume(t *testing.T) {
 		t.Fatalf("stream.store_max_bytes = %d for an 8Gi volume, want %d", got.Stream.StoreMaxBytes, want)
 	}
 }
+
+// TestDataPodsKeepTheirLeafListenerForPinnedSeats holds the data pods' leaf
+// listener open while the revision the engine runs pins a seat to a seat pod,
+// whatever the class says now: the engine keeps running that revision while
+// the next one is refused for its pools, and closing the listener would leave
+// the seats it pins held by nobody.
+func TestDataPodsKeepTheirLeafListenerForPinnedSeats(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		policy  v1alpha1.SeatPoolPolicy
+		pinned  v1alpha1.RevisionPlacement
+		want    bool
+		because string
+	}{
+		{name: "pools allowed", policy: v1alpha1.SeatPoolsAllowed, want: true, because: "the class allows seat pools"},
+		{name: "pools forbidden", policy: v1alpha1.SeatPoolsForbidden, because: "nothing joins it"},
+		{
+			name: "pools forbidden, every seat on the data pods", policy: v1alpha1.SeatPoolsForbidden,
+			pinned: v1alpha1.RevisionPlacement{Pools: []string{v1alpha1.DataPool}}, because: "no seat runs on a seat pod",
+		},
+		{
+			name: "pools forbidden, a seat in a Shared pool", policy: v1alpha1.SeatPoolsForbidden,
+			pinned: v1alpha1.RevisionPlacement{Pools: []string{v1alpha1.DataPool, "general"}}, want: true,
+			because: "the running revision pins a seat to a Shared pool's pods",
+		},
+		{
+			name: "pools forbidden, a seat of its own", policy: v1alpha1.SeatPoolsForbidden,
+			pinned: v1alpha1.RevisionPlacement{Seats: []string{"cy"}}, want: true,
+			because: "the running revision pins a seat to its own pods",
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := bootstrapCases()[0].input(t)
+			in.Class.Spec.SeatPools = v1alpha1.SeatPoolSettings{Policy: c.policy}
+			in.Company.Status.Config.Placement = c.pinned
+			doc, err := Bootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var tierA struct {
+				Stream struct {
+					Leaf *struct {
+						Port int `json:"port"`
+					} `json:"leaf"`
+				} `json:"stream"`
+			}
+			if err := yaml.Unmarshal(doc.YAML, &tierA); err != nil {
+				t.Fatal(err)
+			}
+			if got := tierA.Stream.Leaf != nil && tierA.Stream.Leaf.Port == LeafPort; got != c.want {
+				t.Errorf("the data pods open the leaf listener: %v, want %v: %s", got, c.want, c.because)
+			}
+			if got := LeafOpen(in.Company, in.Class); got != c.want {
+				t.Errorf("LeafOpen = %v, want %v: %s", got, c.want, c.because)
+			}
+		})
+	}
+}

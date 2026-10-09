@@ -176,7 +176,7 @@ func planTopology(c *v1alpha1.Company, class *v1alpha1.EngineClass, seats []v1al
 	settings := class.Spec.SeatPools
 	t := &Topology{}
 	for i := range c.Spec.Topology.SeatPools {
-		t.Pools = append(t.Pools, poolPlan(&c.Spec.Topology.SeatPools[i], settings.Defaults))
+		t.Pools = append(t.Pools, PoolPlanOf(&c.Spec.Topology.SeatPools[i], settings.Defaults))
 	}
 
 	allowed := settings.Policy == v1alpha1.SeatPoolsAllowed
@@ -275,8 +275,9 @@ func checkCapacity(c *v1alpha1.Company, class *v1alpha1.EngineClass, t *Topology
 	}
 }
 
-// poolPlan resolves a pool's spec against the class's defaults.
-func poolPlan(p *v1alpha1.SeatPool, defaults v1alpha1.SeatPoolDefaults) PoolPlan {
+// PoolPlanOf resolves a pool's spec against the class's defaults, with no
+// seats placed in it.
+func PoolPlanOf(p *v1alpha1.SeatPool, defaults v1alpha1.SeatPoolDefaults) PoolPlan {
 	plan := PoolPlan{
 		Name: p.Name,
 		Mode: cmp.Or(p.Mode, v1alpha1.SeatPoolShared),

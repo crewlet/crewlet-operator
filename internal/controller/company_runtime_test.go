@@ -1531,7 +1531,7 @@ var _ = Describe("Company runtime", func() {
 				Spec: corev1.PodSpec{
 					ServiceAccountName:           engineName,
 					AutomountServiceAccountToken: new(false),
-					Containers:                   []corev1.Container{{Name: "engine", Image: engineImageV020}},
+					Containers:                   []corev1.Container{{Name: engineContainer, Image: engineImageV020}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, pod)).To(Succeed())

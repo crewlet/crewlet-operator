@@ -490,8 +490,13 @@ func engineEgress(settings *crewletaiv1alpha1.NetworkPolicySettings) []*networki
 }
 
 // reconcileBrokerPolicy writes <c>-broker while the data pods open the leaf
-// listener (the class allows seat pools), whatever the class's networkPolicy
-// says, and deletes it otherwise. Crewlet's broker accepts any connection on
+// listener, whatever the class's networkPolicy says, and deletes it
+// otherwise. "While" covers both the pods the next template makes
+// (render.LeafOpen) and the pods that run now (dataPodsOpenLeaf): a template
+// that closes the listener reaches the pods only as the data StatefulSet
+// rolls, which takes a drain at least and lasts as long as the rollout is
+// held back, and a pod that still listens meanwhile must stay behind the
+// policy. Crewlet's broker accepts any connection on
 // that port, with no authentication and no TLS, and whoever joins it reads
 // and writes the company's whole event stream; with companies sharing a
 // cluster, and sometimes a namespace, only a policy keeps another's pods off
@@ -506,7 +511,15 @@ func engineEgress(settings *crewletaiv1alpha1.NetworkPolicySettings) []*networki
 func (r *CompanyReconciler) reconcileBrokerPolicy(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 ) error {
-	if !leafOpen(class) {
+	open := render.LeafOpen(c, class)
+	if !open {
+		running, err := r.dataPodsOpenLeaf(ctx, c)
+		if err != nil {
+			return err
+		}
+		open = running
+	}
+	if !open {
 		return r.deleteControlled(ctx, c, networkPolicyGVK, brokerPolicyName(c))
 	}
 	rules := []*networkingv1ac.NetworkPolicyIngressRuleApplyConfiguration{
@@ -526,6 +539,25 @@ func (r *CompanyReconciler) reconcileBrokerPolicy(
 			WithPolicyTypes(networkingv1.PolicyTypeIngress).
 			WithIngress(rules...))
 	return r.apply(ctx, c, networkPolicyGVK, brokerPolicyName(c), policy)
+}
+
+// dataPodsOpenLeaf reports whether any data pod of the Company, running or
+// stopping, opens the leaf listener: carries LeafListenerAnnotation. The
+// operator does not watch Pods; the data StatefulSet's status changes as its
+// pods are replaced, which brings the Company back here once the last one
+// that listened is gone.
+func (r *CompanyReconciler) dataPodsOpenLeaf(ctx context.Context, c *crewletaiv1alpha1.Company) (bool, error) {
+	pods := &metav1.PartialObjectMetadataList{}
+	pods.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PodList"))
+	if err := r.APIReader.List(ctx, pods, client.InNamespace(c.Namespace), client.MatchingLabels(selectorFor(c, componentData))); err != nil {
+		return false, fmt.Errorf("listing the data pods of Company %s/%s: %w", c.Namespace, c.Name, err)
+	}
+	for i := range pods.Items {
+		if pods.Items[i].Annotations[LeafListenerAnnotation] == leafListenerOpen {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // reconcileSeatsPolicy writes <c>-seats while the company runs seat pods, and

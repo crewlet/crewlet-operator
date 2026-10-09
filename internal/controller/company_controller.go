@@ -363,7 +363,9 @@ func (r *CompanyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&crewletaiv1alpha1.Company{}, builder.WithPredicates(predicate.Or[client.Object](
 			predicate.GenerationChangedPredicate{}, configReported()))).
 		Owns(&appsv1.StatefulSet{}).
-		Owns(&policyv1.PodDisruptionBudget{}, builder.OnlyMetadata).
+		// A budget's status moves with every readiness flip of a seat pod,
+		// and nothing here reads it: only its spec, or its deletion, does.
+		Owns(&policyv1.PodDisruptionBudget{}, builder.OnlyMetadata, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&corev1.Service{}, builder.OnlyMetadata).
 		Owns(&corev1.ServiceAccount{}, builder.OnlyMetadata).
 		Owns(&corev1.Secret{}, builder.OnlyMetadata).
