@@ -12,17 +12,21 @@ import (
 // whose runs call back into the node that holds the seat, or keep a CLI
 // login it was given as a credential bundle.
 //
-// A seat pod binds no port: the pinned engine serves nothing on a node
-// without the ingress role, and the operator gives a seat pod neither an
-// api.port nor CREWLET_MCP_BRIDGE_URL. An agent-mode run calls the seat's
-// tools through the tool bridge of the very node that opened its session
-// (Crewlet's docs/concepts/code-sandbox.md, "The tool bridge"), and the
-// company's public address reaches the data pods only, so the engine refuses
-// agent mode for a seat on a seat pod at run time, after the revision is
-// applied and while the Seat reports Applied. Giving every seat pod a bridge
-// of its own would give it a listener reachable from the sandbox, a route and
-// an address of its own; until the operator does, the seat is refused here,
-// where the refusal is reported before anything runs.
+// An agent-mode run calls the seat's tools through the tool bridge of the
+// very node that opened its session (Crewlet's
+// docs/concepts/code-sandbox.md, "The tool bridge"), at the address the node
+// was given as CREWLET_MCP_BRIDGE_URL. The engine serves that bridge on a
+// node without the ingress role too, on its api.port beside the probes (or
+// on api.public's listener when one is set), and a seat pod binds api.port
+// for its probes. What a seat pod lacks is an address: the operator routes
+// the company's public address to the data pods alone, and publishes none
+// for a seat pod that a remote sandbox could dial, so it gives a seat pod no
+// CREWLET_MCP_BRIDGE_URL, and the engine refuses agent mode for a seat there
+// at run time, after the revision is applied and while the Seat reports
+// Applied. A bridge for a seat pod needs a route and a public address of the
+// pod's own, which its session's runs reach and no other pod's; until the
+// operator gives it one, the seat is refused here, where the refusal is
+// reported before anything runs.
 //
 // A CLI's login lives under its state directory, which on a data pod is the
 // data volume and on a seat pod the scratch volume it loses at every start.

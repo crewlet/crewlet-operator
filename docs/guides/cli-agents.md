@@ -161,13 +161,18 @@ A seat runs on it by naming it in `spec.llm.default`; see the Seat's
 ## Seat pools
 
 A seat placed in a [seat pool](topology.md) runs on a seat pod, which keeps
-nothing between starts and serves no port. Two things a data pod does for a
-CLI it cannot do:
+nothing between starts and serves only its probes. Two things a data pod
+does for a CLI it cannot do:
 
 - **Agent mode.** A run calls the seat's tools back through the tool bridge
   of the very pod that holds the seat, on an address the sandbox reaches; the
-  operator gives the data pod the company's public address for it, and a
-  seat pod has neither a bridge nor an address. Crewlet runs a turn in agent
+  operator gives the data pod the company's public address for it. The
+  engine would serve the bridge on a seat pod too, on the listener its
+  probes use, but nothing publishes an address of a seat pod's own that a
+  remote sandbox could dial: the company's public address reaches the data
+  pod alone, and a seat pod is reached by its kubelet and nothing else.
+  Without an address the engine refuses every agent-mode run on the pod,
+  after the revision has applied. Crewlet runs a turn in agent
   mode only when the HEAD of the executor's chain is in `mode: Agent`, so a
   seat in a seat pool whose executor's chain (`spec.llm.default`, or the
   Company's first provider when the seat names none) starts with such a

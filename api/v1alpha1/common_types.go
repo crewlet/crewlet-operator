@@ -740,9 +740,12 @@ const (
 	// one at the head of its executor's chain, the only entry Crewlet runs
 	// as an agentic run (a fallback behind it is a text call).
 	// An agent-mode run calls the seat's tools back through the tool bridge
-	// of the engine node that holds the seat, and a seat pod serves none:
-	// the engine refuses agent mode on a node with no bridge URL, and the
-	// company's public address reaches the data pods only.
+	// of the engine node that holds the seat, at the address that node was
+	// given (CREWLET_MCP_BRIDGE_URL). The engine would serve the bridge on a
+	// seat pod's own listener, but the operator publishes no address of a
+	// seat pod a remote sandbox could dial (the company's public address
+	// reaches the data pods only), so it gives a seat pod none, and the
+	// engine refuses agent mode on a node with no bridge URL.
 	ReasonAgentModeBridgeUnsupported = "AgentModeBridgeUnsupported"
 
 	// ReasonCLIAuthNotPortable is Applied=False on a Seat placed in a seat

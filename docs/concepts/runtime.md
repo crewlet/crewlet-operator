@@ -346,8 +346,9 @@ engine is given the public address as `CREWLET_MCP_BRIDGE_URL`. That is the
 engine's tool bridge: an agent-mode run happens in a remote sandbox and calls
 the seat's own tools back there, each request carrying a token signed for its
 one run, which expires with it. Crewlet requires the address to reach the
-node that runs the seat, which only the single data pod is: a seat pod serves
-no bridge, so a seat in a seat pool whose work runs on such a provider is
+node that runs the seat, which only the single data pod is: the engine would
+serve the bridge on a seat pod too, but nothing publishes an address of one,
+so a seat in a seat pool whose work runs on such a provider is
 refused (`AgentModeBridgeUnsupported`, see [Seat pools](../guides/cli-agents.md#seat-pools)),
 and the variable is given to the data pod alone. With no such provider
 the bridge is neither mounted nor routed; adding or removing one changes the
