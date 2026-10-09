@@ -6,8 +6,10 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -390,4 +392,59 @@ func seatNamed(in *Input, name string) *v1alpha1.Seat {
 		}
 	}
 	panic("no Seat " + name)
+}
+
+// TestPerSeatCapacityRefusesOnlyTheSeatsPastIt holds the class's maxPods to
+// the PerSeat seats that pass it: they are admitted oldest first, then by
+// handle, and only the ones whose pods would take the company past the cap
+// are refused, so that adding a seat never refuses those already running.
+func TestPerSeatCapacityRefusesOnlyTheSeatsPastIt(t *testing.T) {
+	// eve is a second seat of the PerSeat pool, beside ana.
+	const seatEve = "eve"
+	at := func(minute int) metav1.Time { return metav1.NewTime(time.Date(2026, 10, 9, 8, minute, 0, 0, time.UTC)) }
+	for _, c := range []struct {
+		name    string
+		created map[string]metav1.Time
+		want    []string
+		planned string
+	}{
+		{
+			name:    "the newest seat passes the cap",
+			created: map[string]metav1.Time{seatAna: at(0), seatEve: at(5)},
+			want:    []string{"Seat/eve spec.placement.pool PoolCapacityExceeded"},
+			planned: "batch:dee data:cy general:bo isolated:ana",
+		},
+		{
+			name:    "an older seat comes first whatever its handle",
+			created: map[string]metav1.Time{seatAna: at(5), seatEve: at(0)},
+			want:    []string{"Seat/ana spec.placement.pool PoolCapacityExceeded"},
+			planned: "batch:dee data:cy general:bo isolated:eve",
+		},
+		{
+			name:    "seats created together, by handle",
+			created: map[string]metav1.Time{seatAna: at(0), seatEve: at(0)},
+			want:    []string{"Seat/eve spec.placement.pool PoolCapacityExceeded"},
+			planned: "batch:dee data:cy general:bo isolated:ana",
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := companyCaseNamed(t, "seat-pools").input(t)
+			eve := seatNamed(in, seatAna).DeepCopy()
+			eve.Name = seatEve
+			in.Seats = append(in.Seats, *eve)
+			for name, created := range c.created {
+				seatNamed(in, name).CreationTimestamp = created
+			}
+			// general's 2 pods and one PerSeat seat's 2 are 4; a second's
+			// would make 6.
+			in.Class.Spec.SeatPools.MaxPods = 5
+			plan, err := PlanTopology(in.Company, in.Class, in.Seats)
+			if got := refusalsOf(err); !slices.Equal(got, c.want) {
+				t.Errorf("refused %v, want %v", got, c.want)
+			}
+			if got := planText(plan); got != c.planned {
+				t.Errorf("planned %q, want %q", got, c.planned)
+			}
+		})
+	}
 }

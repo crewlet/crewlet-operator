@@ -3,6 +3,7 @@ package render
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -238,9 +239,11 @@ func planTopology(c *v1alpha1.Company, class *v1alpha1.EngineClass, seats []v1al
 
 // checkCapacity holds the pools to the class's seatPools.maxPods. The Shared
 // pools are the Company's own choice and run whatever seats they hold, so
-// when they alone pass the cap the Company is refused; otherwise it is the
-// PerSeat seats whose pods pass it, and each of them is refused, so that the
-// message is on the objects whose removal brings the company back under it.
+// when they alone pass the cap the Company is refused. Otherwise the PerSeat
+// seats are admitted oldest first (by creation, then by handle), each with its
+// pool's pods, for as long as the cap holds, and each seat past it is refused:
+// the refusal is on the seats whose pods would pass the cap, which removing
+// brings the company back under it, never on the ones already running.
 func checkCapacity(c *v1alpha1.Company, class *v1alpha1.EngineClass, t *Topology, perSeat map[string][]*v1alpha1.Seat, errs *refErrors) {
 	limit := int(class.Spec.SeatPools.MaxPods)
 	if limit == 0 {
@@ -258,20 +261,33 @@ func checkCapacity(c *v1alpha1.Company, class *v1alpha1.EngineClass, t *Topology
 			shared, class.Name, limit))
 		return
 	}
-	total := t.Pods()
-	if total <= limit {
-		return
+	type placed struct {
+		seat *v1alpha1.Seat
+		pool string
 	}
-	for name, seats := range perSeat {
-		pool := t.Pool(name)
-		for _, s := range seats {
-			errs.add(KindSeat, s.Name, "spec.placement.pool", v1alpha1.ReasonPoolCapacityExceeded, fmt.Sprintf(
-				"places the seat in PerSeat pool %s, which runs %d pods for it; the company's seat pools would run %d pods "+
-					"together, and EngineClass %s allows %d (spec.seatPools.maxPods)",
-				name, pool.Replicas, total, class.Name, limit))
+	var queue []placed
+	for _, name := range slices.Sorted(maps.Keys(perSeat)) {
+		for _, s := range perSeat[name] {
+			queue = append(queue, placed{seat: s, pool: name})
 		}
-		// Refused, so placed nowhere: the plan runs no pod for them.
-		pool.Seats = nil
+	}
+	slices.SortStableFunc(queue, func(a, b placed) int {
+		return cmp.Or(a.seat.CreationTimestamp.Compare(b.seat.CreationTimestamp.Time),
+			strings.Compare(SeatHandle(a.seat), SeatHandle(b.seat)))
+	})
+	pods := shared
+	for _, q := range queue {
+		pool := t.Pool(q.pool)
+		if pods+int(pool.Replicas) <= limit {
+			pods += int(pool.Replicas)
+			continue
+		}
+		errs.add(KindSeat, q.seat.Name, "spec.placement.pool", v1alpha1.ReasonPoolCapacityExceeded, fmt.Sprintf(
+			"places the seat in PerSeat pool %s, which runs %d pods for it; the company's seat pods would number %d with "+
+				"them, and EngineClass %s allows %d (spec.seatPools.maxPods): the seats placed before it take the rest",
+			q.pool, pool.Replicas, pods+int(pool.Replicas), class.Name, limit))
+		// Refused, so placed nowhere: the plan runs no pod for it.
+		pool.Seats = slices.DeleteFunc(pool.Seats, func(h string) bool { return h == SeatHandle(q.seat) })
 	}
 }
 
