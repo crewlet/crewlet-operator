@@ -509,6 +509,84 @@ var _ = Describe("Company runtime", func() {
 		Expect(keyring.Annotations).NotTo(HaveKey(KeyringActiveKeyAnnotation))
 	})
 
+	It("never generates a keyring while the company's data exists", func() {
+		class := newClass()
+		company := reconciled(newCompany(class.Name))
+		rollOut()
+		before := statefulSet().Spec.Template.Annotations
+		claim := &corev1.PersistentVolumeClaim{
+			Namespace: namespace,
+			Name:      "data-nimbus-data-0",
+			Labels:    selectorFor(company, componentData),
+			Spec: corev1.PersistentVolumeClaimSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, claim)).To(Succeed())
+
+		By("holding the pods back while the StatefulSet and its claim exist")
+		keyring := &corev1.Secret{}
+		get(keyring, keyringName)
+		Expect(k8sClient.Delete(ctx, keyring)).To(Succeed())
+		company = reconciled(company)
+		absent(&corev1.Secret{}, keyringName)
+		runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonKeyringMissing))
+		Expect(runtimeReady.Message).To(ContainSubstring("StatefulSet nimbus-data"))
+		Expect(runtimeReady.Message).To(ContainSubstring("PersistentVolumeClaim data-nimbus-data-0"))
+		Expect(statefulSet().Spec.Template.Annotations).To(Equal(before), "the pods rolled onto another keyring")
+
+		By("holding them back on the claim alone")
+		Expect(k8sClient.Delete(ctx, statefulSet())).To(Succeed())
+		company = reconciled(company)
+		absent(&corev1.Secret{}, keyringName)
+		absent(&appsv1.StatefulSet{}, "nimbus-data")
+		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonKeyringMissing))
+
+		By("generating one once the claim is being deleted, with the data it holds")
+		Expect(k8sClient.Delete(ctx, claim)).To(Succeed())
+		company = reconciled(company)
+		get(&corev1.Secret{}, keyringName)
+		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+	})
+
+	It("waits for the Secrets of an earlier Company of the same name to be collected", func() {
+		class := newClass()
+		// What a deletionPolicy Delete of an earlier nimbus leaves until the
+		// garbage collector, which envtest does not run, deletes it.
+		stale := &corev1.Secret{
+			Namespace: namespace,
+			Name:      keyringName,
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: crewletaiv1alpha1.GroupVersion.String(), Kind: "Company", Name: companyName,
+				UID: "0e4d7c1a-5b8e-4a3e-9d8f-1c2b3a4d5e6f", Controller: new(true),
+			}},
+			Annotations: map[string]string{KeyringActiveKeyAnnotation: keyringKeyID},
+			Data:        map[string][]byte{keyringKeyID: []byte(base64.StdEncoding.EncodeToString(make([]byte, 32)))},
+		}
+		Expect(k8sClient.Create(ctx, stale)).To(Succeed())
+
+		company := reconciled(newCompany(class.Name))
+		runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonPreviousCompanyObjects))
+		Expect(runtimeReady.Message).To(ContainSubstring(keyringName))
+		absent(&appsv1.StatefulSet{}, "nimbus-data")
+		kept := &corev1.Secret{}
+		get(kept, keyringName)
+		Expect(kept.OwnerReferences).To(Equal(stale.OwnerReferences), "took over a Secret that is about to be collected")
+
+		Expect(k8sClient.Delete(ctx, kept)).To(Succeed())
+		company = reconciled(company)
+		keyring := &corev1.Secret{}
+		get(keyring, keyringName)
+		ownedByCompany(keyring, company)
+		Expect(keyring.Data).NotTo(Equal(stale.Data))
+		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+	})
+
 	It("reports the engine ready once its pods are, and the Company once its document is applied", func() {
 		class := newClass()
 		company := reconciled(newCompany(class.Name))

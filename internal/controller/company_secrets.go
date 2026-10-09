@@ -9,9 +9,11 @@ import (
 	"slices"
 	"strings"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -54,85 +56,157 @@ const (
 	platformKeyEnvPrefix = "env."
 )
 
+// held is why the data pods are held back: RuntimeReady's reason and
+// message.
+type held struct {
+	reason, message string
+}
+
 // ensureKeyring returns the company's keyring Secret, creating it with one
-// fresh key if it does not exist.
+// fresh key if it does not exist and the company has no data yet.
 //
 // A keyring is generated once and never rewritten: every value the engine
 // has sealed (its secret store, its configuration revisions) opens only
 // with the keys it was sealed under, so a regenerated keyring loses them all.
-func (r *CompanyReconciler) ensureKeyring(ctx context.Context, c *crewletaiv1alpha1.Company) (*corev1.Secret, error) {
-	return r.ensureGenerated(ctx, c, keyringSecretName(c), componentKeyring, func() (*corev1.Secret, error) {
+// That is also why a keyring that disappears while the company's data does
+// not is never generated again: the pods would roll onto keys that cannot
+// open what is on the volumes. The pods are held back instead, until the
+// Secret is restored or the data discarded.
+func (r *CompanyReconciler) ensureKeyring(ctx context.Context, c *crewletaiv1alpha1.Company) (*corev1.Secret, *held, error) {
+	return r.ensureGenerated(ctx, c, keyringSecretName(c), componentKeyring, func() (*corev1.Secret, *held, error) {
+		if h, err := r.dataExists(ctx, c); h != nil || err != nil {
+			return nil, h, err
+		}
 		key := make([]byte, keyringKeyBytes)
 		if _, err := rand.Read(key); err != nil {
-			return nil, fmt.Errorf("generating a keyring key: %w", err)
+			return nil, nil, fmt.Errorf("generating a keyring key: %w", err)
 		}
 		return &corev1.Secret{
 			Annotations: map[string]string{KeyringActiveKeyAnnotation: keyringKeyID},
 			Data:        map[string][]byte{keyringKeyID: []byte(base64.StdEncoding.EncodeToString(key))},
-		}, nil
+		}, nil, nil
 	})
+}
+
+// dataExists reports, as the hold it puts on the pods, that the company has
+// a data StatefulSet or data volume claims, which a new keyring could not
+// open. It reads the API server, not the cache: a cache that has not seen a
+// claim yet must not cost the data on it. A claim being deleted does not
+// count; its data goes with it.
+func (r *CompanyReconciler) dataExists(ctx context.Context, c *crewletaiv1alpha1.Company) (*held, error) {
+	var found []string
+	sts := &appsv1.StatefulSet{}
+	err := r.APIReader.Get(ctx, types.NamespacedName{Namespace: c.Namespace, Name: dataStatefulSetName(c)}, sts)
+	switch {
+	case err == nil:
+		found = append(found, "StatefulSet "+sts.Name)
+	case !apierrors.IsNotFound(err):
+		return nil, fmt.Errorf("reading StatefulSet %s/%s: %w", c.Namespace, dataStatefulSetName(c), err)
+	}
+	claims, err := r.dataClaims(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	for i := range claims {
+		if claims[i].DeletionTimestamp.IsZero() {
+			found = append(found, "PersistentVolumeClaim "+claims[i].Name)
+		}
+	}
+	if len(found) == 0 {
+		return nil, nil
+	}
+	return &held{
+		reason: crewletaiv1alpha1.ReasonKeyringMissing,
+		message: fmt.Sprintf("The keyring Secret %s/%s does not exist, and the company's data does (%s): a new keyring could not open "+
+			"the secrets sealed on it, so none is generated. Restore the Secret from a backup, with its %s annotation. To discard "+
+			"the data instead, delete the data volume claims first; the operator then generates a new keyring.",
+			c.Namespace, keyringSecretName(c), strings.Join(found, ", "), KeyringActiveKeyAnnotation),
+	}, nil
+}
+
+// dataClaims lists a Company's data volume claims from the API server.
+func (r *CompanyReconciler) dataClaims(ctx context.Context, c *crewletaiv1alpha1.Company) ([]corev1.PersistentVolumeClaim, error) {
+	claims := &corev1.PersistentVolumeClaimList{}
+	if err := r.APIReader.List(ctx, claims, client.InNamespace(c.Namespace), client.MatchingLabels(selectorFor(c, componentData))); err != nil {
+		return nil, fmt.Errorf("listing the data volume claims of Company %s/%s: %w", c.Namespace, c.Name, err)
+	}
+	return claims.Items, nil
 }
 
 // ensureAPITokens returns the company's API tokens Secret, creating it with
 // two fresh tokens if it does not exist. It is never rewritten either: the
 // consumers of the access token hold a copy of it.
-func (r *CompanyReconciler) ensureAPITokens(ctx context.Context, c *crewletaiv1alpha1.Company) (*corev1.Secret, error) {
-	return r.ensureGenerated(ctx, c, apiTokensSecretName(c), componentAPI, func() (*corev1.Secret, error) {
+func (r *CompanyReconciler) ensureAPITokens(ctx context.Context, c *crewletaiv1alpha1.Company) (*corev1.Secret, *held, error) {
+	return r.ensureGenerated(ctx, c, apiTokensSecretName(c), componentAPI, func() (*corev1.Secret, *held, error) {
 		data := map[string][]byte{}
 		for _, id := range []string{render.TokenOperator, render.TokenAccess} {
 			token := make([]byte, apiTokenBytes)
 			if _, err := rand.Read(token); err != nil {
-				return nil, fmt.Errorf("generating the %s API token: %w", id, err)
+				return nil, nil, fmt.Errorf("generating the %s API token: %w", id, err)
 			}
 			data[id] = []byte(base64.RawURLEncoding.EncodeToString(token))
 		}
-		return &corev1.Secret{Data: data}, nil
+		return &corev1.Secret{Data: data}, nil, nil
 	})
 }
 
 // ensureGenerated returns the Secret of the name given, creating it from
 // generate when it does not exist, and never changes the data of a Secret
-// that does.
+// that does. generate may refuse, with the hold it puts on the pods.
 //
 // An existing Secret that no one controls is adopted: it is what a Retain
 // deletion of an earlier Company of this name kept, and the company's data
 // volumes need it. One that another object controls is used as it is,
 // which lets a platform supply the Secret from its own store (an
 // ExternalSecret, for example) instead of having the operator generate it.
+//
+// The exception is a Secret an earlier Company of this name still controls:
+// one deleted with deletionPolicy Delete, whose objects the garbage
+// collector has not removed yet, as happens when a platform deletes a tenant
+// and provisions it again at once. That Secret is about to be deleted, and
+// pods started on it would roll onto a regenerated one as soon as it is, so
+// the pods wait for it to go; its deletion requeues the Company.
 func (r *CompanyReconciler) ensureGenerated(
 	ctx context.Context, c *crewletaiv1alpha1.Company, name, component string,
-	generate func() (*corev1.Secret, error),
-) (*corev1.Secret, error) {
+	generate func() (*corev1.Secret, *held, error),
+) (*corev1.Secret, *held, error) {
 	secret := &corev1.Secret{}
 	err := r.APIReader.Get(ctx, types.NamespacedName{Namespace: c.Namespace, Name: name}, secret)
 	switch {
 	case apierrors.IsNotFound(err):
-		secret, err = generate()
-		if err != nil {
-			return nil, err
+		secret, h, err := generate()
+		if h != nil || err != nil {
+			return nil, h, err
 		}
 		secret.Namespace, secret.Name = c.Namespace, name
 		secret.Labels = labelsFor(c, component)
 		secret.Type = corev1.SecretTypeOpaque
 		if err := controllerutil.SetControllerReference(c, secret, r.Scheme()); err != nil {
-			return nil, fmt.Errorf("owning Secret %s/%s: %w", c.Namespace, name, err)
+			return nil, nil, fmt.Errorf("owning Secret %s/%s: %w", c.Namespace, name, err)
 		}
 		// Create, never apply: a create fails if the Secret appeared in the
 		// meantime, where an apply would overwrite it.
 		if err := r.Create(ctx, secret, client.FieldOwner(FieldOwner)); err != nil {
-			return nil, fmt.Errorf("creating Secret %s/%s: %w", c.Namespace, name, err)
+			return nil, nil, fmt.Errorf("creating Secret %s/%s: %w", c.Namespace, name, err)
 		}
-		return secret, nil
+		return secret, nil, nil
 	case err != nil:
-		return nil, fmt.Errorf("reading Secret %s/%s: %w", c.Namespace, name, err)
+		return nil, nil, fmt.Errorf("reading Secret %s/%s: %w", c.Namespace, name, err)
 	}
 
-	if metav1.GetControllerOf(secret) != nil {
-		return secret, nil
+	if owner := metav1.GetControllerOf(secret); owner != nil {
+		if isPreviousCompany(owner, c) {
+			return nil, &held{
+				reason: crewletaiv1alpha1.ReasonPreviousCompanyObjects,
+				message: fmt.Sprintf("Secret %s/%s belongs to an earlier Company %s, which was deleted; the garbage collector "+
+					"deletes it, and the pods wait until it has.", c.Namespace, name, c.Name),
+			}, nil
+		}
+		return secret, nil, nil
 	}
 	base := secret.DeepCopy()
 	if err := controllerutil.SetControllerReference(c, secret, r.Scheme()); err != nil {
-		return nil, fmt.Errorf("adopting Secret %s/%s: %w", c.Namespace, name, err)
+		return nil, nil, fmt.Errorf("adopting Secret %s/%s: %w", c.Namespace, name, err)
 	}
 	if secret.Labels == nil {
 		secret.Labels = map[string]string{}
@@ -142,9 +216,18 @@ func (r *CompanyReconciler) ensureGenerated(
 	// rather than apply to a Secret someone changed since it was read.
 	patch := client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})
 	if err := r.Patch(ctx, secret, patch, client.FieldOwner(FieldOwner)); err != nil {
-		return nil, fmt.Errorf("adopting Secret %s/%s: %w", c.Namespace, name, err)
+		return nil, nil, fmt.Errorf("adopting Secret %s/%s: %w", c.Namespace, name, err)
 	}
-	return secret, nil
+	return secret, nil, nil
+}
+
+// isPreviousCompany reports whether an owner reference names an earlier
+// Company of the same name as c: one that was deleted, since names are
+// unique among the objects that exist.
+func isPreviousCompany(owner *metav1.OwnerReference, c *crewletaiv1alpha1.Company) bool {
+	gv, err := schema.ParseGroupVersion(owner.APIVersion)
+	return err == nil && gv.Group == crewletaiv1alpha1.GroupVersion.Group && owner.Kind == "Company" &&
+		owner.Name == c.Name && owner.UID != c.UID
 }
 
 // missingTokens says which API tokens a tokens Secret lacks.

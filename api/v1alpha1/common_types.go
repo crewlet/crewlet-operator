@@ -309,6 +309,21 @@ const (
 	// what to repair.
 	ReasonKeyringInvalid = "KeyringInvalid"
 
+	// ReasonKeyringMissing is RuntimeReady=False when the company's keyring
+	// Secret does not exist while its data StatefulSet or data volume claims
+	// do. A new keyring could not open the secrets sealed on the volumes, so
+	// the operator generates none and holds the pods back until the Secret
+	// is restored from a backup, or the claims are deleted to discard the
+	// data.
+	ReasonKeyringMissing = "KeyringMissing"
+
+	// ReasonPreviousCompanyObjects is RuntimeReady=False while the keyring
+	// or API tokens Secret of an earlier Company of the same name, deleted
+	// with deletionPolicy Delete, still exists: the garbage collector is
+	// about to delete it, and the pods wait until it has rather than start
+	// on keys that are going away.
+	ReasonPreviousCompanyObjects = "PreviousCompanyObjects"
+
 	// ReasonEngineClassNotFound is Accepted=False on a Company whose class
 	// does not exist, or that names none while no class, or more than one,
 	// is the default.

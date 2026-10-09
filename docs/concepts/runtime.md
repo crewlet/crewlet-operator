@@ -37,6 +37,24 @@ earlier Company of the same name leaves its keyring behind), and one another
 controller owns, such as an ExternalSecret, is left to it. That is how a
 platform supplies the keyring from its own secret store instead.
 
+Two cases are refused rather than guessed at:
+
+- A keyring Secret that disappears while the company's data StatefulSet or
+  data volume claims exist is not generated again: the pods would roll onto
+  keys that cannot open the secret store and the configuration revisions
+  sealed on the volume. The operator holds the pod back with
+  `RuntimeReady=False`, reason `KeyringMissing`, until the Secret is restored
+  from a backup (with its `crewlet.ai/active-key-id` annotation), or until
+  the claims are deleted, which discards the data; it then generates a new
+  keyring. Back the keyring Secret up with the volumes.
+- A keyring or tokens Secret that an earlier Company of the same name still
+  controls (one deleted with `deletionPolicy: Delete` moments ago, whose
+  objects the garbage collector has not removed yet) is not used: it is about
+  to be deleted. The pod waits, with `RuntimeReady=False`, reason
+  `PreviousCompanyObjects`, and starts once the Secret is gone. The objects
+  the operator writes whole (Services, the API access Secret, routes) are
+  simply taken over from the earlier Company.
+
 ## The data pod
 
 | | |
@@ -173,8 +191,10 @@ operator:
 
 A Company created again with the same name and namespace after a `Retain`
 deletion adopts the kept keyring and finds its volume, and with it its estate.
-To discard a retained company for good, delete the claims and the keyring
-Secret.
+To discard a retained company for good, delete the claims first and the
+keyring Secret after them: a Company that finds its claims without its
+keyring holds its pod back rather than generate a keyring that cannot open
+them (`KeyringMissing`).
 
 ## Status
 

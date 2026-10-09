@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"strings"
@@ -37,21 +38,25 @@ const drainPollInterval = 5 * time.Second
 func (r *CompanyReconciler) reconcileRuntime(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 ) error {
-	keyring, err := r.ensureKeyring(ctx, c)
+	keyring, keyringHeld, err := r.ensureKeyring(ctx, c)
 	if err != nil {
 		return err
 	}
-	tokens, err := r.ensureAPITokens(ctx, c)
+	tokens, tokensHeld, err := r.ensureAPITokens(ctx, c)
 	if err != nil {
 		return err
 	}
-	// A tokens Secret the platform supplies (see ensureGenerated) may lack
-	// a token; the pods could not start without it, and consumers must not
-	// be handed an empty one.
-	missing := missingTokens(tokens)
-	if len(missing) == 0 {
-		if err := r.applyAPIAccess(ctx, c, tokens); err != nil {
-			return err
+	hold := cmp.Or(keyringHeld, tokensHeld)
+	var missing []string
+	if tokens != nil {
+		// A tokens Secret the platform supplies (see ensureGenerated) may
+		// lack a token; the pods could not start without it, and consumers
+		// must not be handed an empty one.
+		missing = missingTokens(tokens)
+		if len(missing) == 0 {
+			if err := r.applyAPIAccess(ctx, c, tokens); err != nil {
+				return err
+			}
 		}
 	}
 	c.Status.APIAccessSecretRef = crewletaiv1alpha1.SecretReference{Name: apiAccessSecretName(c)}
@@ -78,7 +83,7 @@ func (r *CompanyReconciler) reconcileRuntime(
 		return err
 	}
 
-	runtimeReady, err := r.reconcileWorkload(ctx, c, class, keyring, tokens, platformVersion, missing)
+	runtimeReady, err := r.reconcileWorkload(ctx, c, class, keyring, tokens, platformVersion, missing, hold)
 	if err != nil {
 		return err
 	}
@@ -90,18 +95,22 @@ func (r *CompanyReconciler) reconcileRuntime(
 // reconcileWorkload writes the bootstrap ConfigMap and the data StatefulSet
 // and returns the RuntimeReady condition.
 //
-// What cannot be rendered (a keyring the engine could not open, a platform
-// Secret that is missing) holds the pods back: the StatefulSet keeps running
+// What cannot be rendered (a keyring the engine could not open or that is
+// gone, a platform Secret that is missing) holds the pods back: the StatefulSet keeps running
 // what it runs, and is only scaled to zero if the Company is suspended
 // meanwhile. An engine image that is refused does not hold back anything else:
 // the pods keep the image they run, and every other change still applies.
 func (r *CompanyReconciler) reconcileWorkload(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
-	keyring, tokens *corev1.Secret, platformVersion string, missing []string,
+	keyring, tokens *corev1.Secret, platformVersion string, missing []string, hold *held,
 ) (metav1.Condition, error) {
 	existing, err := r.existingStatefulSet(ctx, c)
 	if err != nil {
 		return metav1.Condition{}, err
+	}
+
+	if hold != nil {
+		return r.holdBack(ctx, c, existing, hold.reason, hold.message)
 	}
 
 	if len(missing) > 0 {
@@ -310,12 +319,12 @@ func (r *CompanyReconciler) finalize(ctx context.Context, c *crewletaiv1alpha1.C
 // has not reached; deleting them here makes the policy hold whenever it was
 // set.
 func (r *CompanyReconciler) deleteDataVolumes(ctx context.Context, c *crewletaiv1alpha1.Company) error {
-	claims := &corev1.PersistentVolumeClaimList{}
-	if err := r.APIReader.List(ctx, claims, client.InNamespace(c.Namespace), client.MatchingLabels(selectorFor(c, componentData))); err != nil {
-		return fmt.Errorf("listing the data volume claims of Company %s/%s: %w", c.Namespace, c.Name, err)
+	claims, err := r.dataClaims(ctx, c)
+	if err != nil {
+		return err
 	}
-	for i := range claims.Items {
-		claim := &claims.Items[i]
+	for i := range claims {
+		claim := &claims[i]
 		if err := r.Delete(ctx, claim); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("deleting PersistentVolumeClaim %s/%s: %w", claim.Namespace, claim.Name, err)
 		}
