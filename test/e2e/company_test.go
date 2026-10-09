@@ -155,29 +155,23 @@ var _ = Describe("Company", Ordered, func() {
 
 	It("lets a consumer the class admits read the engine's API with the published token", func() {
 		By("copying the API access Secret into the namespace the class admits as an API consumer")
-		access := &corev1.Secret{}
-		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: tenantNamespace, Name: accessSecret}, access)).To(Succeed())
+		access := copyAccessSecret(consumerNamespace)
 		Expect(access.Data).To(HaveKey(v1.APIAccessTokenKey))
 		Expect(string(access.Data[v1.APIAccessURLKey])).To(Equal(engineURL))
-		for _, ns := range []string{consumerNamespace, outsiderNamespace} {
-			apply(&corev1.Namespace{
-				Name:   ns,
-				Labels: map[string]string{"pod-security.kubernetes.io/enforce": "restricted"},
-			})
-			apply(&corev1.Secret{Namespace: ns, Name: accessSecret, Data: access.Data})
-		}
 
 		By("reading the active company document with the token")
-		// The token reaches curl from the Secret, through the environment:
-		// never as a literal in the pod.
-		readConfig := `curl -fsS --max-time 20 -H "Authorization: Bearer ${TOKEN}" "${URL}/config"`
 		apply(curlPod(consumerNamespace, readConfig))
 		Expect(curlPhase(consumerNamespace)).To(Equal(corev1.PodSucceeded), "the consumer's request did not succeed")
 		out, err := utils.Run(exec.Command("kubectl", "logs", curlPodName, "-n", consumerNamespace))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(out).To(ContainSubstring("Acme"), "the engine's active document is not the company's")
+	})
 
-		By("finding a namespace the class does not admit refused, token or not")
+	// The engine's NetworkPolicy at work, which needs a CNI that enforces
+	// NetworkPolicy: kind's kindnet does, on a kernel with nftables' queue
+	// support (CONFIG_NFT_QUEUE).
+	It("refuses a pod of a namespace the class does not admit, token or not", func() {
+		copyAccessSecret(outsiderNamespace)
 		apply(curlPod(outsiderNamespace, readConfig))
 		Expect(curlPhase(outsiderNamespace)).To(Equal(corev1.PodFailed),
 			"a pod in a namespace the engine's NetworkPolicy does not admit reached its API")
@@ -444,6 +438,26 @@ func dump(args ...string) {
 		return
 	}
 	_, _ = fmt.Fprintf(GinkgoWriter, "kubectl %s:\n%s\n", strings.Join(args, " "), out)
+}
+
+// readConfig reads the engine's active company document with the token and
+// the URL of the API access Secret. The token reaches curl from the Secret,
+// through the environment: never as a literal in the pod.
+const readConfig = `curl -fsS --max-time 20 -H "Authorization: Bearer ${TOKEN}" "${URL}/config"`
+
+// copyAccessSecret creates namespace, enforcing the restricted Pod Security
+// Standard, with a copy of the Company's API access Secret, as a consumer's
+// platform would provide it, and returns the Secret.
+func copyAccessSecret(namespace string) *corev1.Secret {
+	GinkgoHelper()
+	access := &corev1.Secret{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: tenantNamespace, Name: accessSecret}, access)).To(Succeed())
+	apply(&corev1.Namespace{
+		Name:   namespace,
+		Labels: map[string]string{"pod-security.kubernetes.io/enforce": "restricted"},
+	})
+	apply(&corev1.Secret{Namespace: namespace, Name: accessSecret, Data: access.Data})
+	return access
 }
 
 // curlPodName is the name of the pod curlPod makes.

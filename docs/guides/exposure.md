@@ -212,7 +212,8 @@ gateway:
 ```
 
 The policy holds only on a CNI that enforces NetworkPolicy, egress included
-(Calico, Cilium, Antrea, and kind's kindnet). Some Gateway implementations
+(Calico, Cilium, Antrea, and kind's kindnet on a kernel with nftables' queue
+support). Some Gateway implementations
 deliver traffic from the node rather than from a pod, which no NetworkPolicy
 can admit by namespace; with those, set `networkPolicy.mode: None` and isolate
 the engines with the CNI's own policy.

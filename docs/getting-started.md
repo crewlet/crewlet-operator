@@ -17,8 +17,10 @@ bin/kind create cluster --name crewlet
 bin/kubectl cluster-info --context kind-crewlet
 ```
 
-kind's default CNI, kindnet, enforces NetworkPolicy, so the isolation the
-operator sets up around each engine applies here as in production; see
+kind's default CNI, kindnet, enforces NetworkPolicy on a host whose kernel
+has nftables' queue support (`CONFIG_NFT_QUEUE`, as common distributions
+do), so the isolation the operator sets up around each engine applies here as
+in production; see
 [Exposure and network policy](guides/exposure.md).
 
 ## Build and load the images
