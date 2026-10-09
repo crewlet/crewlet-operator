@@ -223,11 +223,12 @@ To rotate without a moment where the provider refuses the old key, use two
 keys: add the new one as a second entry of `apiKeySecretRefs`, wait for the
 revision, revoke the old one at the provider, then remove its entry.
 
-Secrets the engine's pods read from their environment are the exception:
-Kubernetes reads them when a container starts. The operator watches its own
-copies (the API tokens, the keyring, the platform Secret) and rolls the data
-pod when one changes. A Secret a Company's `spec.runtime.env` references is
-not watched; restart the data pod after changing it
+What the engine reads when it starts is the exception. The values in its
+`crewlet.yaml` (the API tokens, the keyring, the Company's object-store keys,
+the class's telemetry headers and env values) are read once: the operator
+watches the Secrets they come from and rolls the data pod when one changes.
+A Secret a Company's `spec.runtime.env` references is not watched; restart
+the data pod after changing it
 (`kubectl rollout restart statefulset/<company>-data`).
 
 ## The engine's own Secrets
@@ -251,6 +252,15 @@ Deleting the tokens Secret makes the operator generate new tokens and roll
 the data pod; consumers then read the new one from the access Secret. Never
 delete the keyring of a company that has data: the values sealed with it
 cannot be read without it.
+
+Rotating the keyring is not supported in v1alpha1. Crewlet rotates a key by
+adding the new one, making it active, re-sealing both its secret store and
+its stored company configuration under it (`crewlet secrets rekey` and
+`crewlet config rekey`), and only then dropping the old one; the operator
+runs none of those steps, and a key removed before the re-seal leaves
+whatever it sealed unreadable, the engine refusing a snapshot it cannot
+open whole. Adding a key to the Secret is safe (the pod rolls onto a
+keyring that opens everything it did); removing one is not.
 
 ## When a credential does not arrive
 
