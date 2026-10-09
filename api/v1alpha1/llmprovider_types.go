@@ -84,8 +84,16 @@ const (
 
 // CLIAgentAuthMode is how a CLIAgent provider authenticates. It maps onto
 // Crewlet's cli.auth.mode (Subscription is `subscription`, APIKey is
-// `api-key`, InheritEnv is `inherit-env`).
-// +kubebuilder:validation:Enum=Subscription;APIKey;InheritEnv
+// `api-key`).
+//
+// Crewlet's `inherit-env`, which hands the CLI whichever token or key the
+// engine's own environment holds, is not offered: a credential in the
+// engine's environment is outside the encrypted store, readable by every
+// process the engine runs, and resolvable by a ${NAME} written in any field of
+// the company document, so it would be the one credential the API takes by
+// another route than a Secret reference. Subscription and APIKey cover what
+// it is for.
+// +kubebuilder:validation:Enum=Subscription;APIKey
 type CLIAgentAuthMode string
 
 // The CLI agent authentication modes.
@@ -96,10 +104,6 @@ const (
 	// CLIAgentAuthAPIKey gives the CLI the provider's apiKeySecretRefs
 	// key, billing the metered account.
 	CLIAgentAuthAPIKey CLIAgentAuthMode = "APIKey"
-	// CLIAgentAuthInheritEnv gives the CLI whichever of its token and key
-	// variables the engine container's own environment holds, such as a
-	// Company's spec.runtime.env.
-	CLIAgentAuthInheritEnv CLIAgentAuthMode = "InheritEnv"
 )
 
 // CLIAgentAuth is how a CLIAgent provider signs in. It maps onto Crewlet's

@@ -184,7 +184,6 @@ spec:
                         enum:
                         - Subscription
                         - APIKey
-                        - InheritEnv
                         type: string
                       tokenSecretRef:
                         description: |-

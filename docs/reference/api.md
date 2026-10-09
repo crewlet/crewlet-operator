@@ -148,7 +148,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `mode` _[CLIAgentAuthMode](#cliagentauthmode)_ | mode is how the CLI signs in. Unset is Subscription. Crewlet's<br />`mode`. |  | Enum: [Subscription APIKey InheritEnv] <br />Optional: \{\} <br /> |
+| `mode` _[CLIAgentAuthMode](#cliagentauthmode)_ | mode is how the CLI signs in. Unset is Subscription. Crewlet's<br />`mode`. |  | Enum: [Subscription APIKey] <br />Optional: \{\} <br /> |
 | `tokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | tokenSecretRef is the Secret key holding a long-lived subscription<br />token the CLI mints for headless use. Crewlet's `token`, a credential<br />position. |  | Optional: \{\} <br /> |
 | `credentialBundleSecretRef` _[SecretKeyReference](#secretkeyreference)_ | credentialBundleSecretRef is the Secret key holding a credential<br />bundle `crewlet llm export` wrote. Crewlet's `credential_bundle`, a<br />credential position. |  | Optional: \{\} <br /> |
 
@@ -159,10 +159,18 @@ _Underlying type:_ _string_
 
 CLIAgentAuthMode is how a CLIAgent provider authenticates. It maps onto
 Crewlet's cli.auth.mode (Subscription is `subscription`, APIKey is
-`api-key`, InheritEnv is `inherit-env`).
+`api-key`).
+
+Crewlet's `inherit-env`, which hands the CLI whichever token or key the
+engine's own environment holds, is not offered: a credential in the
+engine's environment is outside the encrypted store, readable by every
+process the engine runs, and resolvable by a ${NAME} written in any field of
+the company document, so it would be the one credential the API takes by
+another route than a Secret reference. Subscription and APIKey cover what
+it is for.
 
 _Validation:_
-- Enum: [Subscription APIKey InheritEnv]
+- Enum: [Subscription APIKey]
 
 _Appears in:_
 - [CLIAgentAuth](#cliagentauth)
@@ -171,7 +179,6 @@ _Appears in:_
 | --- | --- |
 | `Subscription` | CLIAgentAuthSubscription signs the CLI in to a subscription with<br />tokenSecretRef or credentialBundleSecretRef.<br /> |
 | `APIKey` | CLIAgentAuthAPIKey gives the CLI the provider's apiKeySecretRefs<br />key, billing the metered account.<br /> |
-| `InheritEnv` | CLIAgentAuthInheritEnv gives the CLI whichever of its token and key<br />variables the engine container's own environment holds, such as a<br />Company's spec.runtime.env.<br /> |
 
 
 #### CLIAgentMode

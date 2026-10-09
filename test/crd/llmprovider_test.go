@@ -169,13 +169,6 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			},
 		},
 		{
-			name: "a key inherited from the engine's environment is accepted",
-			mutate: func(p *v1.LLMProvider) {
-				p.Spec.CLI.Agent = v1.CLIAgentCopilot
-				p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthInheritEnv}
-			},
-		},
-		{
 			name:   "type CLIAgent without cli is refused",
 			mutate: func(p *v1.LLMProvider) { p.Spec.CLI = v1.CLIAgentSettings{} },
 			want:   msgCLIBlock,
@@ -247,11 +240,20 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			want:   msgCLINoLogin,
 		},
 		{
-			name: "a subscription token beside auth mode InheritEnv is refused",
+			name: "a subscription token beside auth mode APIKey is refused",
 			mutate: func(p *v1.LLMProvider) {
-				p.Spec.CLI.Auth.Mode = v1.CLIAgentAuthInheritEnv
+				p.Spec.CLI.Auth.Mode = v1.CLIAgentAuthAPIKey
+				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
 			},
 			want: msgCLILoginFields,
+		},
+		{
+			// A credential in the engine's environment is one a ${NAME}
+			// in any field of the company document can have the engine
+			// send anywhere, and the CLI's own children can read.
+			name:   "a login inherited from the engine's environment is not offered",
+			mutate: func(p *v1.LLMProvider) { p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: "InheritEnv"} },
+			want:   `Unsupported value: "InheritEnv"`,
 		},
 		{
 			name:   "Crewlet's custom profile is not offered",

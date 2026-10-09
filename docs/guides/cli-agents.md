@@ -87,9 +87,7 @@ homes, which is how several models run off one subscription; they must
 drive the same CLI, or the engine refuses the document.
 
 `auth.mode: APIKey` gives the CLI the provider's one `apiKeySecretRefs` key
-instead, billing the metered account. `auth.mode: InheritEnv` gives it
-whichever of its key and token variables the engine's container holds,
-which in a pod means the Company's `spec.runtime.env`.
+instead, billing the metered account.
 
 ## Text mode and agent mode
 
@@ -135,3 +133,14 @@ A seat runs on it by naming it in `spec.llm.default`; see the Seat's
 Crewlet's `custom` CLI and the profile `overrides` of the built-in ones are
 not offered: they name the binary and the arguments the engine's pod runs.
 Nor are the `direct` and `container` cells, for the reason above.
+
+Nor is Crewlet's `inherit-env` login, which gives the CLI whichever token or
+key the engine's container environment holds. A credential there is outside
+the engine's encrypted store: every process the engine runs (the CLI, a
+stdio MCP server) can read it, and the engine resolves a `${NAME}` written in
+any field of the company document from its environment too, so whoever can
+write such a field can have the engine send the value anywhere. The operator
+puts no credential of the engine's own into its environment for the same
+reason ([Credentials](../concepts/credentials.md)); `tokenSecretRef`,
+`credentialBundleSecretRef` and `auth.mode: APIKey` take the login from a
+Secret instead.
