@@ -104,8 +104,18 @@ func NewHTTPClient() *http.Client {
 	// One engine per Client, so a reconcile that makes several calls in a
 	// row reuses one connection rather than opening one per call.
 	transport.MaxIdleConnsPerHost = 4
-	return &http.Client{Transport: transport, Timeout: DefaultTimeout}
+	return &http.Client{Transport: transport, Timeout: DefaultTimeout, CheckRedirect: refuseRedirects}
 }
+
+// refuseRedirects makes a redirect the answer, which the call then reports.
+//
+// The engine never redirects its API, and what answers at an engine's
+// address is not to be trusted to: a data pod's address is a name behind a
+// headless Service that a tenant's own pod can answer at. Following a 307 or
+// 308 would send the request on to wherever it pointed, with the request's
+// body (a company document, or a credential for the engine's secret store),
+// and net/http keeps the Authorization header on a redirect to the same host.
+func refuseRedirects(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 // Ready reports whether the engine is ready for work: nil when its /ready
 // answers 200, a *NotReadyError (matching ErrNotReady) naming the engine's
@@ -377,6 +387,15 @@ type response struct {
 // refusal is the error for an answer the caller did not expect, prefixed with
 // the request it answered.
 func (r *response) refusal() error {
+	if r.status >= 300 && r.status < 400 {
+		// The client follows no redirect (refuseRedirects), and the engine
+		// sends none, so a 3xx is something else answering at its address.
+		return fmt.Errorf("%s %s: %w", r.method, r.path, &APIError{
+			StatusCode: r.status,
+			Message: fmt.Sprintf("%s to %q, which this client does not follow, since the engine never redirects",
+				http.StatusText(r.status), r.header.Get("Location")),
+		})
+	}
 	return fmt.Errorf("%s %s: %w", r.method, r.path, errorFromResponse(r.status, r.body))
 }
 

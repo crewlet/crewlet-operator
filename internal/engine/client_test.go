@@ -672,3 +672,37 @@ func TestSegmentRefusesAnythingButAKeyOrAnIndex(t *testing.T) {
 		t.Fatalf(`"roles" decoded as %+v, %v`, s, err)
 	}
 }
+
+// TestRedirectsAreNotFollowed pins that a redirect from whatever answers at
+// an engine's address is the answer: the request, its token and its body (a
+// credential, for PutSecret) never reach where it points.
+func TestRedirectsAreNotFollowed(t *testing.T) {
+	elsewhere := newFakeEngine(t)
+	for _, status := range []int{http.StatusFound, http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			f := newFakeEngine(t)
+			redirect := func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, elsewhere.server.URL+"/elsewhere", status)
+			}
+			f.handle("PUT /secrets/GITHUB_TOKEN", redirect)
+			f.handle("PUT /config", redirect)
+			f.handle("GET /ready", redirect)
+
+			calls := map[string]error{
+				"PutSecret": f.client().PutSecret(context.Background(), "GITHUB_TOKEN", []byte("ghp_value"), ""),
+				"Ready":     f.client().Ready(context.Background()),
+			}
+			_, calls["ApplyConfig"] = apply(f, write)
+			for name, err := range calls {
+				if apiErr, ok := errors.AsType[*engine.APIError](err); !ok || apiErr.StatusCode != status {
+					t.Errorf("%s: got %v, want an *APIError with status %d", name, err, status)
+				} else if !strings.Contains(err.Error(), "does not follow") {
+					t.Errorf("%s: %q does not say the redirect was not followed", name, err)
+				}
+			}
+			if n := elsewhere.requests(); n != 0 {
+				t.Fatalf("the redirect's target received %d requests, want none", n)
+			}
+		})
+	}
+}
