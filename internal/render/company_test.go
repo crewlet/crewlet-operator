@@ -170,6 +170,27 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 	if len(doc.Refs) != len(positions) {
 		t.Errorf("the document references %d keys, the test names %d positions: name the new one here", len(doc.Refs), len(positions))
 	}
+
+	// Every position CredentialPositions says the API covers is filled
+	// here, and every reference the document holds is at one of them.
+	var referenced []Path
+	visitLeaves(t, doc.YAML, func(at Path, v any) {
+		if value, _ := v.(string); !pointer.MatchString(value) {
+			return
+		}
+		referenced = append(referenced, at)
+		if position, ok := positionOf(TierCompany, at); !ok || position.Unsupported != "" {
+			t.Errorf("%s holds a reference, and CredentialPositions lists no covered position there", at)
+		}
+	})
+	for _, position := range CredentialPositions {
+		if position.Tier != TierCompany || position.Unsupported != "" {
+			continue
+		}
+		if !slices.ContainsFunc(referenced, func(p Path) bool { return matchesPosition(position.Path, p) }) {
+			t.Errorf("CredentialPositions covers %s, and the secret-positions case fills it nowhere: add it there", position.Path)
+		}
+	}
 }
 
 // flatten decodes a document into its scalar leaves, keyed by their paths

@@ -2,9 +2,21 @@
 
 Every credential reaches the operator as a reference to a Kubernetes `Secret`,
 never as a value in a field. This page lists every position in a Crewlet
-company document that holds a credential, and the field of the `crewlet.ai`
-API that fills it. The list is Crewlet's own: the fields its configuration
-marks as secret, which it masks on every read.
+company document, and in a data pod's `crewlet.yaml`, that holds a
+credential, and the field of the `crewlet.ai` API or the Secret that fills
+it. The list is Crewlet's own: the positions its JSON Schema marks
+`"x-crewlet-secret": true` (`crewlet schema company`, `crewlet schema
+bootstrap`), which are the fields its configuration masks on every read. A
+position is written as the schema places it: `[]` is every element of a list
+and `*` every value of a map, and a seat's positions are written from
+`roles[]` wherever the org chart puts the seat.
+
+The tables below are made from one table in the operator's source
+(`internal/render/credentials.go`), and a test holds that table to the marks
+of the engine version the operator is built against, in both directions: a
+credential position Crewlet adds fails the operator's build until it is
+covered or listed as not offered, and so does a row for a position Crewlet
+no longer marks.
 
 How references work is explained in
 [How the operator models a company](overview.md#credentials-by-reference-never-by-value).
@@ -44,19 +56,19 @@ and `<company>-bootstrap`.
 
 | Crewlet position | Field | Reference |
 |---|---|---|
-| `providers.llm.<key>.api_keys` | `LLMProvider.spec.apiKeySecretRefs` | one `SecretKeyReference` per key |
-| `providers.llm.<key>.api_keys`, for a model the platform provides | `EngineClass.spec.platformLLMProviders[].apiKeySecretRefs` | one `NamespacedSecretKeyReference` per key |
+| `providers.llm.*.api_keys[]` | `LLMProvider.spec.apiKeySecretRefs` | one `SecretKeyReference` per key |
+| `providers.llm.*.api_keys[]`, for a model the platform provides | `EngineClass.spec.platformLLMProviders[].apiKeySecretRefs` | one `NamespacedSecretKeyReference` per key |
 | `providers.embeddings.api_key` | `Company.spec.embeddings.apiKeySecretRef` | `SecretKeyReference` |
 | `providers.sandbox.e2b.api_key` | `Company.spec.sandbox.e2b.apiKeySecretRef` | `SecretKeyReference` |
-| `providers.sandbox.setup[].files` | `Company.spec.sandbox.setup[].files[].valueFrom.secretKeyRef` | one `SecretKeyReference` per file |
-| `providers.sandbox.setup[].env` | `Company.spec.sandbox.setup[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
-| `mcp_servers[].env` | `MCPServer.spec.env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
-| `mcp_servers[].headers` | `MCPServer.spec.headers[].valueFrom.secretKeyRef` | one `SecretKeyReference` per header |
-| `units[].mcp_env` | `Unit.spec.mcp[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable or header |
-| `roles[].mcp_env` | `Seat.spec.mcp[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable or header |
-| `roles[].sandbox.env` | `Seat.spec.sandbox.env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
-| `roles[].sandbox.setup[].files` | `Seat.spec.sandbox.setup[].files[].valueFrom.secretKeyRef` | one `SecretKeyReference` per file |
-| `roles[].sandbox.setup[].env` | `Seat.spec.sandbox.setup[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
+| `providers.sandbox.setup[].files.*` | `Company.spec.sandbox.setup[].files[].valueFrom.secretKeyRef` | one `SecretKeyReference` per file |
+| `providers.sandbox.setup[].env.*` | `Company.spec.sandbox.setup[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
+| `mcp_servers[].env.*` | `MCPServer.spec.env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
+| `mcp_servers[].headers.*` | `MCPServer.spec.headers[].valueFrom.secretKeyRef` | one `SecretKeyReference` per header |
+| `units[].mcp_env.*.*` | `Unit.spec.mcp[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable or header |
+| `roles[].mcp_env.*.*` | `Seat.spec.mcp[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable or header |
+| `roles[].sandbox.env.*` | `Seat.spec.sandbox.env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
+| `roles[].sandbox.setup[].files.*` | `Seat.spec.sandbox.setup[].files[].valueFrom.secretKeyRef` | one `SecretKeyReference` per file |
+| `roles[].sandbox.setup[].env.*` | `Seat.spec.sandbox.setup[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
 | `roles[].integrations.slack.bot_token` | `Seat.spec.integrations.slack.credentialsSecretRef` | `SecretReference`, key `botToken` (`SlackBotTokenKey`) |
 | `roles[].integrations.slack.signing_secret` | `Seat.spec.integrations.slack.credentialsSecretRef` | `SecretReference`, key `signingSecret` (`SlackSigningSecretKey`) |
 | `roles[].integrations.github.private_key` | `Seat.spec.integrations.github.app.credentialsSecretRef` | `SecretReference`, key `privateKey` (`GitHubAppPrivateKeyKey`) |
@@ -85,10 +97,33 @@ other block a field of the API owns), so such a Company is never stored.
 | `integrations.confluence.token`, `integrations.confluence.webhook_secret`, `integrations.confluence.webhook_token` | The Confluence integration is not offered yet; so the knowledge backend is Native or None. |
 | `integrations.datadog.webhook_token`, `integrations.datadog.provisioning.api_key`, `integrations.datadog.provisioning.app_key` | The Datadog integration is not offered yet. |
 | `integrations.atlassian.api_key` | The Atlassian organization integration is not offered yet. |
-| `providers.llm.<key>.cli.auth.token`, `providers.llm.<key>.cli.auth.credential_bundle`, `providers.llm.<key>.cli.env` | The `cli-agent` provider type is not offered: the engine image ships no coding CLI, and a subscription login belongs to one machine, which a pod that can be rescheduled at any time is not. |
+| `providers.llm.*.cli.auth.token`, `providers.llm.*.cli.auth.credential_bundle`, `providers.llm.*.cli.env.*` | The `cli-agent` provider type is not offered: the engine image ships no coding CLI, and a subscription login belongs to one machine, which a pod that can be rescheduled at any time is not. |
 
 Each integration arrives as a new member of the `Integration` union, with a
 reference field for each of its credentials.
+
+## In the data pod's `crewlet.yaml`
+
+The data pod's `crewlet.yaml` (Crewlet's Tier A) has credential positions of
+its own:
+
+| Crewlet position | Filled from |
+|---|---|
+| `api.auth.tokens[].token` | Secret `<company>-api-tokens`, which the operator generates once (or a platform supplies): key `operator` for the operator's own token, `access` for the one published in `status.apiAccessSecretRef` |
+| `secrets.keys[].material` | Secret `<company>-keyring`, which the operator generates once (or a platform supplies): one key per keyring key, the annotation `crewlet.ai/active-key-id` naming the one that seals |
+| `store.objects.s3.secret_access_key` | `Company.spec.objects.credentialsSecretRef`: `SecretReference`, key `secretAccessKey` (`S3SecretAccessKeyKey`); unset, the pod's own identity |
+| `stream.token` | Not offered. The data pod runs Crewlet's embedded broker, which needs no token; an external NATS cluster (`stream.type: nats`), where Crewlet reads one, is not offered. |
+
+Crewlet suggests a `${VAR}` at these positions, resolved from the node's
+environment. The operator writes the values themselves instead, into the
+`crewlet.yaml` it keeps in the Secret `<company>-bootstrap`, because the
+engine also expands a `${NAME}` in the company document from its environment,
+in fields that are not credentials, such as an MCP server's `url`: a
+credential in the environment is one anyone who can write the document could
+have the engine send anywhere
+([The data pod's `crewlet.yaml`](company-document.md#the-data-pods-crewletyaml)).
+A test renders each case and checks that every credential it was given sits
+at one of these positions and nowhere else.
 
 ## Credentials the operator makes or copies itself
 

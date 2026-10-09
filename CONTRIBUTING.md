@@ -176,7 +176,12 @@ closely enough that nobody has to learn a house style:
   because the API cannot tell the two apart. No field accepts a literal
   secret, and the pass-through `engineConfig` may not name a block that holds
   credentials. [docs/concepts/credentials.md](docs/concepts/credentials.md)
-  maps every Crewlet credential position to its field.
+  maps every Crewlet credential position to its field, from the table in
+  [`internal/render/credentials.go`](internal/render/credentials.go); a test
+  holds that table to the positions the pinned engine's schemas mark
+  `x-crewlet-secret`, in both directions, and the page to the table, so a
+  credential Crewlet adds fails the build until it has a field or a reason
+  it has none.
 - References stay within the object's namespace. Only the cluster-scoped
   `EngineClass` may reference objects in another namespace.
 - Validation is OpenAPI plus CEL (`x-kubernetes-validations`) — immutability
