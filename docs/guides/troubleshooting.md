@@ -275,15 +275,19 @@ condition's message carries the engine's account of the failure, its
 
 - `isolated`: the only node, or every node, failed the revision. It keeps
   serving and stays ready, and retries the revision three times at most.
-- `shed` or `stuck`: peers applied it and this node cannot; it refuses new
-  work and fails `/ready` (`stuck` once out of retries).
+- `shed` or `stuck`: peers applied it and this node cannot, or its apply has
+  run longer than 45 seconds while they did; it refuses new work and fails
+  `/ready` (`stuck` once out of retries). On a data pod the peers are the
+  company's seat pods, which apply the revision too.
 
 Read the log for `config_apply_failed`, fix the cause in the objects (or in
 the class, for the pod's own configuration), and the next change is a new
-revision the engine tries afresh. When the message says the engine neither
-applied nor failed the revision within 72 seconds, the engine is not
-polling its activation pointer at all; its log says why, and a restart of the
-data pod is the usual remedy.
+revision the engine tries afresh. When the message says the engine
+has neither applied the revision nor concluded that it failed within 72
+seconds (its posture still reads `wait`), the engine is not polling its
+activation pointer at all, or an apply hangs with no peer to compare it
+against; its log says which, and a restart of the data pod is the usual
+remedy.
 
 ```bash
 kubectl logs acme-data-0 -n acme | grep -E 'config_apply_failed|reconcile_tick_failed' | tail

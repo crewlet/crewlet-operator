@@ -35,12 +35,22 @@ const applyPollInterval = 2 * time.Second
 // epoch it has not applied makes an attempt at it, up to three per epoch.
 const enginePollInterval = 18 * time.Second
 
-// applyDeadline is how long after a write the operator waits for the engine
-// to report the write's epoch applied when the engine records no failed
-// attempt either. One poll covers a lost nudge and a second the apply itself
-// (one that starts the native runtime or MCP servers takes seconds); an
-// engine that has neither applied nor failed the epoch in four is not
-// polling its pointer at all, which no later look will change by itself.
+// engineLagGrace is how long a Crewlet node may be behind an epoch before it
+// counts the lag as its own failure rather than propagation: three of its
+// 15-second reconcile intervals (crewlet's configplane.LagGrace). Past it, a
+// node whose apply has not ended reads shed when a peer has applied the epoch.
+const engineLagGrace = 45 * time.Second
+
+// applyDeadline is how long after a write the operator waits for an engine
+// whose posture still reads wait. Since crewlet #203 a node reports wait for
+// the whole of an apply, and turns serve when it succeeds or a diverged
+// posture when an attempt fails, so wait past this is one of two things the
+// engine itself never concludes: it is not polling its activation pointer at
+// all, or an apply hangs on a node no peer has applied the epoch beside (the
+// engine reads that silence as no evidence, and keeps reporting wait). One
+// poll covers a lost nudge and a second the apply itself (one that starts the
+// native runtime or MCP servers takes seconds); four is past any apply that
+// ends.
 const applyDeadline = 4 * enginePollInterval
 
 // pendingApplies remembers, per Company, the ConfigApplied condition a write
@@ -103,12 +113,19 @@ func (r *CompanyConfigReconciler) clock() time.Time {
 
 // verifyApplied turns a ConfigApplied=True verdict into what the engine
 // reports about it: True once the engine has applied the epoch status.config
-// records and has not diverged since, Applying until then, and ApplyFailed
-// when the engine recorded a failed attempt at that epoch or a later one, or
-// when applyDeadline passes without either. It runs on every look at the
-// engine, the periodic resync included, so an engine that diverges after
-// applying the operator's revision is reported too. health and healthErr are
-// what readHealth read; result is what the reconcile would return otherwise.
+// records and has not diverged since, Applying while its posture reads wait,
+// and ApplyFailed when its posture reads diverged, or still wait
+// applyDeadline after the write. It runs on every look at the engine, the
+// periodic resync included, so an engine that diverges after applying the
+// operator's revision, on one someone activates later, is reported too.
+// health and healthErr are what readHealth read; result is what the
+// reconcile would return otherwise.
+//
+// The posture decides, because the engine's posture is its own conclusion:
+// an attempt counts, and its failure turns the posture diverged, only once
+// the attempt has ended (crewlet #203), so a diverged posture is never an
+// apply still running. Its record in /fleet is read only for what the
+// posture cannot carry: the failed attempt's epoch and its account.
 func (run *configRun) verifyApplied(
 	ctx context.Context, eng *engine.Client, health engine.Health, healthErr error, result ctrl.Result,
 ) ctrl.Result {
@@ -130,46 +147,52 @@ func (run *configRun) verifyApplied(
 		return ctrl.Result{RequeueAfter: engineRetryInterval}
 	}
 
-	if health.AppliedEpoch >= target && !health.Posture.Diverged() {
-		run.settled(key, target, config.RevisionID)
-		return result
-	}
-	// Behind the epoch, or diverged from a later one. A diverged posture
-	// alone does not say the apply failed: the engine counts an attempt
-	// before it makes it, so its posture reads diverged for as long as an
-	// apply that will succeed takes. Only the record of an attempt that
-	// ended does.
-	fleet, err := run.fleetOf(ctx, eng)
-	if err != nil {
-		run.unavailable(err)
-		run.applied = appliedVerdict{}
-		return ctrl.Result{RequeueAfter: engineRetryInterval}
-	}
-	record := fleet.LastApply()
 	switch {
-	case record.Status.Failed() && record.Epoch >= target && record.Epoch > health.AppliedEpoch:
-		account := record.Error
-		if account == "" {
-			account = "the engine gave no account of the failure"
-		}
-		run.applyFailed(config.RevisionID, fmt.Sprintf("The engine failed to apply epoch %d (revision %s): %s. "+
-			"It reports status %q and posture %q, and keeps running epoch %d, the last it applied.",
-			record.Epoch, record.RevisionID, account, health.Status, health.Posture, health.AppliedEpoch))
+	case health.Posture.Diverged():
+		run.applyFailed(config.RevisionID, run.failureAccount(ctx, eng, health, target))
 		return ctrl.Result{RequeueAfter: engineRetryInterval}
 	case health.AppliedEpoch >= target:
-		// An apply of a later epoch, in progress: the epoch the
-		// operator's revision has is applied, and still runs.
 		run.settled(key, target, config.RevisionID)
 		return result
 	case config.AppliedAt != nil && run.clock().Sub(config.AppliedAt.Time) >= applyDeadline:
 		run.applyFailed(config.RevisionID, fmt.Sprintf("The engine has not applied revision %s (epoch %d) %s after the "+
-			"operator activated it, and records no failed attempt: it reports status %q and posture %q at applied epoch %d, "+
-			"and keeps running that. Its log says why.",
+			"operator activated it, and has not concluded that it failed: it reports status %q and posture %q at applied "+
+			"epoch %d, and keeps running that. It is not polling its activation pointer, or an apply hangs; its log says which.",
 			config.RevisionID, target, applyDeadline, health.Status, health.Posture, health.AppliedEpoch))
 		return ctrl.Result{RequeueAfter: engineRetryInterval}
 	}
 	run.applying(key, target, config.RevisionID, health)
 	return ctrl.Result{RequeueAfter: applyPollInterval}
+}
+
+// failureAccount is ApplyFailed's message for an engine whose posture reads
+// diverged: the failed attempt's epoch and the engine's own account of it,
+// from its record in /fleet, when that record names an attempt at the
+// operator's epoch or a later one that ended in failure. A diverged posture
+// with no such record is an apply that has run past engineLagGrace while a
+// peer applied the epoch, or a failure the engine has not yet written to
+// the record it keeps for its peers (it updates its own posture first); the
+// next look, engineRetryInterval later, finds the account of the second.
+func (run *configRun) failureAccount(ctx context.Context, eng *engine.Client, health engine.Health, target int64) string {
+	runs := fmt.Sprintf(" It reports status %q and posture %q, and keeps running epoch %d, the last it applied.",
+		health.Status, health.Posture, health.AppliedEpoch)
+	fleet, err := run.fleetOf(ctx, eng)
+	if err != nil {
+		return fmt.Sprintf("The engine reports that it did not apply the activated epoch, and its record of the attempt "+
+			"could not be read: %v.", err) + runs
+	}
+	record := fleet.LastApply()
+	if record.Status.Failed() && record.Epoch >= target && record.Epoch > health.AppliedEpoch {
+		account := record.Error
+		if account == "" {
+			account = "the engine gave no account of the failure"
+		}
+		return fmt.Sprintf("The engine failed to apply epoch %d (revision %s): %s.", record.Epoch, record.RevisionID, account) + runs
+	}
+	epoch := max(fleet.TargetEpoch, target)
+	return fmt.Sprintf("The engine reports that it did not apply epoch %d and records no failed attempt at it: its apply "+
+		"has run longer than the engine's %s grace while a peer applied it, or the account of the failure has not reached "+
+		"its record yet.", epoch, engineLagGrace) + runs
 }
 
 // settled reports the verdict of an epoch the engine has applied: the write's

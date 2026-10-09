@@ -97,12 +97,16 @@ flowchart TD
    revision until it has. So the Company reports `ConfigApplied=False` with
    the reason `Applying` until the engine's `/health` reports that epoch
    applied (the operator looks every two seconds; it usually takes
-   milliseconds), and only then `True`. When the engine records the attempt
-   as failed, or has neither applied nor failed the epoch 72 seconds after
-   the write (four of its 18-second polls), the Company reports
+   milliseconds), and only then `True`. The engine's posture reads `wait`
+   for as long as it applies an epoch, and turns `isolated`, `shed` or
+   `stuck` only once it has concluded that it did not: an attempt ended in
+   failure, or the apply has run past the engine's 45-second grace while a
+   peer applied the epoch. On such a posture, or on `wait` still 72 seconds
+   after the write (four of its 18-second polls), the Company reports
    `ConfigApplied=False ApplyFailed` with the engine's status, posture and
-   account of the failure, and an `ApplyFailed` event; the engine keeps
-   running the revision it applied last. The same check runs on every later
+   account of the failure (from its record of the attempt in `/fleet`), and
+   an `ApplyFailed` event; the engine keeps running the revision it applied
+   last. The same check runs on every later
    look, so an engine that fails a revision someone activates afterwards is
    reported too.
 7. **Clean up** the store: every entry of the operator's shape that the new

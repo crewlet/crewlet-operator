@@ -60,9 +60,10 @@ func TestEngineReadyFollowsTheFirstApply(t *testing.T) {
 
 // TestEngineHealthReportsTheAppliedEpoch pins what the config reconciler
 // waits for after a write: the engine applies the revision asynchronously,
-// and its /health reports it applied, converged (posture serve) and ok, with
-// an applied epoch that reaches the epoch the write returned; and the node's
-// record in /fleet names that epoch, its revision and a clean outcome.
+// never reading a diverged posture while it does, and its /health then
+// reports it applied, converged (posture serve) and ok, with an applied epoch
+// that reaches the epoch the write returned; and the node's record in /fleet
+// names that epoch, its revision and a clean outcome.
 func TestEngineHealthReportsTheAppliedEpoch(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -82,20 +83,28 @@ func TestEngineHealthReportsTheAppliedEpoch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var diverged []engine.Health
 	eventually(t, "the engine reporting the write's epoch applied", func() error {
 		h, err := client.Health(ctx)
 		switch {
 		case err != nil:
 			return err
+		case h.AppliedEpoch < applied.Epoch && h.Posture.Diverged():
+			// The config reconciler reads a diverged posture as a failed
+			// apply (crewlet #203): one that applies reads wait until it
+			// has.
+			diverged = append(diverged, h)
+			return fmt.Errorf("applied epoch %d is behind the write's %d, posture %q", h.AppliedEpoch, applied.Epoch, h.Posture)
 		case h.AppliedEpoch < applied.Epoch:
-			// Its posture may read isolated meanwhile: the engine counts
-			// the attempt before it makes it (see LastApply).
 			return fmt.Errorf("applied epoch %d is behind the write's %d", h.AppliedEpoch, applied.Epoch)
 		case h.Status != "ok" || !h.Configured || h.Posture != engine.PostureServe:
 			return fmt.Errorf("Health() = %+v, want status ok, configured, posture serve", h)
 		}
 		return nil
 	})
+	if len(diverged) > 0 {
+		t.Errorf("Health() read a diverged posture during an apply that succeeded: %+v", diverged)
+	}
 	fleet, err := client.Fleet(ctx)
 	if err != nil {
 		t.Fatal(err)

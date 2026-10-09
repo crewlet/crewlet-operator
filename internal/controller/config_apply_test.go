@@ -134,18 +134,74 @@ func TestConfigAppliedWaitsForTheEngineToApplyTheEpoch(t *testing.T) {
 	}
 }
 
-// TestConfigAppliedTakesADivergedPostureDuringAnApplyForTheApply pins the
-// engine's quirk the verdict has to survive: it counts an attempt before it
-// makes it, so mid-apply its posture reads isolated and nothing failed.
-func TestConfigAppliedTakesADivergedPostureDuringAnApplyForTheApply(t *testing.T) {
+// TestConfigAppliedTakesAWaitPostureForAnApplyInProgress pins that the
+// verdict follows the engine's posture. Since crewlet #203 a node reads wait
+// for the whole of an apply and turns diverged only once an attempt has ended
+// in failure, so wait is Applying whatever the record in /fleet says, and
+// costs no read of it: a record of a failed attempt beside a wait posture is
+// one the engine itself no longer counts against the epoch it is applying.
+func TestConfigAppliedTakesAWaitPostureForAnApplyInProgress(t *testing.T) {
 	written := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
-	eng := &fakeEngine{health: health("isolated", "isolated", 1), fleet: fleet(1, "r1", "ok", "")}
+	eng := &fakeEngine{health: health("ok", "wait", 1), fleet: fleet(2, "r2", "error", "engine: apply: no sandbox cell")}
 	cl := eng.client(t)
-	run, _ := verifyRun(written.Add(time.Second), written, crewletaiv1alpha1.ReasonApplied, nil)
+	run, log := verifyRun(written.Add(time.Second), written, crewletaiv1alpha1.ReasonApplied, nil)
 	h, err := cl.Health(context.Background())
 	run.verifyApplied(context.Background(), cl, h, err, ctrl.Result{})
 	if got := run.configApplied; got.Reason != crewletaiv1alpha1.ReasonApplying {
-		t.Fatalf("ConfigApplied mid-apply = %+v, want Applying", got)
+		t.Fatalf("ConfigApplied while the engine reads wait = %+v, want Applying", got)
+	}
+	if eng.fleetReads != 0 {
+		t.Errorf("read /fleet %d times for an engine whose posture says it is still applying", eng.fleetReads)
+	}
+	if events := log.of("acme"); len(events) != 0 {
+		t.Errorf("events = %q, want none", events)
+	}
+}
+
+// TestConfigAppliedTakesADivergedPostureForAFailure pins that a diverged
+// posture is ApplyFailed at once, with or without an account in /fleet: the
+// engine has concluded, and its record either lags its posture by a moment
+// (the account arrives on the next look) or has nothing to say (an apply past
+// the engine's grace while a peer applied the epoch, on the operator's epoch
+// or on one activated after it). Before crewlet #203 a diverged posture was
+// also what an apply in progress looked like, and the verdict waited for the
+// record; now that wait would only delay a failure the engine has reported.
+func TestConfigAppliedTakesADivergedPostureForAFailure(t *testing.T) {
+	written := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		name, health, fleet, want string
+	}{
+		{"before the account reaches the record", health("isolated", "isolated", 1), fleet(1, "r1", "ok", ""),
+			"records no failed attempt"},
+		{"past the grace beside a peer", health("shed", "shed", 1), fleet(1, "r1", "ok", ""), "45s grace"},
+		{"on an epoch activated after the operator's", health("shed", "shed", 2), `{"this_node":"node-0","target_epoch":3,` +
+			`"nodes":[{"id":"node-0","config_epoch":2,"config_revision_id":"r2","config_status":"ok"}]}`, "apply epoch 3"},
+		{"with no record to read", health("isolated", "isolated", 1), `not json`, "could not be read"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			cl := (&fakeEngine{health: c.health, fleet: c.fleet}).client(t)
+			run, log := verifyRun(written.Add(time.Second), written, crewletaiv1alpha1.ReasonApplied, nil)
+			h, err := cl.Health(context.Background())
+			result := run.verifyApplied(context.Background(), cl, h, err, ctrl.Result{})
+			got := run.configApplied
+			if got.Status != metav1.ConditionFalse || got.Reason != crewletaiv1alpha1.ReasonApplyFailed {
+				t.Fatalf("ConfigApplied = %+v, want False, ApplyFailed", got)
+			}
+			for _, want := range []string{c.want, `posture "` + string(h.Posture) + `"`} {
+				if !strings.Contains(got.Message, want) {
+					t.Errorf("message %q does not carry %q", got.Message, want)
+				}
+			}
+			if run.applied.kind != appliedFailed {
+				t.Errorf("parts' verdict = %v, want appliedFailed", run.applied.kind)
+			}
+			if events := log.of("acme"); len(events) != 1 || !strings.HasPrefix(events[0], "Warning ApplyFailed") {
+				t.Errorf("events = %q, want one Warning ApplyFailed", events)
+			}
+			if result.RequeueAfter != engineRetryInterval {
+				t.Errorf("RequeueAfter = %s, want %s", result.RequeueAfter, engineRetryInterval)
+			}
+		})
 	}
 }
 

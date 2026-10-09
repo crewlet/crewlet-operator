@@ -60,8 +60,10 @@ const (
 	PostureServe Posture = "serve"
 
 	// PostureWait is a node behind the current epoch for an ordinary
-	// reason: it has not polled the activation pointer yet, or its peers
-	// have not applied the epoch either and it has not failed to.
+	// reason: it is applying the epoch, it has not polled the activation
+	// pointer yet, or it has been behind longer than the engine's grace
+	// with no peer reporting either way and no attempt of its own that
+	// failed, which the engine takes as no evidence.
 	PostureWait Posture = "wait"
 
 	// PostureShed is a node that cannot apply an epoch its peers have, and
@@ -79,7 +81,10 @@ const (
 )
 
 // Diverged reports whether the posture says the node has failed to apply
-// the current epoch rather than only not reached it yet.
+// the current epoch rather than only not reached it yet. The engine concludes
+// that only from an attempt at the epoch that ended in failure, or from a lag
+// on it past its grace while a peer has applied it: an apply still running
+// reads wait (crewlet #203).
 func (p Posture) Diverged() bool {
 	return p == PostureShed || p == PostureIsolated || p == PostureStuck
 }
@@ -333,15 +338,13 @@ func (f *Fleet) Node(id string) (FleetNode, bool) {
 }
 
 // LastApply is what the answering node recorded about its last attempt to
-// apply an activation epoch.
-//
-// It is what tells an apply in progress from a failed one. /health cannot:
-// the engine counts an attempt before it makes it, so while a revision is
-// being applied its posture already reads as diverged (isolated, on a single
-// node) and turns serve when the apply ends, whereas the record is written
-// only once the attempt has ended, with its outcome. A node that has
-// recorded no attempt, or that the fleet does not list yet, is the zero
-// ApplyRecord.
+// apply an activation epoch: the epoch, its revision and how the attempt
+// ended, with the engine's own account of a failure. /health's posture says
+// whether the node has concluded that an apply failed; this record is the
+// only place that says which epoch failed and why. A node writes it once
+// the attempt has ended, just after it moves its own posture, and a node
+// that has recorded no attempt, or that the fleet does not list yet, is the
+// zero ApplyRecord.
 func (f *Fleet) LastApply() ApplyRecord {
 	n, _ := f.Node(f.ThisNode)
 	return n.Apply
