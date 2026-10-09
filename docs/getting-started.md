@@ -262,8 +262,10 @@ source, and the engine refuses any other change to it
 `EngineClass` that routes webhooks through a Gateway, two `Unit`s, three
 `Seat`s (one of them a person) with their own Slack and GitHub credentials,
 two `MCPServer`s, three `Integration`s and two `Schedule`s. On kind it shows what an object reports
-when what it needs is missing: there is no Gateway API, and none of the
-Secrets the samples reference exist. Point its class at the image you loaded
+when what it needs is missing: there is no Gateway API, none of the
+Secrets the samples reference exist, and the `gitlab` tool server's `glab`
+is not in the engine image (a stdio server's command needs an image derived
+from the engine's, as a [coding CLI](guides/cli-agents.md#the-image-needs-the-cli) does). Point its class at the image you loaded
 first:
 
 ```bash

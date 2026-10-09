@@ -2,6 +2,12 @@
 # shared: false starts one instance per seat with that seat's own credentials
 # (see the Seat ana): an Authorization header for GitHub, a GITLAB_TOKEN for
 # GitLab, which the engine mints.
+#
+# A Stdio server's command runs in the engine's container, and Crewlet's image
+# ships no glab (nor any other runtime a stdio server needs): run this one on
+# an image derived from the engine's with glab installed, as for a coding CLI
+# (docs/guides/cli-agents.md). On the plain engine image the server fails to
+# start, and every other part of the company still runs.
 apiVersion: crewlet.ai/v1alpha1
 kind: MCPServer
 metadata:

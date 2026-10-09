@@ -12,10 +12,14 @@ the engine runs in a pod: the image, the login, and agent mode.
 The CLI is a program the engine starts, in the engine's own container, and
 Crewlet's image ships none: its Dockerfile leaves every runtime a CLI needs
 (Node.js for most of them) to a derived image. Build one from the engine
-image you run, pinning both the engine and the CLI:
+image you run, the one [Installing](installing.md#engine-image) builds at
+the operator's `CREWLET_VERSION`, pinning both the engine and the CLI:
 
 ```dockerfile
-FROM ghcr.io/crewlet/crewlet:v0.1.0
+# The engine image you built and pushed: <your registry>/crewlet:<CREWLET_VERSION>,
+# by digest. Never an older engine than the operator's CREWLET_VERSION.
+ARG ENGINE_IMAGE
+FROM ${ENGINE_IMAGE}
 USER root
 RUN apt-get update \
     && apt-get install -y --no-install-recommends nodejs npm \
@@ -25,16 +29,18 @@ RUN apt-get update \
 USER crewlet
 ```
 
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-claude-code:<CREWLET_VERSION> .
+```
+
 and name it in the class, which every company of the class then runs:
 
 ```yaml
-apiVersion: crewlet.ai/v1alpha1
-kind: EngineClass
-metadata:
-  name: with-claude-code
+# EngineClass with-claude-code, excerpt
 spec:
   engine:
-    image: registry.example.com/crewlet-claude-code:v0.1.0
+    image: <your registry>/crewlet-claude-code@sha256:<digest>   # <CREWLET_VERSION>
 ```
 
 The engine's root filesystem is read-only: a CLI writes under the home the
