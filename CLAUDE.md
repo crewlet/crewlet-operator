@@ -59,9 +59,9 @@ scripts/              the DCO sign-off gate and its tests; the engine image buil
 hack/                 generator configuration
 ```
 
-`api/` is its own module so consumers (a provisioning control plane) import the types
-without controller-runtime: it may depend on `k8s.io/api` and
-`k8s.io/apimachinery` only (a depguard rule enforces it). The root module
+`api/` is its own module so consumers (a control plane that provisions
+tenants) import the types without controller-runtime: it may depend on
+`k8s.io/api` and `k8s.io/apimachinery` only (a depguard rule enforces it). The root module
 requires it via `replace ./api`. Every Makefile Go target runs in both
 modules.
 

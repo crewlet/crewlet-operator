@@ -160,7 +160,7 @@ The operator pushes each referenced value into the engine's encrypted secret
 store, and the company document refers to it by name only. Rewriting the
 Secret rotates the value in the engine without a restart. Who writes the
 Secret is up to you: a person with `kubectl`, External Secrets, or a control
-plane after an OAuth flow only it knows about.
+plane after a vendor's install flow only it knows about.
 
 `Company.spec.engineConfig` passes engine tuning through as written, one
 entry per top-level key of the document (`turn_engine`, `learning`,

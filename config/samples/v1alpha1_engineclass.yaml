@@ -1,4 +1,4 @@
-# A platform's "standard" plan. One EngineClass is shared by every Company
+# A platform's "standard" class. One EngineClass is shared by every Company
 # that names it; the Secrets it references live in the platform's own
 # namespace (crewlet-system), never in a tenant's.
 apiVersion: crewlet.ai/v1alpha1

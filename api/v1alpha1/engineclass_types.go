@@ -41,8 +41,8 @@ type EngineSettings struct {
 	ImagePullSecrets []LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
 	// allowVersionOverride lets a Company of this class choose its own engine
-	// version with spec.runtime.version. Off by default: the class usually
-	// decides which version its tenants run.
+	// version with spec.runtime.version. Off by default: the platform
+	// usually decides which version a class's tenants run.
 	// +optional
 	AllowVersionOverride *bool `json:"allowVersionOverride,omitempty"`
 }
@@ -195,7 +195,8 @@ type SeatPoolSettings struct {
 	// its pools together: each Shared pool's replicas, and each PerSeat
 	// pool's replicas for every seat placed in it. The data pods are not
 	// counted. Required with policy Allowed: a class's companies size their
-	// own pools, and only this bounds how many seat pods a company of the class runs.
+	// own pools, and only this bounds how many seat pods a company of the
+	// class runs.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	MaxPods int32 `json:"maxPods,omitempty"`
@@ -795,8 +796,8 @@ type PlatformLLMProvider struct {
 
 // EngineLimits caps what a Company of a class may declare. The operator
 // refuses to apply a company that exceeds a limit and reports it on the
-// Company. A control plane should refuse it before it writes the Company; this
-// is the cluster's defence in depth.
+// Company. A control plane should refuse such a request before it writes the
+// Company; this is the cluster's defence in depth.
 // +kubebuilder:validation:MinProperties=1
 type EngineLimits struct {
 	// maxSeats is the most Seats a Company may have. Unset is unlimited.
@@ -1009,8 +1010,9 @@ type EngineClassStatus struct {
 
 // EngineClass is a platform's defaults and guard rails for running Crewlet
 // engines: the image, the size of the data pods, how companies are exposed,
-// and limits. A Company names one in spec.engineClassName; in a multi-tenant platform, a service tier
-// usually maps to a class.
+// and limits. A Company names one in spec.engineClassName; a platform that
+// hosts many tenants usually writes one class for each service tier it
+// offers them.
 //
 // Anyone who may write a Company may name any class; a class admits the
 // namespaces its spec.allowedNamespaces selects, and no others.

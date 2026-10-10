@@ -58,10 +58,10 @@ bin/kubectl api-resources --api-group=crewlet.ai
 
 ## Create an EngineClass
 
-An `EngineClass` is a platform's defaults and limits: the engine image, the size of each
-company's data pod, and how companies are reached. This one runs the image
-you loaded, exposes no webhooks (kind has no public address), and gives each
-company the smallest data volume the API admits. The engine reserves three
+An `EngineClass` is a platform's defaults and limits: the engine image, the
+size of each company's data pod, and how companies are reached. This one runs
+the image you loaded, exposes no webhooks (kind has no public address), and
+gives each company the smallest data volume the API admits. The engine reserves three
 quarters of that volume for its event stream, and kind's provisioner puts it
 on the node's disk without enforcing the size: the Docker host needs about
 6 GiB free for each company, or its pod never becomes ready.

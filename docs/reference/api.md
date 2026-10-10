@@ -589,7 +589,7 @@ _Appears in:_
 | `exposure` _[CompanyExposure](#companyexposure)_ | exposure overrides how the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `runtime` _[CompanyRuntime](#companyruntime)_ | runtime is the company's bounded overrides of its class. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `objects` _[CompanyObjects](#companyobjects)_ | objects is the company's own access to its class's object store. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `suspend` _boolean_ | suspend stops the engine and keeps its data volumes; setting it back<br />to false starts it again. It takes effect whatever else is wrong with<br />the Company, even while it is not Accepted. The Company reports<br />Ready=False with the reason Suspended meanwhile. Vendors keep delivering webhooks meanwhile,<br />and some disable a subscription after a long run of failed deliveries. |  | Optional: \{\} <br /> |
+| `suspend` _boolean_ | suspend stops the engine and keeps its data volumes; setting it back<br />to false starts it again. It takes effect whatever else is wrong with<br />the Company, even while it is not Accepted. Meanwhile the Company<br />reports Ready=False with the reason Suspended, and vendors keep<br />delivering webhooks, some disabling a subscription after a long run of<br />failed deliveries. |  | Optional: \{\} <br /> |
 | `deletionPolicy` _[DeletionPolicy](#deletionpolicy)_ | deletionPolicy is what happens to the data volumes when the Company is<br />deleted. With Retain the keyring Secret is kept as well, since the<br />volumes cannot be read without it. | Retain | Enum: [Retain Delete] <br />Optional: \{\} <br /> |
 
 
@@ -963,8 +963,9 @@ _Appears in:_
 
 EngineClass is a platform's defaults and guard rails for running Crewlet
 engines: the image, the size of the data pods, how companies are exposed,
-and limits. A Company names one in spec.engineClassName; in a multi-tenant platform, a service tier
-usually maps to a class.
+and limits. A Company names one in spec.engineClassName; a platform that
+hosts many tenants usually writes one class for each service tier it
+offers them.
 
 Anyone who may write a Company may name any class; a class admits the
 namespaces its spec.allowedNamespaces selects, and no others.
@@ -1069,8 +1070,8 @@ _Appears in:_
 
 EngineLimits caps what a Company of a class may declare. The operator
 refuses to apply a company that exceeds a limit and reports it on the
-Company. A control plane should refuse it before it writes the Company; this
-is the cluster's defence in depth.
+Company. A control plane should refuse such a request before it writes the
+Company; this is the cluster's defence in depth.
 
 _Validation:_
 - MinProperties: 1
@@ -1200,7 +1201,7 @@ _Appears in:_
 | `image` _string_ | image is the Crewlet engine image, by tag or by digest, for example<br />registry.example.com/crewlet:v1.2.3. There is no default: the platform<br />decides which build its tenants run. A Company's spec.runtime.version<br />replaces the tag, so an image pinned by digest cannot be combined with<br />allowVersionOverride. |  | MaxLength: 512 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `imagePullPolicy` _[PullPolicy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#pullpolicy-v1-core)_ | imagePullPolicy is the pull policy of the engine container. Unset<br />takes the Kubernetes default for the image reference. |  | Enum: [Always IfNotPresent Never] <br />Optional: \{\} <br /> |
 | `imagePullSecrets` _[LocalObjectReference](#localobjectreference) array_ | imagePullSecrets name Secrets in each Company's namespace that pull<br />the image. They are referenced, not copied: the platform puts them<br />into the tenant namespaces it creates. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
-| `allowVersionOverride` _boolean_ | allowVersionOverride lets a Company of this class choose its own engine<br />version with spec.runtime.version. Off by default: the class usually<br />decides which version its tenants run. |  | Optional: \{\} <br /> |
+| `allowVersionOverride` _boolean_ | allowVersionOverride lets a Company of this class choose its own engine<br />version with spec.runtime.version. Off by default: the platform<br />usually decides which version a class's tenants run. |  | Optional: \{\} <br /> |
 
 
 #### EngineStatus
@@ -3094,7 +3095,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `policy` _[SeatPoolPolicy](#seatpoolpolicy)_ | policy is whether the class's companies may declare seat pools.<br />Changing it restarts every data pod of the class, which opens or<br />closes the leaf listener. | Forbidden | Enum: [Forbidden Allowed] <br />Optional: \{\} <br /> |
 | `allowPerSeat` _boolean_ | allowPerSeat lets a Company declare a PerSeat pool, which runs one<br />pod (or two, a warm standby) for each seat placed in it. Each costs a<br />pod, and every pod's work grows with the number of seats of the<br />company, so it is off by default and meant for the few seats that<br />need a pod to themselves. It isolates a seat's compute and its<br />failures, not its credentials: every pod of a company can read the<br />company's whole secret store. |  | Optional: \{\} <br /> |
-| `maxPods` _integer_ | maxPods is the most seat pods a Company of the class may run, all of<br />its pools together: each Shared pool's replicas, and each PerSeat<br />pool's replicas for every seat placed in it. The data pods are not<br />counted. Required with policy Allowed: a class's companies size their<br />own pools, and only this bounds how many seat pods a company of the class runs. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `maxPods` _integer_ | maxPods is the most seat pods a Company of the class may run, all of<br />its pools together: each Shared pool's replicas, and each PerSeat<br />pool's replicas for every seat placed in it. The data pods are not<br />counted. Required with policy Allowed: a class's companies size their<br />own pools, and only this bounds how many seat pods a company of the<br />class runs. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `defaults` _[SeatPoolDefaults](#seatpooldefaults)_ | defaults size the pods of a pool that does not size its own. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 

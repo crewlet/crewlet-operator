@@ -140,8 +140,8 @@ helper only to whoever may read every Secret.
 
 A platform that hosts tenants usually has a control plane that creates each
 tenant's namespace, its crewlet.ai objects and the Secrets they reference
-([Hosting many tenants on the operator](multi-tenancy.md)). The chart has roles for it, off
-by default:
+([Hosting many tenants on the operator](multi-tenancy.md)). The chart has
+roles for it, off by default:
 
 ```yaml
 tenantProvisioner:

@@ -6,7 +6,8 @@ wait to take over):
   kubectl get pods -n {{ .Release.Namespace }}
   kubectl api-resources --api-group=crewlet.ai
 
-Next, create an EngineClass, the class your companies run on, and a Company:
+Next, create an EngineClass, the defaults and limits your companies run with,
+and a Company:
 
   https://github.com/crewlet/crewlet-operator/blob/main/docs/getting-started.md
 {{- if .Values.tenantProvisioner.enabled }}

@@ -41,15 +41,16 @@ that caused it, while the last good revision keeps running.
 Credentials are handled **by reference, never by value**. No field accepts a
 secret; every credential is a reference to a Kubernetes `Secret`, whose value
 the operator pushes into the engine's encrypted secret store and rotates live.
-Who put the value there — a person with `kubectl`, External Secrets, or a provisioning
-control plane after an OAuth flow only it knows about — is invisible to the
-operator, so the same API serves self-hosters writing YAML and a control
-plane writing objects programmatically, one namespace per tenant.
+Who put the value there — a person with `kubectl`, External Secrets, or a
+control plane that provisions tenants, after a vendor's install flow only it
+knows about — is invisible to the operator, so the same API serves
+self-hosters writing YAML and a control plane writing objects
+programmatically, one namespace per tenant.
 
 ```mermaid
 flowchart LR
     platform["Platform admin"] -- EngineClass --> kapi[("Kubernetes API")]
-    users["kubectl, GitOps,<br/>or a provisioning control plane"] -- "Company, Unit, Seat,<br/>LLMProvider, MCPServer,<br/>Integration, Schedule" --> kapi
+    users["kubectl, GitOps,<br/>or a tenant control plane"] -- "Company, Unit, Seat,<br/>LLMProvider, MCPServer,<br/>Integration, Schedule" --> kapi
     users -- Secrets --> kapi
     kapi --> operator["crewlet-operator"]
     operator -- "StatefulSet, Services, routes,<br/>keyring, NetworkPolicy" --> engine["Crewlet engine<br/>(one per Company)"]

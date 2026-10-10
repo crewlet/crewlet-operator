@@ -20,7 +20,7 @@ so these pages describe what exists today and grow with it.
 | [Exposure and network policy](guides/exposure.md) | Webhook routes through a Gateway, an Ingress or your own proxy, the public listener and the public address vendors and sandboxes use, load balancer health checks, the internal API route, where people reach the dashboard, the network policy around each engine |
 | [Choosing a management policy](guides/management-policies.md) | Enforce, Observe and Seed: which to use, and how to move an engine under the operator |
 | [Choosing where seats run](guides/topology.md) | Data pods and stateless seat pools, Shared and PerSeat pools, what a pod of its own isolates and what it does not, what pools cost, where each seat runs now, and what the current engine does not do |
-| [Hosting many tenants on the operator](guides/multi-tenancy.md) | A control plane that provisions tenants: a namespace each, server-side apply with a field manager, the status to read, credentials from an OAuth flow |
+| [Hosting many tenants on the operator](guides/multi-tenancy.md) | A control plane that provisions tenants' companies: the tenant provisioner role, a namespace each, server-side apply with a field manager, the status to read, credentials as Secrets, management policies, what a tenant can read, tiers as classes, offboarding |
 | [Troubleshooting](guides/troubleshooting.md) | Every condition and reason an object reports, and what to do about each |
 
 ## Concepts and reference

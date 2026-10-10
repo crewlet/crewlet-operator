@@ -33,13 +33,13 @@ The repository holds two modules:
 | `github.com/crewlet/crewlet-operator` | `/` | the manager (`cmd/`), the controllers (`internal/`), the e2e suite (`test/`) |
 | `github.com/crewlet/crewlet-operator/api` | `api/` | the `crewlet.ai` API types, their markers and generated deepcopy |
 
-**Why the API is a module of its own:** consumers such as a provisioning control
-plane import the types to write these objects, and they should get exactly
-the types — not controller-runtime, not the operator's dependency tree, and
-not a version bump every time the operator's own dependencies move. The API
-module therefore depends on `k8s.io/api` and `k8s.io/apimachinery` only, and
-registers its types with apimachinery's scheme builder. A depguard rule in
-[`.golangci.yml`](.golangci.yml) refuses controller-runtime and the
+**Why the API is a module of its own:** consumers such as a control plane that
+provisions tenants import the types to write these objects, and they should
+get exactly the types — not controller-runtime, not the operator's dependency
+tree, and not a version bump every time the operator's own dependencies move.
+The API module therefore depends on `k8s.io/api` and `k8s.io/apimachinery`
+only, and registers its types with apimachinery's scheme builder. A depguard
+rule in [`.golangci.yml`](.golangci.yml) refuses controller-runtime and the
 operator's packages under `api/`; do not add other dependencies there without
 discussing it first. Its `go` line is deliberately the floor its own
 dependencies impose rather than the newest Go, because a library's `go` line

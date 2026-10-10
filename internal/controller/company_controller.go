@@ -124,8 +124,8 @@ func (r *CompanyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// A Company that is no longer accepted (its class was deleted, say)
 	// keeps the engine it has: the runtime conditions keep the generation
 	// they describe, and Ready says why nothing changes. Suspending is the
-	// exception. It is how a platform stops an engine,
-	// and it needs nothing a refusal could be about, so it takes effect
+	// exception. It is how a platform stops a tenant's engine and keeps its
+	// data, and it needs nothing a refusal could be about, so it takes effect
 	// whatever else is wrong: otherwise a tenant could keep a suspended
 	// engine running by declaring one Seat more than its class allows.
 	retry := &requeue{}
