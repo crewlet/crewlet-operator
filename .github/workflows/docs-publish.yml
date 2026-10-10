@@ -1,0 +1,136 @@
+name: Publish docs
+
+# docs/ is also published on the documentation site, docs.crewlet.ai, under
+# /operator/, beside the engine's documentation. The site's renderer is a
+# separate repository whose name and token are secrets of this one. It rebuilds
+# when it is asked to and at no other time: it has no schedule and does not
+# watch this repository. This workflow asks it, after a change to docs/ lands
+# on main and after a release, so the change is live in minutes; without it
+# the site keeps serving the pages it last built until something else rebuilds
+# it.
+#
+# The renderer reads docs/README.md's tables as the navigation and fails its
+# build on a page they do not list; test/docs holds this tree to that in CI,
+# so a change that reaches main cannot break the site's build.
+#
+# The target and the token are both secrets, so this file names neither. They
+# are secrets of the docs-publish environment rather than of the repository,
+# and that environment admits only main (see the job). The only permission that
+# allows a dispatch, Contents: read and write, also lets the token push to the
+# renderer's repository, and anyone with write access here can push a branch
+# whose own workflow runs with the repository's secrets: a repository secret
+# would be readable from any branch. An environment secret is readable only by
+# a job the environment's branch rule admits.
+#
+# No trigger below can hand them to a fork either. A push to main is a real
+# merge. The workflow_run trigger runs on the default branch, and so passes the
+# environment, whatever triggered the run it watched, so what holds there is
+# the job condition: it fires only for a release run whose own event was a
+# push, which for that workflow means a v* tag. Nothing here checks out any
+# code either — the job only POSTs a dispatch — so no code from a fork, or from
+# this repository, runs with the token at all.
+
+on:
+  push:
+    branches: [main]
+    # Only what the site renders. The root README is not on the site, and
+    # docs/README.md, the site's navigation, is under docs/.
+    paths:
+      - "docs/**"
+
+  # A release changes which versions the site publishes, not just the content
+  # of one: the newest tag takes /operator/, main moves to /operator/next/ and
+  # the line it replaces to /operator/vX.Y/. Nothing above notices that
+  # happening, and the two obvious ways to catch it do not work:
+  #
+  #   - `tags: ["v*"]` here would be ANDed with the `paths` filter above, and a
+  #     tag pointing at a commit already on main changes no files at all — so
+  #     the filter that keeps this workflow quiet would also make it never fire.
+  #   - `release: [published]` never fires either. The release workflow
+  #     creates the release with the built-in GITHUB_TOKEN, and GitHub does
+  #     not start workflow runs from events that token authored.
+  #
+  # Watching the release workflow itself sidesteps both.
+  #
+  # The name must match `name:` in .github/workflows/release.yml EXACTLY.
+  # GitHub matches this list against that string and reports nothing when no
+  # workflow has it, so a mismatch silently never fires and a release reaches
+  # the site only with the next docs change. Nothing asserts the two strings
+  # match, so re-read both on any rename.
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+
+  # By hand, from main: after configuring the secrets, or to republish. Run
+  # from any other branch, the environment refuses the job and the run fails.
+  workflow_dispatch:
+
+# The job calls GitHub's API with its own token, never with GITHUB_TOKEN.
+permissions: {}
+
+concurrency:
+  group: publish-docs
+  # A newer request supersedes one still in flight: the site builds from the
+  # latest of everything, so only the last request matters.
+  cancel-in-progress: true
+
+jobs:
+  notify:
+    name: ask the documentation site to rebuild
+    runs-on: ubuntu-latest
+    # Only a release run that published something is worth a rebuild: a
+    # failed one published no version. The release workflow runs only on a
+    # v* tag push today; the event check keeps it that way here if it ever
+    # gains a trigger that publishes nothing. Every other trigger of THIS
+    # workflow passes through.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    # Where DOCS_REPO and DOCS_TOKEN live. Its deployment-branch rule must allow
+    # main and nothing else: a workflow_run run and a push to main run on main
+    # and pass it, a branch's workflow is refused it and never sees the token.
+    # An environment nobody created is created bare by the first run that
+    # names it, with no secrets, so this job then skips with the notice below.
+    environment: docs-publish
+    steps:
+      - name: Ask the documentation site to rebuild
+        env:
+          # Both are secrets, including the repository name. It is not a
+          # credential, but this repository is public, its Actions logs are
+          # public with it, and a repository *variable* is printed in them
+          # verbatim. A secret is masked to *** instead, which is the whole
+          # reason this workflow never names its target.
+          #
+          # Both are named the same as the secrets they come from, because these
+          # names are the only ones a run log shows: a mismatch would send
+          # whoever is configuring this to create them under the wrong names.
+          DOCS_REPO: ${{ secrets.DOCS_REPO }}
+          DOCS_TOKEN: ${{ secrets.DOCS_TOKEN }}
+        run: |
+          # Report presence, never a value. Unconfigured is a state this
+          # repository is allowed to be in — a fork, or before the site is set
+          # up — so it is a notice and a green run, not a failure on main.
+          if [ -z "${DOCS_REPO}" ] || [ -z "${DOCS_TOKEN}" ]; then
+            echo "::notice title=Docs publish not configured::DOCS_REPO and DOCS_TOKEN are not both set, so the documentation site was not asked to rebuild."
+            echo "Docs publish not configured; skipping."
+            echo "  DOCS_REPO   $([ -n "${DOCS_REPO}" ]  && echo set || echo MISSING)"
+            echo "  DOCS_TOKEN  $([ -n "${DOCS_TOKEN}" ] && echo set || echo MISSING)"
+            echo
+            echo "Both are secrets of the docs-publish environment (Settings > Environments),"
+            echo "whose deployment branches are limited to main; never repository secrets, which"
+            echo "any branch's workflow can read, and never variables, which these logs would"
+            echo "print. DOCS_REPO is the documentation site's repository as owner/name;"
+            echo "DOCS_TOKEN needs Contents: read and write on it, which is the permission"
+            echo "repository_dispatch is under. Until they are set, the site shows this"
+            echo "repository's docs as of its last rebuild."
+            exit 0
+          fi
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${DOCS_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${DOCS_REPO}/dispatches" \
+            -d '{"event_type":"upstream-docs-updated"}'
+          echo "Requested a docs site rebuild."
