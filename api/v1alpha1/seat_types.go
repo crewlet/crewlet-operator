@@ -105,7 +105,10 @@ type SeatLLM struct {
 	// be a provider the coding agent can read: an Anthropic provider, or for
 	// OpenCode an OpenAI or OpenAICompatible one too, or a CLIAgent provider
 	// of the coding agent's own CLI. The operator refuses the Seat otherwise
-	// (CodingAgentMismatch, SandboxModelUnsupported). Crewlet's `sandbox`.
+	// (CodingAgentMismatch, SandboxModelUnsupported). Every box of the seat
+	// carries the head's first API key, and under ClaudeCode its baseURL,
+	// unless spec.sandbox.env signs ClaudeCode in itself: give code work a
+	// provider whose key is scoped for it. Crewlet's `sandbox`.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MinItems=1
@@ -151,8 +154,12 @@ type SeatSandbox struct {
 	// env is the environment of the seat's sandbox runs, for the external
 	// tokens its code work needs: from Secrets, or provisioned by the
 	// engine, such as the GitLab token a provisioning Integration mints for
-	// the seat, named as its tool server's is so both are one token.
-	// Crewlet's `env`, a credential position.
+	// the seat, named as its tool server's is so both are one token. A
+	// ClaudeCode sign-in here (CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY,
+	// ANTHROPIC_AUTH_TOKEN or a CLAUDE_CODE_USE_* toggle) keeps the key and
+	// endpoint of the provider the code work runs on out of the box, and a
+	// variable named as one the provider would set wins over it. Crewlet's
+	// `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name

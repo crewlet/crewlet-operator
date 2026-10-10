@@ -81,6 +81,45 @@ Variables and files the sandbox sets up for every run (`sandbox.setup[].env`,
 `sandbox.setup[].files`) and a Seat's own sandbox variables
 (`Seat.spec.sandbox.env`) take `valueFrom.secretKeyRef` for every entry.
 
+### What a coding box carries
+
+A seat's code work signs its coding agent in with the provider it runs on:
+the head of `spec.llm.sandbox`, else of `spec.llm.default`, else of the
+Company's order. From crewlet 4e45c6b99, the engine exports into every box
+of such a seat:
+
+- for an `Anthropic`, `OpenAI` or `OpenAICompatible` provider, an
+  `LLMProvider` or a platform provider, the **first** key of its
+  `apiKeySecretRefs`, as `ANTHROPIC_API_KEY` (`Anthropic`) or
+  `OPENAI_API_KEY` (the others), and its `baseURL`: under Claude Code as
+  `ANTHROPIC_BASE_URL`, and under OpenCode in the box's `opencode.json`,
+  as the endpoint of the provider the run is pointed at;
+- for a `CLIAgent` provider, its headless token, its key, or the
+  credential-named variables of its `cli.env`, never its credential bundle.
+
+The box runs in the Company's own E2B account, and the coding agent in it
+runs with every permission, so it can read the key; the report the run
+sends back is redacted by the shape of a credential, not by its value. A
+box holds the key it started with and never rotates it, and only the first
+key travels, so rotating the provider's keys reaches a running box only
+when its next run starts. Give code work a key of its own: a provider whose
+key is scoped and limited for code work, first in `spec.llm.sandbox`.
+
+An `Anthropic` provider's `baseURL` is the gateway's root, without `/v1`
+(`https://gateway.example.com`, not `https://gateway.example.com/v1`):
+Crewlet's own calls, Claude Code and OpenCode each add the version
+themselves, so a `baseURL` ending in `/v1` is called at `/v1/v1` by all
+three. An `OpenAI` or `OpenAICompatible` provider's `baseURL` ends where
+the OpenAI wire expects it, usually in `/v1`, and reaches the box as
+written.
+
+A seat that signs Claude Code in itself, with `CLAUDE_CODE_OAUTH_TOKEN`,
+`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or a `CLAUDE_CODE_USE_*` toggle
+in `spec.sandbox.env` or a setup step's `env`, gets neither the provider's
+key nor its endpoint: its own sign-in is what the run uses. Under OpenCode
+the provider's key is added beneath the seat's variables, so a seat variable
+of the same name wins.
+
 ### An agent's Slack app
 
 Each agent seat is its own Slack app, so it posts and is mentioned as itself.
@@ -286,8 +325,16 @@ A change that leaves every referenced value as it was (a label, an
 annotation, another key nothing references) writes nothing.
 
 To rotate without a moment where the provider refuses the old key, use two
-keys: add the new one as a second entry of `apiKeySecretRefs`, wait for the
-revision, revoke the old one at the provider, then remove its entry.
+keys. For a provider no seat's code work runs on: add the new one as a
+second entry of `apiKeySecretRefs`, wait for the revision, revoke the old
+one at the provider, then remove its entry; the engine benches a refused
+key and calls with the other meanwhile. A coding box cannot: it carries the
+provider's first key alone and never rotates it
+([What a coding box carries](#what-a-coding-box-carries)). So for a
+provider that backs code work, add the new key first in
+`apiKeySecretRefs`, or remove the old entry once the new one is there, wait
+for that revision and for the coding runs already going to end, and only
+then revoke the old key.
 
 What the engine reads when it starts is the exception. The values in its
 `crewlet.yaml` (the API tokens, the keyring, the Company's object-store keys,

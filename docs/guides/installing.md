@@ -313,7 +313,13 @@ sandbox environment (`SandboxModelUnsupported`), and code work on a
 `CLIAgent` provider whose login cannot reach the remote sandbox
 (`SandboxLoginNotPortable`). Fix such Seats before upgrading the operator
 or the engine ([Code work](cli-agents.md#code-work)); until then each keeps
-its company on the last revision it applied.
+its company on the last revision it applied. From that engine on, every
+coding box of a seat also carries the first key of the API provider its
+code work runs on, and under Claude Code its `baseURL`
+([What a coding box carries](credentials.md#what-a-coding-box-carries)): a
+`spec.sandbox.env` entry that only existed to sign the coding agent in with
+that same key can go, and one that signs Claude Code in otherwise keeps the
+provider's key and endpoint out of the box.
 
 The same release takes as `claudeModel` only the ids of the pinned engine's
 table of Claude models, which `kubectl explain llmprovider.spec.claudeModel`

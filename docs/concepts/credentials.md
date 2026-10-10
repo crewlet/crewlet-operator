@@ -46,6 +46,18 @@ uses is readable by the company's tenant:
   document, since the data pod's `crewlet.yaml` names the operator's token
   the document's only writer (`api.auth.company_writers`); a value the
   document references can still be replaced through the secret store.
+- A seat's code work runs in the Company's E2B sandbox, in the Company's
+  own E2B account, where the coding agent runs with every permission.
+  Crewlet exports into each box the first `apiKeySecretRefs` key of the
+  provider the code work runs on, an `Anthropic`, `OpenAI` or
+  `OpenAICompatible` `LLMProvider` or platform provider (as
+  `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`), and under Claude Code its
+  `baseURL` (`ANTHROPIC_BASE_URL`), unless the seat's own sandbox
+  environment signs Claude Code in; a `CLIAgent` provider's token, key or
+  key in `cli.env` travels the same way. The coding agent can read it, and
+  the run's report is redacted by the shape of a credential, not by its
+  value ([What a coding box
+  carries](../guides/credentials.md#what-a-coding-box-carries)).
 
 So a credential an `EngineClass` gives its companies (a platform model key,
 telemetry headers, a class env value) is every tenant's. Give a class only

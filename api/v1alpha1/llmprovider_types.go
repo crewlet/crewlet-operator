@@ -237,7 +237,10 @@ type CLIAgentSettings struct {
 	// sign in under auth mode Subscription with no login of their own: their
 	// model provider's key, under a name Crewlet reads as a credential, such
 	// as OPENROUTER_API_KEY. It may not set the CLI's own token or key
-	// variable, which auth owns. Crewlet's `env`, a credential position.
+	// variable, which auth owns. An OpenCode provider's credential-named
+	// variables also travel into every box of an Agent-mode run, and of a
+	// seat's code work that runs on it, where the coding agent can read
+	// them. Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
@@ -335,8 +338,11 @@ type LLMProviderSettings struct {
 	ClaudeModel ClaudeModelID `json:"claudeModel,omitempty"`
 
 	// baseURL sends requests to this endpoint instead of the vendor's own,
-	// for a gateway or a proxy. Required for type OpenAICompatible. Crewlet's
-	// `base_url`.
+	// for a gateway or a proxy. Required for type OpenAICompatible. For type
+	// Anthropic it is the gateway's root, without /v1: Crewlet's own calls,
+	// Claude Code (as ANTHROPIC_BASE_URL) and OpenCode each add the version
+	// themselves. A seat's code work running on the provider hands it to the
+	// coding agent in each box. Crewlet's `base_url`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048

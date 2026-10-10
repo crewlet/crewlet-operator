@@ -327,7 +327,8 @@ Seat with `Applied=False`, naming the field to change, when it is not:
 
 The operator sees the names of the seat's variables, not their values: a
 variable named above whose Secret holds nothing passes it, and the engine
-refuses the run.
+refuses the run. What the box receives from the provider is in
+[What a coding box carries](credentials.md#what-a-coding-box-carries).
 
 ## Seat pools
 
