@@ -7,11 +7,14 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/yaml"
+
+	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 )
 
 // TestSamplesAreAccepted applies every object in config/samples, the Nimbus
@@ -50,6 +53,7 @@ func TestSamplesAreAccepted(t *testing.T) {
 			if obj.GetKind() != kindEngineClass {
 				obj.SetNamespace(namespace)
 			} else {
+				checkSampleEngineImage(t, resource, obj)
 				// Cluster-scoped: keep it from colliding with another test's.
 				obj.SetName(namespacePrefix(namespace) + "-" + obj.GetName())
 			}
@@ -65,6 +69,23 @@ func TestSamplesAreAccepted(t *testing.T) {
 		if kinds[kind] == 0 {
 			t.Errorf("config/samples has no %s", kind)
 		}
+	}
+}
+
+// checkSampleEngineImage holds a sample class's engine image to the engine
+// the operator is built against: the tag names the version the pinned binary
+// was built from, so a reader who builds the image as the sample's comment
+// says runs the engine every suite ran, and a move of CREWLET_VERSION that
+// leaves the sample behind fails here.
+func checkSampleEngineImage(t *testing.T, resource string, class *unstructured.Unstructured) {
+	t.Helper()
+	image, _, err := unstructured.NestedString(class.Object, "spec", "engine", "image")
+	if err != nil {
+		t.Fatalf("%s: %v", resource, err)
+	}
+	if want := ":" + enginetest.Version(t); !strings.HasSuffix(image, want) {
+		t.Errorf("%s: EngineClass %s runs %q, want an image tagged %s, the engine CREWLET_VERSION pins",
+			resource, class.GetName(), image, strings.TrimPrefix(want, ":"))
 	}
 }
 

@@ -461,16 +461,7 @@ const Module = "github.com/crewlet/crewlet"
 // names no version, and fails the test, as a source that cannot be had does.
 func Source(t T) string {
 	t.Helper()
-	bin := Binary(t)
-	info, err := buildinfo.ReadFile(bin)
-	if err != nil {
-		t.Fatalf("reading the build info of %s: %v", bin, err)
-	}
-	version := info.Main.Version
-	if info.Main.Path != Module || version == "" || version == "(devel)" {
-		t.Fatalf("%s is %s %s, not a released version of %s: build it with `make crewlet`",
-			bin, info.Main.Path, version, Module)
-	}
+	version := Version(t)
 	cmd := exec.Command("go", "mod", "download", "-json", Module+"@"+version)
 	// Outside any module, so that no go.mod or go.work of the caller's
 	// decides what is downloaded.
@@ -485,6 +476,25 @@ func Source(t T) string {
 			Module, version, runErr, err, module.Error, stdout.String(), stderr.String())
 	}
 	return module.Dir
+}
+
+// Version returns the version of the crewlet module the binary Binary returns
+// was built from, as its build info names it: the Makefile's CREWLET_VERSION
+// for the binary `make crewlet` builds. A binary built from a checkout names
+// no version, and fails the test.
+func Version(t T) string {
+	t.Helper()
+	bin := Binary(t)
+	info, err := buildinfo.ReadFile(bin)
+	if err != nil {
+		t.Fatalf("reading the build info of %s: %v", bin, err)
+	}
+	version := info.Main.Version
+	if info.Main.Path != Module || version == "" || version == "(devel)" {
+		t.Fatalf("%s is %s %s, not a released version of %s: build it with `make crewlet`",
+			bin, info.Main.Path, version, Module)
+	}
+	return version
 }
 
 // moduleRoot is the nearest directory at or above the working directory that

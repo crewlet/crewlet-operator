@@ -11,11 +11,13 @@ metadata:
 spec:
   engine:
     # The engine image your platform runs, pinned by digest in production.
-    # It must be the engine this operator release is built against (the
-    # Makefile's CREWLET_VERSION, named in the release's notes); until Crewlet
-    # tags a release that carries it, build it with `make crewlet-image` and
-    # push it to your registry (docs/guides/installing.md, "Engine image").
-    image: ghcr.io/crewlet/crewlet:v0.1.0
+    # It must be the engine this operator is built against, the Makefile's
+    # CREWLET_VERSION, which the tag below names; until Crewlet tags a
+    # release that carries it, build it with
+    # `make crewlet-image CREWLET_IMG=registry.example.com/crewlet:<CREWLET_VERSION>`,
+    # naming your registry, and push it there (docs/guides/installing.md,
+    # "Engine image").
+    image: registry.example.com/crewlet:v0.1.1-0.20261010171839-4e45c6b992a2
     allowVersionOverride: false
   data:
     resources:
