@@ -135,11 +135,11 @@ func TestConfigAppliedWaitsForTheEngineToApplyTheEpoch(t *testing.T) {
 }
 
 // TestConfigAppliedTakesAWaitPostureForAnApplyInProgress pins that the
-// verdict follows the engine's posture. Since crewlet #203 a node reads wait
-// for the whole of an apply and turns diverged only once an attempt has ended
-// in failure, so wait is Applying whatever the record in /fleet says, and
-// costs no read of it: a record of a failed attempt beside a wait posture is
-// one the engine itself no longer counts against the epoch it is applying.
+// verdict follows the engine's posture. A node reads wait for the whole of an
+// apply and turns diverged only once an attempt has ended in failure, so wait
+// is Applying whatever the record in /fleet says, and costs no read of it: a
+// record of a failed attempt beside a wait posture is one the engine does not
+// count against the epoch it is applying.
 func TestConfigAppliedTakesAWaitPostureForAnApplyInProgress(t *testing.T) {
 	written := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
 	eng := &fakeEngine{health: health("ok", "wait", 1), fleet: fleet(2, "r2", "error", "engine: apply: no sandbox cell")}
@@ -163,9 +163,8 @@ func TestConfigAppliedTakesAWaitPostureForAnApplyInProgress(t *testing.T) {
 // engine has concluded, and its record either lags its posture by a moment
 // (the account arrives on the next look) or has nothing to say (an apply past
 // the engine's grace while a peer applied the epoch, on the operator's epoch
-// or on one activated after it). Before crewlet #203 a diverged posture was
-// also what an apply in progress looked like, and the verdict waited for the
-// record; now that wait would only delay a failure the engine has reported.
+// or on one activated after it). Waiting for the record would only delay a
+// failure the engine has already reported.
 func TestConfigAppliedTakesADivergedPostureForAFailure(t *testing.T) {
 	written := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
 	for _, c := range []struct {

@@ -84,7 +84,7 @@ const (
 // the current epoch rather than only not reached it yet. The engine concludes
 // that only from an attempt at the epoch that ended in failure, or from a lag
 // on it past its grace while a peer has applied it: an apply still running
-// reads wait (crewlet #203).
+// reads wait.
 func (p Posture) Diverged() bool {
 	return p == PostureShed || p == PostureIsolated || p == PostureStuck
 }

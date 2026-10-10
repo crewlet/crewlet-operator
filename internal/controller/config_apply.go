@@ -42,13 +42,13 @@ const enginePollInterval = 18 * time.Second
 const engineLagGrace = 45 * time.Second
 
 // applyDeadline is how long after a write the operator waits for an engine
-// whose posture still reads wait. Since crewlet #203 a node reports wait for
-// the whole of an apply, and turns serve when it succeeds or a diverged
-// posture when an attempt fails, so wait past this is one of two things the
-// engine itself never concludes: it is not polling its activation pointer at
-// all, or an apply hangs on a node no peer has applied the epoch beside (the
-// engine reads that silence as no evidence, and keeps reporting wait). One
-// poll covers a lost nudge and a second the apply itself (one that starts the
+// whose posture still reads wait. A node reports wait for the whole of an
+// apply, and turns serve when it succeeds or a diverged posture when an
+// attempt fails, so wait past this is one of two things the engine itself
+// never concludes: it is not polling its activation pointer at all, or an
+// apply hangs on a node no peer has applied the epoch beside (the engine
+// reads that silence as no evidence, and keeps reporting wait). One poll
+// covers a lost nudge and a second the apply itself (one that starts the
 // native runtime or MCP servers takes seconds); four is past any apply that
 // ends.
 const applyDeadline = 4 * enginePollInterval
@@ -123,9 +123,9 @@ func (r *CompanyConfigReconciler) clock() time.Time {
 //
 // The posture decides, because the engine's posture is its own conclusion:
 // an attempt counts, and its failure turns the posture diverged, only once
-// the attempt has ended (crewlet #203), so a diverged posture is never an
-// apply still running. Its record in /fleet is read only for what the
-// posture cannot carry: the failed attempt's epoch and its account.
+// the attempt has ended, so a diverged posture is never an apply still
+// running. Its record in /fleet is read only for what the posture cannot
+// carry: the failed attempt's epoch and its account.
 func (run *configRun) verifyApplied(
 	ctx context.Context, eng *engine.Client, health engine.Health, healthErr error, result ctrl.Result,
 ) ctrl.Result {

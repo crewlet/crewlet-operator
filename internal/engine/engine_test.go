@@ -91,8 +91,7 @@ func TestEngineHealthReportsTheAppliedEpoch(t *testing.T) {
 			return err
 		case h.AppliedEpoch < applied.Epoch && h.Posture.Diverged():
 			// The config reconciler reads a diverged posture as a failed
-			// apply (crewlet #203): one that applies reads wait until it
-			// has.
+			// apply: one that applies reads wait until it has.
 			diverged = append(diverged, h)
 			return fmt.Errorf("applied epoch %d is behind the write's %d, posture %q", h.AppliedEpoch, applied.Epoch, h.Posture)
 		case h.AppliedEpoch < applied.Epoch:
