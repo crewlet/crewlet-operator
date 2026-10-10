@@ -1,0 +1,82 @@
+# OpenCode as a seat's executor in agent mode, signed in by its model
+# provider's key in cli.env, which an agent-mode run carries into the
+# company's E2B sandbox, and its model written <provider>/<model>, as
+# OpenCode reads it. The same seat's code work runs on the same provider
+# with OpenCode as its coding agent, the company's default; a second seat's
+# code work runs OpenCode on an Anthropic provider. Agent mode calls the
+# seat's tools back through the company's public address, so the case is
+# exposed.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: harbor
+spec:
+  engineClassName: basic
+  companyName: Harbor
+  sandbox:
+    e2b:
+      apiKeySecretRef:
+        name: e2b
+        key: apiKey
+    defaultCodingAgent: OpenCode
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: opencode
+spec:
+  companyRef:
+    name: harbor
+  type: CLIAgent
+  model: openrouter/anthropic/claude-sonnet-5
+  cli:
+    agent: OpenCode
+    mode: Agent
+    runIn: E2B
+    auth:
+      mode: Subscription
+    env:
+      - name: OPENROUTER_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: openrouter
+            key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: anthropic
+spec:
+  companyRef:
+    name: harbor
+  type: Anthropic
+  model: claude-sonnet-5
+  apiKeySecretRefs:
+    - name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: porter
+spec:
+  companyRef:
+    name: harbor
+  goal: Port the services to the new runtime.
+  llm:
+    default:
+      - name: opencode
+  sandbox: {}
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: fixer
+spec:
+  companyRef:
+    name: harbor
+  goal: Fix what the port breaks.
+  llm:
+    default:
+      - name: anthropic
+  sandbox: {}

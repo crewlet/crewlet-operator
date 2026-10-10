@@ -25,6 +25,14 @@ const (
 	poolName      = "general"
 )
 
+// Models the OpenCode cases name, which OpenCode reads as <provider>/<model>:
+// Anthropic's model on Anthropic's key, and the same model through
+// OpenRouter.
+const (
+	modelViaAnthropic  = "anthropic/claude-sonnet-5"
+	modelViaOpenRouter = "openrouter/anthropic/claude-sonnet-5"
+)
+
 // Environment variables the CLIAgent cases name: a model provider's key
 // some CLI's profile reads, and a proxy, which is no credential.
 const (

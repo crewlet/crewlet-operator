@@ -663,7 +663,10 @@ spec:
                       template:
                         description: |-
                           template is the sandbox template, which also fixes each sandbox's CPU,
-                          memory and disk.
+                          memory and disk. Unset, each run gets the vendor's prebuilt template
+                          for its coding agent's CLI (claude or opencode); a template set here is
+                          used for every run, so it must carry the CLI of every coding agent and
+                          Agent-mode CLIAgent provider the company runs.
                         maxLength: 253
                         minLength: 1
                         type: string

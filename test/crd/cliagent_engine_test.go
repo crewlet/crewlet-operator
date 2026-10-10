@@ -43,20 +43,18 @@ import (
 //
 // The engine admits some shapes the API refuses on purpose, which this does
 // not hold against it: a Subscription signed in to nothing (the engine
-// expects `crewlet llm login` at a terminal a pod does not have), mode Agent
-// for a CLI with no sandbox runner (the engine refuses it when the seat first
-// has work), and mode Agent for OpenCode, whose run the engine names its
-// model to as anthropic/<model> while every text call on the same provider
-// passes the model as written, so that no model serves both, which no
-// validation sees. The rest must agree.
+// expects `crewlet llm login` at a terminal a pod does not have), and mode
+// Agent for a CLI with no sandbox runner (the engine refuses it when the seat
+// first has work). Mode Agent is offered for exactly the Company's coding
+// agents, the CLIs the engine has a sandbox runner for, which hand an
+// Agent-mode run the model as the provider's text calls pass it. The rest
+// must agree.
 func TestCLIAgentSignInFollowsTheEngine(t *testing.T) {
 	namespace := newNamespace(t)
 	agents := enumOf(t, "llmproviders.crewlet.ai", "spec", "cli", "agent")
-	runners := enumOf(t, "companies.crewlet.ai", "spec", "sandbox", "defaultCodingAgent")
-	// The coding agents an Agent-mode run of the pinned engine works for.
-	agentRunners := slices.DeleteFunc(slices.Clone(runners), func(r string) bool {
-		return r == string(v1.CLIAgentOpenCode)
-	})
+	// The coding agents an Agent-mode run of the pinned engine works for:
+	// the render tests hold the enum to the engine's runners.
+	agentRunners := enumOf(t, "companies.crewlet.ai", "spec", "sandbox", "defaultCodingAgent")
 
 	variables := engineVariables(t, namespace, agents)
 	for _, agent := range agents {
@@ -78,7 +76,7 @@ func TestCLIAgentSignInFollowsTheEngine(t *testing.T) {
 				admitted[p.Name] = apiVerdict(t, p)
 				providers = append(providers, *p)
 			}
-			report := askEngine(t, providers)
+			report := askEngine(t, providers, true)
 			verdicts[shape] = map[string]verdict{}
 			for i := range providers {
 				p := &providers[i]
@@ -123,6 +121,99 @@ func TestCLIAgentSignInFollowsTheEngine(t *testing.T) {
 	}
 
 	signInTableFollows(t, agents, variables, fromEnv, verdicts)
+}
+
+// TestCLIAgentModelFollowsTheEngine holds the LLMProvider API's rule over a
+// CLIAgent provider's model to the pinned engine, which refuses on every write
+// a model with no provider segment for a CLI whose profile reads its model as
+// <provider>/<model> (model_names_provider). Every CLI the API offers is
+// tried, signed in a way the API admits for it, in both modes, with models
+// with and without a provider, with empty segments and with segments of white
+// space, Go's and Unicode's beyond ASCII's among it: the API refuses with its
+// model rule exactly the providers whose model the engine refuses. A bump of
+// the engine that marks another profile as naming its provider, or stops
+// marking OpenCode's, fails here until the API follows it.
+//
+// The API's rule is the engine's test, transcribed: a slash, and something
+// other than white space on each side of the first one, where white space is
+// what Go's strings.TrimSpace removes, as CEL's trim() is. The engine judges
+// the model as the profile's model_args render it, which the API offers no
+// override of, so the value the rule judges is spec.model itself.
+func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
+	namespace := newNamespace(t)
+	agents := enumOf(t, "llmproviders.crewlet.ai", "spec", "cli", "agent")
+	variables := engineVariables(t, namespace, agents)
+	models := []string{
+		"claude-sonnet-5", modelViaAnthropic, modelViaOpenRouter,
+		"anthropic/", "/claude-sonnet-5", "/", " anthropic/claude-sonnet-5", "anthropic /x",
+		" /x", "x/ ", "x/\t", "\u00a0/x", "x/\u3000", "x/\u2028", "x/\u0085",
+		// Not white space to Go: a format character and a zero-width
+		// space are a provider and a model like any other.
+		"\u180e/x", "x/\u200b",
+	}
+	refusedModels := map[v1.CLIAgentName]bool{}
+	for _, mode := range []v1.CLIAgentMode{v1.CLIAgentModeText, v1.CLIAgentModeAgent} {
+		for _, model := range models {
+			providers := make([]v1.LLMProvider, 0, len(agents))
+			refused := map[string]bool{}
+			for _, agent := range agents {
+				shape := admittedSignIn(v1.CLIAgentName(agent), variables)
+				p := shapedProvider(namespace, v1.CLIAgentName(agent), mode, &shape)
+				p.Spec.Model = model
+				refusal := apiVerdict(t, p)
+				refused[p.Name] = strings.Contains(refusal, msgOpenCodeModel)
+				// The shape is admitted but for its model, so the model
+				// rule is the question; in mode Agent, but for a CLI with
+				// no sandbox runner.
+				if !refused[p.Name] && refusal != "" &&
+					(mode == v1.CLIAgentModeText || !strings.Contains(refusal, msgCLIAgentRunner)) {
+					t.Fatalf("%s, %s, model %q: the API refuses the sign-in shape, not the model: %s",
+						agent, shape.name, model, refusal)
+				}
+				providers = append(providers, *p)
+			}
+			// The sign-in is not the question, and `crewlet llm list`
+			// prints a model as it is, a tab in it splitting its row's
+			// cells.
+			report := askEngine(t, providers, false)
+			for i := range providers {
+				p := &providers[i]
+				engineRefuses := len(report.models[p.Name]) > 0
+				switch {
+				case refused[p.Name] && !engineRefuses:
+					t.Errorf("%s, mode %s, model %q: the API refuses the model and the engine admits it",
+						p.Spec.CLI.Agent, mode, model)
+				case !refused[p.Name] && engineRefuses:
+					t.Errorf("%s, mode %s, model %q: the engine refuses the model and the API admits it: %s",
+						p.Spec.CLI.Agent, mode, model, report.models[p.Name][0])
+				}
+				if engineRefuses {
+					refusedModels[p.Spec.CLI.Agent] = true
+				}
+			}
+		}
+	}
+	// The probe can fail: the engine refuses some model of OpenCode's.
+	if !refusedModels[v1.CLIAgentOpenCode] {
+		t.Errorf("the engine refused no OpenCode model; the probe's models no longer reach its rule")
+	}
+}
+
+// admittedSignIn is a sign-in the API admits for agent, one of signInShapes:
+// its headless token, its key, its model provider's key in env, or a bundle,
+// the first it has.
+func admittedSignIn(agent v1.CLIAgentName, variables map[v1.CLIAgentName]cliVariable) signInShape {
+	name := shapeBundle
+	switch v := variables[agent]; {
+	case v.headless != "":
+		name = shapeToken
+	case v.key != "":
+		name = shapeAPIKey
+	case slices.Contains(envSignIn, agent):
+		name = shapeEnv + "OPENROUTER_API_KEY"
+	}
+	shapes := signInShapes(variables)
+	return shapes[slices.IndexFunc(shapes, func(s signInShape) bool { return s.name == name })]
 }
 
 // holdVerdicts holds the API server's verdict on each shape to the engine's,
@@ -244,7 +335,7 @@ func engineVariables(t *testing.T, namespace string, agents []string) map[v1.CLI
 	for _, agent := range agents {
 		providers = append(providers, *shapedProvider(namespace, v1.CLIAgentName(agent), v1.CLIAgentModeText, &probe))
 	}
-	report := askEngine(t, providers)
+	report := askEngine(t, providers, true)
 	// Each says what one problem means: the variable it names, or none.
 	read := func(problems []string, names, none *regexp.Regexp) (string, error) {
 		var found []string
@@ -312,6 +403,16 @@ type verdict struct {
 	signIn string
 }
 
+// The names of the sign-in shapes the API's cases are built on, and the start
+// of the name of each shape that signs a subscription in with one variable in
+// env.
+const (
+	shapeAPIKey = "api key"
+	shapeToken  = "token"
+	shapeBundle = "bundle"
+	shapeEnv    = "subscription, env "
+)
+
 // signInShape is one way to sign a CLI in.
 type signInShape struct {
 	name string
@@ -350,13 +451,13 @@ func signInShapes(variables map[v1.CLIAgentName]cliVariable) []signInShape {
 	bundle := v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("cli", "bundle")}
 	shapes := make([]signInShape, 0, 3+len(inEnv)+len(besideBundle))
 	shapes = append(shapes,
-		signInShape{name: "api key", auth: v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}, key: true},
-		signInShape{name: "token", auth: v1.CLIAgentAuth{TokenSecretRef: secretKey("cli", "token")}},
-		signInShape{name: "bundle", auth: bundle},
+		signInShape{name: shapeAPIKey, auth: v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}, key: true},
+		signInShape{name: shapeToken, auth: v1.CLIAgentAuth{TokenSecretRef: secretKey("cli", "token")}},
+		signInShape{name: shapeBundle, auth: bundle},
 	)
 	for _, name := range inEnv {
 		shapes = append(shapes, signInShape{
-			name: "subscription, env " + name,
+			name: shapeEnv + name,
 			auth: v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription},
 			env:  []string{name},
 		})
@@ -408,6 +509,8 @@ type engineReport struct {
 	problems map[string][]string
 	// warnings are what it doubted in either.
 	warnings map[string][]string
+	// models are the problems it found with the provider's model.
+	models map[string][]string
 	// signIns are the SIGN-IN column of `crewlet llm list`.
 	signIns map[string]string
 }
@@ -417,10 +520,11 @@ type engineReport struct {
 // so that the engine's rules over a seat whose executor reaches a provider in
 // mode Agent run too. It asks the pinned engine about each provider: what
 // `crewlet validate` refuses and warns about in it or in its seat, and the
-// SIGN-IN column `crewlet llm list` prints for it. Every reference the
-// document makes resolves to a value, as the operator's secret sync makes it
-// resolve, and the engine logging one that did not fails the test.
-func askEngine(t *testing.T, providers []v1.LLMProvider) engineReport {
+// SIGN-IN column `crewlet llm list` prints for it, when list is true. Every
+// reference the document makes resolves to a value, as the operator's secret
+// sync makes it resolve, and the engine logging one that did not fails the
+// test.
+func askEngine(t *testing.T, providers []v1.LLMProvider, list bool) engineReport {
 	t.Helper()
 	in := &render.Input{
 		Company: company("probe", companyName),
@@ -501,16 +605,22 @@ func askEngine(t *testing.T, providers []v1.LLMProvider) engineReport {
 		}
 		return got.Name
 	}
-	report := engineReport{problems: map[string][]string{}, warnings: map[string][]string{}}
+	report := engineReport{problems: map[string][]string{}, warnings: map[string][]string{}, models: map[string][]string{}}
 	for _, p := range validation.Problems {
 		name := owner("refused", p)
 		report.problems[name] = append(report.problems[name], p.Message)
+		if path := render.PathOf(p.Segments); path.String() == "providers.llm."+name+".model" {
+			report.models[name] = append(report.models[name], p.Message)
+		}
 	}
 	for _, w := range validation.Warnings {
 		name := owner("doubted", w)
 		report.warnings[name] = append(report.warnings[name], w.Message)
 	}
 
+	if !list {
+		return report
+	}
 	// No Tier A: llm list then resolves a reference from its environment
 	// alone, which holds every one.
 	out, err = run("llm", "list", "-company", file, "-config", filepath.Join(dir, "absent.yaml"))

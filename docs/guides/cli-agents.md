@@ -58,7 +58,7 @@ takes none and signs in with that key in `cli.env`:
 
 | Sign-in | What the Secret holds | Use it when |
 |---|---|---|
-| `auth.tokenSecretRef` | a long-lived headless token the CLI mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the CLI is Claude Code, the one CLI whose Crewlet profile names a token variable: it never needs refreshing, and it is the only subscription login an agent-mode run can carry |
+| `auth.tokenSecretRef` | a long-lived headless token the CLI mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the CLI is Claude Code, the one CLI whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins an agent-mode run can carry (an agent-mode OpenCode carries its model provider's key in `env` instead) |
 | `auth.credentialBundleSecretRef` | a bundle of the CLI's credential files, from `crewlet llm export <key>` on a machine where you logged in | any CLI: the others mint no token Crewlet hands on |
 | `auth.mode: APIKey` with one `apiKeySecretRefs` key | the CLI's metered API key | the CLI's Crewlet profile names a key variable ([below](#a-metered-key)) |
 | `env`, with `auth.mode: Subscription` | the key of the model provider the CLI runs on, in the variable the CLI reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the CLI is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
@@ -79,7 +79,7 @@ can fall behind it):
 | `Grok` | no | `XAI_API_KEY` | no | yes | no |
 | `MuseCode` | no | `META_API_KEY` | no | yes | no |
 | `KimiCode` | no | no: it reads a key only from its own `config.toml`, so give that in the bundle | no | yes | no |
-| `OpenCode` | no | no | yes | yes | no: no one `model` serves its run and its text calls ([below](#text-mode-and-agent-mode)) |
+| `OpenCode` | no | no | yes | yes | on the key in `env` ([below](#text-mode-and-agent-mode)) |
 | `Hermes` | no | no | yes | yes | no |
 | `Pi` | no | no | yes | yes | no |
 
@@ -144,6 +144,15 @@ spec:
         valueFrom:
           secretKeyRef: {name: openrouter, key: apiKey}
 ```
+
+OpenCode reads its model as `<provider>/<model>`, splitting it at the first
+slash: `anthropic/claude-sonnet-5` runs Anthropic's model on
+`ANTHROPIC_API_KEY`, and `openrouter/anthropic/claude-sonnet-5` runs it
+through OpenRouter on `OPENROUTER_API_KEY` (`opencode models` lists the
+providers it knows). A model with no slash, or with nothing but white space
+before or after it, names no provider or no model, and every call the
+provider made would fail inside OpenCode with `Model not found`, so the
+engine refuses it and the API server refuses it first, at `spec.model`.
 
 For Claude Code, on a headless token:
 
@@ -218,24 +227,28 @@ in the company's sandbox. Every other phase on the same provider (the
 reviewer, a delegated worker, the summariser) is still a text call, so the
 CLI must be in the engine's image either way. In agent mode:
 
-- The run is a sandbox run: the Company needs `spec.sandbox`, whose template
-  must carry the CLI too. `cli.runIn` is `E2B`, the only cell v1alpha1
-  offers: Crewlet's local cells would run every seat's code in the engine's
-  pod, with its credentials.
-- Only Claude Code runs in agent mode. The engine has a sandbox runner for
-  OpenCode too, one of the coding agents `spec.sandbox` offers, but at the
-  pinned engine an agent-mode OpenCode run names its model to OpenCode as
-  `anthropic/<model>`, the family taken from Crewlet's OpenCode profile,
-  while every other phase on the same provider is a text call that passes
-  `model` as written, and OpenCode reads a model as `<provider>/<model>`.
-  No value of `model` serves both, so such a provider would fail its runs
-  or its text calls, and the API server refuses it. Run OpenCode in text
-  mode.
-- The login must follow the run into a remote sandbox, which only a headless
-  token or a key can: an agent-mode Claude Code takes `auth.tokenSecretRef`,
-  or `auth.mode: APIKey`. A credential bundle stays on the data volume. A
-  key in the Seat's `spec.sandbox.env` reaches the box as well, but the API
-  server cannot see the Seat from the provider, so it does not count it.
+- The run is a sandbox run: the Company needs `spec.sandbox`. With no
+  `spec.sandbox.e2b.template`, each run gets E2B's prebuilt template for its
+  CLI (`claude` for Claude Code, `opencode` for OpenCode); a template you
+  set is used for every run, so it must carry the CLI of every coding agent
+  and agent-mode provider the company runs. `cli.runIn` is `E2B`, the only
+  cell v1alpha1 offers: Crewlet's local cells would run every seat's code in
+  the engine's pod, with its credentials.
+- Claude Code and OpenCode run in agent mode: they are the CLIs the engine
+  has a sandbox runner for, the coding agents `spec.sandbox` offers, and the
+  API server refuses `mode: Agent` for any other. The run is handed `model`
+  exactly as the provider's text calls pass it, so one model serves the
+  executor's run and every other phase.
+- The login must follow the run into the remote sandbox, which only a
+  variable of the run's environment can: an agent-mode Claude Code takes
+  `auth.tokenSecretRef` or `auth.mode: APIKey`, and an agent-mode OpenCode
+  its model provider's key in `env`, under a name the engine reads as a
+  credential, which the engine exports into the box. A credential bundle
+  stays on the data volume, since its login carries a refresh token the
+  engine keeps rotating there, so the API server refuses an agent-mode
+  provider signed in with nothing else. A key in the Seat's
+  `spec.sandbox.env` reaches the box as well, but the API server cannot see
+  the Seat from the provider, so it does not count it.
 - The run calls the seat's own tools back through the engine's tool bridge.
   While any LLMProvider of the company is in agent mode, the operator gives
   the engine its public address as the bridge's (`CREWLET_MCP_BRIDGE_URL`),
@@ -253,6 +266,23 @@ spec:                       # LLMProvider claude-agent
     loginName: claude-code        # the same login as the text-mode provider
     auth:
       tokenSecretRef: {name: claude-subscription, key: oauthToken}
+```
+
+or OpenCode, on its model provider's key:
+
+```yaml
+spec:                       # LLMProvider opencode-agent
+  type: CLIAgent
+  model: openrouter/anthropic/claude-sonnet-5
+  cli:
+    agent: OpenCode
+    mode: Agent
+    auth:
+      mode: Subscription
+    env:
+      - name: OPENROUTER_API_KEY
+        valueFrom:
+          secretKeyRef: {name: openrouter, key: apiKey}
 ```
 
 A seat runs on it by naming it in `spec.llm.default`; see the Seat's

@@ -1,0 +1,56 @@
+integrations:
+  dashboard_base_url: https://opencode-agent.crewlet.internal.example.com
+  public_base_url: https://opencode-agent.hooks.example.com
+name: Harbor
+providers:
+  llm:
+    anthropic:
+      api_keys:
+      - ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+      model: claude-sonnet-5
+      type: anthropic
+    opencode:
+      cli:
+        agent: opencode
+        auth:
+          mode: subscription
+        env:
+          OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
+        mode: agent
+        run_in: e2b
+        state_dir: /var/lib/crewlet/llm-cli/opencode
+      model: openrouter/anthropic/claude-sonnet-5
+      type: cli-agent
+  llm_order:
+  - anthropic
+  - opencode
+  sandbox:
+    default_coding_agent: opencode
+    default_run_in: e2b
+    e2b:
+      api_key: ${K8S_E2B_API_KEY_GSEHAAV5THN5}
+roles:
+- goal: Fix what the port breaks.
+  handle: fixer
+  kind: agent
+  llm:
+    default:
+    - anthropic
+  name: fixer
+  placement:
+    labels:
+      crewlet.ai/pool: data
+  sandbox:
+    enabled: true
+- goal: Port the services to the new runtime.
+  handle: porter
+  kind: agent
+  llm:
+    default:
+    - opencode
+  name: porter
+  placement:
+    labels:
+      crewlet.ai/pool: data
+  sandbox:
+    enabled: true

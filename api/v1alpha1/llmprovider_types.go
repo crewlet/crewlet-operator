@@ -66,7 +66,8 @@ const (
 	CLIAgentModeText CLIAgentMode = "Text"
 	// CLIAgentModeAgent runs a seat's executor as the CLI's own agentic
 	// run, in a sandbox, with the seat's tools reached back through the
-	// engine's tool bridge.
+	// engine's tool bridge. It is offered for the CLIs Crewlet has a
+	// sandbox runner for, ClaudeCode and OpenCode.
 	CLIAgentModeAgent CLIAgentMode = "Agent"
 )
 
@@ -183,22 +184,27 @@ type CLIAgentAuth struct {
 // env_sign_in at the engine version the operator is built against; a test
 // holds them to that engine's own verdict.
 //
-// Mode Agent runs ClaudeCode alone. Crewlet has a sandbox runner for
-// OpenCode too, but the engine the operator is built against names an
-// OpenCode run's model to it as anthropic/<model>, while every other phase
-// on the same provider (the reviewer, a delegated worker, the summariser) is
-// a text call that passes the model as written, and OpenCode reads a model
-// as <provider>/<model>: no one model serves both, so such a provider would
-// fail one of them at run time.
+// Mode Agent runs the CLIs Crewlet has a sandbox runner for, ClaudeCode and
+// OpenCode: the Company's coding agents. Crewlet hands an Agent-mode run its
+// provider's model exactly as the provider's text calls pass it (the
+// reviewer's, a delegated worker's, the summariser's), so one model serves
+// every phase. The run happens in the Company's E2B sandbox, which never
+// receives a credential bundle: the bundle's login carries a refresh token
+// the engine keeps rotating on its data volume. So a Subscription login
+// reaches the run only as a variable of its environment, which for ClaudeCode
+// is its headless token and for OpenCode its model provider's key in env.
 // +kubebuilder:validation:XValidation:rule="!has(self.runIn) || (has(self.mode) && self.mode == 'Agent')",message="runIn applies to mode Agent only: in mode Text the CLI is a process in the engine's pod"
-// +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'Agent' || self.agent == 'ClaudeCode'",message="mode Agent runs ClaudeCode only: Crewlet names an OpenCode run's model to it as anthropic/<model>, while every other phase on the same provider passes the model as written, and OpenCode reads <provider>/<model>, so no one model runs both; Crewlet has a sandbox runner for no other CLI"
+// +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'Agent' || self.agent in ['ClaudeCode', 'OpenCode']",message="mode Agent runs a CLI Crewlet has a sandbox runner for: ClaudeCode or OpenCode"
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || (has(self.auth.mode) && self.auth.mode != 'Subscription') || has(self.auth.tokenSecretRef) || has(self.auth.credentialBundleSecretRef) || (self.agent in ['Hermes', 'Pi', 'OpenCode'] && has(self.env) && self.env.exists(e, e.name.matches('(?i)(^|_)(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)(_|$)')))",message="a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef: a pod has no terminal to log in at. Hermes, Pi and OpenCode alone may sign in with their model provider's key in env instead, under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY), which Crewlet hands them untouched. A CLI with a key variable takes its key through auth mode APIKey, as Crewlet refuses that variable in env",fieldPath=".auth"
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.tokenSecretRef) || self.agent == 'ClaudeCode'",message="auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode (CLAUDE_CODE_OAUTH_TOKEN): its profile for every other CLI names no token variable. Sign that CLI in with auth.credentialBundleSecretRef, with auth mode APIKey where it has a key variable, or, for Hermes, Pi and OpenCode, with its model provider's key in env"
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'APIKey' || self.agent in ['ClaudeCode', 'Codex', 'GeminiCLI', 'QwenCode', 'CursorAgent', 'Copilot', 'Grok', 'MuseCode']",message="auth mode APIKey takes a CLI Crewlet hands a key to: ClaudeCode, Codex, GeminiCLI, QwenCode, CursorAgent, Copilot, Grok or MuseCode. Crewlet's profiles for OpenCode, KimiCode, Hermes and Pi name no key variable: sign Hermes, Pi or OpenCode in with its model provider's key in env under mode Subscription, and KimiCode, which reads a key only from its own files, with auth.credentialBundleSecretRef"
 // +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, (self.agent == 'ClaudeCode' && e.name in ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']) || (self.agent == 'Codex' && e.name == 'OPENAI_API_KEY') || (self.agent == 'GeminiCLI' && e.name == 'GEMINI_API_KEY') || (self.agent == 'QwenCode' && e.name == 'DASHSCOPE_API_KEY') || (self.agent == 'CursorAgent' && e.name == 'CURSOR_API_KEY') || (self.agent == 'Copilot' && e.name == 'GITHUB_TOKEN') || (self.agent == 'Grok' && e.name == 'XAI_API_KEY') || (self.agent == 'MuseCode' && e.name == 'META_API_KEY'))",message="env may not set the CLI's own token or key variable (ClaudeCode's CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY, Codex's OPENAI_API_KEY, GeminiCLI's GEMINI_API_KEY, QwenCode's DASHSCOPE_API_KEY, CursorAgent's CURSOR_API_KEY, Copilot's GITHUB_TOKEN, Grok's XAI_API_KEY, MuseCode's META_API_KEY): Crewlet's auth owns it, and whether a value in env reaches the CLI would turn on the auth mode. Give a token as auth.tokenSecretRef, and a key as apiKeySecretRefs with auth mode APIKey",fieldPath=".env"
-// +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'Agent' || (has(self.auth) && has(self.auth.mode) && self.auth.mode != 'Subscription') || (self.agent == 'ClaudeCode' && has(self.auth) && has(self.auth.tokenSecretRef))",message="a Subscription login reaches an Agent-mode run in a remote sandbox only as a headless token: give ClaudeCode auth.tokenSecretRef, or use auth mode APIKey"
+// +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'Agent' || (has(self.auth) && has(self.auth.mode) && self.auth.mode != 'Subscription') || (self.agent == 'ClaudeCode' && has(self.auth) && has(self.auth.tokenSecretRef)) || (self.agent == 'OpenCode' && has(self.env) && self.env.exists(e, e.name.matches('(?i)(^|_)(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)(_|$)')))",message="a Subscription login reaches an Agent-mode run in a remote sandbox only as a variable of its environment: give ClaudeCode auth.tokenSecretRef, or use auth mode APIKey, and give OpenCode its model provider's key in env under a name Crewlet reads as a credential, such as ANTHROPIC_API_KEY or OPENROUTER_API_KEY. A credential bundle stays on the engine's data volume"
 type CLIAgentSettings struct {
-	// agent is which CLI to drive. Crewlet's `agent`.
+	// agent is which CLI to drive. The provider's model is written as this
+	// CLI reads it, and an Agent-mode run is handed it unchanged: OpenCode
+	// reads `<provider>/<model>`, such as `anthropic/claude-sonnet-5`.
+	// Crewlet's `agent`.
 	// +required
 	Agent CLIAgentName `json:"agent,omitempty"`
 
@@ -375,6 +381,7 @@ type LLMProviderSettings struct {
 // +kubebuilder:validation:XValidation:rule="self.type != 'CLIAgent' || !(has(self.baseURL) || has(self.timeoutSeconds) || has(self.cooldowns))",message="baseURL, timeoutSeconds and cooldowns configure an HTTP client, and a CLIAgent provider runs a process: its timeout is cli.timeoutSeconds"
 // +kubebuilder:validation:XValidation:rule="self.type != 'CLIAgent' || !has(self.cli) || has(self.apiKeySecretRefs) == (has(self.cli.auth) && has(self.cli.auth.mode) && self.cli.auth.mode == 'APIKey')",message="a CLIAgent provider takes apiKeySecretRefs with cli.auth.mode APIKey, and only then"
 // +kubebuilder:validation:XValidation:rule="self.type != 'CLIAgent' || !has(self.apiKeySecretRefs) || self.apiKeySecretRefs.size() == 1",message="a CLIAgent provider gives its CLI one key: it rotates none"
+// +kubebuilder:validation:XValidation:rule="self.type != 'CLIAgent' || !has(self.cli) || self.cli.agent != 'OpenCode' || !has(self.model) || (self.model.indexOf('/') >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size() > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size() > 0)",message="an OpenCode model is <provider>/<model>, which OpenCode splits at its first slash: a model with no slash, or with nothing but white space before or after it, names no provider or no model, and every call the provider makes, an Agent-mode run's included, would fail inside OpenCode with Model not found. Name the provider as OpenCode spells it (opencode models lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5, with that provider's key in cli.env",fieldPath=".model"
 type LLMProviderSpec struct {
 	// companyRef names the Company this provider belongs to. Immutable.
 	// +required

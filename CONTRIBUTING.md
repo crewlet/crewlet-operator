@@ -129,17 +129,12 @@ it reads each CLI's token and key variable from the engine's own refusals,
 tries every CLI the API offers in every sign-in shape, each driving a seat,
 and compares the API server's verdict with what `crewlet validate` admits
 and doubts and what `crewlet llm list` reports the CLI signed in with, so an
-engine whose profiles move a token or key variable fails it. A mock would
-agree with the code by construction; the real engine is what tells the two
-apart when Crewlet's API or schema moves.
-
-What no validation shows is how the engine runs a CLI. The API refuses
-OpenCode in `mode: Agent` because the engine names an agent-mode OpenCode
-run's model to it as `anthropic/<model>` (`openCodeModelArg` in crewlet's
-`internal/sandbox/codingagent`) while a text call on the same provider
-passes the model as written. When you move `CREWLET_VERSION`, read that
-function: once it passes a `cli-agent` entry's model as written, admit the
-mode, and the CRD suite's exemption for it goes with the refusal.
+engine whose profiles move a token or key variable fails it. It holds the
+rule over an OpenCode provider's `model` the same way, trying every CLI with
+models with and without a provider, and with segments of white space, so an
+engine that marks another profile as reading `<provider>/<model>` fails it
+too. A mock would agree with the code by construction; the real engine is
+what tells the two apart when Crewlet's API or schema moves.
 
 The engine is pinned like every other tool, as `CREWLET_VERSION` in the
 Makefile, and `make crewlet` builds it into `bin/crewlet` (`make test` does so

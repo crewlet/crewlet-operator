@@ -108,6 +108,11 @@ A `CLIAgent` provider of `CursorAgent` on `auth.mode: APIKey` needs crewlet
 a0dd86d94 (`v0.1.1-0.20261010051424-a0dd86d94fc5`): an older engine gives
 Cursor no key, so every call it makes is refused as unauthenticated
 ([A metered key](cli-agents.md#a-metered-key)).
+A `CLIAgent` provider of `OpenCode` in `cli.mode: Agent` needs crewlet
+4e45c6b99 (`v0.1.1-0.20261010171839-4e45c6b992a2`): an older engine names
+the run's model to OpenCode as `anthropic/<model>`, which no model the
+provider's text calls also run on survives
+([Text mode and agent mode](cli-agents.md#text-mode-and-agent-mode)).
 
 ## Values worth setting
 
@@ -284,3 +289,16 @@ Subscription` whose `cli.env` holds no credential-named variable, which
 signs it in to nothing ([Signing in](cli-agents.md#signing-in)). The API
 server keeps such an object as it is stored, and refuses a change to its
 `spec.cli` until it is fixed.
+
+The first release that admits `OpenCode` in `cli.mode: Agent` needs crewlet
+4e45c6b99 or later on every company that runs such a provider; it restarts
+nothing, and the providers it newly admits are refused before it. That
+engine refuses, in every revision written to it, an `OpenCode` provider
+whose `model` names no provider (`claude-sonnet-5` rather than
+`anthropic/claude-sonnet-5`), which every release before admitted though
+every call such a provider made failed inside OpenCode with `Model not
+found`. So before moving any EngineClass's `engine.image` to it, give each
+`OpenCode` provider's `model` its provider, as
+[Signing in](cli-agents.md#signing-in) describes; a provider left as it
+was is reported as the `cli.env` variables above are, and the API server
+refuses a change to its `spec` until its `model` is fixed.

@@ -340,7 +340,10 @@ type E2BSandbox struct {
 	Domain string `json:"domain,omitempty"`
 
 	// template is the sandbox template, which also fixes each sandbox's CPU,
-	// memory and disk.
+	// memory and disk. Unset, each run gets the vendor's prebuilt template
+	// for its coding agent's CLI (claude or opencode); a template set here is
+	// used for every run, so it must carry the CLI of every coding agent and
+	// Agent-mode CLIAgent provider the company runs.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253

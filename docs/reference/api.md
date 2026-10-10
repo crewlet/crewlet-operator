@@ -221,7 +221,7 @@ _Appears in:_
 | Field | Description |
 | --- | --- |
 | `Text` | CLIAgentModeText drives the CLI as a text model behind the engine's<br />own tool loop, as a process in the engine's pod.<br /> |
-| `Agent` | CLIAgentModeAgent runs a seat's executor as the CLI's own agentic<br />run, in a sandbox, with the seat's tools reached back through the<br />engine's tool bridge.<br /> |
+| `Agent` | CLIAgentModeAgent runs a seat's executor as the CLI's own agentic<br />run, in a sandbox, with the seat's tools reached back through the<br />engine's tool bridge. It is offered for the CLIs Crewlet has a<br />sandbox runner for, ClaudeCode and OpenCode.<br /> |
 
 
 #### CLIAgentName
@@ -299,13 +299,15 @@ rules name are those whose profiles set token_env, api_key_env or
 env_sign_in at the engine version the operator is built against; a test
 holds them to that engine's own verdict.
 
-Mode Agent runs ClaudeCode alone. Crewlet has a sandbox runner for
-OpenCode too, but the engine the operator is built against names an
-OpenCode run's model to it as anthropic/<model>, while every other phase
-on the same provider (the reviewer, a delegated worker, the summariser) is
-a text call that passes the model as written, and OpenCode reads a model
-as <provider>/<model>: no one model serves both, so such a provider would
-fail one of them at run time.
+Mode Agent runs the CLIs Crewlet has a sandbox runner for, ClaudeCode and
+OpenCode: the Company's coding agents. Crewlet hands an Agent-mode run its
+provider's model exactly as the provider's text calls pass it (the
+reviewer's, a delegated worker's, the summariser's), so one model serves
+every phase. The run happens in the Company's E2B sandbox, which never
+receives a credential bundle: the bundle's login carries a refresh token
+the engine keeps rotating on its data volume. So a Subscription login
+reaches the run only as a variable of its environment, which for ClaudeCode
+is its headless token and for OpenCode its model provider's key in env.
 
 
 
@@ -314,7 +316,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `agent` _[CLIAgentName](#cliagentname)_ | agent is which CLI to drive. Crewlet's `agent`. |  | Enum: [ClaudeCode Codex GeminiCLI QwenCode OpenCode CursorAgent Copilot Grok MuseCode KimiCode Hermes Pi] <br />Required: \{\} <br /> |
+| `agent` _[CLIAgentName](#cliagentname)_ | agent is which CLI to drive. The provider's model is written as this<br />CLI reads it, and an Agent-mode run is handed it unchanged: OpenCode<br />reads `<provider>/<model>`, such as `anthropic/claude-sonnet-5`.<br />Crewlet's `agent`. |  | Enum: [ClaudeCode Codex GeminiCLI QwenCode OpenCode CursorAgent Copilot Grok MuseCode KimiCode Hermes Pi] <br />Required: \{\} <br /> |
 | `mode` _[CLIAgentMode](#cliagentmode)_ | mode is how the engine uses the CLI. Unset is Text. Crewlet's `mode`. |  | Enum: [Text Agent] <br />Optional: \{\} <br /> |
 | `runIn` _[CLIAgentRunIn](#cliagentrunin)_ | runIn is where an Agent-mode run happens. Unset is the Company's<br />sandbox, which is E2B. Crewlet's `run_in`. |  | Enum: [E2B] <br />Optional: \{\} <br /> |
 | `auth` _[CLIAgentAuth](#cliagentauth)_ | auth is how the CLI signs in. |  | MinProperties: 1 <br />Required: \{\} <br /> |
@@ -885,7 +887,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `apiKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | apiKeySecretRef is the Secret key holding the service's API key.<br />Crewlet's `api_key`, a credential position. |  | Required: \{\} <br /> |
 | `domain` _string_ | domain points at a self-hosted cluster of the service. Unset is the<br />vendor's cloud. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `template` _string_ | template is the sandbox template, which also fixes each sandbox's CPU,<br />memory and disk. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `template` _string_ | template is the sandbox template, which also fixes each sandbox's CPU,<br />memory and disk. Unset, each run gets the vendor's prebuilt template<br />for its coding agent's CLI (claude or opencode); a template set here is<br />used for every run, so it must carry the CLI of every coding agent and<br />Agent-mode CLIAgent provider the company runs. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### EmbeddingProviderType

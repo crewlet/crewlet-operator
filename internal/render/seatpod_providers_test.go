@@ -31,6 +31,7 @@ func TestSeatPodProviders(t *testing.T) {
 	keyInEnv := func(agent v1alpha1.CLIAgentName) func(*Input) {
 		return func(in *Input) {
 			p := cliProvider(v1alpha1.CLIAgentModeText)
+			p.Spec.Model = "openrouter/anthropic/claude-sonnet-5"
 			p.Spec.CLI.Agent = agent
 			p.Spec.CLI.Auth = v1alpha1.CLIAgentAuth{Mode: v1alpha1.CLIAgentAuthSubscription}
 			p.Spec.CLI.Env = []v1alpha1.SecretEnvVar{{

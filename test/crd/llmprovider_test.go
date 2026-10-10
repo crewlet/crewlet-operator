@@ -123,12 +123,14 @@ const (
 	msgCLIKey         = "a CLIAgent provider takes apiKeySecretRefs with cli.auth.mode APIKey, and only then"
 	msgCLIOneKey      = "a CLIAgent provider gives its CLI one key"
 	msgCLIRunIn       = "runIn applies to mode Agent only"
-	msgCLIAgentRunner = "mode Agent runs ClaudeCode only"
+	msgCLIAgentRunner = "mode Agent runs a CLI Crewlet has a sandbox runner for: ClaudeCode or OpenCode"
 	msgCLIToken       = "auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode"
 	msgCLIKeyAgent    = "auth mode APIKey takes a CLI Crewlet hands a key to"
 	msgCLITwoLogins   = "tokenSecretRef and credentialBundleSecretRef are two logins"
-	msgCLIRemoteLogin = "a Subscription login reaches an Agent-mode run in a remote sandbox only as a headless token: " +
-		"give ClaudeCode auth.tokenSecretRef, or use auth mode APIKey"
+	msgCLIRemoteLogin = "a Subscription login reaches an Agent-mode run in a remote sandbox only as a variable of its " +
+		"environment: give ClaudeCode auth.tokenSecretRef, or use auth mode APIKey, and give OpenCode its model " +
+		"provider's key in env"
+	msgOpenCodeModel  = "an OpenCode model is <provider>/<model>, which OpenCode splits at its first slash"
 	msgCLINoLogin     = "a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef"
 	msgCLILoginFields = "tokenSecretRef and credentialBundleSecretRef sign in to a subscription"
 	msgCLIOwnVariable = "env may not set the CLI's own token or key variable"
@@ -154,7 +156,7 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 	// engine to fill.
 	keyInEnv := func(agent v1.CLIAgentName, key string) func(*v1.LLMProvider) {
 		return func(p *v1.LLMProvider) {
-			p.Spec.Model = "anthropic/claude-sonnet-5"
+			p.Spec.Model = modelViaAnthropic
 			p.Spec.CLI.Agent = agent
 			p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription}
 			p.Spec.CLI.Env = []v1.SecretEnvVar{{Name: key, ValueFrom: fromSecret("model-keys", "key")}}
@@ -200,25 +202,74 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			},
 		},
 		{
-			// Crewlet runs OpenCode in its sandbox, but names the run's
-			// model to it as anthropic/<model> while every text call on
-			// the provider passes the model as written: no one model
-			// serves both, whichever key signs it in.
-			name: "OpenCode in mode Agent on its model provider's key in env is refused",
+			// Crewlet hands the run the model as the provider's text
+			// calls pass it, and exports a key in env into the remote
+			// sandbox, where it signs OpenCode in.
+			name: "OpenCode in mode Agent on its model provider's key in env is accepted",
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey)(p)
 				agentMode(p)
+				p.Spec.CLI.RunIn = v1.CLIAgentRunInE2B
 			},
-			want: msgCLIAgentRunner,
+		},
+		{
+			name: "OpenCode in mode Agent through a gateway's key in env is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
+				agentMode(p)
+				p.Spec.Model = modelViaOpenRouter
+			},
+		},
+		{
+			// The bundle never reaches the sandbox; the key in env does,
+			// and the engine reports the provider signed in through its
+			// environment.
+			name: "OpenCode in mode Agent on an exported login beside a key in env is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey)(p)
+				agentMode(p)
+				p.Spec.CLI.Auth.CredentialBundleSecretRef = secretKey("opencode", "bundle")
+			},
 		},
 		{
 			name: "OpenCode in mode Agent on an exported login is refused",
 			mutate: func(p *v1.LLMProvider) {
 				agentMode(p)
+				p.Spec.Model = modelViaAnthropic
 				p.Spec.CLI.Agent = v1.CLIAgentOpenCode
 				p.Spec.CLI.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("opencode", "bundle")}
 			},
-			want: msgCLIAgentRunner,
+			want: msgCLIRemoteLogin,
+		},
+		{
+			// A proxy beside the bundle is configuration: nothing in the
+			// run's environment signs OpenCode in.
+			name: "OpenCode in mode Agent on an exported login beside a proxy in env is refused",
+			mutate: func(p *v1.LLMProvider) {
+				keyInEnv(v1.CLIAgentOpenCode, envProxy)(p)
+				agentMode(p)
+				p.Spec.CLI.Auth.CredentialBundleSecretRef = secretKey("opencode", "bundle")
+			},
+			want: msgCLIRemoteLogin,
+		},
+		{
+			name: "OpenCode in mode Agent on a proxy alone in env is refused",
+			mutate: func(p *v1.LLMProvider) {
+				keyInEnv(v1.CLIAgentOpenCode, envProxy)(p)
+				agentMode(p)
+			},
+			want: msgCLINoLogin,
+		},
+		{
+			name: "OpenCode in mode Agent on auth mode APIKey is refused",
+			mutate: func(p *v1.LLMProvider) {
+				keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey)(p)
+				agentMode(p)
+				p.Spec.CLI.Env = nil
+				p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}
+				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
+			},
+			want: msgCLIKeyAgent,
 		},
 		{
 			// Hermes signs in through env too, and has no sandbox
@@ -473,6 +524,55 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			mutate: keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey),
 		},
 	)
+	// OpenCode splits its model at the first slash into a provider and a
+	// model id, and Crewlet refuses a model with nothing but white space on
+	// either side of it, white space as Go's strings.TrimSpace reads it: the
+	// Unicode spaces beyond ASCII's among it.
+	openCodeModel := func(model string, mode v1.CLIAgentMode) func(*v1.LLMProvider) {
+		return func(p *v1.LLMProvider) {
+			keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
+			p.Spec.CLI.Mode = mode
+			p.Spec.Model = model
+		}
+	}
+	for _, mode := range []v1.CLIAgentMode{v1.CLIAgentModeText, v1.CLIAgentModeAgent} {
+		for _, model := range []string{
+			modelViaAnthropic, modelViaOpenRouter,
+			" anthropic/claude-sonnet-5", "anthropic/ claude-sonnet-5", "a/b",
+		} {
+			cases = append(cases, createCase[*v1.LLMProvider]{
+				name:   fmt.Sprintf("an OpenCode model %q in mode %s is accepted", model, mode),
+				mutate: openCodeModel(model, mode),
+			})
+		}
+		for _, model := range []string{
+			"claude-sonnet-5", "anthropic/", "/claude-sonnet-5", "/", " /claude-sonnet-5",
+			"anthropic/ ", "anthropic/\t\n", "\u00a0/claude-sonnet-5", "anthropic/\u3000",
+			"\u2028/x", "anthropic/\u0085", "   ",
+		} {
+			cases = append(cases, createCase[*v1.LLMProvider]{
+				name:   fmt.Sprintf("an OpenCode model %q in mode %s is refused", model, mode),
+				mutate: openCodeModel(model, mode),
+				want:   msgOpenCodeModel,
+			})
+		}
+	}
+	cases = append(cases,
+		createCase[*v1.LLMProvider]{
+			name:   "an OpenCode model with no provider is reported at model",
+			mutate: openCodeModel(claudeModel, v1.CLIAgentModeText),
+			want:   "spec.model: Invalid value",
+		},
+		createCase[*v1.LLMProvider]{
+			// The grammar is OpenCode's: Hermes takes a model it routes
+			// without one.
+			name: "a Hermes model with no provider is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				keyInEnv(v1.CLIAgentHermes, "OPENROUTER_API_KEY")(p)
+				p.Spec.Model = claudeModel
+			},
+		},
+	)
 	runCreateCases(t, cliProvider, cases)
 }
 
@@ -486,7 +586,7 @@ func TestCLIAgentEnvSignInEmptyEnv(t *testing.T) {
 		t.Run(string(agent), func(t *testing.T) {
 			p := llmProvider(namespace, strings.ToLower(string(agent)))
 			p.Spec.Type = v1.LLMProviderCLIAgent
-			p.Spec.Model = "anthropic/claude-sonnet-5"
+			p.Spec.Model = modelViaAnthropic
 			p.Spec.APIKeySecretRefs = nil
 			p.Spec.CLI = v1.CLIAgentSettings{
 				Agent: agent,
