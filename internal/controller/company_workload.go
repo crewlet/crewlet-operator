@@ -763,8 +763,8 @@ func engineImage(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineCl
 		return "", &imageRefusal{
 			reason: crewletaiv1alpha1.ReasonDowngradeRefused,
 			message: fmt.Sprintf("The engine image %s is older than %s, which the company's data was last run on: the engine migrates its "+
-				"data forward only. Run %s or later; to go back, restore the data volume from a backup taken before the upgrade.",
-				image, floor, floor),
+				"data forward only. Run %s or later; to go back, restore the data volume from a backup taken before %s first ran on it.",
+				image, floor, floor, floor),
 		}
 	}
 	return image, nil
