@@ -354,11 +354,13 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 			}
 			doc.Sandbox.MCP.Servers = append(doc.Sandbox.MCP.Servers, ref.Name)
 		}
-		// Crewlet offers run_sandbox only with a catalogue, which the
-		// Company's spec.sandbox is; without one the engine refuses the
-		// seat's gate instead.
-		if r.in.Company.Spec.Sandbox.E2B.APIKeySecretRef.Name != "" {
-			r.codeWork(s)
+		// Crewlet refuses a coding agent on another CLI's provider on every
+		// write; the other pairings it cannot run are CodeWorkOf's to
+		// report, since Crewlet applies them.
+		if r.offersCodeWork(s) {
+			if w, ok := r.codeWork(s); ok && w.Reason == v1alpha1.ReasonCodingAgentMismatch {
+				r.errs.add(KindSeat, s.Name, w.Field, w.Reason, w.Message)
+			}
 		}
 	}
 	doc.Integrations = r.roleIntegrations(s)

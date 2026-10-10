@@ -296,7 +296,10 @@ const (
 	//
 	// On an agent Seat, Ready reports whether an engine node holds the
 	// seat's lease and so runs it: LeaseHeld, or Unplaced while no node
-	// does, as the engine's GET /fleet reports.
+	// does, as the engine's GET /fleet reports. CodeWorkRunnable does not
+	// count towards it: a seat whose code work cannot run still runs its
+	// turns, and a health check gating on Ready would otherwise hold a
+	// rollout over a seat that works.
 	ConditionReady = "Ready"
 
 	// ConditionRuntimeReady reports whether a Company's engine pods exist,
@@ -338,6 +341,20 @@ const (
 	// ConditionPaused reports whether the engine holds an agent seat
 	// paused: True while it does, whoever paused it.
 	ConditionPaused = "Paused"
+
+	// ConditionCodeWorkRunnable reports whether an agent Seat's coding agent
+	// can run on the provider at the head of its sandbox chain, or on the
+	// sign-in the seat's sandbox environment gives it, so that a run_sandbox
+	// launch of the seat can start. It is set on an Agent seat with
+	// spec.sandbox in a Company with spec.sandbox, the seats Crewlet offers
+	// run_sandbox, and is computed from the spec under every management
+	// policy: under Observe or Seed it judges the Seat's objects, which may
+	// not be the document the engine runs (Applied says whether they are).
+	// Only CodingAgentMismatch also holds the document (Applied=False), as
+	// Crewlet refuses it on every write; with SandboxModelUnsupported or
+	// SandboxLoginNotPortable the seat is applied and runs its turns, and
+	// Crewlet refuses each of its coding runs.
+	ConditionCodeWorkRunnable = "CodeWorkRunnable"
 
 	// ConditionHealthy reports what the engine says about an integration:
 	// whether its credentials work and its webhooks are registered.
@@ -756,9 +773,16 @@ const (
 	// whole company out.
 	ReasonCLIAuthNotPortable = "CLIAuthNotPortable"
 
-	// ReasonCodingAgentMismatch is Applied=False on a Seat whose code work
-	// (spec.sandbox) runs on a CLIAgent provider driving another CLI than
-	// the seat's coding agent (spec.sandbox.codingAgent, else the Company's
+	// ReasonCodeWorkSupported is CodeWorkRunnable=True on a Seat whose
+	// coding agent can run on the provider at the head of its sandbox chain,
+	// or on the sign-in the seat's sandbox environment gives it; the message
+	// says which.
+	ReasonCodeWorkSupported = "CodeWorkSupported"
+
+	// ReasonCodingAgentMismatch is Applied=False and CodeWorkRunnable=False
+	// on a Seat whose code work (spec.sandbox) runs on a CLIAgent provider
+	// driving another CLI than the seat's coding agent
+	// (spec.sandbox.codingAgent, else the Company's
 	// spec.sandbox.defaultCodingAgent, else ClaudeCode): the head of
 	// spec.llm.sandbox, else of spec.llm.default, else of the Company's
 	// model order. The provider's model is written in its own CLI's grammar
@@ -766,23 +790,25 @@ const (
 	// and Crewlet refuses the pairing on every write.
 	ReasonCodingAgentMismatch = "CodingAgentMismatch"
 
-	// ReasonSandboxModelUnsupported is Applied=False on a Seat whose code
-	// work runs the ClaudeCode coding agent on a provider of type OpenAI or
-	// OpenAICompatible, an LLMProvider or a platform provider, while the
-	// seat's sandbox environment (spec.sandbox.env, its setup steps' and
-	// the Company's spec.sandbox.setup steps') names no variable that signs
-	// ClaudeCode in. ClaudeCode speaks the Anthropic API only, and Crewlet
-	// refuses every run_sandbox launch of such a seat.
+	// ReasonSandboxModelUnsupported is CodeWorkRunnable=False on a Seat
+	// whose code work runs the ClaudeCode coding agent on a provider of type
+	// OpenAI or OpenAICompatible, an LLMProvider or a platform provider,
+	// while the seat's sandbox environment (spec.sandbox.env, its setup
+	// steps' and the Company's spec.sandbox.setup steps') names no variable
+	// that signs ClaudeCode in. ClaudeCode speaks the Anthropic API only:
+	// Crewlet applies the seat, which runs its turns, and refuses each
+	// run_sandbox launch of it.
 	ReasonSandboxModelUnsupported = "SandboxModelUnsupported"
 
-	// ReasonSandboxLoginNotPortable is Applied=False on a Seat whose code
-	// work runs on a CLIAgent provider of its coding agent's CLI whose login
-	// cannot follow a run into the Company's remote sandbox: a ClaudeCode
-	// signed in by a credential bundle with neither CLAUDE_CODE_OAUTH_TOKEN
-	// nor ANTHROPIC_API_KEY in the seat's sandbox environment, or an
-	// OpenCode with no credential-named variable in its cli.env or the
-	// seat's sandbox environment. A bundle stays on the engine's data
-	// volume, and Crewlet refuses every run_sandbox launch of such a seat.
+	// ReasonSandboxLoginNotPortable is CodeWorkRunnable=False on a Seat
+	// whose code work runs on a CLIAgent provider of its coding agent's CLI
+	// whose login cannot follow a run into the Company's remote sandbox: a
+	// ClaudeCode signed in by a credential bundle with neither
+	// CLAUDE_CODE_OAUTH_TOKEN nor ANTHROPIC_API_KEY in the seat's sandbox
+	// environment, or an OpenCode with no credential-named variable in its
+	// cli.env or the seat's sandbox environment. A bundle stays on the
+	// engine's data volume: Crewlet applies the seat, which runs its turns,
+	// and refuses each run_sandbox launch of it.
 	ReasonSandboxLoginNotPortable = "SandboxLoginNotPortable"
 
 	// ReasonPlacementPending is Applied=False on an agent Seat placed in a

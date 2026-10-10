@@ -3,6 +3,7 @@ package render
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -32,11 +33,11 @@ import (
 //     volume, because they carry a refresh token the engine keeps rotating
 //     there, so the run needs a token or a key in its environment.
 //
-// Crewlet admits the last two in the document and refuses each launch of the
-// seat's code work, after the revision is applied and while the Seat reports
-// Applied: the seat would run, and every coding run it started would fail.
-// They are refused here instead, where the refusal is reported before
-// anything runs, as a seat pod's missing tool bridge is.
+// Crewlet applies a document holding either of the last two and refuses each
+// launch of the seat's code work, while the seat runs its turns. They are
+// reported on the Seat's CodeWorkRunnable rather than refused here: refusing
+// them would hold the whole company on its last revision over one seat's
+// code work, which the engine itself would run without it.
 //
 // The seat's own environment is the union of its spec.sandbox.env, its
 // spec.sandbox.setup steps' env and the Company's spec.sandbox.setup steps'
@@ -67,33 +68,107 @@ var signInName = regexp.MustCompile(signInNamePattern)
 
 const signInNamePattern = `(?i)(^|_)(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)(_|$)`
 
-// codeWork refuses a seat whose code work no launch could run, as the
-// comment above describes. It is called for an agent seat with spec.sandbox in
-// a Company with spec.sandbox, the seats Crewlet offers run_sandbox.
-func (r *renderer) codeWork(s *v1alpha1.Seat) {
+// CodeWork is what the operator can tell of a seat's code work from the
+// objects: whether its coding agent can run on the head of its sandbox chain,
+// or on the sign-in the seat's sandbox environment gives it.
+type CodeWork struct {
+	// Field is the field of the Seat that names the head, or spec.llm for
+	// the head of the document's llm_order.
+	Field string
+	// Reason is empty when the coding agent can run, on the head or on the
+	// seat's own sign-in, and otherwise v1alpha1.ReasonCodingAgentMismatch, which the render refuses,
+	// v1alpha1.ReasonSandboxModelUnsupported or
+	// v1alpha1.ReasonSandboxLoginNotPortable, which it only reports.
+	Reason string
+	// Message says what the coding agent runs on and, when it cannot, what
+	// to change, for a condition message after Field.
+	Message string
+}
+
+// CodeWorkOf is the code work of every Seat Crewlet offers run_sandbox,
+// keyed by the Seat's name: an Agent seat with spec.sandbox, in a Company
+// with a sandbox. A Seat none of whose sandbox chain resolves has no entry,
+// as each reference that does not is refused on its own. It is apart from
+// Company because it is a statement about each Seat's spec, which holds while
+// another object's refusal keeps Company from returning a document.
+func CodeWorkOf(in *Input) map[string]CodeWork {
+	r := newRenderer(in)
+	out := map[string]CodeWork{}
+	for i := range in.Seats {
+		s := &in.Seats[i]
+		if !r.offersCodeWork(s) {
+			continue
+		}
+		if w, ok := r.codeWork(s); ok {
+			out[s.Name] = w
+		}
+	}
+	return out
+}
+
+// offersCodeWork reports whether Crewlet offers a seat run_sandbox: a seat
+// with spec.sandbox, which the Seat API admits on an Agent seat only, in a
+// Company whose spec.sandbox is the catalogue of boxes Crewlet requires for
+// it (without one the engine refuses the seat's gate instead).
+func (r *renderer) offersCodeWork(s *v1alpha1.Seat) bool {
+	return s.Spec.Sandbox != nil && r.in.Company.Spec.Sandbox.E2B.APIKeySecretRef.Name != ""
+}
+
+// codeWork is a seat's code work, as the comment above describes; false when
+// none of its sandbox chain resolves.
+func (r *renderer) codeWork(s *v1alpha1.Seat) (CodeWork, bool) {
 	head, ok := r.codeWorkHead(s)
 	if !ok {
-		// No provider resolves: each reference that does not is refused
-		// on its own, and a company with none runs no turn.
-		return
+		return CodeWork{}, false
 	}
 	runner := cmp.Or(s.Spec.Sandbox.CodingAgent, r.in.Company.Spec.Sandbox.DefaultCodingAgent, v1alpha1.CodingAgentClaudeCode)
 	env := r.sandboxEnvNames(s)
+	w := CodeWork{Field: head.field}
 	switch {
 	case head.cli != nil && string(head.cli.Agent) != string(runner):
-		r.errs.add(KindSeat, s.Name, head.field, v1alpha1.ReasonCodingAgentMismatch, codingAgentMismatch(runner, head))
-	case head.cli == nil && runner == v1alpha1.CodingAgentClaudeCode &&
-		head.kind != v1alpha1.LLMProviderAnthropic && !slices.ContainsFunc(claudeCodeSignIn, env.has):
-		r.errs.add(KindSeat, s.Name, head.field, v1alpha1.ReasonSandboxModelUnsupported, fmt.Sprintf(
+		w.Reason, w.Message = v1alpha1.ReasonCodingAgentMismatch, codingAgentMismatch(runner, head)
+	case head.cli == nil && runner == v1alpha1.CodingAgentClaudeCode && head.kind != v1alpha1.LLMProviderAnthropic:
+		if signIn := env.among(claudeCodeSignIn); len(signIn) > 0 {
+			// Crewlet hands the run none of the provider then, so the
+			// message must not say it runs on the provider's model.
+			w.Message = fmt.Sprintf("runs the seat's code work with the ClaudeCode coding agent on the sign-in "+
+				"the seat's sandbox environment gives it (%s), under its own model choice: ClaudeCode speaks the "+
+				"Anthropic API only, so it reads neither the model nor the key of %s, of type %s",
+				strings.Join(signIn, ", "), head.describe(), head.kind)
+			break
+		}
+		w.Reason, w.Message = v1alpha1.ReasonSandboxModelUnsupported, fmt.Sprintf(
 			"runs the seat's code work with the ClaudeCode coding agent on %s, of type %s, and ClaudeCode speaks "+
 				"the Anthropic API only: it can read neither that provider's model nor its key, so Crewlet refuses "+
-				"every run_sandbox launch. Name a provider of type Anthropic first in spec.llm.sandbox, set "+
-				"spec.sandbox.codingAgent: OpenCode, which reads the OpenAI wire too, or sign ClaudeCode in for the "+
-				"seat in spec.sandbox.env (%s), on which it runs under its own model choice",
-			head.describe(), head.kind, strings.Join(claudeCodeSignIn, ", ")))
-	case head.cli != nil && !head.signsInRemotely(env):
-		r.errs.add(KindSeat, s.Name, head.field, v1alpha1.ReasonSandboxLoginNotPortable, loginNotPortable(head))
+				"each run_sandbox launch of the seat. Name a provider of type Anthropic first in "+
+				"spec.llm.sandbox, set spec.sandbox.codingAgent: OpenCode, which reads the OpenAI wire too, or "+
+				"sign ClaudeCode in for the seat in spec.sandbox.env (%s), on which it runs under its own model "+
+				"choice",
+			head.describe(), head.kind, strings.Join(claudeCodeSignIn, ", "))
+	case head.cli != nil:
+		own, seat := head.remoteSignIn(env)
+		switch {
+		case own:
+			w.Message = runsOn(runner, head)
+		case len(seat) > 0:
+			w.Message = fmt.Sprintf("runs the seat's code work with the %s coding agent on %s, whose model it "+
+				"uses, signed in by %s from the seat's sandbox environment: the provider's own %s login cannot "+
+				"follow the run into the Company's E2B sandbox",
+				runner, head.describe(), strings.Join(seat, ", "), head.cli.Agent)
+		default:
+			w.Reason, w.Message = v1alpha1.ReasonSandboxLoginNotPortable, loginNotPortable(head)
+		}
+	default:
+		w.Message = runsOn(runner, head)
 	}
+	return w, true
+}
+
+// runsOn is the message of a seat whose coding agent runs on the model and
+// the sign-in of its sandbox chain's head.
+func runsOn(runner v1alpha1.CodingAgent, head sandboxHead) string {
+	return fmt.Sprintf("runs the seat's code work with the %s coding agent on %s, whose model and sign-in it "+
+		"can use", runner, head.describe())
 }
 
 // codingAgentMismatch is the refusal of a code-work head that is a CLIAgent
@@ -117,7 +192,7 @@ func codingAgentMismatch(runner v1alpha1.CodingAgent, head sandboxHead) string {
 		"pairing. %s", runner, head.describe(), cli, cli, cli, runner, remedy)
 }
 
-// loginNotPortable is the refusal of a code-work head that is a CLIAgent
+// loginNotPortable is the report of a code-work head that is a CLIAgent
 // provider of the runner's own CLI whose login cannot follow a run into the
 // remote sandbox.
 func loginNotPortable(head sandboxHead) string {
@@ -129,8 +204,9 @@ func loginNotPortable(head sandboxHead) string {
 	}
 	return fmt.Sprintf("runs the seat's code work in the Company's E2B sandbox on %s, whose %s login cannot "+
 		"follow it there: a credential bundle stays on the engine's data volume, as it carries a refresh token "+
-		"the engine keeps rotating, and nothing in the run's environment signs %s in, so Crewlet refuses every "+
-		"run_sandbox launch. To fix it, %s", head.describe(), head.cli.Agent, head.cli.Agent, remedy)
+		"the engine keeps rotating, and nothing in the run's environment signs %s in, so Crewlet refuses each "+
+		"run_sandbox launch of the seat. To fix it, %s",
+		head.describe(), head.cli.Agent, head.cli.Agent, remedy)
 }
 
 // sandboxHead is the provider at the head of a seat's sandbox chain.
@@ -153,29 +229,27 @@ func (h sandboxHead) describe() string {
 	return "LLMProvider " + h.name
 }
 
-// signsInRemotely reports whether the login of a CLIAgent head that drives
-// one of the coding agents reaches a remote box, given the names of the
-// seat's own environment (Crewlet's sandboxCredentials): ClaudeCode's through
-// its token or key, from auth or the seat's environment, and OpenCode's, which
-// signs in through its environment, through any variable named as a
-// credential, in its cli.env or the seat's environment.
-func (h sandboxHead) signsInRemotely(env envNames) bool {
+// remoteSignIn is how the login of a CLIAgent head that drives one of the
+// coding agents reaches a remote box, given the names of the seat's own
+// environment (Crewlet's sandboxCredentials): own when the provider's settings
+// carry it, and otherwise the variables of the seat's environment that do,
+// none when nothing does. ClaudeCode's travels as its token or key, from auth
+// or the seat's environment; OpenCode's, which signs in through its
+// environment, as any variable named as a credential, in its cli.env or the
+// seat's environment.
+func (h sandboxHead) remoteSignIn(env envNames) (own bool, seat []string) {
 	if h.cli.Agent == v1alpha1.CLIAgentClaudeCode {
 		auth := h.cli.Auth
-		return auth.TokenSecretRef.Name != "" || auth.Mode == v1alpha1.CLIAgentAuthAPIKey ||
-			slices.ContainsFunc(claudeCodeLogin, env.has)
+		return auth.TokenSecretRef.Name != "" || auth.Mode == v1alpha1.CLIAgentAuthAPIKey,
+			env.among(claudeCodeLogin)
 	}
-	for _, e := range h.cli.Env {
-		if signInName.MatchString(e.Name) {
-			return true
-		}
-	}
-	for name := range env {
+	own = slices.ContainsFunc(h.cli.Env, func(e v1alpha1.SecretEnvVar) bool { return signInName.MatchString(e.Name) })
+	for _, name := range slices.Sorted(maps.Keys(env)) {
 		if signInName.MatchString(name) {
-			return true
+			seat = append(seat, name)
 		}
 	}
-	return false
+	return own, seat
 }
 
 // codeWorkHead resolves the head of a seat's sandbox chain as Crewlet's
@@ -266,7 +340,10 @@ func (r *renderer) platformHead(name, field string) sandboxHead {
 // envNames is the set of variable names of a seat's sandbox runs.
 type envNames map[string]bool
 
-func (e envNames) has(name string) bool { return e[name] }
+// among is the names of names the seat's environment has, in their order.
+func (e envNames) among(names []string) []string {
+	return slices.DeleteFunc(slices.Clone(names), func(name string) bool { return !e[name] })
+}
 
 // sandboxEnvNames is the names the seat's sandbox runs are given values
 // under: its own spec.sandbox.env and setup steps', and the Company's setup

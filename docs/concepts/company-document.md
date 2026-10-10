@@ -246,8 +246,6 @@ the reference:
 | `Seat` | it is placed in a seat pool, and its executor's chain starts with a `CLIAgent` provider in `mode: Agent` (the one entry Crewlet runs as an agentic run), whose runs call back into the tool bridge of the pod that holds the seat, at an address the operator publishes for no seat pod (reported on `Applied`) | `AgentModeBridgeUnsupported` |
 | `Seat` | it is placed in a seat pool, and a chain of it names a `CLIAgent` provider signed in with a credential bundle, which every seat pod would restore and refresh on its own (reported on `Applied`) | `CLIAuthNotPortable` |
 | `Seat` | it has `spec.sandbox`, its Company has one, and the provider its code work runs on (the head of `spec.llm.sandbox`, else of `spec.llm.default`, else of the Company's order) is a `CLIAgent` provider driving another CLI than its coding agent, which Crewlet refuses on every write (reported on `Applied`) | `CodingAgentMismatch` |
-| `Seat` | as above, and its coding agent is `ClaudeCode` on a provider of type `OpenAI` or `OpenAICompatible`, while its sandbox environment names no variable that signs Claude Code in, so Crewlet would refuse every coding run (reported on `Applied`) | `SandboxModelUnsupported` |
-| `Seat` | as above, on a `CLIAgent` provider of its coding agent whose login cannot reach the remote sandbox: a `ClaudeCode` on a credential bundle with neither `CLAUDE_CODE_OAUTH_TOKEN` nor `ANTHROPIC_API_KEY` in the seat's sandbox environment, or an `OpenCode` with no credential-named variable in `cli.env` or the seat's sandbox environment, so Crewlet would refuse every coding run (reported on `Applied`) | `SandboxLoginNotPortable` |
 | `Company` | it declares `spec.topology.seatPools`, and its class's `seatPools.policy` is not `Allowed` | `SeatPoolsNotAllowed` |
 | `Company` | its Shared pools' replicas alone number more than the class's `seatPools.maxPods` | `PoolCapacityExceeded` |
 | `Unit` | `parentRef`, `leadRef` or a `spec.mcp` entry names an object that does not exist | `RefNotFound` |
@@ -279,3 +277,13 @@ rendered document. Crewlet locates each problem by its path in the document
 object that rendered that part of it, which reports `Applied=False` with the
 reason `Invalid` and the engine's own words. [How the document is
 applied](applying.md) covers the rest of what is reported where.
+
+Beyond the table, two more pairings of a seat's code work that no coding run
+can use block nothing, because Crewlet applies them and refuses only each
+run: `ClaudeCode` on a provider of type `OpenAI` or `OpenAICompatible` while
+the seat's sandbox environment names no variable that signs Claude Code in
+(`SandboxModelUnsupported`), and a `CLIAgent` provider of the coding agent's
+own CLI whose login cannot reach the remote sandbox
+(`SandboxLoginNotPortable`). The Seat reports them on its `CodeWorkRunnable`
+condition and is applied, so one seat's code work does not hold the
+company's next revision ([Code work](../guides/cli-agents.md#code-work)).

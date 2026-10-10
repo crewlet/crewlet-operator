@@ -16,13 +16,13 @@ import (
 // agent-mode CLI with no public address to call its tools back through), or it
 // places a seat in a pool the company's EngineClass does not let it run, or
 // whose pods cannot serve the providers it runs on, or runs a seat's code work
-// on a provider its coding agent cannot run on. The controller reports it
-// on the object that holds the reference (Kind and Name), as ResolvedRefs=False
-// with Reason, as Accepted=False for a Conflict, or as Applied=False for a pool
-// the class does not admit (PerSeatNotAllowed, PoolCapacityExceeded) or cannot
-// serve the seat (AgentModeBridgeUnsupported, CLIAuthNotPortable), and for code
-// work no launch could run (CodingAgentMismatch, SandboxModelUnsupported,
-// SandboxLoginNotPortable); a refusal of the Company itself is reported on its
+// on a CLIAgent provider of another CLI than its coding agent. The controller
+// reports it on the object that holds the reference (Kind and Name), as
+// ResolvedRefs=False with Reason, as Accepted=False for a Conflict, or as
+// Applied=False for a pool the class does not admit (PerSeatNotAllowed,
+// PoolCapacityExceeded) or cannot serve the seat (AgentModeBridgeUnsupported,
+// CLIAuthNotPortable), and for code work on a CLIAgent provider of another CLI
+// (CodingAgentMismatch); a refusal of the Company itself is reported on its
 // ConfigApplied.
 //
 // The company document is applied whole or not at all, so one RefError
@@ -43,9 +43,7 @@ type RefError struct {
 	// v1alpha1.ReasonPoolCapacityExceeded, v1alpha1.ReasonSeatPoolsNotAllowed,
 	// v1alpha1.ReasonAgentModeBridgeUnsupported or
 	// v1alpha1.ReasonCLIAuthNotPortable, or for a seat's code work
-	// v1alpha1.ReasonCodingAgentMismatch,
-	// v1alpha1.ReasonSandboxModelUnsupported or
-	// v1alpha1.ReasonSandboxLoginNotPortable.
+	// v1alpha1.ReasonCodingAgentMismatch.
 	Reason string
 	// Message says what is wrong and what to do, for a condition message.
 	Message string

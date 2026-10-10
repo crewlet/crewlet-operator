@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -74,6 +75,9 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 	switch o := p.obj.(type) {
 	case *crewletaiv1alpha1.Seat:
 		decidePause(p, o)
+		if run.objectsChecked {
+			decideCodeWork(p, o)
+		}
 		handle := render.SeatHandle(o)
 		o.Status.Handle = handle
 		o.Status.SeatID = ""
@@ -117,6 +121,21 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 		run.decideHealthy(p, vendor, base)
 	}
 	p.setObservedGeneration()
+}
+
+// decideCodeWork sets a Seat's CodeWorkRunnable condition from what the render
+// found, and removes it from a Seat Crewlet offers no code work. It is called
+// only once the reconcile rendered, so a Seat keeps what it had while its
+// Company is not accepted.
+func decideCodeWork(p *part, seat *crewletaiv1alpha1.Seat) {
+	w := p.codeWork
+	if w == nil {
+		meta.RemoveStatusCondition(&seat.Status.Conditions, crewletaiv1alpha1.ConditionCodeWorkRunnable)
+		return
+	}
+	reason := cmp.Or(w.Reason, crewletaiv1alpha1.ReasonCodeWorkSupported)
+	setCondition(&seat.Status.Conditions, seat.Generation, crewletaiv1alpha1.ConditionCodeWorkRunnable, w.Reason == "",
+		reason, w.Field+": "+w.Message+".")
 }
 
 // decideApplied sets a part's Applied condition from the reconcile's verdict.

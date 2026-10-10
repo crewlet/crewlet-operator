@@ -177,6 +177,9 @@ func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error
 	// render reports every reference that does not resolve at once, so
 	// the parts it does not name have none.
 	run.objectsChecked = true
+	// Whatever became of the document: whether a seat's code work can run
+	// is a fact about its own spec.
+	run.checkCodeWork(render.CodeWorkOf(run.input()))
 	if err != nil {
 		refusals := render.RefErrors(err)
 		if len(refusals) == 0 {
@@ -725,17 +728,43 @@ func (run *configRun) refused(refusals []*render.RefError) {
 	run.block(refusals[0].Reason, "The document cannot be rendered: "+sentences(refusalLines(refusals)))
 }
 
-// unrunnable reports whether reason refuses a seat whose providers its pods,
-// or its code work, cannot run on, which the seat reports as Applied=False
-// rather than as an unresolved reference.
+// unrunnable reports whether reason refuses a seat whose providers its pods
+// cannot run on, or whose code work runs on another CLI's provider, which the
+// seat reports as Applied=False rather than as an unresolved reference.
 func unrunnable(reason string) bool {
 	switch reason {
 	case crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported, crewletaiv1alpha1.ReasonCLIAuthNotPortable,
-		crewletaiv1alpha1.ReasonCodingAgentMismatch, crewletaiv1alpha1.ReasonSandboxModelUnsupported,
-		crewletaiv1alpha1.ReasonSandboxLoginNotPortable:
+		crewletaiv1alpha1.ReasonCodingAgentMismatch:
 		return true
 	}
 	return false
+}
+
+// checkCodeWork records each Seat's code work on its part, and emits a
+// Warning event on a Seat whose code work turns unrunnable or changes its
+// reason, a new problem to announce: with SandboxModelUnsupported or
+// SandboxLoginNotPortable the document applies and nothing on the Company
+// says so.
+func (run *configRun) checkCodeWork(codeWork map[string]render.CodeWork) {
+	for _, p := range run.parts {
+		seat, ok := p.obj.(*crewletaiv1alpha1.Seat)
+		if !ok {
+			continue
+		}
+		w, ok := codeWork[seat.Name]
+		if !ok {
+			continue
+		}
+		p.codeWork = &w
+		if w.Reason == "" {
+			continue
+		}
+		before := meta.FindStatusCondition(p.base.(*crewletaiv1alpha1.Seat).Status.Conditions,
+			crewletaiv1alpha1.ConditionCodeWorkRunnable)
+		if before == nil || before.Reason != w.Reason {
+			run.Recorder.Eventf(seat, nil, corev1.EventTypeWarning, w.Reason, "CheckCodeWork", "%s: %s.", w.Field, w.Message)
+		}
+	}
 }
 
 func refusalLines(refusals []*render.RefError) []string {

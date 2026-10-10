@@ -670,7 +670,7 @@ var _ = Describe("Company config", Ordered, func() {
 		runsRendered(e, c)
 	})
 
-	It("reports a seat whose code work no coding run could use on the Seat, before the engine is asked", func() {
+	It("reports a seat's code work on the Seat, applying a seat Crewlet applies and holding one it refuses", func() {
 		const name = "codework"
 		e := startEngine(name)
 		secret(name+"-llm", map[string]string{llmKey: "k"})
@@ -683,28 +683,75 @@ var _ = Describe("Company config", Ordered, func() {
 		})
 		standIn(c)
 		applied(c, crewletaiv1alpha1.ReasonApplied)
-		good, err := e.Client().ActiveConfig(ctx)
-		Expect(err).NotTo(HaveOccurred())
+		ana := seat(name + "-ana")
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(ana), ana)).To(Succeed())
+		Expect(ana.Status.Conditions).NotTo(ContainElement(HaveField("Type", crewletaiv1alpha1.ConditionCodeWorkRunnable)),
+			"a seat with no sandbox runs no code work")
 
 		By("adding a Seat whose code work runs ClaudeCode, the default coding agent, on the OpenAICompatible provider")
 		coder := newSeat(namespace, name, "coder", func(s *crewletaiv1alpha1.Seat) {
 			s.Spec.Sandbox = &crewletaiv1alpha1.SeatSandbox{}
 		})
-		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
+		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionCodeWorkRunnable)).WithTimeout(settle).
 			Should(Equal(crewletaiv1alpha1.ReasonSandboxModelUnsupported))
-		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionApplied)(Default).Message).
-			To(ContainSubstring("ClaudeCode speaks the Anthropic API only"))
-		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue))
-		Eventually(func(g Gomega) metav1.ConditionStatus {
-			return conditionOf(c, crewletaiv1alpha1.ConditionConfigApplied)(g).Status
-		}).WithTimeout(settle).Should(Equal(metav1.ConditionFalse))
-		active, err := e.Client().ActiveConfig(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(active.RevisionID).To(Equal(good.RevisionID), "the document is refused before the engine is asked")
+		codeWork := conditionOf(coder, crewletaiv1alpha1.ConditionCodeWorkRunnable)(Default)
+		Expect(codeWork.Status).To(Equal(metav1.ConditionFalse))
+		Expect(codeWork.ObservedGeneration).To(Equal(coder.Generation))
+		Expect(codeWork.Message).To(ContainSubstring("ClaudeCode speaks the Anthropic API only"))
+		Expect(codeWork.Message).To(ContainSubstring("spec.sandbox.codingAgent: OpenCode"))
+		By("applying the company with the seat all the same, as Crewlet applies it")
+		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		active := runsRendered(e, c)
+		Expect(string(active.Document)).To(ContainSubstring("handle: " + coder.Name))
+		Expect(reasonOf(coder, crewletaiv1alpha1.ConditionReady)(Default)).
+			To(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced), "code work does not count towards Ready")
+		Expect(log.of(coder.Name)).To(ContainElement(HavePrefix("Warning " + crewletaiv1alpha1.ReasonSandboxModelUnsupported)))
 
 		By("giving the seat a coding agent that speaks the provider's wire")
 		updateLive(coder, func(s *crewletaiv1alpha1.Seat) { s.Spec.Sandbox.CodingAgent = crewletaiv1alpha1.CodingAgentOpenCode })
-		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
+		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionCodeWorkRunnable)).WithTimeout(settle).
+			Should(Equal(crewletaiv1alpha1.ReasonCodeWorkSupported))
+		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionCodeWorkRunnable)(Default).Status).To(Equal(metav1.ConditionTrue))
+		Eventually(func(g Gomega) int64 {
+			return conditionOf(coder, crewletaiv1alpha1.ConditionApplied)(g).ObservedGeneration
+		}).WithTimeout(settle).Should(Equal(coder.Generation))
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		good := runsRendered(e, c)
+
+		By("running its code work on a CLIAgent provider of another CLI, which Crewlet refuses on every write")
+		Expect(k8sClient.Create(ctx, &crewletaiv1alpha1.LLMProvider{
+			Namespace: namespace, Name: name + "-codex",
+			Spec: crewletaiv1alpha1.LLMProviderSpec{
+				CompanyRef:          crewletaiv1alpha1.CompanyReference{Name: name},
+				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{Type: crewletaiv1alpha1.LLMProviderCLIAgent, Model: "gpt-5"},
+				CLI: crewletaiv1alpha1.CLIAgentSettings{
+					Agent: crewletaiv1alpha1.CLIAgentCodex, Auth: crewletaiv1alpha1.CLIAgentAuth{Mode: crewletaiv1alpha1.CLIAgentAuthAPIKey},
+				},
+				APIKeySecretRefs: []crewletaiv1alpha1.SecretKeyReference{{Name: name + "-llm", Key: llmKey}},
+			},
+		})).To(Succeed())
+		updateLive(coder, func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.LLM.Sandbox = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-codex"}}
+		})
+		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
+			Should(Equal(crewletaiv1alpha1.ReasonCodingAgentMismatch))
+		Expect(reasonOf(coder, crewletaiv1alpha1.ConditionCodeWorkRunnable)(Default)).To(Equal(crewletaiv1alpha1.ReasonCodingAgentMismatch))
+		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).
+			Should(Equal(crewletaiv1alpha1.ReasonCodingAgentMismatch))
+		held, err := e.Client().ActiveConfig(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(held.RevisionID).To(Equal(good.RevisionID), "the document is refused before the engine is asked")
+
+		By("taking the sandbox away")
+		updateLive(coder, func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.Sandbox = nil
+			s.Spec.LLM.Sandbox = nil
+		})
+		Eventually(func(g Gomega) []metav1.Condition {
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(coder), coder)).To(Succeed())
+			return coder.Status.Conditions
+		}).WithTimeout(settle).ShouldNot(ContainElement(HaveField("Type", crewletaiv1alpha1.ConditionCodeWorkRunnable)))
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)
 	})

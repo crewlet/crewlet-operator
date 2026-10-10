@@ -200,7 +200,7 @@ Every object reports `status.conditions` with `observedGeneration`:
 | `Company` | `Ready` (the summary), `Accepted`, `RuntimeReady`, `SecretsSynced`, `ConfigApplied`, `Exposed`, `EngineHealthy`, `SeatsPlaced` |
 | `EngineClass` | `Accepted` |
 | `Unit`, `LLMProvider`, `MCPServer`, `Schedule` | `Accepted`, `ResolvedRefs`, `Applied` |
-| `Seat` | `Accepted`, `ResolvedRefs`, `Applied`, and on an Agent seat `Ready` (whether an engine pod holds it) and, once the engine runs it, `Paused` |
+| `Seat` | `Accepted`, `ResolvedRefs`, `Applied`, and on an Agent seat `Ready` (whether an engine pod holds it), once the engine runs it `Paused`, and with `spec.sandbox` in a Company with one `CodeWorkRunnable` (whether its coding agent can run on its sandbox provider; not part of `Ready`) |
 | `Integration` | `Accepted`, `ResolvedRefs`, `Applied`, `Healthy` |
 
 A Company also reports the revision the engine runs, its endpoints and the

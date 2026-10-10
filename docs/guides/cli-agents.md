@@ -294,9 +294,17 @@ A seat with `spec.sandbox` runs code in the company's sandbox with a coding
 agent, `ClaudeCode` or `OpenCode` (`spec.sandbox.codingAgent`, else the
 Company's `spec.sandbox.defaultCodingAgent`, else `ClaudeCode`), on the
 provider at the head of `spec.llm.sandbox`, else of `spec.llm.default`, else
-of the Company's order. That provider is the run's model and sign-in, so the
-pairing has to be one the coding agent can read; the operator refuses the
-Seat with `Applied=False`, naming the field to change, when it is not:
+of the Company's order. That provider is the run's model and sign-in, unless
+the seat's sandbox environment signs the coding agent in (below), so the
+pairing has to be one the coding agent can read. The Seat reports whether it
+is on its `CodeWorkRunnable` condition, saying what the run uses, and naming
+the field to change when it cannot run. Only the first pairing below also holds the company's document
+(`Applied=False`), because Crewlet refuses it on every write; Crewlet applies
+a seat in either of the other two, which runs its turns while Crewlet refuses
+each of its coding runs, so the operator applies it too and the company is
+not held over one seat's code work. `CodeWorkRunnable` does not count towards
+the Seat's `Ready`, and the operator records a Warning event on the Seat each
+time the condition becomes `False` or its reason changes.
 
 - **A `CLIAgent` provider must drive the coding agent's own CLI.** Its model
   is written for its CLI and its sign-in is that CLI's, so Crewlet refuses
@@ -309,7 +317,7 @@ Seat with `Applied=False`, naming the field to change, when it is not:
   OpenCode`.
 - **`ClaudeCode` reads Anthropic's API alone.** On a provider of type
   `OpenAI` or `OpenAICompatible` it can read neither the model nor the key,
-  and Crewlet refuses every coding run (`SandboxModelUnsupported`), unless
+  and Crewlet refuses each coding run (`SandboxModelUnsupported`), unless
   the seat's sandbox environment (`spec.sandbox.env`, its setup steps' `env`,
   or the Company's `spec.sandbox.setup` steps') signs Claude Code in itself,
   with `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`,
@@ -322,8 +330,8 @@ Seat with `Applied=False`, naming the field to change, when it is not:
   does, so a `ClaudeCode` provider signed in by a bundle, with neither
   `CLAUDE_CODE_OAUTH_TOKEN` nor `ANTHROPIC_API_KEY` in the seat's sandbox
   environment, or an `OpenCode` one with no credential-named variable in
-  `cli.env` or the seat's sandbox environment, would have every coding run
-  refused (`SandboxLoginNotPortable`).
+  `cli.env` or the seat's sandbox environment, has each coding run refused
+  (`SandboxLoginNotPortable`).
 
 The operator sees the names of the seat's variables, not their values: a
 variable named above whose Secret holds nothing passes it, and the engine

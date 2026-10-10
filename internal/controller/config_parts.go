@@ -43,8 +43,9 @@ type part struct {
 	unplaceableReason string
 	// unrunnable are why a Seat cannot run on the pods of the pool it is
 	// placed in, which its class admits, because the pods cannot serve what
-	// it runs on, or why its code work cannot run on the provider it names.
-	// Its references resolve; the document is refused all the same.
+	// it runs on, or why its code work runs on a CLIAgent provider of
+	// another CLI. Its references resolve; the document is refused all the
+	// same.
 	unrunnable       []string
 	unrunnableReason string
 	// invalid are the engine's refusals of its part of the document.
@@ -61,6 +62,10 @@ type part struct {
 	// no seat of, whose Paused condition goes.
 	pause     *pauseVerdict
 	pauseGone bool
+	// codeWork is what the render found about a Seat's code work, nil when
+	// Crewlet offers the seat none or none of its sandbox chain resolves;
+	// read only once the reconcile rendered (objectsChecked).
+	codeWork *render.CodeWork
 }
 
 func newPart(obj client.Object) *part {

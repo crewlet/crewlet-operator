@@ -104,11 +104,12 @@ type SeatLLM struct {
 	// the chain's head alone, as its model and its sign-in, so the head must
 	// be a provider the coding agent can read: an Anthropic provider, or for
 	// OpenCode an OpenAI or OpenAICompatible one too, or a CLIAgent provider
-	// of the coding agent's own CLI. The operator refuses the Seat otherwise
-	// (CodingAgentMismatch, SandboxModelUnsupported). Every box of the seat
-	// carries the head's first API key, and under ClaudeCode its baseURL,
-	// unless spec.sandbox.env signs ClaudeCode in itself: give code work a
-	// provider whose key is scoped for it. Crewlet's `sandbox`.
+	// of the coding agent's own CLI. The operator refuses a CLIAgent provider
+	// of another CLI (CodingAgentMismatch), and reports any other head the
+	// coding agent cannot run on in the CodeWorkRunnable condition. Every
+	// box of the seat carries the head's first API key, and under ClaudeCode
+	// its baseURL, unless spec.sandbox.env signs ClaudeCode in itself: give
+	// code work a provider whose key is scoped for it. Crewlet's `sandbox`.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MinItems=1
@@ -661,7 +662,11 @@ type SeatStatus struct {
 	// engine runs) and, on an Agent seat, Ready (an engine node holds the
 	// seat's lease and runs it: LeaseHeld, or Unplaced) and, once the
 	// engine runs it, Paused (whether the engine holds it paused, and
-	// whether that is what spec.paused asks).
+	// whether that is what spec.paused asks), and, on an Agent seat with
+	// spec.sandbox in a Company with spec.sandbox, CodeWorkRunnable (whether
+	// its coding agent can run on the head of its sandbox chain or on the
+	// sign-in the seat's sandbox environment gives it; it does not count
+	// towards Ready, as the seat runs its turns either way).
 	// +optional
 	// +listType=map
 	// +listMapKey=type
@@ -724,6 +729,7 @@ type SeatStatus struct {
 // +kubebuilder:printcolumn:name="Applied",type=string,JSONPath=`.status.conditions[?(@.type=="Applied")].status`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 // +kubebuilder:printcolumn:name="Paused",type=string,JSONPath=`.status.conditions[?(@.type=="Paused")].status`
+// +kubebuilder:printcolumn:name="CodeWork",type=string,JSONPath=`.status.conditions[?(@.type=="CodeWorkRunnable")].status`,priority=1
 // +kubebuilder:printcolumn:name="Pool",type=string,JSONPath=`.status.placement.pool`,priority=1
 // +kubebuilder:printcolumn:name="Node",type=string,JSONPath=`.status.placement.node`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
