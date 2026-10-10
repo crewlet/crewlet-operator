@@ -6,7 +6,7 @@ Each renders one block of Crewlet's `integrations`, and a company has at
 most one per vendor. This guide shows each vendor's object, the credentials
 it takes, what the seats bring of their own, and where the engine wants to
 be told about the vendor. Crewlet's own pages
-([docs/integrations](https://github.com/crewlet/crewlet/tree/main/docs/integrations))
+([Integrations](https://github.com/crewlet/crewlet/blob/main/docs/index.md#integrations))
 describe what each integration does once connected.
 
 Every credential is a Secret reference ([Supplying credentials](credentials.md));
