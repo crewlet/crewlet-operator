@@ -41,9 +41,9 @@ names a provisioned value only while some Integration of its company has
 
 ## Consequences
 
-A minted credential survives every render, restart and upgrade of the
-operator, because its name is a pure function of the seat's handle (which
-never changes) and of a name the Seat states, as `StoreName` is of a Secret
+A minted credential survives every render and restart of the operator,
+because its name is a pure function of the seat's handle (which never
+changes) and of a name the Seat states, as `StoreName` is of a Secret
 reference. One provisioned name is one value wherever a seat names it, which
 is how a seat's GitLab tool server and its sandbox share one token. The cost
 is that `PROVISIONED_` is reserved in the same way `K8S_` is, and that the

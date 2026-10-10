@@ -57,10 +57,11 @@ var owned = regexp.MustCompile(`^` + Prefix + `[A-Z0-9]+(?:_[A-Z0-9]+)*_[A-Z2-7]
 // Secret name in two namespaces — still name different entries.
 //
 // The name is a pure function of k, so a rendered document depends on
-// nothing but its input, and it never changes for a given reference across
-// operator restarts or versions without a breaking-change note: renaming
-// every entry would make each engine resolve references to entries that the
-// next sync has only just written.
+// nothing but its input, and every render, the sync and every operator
+// process name the same entry for a reference. A name that differed between
+// them would rename every entry: every value would be pushed again under the
+// new names, and each engine would resolve references to entries the next
+// sync has only just written.
 func StoreName(k secretref.Key) string {
 	var b strings.Builder
 	b.Grow(MaxStoreNameLength)
@@ -147,8 +148,10 @@ const MaxProvisionedNameLength = len(ProvisionedPrefix) + maxSecretPart + 1 + ma
 // name, and a hash of both, so two seats, or two values of one seat, never
 // share an entry (handles a-b and a--b read the same once sanitised), and it
 // is a pure function of its arguments, so every render names the same entry
-// and a minted credential survives every reconcile, restart and upgrade of the
-// operator. Owns refuses every such name.
+// and a minted credential survives every render and restart of the operator:
+// a different name would point every seat at an entry the engine never
+// minted into, and the seat would lose its minted credential, such as a
+// GitLab token. Owns refuses every such name.
 func ProvisionedName(handle, name string) string {
 	var b strings.Builder
 	b.Grow(MaxProvisionedNameLength)

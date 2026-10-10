@@ -30,13 +30,14 @@ reference (namespace, Secret, key), `K8S_` followed by the readable Secret
 and key and a hash of the whole reference. `render.Input.StoreName` is that
 function in every caller outside tests. The operator owns exactly the names
 `secretsync.Owns` accepts, which is the shape `StoreName` produces, and
-deletes no other entry. A change to `StoreName` that renames an existing
-entry is a breaking change and is called out as one.
+deletes no other entry. A change to `StoreName` renames every entry: every
+value is pushed again under the new names, and a document rendered before
+the sync resolves to entries not yet written.
 
 ## Consequences
 
 Renders are reproducible: the same objects give the same document on every
-operator replica and version, which is what lets the reconciler compare the
+operator replica and process, which is what lets the reconciler compare the
 rendered document with the running one. The cost is that the `K8S_` prefix is
 reserved: an entry a person writes in that shape is deleted once no
 reference produces it. The obvious alternative, names the operator allocates

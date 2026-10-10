@@ -74,7 +74,9 @@ func TestStoreNameIsInTheStoreGrammar(t *testing.T) {
 }
 
 // TestStoreNameIsDeterministic: the rendered document and the sync compute
-// the name separately and must agree, across processes and versions.
+// the name separately, in any operator process, and must agree. A golden
+// value catches a name that differs between processes, such as one seeded per
+// process, which calling StoreName twice in one process cannot see.
 func TestStoreNameIsDeterministic(t *testing.T) {
 	k := secretref.Key{Namespace: nimbusNS, Name: slackSecret, Key: botTokenKey}
 	// A golden value: changing it renames every entry in every engine.

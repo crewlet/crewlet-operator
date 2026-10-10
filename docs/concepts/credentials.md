@@ -273,8 +273,9 @@ PROVISIONED_<HANDLE>_<NAME>_<HASH>
 The seat's handle and the provisioned `name` are written as above, and the
 hash is twelve base32 characters of the SHA-256 of both, so two seats, or
 two values of one seat, never share an entry. A seat keeps its handle for
-life, so its provisioned credentials keep their entries across every
-reconcile, restart and upgrade of the operator.
+life, so its provisioned credentials keep their entries across every render,
+reconcile and restart of the operator; another name would point the seat at
+an entry the engine never minted into, which it would then mint again.
 
 The engine's listing carries names, never values, so to know which values
 changed the operator keeps a fingerprint of each value it wrote, in a Secret
