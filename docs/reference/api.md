@@ -550,7 +550,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `version` _string_ | version replaces the tag of the class's engine image, for example<br />v0.14.3. It is honoured only when the class sets<br />engine.allowVersionOverride; the operator refuses a version older than<br />the one the company's data was last written by. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9_][A-Za-z0-9_.-]\{0,127\}$` <br />Optional: \{\} <br /> |
+| `version` _string_ | version replaces the tag of the class's engine image, for example<br />v1.2.4. It is honoured only when the class sets<br />engine.allowVersionOverride; the operator refuses a version older than<br />the one the company's data was last written by. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9_][A-Za-z0-9_.-]\{0,127\}$` <br />Optional: \{\} <br /> |
 | `env` _[EnvVar](#envvar) array_ | env adds environment variables to the engine container, for platform<br />wiring the engine reads from its environment. They are merged over the<br />class's podTemplate.spec.env by name: a variable here replaces the<br />class's variable of the same name.<br />Names starting with CREWLET_ or OTEL_ are the operator's own.<br />ANTHROPIC_API_KEY and OPENAI_API_KEY are refused too: Crewlet reads them<br />as the key of a model or embeddings provider that names none, so a<br />value here would be a credential outside the engine's secret store;<br />give the provider its key with apiKeySecretRefs or apiKeySecretRef. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 
 
@@ -1197,7 +1197,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `image` _string_ | image is the Crewlet engine image, by tag or by digest, for example<br />ghcr.io/crewlet/crewlet:v0.14.2. There is no default: the platform<br />decides which build its tenants run. A Company's spec.runtime.version<br />replaces the tag, so an image pinned by digest cannot be combined with<br />allowVersionOverride. |  | MaxLength: 512 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `image` _string_ | image is the Crewlet engine image, by tag or by digest, for example<br />registry.example.com/crewlet:v1.2.3. There is no default: the platform<br />decides which build its tenants run. A Company's spec.runtime.version<br />replaces the tag, so an image pinned by digest cannot be combined with<br />allowVersionOverride. |  | MaxLength: 512 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `imagePullPolicy` _[PullPolicy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#pullpolicy-v1-core)_ | imagePullPolicy is the pull policy of the engine container. Unset<br />takes the Kubernetes default for the image reference. |  | Enum: [Always IfNotPresent Never] <br />Optional: \{\} <br /> |
 | `imagePullSecrets` _[LocalObjectReference](#localobjectreference) array_ | imagePullSecrets name Secrets in each Company's namespace that pull<br />the image. They are referenced, not copied: the platform puts them<br />into the tenant namespaces it creates. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `allowVersionOverride` _boolean_ | allowVersionOverride lets a Company of this class choose its own engine<br />version with spec.runtime.version. Off by default: the class usually<br />decides which version its tenants run. |  | Optional: \{\} <br /> |
@@ -1218,7 +1218,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `image` _string_ | image is the engine image the data pods last ran on, recorded once<br />every data pod ran it and was ready. A rollout that has not finished<br />leaves the previous image here. |  | MaxLength: 512 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `version` _string_ | version is the tag of that image, such as v0.14.2; unset for an image<br />pinned by digest alone. The engine migrates its data forward only, so<br />the operator refuses to roll the data pods to an image whose tag is an<br />older semantic version than this one (RuntimeReady=False,<br />DowngradeRefused). The operator also records it on each data volume<br />claim (the annotation crewlet.ai/engine-version), which keeps the floor<br />when this status is lost. A version that never became ready is never<br />recorded, so a rollout that failed can still be taken back. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `version` _string_ | version is the tag of that image, such as v1.2.3; unset for an image<br />pinned by digest alone. The engine migrates its data forward only, so<br />the operator refuses to roll the data pods to an image whose tag is an<br />older semantic version than this one (RuntimeReady=False,<br />DowngradeRefused). The operator also records it on each data volume<br />claim (the annotation crewlet.ai/engine-version), which keeps the floor<br />when this status is lost. A version that never became ready is never<br />recorded, so a rollout that failed can still be taken back. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### EnvVar

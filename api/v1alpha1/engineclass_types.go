@@ -16,7 +16,7 @@ const DefaultEngineClassAnnotation = "crewlet.ai/is-default-class"
 // +kubebuilder:validation:XValidation:rule="!has(self.allowVersionOverride) || !self.allowVersionOverride || !self.image.contains('@')",message="allowVersionOverride needs an image by tag: a Company's spec.runtime.version replaces the tag, and an image pinned by digest has none"
 type EngineSettings struct {
 	// image is the Crewlet engine image, by tag or by digest, for example
-	// ghcr.io/crewlet/crewlet:v0.14.2. There is no default: the platform
+	// registry.example.com/crewlet:v1.2.3. There is no default: the platform
 	// decides which build its tenants run. A Company's spec.runtime.version
 	// replaces the tag, so an image pinned by digest cannot be combined with
 	// allowVersionOverride.

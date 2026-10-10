@@ -272,7 +272,7 @@ spec:
                   image:
                     description: |-
                       image is the Crewlet engine image, by tag or by digest, for example
-                      ghcr.io/crewlet/crewlet:v0.14.2. There is no default: the platform
+                      registry.example.com/crewlet:v1.2.3. There is no default: the platform
                       decides which build its tenants run. A Company's spec.runtime.version
                       replaces the tag, so an image pinned by digest cannot be combined with
                       allowVersionOverride.

@@ -619,7 +619,7 @@ type CompanyExposure struct {
 // +kubebuilder:validation:MinProperties=1
 type CompanyRuntime struct {
 	// version replaces the tag of the class's engine image, for example
-	// v0.14.3. It is honoured only when the class sets
+	// v1.2.4. It is honoured only when the class sets
 	// engine.allowVersionOverride; the operator refuses a version older than
 	// the one the company's data was last written by.
 	// +optional
@@ -894,7 +894,7 @@ type EngineStatus struct {
 	// +kubebuilder:validation:MaxLength=512
 	Image string `json:"image,omitempty"`
 
-	// version is the tag of that image, such as v0.14.2; unset for an image
+	// version is the tag of that image, such as v1.2.3; unset for an image
 	// pinned by digest alone. The engine migrates its data forward only, so
 	// the operator refuses to roll the data pods to an image whose tag is an
 	// older semantic version than this one (RuntimeReady=False,

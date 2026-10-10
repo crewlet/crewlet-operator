@@ -75,7 +75,7 @@ func fullCompany(c *v1.Company) {
 	}
 	c.Spec.Exposure.PublicBaseURL = "https://hooks.nimbus.example"
 	c.Spec.Runtime = v1.CompanyRuntime{
-		Version: "v0.14.3",
+		Version: "v1.2.4",
 		Env:     []v1.EnvVar{{Name: platformURLVar, Value: new("https://platform.example")}},
 	}
 	c.Spec.Suspend = new(true)
