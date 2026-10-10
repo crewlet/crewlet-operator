@@ -104,6 +104,10 @@ webhooks are routed to ([Exposure](exposure.md)), which Crewlet added at
 7670e6592 (`v0.1.1-0.20261009103854-7670e6592e66`): on an older engine every
 data pod restarts in a loop, its log ending in
 `api.public: unknown field: "public" is not a setting`.
+A `CLIAgent` provider of `CursorAgent` on `auth.mode: APIKey` needs crewlet
+a0dd86d94 (`v0.1.1-0.20261010051424-a0dd86d94fc5`): an older engine gives
+Cursor no key, so every call it makes is refused as unauthenticated
+([A metered key](cli-agents.md#a-metered-key)).
 
 ## Values worth setting
 
@@ -254,3 +258,29 @@ the policy ([From outside the
 operator](exposure.md#from-outside-the-operator)). A load balancer that
 health-checks the port it routes to needs its check moved to port 8080
 ([Load balancer health checks](exposure.md#load-balancer-health-checks)).
+
+The first release that admits `CursorAgent` on `auth.mode: APIKey` needs
+crewlet a0dd86d94 or later on every company that runs such a provider; it
+restarts nothing, as it changes no pod, and the providers it newly admits
+are refused before it, so none runs on an older engine until you write one.
+That engine refuses, in every revision written to it, a `CLIAgent` provider
+whose `cli.env` sets the CLI's own token or key variable, which the release
+before it admitted: `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` for
+`ClaudeCode`, `OPENAI_API_KEY` for `Codex`, `GEMINI_API_KEY` for
+`GeminiCLI`, `DASHSCOPE_API_KEY` for `QwenCode`, `CURSOR_API_KEY` for
+`CursorAgent`, `GITHUB_TOKEN` for `Copilot`, `XAI_API_KEY` for `Grok` and
+`META_API_KEY` for `MuseCode`. So before moving any EngineClass's
+`engine.image` to it, find such providers and take the entry out of
+`cli.env`: give a token as `auth.tokenSecretRef` and a key as
+`apiKeySecretRefs` with `auth.mode: APIKey`, except `CursorAgent`'s, which
+the release before refuses `auth.mode: APIKey`: keep its login in the
+credential bundle until the operator is upgraded, then move the key to
+`auth.mode: APIKey`. A provider left as it was keeps the last revision the
+company applied running, and every change to the company after the roll is
+refused whole, reported as `ConfigApplied=False` `Invalid` on the Company
+and `Applied=False` `Invalid` on the provider. The release refuses the
+shape on the object too, and a second one: a Hermes on `auth.mode:
+Subscription` whose `cli.env` holds no credential-named variable, which
+signs it in to nothing ([Signing in](cli-agents.md#signing-in)). The API
+server keeps such an object as it is stored, and refuses a change to its
+`spec.cli` until it is fixed.

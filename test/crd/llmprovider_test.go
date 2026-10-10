@@ -1,6 +1,10 @@
 package crd_test
 
 import (
+	"fmt"
+	"maps"
+	"slices"
+	"strings"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -123,9 +127,11 @@ const (
 	msgCLIToken       = "auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode"
 	msgCLIKeyAgent    = "auth mode APIKey takes a CLI Crewlet hands a key to"
 	msgCLITwoLogins   = "tokenSecretRef and credentialBundleSecretRef are two logins"
-	msgCLIRemoteLogin = "a Subscription login reaches an Agent-mode run in a remote sandbox only as a headless token"
+	msgCLIRemoteLogin = "a Subscription login reaches an Agent-mode run in a remote sandbox only as a headless token: " +
+		"give ClaudeCode auth.tokenSecretRef, or use auth mode APIKey"
 	msgCLINoLogin     = "a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef"
 	msgCLILoginFields = "tokenSecretRef and credentialBundleSecretRef sign in to a subscription"
+	msgCLIOwnVariable = "env may not set the CLI's own token or key variable"
 )
 
 func TestCLIAgentProviderValidation(t *testing.T) {
@@ -143,11 +149,12 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 	}
 	agentMode := func(p *v1.LLMProvider) { p.Spec.CLI.Mode = v1.CLIAgentModeAgent }
 	// keyInEnv signs agent in to a subscription with no login of its own,
-	// its model provider's key in env: the route Crewlet's Hermes profile
-	// documents, as it names no key variable for the engine to fill.
+	// its model provider's key in env: the route Crewlet's Hermes, Pi and
+	// OpenCode profiles document, as they name no key variable for the
+	// engine to fill.
 	keyInEnv := func(agent v1.CLIAgentName, key string) func(*v1.LLMProvider) {
 		return func(p *v1.LLMProvider) {
-			p.Spec.Model = "anthropic/claude-sonnet-4.5"
+			p.Spec.Model = "anthropic/claude-sonnet-5"
 			p.Spec.CLI.Agent = agent
 			p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription}
 			p.Spec.CLI.Env = []v1.SecretEnvVar{{Name: key, ValueFrom: fromSecret("model-keys", "key")}}
@@ -163,7 +170,7 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 				c.Mode = v1.CLIAgentModeAgent
 				c.RunIn = v1.CLIAgentRunInE2B
 				c.Auth.Mode = v1.CLIAgentAuthSubscription
-				c.Env = []v1.SecretEnvVar{{Name: "HTTPS_PROXY", ValueFrom: fromSecret("claude", "proxy")}}
+				c.Env = []v1.SecretEnvVar{{Name: envProxy, ValueFrom: fromSecret("claude", "proxy")}}
 				c.TimeoutSeconds = 900
 				c.MaxConcurrent = 2
 				c.LoginName = "claude"
@@ -193,13 +200,33 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			},
 		},
 		{
-			// OpenCode has a sandbox runner, and its profile names no
-			// variable a key or a token would reach the remote box in.
-			name: "OpenCode in mode Agent is refused",
+			// Crewlet runs OpenCode in its sandbox, but names the run's
+			// model to it as anthropic/<model> while every text call on
+			// the provider passes the model as written: no one model
+			// serves both, whichever key signs it in.
+			name: "OpenCode in mode Agent on its model provider's key in env is refused",
+			mutate: func(p *v1.LLMProvider) {
+				keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey)(p)
+				agentMode(p)
+			},
+			want: msgCLIAgentRunner,
+		},
+		{
+			name: "OpenCode in mode Agent on an exported login is refused",
 			mutate: func(p *v1.LLMProvider) {
 				agentMode(p)
 				p.Spec.CLI.Agent = v1.CLIAgentOpenCode
 				p.Spec.CLI.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("opencode", "bundle")}
+			},
+			want: msgCLIAgentRunner,
+		},
+		{
+			// Hermes signs in through env too, and has no sandbox
+			// runner.
+			name: "Hermes in mode Agent is refused",
+			mutate: func(p *v1.LLMProvider) {
+				keyInEnv(v1.CLIAgentHermes, "OPENROUTER_API_KEY")(p)
+				agentMode(p)
 			},
 			want: msgCLIAgentRunner,
 		},
@@ -209,6 +236,17 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 				p.Spec.CLI.Agent = v1.CLIAgentCodex
 			},
 			want: msgCLIToken,
+		},
+		{
+			// Crewlet's cursor-agent profile names CURSOR_API_KEY, a
+			// Cursor account's key.
+			name: "CursorAgent on a metered key is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.Model = "auto"
+				p.Spec.CLI.Agent = v1.CLIAgentCursorAgent
+				p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}
+				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
+			},
 		},
 		{
 			name: "auth mode APIKey for a CLI with no key variable is refused",
@@ -305,8 +343,17 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			want:   "spec.cli.auth: Invalid value",
 		},
 		{
-			name:   "Hermes on its model provider's key in env is accepted",
-			mutate: keyInEnv(v1.CLIAgentHermes, "OPENROUTER_API_KEY"),
+			// Crewlet compares a name's parts ignoring case.
+			name:   "Pi on a key in env under a lower-case name is accepted",
+			mutate: keyInEnv(v1.CLIAgentPi, "openrouter_api_key"),
+		},
+		{
+			// A name whose parts are KEY or TOKEN only inside a longer
+			// word holds no credential to Crewlet, which reports such a
+			// CLI signed in to nothing.
+			name:   "Hermes on a count of model tokens in env is refused",
+			mutate: keyInEnv(v1.CLIAgentHermes, "HERMES_MAX_TOKENS"),
+			want:   msgCLINoLogin,
 		},
 		{
 			// Two sign-ins, which Hermes settles itself: a variable the
@@ -354,14 +401,26 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			want:   `Unsupported value: "Direct"`,
 		},
 	}
-	// The exception is Hermes's alone, so every other CLI the API offers is
-	// refused a key in env, read from the installed CRD's enum so a CLI added
-	// later is held to the rule without being listed here. A CLI whose
-	// profile names a key variable (Codex's OPENAI_API_KEY) has it dropped
-	// under Subscription, so the key would never reach it; one whose profile
-	// names none is still not Hermes, whose profile documents this route.
+	// The exception is the env sign-in CLIs' alone, so every other CLI the
+	// API offers is refused a key in env, read from the installed CRD's enum
+	// so a CLI added later is held to the rule without being listed here. A
+	// CLI whose profile names a key variable (Codex's OPENAI_API_KEY) has it
+	// dropped under Subscription, so the key would never reach it; one whose
+	// profile names none (KimiCode) reads a key only from its own files.
 	for _, agent := range enumOf(t, "llmproviders.crewlet.ai", "spec", "cli", "agent") {
-		if agent == string(v1.CLIAgentHermes) {
+		if slices.Contains(envSignIn, v1.CLIAgentName(agent)) {
+			cases = append(cases,
+				createCase[*v1.LLMProvider]{
+					name:   agent + " on its model provider's key in env is accepted",
+					mutate: keyInEnv(v1.CLIAgentName(agent), "OPENROUTER_API_KEY"),
+				},
+				createCase[*v1.LLMProvider]{
+					// A proxy is configuration, and signs the CLI in
+					// to nothing.
+					name:   agent + " on a proxy alone in env is refused",
+					mutate: keyInEnv(v1.CLIAgentName(agent), envProxy),
+					want:   msgCLINoLogin,
+				})
 			continue
 		}
 		cases = append(cases, createCase[*v1.LLMProvider]{
@@ -370,30 +429,79 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			want:   msgCLINoLogin,
 		})
 	}
+	// Crewlet's auth owns the variables a profile names for a token and a
+	// key, and refuses each in env, in every auth mode: whether a value
+	// there reached the CLI would turn on the mode and on what else holds a
+	// credential. Each CLI is signed in some other way the API admits, a
+	// bundle beside a token variable and its own key beside a key variable,
+	// so the variable is the only fault.
+	bundle := v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("cli", "bundle")}
+	for _, agent := range slices.Sorted(maps.Keys(cliVariables)) {
+		own := cliVariables[agent]
+		for _, variable := range []string{own.headless, own.key} {
+			if variable == "" {
+				continue
+			}
+			cases = append(cases, createCase[*v1.LLMProvider]{
+				name: fmt.Sprintf("%s with its own %s in env is refused", agent, variable),
+				mutate: func(p *v1.LLMProvider) {
+					p.Spec.CLI.Agent = agent
+					p.Spec.CLI.Auth = bundle
+					if variable == own.key {
+						p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}
+						p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
+					}
+					p.Spec.CLI.Env = []v1.SecretEnvVar{{Name: variable, ValueFrom: fromSecret("cli", "value")}}
+				},
+				want: msgCLIOwnVariable,
+			})
+		}
+	}
+	cases = append(cases,
+		createCase[*v1.LLMProvider]{
+			// The rule sits on cli, and reports the field to change.
+			name: "a CLI's own variable in env is reported at env",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.CLI.Env = []v1.SecretEnvVar{{Name: envAnthropicKey, ValueFrom: fromSecret("cli", "value")}}
+			},
+			want: "spec.cli.env: Invalid value",
+		},
+		createCase[*v1.LLMProvider]{
+			// Another CLI's variable is that CLI's business: OpenCode
+			// reads ANTHROPIC_API_KEY as its model provider's key.
+			name:   "another CLI's key variable in env is accepted",
+			mutate: keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey),
+		},
+	)
 	runCreateCases(t, cliProvider, cases)
 }
 
-// TestCLIAgentHermesEmptyEnv proves an explicit empty env signs Hermes in to
-// nothing: has() is true of a list written as [], which only an unstructured
-// object can send, since the typed client drops an empty list.
-func TestCLIAgentHermesEmptyEnv(t *testing.T) {
+// TestCLIAgentEnvSignInEmptyEnv proves an explicit empty env signs an env
+// sign-in CLI in to nothing: has() is true of a list written as [], which
+// only an unstructured object can send, since the typed client drops an
+// empty list.
+func TestCLIAgentEnvSignInEmptyEnv(t *testing.T) {
 	namespace := newNamespace(t)
-	p := llmProvider(namespace, "hermes")
-	p.Spec.Type = v1.LLMProviderCLIAgent
-	p.Spec.Model = "anthropic/claude-sonnet-4.5"
-	p.Spec.APIKeySecretRefs = nil
-	p.Spec.CLI = v1.CLIAgentSettings{
-		Agent: v1.CLIAgentHermes,
-		Auth:  v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription},
+	for _, agent := range envSignIn {
+		t.Run(string(agent), func(t *testing.T) {
+			p := llmProvider(namespace, strings.ToLower(string(agent)))
+			p.Spec.Type = v1.LLMProviderCLIAgent
+			p.Spec.Model = "anthropic/claude-sonnet-5"
+			p.Spec.APIKeySecretRefs = nil
+			p.Spec.CLI = v1.CLIAgentSettings{
+				Agent: agent,
+				Auth:  v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription},
+			}
+			content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			obj := &unstructured.Unstructured{Object: content}
+			obj.SetGroupVersionKind(v1.GroupVersion.WithKind("LLMProvider"))
+			if err := unstructured.SetNestedSlice(obj.Object, []any{}, "spec", "cli", "env"); err != nil {
+				t.Fatal(err)
+			}
+			expect(t, k8sClient.Create(ctx, obj), msgCLINoLogin)
+		})
 	}
-	content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	obj := &unstructured.Unstructured{Object: content}
-	obj.SetGroupVersionKind(v1.GroupVersion.WithKind("LLMProvider"))
-	if err := unstructured.SetNestedSlice(obj.Object, []any{}, "spec", "cli", "env"); err != nil {
-		t.Fatal(err)
-	}
-	expect(t, k8sClient.Create(ctx, obj), msgCLINoLogin)
 }

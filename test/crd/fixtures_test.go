@@ -25,6 +25,38 @@ const (
 	poolName      = "general"
 )
 
+// Environment variables the CLIAgent cases name: a model provider's key
+// some CLI's profile reads, and a proxy, which is no credential.
+const (
+	envAnthropicKey = "ANTHROPIC_API_KEY"
+	envOpenAIKey    = "OPENAI_API_KEY"
+	envProxy        = "HTTPS_PROXY"
+)
+
+// cliVariable is the variable of the headless token and of the key Crewlet's
+// profile for a CLI names (token_env, api_key_env), empty where it names none.
+type cliVariable struct{ headless, key string }
+
+// cliVariables are the variables of every CLI whose profile names one at the
+// pinned engine, the ones the LLMProvider API's own-variable rule lists.
+// TestCLIAgentSignInFollowsTheEngine reads them from the engine and fails
+// while this copy, which the rule's cases are built from, differs.
+var cliVariables = map[v1.CLIAgentName]cliVariable{
+	v1.CLIAgentClaudeCode:  {headless: "CLAUDE_CODE_OAUTH_TOKEN", key: envAnthropicKey},
+	v1.CLIAgentCodex:       {key: envOpenAIKey},
+	v1.CLIAgentGeminiCLI:   {key: "GEMINI_API_KEY"},
+	v1.CLIAgentQwenCode:    {key: "DASHSCOPE_API_KEY"},
+	v1.CLIAgentCursorAgent: {key: "CURSOR_API_KEY"},
+	v1.CLIAgentCopilot:     {key: "GITHUB_TOKEN"},
+	v1.CLIAgentGrok:        {key: "XAI_API_KEY"},
+	v1.CLIAgentMuseCode:    {key: "META_API_KEY"},
+}
+
+// envSignIn are the CLIs Crewlet's profiles mark env_sign_in at the pinned
+// engine: a credential-named variable in env signs them in.
+// TestCLIAgentSignInFollowsTheEngine holds it to the engine too.
+var envSignIn = []v1.CLIAgentName{v1.CLIAgentHermes, v1.CLIAgentPi, v1.CLIAgentOpenCode}
+
 // The kinds the tests that apply manifests treat specially.
 const (
 	kindEngineClass = "EngineClass"

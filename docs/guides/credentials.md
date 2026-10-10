@@ -186,7 +186,8 @@ says how it is named.
 A `CLIAgent` provider signs its CLI in with a headless subscription token or
 with a credential bundle `crewlet llm export` wrote, each a Secret key; with
 `auth.mode: APIKey`, with the provider's `apiKeySecretRefs` key; or, for
-Hermes, with its model provider's key in `cli.env`:
+Hermes, Pi and OpenCode, with its model provider's key in `cli.env`, which
+may never set the CLI's own token or key variable, since `auth` owns it:
 
 ```yaml
 spec:                       # LLMProvider claude-code

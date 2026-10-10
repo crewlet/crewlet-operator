@@ -25,6 +25,16 @@ providers:
         state_dir: /var/lib/crewlet/llm-cli/codex
       model: gpt-5-codex
       type: cli-agent
+    cursor:
+      api_keys:
+      - ${K8S_CURSOR_API_KEY_UAPO7C3S3GGL}
+      cli:
+        agent: cursor-agent
+        auth:
+          mode: api-key
+        state_dir: /var/lib/crewlet/llm-cli/cursor
+      model: auto
+      type: cli-agent
     hermes:
       cli:
         agent: hermes
@@ -33,12 +43,35 @@ providers:
         env:
           OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
         state_dir: /var/lib/crewlet/llm-cli/hermes
-      model: anthropic/claude-sonnet-4.5
+      model: anthropic/claude-sonnet-5
+      type: cli-agent
+    opencode:
+      cli:
+        agent: opencode
+        auth:
+          mode: subscription
+        env:
+          ANTHROPIC_API_KEY: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        state_dir: /var/lib/crewlet/llm-cli/opencode
+      model: anthropic/claude-sonnet-5
+      type: cli-agent
+    pi:
+      cli:
+        agent: pi
+        auth:
+          mode: subscription
+        env:
+          OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
+        state_dir: /var/lib/crewlet/llm-cli/pi
+      model: openrouter/anthropic/claude-sonnet-5
       type: cli-agent
   llm_order:
   - claude-agent
   - codex
+  - cursor
   - hermes
+  - opencode
+  - pi
   sandbox:
     default_run_in: e2b
     e2b:

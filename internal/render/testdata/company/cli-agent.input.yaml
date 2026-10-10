@@ -3,9 +3,10 @@
 # E2B sandbox, beside Codex on an exported login as a text model behind the
 # engine's tool loop, the reviewer's, and Hermes, the delegated workers',
 # signed in with no login of its own: its model provider's key in cli.env,
-# a ${NAME} Crewlet passes to the Hermes process untouched. Agent mode calls
-# the seat's tools back through the company's public address, so the case is
-# exposed.
+# a ${NAME} Crewlet passes to the Hermes process untouched. Pi and OpenCode
+# sign in the same way, and Cursor on a Cursor account's metered key in
+# CURSOR_API_KEY. Agent mode calls the seat's tools back through the
+# company's public address, so the case is exposed.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -65,7 +66,7 @@ spec:
   companyRef:
     name: forge
   type: CLIAgent
-  model: anthropic/claude-sonnet-4.5
+  model: anthropic/claude-sonnet-5
   cli:
     agent: Hermes
     auth:
@@ -75,6 +76,63 @@ spec:
         valueFrom:
           secretKeyRef:
             name: openrouter
+            key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: pi
+spec:
+  companyRef:
+    name: forge
+  type: CLIAgent
+  model: openrouter/anthropic/claude-sonnet-5
+  cli:
+    agent: Pi
+    auth:
+      mode: Subscription
+    env:
+      - name: OPENROUTER_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: openrouter
+            key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: cursor
+spec:
+  companyRef:
+    name: forge
+  type: CLIAgent
+  model: auto
+  apiKeySecretRefs:
+    - name: cursor
+      key: apiKey
+  cli:
+    agent: CursorAgent
+    auth:
+      mode: APIKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: opencode
+spec:
+  companyRef:
+    name: forge
+  type: CLIAgent
+  model: anthropic/claude-sonnet-5
+  cli:
+    agent: OpenCode
+    auth:
+      mode: Subscription
+    env:
+      - name: ANTHROPIC_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: anthropic
             key: apiKey
 ---
 apiVersion: crewlet.ai/v1alpha1

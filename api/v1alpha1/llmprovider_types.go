@@ -99,11 +99,13 @@ type CLIAgentAuthMode string
 // The CLI agent authentication modes.
 const (
 	// CLIAgentAuthSubscription signs the CLI in to a subscription with
-	// tokenSecretRef or credentialBundleSecretRef, or signs Hermes in with
-	// its model provider's key in the cli block's env.
+	// tokenSecretRef or credentialBundleSecretRef, or signs Hermes, Pi or
+	// OpenCode in with its model provider's key in the cli block's env.
 	CLIAgentAuthSubscription CLIAgentAuthMode = "Subscription"
 	// CLIAgentAuthAPIKey gives the CLI the provider's apiKeySecretRefs
-	// key, billing the metered account.
+	// key, in the key variable Crewlet's profile for it names, billing the
+	// metered account. CursorAgent's key is a Cursor account's API key
+	// (CURSOR_API_KEY), not a model provider's.
 	CLIAgentAuthAPIKey CLIAgentAuthMode = "APIKey"
 )
 
@@ -122,22 +124,26 @@ const (
 // between its environment and its own files, which nothing here can see.
 //
 // Crewlet hands a CLI a token or a key only through the variable its profile
-// names, and drops one for a CLI whose profile names none, which would leave
-// the CLI signed in to nothing: so CLIAgentSettings holds tokenSecretRef to
-// the CLIs with a token variable and mode APIKey to the CLIs with a key
-// variable.
+// names, and refuses one for a CLI whose profile names none, since it would
+// reach nothing: so CLIAgentSettings holds tokenSecretRef to the CLIs with a
+// token variable and mode APIKey to the CLIs with a key variable.
 //
-// Hermes is the one CLI a Subscription provider may sign in with neither:
-// it fronts many model providers, each with a key variable of its own, so
-// Crewlet's profile for it names none, and it documents the provider's key
-// in the cli block's env as Hermes's metered sign-in. Under Subscription
-// Crewlet drops only the key variable a profile names, so that env reaches
-// the Hermes process untouched. Which variable is a key is Hermes's to
-// know, so the API asks only that env name one; a Hermes with neither a
-// login nor env is signed in to nothing, and refused. Every other CLI keeps
-// to a token or a bundle: a CLI with a key variable has it dropped from a
-// Subscription login's environment, and takes its key through mode APIKey.
-// The rule is CLIAgentSettings's, which sees the agent and env beside auth.
+// Hermes, Pi and OpenCode may sign in to a Subscription with neither: each
+// fronts many model providers and reads each provider's key from that
+// provider's own variable, so Crewlet's profile for it names no key variable
+// and marks it as signing in through its environment (env_sign_in), and
+// Crewlet documents the provider's key in the cli block's env as its metered
+// sign-in, and hands that env to the CLI untouched. Crewlet counts an entry of
+// env as a sign-in only when its name says it holds a credential: one of
+// its parts between underscores is, in any case, KEY, KEYS, APIKEY,
+// ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL,
+// CREDENTIALS, AUTH, OAUTH or PAT (cliprofile.IsCredentialName). So
+// OPENROUTER_API_KEY signs such a CLI in and HTTPS_PROXY or
+// HERMES_MAX_TOKENS does not, and one whose env holds no such name is
+// signed in to nothing, and refused. Every other CLI keeps to a token or a
+// bundle: one with a key variable takes its key through mode APIKey, and
+// Crewlet refuses that variable in env, which auth owns. The rule is
+// CLIAgentSettings's, which sees the agent and env beside auth.
 // +kubebuilder:validation:XValidation:rule="!(has(self.mode) && self.mode != 'Subscription') || (!has(self.tokenSecretRef) && !has(self.credentialBundleSecretRef))",message="tokenSecretRef and credentialBundleSecretRef sign in to a subscription: they apply to mode Subscription only"
 // +kubebuilder:validation:XValidation:rule="!has(self.tokenSecretRef) || !has(self.credentialBundleSecretRef)",message="tokenSecretRef and credentialBundleSecretRef are two logins, and the CLI is given one: keep the headless token, which never needs refreshing, or the bundle where the CLI mints no token"
 // +kubebuilder:validation:MinProperties=1
@@ -168,11 +174,28 @@ type CLIAgentAuth struct {
 // engine's with the CLI installed (docs/guides/cli-agents.md). Its login, and
 // the per-seat homes the CLI keeps, are on the data volume, so a restart or a
 // new pod keeps them.
+//
+// Its rules hold every credential to a variable Crewlet's profile for the
+// CLI reads, as Crewlet's own admission does (providers.llm.*.cli): the
+// engine refuses a write that names a credential its CLI would never be
+// given, so the API refuses it on the object instead. The lists of CLIs the
+// rules name are those whose profiles set token_env, api_key_env or
+// env_sign_in at the engine version the operator is built against; a test
+// holds them to that engine's own verdict.
+//
+// Mode Agent runs ClaudeCode alone. Crewlet has a sandbox runner for
+// OpenCode too, but the engine the operator is built against names an
+// OpenCode run's model to it as anthropic/<model>, while every other phase
+// on the same provider (the reviewer, a delegated worker, the summariser) is
+// a text call that passes the model as written, and OpenCode reads a model
+// as <provider>/<model>: no one model serves both, so such a provider would
+// fail one of them at run time.
 // +kubebuilder:validation:XValidation:rule="!has(self.runIn) || (has(self.mode) && self.mode == 'Agent')",message="runIn applies to mode Agent only: in mode Text the CLI is a process in the engine's pod"
-// +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'Agent' || self.agent == 'ClaudeCode'",message="mode Agent runs ClaudeCode only: of the two CLIs the engine has a sandbox runner for, ClaudeCode and OpenCode, Crewlet's opencode profile names no credential variable, so a run in the remote sandbox (E2B, the only runIn) cannot authenticate"
-// +kubebuilder:validation:XValidation:rule="!has(self.auth) || (has(self.auth.mode) && self.auth.mode != 'Subscription') || has(self.auth.tokenSecretRef) || has(self.auth.credentialBundleSecretRef) || (self.agent == 'Hermes' && has(self.env) && size(self.env) > 0)",message="a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef: a pod has no terminal to log in at. Hermes alone may sign in with its model provider's key in env instead (such as OPENROUTER_API_KEY), which Crewlet hands it untouched. A CLI with a key variable takes its key through auth mode APIKey, as Crewlet drops that variable from a Subscription login",fieldPath=".auth"
-// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.tokenSecretRef) || self.agent == 'ClaudeCode'",message="auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode (CLAUDE_CODE_OAUTH_TOKEN): its profile for every other CLI names no token variable and drops it. Sign that CLI in with auth.credentialBundleSecretRef, or Hermes with its model provider's key in env"
-// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'APIKey' || self.agent in ['ClaudeCode', 'Codex', 'GeminiCLI', 'QwenCode', 'Copilot', 'Grok', 'MuseCode']",message="auth mode APIKey takes a CLI Crewlet hands a key to: ClaudeCode, Codex, GeminiCLI, QwenCode, Copilot, Grok or MuseCode. Crewlet's profiles for OpenCode, CursorAgent, KimiCode, Hermes and Pi name no key variable and drop the key: sign those in with auth.credentialBundleSecretRef, or Hermes with its model provider's key in env under mode Subscription"
+// +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'Agent' || self.agent == 'ClaudeCode'",message="mode Agent runs ClaudeCode only: Crewlet names an OpenCode run's model to it as anthropic/<model>, while every other phase on the same provider passes the model as written, and OpenCode reads <provider>/<model>, so no one model runs both; Crewlet has a sandbox runner for no other CLI"
+// +kubebuilder:validation:XValidation:rule="!has(self.auth) || (has(self.auth.mode) && self.auth.mode != 'Subscription') || has(self.auth.tokenSecretRef) || has(self.auth.credentialBundleSecretRef) || (self.agent in ['Hermes', 'Pi', 'OpenCode'] && has(self.env) && self.env.exists(e, e.name.matches('(?i)(^|_)(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)(_|$)')))",message="a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef: a pod has no terminal to log in at. Hermes, Pi and OpenCode alone may sign in with their model provider's key in env instead, under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY), which Crewlet hands them untouched. A CLI with a key variable takes its key through auth mode APIKey, as Crewlet refuses that variable in env",fieldPath=".auth"
+// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.tokenSecretRef) || self.agent == 'ClaudeCode'",message="auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode (CLAUDE_CODE_OAUTH_TOKEN): its profile for every other CLI names no token variable. Sign that CLI in with auth.credentialBundleSecretRef, with auth mode APIKey where it has a key variable, or, for Hermes, Pi and OpenCode, with its model provider's key in env"
+// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'APIKey' || self.agent in ['ClaudeCode', 'Codex', 'GeminiCLI', 'QwenCode', 'CursorAgent', 'Copilot', 'Grok', 'MuseCode']",message="auth mode APIKey takes a CLI Crewlet hands a key to: ClaudeCode, Codex, GeminiCLI, QwenCode, CursorAgent, Copilot, Grok or MuseCode. Crewlet's profiles for OpenCode, KimiCode, Hermes and Pi name no key variable: sign Hermes, Pi or OpenCode in with its model provider's key in env under mode Subscription, and KimiCode, which reads a key only from its own files, with auth.credentialBundleSecretRef"
+// +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, (self.agent == 'ClaudeCode' && e.name in ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']) || (self.agent == 'Codex' && e.name == 'OPENAI_API_KEY') || (self.agent == 'GeminiCLI' && e.name == 'GEMINI_API_KEY') || (self.agent == 'QwenCode' && e.name == 'DASHSCOPE_API_KEY') || (self.agent == 'CursorAgent' && e.name == 'CURSOR_API_KEY') || (self.agent == 'Copilot' && e.name == 'GITHUB_TOKEN') || (self.agent == 'Grok' && e.name == 'XAI_API_KEY') || (self.agent == 'MuseCode' && e.name == 'META_API_KEY'))",message="env may not set the CLI's own token or key variable (ClaudeCode's CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY, Codex's OPENAI_API_KEY, GeminiCLI's GEMINI_API_KEY, QwenCode's DASHSCOPE_API_KEY, CursorAgent's CURSOR_API_KEY, Copilot's GITHUB_TOKEN, Grok's XAI_API_KEY, MuseCode's META_API_KEY): Crewlet's auth owns it, and whether a value in env reaches the CLI would turn on the auth mode. Give a token as auth.tokenSecretRef, and a key as apiKeySecretRefs with auth mode APIKey",fieldPath=".env"
 // +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'Agent' || (has(self.auth) && has(self.auth.mode) && self.auth.mode != 'Subscription') || (self.agent == 'ClaudeCode' && has(self.auth) && has(self.auth.tokenSecretRef))",message="a Subscription login reaches an Agent-mode run in a remote sandbox only as a headless token: give ClaudeCode auth.tokenSecretRef, or use auth mode APIKey"
 type CLIAgentSettings struct {
 	// agent is which CLI to drive. Crewlet's `agent`.
@@ -194,10 +217,11 @@ type CLIAgentSettings struct {
 
 	// env is extra environment of every invocation of the CLI: the child
 	// gets an allowlisted environment, not the engine's, so a variable the
-	// CLI needs beyond that is given here. It is how Hermes signs in under
-	// auth mode Subscription with no login of its own: its model provider's
-	// key, such as OPENROUTER_API_KEY. Crewlet's `env`, a credential
-	// position.
+	// CLI needs beyond that is given here. It is how Hermes, Pi and OpenCode
+	// sign in under auth mode Subscription with no login of their own: their
+	// model provider's key, under a name Crewlet reads as a credential, such
+	// as OPENROUTER_API_KEY. It may not set the CLI's own token or key
+	// variable, which auth owns. Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name

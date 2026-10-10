@@ -121,17 +121,34 @@ each Company an engine of its own, run against it. The renderer in
 [`internal/render`](internal/render) hands every document it renders to the
 same binary's `crewlet validate`, with the secret sync's store names in every
 credential position, and applies it to a running engine to check that the
-engine's encoding of it reads back as no difference. A mock would agree with the code by construction; the
-real engine is what tells the two apart when Crewlet's API or schema moves.
+engine's encoding of it reads back as no difference. The CRD suite in
+[`test/crd`](test/crd) holds the `LLMProvider` rules over a `CLIAgent`
+provider's sign-in, and the sign-in table of
+[`docs/guides/cli-agents.md`](docs/guides/cli-agents.md), to the same binary:
+it reads each CLI's token and key variable from the engine's own refusals,
+tries every CLI the API offers in every sign-in shape, each driving a seat,
+and compares the API server's verdict with what `crewlet validate` admits
+and doubts and what `crewlet llm list` reports the CLI signed in with, so an
+engine whose profiles move a token or key variable fails it. A mock would
+agree with the code by construction; the real engine is what tells the two
+apart when Crewlet's API or schema moves.
+
+What no validation shows is how the engine runs a CLI. The API refuses
+OpenCode in `mode: Agent` because the engine names an agent-mode OpenCode
+run's model to it as `anthropic/<model>` (`openCodeModelArg` in crewlet's
+`internal/sandbox/codingagent`) while a text call on the same provider
+passes the model as written. When you move `CREWLET_VERSION`, read that
+function: once it passes a `cli-agent` entry's model as written, admit the
+mode, and the CRD suite's exemption for it goes with the refusal.
 
 The engine is pinned like every other tool, as `CREWLET_VERSION` in the
 Makefile, and `make crewlet` builds it into `bin/crewlet` (`make test` does so
 first). To run these tests outside make — from an IDE, or with a plain
-`go test ./internal/render` — build it once with `make crewlet`, or point
-`CREWLET_BIN` at a `crewlet` binary of your own. A test that finds no binary
-**fails** and says which of the two to do; it never skips, because a skipped
-contract test reads as a passing one. When a test fails, the engine's log is
-printed with it.
+`go test ./internal/render` or `go test ./test/crd` — build it once with
+`make crewlet`, or point `CREWLET_BIN` at a `crewlet` binary of your own. A
+test that finds no binary **fails** and says which of the two to do; it
+never skips, because a skipped contract test reads as a passing one. When a
+test fails, the engine's log is printed with it.
 
 ## Generated files
 

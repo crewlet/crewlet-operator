@@ -52,42 +52,79 @@ takes 200 to 400 MB, so size the class's `data.resources` for
 
 A subscription login is made at a terminal, by `crewlet llm login` or the
 CLI's own command, and a pod has none. `cli.auth` therefore takes the login
-from a Secret, in one of two forms, or, for Hermes alone, takes none and
-signs in with a key in `cli.env`:
+from a Secret, in one of two forms; takes a metered key instead; or, for the
+three CLIs that read their model provider's key from their environment,
+takes none and signs in with that key in `cli.env`:
 
 | Sign-in | What the Secret holds | Use it when |
 |---|---|---|
 | `auth.tokenSecretRef` | a long-lived headless token the CLI mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the CLI is Claude Code, the one CLI whose Crewlet profile names a token variable: it never needs refreshing, and it is the only subscription login an agent-mode run can carry |
-| `auth.credentialBundleSecretRef` | a bundle of the CLI's credential files, from `crewlet llm export <key>` on a machine where you logged in | any other CLI: they mint no token Crewlet hands on |
-| `env`, with `auth.mode: Subscription` | the key of the model provider Hermes runs on, in the variable Hermes reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the CLI is Hermes: with its model provider's key in its environment, it needs no login |
+| `auth.credentialBundleSecretRef` | a bundle of the CLI's credential files, from `crewlet llm export <key>` on a machine where you logged in | any CLI: the others mint no token Crewlet hands on |
+| `auth.mode: APIKey` with one `apiKeySecretRefs` key | the CLI's metered API key | the CLI's Crewlet profile names a key variable ([below](#a-metered-key)) |
+| `env`, with `auth.mode: Subscription` | the key of the model provider the CLI runs on, in the variable the CLI reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the CLI is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
+
+What each CLI takes, at the engine version the operator is built against
+(Crewlet's profiles name the variables; a test holds the API's rules and this
+table to that engine's own verdict on every CLI and every sign-in, so neither
+can fall behind it):
+
+| `cli.agent` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `credentialBundleSecretRef` | `mode: Agent` |
+|---|---|---|---|---|---|
+| `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | yes | on the token or the key |
+| `Codex` | no | `OPENAI_API_KEY` | no | yes | no |
+| `GeminiCLI` | no | `GEMINI_API_KEY` | no | yes | no |
+| `QwenCode` | no | `DASHSCOPE_API_KEY` | no | yes | no |
+| `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | yes | no |
+| `Copilot` | no | `GITHUB_TOKEN` | no | yes | no |
+| `Grok` | no | `XAI_API_KEY` | no | yes | no |
+| `MuseCode` | no | `META_API_KEY` | no | yes | no |
+| `KimiCode` | no | no: it reads a key only from its own `config.toml`, so give that in the bundle | no | yes | no |
+| `OpenCode` | no | no | yes | yes | no: no one `model` serves its run and its text calls ([below](#text-mode-and-agent-mode)) |
+| `Hermes` | no | no | yes | yes | no |
+| `Pi` | no | no | yes | yes | no |
 
 A provider names one of the two logins: given both, which login the CLI acts
 on would be its own choice between its environment and its files, so the
 API server refuses the pair. Crewlet hands a token to a CLI only through the
-variable its profile names and drops it for every other CLI, so the API
-server refuses `tokenSecretRef` on any agent but `ClaudeCode`. A
+variable its profile names, and the engine refuses a token for a CLI whose
+profile names none, since it would reach nothing, so the API server
+refuses `tokenSecretRef` on any agent but `ClaudeCode` first. A
 Subscription provider that names neither is refused, with one exception:
 
-- **Hermes on a key in `env`.** Hermes fronts many model providers, each
-  with a key variable of its own, so Crewlet's profile for it names none,
-  and passes the CLI's `env` to it untouched, which is the route its profile
-  documents for a metered key. The API server asks only that `env` name at
-  least one variable, since which variable is a key is Hermes's to know: a
-  Hermes with neither a login nor `env` is signed in to nothing, and is
-  refused. Write `auth.mode: Subscription` explicitly, as `auth` may not be
-  empty. A key in `env` is a `${NAME}` the engine resolves from its
-  encrypted store, so it never refreshes and runs on a seat pod too. Beside
-  a credential bundle it is a second sign-in, which Hermes settles by its
-  own rules rather than by the order you wrote them in: a variable the
-  bundle's `.env` also sets takes the file's value, since Hermes loads its
-  home's `.env` over its environment, while a model provider's key in
-  `env` wins over an OAuth login in the bundle's `auth.json`, so Hermes
-  runs on the metered key and the subscription goes unused. Name only the
-  sign-in you mean Hermes to use.
+- **Hermes, Pi and OpenCode on a key in `env`.** Each fronts many model
+  providers and reads each provider's key from that provider's own
+  variable, so Crewlet's profile for it names no key variable and marks it
+  as signing in through its environment: Crewlet passes the CLI's `env` to
+  it untouched, which is the route its profile documents for a metered key.
+  Crewlet counts an entry as a sign-in only when its name says it holds a
+  credential: one of its parts between underscores is, in any case, `KEY`,
+  `KEYS`, `APIKEY`, `ACCESSKEY`, `SECRETKEY`, `TOKEN`, `SECRET`, `PASSWORD`,
+  `PASSWD`, `CREDENTIAL`, `CREDENTIALS`, `AUTH`, `OAUTH` or `PAT`. So
+  `OPENROUTER_API_KEY` and `GH_TOKEN` sign the CLI in, and `HTTPS_PROXY` or
+  `HERMES_MAX_TOKENS` (a count of model tokens) do not; the API server
+  refuses a provider whose `env` holds no such name, which `crewlet llm
+  list` would report signed in to nothing. Write `auth.mode: Subscription`
+  explicitly, as `auth` may not be empty. A key in `env` is a `${NAME}` the
+  engine resolves from its encrypted store, so it never refreshes and runs
+  on a seat pod too. Beside a credential bundle it is a second sign-in,
+  which the CLI settles by its own rules rather than by the order you wrote
+  them in. Hermes, for one, loads its home's `.env` over its environment, so
+  a variable the bundle's `.env` also sets takes the file's value, while a
+  model provider's key in `env` wins over an OAuth login in the bundle's
+  `auth.json`, so Hermes runs on the metered key and the subscription goes
+  unused. Name only the sign-in you mean the CLI to use.
 - **Every other CLI** keeps to a token or a bundle. A CLI whose profile names
-  a key variable has that variable dropped from a Subscription login's
-  environment, so a key in `env` never reaches it: give it the key with
-  `auth.mode: APIKey` instead.
+  a key variable takes its key with `auth.mode: APIKey`; the engine refuses
+  that variable in `env` (below), and a key in `env` under any other name is
+  one the CLI does not read.
+
+`env` may never set the CLI's own token or key variable, the ones the table
+names (`ANTHROPIC_API_KEY` for `ClaudeCode`, `CURSOR_API_KEY` for
+`CursorAgent`, and so on), in any auth mode: `auth` owns them, and whether a
+value in `env` reached the CLI would turn on the mode and on what else holds
+a credential, so the engine refuses the document and the API server refuses
+the provider first. Another CLI's variable is no such conflict:
+`ANTHROPIC_API_KEY` is OpenCode's Anthropic key.
 
 ```yaml
 apiVersion: crewlet.ai/v1alpha1
@@ -97,7 +134,7 @@ metadata:
 spec:
   companyRef: {name: acme}
   type: CLIAgent
-  model: anthropic/claude-sonnet-4.5   # an OpenRouter model id: OPENROUTER_API_KEY selects OpenRouter
+  model: anthropic/claude-sonnet-5   # an OpenRouter model id: OPENROUTER_API_KEY selects OpenRouter
   cli:
     agent: Hermes
     auth:
@@ -144,23 +181,33 @@ Providers that set the same `loginName` share one login and its seats'
 homes, which is how several models run off one subscription; they must
 drive the same CLI, or the engine refuses the document.
 
+### A metered key
+
 `auth.mode: APIKey` gives the CLI the provider's one `apiKeySecretRefs` key
 instead, billing the metered account. Crewlet hands the key over in the
-variable the CLI's profile names, and at the pinned engine only seven name
-one; for the others the key would be dropped and the CLI signed in to
-nothing, so the API server refuses the mode for them:
+variable the CLI's profile names, and at the pinned engine eight name one
+(the table above); for the others the key would reach nothing, so the engine
+refuses the mode for them and the API server refuses it first. Hermes,
+Pi and OpenCode take their model provider's key in `env` instead, and
+KimiCode its key in the bundle. `CursorAgent`'s key is a Cursor account's
+API key, from the Cursor dashboard, not a model provider's.
 
-| `cli.agent` | The variable `auth.mode: APIKey` fills |
-|---|---|
-| `ClaudeCode` | `ANTHROPIC_API_KEY` |
-| `Codex` | `OPENAI_API_KEY` |
-| `GeminiCLI` | `GEMINI_API_KEY` |
-| `QwenCode` | `DASHSCOPE_API_KEY` |
-| `Copilot` | `GITHUB_TOKEN` |
-| `Grok` | `XAI_API_KEY` |
-| `MuseCode` | `META_API_KEY` |
-| `OpenCode`, `CursorAgent`, `KimiCode`, `Pi` | no: sign them in with `credentialBundleSecretRef` |
-| `Hermes` | no: sign it in with its model provider's key in `env`, or with `credentialBundleSecretRef` |
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: cursor
+spec:
+  companyRef: {name: acme}
+  type: CLIAgent
+  model: auto
+  apiKeySecretRefs:
+    - {name: cursor, key: apiKey}
+  cli:
+    agent: CursorAgent
+    auth:
+      mode: APIKey
+```
 
 ## Text mode and agent mode
 
@@ -176,12 +223,19 @@ CLI must be in the engine's image either way. In agent mode:
   offers: Crewlet's local cells would run every seat's code in the engine's
   pod, with its credentials.
 - Only Claude Code runs in agent mode. The engine has a sandbox runner for
-  Claude Code and OpenCode, and a run in a remote sandbox authenticates
-  through the token or key variable the CLI's profile names, which Crewlet's
-  OpenCode profile does not have: every such run would be refused.
+  OpenCode too, one of the coding agents `spec.sandbox` offers, but at the
+  pinned engine an agent-mode OpenCode run names its model to OpenCode as
+  `anthropic/<model>`, the family taken from Crewlet's OpenCode profile,
+  while every other phase on the same provider is a text call that passes
+  `model` as written, and OpenCode reads a model as `<provider>/<model>`.
+  No value of `model` serves both, so such a provider would fail its runs
+  or its text calls, and the API server refuses it. Run OpenCode in text
+  mode.
 - The login must follow the run into a remote sandbox, which only a headless
   token or a key can: an agent-mode Claude Code takes `auth.tokenSecretRef`,
-  or `auth.mode: APIKey`. A credential bundle stays on the data volume.
+  or `auth.mode: APIKey`. A credential bundle stays on the data volume. A
+  key in the Seat's `spec.sandbox.env` reaches the box as well, but the API
+  server cannot see the Seat from the provider, so it does not count it.
 - The run calls the seat's own tools back through the engine's tool bridge.
   While any LLMProvider of the company is in agent mode, the operator gives
   the engine its public address as the bridge's (`CREWLET_MCP_BRIDGE_URL`),
@@ -233,8 +287,8 @@ does for a CLI it cannot do:
   runs on a provider with `credentialBundleSecretRef`, in any phase, is
   refused with `Applied=False`, `CLIAuthNotPortable`: sign it in with
   `tokenSecretRef` (Claude Code), `auth.mode: APIKey` (a CLI the table
-  above gives a key variable) or, for Hermes, its model provider's key in
-  `env`, or place the seat in `data`.
+  above gives a key variable) or, for Hermes, Pi or OpenCode, its model
+  provider's key in `env`, or place the seat in `data`.
 
 ## What v1alpha1 does not offer
 
@@ -250,5 +304,5 @@ any field of the company document from its environment too, so whoever can
 write such a field can have the engine send the value anywhere. The operator
 puts no credential of the engine's own into its environment for the same
 reason ([Credentials](../concepts/credentials.md)); `tokenSecretRef`,
-`credentialBundleSecretRef`, `auth.mode: APIKey` and a Hermes key in `env`
-take the login from a Secret instead.
+`credentialBundleSecretRef`, `auth.mode: APIKey` and a key in `env` for
+Hermes, Pi or OpenCode take the login from a Secret instead.

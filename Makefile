@@ -81,9 +81,9 @@ gateway-api-crds: ## Copy the Gateway API CRDs of the release go.mod requires in
 # The race detector is on because a controller is concurrent by construction:
 # a reconciler, its watches and the cache all run on their own goroutines.
 # test/e2e is excluded; it needs a cluster and runs under test-e2e. Every suite
-# that runs the real engine (engine, render, secretsync, controller) runs the
-# pinned crewlet binary (internal/engine/enginetest), named explicitly so a
-# CREWLET_BIN in the caller's environment cannot swap in another engine
+# that runs the real engine (engine, render, secretsync, controller, test/crd)
+# runs the pinned crewlet binary (internal/engine/enginetest), named explicitly
+# so a CREWLET_BIN in the caller's environment cannot swap in another engine
 # version; test/chart renders the chart with the pinned helm.
 .PHONY: test
 test: manifests generate fmt vet setup-envtest crewlet helm ## Run the unit, envtest, engine and chart suites of both modules.
