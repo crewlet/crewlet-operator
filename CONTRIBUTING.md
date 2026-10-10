@@ -247,7 +247,7 @@ of its own, bounds on every string and list, a list type on every list.
 
 | Version | What a change may do |
 |---|---|
-| `v1alpha1` (now) | Anything, including renaming or removing fields and kinds. Breaking changes are called out in the pull request and the release notes. No conversion is provided. |
+| `v1alpha1` (now) | Anything, including renaming or removing fields and kinds, with no conversion, alias or deprecation. A surface no tag has shipped breaks without ceremony; once a tag ships it, a break carries a `!` and a `BREAKING CHANGE:` footer (see [Commit messages](#commit-messages)). |
 | `v1beta1` | Fields and kinds are deprecated before they are removed, and removed only in a later API version. Conversion between served versions is provided by a conversion webhook. |
 | `v1` | Stable: no field is removed or changes meaning within `v1`. |
 

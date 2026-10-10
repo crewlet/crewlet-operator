@@ -163,11 +163,11 @@ pools](../concepts/runtime.md#seat-pools)). With the API token, the engine's
 own `GET /fleet` lists every node, its roles and labels, and the holder of
 every seat.
 
-## Lifecycle and upgrades
+## Lifecycle and rollouts
 
 - **Start and resume.** Seat pods start only once the data pod is ready on
   its current template.
-- **Upgrades.** The data pod rolls first; the seat pods keep their template
+- **Rollouts.** The data pod rolls first; the seat pods keep their template
   until it is ready, then every seat StatefulSet rolls at once. Pods are
   replaced one at a time: the next once the last is ready, so has joined the
   fleet and may claim seats, and ten seconds after, while the others give

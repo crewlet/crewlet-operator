@@ -215,17 +215,6 @@ own that delivers from the nodes or from outside the cluster) cannot be
 admitted by namespace; isolate those engines with your CNI's own policy and
 `networkPolicy.mode: None`.
 
-Releases before the public listener had the forwarder deliver to
-`<company>-engine:8080`, and admitted it under `Isolated` by listing it in
-`networkPolicy.apiConsumers`. On upgrading to a release with the public
-listener, re-point the forwarder to port 8081 (`public`), and move its peer
-from `apiConsumers` to `exposure.webhooks.external.forwarders`, dropping it
-from `apiConsumers` unless it also calls the admin API: `apiConsumers` now
-admits port 8080 alone, and port 8080 answers every webhook `404`. An
-`External` class under `Isolated` without `forwarders` keeps running as it
-is (the API server does not judge an unchanged object against a rule added
-since), but a change to its spec is refused until it names them.
-
 A Company may set `publicBaseURL` under the other modes too, when the
 address vendors use differs from the route's host (a CDN in front of the
 Gateway, say).

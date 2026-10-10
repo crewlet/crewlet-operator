@@ -15,7 +15,7 @@ dashboard (the operator catalogue's `pause_seat` and `resume_seat` tools)
 when an agent misbehaves, and which the engine deliberately keeps out of the
 document so that a revision never takes or lifts one. The operator's
 management policies are about the document: under `Enforce` the operator is
-its only writer. A Seat can now ask for a pause too (`spec.paused`), so the
+its only writer. A Seat can ask for a pause too (`spec.paused`), so the
 operator and the people in the dashboard can both write one record, and the
 API has to say whose a pause is.
 

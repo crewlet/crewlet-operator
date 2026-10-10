@@ -156,9 +156,8 @@ kubectl logs acme-data-0 -n acme | grep -E 'WARN|ERROR' | tail
 - **`insufficient storage resources available`**: the engine could not
   reserve its event stream's logs. The stream is given three quarters of the
   data volume and needs at least 5 GiB of it; the class's `data.storage.size`
-  admits no less than `7Gi`, but a volume created by an older operator, or a
-  provisioner that hands out less than it was asked for, can be too small.
-  Give the company a larger volume.
+  admits no less than `7Gi`, but a provisioner that hands out less than it
+  was asked for can leave it too small. Give the company a larger volume.
 - **`config_apply_failed`**: the revision was stored but this node could not
   start it; the message says why. The engine keeps running the previous
   revision, and the Company reports `ConfigApplied=False ApplyFailed` (see
@@ -168,13 +167,13 @@ kubectl logs acme-data-0 -n acme | grep -E 'WARN|ERROR' | tail
   why (`kubectl logs acme-data-0 -n acme --previous`).
 - **The pod restarts, and the previous log ends in `unknown field: "…" is
   not a setting`**, such as `api.auth.company_writers: unknown field:
-  "company_writers" is not a setting`: the engine is older than the one the
-  operator is built against, and refuses a setting the operator writes into
-  its `crewlet.yaml` (`company_writers` is set under `Enforce`, and needs
-  crewlet 51b8d06 or later; `api.public`, the public listener, is set on
-  every data pod, and needs crewlet 7670e6592 or later). Move the
-  EngineClass's `engine.image` to the operator's engine version ([Engine
-  image](installing.md#engine-image)); the data pod rolls to it and starts.
+  "company_writers" is not a setting`: the image the pod runs is not the
+  engine at the operator's `CREWLET_VERSION`, and refuses a setting the
+  operator writes into its `crewlet.yaml`. That image is the class's
+  `engine.image`, with the Company's `spec.runtime.version` as its tag when
+  that is set. Move whichever of the two names the wrong engine to that
+  engine ([Engine image](installing.md#engine-image)); the data pod rolls to
+  it and starts.
 - **`Pending`**: the volume claim is not bound (no default StorageClass, or
   the class's `storageClassName` does not exist), or no node fits the class's
   resources, tolerations or affinity.
@@ -204,10 +203,11 @@ kubectl logs -n acme acme-seats-general-159f80d7-0
 | `admission_withheld` | No data pod has answered that its copy of the company's records admits a seat (the data pod is starting, catching up, or unreachable), or the pod cannot serve the seats it holds. It claims nothing until then. |
 
 A seat pod restarted every six minutes, its events saying `Startup probe
-failed` with `connection refused` while its log shows it running, is on an
-engine older than crewlet 7ca18083e, which binds no port on a node without
-the `ingress` role; move the EngineClass's `engine.image` to the operator's
-engine version ([Engine image](installing.md#engine-image)).
+failed` with `connection refused` while its log shows it running, binds no
+port for its probes: the image it runs (the class's `engine.image`, with the
+Company's `spec.runtime.version` as its tag when that is set) is not the
+engine at the operator's `CREWLET_VERSION`; move whichever of the two names
+the wrong engine to that engine ([Engine image](installing.md#engine-image)).
 
 A seat pod that cannot join the data pod's leaf listener within a minute
 exits, and Kubernetes restarts it with a growing back-off: after a data pod

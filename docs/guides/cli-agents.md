@@ -17,7 +17,7 @@ the operator's `CREWLET_VERSION`, pinning both the engine and the CLI:
 
 ```dockerfile
 # The engine image you built and pushed: <your registry>/crewlet:<CREWLET_VERSION>,
-# by digest. Never an older engine than the operator's CREWLET_VERSION.
+# by digest: the engine at the operator's CREWLET_VERSION.
 ARG ENGINE_IMAGE
 FROM ${ENGINE_IMAGE}
 USER root

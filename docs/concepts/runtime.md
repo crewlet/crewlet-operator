@@ -223,7 +223,7 @@ longer one keeps its first 43 characters before the hash. Each Seat's
   every data pod is ready and runs the current template: a leaf that finds
   no data pod to join within a minute fails to start. Taking pods away
   never waits.
-- **Upgrade.** A change that rolls the data pods (an image, the keyring, the
+- **Rollout.** A change that rolls the data pods (an image, the keyring, the
   class's `seatPools.policy`) rolls them first. The seat StatefulSets keep
   their template, and their Secrets, until every data pod is ready on the
   new one, and then every seat StatefulSet takes its new template in the
@@ -320,7 +320,7 @@ class that asks for an image whose tag is older, as a semantic version, than
 the newest of the two is refused with `RuntimeReady=False`, reason
 `DowngradeRefused`; the pod keeps running the newer image, and every other
 change still applies. A version that never became ready is never recorded, so
-an upgrade that failed can be taken back. Tags that are not versions (`latest`)
+a rollout that failed can be taken back. Tags that are not versions (`latest`)
 are not compared. `spec.runtime.version` on a class without
 `allowVersionOverride` is refused the same way, with
 `VersionOverrideNotAllowed`.

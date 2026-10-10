@@ -13,7 +13,7 @@ so these pages describe what exists today and grow with it.
 
 | Page | What it covers |
 |---|---|
-| [Installing the operator](guides/installing.md) | A production install with the Helm chart: prerequisites, the values that matter, the RBAC roles it adds, upgrades |
+| [Installing the operator](guides/installing.md) | A production install with the Helm chart: prerequisites, the values that matter, the RBAC roles it adds |
 | [Supplying credentials](guides/credentials.md) | Writing the Secret for each credential, rotating it, and what an object reports when one is missing |
 | [Connecting integrations](guides/integrations.md) | Slack, GitHub, GitLab, Mattermost, Jira, Confluence, Datadog and an Atlassian organization: each Integration, the seats' own credentials, and the accounts the engine creates |
 | [Running seats on a coding CLI](guides/cli-agents.md) | `CLIAgent` providers: an engine image with the CLI, a subscription login in a pod, text mode and agent mode, which provider a seat's code work can run on |

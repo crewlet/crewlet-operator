@@ -85,8 +85,7 @@ Variables and files the sandbox sets up for every run (`sandbox.setup[].env`,
 
 A seat's code work signs its coding agent in with the provider it runs on:
 the head of `spec.llm.sandbox`, else of `spec.llm.default`, else of the
-Company's order. From crewlet 4e45c6b99, the engine exports into every box
-of such a seat:
+Company's order. The engine exports into every box of such a seat:
 
 - for an `Anthropic`, `OpenAI` or `OpenAICompatible` provider, an
   `LLMProvider` or a platform provider, the **first** key of its
