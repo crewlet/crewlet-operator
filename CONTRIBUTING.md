@@ -353,6 +353,61 @@ reference is generated from it.
 Comments in code explain **why**, and especially why the obvious alternative
 is wrong; the diff already shows what the code does. Diagrams are Mermaid.
 
+### How the docs are published
+
+`docs/` is published twice: as it reads on GitHub, and on the documentation
+site at [docs.crewlet.ai/operator/](https://docs.crewlet.ai/operator/), beside
+the engine's documentation. The site renders the files as they are — write
+plain Markdown that reads correctly on GitHub, with relative links — and a few
+things follow from that:
+
+- **`docs/README.md` is the site's navigation.** Each `## ` section of it is a
+  sidebar group, and each row of its tables whose first cell is a single link
+  to a page is an entry, in order, with the second cell as its description. A
+  page under `docs/` that no row lists has no way to be reached, so the site
+  refuses to build it; add the row in the same change as the page, under a
+  `## ` heading (a row above the first one is in no group, and refused too).
+  The site serves the index as the section's home, so there is no
+  `docs/index.md` beside it. Its opening paragraph is the home page's
+  description in search results: keep it about the operator.
+- **Link the engine's documentation by its GitHub URL at `main`**, as
+  `https://github.com/crewlet/crewlet/blob/main/docs/<page>.md#<heading>`.
+  That is what works on GitHub, and the site turns it into its own page of the
+  engine's documentation. Link a page, not a directory
+  (`tree/main/docs/<dir>`): the site serves a directory only as its index
+  page, and most of the engine's have none. The engine's `docs/index.md`
+  lists each directory's pages under a heading, so
+  `blob/main/docs/index.md#integrations` is the link for "the engine's
+  integration pages".
+- **Commit files, not symbolic links.** The site refuses a symbolic link
+  anywhere under `docs/`, so that nothing in it can make the site's build read
+  a file outside it.
+- **Links outside `docs/`** (this file, `config/samples`, the chart) are links
+  into this repository on the site, so a relative path is right for both.
+- **The site publishes `main` until the first release**, with a notice on
+  every page that there is no release yet. From the first `v*` tag on, the
+  newest release is the site's operator documentation and `main` moves under
+  `/operator/next/`.
+
+`test/docs` holds the tree to all of it in `make test`: every page of `docs/`
+is listed exactly once in the index's tables, under a section, and every file
+there is a regular one; every relative link and image
+names a file that exists, every `#anchor` names a heading its target renders
+(by GitHub's slug rule, which the site's renderer shares), and every link into
+the engine's docs names a page and heading of the engine this module pins
+(`CREWLET_VERSION`), so a pin bump that renames a page fails there.
+
+The site rebuilds when `.github/workflows/docs-publish.yml` asks it to: after
+a push to `main` that touches `docs/`, after a release, or when run by hand
+from `main`. It reads two secrets, `DOCS_REPO` and `DOCS_TOKEN`, that name the
+site's renderer and carry a token allowed to dispatch to it; without them the
+workflow passes with a notice and the site keeps the pages it last built. They
+are **environment secrets** of the `docs-publish` environment, whose
+deployment branches are limited to `main`, never repository secrets: the only
+permission that allows the dispatch also allows a push to the renderer, and a
+repository secret is readable by a workflow on any branch anyone with write
+access pushes.
+
 A decision that binds more than one package is recorded in [`adr/`](adr/README.md).
 
 ## Commit messages

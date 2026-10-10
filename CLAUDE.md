@@ -50,7 +50,9 @@ test/crd/             envtest suite for the CRDs: every CEL rule, defaults, samp
                       of them and the claudeModel enum, against the pinned
                       engine
 test/docs/            reads the manifests a doc hands to kubectl, and the
-                      tables it states, for the suites
+                      tables it states, for the suites; and holds docs/ to
+                      its index, its links and anchors, and the engine's
+                      pages it links (the documentation site's contract)
 test/chart/           envtest suite for the chart's RBAC and admission policies,
                       acting as the subjects they bind (needs bin/helm)
 test/e2e/             kind-based e2e suite (build tag e2e)
@@ -137,7 +139,11 @@ v1beta1 the Kubernetes deprecation policy applies.
 - Logging: controller-runtime's logr, structured key/value pairs (logcheck
   enforces the Kubernetes conventions).
 - Docs are part of the change: update `docs/` for any API, behaviour,
-  deployment or make-target change.
+  deployment or make-target change. `docs/` is also published on the
+  documentation site: a new page gets a row in `docs/README.md`'s tables (its
+  navigation), and the engine's pages are linked as
+  `https://github.com/crewlet/crewlet/blob/main/docs/…` URLs; `test/docs`
+  fails otherwise (CONTRIBUTING.md, "How the docs are published").
 
 ## Versions
 

@@ -91,7 +91,8 @@ everything again.
 
 ## Documentation
 
-- [docs/](docs/README.md) — the documentation index
+- [docs/](docs/README.md) — the documentation index, also published at
+  [docs.crewlet.ai/operator](https://docs.crewlet.ai/operator/)
 - [docs/getting-started.md](docs/getting-started.md) — running the operator
   and a company on a local cluster
 - [docs/guides/](docs/README.md#guides) — installing, credentials, exposure,
