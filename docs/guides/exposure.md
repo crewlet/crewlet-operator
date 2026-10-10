@@ -48,7 +48,10 @@ say so. What the public listener serves depends on what the engine is given:
   the seat's tools back through it ([Running seats on a coding
   CLI](cli-agents.md)). The operator then gives the engine the public address
   as the bridge's (`CREWLET_MCP_BRIDGE_URL`); without one the engine mounts
-  no bridge and `/mcp/` is a path nothing serves.
+  no bridge and `/mcp/` is a path nothing serves, and every agent-mode turn
+  fails: the provider reports `AgentModeRunnable=False`, `NotExposed`, and
+  each seat whose executor's chain it heads `Ready=False`, `NotExposed`,
+  while the rest of the company's document applies.
 - `/otlp/{token}`, the sandbox telemetry receiver, while the class sends the
   engine's telemetry to a collector (`spec.telemetry`): a remote sandbox's
   coding agent exports its traces there, and the engine forwards them to the

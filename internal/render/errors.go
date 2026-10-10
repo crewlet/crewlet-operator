@@ -12,18 +12,17 @@ import (
 // into the company document: the object named does not exist, the chain of
 // parents it starts loops, it names something Crewlet would read as a
 // different object or something that cannot be there (a person where the
-// engine runs a turn, a provisioned credential nothing provisions, an
-// agent-mode CLI with no public address to call its tools back through), or it
+// engine runs a turn, a provisioned credential nothing provisions), or it
 // places a seat in a pool the company's EngineClass does not let it run, or
-// whose pods cannot serve the providers it runs on, or runs a seat's code work
-// on a CLIAgent provider of another CLI than its coding agent. The controller
-// reports it on the object that holds the reference (Kind and Name), as
-// ResolvedRefs=False with Reason, as Accepted=False for a Conflict, or as
-// Applied=False for a pool the class does not admit (PerSeatNotAllowed,
-// PoolCapacityExceeded) or cannot serve the seat (AgentModeBridgeUnsupported,
-// CLIAuthNotPortable), and for code work on a CLIAgent provider of another CLI
-// (CodingAgentMismatch); a refusal of the Company itself is reported on its
-// ConfigApplied.
+// whose pods cannot keep the login of a provider it runs on, or runs a seat's
+// code work on a CLIAgent provider of another CLI than its coding agent. The
+// controller reports it on the object that holds the reference (Kind and
+// Name), as ResolvedRefs=False with Reason, as Accepted=False for a Conflict,
+// or as Applied=False for a pool the class does not admit (PerSeatNotAllowed,
+// PoolCapacityExceeded) or whose pods cannot keep the seat's CLI login
+// (CLIAuthNotPortable), and for code work on a CLIAgent provider of another
+// CLI (CodingAgentMismatch); a refusal of the Company itself is reported on
+// its ConfigApplied.
 //
 // The company document is applied whole or not at all, so one RefError
 // blocks the whole render.
@@ -37,12 +36,10 @@ type RefError struct {
 	// Reason is the condition reason the refusal is reported with:
 	// v1alpha1.ReasonRefNotFound, v1alpha1.ReasonCycle,
 	// v1alpha1.ReasonConflict, v1alpha1.ReasonReferenceNotAllowed,
-	// v1alpha1.ReasonHumanSeat, v1alpha1.ReasonNoProvisioner,
-	// v1alpha1.ReasonNotExposed, or for a placement
-	// v1alpha1.ReasonPoolNotFound, v1alpha1.ReasonPerSeatNotAllowed,
-	// v1alpha1.ReasonPoolCapacityExceeded, v1alpha1.ReasonSeatPoolsNotAllowed,
-	// v1alpha1.ReasonAgentModeBridgeUnsupported or
-	// v1alpha1.ReasonCLIAuthNotPortable, or for a seat's code work
+	// v1alpha1.ReasonHumanSeat, v1alpha1.ReasonNoProvisioner, or for a
+	// placement v1alpha1.ReasonPoolNotFound, v1alpha1.ReasonPerSeatNotAllowed,
+	// v1alpha1.ReasonPoolCapacityExceeded, v1alpha1.ReasonSeatPoolsNotAllowed
+	// or v1alpha1.ReasonCLIAuthNotPortable, or for a seat's code work
 	// v1alpha1.ReasonCodingAgentMismatch.
 	Reason string
 	// Message says what is wrong and what to do, for a condition message.

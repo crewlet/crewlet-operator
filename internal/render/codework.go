@@ -289,16 +289,16 @@ func (r *renderer) documentHead() (sandboxHead, bool) {
 		switch cmp.Or(ref.Kind, v1alpha1.LLMProviderKindLLMProvider) {
 		case v1alpha1.LLMProviderKindLLMProvider:
 			if r.providers[ref.Name] {
-				return r.ownHead(ref.Name, "spec.llm"), true
+				return r.ownHead(ref.Name, fieldLLM), true
 			}
 		case v1alpha1.LLMProviderKindPlatform:
 			if r.usesPlatformProviders() && r.platform[ref.Name] {
-				return r.platformHead(ref.Name, "spec.llm"), true
+				return r.platformHead(ref.Name, fieldLLM), true
 			}
 		}
 	}
 	if own := sortedByName(r.in.LLMProviders); len(own) > 0 {
-		return r.ownHead(own[0].Name, "spec.llm"), true
+		return r.ownHead(own[0].Name, fieldLLM), true
 	}
 	if !r.usesPlatformProviders() {
 		return sandboxHead{}, false
@@ -311,7 +311,7 @@ func (r *renderer) documentHead() (sandboxHead, bool) {
 	if len(names) == 0 {
 		return sandboxHead{}, false
 	}
-	return r.platformHead(slices.Min(names), "spec.llm"), true
+	return r.platformHead(slices.Min(names), fieldLLM), true
 }
 
 // ownHead is the head that is the Company's own LLMProvider name.

@@ -550,17 +550,13 @@ func llmProvider(s *v1alpha1.LLMProviderSettings, keys []string) llmProviderDoc 
 // loginName: on the volume, so they outlive the pod.
 const CLIStateRoot = DataDir + "/llm-cli"
 
-// cli renders the cli block of a CLIAgent provider, or records why it cannot
-// run: in mode Agent its runs happen in a remote sandbox and call the seat's
-// tools back through the engine's public address, which the company must have.
+// cli renders the cli block of a CLIAgent provider. In mode Agent its runs
+// happen in a remote sandbox and call the seat's tools back through the
+// engine's public address; a company with none is applied all the same, and
+// AgentModeOf reports it, since Crewlet refuses only the turns that need the
+// address.
 func (r *renderer) cli(p *v1alpha1.LLMProvider) *cliDoc {
 	c := &p.Spec.CLI
-	if c.Mode == v1alpha1.CLIAgentModeAgent && r.in.PublicBaseURL == "" {
-		r.errs.add(KindLLMProvider, p.Name, "spec.cli.mode", v1alpha1.ReasonNotExposed, fmt.Sprintf(
-			"is Agent, whose runs happen in a sandbox that calls the seat's tools back through the engine's public address, "+
-				"and Company %s has none (status.endpoints.publicBaseURL): give its EngineClass a webhooks route, or the "+
-				"Company spec.exposure.publicBaseURL, or use mode Text", r.in.Company.Name))
-	}
 	login := cmp.Or(c.LoginName, p.Name)
 	doc := &cliDoc{
 		Agent:          cliAgentName(c.Agent),

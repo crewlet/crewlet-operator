@@ -177,9 +177,10 @@ func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error
 	// render reports every reference that does not resolve at once, so
 	// the parts it does not name have none.
 	run.objectsChecked = true
-	// Whatever became of the document: whether a seat's code work can run
-	// is a fact about its own spec.
+	// Whatever became of the document: whether a seat's code work can run,
+	// and whether its turns can, are facts about its own spec.
 	run.checkCodeWork(render.CodeWorkOf(run.input()))
+	run.checkExecutors(render.ExecutorOf(run.input()), render.AgentModeOf(run.input()))
 	if err != nil {
 		refusals := render.RefErrors(err)
 		if len(refusals) == 0 {
@@ -728,13 +729,12 @@ func (run *configRun) refused(refusals []*render.RefError) {
 	run.block(refusals[0].Reason, "The document cannot be rendered: "+sentences(refusalLines(refusals)))
 }
 
-// unrunnable reports whether reason refuses a seat whose providers its pods
-// cannot run on, or whose code work runs on another CLI's provider, which the
+// unrunnable reports whether reason refuses a seat whose CLI login its pods
+// cannot keep, or whose code work runs on another CLI's provider, which the
 // seat reports as Applied=False rather than as an unresolved reference.
 func unrunnable(reason string) bool {
 	switch reason {
-	case crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported, crewletaiv1alpha1.ReasonCLIAuthNotPortable,
-		crewletaiv1alpha1.ReasonCodingAgentMismatch:
+	case crewletaiv1alpha1.ReasonCLIAuthNotPortable, crewletaiv1alpha1.ReasonCodingAgentMismatch:
 		return true
 	}
 	return false
@@ -763,6 +763,38 @@ func (run *configRun) checkCodeWork(codeWork map[string]render.CodeWork) {
 			crewletaiv1alpha1.ConditionCodeWorkRunnable)
 		if before == nil || before.Reason != w.Reason {
 			run.Recorder.Eventf(seat, nil, corev1.EventTypeWarning, w.Reason, "CheckCodeWork", "%s: %s.", w.Field, w.Message)
+		}
+	}
+}
+
+// checkExecutors records each agent Seat's executor and each LLMProvider's
+// agent mode on its part, and emits a Warning event on one that turns
+// unrunnable or changes its reason, a new problem to announce: the document
+// applies with either, and nothing on the Company says so.
+func (run *configRun) checkExecutors(executors map[string]render.Executor, agentModes map[string]render.AgentMode) {
+	for _, p := range run.parts {
+		switch o := p.obj.(type) {
+		case *crewletaiv1alpha1.Seat:
+			e, ok := executors[o.Name]
+			if !ok {
+				continue
+			}
+			p.executor = &e
+			ready := meta.FindStatusCondition(p.base.(*crewletaiv1alpha1.Seat).Status.Conditions, crewletaiv1alpha1.ConditionReady)
+			if e.Reason != "" && (ready == nil || ready.Reason != e.Reason) {
+				run.Recorder.Eventf(o, nil, corev1.EventTypeWarning, e.Reason, "CheckExecutor", "%s: %s.", e.Field, e.Message)
+			}
+		case *crewletaiv1alpha1.LLMProvider:
+			m, ok := agentModes[o.Name]
+			if !ok {
+				continue
+			}
+			p.agentMode = &m
+			before := meta.FindStatusCondition(p.base.(*crewletaiv1alpha1.LLMProvider).Status.Conditions,
+				crewletaiv1alpha1.ConditionAgentModeRunnable)
+			if m.Reason != "" && (before == nil || before.Reason != m.Reason) {
+				run.Recorder.Eventf(o, nil, corev1.EventTypeWarning, m.Reason, "CheckAgentMode", "%s", m.Message+".")
+			}
 		}
 	}
 }

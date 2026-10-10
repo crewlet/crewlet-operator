@@ -254,7 +254,12 @@ CLI must be in the engine's image either way. In agent mode:
   the engine its public address as the bridge's (`CREWLET_MCP_BRIDGE_URL`),
   and the engine serves the bridge on its public listener, beside the
   webhooks ([Exposure](exposure.md)). A company with no public address
-  cannot run one: the LLMProvider reports `ResolvedRefs=False NotExposed`.
+  cannot run one: the engine applies the provider and refuses every turn
+  of a seat whose executor's chain it heads. The operator applies it too
+  and reports it, so the rest of the company still runs: the LLMProvider
+  reports `AgentModeRunnable=False`, `NotExposed`, and each such Seat
+  `Ready=False`, `NotExposed`. With an address, `AgentModeRunnable` is
+  `True`, `ToolBridgeServed`, naming the bridge's address.
 
 ```yaml
 spec:                       # LLMProvider claude-agent
@@ -351,21 +356,26 @@ does for a CLI it cannot do:
   probes use, but nothing publishes an address of a seat pod's own that a
   remote sandbox could dial: the company's public address reaches the data
   pod alone, and a seat pod is reached by its kubelet and nothing else.
-  Without an address the engine refuses every agent-mode run on the pod,
-  after the revision has applied. Crewlet runs a turn in agent
-  mode only when the HEAD of the executor's chain is in `mode: Agent`, so a
-  seat in a seat pool whose executor's chain (`spec.llm.default`, or the
-  Company's first provider when the seat names none) starts with such a
-  provider is refused with `Applied=False`, `AgentModeBridgeUnsupported`. The
-  same provider behind another in that chain, or in another phase's chain, is
-  a text call, and is fine.
+  Without an address the engine refuses every agent-mode turn on the pod.
+  Crewlet runs a turn in agent mode only when the HEAD of the executor's
+  chain is in `mode: Agent`, so a seat in a seat pool whose executor's
+  chain (`spec.llm.default`, or the Company's first provider when the seat
+  names none) starts with such a provider can run no turn. The engine
+  applies it all the same, and so does the operator, which reports it on
+  the Seat as `Ready=False`, `AgentModeBridgeUnsupported`, with a Warning
+  event, rather than hold the rest of the company's changes: place the seat
+  in `data`, or put a provider in `mode: Text` at the head of the chain. The
+  same provider behind another in that chain, or in another phase's chain,
+  is a text call, and is fine.
 - **A credential bundle.** The login lives under the CLI's state directory,
   which on a seat pod is its scratch volume, so every seat pod restores the
   bundle at each start and then refreshes the login on its own, beside the
   data pod. A vendor that rotates refresh tokens retires the token the other
   pods hold at each refresh, and logs them out. A seat in a seat pool that
   runs on a provider with `credentialBundleSecretRef`, in any phase, is
-  refused with `Applied=False`, `CLIAuthNotPortable`: sign it in with
+  refused with `Applied=False`, `CLIAuthNotPortable`, which holds the
+  company's document: applied, it would log out every seat on that login,
+  the data pod's included. Sign it in with
   `tokenSecretRef` (Claude Code), `auth.mode: APIKey` (a CLI the table
   above gives a key variable) or, for Hermes, Pi or OpenCode, its model
   provider's key in `env`, or place the seat in `data`.

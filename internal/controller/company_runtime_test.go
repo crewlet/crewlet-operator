@@ -1314,7 +1314,7 @@ var _ = Describe("Company runtime", func() {
 					Spec: crewletaiv1alpha1.LLMProviderSpec{
 						CompanyRef: crewletaiv1alpha1.CompanyReference{Name: company},
 						LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-							Type: crewletaiv1alpha1.LLMProviderCLIAgent, Model: "sonnet",
+							Type: crewletaiv1alpha1.LLMProviderCLIAgent, Model: cliModel,
 						},
 						CLI: crewletaiv1alpha1.CLIAgentSettings{
 							Agent: crewletaiv1alpha1.CLIAgentClaudeCode,

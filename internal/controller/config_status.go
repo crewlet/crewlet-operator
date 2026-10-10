@@ -108,6 +108,10 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 		if base != "" && vendors[render.VendorGitHub] {
 			o.Status.Integrations.GitHub.WebhookURL = base + "/webhooks/github/" + handle
 		}
+	case *crewletaiv1alpha1.LLMProvider:
+		if run.objectsChecked {
+			decideAgentMode(p, o)
+		}
 	case *crewletaiv1alpha1.Unit:
 		facts := units[o.Name]
 		o.Status.Depth = facts.depth
@@ -136,6 +140,20 @@ func decideCodeWork(p *part, seat *crewletaiv1alpha1.Seat) {
 	reason := cmp.Or(w.Reason, crewletaiv1alpha1.ReasonCodeWorkSupported)
 	setCondition(&seat.Status.Conditions, seat.Generation, crewletaiv1alpha1.ConditionCodeWorkRunnable, w.Reason == "",
 		reason, w.Field+": "+w.Message+".")
+}
+
+// decideAgentMode sets an LLMProvider's AgentModeRunnable condition from what
+// the render found, and removes it from a provider that is not a CLI in mode
+// Agent. Like decideCodeWork it is called only once the reconcile rendered.
+func decideAgentMode(p *part, provider *crewletaiv1alpha1.LLMProvider) {
+	m := p.agentMode
+	if m == nil {
+		meta.RemoveStatusCondition(&provider.Status.Conditions, crewletaiv1alpha1.ConditionAgentModeRunnable)
+		return
+	}
+	reason := cmp.Or(m.Reason, crewletaiv1alpha1.ReasonToolBridgeServed)
+	setCondition(&provider.Status.Conditions, provider.Generation, crewletaiv1alpha1.ConditionAgentModeRunnable,
+		m.Reason == "", reason, m.Message+".")
 }
 
 // decideApplied sets a part's Applied condition from the reconcile's verdict.

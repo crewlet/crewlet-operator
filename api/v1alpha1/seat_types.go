@@ -660,7 +660,9 @@ type SeatStatus struct {
 	// ResolvedRefs (the unit, the providers, the tool servers and
 	// every Secret key exist), Applied (the seat is in the revision the
 	// engine runs) and, on an Agent seat, Ready (an engine node holds the
-	// seat's lease and runs it: LeaseHeld, or Unplaced) and, once the
+	// seat's lease and runs it: LeaseHeld, or Unplaced; or the seat can run
+	// no turn wherever it is held, AgentModeBridgeUnsupported or NotExposed)
+	// and, once the
 	// engine runs it, Paused (whether the engine holds it paused, and
 	// whether that is what spec.paused asks), and, on an Agent seat with
 	// spec.sandbox in a Company with spec.sandbox, CodeWorkRunnable (whether

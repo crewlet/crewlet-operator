@@ -22,7 +22,8 @@ import (
 //
 // Every agent seat is pinned, the data pods' too, because an unpinned seat
 // may run on any node, a seat pod among them, and a seat pod cannot serve
-// every seat (an agent-mode CLI, a bundled login: seatPodProviders). The
+// every seat (a bundled login: seatPodProviders; an agent-mode CLI at the
+// head of the executor's chain: ExecutorOf). The
 // pins are literals, since Crewlet expands no ${NAME} in a Tier B placement,
 // and one label per pod lets placement status and settling map each pod to
 // exactly one workload. Capacity is no reason for it: Crewlet bounds a node

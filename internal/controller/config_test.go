@@ -256,15 +256,16 @@ var _ = Describe("Company config", Ordered, func() {
 
 	// --- fixtures ---------------------------------------------------- //
 
-	// standIn writes the status the runtime reconciler would: the Company is
-	// accepted, its data pod runs (not ready: an engine with no document
-	// never is), and vendors reach it at baseURL.
-	standIn := func(company *crewletaiv1alpha1.Company) {
+	// standInAt writes the status the runtime reconciler would: the Company
+	// is accepted, its data pod runs (not ready: an engine with no document
+	// never is), and vendors reach it at base, its public address, or at
+	// none when base is empty.
+	standInAt := func(company *crewletaiv1alpha1.Company, base string) {
 		GinkgoHelper()
 		Eventually(func(g Gomega) {
 			got := &crewletaiv1alpha1.Company{}
 			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(company), got)).To(Succeed())
-			base := got.DeepCopy()
+			before := got.DeepCopy()
 			for _, c := range []metav1.Condition{
 				{Type: crewletaiv1alpha1.ConditionAccepted, Status: metav1.ConditionTrue, Reason: crewletaiv1alpha1.ReasonValid},
 				{Type: crewletaiv1alpha1.ConditionRuntimeReady, Status: metav1.ConditionFalse, Reason: crewletaiv1alpha1.ReasonPodsNotReady},
@@ -272,9 +273,14 @@ var _ = Describe("Company config", Ordered, func() {
 				c.ObservedGeneration = got.Generation
 				meta.SetStatusCondition(&got.Status.Conditions, c)
 			}
-			got.Status.Endpoints.PublicBaseURL = baseURL
-			g.Expect(k8sClient.Status().Patch(ctx, got, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))).To(Succeed())
+			got.Status.Endpoints.PublicBaseURL = base
+			g.Expect(k8sClient.Status().Patch(ctx, got, client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{}))).To(Succeed())
 		}).WithTimeout(settle).Should(Succeed())
+	}
+	// standIn is standInAt the suite's public address.
+	standIn := func(company *crewletaiv1alpha1.Company) {
+		GinkgoHelper()
+		standInAt(company, baseURL)
 	}
 
 	// startEngine starts the engine a Company's document goes to. The
@@ -348,12 +354,13 @@ var _ = Describe("Company config", Ordered, func() {
 		return &crewletaiv1alpha1.Seat{Namespace: namespace, Name: name}
 	}
 	// rendered renders the Company's document from the objects as the API
-	// server holds them, defaults included.
+	// server holds them, defaults included, with the Company's own class.
 	rendered := func(c *crewletaiv1alpha1.Company) *render.Document {
 		GinkgoHelper()
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(c), c)).To(Succeed())
-		in := &render.Input{Company: c, Class: class, StoreName: secretsync.StoreName, ProvisionedName: secretsync.ProvisionedName, PublicBaseURL: c.Status.Endpoints.PublicBaseURL, DashboardBaseURL: c.Status.Endpoints.DashboardBaseURL}
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(class), class)).To(Succeed())
+		own := &crewletaiv1alpha1.EngineClass{}
+		Expect(k8sClient.Get(ctx, client.ObjectKey{Name: c.Spec.EngineClassName}, own)).To(Succeed())
+		in := &render.Input{Company: c, Class: own, StoreName: secretsync.StoreName, ProvisionedName: secretsync.ProvisionedName, PublicBaseURL: c.Status.Endpoints.PublicBaseURL, DashboardBaseURL: c.Status.Endpoints.DashboardBaseURL}
 		in.Units = listOf[crewletaiv1alpha1.Unit](&crewletaiv1alpha1.UnitList{}, namespace, c.Name)
 		in.Seats = listOf[crewletaiv1alpha1.Seat](&crewletaiv1alpha1.SeatList{}, namespace, c.Name)
 		in.LLMProviders = listOf[crewletaiv1alpha1.LLMProvider](&crewletaiv1alpha1.LLMProviderList{}, namespace, c.Name)
@@ -1028,7 +1035,7 @@ var _ = Describe("Company config", Ordered, func() {
 			Namespace: namespace, Name: name + "-agent",
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
 				CompanyRef:          crewletaiv1alpha1.CompanyReference{Name: name},
-				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{Type: crewletaiv1alpha1.LLMProviderCLIAgent, Model: "sonnet"},
+				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{Type: crewletaiv1alpha1.LLMProviderCLIAgent, Model: cliModel},
 				CLI: crewletaiv1alpha1.CLIAgentSettings{
 					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Mode: crewletaiv1alpha1.CLIAgentModeAgent,
 					Auth: crewletaiv1alpha1.CLIAgentAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
@@ -1049,11 +1056,13 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(conditionOf(alone, crewletaiv1alpha1.ConditionApplied)(Default).Message).To(ContainSubstring("spec.seatPools.allowPerSeat"))
 		Expect(conditionOf(alone, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue))
 
-		By("refusing the seat whose executor runs a CLI in agent mode on a seat pod, which serves no tool bridge")
-		Eventually(reasonOf(bridged, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
+		By("reporting the seat whose executor runs a CLI in agent mode on a seat pod, which serves no tool bridge, on its Ready alone")
+		Eventually(reasonOf(bridged, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
 			Should(Equal(crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported))
-		Expect(conditionOf(bridged, crewletaiv1alpha1.ConditionApplied)(Default).Message).To(ContainSubstring("LLMProvider " + name + "-agent, a CLI in mode Agent"))
+		Expect(conditionOf(bridged, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring("LLMProvider " + name + "-agent, a CLI in mode Agent"))
 		Expect(conditionOf(bridged, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue))
+		Eventually(reasonOf(bridged, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonBlocked),
+			"the seat holds nothing: the other seats' refusals hold the document")
 
 		By("blocking the seat that can run, and recording where it is placed")
 		Eventually(reasonOf(shared, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonBlocked))
@@ -1068,6 +1077,89 @@ var _ = Describe("Company config", Ordered, func() {
 		}).WithTimeout(settle).Should(Equal(metav1.ConditionFalse))
 		_, err := e.Client().ActiveConfig(ctx)
 		Expect(err).To(MatchError(engine.ErrNoActiveRevision))
+	})
+
+	It("applies a seat whose agent-mode executor cannot run, and reports it on the Seat and the LLMProvider", func() {
+		const name = "bridge"
+		e := startEngine(name)
+		secret(name+"-llm", map[string]string{llmKey: "k"})
+		secret(name+"-e2b", map[string]string{llmKey: "k"})
+
+		By("running the company with a class that allows Shared pools")
+		pools := class.DeepCopy()
+		pools.ResourceVersion = ""
+		pools.Name = namespace + "-bridge"
+		pools.Spec.SeatPools = crewletaiv1alpha1.SeatPoolSettings{Policy: crewletaiv1alpha1.SeatPoolsAllowed, MaxPods: 20}
+		Expect(k8sClient.Create(ctx, pools)).To(Succeed())
+		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, pools)).To(Succeed()) })
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
+		updateLive(c, func(c *crewletaiv1alpha1.Company) {
+			c.Spec.EngineClassName = pools.Name
+			c.Spec.Topology.SeatPools = []crewletaiv1alpha1.SeatPool{{Name: poolGeneral, Mode: crewletaiv1alpha1.SeatPoolShared}}
+			c.Spec.LLM.Order = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-llm"}}
+			// An agent-mode run happens in the company's sandbox.
+			c.Spec.Sandbox = crewletaiv1alpha1.SandboxSettings{E2B: crewletaiv1alpha1.E2BSandbox{
+				APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-e2b", Key: llmKey},
+			}}
+		})
+		agent := &crewletaiv1alpha1.LLMProvider{
+			Namespace: namespace, Name: name + "-agent",
+			Spec: crewletaiv1alpha1.LLMProviderSpec{
+				CompanyRef:          crewletaiv1alpha1.CompanyReference{Name: name},
+				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{Type: crewletaiv1alpha1.LLMProviderCLIAgent, Model: cliModel},
+				CLI: crewletaiv1alpha1.CLIAgentSettings{
+					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Mode: crewletaiv1alpha1.CLIAgentModeAgent,
+					Auth: crewletaiv1alpha1.CLIAgentAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, agent)).To(Succeed())
+		onAgent := func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: agent.Name}}
+		}
+		coder := newSeat(namespace, name, "coder", onAgent)
+
+		By("applying the company with no public address, which every agent-mode run calls its seat's tools back through")
+		standInAt(c, "")
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		active := runsRendered(e, c)
+		Expect(string(active.Document)).To(ContainSubstring("handle: " + coder.Name))
+		Expect(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonInRevision))
+		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonNotExposed))
+		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring("has no public address"))
+		Eventually(reasonOf(agent, crewletaiv1alpha1.ConditionAgentModeRunnable)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonNotExposed))
+		Expect(conditionOf(agent, crewletaiv1alpha1.ConditionAgentModeRunnable)(Default).Status).To(Equal(metav1.ConditionFalse))
+		Expect(reasonOf(agent, crewletaiv1alpha1.ConditionResolvedRefs)(Default)).To(Equal(crewletaiv1alpha1.ReasonResolved))
+		Expect(reasonOf(agent, crewletaiv1alpha1.ConditionApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonInRevision))
+		Expect(reasonOf(seat(name+"-ana"), crewletaiv1alpha1.ConditionReady)(Default)).
+			To(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced), "a seat on the text provider is not affected")
+		Expect(log.of(coder.Name)).To(ContainElement(HavePrefix("Warning " + crewletaiv1alpha1.ReasonNotExposed)))
+		Expect(log.of(agent.Name)).To(ContainElement(HavePrefix("Warning " + crewletaiv1alpha1.ReasonNotExposed)))
+
+		By("adding a seat on the agent-mode provider in a seat pool, whose pods serve no tool bridge")
+		bridged := newSeat(namespace, name, "bridged", onAgent, func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.Placement = crewletaiv1alpha1.SeatPlacement{Pool: poolGeneral}
+		})
+		Eventually(reasonOf(bridged, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
+		Eventually(reasonOf(bridged, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
+			Should(Equal(crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported))
+		Expect(conditionOf(bridged, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring("seat pool " + poolGeneral))
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		runsRendered(e, c)
+		Expect(log.of(bridged.Name)).To(ConsistOf(HavePrefix("Warning " + crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported)))
+
+		By("giving the company a public address")
+		standInAt(c, baseURL)
+		Eventually(reasonOf(agent, crewletaiv1alpha1.ConditionAgentModeRunnable)).WithTimeout(settle).
+			Should(Equal(crewletaiv1alpha1.ReasonToolBridgeServed))
+		Expect(conditionOf(agent, crewletaiv1alpha1.ConditionAgentModeRunnable)(Default).Message).To(ContainSubstring(baseURL + "/mcp/"))
+		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
+			Should(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced))
+		Expect(reasonOf(bridged, crewletaiv1alpha1.ConditionReady)(Default)).To(Equal(crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported),
+			"a public address reaches the data pods alone")
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		runsRendered(e, c)
+		Expect(log.of(bridged.Name)).To(HaveLen(1), "the seat that stayed unrunnable is announced once")
 	})
 
 	It("records where the revision the engine runs pins the seats, for the runtime to keep their pods", func() {

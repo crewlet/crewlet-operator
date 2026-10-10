@@ -243,7 +243,6 @@ the reference:
 | `Seat` | `spec.placement.pool` is neither `data` nor one of the Company's `spec.topology.seatPools` | `PoolNotFound` |
 | `Seat` | it is placed in a PerSeat pool, and the class does not set `seatPools.allowPerSeat` (reported on `Applied`) | `PerSeatNotAllowed` |
 | `Seat` | it is placed in a PerSeat pool, and the company's seat pods, its own included, would number more than the class's `seatPools.maxPods` with the PerSeat seats admitted before it: those the running revision already runs in pods of their own, then the older ones; every seat after the first refused is refused too (reported on `Applied`) | `PoolCapacityExceeded` |
-| `Seat` | it is placed in a seat pool, and its executor's chain starts with a `CLIAgent` provider in `mode: Agent` (the one entry Crewlet runs as an agentic run), whose runs call back into the tool bridge of the pod that holds the seat, at an address the operator publishes for no seat pod (reported on `Applied`) | `AgentModeBridgeUnsupported` |
 | `Seat` | it is placed in a seat pool, and a chain of it names a `CLIAgent` provider signed in with a credential bundle, which every seat pod would restore and refresh on its own (reported on `Applied`) | `CLIAuthNotPortable` |
 | `Seat` | it has `spec.sandbox`, its Company has one, and the provider its code work runs on (the head of `spec.llm.sandbox`, else of `spec.llm.default`, else of the Company's order) is a `CLIAgent` provider driving another CLI than its coding agent, which Crewlet refuses on every write (reported on `Applied`) | `CodingAgentMismatch` |
 | `Company` | it declares `spec.topology.seatPools`, and its class's `seatPools.policy` is not `Allowed` | `SeatPoolsNotAllowed` |
@@ -252,7 +251,6 @@ the reference:
 | `Unit` | its chain of parents leads back to it | `Cycle` |
 | `Company` | `spec.llm.order` names a provider that does not exist or is not offered to it | `RefNotFound` |
 | `LLMProvider` | its name is also the name of a platform provider the company uses | `Conflict` |
-| `LLMProvider` | it runs a CLI in `mode: Agent` and the company has no public address for the sandbox to call its tools back through | `NotExposed` |
 | `Integration` | another Integration of the company, earlier by name, connects the same vendor | `Conflict` |
 | `Integration` | Datadog's `routeTo.seatRef` or a GitLab `accessLevels` entry names a Seat that does not exist | `RefNotFound` |
 | `Integration` | Datadog's `routeTo.seatRef` or a GitLab `accessLevels` entry names a Human seat | `HumanSeat` |
@@ -278,12 +276,27 @@ object that rendered that part of it, which reports `Applied=False` with the
 reason `Invalid` and the engine's own words. [How the document is
 applied](applying.md) covers the rest of what is reported where.
 
-Beyond the table, two more pairings of a seat's code work that no coding run
-can use block nothing, because Crewlet applies them and refuses only each
-run: `ClaudeCode` on a provider of type `OpenAI` or `OpenAICompatible` while
-the seat's sandbox environment names no variable that signs Claude Code in
-(`SandboxModelUnsupported`), and a `CLIAgent` provider of the coding agent's
-own CLI whose login cannot reach the remote sandbox
-(`SandboxLoginNotPortable`). The Seat reports them on its `CodeWorkRunnable`
-condition and is applied, so one seat's code work does not hold the
-company's next revision ([Code work](../guides/cli-agents.md#code-work)).
+Beyond the table, what Crewlet applies and then refuses only the runs of
+blocks nothing, so that one seat that cannot work does not hold the
+company's next revision:
+
+- Two pairings of a seat's code work that no coding run can use:
+  `ClaudeCode` on a provider of type `OpenAI` or `OpenAICompatible` while
+  the seat's sandbox environment names no variable that signs Claude Code in
+  (`SandboxModelUnsupported`), and a `CLIAgent` provider of the coding
+  agent's own CLI whose login cannot reach the remote sandbox
+  (`SandboxLoginNotPortable`). The Seat reports them on its
+  `CodeWorkRunnable` condition ([Code work](../guides/cli-agents.md#code-work)).
+- A seat whose executor's chain starts with a `CLIAgent` provider in
+  `mode: Agent` (the one entry Crewlet runs as an agentic run), where the
+  node that holds it serves no tool bridge for the run to call the seat's
+  tools back through: the seat is placed in a seat pool, for whose pods the
+  operator publishes no address (`AgentModeBridgeUnsupported`), or the
+  company has no public address at all (`NotExposed`). Crewlet refuses each
+  of the seat's turns, so the Seat reports `Ready=False` with the reason,
+  and an `LLMProvider` in `mode: Agent` reports `AgentModeRunnable=False`,
+  `NotExposed`, while the company has no public address
+  ([Text mode and agent mode](../guides/cli-agents.md#text-mode-and-agent-mode)).
+
+Each is applied (`Applied=True`), and the operator records a Warning event
+on the object when it turns so.

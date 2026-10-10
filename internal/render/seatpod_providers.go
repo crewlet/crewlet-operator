@@ -8,25 +8,8 @@ import (
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
 )
 
-// What a seat pod cannot do that a data pod does: run a CLIAgent provider
-// whose runs call back into the node that holds the seat, or keep a CLI
-// login it was given as a credential bundle.
-//
-// An agent-mode run calls the seat's tools through the tool bridge of the
-// very node that opened its session (Crewlet's
-// docs/concepts/code-sandbox.md, "The tool bridge"), at the address the node
-// was given as CREWLET_MCP_BRIDGE_URL. The engine serves that bridge on a
-// node without the ingress role too, on its api.port beside the probes (or
-// on api.public's listener when one is set), and a seat pod binds api.port
-// for its probes. What a seat pod lacks is an address: the operator routes
-// the company's public address to the data pods alone, and publishes none
-// for a seat pod that a remote sandbox could dial, so it gives a seat pod no
-// CREWLET_MCP_BRIDGE_URL, and the engine refuses agent mode for a seat there
-// at run time, after the revision is applied and while the Seat reports
-// Applied. A bridge for a seat pod needs a route and a public address of the
-// pod's own, which its session's runs reach and no other pod's; until the
-// operator gives it one, the seat is refused here, where the refusal is
-// reported before anything runs.
+// What a seat pod cannot do that a data pod does: keep a CLI login it was
+// given as a credential bundle.
 //
 // A CLI's login lives under its state directory, which on a data pod is the
 // data volume and on a seat pod the scratch volume it loses at every start.
@@ -36,30 +19,27 @@ import (
 // others hold at each refresh, and logs the company out. A headless token
 // (tokenSecretRef), an API key, or the model provider's key a Hermes, Pi or
 // OpenCode reads from cli.env never refreshes, and is portable: a ${NAME}
-// every pod resolves from the fleet's encrypted store.
+// every pod resolves from the fleet's encrypted store. Crewlet applies a
+// document that places such a seat in a seat pool, so the refusal is the
+// operator's own: applied, it would log out every seat on that CLI login, the
+// seats on the data pods included, which is harm beyond the seat at fault.
+//
+// A seat pod cannot serve a CLI in mode Agent at the head of a seat's
+// executor's chain either, as it serves no tool bridge; that seat is applied
+// and reported on its Ready (ExecutorOf), since only its own turns fail.
 
 // fieldLLMDefault is a Seat's executor chain, the one every phase without a
 // chain of its own runs on.
 const fieldLLMDefault = "spec.llm.default"
 
+// fieldLLM stands for the chain of a Seat whose spec.llm.default is empty:
+// the head of the document's llm_order, which the Company decides.
+const fieldLLM = "spec.llm"
+
 // seatPodProviders refuses the providers an agent seat placed in seat pool
-// pool runs on that a seat pod cannot serve.
+// pool runs on whose login a seat pod cannot keep.
 func (r *renderer) seatPodProviders(s *v1alpha1.Seat, pool string) {
 	llm := &s.Spec.LLM
-	// Crewlet decides a turn's runtime from the head of the executor's chain
-	// alone (Registry.Head): an agent-mode CLI there runs the turn as its own
-	// agentic run. Anywhere else, behind the head or in another phase, it is
-	// reached as a text model, which a seat pod serves like any other.
-	if head, ok := r.executorHead(llm.Default, fieldLLMDefault); ok {
-		if cli := r.cliProviders[head.provider]; cli != nil && cli.Mode == v1alpha1.CLIAgentModeAgent {
-			r.errs.add(KindSeat, s.Name, head.field, v1alpha1.ReasonAgentModeBridgeUnsupported, fmt.Sprintf(
-				"runs the seat's work on LLMProvider %s, a CLI in mode Agent at the head of its executor's chain, and "+
-					"places the seat in seat pool %s: an agent-mode run calls the seat's tools back through the engine "+
-					"pod that holds the seat, and a seat pod serves no tool bridge. Place the seat in data, or put a "+
-					"provider in mode Text at the head of the chain",
-				head.provider, pool))
-		}
-	}
 	phases := []struct {
 		refs  []v1alpha1.LLMProviderReference
 		field string
@@ -110,7 +90,7 @@ func (r *renderer) chainOf(refs []v1alpha1.LLMProviderReference, field string) [
 		if !ok {
 			return nil
 		}
-		return []chainLink{{provider: head, field: "spec.llm"}}
+		return []chainLink{{provider: head, field: fieldLLM}}
 	}
 	var out []chainLink
 	for i, ref := range refs {
@@ -130,7 +110,7 @@ func (r *renderer) chainOf(refs []v1alpha1.LLMProviderReference, field string) [
 func (r *renderer) executorHead(refs []v1alpha1.LLMProviderReference, field string) (chainLink, bool) {
 	if len(refs) == 0 {
 		head, ok := r.orderHead()
-		return chainLink{provider: head, field: "spec.llm"}, ok
+		return chainLink{provider: head, field: fieldLLM}, ok
 	}
 	for i, ref := range refs {
 		switch cmp.Or(ref.Kind, v1alpha1.LLMProviderKindLLMProvider) {

@@ -430,8 +430,10 @@ type LLMProviderSpec struct {
 // +kubebuilder:validation:MinProperties=1
 type LLMProviderStatus struct {
 	// conditions are Accepted (the Company exists), ResolvedRefs (every
-	// Secret key exists) and Applied (the provider is in the revision the
-	// engine runs).
+	// Secret key exists), Applied (the provider is in the revision the
+	// engine runs) and, on a provider of type CLIAgent in mode Agent,
+	// AgentModeRunnable (whether its runs can call a seat's tools back
+	// through the Company's public address).
 	// +optional
 	// +listType=map
 	// +listMapKey=type
@@ -457,6 +459,7 @@ type LLMProviderStatus struct {
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.type`
 // +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.model`
 // +kubebuilder:printcolumn:name="Applied",type=string,JSONPath=`.status.conditions[?(@.type=="Applied")].status`
+// +kubebuilder:printcolumn:name="AgentMode",type=string,JSONPath=`.status.conditions[?(@.type=="AgentModeRunnable")].status`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type LLMProvider struct {
 	metav1.TypeMeta `json:",inline"`

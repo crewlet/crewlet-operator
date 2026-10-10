@@ -42,10 +42,10 @@ type part struct {
 	unplaceable       []string
 	unplaceableReason string
 	// unrunnable are why a Seat cannot run on the pods of the pool it is
-	// placed in, which its class admits, because the pods cannot serve what
-	// it runs on, or why its code work runs on a CLIAgent provider of
-	// another CLI. Its references resolve; the document is refused all the
-	// same.
+	// placed in, which its class admits, because the pods cannot keep the
+	// login of a CLI it runs on, or why its code work runs on a CLIAgent
+	// provider of another CLI. Its references resolve; the document is
+	// refused all the same.
 	unrunnable       []string
 	unrunnableReason string
 	// invalid are the engine's refusals of its part of the document.
@@ -66,6 +66,13 @@ type part struct {
 	// Crewlet offers the seat none or none of its sandbox chain resolves;
 	// read only once the reconcile rendered (objectsChecked).
 	codeWork *render.CodeWork
+	// executor is what the render found about an agent Seat whose
+	// executor's chain is headed by a CLI in mode Agent, nil for any other;
+	// agentMode is what it found about an LLMProvider in mode Agent, nil
+	// for any other. Both are read only once the reconcile rendered
+	// (objectsChecked), and neither holds the document.
+	executor  *render.Executor
+	agentMode *render.AgentMode
 }
 
 func newPart(obj client.Object) *part {

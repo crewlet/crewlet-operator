@@ -34,6 +34,10 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Applied")].status
       name: Applied
       type: string
+    - jsonPath: .status.conditions[?(@.type=="AgentModeRunnable")].status
+      name: AgentMode
+      priority: 1
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -571,8 +575,10 @@ spec:
               conditions:
                 description: |-
                   conditions are Accepted (the Company exists), ResolvedRefs (every
-                  Secret key exists) and Applied (the provider is in the revision the
-                  engine runs).
+                  Secret key exists), Applied (the provider is in the revision the
+                  engine runs) and, on a provider of type CLIAgent in mode Agent,
+                  AgentModeRunnable (whether its runs can call a seat's tools back
+                  through the Company's public address).
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.

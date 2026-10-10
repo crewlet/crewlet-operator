@@ -430,7 +430,7 @@ type SeatPodInput struct {
 // seats from one that is still starting, or has lost the data pods. The
 // engine would serve the agent-mode tool bridge, its one public route, on
 // the same listener when CREWLET_MCP_BRIDGE_URL is set, which the operator
-// never sets on a seat pod (see AgentModeBridgeUnsupported); so it opens no
+// never sets on a seat pod (see ExecutorOf); so it opens no
 // public listener (api.public) either, which would serve nothing.
 //
 // A Shared pool's pods carry the pool's own placement label. A PerSeat pool's

@@ -384,10 +384,13 @@ The public address is also where a remote sandbox calls the engine back:
   its one run, which expires with it. Crewlet requires the address to reach
   the node that runs the seat, which only the single data pod is: the engine
   would serve the bridge on a seat pod too, but nothing publishes an address
-  of one, so a seat in a seat pool whose work runs on such a provider is
-  refused (`AgentModeBridgeUnsupported`, see [Seat
-  pools](../guides/cli-agents.md#seat-pools)), and the variable is given to
-  the data pod alone. With no such provider the bridge is not mounted;
+  of one, so the variable is given to the data pod alone, and the engine
+  refuses every turn of a seat in a seat pool whose executor runs on such a
+  provider, which the Seat reports as `Ready=False`,
+  `AgentModeBridgeUnsupported` (see [Seat
+  pools](../guides/cli-agents.md#seat-pools)). A company with no public
+  address gives no pod the variable, and every such seat reports
+  `NotExposed`. With no such provider the bridge is not mounted;
   adding or removing one changes the pod's environment, so the data pod
   rolls.
 - While the class sends the engine's telemetry to a collector

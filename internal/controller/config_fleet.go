@@ -127,7 +127,12 @@ func (run *configRun) lookAtFleet(ctx context.Context) {
 // from the engine's fleet: True (LeaseHeld) while a node holds the seat's
 // lease, False (Unplaced) while none does. Neither changes when this
 // reconcile did not read the fleet, which it reads whenever the Company runs
-// an engine; Unknown is an engine whose fleet could not be read.
+// an engine; Unknown is an engine whose fleet could not be read. A seat whose
+// executor cannot run a turn on the node its spec places it on is False with
+// that reason whoever holds it: the engine applies the seat and refuses
+// every one of its turns, so a lease says nothing about whether it works.
+// The verdict is the spec's, also while a move holds the seat's pin where it
+// ran (PlacementPending): that lasts until a pod of its new pool starts.
 func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 	gen := s.Generation
 	conditions := p.conditions()
@@ -137,6 +142,22 @@ func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 	case suspended(run.company):
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionReady, false, crewletaiv1alpha1.ReasonSuspended,
 			fmt.Sprintf("Company %s is suspended: no engine node runs its seats, and their messages wait.", run.company.Name))
+	case p.executor != nil && p.executor.Reason != "":
+		message := p.executor.Field + ": " + p.executor.Message + "."
+		lease, held := engine.SeatLease{}, false
+		if run.fleet != nil {
+			lease, held = run.fleet.Holder(handle)
+		}
+		switch {
+		case held:
+			s.Status.Placement.Node = lease.Node
+			message += fmt.Sprintf(" Engine node %s holds the seat.", lease.Node)
+		case run.fleet != nil:
+			message += " No engine node holds the seat."
+		default:
+			s.Status.Placement.Node = p.base.(*crewletaiv1alpha1.Seat).Status.Placement.Node
+		}
+		setCondition(conditions, gen, crewletaiv1alpha1.ConditionReady, false, p.executor.Reason, message)
 	case run.fleet != nil:
 		lease, held := run.fleet.Holder(handle)
 		if held {

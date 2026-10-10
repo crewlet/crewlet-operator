@@ -220,16 +220,6 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			want: []refusal{{KindSeat, seatCTO, "spec.integrations.mattermost.botToken", v1alpha1.ReasonNoProvisioner}},
 		},
 		{
-			// The run happens in a remote sandbox, which calls the seat's
-			// tools back through the company's public address.
-			name: "an Agent-mode CLI provider in a company with no public address",
-			mutate: func(in *Input) {
-				in.PublicBaseURL = ""
-				in.LLMProviders = append(in.LLMProviders, cliProvider(v1alpha1.CLIAgentModeAgent))
-			},
-			want: []refusal{{KindLLMProvider, providerCLI, "spec.cli.mode", v1alpha1.ReasonNotExposed}},
-		},
-		{
 			name: "datadog routes alerts to a seat that does not exist",
 			mutate: func(in *Input) {
 				in.Integrations = append(in.Integrations, datadogIntegration("sre"))

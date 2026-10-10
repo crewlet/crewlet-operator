@@ -294,12 +294,15 @@ const (
 	// except that a suspended Company reports Suspended. Generic health
 	// checks (kstatus, Argo CD, Flux) read this one.
 	//
-	// On an agent Seat, Ready reports whether an engine node holds the
-	// seat's lease and so runs it: LeaseHeld, or Unplaced while no node
-	// does, as the engine's GET /fleet reports. CodeWorkRunnable does not
-	// count towards it: a seat whose code work cannot run still runs its
-	// turns, and a health check gating on Ready would otherwise hold a
-	// rollout over a seat that works.
+	// On an agent Seat, Ready reports whether the seat runs: LeaseHeld while
+	// an engine node holds its lease, as the engine's GET /fleet reports,
+	// and Unplaced while none does. A seat whose executor's chain is headed
+	// by a CLI in mode Agent that no node holding it can serve a tool bridge
+	// for is not Ready either, whoever holds it (AgentModeBridgeUnsupported,
+	// NotExposed): the engine applies it and refuses every one of its turns.
+	// CodeWorkRunnable does not count towards it: a seat whose code work
+	// cannot run still runs its turns, and a health check gating on Ready
+	// would otherwise hold a rollout over a seat that works.
 	ConditionReady = "Ready"
 
 	// ConditionRuntimeReady reports whether a Company's engine pods exist,
@@ -355,6 +358,17 @@ const (
 	// SandboxLoginNotPortable the seat is applied and runs its turns, and
 	// Crewlet refuses each of its coding runs.
 	ConditionCodeWorkRunnable = "CodeWorkRunnable"
+
+	// ConditionAgentModeRunnable reports whether an LLMProvider of type
+	// CLIAgent in mode Agent can run as an agentic run at all: its runs
+	// happen in the Company's remote sandbox and call the seat's tools back
+	// through the engine's public address (status.endpoints.publicBaseURL),
+	// so it is False (NotExposed) while the Company has none. It is set on
+	// such a provider only, and does not hold the document: the engine
+	// applies the provider, which still serves a text call behind a chain's
+	// head or in another phase, and refuses each turn of a seat whose
+	// executor's chain it heads (the Seat's Ready says which seats).
+	ConditionAgentModeRunnable = "AgentModeRunnable"
 
 	// ConditionHealthy reports what the engine says about an integration:
 	// whether its credentials work and its webhooks are registered.
@@ -583,10 +597,12 @@ const (
 
 	// ReasonNotExposed is Healthy=False on an integration that needs inbound
 	// delivery when the company has no public address
-	// (status.endpoints.publicBaseURL), and ResolvedRefs=False on an
+	// (status.endpoints.publicBaseURL), and AgentModeRunnable=False on an
 	// LLMProvider of type CLIAgent in mode Agent then: its runs happen in a
 	// remote sandbox, which calls the seat's tools back through the engine's
-	// public address.
+	// public address. It is Ready=False on an agent Seat placed in data
+	// whose executor's chain such a provider heads: the engine applies the
+	// seat and refuses each of its turns.
 	ReasonNotExposed = "NotExposed"
 
 	// ReasonNoProvisioner is ResolvedRefs=False on a Seat that names a
@@ -752,8 +768,8 @@ const (
 	// they are and starts no other.
 	ReasonPoolCapacityExceeded = "PoolCapacityExceeded"
 
-	// ReasonAgentModeBridgeUnsupported is Applied=False on a Seat placed in
-	// a seat pool whose executor runs on a CLIAgent provider in mode Agent:
+	// ReasonAgentModeBridgeUnsupported is Ready=False on a Seat placed in a
+	// seat pool whose executor runs on a CLIAgent provider in mode Agent:
 	// one at the head of its executor's chain, the only entry Crewlet runs
 	// as an agentic run (a fallback behind it is a text call).
 	// An agent-mode run calls the seat's tools back through the tool bridge
@@ -762,7 +778,9 @@ const (
 	// seat pod's own listener, but the operator publishes no address of a
 	// seat pod a remote sandbox could dial (the company's public address
 	// reaches the data pods only), so it gives a seat pod none, and the
-	// engine refuses agent mode on a node with no bridge URL.
+	// engine refuses agent mode on a node with no bridge URL. The seat is
+	// applied (Applied=True) and the engine refuses each of its turns; the
+	// rest of the company runs.
 	ReasonAgentModeBridgeUnsupported = "AgentModeBridgeUnsupported"
 
 	// ReasonCLIAuthNotPortable is Applied=False on a Seat placed in a seat
@@ -778,6 +796,11 @@ const (
 	// or on the sign-in the seat's sandbox environment gives it; the message
 	// says which.
 	ReasonCodeWorkSupported = "CodeWorkSupported"
+
+	// ReasonToolBridgeServed is AgentModeRunnable=True on an LLMProvider
+	// whose agent-mode runs can reach the tool bridge at the Company's
+	// public address.
+	ReasonToolBridgeServed = "ToolBridgeServed"
 
 	// ReasonCodingAgentMismatch is Applied=False and CodeWorkRunnable=False
 	// on a Seat whose code work (spec.sandbox) runs on a CLIAgent provider

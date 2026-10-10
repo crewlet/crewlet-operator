@@ -201,13 +201,13 @@ has the details.
 | Seat `ResolvedRefs=False`, `PoolNotFound` | `spec.placement.pool` names no pool of the Company | A seat pinned to a label no pod carries would never run, silently. |
 | Seat `Applied=False`, `PerSeatNotAllowed` | the seat is in a PerSeat pool and the class does not allow them | Pods of their own are the most expensive shape; the class decides which companies get them. |
 | Seat `Applied=False`, `PoolCapacityExceeded` | the seat's own pods would take the company past the class's `maxPods`; the seats already running in pods of their own are admitted first, then the rest oldest first, and the first that does not fit is refused with every seat after it | The cost above grows with every pod. |
-| Seat `Applied=False`, `AgentModeBridgeUnsupported` | the seat is in a seat pool, and its executor's chain (`spec.llm.default`, or the Company's first provider when the seat has none) starts with a `CLIAgent` provider in `mode: Agent` | An agent-mode run calls the seat's tools back through the tool bridge of the pod that holds the seat, at an address the sandbox reaches; the operator publishes none for a seat pod, so the engine would refuse every run, after the revision applied. |
-| Seat `Applied=False`, `CLIAuthNotPortable` | the seat is in a seat pool, and a chain of it names a `CLIAgent` provider signed in with `credentialBundleSecretRef` | A seat pod keeps the CLI's login on a volume it loses at every start, so it restores the bundle each time and refreshes it on its own, beside the data pod; a vendor that rotates refresh tokens then logs every pod out. A headless token (`tokenSecretRef`), `auth.mode: APIKey` or the model provider's key a Hermes, Pi or OpenCode takes in `cli.env` never refreshes. |
+| Seat `Ready=False`, `AgentModeBridgeUnsupported`, reported and not held | the seat is in a seat pool, and its executor's chain (`spec.llm.default`, or the Company's first provider when the seat has none) starts with a `CLIAgent` provider in `mode: Agent` | An agent-mode run calls the seat's tools back through the tool bridge of the pod that holds the seat, at an address the sandbox reaches; the operator publishes none for a seat pod, so the engine refuses every one of the seat's turns. It applies the seat all the same, and only that seat fails, so the operator applies it too rather than hold the rest of the company. |
+| Seat `Applied=False`, `CLIAuthNotPortable` | the seat is in a seat pool, and a chain of it names a `CLIAgent` provider signed in with `credentialBundleSecretRef` | A seat pod keeps the CLI's login on a volume it loses at every start, so it restores the bundle each time and refreshes it on its own, beside the data pod; a vendor that rotates refresh tokens then logs every pod out, the data pod's seats on that login included. A headless token (`tokenSecretRef`), `auth.mode: APIKey` or the model provider's key a Hermes, Pi or OpenCode takes in `cli.env` never refreshes. |
 | Company `ConfigApplied=False`, `SeatPoolsNotAllowed` | the Company declares pools and its class's policy is not `Allowed` | The class's data pods open no listener for seat pods to join. |
 | Company `ConfigApplied=False`, `PoolCapacityExceeded` | the Shared pools alone pass `maxPods` | As above; the operator keeps the pools as they are and starts no pod. |
 
-A refusal blocks the company's next revision, like any other, and the last
-good revision keeps running. Users cannot write Crewlet node labels or pin a
+Every row but the one reported on `Ready` blocks the company's next
+revision, like any other refusal, and the last good revision keeps running. Users cannot write Crewlet node labels or pin a
 seat to a node themselves: one stray label would let a seat run on a pod it
 was never placed on, a seat pod that cannot serve it among them, and the
 operator could no longer tell which pool a pod serves.
@@ -225,8 +225,8 @@ operator could no longer tell which pool a pod serves.
   serve them on an address the sandbox reaches. The engine would serve the
   bridge on a seat pod's own listener, but the operator publishes no address
   of a seat pod a remote sandbox could dial, and the company's public address
-  reaches the data pod only, so a seat whose work runs on such a provider
-  stays on the data pods
+  reaches the data pod only, so a seat whose executor runs on such a
+  provider belongs on the data pods
   ([Running seats on a coding CLI](cli-agents.md#seat-pools)).
 - **Code runs in a remote sandbox.** v1alpha1 offers only E2B for a seat's
   sandbox, which works from any pod; Crewlet's local sandbox cells would be

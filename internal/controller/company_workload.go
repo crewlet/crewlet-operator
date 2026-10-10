@@ -454,9 +454,10 @@ func engineContainerOf(
 		tursoCache: render.DataDir + "/cache",
 		// Crewlet requires the URL to address the node that holds each
 		// bridged session. The company's public address reaches the one
-		// data pod, and a seat that runs elsewhere (a seat pool) is
-		// refused an agent-mode provider (render's AgentModeBridgeUnsupported),
-		// so every bridged session is the data pod's.
+		// data pod, and a seat pod is given no URL, so it opens no bridged
+		// session: the engine refuses the agent-mode turns of a seat placed
+		// there, which the Seat reports (render's ExecutorOf). Every bridged
+		// session is the data pod's.
 		bridgeURL: w.bridgeURL,
 	})
 	if err != nil {
