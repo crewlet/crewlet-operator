@@ -329,7 +329,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.22.0
 # crewlet's main rather than its newest tag: v0.1.0 holds no Go source at all
 # (no cmd/crewlet to build), so there is no tagged engine yet. Move it to the
 # first tag that carries the API internal/engine speaks.
-CREWLET_VERSION ?= v0.1.1-0.20261010051424-a0dd86d94fc5
+CREWLET_VERSION ?= v0.1.1-0.20261010171839-4e45c6b992a2
 # .custom-gcl.yml names the same version; the golangci-lint target refuses to
 # build if the two disagree.
 GOLANGCI_LINT_VERSION ?= v2.14.0

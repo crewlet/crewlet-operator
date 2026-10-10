@@ -372,7 +372,7 @@ func signInShapes(variables map[v1.CLIAgentName]cliVariable) []signInShape {
 func shapedProvider(namespace string, agent v1.CLIAgentName, mode v1.CLIAgentMode, s *signInShape) *v1.LLMProvider {
 	p := llmProvider(namespace, strings.ToLower(string(agent)))
 	p.Spec.Type = v1.LLMProviderCLIAgent
-	p.Spec.Model = "probe-model"
+	p.Spec.Model = "probe/probe-model"
 	p.Spec.APIKeySecretRefs = nil
 	if s.key {
 		p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey("cli", apiKeyKey)}
