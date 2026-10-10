@@ -88,6 +88,7 @@ const (
 	msgKeysRequired                = "apiKeySecretRefs needs at least one key for types Anthropic and OpenAI"
 	msgBaseURLRequired             = "baseURL is required for type OpenAICompatible"
 	msgClaudeModel                 = "claudeModel applies to type Anthropic only"
+	msgClaudeModelUnlisted         = `spec.claudeModel: Unsupported value`
 	msgReasoning                   = "reasoning applies to type OpenAI only"
 	msgBudgetTokens                = "reasoningBudgetTokens applies to type Anthropic only"
 	msgBaseURLShape                = "baseURL must be an absolute http or https URL"

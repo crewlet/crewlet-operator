@@ -531,7 +531,7 @@ func llmProvider(s *v1alpha1.LLMProviderSettings, keys []string) llmProviderDoc 
 	doc := llmProviderDoc{
 		Type:                  llmProviderType(s.Type),
 		Model:                 s.Model,
-		ClaudeModel:           s.ClaudeModel,
+		ClaudeModel:           string(s.ClaudeModel),
 		APIKeys:               keys,
 		BaseURL:               s.BaseURL,
 		Reasoning:             s.Reasoning,

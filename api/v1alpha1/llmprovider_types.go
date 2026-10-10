@@ -12,6 +12,16 @@ import (
 // +kubebuilder:validation:Enum=Anthropic;OpenAI;OpenAICompatible;CLIAgent
 type LLMProviderType string
 
+// ClaudeModelID is one id of Crewlet's table of Claude models, which records
+// the request shape each model accepts (its thinking mode, its effort levels,
+// whether it takes a sampling parameter, its output cap). An Anthropic
+// provider whose model is a gateway alias names the row it is an alias of.
+// Crewlet refuses on every write a claude_model its table does not list,
+// exactly as written, so the values are the table's ids at the engine the
+// operator is built against; a test holds them to that engine's refusal.
+// +kubebuilder:validation:Enum=claude-fable-5-1;claude-mythos-5-1;claude-fable-5;claude-mythos-5;claude-opus-5-5;claude-opus-5;claude-opus-4-8;claude-opus-4-7;claude-sonnet-5-5;claude-sonnet-5;claude-opus-4-6;claude-sonnet-4-6;claude-opus-4-5;claude-sonnet-4-5;claude-haiku-4-5;claude-opus-4-1;claude-opus-4-0;claude-opus-4;claude-sonnet-4-0;claude-sonnet-4;claude-3-7-sonnet
+type ClaudeModelID string
+
 // The LLM provider types.
 const (
 	// LLMProviderAnthropic is Anthropic's Messages API.
@@ -322,10 +332,7 @@ type LLMProviderSettings struct {
 	// provider uses when model is a gateway alias Crewlet cannot recognise.
 	// Crewlet's `claude_model`; type Anthropic only.
 	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=256
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="claudeModel may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
-	ClaudeModel string `json:"claudeModel,omitempty"`
+	ClaudeModel ClaudeModelID `json:"claudeModel,omitempty"`
 
 	// baseURL sends requests to this endpoint instead of the vendor's own,
 	// for a gateway or a proxy. Required for type OpenAICompatible. Crewlet's

@@ -133,7 +133,9 @@ engine whose profiles move a token or key variable fails it. It holds the
 rule over an OpenCode provider's `model` the same way, trying every CLI with
 models with and without a provider, and with segments of white space, so an
 engine that marks another profile as reading `<provider>/<model>` fails it
-too. A mock would agree with the code by construction; the real engine is
+too. And it holds the `claudeModel` enum to the engine's table of Claude
+models, read from its refusal of an id the table does not list, so an
+engine that adds or drops a row fails it. A mock would agree with the code by construction; the real engine is
 what tells the two apart when Crewlet's API or schema moves.
 
 The engine is pinned like every other tool, as `CREWLET_VERSION` in the

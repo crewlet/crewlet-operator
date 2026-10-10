@@ -54,9 +54,11 @@ func TestReferencesInModelProviders(t *testing.T) {
 			want:   "model" + msgReference,
 		},
 		{
+			// claudeModel takes the ids of Crewlet's model table alone,
+			// which no reference is.
 			name:   "a reference in claudeModel is refused",
 			mutate: func(p *v1.LLMProvider) { p.Spec.ClaudeModel = leak },
-			want:   "claudeModel" + msgReference,
+			want:   msgClaudeModelUnlisted,
 		},
 		{
 			name:   "a reference in the base URL is refused",

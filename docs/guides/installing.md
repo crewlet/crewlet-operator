@@ -302,3 +302,10 @@ found`. So before moving any EngineClass's `engine.image` to it, give each
 [Signing in](cli-agents.md#signing-in) describes; a provider left as it
 was is reported as the `cli.env` variables above are, and the API server
 refuses a change to its `spec` until its `model` is fixed.
+
+The same release takes as `claudeModel` only the ids of the pinned engine's
+table of Claude models, which `kubectl explain llmprovider.spec.claudeModel`
+lists. Crewlet refused any other in every revision already, so a company
+holding one has applied nothing since, and its `ConfigApplied` says so. The
+API server keeps such an object as it is stored; give it an id of the
+table, or remove `claudeModel` where `model` is one the table reads itself.

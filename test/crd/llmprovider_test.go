@@ -36,6 +36,9 @@ func TestLLMProviderValidation(t *testing.T) {
 		{
 			name: "an Anthropic provider with every setting is accepted",
 			mutate: func(p *v1.LLMProvider) {
+				// Crewlet takes claudeModel only beside a model its table
+				// cannot read, such as a gateway's alias.
+				p.Spec.Model = "house-sonnet"
 				p.Spec.ClaudeModel = "claude-sonnet-4-5"
 				p.Spec.BaseURL = "https://gateway.example/anthropic"
 				p.Spec.ReasoningEffort = v1.ReasoningEffortHigh
@@ -67,6 +70,14 @@ func TestLLMProviderValidation(t *testing.T) {
 			name:   "an OpenAICompatible provider without baseURL is refused",
 			mutate: and(openAICompatible, func(p *v1.LLMProvider) { p.Spec.BaseURL = "" }),
 			want:   msgBaseURLRequired,
+		},
+		{
+			name: "a claudeModel Crewlet's model table does not list is refused",
+			mutate: func(p *v1.LLMProvider) {
+				p.Spec.Model = "house-sonnet"
+				p.Spec.ClaudeModel = "claude-sonnet-4-5-20250929"
+			},
+			want: msgClaudeModelUnlisted,
 		},
 		{
 			name:   "claudeModel on an OpenAI provider is refused",

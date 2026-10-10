@@ -351,6 +351,28 @@ _Appears in:_
 | `valueFrom` _[NamespacedSecretValueSource](#namespacedsecretvaluesource)_ | valueFrom reads the value from a Secret key in a namespace the<br />platform controls. |  | Optional: \{\} <br /> |
 
 
+#### ClaudeModelID
+
+_Underlying type:_ _string_
+
+ClaudeModelID is one id of Crewlet's table of Claude models, which records
+the request shape each model accepts (its thinking mode, its effort levels,
+whether it takes a sampling parameter, its output cap). An Anthropic
+provider whose model is a gateway alias names the row it is an alias of.
+Crewlet refuses on every write a claude_model its table does not list,
+exactly as written, so the values are the table's ids at the engine the
+operator is built against; a test holds them to that engine's refusal.
+
+_Validation:_
+- Enum: [claude-fable-5-1 claude-mythos-5-1 claude-fable-5 claude-mythos-5 claude-opus-5-5 claude-opus-5 claude-opus-4-8 claude-opus-4-7 claude-sonnet-5-5 claude-sonnet-5 claude-opus-4-6 claude-sonnet-4-6 claude-opus-4-5 claude-sonnet-4-5 claude-haiku-4-5 claude-opus-4-1 claude-opus-4-0 claude-opus-4 claude-sonnet-4-0 claude-sonnet-4 claude-3-7-sonnet]
+
+_Appears in:_
+- [LLMProviderSettings](#llmprovidersettings)
+- [LLMProviderSpec](#llmproviderspec)
+- [PlatformLLMProvider](#platformllmprovider)
+
+
+
 #### CodingAgent
 
 _Underlying type:_ _string_
@@ -1837,7 +1859,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `type` _[LLMProviderType](#llmprovidertype)_ | type is which model API the provider speaks. Crewlet's `type`. |  | Enum: [Anthropic OpenAI OpenAICompatible CLIAgent] <br />Required: \{\} <br /> |
 | `model` _string_ | model is the model id requests are sent for, as the provider names it.<br />Crewlet's `model`. Crewlet trims it of white space and refuses a<br />provider with nothing left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
-| `claudeModel` _string_ | claudeModel names the Claude model whose request shape an Anthropic<br />provider uses when model is a gateway alias Crewlet cannot recognise.<br />Crewlet's `claude_model`; type Anthropic only. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `claudeModel` _[ClaudeModelID](#claudemodelid)_ | claudeModel names the Claude model whose request shape an Anthropic<br />provider uses when model is a gateway alias Crewlet cannot recognise.<br />Crewlet's `claude_model`; type Anthropic only. |  | Enum: [claude-fable-5-1 claude-mythos-5-1 claude-fable-5 claude-mythos-5 claude-opus-5-5 claude-opus-5 claude-opus-4-8 claude-opus-4-7 claude-sonnet-5-5 claude-sonnet-5 claude-opus-4-6 claude-sonnet-4-6 claude-opus-4-5 claude-sonnet-4-5 claude-haiku-4-5 claude-opus-4-1 claude-opus-4-0 claude-opus-4 claude-sonnet-4-0 claude-sonnet-4 claude-3-7-sonnet] <br />Optional: \{\} <br /> |
 | `baseURL` _string_ | baseURL sends requests to this endpoint instead of the vendor's own,<br />for a gateway or a proxy. Required for type OpenAICompatible. Crewlet's<br />`base_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `reasoning` _boolean_ | reasoning turns on an OpenAI reasoning model's effort, so that<br />reasoningEffort is sent. Crewlet's `reasoning`; type OpenAI only. |  | Optional: \{\} <br /> |
 | `reasoningEffort` _[ReasoningEffort](#reasoningeffort)_ | reasoningEffort is how hard the model thinks. For Anthropic it is sent<br />on every call, and unset means High. For OpenAI it is sent only while<br />reasoning is true, so it requires reasoning; an OpenAICompatible<br />provider cannot turn reasoning on and takes no reasoningEffort.<br />Crewlet's `reasoning_effort`. |  | Enum: [Low Medium High XHigh Max] <br />Optional: \{\} <br /> |
@@ -1864,7 +1886,7 @@ _Appears in:_
 | `companyRef` _[CompanyReference](#companyreference)_ | companyRef names the Company this provider belongs to. Immutable. |  | Required: \{\} <br /> |
 | `type` _[LLMProviderType](#llmprovidertype)_ | type is which model API the provider speaks. Crewlet's `type`. |  | Enum: [Anthropic OpenAI OpenAICompatible CLIAgent] <br />Required: \{\} <br /> |
 | `model` _string_ | model is the model id requests are sent for, as the provider names it.<br />Crewlet's `model`. Crewlet trims it of white space and refuses a<br />provider with nothing left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
-| `claudeModel` _string_ | claudeModel names the Claude model whose request shape an Anthropic<br />provider uses when model is a gateway alias Crewlet cannot recognise.<br />Crewlet's `claude_model`; type Anthropic only. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `claudeModel` _[ClaudeModelID](#claudemodelid)_ | claudeModel names the Claude model whose request shape an Anthropic<br />provider uses when model is a gateway alias Crewlet cannot recognise.<br />Crewlet's `claude_model`; type Anthropic only. |  | Enum: [claude-fable-5-1 claude-mythos-5-1 claude-fable-5 claude-mythos-5 claude-opus-5-5 claude-opus-5 claude-opus-4-8 claude-opus-4-7 claude-sonnet-5-5 claude-sonnet-5 claude-opus-4-6 claude-sonnet-4-6 claude-opus-4-5 claude-sonnet-4-5 claude-haiku-4-5 claude-opus-4-1 claude-opus-4-0 claude-opus-4 claude-sonnet-4-0 claude-sonnet-4 claude-3-7-sonnet] <br />Optional: \{\} <br /> |
 | `baseURL` _string_ | baseURL sends requests to this endpoint instead of the vendor's own,<br />for a gateway or a proxy. Required for type OpenAICompatible. Crewlet's<br />`base_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `reasoning` _boolean_ | reasoning turns on an OpenAI reasoning model's effort, so that<br />reasoningEffort is sent. Crewlet's `reasoning`; type OpenAI only. |  | Optional: \{\} <br /> |
 | `reasoningEffort` _[ReasoningEffort](#reasoningeffort)_ | reasoningEffort is how hard the model thinks. For Anthropic it is sent<br />on every call, and unset means High. For OpenAI it is sent only while<br />reasoning is true, so it requires reasoning; an OpenAICompatible<br />provider cannot turn reasoning on and takes no reasoningEffort.<br />Crewlet's `reasoning_effort`. |  | Enum: [Low Medium High XHigh Max] <br />Optional: \{\} <br /> |
@@ -2426,7 +2448,7 @@ _Appears in:_
 | `name` _string_ | name is the provider's name. Seats and the Company's model order refer<br />to it with kind PlatformLLMProvider. It may not be default, which<br />Crewlet would run every chainless seat of every opted-in company on,<br />whatever the company's own order says. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Required: \{\} <br /> |
 | `type` _[LLMProviderType](#llmprovidertype)_ | type is which model API the provider speaks. Crewlet's `type`. |  | Enum: [Anthropic OpenAI OpenAICompatible CLIAgent] <br />Required: \{\} <br /> |
 | `model` _string_ | model is the model id requests are sent for, as the provider names it.<br />Crewlet's `model`. Crewlet trims it of white space and refuses a<br />provider with nothing left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
-| `claudeModel` _string_ | claudeModel names the Claude model whose request shape an Anthropic<br />provider uses when model is a gateway alias Crewlet cannot recognise.<br />Crewlet's `claude_model`; type Anthropic only. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `claudeModel` _[ClaudeModelID](#claudemodelid)_ | claudeModel names the Claude model whose request shape an Anthropic<br />provider uses when model is a gateway alias Crewlet cannot recognise.<br />Crewlet's `claude_model`; type Anthropic only. |  | Enum: [claude-fable-5-1 claude-mythos-5-1 claude-fable-5 claude-mythos-5 claude-opus-5-5 claude-opus-5 claude-opus-4-8 claude-opus-4-7 claude-sonnet-5-5 claude-sonnet-5 claude-opus-4-6 claude-sonnet-4-6 claude-opus-4-5 claude-sonnet-4-5 claude-haiku-4-5 claude-opus-4-1 claude-opus-4-0 claude-opus-4 claude-sonnet-4-0 claude-sonnet-4 claude-3-7-sonnet] <br />Optional: \{\} <br /> |
 | `baseURL` _string_ | baseURL sends requests to this endpoint instead of the vendor's own,<br />for a gateway or a proxy. Required for type OpenAICompatible. Crewlet's<br />`base_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `reasoning` _boolean_ | reasoning turns on an OpenAI reasoning model's effort, so that<br />reasoningEffort is sent. Crewlet's `reasoning`; type OpenAI only. |  | Optional: \{\} <br /> |
 | `reasoningEffort` _[ReasoningEffort](#reasoningeffort)_ | reasoningEffort is how hard the model thinks. For Anthropic it is sent<br />on every call, and unset means High. For OpenAI it is sent only while<br />reasoning is true, so it requires reasoning; an OpenAICompatible<br />provider cannot turn reasoning on and takes no reasoningEffort.<br />Crewlet's `reasoning_effort`. |  | Enum: [Low Medium High XHigh Max] <br />Optional: \{\} <br /> |
