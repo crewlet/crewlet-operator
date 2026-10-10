@@ -926,7 +926,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `type` _[EmbeddingProviderType](#embeddingprovidertype)_ | type is which embeddings API the provider speaks. | OpenAI | Enum: [OpenAI OpenAICompatible] <br />Optional: \{\} <br /> |
-| `model` _string_ | model is the embedding model id. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `model` _string_ | model is the embedding model id. Crewlet's `model`. Crewlet trims it of<br />white space and refuses an embeddings provider with nothing left, as<br />naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `apiKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | apiKeySecretRef is the Secret key holding the API key. Crewlet's<br />`api_key`, a credential position. Required for type OpenAI: Crewlet<br />reads OPENAI_API_KEY from the environment when it is unset, and the<br />engine's environment never carries one (see spec.runtime.env). An<br />OpenAICompatible endpoint that needs no key may omit it. |  | Optional: \{\} <br /> |
 | `baseURL` _string_ | baseURL is the endpoint of an OpenAI-compatible service. Crewlet's<br />`base_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `dimensions` _integer_ | dimensions is the vector width. Unset takes the model's own width,<br />which Crewlet knows for the models it names; any other model needs it<br />stated, and it must match what the model produces. |  | Maximum: 4096 <br />Minimum: 64 <br />Optional: \{\} <br /> |
@@ -1836,7 +1836,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `type` _[LLMProviderType](#llmprovidertype)_ | type is which model API the provider speaks. Crewlet's `type`. |  | Enum: [Anthropic OpenAI OpenAICompatible CLIAgent] <br />Required: \{\} <br /> |
-| `model` _string_ | model is the model id requests are sent for, as the provider names it.<br />Crewlet's `model`. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `model` _string_ | model is the model id requests are sent for, as the provider names it.<br />Crewlet's `model`. Crewlet trims it of white space and refuses a<br />provider with nothing left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `claudeModel` _string_ | claudeModel names the Claude model whose request shape an Anthropic<br />provider uses when model is a gateway alias Crewlet cannot recognise.<br />Crewlet's `claude_model`; type Anthropic only. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `baseURL` _string_ | baseURL sends requests to this endpoint instead of the vendor's own,<br />for a gateway or a proxy. Required for type OpenAICompatible. Crewlet's<br />`base_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `reasoning` _boolean_ | reasoning turns on an OpenAI reasoning model's effort, so that<br />reasoningEffort is sent. Crewlet's `reasoning`; type OpenAI only. |  | Optional: \{\} <br /> |
@@ -1863,7 +1863,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `companyRef` _[CompanyReference](#companyreference)_ | companyRef names the Company this provider belongs to. Immutable. |  | Required: \{\} <br /> |
 | `type` _[LLMProviderType](#llmprovidertype)_ | type is which model API the provider speaks. Crewlet's `type`. |  | Enum: [Anthropic OpenAI OpenAICompatible CLIAgent] <br />Required: \{\} <br /> |
-| `model` _string_ | model is the model id requests are sent for, as the provider names it.<br />Crewlet's `model`. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `model` _string_ | model is the model id requests are sent for, as the provider names it.<br />Crewlet's `model`. Crewlet trims it of white space and refuses a<br />provider with nothing left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `claudeModel` _string_ | claudeModel names the Claude model whose request shape an Anthropic<br />provider uses when model is a gateway alias Crewlet cannot recognise.<br />Crewlet's `claude_model`; type Anthropic only. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `baseURL` _string_ | baseURL sends requests to this endpoint instead of the vendor's own,<br />for a gateway or a proxy. Required for type OpenAICompatible. Crewlet's<br />`base_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `reasoning` _boolean_ | reasoning turns on an OpenAI reasoning model's effort, so that<br />reasoningEffort is sent. Crewlet's `reasoning`; type OpenAI only. |  | Optional: \{\} <br /> |
@@ -2425,7 +2425,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | name is the provider's name. Seats and the Company's model order refer<br />to it with kind PlatformLLMProvider. It may not be default, which<br />Crewlet would run every chainless seat of every opted-in company on,<br />whatever the company's own order says. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Required: \{\} <br /> |
 | `type` _[LLMProviderType](#llmprovidertype)_ | type is which model API the provider speaks. Crewlet's `type`. |  | Enum: [Anthropic OpenAI OpenAICompatible CLIAgent] <br />Required: \{\} <br /> |
-| `model` _string_ | model is the model id requests are sent for, as the provider names it.<br />Crewlet's `model`. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `model` _string_ | model is the model id requests are sent for, as the provider names it.<br />Crewlet's `model`. Crewlet trims it of white space and refuses a<br />provider with nothing left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `claudeModel` _string_ | claudeModel names the Claude model whose request shape an Anthropic<br />provider uses when model is a gateway alias Crewlet cannot recognise.<br />Crewlet's `claude_model`; type Anthropic only. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `baseURL` _string_ | baseURL sends requests to this endpoint instead of the vendor's own,<br />for a gateway or a proxy. Required for type OpenAICompatible. Crewlet's<br />`base_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `reasoning` _boolean_ | reasoning turns on an OpenAI reasoning model's effort, so that<br />reasoningEffort is sent. Crewlet's `reasoning`; type OpenAI only. |  | Optional: \{\} <br /> |

@@ -662,6 +662,11 @@ func TestPlatformLLMProviders(t *testing.T) {
 			want:   msgBudgetTokens,
 		},
 		{
+			name:   "a platform provider with a model of white space alone is refused",
+			mutate: platform(with(anthropic, func(s *v1.LLMProviderSettings) { s.Model = "\u2028 " }), true),
+			want:   msgBlankModel,
+		},
+		{
 			name:   "a platform CLIAgent provider is refused",
 			mutate: platform(v1.LLMProviderSettings{Type: v1.LLMProviderCLIAgent, Model: "sonnet"}, true),
 			want:   "a platform model provider speaks a model API",

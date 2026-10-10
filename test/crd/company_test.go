@@ -139,6 +139,32 @@ func TestCompanyValidation(t *testing.T) {
 			},
 		},
 		{
+			// Crewlet trims the embedding model and refuses an empty one,
+			// white space as Go's strings.TrimSpace reads it.
+			name: "an embeddings model of white space alone is refused",
+			mutate: func(c *v1.Company) {
+				c.Spec.Embeddings = v1.EmbeddingSettings{Model: " \t ", APIKeySecretRef: secretKey("openai", apiKeyKey)}
+			},
+			want: msgBlankEmbeddingModel,
+		},
+		{
+			name: "an embeddings model of Unicode white space alone is refused",
+			mutate: func(c *v1.Company) {
+				c.Spec.Embeddings = v1.EmbeddingSettings{
+					Type: v1.EmbeddingProviderOpenAICompatible, Model: "\u3000\u00a0", BaseURL: "http://ollama:11434/v1",
+				}
+			},
+			want: msgBlankEmbeddingModel,
+		},
+		{
+			// A format character is not white space to Go, so the engine
+			// takes it as a model like any other.
+			name: "an embeddings model Go does not count as white space is accepted",
+			mutate: func(c *v1.Company) {
+				c.Spec.Embeddings = v1.EmbeddingSettings{Model: "\u200b", APIKeySecretRef: secretKey("openai", apiKeyKey)}
+			},
+		},
+		{
 			name:   "OpenAI embeddings without a key are refused",
 			mutate: func(c *v1.Company) { c.Spec.Embeddings = v1.EmbeddingSettings{Model: "text-embedding-3-small"} },
 			want:   "apiKeySecretRef is required for type OpenAI",

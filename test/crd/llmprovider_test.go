@@ -102,6 +102,18 @@ func TestLLMProviderValidation(t *testing.T) {
 			want:   msgReasoningEffort,
 		},
 		{
+			// Crewlet trims a model and refuses an empty one, white space
+			// as Go's strings.TrimSpace reads it.
+			name:   "a model of white space alone is refused",
+			mutate: func(p *v1.LLMProvider) { p.Spec.Model = " \t " },
+			want:   msgBlankModel,
+		},
+		{
+			name:   "a model of Unicode white space alone is refused",
+			mutate: and(openAI, func(p *v1.LLMProvider) { p.Spec.Model = "\u3000\u00a0" }),
+			want:   msgBlankModel,
+		},
+		{
 			name:   "a baseURL that is not a URL is refused",
 			mutate: func(p *v1.LLMProvider) { p.Spec.BaseURL = "gateway.example" },
 			want:   msgBaseURLShape,

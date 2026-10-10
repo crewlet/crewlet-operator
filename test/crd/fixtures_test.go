@@ -104,6 +104,8 @@ const (
 	msgContainerKey                = `should match '^[A-Z][A-Z0-9]{1,9}$'`
 	msgProviderKeyEnv              = "ANTHROPIC_API_KEY and OPENAI_API_KEY are model provider keys"
 	msgReasoningEffort             = "reasoningEffort is sent to an OpenAI model only while reasoning is true"
+	msgBlankModel                  = "model may not be white space alone"
+	msgBlankEmbeddingModel         = "refuses an embeddings provider that names no model"
 	msgSeatName                    = "without spec.handle the Seat's name is its handle"
 	msgHandleImmutable             = "the seat's handle is immutable"
 	msgHumanContact                = "a Human seat needs contact"

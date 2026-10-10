@@ -309,10 +309,12 @@ type LLMProviderSettings struct {
 	Type LLMProviderType `json:"type,omitempty"`
 
 	// model is the model id requests are sent for, as the provider names it.
-	// Crewlet's `model`.
+	// Crewlet's `model`. Crewlet trims it of white space and refuses a
+	// provider with nothing left, as naming no model.
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
+	// +kubebuilder:validation:XValidation:rule="self.trim().size() > 0",message="model may not be white space alone: Crewlet trims it, and refuses a provider that names no model"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="model may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
 	Model string `json:"model,omitempty"`
 

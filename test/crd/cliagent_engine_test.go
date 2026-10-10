@@ -123,14 +123,15 @@ func TestCLIAgentSignInFollowsTheEngine(t *testing.T) {
 	signInTableFollows(t, agents, variables, fromEnv, verdicts)
 }
 
-// TestCLIAgentModelFollowsTheEngine holds the LLMProvider API's rule over a
-// CLIAgent provider's model to the pinned engine, which refuses on every write
-// a model with no provider segment for a CLI whose profile reads its model as
-// <provider>/<model> (model_names_provider). Every CLI the API offers is
+// TestCLIAgentModelFollowsTheEngine holds the LLMProvider API's rules over a
+// CLIAgent provider's model to the pinned engine, which refuses a model of
+// white space alone, and on every write a model with no provider segment for
+// a CLI whose profile reads its model as <provider>/<model>
+// (model_names_provider). Every CLI the API offers is
 // tried, signed in a way the API admits for it, in both modes, with models
 // with and without a provider, with empty segments and with segments of white
 // space, Go's and Unicode's beyond ASCII's among it: the API refuses with its
-// model rule exactly the providers whose model the engine refuses. A bump of
+// model rules exactly the providers whose model the engine refuses. A bump of
 // the engine that marks another profile as naming its provider, or stops
 // marking OpenCode's, fails here until the API follows it.
 //
@@ -150,6 +151,8 @@ func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
 		// Not white space to Go: a format character and a zero-width
 		// space are a provider and a model like any other.
 		"\u180e/x", "x/\u200b",
+		// No model at all, which the engine refuses whatever the CLI.
+		"   ", "\u3000",
 	}
 	refusedModels := map[v1.CLIAgentName]bool{}
 	for _, mode := range []v1.CLIAgentMode{v1.CLIAgentModeText, v1.CLIAgentModeAgent} {
@@ -161,7 +164,7 @@ func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
 				p := shapedProvider(namespace, v1.CLIAgentName(agent), mode, &shape)
 				p.Spec.Model = model
 				refusal := apiVerdict(t, p)
-				refused[p.Name] = strings.Contains(refusal, msgOpenCodeModel)
+				refused[p.Name] = strings.Contains(refusal, msgOpenCodeModel) || strings.Contains(refusal, msgBlankModel)
 				// The shape is admitted but for its model, so the model
 				// rule is the question; in mode Agent, but for a CLI with
 				// no sandbox runner.
