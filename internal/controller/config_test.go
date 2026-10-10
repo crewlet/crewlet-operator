@@ -905,7 +905,7 @@ var _ = Describe("Company config", Ordered, func() {
 
 		By("writing the rendered document into the engine as someone else")
 		accessClient := engine.New(e.URL, e.AccessToken)
-		_, err := accessClient.ApplyConfig(ctx, engine.ApplyRequest{Document: rendered(c).YAML, Summary: "migrated", CreateOnly: true})
+		_, err := accessClient.ApplyConfig(ctx, engine.ApplyRequest{Document: rendered(c).YAML, Summary: "written in the dashboard", CreateOnly: true})
 		Expect(err).NotTo(HaveOccurred())
 		applied(c, crewletaiv1alpha1.ReasonInSync)
 		Eventually(reasonOf(seat(name+"-ana"), crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))

@@ -189,11 +189,12 @@ secret store (`SecretsSynced` is `Unknown` with the reason `NotManaged`).
 | no document | `False`, `Drifted` | `False`, `Drifted` |
 
 A `Drifted` event is recorded when the difference first appears or changes.
-Observe is how to point the operator at an engine that already runs a company
-before handing it the document: once the Company reports `InSync`, the
-objects say what the engine runs, and switching to `Enforce` pushes the
-Secret values and applies the same document once, as a revision of the
-operator's own.
+Observe is how to hand the objects a company the engine already runs (one
+run from its dashboard under Seed, or a Company created again over the
+volumes a [Retain](runtime.md#deletion) deletion kept): once it reports
+`InSync`, the objects say what the engine runs, and switching to `Enforce`
+pushes the Secret values and applies the same document once, as a revision
+of the operator's own.
 
 ### Seed
 

@@ -10,7 +10,7 @@ describes exactly what each one writes and reports.
 | Policy | Who owns the document | Choose it when |
 |---|---|---|
 | `Enforce` (default) | The objects. The engine refuses an edit in its dashboard or API, which shows the document read-only. | The objects are the source of truth: GitOps, or a platform that writes them for its tenants. |
-| `Observe` | The engine. The operator compares and reports, and writes nothing. | You are bringing an engine that already runs under the operator, or trying the operator out on one. |
+| `Observe` | The engine. The operator compares and reports, and writes nothing. | You are taking back a company that was run from its dashboard (under `Seed`, or created again over the volumes a `Retain` deletion kept), or trying the operator out without letting it write. |
 | `Seed` | The objects once, then the engine. | You want a company started from YAML and run from the dashboard afterwards. |
 
 ```yaml
@@ -67,13 +67,15 @@ kubectl get seats -n acme \
 names the places that differ, on the Company and on each object whose part
 differs.
 
-### Moving an engine under Enforce
+### Taking a company back under Enforce
 
-Observe is the way to hand a running company to the operator without a
-moment where the engine runs something else:
+Observe is the way to hand a company the engine already runs (one run from
+its dashboard under `Seed`, or one created again over the volumes a `Retain`
+deletion kept) to the objects without a moment where the engine runs
+something else:
 
-1. Create the Company and its objects with `managementPolicy: Observe`, and
-   the Secrets they reference.
+1. Set the Company's `managementPolicy` to `Observe` (or create it with
+   `Observe`, over the kept volumes), with the Secrets its objects reference.
 2. Edit the objects until the Company reports `ConfigApplied=True InSync`.
 3. Switch the Company to `Enforce`. The operator pushes the Secret values
    into the engine's secret store and applies the same document once, as a
