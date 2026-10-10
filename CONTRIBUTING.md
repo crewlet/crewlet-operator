@@ -138,6 +138,23 @@ models, read from its refusal of an id the table does not list, so an
 engine that adds or drops a row fails it. A mock would agree with the code by construction; the real engine is
 what tells the two apart when Crewlet's API or schema moves.
 
+What no validation shows is what signs a coding agent in at a launch, which
+the renderer's refusals of a seat's code work turn on. The renderer's
+`TestCodeWorkFollowsTheEngineSource` reads it from the pinned engine's own
+source (`enginetest.Source`, the module `make crewlet` built from): the
+variables that sign Claude Code in from a seat's environment, and Claude
+Code's token and key variables. It holds the lists and not the rules around
+them, so when you move `CREWLET_VERSION`, read `newCodingRun`,
+`claudeCodeOnForeignEntry` and `sandboxCredentials` in crewlet's
+`internal/engine/sandbox.go` against `internal/render/codework.go`. Two of
+the renderer's three refusals there, `SandboxModelUnsupported` and
+`SandboxLoginNotPortable`, mirror what the engine refuses only when a seat
+launches a coding run, never on a write: no `crewlet validate` can show
+them drifting, and a refusal the engine has dropped would keep a whole
+company from applying over a seat that now works. That is a deliberate
+choice, as `AgentModeBridgeUnsupported` is: the engine would apply such a
+seat, report it applied, and refuse every coding run it started.
+
 The engine is pinned like every other tool, as `CREWLET_VERSION` in the
 Makefile, and `make crewlet` builds it into `bin/crewlet` (`make test` does so
 first). To run these tests outside make — from an IDE, or with a plain

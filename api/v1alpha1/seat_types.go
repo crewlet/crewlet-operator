@@ -100,7 +100,12 @@ type SeatLLM struct {
 	Judge []LLMProviderReference `json:"judge,omitempty"`
 
 	// sandbox is the chain the coding agent in the seat's sandbox runs on.
-	// Crewlet's `sandbox`.
+	// Unset takes default, then the Company's model order. A coding run uses
+	// the chain's head alone, as its model and its sign-in, so the head must
+	// be a provider the coding agent can read: an Anthropic provider, or for
+	// OpenCode an OpenAI or OpenAICompatible one too, or a CLIAgent provider
+	// of the coding agent's own CLI. The operator refuses the Seat otherwise
+	// (CodingAgentMismatch, SandboxModelUnsupported). Crewlet's `sandbox`.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MinItems=1
@@ -114,8 +119,11 @@ type SeatLLM struct {
 // Crewlet's `enabled: true`.
 type SeatSandbox struct {
 	// codingAgent is the coding agent the seat's sandbox runs. Unset takes
-	// the Company's spec.sandbox.defaultCodingAgent. Crewlet's
-	// `coding_agent`.
+	// the Company's spec.sandbox.defaultCodingAgent. ClaudeCode runs on an
+	// Anthropic provider or a ClaudeCode CLIAgent one, unless the seat's
+	// sandbox environment signs it in itself; OpenCode runs on an
+	// Anthropic, OpenAI or OpenAICompatible provider or an OpenCode
+	// CLIAgent one. Crewlet's `coding_agent`.
 	// +optional
 	CodingAgent CodingAgent `json:"codingAgent,omitempty"`
 

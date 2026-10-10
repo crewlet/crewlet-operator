@@ -301,7 +301,19 @@ found`. So before moving any EngineClass's `engine.image` to it, give each
 `OpenCode` provider's `model` its provider, as
 [Signing in](cli-agents.md#signing-in) describes; a provider left as it
 was is reported as the `cli.env` variables above are, and the API server
-refuses a change to its `spec` until its `model` is fixed.
+refuses a change to its `spec` until its `model` is fixed. It refuses a
+second shape the same way: a Seat whose code work (`spec.sandbox`) runs on a
+`CLIAgent` provider driving another CLI than its coding agent, which a seat
+whose key in `spec.sandbox.env` signed the coding agent in ran on by
+accident. The release reports that Seat itself, as `Applied=False`
+`CodingAgentMismatch`, and two more the engine applies and then refuses
+every coding run of: `ClaudeCode` code work on an `OpenAI` or
+`OpenAICompatible` provider with no Claude Code sign-in in the seat's
+sandbox environment (`SandboxModelUnsupported`), and code work on a
+`CLIAgent` provider whose login cannot reach the remote sandbox
+(`SandboxLoginNotPortable`). Fix such Seats before upgrading the operator
+or the engine ([Code work](cli-agents.md#code-work)); until then each keeps
+its company on the last revision it applied.
 
 The same release takes as `claudeModel` only the ids of the pinned engine's
 table of Claude models, which `kubectl explain llmprovider.spec.claudeModel`

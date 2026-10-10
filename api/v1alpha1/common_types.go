@@ -756,6 +756,35 @@ const (
 	// whole company out.
 	ReasonCLIAuthNotPortable = "CLIAuthNotPortable"
 
+	// ReasonCodingAgentMismatch is Applied=False on a Seat whose code work
+	// (spec.sandbox) runs on a CLIAgent provider driving another CLI than
+	// the seat's coding agent (spec.sandbox.codingAgent, else the Company's
+	// spec.sandbox.defaultCodingAgent, else ClaudeCode): the head of
+	// spec.llm.sandbox, else of spec.llm.default, else of the Company's
+	// model order. The provider's model is written in its own CLI's grammar
+	// and its sign-in is that CLI's, so the coding agent can read neither,
+	// and Crewlet refuses the pairing on every write.
+	ReasonCodingAgentMismatch = "CodingAgentMismatch"
+
+	// ReasonSandboxModelUnsupported is Applied=False on a Seat whose code
+	// work runs the ClaudeCode coding agent on a provider of type OpenAI or
+	// OpenAICompatible, an LLMProvider or a platform provider, while the
+	// seat's sandbox environment (spec.sandbox.env, its setup steps' and
+	// the Company's spec.sandbox.setup steps') names no variable that signs
+	// ClaudeCode in. ClaudeCode speaks the Anthropic API only, and Crewlet
+	// refuses every run_sandbox launch of such a seat.
+	ReasonSandboxModelUnsupported = "SandboxModelUnsupported"
+
+	// ReasonSandboxLoginNotPortable is Applied=False on a Seat whose code
+	// work runs on a CLIAgent provider of its coding agent's CLI whose login
+	// cannot follow a run into the Company's remote sandbox: a ClaudeCode
+	// signed in by a credential bundle with neither CLAUDE_CODE_OAUTH_TOKEN
+	// nor ANTHROPIC_API_KEY in the seat's sandbox environment, or an
+	// OpenCode with no credential-named variable in its cli.env or the
+	// seat's sandbox environment. A bundle stays on the engine's data
+	// volume, and Crewlet refuses every run_sandbox launch of such a seat.
+	ReasonSandboxLoginNotPortable = "SandboxLoginNotPortable"
+
 	// ReasonPlacementPending is Applied=False on an agent Seat placed in a
 	// pool other than the one the revision the engine runs pins it to,
 	// while that pool's StatefulSet has no ready pod: the operator keeps the

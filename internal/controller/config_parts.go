@@ -42,8 +42,9 @@ type part struct {
 	unplaceable       []string
 	unplaceableReason string
 	// unrunnable are why a Seat cannot run on the pods of the pool it is
-	// placed in, which its class admits: the pods cannot serve what it runs
-	// on. Its references resolve; the document is refused all the same.
+	// placed in, which its class admits, because the pods cannot serve what
+	// it runs on, or why its code work cannot run on the provider it names.
+	// Its references resolve; the document is refused all the same.
 	unrunnable       []string
 	unrunnableReason string
 	// invalid are the engine's refusals of its part of the document.

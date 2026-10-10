@@ -670,6 +670,45 @@ var _ = Describe("Company config", Ordered, func() {
 		runsRendered(e, c)
 	})
 
+	It("reports a seat whose code work no coding run could use on the Seat, before the engine is asked", func() {
+		const name = "codework"
+		e := startEngine(name)
+		secret(name+"-llm", map[string]string{llmKey: "k"})
+		secret(name+"-e2b", map[string]string{llmKey: "k"})
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
+		updateLive(c, func(c *crewletaiv1alpha1.Company) {
+			c.Spec.Sandbox = crewletaiv1alpha1.SandboxSettings{E2B: crewletaiv1alpha1.E2BSandbox{
+				APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-e2b", Key: llmKey},
+			}}
+		})
+		standIn(c)
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		good, err := e.Client().ActiveConfig(ctx)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("adding a Seat whose code work runs ClaudeCode, the default coding agent, on the OpenAICompatible provider")
+		coder := newSeat(namespace, name, "coder", func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.Sandbox = &crewletaiv1alpha1.SeatSandbox{}
+		})
+		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
+			Should(Equal(crewletaiv1alpha1.ReasonSandboxModelUnsupported))
+		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionApplied)(Default).Message).
+			To(ContainSubstring("ClaudeCode speaks the Anthropic API only"))
+		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue))
+		Eventually(func(g Gomega) metav1.ConditionStatus {
+			return conditionOf(c, crewletaiv1alpha1.ConditionConfigApplied)(g).Status
+		}).WithTimeout(settle).Should(Equal(metav1.ConditionFalse))
+		active, err := e.Client().ActiveConfig(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(active.RevisionID).To(Equal(good.RevisionID), "the document is refused before the engine is asked")
+
+		By("giving the seat a coding agent that speaks the provider's wire")
+		updateLive(coder, func(s *crewletaiv1alpha1.Seat) { s.Spec.Sandbox.CodingAgent = crewletaiv1alpha1.CodingAgentOpenCode })
+		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		runsRendered(e, c)
+	})
+
 	It("applies a Schedule into its seat's entry, reports what is wrong with one on it, and removes a deleted one", func() {
 		const name = "sched"
 		e := startEngine(name)

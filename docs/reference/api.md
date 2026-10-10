@@ -2921,7 +2921,7 @@ _Appears in:_
 | `subagent` _[LLMProviderReference](#llmproviderreference) array_ | subagent is the chain of the short-lived workers the seat delegates<br />to. Crewlet's `subagent`. |  | MaxItems: 8 <br />MinItems: 1 <br />Optional: \{\} <br /> |
 | `auxiliary` _[LLMProviderReference](#llmproviderreference) array_ | auxiliary is the chain of the cheap model used for reflection and<br />summaries. Crewlet's `auxiliary`. |  | MaxItems: 8 <br />MinItems: 1 <br />Optional: \{\} <br /> |
 | `judge` _[LLMProviderReference](#llmproviderreference) array_ | judge is the chain of the model that decides whether a turn that ran<br />out of rounds may have more. Crewlet's `judge`. |  | MaxItems: 8 <br />MinItems: 1 <br />Optional: \{\} <br /> |
-| `sandbox` _[LLMProviderReference](#llmproviderreference) array_ | sandbox is the chain the coding agent in the seat's sandbox runs on.<br />Crewlet's `sandbox`. |  | MaxItems: 8 <br />MinItems: 1 <br />Optional: \{\} <br /> |
+| `sandbox` _[LLMProviderReference](#llmproviderreference) array_ | sandbox is the chain the coding agent in the seat's sandbox runs on.<br />Unset takes default, then the Company's model order. A coding run uses<br />the chain's head alone, as its model and its sign-in, so the head must<br />be a provider the coding agent can read: an Anthropic provider, or for<br />OpenCode an OpenAI or OpenAICompatible one too, or a CLIAgent provider<br />of the coding agent's own CLI. The operator refuses the Seat otherwise<br />(CodingAgentMismatch, SandboxModelUnsupported). Crewlet's `sandbox`. |  | MaxItems: 8 <br />MinItems: 1 <br />Optional: \{\} <br /> |
 
 
 #### SeatPauseStatus
@@ -3134,7 +3134,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `codingAgent` _[CodingAgent](#codingagent)_ | codingAgent is the coding agent the seat's sandbox runs. Unset takes<br />the Company's spec.sandbox.defaultCodingAgent. Crewlet's<br />`coding_agent`. |  | Enum: [ClaudeCode OpenCode] <br />Optional: \{\} <br /> |
+| `codingAgent` _[CodingAgent](#codingagent)_ | codingAgent is the coding agent the seat's sandbox runs. Unset takes<br />the Company's spec.sandbox.defaultCodingAgent. ClaudeCode runs on an<br />Anthropic provider or a ClaudeCode CLIAgent one, unless the seat's<br />sandbox environment signs it in itself; OpenCode runs on an<br />Anthropic, OpenAI or OpenAICompatible provider or an OpenCode<br />CLIAgent one. Crewlet's `coding_agent`. |  | Enum: [ClaudeCode OpenCode] <br />Optional: \{\} <br /> |
 | `pauseTTLSeconds` _integer_ | pauseTTLSeconds is how long the seat's sandbox stays paused while it<br />waits on a person. Unset takes the Company's default; 0 never pauses.<br />Crewlet's `pause_ttl_seconds`. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `maxTurns` _integer_ | maxTurns caps the agentic rounds of the seat's coding runs. Unset<br />takes the Company's default; 0 is uncapped. Crewlet's `max_turns`. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `mcpServerRefs` _[LocalObjectReference](#localobjectreference) array_ | mcpServerRefs name the MCPServers the coding agent may use. Crewlet's<br />mcp.servers. |  | MaxItems: 16 <br />Optional: \{\} <br /> |

@@ -38,6 +38,10 @@ import (
 // OpenCode reads from cli.env never refreshes, and is portable: a ${NAME}
 // every pod resolves from the fleet's encrypted store.
 
+// fieldLLMDefault is a Seat's executor chain, the one every phase without a
+// chain of its own runs on.
+const fieldLLMDefault = "spec.llm.default"
+
 // seatPodProviders refuses the providers an agent seat placed in seat pool
 // pool runs on that a seat pod cannot serve.
 func (r *renderer) seatPodProviders(s *v1alpha1.Seat, pool string) {
@@ -46,7 +50,7 @@ func (r *renderer) seatPodProviders(s *v1alpha1.Seat, pool string) {
 	// alone (Registry.Head): an agent-mode CLI there runs the turn as its own
 	// agentic run. Anywhere else, behind the head or in another phase, it is
 	// reached as a text model, which a seat pod serves like any other.
-	if head, ok := r.executorHead(llm.Default, "spec.llm.default"); ok {
+	if head, ok := r.executorHead(llm.Default, fieldLLMDefault); ok {
 		if cli := r.cliProviders[head.provider]; cli != nil && cli.Mode == v1alpha1.CLIAgentModeAgent {
 			r.errs.add(KindSeat, s.Name, head.field, v1alpha1.ReasonAgentModeBridgeUnsupported, fmt.Sprintf(
 				"runs the seat's work on LLMProvider %s, a CLI in mode Agent at the head of its executor's chain, and "+
@@ -60,7 +64,7 @@ func (r *renderer) seatPodProviders(s *v1alpha1.Seat, pool string) {
 		refs  []v1alpha1.LLMProviderReference
 		field string
 	}{
-		{llm.Default, "spec.llm.default"},
+		{llm.Default, fieldLLMDefault},
 		{llm.Review, "spec.llm.review"},
 		{llm.Subagent, "spec.llm.subagent"},
 		{llm.Auxiliary, "spec.llm.auxiliary"},
@@ -72,7 +76,7 @@ func (r *renderer) seatPodProviders(s *v1alpha1.Seat, pool string) {
 		refs, field := phase.refs, phase.field
 		if len(refs) == 0 {
 			// A phase left unset runs on the default chain.
-			refs, field = llm.Default, "spec.llm.default"
+			refs, field = llm.Default, fieldLLMDefault
 		}
 		for _, link := range r.chainOf(refs, field) {
 			cli := r.cliProviders[link.provider]

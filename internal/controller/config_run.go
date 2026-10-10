@@ -710,7 +710,7 @@ func (run *configRun) refused(refusals []*render.RefError) {
 				target.unplaceableReason = ref.Reason
 			}
 			target.unplaceable = append(target.unplaceable, finding)
-		case ref.Reason == crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported || ref.Reason == crewletaiv1alpha1.ReasonCLIAuthNotPortable:
+		case unrunnable(ref.Reason):
 			if target.unrunnableReason == "" {
 				target.unrunnableReason = ref.Reason
 			}
@@ -723,6 +723,19 @@ func (run *configRun) refused(refusals []*render.RefError) {
 		}
 	}
 	run.block(refusals[0].Reason, "The document cannot be rendered: "+sentences(refusalLines(refusals)))
+}
+
+// unrunnable reports whether reason refuses a seat whose providers its pods,
+// or its code work, cannot run on, which the seat reports as Applied=False
+// rather than as an unresolved reference.
+func unrunnable(reason string) bool {
+	switch reason {
+	case crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported, crewletaiv1alpha1.ReasonCLIAuthNotPortable,
+		crewletaiv1alpha1.ReasonCodingAgentMismatch, crewletaiv1alpha1.ReasonSandboxModelUnsupported,
+		crewletaiv1alpha1.ReasonSandboxLoginNotPortable:
+		return true
+	}
+	return false
 }
 
 func refusalLines(refusals []*render.RefError) []string {

@@ -354,6 +354,12 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 			}
 			doc.Sandbox.MCP.Servers = append(doc.Sandbox.MCP.Servers, ref.Name)
 		}
+		// Crewlet offers run_sandbox only with a catalogue, which the
+		// Company's spec.sandbox is; without one the engine refuses the
+		// seat's gate instead.
+		if r.in.Company.Spec.Sandbox.E2B.APIKeySecretRef.Name != "" {
+			r.codeWork(s)
+		}
 	}
 	doc.Integrations = r.roleIntegrations(s)
 	doc.Schedules = r.schedules(at, r.seatSchedules[s.Name])

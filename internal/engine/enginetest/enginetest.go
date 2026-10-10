@@ -15,8 +15,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"debug/buildinfo"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -445,6 +447,44 @@ func Binary(t T) string {
 		t.Fatalf("no crewlet engine binary (%v): run `make crewlet` to build the pinned version, or set %s", err, BinaryEnv)
 	}
 	return bin
+}
+
+// Module is the Go module the crewlet binary is built from.
+const Module = "github.com/crewlet/crewlet"
+
+// Source returns the directory of the crewlet module source the binary Binary
+// returns was built from: the module zip the Go command downloads, and checks
+// against the checksum database, for the version the binary's build info
+// names, which `make crewlet` has already put in the module cache. A test
+// reads it for what the engine decides where no validation shows it, such as
+// what signs a coding agent in at a launch. A binary built from a checkout
+// names no version, and fails the test, as a source that cannot be had does.
+func Source(t T) string {
+	t.Helper()
+	bin := Binary(t)
+	info, err := buildinfo.ReadFile(bin)
+	if err != nil {
+		t.Fatalf("reading the build info of %s: %v", bin, err)
+	}
+	version := info.Main.Version
+	if info.Main.Path != Module || version == "" || version == "(devel)" {
+		t.Fatalf("%s is %s %s, not a released version of %s: build it with `make crewlet`",
+			bin, info.Main.Path, version, Module)
+	}
+	cmd := exec.Command("go", "mod", "download", "-json", Module+"@"+version)
+	// Outside any module, so that no go.mod or go.work of the caller's
+	// decides what is downloaded.
+	cmd.Dir = t.TempDir()
+	cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	runErr := cmd.Run()
+	var module struct{ Dir, Error string }
+	if err := json.Unmarshal(stdout.Bytes(), &module); err != nil || module.Dir == "" {
+		t.Fatalf("go mod download %s@%s gave no source directory (%v, %v, %s): %s%s",
+			Module, version, runErr, err, module.Error, stdout.String(), stderr.String())
+	}
+	return module.Dir
 }
 
 // moduleRoot is the nearest directory at or above the working directory that

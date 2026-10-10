@@ -288,6 +288,47 @@ spec:                       # LLMProvider opencode-agent
 A seat runs on it by naming it in `spec.llm.default`; see the Seat's
 `spec.llm` in the [API reference](../reference/api.md).
 
+## Code work
+
+A seat with `spec.sandbox` runs code in the company's sandbox with a coding
+agent, `ClaudeCode` or `OpenCode` (`spec.sandbox.codingAgent`, else the
+Company's `spec.sandbox.defaultCodingAgent`, else `ClaudeCode`), on the
+provider at the head of `spec.llm.sandbox`, else of `spec.llm.default`, else
+of the Company's order. That provider is the run's model and sign-in, so the
+pairing has to be one the coding agent can read; the operator refuses the
+Seat with `Applied=False`, naming the field to change, when it is not:
+
+- **A `CLIAgent` provider must drive the coding agent's own CLI.** Its model
+  is written for its CLI and its sign-in is that CLI's, so Crewlet refuses
+  the pairing on every write (`CodingAgentMismatch`). Codex, Gemini CLI,
+  Kimi Code, Hermes, Pi and the other CLIs have no coding agent, so they
+  cannot back code work: put an API provider first in `spec.llm.sandbox`. A
+  seat whose executor runs OpenCode in agent mode and that has
+  `spec.sandbox` runs its code work on the same provider unless
+  `spec.llm.sandbox` says otherwise, so it sets `spec.sandbox.codingAgent:
+  OpenCode`.
+- **`ClaudeCode` reads Anthropic's API alone.** On a provider of type
+  `OpenAI` or `OpenAICompatible` it can read neither the model nor the key,
+  and Crewlet refuses every coding run (`SandboxModelUnsupported`), unless
+  the seat's sandbox environment (`spec.sandbox.env`, its setup steps' `env`,
+  or the Company's `spec.sandbox.setup` steps') signs Claude Code in itself,
+  with `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`,
+  `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`,
+  `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY`; it then runs on
+  that sign-in and its own model choice (`ANTHROPIC_MODEL` in
+  `spec.sandbox.env` picks one; like every variable there, it is read from
+  a Secret key). `OpenCode` reads either wire.
+- **The login must reach the remote sandbox.** A credential bundle never
+  does, so a `ClaudeCode` provider signed in by a bundle, with neither
+  `CLAUDE_CODE_OAUTH_TOKEN` nor `ANTHROPIC_API_KEY` in the seat's sandbox
+  environment, or an `OpenCode` one with no credential-named variable in
+  `cli.env` or the seat's sandbox environment, would have every coding run
+  refused (`SandboxLoginNotPortable`).
+
+The operator sees the names of the seat's variables, not their values: a
+variable named above whose Secret holds nothing passes it, and the engine
+refuses the run.
+
 ## Seat pools
 
 A seat placed in a [seat pool](topology.md) runs on a seat pod, which keeps

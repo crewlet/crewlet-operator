@@ -28,7 +28,9 @@ internal/controller/  reconcilers: two keyed by Company, the runtime one
                       (make gateway-api-crds)
 internal/engine/      typed client for the Crewlet engine's API (REST, and
                       the pause tools of its operator catalogue over MCP);
-  enginetest/         runs the real pinned engine (bin/crewlet) for a test
+  enginetest/         runs the real pinned engine (bin/crewlet) for a test,
+                      and reads its module source for a test that holds a
+                      copied list to it
 internal/render/      pure render of the crewlet.ai objects into the company
                       document (Tier B) and a data or seat pod's
                       crewlet.yaml (Tier A)
