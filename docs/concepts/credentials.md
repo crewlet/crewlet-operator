@@ -1,26 +1,26 @@
-# Credentials
+# Credential Positions
 
-Every credential reaches the operator as a reference to a Kubernetes `Secret`,
-never as a value in a field. This page lists every position in a Crewlet
-company document, and in a data pod's `crewlet.yaml`, that holds a
-credential, and the field of the `crewlet.ai` API or the Secret that fills
-it. The list is Crewlet's own: the positions its JSON Schema marks
-`"x-crewlet-secret": true` (`crewlet schema company`, `crewlet schema
-bootstrap`), which are the fields its configuration masks on every read. A
-position is written as the schema places it: `[]` is every element of a list
-and `*` every value of a map. The org chart nests, so a seat's positions are
-written from `roles[]` wherever the chart puts the seat, and a unit's from
-`units[]` however deep among other units' `children[]` it sits.
+Every credential reaches the operator as a reference to a Kubernetes Secret,
+never as a value. This page lists every position that holds one, and its
+field.
 
-The tables below are made from one table in the operator's tests
-(`internal/render/credentials_table_test.go`), and a test holds that table to
-the marks of the engine the operator is tested against, Crewlet's `main`, in
-both directions: a credential position Crewlet adds fails the operator's build
-until it is covered (or listed as not offered, with the reason), and so does
-a row for a position Crewlet no longer marks. Another holds the rule on a Company's
-`engineConfig` to the same marks: it must refuse every top-level block
-Crewlet holds a credential under, so a credential can never be written there
-as a literal.
+The list is Crewlet's own: the positions of a company document, and of a data
+pod's `crewlet.yaml`, that its JSON Schema marks `"x-crewlet-secret": true`
+(`crewlet schema company`, `crewlet schema bootstrap`), which are the fields
+its configuration masks on every read. A position is written as the schema
+places it: `[]` is every element of a list and `*` every value of a map. The
+org chart nests, so a seat's positions are written from `roles[]` wherever the
+chart puts the seat, and a unit's from `units[]` however deep among other
+units' `children[]` it sits.
+
+> **Checked against the engine.** A test holds the tables below to the marks
+> of the engine the operator is tested against, Crewlet's `main`, in both
+> directions: a credential position Crewlet adds fails the operator's build
+> until it is covered (or listed as not offered, with the reason), and so does
+> a row for a position Crewlet no longer marks. Another holds the rule on a
+> Company's `engineConfig` to the same marks: it refuses every top-level block
+> Crewlet holds a credential under, so a credential can never be written there
+> as a literal.
 
 How references work is explained in
 [How the operator models a company](overview.md#credentials-by-reference-never-by-value).
@@ -29,6 +29,8 @@ engine's encrypted secret store, and writes only the value's name into the
 document. Rewriting a Secret rotates its value without restarting the engine.
 Secrets referenced from a namespaced object are in that object's namespace;
 those referenced from an `EngineClass` name their namespace.
+
+---
 
 ## Who can read a value
 
@@ -59,15 +61,18 @@ uses is readable by the company's tenant:
   value ([What a coding box
   carries](../guides/credentials.md#what-a-coding-box-carries)).
 
-So a credential an `EngineClass` gives its companies (a platform model key,
-telemetry headers, a class env value) is every tenant's. Give a class only
-what each tenant may hold: per-tenant keys, or per-tenant virtual keys from
-an LLM gateway. Object-store keys are a Company's own
-(`spec.objects.credentialsSecretRef`) for that reason. In the tenant's
-namespace, grant `get` on `<company>-api-access` by `resourceNames`: read on
-every Secret there also exposes `<company>-api-tokens`, `<company>-keyring`,
-`<company>-bootstrap` and each seat pool's
-`<company>-bootstrap-<pool>-<hash>`, which hold the same keyring.
+> **Caution: what a class gives its companies is every tenant's.** A
+> credential an `EngineClass` gives its companies (a platform model key,
+> telemetry headers, a class env value) is readable by every tenant of the
+> class. Give a class only what each tenant may hold: per-tenant keys, or
+> per-tenant virtual keys from an LLM gateway. Object-store keys are a
+> Company's own (`spec.objects.credentialsSecretRef`) for that reason. In the
+> tenant's namespace, grant `get` on `<company>-api-access` by
+> `resourceNames`: read on every Secret there also exposes
+> `<company>-api-tokens`, `<company>-keyring`, `<company>-bootstrap` and each
+> seat pool's `<company>-bootstrap-<pool>-<hash>`, which hold the same keyring.
+
+---
 
 ## Covered in v1alpha1
 
@@ -121,6 +126,8 @@ is not secret (a feature flag a tool server reads, say): Crewlet treats the
 whole list as credentials, and the API cannot tell one entry from another.
 Keep such settings in the same Secret as the tool's token.
 
+---
+
 ## Credentials the engine provisions
 
 An `Integration` with `provisioning: Engine` (GitLab, Mattermost, Datadog and
@@ -166,6 +173,8 @@ every seat's credential is a Secret its Seat references.
 [Integrations](../guides/integrations.md) says, vendor by vendor, which
 variables the engine provisions.
 
+---
+
 ## In the data pod's `crewlet.yaml`
 
 The data pod's `crewlet.yaml` (Crewlet's Tier A) has credential positions of
@@ -190,6 +199,8 @@ have the engine send anywhere
 ([The data pod's `crewlet.yaml`](company-document.md#the-data-pods-crewletyaml)).
 A test renders each case and checks that every credential it was given sits
 at one of these positions and nowhere else.
+
+---
 
 ## Credentials the operator makes or copies itself
 
@@ -237,6 +248,8 @@ document. The operator handles them without a field:
   credentials outside the secret store, so a provider's key always comes
   from its own Secret reference.
 
+---
+
 ## Names in the engine's secret store
 
 Each referenced key becomes one entry in the engine's encrypted secret store,
@@ -257,12 +270,12 @@ namespaces — still have entries of their own. Key `botToken` of Secret
 than 90 characters. A reference keeps its name for as long as it exists, so
 rotating a Secret rewrites an entry rather than replacing it.
 
-**Names of that shape are reserved.** The operator writes them with the
-provenance `operator`, rewrites one whose value someone else replaced, and
-deletes one once nothing references it. It never touches a name of any other
-shape, so credentials written into the store by hand or by Crewlet's own
-provisioning are left alone. A name the running configuration still
-references is kept until the next configuration is applied.
+> **Names of that shape are reserved.** The operator writes them with the
+> provenance `operator`, rewrites one whose value someone else replaced, and
+> deletes one once nothing references it. It never touches a name of any other
+> shape, so credentials written into the store by hand or by Crewlet's own
+> provisioning are left alone. A name the running configuration still
+> references is kept until the next configuration is applied.
 
 A seat's provisioned credential has an entry of another shape, which the
 engine fills and the operator never writes or deletes:
@@ -285,3 +298,11 @@ name and the value under a random key held in the same Secret: it confirms no
 guess about a value without that key, and two names holding one value have
 different fingerprints. Deleting that Secret is harmless; the operator writes
 every value once more and starts a new one.
+
+---
+
+## See also
+
+- [Supplying Credentials](../guides/credentials.md) — the Secret for each position, written and rotated
+- [Connecting Integrations](../guides/integrations.md) — which credentials the engine provisions, vendor by vendor
+- [Crewlet's secret store](https://github.com/crewlet/crewlet/blob/main/docs/concepts/secret-store.md) — where the values live in the engine

@@ -1,16 +1,30 @@
-# How the operator models a company
+# How the Operator Models a Company
+
+The operator lets you write a Crewlet company as Kubernetes objects — one per
+unit, seat, model, tool server, integration and schedule — and runs its engine.
 
 [Crewlet](https://github.com/crewlet/crewlet) runs one company per engine, and
 the company is a single versioned document: its name and mission, its org
 chart, the models its agents run on, their tools and the vendors they talk to.
-The operator lets you write that document as Kubernetes objects instead, and
-runs the engine for it.
+The operator renders that document from the objects, and the rule the whole
+design serves is one sentence: **a document is applied whole, or not at all.**
 
 This page explains the objects, how they fit together, how credentials reach
 the engine, and who owns the document once the engine runs. Every field is in
 the [API reference](../reference/api.md).
 
-> The `crewlet.ai/v1alpha1` API is alpha and may change without notice.
+---
+
+## Design principles
+
+- **Credentials by reference, never by value** — no field takes a secret: every credential is a reference to a Kubernetes `Secret`, and the company document names an entry of the engine's encrypted store rather than holding the value ([below](#credentials-by-reference-never-by-value))
+- **Applied whole, or not at all** — every object of a company renders into one document, applied as one revision; an object that cannot be applied safely holds the next revision and says why, while the last good one keeps running
+- **References stay in the namespace** — an object names only objects of its own namespace; only the cluster-scoped `EngineClass` reaches into another, for the platform's own Secrets and Gateways
+- **The operator creates no namespaces** — where a company runs is yours to decide, and a platform's control plane makes a namespace per tenant
+- **No admission webhooks** — every rule is OpenAPI and CEL, enforced by the API server itself, so installing the operator needs no cert-manager
+- **Identities never change** — a company's name and a seat's handle derive the seat's identity and memory in the engine, so the API makes both immutable
+
+---
 
 ## The kinds
 
@@ -31,6 +45,8 @@ All eight are in the `crewlet` category, so one command lists a company:
 kubectl get crewlet -n tenant-nimbus
 ```
 
+---
+
 ## How they relate
 
 Every namespaced object names its company in `spec.companyRef`. The org chart
@@ -39,21 +55,21 @@ each can be added, reviewed, permission-scoped and deleted on its own, the way
 Gateway API routes attach to a Gateway.
 
 ```mermaid
-graph LR
-  EC["EngineClass standard<br/>(cluster-scoped)"]
-  C[Company nimbus]
-  U1[Unit engineering]
-  U2[Unit platform]
-  S1[Seat ana]
-  S2[Seat cto]
-  S3["Seat jane<br/>(Human)"]
-  P[LLMProvider anthropic]
-  M[MCPServer github]
-  I1[Integration slack]
-  I2[Integration github]
-  SCH1[Schedule platform-standup]
-  SCH2[Schedule ci-health]
-  SEC[("Secret ana-slack")]
+flowchart LR
+  EC["<b>EngineClass</b> standard<br/><i>cluster-scoped</i>"]
+  C["<b>Company</b> nimbus"]
+  U1["<b>Unit</b> engineering"]
+  U2["<b>Unit</b> platform"]
+  S1["<b>Seat</b> ana"]
+  S2["<b>Seat</b> cto"]
+  S3["<b>Seat</b> jane<br/><i>Human</i>"]
+  P["<b>LLMProvider</b> anthropic"]
+  M["<b>MCPServer</b> github"]
+  I1["<b>Integration</b> slack"]
+  I2["<b>Integration</b> github"]
+  SCH1["<b>Schedule</b> platform-standup"]
+  SCH2["<b>Schedule</b> ci-health"]
+  SEC[("<b>Secret</b> ana-slack")]
 
   C -- engineClassName --> EC
   U1 -- companyRef --> C
@@ -108,20 +124,26 @@ like a platform provider of the class. The operator reports each on the
 object as `Accepted=False` with the reason `Conflict`, naming the other
 object.
 
+---
+
 ## What the engine looks like
 
-A Company runs on one data pod in v1alpha1: a StatefulSet with one replica
-and a volume, which holds the company's estate and also serves the API, runs
-the background workers and runs the seats placed on it. Its size, image and
-storage come from the `EngineClass`; `Company.spec.topology.data.replicas` is
-1, the only value v1alpha1 admits. Where the class allows it, the Company's
-`spec.topology.seatPools` add stateless seat pods beside the data pod, which
-run the seats placed in them and hold no data
-([Seat pools](runtime.md#seat-pools); [Choosing where seats
-run](../guides/topology.md) says when a company needs them). A company can be stopped with `spec.suspend` (its volume is kept), and
-`spec.deletionPolicy` says whether its volume outlives the Company (`Retain`,
-the default) or goes with it (`Delete`). [How a company's engine
-runs](runtime.md) lists every object the operator creates for it.
+- **One data pod.** A Company runs on one data pod in v1alpha1: a StatefulSet
+  with one replica and a volume, which holds the company's estate, serves the
+  API, runs the background workers and runs the seats placed on it. Its size,
+  image and storage come from the `EngineClass`;
+  `Company.spec.topology.data.replicas` is 1, the only value v1alpha1 admits.
+- **Seat pools, where the class allows them.** The Company's
+  `spec.topology.seatPools` add stateless seat pods beside the data pod, which
+  run the seats placed in them and hold no data
+  ([Seat pools](runtime.md#seat-pools); [Choosing where seats
+  run](../guides/topology.md) says when a company needs them).
+- **Suspension and deletion.** A company can be stopped with `spec.suspend`
+  (its volume is kept), and `spec.deletionPolicy` says whether its volume
+  outlives the Company (`Retain`, the default) or goes with it (`Delete`).
+
+[How a company's engine runs](runtime.md) lists every object the operator
+creates for it.
 
 A seat can be paused without leaving the chart: `Seat.spec.paused: true`
 stops it taking work until it is set back, the way a person pauses it in the
@@ -138,6 +160,8 @@ back: its telemetry and, for an agent-mode coding CLI, the seat's tools) and
 nothing else ([Exposure](../guides/exposure.md)); the engine's admin API and
 dashboard are on another port, which stays inside the cluster unless the
 class routes it through an internal gateway.
+
+---
 
 ## Credentials: by reference, never by value
 
@@ -166,9 +190,11 @@ plane after a vendor's install flow only it knows about.
 entry per top-level key of the document (`turn_engine`, `learning`,
 `notification_rate_limit`, ...). The API server refuses an entry for any key
 another field or object owns, and those are the only blocks that hold
-credentials, so engineConfig can never carry one. [Credentials](credentials.md)
+credentials, so engineConfig can never carry one. [Credential Positions](credentials.md)
 lists every credential position Crewlet has and the field that covers it,
 including the ones v1alpha1 does not offer yet.
+
+---
 
 ## Who owns the document: management policies
 
@@ -190,6 +216,8 @@ exist — the next revision waits, the object reports why in its conditions,
 and the engine keeps running the last revision that worked.
 [What the engine is given](company-document.md) shows the document the
 objects render to, and what keeps one from rendering.
+
+---
 
 ## Status
 
@@ -220,6 +248,8 @@ has any credentials, so a platform that creates a seat's Slack app reads the
 request URL for the app's manifest from `status.integrations.slack.requestURL`
 instead of building it, and they never change for a seat.
 
+---
+
 ## Writing the objects from a program
 
 A control plane imports the types from the Go module
@@ -236,3 +266,12 @@ manager owns. Lists that more than one writer may share are keyed, so that
 each entry has its own owner: a Seat's or a Unit's `spec.mcp` by server name
 (one manager can own the GitHub server's credentials and another the rest),
 `spec.engineConfig` by key, and `env` and `headers` by name.
+
+---
+
+## See also
+
+- [What the Engine Is Given](company-document.md) — the document the objects render to
+- [How the Document Is Applied](applying.md) — what the operator does on every change
+- [How a Company's Engine Runs](runtime.md) — every object it creates for a Company
+- [API Reference](../reference/api.md) — every field of every kind

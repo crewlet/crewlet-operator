@@ -1,14 +1,18 @@
-# How the document is applied
+# How the Document Is Applied
+
+On every change the operator renders the company document, has the engine
+dry-run it, and applies it as one revision, whole or not at all.
 
 The config reconciler keeps the company document a Company's engine runs
-equal to what the Company and its parts — the `Unit`, `Seat`, `LLMProvider`,
-`MCPServer`, `Integration` and `Schedule` objects that name it in
-`spec.companyRef` —
-declare. This page describes what it does on every change, what each
-management policy lets it write, and how it reports the outcome on every
-object involved. [What the engine is given](company-document.md) describes
-the document itself; [How a company's engine runs](runtime.md) the engine it
-is applied to.
+equal to what the Company and its parts declare: the `Unit`, `Seat`,
+`LLMProvider`, `MCPServer`, `Integration` and `Schedule` objects that name it
+in `spec.companyRef`. This page describes what it does on every change, what
+each management policy lets it write, and how it reports the outcome on every
+object involved. [What the engine is given](company-document.md) describes the
+document itself; [How a company's engine runs](runtime.md) the engine it is
+applied to.
+
+---
 
 ## When it runs
 
@@ -37,14 +41,16 @@ A Company is looked at again when:
   five seconds, and a seat whose pod was killed waits out its 45-second lease
   first.
 
-**Changes are coalesced.** A platform that provisions a company writes its
-objects one request at a time, and each revision is a permanent entry in the
-engine's history and a rebuild of every seat. So after a change to a part or
-to a referenced Secret the operator waits until two seconds have passed
-without another one, and then applies everything as one revision: twenty
-Seats created in a burst become one revision, not twenty. A burst that never
-pauses (a Secret something rewrites every second) holds the company back for
-ten seconds at most; the operator then applies what it has.
+> **Changes are coalesced.** A platform that provisions a company writes its
+> objects one request at a time, and each revision is a permanent entry in the
+> engine's history and a rebuild of every seat. So after a change to a part or
+> to a referenced Secret the operator waits until two seconds have passed
+> without another one, and then applies everything as one revision: twenty
+> Seats created in a burst become one revision, not twenty. A burst that never
+> pauses (a Secret something rewrites every second) holds the company back for
+> ten seconds at most; the operator then applies what it has.
+
+---
 
 ## What one reconcile does
 
@@ -76,13 +82,15 @@ flowchart TD
 2. **Read the Secret values** the document references, from the API server
    directly. A missing Secret or key, or a value over the 64 KiB the engine's
    store accepts, stops here.
-3. **Push the values.** Each referenced key is one entry in the engine's
-   encrypted secret store, named as the document refers to it
-   (`K8S_<SECRET>_<KEY>_<hash>`). Only values that changed since the last
-   push are written. The entries the running document still references are
-   kept until the next document replaces it.
-4. **Compare.** The operator reads the engine's active document and compares
-   it with the rendered one, and compares a hash of the rendered document and
+3. **Push the values.** The operator reads the document the engine runs
+   (`GET /health`, then `GET /config`) and lists the engine's encrypted
+   secret store. Each referenced key is one entry in the store, named as the
+   document refers to it (`K8S_<SECRET>_<KEY>_<hash>`). Only values that
+   changed since the last push are written. The entries the running document
+   still references are kept until the next document replaces it; an entry
+   of the operator's shape that neither document references is deleted now.
+4. **Compare.** The operator compares the engine's active document with the
+   rendered one, and compares a hash of the rendered document and
    of the values it references with the one it recorded when it last applied
    (`status.config.appliedHash`). If both match, there is nothing to write.
    A changed value alone is a reason to write: the engine reads a rotated
@@ -98,26 +106,47 @@ flowchart TD
    The revision's summary is `crewlet-operator:` followed by the objects
    whose part of the document changed. A write that loses a race with
    another writer is started over once from a fresh read.
-   The write activates the revision and returns its activation epoch; the
-   engine applies it afterwards, on its own loop, and runs the previous
-   revision until it has. So the Company reports `ConfigApplied=False` with
-   the reason `Applying` until the engine's `/health` reports that epoch
-   applied (the operator looks every two seconds; it usually takes
-   milliseconds), and only then `True`. The engine's posture reads `wait`
-   for as long as it applies an epoch, and turns `isolated`, `shed` or
-   `stuck` only once it has concluded that it did not: an attempt ended in
-   failure, or the apply has run past the engine's 45-second grace while a
-   peer applied the epoch. On such a posture, or on `wait` still 72 seconds
-   after the write (four of its 18-second polls), the Company reports
-   `ConfigApplied=False ApplyFailed` with the engine's status, posture and
-   account of the failure (from its record of the attempt in `/fleet`), and
-   an `ApplyFailed` event; the engine keeps running the revision it applied
-   last. The same check runs on every later
-   look, so an engine that fails a revision someone activates afterwards is
-   reported too.
-7. **Clean up** the store: every entry of the operator's shape that the new
-   document does not reference is deleted. Entries of any other name — one a
-   person wrote with `crewlet secrets set`, say — are never touched.
+7. **Clean up** the store: the operator lists it again, and every entry of
+   the operator's shape that the new document does not reference, the ones
+   only the replaced document used, is deleted. Entries of any other name —
+   one a person wrote with `crewlet secrets set`, say — are never touched.
+8. **Wait for the engine to apply it.** The write activates the revision and
+   returns its activation epoch; the engine applies it afterwards, on its own
+   loop, and runs the previous revision until it has. So the Company reports
+   `ConfigApplied=False` with the reason `Applying` until the engine's
+   `/health` reports that epoch applied (the operator looks every two
+   seconds; it usually takes milliseconds), and only then `True`.
+
+```mermaid
+sequenceDiagram
+    participant O as Crewlet Operator
+    participant E as Engine API
+    O->>E: GET /health, then GET /config, the document the engine runs
+    O->>E: GET /secrets, then PUT /secrets/NAME for each value that changed
+    O->>E: DELETE /secrets/NAME that neither document references
+    O->>E: PUT /config?dry_run=true with the rendered document
+    E-->>O: the revision it checked against, or each problem at its place
+    O->>E: PUT /config, If-Match the revision it checked
+    E-->>O: the new revision and its activation epoch
+    O->>E: GET /secrets, then DELETE /secrets/NAME only the replaced document used
+    loop every two seconds, until the epoch is applied
+        O->>E: GET /health
+        E-->>O: applied epoch and posture
+    end
+    Note over O: ConfigApplied=True, Applied
+```
+
+> **When the engine does not apply a revision.** The engine's posture reads
+> `wait` for as long as it applies an epoch, and turns `isolated`, `shed` or
+> `stuck` only once it has concluded that it did not: an attempt ended in
+> failure, or the apply has run past the engine's 45-second grace while a peer
+> applied the epoch. On such a posture, or on `wait` still 72 seconds after the
+> write (four of its 18-second polls), the Company reports
+> `ConfigApplied=False ApplyFailed` with the engine's status, posture and
+> account of the failure (from its record of the attempt in `/fleet`), and an
+> `ApplyFailed` event; the engine keeps running the revision it applied last.
+> The same check runs on every later look, so an engine that fails a revision
+> someone activates afterwards is reported too.
 
 That is the reconcile under `Enforce`. Under `Observe` the operator renders,
 dry-runs and compares, and reads no Secret value and writes nothing; under
@@ -139,6 +168,8 @@ answer, the Company reports `ConfigApplied=False` with the reason
 `EngineUnavailable`, and the operator tries again every ten seconds. Because
 the address is the cluster's DNS name of the pod, an operator running outside
 the cluster (`make run`) cannot reach any engine.
+
+---
 
 ## Management policies
 
@@ -211,6 +242,8 @@ Company reports `ConfigApplied=True` with the reason `Seeded`, and every part
 applied. An engine that already had a document when the Company was created
 is never written to; the Company reports `Seeded` all the same, saying so.
 
+---
+
 ## Pausing a seat
 
 A seat's pause is not part of the company document. Crewlet keeps it in its
@@ -242,17 +275,17 @@ seats the engine runs at all. A call the engine may or may not have
 recorded, or refused (the record changed under it, say), is made again ten
 seconds later, and so is every owned pause while the roster cannot be read.
 
-**Who owns a pause.** Only a Seat that sets `spec.paused`, and only under
-`Enforce`. A pause or resume made in the dashboard of such a seat is undone on
-the operator's next look, at most five minutes later, with a `Drifted`
-event on the Seat. A Seat that leaves `spec.paused` unset owns nothing, under
-any policy: the operator reports a pause a person takes and never lifts it.
-Reading unset as "not paused" would make the operator lift every pause a
-person takes in the dashboard of an operator-run company within minutes,
-and a pause is the control a person reaches for when an agent misbehaves —
-the reason the engine keeps it out of the document, which `Enforce` makes the
-operator's. Under `Observe` and `Seed` the operator changes no pause; a Seat
-whose pause differs from its `spec.paused` reports so.
+> **Who owns a pause.** Only a Seat that sets `spec.paused`, and only under
+> `Enforce`. A pause or resume made in the dashboard of such a seat is undone on
+> the operator's next look, at most five minutes later, with a `Drifted`
+> event on the Seat. A Seat that leaves `spec.paused` unset owns nothing, under
+> any policy: the operator reports a pause a person takes and never lifts it.
+> Reading unset as "not paused" would make the operator lift every pause a
+> person takes in the dashboard of an operator-run company within minutes,
+> and a pause is the control a person reaches for when an agent misbehaves —
+> the reason the engine keeps it out of the document, which `Enforce` makes the
+> operator's. Under `Observe` and `Seed` the operator changes no pause; a Seat
+> whose pause differs from its `spec.paused` reports so.
 
 The engine keeps the reason a pause was taken with: a `pauseReason` changed
 while the seat stays paused shows from its next pause on. Setting
@@ -275,6 +308,8 @@ pause to the dashboard. Create it with `spec.paused: false`, or resume it in
 the dashboard, to start it running. A Human seat has no pause: the engine
 takes no work for a person that a pause could hold.
 
+---
+
 ## What each object reports
 
 | Object | Condition | When |
@@ -285,7 +320,7 @@ takes no work for a person that a pause could hold.
 | every part | `Accepted` | `True` once its Company exists; `False` with `CompanyNotFound`, or `Conflict` when it collides with another object of its company. |
 | every part | `ResolvedRefs` | `False` with `RefNotFound`, `Cycle`, `HumanSeat`, `ReferenceNotAllowed`, `SecretNotFound`, `SecretTooLarge`, `PoolNotFound` or `NoProvisioner`, saying what it references that is missing or cannot be there. Most hold the document, and the part reports the same reason on `Applied`; `PoolNotFound`, `NoProvisioner`, and `HumanSeat` on a GitLab `accessLevels` entry hold nothing, because only the part at fault suffers them: it is applied (`Applied=True`) and reported, with a Warning event when the condition turns so. |
 | every part | `Applied` | `True`, `InRevision`, naming the revision, with the generation that revision was rendered from as its `observedGeneration`, once the engine has applied it. `False` with the part's own problem (`Invalid`, `RefNotFound`, a Seat's `PerSeatNotAllowed`, `PoolCapacityExceeded`, `CLIAuthNotPortable` or `CodingAgentMismatch`, ...), a Seat's `PlacementPending` while it stays where it runs until a pod of the pool it moves to is ready (or for good, while the Company does not declare that pool), `Blocked` when another object keeps the document from being applied, `Applying` while the engine applies the revision, or `ApplyFailed` when it did not. A part whose current generation already runs keeps `True` meanwhile: only what changed is held back. |
-| Seat (agent) | `Ready` | Whether the seat runs. First, `False`, `Suspended`, while the Company is suspended. Then `False` with `AgentModeBridgeUnsupported` or `NotExposed` when the head of the seat's executor's chain is a `CLIAgent` provider in `mode: Agent` and no pod its spec places it on serves the tool bridge the run calls back through: the seat is in a seat pool, or the Company has no public address. The engine applies such a seat and refuses every one of its turns, so this is decided from the spec each time the document is rendered, holds nothing back, names the pod that holds the seat if one does, and comes with a Warning event when `Ready` becomes so (a suspended Company's seat, whose `Ready` says `Suspended`, is announced once it resumes). Once the spec is fixed, a reconcile that does not reach the engine reports `False`, `Unplaced`, until the engine is asked which pod holds the seat, rather than keep the old reason. Otherwise whether an engine pod holds the seat's lease, as the engine's `GET /fleet` reports, read each time the operator reaches the engine: `True`, `LeaseHeld`, naming the pod (and saying so when it is not a pod of the seat's StatefulSet yet, while the engine moves it); `False`, `Unplaced`, while no pod holds it, saying why: the seat is not in the revision the engine runs, its pool runs no pod, or the engine has not claimed it yet; `False`, `PoolNotFound`, while no pod holds it and none can, as the Company does not declare its pool; `Unknown`, `EngineUnavailable`, when the fleet could not be read. Unchanged while the operator does not reach the engine. A Human seat has none. |
+| Seat (agent) | `Ready` | Whether the seat runs: see [A Seat's `Ready` condition](#a-seats-ready-condition). A Human seat has none. |
 | Seat (Agent) | `Paused` | Whether the engine holds the seat paused, once it runs the seat: `True`, `SeatPaused`, naming who paused it, when and why; `False`, `SeatRunning`; with `PauseNotManaged` instead when the pause differs from `spec.paused` under `Observe` or `Seed`. `Unknown`, `PauseUnknown`, while a pause or resume the engine may or may not have recorded is retried; `Unknown`, `PauseRefused`, with the engine's words when it refused one, which is asked for again ten seconds later. None while the engine runs no seat of the Seat's (not in its revision, or a handle another Seat derives too). |
 | Seat (Agent) | `CodeWorkRunnable` | On an Agent seat with `spec.sandbox` in a Company with `spec.sandbox`: whether its coding agent can run on the provider at the head of its sandbox chain, or on the sign-in the seat's sandbox environment gives it, decided from the spec each time the document is rendered, whatever became of the document. Under `Observe` or `Seed` it judges the Seat's objects, which may not be the document the engine runs; `Applied` says whether they are. `True`, `CodeWorkSupported`, naming the coding agent and what it runs on; `False` with `CodingAgentMismatch`, which also holds the document (`Applied`), or with `SandboxModelUnsupported` or `SandboxLoginNotPortable`, which do not: the seat is applied and runs its turns, and Crewlet refuses each of its coding runs. The operator records a Warning event on the Seat each time the condition becomes `False` or its reason changes. Not part of `Ready`, which says whether a pod runs the seat. None on any other Seat, or while none of the seat's sandbox chain resolves; unchanged while the Company is not accepted. |
 | LLMProvider (`CLIAgent` in `mode: Agent`) | `AgentModeRunnable` | Whether its runs can call a seat's tools back through the tool bridge, decided from the spec each time the document is rendered: `True`, `ToolBridgeServed`, naming the bridge at the Company's public address; `False`, `NotExposed`, while the Company has none. The provider is applied either way (it still serves a text call behind a chain's head or in another phase); the operator records a Warning event when the condition becomes `False`. None on any other provider; unchanged while the Company is not accepted. |
@@ -339,6 +374,33 @@ and
 about. Events, conditions and logs name Secrets, keys and store entries,
 never a value.
 
+### A Seat's `Ready` condition
+
+`Ready` says whether an agent seat runs, as the first of these that holds:
+
+| Status | Reason | When |
+|---|---|---|
+| False | `Suspended` | The Company is suspended. |
+| False | `AgentModeBridgeUnsupported` | The head of the seat's executor's chain is a `CLIAgent` provider in `mode: Agent`, and the seat is in a seat pool, whose pods serve no tool bridge a run can call back through. |
+| False | `NotExposed` | The same provider heads the chain, and the Company has no public address. |
+| True | `LeaseHeld` | An engine pod holds the seat's lease, as the engine's `GET /fleet` reports. The message names the pod, and says so when it is not a pod of the seat's StatefulSet yet, while the engine moves it. |
+| False | `PoolNotFound` | No pod holds the seat and none can: the Company does not declare its pool. |
+| False | `Unplaced` | No pod holds the seat: it is not in the revision the engine runs, its pool runs no pod, or the engine has not claimed it yet. The message says which. |
+| Unknown | `EngineUnavailable` | The engine's fleet could not be read. |
+
+`AgentModeBridgeUnsupported` and `NotExposed` are decided from the spec each
+time the document is rendered: the engine applies such a seat and refuses
+every one of its turns, so the condition holds nothing back, names the pod
+that holds the seat if one does, and comes with a Warning event when `Ready`
+becomes so (a suspended Company's seat, whose `Ready` says `Suspended`, is
+announced once it resumes). Once the spec is fixed, a reconcile that does not
+reach the engine reports `False`, `Unplaced`, until the engine is asked which
+pod holds the seat, rather than keep the old reason. The other reasons are
+read each time the operator reaches the engine, and stay as they are while it
+does not.
+
+---
+
 ## Who writes what
 
 The config reconciler writes the Company's `SecretsSynced` and
@@ -350,3 +412,12 @@ Company, so neither overwrites a field of the other's. A change of
 `ConfigApplied` makes the runtime reconciler recompute `Ready`, and a change
 of `status.config.placement` makes it delete the seat pods no running revision
 needs any more.
+
+---
+
+## See also
+
+- [What the Engine Is Given](company-document.md) — the document this page applies, and what blocks one
+- [Choosing a Management Policy](../guides/management-policies.md) — which policy to run a company under
+- [Troubleshooting](../guides/troubleshooting.md) — what to do about each condition
+- [Crewlet's control plane](https://github.com/crewlet/crewlet/blob/main/docs/concepts/control-plane.md) — how the engine applies a revision, and the postures a node takes

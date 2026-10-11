@@ -321,7 +321,8 @@ closely enough that nobody has to learn a house style:
   credential Crewlet adds fails the build until it has a field or a reason
   it has none. Another holds the `engineConfig` rule to the same marks: a
   credential Crewlet adds under a new top-level block fails it until the rule
-  refuses that block.
+  refuses that block. `TestCredentialsDocListsThePositions` prints the rows
+  the page must hold.
 - References stay within the object's namespace. Only the cluster-scoped
   `EngineClass` may reference objects in another namespace.
 - Validation is OpenAPI plus CEL (`x-kubernetes-validations`) — immutability

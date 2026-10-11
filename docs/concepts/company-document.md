@@ -1,17 +1,37 @@
-# What the engine is given
+# What the Engine Is Given
 
-A Crewlet engine reads two documents: the **company document** (Crewlet's
-Tier B: the company, its org chart, models, tools and integrations), which
-the operator applies over the engine's API, and each engine pod's
-**`crewlet.yaml`** (Tier A: how the node boots), a data pod's or a seat
-pool's, which the operator keeps in a Secret and mounts into the pod. The
-operator renders them from the `crewlet.ai` objects. This page says what they
+The operator renders two documents from the `crewlet.ai` objects: the company
+document the engine runs, and the `crewlet.yaml` each engine pod boots from.
+
+The **company document** (Crewlet's Tier B: the company, its org chart,
+models, tools and integrations) is applied over the engine's API. Each engine
+pod's **`crewlet.yaml`** (Tier A: how the node boots), a data pod's or a seat
+pool's, is kept in a Secret and mounted into the pod. This page says what they
 contain, so that what the engine reports can be traced back to an object.
+
+```mermaid
+flowchart LR
+    subgraph objects["crewlet.ai objects"]
+        CO["<b>Company</b>"]
+        PARTS["<b>Unit · Seat · LLMProvider</b><br/><b>MCPServer · Integration · Schedule</b>"]
+        EC["<b>EngineClass</b><br/><i>platform providers, pods</i>"]
+    end
+    R{{"<b>render</b><br/><i>the same objects,<br/>the same bytes</i>"}}
+    CO --> R
+    PARTS --> R
+    EC --> R
+    R -->|"Tier B, over the API,<br/>applied whole"| DOC["<b>Company document</b><br/><i>org chart, models, tools,<br/>integrations</i>"]
+    R -->|"Tier A, in a Secret,<br/>read at start"| BOOT["<b>crewlet.yaml</b><br/><i>the data pod's,<br/>each seat pool's</i>"]
+    SEC[("<b>Secrets</b><br/>the referenced keys")] -->|"values, pushed"| STORE[("<b>Secret store</b><br/>encrypted, in the engine")]
+    DOC -.->|"references by name"| STORE
+```
 
 Both documents are rendered deterministically: the same objects always give
 the same bytes, whatever order the API server lists them in. Keys are
 sorted, units and their child units are ordered by `metadata.name`, seats by
 handle, and model providers and tool servers by name.
+
+---
 
 ## The company document
 
@@ -146,9 +166,11 @@ pods.
 
 Every credential position holds a reference, `${NAME}`, to an entry of the
 engine's encrypted secret store, never a value. Each referenced Secret key
-gets its own entry, whose value the operator pushes into the store; the
-[credentials](credentials.md) page lists every position and the field that
-fills it.
+gets its own entry, whose value the operator pushes into the store.
+[Credential Positions](credentials.md) lists every position and the field
+that fills it.
+
+---
 
 ## The data pod's `crewlet.yaml`
 
@@ -192,13 +214,13 @@ by the engine's user alone. Its one reference is `${CREWLET_NODE_ID}`, the
 pod's name and the node's stable identity, which the pod's environment
 carries.
 
-None of these credentials is an environment variable, on purpose. Crewlet
-resolves a `${NAME}` in the company document from its secret store and then
-from its process environment, and it does so in fields that hold no
-credential as well, such as an MCP server's `url` or a model provider's
-`base_url`. A credential in the engine's environment would be one anyone who
-can write such a field, or hold the API's access token, could have the
-engine send to a server of their choosing.
+> **None of these credentials is an environment variable, on purpose.** Crewlet
+> resolves a `${NAME}` in the company document from its secret store and then
+> from its process environment, and it does so in fields that hold no
+> credential as well, such as an MCP server's `url` or a model provider's
+> `base_url`. A credential in the engine's environment would be one anyone who
+> can write such a field, or hold the API's access token, could have the
+> engine send to a server of their choosing.
 
 The engine's API answers no read without a token
 (`api.auth.allow_anonymous_read: false`): its reads include every seat's
@@ -212,6 +234,8 @@ operator would otherwise overwrite at its next look. Under `Observe` and
 `Seed` the list is absent: there the engine's own users own the document. The
 pod reads `crewlet.yaml` only at start, so changing the policy to or from
 `Enforce` restarts it ([Switching policies](../guides/management-policies.md#switching-policies)).
+
+---
 
 ## A seat pod's `crewlet.yaml`
 
@@ -236,6 +260,8 @@ only `/health` and `/ready` on its `api.port`, which the pod's probes ask,
 and refuses every other route as an unknown one. Without the port the engine
 would bind nothing, and nothing could tell a seat pod that has joined the
 fleet from one still starting ([Seat pools](runtime.md#seat-pools)).
+
+---
 
 ## What blocks a document
 
@@ -292,7 +318,7 @@ itself would name values that are not its own: the class's platform model
 keys in the store, or the engine's environment. The only references in a
 rendered document are the ones the operator writes for a Secret key the
 object references, and for a seat's credentials the engine provisions
-([Credentials](credentials.md#credentials-the-engine-provisions)). The API server already refuses a `${NAME}` in the typed
+([Credential Positions](credentials.md#credentials-the-engine-provisions)). The API server already refuses a `${NAME}` in the typed
 fields Crewlet is known to expand; the render check covers every other
 string. A sandbox setup command keeps shell syntax Crewlet leaves alone,
 such as `$HOME` and `${1:-x}`.
@@ -351,3 +377,12 @@ classifies every place the render finds one, `TestTheDocsStateTheBases`
 holds this page's table and list to it, and the engine's contract tests hold
 each held for the engine's sake, and each reported one, to the engine the
 operator is tested against, Crewlet's `main`.
+
+---
+
+## See also
+
+- [How the Document Is Applied](applying.md) — how the rendered document reaches the engine
+- [Credential Positions](credentials.md) — every credential position and the field that fills it
+- [Choosing Where Seats Run](../guides/topology.md) — when a company needs seat pools
+- [Crewlet's configuration](https://github.com/crewlet/crewlet/blob/main/docs/concepts/configuration.md) — the engine's own account of both tiers

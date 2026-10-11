@@ -1,22 +1,64 @@
-# How a company's engine runs
+# How a Company's Engine Runs
 
-For every accepted `Company` the operator runs one Crewlet engine: a
-StatefulSet with one data pod, which holds the company's estate, serves the
-engine's API, runs the background workers and runs the seats placed on it;
-and, when the Company declares seat pools and its class allows them,
-StatefulSets of stateless seat pods that run the other seats. This page
-describes what the operator creates for it, how it is reached, how it changes,
-and what happens when the Company is suspended or deleted.
+For every accepted Company the operator runs one Crewlet engine: a data pod
+holding its estate, and the seat pools it declares, where its class allows
+them.
+
+The data pod is a StatefulSet with one replica, which holds the estate,
+serves the engine's API, runs the background workers and runs the seats
+placed on it; when the Company declares seat pools and its class allows them,
+StatefulSets of stateless seat pods run the other seats. This page describes
+what the operator creates for it, how it is reached, how it changes, and what
+happens when the Company is suspended or deleted.
 
 An engine starts unconfigured, and its pod is not ready until the config
 reconciler has applied the company document: [How the document is
 applied](applying.md) describes that half.
+
+---
 
 ## What the operator creates
 
 Every object is in the Company's namespace, named after the Company, labelled
 `app.kubernetes.io/*` and `crewlet.ai/company: <name>`, and owned by the
 Company, so it is deleted with it. For a Company `nimbus`:
+
+```mermaid
+flowchart LR
+    C["<b>Company</b> nimbus"]
+    subgraph sec["Secrets"]
+        KR["nimbus-keyring"]
+        TOK["nimbus-api-tokens"]
+        ACC["nimbus-api-access"]
+        BS["nimbus-bootstrap"]
+        SYNC["nimbus-secret-sync"]
+    end
+    subgraph data["The data pod"]
+        SA["<b>ServiceAccount</b><br/>nimbus-engine"]
+        STS["<b>StatefulSet</b><br/>nimbus-data"]
+        POD[("<b>nimbus-data-0</b><br/>data-nimbus-data-0")]
+    end
+    subgraph reach["How it is reached"]
+        SVC["<b>Service</b> nimbus-engine<br/><i>http 8080 · public 8081</i>"]
+        HL["<b>Service</b> nimbus-data<br/><i>headless</i>"]
+        RT["<b>HTTPRoute or Ingress</b><br/>nimbus-webhooks · nimbus-api"]
+        NP["<b>NetworkPolicy</b><br/>nimbus-engine · nimbus-broker"]
+    end
+    subgraph pools["Seat pools, when declared"]
+        PSTS["<b>StatefulSet</b> per pool<br/><i>or per PerSeat seat</i>"]
+        PBS["<b>Secret</b> per pool<br/><i>its crewlet.yaml</i>"]
+        SSVC["<b>Service</b> nimbus-seats<br/><i>headless</i>"]
+        PDB["<b>PodDisruptionBudget</b>"]
+        SNP["<b>NetworkPolicy</b> nimbus-seats"]
+    end
+    C --> sec
+    C --> data
+    C --> reach
+    C --> pools
+    STS --> POD
+    BS -.->|"crewlet.yaml, mounted"| POD
+    RT --> SVC --> POD
+```
 
 | Object | What it is |
 |---|---|
@@ -73,19 +115,21 @@ Two cases are refused rather than guessed at:
   the operator writes whole (Services, the API access Secret, routes) are
   simply taken over from the earlier Company.
 
+---
+
 ## The data pod
 
-| | |
+| | The data pod |
 |---|---|
-| Image | The class's `engine.image`; with `engine.allowVersionOverride`, its tag replaced by the Company's `spec.runtime.version`. |
-| Command | `crewlet run -config /etc/crewlet/crewlet.yaml`, the bootstrap Secret's `crewlet.yaml` mounted read-only, readable by the engine's user alone (mode `0440`, group `fsGroup`). |
-| Storage | One volume claim per pod (`data-nimbus-data-0`) at `/var/lib/crewlet`, from the class's `data.storage`: the store, the event stream (three quarters of the volume, [sized from the claim](company-document.md#the-data-pods-crewletyaml)), and the store's native library cache (`TURSO_GO_CACHE_DIR`), so a restart does not extract it again. |
-| Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the Company's public address, while an LLMProvider of the company runs a CLI in `mode: Agent` (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`, and with them `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, the Company's public address, while the Company has one (see [Exposure](#exposure)); then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). |
-| Ports | 8080 (`http`), the API, the dashboard and the probes; 8081 (`public`), the public listener: the webhooks, and a remote sandbox's `/otlp/` and `/mcp/`; and 7422 (`leaf`), the leaf listener seat pods join the event stream through, while the class's `seatPools.policy` is `Allowed`. The headless Service `nimbus-data` names 8080 and 7422; `nimbus-engine` names 8080 and 8081. |
-| Probes | `/health` for startup (up to five minutes for the first start) and liveness (a minute of failures before a restart, longer than the 45 seconds in which the engine's watchdog ends a wedged process itself), `/ready` for readiness. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
-| Stopping | A five-second `preStop` sleep, so the endpoint is gone from the Services and Gateways before the engine drains, and the class's `data.terminationGracePeriodSeconds` (default five minutes) for the drain: running turns finish, waiting ones are handed back. |
-| Updates | `RollingUpdate` with `maxUnavailable: 1`, `podManagementPolicy: Parallel`. |
-| Scheduling | The class's `podTemplate`: labels, annotations, node selector, tolerations, affinity, topology spread, runtime and priority class; and its `data.resources`. |
+| **Image** | The class's `engine.image`; with `engine.allowVersionOverride`, its tag replaced by the Company's `spec.runtime.version`. |
+| **Command** | `crewlet run -config /etc/crewlet/crewlet.yaml`, the bootstrap Secret's `crewlet.yaml` mounted read-only, readable by the engine's user alone (mode `0440`, group `fsGroup`). |
+| **Storage** | One volume claim per pod (`data-nimbus-data-0`) at `/var/lib/crewlet`, from the class's `data.storage`: the store, the event stream (three quarters of the volume, [sized from the claim](company-document.md#the-data-pods-crewletyaml)), and the store's native library cache (`TURSO_GO_CACHE_DIR`), so a restart does not extract it again. |
+| **Environment** | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the Company's public address, while an LLMProvider of the company runs a CLI in `mode: Agent` (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`, and with them `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, the Company's public address, while the Company has one (see [Exposure](#exposure)); then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). |
+| **Ports** | 8080 (`http`), the API, the dashboard and the probes; 8081 (`public`), the public listener: the webhooks, and a remote sandbox's `/otlp/` and `/mcp/`; and 7422 (`leaf`), the leaf listener seat pods join the event stream through, while the class's `seatPools.policy` is `Allowed`. The headless Service `nimbus-data` names 8080 and 7422; `nimbus-engine` names 8080 and 8081. |
+| **Probes** | `/health` for startup (up to five minutes for the first start) and liveness (a minute of failures before a restart, longer than the 45 seconds in which the engine's watchdog ends a wedged process itself), `/ready` for readiness. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
+| **Stopping** | A five-second `preStop` sleep, so the endpoint is gone from the Services and Gateways before the engine drains, and the class's `data.terminationGracePeriodSeconds` (default five minutes) for the drain: running turns finish, waiting ones are handed back. |
+| **Updates** | `RollingUpdate` with `maxUnavailable: 1`, `podManagementPolicy: Parallel`. |
+| **Scheduling** | The class's `podTemplate`: labels, annotations, node selector, tolerations, affinity, topology spread, runtime and priority class; and its `data.resources`. |
 
 The pod runs under the `restricted` Pod Security Standard: as the image's
 user (uid 10001, `runAsNonRoot`), with the `RuntimeDefault` seccomp profile,
@@ -105,6 +149,8 @@ an annotation written to a Secret restarts nothing. A Secret the Company's own
 `runtime.env` references is read the same way, but the operator does not
 watch it: restart the pod after changing one.
 
+---
+
 ## Seat pools
 
 A Company's `spec.topology.seatPools` are stateless pods that run seats:
@@ -116,6 +162,23 @@ and `maxPods` bound what a Company may run, and its
 `spec.placement.pool` ([Placement](company-document.md#placement)).
 [Choosing where seats run](../guides/topology.md) says when a company needs
 pools, and which kind.
+
+```mermaid
+flowchart LR
+    subgraph datapods["StatefulSet nimbus-data"]
+        D0[("<b>nimbus-data-0</b><br/>estate · API 8080 · public 8081<br/>leaf listener 7422")]
+    end
+    subgraph general["StatefulSet nimbus-seats-general-c53f6a26"]
+        G0["<b>seat pod</b><br/>any seat of the pool"]
+        G1["<b>seat pod</b><br/>any seat of the pool"]
+    end
+    subgraph cy["StatefulSet nimbus-seat-cy-8ae373fd"]
+        CY0["<b>seat pod</b><br/>cy alone"]
+    end
+    G0 -->|"NATS leaf, 7422"| D0
+    G1 -->|"NATS leaf, 7422"| D0
+    CY0 -->|"NATS leaf, 7422"| D0
+```
 
 | | Shared pool `general` | PerSeat pool, seat `cy` |
 |---|---|---|
@@ -306,6 +369,8 @@ as the pod stays unready, for ever for one that cannot start. Moving seats
 between pods interrupts them: each move releases the seat, starts its tool
 servers on the new pod and rehydrates its memory there.
 
+---
+
 ## Changes, versions and suspension
 
 A change to the class or the Company that changes the pod (an image, the
@@ -354,6 +419,8 @@ that lacks a token or holds one shorter than 43 characters or outside
 base64, base64url and hex (`APITokensInvalid`), or a platform Secret the
 class references that is missing (`SecretNotFound`). Suspending still
 scales the pod to zero meanwhile.
+
+---
 
 ## Exposure
 
@@ -438,6 +505,8 @@ operator to use it. An HTTPRoute in a tenant's namespace attaches to a Gateway
 in another only if the Gateway's listener admits routes from that namespace
 (`allowedRoutes.namespaces`).
 
+---
+
 ## Network policy
 
 With the class's `networkPolicy.mode: Isolated` (the default) the operator
@@ -486,13 +555,15 @@ either admits. That is why `nimbus-engine` and `nimbus-broker` select the data
 pods alone and never a seat pod, and why the isolation of the seat pods holds
 only while no policy of anyone else's selects them.
 
-**The namespace is the trust boundary.** A policy selects pods by their
-labels, and whoever can create a pod in the namespace can give it a seat
-pod's labels and join the company's event stream; they can also mount the
-company's keyring Secret into it and open its secret store, which no policy
-governs. Companies that must not read each other's streams and secrets need
-namespaces of their own, or a namespace where nobody but the operator creates
-pods. Two more limits hold for every NetworkPolicy, on most CNIs (Calico and
+> **Caution: the namespace is the trust boundary.** A policy selects pods by
+> their labels, and whoever can create a pod in the namespace can give it a
+> seat pod's labels and join the company's event stream; they can also mount
+> the company's keyring Secret into it and open its secret store, which no
+> policy governs. Companies that must not read each other's streams and
+> secrets need namespaces of their own, or a namespace where nobody but the
+> operator creates pods.
+
+Two more limits hold for every NetworkPolicy, on most CNIs (Calico and
 Cilium among them): traffic from the node itself, and from `hostNetwork` pods
 on the data pod's node, is not policed. And the leaf link carries the event
 stream (turn transcripts, tool results) unencrypted over the pod network:
@@ -503,6 +574,8 @@ Gateway implementations deliver traffic from the node rather than from a pod
 (Cilium's, for example), which no NetworkPolicy can admit by namespace; with
 those, set `networkPolicy.mode: None` and isolate the engines with the CNI's
 own policy.
+
+---
 
 ## Deletion
 
@@ -530,6 +603,8 @@ To discard a retained company for good, delete the claims first and the
 keyring Secret after them: a Company that finds its claims without its
 keyring holds its pod back rather than generate a keyring that cannot open
 them (`KeyringMissing`).
+
+---
 
 ## Status
 
@@ -584,6 +659,8 @@ with how many and the one standing longest) or `Unknown`
 (`AlarmsNotReported`, before the engine has evaluated them). `Ready` does not
 include it: an engine with an alarm still runs the company.
 
+---
+
 ## Backups
 
 The operator takes no backup, and Crewlet needs them for more than recovery:
@@ -606,9 +683,15 @@ kubectl exec -n acme acme-data-0 -- crewlet backup -config /etc/crewlet/crewlet.
 
 Run it at least daily. Copy each backup off the volume (`kubectl cp`), since
 one on the volume it protects survives nothing that loses the volume, and
-delete old ones from the volume: they count against its size. Back up the `<company>-keyring` Secret with the volume's copies: one
-opens nothing without the other. Crewlet's own guide, *Backups & Restore*,
+delete old ones from the volume: they count against its size.
+
+> **Back up the keyring with the volume.** Back up the `<company>-keyring`
+> Secret with the volume's copies: one opens nothing without the other.
+
+Crewlet's own guide, [Backups & Restore](https://github.com/crewlet/crewlet/blob/main/docs/guides/backup.md),
 covers what a backup holds and how to restore one.
+
+---
 
 ## Reaching the engine
 
@@ -625,3 +708,12 @@ only once it runs a document; a client that has to reach an engine before
 that, as the operator does to apply the first one, addresses the pod directly
 through the headless Service:
 `http://nimbus-data-0.nimbus-data.<namespace>.svc:8080`.
+
+---
+
+## See also
+
+- [Exposure and Network Policy](../guides/exposure.md) — the routes and policies, set up
+- [Choosing Where Seats Run](../guides/topology.md) — whether a company needs seat pools
+- [How the Document Is Applied](applying.md) — the half that configures the engine
+- [Crewlet's backups](https://github.com/crewlet/crewlet/blob/main/docs/guides/backup.md) — what a backup holds and how to restore one
