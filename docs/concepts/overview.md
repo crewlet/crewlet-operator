@@ -68,7 +68,7 @@ graph LR
   I2 -- companyRef --> C
   S1 -. llm .-> P
   S1 -. mcp .-> M
-  S1 -. integrations.slack .-> SEC
+  S1 -.->|integrations.slack| SEC
   SCH1 -- target.unitRef --> U2
   SCH2 -- target.seatRef --> S1
 ```
