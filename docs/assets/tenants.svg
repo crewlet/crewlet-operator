@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none">
+  <defs>
+    <linearGradient id="tenantGrad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="80" y2="80">
+      <stop offset="0%" style="stop-color:#6a5cff"/>
+      <stop offset="100%" style="stop-color:#e24a90"/>
+    </linearGradient>
+  </defs>
+  <circle cx="40" cy="40" r="40" fill="#111"/>
+  <!-- The platform's control plane -->
+  <rect x="34" y="14" width="12" height="12" rx="3" fill="url(#tenantGrad)"/>
+  <!-- What it writes, one namespace each -->
+  <line x1="37" y1="26" x2="23" y2="40" stroke="url(#tenantGrad)" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+  <line x1="40" y1="26" x2="40" y2="40" stroke="url(#tenantGrad)" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+  <line x1="43" y1="26" x2="57" y2="40" stroke="url(#tenantGrad)" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+  <!-- A namespace per tenant -->
+  <rect x="15" y="42" width="15" height="17" rx="4" stroke="url(#tenantGrad)" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.5"/>
+  <rect x="32.5" y="42" width="15" height="17" rx="4" stroke="url(#tenantGrad)" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.5"/>
+  <rect x="50" y="42" width="15" height="17" rx="4" stroke="url(#tenantGrad)" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.5"/>
+  <!-- Each tenant's company -->
+  <circle cx="22.5" cy="50.5" r="4" fill="url(#tenantGrad)" opacity="0.8"/>
+  <circle cx="40" cy="50.5" r="4" fill="url(#tenantGrad)" opacity="0.7"/>
+  <circle cx="57.5" cy="50.5" r="4" fill="url(#tenantGrad)" opacity="0.6"/>
+</svg>

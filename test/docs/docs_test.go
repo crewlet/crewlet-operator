@@ -1091,3 +1091,40 @@ func TestSiteLinkProblemKnowsWhatTheSiteBuilds(t *testing.T) {
 		}
 	}
 }
+
+// yamlFence is the body of a ```yaml block of a Markdown file.
+var yamlFence = regexp.MustCompile("(?s)```yaml\n(.*?)\n```\n")
+
+func TestTheReadmeShowsTheGuidesObjects(t *testing.T) {
+	// The README shows what a company looks like with objects the
+	// getting-started guide applies, which test/crd applies to an API server
+	// and the render contract test hands to the engine, so the README's
+	// excerpt is one the API and the engine accept rather than a copy of it
+	// that drifts. Every object it shows is one of the guide's, byte for byte.
+	root := repoRoot(t)
+	readme, err := os.ReadFile(filepath.Clean(filepath.Join(root, "README.md")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifests, err := Manifests(filepath.Join(root, "docs", "getting-started.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	applied := map[string]bool{}
+	for _, manifest := range manifests {
+		for object := range strings.SplitSeq(manifest, "\n---\n") {
+			applied[strings.TrimSpace(object)] = true
+		}
+	}
+	blocks := yamlFence.FindAllSubmatch(readme, -1)
+	if len(blocks) == 0 {
+		t.Fatal("README.md shows no ```yaml block: the test reads it wrong, or the README changed shape")
+	}
+	for _, block := range blocks {
+		for object := range strings.SplitSeq(string(block[1]), "\n---\n") {
+			if !applied[strings.TrimSpace(object)] {
+				t.Errorf("README.md shows an object docs/getting-started.md does not apply; copy it from the guide:\n%s", object)
+			}
+		}
+	}
+}

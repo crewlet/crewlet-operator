@@ -397,6 +397,7 @@ commit:
 | the curl image | `test/e2e/e2e_test.go` | Docker Hub |
 | the Gateway API CRDs the controller suite installs | `internal/controller/testdata/gateway-api` | `make gateway-api-crds`, after Dependabot bumps `sigs.k8s.io/gateway-api`; the suite fails until the two match |
 | cosign (`cosign-release`) | `.github/workflows/release.yml` | sigstore/cosign's releases |
+| the supported Kubernetes range (1.34 to 1.37) | `README.md` (its badge and Requirements), `docs/guides/installing.md` | Kubernetes' releases: the four newest minor versions |
 
 ## Documentation
 
@@ -446,7 +447,7 @@ a few things follow from that:
   it, `docs/assets/x.svg` from the root README, which is not published). An
   image anywhere else becomes a link to a GitHub page on the site, not an
   image. [`docs/assets/README.md`](docs/assets/README.md) says where each
-  figure comes from.
+  figure comes from and how the icons are drawn.
 - **Asides are blockquotes with a bold lead-in**, `> **Lead-in.** …`, which the
   site draws as a callout titled with the lead-in, in a tone read from the
   lead-in alone: `never`, `irreversible` or `data loss` make a danger
@@ -484,7 +485,8 @@ a few things follow from that:
 
 `test/docs` holds the tree to all of it in `make test`: every page of `docs/`
 but `assets/README.md` is listed exactly once in the index, under a section,
-as a card entry, and every file there is a regular one; every relative link and image
+as a card entry, and every file there is a regular one; every object the
+README shows is one the getting-started guide applies; every relative link and image
 names a file that exists, every `#anchor` names a heading its target renders
 (by GitHub's slug rule, which the site's renderer shares), and every link into
 the engine's repository names a file and heading of Crewlet's `main`, the

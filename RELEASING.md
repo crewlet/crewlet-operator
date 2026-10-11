@@ -137,6 +137,22 @@ the tree:
   to this repository (Package settings), so a pull needs no credentials;
 - protect `v*` and `api/v*` tags so only maintainers can create them.
 
+The first release also changes what the README says about itself: put a
+Release badge in front of the others, in the form the engine's README uses,
+
+```markdown
+[![Release](https://img.shields.io/github/v/release/crewlet/crewlet-operator?style=flat-square&color=7c56ff&label=release)](https://github.com/crewlet/crewlet-operator/releases)
+```
+
+and drop "and nothing is released yet" from its alpha callout and "and has
+no release yet" from its Status section. Until a release exists the badge
+reads "no releases or repo not found", which is why it is not there now.
+The Quickstart says it too: its step 2 (`docs/getting-started.md`) builds
+the operator's image from a checkout because "the operator has no release
+yet". The documentation site publishes each release's copy of the docs under
+that release's version, so rewrite the step in the tree the tag is cut from,
+to install the released image and chart.
+
 ### If a release goes wrong
 
 A tag that produced broken artifacts is not moved or reused: the image and
