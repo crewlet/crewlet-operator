@@ -538,13 +538,15 @@ func cliAgentNames(t *testing.T) []v1alpha1.CLIAgentName {
 	return agents
 }
 
-// TestCodeWorkFollowsTheEngineSource holds the render's copies of what signs
-// a coding agent in at a launch, which no validation shows, to the pinned
-// engine's source: the variables that sign ClaudeCode in from a seat's own
-// environment (codingagent.ClaudeCodeCredentialEnv), and ClaudeCode's token
-// and key variables (its profile's token_env and api_key_env). The pattern of
-// a credential's name is the LLMProvider API's, which the CRD suite holds to
-// the engine: it is held to the installed CRD's rules.
+// TestCodeWorkFollowsTheEngineSource holds the render's copies of what a
+// launch runs and signs in, which no validation shows, to the engine's
+// source: the coding agent of a seat and a catalogue that name none
+// (sandbox.DefaultCodingAgent), the variables that sign ClaudeCode in from a
+// seat's own environment (codingagent.ClaudeCodeCredentialEnv), and
+// ClaudeCode's token and key variables (its profile's token_env and
+// api_key_env). The pattern of a credential's name is the LLMProvider API's,
+// which the CRD suite holds to the engine: it is held to the installed CRD's
+// rules.
 func TestCodeWorkFollowsTheEngineSource(t *testing.T) {
 	source, err := os.OpenRoot(enginetest.Source(t))
 	if err != nil {
@@ -552,9 +554,17 @@ func TestCodeWorkFollowsTheEngineSource(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = source.Close() })
 
-	const file = "internal/sandbox/codingagent/claudecode.go"
-	src, err := source.ReadFile(file)
+	const manager = "internal/sandbox/manager.go"
+	src, err := source.ReadFile(manager)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := stringConst(t, manager, src, "DefaultCodingAgent"), codingAgent(defaultCodingAgent); got != want {
+		t.Errorf("the engine runs %s for a seat and a catalogue that name no coding agent, the render %s", got, want)
+	}
+
+	const file = "internal/sandbox/codingagent/claudecode.go"
+	if src, err = source.ReadFile(file); err != nil {
 		t.Fatal(err)
 	}
 	if got := stringSliceVar(t, file, src, "ClaudeCodeCredentialEnv"); !slices.Equal(got, claudeCodeSignIn) {
@@ -605,40 +615,59 @@ func TestCodeWorkFollowsTheEngineSource(t *testing.T) {
 // the Go source src of file.
 func stringSliceVar(t *testing.T, file string, src []byte, name string) []string {
 	t.Helper()
+	list, ok := declared(t, file, src, token.VAR, name).(*ast.CompositeLit)
+	if !ok {
+		t.Fatalf("%s in %s is no literal", name, file)
+	}
+	out := make([]string, 0, len(list.Elts))
+	for _, elt := range list.Elts {
+		out = append(out, stringLiteral(t, file, name, elt))
+	}
+	return out
+}
+
+// stringConst is the string literal the const name declares in the Go source
+// src of file.
+func stringConst(t *testing.T, file string, src []byte, name string) string {
+	t.Helper()
+	return stringLiteral(t, file, name, declared(t, file, src, token.CONST, name))
+}
+
+// stringLiteral is the value of e, a string literal of name's in file.
+func stringLiteral(t *testing.T, file, name string, e ast.Expr) string {
+	t.Helper()
+	lit, ok := e.(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		t.Fatalf("%s in %s holds a value that is no string literal", name, file)
+	}
+	s, err := strconv.Unquote(lit.Value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+// declared is the value a var or const (tok) of name alone is declared with
+// in the Go source src of file.
+func declared(t *testing.T, file string, src []byte, tok token.Token, name string) ast.Expr {
+	t.Helper()
 	parsed, err := parser.ParseFile(token.NewFileSet(), file, src, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, decl := range parsed.Decls {
 		gen, ok := decl.(*ast.GenDecl)
-		if !ok || gen.Tok != token.VAR {
+		if !ok || gen.Tok != tok {
 			continue
 		}
 		for _, spec := range gen.Specs {
 			value, ok := spec.(*ast.ValueSpec)
-			if !ok || len(value.Names) != 1 || value.Names[0].Name != name || len(value.Values) != 1 {
-				continue
+			if ok && len(value.Names) == 1 && value.Names[0].Name == name && len(value.Values) == 1 {
+				return value.Values[0]
 			}
-			list, ok := value.Values[0].(*ast.CompositeLit)
-			if !ok {
-				t.Fatalf("%s in %s is no literal", name, file)
-			}
-			var out []string
-			for _, elt := range list.Elts {
-				lit, ok := elt.(*ast.BasicLit)
-				if !ok || lit.Kind != token.STRING {
-					t.Fatalf("%s in %s holds a value that is no string literal", name, file)
-				}
-				s, err := strconv.Unquote(lit.Value)
-				if err != nil {
-					t.Fatal(err)
-				}
-				out = append(out, s)
-			}
-			return out
 		}
 	}
-	t.Fatalf("%s declares no var %s", file, name)
+	t.Fatalf("%s declares no %s %s", file, tok, name)
 	return nil
 }
 

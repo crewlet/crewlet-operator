@@ -29,6 +29,10 @@ import (
 // can run no turn on its Ready, and a provider whose agent mode cannot run on
 // its AgentModeRunnable, since the same provider still serves a text call
 // behind a chain's head or in another phase.
+//
+// Crewlet decides it at a turn, where no validation shows it, so
+// TestMirroredEngineFunctionsAreUnchanged holds the engine functions this
+// copies to the ones it was read against, and fails when one changes.
 
 // Executor is what the operator can tell from the objects of a seat whose
 // executor's chain is headed by a CLI in mode Agent: whether the node that

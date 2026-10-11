@@ -44,6 +44,10 @@ import (
 // env, which Crewlet merges into every run. The operator sees the names a
 // Secret's values are given under, not the values: a name counts here where
 // Crewlet would count a non-blank value under it.
+//
+// Crewlet decides all of it at a launch, where no validation shows it, so
+// TestMirroredEngineFunctionsAreUnchanged holds the engine functions this
+// copies to the ones it was read against, and fails when one changes.
 
 // claudeCodeSignIn are the variables that sign ClaudeCode in from its own
 // environment: a plan's headless token, an Anthropic key or bearer token, or a
@@ -53,6 +57,11 @@ var claudeCodeSignIn = []string{
 	"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
 	"CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
 }
+
+// defaultCodingAgent is the coding agent of a seat's code work when neither
+// the seat nor the Company names one: Crewlet's sandbox.DefaultCodingAgent,
+// to which a test holds this copy.
+const defaultCodingAgent = v1alpha1.CodingAgentClaudeCode
 
 // claudeCodeLogin are the variables Crewlet reads as a ClaudeCode CLIAgent
 // provider's own sign-in inside a box: its profile's token and key variables
@@ -121,7 +130,7 @@ func (r *renderer) codeWork(s *v1alpha1.Seat) (CodeWork, bool) {
 	if !ok {
 		return CodeWork{}, false
 	}
-	runner := cmp.Or(s.Spec.Sandbox.CodingAgent, r.in.Company.Spec.Sandbox.DefaultCodingAgent, v1alpha1.CodingAgentClaudeCode)
+	runner := cmp.Or(s.Spec.Sandbox.CodingAgent, r.in.Company.Spec.Sandbox.DefaultCodingAgent, defaultCodingAgent)
 	env := r.sandboxEnvNames(s)
 	w := CodeWork{Field: head.field}
 	switch {

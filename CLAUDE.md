@@ -30,7 +30,7 @@ internal/engine/      typed client for the Crewlet engine's API (REST, and
                       the pause tools of its operator catalogue over MCP);
   enginetest/         runs the real pinned engine (bin/crewlet) for a test,
                       and reads its module source for a test that holds a
-                      copied list to it
+                      copied list or function to it
 internal/render/      pure render of the crewlet.ai objects into the company
                       document (Tier B) and a data or seat pod's
                       crewlet.yaml (Tier A)

@@ -138,24 +138,45 @@ models, read from its refusal of an id the table does not list, so an
 engine that adds or drops a row fails it. A mock would agree with the code by construction; the real engine is
 what tells the two apart when Crewlet's API or schema moves.
 
-What no validation shows is what signs a coding agent in at a launch, which
-the renderer's verdict on a seat's code work turns on. The renderer's
+What no validation shows is what a launch runs and signs a coding agent in
+with, which the renderer's verdict on a seat's code work turns on. The renderer's
 `TestCodeWorkFollowsTheEngineSource` reads it from the pinned engine's own
 source (`enginetest.Source`, the module `make crewlet` built from): the
+coding agent of a seat and a catalogue that name none, the
 variables that sign Claude Code in from a seat's environment, and Claude
-Code's token and key variables. It holds the lists and not the rules around
-them, so when you move `CREWLET_VERSION`, read `newCodingRun`,
-`claudeCodeOnForeignEntry` and `sandboxCredentials` in crewlet's
-`internal/engine/sandbox.go` against `internal/render/codework.go`. Of its
-three verdicts, `SandboxModelUnsupported` and `SandboxLoginNotPortable`
-mirror what the engine refuses only when a seat launches a coding run, never
-on a write, so the operator reports them on the Seat's `CodeWorkRunnable`
-and applies the seat, as the engine does: drift there leaves a stale
-condition, not a held company. `CodingAgentMismatch` mirrors a refusal on
-every write and blocks the document. `TestContractCodeWorkOnWrite` holds
-the split to the pinned engine: it refuses at the seat's `llm_sandbox`
-exactly the pairings the renderer refuses, and accepts the ones it only
-reports, so an engine that starts refusing either on a write fails it.
+Code's token and key variables. The rules around those lists decide only at
+a launch, which no engine test reaches, so `TestMirroredEngineFunctionsAreUnchanged`
+holds their code: [`internal/render/mirror_test.go`](internal/render/mirror_test.go)
+names every engine function whose decision the operator copies at a launch —
+`newCodingRun`, `claudeCodeOnForeignEntry`, `sandboxCredentials` and the
+launch, catalogue and helpers around them in crewlet's
+`internal/engine/sandbox.go`, `internal/sandbox/manager.go` and the CLI
+provider, and config's write-time twins of two of them in
+`internal/config/company.go` — with every operator file that copies it and
+a digest of the function as it was read. Those files are the renderer's
+and, for how an agent-mode run's CLI signs in inside the remote sandbox,
+also the LLMProvider API's rule on a CLI of mode `Agent`, the
+[CLI agents guide](docs/guides/cli-agents.md) that states it and `test/crd`'s
+reading of the engine's verdicts on it. The digest
+(`enginetest.Fingerprint`) is taken over the function as `go/printer` lays it
+out without its comments or the source's line breaks, so a comment or a
+rewrapped line leaves it alone and a changed statement, spread or alias
+moves it. When the engine the suites run changes one, the test fails,
+naming the function, what the operator copies from it, the files to read it
+against and the `git log` that shows the change; read it, make the operator
+follow it, and record the digest and version the failure prints. When the
+engine removes or renames one, the test says so: name the function that
+decides it now in its place, with any digest at first, and the next run
+prints the digest to record. Of the renderer's three code-work verdicts,
+`SandboxModelUnsupported` and `SandboxLoginNotPortable` mirror what the
+engine refuses only when a seat launches a coding run, never on a write, so
+the operator reports them on the Seat's `CodeWorkRunnable` and applies the
+seat, as the engine does: drift there leaves a stale condition, not a held
+company. `CodingAgentMismatch` mirrors a refusal on every write and blocks
+the document. `TestContractCodeWorkOnWrite` holds the split to the pinned
+engine: it refuses at the seat's `llm_sandbox` exactly the pairings the
+renderer refuses, and accepts the ones it only reports, so an engine that
+starts refusing either on a write fails it.
 
 ### When a finding holds the document
 
@@ -198,9 +219,12 @@ are statements about the spec beside the render (`CodeWorkOf`, `ExecutorOf`,
 the engine builds its tool bridge and refuses an agent-mode turn without
 one; `TestExecutorFollowsTheEngineSource` holds the variable the operator
 sets to the engine's, and `TestContractAgentModeIsAppliedWhereItCannotRun`
-holds the documents to the engine, but when you move `CREWLET_VERSION`, read
-`internal/engine/agentrun.go` and `internal/api/mcpbridge/build.go` in
-crewlet against `internal/render/executor.go`.
+holds the documents to the engine, and `TestMirroredEngineFunctionsAreUnchanged`
+holds the code that runs a turn in agent mode and refuses it on a node with no
+tool bridge (`executorRuntime`, `executorRun` and `LaunchExecutor` in crewlet's
+`internal/engine/agentrun.go`, `Build` in `internal/api/mcpbridge/build.go`)
+to the code `internal/render/executor.go` and the head of a seat's executor
+chain in `internal/render/seatpod_providers.go` were read against.
 
 The engine is pinned like every other tool, as `CREWLET_VERSION` in the
 Makefile, and `make crewlet` builds it into `bin/crewlet` (`make test` does so
