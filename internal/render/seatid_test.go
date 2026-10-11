@@ -3,7 +3,7 @@ package render
 import "testing"
 
 // TestSeatIDMatchesTheEngine pins SeatID to ids read from the engine itself:
-// each was read from GET /agents of the pinned Crewlet build, running a
+// each was read from GET /agents of a Crewlet build, running a
 // company of that name with seats of those handles. A difference would give
 // every Seat a status.seatID that names no seat in the engine.
 func TestSeatIDMatchesTheEngine(t *testing.T) {

@@ -324,10 +324,14 @@ class that asks for an image whose tag is older, as a semantic version, than
 the newest of the two is refused with `RuntimeReady=False`, reason
 `DowngradeRefused`; the pod keeps running the newer image, and every other
 change still applies. A version that never became ready is never recorded, so
-a rollout that failed can be taken back. Tags that are not versions (`latest`)
-are not compared. `spec.runtime.version` on a class without
-`allowVersionOverride` is refused the same way, with
-`VersionOverrideNotAllowed`.
+a rollout that failed can be taken back. Tags that are not versions
+(`latest`, crewlet's `main`, a commit) are not compared, and neither is an
+image named by digest alone, so nothing refuses a move back to an older
+commit of crewlet's `main`: a platform that runs one keeps its classes
+moving forward, or tags its copies with versions
+([Engine image](../guides/installing.md#engine-image)).
+`spec.runtime.version` on a class without `allowVersionOverride` is refused
+the same way, with `VersionOverrideNotAllowed`.
 
 `spec.suspend: true` scales the StatefulSet to zero and keeps the volume claim
 (the StatefulSet's retention policy keeps claims on scale-down whatever

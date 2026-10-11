@@ -377,7 +377,7 @@ func TestCodeWork(t *testing.T) {
 }
 
 // TestContractCodeWorkOnWrite holds the render's verdict on a seat's code work
-// to the pinned engine's on a write. Every coding agent the API offers is
+// to the engine's on a write. Every coding agent the API offers is
 // paired with every kind of provider at the head of the seat's sandbox chain,
 // every CLI the API offers among them, signed in as codeWorkProvider signs it
 // and, for each coding agent's own CLI, by a credential bundle alone: where

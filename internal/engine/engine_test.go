@@ -13,7 +13,7 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 )
 
-// These tests run the client against the real engine at the pinned version
+// These tests run the client against the real engine every suite runs
 // (see enginetest), so a change in the engine's API that the client does not
 // follow fails here rather than in a cluster.
 

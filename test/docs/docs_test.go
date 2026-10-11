@@ -5,8 +5,8 @@ package docs
 // navigation and fails its own build on a page the index does not list. These
 // tests hold the tree to both before either can break: every page is in the
 // index, every relative link names a file that exists, every #anchor names a
-// heading its target renders, every link into the engine's documentation
-// names a page of the engine this module pins, and every absolute link into
+// heading its target renders, every link into the engine's repository names
+// a file and heading of the engine every suite runs, and every absolute link into
 // the documentation site names a page it builds. A broken link fails here, in
 // this repository's own CI, rather than on GitHub where nobody is told or on
 // the site where the build that notices is not this repository's.
@@ -452,10 +452,12 @@ func TestRelativeLinksResolve(t *testing.T) {
 	}
 }
 
-// engineDocsLink is a link into the engine's documentation on GitHub, which
-// the documentation site serves as its own page of the engine's main.
-var engineDocsLink = regexp.MustCompile(`^https://` + regexp.QuoteMeta(enginetest.Module) +
-	`/(?:blob|tree)/([^/#?]+)/docs(/[^#?]*)?(?:#(.*))?$`)
+// engineLink is a link to a file of the engine's repository on GitHub: a page
+// of its documentation, which the documentation site serves as its own page
+// of the engine's main, or another file, such as its RELEASING.md, which the
+// site leaves a link to GitHub.
+var engineLink = regexp.MustCompile(`^https://` + regexp.QuoteMeta(enginetest.Module) +
+	`/(?:blob|tree)/([^/#?]+)(/[^#?]*)?(?:#(.*))?$`)
 
 // hasIndexPage reports whether a directory has the page the documentation
 // site serves a link to the directory as: its index.md, or its README.md.
@@ -468,14 +470,14 @@ func hasIndexPage(dir string) bool {
 	return false
 }
 
-func TestEngineDocsLinksResolve(t *testing.T) {
+func TestEngineLinksResolve(t *testing.T) {
 	// The operator documents what the engine does by linking the engine's own
 	// pages rather than restating them, and the engine renames its pages as it
-	// moves. Checked against the engine source this module pins, so a bump
-	// that removes or renames a page the docs point at fails here, in the
-	// pull request that bumps it.
+	// moves. Checked against the source of the engine every suite runs,
+	// crewlet's main, so an engine change that removes or renames a page or a
+	// heading the docs point at fails here, on the operator's next run.
 	root := repoRoot(t)
-	var engineDocs string
+	var engineRoot string
 	for _, file := range markdownFiles(t, root) {
 		data, err := os.ReadFile(filepath.Clean(file))
 		if err != nil {
@@ -486,28 +488,31 @@ func TestEngineDocsLinksResolve(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, l := range links(string(data)) {
-			m := engineDocsLink.FindStringSubmatch(l.target)
+			m := engineLink.FindStringSubmatch(l.target)
 			if m == nil {
 				continue
 			}
 			ref, path, fragment := m[1], m[2], m[3]
 			if ref != "main" {
-				// main is the ref the pin follows and the one the site serves
-				// as the engine's unreleased documentation; a link at another
-				// ref is checked against nothing and rendered as nothing.
-				t.Errorf("%s:%d: %q links the engine's docs at %q; write it at main", name, l.line, l.target, ref)
+				// main is the engine every suite runs and the one the site
+				// serves as the engine's unreleased documentation; a link at
+				// another ref is checked against nothing and rendered as
+				// nothing.
+				t.Errorf("%s:%d: %q links the engine at %q; write it at main", name, l.line, l.target, ref)
 				continue
 			}
-			if engineDocs == "" {
-				engineDocs = filepath.Join(enginetest.Source(t), "docs")
+			if engineRoot == "" {
+				engineRoot = enginetest.Source(t)
 			}
 			unescaped, err := url.PathUnescape(path)
 			if err != nil {
 				t.Errorf("%s:%d: %q: %v", name, l.line, l.target, err)
 				continue
 			}
-			target := filepath.Join(engineDocs, filepath.FromSlash(strings.TrimPrefix(unescaped, "/")))
-			if info, err := os.Stat(target); err == nil && info.IsDir() && !hasIndexPage(target) {
+			unescaped = strings.TrimPrefix(unescaped, "/")
+			target := filepath.Join(engineRoot, filepath.FromSlash(unescaped))
+			inDocs := strings.HasPrefix(unescaped+"/", "docs/")
+			if info, err := os.Stat(target); inDocs && err == nil && info.IsDir() && !hasIndexPage(target) {
 				// The site serves a directory only as its index page, as
 				// GitHub shows one under the listing; a directory without one
 				// stays a GitHub link there and warns on every build. The
@@ -517,7 +522,7 @@ func TestEngineDocsLinksResolve(t *testing.T) {
 					"documentation site cannot serve; link a page, such as docs/index.md#<section>", name, l.line, l.target)
 				continue
 			}
-			if err := checkTarget(target, fragment, engineDocs); err != nil {
+			if err := checkTarget(target, fragment, engineRoot); err != nil {
 				t.Errorf("%s:%d: %q, in the engine at %s, %v", name, l.line, l.target, enginetest.Version(t), err)
 			}
 		}
@@ -600,10 +605,16 @@ func TestTheGateCanFail(t *testing.T) {
 		t.Errorf("indexEntries() refused %q, want the two entries above the first section", refused)
 	}
 
-	const engineLink = "https://github.com/crewlet/crewlet/blob/main/docs/concepts/configuration.md#managed-configuration"
-	if !engineDocsLink.MatchString(engineLink) ||
-		engineDocsLink.MatchString("https://github.com/crewlet/crewlet-operator/blob/main/docs/README.md") {
-		t.Error("engineDocsLink matches the wrong repository")
+	for _, l := range []string{
+		"https://github.com/crewlet/crewlet/blob/main/docs/concepts/configuration.md#managed-configuration",
+		"https://github.com/crewlet/crewlet/blob/main/RELEASING.md#images-from-main",
+	} {
+		if !engineLink.MatchString(l) {
+			t.Errorf("engineLink does not match %s", l)
+		}
+	}
+	if engineLink.MatchString("https://github.com/crewlet/crewlet-operator/blob/main/docs/README.md") {
+		t.Error("engineLink matches the wrong repository")
 	}
 }
 
@@ -623,8 +634,8 @@ var engineRawTrees = []string{"schema/", "skills/"}
 
 // siteLinkProblem reports why an absolute link into the documentation site
 // names nothing the site builds, or "" when it names something. operatorDocs
-// is this tree's docs/; engineRoot returns the source of the engine this
-// module pins, and is called only for a link into the engine's latest/ or
+// is this tree's docs/; engineRoot returns the source of the engine every
+// suite runs, and is called only for a link into the engine's latest/ or
 // next/.
 //
 // A page is docs/<page>.md served as <page>/ (the index, README.md here and
@@ -640,8 +651,8 @@ var engineRawTrees = []string{"schema/", "skills/"}
 //   - latest/ is main or a release cut from the same repository's main,
 //     never another program. Before a product's first release the site
 //     answers latest/ with a redirect to next/; from then it is the newest
-//     release. The engine's one older tag, v0.1.0, predates the engine this
-//     module pins, and the site never serves it at latest/.
+//     release. The engine's one older tag, v0.1.0, predates the main every
+//     suite runs, and the site never serves it at latest/.
 //   - what the release lacks, latest/ redirects to next/: a page, schema or
 //     skill file only main has answers at its latest/ path with a redirect
 //     to its next/ copy.

@@ -49,7 +49,7 @@ spec:
   allowedNamespaces:
     matchLabels: {example.com/tier: team}
   engine:
-    image: <your registry>/crewlet@sha256:<digest>   # <CREWLET_VERSION>
+    image: <your registry>/crewlet@sha256:<digest>   # crewlet <commit>
   data:
     resources:
       requests: {cpu: 500m, memory: 1Gi}

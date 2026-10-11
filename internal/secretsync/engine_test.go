@@ -11,7 +11,7 @@ import (
 )
 
 // TestSyncAgainstTheEngine runs Sync through *engine.Client against the real
-// pinned engine, so the fake the other tests script cannot drift from it:
+// engine, so the fake the other tests script cannot drift from it:
 // the engine must accept every name StoreName produces, record the
 // operator's provenance, list it back, and leave entries the operator does
 // not own alone.
@@ -74,7 +74,7 @@ func TestSyncAgainstTheEngine(t *testing.T) {
 }
 
 // TestContractStoreRefusesWhatResolveRefuses holds MaxValueBytes to the
-// pinned engine's store: a value of exactly that size is stored, and one a
+// engine's store: a value of exactly that size is stored, and one a
 // byte larger is refused. Resolve refuses the larger value before the engine
 // is asked, which holds the company's document (SecretTooLarge) on the
 // engine's word (ADR-0005), so a store that took more would leave the

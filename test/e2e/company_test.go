@@ -77,11 +77,13 @@ var _ = Describe("Company", Ordered, func() {
 		By("creating the tenant's namespace, enforcing the restricted Pod Security Standard")
 		apply(restrictedNamespace(tenantNamespace))
 
-		By("creating an EngineClass that runs the engine image built from source")
+		By("creating an EngineClass that runs the engine image the suite loaded")
 		apply(&v1.EngineClass{
 			Name: className,
 			Spec: v1.EngineClassSpec{
-				Engine: v1.EngineSettings{Image: crewletImage},
+				// Never: the node runs the image the suite loaded, or fails
+				// to start it, and never pulls whatever main is by then.
+				Engine: v1.EngineSettings{Image: crewletImage, ImagePullPolicy: corev1.PullNever},
 				Data: v1.DataPodSettings{
 					Resources: &corev1.ResourceRequirements{Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("50m"),

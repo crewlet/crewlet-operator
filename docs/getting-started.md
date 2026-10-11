@@ -4,8 +4,8 @@ This page runs the operator on a local [kind](https://kind.sigs.k8s.io/)
 cluster and starts a small company on it: an engine, a team of two agents and
 a model provider. Every command is a make target or a tool the Makefile pins
 into `bin/`, so nothing beyond Go, Docker, make, git and curl has to be
-installed. It takes about ten minutes, most of them spent building two
-images.
+installed. It takes about ten minutes, most of them spent building the
+operator's image.
 
 > The `crewlet.ai/v1alpha1` API is alpha and may change without notice.
 
@@ -23,18 +23,18 @@ do), so the isolation the operator sets up around each engine applies here as
 in production; see
 [Exposure and network policy](guides/exposure.md).
 
-## Build and load the images
+## Build and load the operator's image
 
-The operator's image, and the Crewlet engine's. The engine is built from
-source at the version the operator is pinned to (`CREWLET_VERSION` in the
-Makefile), with Crewlet's own Dockerfile; `make crewlet-image` downloads
-that version's module, checked against the Go checksum database, to do so.
-Nothing is pushed to a registry: both images are loaded into the kind node.
+The operator has no release yet, so its image is built from this checkout
+and loaded into the kind node; nothing is pushed to a registry. The engine's
+image needs nothing built: it is crewlet's `main`, which crewlet publishes
+as `ghcr.io/crewlet/crewlet:main` and the operator is tested against, and
+the node pulls it when the first company starts
+([Engine image](guides/installing.md#engine-image)).
 
 ```bash
 make docker-build IMG=crewlet-operator:dev
-make crewlet-image CREWLET_IMG=crewlet:dev
-bin/kind load docker-image crewlet-operator:dev crewlet:dev --name crewlet
+bin/kind load docker-image crewlet-operator:dev --name crewlet
 ```
 
 ## Install the operator
@@ -60,7 +60,7 @@ bin/kubectl api-resources --api-group=crewlet.ai
 
 An `EngineClass` is a platform's defaults and limits: the engine image, the
 size of each company's data pod, and how companies are reached. This one runs
-the image you loaded, exposes no webhooks (kind has no public address), and
+crewlet's `main` image, exposes no webhooks (kind has no public address), and
 gives each company the smallest data volume the API admits. The engine reserves three
 quarters of that volume for its event stream, and kind's provisioner puts it
 on the node's disk without enforcing the size: the Docker host needs about
@@ -74,7 +74,7 @@ metadata:
   name: local
 spec:
   engine:
-    image: crewlet:dev
+    image: ghcr.io/crewlet/crewlet:main
   data:
     resources:
       requests:
@@ -265,13 +265,11 @@ two `MCPServer`s, three `Integration`s and two `Schedule`s. On kind it shows wha
 when what it needs is missing: there is no Gateway API, none of the
 Secrets the samples reference exist, and the `gitlab` tool server's `glab`
 is not in the engine image (a stdio server's command needs an image derived
-from the engine's, as a [coding CLI](guides/cli-agents.md#the-image-needs-the-cli) does). Point its class at the image you loaded
-first:
+from the engine's, as a [coding CLI](guides/cli-agents.md#the-image-needs-the-cli) does):
 
 ```bash
 bin/kubectl create namespace nimbus
 bin/kubectl apply -n nimbus -k config/samples
-bin/kubectl patch engineclass standard --type merge -p '{"spec":{"engine":{"image":"crewlet:dev"}}}'
 bin/kubectl get company nimbus -n nimbus \
   -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}: {.message}{"\n"}{end}'
 ```

@@ -1,13 +1,17 @@
-// Package enginetest runs a real Crewlet engine for a test: the pinned crewlet
-// binary, on a free loopback port, with a throwaway Tier A of its own in the
-// test's temporary directory.
+// Package enginetest runs a real Crewlet engine for a test: the crewlet binary
+// every suite runs, on a free loopback port, with a throwaway Tier A of its
+// own in the test's temporary directory. It also reads that engine's module
+// source, for a test that holds a copy of the engine's code to it.
 //
 // The binary is $CREWLET_BIN, or bin/crewlet under the module root, which
-// `make crewlet` builds at the version the Makefile pins (CREWLET_VERSION). A
-// test that needs it fails, rather than skips, when it is missing: a skipped
-// contract test is indistinguishable from a passing one in a CI summary, and
-// this suite is what tells the operator and the engine apart when they drift.
-// ADR-0002 (adr/0002-test-against-the-real-pinned-engine.md) records the
+// `make crewlet` installs from the crewlet module at the commit the engine
+// image every suite runs (the Makefile's CREWLET_IMG, crewlet's main as
+// ghcr.io publishes it) was built from, or at CREWLET_VERSION when that names
+// another. A test that needs it fails, rather than skips, when it is missing:
+// a skipped contract test is indistinguishable from a passing one in a CI
+// summary, and this suite is what tells the operator and the engine apart
+// when they drift. ADR-0002
+// (adr/0002-test-against-crewlet-main-and-fail-without-it.md) records the
 // decision for every package that tests against the engine.
 package enginetest
 
@@ -26,6 +30,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -422,8 +427,8 @@ retention:
 }
 
 // Binary returns the crewlet binary a test runs: the one BinaryEnv names, or
-// bin/crewlet at the root of the module, which `make crewlet` builds at the
-// pinned version. It fails the test, with what to do, when there is none:
+// bin/crewlet at the root of the module, which `make crewlet` installs. It
+// fails the test, with what to do, when there is none:
 // never a skip, because a suite against the engine that did not run has not
 // passed. Start uses it; a suite that runs another crewlet subcommand, such
 // as `crewlet validate`, calls it directly so both find the same engine.
@@ -444,7 +449,8 @@ func Binary(t T) string {
 	}
 	bin, err := exec.LookPath(filepath.Join(root, "bin", "crewlet"))
 	if err != nil {
-		t.Fatalf("no crewlet engine binary (%v): run `make crewlet` to build the pinned version, or set %s", err, BinaryEnv)
+		t.Fatalf("no crewlet engine binary (%v): run `make crewlet` to install the engine every suite runs, or set %s",
+			err, BinaryEnv)
 	}
 	return bin
 }
@@ -479,9 +485,10 @@ func Source(t T) string {
 }
 
 // Version returns the version of the crewlet module the binary Binary returns
-// was built from, as its build info names it: the Makefile's CREWLET_VERSION
-// for the binary `make crewlet` builds. A binary built from a checkout names
-// no version, and fails the test.
+// was built from, as its build info names it: for the binary `make crewlet`
+// installs, the pseudo-version of the crewlet commit it installed, which `go
+// install` stamps. A binary built from a checkout names no version, and fails
+// the test.
 func Version(t T) string {
 	t.Helper()
 	bin := Binary(t)
@@ -491,11 +498,42 @@ func Version(t T) string {
 	}
 	version := info.Main.Version
 	if info.Main.Path != Module || version == "" || version == "(devel)" {
-		t.Fatalf("%s is %s %s, not a released version of %s: build it with `make crewlet`",
+		t.Fatalf("%s is %s %s, not a module version of %s: install it with `make crewlet`",
 			bin, info.Main.Path, version, Module)
 	}
 	return version
 }
+
+// Image is the engine image every suite runs unless CREWLET_IMG names
+// another: the Makefile's CREWLET_MAIN_IMG, crewlet's main as ghcr.io
+// publishes it, which is CREWLET_IMG's default. A sample or a guide that
+// names an engine image names this one, so a reader runs the engine the
+// suites ran, and a test of either holds it here. It is read from the
+// Makefile, so the image the suites run is named in one place.
+func Image(t T) string {
+	t.Helper()
+	root, err := moduleRoot()
+	if err != nil {
+		t.Fatalf("finding the Makefile: %v", err)
+	}
+	module, err := os.OpenRoot(root)
+	if err != nil {
+		t.Fatalf("opening the module root: %v", err)
+	}
+	defer func() { _ = module.Close() }()
+	makefile, err := module.ReadFile("Makefile")
+	if err != nil {
+		t.Fatalf("reading the Makefile: %v", err)
+	}
+	m := makefileImage.FindSubmatch(makefile)
+	if m == nil {
+		t.Fatalf("the Makefile names no CREWLET_MAIN_IMG (a line `CREWLET_MAIN_IMG := <image>`)")
+	}
+	return string(m[1])
+}
+
+// makefileImage is the Makefile's line that names crewlet's main image.
+var makefileImage = regexp.MustCompile(`(?m)^CREWLET_MAIN_IMG := (\S+)$`)
 
 // moduleRoot is the nearest directory at or above the working directory that
 // holds a go.mod: a test's working directory is its package's, inside the

@@ -223,12 +223,12 @@ func TestAgentMode(t *testing.T) {
 	}
 }
 
-// TestContractAgentModeIsAppliedWhereItCannotRun has the pinned engine
+// TestContractAgentModeIsAppliedWhereItCannotRun has the engine
 // validate the documents the render writes for an agent-mode executor it
 // reports rather than refuses: a seat placed in a seat pool, and a Company
 // with no public address. The engine accepts both, and refuses the seat's
 // turns at run time alone, which is what makes reporting them right. When
-// this fails, the pinned engine has started refusing one of them on a write,
+// this fails, the engine has started refusing one of them on a write,
 // which holds the company on its last revision anyway: refuse it in the
 // render then, where the Seat or the LLMProvider is told why.
 func TestContractAgentModeIsAppliedWhereItCannotRun(t *testing.T) {

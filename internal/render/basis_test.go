@@ -325,7 +325,7 @@ type engineCase struct {
 }
 
 // engineCases are the findings of the basis EngineRefuses, each held to the
-// pinned engine.
+// engine.
 func engineCases() []engineCase {
 	const (
 		missing = "missing"
@@ -579,7 +579,7 @@ func codeSpans(text string) []string {
 }
 
 // TestContractEngineRefusesWhatItHolds holds every finding of the basis
-// EngineRefuses to the pinned engine: the render refuses the broken input on
+// EngineRefuses to the engine: the render refuses the broken input on
 // that basis, and the engine refuses the document the operator would write
 // without the refusal, the object's spec whole, at the same place; or the
 // engine's schema of the document has no place for the object at all. An
@@ -648,7 +648,7 @@ func TestContractEngineRefusesWhatItHolds(t *testing.T) {
 }
 
 // TestContractReportedIsApplied holds every finding of the basis Reported to
-// the pinned engine the other way: the engine takes the document the render
+// the engine the other way: the engine takes the document the render
 // writes with it, so holding the company for it would be the operator's own
 // strictness over one object. An engine that starts refusing one fails here.
 // Every place of the basis must have a case.
@@ -676,7 +676,7 @@ func TestContractReportedIsApplied(t *testing.T) {
 	}
 }
 
-// scheduleHasNoPlace checks the pinned engine's schema of the company
+// scheduleHasNoPlace checks the engine's schema of the company
 // document: a schedule is written inside the entry of the role or unit that
 // runs it, and nowhere else, and names neither, so a schedule of a seat or a
 // unit that does not exist cannot be written.

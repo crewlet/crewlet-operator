@@ -7,12 +7,15 @@ land it.
 ## Development setup
 
 Prerequisites: **Go** (the version `go.mod` names; with the default
-`GOTOOLCHAIN=auto` the go command fetches it for you), **Docker**, **make**,
+`GOTOOLCHAIN=auto` the go command fetches it for you), **Docker** (28 or
+newer for `make test-e2e`), **make**,
 **git** and **curl**. That is the whole list. Every other tool — controller-gen,
 kustomize, setup-envtest and the Kubernetes test binaries, golangci-lint,
-kind, kubectl, helm, kubebuilder, crd-ref-docs, and the Crewlet engine itself —
-is pinned in the [`Makefile`](Makefile) and installed into `bin/` the first
-time a target needs it, so your machine's copies never stand in for them.
+kind, kubectl, helm, kubebuilder and crd-ref-docs — is pinned in the
+[`Makefile`](Makefile) and installed into `bin/` the first time a target needs
+it, so your machine's copies never stand in for them. The Crewlet engine is
+installed there too, and is the one thing not pinned: every suite runs
+crewlet's `main` ([The engine suite](#the-engine-suite)).
 
 ```bash
 git clone https://github.com/crewlet/crewlet-operator.git
@@ -84,24 +87,33 @@ drift it exists to catch.
 
 Two more suites are not part of `make check`:
 
-- `make test-e2e` creates a kind cluster, builds the manager image and the
+- `make test-e2e` creates a kind cluster, builds the manager image, pulls the
   Crewlet engine image, loads both, deploys the manager with kustomize, and
   checks it from the outside: that it runs and serves metrics, and that a
   company runs end to end — its engine becomes ready and is given its
   document and Secret values, a consumer its class admits reads the API with
   the published token, is refused a change to the document the operator
-  enforces, and a pod of another namespace is refused, an edited Seat becomes a new revision, and deleting the Company
-  keeps or deletes its volume and keyring as its `deletionPolicy` says; and
-  that a company's seat pools run, the engine places each seat in its own
-  pool, and the data pod's leaf listener admits the company's own seat pods
-  and no other pod. Then
-  it deletes the cluster, unless the suite failed: the cluster is left for a
+  enforces, and a pod of another namespace is refused, an edited Seat
+  becomes a new revision, and deleting the Company keeps or deletes its
+  volume and keyring as its `deletionPolicy` says; and that a company's seat
+  pools run, the engine places each seat in its own pool, and the data pod's
+  leaf listener admits the company's own seat pods and no other pod. Then it
+  deletes the cluster, unless the suite failed: the cluster is left for a
   look, and `make cleanup-test-e2e` deletes it. CI runs it on every pull
-  request. The engine image
-  is built from source at `CREWLET_VERSION` with `make crewlet-image`, from
-  the crewlet module the Go command downloads and checks against the
-  checksum database, the same source `make crewlet` builds `bin/crewlet`
-  from. On a host that cannot run kind's default cluster,
+  request, every push to `main` and daily. The engine image is `CREWLET_IMG`,
+  crewlet's `main` image unless you name another, which `make crewlet-image`
+  pulls for this machine's platform, printing the crewlet commit it was
+  built from; another image Docker already has is run as it is. So an
+  engine built from a crewlet checkout runs too: in it, `make image-context
+  VERSION=main-dev`, then `docker buildx build --platform linux/$(go env
+  GOARCH) --load --label org.opencontainers.image.revision="$(git rev-parse
+  HEAD)" -t crewlet:dev -f Dockerfile build/image`, and here `make test-e2e
+  CREWLET_IMG=crewlet:dev`. The suite loads the engine image, and the
+  manager image, into kind as an archive of this platform alone
+  (`test/utils`, with `docker save --platform`, which is Docker 28's),
+  because `kind load docker-image` imports every platform of a pulled image
+  and fails, on Docker's containerd image store, on the platforms that were
+  never pulled. On a host that cannot run kind's default cluster,
   `KIND_CONFIG` names a kind cluster configuration to create it with.
 - `make docker-build` builds the image; CI's `build` job runs it too.
 
@@ -140,8 +152,8 @@ what tells the two apart when Crewlet's API or schema moves.
 
 What no validation shows is what a launch runs and signs a coding agent in
 with, which the renderer's verdict on a seat's code work turns on. The renderer's
-`TestCodeWorkFollowsTheEngineSource` reads it from the pinned engine's own
-source (`enginetest.Source`, the module `make crewlet` built from): the
+`TestCodeWorkFollowsTheEngineSource` reads it from the engine's own source
+(`enginetest.Source`, the module `make crewlet` installed from): the
 coding agent of a seat and a catalogue that name none, the
 variables that sign Claude Code in from a seat's environment, and Claude
 Code's token and key variables. The rules around those lists decide only at
@@ -173,8 +185,8 @@ engine refuses only when a seat launches a coding run, never on a write, so
 the operator reports them on the Seat's `CodeWorkRunnable` and applies the
 seat, as the engine does: drift there leaves a stale condition, not a held
 company. `CodingAgentMismatch` mirrors a refusal on every write and blocks
-the document. `TestContractCodeWorkOnWrite` holds the split to the pinned
-engine: it refuses at the seat's `llm_sandbox` exactly the pairings the
+the document. `TestContractCodeWorkOnWrite` holds the split to the engine:
+it refuses at the seat's `llm_sandbox` exactly the pairings the
 renderer refuses, and accepts the ones it only reports, so an engine that
 starts refusing either on a write fails it.
 
@@ -183,7 +195,7 @@ starts refusing either on a write fails it.
 A company's document is applied whole, so a finding that holds it holds every
 object of the company on the last revision.
 [ADR-0005](adr/0005-hold-a-document-only-for-what-cannot-be-applied-safely.md)
-allows that for three reasons only: the pinned engine cannot take the object
+allows that for three reasons only: the engine cannot take the object
 as it is (`EngineRefuses`), applying it would harm more than the object at
 fault (`HarmsBeyond`), or the class forbids it (`ClassPolicy`). Anything else
 is applied and reported (`Reported`). So when you add a finding to
@@ -202,7 +214,7 @@ is applied and reported (`Reported`). So when you add a finding to
   would run it under a revision nobody checked against them.
 - For `EngineRefuses`, add a case to `TestContractEngineRefusesWhatItHolds`
   that writes the object into the document as its spec says and has the
-  pinned engine refuse it there; it fails until every place of that basis has
+  engine refuse it there; it fails until every place of that basis has
   one. For `Reported`, add a case to `reportedCases` in
   `internal/render/refs_test.go`, which `TestContractReportedIsApplied` hands
   to the engine to accept.
@@ -226,14 +238,38 @@ tool bridge (`executorRuntime`, `executorRun` and `LaunchExecutor` in crewlet's
 to the code `internal/render/executor.go` and the head of a seat's executor
 chain in `internal/render/seatpod_providers.go` were read against.
 
-The engine is pinned like every other tool, as `CREWLET_VERSION` in the
-Makefile, and `make crewlet` builds it into `bin/crewlet` (`make test` does so
-first). To run these tests outside make — from an IDE, or with a plain
-`go test ./internal/render` or `go test ./test/crd` — build it once with
-`make crewlet`, or point `CREWLET_BIN` at a `crewlet` binary of your own. A
-test that finds no binary **fails** and says which of the two to do; it
-never skips, because a skipped contract test reads as a passing one. When a
-test fails, the engine's log is printed with it.
+The engine is the one thing in the Makefile that is not pinned. Every suite
+runs crewlet's `main`, as crewlet publishes it at
+`ghcr.io/crewlet/crewlet:main` (`CREWLET_MAIN_IMG`, which `CREWLET_IMG`
+defaults to), because the operator is
+written against what crewlet ships next and is told the day crewlet breaks it
+([ADR-0002](adr/0002-test-against-crewlet-main-and-fail-without-it.md)).
+`make crewlet` (which `make test` runs first) reads the commit that image was
+built from out of its `org.opencontainers.image.revision` label, with
+`test/enginecommit`, and installs the crewlet module at that commit into
+`bin/crewlet`, printing both: the e2e suite runs the image, and every other
+suite the same commit. It never installs the module proxy's `@main`, which
+runs ahead of the image: crewlet builds the image minutes after a merge, and
+not at all for a merge that starts no workflow or whose build fails. To run
+another engine, such as the one a failed run's log names, set
+`CREWLET_VERSION` to its commit or module version:
+`make test CREWLET_VERSION=a20ed7519ba7`. A branch of crewlet's repository
+works too, which is how a crewlet change is tried against the operator
+before it merges (and `CREWLET_IMG`, above, for the e2e suite). To run these
+tests outside make — from an IDE, or with a plain `go test ./internal/render`
+or `go test ./test/crd` — install it once with `make crewlet`, or point
+`CREWLET_BIN` at a `crewlet` binary of your own. A test that finds no binary
+**fails** and says which of the two to do; it never skips, because a skipped
+contract test reads as a passing one. When a test fails, the engine's log is
+printed with it.
+
+So the operator's CI can fail with no change to the operator: a crewlet
+change broke it, or exposed something the operator had wrong. CI runs the
+engine's suites daily on a schedule, as well as on every pull request and
+push, so that happens within a day of the change, and the failed job's log
+names the crewlet commit it ran. GitHub reports a failed scheduled run to
+whoever last changed the schedule in [`ci.yml`](.github/workflows/ci.yml),
+and turns the schedule off in a repository with no activity for 60 days.
 
 ## Generated files
 
@@ -283,7 +319,7 @@ closely enough that nobody has to learn a house style:
   credentials. [docs/concepts/credentials.md](docs/concepts/credentials.md)
   maps every Crewlet credential position to its field, from the table in
   [`internal/render/credentials_table_test.go`](internal/render/credentials_table_test.go);
-  a test holds that table to the positions the pinned engine's schemas mark
+  a test holds that table to the positions the engine's schemas mark
   `x-crewlet-secret`, in both directions, and the page to the table, so a
   credential Crewlet adds fails the build until it has a field or a reason
   it has none. Another holds the `engineConfig` rule to the same marks: a
@@ -358,7 +394,7 @@ commit:
 | Pin | Where | Newest from |
 |---|---|---|
 | tool versions (`*_VERSION`) | `Makefile` | the Go module proxy, or the project's releases |
-| the Crewlet engine (`CREWLET_VERSION`) | `Makefile` | crewlet's releases; between releases, the commit of `main` the engine client is written against |
+| the Crewlet engine (`CREWLET_MAIN_IMG`) | `Makefile` | not a pin: crewlet's `main` image, whose commit `make crewlet` reads at every run ([The engine suite](#the-engine-suite)); a release keeps the one it was tested against ([RELEASING.md](RELEASING.md)) |
 | `ENVTEST_K8S_VERSION` | `Makefile` | `bin/setup-envtest list` |
 | golangci-lint and its plugins | `.custom-gcl.yml` (version must equal `GOLANGCI_LINT_VERSION`) | the Go module proxy |
 | the curl image | `test/e2e/e2e_test.go` | Docker Hub |
@@ -423,13 +459,14 @@ is listed exactly once in the index's tables, under a section, and every file
 there is a regular one; every relative link and image
 names a file that exists, every `#anchor` names a heading its target renders
 (by GitHub's slug rule, which the site's renderer shares), and every link into
-the engine's docs names a page and heading of the engine this module pins
-(`CREWLET_VERSION`), so a pin bump that renames a page fails there. An
+the engine's repository names a file and heading of crewlet's `main`, the
+engine every suite runs, so a crewlet change that renames a page fails the
+next run. An
 absolute `https://docs.crewlet.ai` link, in any text file of the module (the
 chart's `NOTES.txt` and the Go included, not the Markdown alone), must name
 what the site builds: under a product and a version, a page with its trailing
 slash, and for `latest/` or `next/` a page this tree has, or under `/engine/`
-a page, schema or skill file of the pinned engine.
+a page, schema or skill file of crewlet's `main`.
 
 The site rebuilds when `.github/workflows/docs-publish.yml` asks it to: after
 a push to `main` that touches `docs/`, after a release, or when run by hand

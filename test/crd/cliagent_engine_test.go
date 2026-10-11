@@ -28,18 +28,18 @@ import (
 
 // TestCLIAgentSignInFollowsTheEngine holds the LLMProvider API's rules over a
 // CLIAgent provider's sign-in, and the table docs/guides/cli-agents.md states
-// them in, to the engine the operator is built against rather than to a copy
-// of its profile table. The token and key variable of each CLI are read from
-// the pinned crewlet's own refusals, and held to the copy the API's
-// own-variable rule and its cases name. Every CLI the API offers is then tried
-// in every sign-in shape, those variables among them, each provider driving
-// one seat's executor: the API server's verdict is taken from the installed
-// CRD, and the engine's from the pinned crewlet binary, by `crewlet validate`
-// (does it admit the provider and its seat, and does it doubt either) and
-// `crewlet llm list` (what it reports the CLI signed in with). A bump of the
-// engine that moves a profile's token or key variable, or marks another CLI
-// as signing in through its environment, fails here until the API and the
-// guide follow it.
+// them in, to the engine every suite runs (crewlet's main) rather than to a
+// copy of its profile table. The token and key variable of each CLI are read
+// from crewlet's own refusals, and held to the copy the API's own-variable
+// rule and its cases name. Every CLI the API offers is then tried in every
+// sign-in shape, those variables among them, each provider driving one seat's
+// executor: the API server's verdict is taken from the installed CRD, and the
+// engine's from the crewlet binary, by `crewlet validate` (does it admit the
+// provider and its seat, and does it doubt either) and `crewlet llm list`
+// (what it reports the CLI signed in with). A crewlet change that moves a
+// profile's token or key variable, or marks another CLI as signing in through
+// its environment, fails here, on the next run and the daily one at the
+// latest, until the API and the guide follow it.
 //
 // The engine admits some shapes the API refuses on purpose, which this does
 // not hold against it: a Subscription signed in to nothing (the engine
@@ -52,7 +52,7 @@ import (
 func TestCLIAgentSignInFollowsTheEngine(t *testing.T) {
 	namespace := newNamespace(t)
 	agents := enumOf(t, "llmproviders.crewlet.ai", "spec", "cli", "agent")
-	// The coding agents an Agent-mode run of the pinned engine works for:
+	// The coding agents an Agent-mode run of the engine works for:
 	// the render tests hold the enum to the engine's runners.
 	agentRunners := enumOf(t, "companies.crewlet.ai", "spec", "sandbox", "defaultCodingAgent")
 
@@ -124,16 +124,16 @@ func TestCLIAgentSignInFollowsTheEngine(t *testing.T) {
 }
 
 // TestCLIAgentModelFollowsTheEngine holds the LLMProvider API's rules over a
-// CLIAgent provider's model to the pinned engine, which refuses a model of
+// CLIAgent provider's model to the engine, which refuses a model of
 // white space alone, and on every write a model with no provider segment for
 // a CLI whose profile reads its model as <provider>/<model>
 // (model_names_provider). Every CLI the API offers is
 // tried, signed in a way the API admits for it, in both modes, with models
 // with and without a provider, with empty segments and with segments of white
 // space, Go's and Unicode's beyond ASCII's among it: the API refuses with its
-// model rules exactly the providers whose model the engine refuses. A bump of
-// the engine that marks another profile as naming its provider, or stops
-// marking OpenCode's, fails here until the API follows it.
+// model rules exactly the providers whose model the engine refuses. A crewlet
+// change that marks another profile as naming its provider, or stops marking
+// OpenCode's, fails here until the API follows it.
 //
 // The API's rule is the engine's test, transcribed: a slash, and something
 // other than white space on each side of the first one, where white space is
@@ -246,7 +246,7 @@ func holdVerdicts(t *testing.T, verdicts map[string]map[string]verdict, agentRun
 				t.Errorf("%s, %s: the API admits it and the engine reports it signed in with %q", agent, shape, v.signIn)
 			}
 			// What the engine admits and signs in, the API admits, but an
-			// Agent-mode run no coding agent of the pinned engine works for.
+			// Agent-mode run no coding agent of the engine works for.
 			engineAdmits := v.problem == "" && v.warning == ""
 			if !admitted && engineAdmits && signedIn && (!agentMode || slices.Contains(agentRunners, agent)) {
 				t.Errorf("%s, %s: the engine admits it, signed in with %q, and the API refuses it: %s",
@@ -323,7 +323,7 @@ func signInTableFollows(t *testing.T, agents []string, variables map[v1.CLIAgent
 	}
 }
 
-// engineVariables reads from the pinned engine the token and key variable
+// engineVariables reads from the engine the token and key variable
 // its profile for each of agents names. One provider of each CLI asks for
 // both, in auth mode APIKey with a token and no key, which the engine
 // refuses naming the variable each would have filled, or saying the profile
@@ -504,7 +504,7 @@ func apiVerdict(t *testing.T, p *v1.LLMProvider) string {
 	}
 }
 
-// engineReport is what the pinned engine said of a document's providers,
+// engineReport is what the engine said of a document's providers,
 // each by its name.
 type engineReport struct {
 	// problems are what `crewlet validate` refused in the provider or in
@@ -521,7 +521,7 @@ type engineReport struct {
 // askEngine renders providers into one company document, as the operator
 // would apply it, each driving the executor of an agent seat of its own name,
 // so that the engine's rules over a seat whose executor reaches a provider in
-// mode Agent run too. It asks the pinned engine about each provider: what
+// mode Agent run too. It asks the engine about each provider: what
 // `crewlet validate` refuses and warns about in it or in its seat, and the
 // SIGN-IN column `crewlet llm list` prints for it, when list is true. Every
 // reference the document makes resolves to a value, as the operator's secret

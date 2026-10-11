@@ -12,12 +12,13 @@ the engine runs in a pod: the image, the login, and agent mode.
 The CLI is a program the engine starts, in the engine's own container, and
 Crewlet's image ships none: its Dockerfile leaves every runtime a CLI needs
 (Node.js for most of them) to a derived image. Build one from the engine
-image you run, the one [Installing](installing.md#engine-image) builds at
-the operator's `CREWLET_VERSION`, pinning both the engine and the CLI:
+image you run, named by digest: the engine of the operator's release, or
+the copy of crewlet's `main` image that
+[Installing](installing.md#engine-image) makes in your registry. Pin both
+the engine and the CLI:
 
 ```dockerfile
-# The engine image you built and pushed: <your registry>/crewlet:<CREWLET_VERSION>,
-# by digest: the engine at the operator's CREWLET_VERSION.
+# The engine image you run, by digest.
 ARG ENGINE_IMAGE
 FROM ${ENGINE_IMAGE}
 USER root
@@ -31,7 +32,7 @@ USER crewlet
 
 ```bash
 docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
-  -t <your registry>/crewlet-claude-code:<CREWLET_VERSION> .
+  -t <your registry>/crewlet-claude-code:<crewlet commit> .
 ```
 
 and name it in the class, which every company of the class then runs:
@@ -40,7 +41,7 @@ and name it in the class, which every company of the class then runs:
 # EngineClass with-claude-code, excerpt
 spec:
   engine:
-    image: <your registry>/crewlet-claude-code@sha256:<digest>   # <CREWLET_VERSION>
+    image: <your registry>/crewlet-claude-code@sha256:<digest>   # crewlet <commit>
 ```
 
 The engine's root filesystem is read-only: a CLI writes under the home the
@@ -63,8 +64,8 @@ takes none and signs in with that key in `cli.env`:
 | `auth.mode: APIKey` with one `apiKeySecretRefs` key | the CLI's metered API key | the CLI's Crewlet profile names a key variable ([below](#a-metered-key)) |
 | `env`, with `auth.mode: Subscription` | the key of the model provider the CLI runs on, in the variable the CLI reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the CLI is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
 
-What each CLI takes, at the engine version the operator is built against
-(Crewlet's profiles name the variables; a test holds the API's rules and this
+What each CLI takes, in the engine the operator is tested against, crewlet's
+`main` (Crewlet's profiles name the variables; a test holds the API's rules and this
 table to that engine's own verdict on every CLI and every sign-in, so neither
 can fall behind it):
 
@@ -194,7 +195,7 @@ drive the same CLI, or the engine refuses the document.
 
 `auth.mode: APIKey` gives the CLI the provider's one `apiKeySecretRefs` key
 instead, billing the metered account. Crewlet hands the key over in the
-variable the CLI's profile names, and at the pinned engine eight name one
+variable the CLI's profile names, and in crewlet's `main` eight name one
 (the table above); for the others the key would reach nothing, so the engine
 refuses the mode for them and the API server refuses it first. Hermes,
 Pi and OpenCode take their model provider's key in `env` instead, and

@@ -431,7 +431,7 @@ func TestContractChainlessSeatRunsOnTheFirstProviderAlone(t *testing.T) {
 // TestContractGettingStarted renders the company the getting-started guide
 // applies, as the guide applies it, with the Tier A its class gives a data
 // pod, and has the engine validate both: the first page a reader follows
-// must run on the engine the operator is built against.
+// must run on the engine the operator is tested against.
 func TestContractGettingStarted(t *testing.T) {
 	manifests, err := docs.Manifests(filepath.Join("..", "..", "docs", "getting-started.md"))
 	if err != nil {

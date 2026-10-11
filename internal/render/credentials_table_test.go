@@ -8,7 +8,7 @@ package render
 // This table is the operator's answer to each mark: the crewlet.ai field that
 // fills the position with a reference to a Secret, the Secret the operator
 // makes itself, or why v1alpha1 offers no way to fill it. A test runs the
-// pinned engine's schema and holds the table to its marks in both directions,
+// engine's schema and holds the table to its marks in both directions,
 // so a credential position Crewlet adds fails the build until it is answered
 // here, and one it stops marking fails until its row goes; the same tests
 // hold docs/concepts/credentials.md to the table, and the CRDs to every

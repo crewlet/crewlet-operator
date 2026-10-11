@@ -28,9 +28,9 @@ internal/controller/  reconcilers: two keyed by Company, the runtime one
                       (make gateway-api-crds)
 internal/engine/      typed client for the Crewlet engine's API (REST, and
                       the pause tools of its operator catalogue over MCP);
-  enginetest/         runs the real pinned engine (bin/crewlet) for a test,
-                      and reads its module source for a test that holds a
-                      copied list or function to it
+  enginetest/         runs the real engine (bin/crewlet, crewlet's main) for
+                      a test, and reads its module source for a test that
+                      holds a copied list or function to it
 internal/render/      pure render of the crewlet.ai objects into the company
                       document (Tier B) and a data or seat pod's
                       crewlet.yaml (Tier A)
@@ -47,8 +47,7 @@ adr/                  decisions that bind more than one package
 test/crd/             envtest suite for the CRDs: every CEL rule, defaults, samples,
                       and the objects docs/getting-started.md applies; the
                       CLIAgent sign-in and model rules, the guide's table
-                      of them and the claudeModel enum, against the pinned
-                      engine
+                      of them and the claudeModel enum, against the engine
 test/docs/            reads the manifests a doc hands to kubectl, and the
                       tables it states, for the suites; and holds docs/ to
                       its index, its links and anchors, and the engine's
@@ -57,7 +56,9 @@ test/chart/           envtest suite for the chart's RBAC and admission policies,
                       acting as the subjects they bind (needs bin/helm)
 test/e2e/             kind-based e2e suite (build tag e2e)
 test/envtestbin/      finds bin/k8s's newest test binaries for a run outside make
-scripts/              the DCO sign-off gate and its tests; the engine image build
+test/enginecommit/    reads the crewlet commit an engine image was built from,
+                      for make crewlet
+scripts/              the DCO sign-off gate and its tests
 hack/                 generator configuration
 ```
 
@@ -73,16 +74,19 @@ modules.
 make check       # everything CI runs except e2e and the image: run it before every commit
 make test        # unit + envtest + engine + chart suites (both modules, -race)
 make lint        # golangci-lint, both modules
-make crewlet     # bin/crewlet at CREWLET_VERSION: a go test outside make needs it (or CREWLET_BIN)
+make crewlet     # bin/crewlet at CREWLET_IMG's commit (crewlet's main), or at
+                 # CREWLET_VERSION; prints it; a go test outside make needs it (or CREWLET_BIN)
 make helm        # bin/helm: test/chart outside make needs it (or HELM)
-make test-e2e    # kind cluster; builds the engine image too (make crewlet-image,
-                 # CREWLET_IMG); KIND_CONFIG names a cluster config of your own;
+make test-e2e    # kind cluster, Docker 28+; pulls the engine image too (make
+                 # crewlet-image, CREWLET_IMG; another image already here runs
+                 # as it is); KIND_CONFIG names a cluster config of your own;
                  # a failed run leaves the cluster: make cleanup-test-e2e deletes it
 make help        # every target
 ```
 
-All tools are pinned in the Makefile and installed into `bin/`; never rely on
-a tool from PATH.
+Every tool is pinned in the Makefile and installed into `bin/`, and the
+engine is installed there unpinned (see Versions); never rely on a tool from
+PATH.
 
 ## Generated files — never edit by hand
 
@@ -155,6 +159,18 @@ registry), never from memory. A version held back on purpose carries its
 reason in a comment at the pin. Indirect Go dependencies stay where the direct
 ones put them (the k8s.io modules move in lockstep). CONTRIBUTING.md,
 "Latest versions", lists the pins Dependabot cannot see.
+
+The Crewlet engine is the one deliberate exception: never pinned. Every
+suite runs crewlet's `main` as `ghcr.io/crewlet/crewlet:main` publishes it
+(`CREWLET_MAIN_IMG`, `CREWLET_IMG`'s default; `make crewlet` installs the
+commit it was built from), because the operator is tested against what
+crewlet ships next, and CI runs daily so a crewlet change that breaks it
+shows within a day (ADR-0002). `CREWLET_VERSION` runs another engine, to
+reproduce a run whose log names it. A release keeps the engine it was tested
+against (`ghcr.io/crewlet/crewlet-operator/engine:<version>`, RELEASING.md).
+An engine function the operator copies a run-time decision from is
+fingerprinted (`internal/render/mirror_test.go`): when one changes, read it
+against every operator file named and record its new digest.
 
 ## Commits
 

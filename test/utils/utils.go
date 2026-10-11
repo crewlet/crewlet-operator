@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/onsi/ginkgo/v2"
@@ -35,7 +37,16 @@ func Run(cmd *exec.Cmd) (string, error) {
 }
 
 // LoadImageToKindClusterWithName loads a local image into the kind cluster
-// named by KIND_CLUSTER, using the kind binary named by KIND.
+// named by KIND_CLUSTER, using the kind binary named by KIND: this machine's
+// platform of it alone, saved by docker into an archive kind imports.
+//
+// Not `kind load docker-image`, which saves the image whole and imports every
+// platform it lists: on Docker's containerd image store a pulled image keeps
+// its registry's index of platforms, of which only the pulled one's content is
+// here, so the import fails on the first platform it cannot find. Saved for
+// one platform, the archive holds that platform's image and nothing it lacks,
+// on either image store, and the node runs it under the same name. docker
+// save takes --platform from Docker 28 on, which the suite therefore needs.
 func LoadImageToKindClusterWithName(name string) error {
 	cluster := defaultKindCluster
 	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
@@ -45,8 +56,18 @@ func LoadImageToKindClusterWithName(name string) error {
 	if v, ok := os.LookupEnv("KIND"); ok {
 		kindBinary = v
 	}
-	cmd := exec.Command(kindBinary, "load", "docker-image", name, "--name", cluster)
-	_, err := Run(cmd)
+	dir, err := os.MkdirTemp("", "kind-image-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	archive := filepath.Join(dir, "image.tar")
+	cmd := exec.Command("docker", "save", "--platform", "linux/"+runtime.GOARCH, "--output", archive, name)
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+	cmd = exec.Command(kindBinary, "load", "image-archive", archive, "--name", cluster)
+	_, err = Run(cmd)
 	return err
 }
 

@@ -10,14 +10,11 @@ metadata:
     crewlet.ai/is-default-class: "true"
 spec:
   engine:
-    # The engine image your platform runs, pinned by digest in production.
-    # It must be the engine this operator is built against, the Makefile's
-    # CREWLET_VERSION, which the tag below names; until Crewlet tags a
-    # release that carries it, build it with
-    # `make crewlet-image CREWLET_IMG=registry.example.com/crewlet:<CREWLET_VERSION>`,
-    # naming your registry, and push it there (docs/guides/installing.md,
-    # "Engine image").
-    image: registry.example.com/crewlet:v0.1.1-0.20261010171839-4e45c6b992a2
+    # The engine image your platform runs: crewlet's main, which the operator
+    # is tested against. GHCR keeps a main image only while it is main, so
+    # past a trial copy it into your own registry and name the copy by
+    # digest (docs/guides/installing.md, "Engine image").
+    image: ghcr.io/crewlet/crewlet:main
     allowVersionOverride: false
   data:
     resources:

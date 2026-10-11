@@ -33,7 +33,7 @@ The operator holds the document for a finding only when it cannot be
 applied safely, which is when one of these is true, and each place in the
 render that records a finding names which (`render.Basis`):
 
-1. **EngineRefuses**: the pinned engine cannot take the object as it is. It
+1. **EngineRefuses**: the engine cannot take the object as it is. It
    refuses the document on a write, or the document has no place to write
    the object (a Schedule lives inside the entry of the role or unit that
    runs it, so one of a seat that does not exist cannot be written).
@@ -82,7 +82,7 @@ the rest of the company. The cost is that a reported finding can sit
 unnoticed by a health check that reads only the Company's `Ready`, which is
 why it is on the affected object's own `Ready` where it stops the object
 entirely, and why each comes with an event. A finding classified
-`EngineRefuses` is held to the pinned engine by a contract case, so an
+`EngineRefuses` is held to the engine by a contract case, so an
 engine that starts accepting it fails a test rather than leaving the
 operator stricter than the engine; one that is `Reported` is held the other
 way, so an engine that starts refusing it fails too. One reason can hold on

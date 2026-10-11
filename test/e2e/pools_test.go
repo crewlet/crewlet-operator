@@ -115,7 +115,9 @@ var _ = Describe("Seat pools", Ordered, func() {
 		apply(&v1.EngineClass{
 			Name: poolsClassName,
 			Spec: v1.EngineClassSpec{
-				Engine: v1.EngineSettings{Image: crewletImage},
+				// Never: the node runs the image the suite loaded, or fails
+				// to start it, and never pulls whatever main is by then.
+				Engine: v1.EngineSettings{Image: crewletImage, ImagePullPolicy: corev1.PullNever},
 				Data: v1.DataPodSettings{
 					Resources: small,
 					Storage:   v1.DataStorage{Size: new(resource.MustParse("7Gi"))},

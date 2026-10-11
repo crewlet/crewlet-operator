@@ -3,8 +3,8 @@
 // and told is true rather than a copy of it that can drift. Its own tests
 // hold the docs tree to what publishing it needs: every page listed in
 // docs/README.md, and every link and anchor resolving, here and in the
-// engine's pinned documentation (CONTRIBUTING.md, "How the docs are
-// published").
+// engine's documentation at the crewlet main every suite runs
+// (CONTRIBUTING.md, "How the docs are published").
 package docs
 
 import (

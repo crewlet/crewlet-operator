@@ -349,5 +349,5 @@ Each is applied (`Applied=True`), and the operator records a Warning event
 on the object when it turns so. The table in `internal/render/basis_test.go`
 classifies every place the render finds one, `TestTheDocsStateTheBases`
 holds this page's table and list to it, and the engine's contract tests hold
-each held for the engine's sake, and each reported one, to the pinned
-engine.
+each held for the engine's sake, and each reported one, to the engine the
+operator is tested against, crewlet's `main`.

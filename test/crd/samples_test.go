@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -72,20 +71,20 @@ func TestSamplesAreAccepted(t *testing.T) {
 	}
 }
 
-// checkSampleEngineImage holds a sample class's engine image to the engine
-// the operator is built against: the tag names the version the pinned binary
-// was built from, so a reader who builds the image as the sample's comment
-// says runs the engine every suite ran, and a move of CREWLET_VERSION that
-// leaves the sample behind fails here.
+// checkSampleEngineImage holds a sample class's engine image to the image
+// every suite runs (the Makefile's CREWLET_MAIN_IMG, CREWLET_IMG's default),
+// so a reader who applies the samples runs the engine the suites ran, and a
+// sample that names another image, or a Makefile that moves to one, fails
+// here.
 func checkSampleEngineImage(t *testing.T, resource string, class *unstructured.Unstructured) {
 	t.Helper()
 	image, _, err := unstructured.NestedString(class.Object, "spec", "engine", "image")
 	if err != nil {
 		t.Fatalf("%s: %v", resource, err)
 	}
-	if want := ":" + enginetest.Version(t); !strings.HasSuffix(image, want) {
-		t.Errorf("%s: EngineClass %s runs %q, want an image tagged %s, the engine CREWLET_VERSION pins",
-			resource, class.GetName(), image, strings.TrimPrefix(want, ":"))
+	if want := enginetest.Image(t); image != want {
+		t.Errorf("%s: EngineClass %s runs %q, want %s, the engine image every suite runs (CREWLET_MAIN_IMG)",
+			resource, class.GetName(), image, want)
 	}
 }
 

@@ -81,10 +81,11 @@ gateway-api-crds: ## Copy the Gateway API CRDs of the release go.mod requires in
 # The race detector is on because a controller is concurrent by construction:
 # a reconciler, its watches and the cache all run on their own goroutines.
 # test/e2e is excluded; it needs a cluster and runs under test-e2e. Every suite
-# that runs the real engine (engine, render, secretsync, controller, test/crd)
-# runs the pinned crewlet binary (internal/engine/enginetest), named explicitly
-# so a CREWLET_BIN in the caller's environment cannot swap in another engine
-# version; test/chart renders the chart with the pinned helm.
+# that runs the real engine (engine, render, secretsync, controller, test/crd,
+# test/docs) runs the crewlet binary `make crewlet` installed
+# (internal/engine/enginetest), named explicitly so a CREWLET_BIN in the
+# caller's environment cannot swap in another engine; test/chart renders the
+# chart with the pinned helm.
 .PHONY: test
 test: manifests generate fmt vet setup-envtest crewlet helm ## Run the unit, envtest, engine and chart suites of both modules.
 	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" \
@@ -110,9 +111,9 @@ setup-test-e2e: kind ## Create the kind cluster for the e2e suite unless it exis
 
 # The suite shells out to kind, kubectl and make, so the pinned tools go first
 # on its PATH. kubectl's kuberc is off unless KUBECTL_KUBERC=true, so a local
-# kubectl configuration cannot change what the suite sees. The suite builds
-# and loads two images: the manager's and the engine's, CREWLET_IMG, from
-# source at CREWLET_VERSION (make crewlet-image).
+# kubectl configuration cannot change what the suite sees. The suite loads two
+# images into the cluster: the manager's, which it builds, and the engine's,
+# CREWLET_IMG, which it pulls (make crewlet-image).
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt vet kubectl ## Run the e2e suite against a kind cluster, then delete the cluster (left in place when the suite fails; make cleanup-test-e2e).
 	PATH="$(LOCALBIN):$$PATH" KIND="$(KIND)" KIND_CLUSTER=$(KIND_CLUSTER) CREWLET_IMG="$(CREWLET_IMG)" \
@@ -218,18 +219,27 @@ run: manifests generate fmt vet ## Run the manager from your host against the cu
 docker-build: ## Build the manager image for the local platform.
 	$(CONTAINER_TOOL) build -t ${IMG} .
 
-# The engine image the e2e suite runs. It is built the way a Crewlet release
-# builds its own, from crewlet's Dockerfile, at the CREWLET_VERSION every
-# other suite tests against, so the suite runs no image that differs from the
-# engine the code was written for. The source is the crewlet module at
-# CREWLET_VERSION, downloaded and checked against the Go checksum database as
-# `make crewlet` does, so the image and bin/crewlet are built from the same
-# bytes.
-CREWLET_IMG ?= example.com/crewlet:$(CREWLET_VERSION)
-
+# The engine image the e2e suite runs, pulled for this machine's platform: the
+# one platform of it the suite loads into kind (test/utils), and so the only
+# one a pull needs. crewlet's main image is pulled every time, since the tag
+# moves with every build of crewlet's main. Another image the container tool
+# already has is used as it is: a copy named by digest never changes, and an
+# image built here (crewlet's `make image-context` and `docker buildx build
+# --load`) is in no registry to pull from. The crewlet commit it was built
+# from is printed from the image's own label, so the log names the engine the
+# suite ran.
 .PHONY: crewlet-image
-crewlet-image: ## Build the Crewlet engine image CREWLET_IMG from the crewlet module at CREWLET_VERSION.
-	CONTAINER_TOOL="$(CONTAINER_TOOL)" scripts/build-crewlet-image.sh "$(CREWLET_VERSION)" "$(CREWLET_IMG)"
+crewlet-image: ## Pull the Crewlet engine image CREWLET_IMG for this platform, unless it is another image already here, and print its crewlet commit.
+	@set -e; \
+	if [ "$(CREWLET_IMG)" != "$(CREWLET_MAIN_IMG)" ] && "$(CONTAINER_TOOL)" image inspect "$(CREWLET_IMG)" >/dev/null 2>&1; then \
+		echo "Crewlet engine image: $(CREWLET_IMG) is here already, not pulled"; \
+	else \
+		echo "Pulling $(CREWLET_IMG) for linux/$$(go env GOARCH)"; \
+		"$(CONTAINER_TOOL)" pull --platform "linux/$$(go env GOARCH)" "$(CREWLET_IMG)"; \
+	fi; \
+	commit="$$("$(CONTAINER_TOOL)" image inspect \
+		--format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$(CREWLET_IMG)")"; \
+	echo "Crewlet engine image: $(CREWLET_IMG), built from crewlet commit $${commit:-unknown (it has no org.opencontainers.image.revision label)}"
 
 .PHONY: docker-push
 docker-push: ## Push the manager image.
@@ -325,11 +335,22 @@ CRD_REF_DOCS_VERSION ?= v0.3.0
 KIND_VERSION ?= v0.33.0
 KUSTOMIZE_VERSION ?= v5.8.3
 CONTROLLER_TOOLS_VERSION ?= v0.22.0
-# The Crewlet engine the operator is built and tested against. A commit of
-# crewlet's main rather than its newest tag: v0.1.0 holds no Go source at all
-# (no cmd/crewlet to build), so there is no tagged engine yet. Move it to the
-# first tag that carries the API internal/engine speaks.
-CREWLET_VERSION ?= v0.1.1-0.20261010171839-4e45c6b992a2
+# The Crewlet engine every suite runs: crewlet's main, as crewlet publishes it
+# in this image, which the e2e suite runs and whose commit `make crewlet`
+# installs for every other suite. Not a pin, unlike every version above: the
+# operator is tested against what crewlet ships next, so a crewlet change that
+# breaks it fails its next run, CI's daily one included (ADR-0002). The samples
+# and the guides name the same image (enginetest.Image reads it here).
+CREWLET_MAIN_IMG := ghcr.io/crewlet/crewlet:main
+# CREWLET_IMG is the engine image the e2e suite runs, and whose commit `make
+# crewlet` installs: crewlet's main unless you name another, such as a copy of
+# an earlier main image or one built from a crewlet checkout.
+CREWLET_IMG ?= $(CREWLET_MAIN_IMG)
+# CREWLET_VERSION, when set, is the crewlet commit or module version `make
+# crewlet` installs instead of CREWLET_IMG's, to run a given engine again: a
+# failed run's log names the one it ran. The e2e suite runs CREWLET_IMG all the
+# same; name an image of the same commit there.
+CREWLET_VERSION ?=
 # .custom-gcl.yml names the same version; the golangci-lint target refuses to
 # build if the two disagree.
 GOLANGCI_LINT_VERSION ?= v2.14.0
@@ -388,12 +409,40 @@ kind: $(LOCALBIN) ## Download kind locally if necessary.
 kustomize: $(LOCALBIN) ## Download kustomize locally if necessary.
 	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5,$(KUSTOMIZE_VERSION))
 
-# The engine itself, for every suite that runs the real engine (engine, render,
-# secretsync, controller): built from the crewlet module at CREWLET_VERSION,
-# so every run tests against the same engine.
+# The engine itself, for every suite that runs the real engine binary: built
+# from the crewlet module at the commit CREWLET_IMG was built from, which
+# test/enginecommit reads from the image's revision label in its registry, so
+# these suites and the e2e suite run one engine. Never the module proxy's
+# @main, which runs ahead of the image: crewlet builds it minutes after a
+# merge, and not at all for a merge that starts no workflow or whose build
+# fails. The commit is resolved to its module version, which names the binary,
+# on every run: a moving engine has no version to compare with until it has
+# been asked. Each new engine replaces the binaries of the ones before it,
+# which take over 150 MB each and change daily: bin/ is one checkout's, so
+# nothing else runs them. (Two checkouts sharing a LOCALBIN would share
+# bin/crewlet too, and run one another's engine.) The binary is installed into
+# a directory of its own first, so neither its name nor CREWLET's is assumed.
+CREWLET_MODULE := github.com/crewlet/crewlet
 .PHONY: crewlet
-crewlet: $(LOCALBIN) ## Build the Crewlet engine at CREWLET_VERSION into bin/crewlet, for every suite that runs the real engine.
-	$(call go-install-tool,$(CREWLET),github.com/crewlet/crewlet/cmd/crewlet,$(CREWLET_VERSION))
+crewlet: $(LOCALBIN) ## Install the Crewlet engine every suite runs into bin/crewlet: CREWLET_IMG's commit, or CREWLET_VERSION.
+	@set -e; \
+	if [ -n "$(CREWLET_VERSION)" ]; then \
+		ref='$(CREWLET_VERSION)'; \
+		echo "Crewlet engine: CREWLET_VERSION=$$ref"; \
+	else \
+		ref="$$(go run ./test/enginecommit '$(CREWLET_IMG)')"; \
+	fi; \
+	version="$$(GOWORK=off GOFLAGS= go list -m -f '{{.Version}}' '$(CREWLET_MODULE)@'"$$ref")"; \
+	echo "Crewlet engine: $(CREWLET_MODULE) $$version"; \
+	if [ ! -f "$(CREWLET)-$$version" ]; then \
+		echo "Installing $(CREWLET_MODULE)/cmd/crewlet@$$version"; \
+		installed="$$(mktemp -d "$(LOCALBIN)/.crewlet.XXXXXX")"; \
+		trap 'rm -rf "$$installed"' EXIT; \
+		GOBIN="$$installed" go install "$(CREWLET_MODULE)/cmd/crewlet@$$version"; \
+		rm -f "$(CREWLET)"-v*; \
+		mv "$$installed/crewlet" "$(CREWLET)-$$version"; \
+	fi; \
+	ln -sf "$(CREWLET)-$$version" "$(CREWLET)"
 
 .PHONY: controller-gen
 controller-gen: $(LOCALBIN) ## Download controller-gen locally if necessary.

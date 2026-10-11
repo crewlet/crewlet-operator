@@ -18,14 +18,14 @@ const unlistedClaudeModel = "claude-unlisted-0"
 var wantOneOf = regexp.MustCompile(`\(want one of ([^)]*)\)`)
 
 // TestClaudeModelFollowsTheEngine holds the LLMProvider API's claudeModel
-// enum to the model table of the engine the operator is built against, which
-// refuses on every write a claude_model it does not list exactly as written.
-// The table's ids are read from the pinned crewlet's own refusal of one it
-// does not list; the enum must be exactly those. Every id of the enum is then
-// given to an Anthropic provider whose model is a gateway alias, the one place
-// Crewlet takes a claudeModel, and the engine must admit each. A bump of the
-// engine that adds, renames or drops a row of its table fails here until the
-// API follows it.
+// enum to the model table of the engine every suite runs (crewlet's main),
+// which refuses on every write a claude_model it does not list exactly as
+// written. The table's ids are read from crewlet's own refusal of one it does
+// not list; the enum must be exactly those. Every id of the enum is then given
+// to an Anthropic provider whose model is a gateway alias, the one place
+// Crewlet takes a claudeModel, and the engine must admit each. A crewlet
+// change that adds, renames or drops a row of its table fails here, on the
+// next run and the daily one at the latest, until the API follows it.
 func TestClaudeModelFollowsTheEngine(t *testing.T) {
 	namespace := newNamespace(t)
 	enum := enumOf(t, "llmproviders.crewlet.ai", "spec", "claudeModel")

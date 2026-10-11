@@ -10,12 +10,14 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
 
+	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 	"github.com/crewlet/crewlet-operator/test/docs"
 )
 
 // TestGettingStartedIsAccepted applies every object the getting-started
-// guide hands to kubectl, as the guide applies them. A page a reader cannot
-// follow is caught here rather than by the reader.
+// guide hands to kubectl, as the guide applies them, and holds its engine
+// image to the one every suite runs. A page a reader cannot follow is caught
+// here rather than by the reader.
 func TestGettingStartedIsAccepted(t *testing.T) {
 	manifests, err := docs.Manifests(filepath.Join("..", "..", "docs", "getting-started.md"))
 	if err != nil {
@@ -40,6 +42,16 @@ func TestGettingStartedIsAccepted(t *testing.T) {
 			switch obj.GetKind() {
 			case kindEngineClass:
 				guideClass = obj.GetName()
+				// The guide runs the image every suite runs, which needs
+				// nothing built and is the engine the suites ran.
+				image, _, err := unstructured.NestedString(obj.Object, "spec", "engine", "image")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if want := enginetest.Image(t); image != want {
+					t.Errorf("the guide's EngineClass runs %q, want %s, the engine image every suite runs (CREWLET_MAIN_IMG)",
+						image, want)
+				}
 				if _, isDefault := obj.GetAnnotations()["crewlet.ai/is-default-class"]; isDefault {
 					t.Errorf("the guide's EngineClass is a default class: the full example's samples bring another, " +
 						"and two defaults leave every Company that names none unaccepted")

@@ -17,8 +17,9 @@ type LLMProviderType string
 // whether it takes a sampling parameter, its output cap). An Anthropic
 // provider whose model is a gateway alias names the row it is an alias of.
 // Crewlet refuses on every write a claude_model its table does not list,
-// exactly as written, so the values are the table's ids at the engine the
-// operator is built against; a test holds them to that engine's refusal.
+// exactly as written, so the values are the table's ids in the engine the
+// operator is tested against, crewlet's main; a test holds them to that
+// engine's refusal.
 // +kubebuilder:validation:Enum=claude-fable-5-1;claude-mythos-5-1;claude-fable-5;claude-mythos-5;claude-opus-5-5;claude-opus-5;claude-opus-4-8;claude-opus-4-7;claude-sonnet-5-5;claude-sonnet-5;claude-opus-4-6;claude-sonnet-4-6;claude-opus-4-5;claude-sonnet-4-5;claude-haiku-4-5;claude-opus-4-1;claude-opus-4-0;claude-opus-4;claude-sonnet-4-0;claude-sonnet-4;claude-3-7-sonnet
 type ClaudeModelID string
 
@@ -191,8 +192,8 @@ type CLIAgentAuth struct {
 // engine refuses a write that names a credential its CLI would never be
 // given, so the API refuses it on the object instead. The lists of CLIs the
 // rules name are those whose profiles set token_env, api_key_env or
-// env_sign_in at the engine version the operator is built against; a test
-// holds them to that engine's own verdict.
+// env_sign_in in the engine the operator is tested against, crewlet's main;
+// a test holds them to that engine's own verdict.
 //
 // Mode Agent runs the CLIs Crewlet has a sandbox runner for, ClaudeCode and
 // OpenCode: the Company's coding agents. Crewlet hands an Agent-mode run its

@@ -17,11 +17,12 @@ keeps the engine's live configuration equal to what the resources say.
 > Services, webhook routes and network policy), applies its company
 > document, with the Secret values it references, as its management policy
 > says, and cleans up after it as its deletion policy says. The e2e suite
-> proves that on kind with the pinned Crewlet engine built from source. It
-> runs one data pod per company, and the seat pools a company declares as
-> stateless pods beside it, Shared or one pod per seat, and reports on each
-> Seat which pod the engine runs it on; highly available companies come
-> later.
+> proves that on kind against crewlet's `main`, as crewlet publishes it at
+> `ghcr.io/crewlet/crewlet:main`, which every test suite runs, daily as well
+> as on every change. It runs one data pod per company, and the seat pools a
+> company declares as stateless pods beside it, Shared or one pod per seat,
+> and reports on each Seat which pod the engine runs it on; highly available
+> companies come later.
 
 ## How it works
 
@@ -73,15 +74,15 @@ flowchart LR
 
 ## Running it locally
 
-On a throwaway kind cluster, with the operator's image and the Crewlet
-engine's, both built from source and loaded into the cluster:
+On a throwaway kind cluster, with the operator's image built from source and
+loaded into the cluster; the engine is crewlet's `main` image, which the
+node pulls itself:
 
 ```bash
 make kind kubectl                                 # the pinned kind and kubectl, in bin/
 bin/kind create cluster --name crewlet
 make docker-build IMG=crewlet-operator:dev
-make crewlet-image CREWLET_IMG=crewlet:dev        # the engine, at the pinned CREWLET_VERSION
-bin/kind load docker-image crewlet-operator:dev crewlet:dev --name crewlet
+bin/kind load docker-image crewlet-operator:dev --name crewlet
 make install deploy IMG=crewlet-operator:dev      # or: make helm-deploy IMG=crewlet-operator:dev
 ```
 

@@ -296,7 +296,7 @@ func TestUnrunnableExecutorIsAnnouncedOnce(t *testing.T) {
 
 // TestExecutorFollowsTheEngineSource holds the operator's name for the tool
 // bridge's address, the one variable whose absence makes the render report a
-// seat's turns unrunnable, to the pinned engine's (mcpbridge.BaseURLVar): a
+// seat's turns unrunnable, to the engine's (mcpbridge.BaseURLVar): a
 // pod given another name would serve no bridge either, and every agent-mode
 // seat on the data pods would fail while reported runnable.
 func TestExecutorFollowsTheEngineSource(t *testing.T) {

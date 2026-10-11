@@ -26,7 +26,7 @@ import (
 // position.
 const secretMark = "x-crewlet-secret"
 
-// engineSchema runs the pinned engine's `crewlet schema <tier>` and returns
+// engineSchema runs the engine's `crewlet schema <tier>` and returns
 // the JSON Schema it prints.
 func engineSchema(t *testing.T, tier credentialTier) map[string]any {
 	t.Helper()
@@ -119,7 +119,7 @@ func markedLocations(t *testing.T, schema map[string]any) [][]string {
 	return locations
 }
 
-// schemaMarks returns every position the pinned engine's schema of tier
+// schemaMarks returns every position the engine's schema of tier
 // marks as a credential, written as credentialPosition.Path is.
 func schemaMarks(t *testing.T, tier credentialTier) []string {
 	t.Helper()
@@ -252,7 +252,7 @@ func TestOrgPositionsAreWrittenFromTheirEntry(t *testing.T) {
 }
 
 // TestCredentialPositionsAreTheEnginesMarks holds credentialPositions to the
-// positions the pinned engine marks as credentials, in both directions: a
+// positions the engine marks as credentials, in both directions: a
 // position Crewlet adds must be answered (a field, or why there is none), and
 // a row for a position Crewlet no longer marks is a stale claim.
 func TestCredentialPositionsAreTheEnginesMarks(t *testing.T) {
@@ -337,7 +337,7 @@ func engineConfigValidator(t *testing.T) func(entries ...any) field.ErrorList {
 // never name a block Crewlet holds a credential under, or a literal could
 // reach the document past every reference this API makes. The CRD's rule
 // keeps a list of the blocks it refuses; this holds that list to the
-// top-level key of every position the pinned engine's schema marks, so a
+// top-level key of every position the engine's schema marks, so a
 // credential Crewlet adds under another block fails here until the rule
 // refuses that block too.
 func TestEngineConfigCannotNameACredentialBlock(t *testing.T) {

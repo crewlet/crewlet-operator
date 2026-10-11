@@ -27,9 +27,10 @@ import (
 const managerImage = "example.com/crewlet-operator:v0.0.1"
 
 var (
-	// crewletImage is the engine image the suite builds from source and
-	// runs every Company on. `make test-e2e` passes it as CREWLET_IMG, the
-	// image `make crewlet-image` builds at the pinned CREWLET_VERSION.
+	// crewletImage is the engine image the suite runs every Company on.
+	// `make test-e2e` passes it as CREWLET_IMG, crewlet's main as GHCR
+	// publishes it unless the caller names another, and the suite pulls it
+	// with `make crewlet-image`, which prints the crewlet commit it runs.
 	crewletImage string
 
 	// k8sClient talks to the kind cluster as the suite's own control plane
@@ -56,7 +57,7 @@ func TestE2E(t *testing.T) {
 var _ = BeforeSuite(func() {
 	crewletImage = os.Getenv("CREWLET_IMG")
 	Expect(crewletImage).NotTo(BeEmpty(),
-		"CREWLET_IMG names the engine image to build and run: run the suite with make test-e2e, which sets it")
+		"CREWLET_IMG names the engine image to pull and run: run the suite with make test-e2e, which sets it")
 
 	By("building the manager image")
 	cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", managerImage))
@@ -67,11 +68,22 @@ var _ = BeforeSuite(func() {
 	err = utils.LoadImageToKindClusterWithName(managerImage)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager image into Kind")
 
-	By("building the Crewlet engine image from source")
+	By("pulling the Crewlet engine image")
 	cmd = exec.Command("make", "crewlet-image", fmt.Sprintf("CREWLET_IMG=%s", crewletImage))
-	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the Crewlet engine image")
+	pulled, err := utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to pull the Crewlet engine image")
+	// The line naming the engine's commit, in the suite's own output, so a
+	// failed run says which engine it failed on.
+	_, _ = fmt.Fprint(GinkgoWriter, pulled)
 
+	// Loaded rather than left for the node to pull: the node runs the image
+	// this suite pulled, of the commit printed above, and never pulls one,
+	// since every class here sets the pull policy Never. IfNotPresent, the
+	// default for a tag other than latest, would pull main again should the
+	// node's image garbage collection remove the loaded one, and run another
+	// commit than the one printed with no error; Never fails the pod
+	// instead (ErrImageNeverPull). So main moving on while the suite runs
+	// changes nothing.
 	By("loading the Crewlet engine image on Kind")
 	err = utils.LoadImageToKindClusterWithName(crewletImage)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the Crewlet engine image into Kind")

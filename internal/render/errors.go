@@ -64,7 +64,7 @@ type RefError struct {
 type Basis int
 
 const (
-	// EngineRefuses holds a document the pinned engine cannot take as it
+	// EngineRefuses holds a document the engine cannot take as it
 	// is: it refuses the document on a write, or the document has no place
 	// to write the object (a Schedule of a seat or unit that does not
 	// exist). Applying it is impossible, so refusing it here only says so

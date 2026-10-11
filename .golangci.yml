@@ -131,6 +131,14 @@ linters:
           - gosec
         path: test/
         text: "G204"
+      # test/enginecommit reads the registry of the image reference it is
+      # handed, and the token realm that registry names: requesting a host
+      # its input names is the program's whole job, and its tests' fake
+      # registry redirects to a fake storage host the same way.
+      - linters:
+          - gosec
+        path: test/enginecommit/
+        text: "G704|G710"
     paths:
       - third_party$
       - builtin$

@@ -45,8 +45,8 @@ const (
 // profile for a CLI names (token_env, api_key_env), empty where it names none.
 type cliVariable struct{ headless, key string }
 
-// cliVariables are the variables of every CLI whose profile names one at the
-// pinned engine, the ones the LLMProvider API's own-variable rule lists.
+// cliVariables are the variables of every CLI whose profile names one in the
+// engine every suite runs, the ones the LLMProvider API's own-variable rule lists.
 // TestCLIAgentSignInFollowsTheEngine reads them from the engine and fails
 // while this copy, which the rule's cases are built from, differs.
 var cliVariables = map[v1.CLIAgentName]cliVariable{
@@ -60,8 +60,8 @@ var cliVariables = map[v1.CLIAgentName]cliVariable{
 	v1.CLIAgentMuseCode:    {key: "META_API_KEY"},
 }
 
-// envSignIn are the CLIs Crewlet's profiles mark env_sign_in at the pinned
-// engine: a credential-named variable in env signs them in.
+// envSignIn are the CLIs Crewlet's profiles mark env_sign_in in the engine
+// every suite runs: a credential-named variable in env signs them in.
 // TestCLIAgentSignInFollowsTheEngine holds it to the engine too.
 var envSignIn = []v1.CLIAgentName{v1.CLIAgentHermes, v1.CLIAgentPi, v1.CLIAgentOpenCode}
 

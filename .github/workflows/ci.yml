@@ -4,17 +4,33 @@ name: ci
 # pinned tools in bin/ and the flags are the Makefile's, not a second copy
 # kept here. `make check` runs the union of these jobs except e2e and the
 # image build.
+#
+# The test and e2e jobs run the Crewlet engine, and it is crewlet's main as
+# ghcr.io/crewlet/crewlet:main publishes it, read when the job starts, never a
+# pin (ADR-0002): `make crewlet` and `make crewlet-image` print the commit, so
+# a failed job's log names the engine it failed on. So the operator can turn
+# red with no change of its own, and the schedule below is what makes it do
+# so within a day of the crewlet change that broke it, rather than on the
+# operator's next push.
 
 on:
   push:
     branches: [main]
   pull_request:
+  # Daily, at a minute off the hour: GitHub delays, and under load drops,
+  # the scheduled runs due at the top of an hour, when every repository's
+  # start at once.
+  schedule:
+    - cron: "17 5 * * *"
 
 # Nothing by default; each job asks for what it needs.
 permissions: {}
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  # A scheduled run has a group of its own: it shares main's ref with the
+  # runs of pushes to main, and in their group it would replace a push's
+  # waiting run, leaving that commit with none.
+  group: ci-${{ github.event_name == 'schedule' && 'schedule' || github.event.pull_request.number || github.ref }}
   # A new push to a pull request makes the previous run moot; a push to main
   # is never cancelled, so every commit on main has a complete run.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -26,6 +42,9 @@ env:
 jobs:
   lint:
     name: lint
+    # Nothing it checks moves unless the tree does: the schedule is for the
+    # jobs that run the engine.
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -64,14 +83,24 @@ jobs:
           cache-dependency-path: |
             go.sum
             api/go.sum
+      # The engine binary is left out: its name carries the engine's version,
+      # which moves with crewlet's main, so a cached one would be replaced on
+      # nearly every run rather than reused.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: bin
+          path: |
+            bin
+            !bin/crewlet*
           key: bin-test-${{ runner.os }}-${{ hashFiles('Makefile', 'go.mod') }}
+      # Installs the engine at the commit of ghcr.io/crewlet/crewlet:main
+      # first (make crewlet), and prints it.
       - run: make test
 
   verify:
     name: verify (generated files, go.mod)
+    # Nothing it checks moves unless the tree does: the schedule is for the
+    # jobs that run the engine.
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -98,6 +127,9 @@ jobs:
 
   build:
     name: build (binary, image)
+    # Nothing it checks moves unless the tree does: the schedule is for the
+    # jobs that run the engine.
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -122,8 +154,8 @@ jobs:
   signoff:
     name: sign-off
     # Pull requests only, and the guard is load-bearing: the step reads
-    # github.event.pull_request.*, which a push event does not populate, so
-    # on a push the script would judge an empty range and pass.
+    # github.event.pull_request.*, which a push or a scheduled run does not
+    # populate, so there the script would judge an empty range and pass.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -166,7 +198,8 @@ jobs:
           path: bin
           key: bin-e2e-${{ runner.os }}-${{ hashFiles('Makefile', 'go.mod') }}
       # Creates the kind cluster with the pinned kind, builds and loads the
-      # manager image and the engine image (built from the crewlet module at
-      # the Makefile's CREWLET_VERSION), deploys the manager with kustomize,
-      # runs the suite, deletes the cluster.
+      # manager image, pulls and loads the engine image
+      # (ghcr.io/crewlet/crewlet:main, whose commit make crewlet-image
+      # prints), deploys the manager with kustomize, runs the suite, deletes
+      # the cluster.
       - run: make test-e2e
