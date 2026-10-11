@@ -1,13 +1,14 @@
 name: Publish docs
 
 # docs/ is also published on the documentation site, docs.crewlet.ai, under
-# /operator/, beside the engine's documentation. The site's renderer is a
-# separate repository whose name and token are secrets of this one. It rebuilds
-# when it is asked to and at no other time: it has no schedule and does not
-# watch this repository. This workflow asks it, after a change to docs/ lands
-# on main and after a release, so the change is live in minutes; without it
-# the site keeps serving the pages it last built until something else rebuilds
-# it.
+# /operator/, beside the engine's documentation under /engine/: main is
+# /operator/next/, the newest release /operator/latest/ and an older release
+# line /operator/vX.Y/. The site's renderer is a separate repository whose
+# name and token are secrets of this one. It rebuilds when it is asked to and
+# at no other time: it has no schedule and does not watch this repository.
+# This workflow asks it, after a change to docs/ lands on main and after a
+# release, so the change is live in minutes; without it the site keeps serving
+# the pages it last built until something else rebuilds it.
 #
 # The renderer reads docs/README.md's tables as the navigation and fails its
 # build on a page they do not list; test/docs holds this tree to that in CI,
@@ -39,9 +40,9 @@ on:
       - "docs/**"
 
   # A release changes which versions the site publishes, not just the content
-  # of one: the newest tag takes /operator/, main moves to /operator/next/ and
-  # the line it replaces to /operator/vX.Y/. Nothing above notices that
-  # happening, and the two obvious ways to catch it do not work:
+  # of one: the newest tag takes /operator/latest/ and the line it replaces
+  # moves to /operator/vX.Y/ (main stays /operator/next/). Nothing above
+  # notices that happening, and the two obvious ways to catch it do not work:
   #
   #   - `tags: ["v*"]` here would be ANDed with the `paths` filter above, and a
   #     tag pointing at a commit already on main changes no files at all — so
