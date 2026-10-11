@@ -49,7 +49,7 @@ A test that needs the binary and does not find it fails, naming the command
 that installs it; it never skips. Fakes stay for what the engine cannot be
 made to do on demand (a refusal of a given shape, a proxy in front of it), in
 the engine client's own unit tests. CI runs the suites on every pull request
-and push, and daily on a schedule. `CREWLET_VERSION` names another engine
+and every push to main. `CREWLET_VERSION` names another engine
 for `make crewlet` (a crewlet commit or module version), to run one again,
 and `CREWLET_IMG` names another image for the e2e suite: one the container
 tool already has, such as an image built from a crewlet checkout, is run as
@@ -65,7 +65,7 @@ and signs it. The release names it, and installers run it.
 
 The operator's CI can turn red with no change to the operator, and that is
 the point: a crewlet change that breaks the operator fails the operator's
-next run, the daily one at the latest, rather than the pull request that
+next run, rather than the pull request that
 eventually moves a pin over it and a dozen other changes. The fix goes where
 the fault is, in the operator when crewlet's change is right and in crewlet
 when it is not.

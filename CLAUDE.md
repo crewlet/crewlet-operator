@@ -164,8 +164,8 @@ The Crewlet engine is the one deliberate exception: never pinned. Every
 suite runs crewlet's `main` as `ghcr.io/crewlet/crewlet:main` publishes it
 (`CREWLET_MAIN_IMG`, `CREWLET_IMG`'s default; `make crewlet` installs the
 commit it was built from), because the operator is tested against what
-crewlet ships next, and CI runs daily so a crewlet change that breaks it
-shows within a day (ADR-0002). `CREWLET_VERSION` runs another engine, to
+crewlet ships next: a crewlet change that breaks it fails the operator's
+next run (ADR-0002). `CREWLET_VERSION` runs another engine, to
 reproduce a run whose log names it. A release keeps the engine it was tested
 against (`ghcr.io/crewlet/crewlet-operator/engine:<version>`, RELEASING.md).
 An engine function the operator copies a run-time decision from is

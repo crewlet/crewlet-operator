@@ -81,8 +81,7 @@ release's version and signs it, and the Release's notes name it.
 
 ### Cutting a release
 
-1. Make sure `main` is green, its latest daily run included, which ran
-   crewlet's `main` of that day (the `gate` job refuses a commit that is not
+1. Make sure `main` is green (the `gate` job refuses a commit that is not
    on `main` or does not pass `make check`, but finding out from a failed
    release is slower), and that the pull request titles since the last
    tag read as release notes (`gh pr list --state merged --base main`); fix a

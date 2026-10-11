@@ -100,7 +100,7 @@ Two more suites are not part of `make check`:
   leaf listener admits the company's own seat pods and no other pod. Then it
   deletes the cluster, unless the suite failed: the cluster is left for a
   look, and `make cleanup-test-e2e` deletes it. CI runs it on every pull
-  request, every push to `main` and daily. The engine image is `CREWLET_IMG`,
+  request and every push to `main`. The engine image is `CREWLET_IMG`,
   crewlet's `main` image unless you name another, which `make crewlet-image`
   pulls for this machine's platform, printing the crewlet commit it was
   built from; another image Docker already has is run as it is. So an
@@ -264,12 +264,9 @@ contract test reads as a passing one. When a test fails, the engine's log is
 printed with it.
 
 So the operator's CI can fail with no change to the operator: a crewlet
-change broke it, or exposed something the operator had wrong. CI runs the
-engine's suites daily on a schedule, as well as on every pull request and
-push, so that happens within a day of the change, and the failed job's log
-names the crewlet commit it ran. GitHub reports a failed scheduled run to
-whoever last changed the schedule in [`ci.yml`](.github/workflows/ci.yml),
-and turns the schedule off in a repository with no activity for 60 days.
+change broke it, or exposed something the operator had wrong. That shows on
+the operator's next pull request or push to `main`, and the failed job's log
+names the crewlet commit it ran.
 
 ## Generated files
 

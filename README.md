@@ -18,11 +18,10 @@ keeps the engine's live configuration equal to what the resources say.
 > document, with the Secret values it references, as its management policy
 > says, and cleans up after it as its deletion policy says. The e2e suite
 > proves that on kind against crewlet's `main`, as crewlet publishes it at
-> `ghcr.io/crewlet/crewlet:main`, which every test suite runs, daily as well
-> as on every change. It runs one data pod per company, and the seat pools a
-> company declares as stateless pods beside it, Shared or one pod per seat,
-> and reports on each Seat which pod the engine runs it on; highly available
-> companies come later.
+> `ghcr.io/crewlet/crewlet:main`, which every test suite runs. It runs one
+> data pod per company, and the seat pools a company declares as stateless
+> pods beside it, Shared or one pod per seat, and reports on each Seat which
+> pod the engine runs it on; highly available companies come later.
 
 ## How it works
 

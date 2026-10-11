@@ -339,7 +339,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.22.0
 # in this image, which the e2e suite runs and whose commit `make crewlet`
 # installs for every other suite. Not a pin, unlike every version above: the
 # operator is tested against what crewlet ships next, so a crewlet change that
-# breaks it fails its next run, CI's daily one included (ADR-0002). The samples
+# breaks it fails its next run (ADR-0002). The samples
 # and the guides name the same image (enginetest.Image reads it here).
 CREWLET_MAIN_IMG := ghcr.io/crewlet/crewlet:main
 # CREWLET_IMG is the engine image the e2e suite runs, and whose commit `make
@@ -418,10 +418,11 @@ kustomize: $(LOCALBIN) ## Download kustomize locally if necessary.
 # fails. The commit is resolved to its module version, which names the binary,
 # on every run: a moving engine has no version to compare with until it has
 # been asked. Each new engine replaces the binaries of the ones before it,
-# which take over 150 MB each and change daily: bin/ is one checkout's, so
-# nothing else runs them. (Two checkouts sharing a LOCALBIN would share
-# bin/crewlet too, and run one another's engine.) The binary is installed into
-# a directory of its own first, so neither its name nor CREWLET's is assumed.
+# which take over 150 MB each and change with crewlet's main: bin/ is one
+# checkout's, so nothing else runs them. (Two checkouts sharing a LOCALBIN
+# would share bin/crewlet too, and run one another's engine.) The binary is
+# installed into a directory of its own first, so neither its name nor
+# CREWLET's is assumed.
 CREWLET_MODULE := github.com/crewlet/crewlet
 .PHONY: crewlet
 crewlet: $(LOCALBIN) ## Install the Crewlet engine every suite runs into bin/crewlet: CREWLET_IMG's commit, or CREWLET_VERSION.

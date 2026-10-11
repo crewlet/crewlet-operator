@@ -185,9 +185,8 @@ kubectl logs acme-data-0 -n acme | grep -E 'WARN|ERROR' | tail
   commit's CI ran, whose log names the crewlet commit. A class that names
   `ghcr.io/crewlet/crewlet:main` itself runs an engine newer than an
   operator built before crewlet's change: build the operator from this
-  repository's newest `main` instead, which CI tests against crewlet's
-  `main` daily, or move the class to the engine the operator was tested
-  against. The data pod rolls to the image and starts.
+  repository's newest `main` instead, or move the class to the engine the
+  operator was tested against. The data pod rolls to the image and starts.
 - **`Pending`**: the volume claim is not bound (no default StorageClass, or
   the class's `storageClassName` does not exist), or no node fits the class's
   resources, tolerations or affinity.
