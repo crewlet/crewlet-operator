@@ -27,6 +27,17 @@ make build    # bin/manager
 To run the operator against a cluster, see
 [docs/getting-started.md](docs/getting-started.md).
 
+### Running the manager from your machine
+
+While working on the operator, `make run` runs the manager in your terminal
+against the current kubeconfig, after `make install`. It regenerates the CRDs
+and RBAC first, so it always runs the code in your working tree. It runs
+with your kubeconfig's credentials rather than its own ServiceAccount, so
+RBAC mistakes do not show up, and it cannot reach the engines it runs: it
+addresses each by its pod's DNS name inside the cluster, so every Company
+reports `ConfigApplied=False` with the reason `EngineUnavailable`. Stop the
+in-cluster manager first (`make undeploy`), or the two compete.
+
 ## Two Go modules
 
 The repository holds two modules:

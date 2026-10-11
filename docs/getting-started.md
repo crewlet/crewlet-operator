@@ -1,15 +1,42 @@
-# Getting started
+# Quickstart
 
-This page runs the operator on a local [kind](https://kind.sigs.k8s.io/)
-cluster and starts a small company on it: an engine, a team of two agents and
-a model provider. Every command is a make target or a tool the Makefile pins
-into `bin/`, so nothing beyond Go, Docker, make, git and curl has to be
-installed. It takes about ten minutes, most of them spent building the
-operator's image.
+Run the operator on a local [kind](https://kind.sigs.k8s.io/) cluster and
+start a small company on it: an engine, a team of two agents and a model
+provider, in about ten minutes.
 
-> The `crewlet.ai/v1alpha1` API is alpha and may change without notice.
+Every command is a make target or a tool the Makefile pins into `bin/`, so
+nothing beyond Go, Docker, make, git and curl has to be installed; most of the
+ten minutes goes on building the operator's image.
 
-## Create a cluster
+```mermaid
+flowchart LR
+    subgraph cluster["kind cluster crewlet"]
+        OP["<b>Crewlet Operator</b><br/><i>crewlet-operator-system</i>"]
+        EC["<b>EngineClass</b> local<br/><i>cluster-scoped</i>"]
+        subgraph ns["namespace acme"]
+            C["<b>Company</b> acme"]
+            U["<b>Unit</b> engineering"]
+            L["<b>Seat</b> lead"]
+            D["<b>Seat</b> dev"]
+            P["<b>LLMProvider</b> anthropic"]
+            S[("<b>Secret</b> anthropic")]
+            POD[("<b>acme-data-0</b><br/>the engine and its volume")]
+        end
+    end
+    C -->|engineClassName| EC
+    U -->|companyRef| C
+    L -->|unitRef| U
+    D -->|unitRef| U
+    L -.->|llm| P
+    D -.->|llm| P
+    P -.->|apiKeySecretRefs| S
+    OP -->|"runs and configures"| POD
+```
+
+> **Caution: alpha.** The `crewlet.ai/v1alpha1` API may change without
+> notice.
+
+## 1. Create a cluster
 
 ```bash
 make kind kubectl
@@ -23,7 +50,7 @@ do), so the isolation the operator sets up around each engine applies here as
 in production; see
 [Exposure and network policy](guides/exposure.md).
 
-## Build and load the operator's image
+## 2. Build and load the operator's image
 
 The operator has no release yet, so its image is built from this checkout
 and loaded into the kind node; nothing is pushed to a registry. The engine's
@@ -37,7 +64,7 @@ make docker-build IMG=crewlet-operator:dev
 bin/kind load docker-image crewlet-operator:dev --name crewlet
 ```
 
-## Install the operator
+## 3. Install the operator
 
 With kustomize (`config/default`) or with the Helm chart (`dist/chart`):
 
@@ -56,15 +83,17 @@ bin/kubectl -n crewlet-operator-system rollout status deploy/crewlet-operator-co
 bin/kubectl api-resources --api-group=crewlet.ai
 ```
 
-## Create an EngineClass
+## 4. Create an EngineClass
 
 An `EngineClass` is a platform's defaults and limits: the engine image, the
 size of each company's data pod, and how companies are reached. This one runs
 Crewlet's `main` image, exposes no webhooks (kind has no public address), and
-gives each company the smallest data volume the API admits. The engine reserves three
-quarters of that volume for its event stream, and kind's provisioner puts it
-on the node's disk without enforcing the size: the Docker host needs about
-6 GiB free for each company, or its pod never becomes ready.
+gives each company the smallest data volume the API admits.
+
+> **Watch for disk space.** The engine reserves three quarters of that volume
+> for its event stream, and kind's provisioner puts it on the node's disk
+> without enforcing the size: the Docker host needs about 6 GiB free for each
+> company, or its pod never becomes ready.
 
 ```bash
 bin/kubectl apply -f - <<'EOF'
@@ -92,7 +121,7 @@ spec:
 EOF
 ```
 
-## Start a company
+## 5. Start a company
 
 A namespace for the company, the Secret holding its model provider's API key,
 and the objects: the `Company`, a `Unit`, two `Seat`s in it and the
@@ -184,7 +213,7 @@ bin/kubectl get company acme -n acme \
   -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}{"\n"}{end}'
 ```
 
-```
+```text
 Accepted=True Valid
 Exposed=True NoRoutes
 RuntimeReady=True PodsReady
@@ -200,7 +229,7 @@ bin/kubectl get seats -n acme \
   -o jsonpath='{range .items[*]}{.metadata.name}: {.status.seatID} {.status.conditions[?(@.type=="Applied")].message}{"\n"}{end}'
 ```
 
-## Change it
+## 6. Change it
 
 Edit an object and the operator applies the whole document again as a new
 revision, once two seconds have passed without another change. The Seat's
@@ -239,7 +268,7 @@ bin/kubectl patch llmprovider anthropic -n acme --type merge \
 [Troubleshooting](guides/troubleshooting.md) lists every condition and
 reason an object can report.
 
-## Open the dashboard
+## 7. Open the dashboard
 
 The engine serves its dashboard and API inside the cluster, behind a token.
 The Company publishes a token for its consumers in the Secret
@@ -256,7 +285,7 @@ under the default management policy, `Enforce`, the objects are its only
 source, and the engine refuses any other change to it
 ([Choosing a management policy](guides/management-policies.md)).
 
-## The full example
+## 8. Try the full example
 
 [`config/samples`](../config/samples) is one complete company, Nimbus: an
 `EngineClass` that routes webhooks through a Gateway, two `Unit`s, three
@@ -274,18 +303,7 @@ bin/kubectl get company nimbus -n nimbus \
   -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}: {.message}{"\n"}{end}'
 ```
 
-## Run the manager from your machine
-
-While working on the operator, `make run` runs the manager in your terminal
-against the current kubeconfig, after `make install`. It regenerates the CRDs
-and RBAC first, so it always runs the code in your working tree. It runs
-with your kubeconfig's credentials rather than its own ServiceAccount, so
-RBAC mistakes do not show up, and it cannot reach the engines it runs: it
-addresses each by its pod's DNS name inside the cluster, so every Company
-reports `ConfigApplied=False` with the reason `EngineUnavailable`. Stop the
-in-cluster manager first (`make undeploy`), or the two compete.
-
-## Clean up
+## 9. Clean up
 
 Delete the companies while the operator still runs: each Company's finalizer
 stops its engine and settles its volume as `deletionPolicy` says (`Delete`
@@ -301,3 +319,11 @@ make undeploy            # the manager and the CRDs, and with them every crewlet
 # or, if you installed the chart: make helm-uninstall uninstall   # the chart keeps the CRDs
 bin/kind delete cluster --name crewlet
 ```
+
+## Next steps
+
+- [Installing the Operator](guides/installing.md) — a production install with the Helm chart
+- [How the Operator Models a Company](concepts/overview.md) — the kinds, and how they become one document
+- [Supplying Credentials](guides/credentials.md) — the Secret behind each credential
+- [Connecting Integrations](guides/integrations.md) — Slack, GitHub, GitLab and the other vendors
+- [Troubleshooting](guides/troubleshooting.md) — every condition and reason an object reports

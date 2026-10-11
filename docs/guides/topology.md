@@ -1,11 +1,11 @@
-# Choosing where seats run
+# Choosing Where Seats Run
 
 A company always has one data pod, and every agent seat runs there unless you
-say otherwise. Seat pools add stateless pods beside it that run seats and
-nothing else. This guide is for deciding whether a company needs them, which
-kind, and what they buy; [How a company's engine
-runs](../concepts/runtime.md#seat-pools) describes the objects the operator
-makes for them.
+say otherwise; seat pools add stateless pods beside it that run seats alone.
+
+This guide is for deciding whether a company needs them, which kind, and what
+they buy; [How a company's engine runs](../concepts/runtime.md#seat-pools)
+describes the objects the operator makes for them.
 
 ## Data pods and seat pods
 
@@ -20,18 +20,35 @@ Crewlet runs one binary in two shapes, chosen only by its `crewlet.yaml`:
 | Company document | applied to it by the operator | taken from the data pod at start |
 | Can be a company's only pod | yes | no: without a data pod it has nothing to join, and gives up within a minute |
 
+```mermaid
+flowchart TB
+    subgraph company["One company"]
+        DATA[("<b>Data pod</b><br/>estate · API · webhooks<br/>runs the seats placed in data")]
+        subgraph shared["Shared pool general"]
+            S1["<b>seat pod</b>"]
+            S2["<b>seat pod</b>"]
+        end
+        subgraph perseat["PerSeat pool isolated"]
+            P1["<b>seat pod</b><br/>release-manager alone"]
+        end
+    end
+    S1 -->|leaf link| DATA
+    S2 -->|leaf link| DATA
+    P1 -->|leaf link| DATA
+```
+
 So the smallest company is one data pod, and seat pools only ever add pods
 beside it. A seat pod writes its tracker and audit records through a data pod
 and hands it its last records when it stops.
 
 ## Do you need seat pools?
 
-Crewlet's own guidance is to scale up before scaling out: what bounds a
-company is its model providers' rate limits and its host's memory, not the
-number of processes. A seat is serial, taking one batch of messages at a
-time, so a pod of its own does not make one seat faster. A data pod with
-enough CPU and memory, and the class's `seatPools.policy` left at
-`Forbidden`, is the right shape for most companies.
+> **Rule of thumb: scale up before you scale out.** Crewlet's own guidance:
+> what bounds a company is its model providers' rate limits and its host's
+> memory, not the number of processes. A seat is serial, taking one batch of
+> messages at a time, so a pod of its own does not make one seat faster. A
+> data pod with enough CPU and memory, and the class's `seatPools.policy` left
+> at `Forbidden`, is the right shape for most companies.
 
 Seat pools are worth their cost when a company needs one of these:
 
@@ -232,3 +249,9 @@ operator could no longer tell which pool a pod serves.
 - **Code runs in a remote sandbox.** v1alpha1 offers only E2B for a seat's
   sandbox, which works from any pod; Crewlet's local sandbox cells would be
   polled by a data pod for a box on another pod, and fail.
+
+## See also
+
+- [How a Company's Engine Runs](../concepts/runtime.md#seat-pools) — the objects a pool is made of
+- [Running Seats on a Coding CLI](cli-agents.md#seat-pools) — what a CLI cannot do on a seat pod
+- [Crewlet's fleet guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/fleet.md) — the engine's own case for scaling up before out

@@ -1,9 +1,11 @@
-# Running seats on a coding CLI
+# Running Seats on a Coding CLI
 
-An `LLMProvider` of type `CLIAgent` drives a coding CLI (Claude Code, Codex,
-Gemini CLI and the others Crewlet knows) on a subscription login, rather than
-calling a model API with a key. It renders Crewlet's `cli-agent` provider;
-Crewlet's [Subscription LLM backends](https://github.com/crewlet/crewlet/blob/main/docs/concepts/subscription-llm-backends.md)
+An `LLMProvider` of type `CLIAgent` runs a seat on a coding CLI you already
+subscribe to, such as Claude Code or Codex, rather than on a metered API key.
+
+It renders Crewlet's `cli-agent` provider, which drives the CLI on a
+subscription login; Crewlet's
+[Subscription LLM backends](https://github.com/crewlet/crewlet/blob/main/docs/concepts/subscription-llm-backends.md)
 describes what the engine does with it. This guide covers what changes when
 the engine runs in a pod: the image, the login, and agent mode.
 
@@ -97,23 +99,8 @@ Subscription provider that names neither is refused, with one exception:
   variable, so Crewlet's profile for it names no key variable and marks it
   as signing in through its environment: Crewlet passes the CLI's `env` to
   it untouched, which is the route its profile documents for a metered key.
-  Crewlet counts an entry as a sign-in only when its name says it holds a
-  credential: one of its parts between underscores is, in any case, `KEY`,
-  `KEYS`, `APIKEY`, `ACCESSKEY`, `SECRETKEY`, `TOKEN`, `SECRET`, `PASSWORD`,
-  `PASSWD`, `CREDENTIAL`, `CREDENTIALS`, `AUTH`, `OAUTH` or `PAT`. So
-  `OPENROUTER_API_KEY` and `GH_TOKEN` sign the CLI in, and `HTTPS_PROXY` or
-  `HERMES_MAX_TOKENS` (a count of model tokens) do not; the API server
-  refuses a provider whose `env` holds no such name, which `crewlet llm
-  list` would report signed in to nothing. Write `auth.mode: Subscription`
-  explicitly, as `auth` may not be empty. A key in `env` is a `${NAME}` the
-  engine resolves from its encrypted store, so it never refreshes and runs
-  on a seat pod too. Beside a credential bundle it is a second sign-in,
-  which the CLI settles by its own rules rather than by the order you wrote
-  them in. Hermes, for one, loads its home's `.env` over its environment, so
-  a variable the bundle's `.env` also sets takes the file's value, while a
-  model provider's key in `env` wins over an OAuth login in the bundle's
-  `auth.json`, so Hermes runs on the metered key and the subscription goes
-  unused. Name only the sign-in you mean the CLI to use.
+  Crewlet counts an entry as a sign-in only by its name
+  ([below](#which-env-entries-sign-a-cli-in)).
 - **Every other CLI** keeps to a token or a bundle. A CLI whose profile names
   a key variable takes its key with `auth.mode: APIKey`; the engine refuses
   that variable in `env` (below), and a key in `env` under any other name is
@@ -191,6 +178,30 @@ Providers that set the same `loginName` share one login and its seats'
 homes, which is how several models run off one subscription; they must
 drive the same CLI, or the engine refuses the document.
 
+### Which `env` entries sign a CLI in
+
+This is the sign-in of a Hermes, Pi or OpenCode provider in
+`auth.mode: Subscription` with neither a token nor a bundle: a key in its
+`env`. Crewlet counts an entry as that sign-in only when its name says it
+holds a credential: one of its parts between underscores is, in any case,
+`KEY`, `KEYS`, `APIKEY`, `ACCESSKEY`, `SECRETKEY`, `TOKEN`, `SECRET`,
+`PASSWORD`, `PASSWD`, `CREDENTIAL`, `CREDENTIALS`, `AUTH`, `OAUTH` or `PAT`.
+So `OPENROUTER_API_KEY` and `GH_TOKEN` sign the CLI in, and `HTTPS_PROXY` or
+`HERMES_MAX_TOKENS` (a count of model tokens) do not; the API server refuses
+such a provider when its `env` holds no such name, since `crewlet llm list`
+would report it signed in to nothing. Write its `auth.mode: Subscription`
+explicitly, as `auth` may not be empty. A key in `env` is a `${NAME}` the
+engine resolves from its encrypted store, so it never refreshes and runs on a
+seat pod too.
+
+> **Name only the sign-in you mean the CLI to use.** Beside a credential
+> bundle a key in `env` is a second sign-in, which the CLI settles by its own
+> rules rather than by the order you wrote them in. Hermes, for one, loads its
+> home's `.env` over its environment, so a variable the bundle's `.env` also
+> sets takes the file's value, while a model provider's key in `env` wins over
+> an OAuth login in the bundle's `auth.json`, so Hermes runs on the metered key
+> and the subscription goes unused.
+
 ### A metered key
 
 `auth.mode: APIKey` gives the CLI the provider's one `apiKeySecretRefs` key
@@ -226,7 +237,25 @@ own tool loop, as a process in the engine's pod. `cli.mode: Agent` runs a
 seat's executor as the CLI's own agentic run, with its own shell and editor,
 in the company's sandbox. Every other phase on the same provider (the
 reviewer, a delegated worker, the summariser) is still a text call, so the
-CLI must be in the engine's image either way. In agent mode:
+CLI must be in the engine's image either way.
+
+```mermaid
+flowchart LR
+    subgraph pod["The data pod"]
+        ENG["<b>Engine</b><br/><i>the seat's turn</i>"]
+        TXT["<b>CLI, text mode</b><br/><i>a model behind the<br/>engine's tool loop</i>"]
+        PUB["<b>:8081 public listener</b><br/>/mcp/ tool bridge"]
+    end
+    subgraph box["The company's E2B sandbox"]
+        AG["<b>CLI, agent mode</b><br/><i>its own shell, editor<br/>and agentic loop</i>"]
+    end
+    ENG <-->|"prompt and answer"| TXT
+    ENG -->|"starts a detached run"| AG
+    AG -->|"the seat's tools, with a token<br/>signed for the run"| PUB
+    PUB --> ENG
+```
+
+In agent mode:
 
 - The run is a sandbox run: the Company needs `spec.sandbox`. With no
   `spec.sandbox.e2b.template`, each run gets E2B's prebuilt template for its
@@ -394,6 +423,12 @@ stdio MCP server) can read it, and the engine resolves a `${NAME}` written in
 any field of the company document from its environment too, so whoever can
 write such a field can have the engine send the value anywhere. The operator
 puts no credential of the engine's own into its environment for the same
-reason ([Credentials](../concepts/credentials.md)); `tokenSecretRef`,
+reason ([Credential Positions](../concepts/credentials.md)); `tokenSecretRef`,
 `credentialBundleSecretRef`, `auth.mode: APIKey` and a key in `env` for
 Hermes, Pi or OpenCode take the login from a Secret instead.
+
+## See also
+
+- [Crewlet's subscription LLM backends](https://github.com/crewlet/crewlet/blob/main/docs/concepts/subscription-llm-backends.md) — what the engine does with a CLI
+- [Choosing Where Seats Run](topology.md) — seat pools, and what a CLI cannot do there
+- [Exposure and Network Policy](exposure.md) — the public listener the tool bridge is served on

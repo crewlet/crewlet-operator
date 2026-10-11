@@ -1,16 +1,35 @@
-# Exposure and network policy
+# Exposure and Network Policy
 
-A company's engine listens on two ports. Port 8080 serves its API, its
-dashboard and its probes; port 8081, its **public listener**, serves only the
-routes outside parties call, each of which authenticates itself without an
-operator credential: vendors' webhooks (`/webhooks/`), and a remote
-sandbox's telemetry (`/otlp/{token}`) and tool calls (`/mcp/{token}`), with a
-token signed for its one run in the path. Only the public listener needs to
-be reachable from the internet, and only it is routed there. This guide sets
-up the webhook routes, the public address vendors are given, the address
-people reach the dashboard at, an internal route to the API, and the network
-policy around each engine. The objects involved are described in
+A company's engine listens on two ports: 8080 for its API, dashboard and
+probes, and 8081, its public listener, the only one vendors and sandboxes call.
+
+Port 8081 serves only the routes outside parties call, each of which
+authenticates itself without an operator credential: vendors' webhooks
+(`/webhooks/`), and a remote sandbox's telemetry (`/otlp/{token}`) and tool
+calls (`/mcp/{token}`), with a token signed for its one run in the path. Only
+the public listener needs to be reachable from the internet, and only it is
+routed there; port 8080 stays in the cluster unless the class gives it an
+internal route ([Reach the API from elsewhere](#reach-the-api-from-elsewhere)).
+This guide sets up the webhook routes, the public address vendors are given,
+the address people reach the dashboard at, an internal route to the API, and
+the network policy around each engine. The objects involved are described in
 [How a company's engine runs](../concepts/runtime.md#exposure).
+
+```mermaid
+flowchart LR
+    V["<b>Vendors</b><br/><i>Slack, GitHub, GitLab, …</i>"] -->|"/webhooks/"| GW
+    SB["<b>A remote sandbox</b>"] -->|"/otlp/ · /mcp/"| GW
+    GW["<b>Gateway or Ingress</b><br/><i>or your own forwarder</i>"]
+    IN["<b>The operator, API consumers</b><br/><i>in the cluster, or an internal route</i>"]
+    subgraph pod["The engine's data pod"]
+        PUB["<b>:8081 public listener</b><br/>webhooks, sandbox calls"]
+        API["<b>:8080 API</b><br/>configuration, secrets,<br/>dashboard, probes"]
+    end
+    GW -->|every path| PUB
+    IN --> API
+    GW -.-x|never| API
+    linkStyle 4 stroke:#ef4444,color:#ef4444
+```
 
 The split is the engine's own (Crewlet's `api.public`): the public listener
 answers every other path, `/config` and `/health` included, as a path
@@ -192,8 +211,10 @@ spec:                       # Company
     publicBaseURL: https://acme.hooks.example.com
 ```
 
-Never forward to port 8080: that is the admin API, and it answers a webhook
-`404` anyway. Under `networkPolicy.mode: Isolated`, name the pods that
+> **Never forward to port 8080.** That is the admin API, and it answers a
+> webhook `404` anyway.
+
+Under `networkPolicy.mode: Isolated`, name the pods that
 forward (a tunnel's or a relay's pods in the cluster) in the class, so the
 policy admits them to the public port and to nothing else. The class is
 refused without them, since the policy would then refuse everything
@@ -310,6 +331,21 @@ The public port, 8081, only from where webhooks arrive: `exposure.webhooks`'
 `ingress.controllerNamespaces`, or `external.forwarders`. Under
 `webhooks.mode: None` nothing is admitted to it.
 
+```mermaid
+flowchart LR
+    OP["<b>The operator's pods</b>"] -->|8080| A
+    AC["<b>apiConsumers</b>"] -->|8080| A
+    AR["<b>The API route's proxy</b>"] -->|8080| A
+    WR["<b>The webhooks' proxy</b><br/><i>or forwarders</i>"] -->|8081| P
+    SP["<b>The company's seat pods</b>"] -.->|"7422, under the broker policy,<br/>while the class allows seat pools"| L
+    subgraph pod["Data pod, under Isolated"]
+        A["<b>:8080</b> API"]
+        P["<b>:8081</b> public listener"]
+        L["<b>:7422</b> leaf listener"]
+    end
+    pod -->|"DNS, its namespace, egress.to,<br/>any address but exceptCIDRs<br/>and the metadata endpoints"| OUT["<b>Outward</b>"]
+```
+
 So a webhook's proxy reaches no admin route, and an API consumer cannot
 reach the port published to the internet. Everything else, other tenants and
 the tenant's own other pods included, is refused. Name your consumers in the
@@ -369,24 +405,27 @@ gateway:
 
 A class that allows seat pools (`seatPools.policy: Allowed`) also has the
 operator create two more policies per company, under either mode:
-`<company>-broker`, which admits the data pods' leaf listener (port 7422)
-from the company's own seat pods and from nothing else, since Crewlet's
-broker port takes any connection without authentication or TLS (under `None`
-it also admits ports 8080 and 8081 from anywhere, so the data pods stay as
-open as they are without a policy); and, while the company runs seat pods,
-`<company>-seats`, which admits no connection to a seat pod from any pod
-and, under `Isolated`, holds the seat pods to the egress above. A seat pod's
-probes (port 8080, `/health` and `/ready`) still answer its kubelet, whose
-traffic comes from the pod's own node, which a NetworkPolicy does not
-police. NetworkPolicies are additive, so this isolation of the seat pods
-holds only while no other policy selects them: do not add one that selects
-every pod of a tenant's namespace. A policy selects pods by label, so it
-cannot keep apart companies that share a namespace, whose pods anyone who
-creates pods there can label as either's: give each company a namespace of
-its own where that matters, and see [Network
-policy](../concepts/runtime.md#network-policy) for what no NetworkPolicy
-governs (the node's own traffic, `hostNetwork` pods) and for the leaf link's
-lack of encryption.
+
+- `<company>-broker` admits the data pods' leaf listener (port 7422) from the
+  company's own seat pods and from nothing else, since Crewlet's broker port
+  takes any connection without authentication or TLS. Under `None` it also
+  admits ports 8080 and 8081 from anywhere, so the data pods stay as open as
+  they are without a policy.
+- `<company>-seats`, while the company runs seat pods, admits no connection to
+  a seat pod from any pod and, under `Isolated`, holds the seat pods to the
+  egress above. A seat pod's probes (port 8080, `/health` and `/ready`) still
+  answer its kubelet, whose traffic comes from the pod's own node, which a
+  NetworkPolicy does not police.
+
+> **Do not add a policy that selects every pod of a tenant's namespace.**
+> NetworkPolicies are additive, so the seat pods' isolation holds only while
+> no other policy selects them. A policy selects pods by label, so it cannot
+> keep apart companies that share a namespace either, whose pods anyone who
+> creates pods there can label as either's: give each company a namespace of
+> its own where that matters, and see
+> [Network policy](../concepts/runtime.md#network-policy) for what no
+> NetworkPolicy governs (the node's own traffic, `hostNetwork` pods) and for
+> the leaf link's lack of encryption.
 
 The policy holds only on a CNI that enforces NetworkPolicy, egress included
 (Calico, Cilium, Antrea, and kind's kindnet on a kernel with nftables' queue
@@ -403,3 +442,9 @@ kubectl get company acme -n acme \
   -o jsonpath='{.status.conditions[?(@.type=="Exposed")].reason}: {.status.conditions[?(@.type=="Exposed")].message}{"\n"}'
 kubectl get httproutes,ingresses,networkpolicies -n acme -l crewlet.ai/company=acme
 ```
+
+## See also
+
+- [How a Company's Engine Runs](../concepts/runtime.md#exposure) — the objects behind each route
+- [Connecting Integrations](integrations.md) — where each vendor's webhooks arrive
+- [Troubleshooting](troubleshooting.md#webhooks-do-not-arrive) — when webhooks do not arrive

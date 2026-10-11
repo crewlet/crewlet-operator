@@ -1,12 +1,12 @@
-# Hosting many tenants on the operator
+# Hosting Many Tenants on the Operator
 
-A platform that runs Crewlet companies for many tenants usually has a control
-plane of its own: it decides which tenants exist and which service tier each
+With the operator, a platform's control plane runs no engines: it writes
+Kubernetes objects, a namespace per tenant, and reads back what they report.
+
+Such a control plane decides which tenants exist and which service tier each
 runs on, connects each company to its people's Slack and GitHub, and shows
-them their company. With the operator, that control plane does not run
-engines. It writes Kubernetes objects, one namespace per tenant, and reads
-back what the operator reports. This guide describes what the operator does
-for such a control plane, and what the control plane has to do itself.
+them their company. This guide describes what the operator does for it, and
+what the control plane has to do itself.
 
 ```mermaid
 sequenceDiagram
@@ -389,29 +389,33 @@ keys and the class's env values too.
   reports `Accepted=False LimitExceeded` and its next revision waits. They
   are the cluster's defence in depth; the control plane stays the place the
   company's people are told what their tier admits.
-- **Seat pools** are a tier's too. A class with `seatPools.policy: Allowed`
-  lets its Companies declare `spec.topology.seatPools`, stateless pods that
-  run seats beside the data pod (more concurrent turns, a pod that can fail
-  without stopping the company); `maxPods`, which a class that allows pools
-  must set, caps a company's seat pods, `defaults.resources` sizes every one
-  of them (a Company chooses how many its pools run, never how large), and
-  `allowPerSeat` admits a pod for one seat alone. A move to a class that
-  allows pools restarts the data pod once, to open the listener seat pods
-  join; adding a pool afterwards restarts nothing. A move to a class that
-  forbids them stops nothing at once: the company's next revision is refused
-  while it declares pools, and the seat pods its running revision pins seats
-  to keep running, listener and all, until the tenant's Seats are moved to
-  `data` and that revision runs. Scale a Shared pool by writing
-  `spec.topology.seatPools[name=P].replicas` with server-side apply: the
-  operator never scales one itself, and moving seats between pods interrupts
-  them ([Seat pools](../concepts/runtime.md#seat-pools)). Tiers map onto a
-  class's `seatPools`: the smallest forbids pools and runs every seat on the
-  data pod; a larger one allows Shared pools up to a `maxPods`; the largest
-  adds `allowPerSeat` for chosen agents. Own `replicas` from the control
-  plane's field manager, and only that field of the pool if a person may
-  change the rest. [Choosing where seats run](topology.md) says what each
-  shape buys, and what a pod of its own does not isolate: every pod of a
-  company can read all of its credentials.
+- **Seat pools** are a tier's too:
+  - A class with `seatPools.policy: Allowed` lets its Companies declare
+    `spec.topology.seatPools`, stateless pods that run seats beside the data
+    pod (more concurrent turns, a pod that can fail without stopping the
+    company).
+  - `maxPods`, which a class that allows pools must set, caps a company's seat
+    pods; `defaults.resources` sizes every one of them (a Company chooses how
+    many its pools run, never how large); and `allowPerSeat` admits a pod for
+    one seat alone.
+  - A move to a class that allows pools restarts the data pod once, to open
+    the listener seat pods join; adding a pool afterwards restarts nothing.
+  - A move to a class that forbids them stops nothing at once: the company's
+    next revision is refused while it declares pools, and the seat pods its
+    running revision pins seats to keep running, listener and all, until the
+    tenant's Seats are moved to `data` and that revision runs.
+  - Scale a Shared pool by writing `spec.topology.seatPools[name=P].replicas`
+    with server-side apply: the operator never scales one itself, and moving
+    seats between pods interrupts them
+    ([Seat pools](../concepts/runtime.md#seat-pools)). Own `replicas` from the
+    control plane's field manager, and only that field of the pool if a person
+    may change the rest.
+  - Tiers map onto a class's `seatPools`: the smallest forbids pools and runs
+    every seat on the data pod; a larger one allows Shared pools up to a
+    `maxPods`; the largest adds `allowPerSeat` for chosen agents.
+    [Choosing where seats run](topology.md) says what each shape buys, and
+    what a pod of its own does not isolate: every pod of a company can read
+    all of its credentials.
 - **Suspending** a tenant's company is `spec.suspend: true`: the engine stops
   and its volume is kept, whatever else the Company reports, so a tenant
   cannot keep a suspended engine running by declaring more than its class
@@ -432,3 +436,9 @@ keys and the class's env values too.
   `reclaimPolicy: Retain` survives its claim, and the operator never deletes
   the company's prefix of an S3 bucket (the class's `objects.s3.prefix`).
   Delete both yourself when the company's data must go.
+
+## See also
+
+- [Installing the Operator](installing.md#a-tenant-provisioner) — the chart's tenant provisioner role
+- [Choosing Where Seats Run](topology.md) — seat pools as a tier
+- [Credential Positions](../concepts/credentials.md#who-can-read-a-value) — what a tenant can read

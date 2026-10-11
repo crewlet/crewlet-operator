@@ -1,9 +1,12 @@
 # Troubleshooting
 
 Every object the operator reconciles says what is wrong with it in its
-conditions. Start at the Company: its `Ready` condition, when `False`, carries
-the reason of the first of `Accepted`, `RuntimeReady`, `Exposed` and
-`ConfigApplied` that is not `True`, and the message says what to do.
+conditions. Start at the Company, and follow the first condition that is not
+True.
+
+The Company's `Ready` condition, when `False`, carries the reason of the first
+of `Accepted`, `RuntimeReady`, `Exposed` and `ConfigApplied` that is not
+`True`, and the message says what to do:
 
 ```bash
 kubectl get crewlet -n acme
@@ -12,6 +15,30 @@ kubectl get company acme -n acme \
 kubectl get seats,units,llmproviders,mcpservers,integrations,schedules -n acme \
   -o jsonpath='{range .items[*]}{.kind}/{.metadata.name}{range .status.conditions[?(@.status!="True")]} {.type}={.status} {.reason}: {.message}{end}{"\n"}{end}'
 kubectl events -n acme --for company/acme
+```
+
+Where each one leads, below:
+
+```mermaid
+flowchart TD
+    R{"Company <b>Ready</b>"}
+    R -->|False| A{"<b>Accepted</b>"}
+    R -->|True| SYM{"What does not work?"}
+    A -->|False| CL["Conditions and reasons:<br/>Company"]
+    A -->|True| RT{"<b>RuntimeReady</b>"}
+    RT -->|PodsNotReady| POD["The data pod is not ready"]
+    RT -->|"any other reason"| CL
+    RT -->|True| EX{"<b>Exposed</b>"}
+    EX -->|False| CL
+    EX -->|True| CA{"<b>ConfigApplied</b>"}
+    CA -->|EngineUnavailable| UN["The operator cannot reach the engine"]
+    CA -->|WriteRefused| WR["The engine refuses a change<br/>to the document"]
+    CA -->|"Applying, ApplyFailed"| AF["The engine did not apply a revision"]
+    CA -->|"any other reason"| NA["Changes are not applied"]
+    SYM -->|"a Seat's Ready=False Unplaced"| NW["A seat runs nowhere"]
+    SYM -->|"a Seat's Ready=False, another reason"| CS["Conditions and reasons:<br/>Unit, Seat, …"]
+    SYM -->|"SeatsPlaced=False"| SP["Seat pods do not run"]
+    SYM -->|"a vendor's webhooks"| WH["Webhooks do not arrive"]
 ```
 
 Each condition's `observedGeneration` says which generation of the object it
@@ -401,3 +428,9 @@ kubectl get lease 839a0df8.crewlet.ai -n crewlet-operator-system -o jsonpath='{.
 
 Conditions, events and logs name Secrets and keys, never their values, so
 they are safe to paste into an issue. Do not paste Secrets.
+
+## See also
+
+- [How the Document Is Applied](../concepts/applying.md#what-each-object-reports) — what every condition means
+- [How a Company's Engine Runs](../concepts/runtime.md#status) — who writes which status field
+- [Crewlet's alarms](https://github.com/crewlet/crewlet/blob/main/docs/reference/alarms.md) — what `EngineHealthy=False Alarms` names

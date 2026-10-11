@@ -1,7 +1,8 @@
-# Connecting integrations
+# Connecting Integrations
 
-An `Integration` connects a company to one vendor: Slack, GitHub, GitLab,
+An Integration connects a company to one vendor: Slack, GitHub, GitLab,
 Mattermost, Jira, Confluence, Datadog, or an Atlassian Cloud organization.
+
 Each renders one block of Crewlet's `integrations`, and a company has at
 most one per vendor. This guide shows each vendor's object, the credentials
 it takes, what the seats bring of their own, and where the engine wants to
@@ -10,8 +11,8 @@ be told about the vendor. Crewlet's own pages
 describe what each integration does once connected.
 
 Every credential is a Secret reference ([Supplying credentials](credentials.md));
-[Credentials](../concepts/credentials.md) lists every position and the field
-that fills it.
+[Credential Positions](../concepts/credentials.md) lists every position and
+the field that fills it.
 
 ## Who creates the seats' accounts
 
@@ -28,18 +29,18 @@ Jira or Confluence is refused, since the engine mints no credential there.
 Datadog and Atlassian take `Engine` only: the engine creates the seats'
 accounts with the keys they reference whenever it holds them.
 
-**An administrator credential is readable by everything the company runs.**
-Under `Engine` the Integration's administrator token or organization keys go
-into the company's secret store, which every engine pod of the company opens
-(the data pod and each seat pod hold its keyring), and so does every process
-that runs as the engine: its stdio MCP servers, a coding CLI, the code a seat
-runs. A seat steered by a prompt injection, or a compromised MCP package, is
-then one step from administering the vendor. Give the provisioner the
-narrowest credential it accepts: a GitLab group Owner's token rather than an
-instance administrator's, an Atlassian API key scoped to the organization's
-user management, Datadog keys of a service account limited to what
-provisioning needs. [Credentials](../concepts/credentials.md) says where each
-one goes.
+> **Caution: an administrator credential is readable by everything the
+> company runs.** Under `Engine` the Integration's administrator token or
+> organization keys go into the company's secret store, which every engine pod
+> of the company opens (the data pod and each seat pod hold its keyring), and
+> so does every process that runs as the engine: its stdio MCP servers, a
+> coding CLI, the code a seat runs. A seat steered by a prompt injection, or a
+> compromised MCP package, is then one step from administering the vendor.
+> Give the provisioner the narrowest credential it accepts: a GitLab group
+> Owner's token rather than an instance administrator's, an Atlassian API key
+> scoped to the organization's user management, Datadog keys of a service
+> account limited to what provisioning needs.
+> [Credential Positions](../concepts/credentials.md) says where each one goes.
 
 A seat names a credential the engine provisions with `provisioned` where it
 would otherwise name a Secret key, in its tool servers' credentials
@@ -299,3 +300,9 @@ Seat's `spec.integrations.slack`. GitHub's Integration holds the webhook
 secret of the company-wide route and an optional organization token, and
 each agent seat is its own GitHub App, in `spec.integrations.github`.
 [Supplying credentials](credentials.md#an-agents-slack-app) shows both.
+
+## See also
+
+- [Supplying Credentials](credentials.md) — writing and rotating each Secret
+- [Exposure and Network Policy](exposure.md) — the public address vendors deliver to
+- [Crewlet's integrations](https://github.com/crewlet/crewlet/blob/main/docs/index.md#integrations) — what each one does once connected

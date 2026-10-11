@@ -1,10 +1,11 @@
-# Choosing a management policy
+# Choosing a Management Policy
 
-Crewlet's company document can be changed two ways: through the objects in
-Kubernetes, which the operator renders and applies, and live, through the
-engine's dashboard and API. `Company.spec.config.managementPolicy` says which
-of the two owns the document. This guide helps you choose, and shows how to
-move between policies. [How the document is applied](../concepts/applying.md#management-policies)
+A company document can be changed through the objects or live in the engine's
+dashboard; the management policy says which of the two owns it.
+
+`Company.spec.config.managementPolicy` sets it. This guide helps you choose,
+and shows how to move between policies.
+[How the document is applied](../concepts/applying.md#management-policies)
 describes exactly what each one writes and reports.
 
 | Policy | Who owns the document | Choose it when |
@@ -90,9 +91,9 @@ The Company reports `ConfigApplied=True Seeded`; every object reports
 `SecretsSynced` is `Unknown`. An engine that already had a document is never
 written to.
 
-Rotating a Secret is not applied under Seed either: rotate the credential
-through the engine's own secret store (`crewlet secrets set`, or the
-dashboard).
+> **Under Seed, rotate in the engine.** Rotating a Secret is not applied under
+> Seed either: rotate the credential through the engine's own secret store
+> (`crewlet secrets set`, or the dashboard).
 
 ## Seat pauses
 
@@ -112,9 +113,25 @@ only at start, so a switch to or from `Enforce` restarts the data pod: the
 operator writes the new `crewlet.yaml` into `<company>-bootstrap`, and the
 pod template's `crewlet.ai/bootstrap-hash` changes with it.
 
+```mermaid
+stateDiagram-v2
+    direction LR
+    Observe --> Enforce: applies the rendered document once
+    Seed --> Enforce: replaces the dashboard's changes
+    Enforce --> Observe: writes nothing more
+    Enforce --> Seed: writes nothing more
+    Observe --> Seed: writes once, if the engine has none
+    Seed --> Observe: compares and reports
+```
+
 | From → to | What happens | Data pod |
 |---|---|---|
 | `Observe` → `Enforce` | The rendered document is applied once, with its Secret values; anything the engine had that the objects do not say is replaced. From the restart on, the engine refuses other tokens' edits. | Restarts |
 | `Seed` → `Enforce` | The same: the dashboard's changes since seeding are replaced by the rendered document. Copy what you want to keep into the objects first; `Observe` first shows you the differences. | Restarts |
 | `Enforce` → `Observe` or `Seed` | Nothing is written. The engine keeps the last revision, the objects stop being applied, and from the restart on the dashboard and the access token may change the document again. | Restarts |
 | `Observe` ↔ `Seed` | What the operator writes changes as above; the engine's `crewlet.yaml` does not. | Keeps running |
+
+## See also
+
+- [How the Document Is Applied](../concepts/applying.md#management-policies) — exactly what each policy writes and reports
+- [Hosting Many Tenants on the Operator](multi-tenancy.md#who-owns-the-companys-document) — the policy a platform runs tenants under

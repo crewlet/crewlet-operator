@@ -1,10 +1,12 @@
-# Installing the operator
+# Installing the Operator
+
+Install the operator with its signed Helm chart, run the engine it was tested
+against, and decide the few values a production cluster needs.
 
 The operator ships as a Helm chart and an image, both signed, from every
 release ([RELEASING.md](../../RELEASING.md) shows how to verify them). This
-page installs it on a cluster you run companies on, and says which of the
-chart's values matter there. [Getting started](../getting-started.md) does
-the same on a laptop, from source.
+page installs it on a cluster you run companies on. The
+[Quickstart](../getting-started.md) does the same on a laptop, from source.
 
 ## Before you install
 
@@ -124,7 +126,7 @@ has moved on and that image is an hour old, which is usually minutes after
 the next push to Crewlet's `main`
 ([Images from main](https://github.com/crewlet/crewlet/blob/main/RELEASING.md#images-from-main)),
 so no digest of it can be pinned for long. To try the operator out, name the
-tag, as [Getting started](../getting-started.md) does. For anything longer,
+tag, as the [Quickstart](../getting-started.md) does. For anything longer,
 copy the image into a registry of your own while it is still `main`, both
 platforms with it, and name the copy by digest. `docker buildx imagetools
 create` copies the image index as it is, so the copy has the digest you
@@ -201,12 +203,12 @@ namespace label selector; a Company elsewhere reports `Accepted=False
 ClassNotAllowed`. Select by a label only the platform can set: a namespace's
 editors cannot change its labels, since Namespaces are cluster-scoped.
 
-The reverse holds too: **writing EngineClasses is as good as reading any
-Secret in the cluster.** A class may reference a Secret in any namespace
-(model keys, telemetry headers, env values), and the operator copies it into
-each of its companies' namespaces or engines, where the class's author can
-read it through a Company of their own. Grant the `engineclass-editor-role`
-helper only to whoever may read every Secret.
+> **Caution: writing EngineClasses is as good as reading any Secret in the
+> cluster.** A class may reference a Secret in any namespace (model keys,
+> telemetry headers, env values), and the operator copies it into each of its
+> companies' namespaces or engines, where the class's author can read it
+> through a Company of their own. Grant the `engineclass-editor-role` helper
+> only to whoever may read every Secret.
 
 ### A tenant provisioner
 
@@ -263,3 +265,9 @@ The operator is cluster-scoped: it reads the cluster-scoped EngineClasses and
 runs companies in every namespace, so it cannot run with a namespaced Role.
 The chart refuses `rbac.namespaced`. To keep tenants apart, give each its own
 namespace and isolate the engines with the class's network policy.
+
+## See also
+
+- [Quickstart](../getting-started.md) — the same on a laptop, from source
+- [Exposure and Network Policy](exposure.md) — routes and the isolation around each engine
+- [Hosting Many Tenants on the Operator](multi-tenancy.md) — the tenant provisioner role in use

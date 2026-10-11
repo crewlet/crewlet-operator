@@ -1,14 +1,29 @@
-# Supplying credentials
+# Supplying Credentials
 
-Every credential a company uses — a model provider's API key, an agent's
-Slack app, a tool server's token — is a key of a Kubernetes `Secret` that a
-field of the `crewlet.ai` API refers to. No field accepts the value itself.
-This guide shows how to supply each one, how to rotate it, and what to look
-at when one does not arrive.
-[Credentials](../concepts/credentials.md) is the complete reference: every
-credential position Crewlet has and the field that fills it.
+Every credential a company uses is a key of a Kubernetes Secret that a field
+refers to. This guide supplies each one, rotates it, and finds a missing one.
+
+No field accepts the value itself: a model provider's API key, an agent's
+Slack app and a tool server's token all come from Secrets.
+[Credential Positions](../concepts/credentials.md) is the complete reference:
+every credential position Crewlet has and the field that fills it.
 
 ## How a value reaches the engine
+
+```mermaid
+sequenceDiagram
+    participant Y as You or your control plane
+    participant K as Kubernetes API
+    participant O as Crewlet Operator
+    participant E as Engine
+    Y->>K: Secret anthropic, key apiKey
+    Y->>K: LLMProvider anthropic, apiKeySecretRefs
+    K-->>O: a change, seen as metadata only
+    O->>K: read the key's value
+    O->>E: PUT /secrets/K8S_ANTHROPIC_API_KEY_…
+    O->>E: the company document, naming that entry
+    Note over E: the document names the entry, the store holds the value
+```
 
 1. You write a Secret in the object's namespace. Who writes it does not
    matter to the operator: `kubectl`, External Secrets, a CSI driver's
@@ -20,9 +35,10 @@ credential position Crewlet has and the field that fills it.
    encrypted secret store, and writes only the entry's name into the company
    document as `${K8S_…}`.
 
-The value never appears in a pod, an environment variable, an annotation, a
-status, an event or a log line. The operator reads Secrets from the API
-server when it applies a document and does not keep them in its cache.
+> **The company document holds only the entry's name.** The value never
+> appears in a pod template, an environment variable, an annotation, a status,
+> an event or a log line. The operator reads Secrets from the API server when
+> it applies a document and does not keep them in its cache.
 
 A Secret must exist before the document that references it can be applied.
 Until it does, the next revision waits and the engine keeps running the last
@@ -216,7 +232,7 @@ spec:                       # Seat lead
 ```
 
 The engine rotates and heals it; the operator never writes, rewrites or
-deletes it. [Credentials](../concepts/credentials.md#credentials-the-engine-provisions)
+deletes it. [Credential Positions](../concepts/credentials.md#credentials-the-engine-provisions)
 says how it is named.
 
 ### A coding CLI's login
@@ -388,3 +404,9 @@ keyring that opens everything it did); removing one is not.
 | `Seat` `ResolvedRefs=False NoProvisioner` | The Seat names a provisioned credential, and no Integration of its company has `provisioning: Engine` to create it. The seat is applied, and its tool or chat app starts without the value until one does. |
 
 [Troubleshooting](troubleshooting.md) lists every condition.
+
+## See also
+
+- [Credential Positions](../concepts/credentials.md) — every position, and who can read a value
+- [Connecting Integrations](integrations.md) — each vendor's credentials
+- [Troubleshooting](troubleshooting.md) — `SecretNotFound` and the other reasons
