@@ -356,10 +356,11 @@ is wrong; the diff already shows what the code does. Diagrams are Mermaid.
 ### How the docs are published
 
 `docs/` is published twice: as it reads on GitHub, and on the documentation
-site at [docs.crewlet.ai/operator/](https://docs.crewlet.ai/operator/), beside
-the engine's documentation. The site renders the files as they are — write
-plain Markdown that reads correctly on GitHub, with relative links — and a few
-things follow from that:
+site at
+[docs.crewlet.ai/operator/latest/](https://docs.crewlet.ai/operator/latest/),
+beside the engine's documentation. The site renders the files as they are —
+write plain Markdown that reads correctly on GitHub, with relative links — and
+a few things follow from that:
 
 - **`docs/README.md` is the site's navigation.** Each `## ` section of it is a
   sidebar group, and each row of its tables whose first cell is a single link
@@ -373,9 +374,9 @@ things follow from that:
 - **Link the engine's documentation by its GitHub URL at `main`**, as
   `https://github.com/crewlet/crewlet/blob/main/docs/<page>.md#<heading>`.
   That is what works on GitHub, and the site turns it into its own page of the
-  engine's documentation. Link a page, not a directory
-  (`tree/main/docs/<dir>`): the site serves a directory only as its index
-  page, and most of the engine's have none. The engine's `docs/index.md`
+  engine's documentation for `main` (`/engine/next/`). Link a page, not a
+  directory (`tree/main/docs/<dir>`): the site serves a directory only as its
+  index page, and most of the engine's have none. The engine's `docs/index.md`
   lists each directory's pages under a heading, so
   `blob/main/docs/index.md#integrations` is the link for "the engine's
   integration pages".
@@ -384,10 +385,14 @@ things follow from that:
   a file outside it.
 - **Links outside `docs/`** (this file, `config/samples`, the chart) are links
   into this repository on the site, so a relative path is right for both.
-- **The site publishes `main` until the first release**, with a notice on
-  every page that there is no release yet. From the first `v*` tag on, the
-  newest release is the site's operator documentation and `main` moves under
-  `/operator/next/`.
+- **Every version has its own path.** `main` is always `/operator/next/`, the
+  newest release is `/operator/latest/`, and an older release line is
+  `/operator/vX.Y/`. Until the first `v*` tag only `main` is built, every page
+  carries a notice that there is no release yet, and `/operator/latest/…` and
+  `/operator/` redirect to `/operator/next/…`, so a `latest` link written today
+  names the release once there is one. Link the site at `/operator/latest/`;
+  the URLs the site used before this scheme (`/operator/<page>/`) are not
+  forwarded.
 
 `test/docs` holds the tree to all of it in `make test`: every page of `docs/`
 is listed exactly once in the index's tables, under a section, and every file
