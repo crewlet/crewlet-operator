@@ -10,7 +10,7 @@ metadata:
     crewlet.ai/is-default-class: "true"
 spec:
   engine:
-    # The engine image your platform runs: crewlet's main, which the operator
+    # The engine image your platform runs: Crewlet's main, which the operator
     # is tested against. GHCR keeps a main image only while it is main, so
     # past a trial copy it into your own registry and name the copy by
     # digest (docs/guides/installing.md, "Engine image").

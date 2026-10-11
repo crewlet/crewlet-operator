@@ -1,4 +1,4 @@
-# crewlet-operator — conventions for AI coding agents
+# Crewlet Operator — conventions for AI coding agents
 
 A Kubernetes operator (Kubebuilder v4, `go/v4` layout, controller-runtime)
 that runs [Crewlet](https://github.com/crewlet/crewlet) companies from
@@ -28,7 +28,7 @@ internal/controller/  reconcilers: two keyed by Company, the runtime one
                       (make gateway-api-crds)
 internal/engine/      typed client for the Crewlet engine's API (REST, and
                       the pause tools of its operator catalogue over MCP);
-  enginetest/         runs the real engine (bin/crewlet, crewlet's main) for
+  enginetest/         runs the real engine (bin/crewlet, Crewlet's main) for
                       a test, and reads its module source for a test that
                       holds a copied list or function to it
 internal/render/      pure render of the crewlet.ai objects into the company
@@ -56,7 +56,7 @@ test/chart/           envtest suite for the chart's RBAC and admission policies,
                       acting as the subjects they bind (needs bin/helm)
 test/e2e/             kind-based e2e suite (build tag e2e)
 test/envtestbin/      finds bin/k8s's newest test binaries for a run outside make
-test/enginecommit/    reads the crewlet commit an engine image was built from,
+test/enginecommit/    reads the Crewlet commit an engine image was built from,
                       for make crewlet
 scripts/              the DCO sign-off gate and its tests
 hack/                 generator configuration
@@ -74,7 +74,7 @@ modules.
 make check       # everything CI runs except e2e and the image: run it before every commit
 make test        # unit + envtest + engine + chart suites (both modules, -race)
 make lint        # golangci-lint, both modules
-make crewlet     # bin/crewlet at CREWLET_IMG's commit (crewlet's main), or at
+make crewlet     # bin/crewlet at CREWLET_IMG's commit (Crewlet's main), or at
                  # CREWLET_VERSION; prints it; a go test outside make needs it (or CREWLET_BIN)
 make helm        # bin/helm: test/chart outside make needs it (or HELM)
 make test-e2e    # kind cluster, Docker 28+; pulls the engine image too (make
@@ -161,10 +161,10 @@ ones put them (the k8s.io modules move in lockstep). CONTRIBUTING.md,
 "Latest versions", lists the pins Dependabot cannot see.
 
 The Crewlet engine is the one deliberate exception: never pinned. Every
-suite runs crewlet's `main` as `ghcr.io/crewlet/crewlet:main` publishes it
+suite runs Crewlet's `main` as `ghcr.io/crewlet/crewlet:main` publishes it
 (`CREWLET_MAIN_IMG`, `CREWLET_IMG`'s default; `make crewlet` installs the
 commit it was built from), because the operator is tested against what
-crewlet ships next: a crewlet change that breaks it fails the operator's
+Crewlet ships next: a Crewlet change that breaks it fails the operator's
 next run (ADR-0002). `CREWLET_VERSION` runs another engine, to
 reproduce a run whose log names it. A release keeps the engine it was tested
 against (`ghcr.io/crewlet/crewlet-operator/engine:<version>`, RELEASING.md).

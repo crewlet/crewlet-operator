@@ -13,7 +13,7 @@ The CLI is a program the engine starts, in the engine's own container, and
 Crewlet's image ships none: its Dockerfile leaves every runtime a CLI needs
 (Node.js for most of them) to a derived image. Build one from the engine
 image you run, named by digest: the engine of the operator's release, or
-the copy of crewlet's `main` image that
+the copy of Crewlet's `main` image that
 [Installing](installing.md#engine-image) makes in your registry. Pin both
 the engine and the CLI:
 
@@ -64,7 +64,7 @@ takes none and signs in with that key in `cli.env`:
 | `auth.mode: APIKey` with one `apiKeySecretRefs` key | the CLI's metered API key | the CLI's Crewlet profile names a key variable ([below](#a-metered-key)) |
 | `env`, with `auth.mode: Subscription` | the key of the model provider the CLI runs on, in the variable the CLI reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the CLI is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
 
-What each CLI takes, in the engine the operator is tested against, crewlet's
+What each CLI takes, in the engine the operator is tested against, Crewlet's
 `main` (Crewlet's profiles name the variables; a test holds the API's rules and this
 table to that engine's own verdict on every CLI and every sign-in, so neither
 can fall behind it):
@@ -195,7 +195,7 @@ drive the same CLI, or the engine refuses the document.
 
 `auth.mode: APIKey` gives the CLI the provider's one `apiKeySecretRefs` key
 instead, billing the metered account. Crewlet hands the key over in the
-variable the CLI's profile names, and in crewlet's `main` eight name one
+variable the CLI's profile names, and in Crewlet's `main` eight name one
 (the table above); for the others the key would reach nothing, so the engine
 refuses the mode for them and the API server refuses it first. Hermes,
 Pi and OpenCode take their model provider's key in `env` instead, and

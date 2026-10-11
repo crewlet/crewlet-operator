@@ -1,6 +1,6 @@
 # Releasing
 
-Maintainer runbook for publishing crewlet-operator. Releases are driven by
+Maintainer runbook for publishing the Crewlet Operator. Releases are driven by
 tags, and there are two kinds:
 
 | Tag | Releases | How |
@@ -16,8 +16,8 @@ nothing for a tag to disagree with: **the tag is the version.**
 ```mermaid
 flowchart TD
     T["git push origin v0.2.0"] --> E
-    E["engine<br/>ghcr.io/crewlet/crewlet:main resolved to a digest<br/>crewlet's signature checked<br/>copied to ghcr.io/crewlet/crewlet-operator/engine<br/>tagged with its crewlet commit"] --> G
-    G["gate<br/>the tagged commit is on main<br/>make check passes on it, against that crewlet commit"] --> I
+    E["engine<br/>ghcr.io/crewlet/crewlet:main resolved to a digest<br/>Crewlet's signature checked<br/>copied to ghcr.io/crewlet/crewlet-operator/engine<br/>tagged with its Crewlet commit"] --> G
+    G["gate<br/>the tagged commit is on main<br/>make check passes on it, against that Crewlet commit"] --> I
     I["image<br/>buildx: linux/amd64 + linux/arm64<br/>ghcr.io/crewlet/crewlet-operator:v0.2.0, :v0.2, :latest"] --> S
     S["sign + attest<br/>cosign keyless signature<br/>GitHub build-provenance attestation<br/>the engine tagged v0.2.0 and signed"] --> C
     C["chart<br/>helm package --version 0.2.0 --app-version v0.2.0<br/>push to oci://ghcr.io/crewlet/charts, sign"] --> R
@@ -32,7 +32,7 @@ What a release publishes:
   `latest`. It carries an SBOM, a keyless cosign signature and a
   GitHub build-provenance attestation, all bound to the manifest digest.
 - **The engine image** the release was tested against,
-  `ghcr.io/crewlet/crewlet-operator/engine:vX.Y.Z`: crewlet's `main` image
+  `ghcr.io/crewlet/crewlet-operator/engine:vX.Y.Z`: Crewlet's `main` image
   as the `gate` job tested it, copied whole (both platforms, the same
   digest) and signed by this workflow like the operator's image. The
   operator runs no engine of its own, so this is what an installer names in
@@ -47,7 +47,7 @@ What a release publishes:
 - **The GitHub Release**, with notes GitHub generates from the titles of the
   pull requests merged since the previous tag (sorted by
   [`.github/release.yml`](.github/release.yml)) after a line naming the
-  engine image by tag and digest and the crewlet commit it was built from,
+  engine image by tag and digest and the Crewlet commit it was built from,
   and `install.yaml`: the kustomize-rendered CRDs and manager, with the image
   pinned by digest.
 
@@ -55,23 +55,23 @@ A tag with a pre-release suffix (`v0.2.0-rc.1`) is published as a GitHub
 pre-release and does not move `latest`.
 
 The first job, `engine`, keeps the engine the release is tested against.
-Every suite runs crewlet's `main` image (ADR-0002), a tag that moves with
-every build of crewlet's `main`, and GHCR deletes the image it named once
+Every suite runs Crewlet's `main` image (ADR-0002), a tag that moves with
+every build of Crewlet's `main`, and GHCR deletes the image it named once
 `main` has moved and that image is an hour old, often minutes after the
 move ([Images from main](https://github.com/crewlet/crewlet/blob/main/RELEASING.md#images-from-main)):
 sooner than the gate takes, and long before anybody installs the release.
-So the job resolves the tag to one digest, checks crewlet's signature on it
+So the job resolves the tag to one digest, checks Crewlet's signature on it
 for the commit its label names, and copies it by that digest into
 `ghcr.io/crewlet/crewlet-operator/engine`, tagged with that commit, before
-anything is tested. The copy names a crewlet commit and nothing about the
+anything is tested. The copy names a Crewlet commit and nothing about the
 release, so one a failed release leaves behind claims nothing.
 
 The second job, `gate`, publishes nothing: it fails the release unless the
 tagged commit is an ancestor of `main` and `make check` passes on it, against
-the crewlet commit the `engine` job kept (`CREWLET_VERSION`). A tag on an
+the Crewlet commit the `engine` job kept (`CREWLET_VERSION`). A tag on an
 unmerged branch, or on a commit that broke since it merged, releases nothing,
-so a mistaken tag costs only its deletion. A tag pushed while crewlet's
-`main` breaks the operator releases nothing either. Once crewlet's `main` is
+so a mistaken tag costs only its deletion. A tag pushed while Crewlet's
+`main` breaks the operator releases nothing either. Once Crewlet's `main` is
 fixed, re-run all of the release's jobs, so that the `engine` job reads
 `main` again (re-running the failed `gate` alone tests the same engine); if
 the operator needed the fix instead, delete the tag and tag the commit that

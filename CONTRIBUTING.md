@@ -1,4 +1,4 @@
-# Contributing to crewlet-operator
+# Contributing to the Crewlet Operator
 
 Thanks for your interest in contributing. This document covers getting a
 development environment running, the rules a change has to follow, and how to
@@ -15,7 +15,7 @@ kind, kubectl, helm, kubebuilder and crd-ref-docs — is pinned in the
 [`Makefile`](Makefile) and installed into `bin/` the first time a target needs
 it, so your machine's copies never stand in for them. The Crewlet engine is
 installed there too, and is the one thing not pinned: every suite runs
-crewlet's `main` ([The engine suite](#the-engine-suite)).
+Crewlet's `main` ([The engine suite](#the-engine-suite)).
 
 ```bash
 git clone https://github.com/crewlet/crewlet-operator.git
@@ -101,10 +101,10 @@ Two more suites are not part of `make check`:
   deletes the cluster, unless the suite failed: the cluster is left for a
   look, and `make cleanup-test-e2e` deletes it. CI runs it on every pull
   request and every push to `main`. The engine image is `CREWLET_IMG`,
-  crewlet's `main` image unless you name another, which `make crewlet-image`
-  pulls for this machine's platform, printing the crewlet commit it was
+  Crewlet's `main` image unless you name another, which `make crewlet-image`
+  pulls for this machine's platform, printing the Crewlet commit it was
   built from; another image Docker already has is run as it is. So an
-  engine built from a crewlet checkout runs too: in it, `make image-context
+  engine built from a Crewlet checkout runs too: in it, `make image-context
   VERSION=main-dev`, then `docker buildx build --platform linux/$(go env
   GOARCH) --load --label org.opencontainers.image.revision="$(git rev-parse
   HEAD)" -t crewlet:dev -f Dockerfile build/image`, and here `make test-e2e
@@ -161,7 +161,7 @@ a launch, which no engine test reaches, so `TestMirroredEngineFunctionsAreUnchan
 holds their code: [`internal/render/mirror_test.go`](internal/render/mirror_test.go)
 names every engine function whose decision the operator copies at a launch —
 `newCodingRun`, `claudeCodeOnForeignEntry`, `sandboxCredentials` and the
-launch, catalogue and helpers around them in crewlet's
+launch, catalogue and helpers around them in Crewlet's
 `internal/engine/sandbox.go`, `internal/sandbox/manager.go` and the CLI
 provider, and config's write-time twins of two of them in
 `internal/config/company.go` — with every operator file that copies it and
@@ -233,28 +233,28 @@ one; `TestExecutorFollowsTheEngineSource` holds the variable the operator
 sets to the engine's, and `TestContractAgentModeIsAppliedWhereItCannotRun`
 holds the documents to the engine, and `TestMirroredEngineFunctionsAreUnchanged`
 holds the code that runs a turn in agent mode and refuses it on a node with no
-tool bridge (`executorRuntime`, `executorRun` and `LaunchExecutor` in crewlet's
+tool bridge (`executorRuntime`, `executorRun` and `LaunchExecutor` in Crewlet's
 `internal/engine/agentrun.go`, `Build` in `internal/api/mcpbridge/build.go`)
 to the code `internal/render/executor.go` and the head of a seat's executor
 chain in `internal/render/seatpod_providers.go` were read against.
 
 The engine is the one thing in the Makefile that is not pinned. Every suite
-runs crewlet's `main`, as crewlet publishes it at
+runs Crewlet's `main`, as Crewlet publishes it at
 `ghcr.io/crewlet/crewlet:main` (`CREWLET_MAIN_IMG`, which `CREWLET_IMG`
 defaults to), because the operator is
-written against what crewlet ships next and is told the day crewlet breaks it
+written against what Crewlet ships next and is told the day Crewlet breaks it
 ([ADR-0002](adr/0002-test-against-crewlet-main-and-fail-without-it.md)).
 `make crewlet` (which `make test` runs first) reads the commit that image was
 built from out of its `org.opencontainers.image.revision` label, with
-`test/enginecommit`, and installs the crewlet module at that commit into
+`test/enginecommit`, and installs the Crewlet module at that commit into
 `bin/crewlet`, printing both: the e2e suite runs the image, and every other
 suite the same commit. It never installs the module proxy's `@main`, which
-runs ahead of the image: crewlet builds the image minutes after a merge, and
+runs ahead of the image: Crewlet builds the image minutes after a merge, and
 not at all for a merge that starts no workflow or whose build fails. To run
 another engine, such as the one a failed run's log names, set
 `CREWLET_VERSION` to its commit or module version:
-`make test CREWLET_VERSION=a20ed7519ba7`. A branch of crewlet's repository
-works too, which is how a crewlet change is tried against the operator
+`make test CREWLET_VERSION=a20ed7519ba7`. A branch of Crewlet's repository
+works too, which is how a Crewlet change is tried against the operator
 before it merges (and `CREWLET_IMG`, above, for the e2e suite). To run these
 tests outside make — from an IDE, or with a plain `go test ./internal/render`
 or `go test ./test/crd` — install it once with `make crewlet`, or point
@@ -263,10 +263,10 @@ or `go test ./test/crd` — install it once with `make crewlet`, or point
 contract test reads as a passing one. When a test fails, the engine's log is
 printed with it.
 
-So the operator's CI can fail with no change to the operator: a crewlet
+So the operator's CI can fail with no change to the operator: a Crewlet
 change broke it, or exposed something the operator had wrong. That shows on
 the operator's next pull request or push to `main`, and the failed job's log
-names the crewlet commit it ran.
+names the Crewlet commit it ran.
 
 ## Generated files
 
@@ -391,7 +391,7 @@ commit:
 | Pin | Where | Newest from |
 |---|---|---|
 | tool versions (`*_VERSION`) | `Makefile` | the Go module proxy, or the project's releases |
-| the Crewlet engine (`CREWLET_MAIN_IMG`) | `Makefile` | not a pin: crewlet's `main` image, whose commit `make crewlet` reads at every run ([The engine suite](#the-engine-suite)); a release keeps the one it was tested against ([RELEASING.md](RELEASING.md)) |
+| the Crewlet engine (`CREWLET_MAIN_IMG`) | `Makefile` | not a pin: Crewlet's `main` image, whose commit `make crewlet` reads at every run ([The engine suite](#the-engine-suite)); a release keeps the one it was tested against ([RELEASING.md](RELEASING.md)) |
 | `ENVTEST_K8S_VERSION` | `Makefile` | `bin/setup-envtest list` |
 | golangci-lint and its plugins | `.custom-gcl.yml` (version must equal `GOLANGCI_LINT_VERSION`) | the Go module proxy |
 | the curl image | `test/e2e/e2e_test.go` | Docker Hub |
@@ -456,14 +456,14 @@ is listed exactly once in the index's tables, under a section, and every file
 there is a regular one; every relative link and image
 names a file that exists, every `#anchor` names a heading its target renders
 (by GitHub's slug rule, which the site's renderer shares), and every link into
-the engine's repository names a file and heading of crewlet's `main`, the
-engine every suite runs, so a crewlet change that renames a page fails the
+the engine's repository names a file and heading of Crewlet's `main`, the
+engine every suite runs, so a Crewlet change that renames a page fails the
 next run. An
 absolute `https://docs.crewlet.ai` link, in any text file of the module (the
 chart's `NOTES.txt` and the Go included, not the Markdown alone), must name
 what the site builds: under a product and a version, a page with its trailing
 slash, and for `latest/` or `next/` a page this tree has, or under `/engine/`
-a page, schema or skill file of crewlet's `main`.
+a page, schema or skill file of Crewlet's `main`.
 
 The site rebuilds when `.github/workflows/docs-publish.yml` asks it to: after
 a push to `main` that touches `docs/`, after a release, or when run by hand

@@ -296,7 +296,7 @@ CLI reads, as Crewlet's own admission does (providers.llm.*.cli): the
 engine refuses a write that names a credential its CLI would never be
 given, so the API refuses it on the object instead. The lists of CLIs the
 rules name are those whose profiles set token_env, api_key_env or
-env_sign_in in the engine the operator is tested against, crewlet's main;
+env_sign_in in the engine the operator is tested against, Crewlet's main;
 a test holds them to that engine's own verdict.
 
 Mode Agent runs the CLIs Crewlet has a sandbox runner for, ClaudeCode and
@@ -361,7 +361,7 @@ whether it takes a sampling parameter, its output cap). An Anthropic
 provider whose model is a gateway alias names the row it is an alias of.
 Crewlet refuses on every write a claude_model its table does not list,
 exactly as written, so the values are the table's ids in the engine the
-operator is tested against, crewlet's main; a test holds them to that
+operator is tested against, Crewlet's main; a test holds them to that
 engine's refusal.
 
 _Validation:_

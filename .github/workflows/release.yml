@@ -94,7 +94,7 @@ jobs:
             echo "::error::the copy of ${repository}@${digest} is ${copied}"
             exit 1
           fi
-          echo "Crewlet engine: crewlet commit ${commit}, ${repository}@${digest}, kept as ${ENGINE_IMAGE}:${commit}"
+          echo "Crewlet engine: Crewlet commit ${commit}, ${repository}@${digest}, kept as ${ENGINE_IMAGE}:${commit}"
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
           echo "commit=${commit}" >> "$GITHUB_OUTPUT"
 
@@ -306,7 +306,7 @@ jobs:
           set -euo pipefail
           prerelease=()
           case "$GITHUB_REF_NAME" in *-*) prerelease=(--prerelease) ;; esac
-          engine="**Engine:** \`${ENGINE_IMAGE}:${GITHUB_REF_NAME}\` (\`${ENGINE_IMAGE}@${ENGINE_DIGEST}\`), crewlet's main at"
+          engine="**Engine:** \`${ENGINE_IMAGE}:${GITHUB_REF_NAME}\` (\`${ENGINE_IMAGE}@${ENGINE_DIGEST}\`), Crewlet's main at"
           engine+=" [${ENGINE_COMMIT:0:12}](https://github.com/crewlet/crewlet/commit/${ENGINE_COMMIT}), the engine this release"
           engine+=" was tested against: name it in an EngineClass's \`spec.engine.image\`"
           engine+=" ([Engine image](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/docs/guides/installing.md#engine-image))."

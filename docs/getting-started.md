@@ -27,7 +27,7 @@ in production; see
 
 The operator has no release yet, so its image is built from this checkout
 and loaded into the kind node; nothing is pushed to a registry. The engine's
-image needs nothing built: it is crewlet's `main`, which crewlet publishes
+image needs nothing built: it is Crewlet's `main`, which Crewlet publishes
 as `ghcr.io/crewlet/crewlet:main` and the operator is tested against, and
 the node pulls it when the first company starts
 ([Engine image](guides/installing.md#engine-image)).
@@ -60,7 +60,7 @@ bin/kubectl api-resources --api-group=crewlet.ai
 
 An `EngineClass` is a platform's defaults and limits: the engine image, the
 size of each company's data pod, and how companies are reached. This one runs
-crewlet's `main` image, exposes no webhooks (kind has no public address), and
+Crewlet's `main` image, exposes no webhooks (kind has no public address), and
 gives each company the smallest data volume the API admits. The engine reserves three
 quarters of that volume for its event stream, and kind's provisioner puts it
 on the node's disk without enforcing the size: the Docker host needs about

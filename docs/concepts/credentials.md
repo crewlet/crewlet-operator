@@ -14,7 +14,7 @@ written from `roles[]` wherever the chart puts the seat, and a unit's from
 
 The tables below are made from one table in the operator's tests
 (`internal/render/credentials_table_test.go`), and a test holds that table to
-the marks of the engine the operator is tested against, crewlet's `main`, in
+the marks of the engine the operator is tested against, Crewlet's `main`, in
 both directions: a credential position Crewlet adds fails the operator's build
 until it is covered (or listed as not offered, with the reason), and so does
 a row for a position Crewlet no longer marks. Another holds the rule on a Company's

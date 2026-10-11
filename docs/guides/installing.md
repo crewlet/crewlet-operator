@@ -70,9 +70,9 @@ deleting a CRD deletes every company declared with it.
 ### Engine image
 
 Each EngineClass names the engine image its companies run
-(`spec.engine.image`). The operator is tested against crewlet's `main`, as
-crewlet publishes it at `ghcr.io/crewlet/crewlet:main`: every test suite runs
-that image, or the crewlet commit it was built from, so the operator writes
+(`spec.engine.image`). The operator is tested against Crewlet's `main`, as
+Crewlet publishes it at `ghcr.io/crewlet/crewlet:main`: every test suite runs
+that image, or the Crewlet commit it was built from, so the operator writes
 the data pod's `crewlet.yaml` in the settings of the engine `main` runs, and
 an engine refuses at start a setting it does not know. Crewlet builds the
 image after a push to its `main`, for the newest commit (a merge that starts
@@ -84,7 +84,7 @@ linux/amd64 and linux/arm64, labels it with the commit
 against. Each release copies the image its tests ran into
 `ghcr.io/crewlet/crewlet-operator/engine`, under the release's version, and
 signs the copy from its own workflow, as it signs the operator's image; the
-release's notes name it by tag and digest, with the crewlet commit it was
+release's notes name it by tag and digest, with the Crewlet commit it was
 built from:
 
 ```bash
@@ -106,10 +106,10 @@ is refused with `DowngradeRefused`, since the engine migrates its data
 forward only ([Changes, versions and
 suspension](../concepts/runtime.md#changes-versions-and-suspension)).
 
-**With an operator built from a commit of this repository**, run crewlet's
+**With an operator built from a commit of this repository**, run Crewlet's
 `main` image, which that commit's CI tested on the day it ran. Check its
 signature with cosign 3, or with cosign 2 and `--new-bundle-format`, since
-crewlet signs it in cosign 3's bundle format. `main` moves at a push and is
+Crewlet signs it in cosign 3's bundle format. `main` moves at a push and is
 signed a moment later, so a check right after a push can fail until the
 signature lands; try again a minute later.
 
@@ -121,14 +121,14 @@ cosign verify ghcr.io/crewlet/crewlet:main \
 
 `main` is a tag that moves, and GHCR deletes the image it named once `main`
 has moved on and that image is an hour old, which is usually minutes after
-the next push to crewlet's `main`
+the next push to Crewlet's `main`
 ([Images from main](https://github.com/crewlet/crewlet/blob/main/RELEASING.md#images-from-main)),
 so no digest of it can be pinned for long. To try the operator out, name the
 tag, as [Getting started](../getting-started.md) does. For anything longer,
 copy the image into a registry of your own while it is still `main`, both
 platforms with it, and name the copy by digest. `docker buildx imagetools
 create` copies the image index as it is, so the copy has the digest you
-verified. It does not copy crewlet's signature, which stays in GHCR with the
+verified. It does not copy Crewlet's signature, which stays in GHCR with the
 original and goes when GHCR deletes it, so verify the image before you copy
 it, as here:
 
@@ -154,7 +154,7 @@ Move the engine when you move the operator: an operator built from a commit
 of this repository was tested against the `main` of the day its CI ran,
 which the CI jobs' logs name (the `Crewlet engine:` lines). An image named by
 digest, by `main` or by a commit is no semantic version, so the operator
-cannot tell an older crewlet commit from a newer one, and `DowngradeRefused`
+cannot tell an older Crewlet commit from a newer one, and `DowngradeRefused`
 never protects a class that names one: never point such a class at an older
 commit than its companies have run. To go back, restore the data volume from
 a backup taken before the newer engine first ran on it.

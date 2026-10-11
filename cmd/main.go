@@ -1,4 +1,4 @@
-// Command manager runs the crewlet-operator: the controllers that turn
+// Command manager runs the Crewlet Operator: the controllers that turn
 // crewlet.ai resources into running Crewlet engines.
 package main
 

@@ -51,7 +51,7 @@ an individual is officially representing the community in public spaces.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the maintainers of crewlet-operator privately, through GitHub's
+reported to the maintainers of the Crewlet Operator privately, through GitHub's
 "Report content" tooling on the
 [repository](https://github.com/crewlet/crewlet-operator) or the comment,
 issue or pull request concerned, or by contacting a maintainer directly. All

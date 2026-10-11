@@ -10,7 +10,7 @@ labels: bug
 
 ## Environment
 
-- crewlet-operator version (image tag or commit):
+- Crewlet Operator version (image tag or commit):
 - How it was installed (Helm chart, install.yaml, `make deploy`):
 - Kubernetes version and distribution (`kubectl version`):
 - Crewlet engine image, if the problem involves an engine:

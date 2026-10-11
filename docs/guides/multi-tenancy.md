@@ -13,7 +13,7 @@ sequenceDiagram
     participant P as The company's people
     participant CP as Control plane
     participant K as Kubernetes API
-    participant O as crewlet-operator
+    participant O as Crewlet Operator
     participant E as Engine
     P->>CP: a new company, on a tier
     CP->>K: Namespace, Company, Units, Seats, LLMProviders (server-side apply)

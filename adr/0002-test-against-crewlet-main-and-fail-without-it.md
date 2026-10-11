@@ -1,4 +1,4 @@
-# ADR-0002 — Test against the real engine, at crewlet's main, and fail without it
+# ADR-0002 — Test against the real engine, at Crewlet's main, and fail without it
 
 - **Status:** accepted
 - **Authority:** `internal/engine/enginetest` — the package doc
@@ -29,13 +29,13 @@ workflow and labelled with the commit it was built from
 ## Decision
 
 Every test of what the engine accepts or does runs the real engine, and the
-engine is crewlet's `main` as that image publishes it, never a pin of it.
+engine is Crewlet's `main` as that image publishes it, never a pin of it.
 The e2e suite runs the image (the Makefile's `CREWLET_IMG`, whose default is
 `CREWLET_MAIN_IMG`, pulled and loaded into kind by `make crewlet-image`).
-Every other suite runs the crewlet binary `make crewlet` installs from the
-crewlet module at the commit the image was built from, which
+Every other suite runs the Crewlet binary `make crewlet` installs from the
+Crewlet module at the commit the image was built from, which
 `test/enginecommit` reads from the image's label in its registry; never at
-the module proxy's `@main`, which runs ahead of the image, since crewlet
+the module proxy's `@main`, which runs ahead of the image, since Crewlet
 builds it minutes after a merge and not at all for a merge that starts no
 workflow or whose build fails. Those suites reach it
 through `internal/engine/enginetest`: `crewlet validate` for rendered
@@ -50,13 +50,13 @@ that installs it; it never skips. Fakes stay for what the engine cannot be
 made to do on demand (a refusal of a given shape, a proxy in front of it), in
 the engine client's own unit tests. CI runs the suites on every pull request
 and every push to main. `CREWLET_VERSION` names another engine
-for `make crewlet` (a crewlet commit or module version), to run one again,
+for `make crewlet` (a Crewlet commit or module version), to run one again,
 and `CREWLET_IMG` names another image for the e2e suite: one the container
-tool already has, such as an image built from a crewlet checkout, is run as
+tool already has, such as an image built from a Crewlet checkout, is run as
 it is, not pulled.
 
 A release of the operator keeps the engine it was tested against: its
-workflow copies crewlet's `main` image, by the digest it resolved, into
+workflow copies Crewlet's `main` image, by the digest it resolved, into
 `ghcr.io/crewlet/crewlet-operator/engine` before its gate tests that
 commit, and once the gate passes tags the copy with the release's version
 and signs it. The release names it, and installers run it.
@@ -64,10 +64,10 @@ and signs it. The release names it, and installers run it.
 ## Consequences
 
 The operator's CI can turn red with no change to the operator, and that is
-the point: a crewlet change that breaks the operator fails the operator's
+the point: a Crewlet change that breaks the operator fails the operator's
 next run, rather than the pull request that
 eventually moves a pin over it and a dozen other changes. The fix goes where
-the fault is, in the operator when crewlet's change is right and in crewlet
+the fault is, in the operator when Crewlet's change is right and in Crewlet
 when it is not.
 
 A run is reproduced only by naming its engine. Every job that runs one logs
@@ -79,7 +79,7 @@ old, usually minutes after the next push
 ([Images from main](https://github.com/crewlet/crewlet/blob/main/RELEASING.md#images-from-main)).
 So an e2e run of an older commit is repeated from a copy somebody made of
 its image while it was `main`, from a release's engine image, or from an
-image built from crewlet's source at the commit (crewlet's `make
+image built from Crewlet's source at the commit (Crewlet's `make
 image-context`, then `docker buildx build --load`), named as `CREWLET_IMG`.
 The test and e2e jobs each read `main` when they start, so a run in which
 `main` moved between them tests two commits, each named in its own job's

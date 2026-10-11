@@ -325,9 +325,9 @@ the newest of the two is refused with `RuntimeReady=False`, reason
 `DowngradeRefused`; the pod keeps running the newer image, and every other
 change still applies. A version that never became ready is never recorded, so
 a rollout that failed can be taken back. Tags that are not versions
-(`latest`, crewlet's `main`, a commit) are not compared, and neither is an
+(`latest`, Crewlet's `main`, a commit) are not compared, and neither is an
 image named by digest alone, so nothing refuses a move back to an older
-commit of crewlet's `main`: a platform that runs one keeps its classes
+commit of Crewlet's `main`: a platform that runs one keeps its classes
 moving forward, or tags its copies with versions
 ([Engine image](../guides/installing.md#engine-image)).
 `spec.runtime.version` on a class without `allowVersionOverride` is refused

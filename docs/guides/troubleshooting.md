@@ -172,19 +172,19 @@ kubectl logs acme-data-0 -n acme | grep -E 'WARN|ERROR' | tail
 - **The pod restarts, and the previous log ends in `unknown field: "…" is
   not a setting`**, such as `api.auth.company_writers: unknown field:
   "company_writers" is not a setting`: the engine and the operator come from
-  different points of crewlet's `main`. The operator writes the pod's
+  different points of Crewlet's `main`. The operator writes the pod's
   `crewlet.yaml` in the settings of the engine it was tested against, and
   this engine refuses one of them: it is older than that engine and does not
-  know the setting yet, or newer, and crewlet has renamed or removed it
+  know the setting yet, or newer, and Crewlet has renamed or removed it
   since. The image the pod runs is the class's `engine.image`, with the
   Company's `spec.runtime.version` as its tag when that is set. Run the
   engine the operator was tested against
   ([Engine image](installing.md#engine-image)): with a release of the
   operator, the engine image its notes name; with an operator built from a
-  commit of this repository, a copy of crewlet's `main` image of the day that
-  commit's CI ran, whose log names the crewlet commit. A class that names
+  commit of this repository, a copy of Crewlet's `main` image of the day that
+  commit's CI ran, whose log names the Crewlet commit. A class that names
   `ghcr.io/crewlet/crewlet:main` itself runs an engine newer than an
-  operator built before crewlet's change: build the operator from this
+  operator built before Crewlet's change: build the operator from this
   repository's newest `main` instead, or move the class to the engine the
   operator was tested against. The data pod rolls to the image and starts.
 - **`Pending`**: the volume claim is not bound (no default StorageClass, or
@@ -219,7 +219,7 @@ A seat pod restarted every six minutes, its events saying `Startup probe
 failed` with `connection refused` while its log shows it running, binds no
 port for its probes: the engine it runs (the class's `engine.image`, with the
 Company's `spec.runtime.version` as its tag when that is set) and the
-operator come from different points of crewlet's `main`, older or newer than
+operator come from different points of Crewlet's `main`, older or newer than
 the engine the operator was tested against. Run that engine, as for a data
 pod that refuses a setting
 ([The data pod is not ready](#the-data-pod-is-not-ready)).

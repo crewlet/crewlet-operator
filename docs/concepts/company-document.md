@@ -350,4 +350,4 @@ on the object when it turns so. The table in `internal/render/basis_test.go`
 classifies every place the render finds one, `TestTheDocsStateTheBases`
 holds this page's table and list to it, and the engine's contract tests hold
 each held for the engine's sake, and each reported one, to the engine the
-operator is tested against, crewlet's `main`.
+operator is tested against, Crewlet's `main`.

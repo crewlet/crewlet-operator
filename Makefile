@@ -229,7 +229,7 @@ docker-build: ## Build the manager image for the local platform.
 # from is printed from the image's own label, so the log names the engine the
 # suite ran.
 .PHONY: crewlet-image
-crewlet-image: ## Pull the Crewlet engine image CREWLET_IMG for this platform, unless it is another image already here, and print its crewlet commit.
+crewlet-image: ## Pull the Crewlet engine image CREWLET_IMG for this platform, unless it is another image already here, and print its Crewlet commit.
 	@set -e; \
 	if [ "$(CREWLET_IMG)" != "$(CREWLET_MAIN_IMG)" ] && "$(CONTAINER_TOOL)" image inspect "$(CREWLET_IMG)" >/dev/null 2>&1; then \
 		echo "Crewlet engine image: $(CREWLET_IMG) is here already, not pulled"; \
@@ -239,7 +239,7 @@ crewlet-image: ## Pull the Crewlet engine image CREWLET_IMG for this platform, u
 	fi; \
 	commit="$$("$(CONTAINER_TOOL)" image inspect \
 		--format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$(CREWLET_IMG)")"; \
-	echo "Crewlet engine image: $(CREWLET_IMG), built from crewlet commit $${commit:-unknown (it has no org.opencontainers.image.revision label)}"
+	echo "Crewlet engine image: $(CREWLET_IMG), built from Crewlet commit $${commit:-unknown (it has no org.opencontainers.image.revision label)}"
 
 .PHONY: docker-push
 docker-push: ## Push the manager image.

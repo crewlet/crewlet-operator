@@ -1,4 +1,4 @@
-# crewlet-operator
+# Crewlet Operator
 
 A Kubernetes operator for [Crewlet](https://github.com/crewlet/crewlet), the
 AI agent company engine. It makes a Crewlet company a native Kubernetes
@@ -17,7 +17,7 @@ keeps the engine's live configuration equal to what the resources say.
 > Services, webhook routes and network policy), applies its company
 > document, with the Secret values it references, as its management policy
 > says, and cleans up after it as its deletion policy says. The e2e suite
-> proves that on kind against crewlet's `main`, as crewlet publishes it at
+> proves that on kind against Crewlet's `main`, as Crewlet publishes it at
 > `ghcr.io/crewlet/crewlet:main`, which every test suite runs. It runs one
 > data pod per company, and the seat pools a company declares as stateless
 > pods beside it, Shared or one pod per seat, and reports on each Seat which
@@ -52,7 +52,7 @@ flowchart LR
     platform["Platform admin"] -- EngineClass --> kapi[("Kubernetes API")]
     users["kubectl, GitOps,<br/>or a tenant control plane"] -- "Company, Unit, Seat,<br/>LLMProvider, MCPServer,<br/>Integration, Schedule" --> kapi
     users -- Secrets --> kapi
-    kapi --> operator["crewlet-operator"]
+    kapi --> operator["Crewlet Operator"]
     operator -- "StatefulSet, Services, routes,<br/>keyring, NetworkPolicy" --> engine["Crewlet engine<br/>(one per Company)"]
     operator -- "company document,<br/>applied whole" --> engine
     operator -- "referenced secret values" --> engine
@@ -74,7 +74,7 @@ flowchart LR
 ## Running it locally
 
 On a throwaway kind cluster, with the operator's image built from source and
-loaded into the cluster; the engine is crewlet's `main` image, which the
+loaded into the cluster; the engine is Crewlet's `main` image, which the
 node pulls itself:
 
 ```bash

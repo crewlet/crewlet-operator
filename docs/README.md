@@ -1,4 +1,4 @@
-# crewlet-operator documentation
+# Crewlet Operator Documentation
 
 The operator is in alpha and its `crewlet.ai/v1alpha1` API is still changing,
 so these pages describe what exists today and grow with it.
