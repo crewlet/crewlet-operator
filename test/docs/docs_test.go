@@ -1,15 +1,16 @@
 package docs
 
 // The documentation is published twice: as it reads on GitHub, and on the
-// documentation site, which renders docs/ with docs/README.md's tables as its
-// navigation and fails its own build on a page the index does not list. These
-// tests hold the tree to both before either can break: every page is in the
-// index, every relative link names a file that exists, every #anchor names a
-// heading its target renders, every link into the engine's repository names
-// a file and heading of the engine every suite runs, and every absolute link into
-// the documentation site names a page it builds. A broken link fails here, in
-// this repository's own CI, rather than on GitHub where nobody is told or on
-// the site where the build that notices is not this repository's.
+// documentation site, which reads docs/README.md's lists as its navigation,
+// renders them as cards on the index page, and fails its own build on a page
+// the index does not list. These tests hold the tree to both before either can
+// break: every page is in the index, as a card, every relative link names a
+// file that exists, every #anchor names a heading its target renders, every
+// link into the engine's repository names a file and heading of the engine
+// every suite runs, and every absolute link into the documentation site names
+// a page it builds. A broken link fails here, in this repository's own CI,
+// rather than on GitHub where nobody is told or on the site where the build
+// that notices is not this repository's.
 
 import (
 	"bytes"
@@ -298,36 +299,166 @@ func TestSlugsFollowGitHub(t *testing.T) {
 }
 
 var (
-	// indexEntry is a docs/README.md table row whose first cell is exactly one
-	// link: the shape the documentation site reads as a navigation entry.
-	indexEntry = regexp.MustCompile(`^\|\s*\[[^\]]+\]\(([^)\s]+)\)\s*\|`)
+	// listEntry is a list item the documentation site's navigation reads as an
+	// entry: a dash at the very start of the line, then a bold link, whatever
+	// follows it. The site matches it against the line as written, so an item
+	// indented under another is no entry of its navigation.
+	listEntry = regexp.MustCompile(`^-\s+\*\*\[[^\]]+\]\(([^)\s]+)\)\*\*`)
+	// tableEntry is the other shape the navigation reads: a table row whose
+	// first cell is one link, indented or not.
+	tableEntry = regexp.MustCompile(`^\|\s*\[[^\]]+\]\(([^)\s]+)\)\s*\|`)
+	// cardEntry is the entry the site also draws as a card on the index page:
+	// `- **[Title](page.md)** — description`, with a space, an em dash and a
+	// space between the link and the description. The site turns a list into
+	// cards only when every item of it opens that way, and leaves the whole
+	// list plain, saying nothing, when one does not.
+	cardEntry = regexp.MustCompile(`^-\s+\*\*\[[^\]]+\]\([^)\s]+\)\*\* — \S`)
 	// indexSection is a heading the site reads as a sidebar section.
 	indexSection = regexp.MustCompile(`^##\s+\S`)
+	// listMarker opens a list item, of a bullet or an ordered list.
+	listMarker = regexp.MustCompile(`^ ?(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)`)
+	// listCloser is a line that ends a list whatever came before it: a
+	// heading, a thematic break or a block quote.
+	listCloser = regexp.MustCompile(`^ {0,3}(?:#{1,6}(?:[ \t]|$)|(?:-[ \t]*){3,}$|(?:\*[ \t]*){3,}$|(?:_[ \t]*){3,}$|>)`)
 )
 
+// indentOf is the column a line's text starts at, a tab advancing to the
+// next multiple of four as CommonMark counts it.
+func indentOf(line string) int {
+	n := 0
+	for _, r := range line {
+		switch r {
+		case ' ':
+			n++
+		case '\t':
+			n += 4 - n%4
+		default:
+			return n
+		}
+	}
+	return n
+}
+
+// itemWidth is the column a list item's content starts at: a line indented
+// that far or further belongs to the item rather than ending the list.
+func itemWidth(line string) int {
+	m := listMarker.FindString(line)
+	marker := len(strings.TrimRight(m, " \t"))
+	gap := indentOf(line[marker:])
+	if gap == 0 || gap > 4 || strings.TrimSpace(line[marker:]) == "" {
+		return marker + 1
+	}
+	return marker + gap
+}
+
 // indexEntries returns the navigation entries of an index, in order, and a
-// problem for each entry the documentation site would refuse: one above the
-// first `## ` heading belongs to no sidebar section, and the site fails its
-// build on it rather than guess one.
+// problem for each line the documentation site would refuse, draw other than
+// as a card, or read other than as written:
+//   - an entry above the first `## ` heading belongs to no sidebar section,
+//     and the site fails its build on it rather than guess one;
+//   - an entry that is not cardEntry, or that a table row stands for, is no
+//     card, and neither is any entry of its list;
+//   - a blank line between the items of a list, or between an entry and a
+//     line indented under it, makes the list loose, and the site draws a
+//     loose list as a plain list;
+//   - a list item that is not an entry, beside the entries, keeps its list
+//     plain, and the navigation does not read it;
+//   - an entry indented under another is not read by the navigation at all;
+//   - a link in a description cannot be clicked, since a card lays the link
+//     of its title over its whole face;
+//   - a description that goes on past its line is read by the navigation to
+//     the end of the first only.
 func indexEntries(source string) ([]link, []string) {
 	var entries []link
 	var refused []string
+	refuse := func(line int, format string, args ...any) {
+		refused = append(refused, fmt.Sprintf("%d: ", line)+fmt.Sprintf(format, args...))
+	}
 	inSection := false
+	// item is the line of the list item the lines since belong to, or 0 when
+	// no list is open; width is the column its content starts at, entry
+	// whether it is an index entry that has not been refused for going on,
+	// and blank whether a blank line came after it.
+	item, width, entry, blank := 0, 0, false, false
 	for i, line := range prose(source) {
+		n := i + 1
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			blank = item != 0
+			continue
+		}
 		if indexSection.MatchString(line) {
 			inSection = true
+			item = 0
 			continue
 		}
-		m := indexEntry.FindStringSubmatch(strings.TrimSpace(line))
-		if m == nil {
+		if m := tableEntry.FindStringSubmatch(trimmed); m != nil {
+			if inSection {
+				entries = append(entries, link{n, m[1]})
+				refuse(n, "index entry %q is a table row, which the site's navigation reads but never draws as a card: "+
+					"write it `- **[Title](page.md)** — description`", m[1])
+			} else {
+				refuse(n, "index entry %q is above the first `## ` heading, so it is in no section of the site's "+
+					"sidebar; move it under the section it belongs to", m[1])
+			}
+			// A table is no part of the list above it.
+			item = 0
 			continue
 		}
-		if !inSection {
-			refused = append(refused, fmt.Sprintf("%d: index entry %q is above the first `## ` heading, "+
-				"so it is in no section of the site's sidebar; move it under the section it belongs to", i+1, m[1]))
+		if m := listEntry.FindStringSubmatch(line); m != nil {
+			target := m[1]
+			description := line[strings.Index(line, ")**")+len(")**"):]
+			switch {
+			case !inSection:
+				refuse(n, "index entry %q is above the first `## ` heading, so it is in no section of the site's "+
+					"sidebar; move it under the section it belongs to", target)
+			case !cardEntry.MatchString(line):
+				refuse(n, "index entry %q does not put ` — `, a space, an em dash and a space, between its link and "+
+					"its description, so the site draws its list as a plain list instead of cards", target)
+			case strings.Contains(description, "]("):
+				refuse(n, "index entry %q has a link in its description, which nobody could click: a card lays the "+
+					"link of its title over its whole face; name the page in words instead", target)
+			case item != 0 && blank:
+				refuse(n, "a blank line separates index entry %q from the item above it, which makes the list loose, "+
+					"and the site draws a loose list as a plain list instead of cards", target)
+			}
+			if inSection {
+				entries = append(entries, link{n, target})
+			}
+			item, width, entry, blank = n, itemWidth(line), true, false
 			continue
 		}
-		entries = append(entries, link{i + 1, m[1]})
+		if m := listEntry.FindStringSubmatch(trimmed); m != nil {
+			refuse(n, "index entry %q is indented, and the site's navigation reads an entry only at the start of "+
+				"its line, so the page is in no section of its sidebar; write it at the start of the line", m[1])
+			blank = false
+			continue
+		}
+		if item == 0 {
+			continue
+		}
+		indented := indentOf(line) >= width
+		switch {
+		case !indented && listCloser.MatchString(line):
+			item = 0
+		case !indented && listMarker.MatchString(line):
+			refuse(n, "a list item that is not an index entry follows the entries above it: the site's navigation "+
+				"does not read it, and the site draws the list it is in as a plain list instead of cards")
+			item, width, entry, blank = n, itemWidth(line), false, false
+		case indented && blank:
+			refuse(n, "a blank line and then a line indented under the item on line %d make the list loose, and "+
+				"the site draws a loose list as a plain list instead of cards", item)
+			entry, blank = false, false
+		case indented || !blank:
+			if entry {
+				refuse(n, "the entry on line %d goes on here, but an entry is one line: the site's navigation reads "+
+					"its description to the end of that line only", item)
+			}
+			entry = false
+		default:
+			// Text after a blank line, not indented: the list has ended.
+			item = 0
+		}
 	}
 	return entries, refused
 }
@@ -393,7 +524,9 @@ func TestEveryPageIsInTheIndex(t *testing.T) {
 				filepath.ToSlash(rel), kind)
 			return nil
 		}
-		if !strings.HasSuffix(path, ".md") || path == index {
+		// assets/README.md describes the figures to whoever draws them; the
+		// site publishes the directory without it, as no page.
+		if !strings.HasSuffix(path, ".md") || path == index || path == filepath.Join(docsDir, "assets", "README.md") {
 			return nil
 		}
 		rel, err := filepath.Rel(docsDir, path)
@@ -403,7 +536,7 @@ func TestEveryPageIsInTheIndex(t *testing.T) {
 		rel = filepath.ToSlash(rel)
 		switch listed[rel] {
 		case 0:
-			t.Errorf("docs/%s is in no table of docs/README.md: add a row `| [Title](%s) | what it covers |` "+
+			t.Errorf("docs/%s is not listed in docs/README.md: add `- **[Title](%s)** — what it covers` "+
 				"under the section it belongs to, or the documentation site has no way to reach it", rel, rel)
 		case 1:
 		default:
@@ -581,12 +714,10 @@ func TestTheGateCanFail(t *testing.T) {
 	if !hasIndexPage(dir) {
 		t.Errorf("hasIndexPage(%s) is false for a directory with a README.md", dir)
 	}
-	index := strings.Join([]string{
+	index := []string{
 		"# Docs",
 		"",
-		"| Page | What it covers |",
-		"|---|---|",
-		"| [Stray](stray.md) | above every section |",
+		"- **[Stray](stray.md)** — above every section",
 		"",
 		"```md",
 		"## Not a heading",
@@ -595,14 +726,65 @@ func TestTheGateCanFail(t *testing.T) {
 		"",
 		"## Guides",
 		"",
-		"| [Guide](guide.md) | a page |",
-	}, "\n")
-	entries, refused := indexEntries(index)
-	if want := []link{{14, "guide.md"}}; !slices.Equal(entries, want) {
-		t.Errorf("indexEntries() = %v, want %v", entries, want)
+		"- **[Guide](guide.md)** — a card",
+		"",
+		"- **[Loose](loose.md)** — after a blank line",
+		"- **[Colon](colon.md)**: a colon, which the navigation reads and no card does",
+		"- **[Hyphen](hyphen.md)** - a hyphen",
+		"- **[Linked](linked.md)** — a description with [a link](elsewhere.md)",
+		"- **[Wrapped](wrapped.md)** — a description",
+		"  that goes on",
+		"- More pages are coming",
+		"  - **[Nested](nested.md)** — under an item, where the navigation does not look",
+		"| [Row](row.md) | a table row |",
+		"",
+		"- **[After](after.md)** — a card after a table, in a list of its own",
+		"",
+		"## Reference",
+		"",
+		"- **[Paragraph](paragraph.md)** — a card",
+		"",
+		"  with a second paragraph under it",
+		"",
+		"Prose naming **[a page](prose.md)** is no entry, and ends the list.",
 	}
-	if len(refused) != 2 || !strings.Contains(refused[0], "stray.md") || !strings.Contains(refused[1], "fenced.md") {
-		t.Errorf("indexEntries() refused %q, want the two entries above the first section", refused)
+	entries, refused := indexEntries(strings.Join(index, "\n"))
+	targets := make([]string, 0, len(entries))
+	for _, e := range entries {
+		targets = append(targets, e.target)
+	}
+	want := []string{
+		"guide.md", "loose.md", "colon.md", "hyphen.md", "linked.md", "wrapped.md", "row.md", "after.md", "paragraph.md",
+	}
+	if !slices.Equal(targets, want) {
+		t.Errorf("indexEntries() = %v, want %v", targets, want)
+	}
+	// Each line below is refused, once, for the reason given; every other line
+	// is not, the cards and the prose among them.
+	refusals := []struct{ line, reason string }{
+		{"- **[Stray](stray.md)** — above every section", "above the first `## ` heading"},
+		{"| [Fenced](fenced.md) | still above every section |", "above the first `## ` heading"},
+		{"- **[Loose](loose.md)** — after a blank line", "makes the list loose"},
+		{"- **[Colon](colon.md)**: a colon, which the navigation reads and no card does", "an em dash"},
+		{"- **[Hyphen](hyphen.md)** - a hyphen", "an em dash"},
+		{"- **[Linked](linked.md)** — a description with [a link](elsewhere.md)", "nobody could click"},
+		{"  that goes on", "an entry is one line"},
+		{"- More pages are coming", "not an index entry"},
+		{"  - **[Nested](nested.md)** — under an item, where the navigation does not look", "is indented"},
+		{"| [Row](row.md) | a table row |", "table row"},
+		{"  with a second paragraph under it", "make the list loose"},
+	}
+	for _, r := range refusals {
+		line := slices.Index(index, r.line) + 1
+		prefix := fmt.Sprintf("%d: ", line)
+		if line == 0 || !slices.ContainsFunc(refused, func(got string) bool {
+			return strings.HasPrefix(got, prefix) && strings.Contains(got, r.reason)
+		}) {
+			t.Errorf("indexEntries() did not refuse line %d, %q, saying %q: %q", line, r.line, r.reason, refused)
+		}
+	}
+	if len(refused) != len(refusals) {
+		t.Errorf("indexEntries() refused %d lines, want the %d above and no other: %q", len(refused), len(refusals), refused)
 	}
 
 	for _, l := range []string{

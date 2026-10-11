@@ -10,7 +10,7 @@ name: Publish docs
 # release, so the change is live in minutes; without it the site keeps serving
 # the pages it last built until something else rebuilds it.
 #
-# The renderer reads docs/README.md's tables as the navigation and fails its
+# The renderer reads docs/README.md's lists as the navigation and fails its
 # build on a page they do not list; test/docs holds this tree to that in CI,
 # so a change that reaches main cannot break the site's build.
 #

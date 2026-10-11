@@ -144,8 +144,9 @@ v1beta1 the Kubernetes deprecation policy applies.
   enforces the Kubernetes conventions).
 - Docs are part of the change: update `docs/` for any API, behaviour,
   deployment or make-target change. `docs/` is also published on the
-  documentation site: a new page gets a row in `docs/README.md`'s tables (its
-  navigation), and the engine's pages are linked as
+  documentation site: a new page gets an entry,
+  `- **[Title](page.md)** — description`, in `docs/README.md` (its navigation
+  and card grid), and the engine's pages are linked as
   `https://github.com/crewlet/crewlet/blob/main/docs/…` URLs; `test/docs`
   fails otherwise (CONTRIBUTING.md, "How the docs are published").
 

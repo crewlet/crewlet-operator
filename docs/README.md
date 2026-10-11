@@ -1,38 +1,59 @@
+<div align="center">
+<img src="assets/crewlet-icon.svg" alt="Crewlet" width="88">
+</div>
+
 # Crewlet Operator Documentation
 
-The operator is in alpha and its `crewlet.ai/v1alpha1` API is still changing,
-so these pages describe what exists today and grow with it.
+The Crewlet Operator runs Crewlet AI agent companies on Kubernetes: declare a
+company and its org chart as custom resources, and the operator runs its
+engine.
 
-## Start here
+You write the `Company`, its units and seats, its model providers, tool
+servers, integrations and schedules as `crewlet.ai` objects. The operator
+renders them into the one company document [Crewlet](https://github.com/crewlet/crewlet)
+runs on and applies it whole or not at all, pushes the credentials they
+reference into the engine's encrypted store, and runs the engine's pods,
+routes and network policy beside them.
 
-| Page | What it covers |
-|---|---|
-| [Getting started](getting-started.md) | Running the operator and a small company on a local kind cluster, from source, and removing it all again |
+New here? Read in this order: **[Quickstart](getting-started.md) →
+[Installing the Operator](guides/installing.md) →
+[How the Operator Models a Company](concepts/overview.md)**, then the guide
+for what you are setting up.
+
+> **Caution: alpha.** The `crewlet.ai/v1alpha1` API changes without notice.
+> Each version of these pages describes the operator it was published with.
+
+---
+
+## Getting Started
+
+- **[Quickstart](getting-started.md)** — Run the operator and a two-agent company on a local kind cluster: change it, break it on purpose, open its dashboard and remove it all again
+- **[Installing the Operator](guides/installing.md)** — A production install with the Helm chart: prerequisites, the engine image to run, the values that matter, and the roles and admission policies it adds
+
+## Core Concepts
+
+How the operator turns objects into a running engine, one part per page:
+
+- **[How the Operator Models a Company](concepts/overview.md)** — The eight kinds and how they relate, the identities that never change, credentials by reference, management policies and what every object reports
+- **[What the Engine Is Given](concepts/company-document.md)** — The company document and each engine pod's `crewlet.yaml` the operator renders from the objects, where every seat is placed, and what blocks a document
+- **[How the Document Is Applied](concepts/applying.md)** — What happens on every change: coalescing, the secret store, the dry run and the apply, management policies and drift, seat pauses, and every condition an object reports
+- **[How a Company's Engine Runs](concepts/runtime.md)** — Every object the operator creates for a Company: the data pod, seat pools, exposure and network policy, versions, suspension, deletion and backups
+- **[Credential Positions](concepts/credentials.md)** — Every position in a Crewlet company that holds a credential and the field that fills it, who can read a value, and how the engine's store entries are named
 
 ## Guides
 
-| Page | What it covers |
-|---|---|
-| [Installing the operator](guides/installing.md) | A production install with the Helm chart: prerequisites, the values that matter, the RBAC roles it adds |
-| [Supplying credentials](guides/credentials.md) | Writing the Secret for each credential, rotating it, and what an object reports when one is missing |
-| [Connecting integrations](guides/integrations.md) | Slack, GitHub, GitLab, Mattermost, Jira, Confluence, Datadog and an Atlassian organization: each Integration, the seats' own credentials, and the accounts the engine creates |
-| [Running seats on a coding CLI](guides/cli-agents.md) | `CLIAgent` providers: an engine image with the CLI, a subscription login in a pod, text mode and agent mode, which provider a seat's code work can run on |
-| [Exposure and network policy](guides/exposure.md) | Webhook routes through a Gateway, an Ingress or your own proxy, the public listener and the public address vendors and sandboxes use, load balancer health checks, the internal API route, where people reach the dashboard, the network policy around each engine |
-| [Choosing a management policy](guides/management-policies.md) | Enforce, Observe and Seed: which to use, and how to move an engine under the operator |
-| [Choosing where seats run](guides/topology.md) | Data pods and stateless seat pools, Shared and PerSeat pools, what a pod of its own isolates and what it does not, what pools cost, where each seat runs now, and what the current engine does not do |
-| [Hosting many tenants on the operator](guides/multi-tenancy.md) | A control plane that provisions tenants' companies: the tenant provisioner role, a namespace each, server-side apply with a field manager, the status to read, credentials as Secrets, management policies, what a tenant can read, tiers as classes, offboarding |
-| [Troubleshooting](guides/troubleshooting.md) | Every condition and reason an object reports, and what to do about each |
+- **[Supplying Credentials](guides/credentials.md)** — Write the Secret for each credential, rotate it without a restart, and find out why one did not arrive
+- **[Connecting Integrations](guides/integrations.md)** — Slack, GitHub, GitLab, Mattermost, Jira, Confluence, Datadog and an Atlassian organization: each Integration, the seats' own credentials and the accounts the engine creates
+- **[Running Seats on a Coding CLI](guides/cli-agents.md)** — `CLIAgent` providers: an engine image with the CLI, a subscription login in a pod, text mode and agent mode, and the provider a seat's code work runs on
+- **[Exposure and Network Policy](guides/exposure.md)** — The public listener and the webhook routes through a Gateway, an Ingress or your own proxy, the internal API route, the dashboard's address and the policy around each engine
+- **[Choosing a Management Policy](guides/management-policies.md)** — `Enforce`, `Observe` and `Seed`: who owns the company document, which to choose, and how to move a running engine under the operator
+- **[Choosing Where Seats Run](guides/topology.md)** — Data pods and stateless seat pools, Shared and PerSeat, what a pod of its own isolates and what it costs, and where each seat runs now
+- **[Hosting Many Tenants on the Operator](guides/multi-tenancy.md)** — A control plane that provisions tenants: a namespace each, server-side apply, the status to read, credentials as Secrets, tiers as classes, offboarding
+- **[Troubleshooting](guides/troubleshooting.md)** — Every condition and reason an object reports, what each one means, and what to do about it
 
-## Concepts and reference
+## Reference
 
-| Page | What it covers |
-|---|---|
-| [How the operator models a company](concepts/overview.md) | The kinds and how they relate, the identities that never change, credentials, management policies and status |
-| [Credentials](concepts/credentials.md) | Every position in a Crewlet company that holds a credential, and the field that fills it |
-| [What the engine is given](concepts/company-document.md) | The company document and the data pod's and the seat pods' `crewlet.yaml` the operator renders from the objects, and what blocks a document |
-| [How the document is applied](concepts/applying.md) | What the operator does on every change: coalescing, the secret store, the dry run and the apply; the management policies and drift; what every object reports |
-| [How a company's engine runs](concepts/runtime.md) | The objects the operator creates for a Company, the data pod, seat pools, exposure and network policy, versions, suspension, deletion, and who writes which status field |
-| [API reference](reference/api.md) | Every kind and field of `crewlet.ai/v1alpha1`, generated from the types with `make api-docs` |
+- **[API Reference](reference/api.md)** — Every kind and field of `crewlet.ai/v1alpha1`, generated from the API types with `make api-docs`
 
 For working on the operator itself, see [CONTRIBUTING.md](../CONTRIBUTING.md);
 for publishing it, [RELEASING.md](../RELEASING.md).

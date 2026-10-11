@@ -419,15 +419,46 @@ beside the engine's documentation. The site renders the files as they are —
 write plain Markdown that reads correctly on GitHub, with relative links — and
 a few things follow from that:
 
-- **`docs/README.md` is the site's navigation.** Each `## ` section of it is a
-  sidebar group, and each row of its tables whose first cell is a single link
-  to a page is an entry, in order, with the second cell as its description. A
-  page under `docs/` that no row lists has no way to be reached, so the site
-  refuses to build it; add the row in the same change as the page, under a
-  `## ` heading (a row above the first one is in no group, and refused too).
-  The site serves the index as the section's home, so there is no
-  `docs/index.md` beside it. Its opening paragraph is the home page's
-  description in search results: keep it about the operator.
+- **`docs/README.md` is the site's navigation and its front page.** Each `## `
+  section of it is a sidebar group, and each entry is one line, unindented,
+  `- **[Title](page.md)** — description`, with an em dash between the two: the
+  site lists the entries in the sidebar, in order, and on the index page draws
+  each section's list as a grid of cards, but only when every item of the list
+  has exactly that shape (a colon or a hyphen for the dash, an item that is
+  not an entry, or a blank line between items or under one, and the whole list
+  stays plain, silently). Three more mistakes pass without a word: a link in a
+  description cannot be clicked, since a card lays its title's link over its
+  whole face; the site's navigation reads a description to the end of its
+  first line only; and it does not read an entry indented under another at
+  all. `test/docs` refuses each of them. Write the title as the page's H1 says
+  it, in Title Case, and the description on one line with no full stop. A page
+  under `docs/` that no entry lists has no way to be reached, so the site
+  refuses to build it; add the entry in the same change as the page, under a
+  `## ` heading (an entry above the first one is in no group, and refused
+  too). The site serves the index as the section's home, so there is no
+  `docs/index.md` beside it. Its first paragraph is the operator's description
+  on the site's front page and in search results: keep it a pitch about the
+  operator, under 160 characters, with the alpha status in the callout after
+  it, worded so it stays true in a released copy.
+- **`docs/assets/` is published with every version**, less its `README.md`: an
+  image the docs show is a committed SVG there, linked relatively
+  (`assets/x.svg` from `docs/README.md`, `../assets/x.svg` from a page below
+  it, `docs/assets/x.svg` from the root README, which is not published). An
+  image anywhere else becomes a link to a GitHub page on the site, not an
+  image. [`docs/assets/README.md`](docs/assets/README.md) says where each
+  figure comes from.
+- **Asides are blockquotes with a bold lead-in**, `> **Lead-in.** …`, which the
+  site draws as a callout titled with the lead-in, in a tone read from the
+  lead-in alone: `never`, `irreversible` or `data loss` make a danger
+  callout; `caution`, `warning`, `do not` or `avoid` a warning; `tip`, `prefer`
+  or `recommended` a success; anything else a note. GitHub's `> [!NOTE]` and
+  `:::note` are not used: each renders as literal text on one of the two.
+- **Diagrams are Mermaid 11**, drawn ahead of time on the site and in the
+  reader's browser on GitHub. The site's build fails on a diagram that does
+  not parse, so check a new one where it renders before it lands. Colour only
+  with the site's three semantic classes (`classDef ok stroke:#46a758`,
+  `warning stroke:#f59e0b`, `danger stroke:#ef4444`); any other colour fails
+  the site's build.
 - **Link the engine's documentation by its GitHub URL at `main`**, as
   `https://github.com/crewlet/crewlet/blob/main/docs/<page>.md#<heading>`.
   That is what works on GitHub, and the site turns it into its own page of the
@@ -452,8 +483,8 @@ a few things follow from that:
   forwarded.
 
 `test/docs` holds the tree to all of it in `make test`: every page of `docs/`
-is listed exactly once in the index's tables, under a section, and every file
-there is a regular one; every relative link and image
+but `assets/README.md` is listed exactly once in the index, under a section,
+as a card entry, and every file there is a regular one; every relative link and image
 names a file that exists, every `#anchor` names a heading its target renders
 (by GitHub's slug rule, which the site's renderer shares), and every link into
 the engine's repository names a file and heading of Crewlet's `main`, the
