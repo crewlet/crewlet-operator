@@ -193,14 +193,18 @@ objects render to, and what keeps one from rendering.
 
 ## Status
 
-Every object reports `status.conditions` with `observedGeneration`:
+Every object reports `status.conditions` with `observedGeneration`.
+`ResolvedRefs=False` on a part with `Applied=True` holds nothing back: the
+part is in the running revision, and only it suffers what is reported
+([What blocks a document](company-document.md#what-blocks-a-document)).
 
 | Kind | Conditions |
 |---|---|
 | `Company` | `Ready` (the summary), `Accepted`, `RuntimeReady`, `SecretsSynced`, `ConfigApplied`, `Exposed`, `EngineHealthy`, `SeatsPlaced` |
 | `EngineClass` | `Accepted` |
-| `Unit`, `LLMProvider`, `MCPServer`, `Schedule` | `Accepted`, `ResolvedRefs`, `Applied` |
-| `Seat` | `Accepted`, `ResolvedRefs`, `Applied`, and on an Agent seat `Ready` (whether an engine pod holds it), once the engine runs it `Paused`, and with `spec.sandbox` in a Company with one `CodeWorkRunnable` (whether its coding agent can run on its sandbox provider; not part of `Ready`) |
+| `Unit`, `MCPServer`, `Schedule` | `Accepted`, `ResolvedRefs`, `Applied` |
+| `LLMProvider` | `Accepted`, `ResolvedRefs`, `Applied`, and on a `CLIAgent` provider in `mode: Agent` `AgentModeRunnable` (whether its runs can call a seat's tools back: `False`, `NotExposed`, while the Company has no public address) |
+| `Seat` | `Accepted`, `ResolvedRefs`, `Applied`, and on an Agent seat `Ready` (whether it runs: `True`, `LeaseHeld`, while an engine pod holds it; `False` with `Unplaced` while none does, `PoolNotFound` when its pool is not one the Company declares, or `AgentModeBridgeUnsupported` or `NotExposed` when the engine refuses every one of its turns), once the engine runs it `Paused`, and with `spec.sandbox` in a Company with one `CodeWorkRunnable` (whether its coding agent can run on its sandbox provider; not part of `Ready`) |
 | `Integration` | `Accepted`, `ResolvedRefs`, `Applied`, `Healthy` |
 
 A Company also reports the revision the engine runs, its endpoints and the

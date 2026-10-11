@@ -1,6 +1,7 @@
 # ADR-0004 — Leave a seat's provisioned credentials to the engine, under a name the operator derives
 
-- **Status:** accepted
+- **Status:** accepted; that a seat names a provisioned value only while an
+  Integration provisions is superseded by ADR-0005
 - **Authority:** `internal/secretsync` — `ProvisionedName` and the package
   doc; `docs/concepts/credentials.md` for the API's side
 - **Enforced-by:** `internal/secretsync.TestProvisionedNameIsTheEnginesAlone`,

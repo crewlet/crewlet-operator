@@ -104,7 +104,7 @@ func TestSeatPodProviders(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			in := companyCaseNamed(t, "seat-pools").input(t)
+			in := companyCaseNamed(t, caseSeatPools).input(t)
 			c.mutate(in)
 			_, err := Company(in)
 			got := refusalsOf(err)

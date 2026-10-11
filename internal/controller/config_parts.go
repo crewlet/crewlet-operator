@@ -35,6 +35,12 @@ type part struct {
 	// of the first.
 	unresolved       []string
 	unresolvedReason string
+	// reported are what the render found wrong with its references that
+	// holds nothing (render.ReportedOf), with the reason of the first: the
+	// part is rendered as its spec says, and only it suffers. Read only once
+	// the reconcile rendered (objectsChecked).
+	reported       []string
+	reportedReason string
 	// unplaceable are why a Seat cannot run in the pool it is placed in,
 	// which its class does not let the company run it in, with the reason
 	// of the first. Its references resolve; the document is refused all
@@ -104,7 +110,12 @@ func kindOf(obj client.Object) string {
 
 // conditions returns the part's status conditions, to be set in place.
 func (p *part) conditions() *[]metav1.Condition {
-	switch o := p.obj.(type) {
+	return conditionsOf(p.obj)
+}
+
+// conditionsOf returns a part object's status conditions.
+func conditionsOf(obj client.Object) *[]metav1.Condition {
+	switch o := obj.(type) {
 	case *crewletaiv1alpha1.Unit:
 		return &o.Status.Conditions
 	case *crewletaiv1alpha1.Seat:

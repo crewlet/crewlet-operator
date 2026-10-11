@@ -53,12 +53,13 @@ func TestPodOf(t *testing.T) {
 	}
 }
 
-// seatRun is a reconcile of one Company with one agent Seat, ana, placed on
-// StatefulSet fleetWorkload and in the revision the engine runs; the Seat
-// last reported node lastNode.
+// seatRun is a reconcile of one Company with one agent Seat, ana, placed in
+// its Shared pool general, on StatefulSet fleetWorkload, and in the revision
+// the engine runs; the Seat last reported node lastNode.
 func seatRun(lastNode string) (*configRun, *part) {
 	const workload = fleetWorkload
 	company := &crewletaiv1alpha1.Company{Namespace: "ns", Name: fleetCompany, UID: "company-uid"}
+	company.Spec.Topology.SeatPools = []crewletaiv1alpha1.SeatPool{{Name: poolGeneral, Mode: crewletaiv1alpha1.SeatPoolShared}}
 	seat := &crewletaiv1alpha1.Seat{Namespace: "ns", Name: seatAna, Generation: 3}
 	seat.Status.Handle = seatAna
 	seat.Status.Placement = crewletaiv1alpha1.SeatPlacementStatus{Pool: "general", Node: lastNode}

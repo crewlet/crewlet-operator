@@ -10,7 +10,7 @@ directory from becoming a second, drifting copy of the package docs.
 
 | Field | What it is for |
 |---|---|
-| **Status** | `proposed`, `accepted`, or `superseded by ADR-NNNN`. A superseded record keeps its number and its text; numbers are never reused, and a record is never edited into a different decision, because the reasoning somebody acted on has to stay readable. |
+| **Status** | `proposed`, `accepted`, or `superseded by ADR-NNNN`. A superseded record keeps its number and its text; numbers are never reused, and a record is never edited into a different decision, because the reasoning somebody acted on has to stay readable. A record a later one changes in part stays `accepted` and names the part that later record supersedes. |
 | **Authority** | The one package or page whose own doc holds the detail. The record states the decision and why; the detail stays at the authority, and the authority's doc names the record back (`ADR-NNNN`), so the decision is in front of whoever is about to change the code. |
 | **Enforced-by** | A named test, a compile error, or the literal `nothing`. A rule held by prose alone decays; this field makes it visible which rules have a gate. `nothing` is an allowed and honest answer, but it has to be written down. |
 | **Context** | The forces that make the decision necessary. |
@@ -32,3 +32,4 @@ like any other change.
 | [0002](0002-test-against-the-real-pinned-engine.md) | Test against the real, pinned engine, and fail without it | `TestBinaryFailsWithoutTheEngine` |
 | [0003](0003-own-a-seats-pause-only-where-the-seat-asks.md) | Own a seat's pause only where its Seat sets `spec.paused` | `TestSyncPauseChangesNoPauseItDoesNotOwn`, the config suite's pause spec |
 | [0004](0004-leave-a-seats-provisioned-credentials-to-the-engine.md) | Leave a seat's provisioned credentials to the engine, under a name the operator derives | `TestProvisionedNameIsTheEnginesAlone`, `TestProvisionedNameIsDeterministic`, `TestCompanyRefsAreExactlyThePointers`, `TestEveryReferenceInADocumentIsTheOperators` |
+| [0005](0005-hold-a-document-only-for-what-cannot-be-applied-safely.md) | Hold a company's document only for what cannot be applied safely | a compile error, `TestEveryFindingHasABasis`, `TestTheDocsStateTheBases`, `TestAnUndeclaredPoolPinsNoPod`, `TestContractEngineRefusesWhatItHolds`, `TestContractReportedIsApplied`, `TestContractAgentModeIsAppliedWhereItCannotRun`, `TestContractCodeWorkOnWrite`, `TestContractStoreRefusesWhatResolveRefuses` |

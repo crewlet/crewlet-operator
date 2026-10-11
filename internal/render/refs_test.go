@@ -126,6 +126,16 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			want: []refusal{{KindSeat, seatAna, "spec.llm.auxiliary[0].name", v1alpha1.ReasonRefNotFound}},
 		},
 		{
+			name: "the company's model order names a platform provider it did not opt into",
+			mutate: func(in *Input) {
+				in.Company.Spec.LLM.UsePlatformProviders = nil
+				seat(in, seatAna).Spec.LLM.Auxiliary = nil
+				in.Company.Spec.LLM.Order = append(in.Company.Spec.LLM.Order,
+					v1alpha1.LLMProviderReference{Kind: v1alpha1.LLMProviderKindPlatform, Name: samplePlatformProvider})
+			},
+			want: []refusal{{KindCompany, sampleCompany, "spec.llm.order[1].name", v1alpha1.ReasonRefNotFound}},
+		},
+		{
 			name:   "a seat names a platform provider the class does not offer",
 			mutate: func(in *Input) { seat(in, seatAna).Spec.LLM.Auxiliary[0].Name = "platform-gpt" },
 			want:   []refusal{{KindSeat, seatAna, "spec.llm.auxiliary[0].name", v1alpha1.ReasonRefNotFound}},
@@ -134,10 +144,10 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			name: "a provider is named like a platform provider",
 			mutate: func(in *Input) {
 				p := in.LLMProviders[0]
-				p.Name = "platform-claude"
+				p.Name = samplePlatformProvider
 				in.LLMProviders = append(in.LLMProviders, p)
 			},
-			want: []refusal{{KindLLMProvider, "platform-claude", "metadata.name", v1alpha1.ReasonConflict}},
+			want: []refusal{{KindLLMProvider, samplePlatformProvider, "metadata.name", v1alpha1.ReasonConflict}},
 		},
 		{
 			name: "a tool server's URL names a variable of the engine",
@@ -191,33 +201,6 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			},
 			want: []refusal{{KindSchedule, scheduleCIHealth, "document units[0].children[0].roles[0].schedules[0].task",
 				v1alpha1.ReasonReferenceNotAllowed}},
-		},
-		{
-			// Nothing would create the value: the engine provisions only
-			// under an Integration with provisioning Engine.
-			name: "a seat names a provisioned credential and no integration provisions",
-			mutate: func(in *Input) {
-				integration(in, sampleGitLab).Spec.Provisioning = v1alpha1.IntegrationProvisioningExternal
-				integration(in, sampleGitLab).Spec.GitLab.EngineProvisioning = v1alpha1.GitLabEngineProvisioning{}
-			},
-			want: []refusal{
-				{KindSeat, seatAna, "spec.mcp[1].env[0].valueFrom", v1alpha1.ReasonNoProvisioner},
-				{KindSeat, seatAna, "spec.sandbox.env[1].valueFrom", v1alpha1.ReasonNoProvisioner},
-			},
-		},
-		{
-			name: "a seat's provisioned Mattermost bot token with no integration that provisions",
-			mutate: func(in *Input) {
-				in.Integrations = slices.DeleteFunc(in.Integrations, func(i v1alpha1.Integration) bool { return i.Name == sampleGitLab })
-				for i := range in.Seats {
-					in.Seats[i].Spec.MCP = slices.DeleteFunc(in.Seats[i].Spec.MCP, func(c v1alpha1.MCPCredentials) bool { return c.Name == sampleGitLab })
-					if sb := in.Seats[i].Spec.Sandbox; sb != nil {
-						sb.Env = slices.DeleteFunc(sb.Env, func(e v1alpha1.SeatEnvVar) bool { return e.ValueFrom.SecretKeyRef.Name == "" })
-					}
-				}
-				seat(in, seatCTO).Spec.Integrations.Mattermost.BotToken.Provisioned.Name = "bot"
-			},
-			want: []refusal{{KindSeat, seatCTO, "spec.integrations.mattermost.botToken", v1alpha1.ReasonNoProvisioner}},
 		},
 		{
 			name: "datadog routes alerts to a seat that does not exist",
@@ -347,6 +330,112 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 	}
 }
 
+// reportedCase is a finding of the basis Reported: an input broken so that
+// the render records one at fn, which it renders past.
+type reportedCase struct {
+	name   string
+	fn     string
+	input  string
+	mutate func(*Input)
+	want   []reportedFinding
+	// writes is a line the document holds for what was reported.
+	writes string
+}
+
+type reportedFinding struct{ kind, name, field, reason string }
+
+// reportedCases are the findings of the basis Reported, each something the
+// engine applies and only the object at fault suffers.
+func reportedCases() []reportedCase {
+	return []reportedCase{
+		{
+			// Nothing creates the value until an Integration provisions:
+			// the seat's tool starts without it.
+			name: "a seat names a provisioned credential and no integration provisions", fn: fnSeatCredential,
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				integration(in, sampleGitLab).Spec.Provisioning = v1alpha1.IntegrationProvisioningExternal
+				integration(in, sampleGitLab).Spec.GitLab.EngineProvisioning = v1alpha1.GitLabEngineProvisioning{}
+			},
+			want: []reportedFinding{
+				{KindSeat, seatAna, "spec.mcp[1].env[0].valueFrom", v1alpha1.ReasonNoProvisioner},
+				{KindSeat, seatAna, "spec.sandbox.env[1].valueFrom", v1alpha1.ReasonNoProvisioner},
+			},
+			writes: "${PROVISIONED_ANA_",
+		},
+		{
+			name: "a seat's provisioned Mattermost bot token with no integration that provisions", fn: fnSeatCredential,
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				in.Integrations = slices.DeleteFunc(in.Integrations, func(i v1alpha1.Integration) bool { return i.Name == sampleGitLab })
+				for i := range in.Seats {
+					in.Seats[i].Spec.MCP = slices.DeleteFunc(in.Seats[i].Spec.MCP, func(c v1alpha1.MCPCredentials) bool { return c.Name == sampleGitLab })
+					if sb := in.Seats[i].Spec.Sandbox; sb != nil {
+						sb.Env = slices.DeleteFunc(sb.Env, func(e v1alpha1.SeatEnvVar) bool { return e.ValueFrom.SecretKeyRef.Name == "" })
+					}
+				}
+				seat(in, seatCTO).Spec.Integrations.Mattermost.BotToken.Provisioned.Name = "bot"
+			},
+			want:   []reportedFinding{{KindSeat, seatCTO, "spec.integrations.mattermost.botToken", v1alpha1.ReasonNoProvisioner}},
+			writes: "bot_token: ${PROVISIONED_CTO_BOT_",
+		},
+		{
+			// The engine creates no GitLab account for a person, so the
+			// level grants nothing until the Seat is an Agent seat.
+			name: "gitlab gives an access level to a person", fn: fnGitLabAccessLevels,
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				p := &integration(in, sampleGitLab).Spec.GitLab.EngineProvisioning
+				p.AccessLevels = []v1alpha1.GitLabSeatAccess{{Name: seatJane, AccessLevel: v1alpha1.GitLabMaintainer}}
+			},
+			want: []reportedFinding{
+				{KindIntegration, sampleGitLab, "spec.gitlab.engineProvisioning.accessLevels[0].name", v1alpha1.ReasonHumanSeat},
+			},
+			writes: "jane: maintainer",
+		},
+		{
+			// A pin to a label no pod carries: the seat runs nowhere until
+			// the Company declares the pool.
+			name: "a seat in a pool the company does not declare", fn: fnPlanTopology,
+			input:  caseSeatPools,
+			mutate: func(in *Input) { seatNamed(in, seatDee).Spec.Placement.Pool = "nowhere" },
+			want:   []reportedFinding{{KindSeat, seatDee, "spec.placement.pool", v1alpha1.ReasonPoolNotFound}},
+			writes: UndeclaredPoolLabel + ": nowhere",
+		},
+	}
+}
+
+// TestCompanyReportsWhatItRendersPast covers every finding that holds
+// nothing (Basis Reported): the document is rendered with the object as its
+// spec says, and ReportedOf names the object and the field, with the reason
+// the controller reports it with, while Company returns no error.
+func TestCompanyReportsWhatItRendersPast(t *testing.T) {
+	for _, c := range reportedCases() {
+		t.Run(c.name, func(t *testing.T) {
+			in := companyCaseNamed(t, c.input).input(t)
+			c.mutate(in)
+			doc, err := Company(in)
+			if err != nil {
+				t.Fatalf("the document is refused: %v", err)
+			}
+			if !strings.Contains(string(doc.YAML), c.writes) {
+				t.Errorf("the document does not hold %q:\n%s", c.writes, doc.YAML)
+			}
+			reported := ReportedOf(in)
+			got := make([]reportedFinding, 0, len(reported))
+			for _, e := range reported {
+				got = append(got, reportedFinding{e.Kind, e.Name, e.Field, e.Reason})
+				if e.Basis != Reported || e.Message == "" {
+					t.Errorf("%v: basis %v, message %q", e, e.Basis, e.Message)
+				}
+			}
+			if !slices.Equal(got, c.want) {
+				t.Errorf("reported %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
 func seat(in *Input, name string) *v1alpha1.Seat {
 	for i := range in.Seats {
 		if in.Seats[i].Name == name {
@@ -398,7 +487,7 @@ func TestAttributeFindsTheInnermostObject(t *testing.T) {
 		path string
 		want ObjectRef
 	}{
-		{"name", company},
+		{keyName, company},
 		{"turn_engine.extension_enabled", company},
 		{"providers.embeddings.model", company},
 		{"providers.llm_order[1]", company},

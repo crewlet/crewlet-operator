@@ -181,6 +181,7 @@ func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error
 	// and whether its turns can, are facts about its own spec.
 	run.checkCodeWork(render.CodeWorkOf(run.input()))
 	run.checkExecutors(render.ExecutorOf(run.input()), render.AgentModeOf(run.input()))
+	run.checkReported(render.ReportedOf(run.input()))
 	if err != nil {
 		refusals := render.RefErrors(err)
 		if len(refusals) == 0 {
@@ -768,33 +769,73 @@ func (run *configRun) checkCodeWork(codeWork map[string]render.CodeWork) {
 }
 
 // checkExecutors records each agent Seat's executor and each LLMProvider's
-// agent mode on its part, and emits a Warning event on one that turns
-// unrunnable or changes its reason, a new problem to announce: the document
-// applies with either, and nothing on the Company says so.
+// agent mode on its part, for decide to report and announce.
 func (run *configRun) checkExecutors(executors map[string]render.Executor, agentModes map[string]render.AgentMode) {
 	for _, p := range run.parts {
 		switch o := p.obj.(type) {
 		case *crewletaiv1alpha1.Seat:
-			e, ok := executors[o.Name]
-			if !ok {
-				continue
-			}
-			p.executor = &e
-			ready := meta.FindStatusCondition(p.base.(*crewletaiv1alpha1.Seat).Status.Conditions, crewletaiv1alpha1.ConditionReady)
-			if e.Reason != "" && (ready == nil || ready.Reason != e.Reason) {
-				run.Recorder.Eventf(o, nil, corev1.EventTypeWarning, e.Reason, "CheckExecutor", "%s: %s.", e.Field, e.Message)
+			if e, ok := executors[o.Name]; ok {
+				p.executor = &e
 			}
 		case *crewletaiv1alpha1.LLMProvider:
-			m, ok := agentModes[o.Name]
-			if !ok {
-				continue
+			if m, ok := agentModes[o.Name]; ok {
+				p.agentMode = &m
 			}
-			p.agentMode = &m
-			before := meta.FindStatusCondition(p.base.(*crewletaiv1alpha1.LLMProvider).Status.Conditions,
-				crewletaiv1alpha1.ConditionAgentModeRunnable)
-			if m.Reason != "" && (before == nil || before.Reason != m.Reason) {
-				run.Recorder.Eventf(o, nil, corev1.EventTypeWarning, m.Reason, "CheckAgentMode", "%s", m.Message+".")
-			}
+		}
+	}
+}
+
+// checkReported records on each part what the render found wrong with its
+// references that holds nothing, for decide to report and announce.
+func (run *configRun) checkReported(reported []*render.RefError) {
+	for _, ref := range reported {
+		p := run.part(render.ObjectRef{Kind: ref.Kind, Name: ref.Name})
+		if p == nil {
+			continue
+		}
+		if p.reportedReason == "" {
+			p.reportedReason = ref.Reason
+		}
+		p.reported = append(p.reported, ref.Field+": "+ref.Message)
+	}
+}
+
+// announce emits a Warning event on a part whose decided status now shows a
+// finding that holds nothing: a Seat whose Ready turns to its executor's
+// reason, an LLMProvider whose AgentModeRunnable turns False, a part whose
+// ResolvedRefs turns False for a reported finding. The document applies with
+// each, and nothing on the Company says so. The event follows the condition
+// that shows the finding, from the status the part had to the one decided,
+// rather than the finding alone: a Seat's Ready says Suspended while its
+// Company is, and a part's ResolvedRefs a finding that holds the document
+// before a reported one, and a finding compared with a condition showing
+// another reason would be announced again on every reconcile.
+func (run *configRun) announce(p *part) {
+	turned := func(condition string, reason string) *metav1.Condition {
+		now := meta.FindStatusCondition(*conditionsOf(p.obj), condition)
+		if reason == "" || now == nil || now.Status != metav1.ConditionFalse || now.Reason != reason {
+			return nil
+		}
+		before := meta.FindStatusCondition(*conditionsOf(p.base), condition)
+		if before != nil && before.Status == now.Status && before.Reason == now.Reason {
+			return nil
+		}
+		return now
+	}
+	if p.executor != nil {
+		if c := turned(crewletaiv1alpha1.ConditionReady, p.executor.Reason); c != nil {
+			run.Recorder.Eventf(p.obj, nil, corev1.EventTypeWarning, c.Reason, "CheckExecutor", "%s: %s.",
+				p.executor.Field, p.executor.Message)
+		}
+	}
+	if p.agentMode != nil {
+		if c := turned(crewletaiv1alpha1.ConditionAgentModeRunnable, p.agentMode.Reason); c != nil {
+			run.Recorder.Eventf(p.obj, nil, corev1.EventTypeWarning, c.Reason, "CheckAgentMode", "%s", p.agentMode.Message+".")
+		}
+	}
+	if len(p.unresolved) == 0 {
+		if c := turned(crewletaiv1alpha1.ConditionResolvedRefs, p.reportedReason); c != nil {
+			run.Recorder.Eventf(p.obj, nil, corev1.EventTypeWarning, c.Reason, "CheckReferences", "%s", sentences(p.reported))
 		}
 	}
 }

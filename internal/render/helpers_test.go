@@ -44,10 +44,20 @@ const (
 	// sampleGitLab names both the GitLab MCPServer and the GitLab
 	// Integration.
 	sampleGitLab = "gitlab"
+	// samplePlatformProvider is the class's platform model provider, which
+	// the seat ana's auxiliary chain names.
+	samplePlatformProvider = "platform-claude"
 
 	schedulePlatformStandup = "platform-standup"
 	scheduleCIHealth        = "ci-health"
 )
+
+// caseSeatPools is the company case that places seats in every kind of pool.
+const caseSeatPools = "seat-pools"
+
+// keyName is the key an entry of the company document is named by: a role's,
+// a unit's, an engineConfig block's.
+const keyName = "name"
 
 // objects is what a set of manifests holds, sorted into the slices an Input
 // is made of.

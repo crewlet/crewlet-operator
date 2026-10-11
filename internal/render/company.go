@@ -87,11 +87,12 @@ type Document struct {
 // Company renders the company document of in.Company.
 //
 // It fails with *RefError values, joined (see RefErrors): one for each
-// reference between objects that cannot be rendered, and one for each
-// ${NAME} reference an object holds itself (checkReferences). Nothing is
-// rendered then, because a document is applied whole or not at all. The only
-// other failure is an engineConfig value that is not JSON, which the API
-// server never stores.
+// finding about a reference between objects that holds the document (its
+// Basis), and one for each ${NAME} reference an object holds itself
+// (checkReferences). Nothing is rendered then, because a document is applied
+// whole or not at all. A finding that holds nothing is rendered past, and
+// ReportedOf lists it. The only other failure is an engineConfig value that is
+// not JSON, which the API server never stores.
 func Company(in *Input) (*Document, error) {
 	r, merged, err := renderJSON(in, in.StoreName, in.ProvisionedName)
 	if err != nil {
@@ -125,6 +126,17 @@ func Company(in *Input) (*Document, error) {
 		return nil, err
 	}
 	return rendered, nil
+}
+
+// ReportedOf is every finding about the objects of in that holds nothing
+// (Basis Reported), sorted by object and field: each such object is rendered
+// as its spec says, and the finding is the controller's to report on it. Like
+// CodeWorkOf it is a statement about the objects' specs, which holds while
+// another object's refusal keeps Company from returning a document.
+func ReportedOf(in *Input) []*RefError {
+	r := newRenderer(in)
+	r.company()
+	return r.errs.reported()
 }
 
 // renderJSON renders the document as JSON, its map keys sorted, with
@@ -206,7 +218,7 @@ func checkReferences(doc *Document, company ObjectRef, encoded, probe []byte) er
 		if !ok {
 			owner = company
 		}
-		errs.add(owner.Kind, owner.Name, "document "+at.String(), v1alpha1.ReasonReferenceNotAllowed, fmt.Sprintf(
+		errs.add(HarmsBeyond, owner.Kind, owner.Name, "document "+at.String(), v1alpha1.ReasonReferenceNotAllowed, fmt.Sprintf(
 			"holds the reference %s, which the engine would resolve from its own secret store and environment: "+
 				"name a credential only with a Secret reference, which the operator turns into a reference of its own",
 			reference.FindString(s)))
@@ -345,17 +357,19 @@ func (r *renderer) secretKey(k secretref.Key) string {
 // own credentials: a Secret key's store entry, which the secret sync fills,
 // or a provisioned credential's, which the engine's provisioning fills. A
 // provisioned credential in a company where no Integration provisions is
-// refused at field: nothing would ever fill it.
+// reported at field, as nothing fills it until one does; it is rendered all
+// the same, since Crewlet applies the reference and only the seat's own tool
+// or chat app starts without its value.
 func (r *renderer) seatCredential(s *v1alpha1.Seat, field string, src v1alpha1.SeatCredentialSource) string {
 	if ref := src.SecretKeyRef; ref.Name != "" {
 		return r.secret(ref.Name, ref.Key)
 	}
 	if !r.engineProvisions() {
-		r.errs.add(KindSeat, s.Name, field, v1alpha1.ReasonNoProvisioner, fmt.Sprintf(
+		r.errs.add(Reported, KindSeat, s.Name, field, v1alpha1.ReasonNoProvisioner, fmt.Sprintf(
 			"names the provisioned credential %s, and no Integration of Company %s has provisioning Engine, "+
-				"so nothing would create it: give the value from a Secret, or provision the vendor with the engine",
+				"so nothing creates it and the seat's tool or chat app starts without it: give the value from a Secret, "+
+				"or provision the vendor with the engine",
 			src.Provisioned.Name, r.in.Company.Name))
-		return ""
 	}
 	name := r.in.ProvisionedName(SeatHandle(s), src.Provisioned.Name)
 	r.provisioned[name] = struct{}{}
@@ -441,7 +455,7 @@ func (r *renderer) providersDoc() providersDoc {
 			// would silently replace it. The tenant's object is the one
 			// that can be renamed.
 			if r.providers[p.Name] {
-				r.errs.add(KindLLMProvider, p.Name, "metadata.name", v1alpha1.ReasonConflict,
+				r.errs.add(HarmsBeyond, KindLLMProvider, p.Name, "metadata.name", v1alpha1.ReasonConflict,
 					fmt.Sprintf("EngineClass %s offers a platform model provider named %s, and both are keys of the company's one providers.llm mapping: rename this LLMProvider", r.in.Class.Name, p.Name))
 				continue
 			}
@@ -581,27 +595,43 @@ func (r *renderer) cli(p *v1alpha1.LLMProvider) *cliDoc {
 // key, or records why it cannot be resolved.
 func (r *renderer) provider(kind, name, field string, ref v1alpha1.LLMProviderReference) (string, bool) {
 	field += ".name"
+	var absent string
 	switch ref.Kind {
 	case v1alpha1.LLMProviderKindPlatform:
 		switch {
 		case !r.usesPlatformProviders():
-			r.errs.notFound(kind, name, field, fmt.Sprintf(
-				"names the platform model provider %s, but Company %s does not set spec.llm.usePlatformProviders", ref.Name, r.in.Company.Name))
-			return "", false
+			// Not the class's policy: the setting is the Company's own,
+			// and the document holds none of the class's providers for a
+			// Company that does not set it, so the key is absent as a
+			// missing LLMProvider's is.
+			absent = fmt.Sprintf("names the platform model provider %s, but Company %s does not set spec.llm.usePlatformProviders",
+				ref.Name, r.in.Company.Name)
 		case !r.platform[ref.Name]:
-			r.errs.notFound(kind, name, field, fmt.Sprintf(
+			r.errs.notFound(ClassPolicy, kind, name, field, fmt.Sprintf(
 				"EngineClass %s offers no platform model provider named %s", r.in.Class.Name, ref.Name))
 			return "", false
 		}
 	case v1alpha1.LLMProviderKindLLMProvider, "":
 		// An unset kind is the API's default, LLMProvider.
 		if !r.providers[ref.Name] {
-			r.errs.notFound(kind, name, field, fmt.Sprintf(
-				"names LLMProvider %s, which does not exist in namespace %s", ref.Name, r.namespace()))
-			return "", false
+			absent = fmt.Sprintf("names LLMProvider %s, which does not exist in namespace %s", ref.Name, r.namespace())
 		}
 	}
-	return ref.Name, true
+	if absent == "" {
+		return ref.Name, true
+	}
+	// A key providers.llm does not hold is held for what Crewlet does with
+	// it where it is written, whichever reason left it out.
+	if kind == KindCompany {
+		// Crewlet drops a key of llm_order that names no provider, so
+		// every seat with no chain of its own would run on whichever
+		// provider it then puts first.
+		r.errs.notFound(HarmsBeyond, kind, name, field, absent)
+	} else {
+		// Crewlet refuses a seat's chain naming no provider.
+		r.errs.notFound(EngineRefuses, kind, name, field, absent)
+	}
+	return "", false
 }
 
 func (r *renderer) setup(steps []v1alpha1.SandboxSetupStep) []setupStepDoc {
@@ -663,7 +693,7 @@ func (r *renderer) integrations() integrationsDoc {
 		// Integration for it would replace the first. The one that sorts
 		// first by name keeps the block.
 		if other, taken := claimed[vendor]; taken {
-			r.errs.add(KindIntegration, in.Name, "spec."+vendor, v1alpha1.ReasonConflict, fmt.Sprintf(
+			r.errs.add(HarmsBeyond, KindIntegration, in.Name, "spec."+vendor, v1alpha1.ReasonConflict, fmt.Sprintf(
 				"Integration %s already connects %s for Company %s: a company has one Integration per vendor", other, vendor, r.in.Company.Name))
 			continue
 		}
@@ -829,50 +859,59 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 }
 
 // gitLabAccessLevels renders a GitLab Integration's per-seat access levels,
-// which Crewlet keys by the seat's handle, or records why a Seat named there
-// cannot carry one.
+// which Crewlet keys by the seat's handle. A Seat that does not exist is
+// refused: written by its name, the level would go to whichever seat takes
+// that handle later, which nobody granted it to. A Human seat is rendered and
+// reported: the engine creates no GitLab account for a person, so its entry
+// grants nothing until the Seat becomes an Agent seat, which is what it says.
 func (r *renderer) gitLabAccessLevels(in *v1alpha1.Integration, levels []v1alpha1.GitLabSeatAccess) map[string]string {
 	if len(levels) == 0 {
 		return nil
 	}
 	out := make(map[string]string, len(levels))
 	for i, l := range levels {
-		if handle, ok := r.agentSeat(in, fmt.Sprintf("spec.gitlab.engineProvisioning.accessLevels[%d].name", i), l.Name,
-			"which has no GitLab account: the engine provisions agent seats only"); ok {
-			out[handle] = gitLabAccessLevel(l.AccessLevel)
+		field := fmt.Sprintf("spec.gitlab.engineProvisioning.accessLevels[%d].name", i)
+		s := r.seats[l.Name]
+		switch {
+		case s == nil:
+			r.errs.notFound(HarmsBeyond, KindIntegration, in.Name, field, r.noSeat(l.Name))
+			continue
+		case s.Spec.Kind == v1alpha1.SeatKindHuman:
+			r.errs.add(Reported, KindIntegration, in.Name, field, v1alpha1.ReasonHumanSeat, fmt.Sprintf(
+				"names Seat %s, a Human seat, which has no GitLab account: the engine provisions agent seats only, so "+
+					"the entry grants nothing", l.Name))
 		}
+		out[SeatHandle(s)] = gitLabAccessLevel(l.AccessLevel)
 	}
 	return out
 }
 
 // datadogRouteTo renders a Datadog Integration's route_to: the handle of the
-// seat an alert naming no seat wakes, or Crewlet's `none`.
+// seat an alert naming no seat wakes, or Crewlet's `none`. Crewlet refuses a
+// route_to naming no seat, or a person, on every write.
 func (r *renderer) datadogRouteTo(in *v1alpha1.Integration) string {
 	route := in.Spec.Datadog.RouteTo
 	if route.Dismiss != nil && *route.Dismiss {
 		return crewletNone
 	}
-	handle, _ := r.agentSeat(in, "spec.datadog.routeTo.seatRef.name", route.SeatRef.Name,
-		"and the engine runs no turn for a person: route the alert to an Agent seat")
-	return handle
-}
-
-// agentSeat resolves the Seat an Integration names at field to its handle,
-// or records why it cannot be named there: it does not exist, or it is a
-// Human seat, which humanReason says the consequence of.
-func (r *renderer) agentSeat(in *v1alpha1.Integration, field, name, humanReason string) (string, bool) {
+	const field = "spec.datadog.routeTo.seatRef.name"
+	name := route.SeatRef.Name
 	s := r.seats[name]
 	switch {
 	case s == nil:
-		r.errs.notFound(KindIntegration, in.Name, field, fmt.Sprintf(
-			"names Seat %s, which does not exist in namespace %s", name, r.namespace()))
-		return "", false
+		r.errs.notFound(EngineRefuses, KindIntegration, in.Name, field, r.noSeat(name))
+		return ""
 	case s.Spec.Kind == v1alpha1.SeatKindHuman:
-		r.errs.add(KindIntegration, in.Name, field, v1alpha1.ReasonHumanSeat, fmt.Sprintf(
-			"names Seat %s, a Human seat, %s", name, humanReason))
-		return "", false
+		r.errs.add(EngineRefuses, KindIntegration, in.Name, field, v1alpha1.ReasonHumanSeat, fmt.Sprintf(
+			"names Seat %s, a Human seat, and the engine runs no turn for a person: route the alert to an Agent seat", name))
+		return ""
 	}
-	return SeatHandle(s), true
+	return SeatHandle(s)
+}
+
+// noSeat is the message of a reference to a Seat that does not exist.
+func (r *renderer) noSeat(name string) string {
+	return fmt.Sprintf("names Seat %s, which does not exist in namespace %s", name, r.namespace())
 }
 
 // ---- tool servers ------------------------------------------------------- //
@@ -929,7 +968,7 @@ func (r *renderer) mcpEnv(
 	out := make(map[string]map[string]string, len(creds))
 	for i, c := range creds {
 		if r.mcp[c.Name] == nil {
-			r.errs.notFound(kind, name, fmt.Sprintf("spec.mcp[%d].name", i), fmt.Sprintf(
+			r.errs.notFound(HarmsBeyond, kind, name, fmt.Sprintf("spec.mcp[%d].name", i), fmt.Sprintf(
 				"names MCPServer %s, which does not exist in namespace %s", c.Name, r.namespace()))
 			continue
 		}

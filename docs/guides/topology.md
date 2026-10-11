@@ -198,7 +198,7 @@ has the details.
 
 | Reported | When | Why |
 |---|---|---|
-| Seat `ResolvedRefs=False`, `PoolNotFound` | `spec.placement.pool` names no pool of the Company | A seat pinned to a label no pod carries would never run, silently. |
+| Seat `ResolvedRefs=False`, `PoolNotFound`, reported and not held | `spec.placement.pool` names no pool of the Company | A seat pinned to a label no pod carries (`crewlet.ai/undeclared-pool`, never the pool's own, which the pods of the pool would carry once it is declared) never runs. The engine applies the pin all the same, and only that seat suffers, so the operator applies it too and says so: the Seat reports `Ready=False`, `PoolNotFound`, while no pod holds it, and the Company `SeatsPlaced=False`, `PoolNotFound`. A seat that ran elsewhere keeps running there (`Applied=False`, `PlacementPending`) until the Company declares the pool. |
 | Seat `Applied=False`, `PerSeatNotAllowed` | the seat is in a PerSeat pool and the class does not allow them | Pods of their own are the most expensive shape; the class decides which companies get them. |
 | Seat `Applied=False`, `PoolCapacityExceeded` | the seat's own pods would take the company past the class's `maxPods`; the seats already running in pods of their own are admitted first, then the rest oldest first, and the first that does not fit is refused with every seat after it | The cost above grows with every pod. |
 | Seat `Ready=False`, `AgentModeBridgeUnsupported`, reported and not held | the seat is in a seat pool, and its executor's chain (`spec.llm.default`, or the Company's first provider when the seat has none) starts with a `CLIAgent` provider in `mode: Agent` | An agent-mode run calls the seat's tools back through the tool bridge of the pod that holds the seat, at an address the sandbox reaches; the operator publishes none for a seat pod, so the engine refuses every one of the seat's turns. It applies the seat all the same, and only that seat fails, so the operator applies it too rather than hold the rest of the company. |
@@ -206,8 +206,9 @@ has the details.
 | Company `ConfigApplied=False`, `SeatPoolsNotAllowed` | the Company declares pools and its class's policy is not `Allowed` | The class's data pods open no listener for seat pods to join. |
 | Company `ConfigApplied=False`, `PoolCapacityExceeded` | the Shared pools alone pass `maxPods` | As above; the operator keeps the pools as they are and starts no pod. |
 
-Every row but the one reported on `Ready` blocks the company's next
-revision, like any other refusal, and the last good revision keeps running. Users cannot write Crewlet node labels or pin a
+Every row but the two reported and not held blocks the company's next
+revision, like any other refusal, and the last good revision keeps running
+([What blocks a document](../concepts/company-document.md#what-blocks-a-document)). Users cannot write Crewlet node labels or pin a
 seat to a node themselves: one stray label would let a seat run on a pod it
 was never placed on, a seat pod that cannot serve it among them, and the
 operator could no longer tell which pool a pod serves.

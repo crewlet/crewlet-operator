@@ -142,6 +142,10 @@ type seatPlan struct {
 	refusal *render.RefError
 	// refusedSeats counts the Seats refused a pool on their own.
 	refusedSeats int
+	// undeclared are the agent Seats placed in a pool the Company does not
+	// declare, as "seat (pool)", sorted: the document pins each to a label
+	// no pod carries, which holds nothing else back.
+	undeclared []string
 	// wanted are the StatefulSets the plan runs, in the order of the pools
 	// and of their seats; kept those it does not, which the running revision
 	// pins a seat to; stale every other StatefulSet of seat pods.
@@ -178,6 +182,13 @@ func (r *CompanyReconciler) planSeatPools(
 	ours := slices.DeleteFunc(seats.Items, func(s crewletaiv1alpha1.Seat) bool { return s.Spec.CompanyRef.Name != c.Name })
 	topology, err := render.PlanTopology(c, class, ours)
 	plan := &seatPlan{topology: topology, allowed: render.SeatPoolsAllowed(class)}
+	for i := range ours {
+		s := &ours[i]
+		if pool := render.SeatPool(c, s); s.Spec.Kind != crewletaiv1alpha1.SeatKindHuman && !declaredPool(c, pool) {
+			plan.undeclared = append(plan.undeclared, fmt.Sprintf("%s (%s)", s.Name, pool))
+		}
+	}
+	slices.Sort(plan.undeclared)
 	for _, refusal := range render.RefErrors(err) {
 		switch {
 		case refusal.Kind != render.KindCompany:
@@ -988,6 +999,18 @@ func seatsPlaced(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineCl
 		return notPlaced(crewletaiv1alpha1.ReasonPoolCapacityExceeded, fmt.Sprintf(
 			"%s: %s. The operator keeps each seat pool at the size it is and starts no other; their pods still follow the "+
 				"data pods' image and keyring.", plan.refusal.Field, plan.refusal.Message))
+	case len(plan.undeclared) == 1:
+		return notPlaced(crewletaiv1alpha1.ReasonPoolNotFound, fmt.Sprintf(
+			"Seat %s is placed in a pool the Company does not declare (spec.topology.seatPools), whose pods never start: "+
+				"the seat does not run in it until the Company declares the pool or the Seat names another. If it ran "+
+				"elsewhere it keeps running there (its Applied is PlacementPending); otherwise no pod runs it, and its "+
+				"messages wait.", plan.undeclared[0]))
+	case len(plan.undeclared) > 1:
+		return notPlaced(crewletaiv1alpha1.ReasonPoolNotFound, fmt.Sprintf(
+			"Seats %s are placed in pools the Company does not declare (spec.topology.seatPools), whose pods never start: "+
+				"none runs in its pool until the Company declares it or the Seat names another. A seat that ran elsewhere "+
+				"keeps running there (its Applied is PlacementPending); no pod runs any other, and its messages wait.",
+			strings.Join(plan.undeclared, ", ")))
 	}
 
 	// Every pool with a seat, data included, by what serves it.

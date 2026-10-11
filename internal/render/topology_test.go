@@ -66,7 +66,7 @@ func rolePlacements(t *testing.T, document []byte) map[string]map[string]string 
 // label in it (the company's default pool included), the seat's own label in
 // a PerSeat pool, and none for a person, whom the engine never runs.
 func TestSeatsArePinnedToTheirPools(t *testing.T) {
-	doc, err := Company(companyCaseNamed(t, "seat-pools").input(t))
+	doc, err := Company(companyCaseNamed(t, caseSeatPools).input(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestSeatsArePinnedToTheirPools(t *testing.T) {
 // pods of its own pool and no other pod: a pin matching another pool's pod
 // could run the seat where it was not placed.
 func TestEveryPodMatchesExactlyOnePlacementGroup(t *testing.T) {
-	in := companyCaseNamed(t, "seat-pools").input(t)
+	in := companyCaseNamed(t, caseSeatPools).input(t)
 	doc, err := Company(in)
 	if err != nil {
 		t.Fatal(err)
@@ -204,7 +204,7 @@ func matches(pin, labels map[string]string) bool {
 // class's defaults and then from the operator's own, and counts the pods the
 // pools run, a PerSeat pool's for each of its seats.
 func TestPlanTopologySizesEachPool(t *testing.T) {
-	in := companyCaseNamed(t, "seat-pools").input(t)
+	in := companyCaseNamed(t, caseSeatPools).input(t)
 	topology, err := PlanTopology(in.Company, in.Class, in.Seats)
 	if err != nil {
 		t.Fatal(err)
@@ -272,12 +272,13 @@ func refusalsOf(err error) []string {
 	return out
 }
 
-// TestPlacementRefusals covers every seat that cannot run where it is
-// placed, and every topology the class does not admit. Each is refused
+// TestPlacementRefusals covers every seat its class does not let run where it
+// is placed, and every topology the class does not admit. Each is refused
 // both when the topology is planned (for the workloads) and when the document
 // is rendered, on the object a person has to change. The plan still comes
 // with the refusal, less every Seat refused on its own: the runtime runs the
-// pools from it while the document is blocked.
+// pools from it while the document is blocked. A seat in a pool the Company
+// does not declare is in no pool of the plan, and refused nowhere.
 func TestPlacementRefusals(t *testing.T) {
 	const (
 		// Every seat where the seat-pools company places it.
@@ -292,11 +293,12 @@ func TestPlacementRefusals(t *testing.T) {
 		planned string
 	}{
 		{
+			// It runs in no pool, and is reported rather than refused
+			// (TestCompanyReportsWhatItRendersPast).
 			name: "a seat in a pool the company does not declare",
 			mutate: func(in *Input) {
 				seatNamed(in, seatDee).Spec.Placement.Pool = "nowhere"
 			},
-			want:    []string{"Seat/dee spec.placement.pool PoolNotFound"},
 			planned: "batch: data:cy general:bo isolated:ana",
 		},
 		{
@@ -351,7 +353,7 @@ func TestPlacementRefusals(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			in := companyCaseNamed(t, "seat-pools").input(t)
+			in := companyCaseNamed(t, caseSeatPools).input(t)
 			c.mutate(in)
 			plan, planErr := PlanTopology(in.Company, in.Class, in.Seats)
 			_, renderErr := Company(in)
@@ -435,7 +437,7 @@ func TestPerSeatCapacityRefusesOnlyTheSeatsPastIt(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			in := companyCaseNamed(t, "seat-pools").input(t)
+			in := companyCaseNamed(t, caseSeatPools).input(t)
 			eve := seatNamed(in, seatAna).DeepCopy()
 			eve.Name = seatEve
 			in.Seats = append(in.Seats, *eve)
@@ -460,7 +462,7 @@ func TestPerSeatCapacityRefusesOnlyTheSeatsPastIt(t *testing.T) {
 // the pin it runs under, and every other seat where it is placed: the
 // controller holds a seat's pin until its new pool has a ready pod.
 func TestAHeldSeatKeepsItsRunningPin(t *testing.T) {
-	in := companyCaseNamed(t, "seat-pools").input(t)
+	in := companyCaseNamed(t, caseSeatPools).input(t)
 	running := map[string]string{SeatLabel: seatAna}
 	in.HeldPlacements = map[string]map[string]string{seatBo: running}
 	doc, err := Company(in)
@@ -550,7 +552,7 @@ func TestPerSeatCapacityAdmitsTheRunningSeatsFirst(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			in := companyCaseNamed(t, "seat-pools").input(t)
+			in := companyCaseNamed(t, caseSeatPools).input(t)
 			in.Class.Spec.SeatPools.MaxPods = 5
 			c.mutate(in)
 			plan, err := PlanTopology(in.Company, in.Class, in.Seats)
@@ -561,5 +563,88 @@ func TestPerSeatCapacityAdmitsTheRunningSeatsFirst(t *testing.T) {
 				t.Errorf("planned %q, want %q", got, c.planned)
 			}
 		})
+	}
+}
+
+// TestAnUndeclaredPoolPinsNoPod holds a seat placed in a pool the Company
+// does not declare to a pin no pod can carry, now or once the pool is
+// declared, which the document records as no pool. A pin to the pool's own
+// label would let the engine place the seat on the pods of a pool declared
+// later under the revision it already runs, before a revision placing it
+// there had been through the render's checks of what those pods can run: a
+// seat on a CLI signed in with a credential bundle would be restored and
+// refreshed on a seat pod, logging every seat on that login out. And a pool
+// the document records would keep a StatefulSet for it, and open the data
+// pods' leaf listener under a class that runs no seat pods.
+func TestAnUndeclaredPoolPinsNoPod(t *testing.T) {
+	const later = "later"
+	in := companyCaseNamed(t, caseSeatPools).input(t)
+	bundled := cliProvider(v1alpha1.CLIAgentModeText)
+	bundled.Spec.CLI.Auth = v1alpha1.CLIAgentAuth{
+		CredentialBundleSecretRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "bundle"},
+	}
+	in.LLMProviders = append(in.LLMProviders, bundled)
+	bo := seatNamed(in, seatBo)
+	bo.Spec.LLM.Default = []v1alpha1.LLMProviderReference{{Name: providerCLI}}
+	bo.Spec.Placement.Pool = later
+
+	doc, err := Company(in)
+	if err != nil {
+		t.Fatalf("a seat in a pool the Company does not declare holds the document: %v", err)
+	}
+	pin := rolePlacements(t, doc.YAML)[seatBo]
+	if want := map[string]string{UndeclaredPoolLabel: later}; !maps.Equal(pin, want) {
+		t.Fatalf("seat %s is pinned to %v, want %v", seatBo, pin, want)
+	}
+	placement, err := PlacementOf(doc.YAML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(placement.Pools, later) {
+		t.Errorf("the document records pool %s, which the Company does not declare: %v", later, placement.Pools)
+	}
+
+	// The pool declared: its pods carry its label, and the seat's pin
+	// does not match them.
+	in.Company.Spec.Topology.SeatPools = append(in.Company.Spec.Topology.SeatPools,
+		v1alpha1.SeatPool{Name: later, Mode: v1alpha1.SeatPoolShared})
+	topology, _ := PlanTopology(in.Company, in.Class, in.Seats)
+	keyring := Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}
+	pod, err := SeatPodBootstrap(&SeatPodInput{
+		Company: in.Company, Class: in.Class, Pool: topology.Pool(later), Keyring: keyring, DataMembers: testDataMembers,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if labels := nodeLabels(t, pod); matches(pin, labels) {
+		t.Errorf("a pod of pool %s, once declared, carries %v, which the pin %v of the revision before matches", later, labels, pin)
+	}
+	// And the revision that would place the seat there is refused.
+	_, err = Company(in)
+	if got := refusalsOf(err); !slices.Equal(got, []string{"Seat/bo spec.llm.default[0].name CLIAuthNotPortable"}) {
+		t.Errorf("with pool %s declared, refused %v (%v), want the bundled login refused on its pods", later, got, err)
+	}
+
+	// Under a class that runs no seat pods, the pin keeps the data pods'
+	// leaf listener closed.
+	in = companyCaseNamed(t, caseSeatPools).input(t)
+	in.Class.Spec.SeatPools.Policy = v1alpha1.SeatPoolsForbidden
+	in.Company.Spec.Topology = v1alpha1.CompanyTopology{}
+	for i := range in.Seats {
+		in.Seats[i].Spec.Placement.Pool = ""
+	}
+	seatNamed(in, seatBo).Spec.Placement.Pool = later
+	doc, err = Company(in)
+	if err != nil {
+		t.Fatalf("a seat in a pool the Company does not declare holds the document: %v", err)
+	}
+	placement, err = PlacementOf(doc.YAML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in.Company.Status.Config.Placement = v1alpha1.RevisionPlacement{Pools: placement.Pools, Seats: placement.Seats}
+	if LeafOpen(in.Company, in.Class) {
+		t.Errorf("under a class whose seatPools.policy is Forbidden, the revision %+v opens the data pods' leaf listener",
+			in.Company.Status.Config.Placement)
 	}
 }

@@ -37,7 +37,7 @@ import (
 // launch of the seat's code work, while the seat runs its turns. They are
 // reported on the Seat's CodeWorkRunnable rather than refused here: refusing
 // them would hold the whole company on its last revision over one seat's
-// code work, which the engine itself would run without it.
+// code work, which the engine itself would run without it (ADR-0005).
 //
 // The seat's own environment is the union of its spec.sandbox.env, its
 // spec.sandbox.setup steps' env and the Company's spec.sandbox.setup steps'

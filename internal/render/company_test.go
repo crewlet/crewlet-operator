@@ -42,7 +42,7 @@ func companyCases() []companyCase {
 		{name: "cli-agent", exposed: true},
 		{name: "opencode-agent", exposed: true},
 		{name: "atlassian", exposed: true},
-		{name: "seat-pools"},
+		{name: caseSeatPools},
 	}
 }
 

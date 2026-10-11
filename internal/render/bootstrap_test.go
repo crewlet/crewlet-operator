@@ -55,7 +55,7 @@ func bootstrapCases() []bootstrapCase {
 		{name: "seed", keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}},
 		// A class that allows seat pools: the data pod opens its leaf
 		// listener.
-		{name: "seat-pools", keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}},
+		{name: caseSeatPools, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}},
 	}
 }
 

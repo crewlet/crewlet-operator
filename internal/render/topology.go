@@ -36,6 +36,17 @@ const (
 	// SeatLabel places the seat of a PerSeat pool, with the seat's handle as
 	// its value: only that seat's own pods carry it.
 	SeatLabel = "crewlet.ai/seat"
+	// UndeclaredPoolLabel pins a seat placed in a pool the Company does not
+	// declare, with the pool's name as its value. No pod carries it, the
+	// operator's least of all: PoolLabel would not do, because the pods of
+	// a pool declared later carry PoolLabel with that name, and the engine
+	// would place the seat on them under the revision it already runs,
+	// before a revision placing it there had been through the render's
+	// checks of what those pods can run (seatPodProviders). And
+	// PlacementOf, which reads PoolLabel and SeatLabel alone, records no
+	// pool for it, so it neither keeps a StatefulSet nor opens the data
+	// pods' leaf listener (PinsSeatPods).
+	UndeclaredPoolLabel = "crewlet.ai/undeclared-pool"
 )
 
 // What a seat pool runs with when neither it nor its class says.
@@ -130,11 +141,17 @@ func (t *Topology) Places(pool, handle string) bool {
 }
 
 // Placement is the role.placement labels of an agent seat placed in pool:
-// the pool's own label, or in a PerSeat pool the seat's. They are literal
-// values: Crewlet expands no ${NAME} in a Tier B placement, so a pin can only
-// name what the pods spell out.
+// the pool's own label, or in a PerSeat pool the seat's, or for a pool the
+// Company does not declare UndeclaredPoolLabel, which no pod carries. They
+// are literal values: Crewlet expands no ${NAME} in a Tier B placement, so a
+// pin can only name what the pods spell out.
 func (t *Topology) Placement(pool, handle string) map[string]string {
-	if p := t.Pool(pool); p != nil && p.Mode == v1alpha1.SeatPoolPerSeat {
+	p := t.Pool(pool)
+	switch {
+	case pool == v1alpha1.DataPool:
+	case p == nil:
+		return map[string]string{UndeclaredPoolLabel: pool}
+	case p.Mode == v1alpha1.SeatPoolPerSeat:
 		return map[string]string{SeatLabel: handle}
 	}
 	return map[string]string{PoolLabel: pool}
@@ -152,16 +169,20 @@ func SeatPool(c *v1alpha1.Company, s *v1alpha1.Seat) string {
 
 // PlanTopology places a company's agent seats in its pools.
 //
-// It fails with *RefError values, joined (see RefErrors), when a seat cannot
-// run where it is placed: it names a pool the Company does not declare
-// (ReasonPoolNotFound), a PerSeat pool its class does not allow
-// (ReasonPerSeatNotAllowed), or a PerSeat pool whose pods would take the
+// It fails with *RefError values, joined (see RefErrors), when the class does
+// not let a seat run where it is placed: a PerSeat pool its class does not
+// allow (ReasonPerSeatNotAllowed), or a PerSeat pool whose pods would take the
 // company past its class's seatPools.maxPods (ReasonPoolCapacityExceeded);
 // and with refusals of the Company itself when it declares seat pools its
 // class does not allow at all (ReasonSeatPoolsNotAllowed) or Shared pools
 // whose pods alone pass maxPods (ReasonPoolCapacityExceeded). Company refuses
 // the document for the same reasons, so a topology that fails here is never
 // one the engine runs.
+//
+// A seat placed in a pool the Company does not declare is in no pool of the
+// plan and fails nothing: it is pinned to UndeclaredPoolLabel, which no pod
+// carries, and the render reports it (ReasonPoolNotFound, Basis Reported),
+// since only that seat does not run.
 //
 // The plan is returned with the error, never nil: every pool the Company
 // declares, with the seats placed in it, less each Seat refused on its own
@@ -186,7 +207,7 @@ func planTopology(c *v1alpha1.Company, class *v1alpha1.EngineClass, seats []v1al
 
 	allowed := settings.Policy == v1alpha1.SeatPoolsAllowed
 	if len(t.Pools) > 0 && !allowed {
-		errs.add(KindCompany, c.Name, "spec.topology.seatPools", v1alpha1.ReasonSeatPoolsNotAllowed, fmt.Sprintf(
+		errs.add(ClassPolicy, KindCompany, c.Name, "spec.topology.seatPools", v1alpha1.ReasonSeatPoolsNotAllowed, fmt.Sprintf(
 			"declares %d seat pools, and EngineClass %s does not allow seat pools (spec.seatPools.policy is %s): "+
 				"remove them, or run the company with a class whose policy is Allowed",
 			len(t.Pools), class.Name, cmp.Or(settings.Policy, v1alpha1.SeatPoolsForbidden)))
@@ -214,14 +235,15 @@ func planTopology(c *v1alpha1.Company, class *v1alpha1.EngineClass, seats []v1al
 		pool := t.Pool(name)
 		switch {
 		case pool == nil:
-			errs.add(KindSeat, s.Name, "spec.placement.pool", v1alpha1.ReasonPoolNotFound, fmt.Sprintf(
-				"names pool %s, which is neither data nor one of Company %s's spec.topology.seatPools", name, c.Name))
+			errs.add(Reported, KindSeat, s.Name, "spec.placement.pool", v1alpha1.ReasonPoolNotFound, fmt.Sprintf(
+				"names pool %s, which is neither data nor one of Company %s's spec.topology.seatPools, so no pod runs "+
+					"the seat until the Company declares it", name, c.Name))
 			continue
 		case !allowed:
 			// The Company is refused for declaring the pool at all; a
 			// refusal of each of its seats would say nothing more.
 		case pool.Mode == v1alpha1.SeatPoolPerSeat && !perSeatAllowed:
-			errs.add(KindSeat, s.Name, "spec.placement.pool", v1alpha1.ReasonPerSeatNotAllowed, fmt.Sprintf(
+			errs.add(ClassPolicy, KindSeat, s.Name, "spec.placement.pool", v1alpha1.ReasonPerSeatNotAllowed, fmt.Sprintf(
 				"places the seat in PerSeat pool %s, and EngineClass %s does not allow PerSeat pools "+
 					"(spec.seatPools.allowPerSeat): place it in data or in a Shared pool", name, class.Name))
 			continue
@@ -269,7 +291,7 @@ func checkCapacity(c *v1alpha1.Company, class *v1alpha1.EngineClass, t *Topology
 		}
 	}
 	if shared > limit {
-		errs.add(KindCompany, c.Name, "spec.topology.seatPools", v1alpha1.ReasonPoolCapacityExceeded, fmt.Sprintf(
+		errs.add(ClassPolicy, KindCompany, c.Name, "spec.topology.seatPools", v1alpha1.ReasonPoolCapacityExceeded, fmt.Sprintf(
 			"its Shared pools run %d pods together, and EngineClass %s allows the company %d seat pods (spec.seatPools.maxPods)",
 			shared, class.Name, limit))
 		return
@@ -308,13 +330,13 @@ func checkCapacity(c *v1alpha1.Company, class *v1alpha1.EngineClass, t *Topology
 			continue
 		case first == nil:
 			first = q.seat
-			errs.add(KindSeat, q.seat.Name, "spec.placement.pool", v1alpha1.ReasonPoolCapacityExceeded, fmt.Sprintf(
+			errs.add(ClassPolicy, KindSeat, q.seat.Name, "spec.placement.pool", v1alpha1.ReasonPoolCapacityExceeded, fmt.Sprintf(
 				"places the seat in PerSeat pool %s, which runs %d pods for it; the company's seat pods would number %d with "+
 					"them, and EngineClass %s allows %d (spec.seatPools.maxPods): the seats already running in pods of their "+
 					"own, then the older seats, take the rest",
 				q.pool, pool.Replicas, pods+int(pool.Replicas), class.Name, limit))
 		default:
-			errs.add(KindSeat, q.seat.Name, "spec.placement.pool", v1alpha1.ReasonPoolCapacityExceeded, fmt.Sprintf(
+			errs.add(ClassPolicy, KindSeat, q.seat.Name, "spec.placement.pool", v1alpha1.ReasonPoolCapacityExceeded, fmt.Sprintf(
 				"places the seat in PerSeat pool %s, and comes after Seat %s, which already takes the company past "+
 					"EngineClass %s's %d seat pods (spec.seatPools.maxPods): the seats already running in pods of their "+
 					"own, then the older seats, are admitted first",

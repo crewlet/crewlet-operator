@@ -9,7 +9,7 @@ import (
 // every pool a seat runs in, data included, and every PerSeat seat, and
 // nothing for a person.
 func TestPlacementOfARenderedDocument(t *testing.T) {
-	doc, err := Company(companyCaseNamed(t, "seat-pools").input(t))
+	doc, err := Company(companyCaseNamed(t, caseSeatPools).input(t))
 	if err != nil {
 		t.Fatal(err)
 	}

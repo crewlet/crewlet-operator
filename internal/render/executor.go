@@ -25,7 +25,7 @@ import (
 // Crewlet applies a document holding such a seat or provider, and the turns
 // of every other seat run. So neither is refused here: refusing them would
 // hold the whole company on its last revision over a seat the engine would
-// apply and refuse alone. They are reported instead: a seat that
+// apply and refuse alone (ADR-0005). They are reported instead: a seat that
 // can run no turn on its Ready, and a provider whose agent mode cannot run on
 // its AgentModeRunnable, since the same provider still serves a text call
 // behind a chain's head or in another phase.

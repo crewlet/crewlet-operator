@@ -54,10 +54,10 @@ valueFrom:
 
 The engine finds the value where its provisioning looks for a seat's
 credential, which differs by vendor (below). A provisioned value anywhere
-else is never filled. A seat names one only while an Integration of its
-company has `provisioning: Engine`; otherwise it reports
-`ResolvedRefs=False NoProvisioner`. A Unit's credentials always come from
-Secrets.
+else is never filled, and so is one no Integration of the seat's company
+creates: while none has `provisioning: Engine`, the seat is applied and
+reports `ResolvedRefs=False NoProvisioner`, and its tool starts without the
+value. A Unit's credentials always come from Secrets.
 
 ## Where webhooks arrive
 

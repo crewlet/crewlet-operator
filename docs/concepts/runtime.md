@@ -265,10 +265,14 @@ takes their new image and keyring once they are ready on them, with the
 grace period and turns its pool had when the operator last wrote it (the
 annotation `crewlet.ai/seat-pool` records them), and the class's current
 resources, since a pod restarted from an image or a keyring the data pods
-have left would not join them. A document that cannot be applied (a Seat
-still placed in the removed pool is refused `PoolNotFound`) therefore keeps
-the pool running with the revision that needs it. `SeatsPlaced` names the
-StatefulSets kept that way.
+have left would not join them. A document that cannot be applied therefore
+keeps the pool running with the revision that needs it. A Seat still placed
+in the removed pool does not hold the document: it is reported
+(`ResolvedRefs=False`, `PoolNotFound`) and applied pinned where it runs
+(`Applied=False`, `PlacementPending`, below), so the removed pool's
+StatefulSet keeps running it as the operator last wrote it until the Seat
+names a pool the Company declares. `SeatsPlaced` names the StatefulSets kept
+that way.
 
 A seat moved to another pool keeps running where it runs until a pod of its
 new pool is ready: the config reconciler keeps it pinned where the revision

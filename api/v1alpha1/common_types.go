@@ -296,7 +296,8 @@ const (
 	//
 	// On an agent Seat, Ready reports whether the seat runs: LeaseHeld while
 	// an engine node holds its lease, as the engine's GET /fleet reports,
-	// and Unplaced while none does. A seat whose executor's chain is headed
+	// and Unplaced while none does, or PoolNotFound when none can, as the
+	// Company does not declare the seat's pool. A seat whose executor's chain is headed
 	// by a CLI in mode Agent that no node holding it can serve a tool bridge
 	// for is not Ready either, whoever holds it (AgentModeBridgeUnsupported,
 	// NotExposed): the engine applies it and refuses every one of its turns.
@@ -334,7 +335,14 @@ const (
 	ConditionAccepted = "Accepted"
 
 	// ConditionResolvedRefs reports whether every object and Secret a child
-	// references exists and has the keys it needs.
+	// references exists and has the keys it needs, and is what it must be
+	// (an Agent seat where the engine runs a turn, an Integration that
+	// provisions a provisioned credential). False holds the company's
+	// document, and the part reports it on Applied too, except for the
+	// findings the operator applies and reports only, because only the part
+	// at fault suffers them: a Seat's PoolNotFound and NoProvisioner, and a
+	// Human seat named in a GitLab Integration's accessLevels (HumanSeat).
+	// Applied says which.
 	ConditionResolvedRefs = "ResolvedRefs"
 
 	// ConditionApplied reports whether a child is part of the revision the
@@ -375,10 +383,10 @@ const (
 	ConditionHealthy = "Healthy"
 
 	// ConditionSeatsPlaced reports whether every pool a Company's agent
-	// seats are placed in, data included, has a ready pod to run them, and
-	// whether the seat pools run what the Company and its class ask for. It
-	// does not count towards Ready: a Shared pool scaled to zero parks its
-	// seats on purpose.
+	// seats are placed in, data included, exists and has a ready pod to run
+	// them, and whether the seat pools run what the Company and its class ask
+	// for. It does not count towards Ready: a Shared pool scaled to zero
+	// parks its seats on purpose.
 	ConditionSeatsPlaced = "SeatsPlaced"
 )
 
@@ -607,8 +615,9 @@ const (
 
 	// ReasonNoProvisioner is ResolvedRefs=False on a Seat that names a
 	// provisioned credential while no Integration of its Company has
-	// provisioning Engine: nothing would create the value, and the seat's
-	// tool or chat app would start without it.
+	// provisioning Engine: nothing creates the value, and the seat's tool or
+	// chat app starts without it. The seat is applied, with the reference
+	// the engine fills once an Integration provisions.
 	ReasonNoProvisioner = "NoProvisioner"
 
 	// ReasonValid is Accepted=True.
@@ -676,11 +685,13 @@ const (
 
 	// ReasonHumanSeat is ResolvedRefs=False on a Schedule whose
 	// target.seatRef names a Human seat: the engine runs no turn for a
-	// person, so the schedule could never fire. Target an Agent seat, or the
-	// person's unit with fanOut Each. It is also ResolvedRefs=False on an
-	// Integration whose Datadog routeTo.seatRef or GitLab accessLevels entry
-	// names a Human seat, for whom the engine runs no turn and creates no
-	// account.
+	// person, so the schedule could never fire, and refuses it. Target an
+	// Agent seat, or the person's unit with fanOut Each. It is also
+	// ResolvedRefs=False on an Integration whose Datadog routeTo.seatRef
+	// names a Human seat, which the engine refuses as well, and on one whose
+	// GitLab accessLevels entry does: the engine creates no GitLab account
+	// for a person, so that entry grants nothing, and is applied and
+	// reported only.
 	ReasonHumanSeat = "HumanSeat"
 
 	// ReasonSeatPaused is Paused=True: the engine holds the seat paused, as
@@ -744,7 +755,11 @@ const (
 
 	// ReasonPoolNotFound is ResolvedRefs=False on a Seat whose
 	// spec.placement.pool is neither data nor the name of one of its
-	// Company's spec.topology.seatPools.
+	// Company's spec.topology.seatPools. The seat is applied, pinned to the
+	// label crewlet.ai/undeclared-pool, which no pod carries: it is
+	// Ready=False with the reason while no engine node holds it, a seat that
+	// ran elsewhere keeps running there (Applied=False, PlacementPending),
+	// and the Company reports SeatsPlaced=False with the reason.
 	ReasonPoolNotFound = "PoolNotFound"
 
 	// ReasonSeatPoolsNotAllowed is ConfigApplied=False and
@@ -836,9 +851,10 @@ const (
 
 	// ReasonPlacementPending is Applied=False on an agent Seat placed in a
 	// pool other than the one the revision the engine runs pins it to,
-	// while that pool's StatefulSet has no ready pod: the operator keeps the
-	// seat pinned where it runs, so that it is never pinned to pods that are
-	// not there, and moves the pin with the first revision after one is.
+	// while that pool's StatefulSet has no ready pod, or the Company does
+	// not declare the pool: the operator keeps the seat pinned where it
+	// runs, so that it is never pinned to pods that are not there, and
+	// moves the pin with the first revision after one is.
 	ReasonPlacementPending = "PlacementPending"
 )
 

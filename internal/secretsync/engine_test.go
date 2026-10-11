@@ -1,6 +1,7 @@
 package secretsync
 
 import (
+	"bytes"
 	"maps"
 	"slices"
 	"testing"
@@ -69,5 +70,23 @@ func TestSyncAgainstTheEngine(t *testing.T) {
 	}
 	if len(res.Put) != 0 || len(res.Deleted) != 0 {
 		t.Fatalf("a second Sync of the same set changed the store: %+v", res)
+	}
+}
+
+// TestContractStoreRefusesWhatResolveRefuses holds MaxValueBytes to the
+// pinned engine's store: a value of exactly that size is stored, and one a
+// byte larger is refused. Resolve refuses the larger value before the engine
+// is asked, which holds the company's document (SecretTooLarge) on the
+// engine's word (ADR-0005), so a store that took more would leave the
+// operator holding a company the engine would run.
+func TestContractStoreRefusesWhatResolveRefuses(t *testing.T) {
+	t.Parallel()
+	eng := enginetest.Start(t).Client()
+	name := StoreName(secretref.Key{Namespace: nimbusNS, Name: slackSecret, Key: botTokenKey})
+	if err := eng.PutSecret(t.Context(), name, bytes.Repeat([]byte("a"), MaxValueBytes), Source); err != nil {
+		t.Errorf("the store refuses a value of MaxValueBytes: %v", err)
+	}
+	if err := eng.PutSecret(t.Context(), name, bytes.Repeat([]byte("a"), MaxValueBytes+1), Source); err == nil {
+		t.Error("the store takes a value a byte over MaxValueBytes, which Resolve refuses")
 	}
 }

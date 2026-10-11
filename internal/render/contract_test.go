@@ -199,7 +199,7 @@ func TestContractRefusesListenersThatCannotOpen(t *testing.T) {
 // listens for the seat pods: the pins are labels the engine accepts beside
 // the node that serves the company.
 func TestContractSeatPoolsCompany(t *testing.T) {
-	in := companyCaseNamed(t, "seat-pools").input(t)
+	in := companyCaseNamed(t, caseSeatPools).input(t)
 	doc, err := Company(in)
 	if err != nil {
 		t.Fatal(err)

@@ -166,6 +166,13 @@ func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 				heldMessage(lease, workload))
 			return
 		}
+		if pool := s.Status.Placement.Pool; !declaredPool(run.company, pool) {
+			setCondition(conditions, gen, crewletaiv1alpha1.ConditionReady, false, crewletaiv1alpha1.ReasonPoolNotFound, fmt.Sprintf(
+				"No engine node holds the seat: it is placed in pool %s, which Company %s does not declare "+
+					"(spec.topology.seatPools), so no pod carries the label it is pinned to. Its messages wait for the "+
+					"Company to declare the pool, or for the Seat to name another.", pool, run.company.Name))
+			return
+		}
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionReady, false, crewletaiv1alpha1.ReasonUnplaced,
 			run.unplacedMessage(p, handle, workload))
 	case run.fleetErr != nil:
@@ -176,13 +183,33 @@ func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 			ObservedGeneration: gen,
 		})
 	default:
-		// Not looked at: what the engine last reported stands.
+		// Not looked at: what the engine last reported stands, but not a
+		// verdict of the spec's that this render no longer finds.
 		s.Status.Placement.Node = p.base.(*crewletaiv1alpha1.Seat).Status.Placement.Node
-		if meta.FindStatusCondition(*conditions, crewletaiv1alpha1.ConditionReady) == nil {
+		ready := meta.FindStatusCondition(*conditions, crewletaiv1alpha1.ConditionReady)
+		switch {
+		case ready == nil:
 			setCondition(conditions, gen, crewletaiv1alpha1.ConditionReady, false, crewletaiv1alpha1.ReasonUnplaced,
 				"No engine has reported holding the seat yet.")
+		case run.objectsChecked && executorReason(ready.Reason):
+			setCondition(conditions, gen, crewletaiv1alpha1.ConditionReady, false, crewletaiv1alpha1.ReasonUnplaced, fmt.Sprintf(
+				"Its turns can run now (it was %s), and the engine has not been asked since which node holds the seat.",
+				ready.Reason))
 		}
 	}
+}
+
+// executorReason reports whether reason is Ready's for a seat whose executor
+// cannot run a turn, a verdict of the seat's spec rather than of the fleet.
+func executorReason(reason string) bool {
+	return reason == crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported || reason == crewletaiv1alpha1.ReasonNotExposed
+}
+
+// declaredPool reports whether pool is one a seat of the Company can run in:
+// data, or one of its spec.topology.seatPools.
+func declaredPool(c *crewletaiv1alpha1.Company, pool string) bool {
+	return pool == crewletaiv1alpha1.DataPool ||
+		slices.ContainsFunc(c.Spec.Topology.SeatPools, func(p crewletaiv1alpha1.SeatPool) bool { return p.Name == pool })
 }
 
 // heldMessage is Ready's message for a seat a node holds.

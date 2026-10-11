@@ -991,7 +991,7 @@ var _ = Describe("Company config", Ordered, func() {
 		e := startEngine(name)
 		secret(name+"-llm", map[string]string{llmKey: "k"})
 		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce)
-		lost := newSeat(namespace, name, "lost", func(s *crewletaiv1alpha1.Seat) { s.Spec.UnitRef.Name = "nowhere" })
+		lost := newSeat(namespace, name, "lost", func(s *crewletaiv1alpha1.Seat) { s.Spec.UnitRef.Name = nowhere })
 		standIn(c)
 		Eventually(reasonOf(lost, crewletaiv1alpha1.ConditionResolvedRefs)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonRefNotFound))
 		Expect(conditionOf(lost, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Message).To(ContainSubstring("Unit nowhere"))
@@ -1030,7 +1030,7 @@ var _ = Describe("Company config", Ordered, func() {
 		}
 		shared := newSeat(namespace, name, "shared", placed(poolGeneral))
 		alone := newSeat(namespace, name, "alone", placed(poolIsolated))
-		lost := newSeat(namespace, name, "lost", placed("nowhere"))
+		lost := newSeat(namespace, name, "lost", placed(nowhere))
 		Expect(k8sClient.Create(ctx, &crewletaiv1alpha1.LLMProvider{
 			Namespace: namespace, Name: name + "-agent",
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
@@ -1047,9 +1047,10 @@ var _ = Describe("Company config", Ordered, func() {
 		})
 		standIn(c)
 
-		By("refusing the seat in a pool the company does not declare as a reference that does not resolve")
+		By("reporting the seat in a pool the company does not declare as a reference that does not resolve, which holds nothing")
 		Eventually(reasonOf(lost, crewletaiv1alpha1.ConditionResolvedRefs)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonPoolNotFound))
 		Expect(conditionOf(lost, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Message).To(ContainSubstring("pool nowhere"))
+		Eventually(reasonOf(lost, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonBlocked))
 
 		By("refusing the seat in a PerSeat pool on Applied, its references resolved")
 		Eventually(reasonOf(alone, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonPerSeatNotAllowed))
@@ -1077,6 +1078,32 @@ var _ = Describe("Company config", Ordered, func() {
 		}).WithTimeout(settle).Should(Equal(metav1.ConditionFalse))
 		_, err := e.Client().ActiveConfig(ctx)
 		Expect(err).To(MatchError(engine.ErrNoActiveRevision))
+	})
+
+	It("applies a seat in a pool the company does not declare, and reports it on the Seat", func() {
+		const name = "undeclared"
+		e := startEngine(name)
+		secret(name+"-llm", map[string]string{llmKey: "k"})
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
+		standIn(c)
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+
+		By("placing a new seat in a pool the company does not declare")
+		lost := newSeat(namespace, name, "lost", func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.Placement = crewletaiv1alpha1.SeatPlacement{Pool: nowhere}
+		})
+		Eventually(reasonOf(lost, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
+		Expect(reasonOf(lost, crewletaiv1alpha1.ConditionResolvedRefs)(Default)).To(Equal(crewletaiv1alpha1.ReasonPoolNotFound))
+		Expect(conditionOf(lost, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionFalse))
+		Eventually(reasonOf(lost, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonPoolNotFound))
+		Expect(lost.Status.Placement.Workload).To(BeEmpty(), "no StatefulSet runs a pool the company does not declare")
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		active := runsRendered(e, c)
+		Expect(string(active.Document)).To(ContainSubstring(render.UndeclaredPoolLabel+": nowhere"),
+			"the seat is pinned to a label the pods of a pool declared later do not carry")
+		Expect(string(active.Document)).NotTo(ContainSubstring(render.PoolLabel + ": nowhere"))
+		Expect(c.Status.Config.Placement.Pools).NotTo(ContainElement(nowhere), "no StatefulSet is kept for a pool the company does not declare")
+		Expect(log.of(lost.Name)).To(ConsistOf(HavePrefix("Warning " + crewletaiv1alpha1.ReasonPoolNotFound)))
 	})
 
 	It("applies a seat whose agent-mode executor cannot run, and reports it on the Seat and the LLMProvider", func() {
@@ -1160,6 +1187,10 @@ var _ = Describe("Company config", Ordered, func() {
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)
 		Expect(log.of(bridged.Name)).To(HaveLen(1), "the seat that stayed unrunnable is announced once")
+		Expect(log.of(coder.Name)).To(ConsistOf(HavePrefix("Warning "+crewletaiv1alpha1.ReasonNotExposed)),
+			"the seat is announced once, however many reconciles found it unrunnable")
+		Expect(log.of(agent.Name)).To(ConsistOf(HavePrefix("Warning "+crewletaiv1alpha1.ReasonNotExposed)),
+			"the provider is announced once, however many reconciles found it unrunnable")
 	})
 
 	It("records where the revision the engine runs pins the seats, for the runtime to keep their pods", func() {
@@ -1262,6 +1293,16 @@ var _ = Describe("Company config", Ordered, func() {
 		pins, err := render.PlacementOf(active.Document)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(pins).To(Equal(render.Placement{Pools: []string{crewletaiv1alpha1.DataPool, poolGeneral}}), "the record is not what the engine runs")
+
+		By("keeping a seat moved to a pool the company does not declare where it runs")
+		updateLive(cy, func(s *crewletaiv1alpha1.Seat) { s.Spec.Placement.Pool = nowhere })
+		Eventually(reasonOf(cy, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonPlacementPending))
+		Expect(conditionOf(cy, crewletaiv1alpha1.ConditionApplied)(Default).Message).
+			To(ContainSubstring("pool nowhere, which Company " + name + " does not declare (see ResolvedRefs)"))
+		Expect(reasonOf(cy, crewletaiv1alpha1.ConditionResolvedRefs)(Default)).To(Equal(crewletaiv1alpha1.ReasonPoolNotFound))
+		Consistently(placement).WithTimeout(3 * time.Second).Should(Equal(crewletaiv1alpha1.RevisionPlacement{
+			Pools: []string{crewletaiv1alpha1.DataPool, poolGeneral},
+		}))
 	})
 
 	It("reports the engine node that holds each agent seat, and a seat no node may run as unplaced", func() {

@@ -64,7 +64,7 @@ func (r *renderer) seatPodProviders(s *v1alpha1.Seat, pool string) {
 				continue
 			}
 			refused = append(refused, link.provider)
-			r.errs.add(KindSeat, s.Name, link.field, v1alpha1.ReasonCLIAuthNotPortable, fmt.Sprintf(
+			r.errs.add(HarmsBeyond, KindSeat, s.Name, link.field, v1alpha1.ReasonCLIAuthNotPortable, fmt.Sprintf(
 				"runs on LLMProvider %s, whose CLI signs in with a credential bundle, and places the seat in seat pool %s: "+
 					"a seat pod keeps the login on a volume it loses at every start, restores the bundle each time and "+
 					"refreshes it on its own, which logs every pod out once the vendor rotates the refresh token. Sign "+

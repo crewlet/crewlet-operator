@@ -251,12 +251,13 @@ kubectl wait company/acme -n tenant-7f3a9c --for=condition=Ready --timeout=10m
 | `Company.status.config.revisionID` | The revision the engine runs. Every part reports the revision it is in. |
 | `Company.status.topology` | The pods that run the company: the data pod's, and each seat pool's. `SeatsPlaced` says whether every pool with a seat has a ready pod. |
 | `Seat.status.seatID` | The seat's identity in the engine, derived from the company's name and the seat's handle: stable for the seat's life, and the same if a deleted Seat is created again with the handle. Key your own records about a seat by it. |
-| `Seat.status.placement`, a Seat's `Ready` | The pool and StatefulSet that run the seat, and the pod whose engine holds it as the engine reports it: `Ready=False Unplaced` while none does and the seat's messages wait. |
+| `Seat.status.placement`, a Seat's `Ready` | The pool and StatefulSet that run the seat, and the pod whose engine holds it as the engine reports it: `Ready=False Unplaced` while none does and the seat's messages wait; `Ready=False PoolNotFound` while its pool is not one the Company declares, which no wait fixes; `Ready=False` with `AgentModeBridgeUnsupported` or `NotExposed` while its executor is a `CLIAgent` provider in `mode: Agent` that cannot call its tools back where it runs, so the engine refuses every one of its turns, whichever pod holds it. Show the message, which names the field to change. |
 | a Seat's `CodeWorkRunnable` | On an Agent seat with `spec.sandbox`, in a Company with one, whether its coding runs can start. `False` with `SandboxModelUnsupported` or `SandboxLoginNotPortable` leaves the seat applied and working, every coding run refused: show the message, which names the field to change. |
+| an LLMProvider's `AgentModeRunnable` | On a `CLIAgent` provider in `mode: Agent`, whether its runs can call a seat's tools back. `False`, `NotExposed`, while the Company has no public address: the provider is applied, and every seat whose executor's chain it heads fails each turn (each such Seat's `Ready` says so). |
 | `Seat.status.integrations.slack.requestURL` | The request URL of the seat's own Slack app, for the app's manifest. |
 | `Seat.status.integrations.github.webhookURL` | The webhook URL of the seat's own GitHub App. |
 | `Integration.status.webhookURL` | The company-wide address a vendor delivers to (GitHub's organization webhook). |
-| each object's `Accepted`, `ResolvedRefs`, `Applied` | Whether that object is in the running revision, and if not, why. |
+| each object's `Accepted`, `ResolvedRefs`, `Applied` | `Applied` says whether that object is in the running revision, and if not, why. `ResolvedRefs=False` while `Applied` is `True` holds nothing: the object is applied, and the reason (`PoolNotFound`, `NoProvisioner`, `HumanSeat` on a GitLab access level) is what it cannot do until it is fixed ([What blocks a document](../concepts/company-document.md#what-blocks-a-document)). |
 
 The Seat's URLs are set as soon as the Company has the vendor's `Integration`
 and a public address, before the seat has any credentials, so the control

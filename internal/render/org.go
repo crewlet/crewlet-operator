@@ -32,10 +32,10 @@ func (r *renderer) org() ([]roleDoc, []unitDoc) {
 		case parent == "":
 			roots = append(roots, u)
 		case r.units[parent] == nil:
-			r.errs.notFound(KindUnit, u.Name, "spec.parentRef.name", fmt.Sprintf(
+			r.errs.notFound(HarmsBeyond, KindUnit, u.Name, "spec.parentRef.name", fmt.Sprintf(
 				"names Unit %s as the parent, which does not exist in namespace %s", parent, r.namespace()))
 		case r.inCycle(u):
-			r.errs.add(KindUnit, u.Name, "spec.parentRef.name", v1alpha1.ReasonCycle, fmt.Sprintf(
+			r.errs.add(HarmsBeyond, KindUnit, u.Name, "spec.parentRef.name", v1alpha1.ReasonCycle, fmt.Sprintf(
 				"its chain of parents, through Unit %s, leads back to it: point spec.parentRef of one Unit in the chain elsewhere, or remove it", parent))
 		default:
 			children[parent] = append(children[parent], u)
@@ -50,7 +50,7 @@ func (r *renderer) org() ([]roleDoc, []unitDoc) {
 		case unit == "":
 			rootSeats = append(rootSeats, s)
 		case r.units[unit] == nil:
-			r.errs.notFound(KindSeat, s.Name, "spec.unitRef.name", fmt.Sprintf(
+			r.errs.notFound(HarmsBeyond, KindSeat, s.Name, "spec.unitRef.name", fmt.Sprintf(
 				"names Unit %s, which does not exist in namespace %s", unit, r.namespace()))
 		default:
 			members[unit] = append(members[unit], s)
@@ -187,7 +187,7 @@ func conflict[T interface{ GetName() string }](
 		if len(others) > 1 {
 			names = kind + "s " + strings.Join(others, ", ")
 		}
-		errs.add(kind, member.GetName(), field, v1alpha1.ReasonConflict, message(names))
+		errs.add(EngineRefuses, kind, member.GetName(), field, v1alpha1.ReasonConflict, message(names))
 	}
 }
 
@@ -260,7 +260,7 @@ func (r *renderer) unit(at Path, u *v1alpha1.Unit, t tree) unitDoc {
 			// handle.
 			doc.Lead = seatName(s)
 		} else {
-			r.errs.notFound(KindUnit, u.Name, "spec.leadRef.name", fmt.Sprintf(
+			r.errs.notFound(HarmsBeyond, KindUnit, u.Name, "spec.leadRef.name", fmt.Sprintf(
 				"names Seat %s as the lead, which does not exist in namespace %s", lead, r.namespace()))
 		}
 	}
@@ -345,7 +345,7 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 		}
 		for i, ref := range sb.MCPServerRefs {
 			if r.mcp[ref.Name] == nil {
-				r.errs.notFound(KindSeat, s.Name, fmt.Sprintf("spec.sandbox.mcpServerRefs[%d].name", i), fmt.Sprintf(
+				r.errs.notFound(HarmsBeyond, KindSeat, s.Name, fmt.Sprintf("spec.sandbox.mcpServerRefs[%d].name", i), fmt.Sprintf(
 					"names MCPServer %s, which does not exist in namespace %s", ref.Name, r.namespace()))
 				continue
 			}
@@ -359,7 +359,7 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 		// report, since Crewlet applies them.
 		if r.offersCodeWork(s) {
 			if w, ok := r.codeWork(s); ok && w.Reason == v1alpha1.ReasonCodingAgentMismatch {
-				r.errs.add(KindSeat, s.Name, w.Field, w.Reason, w.Message)
+				r.errs.add(EngineRefuses, KindSeat, s.Name, w.Field, v1alpha1.ReasonCodingAgentMismatch, w.Message)
 			}
 		}
 	}
@@ -383,10 +383,10 @@ func (r *renderer) scheduleTargets() {
 			seat := r.seats[name]
 			switch {
 			case seat == nil:
-				r.errs.notFound(KindSchedule, sched.Name, "spec.target.seatRef.name", fmt.Sprintf(
+				r.errs.notFound(EngineRefuses, KindSchedule, sched.Name, "spec.target.seatRef.name", fmt.Sprintf(
 					"names Seat %s, which does not exist in namespace %s", name, r.namespace()))
 			case seat.Spec.Kind == v1alpha1.SeatKindHuman:
-				r.errs.add(KindSchedule, sched.Name, "spec.target.seatRef.name", v1alpha1.ReasonHumanSeat, fmt.Sprintf(
+				r.errs.add(EngineRefuses, KindSchedule, sched.Name, "spec.target.seatRef.name", v1alpha1.ReasonHumanSeat, fmt.Sprintf(
 					"names Seat %s, a Human seat, and the engine runs no turn for a person: target an Agent seat, "+
 						"or a unit with fanOut Each", name))
 			default:
@@ -396,7 +396,7 @@ func (r *renderer) scheduleTargets() {
 		}
 		name := target.UnitRef.Name
 		if r.units[name] == nil {
-			r.errs.notFound(KindSchedule, sched.Name, "spec.target.unitRef.name", fmt.Sprintf(
+			r.errs.notFound(EngineRefuses, KindSchedule, sched.Name, "spec.target.unitRef.name", fmt.Sprintf(
 				"names Unit %s, which does not exist in namespace %s", name, r.namespace()))
 			continue
 		}
@@ -501,12 +501,12 @@ func (r *renderer) manages(s *v1alpha1.Seat) []string {
 		if ref.Kind == v1alpha1.ManagedKindUnit {
 			u := r.units[ref.Name]
 			if u == nil {
-				r.errs.notFound(KindSeat, s.Name, field, fmt.Sprintf(
+				r.errs.notFound(HarmsBeyond, KindSeat, s.Name, field, fmt.Sprintf(
 					"names Unit %s, which does not exist in namespace %s", ref.Name, r.namespace()))
 				continue
 			}
 			if other := r.seatNamed(unitName(u)); other != nil {
-				r.errs.add(KindSeat, s.Name, field, v1alpha1.ReasonConflict, fmt.Sprintf(
+				r.errs.add(HarmsBeyond, KindSeat, s.Name, field, v1alpha1.ReasonConflict, fmt.Sprintf(
 					"Unit %s is named %q, as Seat %s is, and Crewlet would read this as managing the seat: give the Unit or the Seat another displayName",
 					u.Name, unitName(u), other.Name))
 				continue
@@ -517,8 +517,7 @@ func (r *renderer) manages(s *v1alpha1.Seat) []string {
 		// An unset kind is the API's default, Seat.
 		managed := r.seats[ref.Name]
 		if managed == nil {
-			r.errs.notFound(KindSeat, s.Name, field, fmt.Sprintf(
-				"names Seat %s, which does not exist in namespace %s", ref.Name, r.namespace()))
+			r.errs.notFound(HarmsBeyond, KindSeat, s.Name, field, r.noSeat(ref.Name))
 			continue
 		}
 		out = append(out, seatName(managed))

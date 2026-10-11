@@ -79,6 +79,11 @@ func (run *configRun) holdMoves(ctx context.Context, active *engine.ActiveConfig
 		p.moving = fmt.Sprintf("The seat moves to pool %s, whose StatefulSet %s has no ready pod yet: it keeps running "+
 			"where the revision the engine runs pins it (%s), and a revision that moves it is applied once a pod of %s is "+
 			"ready, so that it is never pinned to pods that are not there.", pool, workload, labelsText(was), workload)
+		if !declaredPool(run.company, pool) {
+			p.moving = fmt.Sprintf("The seat moves to pool %s, which Company %s does not declare (see ResolvedRefs), so no "+
+				"pod of it will start: it keeps running where the revision the engine runs pins it (%s) until the Company "+
+				"declares the pool or the Seat names another.", pool, run.company.Name, labelsText(was))
+		}
 	}
 	if len(held) == 0 {
 		return nil

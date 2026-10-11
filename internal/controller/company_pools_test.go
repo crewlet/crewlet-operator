@@ -64,6 +64,42 @@ func setReady(p *corev1.Pod, ready bool, since time.Time) {
 	Expect(k8sClient.Status().Update(ctx, p)).To(Succeed())
 }
 
+// TestSeatsPlacedNamesUndeclaredPools holds the Company's SeatsPlaced to
+// every agent Seat placed in a pool the Company does not declare: such a seat
+// is applied and runs in no pool it names, which nothing else on the Company
+// says, so the condition names each seat with its pool, and says where a
+// seat that ran elsewhere still runs.
+func TestSeatsPlacedNamesUndeclaredPools(t *testing.T) {
+	company := &crewletaiv1alpha1.Company{Name: poolsCompany}
+	for _, c := range []struct {
+		name       string
+		undeclared []string
+		says       []string
+	}{
+		{name: "one seat", undeclared: []string{"lost (nowhere)"}, says: []string{"Seat lost (nowhere) is placed", "PlacementPending"}},
+		{
+			name:       "several seats",
+			undeclared: []string{"lost (nowhere)", "strayed (elsewhere)"},
+			says:       []string{"Seats lost (nowhere), strayed (elsewhere) are placed", "PlacementPending"},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got := seatsPlaced(company, nil, &seatPlan{topology: &render.Topology{}, allowed: true, undeclared: c.undeclared})
+			if got.Status != metav1.ConditionFalse || got.Reason != crewletaiv1alpha1.ReasonPoolNotFound {
+				t.Fatalf("SeatsPlaced is %s %s, want False %s", got.Status, got.Reason, crewletaiv1alpha1.ReasonPoolNotFound)
+			}
+			for _, phrase := range c.says {
+				if !strings.Contains(got.Message, phrase) {
+					t.Errorf("SeatsPlaced does not say %q: %s", phrase, got.Message)
+				}
+			}
+		})
+	}
+	if got := seatsPlaced(company, nil, &seatPlan{topology: &render.Topology{}, allowed: true}); got.Reason == crewletaiv1alpha1.ReasonPoolNotFound {
+		t.Errorf("SeatsPlaced is %s with every seat in a declared pool: %s", got.Reason, got.Message)
+	}
+}
+
 // TestStaleUnreadyPodTakesOneAtATime holds the operator's replacement of a
 // seat pod that is unready on an older template to what the StatefulSet's
 // own rollout would do: an unready seat pod may still hold seats, so it
@@ -1109,6 +1145,34 @@ var _ = Describe("Company seat pools", func() {
 		company := reconciled(&crewletaiv1alpha1.Company{Namespace: namespace, Name: poolsCompany})
 		Expect(seatSets()).To(ConsistOf(generalSet, batchSet), "cy's two pods would make four")
 		Expect(condition(company, crewletaiv1alpha1.ConditionSeatsPlaced).Message).To(ContainSubstring("1 Seat is refused"))
+	})
+
+	It("reports a seat placed in a pool the company does not declare, and runs no pod for it", func() {
+		class := newClass()
+		company := running(class.Name)
+		for name, pool := range map[string]string{"lost": nowhere, "strayed": "elsewhere"} {
+			Expect(k8sClient.Create(ctx, &crewletaiv1alpha1.Seat{
+				Namespace: namespace, Name: name,
+				Spec: crewletaiv1alpha1.SeatSpec{
+					CompanyRef: crewletaiv1alpha1.CompanyReference{Name: poolsCompany},
+					Placement:  crewletaiv1alpha1.SeatPlacement{Pool: pool},
+				},
+			})).To(Succeed())
+		}
+		company = reconciled(company)
+		placed := condition(company, crewletaiv1alpha1.ConditionSeatsPlaced)
+		Expect(placed.Status).To(Equal(metav1.ConditionFalse))
+		Expect(placed.Reason).To(Equal(crewletaiv1alpha1.ReasonPoolNotFound))
+		Expect(placed.Message).To(ContainSubstring("Seats lost (nowhere), strayed (elsewhere) are placed in pools the Company does not declare"))
+		Expect(seatSets()).To(ConsistOf(generalSet, batchSet, cySet), "no StatefulSet runs a pool the company does not declare")
+
+		By("naming the one seat left")
+		strayed := &crewletaiv1alpha1.Seat{}
+		get(strayed, "strayed")
+		Expect(k8sClient.Delete(ctx, strayed)).To(Succeed())
+		placed = condition(reconciled(company), crewletaiv1alpha1.ConditionSeatsPlaced)
+		Expect(placed.Reason).To(Equal(crewletaiv1alpha1.ReasonPoolNotFound))
+		Expect(placed.Message).To(HavePrefix("Seat lost (nowhere) is placed in a pool the Company does not declare"))
 	})
 
 	It("gives a PerSeat seat with a single pod no disruption budget", func() {

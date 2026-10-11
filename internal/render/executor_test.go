@@ -157,7 +157,7 @@ func TestExecutor(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			in := companyCaseNamed(t, "seat-pools").input(t)
+			in := companyCaseNamed(t, caseSeatPools).input(t)
 			in.PublicBaseURL = c.public
 			c.mutate(in)
 			if _, err := Company(in); err != nil {
@@ -196,7 +196,7 @@ func TestAgentMode(t *testing.T) {
 		{name: "a company with none", want: map[string]string{providerCLI: v1alpha1.ReasonNotExposed}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			in := companyCaseNamed(t, "seat-pools").input(t)
+			in := companyCaseNamed(t, caseSeatPools).input(t)
 			in.PublicBaseURL = c.public
 			in.LLMProviders = append(in.LLMProviders, cliProvider(v1alpha1.CLIAgentModeAgent))
 			text := cliProvider(v1alpha1.CLIAgentModeText)
@@ -241,7 +241,7 @@ func TestContractAgentModeIsAppliedWhereItCannotRun(t *testing.T) {
 		{
 			name: "an agent-mode executor in a seat pool",
 			input: func(t *testing.T) *Input {
-				in := companyCaseNamed(t, "seat-pools").input(t)
+				in := companyCaseNamed(t, caseSeatPools).input(t)
 				in.PublicBaseURL = "https://nimbus.example.com"
 				in.LLMProviders = append(in.LLMProviders, cliProvider(v1alpha1.CLIAgentModeAgent))
 				in.Company.Spec.Sandbox.E2B.APIKeySecretRef = v1alpha1.SecretKeyReference{Name: "e2b", Key: "apiKey"}

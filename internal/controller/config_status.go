@@ -27,6 +27,7 @@ func (run *configRun) writeStatus(ctx context.Context) error {
 	var errs []error
 	for _, p := range run.parts {
 		run.decide(p, vendors, units)
+		run.announce(p)
 		if err := run.patchPartStatus(ctx, p); err != nil {
 			errs = append(errs, err)
 		}
@@ -62,6 +63,9 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 	switch {
 	case len(p.unresolved) > 0:
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionResolvedRefs, false, p.unresolvedReason, sentences(p.unresolved))
+	case len(p.reported) > 0:
+		// Applied says that this holds nothing.
+		setCondition(conditions, gen, crewletaiv1alpha1.ConditionResolvedRefs, false, p.reportedReason, sentences(p.reported))
 	case run.secretsChecked:
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionResolvedRefs, true, crewletaiv1alpha1.ReasonResolved,
 			"Every object and Secret key it references exists.")
@@ -98,7 +102,9 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 		// The StatefulSet that runs the seat, unless none does: the pool
 		// is not declared, or the class runs no seat pods (none at all,
 		// or none for this seat).
-		if o.Status.Placement.Pool == crewletaiv1alpha1.DataPool || (run.class != nil && render.SeatPoolsAllowed(run.class) && len(p.unplaceable) == 0) {
+		pool := o.Status.Placement.Pool
+		if pool == crewletaiv1alpha1.DataPool ||
+			(declaredPool(run.company, pool) && run.class != nil && render.SeatPoolsAllowed(run.class) && len(p.unplaceable) == 0) {
 			o.Status.Placement.Workload = seatWorkloadName(run.company, o.Status.Placement.Pool, handle)
 		}
 		run.decideReady(p, o)

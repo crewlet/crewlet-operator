@@ -157,6 +157,51 @@ the split to the pinned engine: it refuses at the seat's `llm_sandbox`
 exactly the pairings the renderer refuses, and accepts the ones it only
 reports, so an engine that starts refusing either on a write fails it.
 
+### When a finding holds the document
+
+A company's document is applied whole, so a finding that holds it holds every
+object of the company on the last revision.
+[ADR-0005](adr/0005-hold-a-document-only-for-what-cannot-be-applied-safely.md)
+allows that for three reasons only: the pinned engine cannot take the object
+as it is (`EngineRefuses`), applying it would harm more than the object at
+fault (`HarmsBeyond`), or the class forbids it (`ClassPolicy`). Anything else
+is applied and reported (`Reported`). So when you add a finding to
+`internal/render`:
+
+- Pick its basis where you record it: `refErrors.add` and `notFound` take a
+  `render.Basis` first, and `TestEveryFindingHasABasis` fails until the
+  table in `internal/render/basis_test.go` classifies the new place, with
+  why. One reason can have a different basis in different places. State it
+  in `docs/concepts/company-document.md` too, in the table of "What blocks a
+  document" or the list of what is applied and reported instead:
+  `TestTheDocsStateTheBases` fails until the page agrees with the table.
+- Make sure what is applied for a `Reported` finding cannot reach past its
+  object later. A seat in a pool the Company does not declare is pinned to a
+  label of its own, never the pool's, because the pool's pods, once declared,
+  would run it under a revision nobody checked against them.
+- For `EngineRefuses`, add a case to `TestContractEngineRefusesWhatItHolds`
+  that writes the object into the document as its spec says and has the
+  pinned engine refuse it there; it fails until every place of that basis has
+  one. For `Reported`, add a case to `reportedCases` in
+  `internal/render/refs_test.go`, which `TestContractReportedIsApplied` hands
+  to the engine to accept.
+- Report a finding that holds nothing on the object at fault, and on each
+  object that cannot do its job because of it: `ResolvedRefs=False` when a
+  reference names what is not there, `Ready=False` when the object cannot do
+  its job at all, and a condition of its own when only part of it fails
+  (`CodeWorkRunnable`, `AgentModeRunnable`), with a Warning event when it
+  turns so.
+
+The verdicts on a seat that the engine applies and refuses only at run time
+are statements about the spec beside the render (`CodeWorkOf`, `ExecutorOf`,
+`AgentModeOf`), never findings. `ExecutorOf` and `AgentModeOf` mirror where
+the engine builds its tool bridge and refuses an agent-mode turn without
+one; `TestExecutorFollowsTheEngineSource` holds the variable the operator
+sets to the engine's, and `TestContractAgentModeIsAppliedWhereItCannotRun`
+holds the documents to the engine, but when you move `CREWLET_VERSION`, read
+`internal/engine/agentrun.go` and `internal/api/mcpbridge/build.go` in
+crewlet against `internal/render/executor.go`.
+
 The engine is pinned like every other tool, as `CREWLET_VERSION` in the
 Makefile, and `make crewlet` builds it into `bin/crewlet` (`make test` does so
 first). To run these tests outside make — from an IDE, or with a plain

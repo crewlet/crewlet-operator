@@ -351,7 +351,7 @@ func TestEngineConfigCannotNameACredentialBlock(t *testing.T) {
 	if len(blocks) == 0 {
 		t.Fatal("crewlet schema company marks no position, so this test would prove nothing")
 	}
-	entry := func(block string) map[string]any { return map[string]any{"name": block, "value": map[string]any{}} }
+	entry := func(block string) map[string]any { return map[string]any{keyName: block, "value": map[string]any{}} }
 	for _, block := range blocks {
 		errs := validate(entry(block))
 		if !slices.ContainsFunc(errs, func(e *field.Error) bool { return strings.HasPrefix(e.Detail, engineConfigRefusal) }) {
