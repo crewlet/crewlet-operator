@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/crewlet-icon.svg" alt="Crewlet" width="112">
+<img src="docs/assets/crewlet-operator-mascot.svg" alt="The Crewlet character on a stack of shipping containers, mug in hand, a ship's wheel beside it" width="280">
 
 # Crewlet Operator
 
@@ -269,7 +269,7 @@ the engine's documentation.
 
 </td>
 <td valign="top" align="center" width="38%">
-<img src="docs/assets/crewlet-mascot.svg" width="300" alt="">
+<img src="docs/assets/crewlet-operator-mascot.svg" width="300" alt="">
 </td>
 </tr>
 </table>

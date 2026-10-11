@@ -6,8 +6,7 @@ leaves this file out of them.
 
 | File | Used for |
 |---|---|
-| `crewlet-icon.svg` | The Crewlet mark: the README's header and the documentation index's |
-| `crewlet-mascot.svg` | The Crewlet character, on its own dark canvas: the README's Documentation section |
+| `crewlet-operator-mascot.svg` | The operator's mascot, on its own dark canvas: the README's header and Documentation section, and the documentation index's header |
 | `company-as-code.svg` | Feature icon: a company declared as `crewlet.ai` objects |
 | `hierarchy.svg` | Feature icon: the org chart as objects |
 | `applied-whole.svg` | Feature icon: one company document, applied whole or not at all |
@@ -15,13 +14,19 @@ leaves this file out of them.
 | `engine-runtime.svg` | Feature icon: the engine the operator runs for each company |
 | `tenants.svg` | Feature icon: one namespace per tenant |
 
-The mark, the character, `company-as-code.svg` and `hierarchy.svg` are copies
-of the [Crewlet engine's](https://github.com/crewlet/crewlet/blob/main/docs/assets/README.md),
+`company-as-code.svg` and `hierarchy.svg` are copies of the
+[Crewlet engine's](https://github.com/crewlet/crewlet/blob/main/docs/assets/README.md),
 byte for byte, which take them from the Crewlet design system: never redraw,
 recolour or re-optimise them here. The other feature icons were drawn for the
-operator to the same brief. The mark and the character are Crewlet trademarks,
-used here because the operator is a Crewlet product; the Kubernetes logo is
-not ours to combine with them.
+operator to the same brief.
+
+The mascot is the Crewlet character of the engine's `crewlet-mascot.svg`, its
+newspaper swapped for a mug, taking a break on a stack of shipping containers
+with a ship's wheel propped beside it: the containers are what Kubernetes runs
+and the helm is what its name means. The character is a Crewlet trademark,
+used here because the operator is a Crewlet product. The Kubernetes logo is not
+ours to combine with it, so the scene does not borrow it: the wheel has eight
+spokes, not seven, and stands in the scene as a prop rather than as an emblem.
 
 ## Conventions
 
@@ -40,7 +45,7 @@ With the default `objectBoundingBox` units, any horizontal or vertical stroke
 has a zero-area bounding box, which makes the gradient degenerate: the shape
 then does not paint at all.
 
-The mark is traced from raster art and is **not** minified: at aggressive
-settings `svgo` drops geometry from it. The character is minified, and carries
-near-white details, so it embeds its own dark canvas rather than relying on
-the page background.
+The mascot is drawn in the character's own style: flat purples with black
+outlines, and white props drawn in navy line work, with no gradient. It is
+minified, and carries near-white details, so it embeds its own dark canvas
+(`#0d0d12`, rounded) rather than relying on the page background.

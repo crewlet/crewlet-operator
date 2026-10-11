@@ -1,5 +1,5 @@
 <div align="center">
-<img src="assets/crewlet-icon.svg" alt="Crewlet" width="88">
+<img src="assets/crewlet-operator-mascot.svg" alt="The Crewlet character on a stack of shipping containers, mug in hand, a ship's wheel beside it" width="240">
 </div>
 
 # Crewlet Operator Documentation
