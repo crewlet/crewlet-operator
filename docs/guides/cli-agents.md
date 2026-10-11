@@ -12,25 +12,49 @@ the engine runs in a pod: the image, the login, and agent mode.
 ## The image needs the CLI
 
 The CLI is a program the engine starts, in the engine's own container, and
-Crewlet's image ships none: its Dockerfile leaves every runtime a CLI needs
-(Node.js for most of them) to a derived image. Build one from the engine
-image you run, named by digest: the engine of the operator's release, or
-the copy of Crewlet's `main` image that
-[Installing](installing.md#engine-image) makes in your registry. Pin both
-the engine and the CLI:
+Crewlet's image ships none: a derived image adds it, with whatever runtime it
+needs (Node.js for most of them; Claude Code needs none, being one native
+binary). Build one from the engine image you run, named by digest: the engine
+of the operator's release, or the copy of Crewlet's `main` image that
+[Installing](installing.md#engine-image) makes in your registry. Pin both the
+engine and the CLI. For Claude Code, Anthropic's installer runs in a build
+stage of its own and only the binary it installed is kept:
 
 ```dockerfile
-# The engine image you run, by digest.
+# The engine image you run, by digest, and the Claude Code release to add.
 ARG ENGINE_IMAGE
-FROM ${ENGINE_IMAGE}
+ARG CLAUDE_CODE_VERSION=2.1.296
+
+# The installer needs curl, which the engine image does not ship, and leaves a
+# download cache, a launcher and the build user's ~/.claude.json behind, none
+# of which a seat reads: only the binary leaves this stage.
+FROM ${ENGINE_IMAGE} AS claude-code
+ARG CLAUDE_CODE_VERSION
 USER root
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends nodejs npm \
-    && npm install -g @anthropic-ai/claude-code@2.1.295 \
-    && npm cache clean --force \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl
 USER crewlet
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_CODE_VERSION}"
+
+FROM ${ENGINE_IMAGE}
+ARG CLAUDE_CODE_VERSION
+COPY --from=claude-code --chown=0:0 \
+    /home/crewlet/.local/share/claude/versions/${CLAUDE_CODE_VERSION} /usr/local/bin/claude
+# The image is how the CLI is updated. The engine starts it with an
+# allowlisted environment, which an ENV here never reaches, so the switch goes
+# in the managed settings every claude reads.
+COPY <<'JSON' /etc/claude-code/managed-settings.json
+{"env": {"DISABLE_UPDATES": "1"}}
+JSON
 ```
+
+The installer checks the binary's SHA-256 against Anthropic's release manifest
+before it installs it, and a `CLAUDE_CODE_VERSION` that names no release fails
+the build. Updates are off because, left on, Claude Code would download each
+new release into each seat's home on the data volume, about 250 MB a copy that
+nothing runs: the engine runs the `claude` on its `PATH`.
+
+Build it from the engine image,
 
 ```bash
 docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \

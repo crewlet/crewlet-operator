@@ -409,6 +409,7 @@ commit:
 | the curl image | `test/e2e/e2e_test.go` | Docker Hub |
 | the Gateway API CRDs the controller suite installs | `internal/controller/testdata/gateway-api` | `make gateway-api-crds`, after Dependabot bumps `sigs.k8s.io/gateway-api`; the suite fails until the two match |
 | cosign (`cosign-release`) | `.github/workflows/release.yml` | sigstore/cosign's releases |
+| Claude Code (`CLAUDE_CODE_VERSION`) | the Dockerfile in `docs/guides/cli-agents.md` | `https://downloads.claude.ai/claude-code-releases/latest`, the release Anthropic's installer installs |
 | the supported Kubernetes range (1.34 to 1.37) | `README.md` (its badge and Requirements), `docs/guides/installing.md` | Kubernetes' releases: the four newest minor versions |
 
 ## Documentation
