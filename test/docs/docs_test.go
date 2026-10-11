@@ -5,13 +5,17 @@ package docs
 // navigation and fails its own build on a page the index does not list. These
 // tests hold the tree to both before either can break: every page is in the
 // index, every relative link names a file that exists, every #anchor names a
-// heading its target renders, and every link into the engine's documentation
-// names a page of the engine this module pins. A broken link fails here, in
+// heading its target renders, every link into the engine's documentation
+// names a page of the engine this module pins, and every absolute link into
+// the documentation site names a page it builds. A broken link fails here, in
 // this repository's own CI, rather than on GitHub where nobody is told or on
 // the site where the build that notices is not this repository's.
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/url"
 	"os"
@@ -600,5 +604,297 @@ func TestTheGateCanFail(t *testing.T) {
 	if !engineDocsLink.MatchString(engineLink) ||
 		engineDocsLink.MatchString("https://github.com/crewlet/crewlet-operator/blob/main/docs/README.md") {
 		t.Error("engineDocsLink matches the wrong repository")
+	}
+}
+
+// siteOrigin is the documentation site, whose absolute links are held to the
+// paths it builds.
+const siteOrigin = "https://docs.crewlet.ai"
+
+// siteVersioned is a path under a product and a version segment: the only
+// paths the site builds besides its own home. main is next/, the newest
+// release latest/, an older release line vX.Y/.
+var siteVersioned = regexp.MustCompile(`^/(engine|operator)/(latest|next|v[0-9]+\.[0-9]+)/(.*)$`)
+
+// engineRawTrees are the engine's directories outside docs/ the site publishes
+// file for file beside each version's pages: its JSON Schemas and its agent
+// skill.
+var engineRawTrees = []string{"schema/", "skills/"}
+
+// siteLinkProblem reports why an absolute link into the documentation site
+// names nothing the site builds, or "" when it names something. operatorDocs
+// is this tree's docs/; engineRoot returns the source of the engine this
+// module pins, and is called only for a link into the engine's latest/ or
+// next/.
+//
+// A page is docs/<page>.md served as <page>/ (the index, README.md here and
+// index.md in the engine, as the version's home), and every page is a
+// directory, so a page without its trailing slash is a redirect on every
+// click. The engine's schema/ and skills/ are served beside its pages, under
+// the same version. An older line (vX.Y/) is not in either tree and is held to
+// its shape alone.
+//
+// latest/ is checked against the same tree as next/, and that is sound only
+// because of two rules the site keeps:
+//
+//   - latest/ is main or a release cut from the same repository's main,
+//     never another program. Before a product's first release the site
+//     answers latest/ with a redirect to next/; from then it is the newest
+//     release. The engine's one older tag, v0.1.0, predates the engine this
+//     module pins, and the site never serves it at latest/.
+//   - what the release lacks, latest/ redirects to next/: a page, schema or
+//     skill file only main has answers at its latest/ path with a redirect
+//     to its next/ copy.
+//
+// So a link to a page or file main has reaches main's copy or a release's.
+// What this cannot see is a release's copy of a page main has since changed,
+// which is why a #fragment into the site is not checked here.
+func siteLinkProblem(target, operatorDocs string, engineRoot func() string) string {
+	path, _, _ := strings.Cut(strings.TrimPrefix(target, siteOrigin), "#")
+	path, _, _ = strings.Cut(path, "?")
+	// A full stop ending a sentence is prose, not part of the path.
+	path = strings.TrimRight(path, ".")
+	if path == "" || path == "/" {
+		return "" // the site's home
+	}
+	parts := siteVersioned.FindStringSubmatch(path)
+	if parts == nil {
+		return "is not under /operator/ or /engine/ and a version (latest, next or vX.Y), where the site " +
+			"builds nothing; link this tree's pages under /operator/latest/"
+	}
+	product, version, rest := parts[1], parts[2], parts[3]
+	if strings.HasPrefix(version, "v") {
+		return ""
+	}
+	last := rest[strings.LastIndex(rest, "/")+1:]
+	if last != "" && !strings.Contains(last, ".") {
+		return "names a page without its trailing slash, which the site answers with a redirect"
+	}
+	if product == "engine" {
+		root := engineRoot()
+		for _, tree := range engineRawTrees {
+			if strings.HasPrefix(rest, tree) {
+				if !isRegularIn(root, rest) {
+					return fmt.Sprintf("names %s, which is not in the engine's %s", rest, tree)
+				}
+				return ""
+			}
+		}
+	}
+	docs, index := operatorDocs, "README.md"
+	if product == "engine" {
+		docs, index = filepath.Join(engineRoot(), "docs"), "index.md"
+	}
+	file := index
+	switch page := strings.TrimSuffix(rest, "/"); {
+	case page == "":
+	case strings.Contains(last, "."):
+		file = page
+	default:
+		file = page + ".md"
+	}
+	if !isRegularIn(docs, file) {
+		return fmt.Sprintf("names %s, which is not in the %s's docs/", file, product)
+	}
+	return ""
+}
+
+// isRegularIn reports whether the slash-separated path rel names a regular
+// file under dir. It is read through dir as an os.Root, so a link's path
+// (which may hold "..") cannot reach a file outside the tree it names.
+func isRegularIn(dir, rel string) bool {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = root.Close() }()
+	info, err := root.Stat(filepath.FromSlash(rel))
+	return err == nil && info.Mode().IsRegular()
+}
+
+// siteLink matches an absolute link into the documentation site in any text,
+// and captures its path. The class stops at '#', '?', ')', a quote and
+// whitespace, so a fragment, a query, a Markdown paren and the end of a string
+// literal stay outside it; a '.' is in it, because a file has an extension,
+// and siteLinkProblem tells one from a full stop.
+var siteLink = regexp.MustCompile(regexp.QuoteMeta(siteOrigin) + `(/[A-Za-z0-9/._-]*)?`)
+
+// binaryProbe is how much of a file is read to decide it is not text: git's
+// own figure for the same decision, a NUL byte in the first eight thousand.
+const binaryProbe = 8000
+
+// textFiles is every text file of this module: Go, YAML, Markdown, the chart's
+// templates and NOTES.txt, the workflows, the Makefile. bin/ (the pinned tools)
+// is not this repository's, and neither is a nested checkout (a directory
+// holding a .git of its own), which is another commit of this tree.
+func textFiles(t *testing.T, root string) []string {
+	t.Helper()
+	var files []string
+	// Read through the module as an os.Root, so nothing the walk names can
+	// lead a read outside it.
+	tree, err := os.OpenRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tree.Close() }()
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if d.Name() == ".git" {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			if path == filepath.Join(root, "bin") {
+				return filepath.SkipDir
+			}
+			if path != root {
+				if _, err := tree.Lstat(filepath.Join(relative, ".git")); err == nil {
+					return filepath.SkipDir
+				}
+			}
+			return nil
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		head := make([]byte, binaryProbe)
+		file, err := tree.Open(relative)
+		if err != nil {
+			return err
+		}
+		n, readErr := io.ReadFull(file, head)
+		if closeErr := file.Close(); closeErr != nil {
+			return closeErr
+		}
+		if readErr != nil && !errors.Is(readErr, io.EOF) && !errors.Is(readErr, io.ErrUnexpectedEOF) {
+			return readErr
+		}
+		if !bytes.Contains(head[:n], []byte{0}) {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
+}
+
+func TestSiteLinksNameABuiltPage(t *testing.T) {
+	// The site moved every product under its own path and a version, and
+	// nothing forwards a path it no longer builds: /operator/<page>/, the
+	// shape the operator's pages had before, is a 404, and so is a page
+	// renamed under a link that still names it.
+	//
+	// Every text file, not the Markdown alone: a link the chart's NOTES.txt
+	// prints after an install, a Go doc comment or a sample's annotation is
+	// handed out as surely as one in a page.
+	root := repoRoot(t)
+	operatorDocs := filepath.Join(root, "docs")
+	var engineRoot string
+	engine := func() string {
+		if engineRoot == "" {
+			engineRoot = enginetest.Source(t)
+		}
+		return engineRoot
+	}
+	files := textFiles(t, root)
+	// A walk that read almost nothing certified almost nothing: a root
+	// resolved to the wrong directory finds no link and passes. The module
+	// holds several hundred text files.
+	if len(files) < 200 {
+		t.Fatalf("read %d text files under %s, which is not this module", len(files), root)
+	}
+	checked := 0
+	for _, file := range files {
+		data, err := os.ReadFile(filepath.Clean(file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		name, err := filepath.Rel(root, file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for number, line := range strings.Split(string(data), "\n") {
+			for _, match := range siteLink.FindAllStringSubmatch(line, -1) {
+				checked++
+				if problem := siteLinkProblem(match[0], operatorDocs, engine); problem != "" {
+					t.Errorf("%s:%d: %q %s", name, number+1, match[0], problem)
+				}
+			}
+		}
+	}
+	// README.md and CONTRIBUTING.md each link the site: a reader that found
+	// neither would pass every tree.
+	if checked < 2 {
+		t.Errorf("found %d links to %s in this tree, want at least the README's and "+
+			"CONTRIBUTING.md's", checked, siteOrigin)
+	}
+}
+
+func TestSiteLinkProblemKnowsWhatTheSiteBuilds(t *testing.T) {
+	operator := t.TempDir()
+	engine := t.TempDir()
+	for _, file := range []string{
+		filepath.Join(operator, "README.md"),
+		filepath.Join(operator, "guides", "installing.md"),
+		filepath.Join(engine, "docs", "index.md"),
+		filepath.Join(engine, "docs", "concepts", "overview.md"),
+		filepath.Join(engine, "schema", "company.schema.json"),
+		filepath.Join(engine, "skills", "company-architect", "SKILL.md"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(file), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte("# Page\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	engineRoot := func() string { return engine }
+	for _, c := range []struct {
+		target string
+		built  bool
+	}{
+		{siteOrigin, true},
+		{siteOrigin + "/", true},
+		{siteOrigin + "/operator/latest/", true},
+		{siteOrigin + "/operator/next/", true},
+		{siteOrigin + "/operator/latest/guides/installing/", true},
+		{siteOrigin + "/operator/next/guides/installing/#section", true},
+		{siteOrigin + "/operator/v0.3/anything/", true},
+		{siteOrigin + "/engine/latest/", true},
+		{siteOrigin + "/engine/next/concepts/overview/", true},
+		{siteOrigin + "/engine/latest/concepts/overview/.", true},
+		// The engine's schemas and skills are served beside its pages.
+		{siteOrigin + "/engine/latest/schema/company.schema.json", true},
+		{siteOrigin + "/engine/next/skills/company-architect/SKILL.md", true},
+
+		{siteOrigin + "/operator/", false},
+		{siteOrigin + "/operator", false},
+		{siteOrigin + "/operator/guides/installing/", false},
+		{siteOrigin + "/next/guides/installing/", false},
+		{siteOrigin + "/concepts/overview/", false},
+		{siteOrigin + "/operator/latest/guides/installing", false},
+		{siteOrigin + "/operator/latest/guides/no-such-page/", false},
+		{siteOrigin + "/engine/latest/concepts/no-such-page/", false},
+		{siteOrigin + "/engine/latest/schema/no-such.schema.json", false},
+		{siteOrigin + "/engine/latest/skills/no-such/SKILL.md", false},
+		// Not under docs/: the raw trees are the engine's, at its root.
+		{siteOrigin + "/engine/latest/concepts/company.schema.json", false},
+		{siteOrigin + "/operator/latest/schema/company.schema.json", false},
+		{siteOrigin + "/operator/latest/guides/installing.", false},
+	} {
+		problem := siteLinkProblem(c.target, operator, engineRoot)
+		if (problem == "") != c.built {
+			t.Errorf("siteLinkProblem(%q) = %q, want built=%v", c.target, problem, c.built)
+		}
 	}
 }

@@ -400,7 +400,12 @@ there is a regular one; every relative link and image
 names a file that exists, every `#anchor` names a heading its target renders
 (by GitHub's slug rule, which the site's renderer shares), and every link into
 the engine's docs names a page and heading of the engine this module pins
-(`CREWLET_VERSION`), so a pin bump that renames a page fails there.
+(`CREWLET_VERSION`), so a pin bump that renames a page fails there. An
+absolute `https://docs.crewlet.ai` link, in any text file of the module (the
+chart's `NOTES.txt` and the Go included, not the Markdown alone), must name
+what the site builds: under a product and a version, a page with its trailing
+slash, and for `latest/` or `next/` a page this tree has, or under `/engine/`
+a page, schema or skill file of the pinned engine.
 
 The site rebuilds when `.github/workflows/docs-publish.yml` asks it to: after
 a push to `main` that touches `docs/`, after a release, or when run by hand
