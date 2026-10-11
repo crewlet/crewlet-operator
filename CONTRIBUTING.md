@@ -411,7 +411,8 @@ The site rebuilds when `.github/workflows/docs-publish.yml` asks it to: after
 a push to `main` that touches `docs/`, after a release, or when run by hand
 from `main`. It reads two secrets, `DOCS_REPO` and `DOCS_TOKEN`, that name the
 site's renderer and carry a token allowed to dispatch to it; without them the
-workflow passes with a notice and the site keeps the pages it last built. They
+run fails, naming the missing one, and the site keeps the pages it last built.
+The job runs in this repository only, so a fork's pushes skip it. They
 are **environment secrets** of the `docs-publish` environment, whose
 deployment branches are limited to `main`, never repository secrets: the only
 permission that allows the dispatch also allows a push to the renderer, and a

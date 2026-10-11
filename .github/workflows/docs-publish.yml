@@ -79,20 +79,25 @@ jobs:
   notify:
     name: ask the documentation site to rebuild
     runs-on: ubuntu-latest
+    # In this repository only. A fork has neither the secrets nor a site to
+    # publish, and without this its every docs push would fail below; here a
+    # missing secret fails the run, on purpose.
+    #
     # Only a release run that published something is worth a rebuild: a
     # failed one published no version. The release workflow runs only on a
     # v* tag push today; the event check keeps it that way here if it ever
     # gains a trigger that publishes nothing. Every other trigger of THIS
     # workflow passes through.
     if: >-
-      github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push')
+      github.repository == 'crewlet/crewlet-operator' &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push'))
     # Where DOCS_REPO and DOCS_TOKEN live. Its deployment-branch rule must allow
     # main and nothing else: a workflow_run run and a push to main run on main
     # and pass it, a branch's workflow is refused it and never sees the token.
     # An environment nobody created is created bare by the first run that
-    # names it, with no secrets, so this job then skips with the notice below.
+    # names it, with no secrets, so this job then fails with the error below.
     environment: docs-publish
     steps:
       - name: Ask the documentation site to rebuild
@@ -109,12 +114,11 @@ jobs:
           DOCS_REPO: ${{ secrets.DOCS_REPO }}
           DOCS_TOKEN: ${{ secrets.DOCS_TOKEN }}
         run: |
-          # Report presence, never a value. Unconfigured is a state this
-          # repository is allowed to be in — a fork, or before the site is set
-          # up — so it is a notice and a green run, not a failure on main.
+          # Report presence, never a value. A missing one FAILS the run:
+          # publishing is the job, and a green run that asked nothing reads as
+          # a site that is up to date.
           if [ -z "${DOCS_REPO}" ] || [ -z "${DOCS_TOKEN}" ]; then
-            echo "::notice title=Docs publish not configured::DOCS_REPO and DOCS_TOKEN are not both set, so the documentation site was not asked to rebuild."
-            echo "Docs publish not configured; skipping."
+            echo "::error title=Docs not published::DOCS_REPO and DOCS_TOKEN are not both set in the docs-publish environment, so the documentation site was not asked to rebuild."
             echo "  DOCS_REPO   $([ -n "${DOCS_REPO}" ]  && echo set || echo MISSING)"
             echo "  DOCS_TOKEN  $([ -n "${DOCS_TOKEN}" ] && echo set || echo MISSING)"
             echo
@@ -125,7 +129,7 @@ jobs:
             echo "DOCS_TOKEN needs Contents: read and write on it, which is the permission"
             echo "repository_dispatch is under. Until they are set, the site shows this"
             echo "repository's docs as of its last rebuild."
-            exit 0
+            exit 1
           fi
           curl --fail-with-body --silent --show-error \
             -X POST \
