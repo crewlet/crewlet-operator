@@ -38,8 +38,8 @@ import (
 // provider and its seat, and does it doubt either) and `crewlet llm list`
 // (what it reports the CLI signed in with). A crewlet change that moves a
 // profile's token or key variable, or marks another CLI as signing in through
-// its environment, fails here, on the next run and the daily one at the
-// latest, until the API and the guide follow it.
+// its environment, fails here, on the next run, until the API and the guide
+// follow it.
 //
 // The engine admits some shapes the API refuses on purpose, which this does
 // not hold against it: a Subscription signed in to nothing (the engine

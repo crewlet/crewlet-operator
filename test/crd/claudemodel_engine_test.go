@@ -25,7 +25,7 @@ var wantOneOf = regexp.MustCompile(`\(want one of ([^)]*)\)`)
 // to an Anthropic provider whose model is a gateway alias, the one place
 // Crewlet takes a claudeModel, and the engine must admit each. A crewlet
 // change that adds, renames or drops a row of its table fails here, on the
-// next run and the daily one at the latest, until the API follows it.
+// next run, until the API follows it.
 func TestClaudeModelFollowsTheEngine(t *testing.T) {
 	namespace := newNamespace(t)
 	enum := enumOf(t, "llmproviders.crewlet.ai", "spec", "claudeModel")

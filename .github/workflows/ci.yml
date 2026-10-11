@@ -136,8 +136,8 @@ jobs:
   signoff:
     name: sign-off
     # Pull requests only, and the guard is load-bearing: the step reads
-    # github.event.pull_request.*, which a push or a scheduled run does not
-    # populate, so there the script would judge an empty range and pass.
+    # github.event.pull_request.*, which a push does not populate, so there
+    # the script would judge an empty range and pass.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
