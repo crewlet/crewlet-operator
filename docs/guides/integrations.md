@@ -175,6 +175,46 @@ spec:
       displayNameSuffix: " (AI)"
 ```
 
+`url` is the address the engine reaches the server at: each seat's
+websocket and the engine's REST calls, those that create the bots under
+`Engine` included, go to it, and each seat's Mattermost tool server is given
+the same address ([Mattermost's server](tool-servers.md#mattermost)). It
+need not be where people go. They browse the server's Site URL
+(`ServiceSettings.SiteURL`), from which Mattermost builds every link it hands
+out; the engine builds no Mattermost link from `url`. Any route to the
+server serves, the Site URL or the server's in-cluster Service while people
+browse a public name: the engine's websockets carry no `Origin` header, so
+Mattermost's origin check, which holds a browser's `Origin` to the Site
+URL's scheme and host, never applies to them.
+
+The server has to answer its API at `url` itself, without a redirect. The
+engine follows none, and fails each call the server redirects with an error
+naming where the server sent it; nor does the tool server, which is how an
+agent posts. So `url` has:
+
+- **the Site URL's path.** Mattermost serves its API at that path, whatever
+  host a request arrives at, and redirects a request outside the path into
+  it. A longer path is not redirected but reaches its web app, which answers
+  a read with its page and a write with `405 Method Not Allowed`. A Site URL
+  of `https://example.com/chat` takes a `url` ending in `/chat`, and a Site
+  URL with no path a `url` with none.
+- **the scheme its address is served on.** The other scheme is redirected
+  or refused: Mattermost's own `Forward80To443` redirects a read from
+  `http://` to `https://` and answers a write `400 Use HTTPS`, and a proxy
+  that moves `http://` to `https://` does so with a redirect.
+
+A connection that stays in the cluster has to pass the class's network
+policy too ([Network policy](exposure.md#network-policy)). Under
+`networkPolicy.mode: Isolated` the engine reaches every pod of the
+Company's own namespace already, so a server running there needs nothing
+more at its Service's address. Where `networkPolicy.egress.exceptCIDRs`
+covers the addresses a connection to `url` reaches, `egress.to` has to
+admit the pods it lands on: the server's pods for its Service, and, for a
+Site URL served by an Ingress controller or a Gateway in the cluster, that
+proxy's pods, wherever the server runs, because kube-proxy delivers a pod's
+connection to a load balancer's address in the cluster straight to the pods
+behind it.
+
 Each agent seat speaks as its own bot, whose one token covers the websocket,
 the REST calls and the Mattermost tool server:
 

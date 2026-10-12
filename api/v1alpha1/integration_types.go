@@ -388,9 +388,19 @@ type MattermostEngineProvisioning struct {
 // integration needs no public address. Each seat's bot is in its Seat's
 // spec.integrations.mattermost.
 type MattermostIntegration struct {
-	// url is the server's base URL, such as https://chat.example.com: its
-	// Site URL, which the websocket, the REST calls and every link derive
-	// from. Crewlet's `url`.
+	// url is the address the engine reaches the server at, such as
+	// https://chat.example.com: each seat's websocket, the REST calls and
+	// the bots' provisioning go to it. It need not be the server's Site URL,
+	// which people browse and from which Mattermost builds its links; the
+	// engine builds none from url. Any route to the server serves, such as
+	// its in-cluster Service: the engine's websockets carry no Origin
+	// header, so Mattermost's origin check, which holds a browser to the
+	// Site URL, never applies to them. The server has to answer its API at
+	// url without a redirect, which neither the engine nor the seats'
+	// Mattermost tool server, given the same address as its MATTERMOST_URL,
+	// follows: on the scheme that address is served on, and at the Site
+	// URL's path, outside which Mattermost redirects every request.
+	// Crewlet's `url`.
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048

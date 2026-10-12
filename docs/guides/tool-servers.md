@@ -295,6 +295,14 @@ spec:
   toolPrefix: mattermost_
 ```
 
+`MATTERMOST_URL` takes the Mattermost Integration's `url`, the address the
+engine reaches the server at, and the same rule holds for it
+([Mattermost](integrations.md#mattermost)): Mattermost has to answer its API
+there without a redirect, on the scheme the address is served on and at the
+Site URL's path. `mcp-server-mattermost` sends every call to that address
+with `httpx`, which follows no redirect unless told to, and it never tells
+it, so at an address Mattermost redirects no agent can post.
+
 The prefix makes its posting tool `mattermost_post_message`, the name
 Crewlet's [mentions skill](https://github.com/crewlet/crewlet/blob/main/examples/tool-skills/platform-mentions.md)
 triggers on. Each seat gives it `MATTERMOST_TOKEN`, the bot token of its

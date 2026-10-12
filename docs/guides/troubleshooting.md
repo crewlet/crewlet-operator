@@ -413,14 +413,14 @@ Webhooks reach the engine's public listener, port 8081 of the
 ## A tool server does not start
 
 An agent that receives its Mattermost or Slack messages, runs its turns and
-never answers has no chat tool server: it posts only through one. An
-`MCPServer` reports `Applied=True` once the engine runs the document that
-names it; whether its process starts is the engine's to see, at run time, and
-a server that does not start costs the seats its tools and nothing else. The
-engine logs each failure, with the last lines the server wrote, on the pod
-that started it. A server with `shared: false`, as each integration's server
-is, runs for each seat on the pod that holds the seat, which the Seat's
-`status.placement.node` names (unset while none does:
+never answers has no chat tool server, or one it cannot post through: it
+posts only through one. An `MCPServer` reports `Applied=True` once the engine
+runs the document that names it; whether its process starts is the engine's
+to see, at run time, and a server that does not start costs the seats its
+tools and nothing else. The engine logs each failure, with the last lines the
+server wrote, on the pod that started it. A server with `shared: false`, as
+each integration's server is, runs for each seat on the pod that holds the
+seat, which the Seat's `status.placement.node` names (unset while none does:
 [A seat runs nowhere](#a-seat-runs-nowhere)); a shared one runs on every
 engine pod:
 
@@ -445,6 +445,15 @@ API's [`GET /mcp-servers`](https://github.com/crewlet/crewlet/blob/main/docs/ref
 - **The server started without a tool you expected.** Some servers offer a
   tool only when a setting asks for it, such as Slack's posting tool
   ([Slack](tool-servers.md#slack)).
+- **Mattermost's server runs, and no post arrives.** Mattermost does not
+  answer its API at the server's `MATTERMOST_URL`, which is then not the
+  Integration's `url`: the engine fails at such an address too, and no seat
+  would receive a message. A path outside the Site URL's path is
+  redirected, and the server follows no redirect; a longer path reaches the
+  web app, which answers a write `405`; and the other scheme is redirected
+  or refused, as by Mattermost's own `Forward80To443`, which answers a write
+  over `http://` with `400 Use HTTPS`. Give it the Integration's `url`
+  ([Mattermost](integrations.md#mattermost)).
 
 ## Collecting what to report
 
