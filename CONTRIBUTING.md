@@ -410,7 +410,15 @@ commit:
 | the Gateway API CRDs the controller suite installs | `internal/controller/testdata/gateway-api` | `make gateway-api-crds`, after Dependabot bumps `sigs.k8s.io/gateway-api`; the suite fails until the two match |
 | cosign (`cosign-release`) | `.github/workflows/release.yml` | sigstore/cosign's releases |
 | Claude Code (`CLAUDE_CODE_VERSION`) | the Dockerfile in `docs/guides/cli-agents.md` | `https://downloads.claude.ai/claude-code-releases/latest`, the release Anthropic's installer installs |
+| uv (`UV_IMAGE`), Python (`PYTHON_VERSION`), `mcp-server-mattermost` and `mcp-atlassian` (`MCP_*_VERSION`), and `RESOLVED_AT` | the Dockerfile in `docs/guides/tool-servers.md` | `ghcr.io/astral-sh/uv`, by digest; `https://pypi.org/pypi/<package>/json`; the newest Python of the minor version the comment at the pin holds it to, which the pinned uv must offer; `RESOLVED_AT` the day the versions were read |
+| glab (`GLAB_VERSION`, `GLAB_SHA256_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases/permalink/latest`, the digests from the release's `checksums.txt` |
+| slack-mcp-server (`SLACK_MCP_SERVER_VERSION`, `SLACK_MCP_SERVER_INTEGRITY_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://registry.npmjs.org/slack-mcp-server/latest`, the integrities each platform package's `dist.integrity` |
 | the supported Kubernetes range (1.34 to 1.37) | `README.md` (its badge and Requirements), `docs/guides/installing.md` | Kubernetes' releases: the four newest minor versions |
+
+No CI job builds the Dockerfiles in `docs/guides/`: after moving one of their
+pins, build it from the engine image, and for the tool servers run the guide's
+checks against what you built, which start each server as the engine's pod
+does and ask it for its tools over MCP.
 
 ## Documentation
 

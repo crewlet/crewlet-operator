@@ -78,8 +78,10 @@ spec:
                   rule: self.all(x, !x.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]'))
               command:
                 description: |-
-                  command is the executable a Stdio server is launched with. Crewlet's
-                  `command`.
+                  command is the executable a Stdio server is launched with, as a process
+                  of the engine's container, by the engine's user. It must be installed
+                  in the engine image, and Crewlet's image ships no Python or Node.js
+                  runtime (docs/guides/tool-servers.md). Crewlet's `command`.
                 maxLength: 1024
                 minLength: 1
                 type: string

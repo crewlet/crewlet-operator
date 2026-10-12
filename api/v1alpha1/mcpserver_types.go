@@ -78,8 +78,10 @@ type MCPServerSpec struct {
 	// +default=true
 	Shared *bool `json:"shared,omitempty"`
 
-	// command is the executable a Stdio server is launched with. Crewlet's
-	// `command`.
+	// command is the executable a Stdio server is launched with, as a process
+	// of the engine's container, by the engine's user. It must be installed
+	// in the engine image, and Crewlet's image ships no Python or Node.js
+	// runtime (docs/guides/tool-servers.md). Crewlet's `command`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=1024

@@ -70,6 +70,12 @@ spec:
     image: <your registry>/crewlet-claude-code@sha256:<digest>   # crewlet <commit>
 ```
 
+A class names one engine image, so a company that also runs stdio tool
+servers needs one image with both: push this one, then build the Dockerfile
+of [Building the image](tool-servers.md#building-the-image) on it, with its
+`ENGINE_IMAGE` naming this image, rather than pasting one Dockerfile into the
+other ([One image with a coding CLI](tool-servers.md#one-image-with-a-coding-cli)).
+
 The engine's root filesystem is read-only: a CLI writes under the home the
 engine gives each seat and under `/tmp`, both writable. Each running CLI
 takes 200 to 400 MB, so size the class's `data.resources` for

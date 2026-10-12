@@ -294,7 +294,7 @@ two `MCPServer`s, three `Integration`s and two `Schedule`s. On kind it shows wha
 when what it needs is missing: there is no Gateway API, none of the
 Secrets the samples reference exist, and the `gitlab` tool server's `glab`
 is not in the engine image (a stdio server's command needs an image derived
-from the engine's, as a [coding CLI](guides/cli-agents.md#the-image-needs-the-cli) does):
+from the engine's: [Running tool servers](guides/tool-servers.md#the-image-needs-the-server)):
 
 ```bash
 bin/kubectl create namespace nimbus

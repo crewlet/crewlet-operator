@@ -39,6 +39,7 @@ flowchart TD
     SYM -->|"a Seat's Ready=False, another reason"| CS["Conditions and reasons:<br/>Unit, Seat, …"]
     SYM -->|"SeatsPlaced=False"| SP["Seat pods do not run"]
     SYM -->|"a vendor's webhooks"| WH["Webhooks do not arrive"]
+    SYM -->|"an agent never answers,<br/>a tool is missing"| TS["A tool server does not start"]
 ```
 
 Each condition's `observedGeneration` says which generation of the object it
@@ -408,6 +409,42 @@ Webhooks reach the engine's public listener, port 8081 of the
   health-checks the port it routes to, where the public listener answers
   `/` and the probe paths `404`. Point the check at port 8080, path `/ready`
   ([Load balancer health checks](exposure.md#load-balancer-health-checks)).
+
+## A tool server does not start
+
+An agent that receives its Mattermost or Slack messages, runs its turns and
+never answers has no chat tool server: it posts only through one. An
+`MCPServer` reports `Applied=True` once the engine runs the document that
+names it; whether its process starts is the engine's to see, at run time, and
+a server that does not start costs the seats its tools and nothing else. The
+engine logs each failure, with the last lines the server wrote, on the pod
+that started it. A server with `shared: false`, as each integration's server
+is, runs for each seat on the pod that holds the seat, which the Seat's
+`status.placement.node` names (unset while none does:
+[A seat runs nowhere](#a-seat-runs-nowhere)); a shared one runs on every
+engine pod:
+
+```bash
+pod=$(kubectl get seat triage -n acme -o jsonpath='{.status.placement.node}')
+kubectl logs "$pod" -n acme | grep -E 'mcp_server_failed|server_stderr_tail|empty_env_vars'
+kubectl logs acme-data-0 -n acme | grep -E 'mcp_server_failed|server_stderr_tail|empty_env_vars'   # a shared server
+```
+
+The engine's dashboard shows every server's state on every pod, as does its
+API's [`GET /mcp-servers`](https://github.com/crewlet/crewlet/blob/main/docs/reference/api-endpoints.md#get-mcp-servers).
+
+- **The command is not in the engine image.** Crewlet's image has no Python
+  or Node.js: build one with the server installed and name its command
+  ([Running Tool Servers](tool-servers.md#the-image-needs-the-server)).
+- **`empty_env_vars` names a variable.** Its value is empty: a Secret key
+  that holds nothing, or a provisioned credential the engine has not minted
+  yet. A seat's own server takes its environment when its pod claims the
+  seat, so a value that arrives later reaches it when the seat next changes
+  hands, as it does when the pod restarts (Crewlet's
+  [Shared vs per-role servers](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#shared-vs-per-role-servers)).
+- **The server started without a tool you expected.** Some servers offer a
+  tool only when a setting asks for it, such as Slack's posting tool
+  ([Slack](tool-servers.md#slack)).
 
 ## Collecting what to report
 

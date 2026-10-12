@@ -35,7 +35,7 @@ the [API reference](../reference/api.md).
 | `Unit` | Namespace | One node of the org chart: a division, a team, a squad | One entry of `units`, nested under its parent |
 | `Seat` | Namespace | One seat: an AI agent, or a person agents work with, tied to their own accounts ([A person's accounts](../guides/integrations.md#a-persons-accounts)) | One entry of `roles`, inside its unit |
 | `LLMProvider` | Namespace | A model a company's seats can run on | One entry of `providers.llm` |
-| `MCPServer` | Namespace | A tool server agents call | One entry of `mcp_servers` |
+| `MCPServer` | Namespace | A tool server agents call: a program the engine starts, which the engine image must carry ([Running tool servers](../guides/tool-servers.md)), or a remote one | One entry of `mcp_servers` |
 | `Integration` | Namespace | A vendor the company is connected to (Slack, GitHub, GitLab, Mattermost, Jira, Confluence, Datadog, an Atlassian organization), and who creates the seats' accounts there | One block of `integrations` |
 | `Schedule` | Namespace | Recurring work of a seat or a unit, fired on a cron schedule: the company's CronJob | One entry of its seat's or unit's `schedules` |
 

@@ -15,6 +15,13 @@ Every credential is a Secret reference ([Supplying credentials](credentials.md))
 [Credential Positions](../concepts/credentials.md) lists every position and
 the field that fills it.
 
+An Integration connects the engine to the vendor. An agent acts there, its
+chat replies included, through a tool server: an `MCPServer` its Seat gives
+its own credentials. Most of those servers are programs the engine starts in
+its own container, and Crewlet's image carries none of them:
+[Running Tool Servers](tool-servers.md) builds an engine image with each
+vendor's server and shows its `MCPServer`.
+
 ## Who creates the seats' accounts
 
 `spec.provisioning` says who creates each agent seat's account at the vendor:
@@ -121,7 +128,8 @@ spec:
   and registers the webhook.
 
 A seat's GitLab identity is its token for the `MCPServer` named `gitlab`
-(Crewlet looks for the seat's GitLab credential there, under `GITLAB_TOKEN`,
+([`glab mcp serve`](tool-servers.md#gitlab), in the engine image; Crewlet
+looks for the seat's GitLab credential there, under `GITLAB_TOKEN`,
 `GITLAB_PERSONAL_ACCESS_TOKEN`, `Private-Token` or `Authorization`):
 
 ```yaml
@@ -188,6 +196,11 @@ spec:                       # Seat lead
 Under `External` a bot made by hand, or by a platform, is a Secret key, and
 `username` names it when it is not the seat's handle.
 
+The seat's websocket only listens: the agent posts through the `mattermost`
+tool server, `mcp-server-mattermost`, which has to be in the engine image.
+Without it the agent receives every message and answers none
+([Mattermost's server](tool-servers.md#mattermost)).
+
 A person is tied to their Mattermost account by their Seat's
 `contact.mattermostUsername` ([A person's accounts](#a-persons-accounts)).
 
@@ -229,8 +242,10 @@ its tracker and knowledge base with `spec.tracker.backend: Jira` and
 `spec.knowledge.backend: Confluence`.
 
 A seat's Jira and Confluence identity is one Atlassian account: its token
-for the `MCPServer` named `atlassian` (or a product's own server, `jira` or
-`confluence`), under `JIRA_API_TOKEN`, `CONFLUENCE_API_TOKEN` or
+for the `MCPServer` named `atlassian`
+([`mcp-atlassian`](tool-servers.md#jira-and-confluence), in the engine
+image), or a product's own server, `jira` or `confluence`, under
+`JIRA_API_TOKEN`, `CONFLUENCE_API_TOKEN` or
 `ATLASSIAN_API_TOKEN` (a Data Center personal access token under
 `JIRA_PERSONAL_TOKEN` or `CONFLUENCE_PERSONAL_TOKEN`), with its address
 under `JIRA_USERNAME`, `CONFLUENCE_USERNAME` or `ATLASSIAN_EMAIL`. Without an
@@ -302,7 +317,9 @@ seat its monitor's `crewlet:<handle>` tag names (`handleTag`), and
 The engine also creates a service account, with `role`, for every agent seat
 whose credentials for the `MCPServer` named `datadog` name an application
 key (`DD_APP_KEY`, `DATADOG_APP_KEY` or `app_key`), and mints the key there:
-name it as provisioned.
+name it as provisioned. Crewlet names no Datadog tool server: the server you
+choose must read its key from one of those
+([Datadog's server](tool-servers.md#datadog)).
 
 ## Slack and GitHub
 
@@ -311,6 +328,13 @@ Seat's `spec.integrations.slack`. GitHub's Integration holds the webhook
 secret of the company-wide route and an optional organization token, and
 each agent seat is its own GitHub App, in `spec.integrations.github`.
 [Supplying credentials](credentials.md#an-agents-slack-app) shows both.
+
+A Slack agent posts through the `slack` tool server, `slack-mcp-server`, on
+its app's bot token, which its Seat names a second time for the server; the
+server offers its posting tool only when told to
+([Slack's server](tool-servers.md#slack)). GitHub's tool server is GitHub's
+own remote one, which needs nothing in the image
+([GitHub's server](tool-servers.md#github)).
 
 ## A person's accounts
 

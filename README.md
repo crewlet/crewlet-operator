@@ -256,7 +256,7 @@ run.
 - [How the document is applied](docs/concepts/applying.md) · [How a company's engine runs](docs/concepts/runtime.md) · [Credential positions](docs/concepts/credentials.md)
 
 **Guides**
-- [Supplying credentials](docs/guides/credentials.md) · [Connecting integrations](docs/guides/integrations.md) · [Seats on a coding CLI](docs/guides/cli-agents.md)
+- [Supplying credentials](docs/guides/credentials.md) · [Connecting integrations](docs/guides/integrations.md) · [Tool servers](docs/guides/tool-servers.md) · [Seats on a coding CLI](docs/guides/cli-agents.md)
 - [Exposure and network policy](docs/guides/exposure.md) · [Management policies](docs/guides/management-policies.md) · [Where seats run](docs/guides/topology.md)
 - [Hosting many tenants](docs/guides/multi-tenancy.md) · [Troubleshooting](docs/guides/troubleshooting.md)
 
