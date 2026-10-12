@@ -438,9 +438,11 @@ API's [`GET /mcp-servers`](https://github.com/crewlet/crewlet/blob/main/docs/ref
   ([Running Tool Servers](tool-servers.md#the-image-needs-the-server)).
 - **`empty_env_vars` names a variable.** Its value is empty: a Secret key
   that holds nothing, or a provisioned credential the engine has not minted
-  yet. A seat's own server takes its environment when its pod claims the
-  seat, so a value that arrives later reaches it when the seat next changes
-  hands, as it does when the pod restarts (Crewlet's
+  yet. A value that arrives later reaches the server at the next revision
+  the engine applies, which starts or restarts it with the value: the
+  engine's pass applies one once it has sealed the credentials it minted,
+  and the operator applies one once it has pushed a Secret's new value
+  ([Rotating a credential](credentials.md#rotating-a-credential); Crewlet's
   [Shared vs per-role servers](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#shared-vs-per-role-servers)).
 - **The server started without a tool you expected.** Some servers offer a
   tool only when a setting asks for it, such as Slack's posting tool
