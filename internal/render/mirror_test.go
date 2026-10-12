@@ -18,7 +18,11 @@ import (
 // seat's code work (CodeWorkOf) and on an agent-mode executor (ExecutorOf),
 // and the LLMProvider API's rule on an Agent-mode CLI's login, which Crewlet
 // reaches only when a seat launches a run, never on a write or in an answer
-// of its API. A contract test cannot hold those to the engine, so the
+// of its API; and which Atlassian deployment the company's Jira and
+// Confluence are on, and the identity each names a person by there, which
+// it reaches only when it connects to them and when a webhook arrives, and
+// against which the render reports a person's Atlassian account
+// (atlassianAccounts). A contract test cannot hold those to the engine, so the
 // operator holds the code it read: the digest of each function as it was
 // when it was read against the operator files that copy it.
 type mirror struct {
@@ -49,7 +53,19 @@ const (
 	doctorGo    = "internal/providers/llm/cliagent/doctor.go"
 	companyGo   = "internal/config/company.go"
 	firstRead   = "v0.1.1-0.20261010171839-4e45c6b992a2"
+
+	contactGo      = "internal/render/contact.go"
+	integrationsMd = "docs/guides/integrations.md"
+	jiraClient     = "internal/jira/client.go"
+	confluenceGo   = "internal/confluence/client.go"
+	atlassianRead  = "v0.1.1-0.20261012064104-c5d26af1f2b1"
 )
+
+// atlassianAccount is every operator file that copies which deployment the
+// company's Jira and Confluence are on, and what names a person there: the
+// render's report on a Seat's atlassianAccount, and the guide that tells a
+// person which value to give.
+var atlassianAccount = []string{contactGo, "api/v1alpha1/seat_types.go", integrationsMd}
 
 // agentLogin is every operator file that copies how an Agent-mode run's CLI
 // signs in inside the remote sandbox, and is refused when nothing does: the
@@ -203,6 +219,47 @@ var mirrored = []mirror{
 			"(phase Execute), never on its llm_sandbox, so that head's sign-in is the one that must reach the box",
 		digest: "49679ff36a054ab3dea460a4a5c850c4fafea190b74e37c3a6e72637b25df448",
 		read:   firstRead,
+	},
+	{
+		file: jiraClient, function: "DeploymentOf",
+		against: atlassianAccount,
+		decides: "Jira is on Atlassian Cloud when the host of the address the engine reads it at, the API gateway " +
+			"for a cloud_id, is under one of its cloudHosts (which TestAtlassianDeploymentFollowsTheEngineSource " +
+			"holds), and on Data Center otherwise",
+		digest: "568ae81c9f3a3c1b99c859483dc775f7f21c16d8e6cb8f6c04ae26265a373849",
+		read:   atlassianRead,
+	},
+	{
+		file: confluenceGo, function: "DeploymentOf",
+		against: atlassianAccount,
+		decides: "Confluence is on Atlassian Cloud when its address is a Cloud site (isCloudSite) or holds the path " +
+			"of the API gateway, which a cloud_id is read through, and on Data Center otherwise",
+		digest: "68fe7fefa610297d0e59758e9ed39ea3778c8c080a3a493dca6ec9b5af756388",
+		read:   atlassianRead,
+	},
+	{
+		file: confluenceGo, function: "isCloudSite",
+		against: atlassianAccount,
+		decides: "a Confluence address is a Cloud site when its host, without case, is under .atlassian.net or " +
+			".jira.com, a shorter list than Jira's",
+		digest: "8979b7745055e996b665f1c40b4adbb1872715c71b2eebdbe33fdb3bdd1af24f",
+		read:   atlassianRead,
+	},
+	{
+		file: "internal/jira/payload.go", function: "personID",
+		against: atlassianAccount,
+		decides: "a Jira webhook names a person by accountId on Cloud and by name, the username, on Data Center, " +
+			"which is what a person's atlassian_account_id is matched against",
+		digest: "f3e78974748a84706859ffe74740d238a17a72477bda196106b7837d7e2f105f",
+		read:   atlassianRead,
+	},
+	{
+		file: "internal/confluence/parse.go", function: "(*Parser).base",
+		against: atlassianAccount,
+		decides: "a Confluence webhook names its actor by accountId on Cloud and by username, else the user key, on " +
+			"Data Center, which is what a person's atlassian_account_id is matched against",
+		digest: "f93e753e2226757e3cd1e14f55610c86f3f384efb77980612c69d8458b1e9ab6",
+		read:   atlassianRead,
 	},
 	{
 		file: "internal/api/mcpbridge/build.go", function: "Build",

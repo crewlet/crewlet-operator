@@ -50,6 +50,12 @@ providers:
   llm_order:
   - claude
 roles:
+- contact:
+    atlassian_account_id: 557058:0d3b7c6e-2a41-4c8f-9e1d-5b6a7c8d9e0f
+    mattermost_user_id: lena.ortiz
+  handle: lena
+  kind: human
+  name: Lena Ortiz
 - goal: Triage the issues and the alerts nobody owns yet.
   handle: triage
   integrations:

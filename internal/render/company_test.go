@@ -41,7 +41,7 @@ func companyCases() []companyCase {
 		{name: "secret-positions", exposed: true},
 		{name: "cli-agent", exposed: true},
 		{name: "opencode-agent", exposed: true},
-		{name: "atlassian", exposed: true},
+		{name: caseAtlassian, exposed: true},
 		{name: caseSeatPools},
 	}
 }

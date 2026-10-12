@@ -46,6 +46,7 @@ var (
 	fnScheduleTargets    = nameOf((*renderer).scheduleTargets)
 	fnManages            = nameOf((*renderer).manages)
 	fnSeatPodProviders   = nameOf((*renderer).seatPodProviders)
+	fnAtlassianAccounts  = nameOf((*renderer).atlassianAccounts)
 )
 
 // nameOf is the name a function of the package is declared under: the last
@@ -120,6 +121,8 @@ var findings = []struct {
 	{site{fnOrg, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"a Seat with no unit: moved or left out, its unit's members and lead change and a running seat retires"},
 	{site{fnConflict, EngineRefuses, v1alpha1.ReasonConflict}, "two seats or units with one identity"},
+	{site{fnAtlassianAccounts, Reported, v1alpha1.ReasonNotAnAccountID},
+		"the engine registers any value; only the person goes unrecognized on Jira and Confluence Cloud"},
 	{site{fnUnit, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the engine runs the unit and every descendant inheriting its lead with no lead"},
 	{site{fnRole, HarmsBeyond, v1alpha1.ReasonRefNotFound},
@@ -365,7 +368,31 @@ func engineCases() []engineCase {
 			in.Seats = append(in.Seats, *s)
 		}
 	}
-	return []engineCase{
+	// Every account of a contact, claimed by jane and her twin.
+	accounts := make([]engineCase, 0, len(contactAccounts))
+	for _, a := range contactAccounts {
+		const account = "jane-founder"
+		accounts = append(accounts, engineCase{
+			name: "two seats take one account: " + a.field, site: site{fnConflict, EngineRefuses, v1alpha1.ReasonConflict},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				setContact(&seat(in, seatJane).Spec.Contact, a.field, account)
+				twin(func(s *v1alpha1.Seat) { setContact(&s.Spec.Contact, a.field, account) })(in)
+			},
+			refused: "Seat/jane-2 spec.contact." + a.field,
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				contact, _ := role(t, doc, seatJane)["contact"].(map[string]any)
+				contact[a.key] = account
+				another(func(r map[string]any) {
+					r["handle"], r[keyName] = seatJane+"-2", janeTwo
+					r["contact"] = map[string]any{a.key: account}
+				})(t, doc)
+			},
+			at: keyName, says: a.key,
+		})
+	}
+	return append([]engineCase{
 		{
 			name: "a seat's chain names no provider", site: site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
 			input:   sampleCompany,
@@ -413,28 +440,6 @@ func engineCases() []engineCase {
 			refused: "Seat/jane-2 spec.displayName",
 			write:   another(func(r map[string]any) { r["handle"] = seatJane + "-2" }),
 			at:      keyName,
-		},
-		{
-			name: "two seats take one Slack account", site: site{fnConflict, EngineRefuses, v1alpha1.ReasonConflict},
-			input:   sampleCompany,
-			mutate:  twin(func(s *v1alpha1.Seat) { s.Spec.Contact.SlackUserID = "U0FOUNDER" }),
-			refused: "Seat/jane-2 spec.contact.slackUserID",
-			write: another(func(r map[string]any) {
-				r["handle"], r[keyName] = seatJane+"-2", janeTwo
-				r["contact"] = map[string]any{"slack_user_id": "U0FOUNDER"}
-			}),
-			at: keyName, says: "slack_user_id",
-		},
-		{
-			name: "two seats take one GitHub account", site: site{fnConflict, EngineRefuses, v1alpha1.ReasonConflict},
-			input:   sampleCompany,
-			mutate:  twin(func(s *v1alpha1.Seat) { s.Spec.Contact.GitHubLogin = "jane-founder" }),
-			refused: "Seat/jane-2 spec.contact.githubLogin",
-			write: another(func(r map[string]any) {
-				r["handle"], r[keyName] = seatJane+"-2", janeTwo
-				r["contact"] = map[string]any{"github_login": "jane-founder"}
-			}),
-			at: keyName, says: "github_login",
 		},
 		{
 			name: "two units answer to one name", site: site{fnConflict, EngineRefuses, v1alpha1.ReasonConflict},
@@ -488,7 +493,7 @@ func engineCases() []engineCase {
 			refused: "Schedule/platform-standup spec.target.unitRef.name",
 			noPlace: true,
 		},
-	}
+	}, accounts...)
 }
 
 // heldElsewhere are the places of the basis EngineRefuses another contract

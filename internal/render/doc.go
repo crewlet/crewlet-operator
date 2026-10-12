@@ -28,7 +28,9 @@
 // objects, and render trusts that rather than repeating it. What no single
 // object's validation can see is a reference to another object: a Seat whose
 // Unit does not exist, a chain of parent Units that loops, a Seat placed in a
-// pool its Company does not declare or its EngineClass does not admit. Each
+// pool its Company does not declare or its EngineClass does not admit, a
+// person's Atlassian account that the company's Jira or Confluence, on
+// Atlassian Cloud, names nobody by. Each
 // is a *RefError naming the object and field that hold the reference, so the
 // controller can report it on that object, and each names its Basis
 // (ADR-0005): a document is held only for what the engine refuses, what

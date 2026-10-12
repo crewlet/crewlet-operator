@@ -340,9 +340,9 @@ const (
 	// provisions a provisioned credential). False holds the company's
 	// document, and the part reports it on Applied too, except for the
 	// findings the operator applies and reports only, because only the part
-	// at fault suffers them: a Seat's PoolNotFound and NoProvisioner, and a
-	// Human seat named in a GitLab Integration's accessLevels (HumanSeat).
-	// Applied says which.
+	// at fault suffers them: a Seat's PoolNotFound, NoProvisioner and
+	// NotAnAccountID, and a Human seat named in a GitLab Integration's
+	// accessLevels (HumanSeat). Applied says which.
 	ConditionResolvedRefs = "ResolvedRefs"
 
 	// ConditionApplied reports whether a child is part of the revision the
@@ -620,6 +620,15 @@ const (
 	// the engine fills once an Integration provisions.
 	ReasonNoProvisioner = "NoProvisioner"
 
+	// ReasonNotAnAccountID is ResolvedRefs=False on a Seat whose
+	// spec.contact.atlassianAccount is not in the form of an Atlassian
+	// account id while its Company reaches Jira or Confluence on Atlassian
+	// Cloud, which names a person by account id alone: an email address, or
+	// a Data Center username. Nothing the person does there reaches the seat
+	// as theirs, and an agent's mention of them names nobody. The seat is
+	// applied with the value as written.
+	ReasonNotAnAccountID = "NotAnAccountID"
+
 	// ReasonValid is Accepted=True.
 	ReasonValid = "Valid"
 
@@ -662,12 +671,14 @@ const (
 
 	// ReasonConflict is Accepted=False when the object collides with
 	// another of its company in a way Crewlet refuses: two Integrations for
-	// one vendor (Jira, Confluence and Atlassian are three vendors); two Seats with one handle, one displayName or one contact
-	// account (contact.slackUserID or contact.githubLogin); two Units with
-	// one displayName; or an LLMProvider whose name is also the name of one
-	// of the EngineClass's platformLLMProviders the company uses, since both
-	// are keys of Crewlet's one providers.llm mapping. The message names the
-	// other object.
+	// one vendor (Jira, Confluence and Atlassian are three vendors); two
+	// Seats with one handle, one displayName or one contact account (any
+	// field of spec.contact); two Units that answer to one key (a
+	// displayName or a name, compared without case); or an LLMProvider
+	// whose name is also the name of one of the EngineClass's
+	// platformLLMProviders the company uses, since both are keys of
+	// Crewlet's one providers.llm mapping. The message names the other
+	// object.
 	ReasonConflict = "Conflict"
 
 	// ReasonReferenceNotAllowed is ResolvedRefs=False on an object (or

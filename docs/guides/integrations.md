@@ -5,8 +5,9 @@ Mattermost, Jira, Confluence, Datadog, or an Atlassian Cloud organization.
 
 Each renders one block of Crewlet's `integrations`, and a company has at
 most one per vendor. This guide shows each vendor's object, the credentials
-it takes, what the seats bring of their own, and where the engine wants to
-be told about the vendor. Crewlet's own pages
+it takes, what the seats bring of their own, where the engine wants to be
+told about the vendor, and how a person is tied to their account there.
+Crewlet's own pages
 ([Integrations](https://github.com/crewlet/crewlet/blob/main/docs/index.md#integrations))
 describe what each integration does once connected.
 
@@ -142,6 +143,9 @@ A provisioned value is the credential alone, so provision a variable, such
 as `GITLAB_TOKEN` of a Stdio server, rather than an `Authorization` header,
 which would need a scheme in front of it.
 
+A person is tied to their GitLab account by their Seat's
+`contact.gitlabUsername` ([A person's accounts](#a-persons-accounts)).
+
 ## Mattermost
 
 ```yaml
@@ -183,6 +187,9 @@ spec:                       # Seat lead
 
 Under `External` a bot made by hand, or by a platform, is a Secret key, and
 `username` names it when it is not the seat's handle.
+
+A person is tied to their Mattermost account by their Seat's
+`contact.mattermostUsername` ([A person's accounts](#a-persons-accounts)).
 
 ## Jira and Confluence
 
@@ -228,6 +235,10 @@ for the `MCPServer` named `atlassian` (or a product's own server, `jira` or
 `JIRA_PERSONAL_TOKEN` or `CONFLUENCE_PERSONAL_TOKEN`), with its address
 under `JIRA_USERNAME`, `CONFLUENCE_USERNAME` or `ATLASSIAN_EMAIL`. Without an
 Atlassian Integration those come from Secrets.
+
+A person is tied to their Atlassian account, on Jira and Confluence both, by
+their Seat's `contact.atlassianAccount`: their account id on Cloud, their
+username on Data Center ([A person's accounts](#a-persons-accounts)).
 
 ## An Atlassian Cloud organization
 
@@ -300,6 +311,72 @@ Seat's `spec.integrations.slack`. GitHub's Integration holds the webhook
 secret of the company-wide route and an optional organization token, and
 each agent seat is its own GitHub App, in `spec.integrations.github`.
 [Supplying credentials](credentials.md#an-agents-slack-app) shows both.
+
+## A person's accounts
+
+The engine creates no account for a person. A Human seat is tied to the
+person's own account on each surface by its `spec.contact`, which renders to
+the role's `contact` in Crewlet: agents mention the person there and message
+them directly, and what the person does there, a post, a comment or a
+review, reaches the engine as theirs. A Human seat needs at least one, and
+takes one field for each surface it is reached on:
+
+| Field | Surface | The value | Where to find it |
+|---|---|---|---|
+| `slackUserID` | Slack | the member id, such as `U0123ABCD` | the person's Slack profile: *More*, then *Copy member ID* |
+| `mattermostUsername` | Mattermost | the username, such as `jane.doe`, without the `@`; never the 26-character user id | the person's Mattermost profile, under *Username* |
+| `atlassianAccount` | Jira and Confluence | on Atlassian Cloud, the account id, such as `557058:f58131cb-b67d-43c7-b30d-6b58d40bd077` or `5b10ac8d82e05b22cc7d4ef5`, never the email address; on Data Center, the username, such as `jane.doe` | on Cloud, the `accountId` of Jira's `GET /rest/api/3/myself` called as the person, or of `GET /rest/api/3/user/search?query=<email address>`; on Data Center, the `name` of Jira's `GET /rest/api/2/myself`, or the `username` of Confluence's `GET /rest/api/user/current` |
+| `githubLogin` | GitHub | the login, such as `jane-founder` | the person's profile address, `https://github.com/<login>` |
+| `gitlabUsername` | GitLab | the username, without the `@` | the person's GitLab profile, after the `@` |
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: jane
+spec:
+  companyRef: {name: acme}
+  kind: Human
+  displayName: Jane Founder
+  contact:
+    mattermostUsername: jane.doe
+    atlassianAccount: 557058:f58131cb-b67d-43c7-b30d-6b58d40bd077
+    gitlabUsername: jane-doe
+```
+
+Each value is checked in its platform's own form when the Seat is written: a
+Mattermost username in capitals, with an `@`, one Mattermost reserves
+(`all`, `channel`, `matterbot`, `system`), and `here`, whose mention, like
+`all` and `channel`, notifies the whole channel rather than the person, are
+refused.
+
+An Atlassian account takes any value of up to 255 characters without
+whitespace or `${`, since a Data Center username may hold almost any
+character, and it is checked against the deployment the company reaches
+Jira and Confluence on, which the operator reads as Crewlet does: a product connected by `cloudID`, by a `url` whose
+host is under `atlassian.net` or `jira.com` (or `atlassian.com`, for Jira),
+or by neither, on the sites the Atlassian organization discovers, is on
+Cloud, and any other `url` is a Data Center instance. Where either product
+is on Cloud, which names a person by account id alone, a value that is no
+account id, such as an email address, is applied and reported on the Seat as
+`ResolvedRefs=False` with the reason `NotAnAccountID`, naming the products
+on Cloud. Jira and Confluence share the one value, so a company with one
+product on Cloud and the other on Data Center reaches the person on only
+one of them.
+
+One account belongs to one person: a Seat claiming an account another Seat
+of the company claims reports `Accepted=False` with the reason `Conflict`,
+naming the other, and holds the company's document until one of them gives
+it up. GitHub logins and GitLab usernames are compared without case, as
+those platforms compare them; the others exactly.
+
+Crewlet's `crewlet_operator_id`, which binds one of the engine's API tokens
+to a person so that whoever writes with it acts as them, has no field: the
+engines the operator runs hold two tokens, the operator's own and the one
+`Company.status.apiAccessSecretRef` hands every consumer of the company, and
+neither is one person's.
+[Humans in the Org Chart](https://github.com/crewlet/crewlet/blob/main/docs/concepts/humans-in-the-org.md)
+describes what Crewlet does with each account.
 
 ## See also
 

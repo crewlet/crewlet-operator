@@ -18,6 +18,7 @@ spec:
   contact:
     slackUserID: U0FOUNDER
     githubLogin: jane-founder
+    gitlabUsername: jane-founder
   availability: CET business hours
 ---
 apiVersion: crewlet.ai/v1alpha1

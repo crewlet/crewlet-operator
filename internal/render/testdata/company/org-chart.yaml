@@ -51,7 +51,10 @@ roles:
   - researcher
 - availability: Mornings only
   contact:
+    atlassian_account_id: 557058:f58131cb-b67d-43c7-b30d-6b58d40bd077
     github_login: wile-e
+    gitlab_username: Wile-E
+    mattermost_user_id: wile.e
     slack_user_id: U0WILE
   email: wile@acme.example
   handle: wile

@@ -73,6 +73,7 @@ roles:
 - availability: CET business hours
   contact:
     github_login: jane-founder
+    gitlab_username: jane-founder
     slack_user_id: U0FOUNDER
   goal: Own Nimbus's direction and make the final call on what ships.
   handle: jane

@@ -17,7 +17,8 @@ import (
 // provisions), or it places a seat in a pool the company does not declare or
 // its EngineClass does not let it run, or whose pods cannot keep the login of
 // a provider it runs on, or runs a seat's code work on a CLIAgent provider of
-// another CLI than its coding agent.
+// another CLI than its coding agent, or names a person's Atlassian account in
+// a form the company's Jira or Confluence on Atlassian Cloud names nobody by.
 //
 // Its Basis says whether it holds the company's document, and why
 // (ADR-0005). A finding that holds is a refusal: the document is applied
@@ -46,7 +47,8 @@ type RefError struct {
 	// placement v1alpha1.ReasonPoolNotFound, v1alpha1.ReasonPerSeatNotAllowed,
 	// v1alpha1.ReasonPoolCapacityExceeded, v1alpha1.ReasonSeatPoolsNotAllowed
 	// or v1alpha1.ReasonCLIAuthNotPortable, or for a seat's code work
-	// v1alpha1.ReasonCodingAgentMismatch.
+	// v1alpha1.ReasonCodingAgentMismatch, or for a person's Atlassian account
+	// v1alpha1.ReasonNotAnAccountID.
 	Reason string
 	// Message says what is wrong and what to do, for a condition message.
 	Message string

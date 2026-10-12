@@ -3,7 +3,8 @@
 # organization, where it creates each agent seat's account and mints the
 # token and the address the seat's Atlassian tool server signs in with.
 # Mattermost bots are made by hand (provisioning External), and Datadog
-# alerts that name no seat are dismissed.
+# alerts that name no seat are dismissed. Its founder is a person, tied to
+# her Atlassian Cloud account id and her Mattermost username.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -163,3 +164,16 @@ spec:
           key: botToken
       username: helix-triage
       channel: ops
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: lena
+spec:
+  companyRef:
+    name: helix
+  kind: Human
+  displayName: Lena Ortiz
+  contact:
+    mattermostUsername: lena.ortiz
+    atlassianAccount: 557058:0d3b7c6e-2a41-4c8f-9e1d-5b6a7c8d9e0f

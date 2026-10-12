@@ -257,7 +257,7 @@ kubectl wait company/acme -n tenant-7f3a9c --for=condition=Ready --timeout=10m
 | `Seat.status.integrations.slack.requestURL` | The request URL of the seat's own Slack app, for the app's manifest. |
 | `Seat.status.integrations.github.webhookURL` | The webhook URL of the seat's own GitHub App. |
 | `Integration.status.webhookURL` | The company-wide address a vendor delivers to (GitHub's organization webhook). |
-| each object's `Accepted`, `ResolvedRefs`, `Applied` | `Applied` says whether that object is in the running revision, and if not, why. `ResolvedRefs=False` while `Applied` is `True` holds nothing: the object is applied, and the reason (`PoolNotFound`, `NoProvisioner`, `HumanSeat` on a GitLab access level) is what it cannot do until it is fixed ([What blocks a document](../concepts/company-document.md#what-blocks-a-document)). |
+| each object's `Accepted`, `ResolvedRefs`, `Applied` | `Applied` says whether that object is in the running revision, and if not, why. `ResolvedRefs=False` while `Applied` is `True` holds nothing: the object is applied, and the reason (`PoolNotFound`, `NoProvisioner`, `NotAnAccountID`, `HumanSeat` on a GitLab access level) is what it cannot do until it is fixed ([What blocks a document](../concepts/company-document.md#what-blocks-a-document)). |
 
 The Seat's URLs are set as soon as the Company has the vendor's `Integration`
 and a public address, before the seat has any credentials, so the control

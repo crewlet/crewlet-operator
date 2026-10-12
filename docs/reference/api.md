@@ -2784,10 +2784,20 @@ a letter or digit, at most 63 characters. The handle cannot change.
 
 
 SeatContact is how agents reach a person: their accounts on the company's
-surfaces. It maps onto Crewlet's role `contact`. Crewlet refuses two seats
-that claim one account, so a Seat whose slackUserID or githubLogin (in any
-case: GitHub logins are compared without it) another Seat of the company
-already claims is reported as a Conflict.
+surfaces, which tie what the person does there to their seat. It maps onto
+Crewlet's role `contact`, one field for each of its keys but one (below).
+
+Crewlet refuses two seats that claim one account, so a Seat claiming an
+account another Seat of the company already claims is reported as a
+Conflict. Each field is compared as Crewlet compares it: githubLogin and
+gitlabUsername without case, as GitHub and GitLab compare them; the others
+exactly.
+
+Crewlet's `crewlet_operator_id` has no field here. It binds one of the
+engine's API tokens to the person, so that whoever writes with that token
+acts as them, and the engines the operator runs hold two tokens, neither
+of them one person's: the operator's own, and the one
+Company.status.apiAccessSecretRef hands every consumer of the company.
 
 _Validation:_
 - MinProperties: 1
@@ -2798,7 +2808,10 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `slackUserID` _string_ | slackUserID is the person's Slack member id, such as U0123ABCD.<br />Crewlet's `slack_user_id`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[A-Z0-9]+$` <br />Optional: \{\} <br /> |
+| `mattermostUsername` _string_ | mattermostUsername is the person's username on the company's<br />Mattermost, such as jane.doe, written without the @: the name an<br />agent mentions them by and opens a direct message with, and the<br />sender an inbound post is attributed by. Crewlet's<br />`mattermost_user_id`, which holds the username despite its name, and<br />never the 26-character user id. Mattermost's own rule for a username<br />holds it: lowercase letters, digits, '.', '-' and '_', at most 64<br />characters, and none of the names Mattermost reserves (all, channel,<br />matterbot, system) nor here: a mention of all, channel or here<br />notifies the whole channel rather than the person. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[a-z0-9._-]+$` <br />Optional: \{\} <br /> |
+| `atlassianAccount` _string_ | atlassianAccount is the person's identity on the company's Jira and<br />Confluence, one value for both: their account id on Atlassian Cloud,<br />such as 557058:f58131cb-b67d-43c7-b30d-6b58d40bd077 and never their<br />email address, and their username on a Data Center instance, such as<br />jane.doe. Webhooks name the person by it, so it attributes what they do<br />there to their seat, and agents assign and mention them by it.<br />Crewlet's `atlassian_account_id`, which holds the username on Data<br />Center despite its name. Any value up to 255 characters without<br />whitespace is taken, since a Data Center username may hold almost any<br />character. Where the company reaches Jira or Confluence on Atlassian<br />Cloud, a value outside the form of an account id (letters, digits,<br />'_', '\|', ':' and '-', at most 128 characters) is applied and reported<br />on the Seat as ResolvedRefs=False with the reason NotAnAccountID. |  | MaxLength: 255 <br />MinLength: 1 <br />Pattern: `^\S+$` <br />Optional: \{\} <br /> |
 | `githubLogin` _string_ | githubLogin is the person's GitHub login. Crewlet's `github_login`. |  | MaxLength: 39 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9-]+$` <br />Optional: \{\} <br /> |
+| `gitlabUsername` _string_ | gitlabUsername is the person's GitLab username, written without the<br />@: assignments, review requests, mentions, and the sender an inbound<br />webhook is attributed by. Crewlet's `gitlab_username`. GitLab's own<br />rule for a username's form holds it: letters, digits, '_', '-' and<br />'.', at most 255 characters, not starting with '-' and not ending<br />with '.'. |  | MaxLength: 255 <br />MinLength: 1 <br />Pattern: `^([A-Za-z0-9_.][A-Za-z0-9_.-]*[A-Za-z0-9_-]\|[A-Za-z0-9_])$` <br />Optional: \{\} <br /> |
 
 
 #### SeatCredentialSource

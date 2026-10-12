@@ -289,6 +289,39 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			},
 		},
 		{
+			name: "two seats claim one Mattermost account",
+			mutate: func(in *Input) {
+				seat(in, seatJane).Spec.Contact.MattermostUsername = janeAccount
+				seat(in, seatAna).Spec.Contact.MattermostUsername = janeAccount + " "
+			},
+			want: []refusal{
+				{KindSeat, seatAna, "spec.contact.mattermostUsername", v1alpha1.ReasonConflict},
+				{KindSeat, seatJane, "spec.contact.mattermostUsername", v1alpha1.ReasonConflict},
+			},
+		},
+		{
+			name: "two seats claim one Atlassian account",
+			mutate: func(in *Input) {
+				seat(in, seatJane).Spec.Contact.AtlassianAccount = "5b10ac8d82e05b22cc7d4ef5"
+				seat(in, seatAna).Spec.Contact.AtlassianAccount = "5b10ac8d82e05b22cc7d4ef5"
+			},
+			want: []refusal{
+				{KindSeat, seatAna, "spec.contact." + contactAtlassian, v1alpha1.ReasonConflict},
+				{KindSeat, seatJane, "spec.contact." + contactAtlassian, v1alpha1.ReasonConflict},
+			},
+		},
+		{
+			name: "two seats claim one GitLab username, in another case",
+			mutate: func(in *Input) {
+				seat(in, seatJane).Spec.Contact.GitLabUsername = janeAccount
+				seat(in, seatAna).Spec.Contact.GitLabUsername = "Jane.Founder"
+			},
+			want: []refusal{
+				{KindSeat, seatAna, "spec.contact.gitlabUsername", v1alpha1.ReasonConflict},
+				{KindSeat, seatJane, "spec.contact.gitlabUsername", v1alpha1.ReasonConflict},
+			},
+		},
+		{
 			name:   "two units carry one name, in another case",
 			mutate: func(in *Input) { unit(in, unitPlatform).Spec.DisplayName = "ENGINEERING" },
 			want: []refusal{
@@ -392,6 +425,15 @@ func reportedCases() []reportedCase {
 				{KindIntegration, sampleGitLab, "spec.gitlab.engineProvisioning.accessLevels[0].name", v1alpha1.ReasonHumanSeat},
 			},
 			writes: "jane: maintainer",
+		},
+		{
+			// Jira and Confluence on Cloud name a person by account id: the
+			// engine registers the address, which no webhook carries.
+			name: "a person's Atlassian account is an email address on Cloud", fn: fnAtlassianAccounts,
+			input:  caseAtlassian,
+			mutate: func(in *Input) { seat(in, seatLena).Spec.Contact.AtlassianAccount = "lena@helix.example" },
+			want:   []reportedFinding{{KindSeat, seatLena, "spec.contact." + contactAtlassian, v1alpha1.ReasonNotAnAccountID}},
+			writes: "atlassian_account_id: lena@helix.example",
 		},
 		{
 			// A pin to a label no pod carries: the seat runs nowhere until

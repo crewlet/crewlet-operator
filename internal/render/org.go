@@ -58,6 +58,7 @@ func (r *renderer) org() ([]roleDoc, []unitDoc) {
 	}
 
 	r.duplicateSeats()
+	r.atlassianAccounts()
 	r.duplicateUnits()
 	r.scheduleTargets()
 	t := tree{children: children, members: members}
@@ -87,19 +88,9 @@ func (r *renderer) duplicateSeats() {
 				"and reach only the first of that name, so give each Seat its own spec.displayName", g.key, others)
 		})
 	}
-	contact := []struct {
-		field string
-		value func(*v1alpha1.Seat) string
-	}{
-		{"spec.contact.slackUserID", func(s *v1alpha1.Seat) string { return strings.TrimSpace(s.Spec.Contact.SlackUserID) }},
-		// Crewlet folds a GitHub login, which GitHub compares without case.
-		{"spec.contact.githubLogin", func(s *v1alpha1.Seat) string {
-			return strings.ToLower(strings.TrimSpace(s.Spec.Contact.GitHubLogin))
-		}},
-	}
-	for _, f := range contact {
-		for _, g := range groupBy(seats, f.value) {
-			conflict(&r.errs, KindSeat, g, f.field, func(others string) string {
+	for _, a := range contactAccounts {
+		for _, g := range groupBy(seats, func(s *v1alpha1.Seat) string { return a.claim(&s.Spec.Contact) }) {
+			conflict(&r.errs, KindSeat, g, "spec.contact."+a.field, func(others string) string {
 				return fmt.Sprintf("claims the account %q, as %s does. An inbound message reaches only one of the seats "+
 					"that claim an account, so give each Seat its own", g.key, others)
 			})
@@ -290,6 +281,7 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 		Handle:               SeatHandle(s),
 		Kind:                 seatKind(spec.Kind),
 		Email:                spec.Email,
+		Contact:              contact(&spec.Contact),
 		Availability:         spec.Availability,
 		Goal:                 spec.Goal,
 		Backstory:            spec.Backstory,
@@ -304,9 +296,6 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 		}),
 		Project: spec.Project,
 		Space:   spec.Space,
-	}
-	if c := spec.Contact; c != (v1alpha1.SeatContact{}) {
-		doc.Contact = &contactDoc{SlackUserID: c.SlackUserID, GitHubLogin: c.GitHubLogin}
 	}
 	if doc.Kind == "human" {
 		// The engine never runs a person, so a Human seat has no

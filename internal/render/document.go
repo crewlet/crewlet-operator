@@ -288,7 +288,7 @@ type roleDoc struct {
 	Handle               string                       `json:"handle"`
 	Kind                 string                       `json:"kind"`
 	Email                string                       `json:"email,omitempty"`
-	Contact              *contactDoc                  `json:"contact,omitempty"`
+	Contact              map[string]string            `json:"contact,omitempty"`
 	Availability         string                       `json:"availability,omitempty"`
 	Goal                 string                       `json:"goal,omitempty"`
 	Backstory            string                       `json:"backstory,omitempty"`
@@ -320,11 +320,6 @@ type scheduleDoc struct {
 	Enabled        *bool  `json:"enabled,omitempty"`
 	TimeoutSeconds int32  `json:"timeout_seconds,omitempty"`
 	Catchup        *bool  `json:"catchup,omitempty"`
-}
-
-type contactDoc struct {
-	SlackUserID string `json:"slack_user_id,omitempty"`
-	GitHubLogin string `json:"github_login,omitempty"`
 }
 
 // phaseLLMDoc is Crewlet's per-phase mapping form of a seat's llm field. The

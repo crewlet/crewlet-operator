@@ -55,6 +55,17 @@ const (
 // caseSeatPools is the company case that places seats in every kind of pool.
 const caseSeatPools = "seat-pools"
 
+// caseAtlassian is the company case on Atlassian Cloud, whose Jira and
+// Confluence Integrations are named jira and confluence, and seatLena its
+// person, tied to her Atlassian account.
+const (
+	caseAtlassian        = "atlassian"
+	caseAtlassianJira    = "jira"
+	caseAtlassianWiki    = "confluence"
+	seatLena             = "lena"
+	lenaAtlassianCloudID = "557058:0d3b7c6e-2a41-4c8f-9e1d-5b6a7c8d9e0f"
+)
+
 // keyName is the key an entry of the company document is named by: a role's,
 // a unit's, an engineConfig block's.
 const keyName = "name"

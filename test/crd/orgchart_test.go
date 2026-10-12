@@ -111,6 +111,11 @@ func fullAgent(s *v1.Seat) {
 	}
 }
 
+// contactOnly makes c the seat's whole contact.
+func contactOnly(c *v1.SeatContact) func(*v1.Seat) {
+	return func(s *v1.Seat) { s.Spec.Contact = *c }
+}
+
 func TestSeatValidation(t *testing.T) {
 	rename := func(name string) func(*v1.Seat) {
 		return func(s *v1.Seat) { s.Name = name }
@@ -165,6 +170,150 @@ func TestSeatValidation(t *testing.T) {
 			name:   "availability on an agent seat is refused",
 			mutate: func(s *v1.Seat) { s.Spec.Availability = "CET business hours" },
 			want:   msgAgentContact,
+		},
+
+		// Contact accounts, each in its platform's own form.
+		{
+			name: "a human seat with every contact account is accepted",
+			mutate: asHuman(func(s *v1.Seat) {
+				s.Spec.Contact = v1.SeatContact{
+					SlackUserID:        "U0FOUNDER",
+					MattermostUsername: "jane.doe_2-x",
+					AtlassianAccount:   "557058:f58131cb-b67d-43c7-b30d-6b58d40bd077",
+					GitHubLogin:        "Jane-Founder",
+					GitLabUsername:     "Jane.Doe_2-x",
+				}
+			}),
+		},
+		{
+			name:   "a human seat reached on Mattermost alone is accepted",
+			mutate: asHuman(contactOnly(&v1.SeatContact{MattermostUsername: "jane"})),
+		},
+		{
+			name:   "a Slack member id in lowercase is refused",
+			mutate: asHuman(contactOnly(&v1.SeatContact{SlackUserID: "u0founder"})),
+			want:   msgSlackUserID,
+		},
+		{
+			name:   "a GitHub login with an underscore is refused",
+			mutate: asHuman(contactOnly(&v1.SeatContact{GitHubLogin: "jane_founder"})),
+			want:   msgGitHubLogin,
+		},
+		{
+			name:   "a GitHub login of 40 characters is refused",
+			mutate: asHuman(contactOnly(&v1.SeatContact{GitHubLogin: strings.Repeat("j", 40)})),
+			want:   "spec.contact.githubLogin: Too long",
+		},
+		{
+			// Mattermost lowercases every username, and Crewlet compares
+			// this one as written: a capital would match nobody's posts.
+			name:   "a Mattermost username with a capital is refused",
+			mutate: asHuman(contactOnly(&v1.SeatContact{MattermostUsername: "Jane"})),
+			want:   msgMattermostUsername,
+		},
+		{
+			name:   "a Mattermost username written as a mention is refused",
+			mutate: asHuman(contactOnly(&v1.SeatContact{MattermostUsername: "@jane"})),
+			want:   msgMattermostUsername,
+		},
+		{
+			name:   "a Mattermost username of 64 characters is accepted",
+			mutate: asHuman(contactOnly(&v1.SeatContact{MattermostUsername: strings.Repeat("j", 64)})),
+		},
+		{
+			name:   "a Mattermost username of 65 characters is refused",
+			mutate: asHuman(contactOnly(&v1.SeatContact{MattermostUsername: strings.Repeat("j", 65)})),
+			want:   "spec.contact.mattermostUsername: Too long",
+		},
+		{
+			name:   "a Mattermost username the platform reserves is refused",
+			mutate: asHuman(contactOnly(&v1.SeatContact{MattermostUsername: "channel"})),
+			want:   msgMattermostReserved,
+		},
+		{
+			// The server takes the name, but a mention of it is @here,
+			// which notifies everybody in the channel who is online.
+			name:   "a Mattermost username whose mention notifies the channel is refused",
+			mutate: asHuman(contactOnly(&v1.SeatContact{MattermostUsername: "here"})),
+			want:   msgMattermostReserved,
+		},
+		{
+			name:   "a Mattermost username that only contains a reserved one is accepted",
+			mutate: asHuman(contactOnly(&v1.SeatContact{MattermostUsername: "channel-ops"})),
+		},
+		{
+			name:   "an Atlassian Cloud account id of 24 hexadecimal digits is accepted",
+			mutate: asHuman(contactOnly(&v1.SeatContact{AtlassianAccount: "5b10ac8d82e05b22cc7d4ef5"})),
+		},
+		{
+			// A Data Center username: the render, not the API, knows
+			// whether the company's Jira and Confluence are on Cloud.
+			name:   "an Atlassian Data Center username with a dot is accepted",
+			mutate: asHuman(contactOnly(&v1.SeatContact{AtlassianAccount: "jane.doe"})),
+		},
+		{
+			name:   "an Atlassian Data Center username that is an address is accepted",
+			mutate: asHuman(contactOnly(&v1.SeatContact{AtlassianAccount: "jane.doe@acme.example"})),
+		},
+		{
+			name:   "an Atlassian account with a space is refused",
+			mutate: asHuman(contactOnly(&v1.SeatContact{AtlassianAccount: "jane doe"})),
+			want:   msgAtlassianAccount,
+		},
+		{
+			name:   "an Atlassian account written as a reference is refused",
+			mutate: asHuman(contactOnly(&v1.SeatContact{AtlassianAccount: "${JANE_ATLASSIAN}"})),
+			want:   msgAtlassianReference,
+		},
+		{
+			name:   "an Atlassian account holding a reference is refused",
+			mutate: asHuman(contactOnly(&v1.SeatContact{AtlassianAccount: "jane-${SUFFIX}"})),
+			want:   msgAtlassianReference,
+		},
+		{
+			name:   "an Atlassian account with a dollar sign alone is accepted",
+			mutate: asHuman(contactOnly(&v1.SeatContact{AtlassianAccount: "svc$jira"})),
+		},
+		{
+			name:   "an Atlassian account of 255 characters is accepted",
+			mutate: asHuman(contactOnly(&v1.SeatContact{AtlassianAccount: strings.Repeat("a", 255)})),
+		},
+		{
+			name:   "an Atlassian account of 256 characters is refused",
+			mutate: asHuman(contactOnly(&v1.SeatContact{AtlassianAccount: strings.Repeat("a", 256)})),
+			want:   "spec.contact.atlassianAccount: Too long",
+		},
+		{
+			name:   "a GitLab username of one character is accepted",
+			mutate: asHuman(contactOnly(&v1.SeatContact{GitLabUsername: "j"})),
+		},
+		{
+			name:   "a GitLab username starting with a dot is accepted",
+			mutate: asHuman(contactOnly(&v1.SeatContact{GitLabUsername: ".jane"})),
+		},
+		{
+			name:   "a GitLab username starting with a hyphen is refused",
+			mutate: asHuman(contactOnly(&v1.SeatContact{GitLabUsername: "-jane"})),
+			want:   msgGitLabUsername,
+		},
+		{
+			name:   "a GitLab username ending with a dot is refused",
+			mutate: asHuman(contactOnly(&v1.SeatContact{GitLabUsername: "jane."})),
+			want:   msgGitLabUsername,
+		},
+		{
+			name:   "a GitLab username written as a mention is refused",
+			mutate: asHuman(contactOnly(&v1.SeatContact{GitLabUsername: "@jane"})),
+			want:   msgGitLabUsername,
+		},
+		{
+			name:   "a GitLab username of 255 characters is accepted",
+			mutate: asHuman(contactOnly(&v1.SeatContact{GitLabUsername: strings.Repeat("j", 255)})),
+		},
+		{
+			name:   "a GitLab username of 256 characters is refused",
+			mutate: asHuman(contactOnly(&v1.SeatContact{GitLabUsername: strings.Repeat("j", 256)})),
+			want:   "spec.contact.gitlabUsername: Too long",
 		},
 		{
 			name:   "llm on a human seat is refused",

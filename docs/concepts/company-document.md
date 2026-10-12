@@ -350,9 +350,15 @@ revision:
   `Ready=False`, `PoolNotFound` too while no pod holds it;
   a Seat that names a provisioned credential while no Integration of the
   company has `provisioning: Engine` (`NoProvisioner`), whose tool or chat
-  app starts without the value until one does; and a GitLab `accessLevels`
+  app starts without the value until one does; a GitLab `accessLevels`
   entry naming a Human seat (`HumanSeat`), which grants nothing, as the
-  engine creates no GitLab account for a person.
+  engine creates no GitLab account for a person; and a person's
+  `contact.atlassianAccount` that is no Atlassian account id, such as an
+  email address, while the company reaches Jira or Confluence on Atlassian
+  Cloud, which names a person by account id alone (`NotAnAccountID`): what
+  the person does there reaches nobody's seat, and an agent's mention of
+  them names nobody
+  ([A person's accounts](../guides/integrations.md#a-persons-accounts)).
 - Two pairings of a seat's code work that no coding run can use:
   `ClaudeCode` on a provider of type `OpenAI` or `OpenAICompatible` while
   the seat's sandbox environment names no variable that signs Claude Code in
