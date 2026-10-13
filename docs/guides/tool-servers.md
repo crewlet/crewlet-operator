@@ -93,16 +93,17 @@ Under Mattermost and Slack the server is the agent's only way to post, so on
 the plain image an agent receives every message, runs its turn and answers
 none.
 
-Crewlet's own examples start these servers through a package runner:
-`uvx mcp-server-mattermost` for a Python server, and
-`npm exec slack-mcp-server@latest` for Slack's, a Go binary npm delivers. The
-runner downloads the server, and for `uvx` a Python, as it starts. In a pod
-that does not work: the runner is not in the image, and in an image that had
-it, everything it downloaded would land in `HOME`, an `emptyDir` emptied
-whenever the pod starts. Every pod would download its servers again at every
-start, need egress to PyPI or npm to start them at all, and run whichever
-release was newest that day. Install every server when you build the image,
-pinned, and name the installed command.
+Crewlet's own docs and examples start these servers through a package runner:
+`uvx` for a Python server such as `mcp-server-mattermost`, and `npm exec` for
+`slack-mcp-server`, a Go binary npm delivers. The runner downloads the server,
+and for `uvx` a Python, as it starts. In a pod that does not work: the runner
+is not in the image, and in an image that had it, everything it downloaded
+would land in `HOME`, an `emptyDir` emptied whenever the pod starts. Every pod
+would download its servers again at every start and need egress to PyPI or
+npm to start them at all. Even with the server pinned, each start would also
+resolve again every dependency the package leaves unbounded, so a pod could
+start a different set from the one you tested. Install every server when you
+build the image, pinned, and name the installed command.
 
 ## Building the image
 
