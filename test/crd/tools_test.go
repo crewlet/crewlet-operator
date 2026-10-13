@@ -49,7 +49,7 @@ func TestMCPServerValidation(t *testing.T) {
 			name: "a Stdio server with every field is accepted",
 			mutate: func(s *v1.MCPServer) {
 				s.Spec.Shared = new(false)
-				s.Spec.Args = []string{"mcp-server-mattermost==0.5.1"}
+				s.Spec.Args = []string{"mcp-server-mattermost==0.6.1"}
 				s.Spec.Env = secretEnv
 				s.Spec.ToolPrefix = "mattermost_"
 				s.Spec.ToolAnnotations = []v1.MCPToolAnnotations{
