@@ -322,9 +322,15 @@ closely enough that nobody has to learn a house style:
   Secret whose keys the field documents), in the object's own namespace; only
   `EngineClass` uses the `Namespaced…` variants. Every position Crewlet treats
   as a credential takes a reference, even where the value would not be secret,
-  because the API cannot tell the two apart. No field accepts a literal
-  secret, and the pass-through `engineConfig` may not name a block that holds
-  credentials. [docs/concepts/credentials.md](docs/concepts/credentials.md)
+  because the API cannot tell the two apart from the value; the one exception
+  is a tool server's `env` and `headers` and a Unit's or Seat's `spec.mcp`,
+  where a setting is told apart by its name: a literal `value` is refused
+  under any name Crewlet reads as a credential's (`credentialNamePattern` in
+  `internal/render/codework.go`, which tests hold to the engine's
+  `cliprofile.IsCredentialName` and to the names it reads a seat's tool
+  credentials under), because a seat needs a setting of its own there, such as
+  a cache path. No field accepts a literal secret, and the pass-through
+  `engineConfig` may not name a block that holds credentials. [docs/concepts/credentials.md](docs/concepts/credentials.md)
   maps every Crewlet credential position to its field, from the table in
   [`internal/render/credentials_table_test.go`](internal/render/credentials_table_test.go);
   a test holds that table to the positions the engine's schemas mark

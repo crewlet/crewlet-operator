@@ -20,13 +20,62 @@ agents use.
   process of the engine's own container, as the engine's user (uid 10001),
   and speaks MCP over its standard input and output. The process gets the
   engine's environment, the server's `env` on top of it, and, for a server
-  with `shared: false`, the credentials of the seat it serves.
+  with `shared: false`, the values of the seat it serves.
 
-A server with `shared: false` is a template rather than a process: each seat
-that gives it credentials in its `spec.mcp` gets a process of its own, on the
-pod that holds the seat, which is how each agent acts as itself. Every engine
-pod of a company runs the class's image, a [seat pool](topology.md)'s pods
-too, so the image has to carry every server any seat may need.
+A server with `shared: false` is a template rather than a process: each agent
+seat that names it in `spec.mcp`, its own or its unit's, gets a process of its
+own, on the pod that holds the seat, which is how each agent acts as itself.
+Crewlet starts that process for an entry whatever it holds, a setting alone
+too, and one started without the seat's credentials has no identity of the
+seat's to act as. So a setting every seat shares goes in the server's own
+`env` rather than in a Unit's `spec.mcp`, which starts a process for every
+agent seat directly in the unit. Every engine pod of a company runs the
+class's image, a [seat pool](topology.md)'s pods too, so the image has to
+carry every server any seat may need.
+
+## Settings and credentials
+
+A server's `env` (an HTTP server's `headers`) and the values a Seat or a Unit
+gives it in `spec.mcp` take two kinds of entry: a credential, read from a
+Secret with `valueFrom`, and a setting that is no credential, such as an
+address, a switch or a path, written out as `value`:
+
+```yaml
+spec:                       # MCPServer atlassian
+  env:
+    - name: JIRA_URL                    # a setting
+      value: https://jira.acme.example
+---
+spec:                       # Seat lead
+  mcp:
+    - name: atlassian
+      env:
+        - name: JIRA_API_TOKEN          # a credential
+          valueFrom:
+            secretKeyRef: {name: lead-jira, key: token}
+```
+
+Crewlet cannot tell the two apart: it treats a server's whole environment,
+and every value a seat gives it, as credentials, and masks each on every
+read ([A tool server's token](credentials.md#a-tool-servers-token)). The
+name can, and the API reads it as Crewlet reads a credential's name: a
+`value` is refused under a name one of whose parts, cut at every character
+that is not a letter or a digit, is, in any case, `KEY`, `KEYS`, `APIKEY`,
+`ACCESSKEY`, `SECRETKEY`, `TOKEN`, `SECRET`, `PASSWORD`, `PASSWD`,
+`CREDENTIAL`, `CREDENTIALS`, `AUTH`, `OAUTH` or `PAT`, and under the
+`Authorization`, `Proxy-Authorization` and `Cookie` headers. So
+`MATTERMOST_TOKEN`, `DD_APP_KEY` and `X-Api-Key` come from Secrets, and
+`MATTERMOST_URL`, `GITLAB_HOST` or `SLACK_MCP_ADD_MESSAGE_TOOL` may be written
+out. The rule keeps a token from being typed where a setting goes; it cannot
+keep every secret out, and a credential under a name that says nothing, such
+as a database address with a password in it, is still yours to put in a
+Secret. A `value` lands in the company document as written, where anyone who
+can read the object reads it, and may not hold a `${NAME}` reference, which
+the engine would resolve from its own secret store.
+
+A setting is the server's when every seat runs with it, and a seat's when
+each seat needs its own: Slack's channel cache is one, a path no two seats
+may share ([below](#slack)).
 
 ## The image needs the server
 
@@ -223,8 +272,9 @@ spec:
 The four add about 480 MB to the image. Each running server is a process of
 the engine's container, charged to its memory: started and asked for their
 tools, `mcp-server-mattermost` held about 95 MB, `mcp-atlassian` 130 MB and
-`glab` 50 MB. A server with `shared: false` runs once for every seat that
-gives it credentials, on the pod that holds the seat, so size the class's
+`glab` 50 MB. A server with `shared: false` runs once for every agent seat
+that names it in `spec.mcp`, its own or its unit's, on the pod that holds the
+seat, so size the class's
 `data.resources` (and `seatPools.defaults.resources`) for those processes.
 
 ### One image with a coding CLI
@@ -261,20 +311,9 @@ Crewlet looks for it.
 | GitHub | GitHub's remote server, `https://api.githubcopilot.com/mcp/` | none: `transport: HTTP` | nothing |
 | Datadog | none named ([below](#datadog)) | — | — |
 
-Every `env` entry of an `MCPServer` is read from a Secret, a setting that is
-not secret too: Crewlet treats a server's whole environment as credentials
-([A tool server's token](credentials.md#a-tool-servers-token)). The servers
-below read their settings from one Secret:
-
-```bash
-kubectl create secret generic acme-tool-servers -n acme \
-  --from-literal=mattermostURL=https://chat.acme.example \
-  --from-literal=jiraURL=https://jira.acme.example \
-  --from-literal=confluenceURL=https://wiki.acme.example \
-  --from-literal=slackAddMessageTool=true
-```
-
-Each seat gives its own credentials for the server in its `spec.mcp`, as
+The servers below write their settings out as values
+([Settings and credentials](#settings-and-credentials)), and each seat gives
+its own credentials for the server in its `spec.mcp`, as
 [Connecting Integrations](integrations.md) shows for each vendor.
 
 ### Mattermost
@@ -290,8 +329,7 @@ spec:
   command: /usr/local/bin/mcp-server-mattermost
   env:
     - name: MATTERMOST_URL              # the address the engine reaches Mattermost at
-      valueFrom:
-        secretKeyRef: {name: acme-tool-servers, key: mattermostURL}
+      value: https://chat.acme.example
   toolPrefix: mattermost_
 ```
 
@@ -323,11 +361,9 @@ spec:
   command: /usr/local/bin/mcp-atlassian
   env:
     - name: JIRA_URL
-      valueFrom:
-        secretKeyRef: {name: acme-tool-servers, key: jiraURL}
+      value: https://jira.acme.example
     - name: CONFLUENCE_URL
-      valueFrom:
-        secretKeyRef: {name: acme-tool-servers, key: confluenceURL}
+      value: https://wiki.acme.example
 ```
 
 One server serves both products, so set the URL of each the company uses: the
@@ -349,8 +385,7 @@ spec:
   args: [--transport, stdio]
   env:
     - name: SLACK_MCP_ADD_MESSAGE_TOOL  # without it, the server offers no tool that posts
-      valueFrom:
-        secretKeyRef: {name: acme-tool-servers, key: slackAddMessageTool}
+      value: "true"
   toolPrefix: slack_
 ```
 
@@ -362,7 +397,7 @@ it post anywhere the bot is, and a list of channel IDs limits it to those. Its
 reaction tools wait on `SLACK_MCP_REACTION_TOOL` the same way
 ([its settings](https://github.com/korotovsky/slack-mcp-server#environment-variables-quick-reference)).
 Each seat gives it the bot token of its Slack app, the same key its
-`spec.integrations.slack` names:
+`spec.integrations.slack` names, and a channel cache of its own:
 
 ```yaml
 spec:                       # Seat lead
@@ -375,7 +410,28 @@ spec:                       # Seat lead
         - name: SLACK_MCP_XOXB_TOKEN
           valueFrom:
             secretKeyRef: {name: lead-slack, key: botToken}
+        - name: SLACK_MCP_CHANNELS_CACHE          # this seat's own: no other seat names it
+          value: /home/crewlet/.cache/slack-mcp-server/lead-channels.json
 ```
+
+**Each seat names a channel cache of its own.** `slack-mcp-server` keeps the
+channels its bot can see, the private channels and direct messages it is in
+among them, in a file, and unless `SLACK_MCP_CHANNELS_CACHE` names one it
+names that file after the Slack workspace alone,
+`<team id>_channels_cache_v2.json` under `$HOME/.cache/slack-mcp-server`, and
+reads it back for 24 hours before it asks Slack again
+([its source at 1.3.0](https://github.com/korotovsky/slack-mcp-server/blob/v1.3.0/pkg/provider/api.go)).
+Every seat's server on one engine pod runs as the engine's user, with one
+`HOME`, so the seats whose bots are in one workspace share that file, and
+whichever wrote it last decides what `channels_list` tells the others: that
+bot's private channels and direct messages, named to seats whose bots are not
+in them, and none of their own. So the path is each Seat's own, and never a
+Unit's or the server's `env`, which every seat they reach shares. It is a
+setting, not a credential, so it is a `value`
+([Settings and credentials](#settings-and-credentials)). The server makes
+`$HOME/.cache/slack-mcp-server` itself as it starts, for the other cache it
+keeps there, so a file in it is written; `HOME` is emptied when the pod
+starts, so a new pod's server asks Slack again, for its own bot alone.
 
 ### GitLab
 

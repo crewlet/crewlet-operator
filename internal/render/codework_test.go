@@ -544,9 +544,8 @@ func cliAgentNames(t *testing.T) []v1alpha1.CLIAgentName {
 // (sandbox.DefaultCodingAgent), the variables that sign ClaudeCode in from a
 // seat's own environment (codingagent.ClaudeCodeCredentialEnv), and
 // ClaudeCode's token and key variables (its profile's token_env and
-// api_key_env). The pattern of a credential's name is the LLMProvider API's,
-// which the CRD suite holds to the engine: it is held to the installed CRD's
-// rules.
+// api_key_env). The pattern of a credential's name is held by
+// TestCredentialNameFollowsTheEngineSource.
 func TestCodeWorkFollowsTheEngineSource(t *testing.T) {
 	source, err := os.OpenRoot(enginetest.Source(t))
 	if err != nil {
@@ -586,28 +585,78 @@ func TestCodeWorkFollowsTheEngineSource(t *testing.T) {
 	if want := []string{claude.TokenEnv, claude.APIKeyEnv}; !ok || !slices.Equal(claudeCodeLogin, want) {
 		t.Errorf("the engine's claude-code profile reads its login from %v, the render from %v", want, claudeCodeLogin)
 	}
+}
 
-	crd, err := os.ReadFile(filepath.Join("..", "..", "config", "crd", "bases", "crewlet.ai_llmproviders.yaml"))
+// profileFile is the engine's file of CLI profiles, which declares how it
+// reads a credential's name (IsCredentialName and its credentialWords).
+const profileFile = "internal/providers/llm/cliagent/cliprofile/profile.go"
+
+// credentialNameRules are the kinds whose CRDs read a credential's name, and
+// how many of their rules do (every other kind's, none): the LLMProvider
+// API's two over a CLI's sign-in
+// in cli.env, and the tool-server API's refusal of a literal value under such
+// a name, on each type that takes one (an MCPServer's env and headers, and the
+// values of a Seat's or a Unit's spec.mcp).
+var credentialNameRules = map[string]int{
+	"llmproviders": 2,
+	"mcpservers":   2,
+	"seats":        1,
+	"units":        1,
+}
+
+// TestCredentialNameFollowsTheEngineSource holds the one pattern the operator
+// reads a credential's name with to the engine's source, and every rule of
+// the API that reads one to that pattern. The words are Crewlet's
+// credentialWords, in its order; how a name is cut into parts is
+// IsCredentialName's, which TestMirroredEngineFunctionsAreUnchanged holds, as
+// it holds the function and not the list. The LLMProvider API's rules are
+// also held to the engine's sign-in by the CRD suite, and the tool-server
+// API's to the names the engine reads a seat's tool credentials under.
+func TestCredentialNameFollowsTheEngineSource(t *testing.T) {
+	source := openSource(t, enginetest.Source(t))
+	src, err := source.ReadFile(profileFile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var schema any
-	if err := yaml.Unmarshal(crd, &schema); err != nil {
-		t.Fatal(err)
+	words := stringSliceVar(t, profileFile, src, "credentialWords")
+	const head, tail = `(?i)(^|[^A-Za-z0-9])(`, `)([^A-Za-z0-9]|$)`
+	if want := head + strings.Join(words, "|") + tail; credentialNamePattern != want {
+		t.Errorf("the engine reads a credential's name as one whose part is one of %v, which is the pattern %q; "+
+			"the operator's is %q", words, want, credentialNamePattern)
 	}
-	matches := 0
-	for _, rule := range rules(schema) {
-		_, rest, found := strings.Cut(rule, "e.name.matches('")
-		if !found {
-			continue
-		}
-		matches++
-		if pattern, _, _ := strings.Cut(rest, "')"); pattern != signInNamePattern {
-			t.Errorf("the LLMProvider API reads %q as a credential's name, the render %q", pattern, signInNamePattern)
-		}
+
+	files, err := filepath.Glob(filepath.Join("..", "..", "config", "crd", "bases", "crewlet.ai_*.yaml"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("the CRDs in config/crd/bases: %v", err)
 	}
-	if matches == 0 {
-		t.Error("no rule of the LLMProvider CRD matches a credential's name")
+	for _, file := range files {
+		kind := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(file), "crewlet.ai_"), ".yaml")
+		want := credentialNameRules[kind]
+		crd, err := os.ReadFile(filepath.Clean(file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var schema any
+		if err := yaml.Unmarshal(crd, &schema); err != nil {
+			t.Fatal(err)
+		}
+		found := 0
+		for _, rule := range rules(schema) {
+			// A rule reads a credential's name where it names the words.
+			if !strings.Contains(rule, "|APIKEY|") {
+				continue
+			}
+			found++
+			_, rest, ok := strings.Cut(rule, "name.matches('")
+			pattern, _, _ := strings.Cut(rest, "')")
+			if !ok || pattern != credentialNamePattern {
+				t.Errorf("a rule of the %s CRD reads a credential's name other than as %q: %s",
+					kind, credentialNamePattern, rule)
+			}
+		}
+		if found != want {
+			t.Errorf("%d rules of the %s CRD read a credential's name, want %d", found, kind, want)
+		}
 	}
 }
 

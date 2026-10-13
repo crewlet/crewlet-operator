@@ -52,9 +52,82 @@ type MCPToolAnnotations struct {
 	OpenWorld *bool `json:"openWorld,omitempty"`
 }
 
+// MCPEnvVar is one variable of a Stdio tool server's environment, which every
+// instance of the server starts with: a credential, read from a Secret, or a
+// setting that is no credential, written as a literal value, such as the
+// address of the service the server reaches or a switch that turns one of its
+// tools on.
+//
+// Crewlet treats a server's whole environment as credentials, masking every
+// value on every read, so it cannot tell the two apart; a name can. A name
+// says it holds a credential when one of its parts, cut at every character
+// that is not a letter or a digit and read without case, is KEY, KEYS,
+// APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL,
+// CREDENTIALS, AUTH, OAUTH or PAT, which is how Crewlet itself reads a
+// credential's name (cliprofile.IsCredentialName), or when it is one of the
+// HTTP headers that carry one, Authorization, Proxy-Authorization and
+// Cookie; such a name takes valueFrom, never a literal. So GITLAB_TOKEN,
+// TAVILY_API_KEY and X-Api-Key come from Secrets, and JIRA_URL or
+// SLACK_MCP_ADD_MESSAGE_TOOL may be written out. The rule keeps a credential
+// from being typed where a setting goes; a credential under a name that says
+// nothing (a URL with a password in it, say) is still yours to keep in a
+// Secret.
+// +kubebuilder:validation:XValidation:rule="has(self.value) != has(self.valueFrom)",message="exactly one of value and valueFrom must be set"
+// +kubebuilder:validation:XValidation:rule="!has(self.value) || !(self.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)') || self.name.lowerAscii() in ['authorization', 'proxy-authorization', 'cookie'])",message="value may not be given to a name that says it holds a credential, which comes from a Secret through valueFrom: one of its parts, cut at every character that is not a letter or a digit, is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT, as Crewlet reads a credential's name, or it is the Authorization, Proxy-Authorization or Cookie header",fieldPath=".value"
+type MCPEnvVar struct {
+	// name is the variable's name.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
+	Name string `json:"name,omitempty"`
+
+	// value is a literal value, for a setting that is no credential. It
+	// lands in the company document as written, where anyone who can read
+	// this object reads it too. An empty string is a valid value, which is
+	// why the field is a pointer.
+	// +optional
+	// +kubebuilder:validation:MaxLength=4096
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="value may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	Value *string `json:"value,omitempty"`
+
+	// valueFrom reads a credential from a Secret key.
+	// +optional
+	ValueFrom SecretValueSource `json:"valueFrom,omitzero"`
+}
+
+// MCPHeader is one header of every request to an HTTP tool server, which every
+// instance of the server sends: a credential, read from a Secret, such as the
+// Authorization header, or a setting that is no credential, written as a
+// literal value, by the rule MCPEnvVar states.
+// +kubebuilder:validation:XValidation:rule="has(self.value) != has(self.valueFrom)",message="exactly one of value and valueFrom must be set"
+// +kubebuilder:validation:XValidation:rule="!has(self.value) || !(self.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)') || self.name.lowerAscii() in ['authorization', 'proxy-authorization', 'cookie'])",message="value may not be given to a name that says it holds a credential, which comes from a Secret through valueFrom: one of its parts, cut at every character that is not a letter or a digit, is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT, as Crewlet reads a credential's name, or it is the Authorization, Proxy-Authorization or Cookie header",fieldPath=".value"
+type MCPHeader struct {
+	// name is the header's name.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9!#$%&'*+.^_|~-]+$`
+	Name string `json:"name,omitempty"`
+
+	// value is a literal value, for a setting that is no credential. It
+	// lands in the company document as written, where anyone who can read
+	// this object reads it too. An empty string is a valid value, which is
+	// why the field is a pointer.
+	// +optional
+	// +kubebuilder:validation:MaxLength=4096
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="value may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	Value *string `json:"value,omitempty"`
+
+	// valueFrom reads a credential from a Secret key, which holds the whole
+	// header value, scheme included (for example "Bearer <token>").
+	// +optional
+	ValueFrom SecretValueSource `json:"valueFrom,omitzero"`
+}
+
 // MCPServerSpec is one tool server a company's agents call. It renders to one
 // entry of Crewlet's mcp_servers, named by the MCPServer's metadata.name;
-// Seats and Units give it per-seat credentials by that name.
+// Seats and Units give it per-seat values by that name.
 // +kubebuilder:validation:XValidation:rule="self.transport == 'Stdio' ? has(self.command) : !has(self.command)",message="command is required with transport Stdio and not allowed with HTTP"
 // +kubebuilder:validation:XValidation:rule="self.transport == 'Stdio' || (!has(self.args) && !has(self.env))",message="args and env apply to transport Stdio only"
 // +kubebuilder:validation:XValidation:rule="self.transport == 'HTTP' ? has(self.url) : !has(self.url)",message="url is required with transport HTTP and not allowed with Stdio"
@@ -71,9 +144,11 @@ type MCPServerSpec struct {
 	Transport MCPTransport `json:"transport,omitempty"`
 
 	// shared launches one instance whose tools every agent calls. false
-	// makes the server a template instead: every seat that has credentials
-	// for it in spec.mcp gets an instance of its own, which is how each
-	// agent acts as itself on the server. Crewlet's `shared`.
+	// makes the server a template instead: every agent seat that names it
+	// in spec.mcp, its own or its unit's, gets an instance of its own,
+	// which is how each agent acts as itself on the server. An entry of
+	// settings alone starts one too, with none of the seat's credentials.
+	// Crewlet's `shared`.
 	// +optional
 	// +default=true
 	Shared *bool `json:"shared,omitempty"`
@@ -103,7 +178,7 @@ type MCPServerSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=32
-	Env []SecretEnvVar `json:"env,omitempty"`
+	Env []MCPEnvVar `json:"env,omitempty"`
 
 	// url is the endpoint of an HTTP server. Crewlet's `url`.
 	// +optional
@@ -122,7 +197,7 @@ type MCPServerSpec struct {
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=32
 	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.name.lowerAscii() == a.name.lowerAscii()))",message="names must differ in more than case: HTTP header names are case-insensitive"
-	Headers []SecretHeader `json:"headers,omitempty"`
+	Headers []MCPHeader `json:"headers,omitempty"`
 
 	// toolPrefix is put in front of the server's tool names, to keep them
 	// apart from another server's. Crewlet's `tool_prefix`.

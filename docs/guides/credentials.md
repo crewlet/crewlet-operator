@@ -274,8 +274,9 @@ spec:                       # MCPServer linear
         secretKeyRef: {name: linear, key: authorization}   # "Bearer lin_api_..."
 ```
 
-A server with `shared: false` starts one instance per seat, and each Seat (or
-the Unit it is in) brings its own credentials for it in `spec.mcp`:
+A server with `shared: false` starts one instance for each agent seat that
+names it in `spec.mcp`, and each Seat (or the Unit it is in) brings its own
+credentials for it there:
 
 ```yaml
 spec:                       # Seat lead
@@ -287,9 +288,16 @@ spec:                       # Seat lead
             secretKeyRef: {name: lead-github, key: authorization}
 ```
 
-Every `env` and `headers` entry comes from a Secret, even a setting that is
-not secret: Crewlet treats the whole list as credentials. Keep such settings
-in the same Secret as the token.
+Crewlet treats every value of a tool server's `env` and `headers`, and every
+value a seat gives it, as a credential, and cannot tell a setting from one; the
+name can. A setting that is no credential, such as an address, a switch or a
+seat's own cache path, is written out as `value` instead, under any name
+that does not say it holds a credential: the API refuses a `value` under a
+name with a part such as `TOKEN`, `KEY`, `SECRET` or `PASSWORD`, and under the
+`Authorization`, `Proxy-Authorization` and `Cookie` headers
+([Settings and credentials](tool-servers.md#settings-and-credentials) has
+the rule). The other lists of variables a credential goes in, a sandbox's,
+its setup steps' and a coding CLI's, take no literal value.
 
 ### What the platform supplies
 

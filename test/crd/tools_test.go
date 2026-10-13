@@ -1,6 +1,7 @@
 package crd_test
 
 import (
+	"regexp"
 	"testing"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -13,6 +14,67 @@ func httpServer(s *v1.MCPServer) {
 	s.Spec.Transport = v1.MCPTransportHTTP
 	s.Spec.Command = ""
 	s.Spec.URL = githubServer
+}
+
+// envName is the grammar of an environment variable's name, which an
+// MCPServer's env takes.
+var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// literal is a setting of name written out as a literal value.
+func literal(name string) v1.MCPEnvVar { return v1.MCPEnvVar{Name: name, Value: new("literal")} }
+
+// holdValue offers entry in every position of the tool-server API that takes
+// a value, by a dry run, and checks the API server's answer is want in each:
+// a Seat's and a Unit's spec.mcp, an MCPServer's headers and, where the name
+// is a variable's, an MCPServer's env. Each CRD carries its own generated
+// copy of a rule its types share, so a rule is held in every position rather
+// than in the one a kind's table happens to name. entry is an MCPServer's
+// variable, whose valueFrom is a Secret key alone: a provisioned value is a
+// Seat's, and its cases are the Seat's own.
+func holdValue(t *testing.T, namespace string, entry v1.MCPEnvVar, want string) {
+	t.Helper()
+	s := seat(namespace, "probe")
+	s.Spec.MCP = []v1.MCPCredentials{{Name: "probe", Env: []v1.MCPCredentialValue{{
+		Name: entry.Name, Value: entry.Value,
+		ValueFrom: v1.SeatCredentialSource{SecretKeyRef: entry.ValueFrom.SecretKeyRef},
+	}}}}
+	u := unit(namespace, "probe")
+	u.Spec.MCP = s.Spec.MCP
+	headers := mcpServer(namespace, "probe")
+	httpServer(headers)
+	headers.Spec.Headers = []v1.MCPHeader{{Name: entry.Name, Value: entry.Value, ValueFrom: entry.ValueFrom}}
+	objects := map[string]client.Object{
+		"a Seat's spec.mcp": s, "a Unit's spec.mcp": u, "an MCPServer's headers": headers,
+	}
+	if envName.MatchString(entry.Name) {
+		env := mcpServer(namespace, "probe")
+		env.Spec.Env = []v1.MCPEnvVar{entry}
+		objects["an MCPServer's env"] = env
+	}
+	for position, obj := range objects {
+		t.Run(position, func(t *testing.T) { expect(t, k8sClient.Create(ctx, obj, client.DryRunAll), want) })
+	}
+}
+
+// TestToolServerValuesTakeOneSource holds every value of a tool server, an
+// MCPServer's and the ones a Seat or a Unit gives it, to exactly one of a
+// literal value and a Secret key.
+func TestToolServerValuesTakeOneSource(t *testing.T) {
+	namespace := newNamespace(t)
+	t.Run("a setting with neither value nor valueFrom is refused", func(t *testing.T) {
+		holdValue(t, namespace, v1.MCPEnvVar{Name: envSlackChannels}, msgEnvExactlyOne)
+	})
+	t.Run("a setting with both value and valueFrom is refused", func(t *testing.T) {
+		both := literal(envSlackChannels)
+		both.ValueFrom = fromSecret("slack", "channels-cache")
+		holdValue(t, namespace, both, msgEnvExactlyOne)
+	})
+	t.Run("a setting with a value alone is accepted", func(t *testing.T) {
+		holdValue(t, namespace, literal(envSlackChannels), "")
+	})
+	t.Run("a setting with a valueFrom alone is accepted", func(t *testing.T) {
+		holdValue(t, namespace, v1.MCPEnvVar{Name: envSlackChannels, ValueFrom: fromSecret("slack", "channels-cache")}, "")
+	})
 }
 
 func TestMCPServerDefaults(t *testing.T) {
@@ -34,13 +96,19 @@ func TestMCPServerDefaults(t *testing.T) {
 
 func TestMCPServerValidation(t *testing.T) {
 	tavilyKey := fromSecret("tavily", apiKeyKey)
-	secretEnv := []v1.SecretEnvVar{{Name: "TAVILY_API_KEY", ValueFrom: tavilyKey}}
-	secretHeaders := []v1.SecretHeader{{Name: "X-Api-Key", ValueFrom: tavilyKey}}
+	secretEnv := []v1.MCPEnvVar{{Name: "TAVILY_API_KEY", ValueFrom: tavilyKey}}
+	secretHeaders := []v1.MCPHeader{{Name: "X-Api-Key", ValueFrom: tavilyKey}}
 	asHTTP := func(change func(*v1.MCPServer)) func(*v1.MCPServer) {
 		return func(s *v1.MCPServer) {
 			httpServer(s)
 			change(s)
 		}
+	}
+	withEnv := func(env ...v1.MCPEnvVar) func(*v1.MCPServer) {
+		return func(s *v1.MCPServer) { s.Spec.Env = env }
+	}
+	withHeaders := func(headers ...v1.MCPHeader) func(*v1.MCPServer) {
+		return asHTTP(func(s *v1.MCPServer) { s.Spec.Headers = headers })
 	}
 
 	runCreateCases(t, mcpServer, []createCase[*v1.MCPServer]{
@@ -106,9 +174,47 @@ func TestMCPServerValidation(t *testing.T) {
 		{
 			name: "two headers differing only in case are refused",
 			mutate: asHTTP(func(s *v1.MCPServer) {
-				s.Spec.Headers = []v1.SecretHeader{secretHeaders[0], {Name: "x-api-key", ValueFrom: tavilyKey}}
+				s.Spec.Headers = []v1.MCPHeader{secretHeaders[0], {Name: "x-api-key", ValueFrom: tavilyKey}}
 			}),
 			want: msgHeaderCase,
+		},
+		{
+			name: "settings in env as literal values are accepted",
+			mutate: withEnv(
+				v1.MCPEnvVar{Name: "SLACK_MCP_ADD_MESSAGE_TOOL", Value: new("true")},
+				v1.MCPEnvVar{Name: envJiraURL, Value: new("https://jira.example.com")},
+				v1.MCPEnvVar{Name: "GITLAB_HOST", Value: new("")},
+				secretEnv[0],
+			),
+		},
+		{
+			name:   "a setting in headers as a literal value is accepted",
+			mutate: withHeaders(v1.MCPHeader{Name: headerToolsets, Value: new("repos,issues")}, secretHeaders[0]),
+		},
+		{
+			name:   "a literal value under a credential's name in env is refused",
+			mutate: withEnv(v1.MCPEnvVar{Name: "TAVILY_API_KEY", Value: new("tvly-literal")}),
+			want:   msgLiteralCredential,
+		},
+		{
+			name:   "a literal value under a credential's name in headers is refused",
+			mutate: withHeaders(v1.MCPHeader{Name: "X-Api-Key", Value: new("literal")}),
+			want:   msgLiteralCredential,
+		},
+		{
+			name:   "a literal Authorization header is refused",
+			mutate: withHeaders(v1.MCPHeader{Name: "authorization", Value: new("Bearer literal")}),
+			want:   msgLiteralCredential,
+		},
+		{
+			name:   "a literal Proxy-Authorization header is refused",
+			mutate: withHeaders(v1.MCPHeader{Name: "Proxy-Authorization", Value: new("Basic literal")}),
+			want:   msgLiteralCredential,
+		},
+		{
+			name:   "a literal Cookie header is refused",
+			mutate: withHeaders(v1.MCPHeader{Name: "Cookie", Value: new("session=literal")}),
+			want:   msgLiteralCredential,
 		},
 		{
 			name:   "the name crewlet is refused",

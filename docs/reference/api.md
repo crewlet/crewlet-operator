@@ -1968,10 +1968,20 @@ _Appears in:_
 
 
 
-MCPCredentialValue is one value of a seat's credentials for a tool server.
-Whether it is an environment variable or a request header depends on the
-server's transport, which is why its name follows the grammar of an HTTP
-header name, of which an environment variable's name is a subset.
+MCPCredentialValue is one value a tool server is started with for a seat:
+one of its credentials, from a Secret or provisioned by the engine, or a
+setting that is no credential, written as a literal value. Whether it is an
+environment variable or a request header depends on the server's
+transport, which is why its name follows the grammar of an HTTP header
+name, of which an environment variable's name is a subset.
+
+A literal value is for a setting such as a path: slack-mcp-server, for one,
+keeps the channels its bot can see in a file named after the workspace
+alone, so each seat names its own (SLACK_MCP_CHANNELS_CACHE), or seats on
+one engine pod are shown each other's private channels. Crewlet treats every
+value of mcp_env as a credential and masks it on every read, and cannot
+tell a setting from a credential; the name can, so a name that says it
+holds a credential, as Crewlet reads one (see MCPEnvVar), takes valueFrom.
 
 
 
@@ -1981,16 +1991,17 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | name is the environment variable's name (Stdio) or the header's name<br />(HTTP). |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9!#$%&'*+.^_\|~-]+$` <br />Required: \{\} <br /> |
-| `valueFrom` _[SeatCredentialSource](#seatcredentialsource)_ | valueFrom is where the value comes from: a Secret key, or, for a<br />Seat's own credentials, the engine (provisioned). For a header the<br />value is the whole header, scheme included (for example "Bearer<br /><token>"); a provisioned value is the credential alone, so provision<br />one for a variable rather than a header. |  | MinProperties: 1 <br />Required: \{\} <br /> |
+| `value` _string_ | value is a literal value, for a setting that is no credential. It<br />lands in the company document as written, where anyone who can read<br />this object reads it too. An empty string is a valid value, which is<br />why the field is a pointer. |  | MaxLength: 4096 <br />Optional: \{\} <br /> |
+| `valueFrom` _[SeatCredentialSource](#seatcredentialsource)_ | valueFrom is where a credential comes from: a Secret key, or, for a<br />Seat's own credentials, the engine (provisioned). For a header the<br />value is the whole header, scheme included (for example "Bearer<br /><token>"); a provisioned value is the credential alone, so provision<br />one for a variable rather than a header. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### MCPCredentials
 
 
 
-MCPCredentials are the credentials one tool server is started with for a
-seat: environment variables for a Stdio server, request headers for an HTTP
-one. They map onto one server's entry of Crewlet's mcp_env, a credential
+MCPCredentials are the values one tool server is started with for a seat:
+environment variables for a Stdio server, request headers for an HTTP one.
+They map onto one server's entry of Crewlet's mcp_env, a credential
 position.
 
 The server is named by a top-level name, as an imagePullSecrets entry names
@@ -2008,8 +2019,66 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | name is the metadata.name of the MCPServer, in this namespace, the<br />credentials are for. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `name` _string_ | name is the metadata.name of the MCPServer, in this namespace, the<br />values are for. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `env` _[MCPCredentialValue](#mcpcredentialvalue) array_ | env are the values. For a Stdio server each is an environment<br />variable of its process; for an HTTP server each is a request header<br />(the name is the header's name). Names must differ in more than case:<br />HTTP header names are case-insensitive, so Authorization and<br />authorization are one header. |  | MaxItems: 32 <br />MinItems: 1 <br />Required: \{\} <br /> |
+
+
+#### MCPEnvVar
+
+
+
+MCPEnvVar is one variable of a Stdio tool server's environment, which every
+instance of the server starts with: a credential, read from a Secret, or a
+setting that is no credential, written as a literal value, such as the
+address of the service the server reaches or a switch that turns one of its
+tools on.
+
+Crewlet treats a server's whole environment as credentials, masking every
+value on every read, so it cannot tell the two apart; a name can. A name
+says it holds a credential when one of its parts, cut at every character
+that is not a letter or a digit and read without case, is KEY, KEYS,
+APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL,
+CREDENTIALS, AUTH, OAUTH or PAT, which is how Crewlet itself reads a
+credential's name (cliprofile.IsCredentialName), or when it is one of the
+HTTP headers that carry one, Authorization, Proxy-Authorization and
+Cookie; such a name takes valueFrom, never a literal. So GITLAB_TOKEN,
+TAVILY_API_KEY and X-Api-Key come from Secrets, and JIRA_URL or
+SLACK_MCP_ADD_MESSAGE_TOOL may be written out. The rule keeps a credential
+from being typed where a setting goes; a credential under a name that says
+nothing (a URL with a password in it, say) is still yours to keep in a
+Secret.
+
+
+
+_Appears in:_
+- [MCPServerSpec](#mcpserverspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name is the variable's name. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z_][A-Za-z0-9_]*$` <br />Required: \{\} <br /> |
+| `value` _string_ | value is a literal value, for a setting that is no credential. It<br />lands in the company document as written, where anyone who can read<br />this object reads it too. An empty string is a valid value, which is<br />why the field is a pointer. |  | MaxLength: 4096 <br />Optional: \{\} <br /> |
+| `valueFrom` _[SecretValueSource](#secretvaluesource)_ | valueFrom reads a credential from a Secret key. |  | Optional: \{\} <br /> |
+
+
+#### MCPHeader
+
+
+
+MCPHeader is one header of every request to an HTTP tool server, which every
+instance of the server sends: a credential, read from a Secret, such as the
+Authorization header, or a setting that is no credential, written as a
+literal value, by the rule MCPEnvVar states.
+
+
+
+_Appears in:_
+- [MCPServerSpec](#mcpserverspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name is the header's name. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9!#$%&'*+.^_\|~-]+$` <br />Required: \{\} <br /> |
+| `value` _string_ | value is a literal value, for a setting that is no credential. It<br />lands in the company document as written, where anyone who can read<br />this object reads it too. An empty string is a valid value, which is<br />why the field is a pointer. |  | MaxLength: 4096 <br />Optional: \{\} <br /> |
+| `valueFrom` _[SecretValueSource](#secretvaluesource)_ | valueFrom reads a credential from a Secret key, which holds the whole<br />header value, scheme included (for example "Bearer <token>"). |  | Optional: \{\} <br /> |
 
 
 #### MCPServer
@@ -2040,7 +2109,7 @@ name inside a coding agent's sandbox.
 
 MCPServerSpec is one tool server a company's agents call. It renders to one
 entry of Crewlet's mcp_servers, named by the MCPServer's metadata.name;
-Seats and Units give it per-seat credentials by that name.
+Seats and Units give it per-seat values by that name.
 
 
 
@@ -2051,12 +2120,12 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `companyRef` _[CompanyReference](#companyreference)_ | companyRef names the Company this server belongs to. Immutable. |  | Required: \{\} <br /> |
 | `transport` _[MCPTransport](#mcptransport)_ | transport is how the engine reaches the server. Crewlet's `transport`. | Stdio | Enum: [Stdio HTTP] <br />Optional: \{\} <br /> |
-| `shared` _boolean_ | shared launches one instance whose tools every agent calls. false<br />makes the server a template instead: every seat that has credentials<br />for it in spec.mcp gets an instance of its own, which is how each<br />agent acts as itself on the server. Crewlet's `shared`. | true | Optional: \{\} <br /> |
+| `shared` _boolean_ | shared launches one instance whose tools every agent calls. false<br />makes the server a template instead: every agent seat that names it<br />in spec.mcp, its own or its unit's, gets an instance of its own,<br />which is how each agent acts as itself on the server. An entry of<br />settings alone starts one too, with none of the seat's credentials.<br />Crewlet's `shared`. | true | Optional: \{\} <br /> |
 | `command` _string_ | command is the executable a Stdio server is launched with, as a process<br />of the engine's container, by the engine's user. It must be installed<br />in the engine image, and Crewlet's image ships no Python or Node.js<br />runtime (docs/guides/tool-servers.md). Crewlet's `command`. |  | MaxLength: 1024 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `args` _string array_ | args are the executable's arguments. Crewlet's `args`. |  | MaxItems: 64 <br />items:MaxLength: 4096 <br />Optional: \{\} <br /> |
-| `env` _[SecretEnvVar](#secretenvvar) array_ | env is the environment of a Stdio server's process, shared by every<br />instance; per-seat values belong in a Seat's or a Unit's spec.mcp.<br />Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `env` _[MCPEnvVar](#mcpenvvar) array_ | env is the environment of a Stdio server's process, shared by every<br />instance; per-seat values belong in a Seat's or a Unit's spec.mcp.<br />Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `url` _string_ | url is the endpoint of an HTTP server. Crewlet's `url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `headers` _[SecretHeader](#secretheader) array_ | headers are sent with every request to an HTTP server, shared by every<br />instance; per-seat values belong in a Seat's or a Unit's spec.mcp.<br />Header names are case-insensitive, so names must differ in more than<br />case. Crewlet's `headers`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `headers` _[MCPHeader](#mcpheader) array_ | headers are sent with every request to an HTTP server, shared by every<br />instance; per-seat values belong in a Seat's or a Unit's spec.mcp.<br />Header names are case-insensitive, so names must differ in more than<br />case. Crewlet's `headers`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `toolPrefix` _string_ | toolPrefix is put in front of the server's tool names, to keep them<br />apart from another server's. Crewlet's `tool_prefix`. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[A-Za-z][A-Za-z0-9_-]*$` <br />Optional: \{\} <br /> |
 | `toolAnnotations` _[MCPToolAnnotations](#mcptoolannotations) array_ | toolAnnotations correct the hints individual tools advertise.<br />Crewlet's `tool_annotations`. |  | MaxItems: 128 <br />Optional: \{\} <br /> |
 | `startupTimeoutSeconds` _integer_ | startupTimeoutSeconds bounds starting the server, the handshake and<br />its first tool listing. Unset takes Crewlet's default of 60. Crewlet's<br />`startup_timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
@@ -3186,7 +3255,7 @@ _Appears in:_
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens this seat may spend per window, on top of<br />the Company's caps. Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `llm` _[SeatLLM](#seatllm)_ | llm is the model providers the seat runs on. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `learningEnabled` _boolean_ | learningEnabled overrides the company's learning setting for this<br />seat: false stops reflection after the seat's turns. Unset inherits.<br />Crewlet's `learning_enabled`. |  | Optional: \{\} <br /> |
-| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are the seat's own tool-server credentials, which make it act as<br />itself on each server. They are merged over its unit's, per variable.<br />One entry per server, keyed by its name. Crewlet's `mcp_env`, a<br />credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are the seat's own tool-server credentials, which make it act as<br />itself on each server, and its own settings, such as the channel cache<br />of slack-mcp-server, which no other seat may share. They are merged<br />over its unit's, per variable. One entry per server, keyed by its<br />name. Crewlet's `mcp_env`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `sandbox` _[SeatSandbox](#seatsandbox)_ | sandbox gives the seat a sandbox to run code in. Unset gives it none. |  | Optional: \{\} <br /> |
 | `placement` _[SeatPlacement](#seatplacement)_ | placement is where the seat runs. Unset runs it in the Company's<br />spec.topology.defaultSeatPool. |  | Optional: \{\} <br /> |
 | `paused` _boolean_ | paused says whether the seat may take work. True pauses it: it starts<br />no new turn, the mail it is sent waits on its inbox in order, and its<br />schedules' fires are skipped rather than queued; the turn it is on<br />finishes first unless stopRunning is set. False resumes it, and what<br />waited is delivered first. Unset leaves the seat's pause to the people<br />who run the company in the engine's dashboard: the operator reports a<br />pause they take, and never lifts it.<br />A pause is not part of the company document. Crewlet keeps it in its<br />coordination store, changed through its operator catalogue's<br />pause_seat and resume_seat tools, which the operator calls under the<br />Company's Enforce policy whenever the seat's pause differs from this<br />field; under Observe and Seed it only reports the difference. |  | Optional: \{\} <br /> |
@@ -3227,39 +3296,19 @@ _Appears in:_
 
 
 SecretEnvVar is a named credential delivered as an environment variable,
-such as a tool server's API token. Crewlet treats every value in the
-positions that use this type as a credential, so a literal value is not
-accepted: the value always comes from a Secret.
+such as a sandbox setup step's token or a coding CLI's model key. Crewlet
+treats every value in the positions that use this type as a credential, so
+a literal value is not accepted: the value always comes from a Secret.
 
 
 
 _Appears in:_
 - [CLIAgentSettings](#cliagentsettings)
-- [MCPServerSpec](#mcpserverspec)
 - [SandboxSetupStep](#sandboxsetupstep)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | name is the variable's name. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z_][A-Za-z0-9_]*$` <br />Required: \{\} <br /> |
-| `valueFrom` _[SecretValueSource](#secretvaluesource)_ | valueFrom is the Secret key the value is read from. |  | Required: \{\} <br /> |
-
-
-#### SecretHeader
-
-
-
-SecretHeader is a named credential sent as an HTTP request header, such as
-the Authorization header of a remote tool server. The Secret key holds the
-whole header value, scheme included (for example "Bearer <token>").
-
-
-
-_Appears in:_
-- [MCPServerSpec](#mcpserverspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `name` _string_ | name is the header's name. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9!#$%&'*+.^_\|~-]+$` <br />Required: \{\} <br /> |
 | `valueFrom` _[SecretValueSource](#secretvaluesource)_ | valueFrom is the Secret key the value is read from. |  | Required: \{\} <br /> |
 
 
@@ -3330,9 +3379,10 @@ reshaping every list that carries credentials.
 
 _Appears in:_
 - [EnvVar](#envvar)
+- [MCPEnvVar](#mcpenvvar)
+- [MCPHeader](#mcpheader)
 - [SandboxFile](#sandboxfile)
 - [SecretEnvVar](#secretenvvar)
-- [SecretHeader](#secretheader)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -3606,7 +3656,7 @@ _Appears in:_
 | `knowledge` _string array_ | knowledge are free-text references to knowledge the unit relies on.<br />They are not a read scope. Crewlet's `knowledge`. |  | MaxItems: 32 <br />items:MaxLength: 1024 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
 | `project` _string_ | project is the tracker project the unit files work in, by its key.<br />Crewlet requires a container key to be an upper-case letter followed<br />by 1 to 9 upper-case letters or digits, such as PLAT. Crewlet's<br />`project`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
 | `space` _string_ | space is the knowledge container the unit writes pages in, by its<br />key, which follows the same rule as project. Crewlet's `space`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
-| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are tool-server credentials every agent seat directly in this unit<br />inherits; a seat's own credentials win per variable. One entry per<br />server, keyed by its name. Crewlet's `mcp_env`, a credential position.<br />Every value comes from a Secret: the engine provisions a credential<br />for one seat, and a unit's are every member's. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are tool-server credentials and settings every agent seat<br />directly in this unit inherits; a seat's own values win per variable.<br />One entry per server, keyed by its name. Crewlet's `mcp_env`, a<br />credential position. Every credential comes from a Secret: the engine<br />provisions a credential for one seat, and a unit's are every member's.<br />A value one seat must not share, such as slack-mcp-server's channel<br />cache, belongs on the Seat. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 
 
 #### UnitStatus

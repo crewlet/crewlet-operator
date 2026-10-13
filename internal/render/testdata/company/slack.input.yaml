@@ -1,5 +1,7 @@
 # Slack with nothing overridden, which Crewlet spells as an empty block, and
-# one agent seat with its own Slack app.
+# one agent seat with its own Slack app, which posts through slack-mcp-server
+# on its app's bot token: the server's switch that turns its posting tool on
+# and the seat's own channel cache are settings, written as literal values.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -29,3 +31,28 @@ spec:
     slack:
       credentialsSecretRef:
         name: concierge-slack
+  mcp:
+    - name: slack
+      env:
+        - name: SLACK_MCP_XOXB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: concierge-slack
+              key: botToken
+        - name: SLACK_MCP_CHANNELS_CACHE
+          value: /home/crewlet/.cache/slack-mcp-server/concierge-channels.json
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: slack
+spec:
+  companyRef:
+    name: chatty
+  shared: false
+  command: /usr/local/bin/slack-mcp-server
+  args: [--transport, stdio]
+  env:
+    - name: SLACK_MCP_ADD_MESSAGE_TOOL
+      value: "true"
+  toolPrefix: slack_

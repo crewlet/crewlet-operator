@@ -3,6 +3,7 @@ package render
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -47,7 +48,12 @@ var identityKeys = []string{"handle", "id", "name"}
 // value changed, added or removed there is a difference. A credential the
 // engine holds as anything but a whole ${VAR} reference is served redacted,
 // which never equals the rendered reference, so a literal credential written
-// over a reference is found too.
+// over a reference is found too. The one value rendered as a literal where the
+// engine holds credentials, a tool server's setting (settingServedRedacted),
+// comes back redacted for the same reason, and is not compared: the engine
+// shows nothing to compare it with, so a setting rewritten through the
+// engine as another literal is not found, while one replaced by a reference
+// is.
 //
 // Each path is in the rendered document's terms where the place exists
 // there, so Document.Attribute names the object it belongs to. A place only
@@ -119,10 +125,46 @@ func (d *differ) compare(p Path, r, a any, subset bool) {
 		}
 		d.compareList(p, rv, av, subset)
 	default:
+		if s, ok := r.(string); ok && a == redacted && settingServedRedacted(p) &&
+			!wholeReference.MatchString(strings.TrimSpace(s)) {
+			return
+		}
 		if !reflect.DeepEqual(r, a) {
 			d.add(p)
 		}
 	}
+}
+
+// The keys a tool server's settings are rendered under: a role's or a
+// unit's mcp_env, and a server's env and headers.
+const (
+	keyMCPEnv  = "mcp_env"
+	keyEnv     = "env"
+	keyHeaders = "headers"
+)
+
+// redacted is what the engine serves in place of a value it holds at a
+// credential position as anything but a whole ${VAR} reference (Crewlet's
+// config.Redacted).
+const redacted = "__redacted__"
+
+// wholeReference is a value that is one ${VAR} reference and nothing else,
+// which the engine serves as it holds it.
+var wholeReference = regexp.MustCompile(`^\$\{[A-Za-z_][A-Za-z0-9_]*\}$`)
+
+// settingServedRedacted reports whether p is where the render writes a tool
+// server's setting out as a literal while the engine holds every value there
+// as a credential, and serves one redacted: a value of a tool server's env or
+// headers, or of a role's or a unit's mcp_env.
+func settingServedRedacted(p Path) bool {
+	n := len(p)
+	switch {
+	case n >= 3 && p[n-3] == keyMCPEnv:
+		return true
+	case n == 4 && p[0] == keyMCPServers && (p[2] == keyEnv || p[2] == keyHeaders):
+		return true
+	}
+	return false
 }
 
 // compareList compares two lists, element by element on their identity key

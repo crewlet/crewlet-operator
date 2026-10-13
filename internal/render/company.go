@@ -927,7 +927,7 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 			Shared:                spec.Shared,
 			Command:               spec.Command,
 			Args:                  spec.Args,
-			Env:                   r.secretEnv(spec.Env),
+			Env:                   r.mcpServerEnv(spec.Env),
 			URL:                   spec.URL,
 			ToolPrefix:            spec.ToolPrefix,
 			StartupTimeoutSeconds: spec.StartupTimeoutSeconds,
@@ -936,7 +936,7 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 		if len(spec.Headers) > 0 {
 			doc.Headers = make(map[string]string, len(spec.Headers))
 			for _, h := range spec.Headers {
-				doc.Headers[h.Name] = r.secret(h.ValueFrom.SecretKeyRef.Name, h.ValueFrom.SecretKeyRef.Key)
+				doc.Headers[h.Name] = r.literalOrSecret(h.Value, h.ValueFrom.SecretKeyRef)
 			}
 		}
 		if len(spec.ToolAnnotations) > 0 {
@@ -956,9 +956,32 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 	return out
 }
 
-// mcpEnv renders a Unit's or a Seat's per-server credentials as Crewlet's
-// mcp_env, a mapping from server name to variable (or header) name to value.
-// value renders one credential, at its field of the object.
+// mcpServerEnv renders a tool server's environment as Crewlet's env.
+func (r *renderer) mcpServerEnv(env []v1alpha1.MCPEnvVar) map[string]string {
+	if len(env) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(env))
+	for _, e := range env {
+		out[e.Name] = r.literalOrSecret(e.Value, e.ValueFrom.SecretKeyRef)
+	}
+	return out
+}
+
+// literalOrSecret renders a tool server's value: a literal as it is written,
+// which the API admits only under a name that holds no credential, and
+// otherwise the Secret key it is read from.
+func (r *renderer) literalOrSecret(literal *string, from v1alpha1.SecretKeyReference) string {
+	if literal != nil {
+		return *literal
+	}
+	return r.secret(from.Name, from.Key)
+}
+
+// mcpEnv renders a Unit's or a Seat's per-server values as Crewlet's
+// mcp_env, a mapping from server name to variable (or header) name to value:
+// a setting as it is written, and a credential by the function value, which
+// renders one at its field of the object.
 func (r *renderer) mcpEnv(
 	kind, name string, creds []v1alpha1.MCPCredentials, value func(field string, src v1alpha1.SeatCredentialSource) string,
 ) map[string]map[string]string {
@@ -974,6 +997,10 @@ func (r *renderer) mcpEnv(
 		}
 		values := make(map[string]string, len(c.Env))
 		for j, v := range c.Env {
+			if v.Value != nil {
+				values[v.Name] = *v.Value
+				continue
+			}
 			values[v.Name] = value(fmt.Sprintf("spec.mcp[%d].env[%d].valueFrom", i, j), v.ValueFrom)
 		}
 		out[c.Name] = values

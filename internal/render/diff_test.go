@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/crewlet/crewlet-operator/internal/engine"
@@ -155,6 +156,104 @@ units:
 		},
 	}
 	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := Diff([]byte(rendered), []byte(c.active))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(paths(got), c.want) {
+				t.Errorf("Diff() = %q, want %q", paths(got), c.want)
+			}
+		})
+	}
+}
+
+// TestDiffLeavesOutASettingTheEngineRedacts pins what Diff makes of a tool
+// server's setting, which the render writes out where the engine holds
+// credentials and serves every literal redacted: the redacted setting is no
+// difference, while a credential served redacted, a setting served as a
+// reference, and a redacted value anywhere else are.
+func TestDiffLeavesOutASettingTheEngineRedacts(t *testing.T) {
+	const rendered = `name: Acme
+mission: Ship it.
+mcp_servers:
+- name: slack
+  transport: stdio
+  command: slack-mcp-server
+  env: {SLACK_MCP_ADD_MESSAGE_TOOL: "true", SLACK_MCP_LOG: ""}
+- name: github
+  transport: http
+  url: https://api.githubcopilot.com/mcp/
+  headers: {X-MCP-Toolsets: repos}
+roles:
+- name: Ana
+  handle: ana
+  kind: agent
+  mcp_env:
+    slack:
+      SLACK_MCP_XOXB_TOKEN: ${K8S_ANA_SLACK_BOT_TOKEN_AAAAAAAAAAAA}
+      SLACK_MCP_CHANNELS_CACHE: /home/crewlet/.cache/slack-mcp-server/ana-channels.json
+units:
+- id: eng
+  name: Engineering
+  mcp_env:
+    gitlab: {GITLAB_HOST: gitlab.example.com}
+`
+	served := func(change func(string) string) string {
+		return change(`name: Acme
+mission: Ship it.
+mcp_servers:
+- {name: slack, transport: stdio, command: slack-mcp-server,
+   env: {SLACK_MCP_ADD_MESSAGE_TOOL: __redacted__, SLACK_MCP_LOG: ""}}
+- {name: github, transport: http, url: "https://api.githubcopilot.com/mcp/", headers: {X-MCP-Toolsets: __redacted__}}
+roles:
+- name: Ana
+  handle: ana
+  kind: agent
+  mcp_env:
+    slack:
+      SLACK_MCP_XOXB_TOKEN: ${K8S_ANA_SLACK_BOT_TOKEN_AAAAAAAAAAAA}
+      SLACK_MCP_CHANNELS_CACHE: __redacted__
+units:
+- {id: eng, name: Engineering, mcp_env: {gitlab: {GITLAB_HOST: __redacted__}}}
+`)
+	}
+	same := func(doc string) string { return doc }
+	for _, c := range []struct {
+		name   string
+		active string
+		want   []string
+	}{
+		{name: "every setting served redacted", active: served(same)},
+		{
+			name: "a literal credential written over a seat's reference",
+			active: served(func(doc string) string {
+				return strings.Replace(doc, "${K8S_ANA_SLACK_BOT_TOKEN_AAAAAAAAAAAA}", "__redacted__", 1)
+			}),
+			want: []string{"roles[0].mcp_env.slack.SLACK_MCP_XOXB_TOKEN"},
+		},
+		{
+			name: "a setting replaced by a reference",
+			active: served(func(doc string) string {
+				return strings.Replace(doc, "SLACK_MCP_CHANNELS_CACHE: __redacted__", "SLACK_MCP_CHANNELS_CACHE: ${CACHE}", 1)
+			}),
+			want: []string{"roles[0].mcp_env.slack.SLACK_MCP_CHANNELS_CACHE"},
+		},
+		{
+			name: "a redacted value where no setting is rendered",
+			active: served(func(doc string) string {
+				return strings.Replace(doc, "mission: Ship it.", "mission: __redacted__", 1)
+			}),
+			want: []string{"mission"},
+		},
+		{
+			name: "a setting removed",
+			active: served(func(doc string) string {
+				return strings.Replace(doc, "{GITLAB_HOST: __redacted__}", "{}", 1)
+			}),
+			want: []string{"units[0].mcp_env.gitlab.GITLAB_HOST"},
+		},
+	} {
 		t.Run(c.name, func(t *testing.T) {
 			got, err := Diff([]byte(rendered), []byte(c.active))
 			if err != nil {

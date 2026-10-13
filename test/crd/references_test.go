@@ -46,6 +46,17 @@ func TestReferencesInMCPServers(t *testing.T) {
 	})
 }
 
+// TestReferencesInToolServerSettings offers a reference in a literal setting
+// of a tool server in every position that takes one. The engine expands it in
+// a server's env and headers and in each seat's values alike, and a header of
+// a server whose url the tenant writes would carry the engine's own
+// credential there.
+func TestReferencesInToolServerSettings(t *testing.T) {
+	holdValue(t, newNamespace(t), v1.MCPEnvVar{
+		Name: envSlackChannels, Value: new("/home/crewlet/.cache/slack-mcp-server/" + leak + ".json"),
+	}, msgLiteralReference)
+}
+
 func TestReferencesInModelProviders(t *testing.T) {
 	runCreateCases(t, llmProvider, []createCase[*v1.LLMProvider]{
 		{

@@ -24,10 +24,22 @@ const (
 	UnitTypeUnit       UnitType = "Unit"
 )
 
-// MCPCredentialValue is one value of a seat's credentials for a tool server.
-// Whether it is an environment variable or a request header depends on the
-// server's transport, which is why its name follows the grammar of an HTTP
-// header name, of which an environment variable's name is a subset.
+// MCPCredentialValue is one value a tool server is started with for a seat:
+// one of its credentials, from a Secret or provisioned by the engine, or a
+// setting that is no credential, written as a literal value. Whether it is an
+// environment variable or a request header depends on the server's
+// transport, which is why its name follows the grammar of an HTTP header
+// name, of which an environment variable's name is a subset.
+//
+// A literal value is for a setting such as a path: slack-mcp-server, for one,
+// keeps the channels its bot can see in a file named after the workspace
+// alone, so each seat names its own (SLACK_MCP_CHANNELS_CACHE), or seats on
+// one engine pod are shown each other's private channels. Crewlet treats every
+// value of mcp_env as a credential and masks it on every read, and cannot
+// tell a setting from a credential; the name can, so a name that says it
+// holds a credential, as Crewlet reads one (see MCPEnvVar), takes valueFrom.
+// +kubebuilder:validation:XValidation:rule="has(self.value) != has(self.valueFrom)",message="exactly one of value and valueFrom must be set"
+// +kubebuilder:validation:XValidation:rule="!has(self.value) || !(self.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)') || self.name.lowerAscii() in ['authorization', 'proxy-authorization', 'cookie'])",message="value may not be given to a name that says it holds a credential, which comes from a Secret through valueFrom: one of its parts, cut at every character that is not a letter or a digit, is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT, as Crewlet reads a credential's name, or it is the Authorization, Proxy-Authorization or Cookie header",fieldPath=".value"
 type MCPCredentialValue struct {
 	// name is the environment variable's name (Stdio) or the header's name
 	// (HTTP).
@@ -37,18 +49,27 @@ type MCPCredentialValue struct {
 	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9!#$%&'*+.^_|~-]+$`
 	Name string `json:"name,omitempty"`
 
-	// valueFrom is where the value comes from: a Secret key, or, for a
+	// value is a literal value, for a setting that is no credential. It
+	// lands in the company document as written, where anyone who can read
+	// this object reads it too. An empty string is a valid value, which is
+	// why the field is a pointer.
+	// +optional
+	// +kubebuilder:validation:MaxLength=4096
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="value may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	Value *string `json:"value,omitempty"`
+
+	// valueFrom is where a credential comes from: a Secret key, or, for a
 	// Seat's own credentials, the engine (provisioned). For a header the
 	// value is the whole header, scheme included (for example "Bearer
 	// <token>"); a provisioned value is the credential alone, so provision
 	// one for a variable rather than a header.
-	// +required
+	// +optional
 	ValueFrom SeatCredentialSource `json:"valueFrom,omitzero"`
 }
 
-// MCPCredentials are the credentials one tool server is started with for a
-// seat: environment variables for a Stdio server, request headers for an HTTP
-// one. They map onto one server's entry of Crewlet's mcp_env, a credential
+// MCPCredentials are the values one tool server is started with for a seat:
+// environment variables for a Stdio server, request headers for an HTTP one.
+// They map onto one server's entry of Crewlet's mcp_env, a credential
 // position.
 //
 // The server is named by a top-level name, as an imagePullSecrets entry names
@@ -59,7 +80,7 @@ type MCPCredentialValue struct {
 // overwriting, every other server's.
 type MCPCredentials struct {
 	// name is the metadata.name of the MCPServer, in this namespace, the
-	// credentials are for.
+	// values are for.
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
@@ -163,16 +184,18 @@ type UnitSpec struct {
 	// +kubebuilder:validation:Pattern=`^[A-Z][A-Z0-9]{1,9}$`
 	Space string `json:"space,omitempty"`
 
-	// mcp are tool-server credentials every agent seat directly in this unit
-	// inherits; a seat's own credentials win per variable. One entry per
-	// server, keyed by its name. Crewlet's `mcp_env`, a credential position.
-	// Every value comes from a Secret: the engine provisions a credential
-	// for one seat, and a unit's are every member's.
+	// mcp are tool-server credentials and settings every agent seat
+	// directly in this unit inherits; a seat's own values win per variable.
+	// One entry per server, keyed by its name. Crewlet's `mcp_env`, a
+	// credential position. Every credential comes from a Secret: the engine
+	// provisions a credential for one seat, and a unit's are every member's.
+	// A value one seat must not share, such as slack-mcp-server's channel
+	// cache, belongs on the Seat.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=16
-	// +kubebuilder:validation:XValidation:rule="self.all(c, c.env.all(v, !has(v.valueFrom.provisioned)))",message="a unit's credentials come from Secrets: the engine provisions a credential for one seat, so name it on the Seat"
+	// +kubebuilder:validation:XValidation:rule="self.all(c, c.env.all(v, !has(v.valueFrom) || !has(v.valueFrom.provisioned)))",message="a unit's credentials come from Secrets: the engine provisions a credential for one seat, so name it on the Seat"
 	MCP []MCPCredentials `json:"mcp,omitempty"`
 }
 

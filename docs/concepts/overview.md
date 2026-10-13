@@ -176,9 +176,14 @@ server's token — is a reference to a Kubernetes `Secret`:
   hold: a seat's Slack app is `botToken` and `signingSecret`; its GitHub App
   is `privateKey` and `webhookSecret`.
 - Lists of variables or headers (`env`, `headers`) take
-  `valueFrom.secretKeyRef` for every entry. Even a value that is not secret
-  comes from a Secret there, because the API cannot tell a token from a
-  setting.
+  `valueFrom.secretKeyRef` for a credential. A tool server's, and the values
+  a Seat or a Unit gives one in `spec.mcp`, also take a setting that is no
+  credential as a literal `value`, which a seat needs for a value of its own
+  such as a cache path; the API refuses one under a name that says it holds
+  a credential, as Crewlet reads such a name
+  ([Settings and credentials](../guides/tool-servers.md#settings-and-credentials)).
+  The other lists a credential goes in, a sandbox's, its setup steps' and a
+  coding CLI's, take no literal value.
 
 The operator pushes each referenced value into the engine's encrypted secret
 store, and the company document refers to it by name only. Rewriting the

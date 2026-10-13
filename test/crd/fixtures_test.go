@@ -94,6 +94,8 @@ const (
 	msgBaseURLShape                = "baseURL must be an absolute http or https URL"
 	msgCompanyName                 = "a Company's name must be a DNS label of at most 47 characters"
 	msgEnvExactlyOne               = "exactly one of value and valueFrom must be set"
+	msgLiteralCredential           = "value may not be given to a name that says it holds a credential"
+	msgLiteralReference            = "value may not hold a ${NAME} reference"
 	msgEnvReserved                 = "variables starting with CREWLET_ or OTEL_ are set by the operator"
 	msgPublicBaseURL               = "publicBaseURL must be an absolute https URL"
 	msgDashboardBaseURL            = "dashboardBaseURL must be an absolute http or https URL"
@@ -239,6 +241,30 @@ func unitSchedule(namespace, name string) *v1.Schedule {
 
 func githubMember() v1.GitHubIntegration {
 	return v1.GitHubIntegration{WebhookSecretRef: secretKey(githubKeys, "webhookSecret")}
+}
+
+// The tool server the Slack cases name, and the variables slack-mcp-server
+// reads: the one it takes its bot's token from, and the file it keeps the
+// channels the bot can see in, which each seat names for itself.
+const (
+	slackServer      = "slack"
+	envSlackBot      = "SLACK_MCP_XOXB_TOKEN"
+	envSlackChannels = "SLACK_MCP_CHANNELS_CACHE"
+)
+
+// Settings of tool servers the cases write out as literal values: an address
+// mcp-atlassian reads, and a header GitHub's remote server reads its toolsets
+// from.
+const (
+	envJiraURL     = "JIRA_URL"
+	headerToolsets = "X-MCP-Toolsets"
+)
+
+// slackChannelsCache is a seat's own channel cache for slack-mcp-server, in
+// the engine's home.
+func slackChannelsCache(handle string) v1.MCPCredentialValue {
+	path := "/home/crewlet/.cache/slack-mcp-server/" + handle + "-channels.json"
+	return v1.MCPCredentialValue{Name: envSlackChannels, Value: &path}
 }
 
 // mcpCredentials gives a seat or a unit its own Authorization header for a

@@ -22,9 +22,12 @@ import (
 // Confluence are on, and the identity each names a person by there, which
 // it reaches only when it connects to them and when a webhook arrives, and
 // against which the render reports a person's Atlassian account
-// (atlassianAccounts). A contract test cannot hold those to the engine, so the
-// operator holds the code it read: the digest of each function as it was
-// when it was read against the operator files that copy it.
+// (atlassianAccounts); and how a name says it holds a credential, which the
+// tool-server API's refusal of a literal value copies and the engine never
+// applies to a tool server's values, taking any literal there. A contract
+// test cannot hold those to the engine, so the operator holds the code it
+// read: the digest of each function as it was when it was read against the
+// operator files that copy it.
 type mirror struct {
 	// file and function are the function's file in the crewlet module and
 	// its name, as enginetest.Fingerprint takes it.
@@ -63,6 +66,8 @@ const (
 	atlassianRead   = "v0.1.1-0.20261012064104-c5d26af1f2b1"
 	cloudRuleRead   = "v0.1.1-0.20261012225007-e3313b767056"
 	addressRead     = "v0.1.1-0.20261012231821-14c93cab2ee6"
+
+	credentialNameRead = "v0.1.1-0.20261012231821-14c93cab2ee6"
 )
 
 // atlassianAccount is every operator file that copies which deployment the
@@ -75,6 +80,16 @@ var atlassianAccount = []string{contactGo, "api/v1alpha1/seat_types.go", integra
 // is read through: those of atlassianAccount, to which a product named by
 // one is on Cloud, and the Integration API, which says whose gateway it is.
 var cloudIDGateway = append([]string{"api/v1alpha1/integration_types.go"}, atlassianAccount...)
+
+// credentialNames is every operator file that copies how the engine reads a
+// credential's name: the API's rules that read one (the LLMProvider API's over
+// a CLI's sign-in, and the tool-server API's refusal of a literal value), the
+// render's copy of their pattern, and the guide and the page that state the
+// rule of a literal value.
+var credentialNames = []string{
+	"api/v1alpha1/llmprovider_types.go", "api/v1alpha1/mcpserver_types.go", "api/v1alpha1/unit_types.go",
+	codeWorkGo, "docs/guides/tool-servers.md", "docs/concepts/credentials.md",
+}
 
 // agentLogin is every operator file that copies how an Agent-mode run's CLI
 // signs in inside the remote sandbox, and is refused when nothing does: the
@@ -95,8 +110,9 @@ var agentLogin = []string{
 // the sign-in a CLIAgent provider's settings give it (test/crd's
 // TestCLIAgentSignInFollowsTheEngine), the deployment its validation reads a
 // Jira or Confluence address on (TestContractAtlassianDeploymentIsTheEngines),
-// and the lists TestCodeWorkFollowsTheEngineSource and
-// TestAtlassianDeploymentFollowsTheEngineSource read.
+// and the lists TestCodeWorkFollowsTheEngineSource,
+// TestAtlassianDeploymentFollowsTheEngineSource and
+// TestCredentialNameFollowsTheEngineSource read.
 //
 // Most of them are the launch's own code. Two are config's write-time twins
 // of a launch decision, read because the launch's own is spread through a
@@ -397,6 +413,15 @@ var mirrored = []mirror{
 			"Data Center, which is what a person's atlassian_account_id is matched against",
 		digest: "f93e753e2226757e3cd1e14f55610c86f3f384efb77980612c69d8458b1e9ab6",
 		read:   atlassianRead,
+	},
+	{
+		file: profileFile, function: "IsCredentialName",
+		against: credentialNames,
+		decides: "a name says it holds a credential when one of its parts, cut at every character that is not a " +
+			"letter or a digit and read without case, is one of credentialWords (which " +
+			"TestCredentialNameFollowsTheEngineSource holds)",
+		digest: "c1e074261881108c0b2fc7785714d31c2547d6498d870d22afeb892b59a7321d",
+		read:   credentialNameRead,
 	},
 	{
 		file: "internal/api/mcpbridge/build.go", function: "Build",

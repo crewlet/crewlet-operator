@@ -730,9 +730,9 @@ spec:
                           items:
                             description: |-
                               SecretEnvVar is a named credential delivered as an environment variable,
-                              such as a tool server's API token. Crewlet treats every value in the
-                              positions that use this type as a credential, so a literal value is not
-                              accepted: the value always comes from a Secret.
+                              such as a sandbox setup step's token or a coding CLI's model key. Crewlet
+                              treats every value in the positions that use this type as a credential, so
+                              a literal value is not accepted: the value always comes from a Secret.
                             properties:
                               name:
                                 description: name is the variable's name.

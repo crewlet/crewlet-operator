@@ -372,7 +372,12 @@ each agent seat is its own GitHub App, in `spec.integrations.github`.
 A Slack agent posts through the `slack` tool server, `slack-mcp-server`, on
 its app's bot token, which its Seat names a second time for the server; the
 server offers its posting tool only when told to
-([Slack's server](tool-servers.md#slack)). GitHub's tool server is GitHub's
+([Slack's server](tool-servers.md#slack)). Each Slack Seat also gives the
+server a channel cache of its own, `SLACK_MCP_CHANNELS_CACHE`, as a literal
+path in its `spec.mcp`: the server otherwise keeps the channels its bot can
+see in one file per workspace, which every seat on an engine pod shares for a
+day, and shows each seat the private channels and direct messages of
+whichever bot wrote it last. GitHub's tool server is GitHub's
 own remote one, which needs nothing in the image
 ([GitHub's server](tool-servers.md#github)).
 

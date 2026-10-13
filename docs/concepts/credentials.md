@@ -121,10 +121,23 @@ fills it with a reference.
 | `providers.llm.*.cli.auth.credential_bundle` | `LLMProvider.spec.cli.auth.credentialBundleSecretRef` | `SecretKeyReference` |
 | `providers.llm.*.cli.env.*` | `LLMProvider.spec.cli.env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
 
-An `env` or `headers` entry takes its value from a Secret even when the value
-is not secret (a feature flag a tool server reads, say): Crewlet treats the
-whole list as credentials, and the API cannot tell one entry from another.
-Keep such settings in the same Secret as the tool's token.
+A tool server's `env` and `headers` and the values of a Unit's or a Seat's
+`spec.mcp` also take a setting that is no credential (a feature flag a tool
+server reads, a seat's own cache path) as a literal `value`, which the
+company document carries as written. Crewlet treats every entry of those
+lists as a credential and masks it on every read, and cannot tell a setting
+from one; the name can. So the API refuses a `value` under a name Crewlet
+reads as a credential's (one of its parts, cut at every character that is not
+a letter or a digit, is, in any case, `KEY`, `KEYS`, `APIKEY`, `ACCESSKEY`,
+`SECRETKEY`, `TOKEN`, `SECRET`, `PASSWORD`, `PASSWD`, `CREDENTIAL`,
+`CREDENTIALS`, `AUTH`, `OAUTH` or `PAT`, as its `cliprofile.IsCredentialName`
+reads one), and under the `Authorization`, `Proxy-Authorization` and `Cookie`
+headers, and a test holds that rule to every name the engine reads a seat's
+tool credential under. A credential under a name that says nothing is still
+yours to keep in a Secret
+([Settings and credentials](../guides/tool-servers.md#settings-and-credentials)).
+The other lists of variables in the table, a sandbox's, its setup steps' and a
+coding CLI's, take no literal value.
 
 ---
 

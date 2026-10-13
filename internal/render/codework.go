@@ -68,14 +68,19 @@ const defaultCodingAgent = v1alpha1.CodingAgentClaudeCode
 // (token_env and api_key_env, to which a test holds this copy).
 var claudeCodeLogin = []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"}
 
-// signInName is the names Crewlet reads as holding a credential, which signs
-// an env sign-in CLI in: one of their parts between underscores is, in any
-// case, one of the words below (cliprofile.IsCredentialName). It is the
-// pattern the LLMProvider API's rules over cli.env match, to which a test
-// holds this copy, and which the CRD suite holds to the engine.
-var signInName = regexp.MustCompile(signInNamePattern)
+// credentialName is the names Crewlet reads as holding a credential, which
+// sign an env sign-in CLI in: one of their parts, cut at every character that
+// is not a letter or a digit, is, in any case, one of the words below
+// (cliprofile.IsCredentialName). It is the pattern of every rule of the API
+// that reads a credential's name, to which a test holds this copy: the
+// LLMProvider API's rules over cli.env, which the CRD suite holds to the
+// engine's sign-in, and the tool-server API's refusal of a literal value
+// under such a name, which the CRD suite holds to the names the engine reads
+// a seat's tool credential under.
+var credentialName = regexp.MustCompile(credentialNamePattern)
 
-const signInNamePattern = `(?i)(^|_)(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)(_|$)`
+//nolint:gosec // G101: the pattern a credential's name matches, which holds no credential.
+const credentialNamePattern = `(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)`
 
 // CodeWork is what the operator can tell of a seat's code work from the
 // objects: whether its coding agent can run on the head of its sandbox chain,
@@ -252,9 +257,9 @@ func (h sandboxHead) remoteSignIn(env envNames) (own bool, seat []string) {
 		return auth.TokenSecretRef.Name != "" || auth.Mode == v1alpha1.CLIAgentAuthAPIKey,
 			env.among(claudeCodeLogin)
 	}
-	own = slices.ContainsFunc(h.cli.Env, func(e v1alpha1.SecretEnvVar) bool { return signInName.MatchString(e.Name) })
+	own = slices.ContainsFunc(h.cli.Env, func(e v1alpha1.SecretEnvVar) bool { return credentialName.MatchString(e.Name) })
 	for _, name := range slices.Sorted(maps.Keys(env)) {
-		if signInName.MatchString(name) {
+		if credentialName.MatchString(name) {
 			seat = append(seat, name)
 		}
 	}

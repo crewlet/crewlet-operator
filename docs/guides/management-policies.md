@@ -68,6 +68,14 @@ kubectl get seats -n acme \
 names the places that differ, on the Company and on each object whose part
 differs.
 
+One kind of value is not compared: a tool server's setting written as a
+literal `value` ([Settings and credentials](tool-servers.md#settings-and-credentials)).
+The engine treats a tool server's whole environment as credentials and serves
+every literal there redacted, so it shows nothing to compare the setting
+with: a setting changed to another literal through the engine is not found,
+while one replaced by a `${VAR}` reference, or a credential replaced by a
+literal, is.
+
 ### Taking a company back under Enforce
 
 Observe is the way to hand a company the engine already runs (one run from

@@ -2,6 +2,17 @@ integrations:
   dashboard_base_url: https://slack.crewlet.internal.example.com
   public_base_url: https://slack.hooks.example.com
   slack: {}
+mcp_servers:
+- args:
+  - --transport
+  - stdio
+  command: /usr/local/bin/slack-mcp-server
+  env:
+    SLACK_MCP_ADD_MESSAGE_TOOL: "true"
+  name: slack
+  shared: false
+  tool_prefix: slack_
+  transport: stdio
 name: Chatty
 roles:
 - handle: concierge
@@ -10,6 +21,10 @@ roles:
       bot_token: ${K8S_CONCIERGE_SLACK_BOT_TOKEN_OT734WOIBNF7}
       signing_secret: ${K8S_CONCIERGE_SLACK_SIGNING_SECRET_YG7FKIMOOGDS}
   kind: agent
+  mcp_env:
+    slack:
+      SLACK_MCP_CHANNELS_CACHE: /home/crewlet/.cache/slack-mcp-server/concierge-channels.json
+      SLACK_MCP_XOXB_TOKEN: ${K8S_CONCIERGE_SLACK_BOT_TOKEN_OT734WOIBNF7}
   name: Concierge
   placement:
     labels:

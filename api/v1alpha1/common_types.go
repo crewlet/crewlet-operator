@@ -167,31 +167,15 @@ type SeatEnvVar struct {
 }
 
 // SecretEnvVar is a named credential delivered as an environment variable,
-// such as a tool server's API token. Crewlet treats every value in the
-// positions that use this type as a credential, so a literal value is not
-// accepted: the value always comes from a Secret.
+// such as a sandbox setup step's token or a coding CLI's model key. Crewlet
+// treats every value in the positions that use this type as a credential, so
+// a literal value is not accepted: the value always comes from a Secret.
 type SecretEnvVar struct {
 	// name is the variable's name.
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
-	Name string `json:"name,omitempty"`
-
-	// valueFrom is the Secret key the value is read from.
-	// +required
-	ValueFrom SecretValueSource `json:"valueFrom,omitzero"`
-}
-
-// SecretHeader is a named credential sent as an HTTP request header, such as
-// the Authorization header of a remote tool server. The Secret key holds the
-// whole header value, scheme included (for example "Bearer <token>").
-type SecretHeader struct {
-	// name is the header's name.
-	// +required
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=128
-	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9!#$%&'*+.^_|~-]+$`
 	Name string `json:"name,omitempty"`
 
 	// valueFrom is the Secret key the value is read from.

@@ -67,6 +67,23 @@ func TestUnitValidation(t *testing.T) {
 			mutate: func(u *v1.Unit) { u.Spec.Type = "Tribe" },
 			want:   `Unsupported value: "Tribe"`,
 		},
+		{
+			name: "a setting as a literal value beside a credential is accepted",
+			mutate: func(u *v1.Unit) {
+				c := mcpCredentials("gitlab")
+				c.Env = append(c.Env, v1.MCPCredentialValue{Name: "GITLAB_HOST", Value: new("gitlab.example.com")})
+				u.Spec.MCP = []v1.MCPCredentials{c}
+			},
+		},
+		{
+			name: "a literal value under a credential's name is refused",
+			mutate: func(u *v1.Unit) {
+				u.Spec.MCP = []v1.MCPCredentials{{Name: "gitlab", Env: []v1.MCPCredentialValue{
+					{Name: "GITLAB_TOKEN", Value: new("glpat-literal")},
+				}}}
+			},
+			want: msgLiteralCredential,
+		},
 	})
 }
 
@@ -466,6 +483,42 @@ func TestSeatValidation(t *testing.T) {
 				s.Spec.MCP = []v1.MCPCredentials{c}
 			},
 			want: "spec.mcp[0].env[0].name",
+		},
+		{
+			name: "a seat's own setting as a literal value beside its credential is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.MCP = []v1.MCPCredentials{{Name: slackServer, Env: []v1.MCPCredentialValue{
+					{Name: envSlackBot, ValueFrom: seatFromSecret("ana-slack", v1.SlackBotTokenKey)},
+					slackChannelsCache(seatHandle),
+				}}}
+			},
+		},
+		{
+			name: "a literal value under a credential's name is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.MCP = []v1.MCPCredentials{{Name: slackServer, Env: []v1.MCPCredentialValue{
+					{Name: envSlackBot, Value: new("xoxb-literal")},
+				}}}
+			},
+			want: msgLiteralCredential,
+		},
+		{
+			name: "a literal Authorization header is refused",
+			mutate: func(s *v1.Seat) {
+				c := mcpCredentials("github")
+				c.Env[0] = v1.MCPCredentialValue{Name: "Authorization", Value: new("Bearer literal")}
+				s.Spec.MCP = []v1.MCPCredentials{c}
+			},
+			want: msgLiteralCredential,
+		},
+		{
+			name: "a value and a provisioned valueFrom together are refused",
+			mutate: func(s *v1.Seat) {
+				cache := slackChannelsCache(seatHandle)
+				cache.ValueFrom = v1.SeatCredentialSource{Provisioned: v1.ProvisionedCredential{Name: "slack-cache"}}
+				s.Spec.MCP = []v1.MCPCredentials{{Name: slackServer, Env: []v1.MCPCredentialValue{cache}}}
+			},
+			want: msgEnvExactlyOne,
 		},
 		{
 			name:   "a repository that is not owner/name is refused",

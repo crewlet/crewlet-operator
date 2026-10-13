@@ -258,9 +258,9 @@ spec:
                     items:
                       description: |-
                         SecretEnvVar is a named credential delivered as an environment variable,
-                        such as a tool server's API token. Crewlet treats every value in the
-                        positions that use this type as a credential, so a literal value is not
-                        accepted: the value always comes from a Secret.
+                        such as a sandbox setup step's token or a coding CLI's model key. Crewlet
+                        treats every value in the positions that use this type as a credential, so
+                        a literal value is not accepted: the value always comes from a Secret.
                       properties:
                         name:
                           description: name is the variable's name.
@@ -371,7 +371,7 @@ spec:
                   rule: '!has(self.auth) || (has(self.auth.mode) && self.auth.mode
                     != ''Subscription'') || has(self.auth.tokenSecretRef) || has(self.auth.credentialBundleSecretRef)
                     || (self.agent in [''Hermes'', ''Pi'', ''OpenCode''] && has(self.env)
-                    && self.env.exists(e, e.name.matches(''(?i)(^|_)(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)(_|$)'')))'
+                    && self.env.exists(e, e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')))'
                 - message: 'auth.tokenSecretRef is a headless token, which Crewlet
                     hands only to ClaudeCode (CLAUDE_CODE_OAUTH_TOKEN): its profile
                     for every other CLI names no token variable. Sign that CLI in
@@ -417,7 +417,7 @@ spec:
                     && has(self.auth.mode) && self.auth.mode != ''Subscription'')
                     || (self.agent == ''ClaudeCode'' && has(self.auth) && has(self.auth.tokenSecretRef))
                     || (self.agent == ''OpenCode'' && has(self.env) && self.env.exists(e,
-                    e.name.matches(''(?i)(^|_)(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)(_|$)'')))'
+                    e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')))'
               companyRef:
                 description: companyRef names the Company this provider belongs to.
                   Immutable.

@@ -523,9 +523,10 @@ type SeatSpec struct {
 	LearningEnabled *bool `json:"learningEnabled,omitempty"`
 
 	// mcp are the seat's own tool-server credentials, which make it act as
-	// itself on each server. They are merged over its unit's, per variable.
-	// One entry per server, keyed by its name. Crewlet's `mcp_env`, a
-	// credential position.
+	// itself on each server, and its own settings, such as the channel cache
+	// of slack-mcp-server, which no other seat may share. They are merged
+	// over its unit's, per variable. One entry per server, keyed by its
+	// name. Crewlet's `mcp_env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name

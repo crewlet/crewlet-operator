@@ -113,10 +113,26 @@ spec:
                   Crewlet's `env`, a credential position.
                 items:
                   description: |-
-                    SecretEnvVar is a named credential delivered as an environment variable,
-                    such as a tool server's API token. Crewlet treats every value in the
-                    positions that use this type as a credential, so a literal value is not
-                    accepted: the value always comes from a Secret.
+                    MCPEnvVar is one variable of a Stdio tool server's environment, which every
+                    instance of the server starts with: a credential, read from a Secret, or a
+                    setting that is no credential, written as a literal value, such as the
+                    address of the service the server reaches or a switch that turns one of its
+                    tools on.
+
+                    Crewlet treats a server's whole environment as credentials, masking every
+                    value on every read, so it cannot tell the two apart; a name can. A name
+                    says it holds a credential when one of its parts, cut at every character
+                    that is not a letter or a digit and read without case, is KEY, KEYS,
+                    APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL,
+                    CREDENTIALS, AUTH, OAUTH or PAT, which is how Crewlet itself reads a
+                    credential's name (cliprofile.IsCredentialName), or when it is one of the
+                    HTTP headers that carry one, Authorization, Proxy-Authorization and
+                    Cookie; such a name takes valueFrom, never a literal. So GITLAB_TOKEN,
+                    TAVILY_API_KEY and X-Api-Key come from Secrets, and JIRA_URL or
+                    SLACK_MCP_ADD_MESSAGE_TOOL may be written out. The rule keeps a credential
+                    from being typed where a setting goes; a credential under a name that says
+                    nothing (a URL with a password in it, say) is still yours to keep in a
+                    Secret.
                   properties:
                     name:
                       description: name is the variable's name.
@@ -124,8 +140,21 @@ spec:
                       minLength: 1
                       pattern: ^[A-Za-z_][A-Za-z0-9_]*$
                       type: string
+                    value:
+                      description: |-
+                        value is a literal value, for a setting that is no credential. It
+                        lands in the company document as written, where anyone who can read
+                        this object reads it too. An empty string is a valid value, which is
+                        why the field is a pointer.
+                      maxLength: 4096
+                      type: string
+                      x-kubernetes-validations:
+                      - message: 'value may not hold a ${NAME} reference: the engine
+                          would resolve it from its own secret store and environment,
+                          which hold credentials that are not this object''s to name'
+                        rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                     valueFrom:
-                      description: valueFrom is the Secret key the value is read from.
+                      description: valueFrom reads a credential from a Secret key.
                       properties:
                         secretKeyRef:
                           description: secretKeyRef selects the Secret key that holds
@@ -151,8 +180,21 @@ spec:
                       type: object
                   required:
                   - name
-                  - valueFrom
                   type: object
+                  x-kubernetes-validations:
+                  - message: exactly one of value and valueFrom must be set
+                    rule: has(self.value) != has(self.valueFrom)
+                  - fieldPath: .value
+                    message: 'value may not be given to a name that says it holds
+                      a credential, which comes from a Secret through valueFrom: one
+                      of its parts, cut at every character that is not a letter or
+                      a digit, is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY,
+                      TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH,
+                      OAUTH or PAT, as Crewlet reads a credential''s name, or it is
+                      the Authorization, Proxy-Authorization or Cookie header'
+                    rule: '!has(self.value) || !(self.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')
+                      || self.name.lowerAscii() in [''authorization'', ''proxy-authorization'',
+                      ''cookie''])'
                 maxItems: 32
                 type: array
                 x-kubernetes-list-map-keys:
@@ -166,9 +208,10 @@ spec:
                   case. Crewlet's `headers`, a credential position.
                 items:
                   description: |-
-                    SecretHeader is a named credential sent as an HTTP request header, such as
-                    the Authorization header of a remote tool server. The Secret key holds the
-                    whole header value, scheme included (for example "Bearer <token>").
+                    MCPHeader is one header of every request to an HTTP tool server, which every
+                    instance of the server sends: a credential, read from a Secret, such as the
+                    Authorization header, or a setting that is no credential, written as a
+                    literal value, by the rule MCPEnvVar states.
                   properties:
                     name:
                       description: name is the header's name.
@@ -176,8 +219,23 @@ spec:
                       minLength: 1
                       pattern: ^[A-Za-z0-9!#$%&'*+.^_|~-]+$
                       type: string
+                    value:
+                      description: |-
+                        value is a literal value, for a setting that is no credential. It
+                        lands in the company document as written, where anyone who can read
+                        this object reads it too. An empty string is a valid value, which is
+                        why the field is a pointer.
+                      maxLength: 4096
+                      type: string
+                      x-kubernetes-validations:
+                      - message: 'value may not hold a ${NAME} reference: the engine
+                          would resolve it from its own secret store and environment,
+                          which hold credentials that are not this object''s to name'
+                        rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                     valueFrom:
-                      description: valueFrom is the Secret key the value is read from.
+                      description: |-
+                        valueFrom reads a credential from a Secret key, which holds the whole
+                        header value, scheme included (for example "Bearer <token>").
                       properties:
                         secretKeyRef:
                           description: secretKeyRef selects the Secret key that holds
@@ -203,8 +261,21 @@ spec:
                       type: object
                   required:
                   - name
-                  - valueFrom
                   type: object
+                  x-kubernetes-validations:
+                  - message: exactly one of value and valueFrom must be set
+                    rule: has(self.value) != has(self.valueFrom)
+                  - fieldPath: .value
+                    message: 'value may not be given to a name that says it holds
+                      a credential, which comes from a Secret through valueFrom: one
+                      of its parts, cut at every character that is not a letter or
+                      a digit, is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY,
+                      TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH,
+                      OAUTH or PAT, as Crewlet reads a credential''s name, or it is
+                      the Authorization, Proxy-Authorization or Cookie header'
+                    rule: '!has(self.value) || !(self.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')
+                      || self.name.lowerAscii() in [''authorization'', ''proxy-authorization'',
+                      ''cookie''])'
                 maxItems: 32
                 type: array
                 x-kubernetes-list-map-keys:
@@ -225,9 +296,11 @@ spec:
                 default: true
                 description: |-
                   shared launches one instance whose tools every agent calls. false
-                  makes the server a template instead: every seat that has credentials
-                  for it in spec.mcp gets an instance of its own, which is how each
-                  agent acts as itself on the server. Crewlet's `shared`.
+                  makes the server a template instead: every agent seat that names it
+                  in spec.mcp, its own or its unit's, gets an instance of its own,
+                  which is how each agent acts as itself on the server. An entry of
+                  settings alone starts one too, with none of the seat's credentials.
+                  Crewlet's `shared`.
                 type: boolean
               startupTimeoutSeconds:
                 description: |-
