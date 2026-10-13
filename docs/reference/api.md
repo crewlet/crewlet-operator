@@ -697,8 +697,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `url` _string_ | url is a Data Center instance's or a Cloud site's base URL. Unset<br />with cloudID unset, the company's Atlassian Integration discovers the<br />site. Crewlet's `url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `cloudID` _string_ | cloudID is an Atlassian Cloud site's id; requests go through<br />Atlassian's API gateway. Crewlet's `cloud_id`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9-]+$` <br />Optional: \{\} <br /> |
-| `siteURL` _string_ | siteURL is the site's address as a browser opens it, for the links<br />the engine hands people; needed with cloudID. Unset is url. Crewlet's<br />`site_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `cloudID` _string_ | cloudID is an Atlassian Cloud site's id; requests go through the API<br />gateway of the Cloud siteURL is on: Atlassian Government Cloud's,<br />api.atlassian-us-gov-mod.com, for a site under<br />atlassian-us-gov-mod.net, and api.atlassian.com otherwise. Crewlet's<br />`cloud_id`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9-]+$` <br />Optional: \{\} <br /> |
+| `siteURL` _string_ | siteURL is the site's address as a browser opens it, for the links<br />the engine hands people; needed with cloudID, which is read through<br />the gateway of this site's Cloud. Unset is url. Crewlet's<br />`site_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `email` _string_ | email is the account's address, for Confluence Cloud's basic<br />authentication. Unset sends the token as a bearer token. Crewlet's<br />`email`. |  | MaxLength: 254 <br />MinLength: 3 <br />Pattern: `^[^@\s]+@[^@\s]+$` <br />Optional: \{\} <br /> |
 | `tokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | tokenSecretRef is the Secret key holding the API token (Cloud) or<br />personal access token (Data Center) of the account a seat without a<br />Confluence credential of its own searches as, which also reads the<br />tool-skill pages. Crewlet's `token`, a credential position. |  | Required: \{\} <br /> |
 | `webhookSecretRef` _[SecretKeyReference](#secretkeyreference)_ | webhookSecretRef is the Secret key holding the secret a Data Center<br />instance signs webhook deliveries with. Required for Data Center.<br />Crewlet's `webhook_secret`, a credential position. |  | Optional: \{\} <br /> |
@@ -1706,8 +1706,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `url` _string_ | url is a Data Center instance's or a Cloud site's base URL. Unset<br />with cloudID unset, the company's Atlassian Integration discovers the<br />site. Crewlet's `url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `cloudID` _string_ | cloudID is an Atlassian Cloud site's id; requests go through<br />Atlassian's API gateway. Crewlet's `cloud_id`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9-]+$` <br />Optional: \{\} <br /> |
-| `siteURL` _string_ | siteURL is the site's address as a browser opens it, for the links<br />the engine hands people; needed with cloudID, whose gateway address<br />opens nothing in a browser. Unset is url. Crewlet's `site_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `cloudID` _string_ | cloudID is an Atlassian Cloud site's id; requests go through the API<br />gateway of the Cloud siteURL is on: Atlassian Government Cloud's,<br />api.atlassian-us-gov-mod.com, for a site under<br />atlassian-us-gov-mod.net, and api.atlassian.com otherwise. Crewlet's<br />`cloud_id`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9-]+$` <br />Optional: \{\} <br /> |
+| `siteURL` _string_ | siteURL is the site's address as a browser opens it, for the links<br />the engine hands people; needed with cloudID, whose gateway address<br />opens nothing in a browser, and which is read through the gateway of<br />this site's Cloud. Unset is url. Crewlet's `site_url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `email` _string_ | email is the account's address, for Jira Cloud's basic<br />authentication. Unset sends the token as a bearer token, as a service<br />account and a Data Center personal access token want. Crewlet's<br />`email`. |  | MaxLength: 254 <br />MinLength: 3 <br />Pattern: `^[^@\s]+@[^@\s]+$` <br />Optional: \{\} <br /> |
 | `tokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | tokenSecretRef is the Secret key holding the API token (Cloud) or<br />personal access token (Data Center) of an administrator account. The<br />engine reads an issue's watchers with it, which no webhook carries,<br />and registers the company's webhook. Crewlet's `token`, a credential<br />position. |  | Required: \{\} <br /> |
 | `webhookSecretRef` _[SecretKeyReference](#secretkeyreference)_ | webhookSecretRef is the Secret key holding the secret webhook<br />deliveries are signed with. Required for a Data Center instance, whose<br />route answers none without it; on Cloud, webhooks the engine<br />registers are signed with it, and the Forge relay needs none.<br />Crewlet's `webhook_secret`, a credential position. |  | Optional: \{\} <br /> |
@@ -2789,9 +2789,9 @@ Crewlet's role `contact`, one field for each of its keys but one (below).
 
 Crewlet refuses two seats that claim one account, so a Seat claiming an
 account another Seat of the company already claims is reported as a
-Conflict. Each field is compared as Crewlet compares it: githubLogin and
-gitlabUsername without case, as GitHub and GitLab compare them; the others
-exactly.
+Conflict. Each field is compared as Crewlet compares it: githubLogin,
+gitlabUsername and mattermostUsername without case, as GitHub, GitLab and
+Mattermost compare them; slackUserID and atlassianAccount exactly.
 
 Crewlet's `crewlet_operator_id` has no field here. It binds one of the
 engine's API tokens to the person, so that whoever writes with that token

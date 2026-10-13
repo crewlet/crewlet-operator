@@ -2,6 +2,9 @@ package render
 
 import (
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"maps"
 	"os"
 	"path/filepath"
@@ -221,71 +224,141 @@ func TestContractContactAccountsCompareAsTheEngine(t *testing.T) {
 	}
 }
 
+// The addresses the Atlassian tests name a product at, besides those of
+// Atlassian's own Clouds: a site's id, and a Data Center instance of each
+// product.
+const (
+	atlassianSiteID = "a436116f-02ce-4520-8fbb-7301462a1674"
+	jiraDataCenter  = "https://jira.helix.example"
+	wikiDataCenter  = "https://wiki.helix.example"
+)
+
+// atlassianAddress is an address a Jira or Confluence Integration of the
+// company case caseAtlassian may name its product at, and whether Crewlet
+// reads the product there on Atlassian Cloud in a company that declares no
+// deployment, as every company the operator renders. The render's report on
+// a person's Atlassian account is held to it
+// (TestAtlassianAccountIsReportedWhereCloudNamesPeopleByID), and so is the
+// engine's own reading of the document the operator renders
+// (TestContractAtlassianDeploymentIsTheEngines), so the two agree through it.
+type atlassianAddress struct {
+	name string
+	// vendor is VendorJira or VendorConfluence, and url and cloudID are its
+	// Integration's: with neither, the company's Atlassian Integration
+	// discovers the site.
+	vendor, url, cloudID string
+	cloud                bool
+}
+
+// atlassianAddresses are the addresses the tests hold the render and the
+// engine to: every way Crewlet's rule (atlassianhost.Of) reads a host as
+// Atlassian Cloud's own, and every near miss it reads as Data Center.
+var atlassianAddresses = []atlassianAddress{
+	{name: "Jira on a Data Center instance", vendor: VendorJira, url: jiraDataCenter},
+	{name: "Confluence on a Data Center instance", vendor: VendorConfluence, url: wikiDataCenter},
+	{name: "Jira on the site the organization discovers", vendor: VendorJira, cloud: true},
+	{name: "Confluence on the site the organization discovers", vendor: VendorConfluence, cloud: true},
+	{name: "Jira by cloudID", vendor: VendorJira, cloudID: atlassianSiteID, cloud: true},
+	{name: "Confluence by cloudID", vendor: VendorConfluence, cloudID: atlassianSiteID, cloud: true},
+	{name: "Jira on a Cloud site", vendor: VendorJira, url: "https://helix.atlassian.net", cloud: true},
+	{name: "Jira on a Cloud site written in capitals", vendor: VendorJira, url: "https://HELIX.Atlassian.NET/", cloud: true},
+	{name: "Jira on a Cloud site named absolutely", vendor: VendorJira, url: "https://helix.atlassian.net./", cloud: true},
+	{name: "Jira on a jira.com site", vendor: VendorJira, url: "https://helix.jira.com", cloud: true},
+	{name: "Jira on a Government Cloud site", vendor: VendorJira, url: "https://helix.atlassian-us-gov-mod.net", cloud: true},
+	{
+		name: "Jira at the API gateway", vendor: VendorJira, cloud: true,
+		url: "https://api.atlassian.com/ex/jira/" + atlassianSiteID,
+	},
+	{name: "Confluence on a Cloud site", vendor: VendorConfluence, url: "https://helix.atlassian.net/wiki", cloud: true},
+	{name: "Confluence on a jira.com site", vendor: VendorConfluence, url: "https://helix.jira.com/wiki", cloud: true},
+	{
+		name: "Confluence at the API gateway", vendor: VendorConfluence, cloud: true,
+		url: "https://api.atlassian.com/ex/confluence/" + atlassianSiteID,
+	},
+	{
+		name: "Confluence at Government Cloud's gateway", vendor: VendorConfluence, cloud: true,
+		url: "https://api.atlassian-us-gov-mod.com/ex/confluence/" + atlassianSiteID,
+	},
+	// The gateway is Cloud whatever path follows it, another product's
+	// included: what it does not serve is a 404, not a Data Center.
+	{
+		name: "Confluence at the gateway's Jira path", vendor: VendorConfluence, cloud: true,
+		url: "https://api.atlassian.com/ex/jira/" + atlassianSiteID,
+	},
+	// No customer's site is served under atlassian.com: Atlassian's own
+	// Jira there is Server, and only the gateway's own host is Cloud.
+	{name: "Jira under atlassian.com", vendor: VendorJira, url: "https://jira.atlassian.com"},
+	{name: "Confluence under atlassian.com", vendor: VendorConfluence, url: "https://wiki.atlassian.com"},
+	{name: "Jira under the gateway's host", vendor: VendorJira, url: "https://eu.api.atlassian.com/ex/jira/" + atlassianSiteID},
+	{name: "Jira under Government Cloud's own domain", vendor: VendorJira, url: "https://jira.atlassian-us-gov-mod.com"},
+	{name: "Jira at a host ending in a site domain's letters", vendor: VendorJira, url: "https://helixatlassian.net"},
+	// The host decides, never the path: the gateway's path on a Data
+	// Center instance's host is that instance's.
+	{
+		name: "Confluence at the gateway's path on another host", vendor: VendorConfluence,
+		url: wikiDataCenter + "/api.atlassian.com/ex/confluence/" + atlassianSiteID,
+	},
+	// An Isolated Cloud site is at a base domain of its own, which only a
+	// declared deployment places, and the operator declares none.
+	{name: "Jira at a base domain of its own", vendor: VendorJira, url: "https://helix.isolated.example"},
+	{name: "Confluence at a base domain of its own", vendor: VendorConfluence, url: "https://helix.isolated.example/wiki"},
+}
+
+// atlassianIntegration names the Integration of caseAtlassian that connects
+// each product.
+var atlassianIntegration = map[string]string{VendorJira: caseAtlassianJira, VendorConfluence: caseAtlassianWiki}
+
+// placeAtlassian connects a's product at a's address.
+func placeAtlassian(in *Input, a atlassianAddress) {
+	spec := &integration(in, atlassianIntegration[a.vendor]).Spec
+	switch a.vendor {
+	case VendorJira:
+		spec.Jira.URL, spec.Jira.CloudID = a.url, a.cloudID
+	case VendorConfluence:
+		spec.Confluence.URL, spec.Confluence.CloudID = a.url, a.cloudID
+	default:
+		panic("no Atlassian product is connected by " + a.vendor)
+	}
+}
+
 // TestAtlassianAccountIsReportedWhereCloudNamesPeopleByID holds the render's
 // report on a person's Atlassian account to the deployment each product is
-// on, as Crewlet derives it from the address it reads the product at
-// (jira.DeploymentOf, confluence.DeploymentOf): a value outside the form of
-// an account id is reported, naming each product on Cloud, and nothing is
-// reported where both are on Data Center, whose usernames take almost any
-// form, or where neither is connected.
+// on, as Crewlet derives it from the address it reads the product at, by
+// one rule for both (atlassianhost.Of) in a company that declares no
+// deployment: a value outside the form of an account id is reported, naming
+// each product on Cloud, and nothing is reported where both are on Data
+// Center, whose usernames take almost any form, or where neither is
+// connected.
 func TestAtlassianAccountIsReportedWhereCloudNamesPeopleByID(t *testing.T) {
 	const (
 		email       = "lena@helix.example"
 		username    = "lena.ortiz"
-		siteID      = "a436116f-02ce-4520-8fbb-7301462a1674"
 		jiraCloud   = "Jira (Integration " + caseAtlassianJira + ")"
 		wikiCloud   = "Confluence (Integration " + caseAtlassianWiki + ")"
-		jiraDC      = "https://jira.helix.example"
-		wikiDC      = "https://wiki.helix.example"
 		legacyCloud = "5b10ac8d82e05b22cc7d4ef5"
 	)
-	jira := func(in *Input) *v1alpha1.JiraIntegration { return &integration(in, caseAtlassianJira).Spec.Jira }
-	wiki := func(in *Input) *v1alpha1.ConfluenceIntegration {
-		return &integration(in, caseAtlassianWiki).Spec.Confluence
-	}
-	// onDataCenter puts both products on Data Center instances; each case
-	// below then moves one back to Cloud by an address of its own.
+	onCloud := map[string]string{VendorJira: jiraCloud, VendorConfluence: wikiCloud}
+	// onDataCenter puts both products on Data Center instances; an address
+	// case then moves one to an address of its own.
 	onDataCenter := func(in *Input) {
-		jira(in).URL, wiki(in).URL = jiraDC, wikiDC
+		integration(in, caseAtlassianJira).Spec.Jira.URL = jiraDataCenter
+		integration(in, caseAtlassianWiki).Spec.Confluence.URL = wikiDataCenter
 	}
-	for _, c := range []struct {
+	type reportCase struct {
 		name, account string
 		// mutate moves the company's Jira and Confluence, and want is the
 		// products the report names on Cloud, none when there is no report.
 		mutate func(*Input)
 		want   []string
-	}{
+	}
+	accounts := []reportCase{
 		{name: "an account id on sites the organization discovers", account: lenaAtlassianCloudID},
 		{name: "a legacy account id on Cloud", account: legacyCloud},
 		{name: "an account id of 128 characters on Cloud", account: strings.Repeat("a", 128)},
 		{name: "an email address on sites the organization discovers", account: email, want: []string{jiraCloud, wikiCloud}},
 		{name: "a Data Center username on Cloud", account: username, want: []string{jiraCloud, wikiCloud}},
 		{name: "a value past 128 characters on Cloud", account: strings.Repeat("a", 129), want: []string{jiraCloud, wikiCloud}},
-		{name: "a username on Data Center", account: username, mutate: onDataCenter},
 		{name: "an address for a username on Data Center", account: email, mutate: onDataCenter},
-		{name: "a username with Jira on a Cloud site", account: username, want: []string{jiraCloud},
-			mutate: func(in *Input) { onDataCenter(in); jira(in).URL = "https://helix.atlassian.net" }},
-		{name: "a username with Jira on a Cloud site written in capitals", account: username, want: []string{jiraCloud},
-			mutate: func(in *Input) { onDataCenter(in); jira(in).URL = "https://HELIX.Atlassian.NET/" }},
-		{name: "a username with Jira on a jira.com site", account: username, want: []string{jiraCloud},
-			mutate: func(in *Input) { onDataCenter(in); jira(in).URL = "https://helix.jira.com" }},
-		{name: "a username with Jira at the API gateway", account: username, want: []string{jiraCloud},
-			mutate: func(in *Input) { onDataCenter(in); jira(in).URL = "https://api.atlassian.com/ex/jira/" + siteID }},
-		{name: "a username with Jira by cloudID", account: username, want: []string{jiraCloud},
-			mutate: func(in *Input) { onDataCenter(in); jira(in).URL, jira(in).CloudID = "", siteID }},
-		{name: "a username with Confluence on a Cloud site", account: username, want: []string{wikiCloud},
-			mutate: func(in *Input) { onDataCenter(in); wiki(in).URL = "https://helix.atlassian.net/wiki" }},
-		{name: "a username with Confluence at the API gateway", account: username, want: []string{wikiCloud},
-			mutate: func(in *Input) {
-				onDataCenter(in)
-				wiki(in).URL = "https://api.atlassian.com/ex/confluence/" + siteID
-			}},
-		{name: "a username with Confluence by cloudID", account: username, want: []string{wikiCloud},
-			mutate: func(in *Input) { onDataCenter(in); wiki(in).URL, wiki(in).CloudID = "", siteID }},
-		// Crewlet's Confluence knows fewer Cloud hosts than its Jira: an
-		// instance under atlassian.com is Data Center to it.
-		{name: "a username with Confluence under atlassian.com", account: username,
-			mutate: func(in *Input) { onDataCenter(in); wiki(in).URL = "https://wiki.atlassian.com" }},
 		// Only the Integration that sorts first by name writes the block a
 		// company has one of per vendor; a second one is a Conflict.
 		{name: "a username with a second Jira Integration on Cloud", account: username,
@@ -301,7 +374,17 @@ func TestAtlassianAccountIsReportedWhereCloudNamesPeopleByID(t *testing.T) {
 					return i.Name == caseAtlassianJira || i.Name == caseAtlassianWiki
 				})
 			}},
-	} {
+	}
+	addresses := make([]reportCase, 0, len(atlassianAddresses))
+	for _, a := range atlassianAddresses {
+		c := reportCase{name: "a username with " + a.name, account: username,
+			mutate: func(in *Input) { onDataCenter(in); placeAtlassian(in, a) }}
+		if a.cloud {
+			c.want = []string{onCloud[a.vendor]}
+		}
+		addresses = append(addresses, c)
+	}
+	for _, c := range slices.Concat(accounts, addresses) {
 		t.Run(c.name, func(t *testing.T) {
 			in := companyCaseNamed(t, caseAtlassian).input(t)
 			if c.mutate != nil {
@@ -340,17 +423,150 @@ func TestAtlassianAccountIsReportedWhereCloudNamesPeopleByID(t *testing.T) {
 	}
 }
 
-// TestAtlassianDeploymentFollowsTheEngineSource holds the hosts the render
-// reads a Jira address under as Atlassian Cloud to Crewlet's jira.cloudHosts,
-// which TestMirroredEngineFunctionsAreUnchanged does not: it holds the
-// functions that read the list, not the list.
+// TestContractAtlassianDeploymentIsTheEngines holds atlassianAddresses, to
+// which the render's report is held, to the engine's own reading of each
+// address in the document the operator renders, at the one place the engine
+// shows it without connecting to the product: its validation requires the
+// webhook_secret of a Jira or Confluence on Data Center alone, and Crewlet's
+// atlassianDeployment decides which by the one rule (atlassianhost.Of) and
+// the company's declaration, the two every client the engine builds is
+// handed. So the product under test is connected with no webhookSecretRef,
+// and the engine refuses the document for that product's webhook_secret
+// exactly where it reads the address as Data Center. It holds what no
+// fingerprint in mirrored can: that the document the operator renders
+// declares no deployment, and reaches the rule with each address as the
+// Integration wrote it.
+func TestContractAtlassianDeploymentIsTheEngines(t *testing.T) {
+	client := enginetest.Start(t).Client()
+	for _, a := range atlassianAddresses {
+		t.Run(a.name, func(t *testing.T) {
+			in := companyCaseNamed(t, caseAtlassian).input(t)
+			placeAtlassian(in, a)
+			spec := &integration(in, atlassianIntegration[a.vendor]).Spec
+			spec.Jira.WebhookSecretRef, spec.Confluence.WebhookSecretRef = v1alpha1.SecretKeyReference{}, v1alpha1.SecretKeyReference{}
+			doc, err := Company(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = client.ApplyConfig(t.Context(), engine.ApplyRequest{Document: doc.YAML, DryRun: true})
+			verr, refused := errors.AsType[*engine.ValidationError](err)
+			if err != nil && !refused {
+				t.Fatalf("the engine's dry run answered %v", err)
+			}
+			secret := "integrations." + a.vendor + ".webhook_secret"
+			if refused {
+				for _, p := range verr.Problems {
+					if p.Path != secret {
+						t.Fatalf("the engine refuses the document at %s, not %s: %s", p.Path, secret, p.Message)
+					}
+				}
+			}
+			if dataCenter := refused; dataCenter == a.cloud {
+				t.Errorf("the engine reads the address on Data Center: %v, and atlassianAddresses, to which the "+
+					"render's report is held, on Cloud: %v", dataCenter, a.cloud)
+			}
+		})
+	}
+}
+
+// TestAtlassianDeploymentFollowsTheEngineSource holds the Clouds the render
+// reads a Jira or Confluence address on as Atlassian Cloud's own to
+// Crewlet's atlassianhost.environments, which
+// TestMirroredEngineFunctionsAreUnchanged does not: it holds the functions
+// that read the table, not the table. It holds the table's type too, whose
+// every field a literal may leave out: a field Crewlet adds to an
+// environment is one more thing that may place a host, which the render
+// copies nothing of until somebody reads it.
 func TestAtlassianDeploymentFollowsTheEngineSource(t *testing.T) {
 	source := openSource(t, enginetest.Source(t))
-	src, err := source.ReadFile(jiraClient)
+	src, err := source.ReadFile(atlassianHostGo)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := stringSliceVar(t, jiraClient, src, "cloudHosts"); !slices.Equal(got, jiraCloudHosts) {
-		t.Errorf("the engine reads Jira under %v as Atlassian Cloud, the render under %v", got, jiraCloudHosts)
+	if got, want := structFields(t, atlassianHostGo, src, "environment"), []string{"gateway", "sites"}; !slices.Equal(got, want) {
+		t.Fatalf("an environment of the engine's has the fields %v, the render's %v", got, want)
 	}
+	got := engineEnvironments(t, src)
+	if !slices.EqualFunc(got, atlassianEnvironments, func(a, b atlassianEnvironment) bool {
+		return a.gateway == b.gateway && slices.Equal(a.sites, b.sites)
+	}) {
+		t.Errorf("the engine reads an address on %+v as Atlassian Cloud, the render on %+v", got, atlassianEnvironments)
+	}
+}
+
+// engineEnvironments is the environments table declared in src, the source
+// of Crewlet's atlassianhost: each element a literal naming its fields.
+func engineEnvironments(t *testing.T, src []byte) []atlassianEnvironment {
+	t.Helper()
+	const name = "environments"
+	list, ok := declared(t, atlassianHostGo, src, token.VAR, name).(*ast.CompositeLit)
+	if !ok {
+		t.Fatalf("%s in %s is no literal", name, atlassianHostGo)
+	}
+	out := make([]atlassianEnvironment, 0, len(list.Elts))
+	for _, elt := range list.Elts {
+		lit, ok := elt.(*ast.CompositeLit)
+		if !ok {
+			t.Fatalf("an element of %s in %s is no literal", name, atlassianHostGo)
+		}
+		var env atlassianEnvironment
+		for _, field := range lit.Elts {
+			kv, ok := field.(*ast.KeyValueExpr)
+			if !ok {
+				t.Fatalf("an element of %s in %s does not name its fields", name, atlassianHostGo)
+			}
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok {
+				t.Fatalf("an element of %s in %s does not name its fields", name, atlassianHostGo)
+			}
+			switch key.Name {
+			case "gateway":
+				env.gateway = stringLiteral(t, atlassianHostGo, name, kv.Value)
+			case "sites":
+				env.sites = stringLiterals(t, atlassianHostGo, name, kv.Value)
+			default:
+				t.Fatalf("an element of %s in %s sets %s, which the render has no copy of", name, atlassianHostGo, key.Name)
+			}
+		}
+		out = append(out, env)
+	}
+	return out
+}
+
+// structFields is the names of the fields of the struct type name declares
+// in the Go source src of file, in their order.
+func structFields(t *testing.T, file string, src []byte, name string) []string {
+	t.Helper()
+	parsed, err := parser.ParseFile(token.NewFileSet(), file, src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, decl := range parsed.Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range gen.Specs {
+			typ, ok := spec.(*ast.TypeSpec)
+			if !ok || typ.Name.Name != name {
+				continue
+			}
+			st, ok := typ.Type.(*ast.StructType)
+			if !ok {
+				t.Fatalf("%s in %s is no struct", name, file)
+			}
+			var fields []string
+			for _, f := range st.Fields.List {
+				if len(f.Names) == 0 {
+					t.Fatalf("%s in %s embeds a field", name, file)
+				}
+				for _, n := range f.Names {
+					fields = append(fields, n.Name)
+				}
+			}
+			return fields
+		}
+	}
+	t.Fatalf("%s declares no type %s", file, name)
+	return nil
 }

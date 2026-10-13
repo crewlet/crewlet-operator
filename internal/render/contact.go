@@ -46,7 +46,7 @@ const contactAtlassian = "atlassianAccount"
 // claim one account, so neither can miss a field the other has.
 var contactAccounts = []contactAccount{
 	{field: "slackUserID", key: "slack_user_id", value: func(c *v1alpha1.SeatContact) string { return c.SlackUserID }},
-	{field: "mattermostUsername", key: "mattermost_user_id", value: func(c *v1alpha1.SeatContact) string {
+	{field: "mattermostUsername", key: "mattermost_user_id", fold: true, value: func(c *v1alpha1.SeatContact) string {
 		return c.MattermostUsername
 	}},
 	{field: contactAtlassian, key: "atlassian_account_id", value: func(c *v1alpha1.SeatContact) string {
@@ -115,10 +115,10 @@ func (r *renderer) atlassianAccounts() {
 // with the Integration that connects it, such as "Jira (Integration jira)".
 func (r *renderer) atlassianCloud() []string {
 	var out []string
-	if in := r.vendorBlock(VendorJira); in != nil && jiraOnCloud(&in.Spec.Jira) {
+	if in := r.vendorBlock(VendorJira); in != nil && atlassianOnCloud(in.Spec.Jira.URL) {
 		out = append(out, "Jira (Integration "+in.Name+")")
 	}
-	if in := r.vendorBlock(VendorConfluence); in != nil && confluenceOnCloud(&in.Spec.Confluence) {
+	if in := r.vendorBlock(VendorConfluence); in != nil && atlassianOnCloud(in.Spec.Confluence.URL) {
 		out = append(out, "Confluence (Integration "+in.Name+")")
 	}
 	return out
@@ -135,50 +135,70 @@ func (r *renderer) vendorBlock(vendor string) *v1alpha1.Integration {
 	return nil
 }
 
-// jiraCloudHosts are the domains Crewlet's jira.DeploymentOf reads a Jira
-// address under as Atlassian Cloud (its cloudHosts). The API gateway a
-// cloud_id is read through, api.atlassian.com, is one of them.
-var jiraCloudHosts = []string{".atlassian.net", ".atlassian.com", ".jira.com"}
-
-// jiraOnCloud is the deployment Crewlet's jira.DeploymentOf derives from
-// the address the engine reads Jira at: for a url, Cloud when its host is
-// under one of jiraCloudHosts and Data Center otherwise. Without a url (the
-// API refuses one beside a cloudID) the address is on Cloud: the API
-// gateway for a cloudID, or with neither the site the company's Atlassian
-// Integration discovers, which only Cloud has (without one, Crewlet refuses
-// the document).
-func jiraOnCloud(j *v1alpha1.JiraIntegration) bool {
-	return j.URL == "" || underHost(j.URL, jiraCloudHosts)
+// atlassianEnvironment is one of Atlassian's multi-tenant Clouds, as
+// Crewlet's atlassianhost.environments lists it: the host of the API gateway
+// a cloud_id is read through, and the domains its Jira and Confluence sites
+// are served under, each with its leading dot, so that a host is one of
+// their subdomains rather than merely ending in the same letters.
+type atlassianEnvironment struct {
+	gateway string
+	sites   []string
 }
 
-// confluenceCloudHosts are the domains Crewlet's confluence.isCloudSite
-// reads a Confluence address under as Atlassian Cloud, and
-// confluenceGateway the path of Atlassian's API gateway for Confluence,
-// which its confluence.DeploymentOf reads as Cloud wherever it appears.
-var confluenceCloudHosts = []string{".atlassian.net", ".jira.com"}
-
-const confluenceGateway = "api.atlassian.com/ex/confluence"
-
-// confluenceOnCloud is the deployment Crewlet's confluence.DeploymentOf
-// derives from the address the engine reads Confluence at, as jiraOnCloud
-// is Jira's, by Confluence's own list of hosts and its gateway's path.
-func confluenceOnCloud(c *v1alpha1.ConfluenceIntegration) bool {
-	return c.URL == "" || underHost(c.URL, confluenceCloudHosts) ||
-		strings.Contains(strings.TrimSpace(c.URL), confluenceGateway)
+// atlassianEnvironments are the Clouds Crewlet recognises by their hosts,
+// which TestAtlassianDeploymentFollowsTheEngineSource holds to its own
+// table: the commercial Cloud and Atlassian Government Cloud. An Atlassian
+// Isolated Cloud site is at a base domain of its own, which no list names,
+// so Crewlet places it only by the deployment a company declares in
+// integrations.atlassian.deployment, and the operator renders none.
+var atlassianEnvironments = []atlassianEnvironment{
+	{gateway: "api.atlassian.com", sites: []string{".atlassian.net", ".jira.com"}},
+	{gateway: "api.atlassian-us-gov-mod.com", sites: []string{".atlassian-us-gov-mod.net"}},
 }
 
-// underHost reports whether the host of the address raw, without case, ends
-// in one of suffixes. An address that does not parse is under none.
-func underHost(raw string, suffixes []string) bool {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return false
+// atlassianOnCloud is the deployment Crewlet's jira.DeploymentOf and
+// confluence.DeploymentOf derive, by its one rule (atlassianhost.Of), for a
+// Jira or Confluence Integration whose url is rawURL: on Cloud when the
+// host of the url is a site of one of atlassianEnvironments or its gateway,
+// and on Data Center otherwise. Crewlet places any other host by the
+// deployment the company declares in integrations.atlassian.deployment, and
+// on Data Center when it declares none, which is every company the operator
+// renders. The API refuses a ${NAME} in the url, so its host is always
+// written, never one only the engine can resolve. The engine's validation,
+// which requires the webhook secret of a Data Center instance alone, reads a
+// url and a cloudID the same way, which
+// TestContractAtlassianDeploymentIsTheEngines holds.
+//
+// Without a url (the API refuses one beside a cloudID) the address is the
+// API gateway a cloud_id is read through, which is on Cloud whichever
+// Cloud's gateway it is: the cloudID's, or with neither, the one of the site
+// the company's Atlassian Integration discovers and records as a cloud_id,
+// which only Cloud has (without one, Crewlet refuses the document).
+func atlassianOnCloud(rawURL string) bool {
+	if rawURL == "" {
+		return true
 	}
-	host := strings.ToLower(parsed.Hostname())
-	for _, suffix := range suffixes {
-		if strings.HasSuffix(host, suffix) {
+	h := atlassianHost(rawURL)
+	for _, env := range atlassianEnvironments {
+		if h == env.gateway {
 			return true
+		}
+		for _, site := range env.sites {
+			if strings.HasSuffix(h, site) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+// atlassianHost is the host of the address raw as Crewlet compares it, the
+// way DNS does: without case, and without the trailing dot of an absolute
+// name, which names the same host. An address that does not parse has none.
+func atlassianHost(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
 }

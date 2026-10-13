@@ -615,7 +615,14 @@ func TestCodeWorkFollowsTheEngineSource(t *testing.T) {
 // the Go source src of file.
 func stringSliceVar(t *testing.T, file string, src []byte, name string) []string {
 	t.Helper()
-	list, ok := declared(t, file, src, token.VAR, name).(*ast.CompositeLit)
+	return stringLiterals(t, file, name, declared(t, file, src, token.VAR, name))
+}
+
+// stringLiterals is the string literals of e, a literal of a []string of
+// name's in file.
+func stringLiterals(t *testing.T, file, name string, e ast.Expr) []string {
+	t.Helper()
+	list, ok := e.(*ast.CompositeLit)
 	if !ok {
 		t.Fatalf("%s in %s is no literal", name, file)
 	}

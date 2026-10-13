@@ -417,22 +417,48 @@ refused.
 An Atlassian account takes any value of up to 255 characters without
 whitespace or `${`, since a Data Center username may hold almost any
 character, and it is checked against the deployment the company reaches
-Jira and Confluence on, which the operator reads as Crewlet does: a product connected by `cloudID`, by a `url` whose
-host is under `atlassian.net` or `jira.com` (or `atlassian.com`, for Jira),
-or by neither, on the sites the Atlassian organization discovers, is on
-Cloud, and any other `url` is a Data Center instance. Where either product
-is on Cloud, which names a person by account id alone, a value that is no
-account id, such as an email address, is applied and reported on the Seat as
-`ResolvedRefs=False` with the reason `NotAnAccountID`, naming the products
-on Cloud. Jira and Confluence share the one value, so a company with one
-product on Cloud and the other on Data Center reaches the person on only
-one of them.
+Jira and Confluence on, which the operator reads as Crewlet does, by
+[one rule for both products](https://github.com/crewlet/crewlet/blob/main/docs/integrations/jira.md#configuration).
+A product connected by `cloudID`, or by neither, on the sites the Atlassian
+organization discovers, is on Cloud, and so is one whose `url` is on a host
+of Atlassian's own Clouds: a site under `atlassian.net` or `jira.com`, or
+under Atlassian Government Cloud's `atlassian-us-gov-mod.net`, or the API
+gateway itself, `api.atlassian.com` or `api.atlassian-us-gov-mod.com`. Any
+other `url` is a Data Center instance, other hosts under `atlassian.com`
+among them: no customer's site is served there.
+
+Where either product is on Cloud, which names a person by account id alone,
+a value that is no account id, such as an email address, is applied and
+reported on the Seat as `ResolvedRefs=False` with the reason
+`NotAnAccountID`, naming the products on Cloud. Jira and Confluence share
+the one value, so a company with one product on Cloud and the other on Data
+Center reaches the person on only one of them.
+
+Crewlet places a host that is not Atlassian's own by the deployment a
+company declares in `integrations.atlassian.deployment`, which the operator
+does not render. So Crewlet reads a site of
+[Atlassian Isolated Cloud](https://support.atlassian.com/organization-administration/docs/ip-addresses-and-domains-for-atlassian-cloud-products/),
+which is served at the customer's own base domain, as a Data Center
+instance. For such a site:
+
+- the product needs its `webhookSecretRef`, which Crewlet requires of a Data
+  Center instance;
+- Jira is spoken to over `/rest/api/2`, which Jira Cloud serves too, rather
+  than `/rest/api/3`;
+- Confluence's webhook is registered as on Data Center, one hook for every
+  event, signed with that secret. Confluence Cloud signs no delivery and
+  names no event in one, so no Confluence event reaches the company. Give
+  Confluence's `url` with its `/wiki`, which Crewlet adds only to a site on a
+  host it recognises;
+- a person's `atlassianAccount` is not reported as `NotAnAccountID`,
+  although the site names people by account id alone.
 
 One account belongs to one person: a Seat claiming an account another Seat
 of the company claims reports `Accepted=False` with the reason `Conflict`,
 naming the other, and holds the company's document until one of them gives
-it up. GitHub logins and GitLab usernames are compared without case, as
-those platforms compare them; the others exactly.
+it up. GitHub logins, GitLab usernames and Mattermost usernames are compared
+without case, as those platforms compare them; Slack member ids and
+Atlassian accounts exactly.
 
 Crewlet's `crewlet_operator_id`, which binds one of the engine's API tokens
 to a person so that whoever writes with it acts as them, has no field: the

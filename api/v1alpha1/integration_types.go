@@ -445,8 +445,11 @@ type JiraIntegration struct {
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
 	URL string `json:"url,omitempty"`
 
-	// cloudID is an Atlassian Cloud site's id; requests go through
-	// Atlassian's API gateway. Crewlet's `cloud_id`.
+	// cloudID is an Atlassian Cloud site's id; requests go through the API
+	// gateway of the Cloud siteURL is on: Atlassian Government Cloud's,
+	// api.atlassian-us-gov-mod.com, for a site under
+	// atlassian-us-gov-mod.net, and api.atlassian.com otherwise. Crewlet's
+	// `cloud_id`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=64
@@ -455,7 +458,8 @@ type JiraIntegration struct {
 
 	// siteURL is the site's address as a browser opens it, for the links
 	// the engine hands people; needed with cloudID, whose gateway address
-	// opens nothing in a browser. Unset is url. Crewlet's `site_url`.
+	// opens nothing in a browser, and which is read through the gateway of
+	// this site's Cloud. Unset is url. Crewlet's `site_url`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
@@ -518,8 +522,11 @@ type ConfluenceIntegration struct {
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
 	URL string `json:"url,omitempty"`
 
-	// cloudID is an Atlassian Cloud site's id; requests go through
-	// Atlassian's API gateway. Crewlet's `cloud_id`.
+	// cloudID is an Atlassian Cloud site's id; requests go through the API
+	// gateway of the Cloud siteURL is on: Atlassian Government Cloud's,
+	// api.atlassian-us-gov-mod.com, for a site under
+	// atlassian-us-gov-mod.net, and api.atlassian.com otherwise. Crewlet's
+	// `cloud_id`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=64
@@ -527,7 +534,8 @@ type ConfluenceIntegration struct {
 	CloudID string `json:"cloudID,omitempty"`
 
 	// siteURL is the site's address as a browser opens it, for the links
-	// the engine hands people; needed with cloudID. Unset is url. Crewlet's
+	// the engine hands people; needed with cloudID, which is read through
+	// the gateway of this site's Cloud. Unset is url. Crewlet's
 	// `site_url`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1

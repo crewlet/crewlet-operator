@@ -54,11 +54,15 @@ const (
 	companyGo   = "internal/config/company.go"
 	firstRead   = "v0.1.1-0.20261010171839-4e45c6b992a2"
 
-	contactGo      = "internal/render/contact.go"
-	integrationsMd = "docs/guides/integrations.md"
-	jiraClient     = "internal/jira/client.go"
-	confluenceGo   = "internal/confluence/client.go"
-	atlassianRead  = "v0.1.1-0.20261012064104-c5d26af1f2b1"
+	contactGo       = "internal/render/contact.go"
+	integrationsMd  = "docs/guides/integrations.md"
+	jiraClient      = "internal/jira/client.go"
+	confluenceGo    = "internal/confluence/client.go"
+	atlassianHostGo = "internal/atlassianhost/atlassianhost.go"
+	integrationsGo  = "internal/config/integrations.go"
+	atlassianRead   = "v0.1.1-0.20261012064104-c5d26af1f2b1"
+	cloudRuleRead   = "v0.1.1-0.20261012225007-e3313b767056"
+	addressRead     = "v0.1.1-0.20261012231821-14c93cab2ee6"
 )
 
 // atlassianAccount is every operator file that copies which deployment the
@@ -66,6 +70,11 @@ const (
 // render's report on a Seat's atlassianAccount, and the guide that tells a
 // person which value to give.
 var atlassianAccount = []string{contactGo, "api/v1alpha1/seat_types.go", integrationsMd}
+
+// cloudIDGateway is every operator file that copies which gateway a cloud_id
+// is read through: those of atlassianAccount, to which a product named by
+// one is on Cloud, and the Integration API, which says whose gateway it is.
+var cloudIDGateway = append([]string{"api/v1alpha1/integration_types.go"}, atlassianAccount...)
 
 // agentLogin is every operator file that copies how an Agent-mode run's CLI
 // signs in inside the remote sandbox, and is refused when nothing does: the
@@ -84,8 +93,10 @@ var agentLogin = []string{
 // head of a seat's chain (TestContractChainlessSeatRunsOnTheFirstProviderAlone),
 // the CodingAgentMismatch it refuses on a write (TestContractCodeWorkOnWrite),
 // the sign-in a CLIAgent provider's settings give it (test/crd's
-// TestCLIAgentSignInFollowsTheEngine), and the lists TestCodeWorkFollowsTheEngineSource
-// reads.
+// TestCLIAgentSignInFollowsTheEngine), the deployment its validation reads a
+// Jira or Confluence address on (TestContractAtlassianDeploymentIsTheEngines),
+// and the lists TestCodeWorkFollowsTheEngineSource and
+// TestAtlassianDeploymentFollowsTheEngineSource read.
 //
 // Most of them are the launch's own code. Two are config's write-time twins
 // of a launch decision, read because the launch's own is spread through a
@@ -94,6 +105,21 @@ var agentLogin = []string{
 // gives a launch, and (*Company).codingAgent, which nothing in crewlet holds
 // to the launch's order, so that order is read too (Launch, NewManager,
 // buildSandbox).
+//
+// The Atlassian ones are the chain from a company's Jira or Confluence block
+// to the deployment the engine's clients for it run on, which it shows only
+// when it connects: the address a client reads (jiraBaseURL,
+// confluenceBaseURL, ResolvedBaseURL, BaseURL, atlassianGatewayURL, Gateway),
+// the company's declaration (Declared) and the rule (DeploymentOf, Of and
+// what Of calls). Which declaration each of the engine's many constructions
+// of a client is handed is not read here: Crewlet's
+// TestEveryAtlassianClientIsGivenTheCompanysDeclaration requires every one to
+// name it, and its validation, which
+// TestContractAtlassianDeploymentIsTheEngines holds, reads an address by the
+// same rule with the same declaration. Nor is startConfluence, which reads
+// BaseURL over a copy of the block it resolves itself rather than through
+// confluenceBaseURL, since everything else it does would make every change to
+// its wiring a read.
 var mirrored = []mirror{
 	{
 		file: sandboxGo, function: "(*launcher).Launch",
@@ -223,27 +249,138 @@ var mirrored = []mirror{
 	{
 		file: jiraClient, function: "DeploymentOf",
 		against: atlassianAccount,
-		decides: "Jira is on Atlassian Cloud when the host of the address the engine reads it at, the API gateway " +
-			"for a cloud_id, is under one of its cloudHosts (which TestAtlassianDeploymentFollowsTheEngineSource " +
-			"holds), and on Data Center otherwise",
-		digest: "568ae81c9f3a3c1b99c859483dc775f7f21c16d8e6cb8f6c04ae26265a373849",
-		read:   atlassianRead,
+		decides: "Jira is on Atlassian Cloud exactly where atlassianhost.Of answers Cloud for the address the engine " +
+			"reads it at and the deployment the company declared, and on Data Center otherwise",
+		digest: "9858f45393fbdab8d5148123b227c00ce57138335c7d96c680559c6835a4b9f8",
+		read:   cloudRuleRead,
 	},
 	{
 		file: confluenceGo, function: "DeploymentOf",
 		against: atlassianAccount,
-		decides: "Confluence is on Atlassian Cloud when its address is a Cloud site (isCloudSite) or holds the path " +
-			"of the API gateway, which a cloud_id is read through, and on Data Center otherwise",
-		digest: "68fe7fefa610297d0e59758e9ed39ea3778c8c080a3a493dca6ec9b5af756388",
-		read:   atlassianRead,
+		decides: "Confluence is on Atlassian Cloud by the same rule as Jira, atlassianhost.Of, and on Data Center " +
+			"otherwise",
+		digest: "9858f45393fbdab8d5148123b227c00ce57138335c7d96c680559c6835a4b9f8",
+		read:   cloudRuleRead,
 	},
 	{
-		file: confluenceGo, function: "isCloudSite",
+		file: atlassianHostGo, function: "Of",
 		against: atlassianAccount,
-		decides: "a Confluence address is a Cloud site when its host, without case, is under .atlassian.net or " +
-			".jira.com, a shorter list than Jira's",
-		digest: "8979b7745055e996b665f1c40b4adbb1872715c71b2eebdbe33fdb3bdd1af24f",
-		read:   atlassianRead,
+		decides: "an address whose written host is Atlassian Cloud's own (isCloudHost) is Cloud whatever was " +
+			"declared, any other is the deployment the company declared, and one that declared none is Data Center",
+		digest: "dcdecbbc5c58e3d21efa7bbb922c25e98648791aa4247fdd858776eeec891943",
+		read:   cloudRuleRead,
+	},
+	{
+		file: atlassianHostGo, function: "isCloudHost",
+		against: atlassianAccount,
+		decides: "a host is Atlassian Cloud's own when it is a site of one of its environments or one of their " +
+			"gateways",
+		digest: "91bd18d44e65e07521f8ffca43e6dac018e83c40115a75b693036339544a7fd3",
+		read:   cloudRuleRead,
+	},
+	{
+		file: atlassianHostGo, function: "isGatewayHost",
+		against: atlassianAccount,
+		decides: "a gateway is the host of one of the environments' gateways exactly, never a host under it",
+		digest:  "e8f3b84b85bfd1a5657b4919e1df1b9620660b0b9046ec8f4f203076e82171ac",
+		read:    cloudRuleRead,
+	},
+	{
+		file: atlassianHostGo, function: "environmentOfSite",
+		against: atlassianAccount,
+		decides: "a site is a host under one of an environment's site domains, the environments table " +
+			"TestAtlassianDeploymentFollowsTheEngineSource holds",
+		digest: "c5436ff0b1545a290a0fb137f50a67b7a279c57b920e670cda64594f991b4882",
+		read:   cloudRuleRead,
+	},
+	{
+		file: atlassianHostGo, function: "hostOf",
+		against: atlassianAccount,
+		decides: "an address holding no ${NAME}, as every url the API admits, has its host written, and is judged " +
+			"by that host",
+		digest: "da86eccfe7137e20f4234dfd73d909964f75f592a8a287c9bccf878eb4be9639",
+		read:   cloudRuleRead,
+	},
+	{
+		file: atlassianHostGo, function: "host",
+		against: atlassianAccount,
+		decides: "a host compares without case and without an absolute name's trailing dot, and an address that " +
+			"does not parse has none",
+		digest: "6d24b643eb1f8e30fd37f6d5ccb9d2b7e08fcdc02905a38167b965efde3c8b76",
+		read:   cloudRuleRead,
+	},
+	{
+		file: atlassianHostGo, function: "Gateway",
+		against: cloudIDGateway,
+		decides: "a cloud id is read through the gateway of its site's environment, Government Cloud's for a site " +
+			"under atlassian-us-gov-mod.net and the commercial Cloud's for any other, so always through one of " +
+			"the environments' gateways, and a product named by a cloud_id, given or discovered, is on Cloud",
+		digest: "bab4934fed37904531e5b3b8da88f62845d677bd2479d4ab11fb73bcfa507daf",
+		read:   cloudRuleRead,
+	},
+	{
+		file: integrationsGo, function: "atlassianGatewayURL",
+		against: cloudIDGateway,
+		decides: "a cloud_id's address is on the host of the gateway Gateway names for its site",
+		digest:  "45027e6bb99e10f82f436c16f02b6bbca826dae57f16214143c191ec997b5210",
+		read:    cloudRuleRead,
+	},
+	{
+		file: integrationsGo, function: "(*Jira).BaseURL",
+		against: cloudIDGateway,
+		decides: "Jira named by a cloud_id is read at its gateway address (atlassianGatewayURL), and by a url at " +
+			"the url",
+		digest: "3519295ac5e07dd3f0acf201cd9fab0bcef0aeb3769aa39e2de41f6538121b66",
+		read:   cloudRuleRead,
+	},
+	{
+		file: integrationsGo, function: "(*Confluence).BaseURL",
+		against: cloudIDGateway,
+		decides: "Confluence named by a cloud_id is read at its gateway address (atlassianGatewayURL), and by a " +
+			"url at the url",
+		digest: "9fe72f7427e9d3f6a889b230bc8842287ae0e02670a417f1d2dcbc3384c720a2",
+		read:   cloudRuleRead,
+	},
+	{
+		file: integrationsGo, function: "(*Jira).ResolvedBaseURL",
+		against: atlassianAccount,
+		decides: "Jira is read at BaseURL of its url, cloud_id and site_url, each with its ${NAME} references " +
+			"resolved and its spaces trimmed, which leaves the url the operator renders, holding none, as written",
+		digest: "3fe27899fa6491dbbaffb5cab77690c6fa62b8652f5243a94028255449c89db4",
+		read:   addressRead,
+	},
+	{
+		file: integrationsGo, function: "(*Confluence).ResolvedBaseURL",
+		against: atlassianAccount,
+		decides: "Confluence is read at BaseURL of its url, cloud_id and site_url, each with its ${NAME} " +
+			"references resolved and its spaces trimmed, which leaves the url the operator renders, holding none, " +
+			"as written",
+		digest: "cffc562ba4852ccb7345e3f8acba365220049656bd6347a2146c84121555c544",
+		read:   addressRead,
+	},
+	{
+		file: "internal/engine/jira.go", function: "jiraBaseURL",
+		against: atlassianAccount,
+		decides: "the engine derives Jira's deployment and builds its clients (startJira, rewireJira and the " +
+			"setup pass) at ResolvedBaseURL of the company's jira block",
+		digest: "f1c2e48505b4224df1b3ee4c3229e88491533e85bec1630c246938734cff4454",
+		read:   addressRead,
+	},
+	{
+		file: "internal/engine/integrations.go", function: "confluenceBaseURL",
+		against: atlassianAccount,
+		decides: "the setup pass, which registers Confluence's webhooks as its deployment has them, builds its " +
+			"client at ResolvedBaseURL of the company's confluence block",
+		digest: "699e7b7fcfebc0fe31da4309ff0151693c125c7802a70422e394301b7488b83f",
+		read:   addressRead,
+	},
+	{
+		file: integrationsGo, function: "(*Atlassian).Declared",
+		against: atlassianAccount,
+		decides: "a company whose integrations.atlassian names no deployment, as every document the operator " +
+			"renders, declares none (atlassianhost.Unknown), never the form's default of cloud",
+		digest: "c17c2425fd965b5664acc2bb1cf785dadededc0b80011c4b8579784d58b236fa",
+		read:   cloudRuleRead,
 	},
 	{
 		file: "internal/jira/payload.go", function: "personID",

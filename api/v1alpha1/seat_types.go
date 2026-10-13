@@ -328,9 +328,9 @@ type SeatIntegrations struct {
 //
 // Crewlet refuses two seats that claim one account, so a Seat claiming an
 // account another Seat of the company already claims is reported as a
-// Conflict. Each field is compared as Crewlet compares it: githubLogin and
-// gitlabUsername without case, as GitHub and GitLab compare them; the others
-// exactly.
+// Conflict. Each field is compared as Crewlet compares it: githubLogin,
+// gitlabUsername and mattermostUsername without case, as GitHub, GitLab and
+// Mattermost compare them; slackUserID and atlassianAccount exactly.
 //
 // Crewlet's `crewlet_operator_id` has no field here. It binds one of the
 // engine's API tokens to the person, so that whoever writes with that token
