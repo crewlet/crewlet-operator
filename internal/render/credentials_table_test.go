@@ -67,6 +67,9 @@ type credentialSource struct {
 const (
 	notOfferedStreamToken = "The data pod runs Crewlet's embedded broker, which needs no token; an external NATS " +
 		"cluster (`stream.type: nats`), where Crewlet reads one, is not offered."
+	notOfferedLocalSandbox = "A seat's code work runs in E2B alone (`Company.spec.sandbox.e2b`), and " +
+		"`spec.engineConfig` may not set `providers`, so no company runs a sandbox on the engine's host, " +
+		"whose container runtime this environment is for."
 )
 
 // The references a covered position's sources take.
@@ -109,6 +112,7 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "providers.sandbox.setup[].env.*", Sources: []credentialSource{
 		{Field: "Company.spec.sandbox.setup[].env[].valueFrom.secretKeyRef", Reference: perVariable},
 	}},
+	{Tier: tierCompany, Path: "providers.sandbox.local.runtime_env.*", Unsupported: notOfferedLocalSandbox},
 	{Tier: tierCompany, Path: "mcp_servers[].env.*", Sources: []credentialSource{
 		{Field: "MCPServer.spec.env[].valueFrom.secretKeyRef", Reference: perVariable},
 	}},

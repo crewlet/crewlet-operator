@@ -77,8 +77,8 @@ uses is readable by the company's tenant:
 
 ## Covered in v1alpha1
 
-Every position of the company document is covered: each has a field that
-fills it with a reference.
+Every position of the company document but the one below is covered: each
+has a field that fills it with a reference.
 
 | Crewlet position | Field | Reference |
 |---|---|---|
@@ -139,6 +139,12 @@ yours to keep in a Secret
 ([Settings and credentials](../guides/tool-servers.md#settings-and-credentials)).
 The other lists of variables in the table, a sandbox's, its setup steps' and a
 coding CLI's, take no literal value.
+
+## Not offered in v1alpha1
+
+| Crewlet position | Why it is not offered |
+|---|---|
+| `providers.sandbox.local.runtime_env.*` | A seat's code work runs in E2B alone (`Company.spec.sandbox.e2b`), and `spec.engineConfig` may not set `providers`, so no company runs a sandbox on the engine's host, whose container runtime this environment is for. |
 
 ---
 
