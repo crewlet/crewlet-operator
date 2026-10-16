@@ -38,6 +38,9 @@ type bootstrapCase struct {
 	name    string
 	keyring Keyring
 	objects *S3Credentials
+	// advisories are the advisories Crewlet's validator gives the Tier A,
+	// about a choice of the platform's that the render carries through.
+	advisories []advisory
 }
 
 func bootstrapCases() []bootstrapCase {

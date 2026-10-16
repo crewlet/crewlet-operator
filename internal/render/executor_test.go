@@ -233,10 +233,11 @@ func TestAgentMode(t *testing.T) {
 // render then, where the Seat or the LLMProvider is told why.
 func TestContractAgentModeIsAppliedWhereItCannotRun(t *testing.T) {
 	for _, c := range []struct {
-		name   string
-		input  func(*testing.T) *Input
-		seat   string
-		reason string
+		name       string
+		input      func(*testing.T) *Input
+		seat       string
+		reason     string
+		advisories []advisory
 	}{
 		{
 			name: "an agent-mode executor in a seat pool",
@@ -258,8 +259,9 @@ func TestContractAgentModeIsAppliedWhereItCannotRun(t *testing.T) {
 				in.PublicBaseURL = ""
 				return in
 			},
-			seat:   "builder",
-			reason: v1alpha1.ReasonNotExposed,
+			seat:       "builder",
+			reason:     v1alpha1.ReasonNotExposed,
+			advisories: companyCaseNamed(t, "cli-agent").advisories,
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -286,7 +288,7 @@ func TestContractAgentModeIsAppliedWhereItCannotRun(t *testing.T) {
 			for _, k := range doc.Refs {
 				env[secretsync.StoreName(k)] = dummyCredential(k)
 			}
-			validate(t, env, "-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
+			validate(t, env, c.advisories, "-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
 		})
 	}
 }

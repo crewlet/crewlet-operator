@@ -23,24 +23,29 @@ type companyCase struct {
 	// exposed gives the company a public base URL, as a class that routes
 	// webhooks does.
 	exposed bool
+	// advisories are the advisories Crewlet's validator gives the
+	// document, about choices of the tenant's that no render avoids: a
+	// chart of agents alone, which has no human seat.
+	advisories []advisory
 }
 
 func companyCases() []companyCase {
+	agentsAlone := []advisory{advisoryNoHumanSeat}
 	return []companyCase{
 		// The example company every page of the docs uses.
 		{name: sampleCompany, exposed: true},
-		{name: "minimal"},
-		{name: "minimal-agent"},
+		{name: "minimal", advisories: agentsAlone},
+		{name: "minimal-agent", advisories: agentsAlone},
 		{name: "org-chart"},
-		{name: "slack", exposed: true},
-		{name: "slack-phrases", exposed: true},
-		{name: "github-enterprise", exposed: true},
-		{name: "github-minimal", exposed: true},
-		{name: "platform-providers"},
-		{name: "platform-providers-off"},
-		{name: "secret-positions", exposed: true},
-		{name: "cli-agent", exposed: true},
-		{name: "opencode-agent", exposed: true},
+		{name: "slack", exposed: true, advisories: agentsAlone},
+		{name: "slack-phrases", exposed: true, advisories: agentsAlone},
+		{name: "github-enterprise", exposed: true, advisories: agentsAlone},
+		{name: "github-minimal", exposed: true, advisories: agentsAlone},
+		{name: "platform-providers", advisories: agentsAlone},
+		{name: "platform-providers-off", advisories: agentsAlone},
+		{name: "secret-positions", exposed: true, advisories: agentsAlone},
+		{name: "cli-agent", exposed: true, advisories: agentsAlone},
+		{name: "opencode-agent", exposed: true, advisories: agentsAlone},
 		{name: caseAtlassian, exposed: true},
 		{name: caseSeatPools},
 	}

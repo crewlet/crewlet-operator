@@ -42,11 +42,12 @@ type validation struct {
 }
 
 // validate runs `crewlet validate -json args...` with exactly env as its
-// environment (and PATH and HOME), and fails the test on any problem or
-// warning, and on any reference the environment did not answer: an unresolved reference is
-// only a warning to Crewlet, and a missing variable would be a pod that
-// boots with an empty token.
-func validate(t *testing.T, env map[string]string, args ...string) {
+// environment (and PATH and HOME), and fails the test on any problem, on any
+// reference the environment did not answer, and on any warning but the
+// advisories the case expects, each of which must be given: an unresolved
+// reference is only a warning to Crewlet, and a missing variable would be a
+// pod that boots with an empty token.
+func validate(t *testing.T, env map[string]string, want []advisory, args ...string) {
 	t.Helper()
 	got, stdout, stderr, err := verdict(t, env, args...)
 	if !got.Valid || len(got.Problems) > 0 || err != nil {
@@ -60,12 +61,58 @@ func validate(t *testing.T, env map[string]string, args ...string) {
 			t.Errorf("a reference resolved to nothing:\n%s", stderr)
 		}
 	}
-	// A warning is a document Crewlet runs but doubts: a lead or a manages
-	// entry naming nobody, a backup nobody owns. Every rendered document
-	// is meant to be one Crewlet has nothing to say about.
-	for _, w := range got.Warnings {
+	unexpected, missing := advisoriesOf(got.Warnings, want)
+	for _, w := range unexpected {
 		t.Errorf("crewlet validate warns: %s", w)
 	}
+	for _, a := range missing {
+		t.Errorf("crewlet validate gave no advisory at %s saying %q; it warned %s", a.path, a.says, got.Warnings)
+	}
+}
+
+// advisory is a warning Crewlet's validator is expected to give a document:
+// an advisory (its kind for a setting that is valid and has a consequence),
+// at path, whose sentence says says.
+//
+// A warning is a document Crewlet runs but doubts: a lead or a manages entry
+// naming nobody, a backup nobody owns. Every rendered document is meant to
+// be one Crewlet has nothing to say about, except for the advisories it
+// gives about a choice that is the tenant's or the platform's to make, which
+// no render can avoid. A case names each it expects, and the gate holds the
+// engine to exactly those, both ways: an advisory no case expected is a
+// document Crewlet doubts, and an expected one it stopped giving is a rule
+// that moved under the operator's docs, which say what each means.
+type advisory struct{ path, says string }
+
+// advisoryNoHumanSeat is Crewlet's advisory on a company that declares no
+// `kind: human` seat (config.peoplelessWarnings): nobody can be invited into
+// it or created in it. Crewlet calls it "a warning and not a rule … a
+// company its agents run alone", which is what an agent-only chart of a
+// tenant's is.
+var advisoryNoHumanSeat = advisory{path: keyRoles, says: "no `kind: human` seats"}
+
+// advisoriesOf sorts what the validator warned against what a case expects:
+// the warnings no expected advisory accounts for, and the expected advisories
+// no warning gave. An expected advisory accounts for one warning of kind
+// advisory, at its path, whose message says what it says.
+func advisoriesOf(warnings []json.RawMessage, want []advisory) (unexpected []string, missing []advisory) {
+	missing = slices.Clone(want)
+	for _, raw := range warnings {
+		var w struct{ Kind, Path, Message string }
+		if json.Unmarshal(raw, &w) != nil {
+			unexpected = append(unexpected, string(raw))
+			continue
+		}
+		i := slices.IndexFunc(missing, func(a advisory) bool {
+			return w.Kind == "advisory" && w.Path == a.path && strings.Contains(w.Message, a.says)
+		})
+		if i < 0 {
+			unexpected = append(unexpected, string(raw))
+			continue
+		}
+		missing = slices.Delete(missing, i, i+1)
+	}
+	return unexpected, missing
 }
 
 // verdict runs `crewlet validate -json args...` as validate describes and
@@ -124,7 +171,7 @@ func TestContractBootstrap(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			validate(t, bootstrapEnv(doc), "-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML))
+			validate(t, bootstrapEnv(doc), c.advisories, "-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML))
 		})
 	}
 }
@@ -143,7 +190,7 @@ func TestContractSeatPod(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			validate(t, bootstrapEnv(doc), "-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML))
+			validate(t, bootstrapEnv(doc), nil, "-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML))
 		})
 	}
 }
@@ -217,7 +264,8 @@ func TestContractSeatPoolsCompany(t *testing.T) {
 	for _, k := range doc.Refs {
 		env[secretsync.StoreName(k)] = dummyCredential(k)
 	}
-	validate(t, env, "-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
+	validate(t, env, companyCaseNamed(t, caseSeatPools).advisories,
+		"-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
 }
 
 // TestContractStreamFloor ties the API's floor on data.storage.size to
@@ -241,7 +289,7 @@ func TestContractStreamFloor(t *testing.T) {
 			}
 			args := []string{"-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML)}
 			if c.accept {
-				validate(t, bootstrapEnv(doc), args...)
+				validate(t, bootstrapEnv(doc), nil, args...)
 				return
 			}
 			got, stdout, stderr, _ := verdict(t, bootstrapEnv(doc), args...)
@@ -276,8 +324,50 @@ func TestContractCompany(t *testing.T) {
 			for _, name := range doc.Provisioned {
 				env[name] = "minted-" + name
 			}
-			validate(t, env, "-config", config, "-company", write(t, "company.yaml", doc.YAML))
+			validate(t, env, c.advisories, "-config", config, "-company", write(t, "company.yaml", doc.YAML))
 		})
+	}
+}
+
+// TestContractAdvisoriesAreHeldBothWays proves the advisory gate validate
+// applies can fail in each direction, against the engine's own verdicts: an
+// advisory the engine gives that the case did not expect is reported, and so
+// is an expected one the engine did not give.
+func TestContractAdvisoriesAreHeldBothWays(t *testing.T) {
+	tierA, err := Bootstrap(bootstrapCases()[0].input(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := write(t, "crewlet.yaml", tierA.YAML)
+	warnings := func(name string) []json.RawMessage {
+		doc, err := Company(companyCaseNamed(t, name).input(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		env := bootstrapEnv(tierA)
+		for _, k := range doc.Refs {
+			env[secretsync.StoreName(k)] = dummyCredential(k)
+		}
+		got, _, _, _ := verdict(t, env, "-config", config, "-company", write(t, "company.yaml", doc.YAML))
+		return got.Warnings
+	}
+	agentsAlone, withPeople := warnings("minimal-agent"), warnings("org-chart")
+
+	if unexpected, _ := advisoriesOf(agentsAlone, nil); len(unexpected) != 1 ||
+		!strings.Contains(unexpected[0], advisoryNoHumanSeat.says) {
+		t.Errorf("a chart of agents alone, expecting nothing: unexpected %v, want the engine's no-human-seat advisory", unexpected)
+	}
+	never := advisory{path: keyRoles, says: "a sentence the engine never says"}
+	if _, missing := advisoriesOf(agentsAlone, []advisory{advisoryNoHumanSeat, never}); !slices.Equal(missing, []advisory{never}) {
+		t.Errorf("expecting an advisory the engine never gives: missing %v, want [%v]", missing, never)
+	}
+	if _, missing := advisoriesOf(withPeople, []advisory{advisoryNoHumanSeat}); !slices.Equal(missing, []advisory{advisoryNoHumanSeat}) {
+		t.Errorf("a chart with a person, expecting the no-human-seat advisory: missing %v, want it", missing)
+	}
+	// The engine's words at another place are another advisory.
+	elsewhere := advisory{path: "units", says: advisoryNoHumanSeat.says}
+	if _, missing := advisoriesOf(agentsAlone, []advisory{elsewhere}); !slices.Equal(missing, []advisory{elsewhere}) {
+		t.Errorf("expecting the no-human-seat advisory at %s: missing %v, want it", elsewhere.path, missing)
 	}
 }
 
@@ -457,7 +547,9 @@ func TestContractGettingStarted(t *testing.T) {
 	for _, k := range doc.Refs {
 		env[secretsync.StoreName(k)] = dummyCredential(k)
 	}
-	validate(t, env, "-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
+	// The guide's company is run by its agents alone.
+	validate(t, env, []advisory{advisoryNoHumanSeat},
+		"-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
 }
 
 // TestContractScheduleRefusalsReachTheSchedule has the engine's dry run
