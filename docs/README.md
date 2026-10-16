@@ -47,6 +47,7 @@ How the operator turns objects into a running engine, one part per page:
 - **[Running Tool Servers](guides/tool-servers.md)** — `MCPServer` objects: an engine image with each stdio server installed, the server each integration's agents use, and how to tell that one did not start
 - **[Running Seats on a Coding CLI](guides/cli-agents.md)** — `CLIAgent` providers: an engine image with the CLI, a subscription login in a pod, text mode and agent mode, and the provider a seat's code work runs on
 - **[Exposure and Network Policy](guides/exposure.md)** — The public listener and the webhook routes through a Gateway, an Ingress or your own proxy, the internal API route, the dashboard's address and the policy around each engine
+- **[Bringing People In](guides/people.md)** — A Human seat for each person, where people sign in, the company's first person and everyone after, and why the operator's tokens hold no seat
 - **[Choosing a Management Policy](guides/management-policies.md)** — `Enforce`, `Observe` and `Seed`: who owns the company document, which to choose, and how to move a running engine under the operator
 - **[Choosing Where Seats Run](guides/topology.md)** — Data pods and stateless seat pools, Shared and PerSeat, what a pod of its own isolates and what it costs, and where each seat runs now
 - **[Hosting Many Tenants on the Operator](guides/multi-tenancy.md)** — A control plane that provisions tenants: a namespace each, server-side apply, the status to read, credentials as Secrets, tiers as classes, offboarding

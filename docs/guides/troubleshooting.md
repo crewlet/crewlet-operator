@@ -34,6 +34,7 @@ flowchart TD
     CA -->|EngineUnavailable| UN["The operator cannot reach the engine"]
     CA -->|"WriteRefused, NotGranted, SeatHeld"| WR["The engine refuses a change<br/>to the document"]
     CA -->|"Applying, ApplyFailed"| AF["The engine did not apply a revision"]
+    SYM -->|"IdentityClaimed=False"| NS["Nobody can sign in"]
     CA -->|"any other reason"| NA["Changes are not applied"]
     SYM -->|"a Seat's Ready=False Unplaced"| NW["A seat runs nowhere"]
     SYM -->|"a Seat's Ready=False, another reason"| CS["Conditions and reasons:<br/>Unit, Seat, …"]
@@ -205,15 +206,17 @@ kubectl logs acme-data-0 -n acme | grep -E 'WARN|ERROR' | tail
 - **The pod restarts** (`kubectl get pod` shows restarts): the engine refused
   its own configuration at boot, and the first lines of the previous log say
   why (`kubectl logs acme-data-0 -n acme --previous`).
-- **The pod restarts, and the previous log ends in `unknown field: "…" is
-  not a setting`**, such as `api.auth.company_writers: unknown field:
-  "company_writers" is not a setting`: the engine and the operator come from
-  different points of Crewlet's `main`. The operator writes the pod's
-  `crewlet.yaml` in the settings of the engine it was tested against, and
-  this engine refuses one of them: it is older than that engine and does not
-  know the setting yet, or newer, and Crewlet has renamed or removed it
-  since. The image the pod runs is the class's `engine.image`, with the
-  Company's `spec.runtime.version` as its tag when that is set. Run the
+- **The pod restarts, and the previous log refuses a setting of its
+  `crewlet.yaml` by name**: `"external_url" isn't a setting. Check the
+  spelling and the block it's under`, or, for a setting Crewlet has removed,
+  `` `api.auth.bootstrap` was removed `` followed by what replaced it. The
+  engine and the operator come from different points of Crewlet's `main`.
+  The operator writes the pod's `crewlet.yaml` in the settings of the engine
+  it was tested against, and this engine refuses one of them: it is older
+  than that engine and does not know the setting yet, or newer, and Crewlet
+  has renamed or removed it since. The image the pod runs is the class's
+  `engine.image`, with the Company's `spec.runtime.version` as its tag when
+  that is set. Run the
   engine the operator was tested against
   ([Engine image](installing.md#engine-image)): with a release of the
   operator, the engine image its notes name; with an operator built from a
@@ -314,6 +317,24 @@ requests to `http://<company>-data-0.<company>-data.<namespace>.svc:8080` fail:
   pod's DNS name.
 - The `<company>-api-tokens` Secret was changed by hand and the pod has not
   restarted yet: it rolls on its own once the operator sees the change.
+
+## Nobody can sign in
+
+A new company has nobody in it, and the engine signs nobody in until a person
+is invited or added onto a Human seat: the Company reports
+`IdentityClaimed=False Unclaimed`, naming its Human seats and the Secret of
+the access token to do it with. Sign in to the dashboard with that token and
+add yourself on your seat, or invite yourself with `crewlet iam`
+([Bringing people in](people.md#the-first-person)). `NoHumanSeat` instead
+means the company has no Human seat to put anybody on: add a `Seat` of kind
+`Human` first.
+
+A person who has joined and cannot sign in is usually at the wrong address.
+The engine accepts a sign-in only from the origin of
+`status.endpoints.dashboardBaseURL`: through a port-forward, exactly
+`http://localhost:8080`, and not `127.0.0.1` or another local port
+([Where people sign in](people.md#where-people-sign-in)). A link the engine
+sent (an invitation, a password link) leads to that address too.
 
 ## The engine refuses a change to the document
 

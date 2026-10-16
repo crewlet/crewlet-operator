@@ -385,7 +385,12 @@ The operator generates two Secrets for every company and never rewrites them:
   back with `RuntimeReady=False APITokensInvalid`.
 
 Deleting the tokens Secret makes the operator generate new tokens and roll
-the data pod; consumers then read the new one from the access Secret. Never
+the data pod; consumers then read the new one from the access Secret. The
+tokens keep their ids, and Crewlet keeps a dashboard session opened with a
+token by its id rather than its value, so a session opened with the old
+access token lasts out its hour; sign in with the new token and sign out
+everywhere to end those sooner
+([Rotating the access token](people.md#rotating-the-access-token)). Never
 delete the keyring of a company that has data: the values sealed with it
 cannot be read without it.
 

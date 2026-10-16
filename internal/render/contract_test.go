@@ -609,8 +609,11 @@ func TestContractGettingStarted(t *testing.T) {
 	for _, k := range doc.Refs {
 		env[secretsync.StoreName(k)] = dummyCredential(k)
 	}
-	// The guide's company is run by its agents alone.
-	validate(t, env, []advisory{advisoryNoHumanSeat},
+	// The guide's company has a Human seat for its reader, who joins it in
+	// the dashboard and is reached nowhere else: Crewlet says that seat
+	// has no chat contact, and nothing else.
+	founderUnreachable := advisory{path: "roles[0].contact", says: "founder is a human seat with no chat contact"}
+	validate(t, env, []advisory{founderUnreachable},
 		"-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
 }
 

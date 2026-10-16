@@ -390,7 +390,8 @@ them directly, and what the person does there, a post, a comment or a
 review, reaches the engine as theirs. A Human seat takes one field for each
 chat surface or tool it is reached on, and needs none: a person who works
 only through the engine's dashboard has no account to name, and signs in on
-their seat through the engine's identity directory. The engine warns of a
+their seat through the engine's identity directory
+([Bringing people in](people.md)). The engine warns of a
 Human seat with no chat contact, since a message addressed to it there
 reaches nobody, and the operator records the warning as an `EngineWarnings`
 event on the Company:

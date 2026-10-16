@@ -1,8 +1,8 @@
 # Quickstart
 
 Run the operator on a local [kind](https://kind.sigs.k8s.io/) cluster and
-start a small company on it: an engine, a team of two agents and a model
-provider, in about ten minutes.
+start a small company on it: an engine, a team of two agents, a seat for you
+and a model provider, in about ten minutes.
 
 Every command is a make target or a tool the Makefile pins into `bin/`, so
 nothing beyond Go, Docker, make, git and curl has to be installed; most of the
@@ -18,6 +18,7 @@ flowchart LR
             U["<b>Unit</b> engineering"]
             L["<b>Seat</b> lead"]
             D["<b>Seat</b> dev"]
+            F["<b>Seat</b> founder<br/><i>you, a person</i>"]
             P["<b>LLMProvider</b> anthropic"]
             S[("<b>Secret</b> anthropic")]
             POD[("<b>acme-data-0</b><br/>the engine and its volume")]
@@ -27,6 +28,7 @@ flowchart LR
     U -->|companyRef| C
     L -->|unitRef| U
     D -->|unitRef| U
+    F -.->|manages| U
     L -.->|llm| P
     D -.->|llm| P
     P -.->|apiKeySecretRefs| S
@@ -124,10 +126,11 @@ EOF
 ## 5. Start a company
 
 A namespace for the company, the Secret holding its model provider's API key,
-and the objects: the `Company`, a `Unit`, two `Seat`s in it and the
-`LLMProvider` they run on. The key is only read when an agent works, so any
-value brings the company up; put a real Anthropic key in
-`ANTHROPIC_API_KEY` for agents that can do something.
+and the objects: the `Company`, a `Unit`, two agent `Seat`s in it, the
+`LLMProvider` they run on, and a Human `Seat` for you, which manages the unit.
+The key is only read when an agent works, so any value brings the company up;
+put a real Anthropic key in `ANTHROPIC_API_KEY` for agents that can do
+something.
 
 ```bash
 bin/kubectl create namespace acme
@@ -198,6 +201,19 @@ spec:
   llm:
     default:
       - name: anthropic
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: founder
+spec:
+  companyRef:
+    name: acme
+  kind: Human
+  displayName: Founder
+  manages:
+    - kind: Unit
+      name: engineering
 EOF
 ```
 
@@ -210,17 +226,25 @@ what it reports:
 bin/kubectl wait company/acme -n acme --for=condition=Ready --timeout=5m
 bin/kubectl get crewlet -n acme
 bin/kubectl get company acme -n acme \
-  -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}{"\n"}{end}'
+  -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}{"\n"}{end}' | sort
 ```
 
 ```text
 Accepted=True Valid
-Exposed=True NoRoutes
-RuntimeReady=True PodsReady
-Ready=True Available
 ConfigApplied=True Applied
+EngineHealthy=False Alarms
+Exposed=True NoRoutes
+IdentityClaimed=False Unclaimed
+Ready=True Available
+RuntimeReady=True PodsReady
 SecretsSynced=True Synced
+SeatsPlaced=True AllPoolsServing
 ```
+
+`EngineHealthy=False Alarms` is the engine saying it has no backup yet
+([Backups](concepts/runtime.md#backups)), and `IdentityClaimed=False Unclaimed`
+that nobody has joined the company: step 7 brings you in. Neither keeps the
+Company from `Ready`.
 
 Each Seat reports its identity in the engine and the revision it is in:
 
@@ -268,22 +292,38 @@ bin/kubectl patch llmprovider anthropic -n acme --type merge \
 [Troubleshooting](guides/troubleshooting.md) lists every condition and
 reason an object can report.
 
-## 7. Open the dashboard
+## 7. Join your company
 
-The engine serves its dashboard and API inside the cluster, behind a token.
-The Company publishes a token for its consumers in the Secret
-`status.apiAccessSecretRef` names:
+Crewlet signs people in as themselves, each on a Human seat, and a new
+company has nobody in it. The way in is the access token the Company
+publishes in the Secret `status.apiAccessSecretRef` names, which may invite
+people. Print the token, and forward the engine's API port, which keeps
+running until you stop it:
 
 ```bash
 bin/kubectl get secret acme-api-access -n acme -o jsonpath='{.data.token}' | base64 -d; echo
 bin/kubectl port-forward -n acme svc/acme-engine 8080:8080
 ```
 
-Open <http://localhost:8080>; when the dashboard asks for a token, paste the
-one printed above. The dashboard shows the company's configuration read-only:
-under the default management policy, `Enforce`, the objects are its only
-source, and the engine refuses any other change to it
-([Choosing a management policy](guides/management-policies.md)).
+Open exactly <http://localhost:8080>: the engine is told it is reached there,
+and accepts a sign-in from that address and no other. While nobody has
+joined, the sign-in page puts its token form first: paste the token and
+choose **Sign in with token**. Then open **Agents › Org chart**, open the
+founder seat, choose **Add person** with your email address and **Admin**
+ticked, and open the password link it shows you once. Choose a password, sign
+in with your address, and set up the authenticator app the engine asks for.
+The Company says you have joined:
+
+```bash
+bin/kubectl wait company/acme -n acme --for=condition=IdentityClaimed --timeout=2m
+```
+
+The dashboard shows the company's configuration read-only: under the default
+management policy, `Enforce`, the objects are its only source, and the engine
+refuses any other change to it
+([Choosing a management policy](guides/management-policies.md)). People are
+the engine's own and not in the objects: invite the next one from their seat
+in the org chart ([Bringing people in](guides/people.md)).
 
 ## 8. Try the full example
 

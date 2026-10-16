@@ -145,8 +145,9 @@ make install deploy IMG=crewlet-operator:dev      # or: make helm-deploy IMG=cre
 ```
 
 Beside the `EngineClass` a platform provides and the Secret holding its model
-key, a company with one agent can be four objects — the `Company`, the model
-provider its seats run on, a `Unit` and a `Seat` in it:
+key, a company with one agent can be five objects — the `Company`, the model
+provider its seats run on, a `Unit`, an agent `Seat` in it, and a Human `Seat`
+for the person who joins the company and manages the unit:
 
 ```yaml
 apiVersion: crewlet.ai/v1alpha1
@@ -197,11 +198,25 @@ spec:
   llm:
     default:
       - name: anthropic
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: founder
+spec:
+  companyRef:
+    name: acme
+  kind: Human
+  displayName: Founder
+  manages:
+    - kind: Unit
+      name: engineering
 ```
 
 The full **[Quickstart](docs/getting-started.md)** walks through the rest: the
 `EngineClass` and the Secret, a second seat, what every object reports,
-changing the company, opening its dashboard and removing everything again.
+changing the company, joining it in its dashboard and removing everything
+again.
 
 ---
 
@@ -257,7 +272,7 @@ run.
 
 **Guides**
 - [Supplying credentials](docs/guides/credentials.md) · [Connecting integrations](docs/guides/integrations.md) · [Tool servers](docs/guides/tool-servers.md) · [Seats on a coding CLI](docs/guides/cli-agents.md)
-- [Exposure and network policy](docs/guides/exposure.md) · [Management policies](docs/guides/management-policies.md) · [Where seats run](docs/guides/topology.md)
+- [Exposure and network policy](docs/guides/exposure.md) · [Bringing people in](docs/guides/people.md) · [Management policies](docs/guides/management-policies.md) · [Where seats run](docs/guides/topology.md)
 - [Hosting many tenants](docs/guides/multi-tenancy.md) · [Troubleshooting](docs/guides/troubleshooting.md)
 
 **Reference**

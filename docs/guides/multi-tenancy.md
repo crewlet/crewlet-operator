@@ -247,7 +247,8 @@ kubectl wait company/acme -n tenant-7f3a9c --for=condition=Ready --timeout=10m
 | `Company.status.endpoints.api` | The engine's API inside the cluster, `http://<company>-engine.<namespace>.svc:8080`. |
 | `Company.status.endpoints.publicBaseURL` | Where vendors deliver webhooks: the engine's public listener, which serves nothing else a vendor or a sandbox does not call. |
 | `Company.status.endpoints.dashboardBaseURL` | Where a browser reaches the engine, its dashboard and its people's sign-in: `spec.exposure.dashboardBaseURL`, else the API's route, else `http://localhost:8080` through a port-forward. The engine accepts a person's write only from its origin and the route's, makes the session cookie `Secure` on `https`, and builds every link a person follows on it, an invitation's included. A control plane that fronts its tenants' engines sets `spec.exposure.dashboardBaseURL` to the address it serves each one's at, which must serve the engine there, its `/dashboard` and `/auth` routes included ([Where people reach the dashboard](exposure.md#where-people-reach-the-dashboard)). |
-| `Company.status.apiAccessSecretRef` | A Secret with the engine's API token under `token` and the API's address under `url`, for the control plane's own calls to the engine: its dashboard data, its seats' activity. |
+| `Company.status.apiAccessSecretRef` | A Secret with the engine's API token under `token` and the API's address under `url`, for the control plane's own calls to the engine: its dashboard data, its seats' activity, and the tenant's first person (`POST /iam/invitations`, naming a Human seat). |
+| `Company` condition `IdentityClaimed` | Whether anybody has joined the tenant's company: `False`, `Unclaimed`, until its first person is invited or added onto a Human seat ([Bringing people in](people.md)). |
 | `Company.status.config.revisionID` | The revision the engine runs. Every part reports the revision it is in. |
 | `Company.status.topology` | The pods that run the company: the data pod's, and each seat pool's. `SeatsPlaced` says whether every pool with a seat has a ready pod. |
 | `Seat.status.seatID` | The seat's identity in the engine, derived from the company's name and the seat's handle: stable for the seat's life, and the same if a deleted Seat is created again with the handle. Key your own records about a seat by it. |
@@ -272,6 +273,20 @@ token never locks the operator out. Hand that token to no one the platform
 would not let administer the engine (see
 [What a tenant can read](#what-a-tenant-can-read)): a tenant's own dashboard
 should call the engine through the control plane, not with the token.
+
+A tenant's company starts with nobody in it, and the token is what brings
+its first person in ([Bringing people in](people.md)). From a pod the class
+admits as an API consumer, the control plane posts an invitation to
+`/iam/invitations` with the token, naming the person's address, a vacant
+Human seat by its handle and their grants (`admin` for a tenant's first
+person, who invites the rest), under an `Idempotency-Key` that is a UUIDv7
+the control plane keeps until it has the answer, so that a retry is the same
+invitation rather than a second one. The answer carries the invitation's
+link, built on `status.endpoints.dashboardBaseURL` and good for a week, while
+the invitation holds the seat; no read returns it, and only a retry under the
+same key answers it again. Hand it to the person through the control plane's
+own channel, and keep it nowhere else: it is a credential to their account.
+The Company turns `IdentityClaimed=True` once they have joined.
 
 ## Handing credentials to the operator
 
