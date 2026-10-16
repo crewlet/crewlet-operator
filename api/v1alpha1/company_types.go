@@ -1163,7 +1163,7 @@ type CompanyEndpoints struct {
 type CompanyStatus struct {
 	// conditions are Ready (the summary), Accepted, RuntimeReady,
 	// SecretsSynced, ConfigApplied and Exposed, which Ready summarizes, and
-	// EngineHealthy and SeatsPlaced, which it does not.
+	// EngineHealthy, IdentityClaimed and SeatsPlaced, which it does not.
 	// +optional
 	// +listType=map
 	// +listMapKey=type

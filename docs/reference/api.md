@@ -610,7 +610,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Ready (the summary), Accepted, RuntimeReady,<br />SecretsSynced, ConfigApplied and Exposed, which Ready summarizes, and<br />EngineHealthy and SeatsPlaced, which it does not. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `conditions` _[Condition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#condition-v1-meta) array_ | conditions are Ready (the summary), Accepted, RuntimeReady,<br />SecretsSynced, ConfigApplied and Exposed, which Ready summarizes, and<br />EngineHealthy, IdentityClaimed and SeatsPlaced, which it does not. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `observedGeneration` _integer_ | observedGeneration is the metadata.generation this status describes. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `engine` _[EngineStatus](#enginestatus)_ | engine is what runs the company. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `topology` _[TopologyStatus](#topologystatus)_ | topology is the state of the company's pods. |  | MinProperties: 1 <br />Optional: \{\} <br /> |

@@ -310,6 +310,14 @@ const (
 	// one whose logs reach their ceiling refuses ordinary writes.
 	ConditionEngineHealthy = "EngineHealthy"
 
+	// ConditionIdentityClaimed reports whether anybody has joined the
+	// company: whether the engine's identity directory holds a person, who
+	// signs in to its dashboard as themselves on a Human seat. A company
+	// starts with nobody, and its first person is invited or added with the
+	// access token the operator publishes. It does not count towards Ready:
+	// a company nobody has joined runs its agent seats all the same.
+	ConditionIdentityClaimed = "IdentityClaimed"
+
 	// ConditionExposed reports whether the routes the EngineClass asks for
 	// exist and were accepted.
 	ConditionExposed = "Exposed"
@@ -430,6 +438,25 @@ const (
 	// ReasonAlarmsNotReported is EngineHealthy=Unknown: the engine has not
 	// evaluated its alarms yet, or could not be asked.
 	ReasonAlarmsNotReported = "AlarmsNotReported"
+
+	// ReasonPersonEnrolled is IdentityClaimed=True: a person is in the
+	// company's identity directory. They may not have chosen a password yet.
+	ReasonPersonEnrolled = "PersonEnrolled"
+
+	// ReasonUnclaimed is IdentityClaimed=False: nobody has joined the company
+	// yet. The message names its Human seats and how to bring the first
+	// person in.
+	ReasonUnclaimed = "Unclaimed"
+
+	// ReasonNoHumanSeat is IdentityClaimed=False: nobody has joined the
+	// company, and nobody can, because the company the engine runs has no
+	// Human seat to put them on.
+	ReasonNoHumanSeat = "NoHumanSeat"
+
+	// ReasonIdentityNotReported is IdentityClaimed=Unknown: the engine's
+	// health could not be read, the engine could not read its identity
+	// directory, or it did not say.
+	ReasonIdentityNotReported = "IdentityNotReported"
 
 	// ReasonAPITokensInvalid is RuntimeReady=False when the company's API
 	// tokens Secret, as another controller supplies it, lacks a token or

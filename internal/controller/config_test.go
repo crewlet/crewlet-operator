@@ -1425,6 +1425,40 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(err).To(MatchError(engine.ErrNoActiveRevision))
 	})
 
+	It("reports whether anybody has joined the company, and that nobody can join one with no Human seat", func() {
+		const name = "joined"
+		e := startEngine(name)
+		secret(name+"-llm", map[string]string{llmKey: "k1"})
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
+		founder := newSeat(namespace, name, "founder", func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.Kind, s.Spec.Goal = crewletaiv1alpha1.SeatKindHuman, ""
+		})
+		standIn(c)
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionIdentityClaimed)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonUnclaimed))
+		unclaimed := conditionOf(c, crewletaiv1alpha1.ConditionIdentityClaimed)(Default)
+		Expect(unclaimed.Status).To(Equal(metav1.ConditionFalse))
+		Expect(unclaimed.Message).To(ContainSubstring("Its Human seats are " + founder.Name + "."))
+		Expect(unclaimed.Message).To(ContainSubstring("Secret " + name + "-api-access"))
+		Expect(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonApplied),
+			"a company nobody has joined still runs its document")
+
+		By("adding its first person")
+		e.AddPerson(GinkgoT(), "founder@joined.example", founder.Name)
+		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionIdentityClaimed)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonPersonEnrolled))
+		Expect(conditionOf(c, crewletaiv1alpha1.ConditionIdentityClaimed)(Default).Status).To(Equal(metav1.ConditionTrue))
+
+		By("running a company of agents alone")
+		const agents = "agents-only"
+		startEngine(agents)
+		secret(agents+"-llm", map[string]string{llmKey: "k1"})
+		only := company(agents, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
+		standIn(only)
+		applied(only, crewletaiv1alpha1.ReasonApplied)
+		Eventually(reasonOf(only, crewletaiv1alpha1.ConditionIdentityClaimed)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonNoHumanSeat))
+		Expect(conditionOf(only, crewletaiv1alpha1.ConditionIdentityClaimed)(Default).Status).To(Equal(metav1.ConditionFalse))
+	})
+
 	It("reports a document that takes a human seat a person holds as SeatHeld, and keeps the revision the engine runs", func() {
 		const name = "held"
 		e := startEngine(name)

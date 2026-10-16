@@ -71,3 +71,41 @@ units:
 		t.Error("a document that is not YAML was read")
 	}
 }
+
+// TestHumanSeatsOfReadsEveryUnit reads the human seats of a document the
+// engine owns, as IdentityClaimed names them: the handles of the roles of
+// kind human, at the top level and in units nested to any depth, sorted, and
+// no agent seat, whether its kind is written or left to the default.
+func TestHumanSeatsOfReadsEveryUnit(t *testing.T) {
+	document := []byte(`
+name: Nimbus
+roles:
+  - name: Founder
+    handle: founder
+    kind: human
+  - name: CEO
+    handle: ceo
+units:
+  - name: Engineering
+    roles:
+      - name: Lead
+        handle: lead
+        kind: agent
+    children:
+      - name: Platform
+        roles:
+          - name: Bea
+            handle: bea
+            kind: human
+`)
+	got, err := HumanSeatsOf(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"bea", "founder"}; !slices.Equal(got, want) {
+		t.Fatalf("HumanSeatsOf() = %v, want %v", got, want)
+	}
+	if got, err := HumanSeatsOf([]byte("name: Acme\nroles:\n  - name: Ana\n    handle: ana\n")); err != nil || got != nil {
+		t.Fatalf("HumanSeatsOf() of a company of agents = %v, %v; want none", got, err)
+	}
+}

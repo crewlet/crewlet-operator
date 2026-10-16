@@ -935,6 +935,26 @@ func TestHealthReadsTheAlarms(t *testing.T) {
 	}
 }
 
+// TestHealthReadsWhetherAnybodyHasJoined pins the read of /health's identity:
+// the engine's word as it wrote it, and empty from an engine that left it out.
+func TestHealthReadsWhetherAnybodyHasJoined(t *testing.T) {
+	for _, c := range []struct{ name, body, want string }{
+		{"enrolled", `{"status":"ok","identity":"ready"}`, engine.IdentityReady},
+		{"nobody joined", `{"status":"ok","identity":"unclaimed"}`, engine.IdentityUnclaimed},
+		{"unreadable", `{"status":"ok","identity":"unknown"}`, engine.IdentityUnknown},
+		{"not said", `{"status":"ok"}`, ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			f.handle("GET /health", answer(http.StatusOK, c.body))
+			got, err := f.client().Health(context.Background())
+			if err != nil || got.Identity != c.want {
+				t.Fatalf("Health() = %+v, %v; want identity %q", got, err, c.want)
+			}
+		})
+	}
+}
+
 // TestHealthReadsThePosture pins the fields the config reconciler decides
 // ConfigApplied from: the status, whether a revision is active, the
 // posture, and the applied epoch, and which postures say the node failed to

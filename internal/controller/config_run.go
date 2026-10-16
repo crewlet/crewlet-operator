@@ -50,7 +50,10 @@ type configRun struct {
 	secretsSynced *metav1.Condition
 	configApplied *metav1.Condition
 	engineHealthy *metav1.Condition
-	config        *crewletaiv1alpha1.ConfigStatus
+	// identityClaimed is IdentityClaimed, decided wherever the engine's
+	// health was read.
+	identityClaimed *metav1.Condition
+	config          *crewletaiv1alpha1.ConfigStatus
 	// wrote is whether this reconcile activated a revision.
 	wrote bool
 
@@ -79,6 +82,9 @@ type configRun struct {
 	// whose apply verifyApplied settles.
 	rendered, running *crewletaiv1alpha1.RevisionPlacement
 	runningRevision   string
+	// active is the document the engine ran when converge last read it,
+	// nil before it did or while the engine had none.
+	active []byte
 	// placement is what status.config.placement becomes once this reconcile
 	// writes the status; nil leaves it as it is.
 	placement *placementUpdate
@@ -242,6 +248,7 @@ func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error
 	result = run.verifyApplied(ctx, eng, health, healthErr, result)
 	run.narrowPlacement(ctx, eng, health, healthErr)
 	result = run.holdResync(result)
+	result = run.identityResync(result)
 	// For the seats' placement, if the verification did not need it.
 	_, _ = run.fleetOf(ctx, eng)
 	return result, nil
@@ -312,6 +319,9 @@ func (run *configRun) converge(ctx context.Context, eng *engine.Client) (ctrl.Re
 		active, err := activeConfig(ctx, eng)
 		if err != nil {
 			return ctrl.Result{}, err
+		}
+		if active != nil {
+			run.active = active.Document
 		}
 		var result ctrl.Result
 		switch policy := run.policy(); {
@@ -1265,6 +1275,7 @@ func (run *configRun) readHealth(ctx context.Context, eng *engine.Client) (engin
 		logf.FromContext(ctx).V(1).Info("Failed to read the engine's health", "error", healthErr.Error())
 	}
 	run.engineHealthy = engineHealthy(health.Alarms, healthErr)
+	run.identityClaimed = identityClaimed(health, healthErr, run.humanSeats(ctx), apiAccessSecretName(run.company))
 
 	tools, err := eng.Integrations(ctx)
 	if err != nil {
@@ -1300,6 +1311,98 @@ func engineHealthy(alarms *engine.Alarms, err error) *metav1.Condition {
 				"ordinary writes once a log reaches its ceiling: take one with `crewlet backup` in the data pod " +
 				"(docs/concepts/runtime.md, \"Backups\")."
 		}
+	}
+	return c
+}
+
+// humanSeats are the handles of the human seats of the company the engine
+// runs, which are the seats a person can join on: those of the rendered
+// document when this reconcile activated it, else those of the document the
+// engine ran when the reconcile read it, which under Observe and Seed may
+// not be the rendered one, and under Enforce is not while a refusal holds
+// the rendered one back.
+func (run *configRun) humanSeats(ctx context.Context) []string {
+	document := run.doc.YAML
+	if run.active != nil && !run.wrote {
+		document = run.active
+	}
+	seats, err := render.HumanSeatsOf(document)
+	if err != nil {
+		// The engine served it, and the render wrote the other: neither
+		// fails to parse. Said rather than hidden, and read as no seat.
+		logf.FromContext(ctx).Error(err, "Failed to read the human seats of the company document")
+	}
+	return seats
+}
+
+// maxNamedSeats is how many of a company's Human seats IdentityClaimed names:
+// enough to pick one from, and a bound on a message a company of hundreds of
+// people would otherwise fill.
+const maxNamedSeats = 5
+
+// identityPollInterval is how soon the config reconciler looks at a
+// Company's engine again while nobody has joined it (IdentityClaimed=False
+// Unclaimed). The first person joins in the engine's dashboard or with
+// `crewlet iam`, which nothing the operator watches announces, so the drift
+// check's five minutes would leave the Company saying nobody has joined for
+// that long after somebody has, while the person who just joined waits on
+// it. Thirty seconds keeps that wait inside a minute and costs a company
+// nobody has joined yet the few reads of one look twice a minute; once
+// somebody has, the drift check is enough, and a company with no Human seat
+// changes only through its objects, which the reconciler watches.
+const identityPollInterval = 30 * time.Second
+
+// identityResync looks again soon while nobody has joined the company.
+func (run *configRun) identityResync(result ctrl.Result) ctrl.Result {
+	if c := run.identityClaimed; c != nil && c.Reason == crewletaiv1alpha1.ReasonUnclaimed &&
+		(result.RequeueAfter == 0 || result.RequeueAfter > identityPollInterval) {
+		result.RequeueAfter = identityPollInterval
+	}
+	return result
+}
+
+// identityClaimed is the IdentityClaimed condition for what an engine's
+// /health says about its identity directory, or for the error that kept it
+// from saying. humanSeats are the handles of the company's human seats, and
+// accessSecret the Secret that holds the access token the operator publishes,
+// with which the first person is brought in.
+//
+// A company that has never had anybody join is the state of every new
+// company, and nothing else tells whoever created it that the next step is
+// theirs: the engine signs nobody in until a person is invited or added,
+// and only a holder of an admin credential can do that.
+func identityClaimed(health engine.Health, err error, humanSeats []string, accessSecret string) *metav1.Condition {
+	c := &metav1.Condition{Type: crewletaiv1alpha1.ConditionIdentityClaimed}
+	switch {
+	case err != nil:
+		c.Status, c.Reason = metav1.ConditionUnknown, crewletaiv1alpha1.ReasonIdentityNotReported
+		c.Message = "The engine's health could not be read: " + err.Error()
+	case health.Identity == engine.IdentityReady:
+		c.Status, c.Reason = metav1.ConditionTrue, crewletaiv1alpha1.ReasonPersonEnrolled
+		c.Message = "A person has joined the company: the engine's identity directory holds someone on a Human seat, " +
+			"who signs in to its dashboard as themselves once they have chosen a password."
+	case health.Identity == engine.IdentityUnclaimed && len(humanSeats) == 0:
+		c.Status, c.Reason = metav1.ConditionFalse, crewletaiv1alpha1.ReasonNoHumanSeat
+		c.Message = "Nobody has joined the company, and nobody can: it has no Human seat to put a person on. " +
+			"Add a Seat of kind Human for each person who signs in to the engine's dashboard."
+	case health.Identity == engine.IdentityUnclaimed:
+		c.Status, c.Reason = metav1.ConditionFalse, crewletaiv1alpha1.ReasonUnclaimed
+		named := humanSeats[:min(len(humanSeats), maxNamedSeats)]
+		seats := strings.Join(named, ", ")
+		if more := len(humanSeats) - len(named); more > 0 {
+			seats += fmt.Sprintf(" and %d more", more)
+		}
+		c.Message = fmt.Sprintf("Nobody has joined the company yet. Its Human seats are %s. Bring the first person in "+
+			"with the access token in Secret %s (status.apiAccessSecretRef): sign in to the dashboard with it and "+
+			"invite or add yourself onto your seat, or run `crewlet iam invite <email> -seat <handle> -grants admin` "+
+			"with it.", seats, accessSecret)
+	case health.Identity == "":
+		c.Status, c.Reason = metav1.ConditionUnknown, crewletaiv1alpha1.ReasonIdentityNotReported
+		c.Message = "The engine did not say whether anybody has joined the company."
+	default:
+		c.Status, c.Reason = metav1.ConditionUnknown, crewletaiv1alpha1.ReasonIdentityNotReported
+		c.Message = fmt.Sprintf("The engine could not say whether anybody has joined the company (%s): it could not "+
+			"read its identity directory, and a directory it cannot read is not one nobody is in.", health.Identity)
 	}
 	return c
 }

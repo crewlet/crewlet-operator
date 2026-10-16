@@ -58,7 +58,23 @@ type Health struct {
 	// first evaluated them or on a node that keeps no state log: neither
 	// has looked, which is not the same as no alarm.
 	Alarms *Alarms
+
+	// Identity is whether the company has its first person:
+	// IdentityReady once anybody is enrolled, IdentityUnclaimed while
+	// nobody is, IdentityUnknown when the node could not read its identity
+	// directory. Empty from an engine that did not say. A service account
+	// enrolls nobody: it signs no one in with a password.
+	Identity string
 }
+
+// The answers Health.Identity carries (Crewlet's internal/api, the
+// Identity* constants of /health). The engine never reads a directory it
+// could not read as empty, so unknown is never unclaimed.
+const (
+	IdentityReady     = "ready"
+	IdentityUnclaimed = "unclaimed"
+	IdentityUnknown   = "unknown"
+)
 
 // Posture is an engine node's config posture: what it does about an
 // activation epoch it has not applied (crewlet's docs/concepts/control-plane.md,

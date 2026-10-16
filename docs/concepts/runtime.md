@@ -633,7 +633,7 @@ other:
 |---|---|
 | `conditions` `Accepted`, `RuntimeReady`, `Exposed`, `SeatsPlaced`, `Ready` | the runtime reconciler (this page) |
 | `observedGeneration`, `engine`, `topology`, `endpoints`, `apiAccessSecretRef` | the runtime reconciler |
-| `conditions` `SecretsSynced`, `ConfigApplied`, `EngineHealthy`; `config` | the config reconciler, which [applies the company document](applying.md) |
+| `conditions` `SecretsSynced`, `ConfigApplied`, `EngineHealthy`, `IdentityClaimed`; `config` | the config reconciler, which [applies the company document](applying.md) |
 
 `Ready` is `True` when `Accepted`, `RuntimeReady`, `Exposed` and
 `ConfigApplied` all are. Otherwise its reason is the reason of the first of

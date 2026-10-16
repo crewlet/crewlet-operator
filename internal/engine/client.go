@@ -166,13 +166,14 @@ func (c *Client) Health(ctx context.Context) (Health, error) {
 			Count int    `json:"count"`
 			Worst string `json:"worst"`
 		} `json:"alarms"`
+		Identity string `json:"identity"`
 	}
 	if err := c.call(ctx, request{method: http.MethodGet, path: "/health"}, http.StatusOK, &answer); err != nil {
 		return Health{}, err
 	}
 	h := Health{
 		Status: answer.Status, Configured: answer.Configured, Posture: Posture(answer.Posture),
-		AppliedEpoch: answer.AppliedEpoch,
+		AppliedEpoch: answer.AppliedEpoch, Identity: answer.Identity,
 	}
 	if a := answer.Alarms; a != nil {
 		h.Alarms = &Alarms{Count: a.Count, Worst: a.Worst}

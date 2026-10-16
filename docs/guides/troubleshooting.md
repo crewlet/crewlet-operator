@@ -94,6 +94,10 @@ with your last change yet.
 | `EngineHealthy` | True | `NoAlarms` | The engine raises no alarm. |
 | | False | `Alarms` | The engine raises alarms; the message names the one standing longest. `backup_age` and `trim_blocked` mean it has no recent verified backup and trims no log: see [Backups](../concepts/runtime.md#backups). |
 | | Unknown | `AlarmsNotReported` | The engine has not evaluated its alarms yet, or could not be asked. |
+| `IdentityClaimed` | True | `PersonEnrolled` | A person has joined the company. Not part of `Ready`. |
+| | False | `Unclaimed` | Nobody has joined the company yet: the engine signs nobody in until a person is invited or added onto a Human seat. The message names the seats and the Secret holding the access token to do it with. The operator asks the engine again every 30 seconds while it reads so. |
+| | False | `NoHumanSeat` | Nobody can join: the company the engine runs has no Human seat. Add a Seat of kind `Human` for each person who signs in. |
+| | Unknown | `IdentityNotReported` | The engine could not read its identity directory, did not say, or could not be asked. |
 | `ConfigApplied` | True | `Applied` | The engine runs the rendered document: it reports the epoch of the revision `status.config.revisionID` names applied. |
 | | True | `DriftCorrected` | Under `Enforce`, someone changed the document in the engine and the operator applied the rendered one over it. A `Drifted` event names what differed. |
 | | True | `InSync` | Under `Observe`, the engine runs exactly the rendered document. |
