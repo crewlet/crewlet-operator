@@ -32,8 +32,11 @@ const (
 	// a data pod, which has the ingress role, it carries the API, the
 	// dashboard and the probes, and none of the routes outside parties call,
 	// which are PublicPort's; on a seat pod, which does not have the role,
-	// only the probes (/health and /ready). It is 8080, the port the engine
-	// image documents with EXPOSE.
+	// only the probes (/health and /ready). It is 8080. Crewlet's own
+	// default, and the port its image documents with EXPOSE, is 8000
+	// (config.DefaultAPIPort), but nothing reads an image's EXPOSE once a pod
+	// names its ports: the port is the operator's, and every Service, probe,
+	// NetworkPolicy and address it publishes is built on this constant.
 	APIPort = 8080
 	// PublicPort is the port of a data pod's public listener, api.public:
 	// the routes outside parties call without an operator credential, and
@@ -47,11 +50,13 @@ const (
 	//
 	// Every data pod opens it, whether or not its class routes anything to
 	// it: which routes the engine serves where is then a fact about the pod
-	// that the class's exposure cannot change, a class that starts or stops
-	// routing webhooks restarts no engine (Tier A is read only at start),
-	// and a pod nothing routes to serves its public routes to nobody,
-	// which is what the class's NetworkPolicy and the absence of a route
-	// already make of them.
+	// that the class's exposure cannot change, so the API's route never
+	// serves /webhooks/, and a pod nothing routes to serves its public
+	// routes to nobody, which is what the class's NetworkPolicy and the
+	// absence of a route already make of them. Crewlet requires the
+	// listener's address beside it (api.public.external_url, which
+	// BootstrapInput.PublicURL is), and reads it only at start, so a change
+	// of where the listener is reached restarts the engine.
 	//
 	// It is 8081: plain HTTP like APIPort, beside it, and none of the ports
 	// an engine pod binds otherwise (APIPort, LeafPort, the embedded
@@ -111,7 +116,27 @@ type BootstrapInput struct {
 	// change of the class does not move, and the class's data.storage.size
 	// before.
 	VolumeSize resource.Quantity
+
+	// ExternalURL is where a browser reaches the engine, Crewlet's
+	// api.external_url: the origin a person's write must come from, the
+	// scope and Secure flag of the session cookie, and the base of every
+	// link a person follows, an invitation's included. The Company's
+	// status.endpoints.dashboardBaseURL.
+	ExternalURL string
+	// PublicURL is where the data pod's public listener (PublicPort) is
+	// reached, Crewlet's api.public.external_url: the base of every webhook
+	// address, app manifest and sandbox endpoint the engine builds.
+	PublicURL string
+	// AllowedOrigins are the browser origins the engine is reached on
+	// beside ExternalURL's own, Crewlet's api.auth.allowed_origins.
+	AllowedOrigins []string
 }
+
+// ErrNoAddress is a data pod's Tier A asked for without an address the engine
+// is reached at. Crewlet refuses to start a node that serves the API without
+// api.external_url, or that opens its public listener without
+// api.public.external_url, so the render refuses it first.
+var ErrNoAddress = errors.New("a data pod's crewlet.yaml needs the addresses the engine is reached at")
 
 // Keyring is the engine's secret-store keyring: the keys it can open, and
 // the one it seals new writes with. Crewlet decrypts with every key and
@@ -166,22 +191,25 @@ type nodeDoc struct {
 }
 
 type apiDoc struct {
-	Host   string        `json:"host"`
-	Port   int           `json:"port"`
-	Public *apiPublicDoc `json:"public,omitempty"`
-	Auth   *apiAuthDoc   `json:"auth,omitempty"`
+	Host        string        `json:"host"`
+	Port        int           `json:"port"`
+	ExternalURL string        `json:"external_url,omitempty"`
+	Public      *apiPublicDoc `json:"public,omitempty"`
+	Auth        *apiAuthDoc   `json:"auth,omitempty"`
 }
 
 // apiPublicDoc is api.public. Its host is left to the engine's default,
 // every interface, which a pod needs to be reached at its own address.
 type apiPublicDoc struct {
-	Port int `json:"port"`
+	Port        int    `json:"port"`
+	ExternalURL string `json:"external_url"`
 }
 
 type apiAuthDoc struct {
 	Admin          string        `json:"admin"`
 	Tokens         []apiTokenDoc `json:"tokens"`
 	CompanyWriters []string      `json:"company_writers,omitempty"`
+	AllowedOrigins []string      `json:"allowed_origins,omitempty"`
 }
 
 type apiTokenDoc struct {
@@ -311,10 +339,13 @@ const keyringKeyBytes = 32
 // is one anyone who can write such a field, or hold the API's access token,
 // can have the engine send anywhere. A file is read once, at start.
 //
-// It fails only when the keyring cannot be used: no keys, an active key it
-// does not hold, an id that is not a valid key id, or material that is not
-// base64 of 32 bytes.
+// It fails when an address is missing (ErrNoAddress), and when the keyring
+// cannot be used: no keys, an active key it does not hold, an id that is not
+// a valid key id, or material that is not base64 of 32 bytes.
 func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
+	if in.ExternalURL == "" || in.PublicURL == "" {
+		return nil, fmt.Errorf("%w: api.external_url is %q and api.public.external_url %q", ErrNoAddress, in.ExternalURL, in.PublicURL)
+	}
 	keyring, err := keyringOf(in.Keyring)
 	if err != nil {
 		return nil, err
@@ -330,9 +361,10 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 			Labels: map[string]string{PoolLabel: v1alpha1.DataPool},
 		},
 		API: &apiDoc{
-			Host:   "0.0.0.0",
-			Port:   APIPort,
-			Public: &apiPublicDoc{Port: PublicPort},
+			Host:        "0.0.0.0",
+			Port:        APIPort,
+			ExternalURL: in.ExternalURL,
+			Public:      &apiPublicDoc{Port: PublicPort, ExternalURL: in.PublicURL},
 			Auth: &apiAuthDoc{
 				Admin: adminServe,
 				Tokens: []apiTokenDoc{
@@ -340,6 +372,7 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 					{ID: TokenAccess, Token: in.Tokens.Access, Grants: []string{grantAdmin}},
 				},
 				CompanyWriters: companyWriters(ManagementPolicyOf(in.Company)),
+				AllowedOrigins: in.AllowedOrigins,
 			},
 		},
 		Store: storeDoc{

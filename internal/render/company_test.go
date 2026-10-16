@@ -76,7 +76,6 @@ func (c companyCase) input(t *testing.T) *Input {
 	in := load(t, files...).input
 	if c.exposed {
 		in.PublicBaseURL = "https://" + c.name + ".hooks.example.com"
-		in.DashboardBaseURL = "https://" + c.name + ".crewlet.internal.example.com"
 	}
 	return &in
 }

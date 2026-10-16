@@ -287,16 +287,21 @@ spec:
                 properties:
                   dashboardBaseURL:
                     description: |-
-                      dashboardBaseURL is the address people reach the engine's dashboard
-                      at, overriding the address of the class's API route: set it when the
-                      class routes no API, or people reach it through something in front of
-                      the route (a single sign-on proxy, say). Every link the engine's
-                      agents compose for a person is built on it, as the base followed by
-                      one of the engine dashboard's routes (/#/work/ENG-42,
-                      /#/knowledge/pages/<id>), which an address other than the route's
-                      must serve or redirect. It is never the public address: the public
-                      listener serves no dashboard. A trailing '/' is dropped. Crewlet's
-                      integrations.dashboard_base_url.
+                      dashboardBaseURL is where a browser reaches the engine: its dashboard,
+                      and the sign-in of the company's people. It overrides the address of
+                      the class's API route: set it when the class routes no API, or people
+                      reach it through something in front of the route (a single sign-on
+                      proxy, say). Crewlet's api.external_url, in the data pod's
+                      crewlet.yaml, which the engine reads only at start: changing it
+                      restarts the data pod. The engine takes from it the origin a person's
+                      write must come from, whether the session cookie is Secure (https)
+                      and its scope, and the base of every link a person follows: a link an
+                      agent composes, an invitation (/dashboard#/invite/...), a password
+                      link. An address other than the route's must serve the engine, its
+                      /dashboard and its /auth routes included. The route, when the class
+                      has one, stays an origin the engine accepts. It is never the public
+                      address: the public listener serves no dashboard. A trailing '/' is
+                      dropped.
                     maxLength: 2048
                     minLength: 1
                     type: string
@@ -305,6 +310,10 @@ spec:
                         URL
                       rule: isURL(self) && url(self).getScheme() in ['http', 'https']
                         && url(self).getHostname() != ''
+                    - message: 'dashboardBaseURL may not have a query or a fragment:
+                        Crewlet builds every link a person follows, an invitation
+                        and a password link included, by appending a path to it'
+                      rule: '!self.contains(''?'') && !self.contains(''#'')'
                     - message: 'dashboardBaseURL may not hold a ${NAME} reference:
                         the engine would resolve it from its own secret store and
                         environment, which hold credentials that are not this object''s
@@ -317,8 +326,9 @@ spec:
                       webhooks.hostname derives. Required when the class's webhooks.mode is
                       External, where something outside the operator (a relay, an API
                       gateway) forwards it to the engine's public listener. A trailing '/'
-                      is dropped, as Crewlet drops it. Crewlet's
-                      integrations.public_base_url.
+                      is dropped, as Crewlet drops it. Crewlet's api.public.external_url,
+                      in the data pod's crewlet.yaml, which the engine reads only at start:
+                      changing it restarts the data pod.
                     maxLength: 2048
                     minLength: 1
                     type: string
@@ -326,6 +336,10 @@ spec:
                     - message: publicBaseURL must be an absolute https URL
                       rule: isURL(self) && url(self).getScheme() == 'https' && url(self).getHostname()
                         != ''
+                    - message: 'publicBaseURL may not have a query or a fragment:
+                        Crewlet builds every webhook and sandbox address by appending
+                        a path to it'
+                      rule: '!self.contains(''?'') && !self.contains(''#'')'
                     - message: 'publicBaseURL may not hold a ${NAME} reference: the
                         engine would resolve it from its own secret store and environment,
                         which hold credentials that are not this object''s to name'
@@ -1294,14 +1308,16 @@ spec:
                     type: string
                   dashboardBaseURL:
                     description: |-
-                      dashboardBaseURL is the address people reach the engine's dashboard
-                      at, when the company has one: spec.exposure.dashboardBaseURL, or the
-                      address of the class's API route, on the scheme exposedAPI takes. It
-                      does not wait for the route to be accepted, as exposedAPI does: it is
-                      rendered into the company document, which a flip of acceptance would
-                      otherwise change. The engine builds every link its agents compose for
-                      a person on it (Crewlet's integrations.dashboard_base_url); unset,
-                      they compose none.
+                      dashboardBaseURL is where a browser reaches the engine, its dashboard
+                      and its people's sign-in: spec.exposure.dashboardBaseURL, else the
+                      address of the class's API route, on the scheme exposedAPI takes, else
+                      http://localhost:8080, the address kubectl port-forward serves the
+                      engine Service's API port at. It does not wait for the route to be
+                      accepted, as exposedAPI does: it is the engine's api.external_url,
+                      which the engine reads only at start, and a flip of acceptance would
+                      otherwise restart the data pod. The engine builds every link a person
+                      follows on it, an invitation's included, so with the third these lead
+                      to a localhost only a port-forwarding browser reaches.
                     maxLength: 2048
                     minLength: 1
                     type: string
@@ -1323,7 +1339,10 @@ spec:
                       from the class's webhooks.hostname. It reaches the engine's public
                       listener, and every vendor route is a path under it, such as
                       /webhooks/forge for an Atlassian Forge relay. Unset while the class's
-                      webhooks.mode is None, which exposes nothing.
+                      webhooks.mode is None, which exposes nothing, and under External
+                      before the Company states its address: the engine is then told the
+                      listener's address inside the cluster, http://<company>-engine.
+                      <namespace>.svc:8081, which no vendor can reach.
                     maxLength: 2048
                     minLength: 1
                     type: string

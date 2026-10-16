@@ -356,28 +356,28 @@ func TestEngineStateChangedSeesWhyACompanyIsRefused(t *testing.T) {
 	}
 }
 
-// TestEngineStateChangedSeesTheAddressesTheDocumentCarries: the runtime
-// reconciler writes the public and dashboard addresses into the Company's
-// status, and the document carries both, so a change of either re-renders it.
-func TestEngineStateChangedSeesTheAddressesTheDocumentCarries(t *testing.T) {
+// TestEngineStateChangedSeesTheAddressTheRenderReads: the runtime reconciler
+// writes the vendors' address into the Company's status, and the render's
+// verdicts and the Seats' webhook addresses are built on it, so a change of it
+// renders again. The dashboard's address is the engine's crewlet.yaml, which
+// the runtime reconciler writes, and not the document's: a change of it alone
+// is nothing for the config reconciler to do.
+func TestEngineStateChangedSeesTheAddressTheRenderReads(t *testing.T) {
 	p := engineStateChanged()
-	for _, c := range []struct {
-		name string
-		set  func(*crewletaiv1alpha1.CompanyEndpoints)
-	}{
-		{"vendors'", func(e *crewletaiv1alpha1.CompanyEndpoints) { e.PublicBaseURL = "https://hooks.example.com" }},
-		{"people's", func(e *crewletaiv1alpha1.CompanyEndpoints) { e.DashboardBaseURL = "https://crewlet.example.com" }},
-	} {
-		updated := &crewletaiv1alpha1.Company{}
-		c.set(&updated.Status.Endpoints)
-		if !p.Update(event.UpdateEvent{ObjectOld: &crewletaiv1alpha1.Company{}, ObjectNew: updated}) {
-			t.Errorf("a new %s address does not re-render the document", c.name)
-		}
+	updated := &crewletaiv1alpha1.Company{}
+	updated.Status.Endpoints.PublicBaseURL = "https://hooks.example.com"
+	if !p.Update(event.UpdateEvent{ObjectOld: &crewletaiv1alpha1.Company{}, ObjectNew: updated}) {
+		t.Error("a new vendors' address does not render the document again")
 	}
-	unchanged := &crewletaiv1alpha1.Company{}
-	unchanged.Status.Endpoints.ExposedAPI = "https://api.example.com"
-	if p.Update(event.UpdateEvent{ObjectOld: &crewletaiv1alpha1.Company{}, ObjectNew: unchanged}) {
-		t.Error("an endpoint the document does not carry re-renders it")
+	for _, set := range []func(*crewletaiv1alpha1.CompanyEndpoints){
+		func(e *crewletaiv1alpha1.CompanyEndpoints) { e.ExposedAPI = "https://api.example.com" },
+		func(e *crewletaiv1alpha1.CompanyEndpoints) { e.DashboardBaseURL = "https://crewlet.example.com" },
+	} {
+		unchanged := &crewletaiv1alpha1.Company{}
+		set(&unchanged.Status.Endpoints)
+		if p.Update(event.UpdateEvent{ObjectOld: &crewletaiv1alpha1.Company{}, ObjectNew: unchanged}) {
+			t.Errorf("an endpoint the render does not read renders the document again: %+v", unchanged.Status.Endpoints)
+		}
 	}
 }
 

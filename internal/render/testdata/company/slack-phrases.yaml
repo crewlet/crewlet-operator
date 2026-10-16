@@ -1,6 +1,4 @@
 integrations:
-  dashboard_base_url: https://slack-phrases.crewlet.internal.example.com
-  public_base_url: https://slack-phrases.hooks.example.com
   slack:
     status_phrases:
       default:

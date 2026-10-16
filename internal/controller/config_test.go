@@ -360,7 +360,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(c), c)).To(Succeed())
 		own := &crewletaiv1alpha1.EngineClass{}
 		Expect(k8sClient.Get(ctx, client.ObjectKey{Name: c.Spec.EngineClassName}, own)).To(Succeed())
-		in := &render.Input{Company: c, Class: own, StoreName: secretsync.StoreName, ProvisionedName: secretsync.ProvisionedName, PublicBaseURL: c.Status.Endpoints.PublicBaseURL, DashboardBaseURL: c.Status.Endpoints.DashboardBaseURL}
+		in := &render.Input{Company: c, Class: own, StoreName: secretsync.StoreName, ProvisionedName: secretsync.ProvisionedName, PublicBaseURL: c.Status.Endpoints.PublicBaseURL}
 		in.Units = listOf[crewletaiv1alpha1.Unit](&crewletaiv1alpha1.UnitList{}, namespace, c.Name)
 		in.Seats = listOf[crewletaiv1alpha1.Seat](&crewletaiv1alpha1.SeatList{}, namespace, c.Name)
 		in.LLMProviders = listOf[crewletaiv1alpha1.LLMProvider](&crewletaiv1alpha1.LLMProviderList{}, namespace, c.Name)

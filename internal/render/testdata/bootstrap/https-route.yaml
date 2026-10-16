@@ -1,0 +1,47 @@
+api:
+  auth:
+    admin: serve
+    company_writers:
+    - operator
+    tokens:
+    - grants:
+      - admin
+      id: operator
+      token: test-operator-token-0123456789abcdefghijklm
+    - grants:
+      - admin
+      id: access
+      token: test-access-token-0123456789abcdefghijklmno
+  external_url: https://nimbus.api.example.com
+  host: 0.0.0.0
+  port: 8080
+  public:
+    external_url: https://nimbus.hooks.example.com
+    port: 8081
+coordination:
+  type: embedded-kv
+node:
+  id: ${CREWLET_NODE_ID}
+  labels:
+    crewlet.ai/pool: data
+  roles:
+  - data
+  - ingress
+  - seats
+  - workers
+retention:
+  backup_owner: platform-oncall
+secrets:
+  active_key_id: k1
+  keys:
+  - id: k1
+    material: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+store:
+  objects:
+    backend: nats
+  path: /var/lib/crewlet/store/crewlet.db
+stream:
+  replicas: 1
+  store_dir: /var/lib/crewlet/stream
+  store_max_bytes: 8053063680
+  type: embedded

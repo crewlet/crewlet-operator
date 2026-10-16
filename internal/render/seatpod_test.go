@@ -59,10 +59,10 @@ func (c seatPodCase) input(t *testing.T) (*SeatPodInput, *BootstrapInput) {
 		Company: o.company, Class: o.class, Pool: pool, Seat: c.seat,
 		Keyring: keyring, Objects: c.objects, DataMembers: testDataMembers,
 	}
-	data := &BootstrapInput{
+	data := reachedAtDefaults(&BootstrapInput{
 		Company: o.company, Class: o.class, Keyring: keyring, Tokens: testTokens, Objects: c.objects,
 		VolumeSize: *o.class.Spec.Data.Storage.Size,
-	}
+	})
 	return seatPod, data
 }
 

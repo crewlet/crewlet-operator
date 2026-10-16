@@ -2,6 +2,7 @@ package render
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -40,17 +41,39 @@ const (
 const otherKeyMaterial = "ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA="
 
 type bootstrapCase struct {
-	name    string
+	name string
+	// from names the input the case is rendered from, when it is not the
+	// case's own: a case that differs only in the addresses below.
+	from    string
 	keyring Keyring
 	objects *S3Credentials
+	// external, public and origins are the addresses the engine is
+	// reached at, as the controller derives them: unset, the port-forward
+	// address of a class that routes no API, and the public listener's
+	// address inside the cluster.
+	external, public string
+	origins          []string
 	// advisories are the advisories Crewlet's validator gives the Tier A,
 	// about a choice of the platform's that the render carries through.
 	advisories []advisory
 }
 
+// advisoryNoTrustedProxy is Crewlet's advisory on an https api.external_url
+// with no api.trusted_proxies: something in front of the engine terminates
+// TLS, and unless it is named every caller shows its address. Only the
+// platform knows its proxies' addresses, and no field of the operator's
+// offers them, so a routed engine reached over https draws it.
+var advisoryNoTrustedProxy = advisory{path: "api.trusted_proxies", says: "trusts no proxy"}
+
+// caseNATS is the bootstrap case of the defaults: a class whose object store
+// is the company's own event stream, and a Company under Enforce. The cases
+// that differ from it only in where the engine is reached are rendered from
+// its input.
+const caseNATS = "nats"
+
 func bootstrapCases() []bootstrapCase {
 	return []bootstrapCase{
-		{name: "nats", keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}},
+		{name: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}},
 		{
 			name:    "s3",
 			keyring: Keyring{ActiveKeyID: rotatedKey, Keys: map[string]string{rotatedKey: testKeyMaterial, staleKey: otherKeyMaterial}},
@@ -64,16 +87,42 @@ func bootstrapCases() []bootstrapCase {
 		// A class that allows seat pools: the data pod opens its leaf
 		// listener.
 		{name: caseSeatPools, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}},
+		// A class that routes the API and the webhooks over HTTPS.
+		{
+			name: "https-route", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
+			external: "https://nimbus.api.example.com", public: "https://nimbus.hooks.example.com",
+			advisories: []advisory{advisoryNoTrustedProxy},
+		},
+		// A Company that states where people reach the dashboard, ahead of
+		// the class's API route, which stays an origin it is reached on.
+		{
+			name: "route-origin", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
+			external: "https://crewlet.sso.example.com/nimbus", origins: []string{"https://nimbus.api.example.com"},
+			advisories: []advisory{advisoryNoTrustedProxy},
+		},
 	}
 }
 
-func (c bootstrapCase) input(t *testing.T) *BootstrapInput {
+func (c *bootstrapCase) input(t *testing.T) *BootstrapInput {
 	t.Helper()
-	o := load(t, filepath.Join("testdata", "bootstrap", c.name+".input.yaml"))
-	return &BootstrapInput{
+	o := load(t, filepath.Join("testdata", "bootstrap", cmp.Or(c.from, c.name)+".input.yaml"))
+	in := reachedAtDefaults(&BootstrapInput{
 		Company: o.company, Class: o.class, Keyring: c.keyring, Tokens: testTokens, Objects: c.objects,
-		VolumeSize: *o.class.Spec.Data.Storage.Size,
-	}
+		VolumeSize: *o.class.Spec.Data.Storage.Size, AllowedOrigins: c.origins,
+	})
+	in.ExternalURL = cmp.Or(c.external, in.ExternalURL)
+	in.PublicURL = cmp.Or(c.public, in.PublicURL)
+	return in
+}
+
+// reachedAtDefaults gives in the addresses the controller gives the data pod
+// of a Company that states none and whose class routes nothing: where
+// kubectl port-forward serves the API, and the public listener inside the
+// cluster.
+func reachedAtDefaults(in *BootstrapInput) *BootstrapInput {
+	in.ExternalURL = fmt.Sprintf("http://localhost:%d", APIPort)
+	in.PublicURL = fmt.Sprintf("http://%s-engine.%s.svc:%d", in.Company.Name, in.Company.Namespace, PublicPort)
+	return in
 }
 
 // TestBootstrapGolden pins each Tier A and the environment it needs.
@@ -311,6 +360,28 @@ func TestBootstrapServesAdminToBothTokens(t *testing.T) {
 			}
 			if !slices.Equal(ids, []string{TokenOperator, TokenAccess}) {
 				t.Errorf("api.auth.tokens are %v, want [%s %s]", ids, TokenOperator, TokenAccess)
+			}
+		})
+	}
+}
+
+// TestBootstrapNeedsTheEnginesAddresses: Crewlet refuses to start a node
+// that serves the API without api.external_url, or that opens its public
+// listener without api.public.external_url, so the render refuses a Tier A
+// without either rather than a pod that crash-loops.
+func TestBootstrapNeedsTheEnginesAddresses(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		mutate func(*BootstrapInput)
+	}{
+		{"no external address", func(in *BootstrapInput) { in.ExternalURL = "" }},
+		{"no public address", func(in *BootstrapInput) { in.PublicURL = "" }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := bootstrapCases()[0].input(t)
+			c.mutate(in)
+			if _, err := Bootstrap(in); !errors.Is(err, ErrNoAddress) {
+				t.Fatalf("Bootstrap() = %v, want ErrNoAddress", err)
 			}
 		})
 	}

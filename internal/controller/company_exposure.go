@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -94,12 +95,34 @@ type routeState struct {
 	message  string
 }
 
+// engineAddresses is where the engine is reached, as the data pod's
+// crewlet.yaml tells it: Crewlet's api.external_url, api.public.external_url
+// and api.auth.allowed_origins.
+type engineAddresses struct {
+	// external is where a browser reaches the engine: the Company's
+	// status.endpoints.dashboardBaseURL.
+	external string
+	// public is where the public listener is reached: the Company's
+	// status.endpoints.publicBaseURL, or the listener's address inside the
+	// cluster.
+	public string
+	// origins are the browser origins beside external's own.
+	origins []string
+}
+
 // reconcileExposure writes the routes the class asks for, deletes those it no
 // longer asks for, sets the Company's public and dashboard base URLs and
-// exposed API endpoint, and returns the Exposed condition.
+// exposed API endpoint, and returns the Exposed condition and the addresses
+// the engine is told it is reached at.
+//
+// Crewlet requires a node that serves the API to know where a browser reaches
+// it (api.external_url) and, while its public listener is open, where that is
+// reached (api.public.external_url); it reads both only at start, so a change
+// of either restarts the data pod. ADR-0006 records how each is chosen when
+// nothing names one.
 func (r *CompanyReconciler) reconcileExposure(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
-) (metav1.Condition, error) {
+) (metav1.Condition, engineAddresses, error) {
 	exposure := class.Spec.Exposure
 	webhooks := route{what: "webhooks", name: webhooksRouteName(c), component: componentWebhooks, port: render.PublicPort}
 	if exposure.Webhooks.Mode == crewletaiv1alpha1.WebhookExposureGateway {
@@ -141,36 +164,36 @@ func (r *CompanyReconciler) reconcileExposure(
 
 	webhooksState, err := r.reconcileRoute(ctx, c, &webhooks)
 	if err != nil {
-		return metav1.Condition{}, err
+		return metav1.Condition{}, engineAddresses{}, err
 	}
 	apiState, err := r.reconcileRoute(ctx, c, &api)
 	if err != nil {
-		return metav1.Condition{}, err
+		return metav1.Condition{}, engineAddresses{}, err
 	}
 	// The API's scheme, like the public base URL, is fixed by the class
 	// (and the Gateways it names) and not by whether the route has been
 	// accepted, so the dashboard's address does not wait for acceptance
-	// either: it is rendered into the company document, and an address
-	// that followed acceptance would make every flip of it (a Gateway
-	// controller re-evaluating its routes, an Ingress's published address
-	// briefly cleared) a new revision of the document on every engine,
-	// and would never be known behind an Ingress controller that publishes
-	// no address. exposedAPI keeps waiting: it says the route works.
+	// either: it is the engine's api.external_url, which the engine reads
+	// only at start, and an address that followed acceptance would make
+	// every flip of it (a Gateway controller re-evaluating its routes, an
+	// Ingress's published address briefly cleared) a restart of the data
+	// pod, and would never be known behind an Ingress controller that
+	// publishes no address. exposedAPI keeps waiting: it says the route
+	// works.
 	apiScheme, err := r.routeScheme(ctx, c, &api)
 	if err != nil {
-		return metav1.Condition{}, err
+		return metav1.Condition{}, engineAddresses{}, err
 	}
 	c.Status.Endpoints.ExposedAPI = ""
-	if apiState != nil && apiState.accepted {
-		c.Status.Endpoints.ExposedAPI = apiScheme + "://" + api.hostname
+	var routed string
+	if apiScheme != "" {
+		routed = apiScheme + "://" + api.hostname
+		if apiState != nil && apiState.accepted {
+			c.Status.Endpoints.ExposedAPI = routed
+		}
 	}
-	// Where people reach the dashboard: never the public address, whose
-	// listener serves no dashboard, so with neither this stays unset and
-	// the engine composes no link for a person rather than one to a 404.
-	c.Status.Endpoints.DashboardBaseURL = strings.TrimRight(c.Spec.Exposure.DashboardBaseURL, "/")
-	if c.Status.Endpoints.DashboardBaseURL == "" && apiScheme != "" {
-		c.Status.Endpoints.DashboardBaseURL = apiScheme + "://" + api.hostname
-	}
+	addresses := engineAddressesOf(c, routed)
+	c.Status.Endpoints.DashboardBaseURL = addresses.external
 	var states []routeState
 	for _, state := range []*routeState{webhooksState, apiState} {
 		if state != nil {
@@ -184,12 +207,12 @@ func (r *CompanyReconciler) reconcileExposure(
 		exposed.Reason = crewletaiv1alpha1.ReasonPublicBaseURLMissing
 		exposed.Message = fmt.Sprintf("EngineClass %s has webhooks forwarded from outside the operator (webhooks.mode External): "+
 			"set spec.exposure.publicBaseURL to the address vendors deliver to.", class.Name)
-		return exposed, nil
+		return exposed, addresses, nil
 	}
 	for _, state := range states {
 		if !state.accepted {
 			exposed.Status, exposed.Reason, exposed.Message = metav1.ConditionFalse, state.reason, state.message
-			return exposed, nil
+			return exposed, addresses, nil
 		}
 	}
 	exposed.Status = metav1.ConditionTrue
@@ -203,12 +226,68 @@ func (r *CompanyReconciler) reconcileExposure(
 			messages = append(messages, state.message)
 		}
 	}
-	if c.Status.Endpoints.DashboardBaseURL == "" {
-		messages = append(messages, "No address of the dashboard is known (the class routes no API and the Company states no "+
-			"spec.exposure.dashboardBaseURL), so the engine's agents compose no link for a person.")
+	if routed == "" && c.Spec.Exposure.DashboardBaseURL == "" {
+		messages = append(messages, fmt.Sprintf("The class routes no API and the Company states no spec.exposure.dashboardBaseURL, "+
+			"so the engine is told people reach it at %s, the address kubectl port-forward serves it at: every link it gives a "+
+			"person, an invitation's included, leads there.", addresses.external))
 	}
 	exposed.Message = strings.Join(messages, " ")
-	return exposed, nil
+	return exposed, addresses, nil
+}
+
+// portForwardURL is where a browser reaches the engine through
+// `kubectl port-forward svc/<company>-engine <port>`, the one address every
+// company has: the engine's API port on localhost. Crewlet suggests the same
+// form when it refuses a node without api.external_url, reads localhost as
+// loopback, so neither its plain-http advisory nor its insecure-posture rules
+// fire, and accepts a port-forwarded browser's writes, whose origin it is.
+func portForwardURL() string {
+	return fmt.Sprintf("http://localhost:%d", render.APIPort)
+}
+
+// publicListenerURL is the address of the engine's public listener inside the
+// cluster: the engine Service's public port.
+func publicListenerURL(c *crewletaiv1alpha1.Company) string {
+	return fmt.Sprintf("http://%s.%s.svc:%d", engineServiceName(c), c.Namespace, render.PublicPort)
+}
+
+// engineAddressesOf is where the engine is reached, given the address of the
+// class's API route (scheme and host, or empty when it routes none).
+//
+// A browser reaches it at the Company's spec.exposure.dashboardBaseURL, else
+// at the route, else through a port-forward. The public listener is reached
+// at the Company's status.endpoints.publicBaseURL, else at its address inside
+// the cluster: Crewlet requires an address while the listener is open, and
+// the data pod opens it whatever the class routes, so the one address it
+// truly has is the in-cluster one, which an in-cluster forwarder can use and
+// no vendor can. status.endpoints.publicBaseURL stays unset then, since it is
+// the address a vendor is given.
+//
+// When the Company's address is not the route's, the route is still an
+// address the engine is reached on: Crewlet accepts a browser's write only
+// from api.external_url's origin or an api.auth.allowed_origins entry, so the
+// route's origin is allowed, or a person signing in through the route would
+// be refused every write.
+func engineAddressesOf(c *crewletaiv1alpha1.Company, routed string) engineAddresses {
+	stated := strings.TrimRight(c.Spec.Exposure.DashboardBaseURL, "/")
+	a := engineAddresses{
+		external: cmp.Or(stated, routed, portForwardURL()),
+		public:   cmp.Or(c.Status.Endpoints.PublicBaseURL, publicListenerURL(c)),
+	}
+	if stated != "" && routed != "" && !strings.EqualFold(originOf(stated), routed) {
+		a.origins = []string{routed}
+	}
+	return a
+}
+
+// originOf is a URL's origin, scheme://host[:port], as a browser sends it, or
+// the URL itself when it does not parse (the API refused such a URL).
+func originOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return raw
+	}
+	return u.Scheme + "://" + u.Host
 }
 
 // reconcileRoute writes one route as an HTTPRoute or an Ingress and deletes

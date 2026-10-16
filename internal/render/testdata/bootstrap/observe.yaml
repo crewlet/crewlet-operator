@@ -10,9 +10,11 @@ api:
       - admin
       id: access
       token: test-access-token-0123456789abcdefghijklmno
+  external_url: http://localhost:8080
   host: 0.0.0.0
   port: 8080
   public:
+    external_url: http://nimbus-engine.tenant-nimbus.svc:8081
     port: 8081
 coordination:
   type: embedded-kv

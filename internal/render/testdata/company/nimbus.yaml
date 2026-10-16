@@ -1,5 +1,4 @@
 integrations:
-  dashboard_base_url: https://nimbus.crewlet.internal.example.com
   github:
     enabled: true
     provisioning:
@@ -16,7 +15,6 @@ integrations:
       group_webhook: auto
     signing_secret: ${K8S_NIMBUS_GITLAB_SIGNING_SECRET_XPR7PPZHAEFF}
     url: https://gitlab.nimbus.example
-  public_base_url: https://nimbus.hooks.example.com
   slack:
     typing_status: addressed
 knowledge:

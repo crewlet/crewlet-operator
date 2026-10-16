@@ -142,7 +142,9 @@ image built on another base still has a writable one.
 The pod template carries the annotation `crewlet.ai/bootstrap-hash`, the hash
 of the bootstrap Secret's data, which rolls the pod when what it reads at
 start changes: a token, a keyring key, the object store's keys, a platform
-value, or the document itself. Kubernetes reads a Secret into an environment
+value, an address the engine is reached at (a Company's `dashboardBaseURL` or
+`publicBaseURL`, the class's routes, a Gateway's listener turning HTTPS), or
+the document itself. Kubernetes reads a Secret into an environment
 variable, and the engine its `crewlet.yaml`, only when the container starts.
 It hashes the values rather than naming the Secrets' versions, so a label or
 an annotation written to a Secret restarts nothing. A Secret the Company's own
@@ -434,8 +436,11 @@ telemetry (`/otlp/{token}`) and tool bridge (`/mcp/{token}`). Crewlet
 decides which routes are public, from one list of its own; the public
 listener answers every other path as one nothing serves, and port 8080
 answers a public route with `404` and a hint naming the public listener.
-Every data pod opens both, whatever its class routes, so a class that
-starts or stops routing webhooks restarts no engine.
+Every data pod opens both, whatever its class routes, so which routes each
+port serves is a fact about the pod and the API's route never serves
+`/webhooks/`. The engine is told where each is reached (its `crewlet.yaml`'s
+`api.external_url` and `api.public.external_url`), which it reads only at
+start, so a class that starts or stops routing either restarts the data pod.
 
 | Class `exposure.webhooks.mode` | What the operator creates | `status.endpoints.publicBaseURL` |
 |---|---|---|
@@ -443,6 +448,12 @@ starts or stops routing webhooks restarts no engine.
 | `Ingress` | Ingress `<name>-webhooks`: the class's IngressClass, annotations and TLS Secret, the expanded `hostname`, every path, to port `public` | the same |
 | `External` | Nothing: something outside the operator forwards to `<name>-engine:8081` | `spec.exposure.publicBaseURL`, which is required |
 | `None` | Nothing | unset |
+
+While `status.endpoints.publicBaseURL` is unset, the engine is told its public
+listener is reached at its address inside the cluster,
+`http://<name>-engine.<namespace>.svc:8081`, since Crewlet requires an address
+of a listener it opens: a webhook address or an app manifest the engine builds
+on it is one no vendor can reach.
 
 The route names no path prefix. The public listener is the boundary: the
 admin API is not on its port to be reached by any path, and a route that
@@ -482,14 +493,20 @@ address once the route is accepted: `https://` when the Ingress has TLS or a
 Gateway listener the route attaches to is HTTPS. `status.endpoints.api` is
 always the in-cluster address, `http://<name>-engine.<namespace>.svc:8080`.
 
-`status.endpoints.dashboardBaseURL` is where people reach the dashboard: the
-Company's `spec.exposure.dashboardBaseURL`, else the API route's address on
-the same scheme as `exposedAPI`, without waiting for the route to be
-accepted, since a flip of acceptance would otherwise apply a new revision of
-the company document. The engine builds every link its agents compose for a
-person on it (Crewlet's `integrations.dashboard_base_url`), and never on the
-public address, whose listener serves no dashboard. With neither, no link is
-composed, and the `Exposed` condition's message says so.
+`status.endpoints.dashboardBaseURL` is where a browser reaches the engine,
+its dashboard and its people's sign-in: the Company's
+`spec.exposure.dashboardBaseURL`, else the API route's address on the same
+scheme as `exposedAPI`, without waiting for the route to be accepted, since a
+flip of acceptance would otherwise restart the data pod, else
+`http://localhost:8080`, where `kubectl port-forward svc/<name>-engine 8080`
+serves it. It is the engine's `api.external_url`, never the public address,
+whose listener serves no dashboard: the engine accepts a person's write only
+from its origin, makes the session cookie `Secure` when it is `https`, and
+builds every link a person follows on it, an invitation's included. With the
+third, those links lead to a `localhost` only a port-forwarding browser
+reaches, and the `Exposed` condition's message says so. When the Company's
+own address is not the route's, the route stays an origin the engine accepts
+(`api.auth.allowed_origins`).
 
 The `Exposed` condition is `True` with the reason `RouteAccepted` once every
 route exists and was accepted: an HTTPRoute when each Gateway it names reports

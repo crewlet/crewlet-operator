@@ -99,6 +99,8 @@ const (
 	msgEnvReserved                 = "variables starting with CREWLET_ or OTEL_ are set by the operator"
 	msgPublicBaseURL               = "publicBaseURL must be an absolute https URL"
 	msgDashboardBaseURL            = "dashboardBaseURL must be an absolute http or https URL"
+	msgPublicBaseURLQuery          = "publicBaseURL may not have a query or a fragment"
+	msgDashboardBaseURLQuery       = "dashboardBaseURL may not have a query or a fragment"
 	msgUnitID                      = "a Unit's name is its Crewlet unit id"
 	msgDuplicate                   = "Duplicate value"
 	msgThreeReplicas               = "Unsupported value: 3"

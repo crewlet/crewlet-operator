@@ -105,7 +105,7 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 	if err := r.applyServices(ctx, c, class); err != nil {
 		return err
 	}
-	exposed, err := r.reconcileExposure(ctx, c, class)
+	exposed, addresses, err := r.reconcileExposure(ctx, c, class)
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,8 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 	if bridge {
 		bridgeURL = c.Status.Endpoints.PublicBaseURL
 	}
-	runtimeReady, err := r.reconcileWorkload(ctx, c, class, &workloadInputs{keyring, tokens, objects, platform, missing, hold, bridgeURL, retry})
+	runtimeReady, err := r.reconcileWorkload(ctx, c, class,
+		&workloadInputs{keyring, tokens, objects, platform, missing, hold, bridgeURL, addresses, retry})
 	if err != nil {
 		return err
 	}
@@ -148,6 +149,9 @@ type workloadInputs struct {
 	// bridgeURL is where the engine's tool bridge is reached from a
 	// sandbox, or empty when the engine serves none.
 	bridgeURL string
+	// addresses are where the engine is reached, which its crewlet.yaml
+	// tells it.
+	addresses engineAddresses
 	// retry collects when the reconcile has to run again.
 	retry *requeue
 }
@@ -230,13 +234,21 @@ func (r *CompanyReconciler) runWorkload(
 		return r.holdBack(ctx, c, existing, reason, message)
 	}
 	bootstrap, err := render.Bootstrap(&render.BootstrapInput{
-		Company:    c,
-		Class:      class,
-		Keyring:    keyringOf(keyring),
-		Tokens:     tokensOf(tokens),
-		Objects:    in.objects,
-		VolumeSize: dataVolumeSize(existing, class),
+		Company:        c,
+		Class:          class,
+		Keyring:        keyringOf(keyring),
+		Tokens:         tokensOf(tokens),
+		Objects:        in.objects,
+		VolumeSize:     dataVolumeSize(existing, class),
+		ExternalURL:    in.addresses.external,
+		PublicURL:      in.addresses.public,
+		AllowedOrigins: in.addresses.origins,
 	})
+	if errors.Is(err, render.ErrNoAddress) {
+		// engineAddressesOf always names both, so this is the operator's
+		// own fault, not the keyring's.
+		return metav1.Condition{}, err
+	}
 	if err != nil {
 		return holdBack(crewletaiv1alpha1.ReasonKeyringInvalid,
 			fmt.Sprintf("Secret %s/%s is not a keyring the engine can use: %s. The operator never rewrites a keyring, since the "+

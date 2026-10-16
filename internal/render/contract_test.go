@@ -221,21 +221,83 @@ func TestContractRefusesListenersThatCannotOpen(t *testing.T) {
 	if !strings.Contains(string(doc.YAML), "leaf:") {
 		t.Fatalf("the seat-pools case opens no leaf listener:\n%s", doc.YAML)
 	}
+	// Each case moves one port in the parsed document rather than in its
+	// text, which no longer holds a listener's port at a fixed place once
+	// the block carries an address beside it.
+	public := func(api map[string]any) map[string]any { return api["public"].(map[string]any) }
 	for _, c := range []struct {
-		name, from, to string
+		name   string
+		mutate func(api map[string]any)
 	}{
-		{"public on the API port", fmt.Sprintf("public:\n    port: %d", PublicPort), fmt.Sprintf("public:\n    port: %d", APIPort)},
-		{"public on the leaf port", fmt.Sprintf("public:\n    port: %d", PublicPort), fmt.Sprintf("public:\n    port: %d", LeafPort)},
-		{"public beside no API port", fmt.Sprintf("  port: %d\n  public:", APIPort), "  port: 0\n  public:"},
+		{"public on the API port", func(api map[string]any) { public(api)["port"] = APIPort }},
+		{"public on the leaf port", func(api map[string]any) { public(api)["port"] = LeafPort }},
+		{"public beside no API port", func(api map[string]any) { api["port"] = 0 }},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			if !strings.Contains(string(doc.YAML), c.from) {
-				t.Fatalf("the rendered Tier A holds no %q:\n%s", c.from, doc.YAML)
+			var tierA map[string]any
+			if err := yaml.Unmarshal(doc.YAML, &tierA); err != nil {
+				t.Fatal(err)
 			}
-			mutated := strings.Replace(string(doc.YAML), c.from, c.to, 1)
-			got, stdout, _, _ := verdict(t, bootstrapEnv(doc), "-tier", "bootstrap", write(t, "crewlet.yaml", []byte(mutated)))
+			api, ok := tierA["api"].(map[string]any)
+			if _, open := api["public"].(map[string]any); !ok || !open {
+				t.Fatalf("the rendered Tier A opens no public listener:\n%s", doc.YAML)
+			}
+			c.mutate(api)
+			mutated, err := yaml.Marshal(tierA)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, stdout, _, _ := verdict(t, bootstrapEnv(doc), "-tier", "bootstrap", write(t, "crewlet.yaml", mutated))
 			if got.Valid || !strings.Contains(stdout, "api.public.port") {
 				t.Fatalf("crewlet validate did not refuse api.public.port:\n%s\n%s", mutated, stdout)
+			}
+		})
+	}
+}
+
+// TestContractExternalURLShapes ties the API's rules on
+// spec.exposure.dashboardBaseURL and publicBaseURL, which become
+// api.external_url and api.public.external_url, to Crewlet's
+// (config.checkExternalURL): an address with a query or a fragment is
+// refused, so the API refuses it on the Company rather than crash-loop the
+// data pod; and a path, a trailing '/' and plain http on localhost are
+// accepted, so the API refuses no address the engine runs on.
+func TestContractExternalURLShapes(t *testing.T) {
+	for _, c := range []struct {
+		name             string
+		external, public string
+		refused          string
+		advisories       []advisory
+	}{
+		{name: "a query on the external address", external: "https://crewlet.example.com/?tenant=nimbus", refused: "api.external_url"},
+		{name: "a fragment on the external address", external: "https://crewlet.example.com/#/work", refused: "api.external_url"},
+		{name: "a query on the public address", public: "https://hooks.example.com/?tenant=nimbus", refused: "api.public.external_url"},
+		{name: "a fragment on the public address", public: "https://hooks.example.com/nimbus#hooks", refused: "api.public.external_url"},
+		{
+			name: "a path and a trailing slash", external: "https://crewlet.example.com/nimbus/", public: "https://hooks.example.com/nimbus/",
+			advisories: []advisory{advisoryNoTrustedProxy},
+		},
+		{name: "plain http on localhost", external: "http://localhost:8080"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := bootstrapCases()[0].input(t)
+			in.ExternalURL, in.PublicURL = cmp.Or(c.external, in.ExternalURL), cmp.Or(c.public, in.PublicURL)
+			doc, err := Bootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			args := []string{"-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML)}
+			if c.refused == "" {
+				validate(t, bootstrapEnv(doc), c.advisories, args...)
+				return
+			}
+			got, stdout, stderr, _ := verdict(t, bootstrapEnv(doc), args...)
+			refused := slices.ContainsFunc(got.Problems, func(raw json.RawMessage) bool {
+				var p struct{ Path, Message string }
+				return json.Unmarshal(raw, &p) == nil && p.Path == c.refused && strings.Contains(p.Message, "query or fragment")
+			})
+			if got.Valid || !refused {
+				t.Errorf("crewlet validate did not refuse %s for its query or fragment:\n%s\n%s", c.refused, stdout, stderr)
 			}
 		})
 	}

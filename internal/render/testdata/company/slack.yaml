@@ -1,6 +1,4 @@
 integrations:
-  dashboard_base_url: https://slack.crewlet.internal.example.com
-  public_base_url: https://slack.hooks.example.com
   slack: {}
 mcp_servers:
 - args:

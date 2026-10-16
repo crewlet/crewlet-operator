@@ -293,6 +293,11 @@ var _ = Describe("Company runtime", func() {
 			// Every data StatefulSet here is created from newClass's
 			// volume, and keeps it when the class changes later.
 			VolumeSize: resource.MustParse("10Gi"),
+			// newClass routes nothing: a browser reaches the engine
+			// through a port-forward, and its public listener at its
+			// address inside the cluster.
+			ExternalURL: portForwarded,
+			PublicURL:   "http://nimbus-engine." + company.Namespace + ".svc:8081",
 		})
 		Expect(err).NotTo(HaveOccurred())
 		return doc
@@ -485,9 +490,10 @@ var _ = Describe("Company runtime", func() {
 		ready := condition(company, crewletaiv1alpha1.ConditionReady)
 		Expect(ready.Status).To(Equal(metav1.ConditionFalse))
 		Expect(ready.Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
-		Expect(company.Status.Endpoints.PublicBaseURL).To(BeEmpty())
-		Expect(company.Status.Endpoints.DashboardBaseURL).To(BeEmpty())
-		Expect(exposed.Message).To(ContainSubstring("compose no link for a person"))
+		Expect(company.Status.Endpoints.PublicBaseURL).To(BeEmpty(), "a vendor is given no address")
+		Expect(company.Status.Endpoints.DashboardBaseURL).To(Equal(portForwarded),
+			"a browser reaches an engine nothing routes to through kubectl port-forward")
+		Expect(exposed.Message).To(ContainSubstring("the address kubectl port-forward serves it at"))
 	})
 
 	It("admits the class's API consumers and narrows the engine's egress as the class says", func() {
@@ -1502,12 +1508,29 @@ var _ = Describe("Company runtime", func() {
 			Expect(company.Status.Endpoints.DashboardBaseURL).To(Equal(apiURL),
 				"a flip of the route's acceptance changed the address rendered into the company document")
 
+			By("telling the engine the route's address, which it reads at start")
+			tierA := func() string {
+				GinkgoHelper()
+				bootstrap := &corev1.Secret{}
+				get(bootstrap, bootstrapName)
+				return string(bootstrap.Data[configFile])
+			}
+			hash := func() string { return statefulSet().Spec.Template.Annotations[BootstrapHashAnnotation] }
+			Expect(tierA()).To(ContainSubstring("external_url: " + apiURL + "\n"))
+			Expect(tierA()).NotTo(ContainSubstring("allowed_origins"))
+			before := hash()
+
 			By("taking the Company's own dashboard address over the route's, without its trailing '/'")
 			updateCompany(company, func(c *crewletaiv1alpha1.Company) {
 				c.Spec.Exposure.DashboardBaseURL = "https://crewlet.sso.example.com/nimbus/"
 			})
 			company = reconciled(company)
 			Expect(company.Status.Endpoints.DashboardBaseURL).To(Equal("https://crewlet.sso.example.com/nimbus"))
+
+			By("restarting the engine on it, with the route still an origin people reach it on")
+			Expect(tierA()).To(ContainSubstring("external_url: https://crewlet.sso.example.com/nimbus\n"))
+			Expect(tierA()).To(ContainSubstring("allowed_origins:\n    - " + apiURL + "\n"))
+			Expect(hash()).NotTo(Equal(before), "a new address the engine reads only at start rolled no pod")
 		})
 
 		It("takes the dashboard's address from an API Ingress whose controller publishes none", func() {

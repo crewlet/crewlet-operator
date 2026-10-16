@@ -46,22 +46,10 @@ handle, and model providers and tool servers by name.
 | `Seat` | one entry of its Unit's `roles`, or of the top-level `roles` when it has no Unit |
 | `Schedule` | one entry of the `schedules` of the Seat's role or the Unit it targets, named by its `metadata.name` |
 
-`integrations.public_base_url` is the Company's public address, from
-`spec.exposure.publicBaseURL` or the class's `webhooks.hostname`, and is
-left out while the company has none. It is where vendors and sandboxes reach
-the engine, and it reaches the engine's public listener alone, which serves
-the webhooks and the sandbox endpoints and no dashboard.
-`integrations.dashboard_base_url` is the address people reach the engine's
-dashboard at, `status.endpoints.dashboardBaseURL`: the Company's
-`spec.exposure.dashboardBaseURL`, or the address of the class's API route,
-whether or not that route has been accepted yet. Every link the engine
-composes for a person (a tool skill's `${crewlet_base_url}`, a page change's
-notification) is built on it. It is left out while the company has neither:
-the engine then composes no link for a person, and a skill's
-`${crewlet_base_url}` stays as written. Neither is ever the other: Crewlet
-does not fall back from one to the other, since on a deployment with a
-public listener the two are different sockets
-([Exposure](runtime.md#exposure)).
+Where the engine is reached is not part of the document: the engine reads its
+addresses from the data pod's `crewlet.yaml`
+([below](#the-data-pods-crewletyaml)), since its sign-in and the origin it
+accepts a person's write from are decided before any document is loaded.
 
 ### Names and identities
 
@@ -183,6 +171,19 @@ Its `crewlet.yaml` is shaped for a company that adds seat pods, so that
 adding them moves nothing on the data pod's disk: coordination is Crewlet's
 replicated `embedded-kv`, and the event stream is persisted on the data
 volume under `/var/lib/crewlet`.
+
+It tells the engine where it is reached, which Crewlet requires of a node
+that serves its API and reads only at start:
+
+| Key | Where it is reached | From |
+|---|---|---|
+| `api.external_url` | Where a browser reaches the engine: its dashboard and its people's sign-in. The engine takes from it the origin a person's write must come from, whether the session cookie is `Secure`, and every link a person follows, an invitation's included. | The Company's `status.endpoints.dashboardBaseURL`: its `spec.exposure.dashboardBaseURL`, else the class's API route, else `http://localhost:8080`, the address `kubectl port-forward` serves it at |
+| `api.public.external_url` | Where vendors and sandboxes reach the public listener: the base of every webhook address and app manifest the engine builds. | The Company's `status.endpoints.publicBaseURL`, else the listener's address inside the cluster, `http://<company>-engine.<namespace>.svc:8081`, which no vendor reaches |
+| `api.auth.allowed_origins` | Another origin a browser reaches the engine on. | The class's API route, when the Company's `spec.exposure.dashboardBaseURL` is somewhere else |
+
+A change of any of them restarts the data pod
+([ADR-0006](../../adr/0006-tell-the-engine-an-address-it-is-reached-at.md)
+records why each is chosen as it is).
 
 When the EngineClass's `seatPools.policy` is `Allowed`, the data pod also
 opens the leaf listener seat pods join the event stream through

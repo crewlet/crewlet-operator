@@ -271,15 +271,26 @@ both routes take every path of their host, so on one host the Gateway or
 Ingress controller would pick which port answers, and the public host could
 serve the admin API.
 `status.endpoints.exposedAPI` is its address once accepted. Every request
-still needs a token.
+still needs a credential: a person signed in at the dashboard, or a token.
 
 ## Where people reach the dashboard
 
-The engine's agents put links to the dashboard in what they write for
-people (a tool skill's `${crewlet_base_url}`, the link in a page change's
-notification), and build them on Crewlet's
-`integrations.dashboard_base_url`. That is never the public address, whose
-listener serves no dashboard. The operator writes it from, in order:
+A browser reaches the engine at one address, which the engine must be told
+and reads only at start: Crewlet's `api.external_url`, in the data pod's
+`crewlet.yaml`
+([what Tier A must state](https://github.com/crewlet/crewlet/blob/main/docs/concepts/configuration.md#what-tier-a-must-state-once-the-api-is-served)).
+The engine takes from it:
+
+- the origin it accepts a person's write and a socket from: a browser's
+  request from another origin is refused;
+- whether the session cookie a person signs in with is `Secure` (with an
+  `https` address) or travels in the clear (with an `http` one);
+- every link a person follows: an invitation
+  (`<base>/dashboard#/invite/...`), a password link, a tool skill's
+  `${crewlet_base_url}`, the link in a page change's notification.
+
+It is never the public address, whose listener serves no dashboard. The
+operator writes it from, in order:
 
 1. the Company's `spec.exposure.dashboardBaseURL`, an `http` or `https` URL,
    for an address people reach the dashboard at that the class does not
@@ -288,22 +299,33 @@ listener serves no dashboard. The operator writes it from, in order:
 2. the API route's address: its expanded `api.hostname`, on `https` when
    the Ingress has `tls.secretName` or a Gateway listener the route can
    attach to is HTTPS, and on `http` otherwise. Unlike `exposedAPI`, it
-   does not wait for the route to be accepted. It is rendered into the
-   company document, so an address that followed acceptance would apply a
-   new revision on every engine each time a Gateway controller re-evaluated
-   the route, and would never be known behind an Ingress controller that
-   publishes no address.
+   does not wait for the route to be accepted, so a Gateway controller
+   re-evaluating the route, or an Ingress controller that publishes no
+   address, restarts nothing;
+3. `http://localhost:8080`, where
+   `kubectl port-forward svc/<company>-engine 8080` serves the engine's API
+   port: the one address every company has. Crewlet reads `localhost` as
+   loopback, so the cookie needs no TLS there and nothing warns.
 
-The result is `status.endpoints.dashboardBaseURL`. With neither, the engine
-composes no link for a person (a skill shows `${crewlet_base_url}` as
-written), and the Company's `Exposed` condition says so in its message.
+The result is `status.endpoints.dashboardBaseURL`, and a change of it
+restarts the data pod. With the third, every link the engine gives a person,
+an invitation's included, leads to a `localhost` only a port-forwarding
+browser reaches, and the Company's `Exposed` condition says so in its
+message. An `http` address on a routable host works, but its cookie travels
+unencrypted and Crewlet warns of it at every start: route the API over HTTPS
+for anyone who signs in from elsewhere.
 
-A link is the base followed by one of the engine dashboard's own routes,
-such as `<base>/#/work/ENG-42` for a work item and
+When the Company's own address is not on the route's origin, the route is
+still an address the engine is reached on: the operator adds the route's
+origin to the engine's `api.auth.allowed_origins`, so a person who signs in
+through the route can write as well as read.
+
+A link an agent composes is the base followed by one of the engine
+dashboard's own routes, such as `<base>/#/work/ENG-42` for a work item and
 `<base>/#/knowledge/pages/<page id>` for a page. So an address other than
-the API route's must serve the engine's dashboard there, or redirect those
-routes to a view of its own: the part after `#` never reaches a server, so
-that view reads it in the browser.
+the API route's must serve the engine there, its `/dashboard` and `/auth`
+routes included, since a person signs in through it: the part after `#`
+never reaches a server, so the dashboard reads it in the browser.
 
 ```yaml
 spec:                       # Company

@@ -270,12 +270,11 @@ func isAPIServerError(err error) bool {
 
 func (run *configRun) input() *render.Input {
 	in := &render.Input{
-		Company:          run.company,
-		Class:            run.class,
-		StoreName:        secretsync.StoreName,
-		ProvisionedName:  secretsync.ProvisionedName,
-		PublicBaseURL:    run.company.Status.Endpoints.PublicBaseURL,
-		DashboardBaseURL: run.company.Status.Endpoints.DashboardBaseURL,
+		Company:         run.company,
+		Class:           run.class,
+		StoreName:       secretsync.StoreName,
+		ProvisionedName: secretsync.ProvisionedName,
+		PublicBaseURL:   run.company.Status.Endpoints.PublicBaseURL,
 	}
 	for _, p := range run.parts {
 		switch o := p.obj.(type) {

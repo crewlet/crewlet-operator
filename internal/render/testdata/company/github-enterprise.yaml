@@ -1,5 +1,4 @@
 integrations:
-  dashboard_base_url: https://github-enterprise.crewlet.internal.example.com
   github:
     enabled: true
     provisioning:
@@ -11,7 +10,6 @@ integrations:
     token: ${K8S_FORGE_GITHUB_ORG_TOKEN_BQMOGEO5YFB4}
     url: https://github.forge.example
     webhook_secret: ${K8S_FORGE_GITHUB_WEBHOOK_SECRET_TBDDG2MGKIUZ}
-  public_base_url: https://github-enterprise.hooks.example.com
 name: Forge
 roles:
 - handle: builder

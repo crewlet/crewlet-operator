@@ -260,7 +260,8 @@ func itemsOfKind(list client.ObjectList) client.Object {
 // engineStateChanged passes a Company update that changes what decides
 // whether, and where, its document can be applied: whether it is Accepted
 // and why not, the state of its engine's pods (RuntimeReady), and the public
-// and dashboard base URLs the document carries; and a change of its pods' counts
+// base URL the render's verdicts and the Seats' webhook addresses are built
+// on; and a change of its pods' counts
 // (status.topology), after which the engine moves seats: a pod that comes up
 // takes seats, one that goes down leaves its seats unplaced, which the Seats'
 // Ready reports. These are status fields the runtime reconciler writes; the
@@ -277,7 +278,6 @@ func engineStateChanged() predicate.Funcs {
 				return false
 			}
 			if old.Status.Endpoints.PublicBaseURL != updated.Status.Endpoints.PublicBaseURL ||
-				old.Status.Endpoints.DashboardBaseURL != updated.Status.Endpoints.DashboardBaseURL ||
 				!equality.Semantic.DeepEqual(old.Status.Topology, updated.Status.Topology) {
 				return true
 			}

@@ -246,6 +246,38 @@ func TestCompanyValidation(t *testing.T) {
 			mutate: func(c *v1.Company) { c.Spec.Exposure.DashboardBaseURL = "ftp://crewlet.nimbus.example" },
 			want:   msgDashboardBaseURL,
 		},
+		{
+			// A path is a base a path-routing proxy serves the engine
+			// under, which Crewlet takes.
+			name:   "a dashboardBaseURL with a path is accepted",
+			mutate: func(c *v1.Company) { c.Spec.Exposure.DashboardBaseURL = "https://crewlet.nimbus.example/nimbus/" },
+		},
+		{
+			name: "a dashboardBaseURL with a query is refused",
+			mutate: func(c *v1.Company) {
+				c.Spec.Exposure.DashboardBaseURL = "https://crewlet.nimbus.example/?tenant=nimbus"
+			},
+			want: msgDashboardBaseURLQuery,
+		},
+		{
+			name:   "a dashboardBaseURL with a fragment is refused",
+			mutate: func(c *v1.Company) { c.Spec.Exposure.DashboardBaseURL = "https://crewlet.nimbus.example/#/work" },
+			want:   msgDashboardBaseURLQuery,
+		},
+		{
+			name:   "a publicBaseURL with a path is accepted",
+			mutate: func(c *v1.Company) { c.Spec.Exposure.PublicBaseURL = "https://relay.nimbus.example/nimbus/" },
+		},
+		{
+			name:   "a publicBaseURL with a query is refused",
+			mutate: func(c *v1.Company) { c.Spec.Exposure.PublicBaseURL = "https://relay.nimbus.example/?tenant=nimbus" },
+			want:   msgPublicBaseURLQuery,
+		},
+		{
+			name:   "a publicBaseURL with a fragment is refused",
+			mutate: func(c *v1.Company) { c.Spec.Exposure.PublicBaseURL = "https://relay.nimbus.example/hooks#nimbus" },
+			want:   msgPublicBaseURLQuery,
+		},
 		{name: "an env var from a Secret is accepted", mutate: env(v1.EnvVar{Name: platformURLVar, ValueFrom: platformURL})},
 		{name: "an empty env value is accepted", mutate: env(v1.EnvVar{Name: "EMPTY", Value: new("")})},
 		{

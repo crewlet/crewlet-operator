@@ -43,19 +43,15 @@ type Input struct {
 	// function of its arguments.
 	ProvisionedName func(handle, name string) string
 
-	// PublicBaseURL is the address vendors deliver webhooks to, rendered as
-	// integrations.public_base_url: the Company's
-	// spec.exposure.publicBaseURL, or the one the class's webhooks.hostname
-	// derives. Empty when the company is not exposed.
+	// PublicBaseURL is the address vendors deliver webhooks to: the
+	// Company's spec.exposure.publicBaseURL, or the one the class's
+	// webhooks.hostname derives. Empty when the company is not exposed. It
+	// is not part of the document: Crewlet reads where its public listener
+	// is reached from the data pod's crewlet.yaml (api.public.external_url,
+	// BootstrapInput.PublicURL). It decides what this render reports, the
+	// verdicts of ExecutorOf and AgentModeOf on a run that calls the seat's
+	// tools back through it, and the webhook addresses a Seat publishes.
 	PublicBaseURL string
-
-	// DashboardBaseURL is the address people reach the engine's dashboard
-	// at, rendered as integrations.dashboard_base_url: the Company's
-	// spec.exposure.dashboardBaseURL, or the address of the class's API
-	// route. Empty when people have no address of it: Crewlet then composes
-	// no link for a person, and never falls back to PublicBaseURL, whose
-	// listener serves no dashboard.
-	DashboardBaseURL string
 
 	// HeldPlacements are the role.placement labels to render for the agent
 	// seats, by handle, that keep running where the revision the engine runs
@@ -672,15 +668,7 @@ func (r *renderer) secretEnv(env []v1alpha1.SecretEnvVar) map[string]string {
 
 func (r *renderer) integrations() integrationsDoc {
 	doc := integrationsDoc{
-		PublicBaseURL:        r.in.PublicBaseURL,
-		DashboardBaseURL:     r.in.DashboardBaseURL,
 		CheckIntervalSeconds: r.in.Company.Spec.Integrations.CheckIntervalSeconds,
-	}
-	if doc.PublicBaseURL != "" {
-		r.source(Path{keyIntegrations, "public_base_url"}, r.owner)
-	}
-	if doc.DashboardBaseURL != "" {
-		r.source(Path{keyIntegrations, "dashboard_base_url"}, r.owner)
 	}
 	if doc.CheckIntervalSeconds != 0 {
 		r.source(Path{keyIntegrations, "check_interval_seconds"}, r.owner)
