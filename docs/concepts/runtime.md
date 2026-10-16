@@ -698,9 +698,10 @@ covers what a backup holds and how to restore one.
 A consumer in the cluster reads the Secret `status.apiAccessSecretRef` names
 and sends its `token` as a bearer token to its `url`, from a pod the class's
 `networkPolicy.apiConsumers` admit when the class isolates the engine.
-The token is the engine's administrator: Crewlet has no token scopes, so
-whoever holds it can rewrite the company document and reveal every value in
-the secret store, platform model keys included. Grant read on that Secret by
+The token holds Crewlet's `admin` grant, which takes in every app, so whoever
+holds it can rewrite the company document where the operator does not manage
+it, reveal every value in the secret store, platform model keys included, and
+invite or create the company's people. Grant read on that Secret by
 `resourceNames` to whoever may do that, and to no one else.
 
 The `nimbus-engine` Service routes only to a ready pod, and an engine is ready

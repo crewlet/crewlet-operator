@@ -93,8 +93,9 @@ spec:
                     description: |-
                       managementPolicy says who owns the document. Under Enforce the data
                       pod's crewlet.yaml sets Crewlet's api.auth.company_writers to the
-                      operator's own token, so the engine refuses every other token a change
-                      to the document; under Observe and Seed it sets none. The engine reads
+                      operator's own token, so the engine refuses every other credential a
+                      change to the document; under Observe and Seed it sets none, and
+                      Crewlet's authority table decides who may. The engine reads
                       crewlet.yaml only at start, so changing the policy to or from Enforce
                       restarts the data pod.
                     enum:
@@ -1083,12 +1084,15 @@ spec:
                   plane, a dashboard); the operator uses a token of its own, so revoking
                   this one never locks the operator out.
 
-                  The token is the engine's administrator: Crewlet has no token scopes,
-                  so whoever holds it can rewrite the company document and reveal every
-                  value in the engine's secret store, the class's platform model keys
-                  included. Grant read on this Secret only to whoever may do that, by
-                  resourceNames: read on every Secret of the namespace also exposes
-                  <company>-api-tokens, <company>-keyring and <company>-bootstrap.
+                  The token holds Crewlet's admin grant, which takes in every app, so
+                  whoever holds it can rewrite the company document where the operator
+                  does not manage it, reveal every value in the engine's secret store
+                  (the class's platform model keys included: it is a deployment's own
+                  token, not a person's machine token, which Crewlet refuses a reveal),
+                  and invite or create the company's people. Grant read on this Secret
+                  only to whoever may do that, by resourceNames: read on every Secret of
+                  the namespace also exposes <company>-api-tokens, <company>-keyring and
+                  <company>-bootstrap.
                 properties:
                   name:
                     description: name is the metadata.name of the Secret.

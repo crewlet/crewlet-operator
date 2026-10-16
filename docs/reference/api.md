@@ -39,8 +39,10 @@ in the repository maps every position to its field.
 
 
 
-APIExposure is how a company's engine API is reached. The API always
-requires a bearer token, which the operator generates per company and
+APIExposure is how a company's engine API is reached. Every request needs
+a credential, but for the probes, the vendors' webhooks and a sandbox's
+per-run endpoints: a person's session, signed in at the dashboard, or a
+bearer token, such as the one the operator generates per company and
 publishes in a Secret named by the Company's status.apiAccessSecretRef.
 
 _Validation:_
@@ -614,7 +616,7 @@ _Appears in:_
 | `topology` _[TopologyStatus](#topologystatus)_ | topology is the state of the company's pods. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `config` _[ConfigStatus](#configstatus)_ | config is the revision the engine runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `endpoints` _[CompanyEndpoints](#companyendpoints)_ | endpoints is where the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `apiAccessSecretRef` _[SecretReference](#secretreference)_ | apiAccessSecretRef names the Secret, in the Company's namespace, that<br />holds a bearer token for the engine's API under the key token<br />(APIAccessTokenKey) and the API's in-cluster base URL under the key<br />url (APIAccessURLKey). It is for the company's consumers (a control<br />plane, a dashboard); the operator uses a token of its own, so revoking<br />this one never locks the operator out.<br />The token is the engine's administrator: Crewlet has no token scopes,<br />so whoever holds it can rewrite the company document and reveal every<br />value in the engine's secret store, the class's platform model keys<br />included. Grant read on this Secret only to whoever may do that, by<br />resourceNames: read on every Secret of the namespace also exposes<br /><company>-api-tokens, <company>-keyring and <company>-bootstrap. |  | Optional: \{\} <br /> |
+| `apiAccessSecretRef` _[SecretReference](#secretreference)_ | apiAccessSecretRef names the Secret, in the Company's namespace, that<br />holds a bearer token for the engine's API under the key token<br />(APIAccessTokenKey) and the API's in-cluster base URL under the key<br />url (APIAccessURLKey). It is for the company's consumers (a control<br />plane, a dashboard); the operator uses a token of its own, so revoking<br />this one never locks the operator out.<br />The token holds Crewlet's admin grant, which takes in every app, so<br />whoever holds it can rewrite the company document where the operator<br />does not manage it, reveal every value in the engine's secret store<br />(the class's platform model keys included: it is a deployment's own<br />token, not a person's machine token, which Crewlet refuses a reveal),<br />and invite or create the company's people. Grant read on this Secret<br />only to whoever may do that, by resourceNames: read on every Secret of<br />the namespace also exposes <company>-api-tokens, <company>-keyring and<br /><company>-bootstrap. |  | Optional: \{\} <br /> |
 
 
 #### CompanyTopology
@@ -653,7 +655,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `managementPolicy` _[ManagementPolicy](#managementpolicy)_ | managementPolicy says who owns the document. Under Enforce the data<br />pod's crewlet.yaml sets Crewlet's api.auth.company_writers to the<br />operator's own token, so the engine refuses every other token a change<br />to the document; under Observe and Seed it sets none. The engine reads<br />crewlet.yaml only at start, so changing the policy to or from Enforce<br />restarts the data pod. | Enforce | Enum: [Enforce Observe Seed] <br />Optional: \{\} <br /> |
+| `managementPolicy` _[ManagementPolicy](#managementpolicy)_ | managementPolicy says who owns the document. Under Enforce the data<br />pod's crewlet.yaml sets Crewlet's api.auth.company_writers to the<br />operator's own token, so the engine refuses every other credential a<br />change to the document; under Observe and Seed it sets none, and<br />Crewlet's authority table decides who may. The engine reads<br />crewlet.yaml only at start, so changing the policy to or from Enforce<br />restarts the data pod. | Enforce | Enum: [Enforce Observe Seed] <br />Optional: \{\} <br /> |
 
 
 #### ConfigStatus
@@ -2242,7 +2244,7 @@ _Appears in:_
 
 | Field | Description |
 | --- | --- |
-| `Enforce` | ManagementPolicyEnforce makes the operator the document's only<br />writer. The engine refuses every other token a change to the document<br />(403 config_managed), the published access token included, and its<br />dashboard shows the document read-only; a revision made some other way<br />all the same (the engine's own writes, or one made before the data pod<br />restarted onto the policy) is reported and overwritten.<br /> |
+| `Enforce` | ManagementPolicyEnforce makes the operator the document's only<br />writer. The engine refuses every other credential a change to the<br />document (403 config_managed), the published access token and a person<br />signed in at its dashboard included, and its dashboard shows the<br />document read-only; a revision made some other way all the same (the<br />engine's own writes, or one made before the data pod restarted onto the<br />policy) is reported and overwritten.<br /> |
 | `Observe` | ManagementPolicyObserve renders and compares, and never writes; a<br />difference is reported only. The engine's own users may change the<br />document.<br /> |
 | `Seed` | ManagementPolicySeed writes the document once, into an engine that<br />has none, and then leaves it to the engine and its dashboard, whose<br />users may change it. Changes to the Company's children are ignored<br />afterwards and say so in their status.<br /> |
 

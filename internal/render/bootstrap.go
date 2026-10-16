@@ -179,15 +179,33 @@ type apiPublicDoc struct {
 }
 
 type apiAuthDoc struct {
-	AllowAnonymousRead bool          `json:"allow_anonymous_read"`
-	Tokens             []apiTokenDoc `json:"tokens"`
-	CompanyWriters     []string      `json:"company_writers,omitempty"`
+	Admin          string        `json:"admin"`
+	Tokens         []apiTokenDoc `json:"tokens"`
+	CompanyWriters []string      `json:"company_writers,omitempty"`
 }
 
 type apiTokenDoc struct {
-	ID    string `json:"id"`
-	Token string `json:"token"`
+	ID     string   `json:"id"`
+	Token  string   `json:"token"`
+	Grants []string `json:"grants"`
 }
+
+// adminServe is api.auth.admin on a data pod: the node grants admin to those
+// who hold it. Crewlet requires the posture on every node that serves the
+// API and refuses a token granted admin on a node that refuses it. The one
+// data pod of a v1alpha1 company is its only API node, and the node the
+// operator administers the company through, so it serves admin.
+const adminServe = "serve"
+
+// grantAdmin is Crewlet's admin grant. Both tokens hold it, and it is the
+// least the operator's own can: every route the operator calls is admin's in
+// Crewlet's authority table (the company document, the secret store, the
+// fleet, the integrations, and the pause tools for a token bound to no
+// seat), and admin cannot be split. The token the Company publishes holds it
+// so that a platform can do with it what the operator does, and put a
+// company's first person on their seat, which a person's own machine token
+// never can.
+const grantAdmin = "admin"
 
 type storeDoc struct {
 	Path    string     `json:"path"`
@@ -273,7 +291,9 @@ const keyringKeyBytes = 32
 // Bootstrap renders the Tier A of a company's data pods in the v1alpha1
 // topology: one data pod that holds the estate, serves the API, runs the
 // workers and runs the seats placed in the pool data. It serves the API on
-// APIPort and the routes outside parties call on PublicPort alone.
+// APIPort and the routes outside parties call on PublicPort alone. It serves
+// admin, and both API tokens hold admin (see grantAdmin); every other
+// credential is a person's, which Crewlet's own identity directory holds.
 //
 // The document is shaped for a fleet from the first start, so that seat pods
 // can join without migrating anything: coordination is the replicated
@@ -314,15 +334,10 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 			Port:   APIPort,
 			Public: &apiPublicDoc{Port: PublicPort},
 			Auth: &apiAuthDoc{
-				// Crewlet serves reads without a token by default, and its
-				// reads carry the seats' transcripts and memory. Every
-				// consumer of an operator-run engine has a token, so none
-				// needs the anonymous reads; probes and webhooks are
-				// exempt from authentication either way.
-				AllowAnonymousRead: false,
+				Admin: adminServe,
 				Tokens: []apiTokenDoc{
-					{ID: TokenOperator, Token: in.Tokens.Operator},
-					{ID: TokenAccess, Token: in.Tokens.Access},
+					{ID: TokenOperator, Token: in.Tokens.Operator, Grants: []string{grantAdmin}},
+					{ID: TokenAccess, Token: in.Tokens.Access, Grants: []string{grantAdmin}},
 				},
 				CompanyWriters: companyWriters(ManagementPolicyOf(in.Company)),
 			},

@@ -1,11 +1,15 @@
 api:
   auth:
-    allow_anonymous_read: false
+    admin: serve
     tokens:
-    - id: operator
-      token: test-operator-token
-    - id: access
-      token: test-access-token
+    - grants:
+      - admin
+      id: operator
+      token: test-operator-token-0123456789abcdefghijklm
+    - grants:
+      - admin
+      id: access
+      token: test-access-token-0123456789abcdefghijklmno
   host: 0.0.0.0
   port: 8080
   public:

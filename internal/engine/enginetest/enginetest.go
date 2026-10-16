@@ -168,11 +168,11 @@ func WithTierA(operator, access string, render func(port int, dir string) []byte
 
 // WithCompanyWriters makes the company document managed: enginetest's Tier A
 // names ids as api.auth.company_writers, the token ids that alone may change
-// the document, and the engine refuses every other token a change with 403
-// config_managed. Its reads, a reload and the secret store stay open to
-// both tokens, which hold admin. The engine ignores a WithCompany seed when the document is
-// managed, so the two do not combine; nor does WithTierA, whose Tier A is
-// the caller's to write, list included.
+// the document, and the engine refuses every other credential a change with
+// 403 config_managed. Its reads, a reload and the secret store stay open to
+// both tokens, which hold admin. The engine ignores a WithCompany seed when
+// the document is managed, so the two do not combine; nor does WithTierA,
+// whose Tier A is the caller's to write, list included.
 func WithCompanyWriters(ids ...string) Option {
 	return func(o *options) { o.writers = ids }
 }

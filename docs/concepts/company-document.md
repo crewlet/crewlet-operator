@@ -222,18 +222,29 @@ carries.
 > can write such a field, or hold the API's access token, could have the
 > engine send to a server of their choosing.
 
-The engine's API answers no read without a token
-(`api.auth.allow_anonymous_read: false`): its reads include every seat's
-conversations and memory, and every consumer of an operator-run engine has a
-token. Health probes and vendors' webhooks need none.
+Every route of the engine's API needs a credential but its health probes,
+the vendors' webhooks and a sandbox's per-run endpoints: its reads include
+every seat's conversations and memory. A person signs in at the engine's
+dashboard; a machine sends a bearer token. The data pod serves admin
+(`api.auth.admin: serve`): it is the company's only API node and the one the
+operator administers the company through, and Crewlet refuses a token granted
+admin on a node that refuses it. Both tokens hold admin
+(`grants: [admin]`). Every route the operator calls (the document, the secret
+store, the fleet, the integrations and the pause tools) is admin's in
+Crewlet's authority table, and admin cannot be split, so it is the least the
+operator's token can hold; the access token holds what the operator does, so
+that a platform can do the same, the company's first person included.
 
 Under the management policy `Enforce` it also names the operator's token the
 company document's only writer (`api.auth.company_writers: [operator]`), so the
-engine refuses every other token a change to the document, which the
-operator would otherwise overwrite at its next look. Under `Observe` and
-`Seed` the list is absent: there the engine's own users own the document. The
-pod reads `crewlet.yaml` only at start, so changing the policy to or from
-`Enforce` restarts it ([Switching policies](../guides/management-policies.md#switching-policies)).
+engine refuses every other credential a change to the document, which the
+operator would otherwise overwrite at its next look: the access token, a
+person signed in at the dashboard (whatever they signed in with), and a
+person's own machine token. Under `Observe` and `Seed` the list is absent:
+there Crewlet's authority table decides who may change the document, an
+administrator or a lead inside their own part of the chart. The pod reads
+`crewlet.yaml` only at start, so changing the policy to or from `Enforce`
+restarts it ([Switching policies](../guides/management-policies.md#switching-policies)).
 
 ---
 

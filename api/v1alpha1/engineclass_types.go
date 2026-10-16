@@ -524,8 +524,10 @@ const (
 	APIExposureIngress APIExposureMode = "Ingress"
 )
 
-// APIExposure is how a company's engine API is reached. The API always
-// requires a bearer token, which the operator generates per company and
+// APIExposure is how a company's engine API is reached. Every request needs
+// a credential, but for the probes, the vendors' webhooks and a sandbox's
+// per-run endpoints: a person's session, signed in at the dashboard, or a
+// bearer token, such as the one the operator generates per company and
 // publishes in a Secret named by the Company's status.apiAccessSecretRef.
 // +kubebuilder:validation:XValidation:rule="self.mode == 'Gateway' ? has(self.gateway) : !has(self.gateway)",message="gateway is required with mode Gateway and not allowed otherwise"
 // +kubebuilder:validation:XValidation:rule="self.mode == 'Ingress' ? has(self.ingress) : !has(self.ingress)",message="ingress is required with mode Ingress and not allowed otherwise"

@@ -180,15 +180,19 @@ the cluster (`make run`) cannot reach any engine.
 The operator is the document's only writer, and the engine enforces it: the
 data pod's `crewlet.yaml` sets Crewlet's `api.auth.company_writers` to the id
 of the operator's own token, `operator`, so the engine refuses every other
-token any change to the document — a `PUT` or `PATCH` of `/config`, an entity
-write, a revert, a `/setup` connect, and the dry run of each — with
-`403 config_managed`, and its dashboard shows the document read-only. Reads,
-`POST /config/reload` and the secret store stay open to every token, which is
-how a person rotates a leaked credential; see
+credential any change to the document — a `PUT` or `PATCH` of `/config`, an
+entity write, a revert, a `/setup` connect, and the dry run of each — with
+`403 config_managed`, and its dashboard shows the document read-only. That
+takes in a person signed in at the dashboard, whatever they signed in with:
+the engine judges the credential a write came through, never its author.
+Reads, `POST /config/reload` and the secret store stay open to whoever holds
+admin, which is how a person rotates a leaked credential; see
 [Crewlet's managed configuration](https://github.com/crewlet/crewlet/blob/main/docs/concepts/configuration.md#managed-configuration).
 Under `Observe` and `Seed` the list is not set, since the engine's own users
-own the document there. The engine reads `crewlet.yaml` only at start, so a
-switch to or from `Enforce` restarts the data pod.
+own the document there: Crewlet's authority table decides, which admits an
+administrator, or a lead inside their own part of the chart. The engine reads
+`crewlet.yaml` only at start, so a switch to or from `Enforce` restarts the
+data pod.
 
 On every look the operator compares the engine's active document with the
 rendered one; when they differ and the engine runs a revision the operator

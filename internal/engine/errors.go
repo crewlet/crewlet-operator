@@ -36,11 +36,11 @@ var (
 	ErrNoActiveRevision = errors.New("the engine has no active configuration revision")
 
 	// ErrConfigManaged is a write onto the company document that the
-	// engine refuses this token: its Tier A api.auth.company_writers names
-	// the tokens that alone may change the document, and this one is not
-	// among them (403 config_managed). Reads, a reload and the secret store
-	// stay open to it. The *APIError behind it lists the writers in
-	// ManagedBy.
+	// engine refuses this credential: its Tier A api.auth.company_writers
+	// names the tokens that alone may change the document, and this one is
+	// not among them (403 config_managed). Reads, a reload and the secret
+	// store stay open to a holder of admin. The *APIError behind it lists
+	// the writers in ManagedBy.
 	ErrConfigManaged = errors.New("the engine's company document is managed by another token")
 
 	// ErrNotReady is an engine that is up but should not be sent work: it

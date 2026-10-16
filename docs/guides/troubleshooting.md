@@ -311,9 +311,10 @@ requests to `http://<company>-data-0.<company>-data.<namespace>.svc:8080` fail:
 ## The engine refuses a change to the document
 
 Under `Enforce` the engine lets only the operator's token change the company
-document: a change made with any other token, the published access token
-included, is answered `403 config_managed`, and the engine's dashboard shows
-the document read-only. That is the policy working, not a fault. Change the
+document: a change made with any other credential, the published access
+token and a person signed in at the dashboard included, is answered
+`403 config_managed`, and the engine's dashboard shows the document
+read-only. That is the policy working, not a fault. Change the
 objects, or switch the Company to `Observe` or `Seed` to hand the document to
 the dashboard ([Choosing a management policy](management-policies.md)); the
 switch restarts the data pod, and the dashboard may edit again once it has.

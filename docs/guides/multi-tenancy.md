@@ -314,11 +314,12 @@ keys, the class's telemetry headers and env) go into the Secret
 
 A control plane that writes its tenants' objects is the source of truth for
 them, which is what `Company.spec.config.managementPolicy: Enforce`, the
-default, is for: the engine refuses every token but the operator's own a
-change to the company document (`403 config_managed`), the access token in
-`apiAccessSecretRef` included, and its dashboard shows the document
-read-only. The company's people change their company through the control
-plane, which writes the objects. A revision the operator did not write is
+default, is for: the engine refuses every credential but the operator's own
+token a change to the company document (`403 config_managed`), the access
+token in `apiAccessSecretRef` and the company's people signed in at its
+dashboard included, and the dashboard shows the document read-only. The
+company's people change their company through the control plane, which
+writes the objects. A revision the operator did not write is
 applied over, recorded as a `Drifted` event, and reported as
 `ConfigApplied=True DriftCorrected`.
 
@@ -340,9 +341,10 @@ The engine runs the tenant's code: a `Stdio` MCP server's command, a sandbox
 setup step's commands, agents' tool calls. That code runs as the engine's
 user, so it can read the engine's environment and its `crewlet.yaml`, and
 open the secret store on the data volume with the keyring the pod holds.
-And the access token in `status.apiAccessSecretRef` is the engine's
-administrator: Crewlet has no token scopes, so whoever holds it can reveal
-every value in the secret store and write new ones. Under `Enforce` the
+And the access token in `status.apiAccessSecretRef` holds Crewlet's `admin`
+grant, which takes in every app, so whoever holds it can reveal every value
+in the secret store, write new ones, and invite or create the company's
+people. Under `Enforce` the
 engine refuses it a change to the company document (the operator's own token
 is the document's only writer), but that keeps the document from drifting
 rather than the token from the company: a value the document references can

@@ -18,8 +18,13 @@ import (
 
 // testTokens are the API tokens every bootstrap case is rendered with, and
 // testObjects the S3 keys of the cases whose class names none of its own.
+// Each token is 43 characters, the length of the tokens the operator
+// generates: Crewlet refuses a token under 26 (secrets.CheckOperatorToken).
 var (
-	testTokens  = APITokens{Operator: "test-operator-token", Access: "test-access-token"}
+	testTokens = APITokens{
+		Operator: "test-operator-token-0123456789abcdefghijklm",
+		Access:   "test-access-token-0123456789abcdefghijklmno",
+	}
 	testObjects = S3Credentials{AccessKeyID: "test-access-key-id", SecretAccessKey: "test-secret-access-key"}
 )
 
@@ -261,6 +266,51 @@ func TestBootstrapNamesTheOperatorTheOnlyWriterUnderEnforce(t *testing.T) {
 			}
 			if fmt.Sprint(writers) != fmt.Sprint(c.want) {
 				t.Fatalf("api.auth.company_writers = %v under %q, want %v", writers, c.policy, c.want)
+			}
+		})
+	}
+}
+
+// TestBootstrapServesAdminToBothTokens pins the data pod's authority: it
+// serves admin, and each token holds exactly admin. The operator's own calls
+// are all admin's in Crewlet's authority table, so a narrower grant is an
+// operator the engine refuses its own document; the published token holds
+// what the operator does. A grant the engine does not need would widen what
+// a leaked token opens, and a posture of refuse with an admin token is one
+// the engine refuses to start on.
+func TestBootstrapServesAdminToBothTokens(t *testing.T) {
+	for _, c := range bootstrapCases() {
+		t.Run(c.name, func(t *testing.T) {
+			doc, err := Bootstrap(c.input(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got struct {
+				API struct {
+					Auth struct {
+						Admin  string `json:"admin"`
+						Tokens []struct {
+							ID     string   `json:"id"`
+							Grants []string `json:"grants"`
+						} `json:"tokens"`
+					} `json:"auth"`
+				} `json:"api"`
+			}
+			if err := yaml.Unmarshal(doc.YAML, &got); err != nil {
+				t.Fatal(err)
+			}
+			if got.API.Auth.Admin != "serve" {
+				t.Errorf("api.auth.admin = %q, want serve", got.API.Auth.Admin)
+			}
+			ids := make([]string, 0, len(got.API.Auth.Tokens))
+			for _, token := range got.API.Auth.Tokens {
+				ids = append(ids, token.ID)
+				if !slices.Equal(token.Grants, []string{"admin"}) {
+					t.Errorf("token %s holds %v, want [admin]", token.ID, token.Grants)
+				}
+			}
+			if !slices.Equal(ids, []string{TokenOperator, TokenAccess}) {
+				t.Errorf("api.auth.tokens are %v, want [%s %s]", ids, TokenOperator, TokenAccess)
 			}
 		})
 	}

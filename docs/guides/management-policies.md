@@ -25,17 +25,19 @@ spec:                       # Company
 Every change to an object becomes a revision, and nothing else changes the
 document. The data pod's `crewlet.yaml` names the operator's own API token as
 the document's only writer (Crewlet's `api.auth.company_writers`), so the
-engine refuses every other token a change to the document, the access token
-the Company publishes included, with `403 config_managed`, and its dashboard
-draws the document read-only. Make the change in the objects instead.
+engine refuses every other credential a change to the document with
+`403 config_managed`: the access token the Company publishes, a person signed
+in at the dashboard, whatever they signed in with, and a person's own machine
+token. Its dashboard draws the document read-only. Make the change in the
+objects instead.
 
-What stays open to every token is what changes no byte of the document:
-reading it, the engine's secret store and a reload. So a person can still
+What stays open to whoever holds admin is what changes no byte of the
+document: reading it, the engine's secret store and a reload. So a person can still
 rotate a leaked credential in the engine when the objects cannot be changed in
 time; rotate it in its Secret as well, since the operator writes the Secret's
 value back at its next look. This keeps the document from drifting silently;
-it is not a privilege boundary: a token that may write the secret store can
-still change what a value the document references holds.
+it is not a privilege boundary: a credential that may write the secret store
+can still change what a value the document references holds.
 
 Every five minutes, and whenever anything changes, the operator also compares
 the document the engine runs with the rendered one. A revision the operator
@@ -116,7 +118,7 @@ policy, and reports it. `Observe` and `Seed` change no pause.
 ## Switching policies
 
 The policy may change at any time. Whether the engine refuses edits from
-other tokens is part of the data pod's `crewlet.yaml`, which the engine reads
+other credentials is part of the data pod's `crewlet.yaml`, which the engine reads
 only at start, so a switch to or from `Enforce` restarts the data pod: the
 operator writes the new `crewlet.yaml` into `<company>-bootstrap`, and the
 pod template's `crewlet.ai/bootstrap-hash` changes with it.
@@ -134,9 +136,9 @@ stateDiagram-v2
 
 | From → to | What happens | Data pod |
 |---|---|---|
-| `Observe` → `Enforce` | The rendered document is applied once, with its Secret values; anything the engine had that the objects do not say is replaced. From the restart on, the engine refuses other tokens' edits. | Restarts |
+| `Observe` → `Enforce` | The rendered document is applied once, with its Secret values; anything the engine had that the objects do not say is replaced. From the restart on, the engine refuses every other credential's edits. | Restarts |
 | `Seed` → `Enforce` | The same: the dashboard's changes since seeding are replaced by the rendered document. Copy what you want to keep into the objects first; `Observe` first shows you the differences. | Restarts |
-| `Enforce` → `Observe` or `Seed` | Nothing is written. The engine keeps the last revision, the objects stop being applied, and from the restart on the dashboard and the access token may change the document again. | Restarts |
+| `Enforce` → `Observe` or `Seed` | Nothing is written. The engine keeps the last revision, the objects stop being applied, and from the restart on whoever Crewlet's authority table admits may change the document again: an administrator, the access token, or a lead inside their own part of the chart. | Restarts |
 | `Observe` ↔ `Seed` | What the operator writes changes as above; the engine's `crewlet.yaml` does not. | Keeps running |
 
 ## See also

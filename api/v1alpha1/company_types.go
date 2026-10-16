@@ -421,11 +421,12 @@ type ManagementPolicy string
 // The management policies.
 const (
 	// ManagementPolicyEnforce makes the operator the document's only
-	// writer. The engine refuses every other token a change to the document
-	// (403 config_managed), the published access token included, and its
-	// dashboard shows the document read-only; a revision made some other way
-	// all the same (the engine's own writes, or one made before the data pod
-	// restarted onto the policy) is reported and overwritten.
+	// writer. The engine refuses every other credential a change to the
+	// document (403 config_managed), the published access token and a person
+	// signed in at its dashboard included, and its dashboard shows the
+	// document read-only; a revision made some other way all the same (the
+	// engine's own writes, or one made before the data pod restarted onto the
+	// policy) is reported and overwritten.
 	ManagementPolicyEnforce ManagementPolicy = "Enforce"
 	// ManagementPolicyObserve renders and compares, and never writes; a
 	// difference is reported only. The engine's own users may change the
@@ -443,8 +444,9 @@ const (
 type ConfigSettings struct {
 	// managementPolicy says who owns the document. Under Enforce the data
 	// pod's crewlet.yaml sets Crewlet's api.auth.company_writers to the
-	// operator's own token, so the engine refuses every other token a change
-	// to the document; under Observe and Seed it sets none. The engine reads
+	// operator's own token, so the engine refuses every other credential a
+	// change to the document; under Observe and Seed it sets none, and
+	// Crewlet's authority table decides who may. The engine reads
 	// crewlet.yaml only at start, so changing the policy to or from Enforce
 	// restarts the data pod.
 	// +optional
@@ -1183,12 +1185,15 @@ type CompanyStatus struct {
 	// plane, a dashboard); the operator uses a token of its own, so revoking
 	// this one never locks the operator out.
 	//
-	// The token is the engine's administrator: Crewlet has no token scopes,
-	// so whoever holds it can rewrite the company document and reveal every
-	// value in the engine's secret store, the class's platform model keys
-	// included. Grant read on this Secret only to whoever may do that, by
-	// resourceNames: read on every Secret of the namespace also exposes
-	// <company>-api-tokens, <company>-keyring and <company>-bootstrap.
+	// The token holds Crewlet's admin grant, which takes in every app, so
+	// whoever holds it can rewrite the company document where the operator
+	// does not manage it, reveal every value in the engine's secret store
+	// (the class's platform model keys included: it is a deployment's own
+	// token, not a person's machine token, which Crewlet refuses a reveal),
+	// and invite or create the company's people. Grant read on this Secret
+	// only to whoever may do that, by resourceNames: read on every Secret of
+	// the namespace also exposes <company>-api-tokens, <company>-keyring and
+	// <company>-bootstrap.
 	// +optional
 	APIAccessSecretRef SecretReference `json:"apiAccessSecretRef,omitzero"`
 }
