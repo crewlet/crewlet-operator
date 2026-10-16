@@ -188,8 +188,8 @@ kubectl logs acme-data-0 -n acme | grep -E 'WARN|ERROR' | tail
 
 - **`insufficient storage resources available`**: the engine could not
   reserve its event stream's logs. The stream is given three quarters of the
-  data volume and needs at least 5 GiB of it; the class's `data.storage.size`
-  admits no less than `7Gi`, but a provisioner that hands out less than it
+  data volume and needs at least 6 GiB of it; the class's `data.storage.size`
+  admits no less than `8Gi`, but a provisioner that hands out less than it
   was asked for can leave it too small. Give the company a larger volume.
 - **`config_apply_failed`**: the revision was stored but this node could not
   start it; the message says why. The engine keeps running the previous

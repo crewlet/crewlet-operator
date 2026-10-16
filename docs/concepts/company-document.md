@@ -202,8 +202,9 @@ of its own: a provisioner that carves claims out of one node filesystem
 (local-path, hostPath, kind's default) shows every engine on the node the
 node's whole free space, and engines that share it over-commit it until the
 last one is refused with `insufficient storage resources available`. Crewlet
-needs at least 5 GiB for the stream, so an EngineClass's `data.storage.size`
-is at least `7Gi`.
+needs at least 6 GiB for the stream, since every node reserves the ceilings of
+all five of its state logs, 4.5 GiB at their smallest, and keeps room beside
+them, so an EngineClass's `data.storage.size` is at least `8Gi`.
 
 It holds the node's credentials as values: the two API tokens (the
 operator's own, and the one published for consumers in

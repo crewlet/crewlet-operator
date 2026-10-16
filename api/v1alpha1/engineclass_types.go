@@ -62,8 +62,10 @@ type DataStorage struct {
 	//
 	// Three quarters of it is the engine's event stream, Crewlet's
 	// stream.store_max_bytes: the stream reserves its logs' ceilings against
-	// that share up front. Crewlet's own floor for it is 5Gi, so a volume
-	// must be at least 7Gi.
+	// that share up front. Crewlet's own floor for it is 6Gi
+	// (config.StoreMaxBytesFloor: every node reserves all five of its state
+	// logs' ceilings, 4.5Gi at their smallest, and keeps room beside them for
+	// its mailboxes and coordination), so a volume must be at least 8Gi.
 	//
 	// It applies to the data volumes of companies created after it is set.
 	// An existing company's volumes keep the size they were created with:
@@ -71,7 +73,7 @@ type DataStorage struct {
 	// which Kubernetes does not let change, and resizing a volume is a
 	// decision about one company's storage class and data, not the class's.
 	// +required
-	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('7Gi'))",message="size must be at least 7Gi: three quarters of the volume is the engine's event stream, which Crewlet needs at least 5Gi for"
+	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('8Gi'))",message="size must be at least 8Gi: three quarters of the volume is the engine's event stream, which Crewlet needs at least 6Gi for"
 	Size *resource.Quantity `json:"size,omitempty"`
 }
 

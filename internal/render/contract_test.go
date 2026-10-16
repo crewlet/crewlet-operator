@@ -339,8 +339,8 @@ func TestContractStreamFloor(t *testing.T) {
 		size   string
 		accept bool
 	}{
-		{size: "7Gi", accept: true},
-		{size: "6Gi", accept: false},
+		{size: "8Gi", accept: true},
+		{size: "7Gi", accept: false},
 	} {
 		t.Run(c.size, func(t *testing.T) {
 			in := bootstrapCases()[0].input(t)

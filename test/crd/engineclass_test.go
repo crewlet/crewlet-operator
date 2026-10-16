@@ -79,12 +79,12 @@ func TestEngineClassObjects(t *testing.T) {
 		},
 		{
 			name:   "a storage size just under the engine's floor is refused",
-			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("7167Mi")) },
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("8191Mi")) },
 			want:   msgStorageFloor,
 		},
 		{
 			name:   "a storage size of exactly the floor is accepted",
-			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("7Gi")) },
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("8Gi")) },
 		},
 		{
 			name:   "a storage size in bytes is accepted",

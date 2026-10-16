@@ -104,7 +104,7 @@ const (
 	msgUnitID                      = "a Unit's name is its Crewlet unit id"
 	msgDuplicate                   = "Duplicate value"
 	msgThreeReplicas               = "Unsupported value: 3"
-	msgStorageFloor                = "size must be at least 7Gi"
+	msgStorageFloor                = "size must be at least 8Gi"
 	msgHeaderCase                  = "names must differ in more than case: HTTP header names are case-insensitive"
 	msgContainerKey                = `should match '^[A-Z][A-Z0-9]{1,9}$'`
 	msgProviderKeyEnv              = "ANTHROPIC_API_KEY and OPENAI_API_KEY are model provider keys"
