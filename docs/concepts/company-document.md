@@ -58,10 +58,15 @@ accepts a person's write from are decided before any document is loaded.
 - A Seat's handle is always written out (`spec.handle`, or its
   `metadata.name`), so its identity never depends on how Crewlet would derive
   one from its name. Its Crewlet `name` is its `displayName`, or its handle.
-- Crewlet names a unit's `lead` and a seat's `manages` entries by **name**,
-  not by handle or id, so that is how the operator writes them. Crewlet reads
-  a name that belongs to both a seat and a unit as the seat, so a Seat that
-  manages a Unit named like another Seat cannot be rendered (see below).
+- A unit's `lead` names its Seat by **handle**, and a seat's `manages`
+  entries name a Seat by handle and a Unit by its `metadata.name`, its key.
+  Crewlet refuses anything else there, and holds no display name unique, so
+  two Seats or two Units may share one. It reads a token that is both a
+  seat's handle and a unit's key as the seat, so a Seat that manages a Unit
+  whose name is another Seat's handle cannot be rendered (see below).
+- Each Seat's `spec.email` is its own: Crewlet finds a seat by its address,
+  compared lower-cased and with any plus tag dropped, and refuses two seats
+  that declare one.
 
 ### Models
 
@@ -301,8 +306,8 @@ that holds the reference:
 | `Seat` | a `spec.llm` entry names a platform provider the class does not offer | `RefNotFound` | Class |
 | `Seat` | `unitRef` names a Unit that does not exist: placed anywhere else, its unit's members and lead would change, and a running seat would retire | `RefNotFound` | Harm |
 | `Seat` | a `manages` entry, a `spec.mcp` entry or a `sandbox.mcpServerRefs` entry names an object that does not exist: written by its name, the authority or the credentials would go to whichever object takes the name later | `RefNotFound` | Harm |
-| `Seat` | a `manages` entry names a Unit whose name is also a Seat's, which Crewlet would read as the Seat | `Conflict` | Harm |
-| `Seat` | another Seat has its handle, its display name, or one of its contact accounts | `Conflict` (on `Accepted`) | Engine |
+| `Seat` | a `manages` entry names a Unit whose key, its `metadata.name`, is also a Seat's handle, which Crewlet would read as the Seat | `Conflict` | Harm |
+| `Seat` | another Seat has its handle, its email address (compared lower-cased, with any plus tag dropped), or one of its contact accounts | `Conflict` (on `Accepted`) | Engine |
 | `Seat` | it is placed in a PerSeat pool, and the class does not set `seatPools.allowPerSeat` (reported on `Applied`) | `PerSeatNotAllowed` | Class |
 | `Seat` | it is placed in a PerSeat pool, and the company's seat pods, its own included, would number more than the class's `seatPools.maxPods` with the PerSeat seats admitted before it: those the running revision already runs in pods of their own, then the older ones; every seat after the first refused is refused too (reported on `Applied`) | `PoolCapacityExceeded` | Class |
 | `Seat` | it is placed in a seat pool, and a chain of it names a `CLIAgent` provider signed in with a credential bundle, which every seat pod would restore and refresh on its own, logging out every seat on that login, the data pod's included (reported on `Applied`) | `CLIAuthNotPortable` | Harm |
@@ -314,7 +319,6 @@ that holds the reference:
 | `Unit` | `parentRef` names a Unit that does not exist, or its chain of parents leads back to it: left out, its whole subtree would go | `RefNotFound`, `Cycle` | Harm |
 | `Unit` | `leadRef` names a Seat that does not exist: Crewlet would run the unit, and every unit below that inherits its lead, with no lead | `RefNotFound` | Harm |
 | `Unit` | a `spec.mcp` entry names an MCPServer that does not exist | `RefNotFound` | Harm |
-| `Unit` | another Unit answers to its display name or its name, compared without case | `Conflict` (on `Accepted`) | Engine |
 | `LLMProvider` | its name is also the name of a platform provider the company uses: one would replace the other | `Conflict` | Harm |
 | `Integration` | another Integration of the company, earlier by name, connects the same vendor: a new one would displace the running one | `Conflict` | Harm |
 | `Integration` | Datadog's `routeTo.seatRef` names a Seat that does not exist, or a Human seat | `RefNotFound`, `HumanSeat` | Engine |

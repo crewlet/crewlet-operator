@@ -77,7 +77,7 @@ roles:
   handle: jane
   kind: human
   manages:
-  - Agent CTO
+  - cto
   name: Jane Founder
 timezone: Europe/Berlin
 token_budget:
@@ -93,7 +93,7 @@ units:
     goals:
     - p99 API latency under 200ms
     id: platform
-    lead: Ana (Platform Engineer)
+    lead: ana
     name: Platform Engineering
     project: PLAT
     purpose: Keep the platform boring.
@@ -158,7 +158,7 @@ units:
     space: PLAT
     type: team
   id: engineering
-  lead: Agent CTO
+  lead: cto
   name: Engineering
   purpose: Build and run the Nimbus platform.
   roles:
@@ -174,7 +174,7 @@ units:
       default:
       - anthropic
     manages:
-    - Platform Engineering
+    - platform
     name: Agent CTO
     placement:
       labels:

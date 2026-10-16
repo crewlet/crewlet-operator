@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -933,6 +934,12 @@ func (run *configRun) problemPart(problem *engine.Problem) *part {
 	if obj, ok := run.doc.Attribute(render.PathOf(problem.Segments)); ok {
 		return run.part(obj)
 	}
+	// The engine names the unit a problem is about by its name, the Unit's
+	// displayName or, unset, its metadata.name. Crewlet holds no name
+	// unique, so two Units may carry one, and the problem is then the Unit's
+	// only when one does: blaming the first would report another Unit's
+	// problem on it.
+	var named []*part
 	for _, p := range run.parts {
 		switch o := p.obj.(type) {
 		case *crewletaiv1alpha1.Seat:
@@ -940,10 +947,13 @@ func (run *configRun) problemPart(problem *engine.Problem) *part {
 				return p
 			}
 		case *crewletaiv1alpha1.Unit:
-			if problem.Unit != "" && (o.Name == problem.Unit || o.Spec.DisplayName == problem.Unit) {
-				return p
+			if problem.Unit != "" && cmp.Or(o.Spec.DisplayName, o.Name) == problem.Unit {
+				named = append(named, p)
 			}
 		}
+	}
+	if len(named) == 1 {
+		return named[0]
 	}
 	return nil
 }

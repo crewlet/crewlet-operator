@@ -40,7 +40,7 @@ var (
 	fnPlanTopology       = nameOf(planTopology)
 	fnCheckCapacity      = nameOf(checkCapacity)
 	fnOrg                = nameOf((*renderer).org)
-	fnConflict           = nameOf(conflict[*v1alpha1.Unit])
+	fnConflict           = nameOf(conflict[*v1alpha1.Seat])
 	fnUnit               = nameOf((*renderer).unit)
 	fnRole               = nameOf((*renderer).role)
 	fnScheduleTargets    = nameOf((*renderer).scheduleTargets)
@@ -120,7 +120,8 @@ var findings = []struct {
 	{site{fnOrg, HarmsBeyond, v1alpha1.ReasonCycle}, "a loop of Units: none of them can be placed"},
 	{site{fnOrg, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"a Seat with no unit: moved or left out, its unit's members and lead change and a running seat retires"},
-	{site{fnConflict, EngineRefuses, v1alpha1.ReasonConflict}, "two seats or units with one identity"},
+	{site{fnConflict, EngineRefuses, v1alpha1.ReasonConflict},
+		"two seats with one identity: a handle, an email address or a contact account"},
 	{site{fnAtlassianAccounts, Reported, v1alpha1.ReasonNotAnAccountID},
 		"the engine registers any value; only the person goes unrecognized on Jira and Confluence Cloud"},
 	{site{fnUnit, HarmsBeyond, v1alpha1.ReasonRefNotFound},
@@ -134,10 +135,11 @@ var findings = []struct {
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonRefNotFound},
 		"a schedule lives inside its unit's entry, which does not exist"},
 	{site{fnManages, HarmsBeyond, v1alpha1.ReasonRefNotFound},
-		"written by name, the authority goes to whichever unit takes the name later"},
-	{site{fnManages, HarmsBeyond, v1alpha1.ReasonConflict}, "the engine would read the Unit as the Seat, and grant that"},
+		"written by key, the authority goes to whichever unit takes the key later"},
+	{site{fnManages, HarmsBeyond, v1alpha1.ReasonConflict},
+		"the unit's key is a seat's handle: the engine would read the Unit as the Seat, and grant that"},
 	{site{fnManages, HarmsBeyond, v1alpha1.ReasonRefNotFound},
-		"written by name, the authority goes to whichever seat takes the name later"},
+		"written by handle, the authority goes to whichever seat takes the handle later"},
 	{site{fnSeatPodProviders, HarmsBeyond, v1alpha1.ReasonCLIAuthNotPortable},
 		"every seat pod refreshes the one login on its own and logs every seat on it out"},
 }
@@ -333,6 +335,9 @@ func engineCases() []engineCase {
 	const (
 		missing = "missing"
 		janeTwo = "Jane Two"
+		// sharedEmail is the CTO's address (cto@nimbus.example) as
+		// another seat might spell it.
+		sharedEmail = "CTO+ops@nimbus.example"
 	)
 	role := func(t *testing.T, doc map[string]any, handle string) map[string]any {
 		t.Helper()
@@ -434,22 +439,16 @@ func engineCases() []engineCase {
 			at:      "handle",
 		},
 		{
-			name: "two seats take one name", site: site{fnConflict, EngineRefuses, v1alpha1.ReasonConflict},
+			// Compared as Crewlet compares it (iam.NormalizeEmail):
+			// lower-cased, with the plus tag dropped.
+			name: "two seats take one email", site: site{fnConflict, EngineRefuses, v1alpha1.ReasonConflict},
 			input:   sampleCompany,
-			mutate:  twin(func(s *v1alpha1.Seat) { s.Spec.DisplayName = "Jane Founder" }),
-			refused: "Seat/jane-2 spec.displayName",
-			write:   another(func(r map[string]any) { r["handle"] = seatJane + "-2" }),
-			at:      keyName,
-		},
-		{
-			name: "two units answer to one name", site: site{fnConflict, EngineRefuses, v1alpha1.ReasonConflict},
-			input:   sampleCompany,
-			mutate:  func(in *Input) { unit(in, unitPlatform).Spec.DisplayName = "Engineering" },
-			refused: "Unit/platform spec.displayName",
-			write: func(t *testing.T, doc map[string]any) {
-				unitIn(t, doc, unitPlatform)[keyName] = "Engineering"
-			},
-			at: "name",
+			mutate:  twin(func(s *v1alpha1.Seat) { s.Spec.Email = sharedEmail }),
+			refused: "Seat/jane-2 spec.email",
+			write: another(func(r map[string]any) {
+				r["handle"], r[keyName], r["email"] = seatJane+"-2", janeTwo, sharedEmail
+			}),
+			at: "email", says: "seats declare the email",
 		},
 		{
 			name: "datadog routes alerts to no seat", site: site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonRefNotFound},
@@ -773,35 +772,6 @@ func roleIn(doc map[string]any, handle string) map[string]any {
 			}
 		}
 	}
-	return nil
-}
-
-// unitIn is the entry of the unit id in a decoded document.
-func unitIn(t *testing.T, doc map[string]any, id string) map[string]any {
-	t.Helper()
-	var find func(map[string]any) map[string]any
-	find = func(node map[string]any) map[string]any {
-		for _, key := range []string{keyUnits, keyChildren} {
-			units, _ := node[key].([]any)
-			for _, u := range units {
-				unit, ok := u.(map[string]any)
-				if !ok {
-					continue
-				}
-				if unit["id"] == id {
-					return unit
-				}
-				if found := find(unit); found != nil {
-					return found
-				}
-			}
-		}
-		return nil
-	}
-	if found := find(doc); found != nil {
-		return found
-	}
-	t.Fatalf("the document has no unit %s", id)
 	return nil
 }
 

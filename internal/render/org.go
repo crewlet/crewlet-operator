@@ -59,7 +59,6 @@ func (r *renderer) org() ([]roleDoc, []unitDoc) {
 
 	r.duplicateSeats()
 	r.atlassianAccounts()
-	r.duplicateUnits()
 	r.scheduleTargets()
 	t := tree{children: children, members: members}
 	return r.roles(Path{keyRoles}, rootSeats), r.unitList(Path{keyUnits}, roots, t)
@@ -67,8 +66,10 @@ func (r *renderer) org() ([]roleDoc, []unitDoc) {
 
 // duplicateSeats refuses Seats that would share an identity in the engine,
 // on every Seat involved, as Crewlet's own validation would refuse the
-// document: a handle, a name, or a contact account two Seats claim. Each is
-// compared as Crewlet compares it.
+// document: a handle, an email address, or a contact account two Seats
+// claim. Each is compared as Crewlet compares it. A display name is not an
+// identity: Crewlet holds none unique, and names a seat by its handle
+// wherever one seat refers to another, so two Seats may share one.
 func (r *renderer) duplicateSeats() {
 	seats := slices.SortedFunc(maps.Values(r.seats), byName)
 	for _, g := range groupBy(seats, SeatHandle) {
@@ -77,15 +78,15 @@ func (r *renderer) duplicateSeats() {
 				"(its inbox, its agent id, its accounts), so give each Seat its own spec.handle", g.key, others)
 		})
 	}
-	for _, g := range groupBy(seats, func(s *v1alpha1.Seat) string { return strings.TrimSpace(seatName(s)) }) {
-		// Seats that share a handle and set no displayName share their
-		// name because of it, which the handle's refusal already says.
-		if sameHandle(g.members) {
-			continue
-		}
-		conflict(&r.errs, KindSeat, g, "spec.displayName", func(others string) string {
-			return fmt.Sprintf("shares the name %q with %s. A unit's lead and a manages entry name a seat by its name "+
-				"and reach only the first of that name, so give each Seat its own spec.displayName", g.key, others)
+	// Crewlet's party registry keys a seat by its address in the form
+	// iam.NormalizeEmail gives it, and the first seat to claim one wins, so
+	// mail for one person would reach another; Crewlet refuses two seats
+	// declaring one address in that form (validateSeatEmails).
+	for _, g := range groupBy(seats, func(s *v1alpha1.Seat) string { return normalizeEmail(s.Spec.Email) }) {
+		conflict(&r.errs, KindSeat, g, "spec.email", func(others string) string {
+			return fmt.Sprintf("declares the email %q, as %s does (compared lower-cased, with any plus tag dropped). "+
+				"The engine finds a seat by its address and only the first of these would be found, so give each Seat "+
+				"its own spec.email", g.key, others)
 		})
 	}
 	for _, a := range contactAccounts {
@@ -95,44 +96,6 @@ func (r *renderer) duplicateSeats() {
 					"that claim an account, so give each Seat its own", g.key, others)
 			})
 		}
-	}
-}
-
-// duplicateUnits refuses Units that would answer to one key in the engine,
-// on every Unit involved. A Unit answers to its name (spec.displayName, or
-// metadata.name) and to its id (metadata.name), and Crewlet compares every
-// key without case, a name against another Unit's id as well: Unit
-// platform-team named "Platform" and Unit platform collide.
-func (r *renderer) duplicateUnits() {
-	type claim struct {
-		key  string
-		unit *v1alpha1.Unit
-	}
-	var claims []claim
-	for _, u := range slices.SortedFunc(maps.Values(r.units), byName) {
-		claims = append(claims, claim{strings.ToLower(strings.TrimSpace(unitName(u))), u})
-		if id := strings.ToLower(u.Name); id != claims[len(claims)-1].key {
-			claims = append(claims, claim{id, u})
-		}
-	}
-	byKey := map[string][]*v1alpha1.Unit{}
-	var keys []string
-	for _, c := range claims {
-		if _, seen := byKey[c.key]; !seen {
-			keys = append(keys, c.key)
-		}
-		byKey[c.key] = append(byKey[c.key], c.unit)
-	}
-	for _, key := range keys {
-		g := group[*v1alpha1.Unit]{key: key, members: byKey[key]}
-		if len(g.members) < 2 {
-			continue
-		}
-		conflict(&r.errs, KindUnit, g, "spec.displayName", func(others string) string {
-			return fmt.Sprintf("answers to %q, as %s does. A Unit answers to its displayName and its name, "+
-				"compared without case, and work filed under the key reaches only one of them, so give each Unit "+
-				"a displayName of its own", key, others)
-		})
 	}
 }
 
@@ -187,13 +150,18 @@ func byName[T interface{ GetName() string }](a, b T) int {
 	return strings.Compare(a.GetName(), b.GetName())
 }
 
-func sameHandle(seats []*v1alpha1.Seat) bool {
-	for _, s := range seats[1:] {
-		if SeatHandle(s) != SeatHandle(seats[0]) {
-			return false
-		}
+// normalizeEmail is an address in the form Crewlet compares it in
+// (iam.NormalizeEmail): trimmed, lower-cased, and with the local part cut at
+// its first '+', so ada+ops@example.com and Ada@example.com are one address.
+// An empty address is no claim.
+func normalizeEmail(email string) string {
+	email = strings.ToLower(strings.TrimSpace(email))
+	local, domain, ok := strings.Cut(email, "@")
+	if !ok {
+		return email
 	}
-	return true
+	local, _, _ = strings.Cut(local, "+")
+	return local + "@" + domain
 }
 
 // tree is the org chart indexed by parent: each Unit's child Units and its
@@ -247,9 +215,9 @@ func (r *renderer) unit(at Path, u *v1alpha1.Unit, t tree) unitDoc {
 	}
 	if lead := spec.LeadRef.Name; lead != "" {
 		if s := r.seats[lead]; s != nil {
-			// Crewlet names a unit's lead by the seat's name, not its
-			// handle.
-			doc.Lead = seatName(s)
+			// Crewlet names a unit's lead by the seat's handle, and
+			// refuses anything not shaped like one.
+			doc.Lead = SeatHandle(s)
 		} else {
 			r.errs.notFound(HarmsBeyond, KindUnit, u.Name, "spec.leadRef.name", fmt.Sprintf(
 				"names Seat %s as the lead, which does not exist in namespace %s", lead, r.namespace()))
@@ -479,9 +447,10 @@ func (r *renderer) chain(s *v1alpha1.Seat, phase string, refs []v1alpha1.LLMProv
 	return out
 }
 
-// manages renders a Seat's manages entries. Crewlet names both seats and
-// units there by their names, and reads a name that is both a seat's and a
-// unit's as the seat; a reference to such a Unit is refused rather than
+// manages renders a Seat's manages entries. Crewlet names a seat there by its
+// handle and a unit by its key, which is the Unit's metadata.name, and reads
+// a token that is both a seat's handle and a unit's key as the seat
+// (org.managesIndex); a reference to such a Unit is refused rather than
 // rendered as a reference to the Seat.
 func (r *renderer) manages(s *v1alpha1.Seat) []string {
 	var out []string
@@ -494,13 +463,14 @@ func (r *renderer) manages(s *v1alpha1.Seat) []string {
 					"names Unit %s, which does not exist in namespace %s", ref.Name, r.namespace()))
 				continue
 			}
-			if other := r.seatNamed(unitName(u)); other != nil {
+			if other := r.seatWithHandle(u.Name); other != nil {
 				r.errs.add(HarmsBeyond, KindSeat, s.Name, field, v1alpha1.ReasonConflict, fmt.Sprintf(
-					"Unit %s is named %q, as Seat %s is, and Crewlet would read this as managing the seat: give the Unit or the Seat another displayName",
-					u.Name, unitName(u), other.Name))
+					"Unit %s's key %q is also Seat %s's handle, which Crewlet reads as the seat: this would manage the "+
+						"seat rather than the unit. Give the Seat another spec.handle, or the Unit another name",
+					u.Name, u.Name, other.Name))
 				continue
 			}
-			out = append(out, unitName(u))
+			out = append(out, u.Name)
 			continue
 		}
 		// An unset kind is the API's default, Seat.
@@ -509,17 +479,17 @@ func (r *renderer) manages(s *v1alpha1.Seat) []string {
 			r.errs.notFound(HarmsBeyond, KindSeat, s.Name, field, r.noSeat(ref.Name))
 			continue
 		}
-		out = append(out, seatName(managed))
+		out = append(out, SeatHandle(managed))
 	}
 	return out
 }
 
-// seatNamed returns a Seat whose rendered name is name, the one that sorts
+// seatWithHandle returns a Seat whose handle is handle, the one that sorts
 // first by metadata.name so the answer does not depend on map order.
-func (r *renderer) seatNamed(name string) *v1alpha1.Seat {
+func (r *renderer) seatWithHandle(handle string) *v1alpha1.Seat {
 	var found *v1alpha1.Seat
 	for _, s := range r.seats {
-		if seatName(s) == name && (found == nil || s.Name < found.Name) {
+		if SeatHandle(s) == handle && (found == nil || s.Name < found.Name) {
 			found = s
 		}
 	}

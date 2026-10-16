@@ -18,9 +18,6 @@ import (
 // objects the API server cannot check, each broken on its own in an
 // otherwise valid company. Each refusal must name the object and the field
 // that hold the reference, with the reason the controller reports it with.
-// fieldDisplayName is where a Seat's or Unit's name is set.
-const fieldDisplayName = "spec.displayName"
-
 func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 	type refusal struct{ kind, name, field, reason string }
 	const (
@@ -81,11 +78,11 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			want:   []refusal{{KindSeat, seatCTO, fieldManages, v1alpha1.ReasonRefNotFound}},
 		},
 		{
-			name: "a managed unit is named like a seat",
-			mutate: func(in *Input) {
-				unit(in, unitPlatform).Spec.DisplayName = "Agent CTO"
-			},
-			want: []refusal{{KindSeat, seatCTO, fieldManages, v1alpha1.ReasonConflict}},
+			// Crewlet reads a token that is both a seat's handle and a
+			// unit's key as the seat.
+			name:   "a managed unit's key is a seat's handle",
+			mutate: func(in *Input) { seat(in, seatAna).Spec.Handle = unitPlatform },
+			want:   []refusal{{KindSeat, seatCTO, fieldManages, v1alpha1.ReasonConflict}},
 		},
 		{
 			name: "a seat's tool server is missing",
@@ -261,13 +258,16 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			},
 		},
 		{
-			name:   "two seats carry one name",
-			mutate: func(in *Input) { seat(in, seatAna).Spec.DisplayName = "Agent CTO" },
+			// Crewlet compares addresses lower-cased, with the plus tag
+			// dropped (iam.NormalizeEmail).
+			name:   "two seats declare one email",
+			mutate: func(in *Input) { seat(in, seatAna).Spec.Email = "CTO+ops@nimbus.example" },
 			want: []refusal{
-				{KindSeat, seatAna, fieldDisplayName, v1alpha1.ReasonConflict},
-				{KindSeat, seatCTO, fieldDisplayName, v1alpha1.ReasonConflict},
+				{KindSeat, seatAna, "spec.email", v1alpha1.ReasonConflict},
+				{KindSeat, seatCTO, "spec.email", v1alpha1.ReasonConflict},
 			},
 		},
+
 		{
 			name: "two seats claim one Slack account",
 			mutate: func(in *Input) {
@@ -321,22 +321,6 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 				{KindSeat, seatJane, "spec.contact.gitlabUsername", v1alpha1.ReasonConflict},
 			},
 		},
-		{
-			name:   "two units carry one name, in another case",
-			mutate: func(in *Input) { unit(in, unitPlatform).Spec.DisplayName = "ENGINEERING" },
-			want: []refusal{
-				{KindUnit, unitEngineering, fieldDisplayName, v1alpha1.ReasonConflict},
-				{KindUnit, unitPlatform, fieldDisplayName, v1alpha1.ReasonConflict},
-			},
-		},
-		{
-			name:   "a unit is named as another unit's id",
-			mutate: func(in *Input) { unit(in, unitEngineering).Spec.DisplayName = "Platform" },
-			want: []refusal{
-				{KindUnit, unitEngineering, fieldDisplayName, v1alpha1.ReasonConflict},
-				{KindUnit, unitPlatform, fieldDisplayName, v1alpha1.ReasonConflict},
-			},
-		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			in := companyCaseNamed(t, sampleCompany).input(t)
@@ -360,6 +344,19 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 				t.Fatalf("errors.AsType finds no *RefError in %v", err)
 			}
 		})
+	}
+}
+
+// TestCompanyLetsSeatsAndUnitsShareADisplayName: a display name is for
+// reading. Crewlet holds none unique, and names a seat by its handle and a
+// unit by its key wherever one refers to another, so a refusal of a shared
+// display name would hold back a document the engine runs.
+func TestCompanyLetsSeatsAndUnitsShareADisplayName(t *testing.T) {
+	in := companyCaseNamed(t, sampleCompany).input(t)
+	seat(in, seatAna).Spec.DisplayName = "Agent CTO"
+	unit(in, unitPlatform).Spec.DisplayName = "Engineering"
+	if _, err := Company(in); err != nil {
+		t.Fatalf("Company() refuses seats and units that share a display name: %v", err)
 	}
 }
 

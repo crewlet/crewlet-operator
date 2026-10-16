@@ -96,11 +96,9 @@ spec:
                   displayName is the unit's name as people read it, in prompts and on
                   boards. Unset is the Unit's metadata.name. The metadata.name itself is
                   the unit's stable id, which survives a rename. Crewlet's `name`; the
-                  metadata.name is Crewlet's `id`. Crewlet refuses two units that
-                  answer to one key, and a unit answers to its name and to its id,
-                  compared without case: a Unit whose displayName (or, unset,
-                  metadata.name) is another Unit's displayName or metadata.name, in any
-                  case, is reported as a Conflict.
+                  metadata.name is Crewlet's `id`, the key a seat's manages entry names
+                  the unit by. The displayName is for reading only: nothing refers to a
+                  unit by it, so two Units may share one.
                 maxLength: 256
                 minLength: 1
                 type: string

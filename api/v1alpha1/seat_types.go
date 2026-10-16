@@ -433,16 +433,18 @@ type SeatSpec struct {
 	Kind SeatKind `json:"kind,omitempty"`
 
 	// displayName is the seat's name as people read it, such as "Ana
-	// (Platform Engineer)". Unset is the handle. Crewlet's `name`. Crewlet
-	// refuses two seats with one name, so a Seat whose displayName (or, unset,
-	// handle) another Seat of the company already uses is reported as a
-	// Conflict.
+	// (Platform Engineer)". Unset is the handle. Crewlet's `name`. It is for
+	// reading only: one seat names another, a unit its lead and a seat what
+	// it manages, by the handle, so two Seats may share a displayName.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
 	DisplayName string `json:"displayName,omitempty"`
 
-	// email is the seat's email address. Crewlet's `email`.
+	// email is the seat's email address. Crewlet's `email`. Each seat has its
+	// own: the engine finds a seat by its address, compared lower-cased and
+	// with any plus tag dropped, so a Seat whose address another Seat's
+	// matches that way is reported as a Conflict.
 	// +optional
 	// +kubebuilder:validation:MinLength=3
 	// +kubebuilder:validation:MaxLength=254
@@ -487,7 +489,10 @@ type SeatSpec struct {
 	BehavioralGuidelines []string `json:"behavioralGuidelines,omitempty"`
 
 	// manages names the seats and units this seat manages; a unit stands
-	// for every seat in it and below it. Crewlet's `manages`.
+	// for every seat in it and below it. Crewlet's `manages`, which names a
+	// Seat by its handle and a Unit by its metadata.name, the Unit's key; a
+	// key that is also a seat's handle reads as the seat, so a Unit named so
+	// is refused here as a Conflict.
 	// +optional
 	// +listType=map
 	// +listMapKey=kind
@@ -717,7 +722,7 @@ type SeatIntegrationsStatus struct {
 // +kubebuilder:validation:MinProperties=1
 type SeatStatus struct {
 	// conditions are Accepted (the Company exists, and no other Seat has the
-	// handle, the name or a contact account; Conflict names the other),
+	// handle, the email or a contact account; Conflict names the other),
 	// ResolvedRefs (the unit, the providers, the tool servers and every
 	// Secret key exist), Applied (the seat is in the revision the engine
 	// runs) and, on an Agent seat, Ready (an engine node holds the seat's

@@ -60,7 +60,7 @@ roles:
   handle: wile
   kind: human
   manages:
-  - Research and Development
+  - rnd
   name: Wile E.
 skill_variables:
   support_url: https://support.acme.example
@@ -139,7 +139,7 @@ units:
   id: rnd
   knowledge:
   - The anvil handbook
-  lead: VP of R&D
+  lead: vp
   name: Research and Development
   project: RND
   purpose: Invent the next anvil.
