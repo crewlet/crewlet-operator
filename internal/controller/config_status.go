@@ -184,6 +184,8 @@ func (run *configRun) decideApplied(p *part) {
 			setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, p.unrunnableReason, sentences(p.unrunnable))
 		case len(p.invalid) > 0:
 			setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, crewletaiv1alpha1.ReasonInvalid, sentences(p.invalid))
+		case p.held != "":
+			setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, crewletaiv1alpha1.ReasonSeatHeld, p.held)
 		case p.inRevision():
 			// This generation runs already; only what changed elsewhere
 			// is held back.

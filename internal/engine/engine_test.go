@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -432,4 +433,52 @@ func TestEngineRefusesAManagedDocumentToEveryOtherToken(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// founderCompany is MinimalCompany with a human seat, founder, which a test
+// puts a person on.
+const founderCompany = enginetest.MinimalCompany + `  - name: Founder
+    handle: founder
+    kind: human
+`
+
+// TestEngineRefusesToTakeAHeldSeat pins what the operator reports as
+// SeatHeld: once a person holds a human seat, a document that drops the seat,
+// or makes it an agent's, is refused, a dry run included, as a
+// *SeatHeldError that names the seat and a person on it, and the engine keeps
+// the revision it runs.
+func TestEngineRefusesToTakeAHeldSeat(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	e := enginetest.Start(t, enginetest.WithCompany([]byte(founderCompany)))
+	client := e.Client()
+	eventually(t, "Ready() on the seeded company", func() error { return client.Ready(ctx) })
+	seeded, err := client.ActiveConfig(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.AddPerson(t, "founder@acme.example", seatFounder)
+
+	agent := strings.Replace(founderCompany, "    kind: human\n", "    kind: agent\n    goal: \"Found the company\"\n", 1)
+	for _, c := range []struct{ name, document string }{
+		{"a document without the seat", enginetest.MinimalCompany},
+		{"a document that makes it an agent's", agent},
+	} {
+		for _, dryRun := range []bool{true, false} {
+			_, err := client.ApplyConfig(ctx, engine.ApplyRequest{
+				Document: []byte(c.document), Summary: "enginetest: " + c.name, DryRun: dryRun, IfMatch: seeded.RevisionID,
+			})
+			var held *engine.SeatHeldError
+			if !errors.As(err, &held) {
+				t.Fatalf("%s (dry run %v) = %v, want a *SeatHeldError", c.name, dryRun, err)
+			}
+			want := map[string]engine.SeatHolder{seatFounder: {Kind: engine.HolderPerson, Stage: stageActive}}
+			if !maps.Equal(held.Held, want) {
+				t.Fatalf("%s (dry run %v) names %v as held, want %v", c.name, dryRun, held.Held, want)
+			}
+		}
+	}
+	if active, err := client.ActiveConfig(ctx); err != nil || active.RevisionID != seeded.RevisionID {
+		t.Fatalf("ActiveConfig() = %+v, %v; want the seeded revision %s, unchanged", active, err, seeded.RevisionID)
+	}
 }

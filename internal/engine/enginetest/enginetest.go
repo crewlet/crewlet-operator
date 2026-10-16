@@ -25,8 +25,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -128,6 +130,76 @@ type Engine struct {
 // operator token.
 func (e *Engine) Client() *engine.Client {
 	return engine.New(e.URL, e.OperatorToken)
+}
+
+// AddPerson puts a person with the address email on the human seat seat of
+// the company the engine runs, as an admin of the company does in its
+// dashboard or with `crewlet iam create`: POST /iam/people with the operator
+// token, which this engine grants admin. The engine refuses it until it runs
+// a company that has seat as a human seat nobody holds, so a test applies
+// one and waits for Ready first. The person holds no grant: what a test of a
+// held seat needs is somebody on it, not somebody who can do anything.
+//
+// It returns the person's id once the engine's identity directory answers
+// for them, which is when a write that takes the seat away is refused. The
+// engine's answer to the create also carries the person's first password
+// link, a credential, which is neither kept nor printed.
+func (e *Engine) AddPerson(t T, email, seat string) string {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{"kind": "person", "email": email, "seat": seat, "grants": []string{}})
+	if err != nil {
+		t.Fatalf("encoding a person: %v", err)
+	}
+	status, answer, err := e.call(http.MethodPost, "/iam/people", body)
+	if err != nil {
+		t.Fatalf("POST /iam/people: %v", err)
+	}
+	// 202 is a create the engine has made durable and not yet applied
+	// here, which the read below waits out. Any other answer is a
+	// refusal, which carries no credential and is printed whole.
+	if status != http.StatusCreated && status != http.StatusAccepted {
+		t.Fatalf("POST /iam/people answered %d: %s", status, answer)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(answer, &created); err != nil || created.ID == "" {
+		t.Fatalf("POST /iam/people answered %d with no person id", status)
+	}
+	deadline := time.Now().Add(startTimeout)
+	for {
+		status, answer, err := e.call(http.MethodGet, "/iam/people/"+created.ID, nil)
+		if err == nil && status == http.StatusOK {
+			return created.ID
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the engine's directory does not answer for person %s after %s: %d %s %v",
+				created.ID, startTimeout, status, answer, err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// call sends one request to the engine with the operator token and returns
+// its status and body.
+func (e *Engine) call(method, path string, body []byte) (int, []byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), engine.DefaultTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, method, e.URL+path, bytes.NewReader(body))
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+e.OperatorToken)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	answer, err := io.ReadAll(resp.Body)
+	return resp.StatusCode, answer, err
 }
 
 // Option configures Start.

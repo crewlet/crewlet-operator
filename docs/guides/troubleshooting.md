@@ -32,7 +32,7 @@ flowchart TD
     EX -->|False| CL
     EX -->|True| CA{"<b>ConfigApplied</b>"}
     CA -->|EngineUnavailable| UN["The operator cannot reach the engine"]
-    CA -->|WriteRefused| WR["The engine refuses a change<br/>to the document"]
+    CA -->|"WriteRefused, NotGranted, SeatHeld"| WR["The engine refuses a change<br/>to the document"]
     CA -->|"Applying, ApplyFailed"| AF["The engine did not apply a revision"]
     CA -->|"any other reason"| NA["Changes are not applied"]
     SYM -->|"a Seat's Ready=False Unplaced"| NW["A seat runs nowhere"]
@@ -106,8 +106,10 @@ with your last change yet.
 | | False | `Drifted` | Under `Observe`, the engine runs another document; the message names the places that differ. |
 | | False | `Applying` | The operator activated the revision and the engine has not applied it yet; it runs the previous one meanwhile. Usually gone within seconds; it turns into `ApplyFailed` when the engine fails the revision or has not applied it 72 seconds after the write. |
 | | False | `ApplyFailed` | The engine did not apply the revision, and keeps running the one it applied last. The message carries the engine's status, its posture (`isolated` on a single node, `shed` or `stuck` beside peers that applied it) and its own account of the failure; see [The engine did not apply a revision](#the-engine-did-not-apply-a-revision). |
-| | False | `EngineUnavailable` | The operator cannot reach the engine or is refused by it. Retried every ten seconds; see [The operator cannot reach the engine](#the-operator-cannot-reach-the-engine). |
+| | False | `EngineUnavailable` | The operator cannot reach the engine, the engine does not know its token, or the engine asked to be asked again later (`503`). Retried every ten seconds, or sooner when the engine says when; see [The operator cannot reach the engine](#the-operator-cannot-reach-the-engine). |
 | | False | `WriteRefused` | The engine refuses the operator's own token a change to the document (`403 config_managed`): its `api.auth.company_writers` names other tokens. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
+| | False | `NotGranted` | The engine knows the operator's token and will not let it make a request the operator needs (`403`): the token lacks the grant the message names, or the engine's identity directory binds it to a seat the company no longer has. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
+| | False | `SeatHeld` | The document takes a human seat out of the company, or makes it an agent's, while a person, a service account or an open invitation holds it in the engine (`409 seat_held`). The message names each seat and what holds it; the engine keeps running the revision it runs. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
 
 ### EngineClass
 
@@ -148,6 +150,7 @@ conditions. `kubectl get engineclasses` shows it.
 | | False | `PlacementPending` | The Seat moves to another pool, whose StatefulSet has no ready pod yet: it keeps running where the revision the engine runs pins it, and is moved once a pod of its new pool is ready. A pool at `replicas: 0` never gets one, and neither does a pool the Company does not declare (`ResolvedRefs=False`, `PoolNotFound`). |
 | | False | `CLIAuthNotPortable` | A Seat is placed in a seat pool, and runs on a `CLIAgent` provider signed in with a credential bundle, which every seat pod would restore and refresh on its own. Sign the CLI in with `tokenSecretRef` (Claude Code), `auth.mode: APIKey` or, for Hermes, Pi or OpenCode, its model provider's key in `cli.env`, in place of the bundle ([Signing in](cli-agents.md#signing-in)), or place the seat in `data`. |
 | | False | `CodingAgentMismatch` | A Seat's code work (`spec.sandbox`) runs on a `CLIAgent` provider driving another CLI than the seat's coding agent (`spec.sandbox.codingAgent`, else the Company's `spec.sandbox.defaultCodingAgent`, else `ClaudeCode`). The provider is the head of `spec.llm.sandbox`, else of `spec.llm.default`, else of the Company's order, and the message names the field. Its model is written for its own CLI and its sign-in is that CLI's, so Crewlet refuses the pairing on every write, and the Seat reports it on `CodeWorkRunnable` too. Put a provider of type `Anthropic` (or, for `OpenCode`, `OpenAI` or `OpenAICompatible`) or a `CLIAgent` provider of the coding agent's CLI first in `spec.llm.sandbox`, or set `spec.sandbox.codingAgent` to the provider's CLI where it is `ClaudeCode` or `OpenCode` ([Code work](cli-agents.md#code-work)). |
+| | False | `SeatHeld` | A Human Seat turned Agent while a person, a service account or an open invitation holds the seat in the engine's identity directory: the engine refuses the document until an admin of the company frees the seat, and the Company's `ConfigApplied` says how ([The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document)). |
 | | False | `Blocked` | It is fine, and another object keeps the document from being applied (a document is applied whole). Fix the object the Company's `ConfigApplied` names. A part whose current generation already runs keeps `True` meanwhile. |
 | | False | `Applying` | Its current generation is in a revision the engine is applying. |
 | | False | `ApplyFailed` | Its current generation is in a revision the engine did not apply; the Company's `ConfigApplied` says why. |
@@ -330,6 +333,36 @@ restarted since the Secret changed, or an image whose entrypoint reads another
 kubectl get secret acme-bootstrap -n acme -o jsonpath='{.data.crewlet\.yaml}' | base64 -d | grep -A2 company_writers
 kubectl rollout restart statefulset/acme-data -n acme
 ```
+
+`ConfigApplied=False NotGranted` is the engine refusing the operator's token
+a request for want of authority rather than for the document's sake. The
+message says which of two things it is:
+
+- The token lacks a grant, which the message names (`admin`). The operator
+  renders its token with `admin` in `<company>-bootstrap`, so this too is an
+  engine that runs a `crewlet.yaml` the operator did not render: check the
+  token's `grants` there and restart the data pod as above.
+- The engine's identity directory binds the token, which it knows as
+  `token:operator`, to a seat the company no longer has, so every request
+  made with it is refused (`403 seat_unavailable`). Someone made the token a
+  service account on a seat; an admin of the company unbinds it in the
+  engine's dashboard or with `crewlet iam unbind`. The operator's token needs
+  no seat.
+
+`ConfigApplied=False SeatHeld` is a valid document the engine will not
+apply yet: it removes a human seat, or turns a Human Seat into an Agent one,
+while something in the engine's identity directory holds that seat. A person
+holds a human seat for as long as they are in the company, an open invitation
+holds the seat it invites to, and a service account may be bound to one. The
+engine keeps running the revision it runs, and the operator tries again every
+ten seconds. The message names each seat and what kind of thing holds it,
+never who; a Seat that still exists and is held reports `Applied=False
+SeatHeld` too. An admin of the company frees each seat first, in the engine's
+dashboard or with [`crewlet iam`](https://github.com/crewlet/crewlet/blob/main/docs/concepts/identity-and-access.md):
+moves the person to another human seat or removes them, unbinds the service
+account, or cancels the invitation. `crewlet iam seats` lists what holds each
+seat. The operator does neither for you: whoever holds a seat is a person, or
+something a person set up. Or keep the seat: restore its Seat as a Human seat.
 
 ## The engine did not apply a revision
 

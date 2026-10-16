@@ -56,6 +56,11 @@ type part struct {
 	unrunnableReason string
 	// invalid are the engine's refusals of its part of the document.
 	invalid []string
+	// held says why the engine refuses the document for a Seat whose human
+	// seat a person, a service account or an invitation holds in the
+	// engine's identity directory, which the document makes an agent's;
+	// empty otherwise.
+	held string
 	// drifted are the places its part of the document differs from what
 	// the engine runs (Observe).
 	drifted []string
@@ -173,7 +178,7 @@ func statusOf(obj client.Object) any {
 // applied, as opposed to being blocked by another one.
 func (p *part) hasProblem() bool {
 	return len(p.conflicts) > 0 || len(p.unresolved) > 0 || len(p.unplaceable) > 0 || len(p.unrunnable) > 0 ||
-		len(p.invalid) > 0
+		len(p.invalid) > 0 || p.held != ""
 }
 
 // inRevision reports whether the part's current generation is in the

@@ -519,10 +519,10 @@ const (
 
 	// ReasonEngineUnavailable is ConfigApplied=False while the operator
 	// cannot reach the company's engine or its token: the data pod has not
-	// started, does not answer, or refuses the operator's token. The message
-	// carries what failed. It is also Ready=Unknown on an agent Seat when the
-	// engine's fleet could not be read: whether a node holds the seat is not
-	// known then.
+	// started, does not answer, asks to be asked again later, or does not
+	// know the operator's token. The message carries what failed. It is
+	// also Ready=Unknown on an agent Seat when the engine's fleet could not
+	// be read: whether a node holds the seat is not known then.
 	ReasonEngineUnavailable = "EngineUnavailable"
 
 	// ReasonWriteRefused is ConfigApplied=False when the engine refuses the
@@ -532,6 +532,26 @@ const (
 	// under Enforce, so the engine runs a crewlet.yaml the operator did not
 	// write. The message names the writers the engine reported.
 	ReasonWriteRefused = "WriteRefused"
+
+	// ReasonNotGranted is ConfigApplied=False when the engine knows the
+	// operator's token and will not let it make a request the operator
+	// needs: the token holds none of the grants the request needs, or the
+	// engine's identity directory binds it to a seat the company no longer
+	// has. The operator renders its token with admin, which every request it
+	// makes needs, so the first is an engine running a crewlet.yaml the
+	// operator did not write; the second is undone by an admin of the
+	// company. The message names the grants the engine asked for, or the
+	// binding.
+	ReasonNotGranted = "NotGranted"
+
+	// ReasonSeatHeld is ConfigApplied=False when the engine refuses the
+	// document because it takes a human seat out of the company, or makes
+	// it an agent's, while a person, a service account or an open
+	// invitation in the engine's identity directory holds it. The message
+	// names each such seat and what holds it, never who; an admin of the
+	// company frees the seat first. It is also Applied=False on a Seat that
+	// still exists and is held: one whose kind turned from Human to Agent.
+	ReasonSeatHeld = "SeatHeld"
 
 	// ReasonInvalid is Applied=False (or ConfigApplied=False) when the
 	// engine's dry run refuses the rendered document; the message carries

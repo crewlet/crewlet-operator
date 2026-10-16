@@ -1,17 +1,21 @@
 package engine
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // The sentinels a caller branches on. Each is matched with errors.Is against
-// what a Client method returns; the *APIError, *ValidationError or
-// *NotReadyError behind it carries the engine's own words.
+// what a Client method returns; the *APIError, *ValidationError,
+// *SeatHeldError or *NotReadyError behind it carries the engine's own words.
 var (
 	// ErrUnauthorized is a 401: the engine accepts none of the bearer tokens
 	// it was sent, or none at all. The token is wrong, revoked, or missing
@@ -43,6 +47,23 @@ var (
 	// the writers in ManagedBy.
 	ErrConfigManaged = errors.New("the engine's company document is managed by another token")
 
+	// ErrForbidden is a credential the engine knows and will not let do this
+	// (403 unauthorized, token_refused or seat_unavailable): it holds none of
+	// the grants the request needs, the request needs a person signed in
+	// rather than a token, or the identity directory binds the token to a
+	// seat the company no longer has. The *APIError behind it carries the
+	// rule's Reason and the Grants that would have admitted it. Unlike
+	// ErrUnauthorized the engine accepted the token, so a retry with it
+	// changes nothing.
+	ErrForbidden = errors.New("the engine does not let the API token do this")
+
+	// ErrUnavailable is a request the engine could not answer now and asks
+	// to be sent again (503): it could not decide who is asking, or could
+	// not read what the request needs, such as who holds a seat a write
+	// takes away. The *APIError behind it carries RetryAfter when the
+	// engine said when.
+	ErrUnavailable = errors.New("the engine could not answer now")
+
 	// ErrNotReady is an engine that is up but should not be sent work: it
 	// is draining for a shutdown, has no company yet, or its posture is shed
 	// or stuck. The *NotReadyError behind it names which.
@@ -59,7 +80,17 @@ const (
 	codeNoActiveRevision  = "no_active_revision"
 	codeDraining          = "draining"
 	codeConfigManaged     = "config_managed"
+	codeSeatHeld          = "seat_held"
 )
+
+// codesForbidden are the refusals of a credential the engine accepted: the
+// authority table's own (unauthorized for a grant the token lacks,
+// token_refused for a verb that needs a person present) and the request
+// path's for a token the identity directory binds to a seat the company no
+// longer has (seat_unavailable). config_managed is a 403 too, and is not
+// here: it refuses a write onto the document whatever the token holds, and
+// has its own sentinel.
+var codesForbidden = []string{"unauthorized", "token_refused", "seat_unavailable"}
 
 // codesWithProblems are the refusals of a document: the engine located each
 // failure in it, so they become a *ValidationError.
@@ -73,10 +104,10 @@ var codesWithProblems = map[string]struct{}{
 // every refusal that is not a document's (*ValidationError) or a not-ready
 // engine's (*NotReadyError).
 //
-// It matches ErrUnauthorized, ErrRevisionAdvanced, ErrAlreadyConfigured,
-// ErrNoActiveRevision and ErrConfigManaged with errors.Is where its status
-// and code say so, so a caller can branch on the sentinel and still read the
-// engine's message.
+// It matches ErrUnauthorized, ErrForbidden, ErrRevisionAdvanced,
+// ErrAlreadyConfigured, ErrNoActiveRevision, ErrConfigManaged and
+// ErrUnavailable with errors.Is where its status and code say so, so a caller
+// can branch on the sentinel and still read the engine's message.
 type APIError struct {
 	// StatusCode is the HTTP status.
 	StatusCode int
@@ -87,8 +118,10 @@ type APIError struct {
 	// in front of it, and says nothing about what the engine did.
 	Code string
 
-	// Message is the engine's `detail`, or the HTTP status text when it gave
-	// none.
+	// Message is the engine's `detail`, what it says about this request;
+	// else its `message`, the sentence it writes for the code whatever the
+	// request; else the HTTP status text. The engine writes `message` on
+	// every refusal and `detail` only where it has more to say.
 	Message string
 
 	// Hint is the engine's `hint`: what to do about it, when it said.
@@ -105,6 +138,21 @@ type APIError struct {
 	// ManagedBy are the token ids that may change the company document,
 	// when the engine refused this write as config_managed.
 	ManagedBy []string
+
+	// Reason is the rule that refused the credential, on a refusal of its
+	// authority (ErrForbidden): no_grant, token_refused and the others of
+	// the engine's authority table.
+	Reason string
+
+	// Grants are the permissions any one of which would have admitted the
+	// credential, on a refusal of its authority, such as [admin]. Empty
+	// when no grant would, because what is missing is not a permission.
+	Grants []string
+
+	// RetryAfter is how long the engine asked to be left before the
+	// request is sent again, from a 503's Retry-After; zero when it did
+	// not say.
+	RetryAfter time.Duration
 }
 
 func (e *APIError) Error() string {
@@ -134,6 +182,16 @@ func (e *APIError) Is(target error) bool {
 	switch target {
 	case ErrUnauthorized:
 		return e.StatusCode == http.StatusUnauthorized
+	case ErrForbidden:
+		// By code and status together, as config_managed: a proxy's 403
+		// says nothing about what the engine lets the token do.
+		return e.StatusCode == http.StatusForbidden && slices.Contains(codesForbidden, e.Code)
+	case ErrUnavailable:
+		// By status alone: a 503 is "ask again later" whoever wrote it,
+		// and the engine writes it under several codes (unavailable,
+		// identity_unavailable and the stores' own), each retried the
+		// same way. A draining engine's 503 is a *NotReadyError instead.
+		return e.StatusCode == http.StatusServiceUnavailable
 	case ErrRevisionAdvanced:
 		return e.Code == codeRevisionAdvanced
 	case ErrAlreadyConfigured:
@@ -164,6 +222,82 @@ func (e *NotReadyError) Error() string {
 
 // Is makes a *NotReadyError match ErrNotReady.
 func (e *NotReadyError) Is(target error) bool { return target == ErrNotReady }
+
+// SeatHeldError is a write the engine refused because it takes a human seat
+// out of the company, or turns it into an agent's, while something holds it
+// (409 seat_held): a person, a service account bound to it, or an open
+// invitation onto it. The document is valid; what has to change first is
+// the engine's identity directory, which an admin of the company changes.
+//
+// The engine's detail is not kept: it names each holder by login, for
+// SeatHolder's reason not to.
+type SeatHeldError struct {
+	// Held is what holds each seat the write would take away, by the
+	// seat's handle.
+	Held map[string]SeatHolder
+
+	// Hint is the engine's remedy, naming the routes that free a seat.
+	Hint string
+}
+
+// SeatHolder is what holds a human seat, as much of it as a status may say:
+// whether it is a person, a service account or an invitation, and how far
+// through enrolment. The engine's answer also names the holder's login and
+// id, or the invitation's, which this type does not keep: a login is often
+// a person's email address, and nothing the operator writes about a Company
+// is the place for it.
+type SeatHolder struct {
+	// Kind is what holds the seat: HolderPerson, HolderServiceAccount or
+	// HolderInvitation.
+	Kind string
+
+	// Stage is how far a person or a service account is through
+	// enrolment: invited, enrolling, active or suspended. Empty for an
+	// invitation.
+	Stage string
+}
+
+// The kinds of SeatHolder. The first two are the engine's own words for a
+// principal's kind (person, machine); an invitation is the engine's holder
+// with no principal at all, named here rather than left as an empty kind, so
+// that a caller cannot read a holder the engine sent a kind this package does
+// not know for as an invitation.
+const (
+	HolderPerson         = "person"
+	HolderServiceAccount = "machine"
+	HolderInvitation     = "invitation"
+)
+
+func (e *SeatHeldError) Error() string {
+	seats := make([]string, 0, len(e.Held))
+	for _, handle := range slices.Sorted(maps.Keys(e.Held)) {
+		seats = append(seats, handle+" (held by "+e.Held[handle].String()+")")
+	}
+	message := "the engine refuses to take human seats that are held out of the company: " + strings.Join(seats, "; ")
+	if e.Hint != "" {
+		message += " (" + e.Hint + ")"
+	}
+	return message
+}
+
+// String names the holder as a status message does, without its login.
+func (h SeatHolder) String() string {
+	var who string
+	switch h.Kind {
+	case HolderPerson:
+		who = "a person"
+	case HolderServiceAccount:
+		who = "a service account"
+	case HolderInvitation:
+		return "an open invitation"
+	default:
+		who = "a principal of kind " + strconv.Quote(h.Kind)
+	}
+	if h.Stage != "" {
+		who += ", " + h.Stage
+	}
+	return who
+}
 
 // ValidationError is a company document the engine refused, with every failure
 // it found located in the document, so a caller can attribute each to the
@@ -279,14 +413,34 @@ func (s Segment) String() string {
 
 // refusal is the body of every non-2xx answer the engine writes.
 type refusal struct {
-	Error             string    `json:"error"`
-	Detail            string    `json:"detail"`
-	Hint              string    `json:"hint"`
-	Reason            string    `json:"reason"`
-	Problems          []Problem `json:"problems"`
-	CurrentRevisionID string    `json:"current_revision_id"`
-	StoredRevisionID  string    `json:"stored_revision_id"`
-	ManagedBy         []string  `json:"managed_by"`
+	Error             string                `json:"error"`
+	Message           string                `json:"message"`
+	Detail            string                `json:"detail"`
+	Hint              string                `json:"hint"`
+	Reason            string                `json:"reason"`
+	Grants            []string              `json:"grants"`
+	Problems          []Problem             `json:"problems"`
+	CurrentRevisionID string                `json:"current_revision_id"`
+	StoredRevisionID  string                `json:"stored_revision_id"`
+	ManagedBy         []string              `json:"managed_by"`
+	Held              map[string]heldAnswer `json:"held"`
+}
+
+// heldAnswer is one holder of a seat as the engine's seat_held refusal sends
+// it. Login and the ids are left undecoded: see SeatHolder.
+type heldAnswer struct {
+	Kind       string `json:"kind"`
+	Stage      string `json:"stage"`
+	Invitation string `json:"invitation"`
+}
+
+func (h heldAnswer) holder() SeatHolder {
+	if h.Invitation != "" {
+		// The engine names an invitation only where no principal is
+		// bound to the seat, and sends it with no kind.
+		return SeatHolder{Kind: HolderInvitation}
+	}
+	return SeatHolder{Kind: h.Kind, Stage: h.Stage}
 }
 
 // errorFromResponse turns a non-2xx answer into the package's error for it.
@@ -294,7 +448,7 @@ type refusal struct {
 // The body is the engine's answer, never the request's, so it cannot carry a
 // secret the caller sent: the engine's refusals name a secret by its name and
 // never echo a value.
-func errorFromResponse(status int, body []byte) error {
+func errorFromResponse(status int, header http.Header, body []byte) error {
 	var r refusal
 	if json.Unmarshal(body, &r) != nil {
 		// Not JSON, so not the engine's: a proxy's error page. The body is
@@ -315,17 +469,37 @@ func errorFromResponse(status int, body []byte) error {
 	if status == http.StatusServiceUnavailable && r.Error == codeDraining {
 		return &NotReadyError{Reason: codeDraining}
 	}
-	message := r.Detail
-	if message == "" {
-		message = http.StatusText(status)
+	if status == http.StatusConflict && r.Error == codeSeatHeld && len(r.Held) > 0 {
+		held := make(map[string]SeatHolder, len(r.Held))
+		for handle, h := range r.Held {
+			held[handle] = h.holder()
+		}
+		return &SeatHeldError{Held: held, Hint: r.Hint}
 	}
 	return &APIError{
 		StatusCode:        status,
 		Code:              r.Error,
-		Message:           message,
+		Message:           cmp.Or(r.Detail, r.Message, http.StatusText(status)),
 		Hint:              r.Hint,
 		CurrentRevisionID: r.CurrentRevisionID,
 		StoredRevisionID:  r.StoredRevisionID,
 		ManagedBy:         r.ManagedBy,
+		Reason:            r.Reason,
+		Grants:            r.Grants,
+		RetryAfter:        retryAfter(status, header),
 	}
+}
+
+// retryAfter is a 503's Retry-After as a duration, zero when there is none.
+// Only the delay-seconds form is read: the engine writes whole seconds, and
+// an HTTP date is something else's, whose clock this one does not share.
+func retryAfter(status int, header http.Header) time.Duration {
+	if status != http.StatusServiceUnavailable {
+		return 0
+	}
+	seconds, err := strconv.Atoi(strings.TrimSpace(header.Get("Retry-After")))
+	if err != nil || seconds <= 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
 }

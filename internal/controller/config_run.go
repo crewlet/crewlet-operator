@@ -7,9 +7,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -230,11 +232,11 @@ func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error
 		if isAPIServerError(err) {
 			return ctrl.Result{}, err
 		}
-		if !run.writeRefused(err) {
+		if !run.writeRefused(err) && !run.notGranted(err) && !run.seatHeld(err) {
 			run.unavailable(err)
 		}
 		_, _ = run.fleetOf(ctx, eng)
-		return ctrl.Result{RequeueAfter: engineRetryInterval}, nil
+		return ctrl.Result{RequeueAfter: retryAfter(err)}, nil
 	}
 	health, healthErr := run.readHealth(ctx, eng)
 	result = run.verifyApplied(ctx, eng, health, healthErr, result)
@@ -986,8 +988,131 @@ func (run *configRun) unavailable(err error) {
 	run.configApplied = &metav1.Condition{
 		Type: crewletaiv1alpha1.ConditionConfigApplied, Status: metav1.ConditionFalse,
 		Reason:  crewletaiv1alpha1.ReasonEngineUnavailable,
-		Message: fmt.Sprintf("The operator's request to the company's engine failed, and it tries again in %s: %s.", engineRetryInterval, err),
+		Message: fmt.Sprintf("The operator's request to the company's engine failed, and it tries again in %s: %s.", retryAfter(err), err),
 	}
+}
+
+// retryAfter is how soon the reconcile asks a Company's engine again after
+// err: as soon as the engine asked to be asked again (engine.ErrUnavailable
+// with a Retry-After), and never later than engineRetryInterval. The engine
+// asks for seconds, and waiting the full interval would leave the status
+// that much longer behind it; a longer wait than the interval would hold
+// back a status for whatever a header says.
+func retryAfter(err error) time.Duration {
+	var apiErr *engine.APIError
+	if errors.Is(err, engine.ErrUnavailable) && errors.As(err, &apiErr) && apiErr.RetryAfter > 0 {
+		return min(apiErr.RetryAfter, engineRetryInterval)
+	}
+	return engineRetryInterval
+}
+
+// notGranted records an engine that knows the operator's token and will not
+// let it make a request the operator needs (engine.ErrForbidden), and reports
+// false for any other error. No retry with the token changes that, so it is
+// reported as what blocks the document rather than as an engine that is
+// down.
+//
+// The operator renders its own token with admin, the one grant every route it
+// calls needs, so a token that lacks it is an engine started from a
+// crewlet.yaml the operator did not write. A token refused for the seat it is
+// bound to is a binding an admin of the company made in the engine's
+// identity directory, which only they can undo: the operator's token acts as
+// no seat.
+func (run *configRun) notGranted(err error) bool {
+	var apiErr *engine.APIError
+	if !errors.Is(err, engine.ErrForbidden) || !errors.As(err, &apiErr) {
+		return false
+	}
+	var message string
+	if apiErr.Code == "seat_unavailable" {
+		message = fmt.Sprintf("The engine refuses the operator's token every request: its identity directory binds "+
+			"the token, which it knows as %s, to a seat the company no longer has (%s). An admin of the company "+
+			"unbinds that service account, in the engine's dashboard or with `crewlet iam unbind`; the operator's "+
+			"token needs no seat.", engine.TokenLogin(render.TokenOperator), strings.TrimSuffix(apiErr.Message, "."))
+	} else {
+		needs := "no grant the engine named: what it refused is not a permission"
+		if len(apiErr.Grants) > 0 {
+			needs = "the grant " + strings.Join(apiErr.Grants, " or ")
+		}
+		message = fmt.Sprintf("The engine refuses the operator's token a request the operator needs (%s, %s): "+
+			"the request needs %s. The crewlet.yaml the operator renders for the data pod (Secret %s) grants its "+
+			"token, %q, admin, so the engine runs a crewlet.yaml the operator did not write: check that Secret and "+
+			"that the data pod has restarted since it changed.",
+			apiErr.Code, cmp.Or(apiErr.Reason, "no reason given"), needs, bootstrapSecretName(run.company), render.TokenOperator)
+	}
+	run.blockAndTell(crewletaiv1alpha1.ReasonNotGranted, "ApplyConfig", message)
+	return true
+}
+
+// seatHeld records an engine that refuses the document because it takes a
+// human seat out of the company, or makes it an agent's, while something in
+// the engine's identity directory holds the seat (engine.SeatHeldError), and
+// reports false for any other error. The document is valid and stays
+// unapplied until an admin of the company frees each seat, which the
+// operator neither can nor should do: a seat's holder is a person, or what a
+// person set up. The message names each seat and what kind of thing holds
+// it, never who: the engine names a holder by login, often an email address,
+// which a status is no place for.
+func (run *configRun) seatHeld(err error) bool {
+	var held *engine.SeatHeldError
+	if !errors.As(err, &held) {
+		return false
+	}
+	var seats []string
+	kinds := map[string]bool{}
+	for _, handle := range slices.Sorted(maps.Keys(held.Held)) {
+		holder := held.Held[handle]
+		seats = append(seats, fmt.Sprintf("%s (held by %s)", handle, holder))
+		kinds[holder.Kind] = true
+	}
+	// A Seat that is still there and is held is one the document makes an
+	// agent's: the engine names only the seats the document takes away.
+	for _, p := range run.parts {
+		seat, ok := p.obj.(*crewletaiv1alpha1.Seat)
+		if !ok {
+			continue
+		}
+		if holder, ok := held.Held[render.SeatHandle(seat)]; ok {
+			p.held = fmt.Sprintf("The engine's identity directory has %s on this seat, so the engine refuses a document "+
+				"that makes it an agent's or leaves it out until an admin of the company frees it (see ConfigApplied on "+
+				"Company %s).", holder, run.company.Name)
+		}
+	}
+	// The remedy for each kind of holder present, and only those: a person
+	// holds a human seat for as long as they are in the company, so they are
+	// moved or removed, never unbound.
+	var remedies []string
+	if kinds[engine.HolderPerson] {
+		remedies = append(remedies, "a person is moved to another human seat or removed")
+	}
+	if kinds[engine.HolderServiceAccount] {
+		remedies = append(remedies, "a service account is unbound")
+	}
+	if kinds[engine.HolderInvitation] {
+		remedies = append(remedies, "an open invitation is cancelled")
+	}
+	remedy := ""
+	if len(remedies) > 0 {
+		remedy = ": " + strings.Join(remedies, "; ")
+	}
+	message := fmt.Sprintf("The engine refuses the rendered document: it takes human seats out of the company, or makes "+
+		"them agents', while its identity directory holds them: %s. An admin of the company frees each seat first, in "+
+		"the engine's dashboard or with `crewlet iam` (`crewlet iam seats` lists what holds each seat)%s. Or keep "+
+		"each seat as a Human Seat.", strings.Join(seats, "; "), remedy)
+	run.blockAndTell(crewletaiv1alpha1.ReasonSeatHeld, "DryRunConfig", message)
+	return true
+}
+
+// blockAndTell blocks the document for reason and records a Warning event
+// with the same message when ConfigApplied did not already carry that
+// reason, so that a refusal every retry meets again is told once rather than
+// at every retry.
+func (run *configRun) blockAndTell(reason, action, message string) {
+	if current := meta.FindStatusCondition(run.company.Status.Conditions, crewletaiv1alpha1.ConditionConfigApplied); current == nil ||
+		current.Reason != reason {
+		run.event(corev1.EventTypeWarning, reason, action, "%s", message)
+	}
+	run.block(reason, message)
 }
 
 // writeRefused records an engine that refuses the operator's token a change
@@ -1013,11 +1138,7 @@ func (run *configRun) writeRefused(err error) bool {
 		"that list only under Enforce, and then to its own token's id, %q, so the engine runs a crewlet.yaml the "+
 		"operator did not write: check that Secret and that the data pod has restarted since it changed.",
 		writers, bootstrapSecretName(run.company), render.TokenOperator)
-	if current := meta.FindStatusCondition(run.company.Status.Conditions, crewletaiv1alpha1.ConditionConfigApplied); current == nil ||
-		current.Reason != crewletaiv1alpha1.ReasonWriteRefused {
-		run.event(corev1.EventTypeWarning, crewletaiv1alpha1.ReasonWriteRefused, "ApplyConfig", "%s", message)
-	}
-	run.block(crewletaiv1alpha1.ReasonWriteRefused, message)
+	run.blockAndTell(crewletaiv1alpha1.ReasonWriteRefused, "ApplyConfig", message)
 	return true
 }
 

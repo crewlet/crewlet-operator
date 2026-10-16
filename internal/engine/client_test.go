@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -425,9 +426,40 @@ func TestErrorMapping(t *testing.T) {
 			sentinel: engine.ErrConfigManaged, wantCode: "config_managed", wantStatus: http.StatusForbidden,
 		},
 		{
+			name: "a token without the grant",
+			handler: answer(http.StatusForbidden, `{"error":"unauthorized","grants":["admin"],`+
+				`"message":"You don't have the access this needs (Admin, Tracker or Knowledge). Ask an admin for it.",`+
+				`"reason":"no_grant"}`),
+			sentinel: engine.ErrForbidden, wantCode: "unauthorized", wantStatus: http.StatusForbidden,
+		},
+		{
+			name: "a verb that needs a person",
+			handler: answer(http.StatusForbidden, `{"error":"token_refused","grants":["admin"],`+
+				`"message":"Access tokens can't do this. Sign in and try again.","reason":"token_refused"}`),
+			sentinel: engine.ErrForbidden, wantCode: "token_refused", wantStatus: http.StatusForbidden,
+		},
+		{
+			name: "a token bound to a seat the company dropped",
+			handler: answer(http.StatusForbidden, `{"detail":"Your seat, founder, is not in the org chart.",`+
+				`"error":"seat_unavailable",`+
+				`"message":"Your seat is no longer in the org chart. Ask an admin to move you to another seat."}`),
+			sentinel: engine.ErrForbidden, wantCode: "seat_unavailable", wantStatus: http.StatusForbidden,
+		},
+		{
 			name:       "a proxy's 403",
 			handler:    page(http.StatusForbidden),
 			wantStatus: http.StatusForbidden,
+		},
+		{
+			name: "an engine that could not decide",
+			handler: answer(http.StatusServiceUnavailable, `{"error":"unavailable",`+
+				`"message":"Can't answer right now. Try again in a moment, or ask another node."}`),
+			sentinel: engine.ErrUnavailable, wantCode: "unavailable", wantStatus: http.StatusServiceUnavailable,
+		},
+		{
+			// A 503 asks for the request again whoever wrote it.
+			name: "a proxy's 503", handler: page(http.StatusServiceUnavailable),
+			sentinel: engine.ErrUnavailable, wantStatus: http.StatusServiceUnavailable,
 		},
 		{
 			name:     "missing summary",
@@ -438,7 +470,8 @@ func TestErrorMapping(t *testing.T) {
 	}
 	sentinels := []error{
 		engine.ErrRevisionAdvanced, engine.ErrAlreadyConfigured, engine.ErrNoActiveRevision,
-		engine.ErrUnauthorized, engine.ErrNotReady, engine.ErrConfigManaged,
+		engine.ErrUnauthorized, engine.ErrNotReady, engine.ErrConfigManaged, engine.ErrForbidden,
+		engine.ErrUnavailable,
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -471,6 +504,153 @@ func TestRevisionAdvancedNamesTheCurrentRevision(t *testing.T) {
 	var apiErr *engine.APIError
 	if !errors.As(err, &apiErr) || apiErr.CurrentRevisionID != "rev-9" || apiErr.StoredRevisionID != "rev-10" {
 		t.Fatalf("ApplyConfig() = %v, want the current and the stored revision named", err)
+	}
+}
+
+// TestRefusalMessageIsWhatTheEngineSaid pins which of the engine's sentences
+// a refusal reads as its message: the detail, what the engine says about this
+// request; else the message, the sentence the engine writes for the code on
+// every refusal; and only an answer with neither, a proxy's, the status text.
+func TestRefusalMessageIsWhatTheEngineSaid(t *testing.T) {
+	for _, c := range []struct {
+		name, body, want string
+	}{
+		{
+			name: "detail and message",
+			body: `{"detail":"Your seat, founder, is not in the org chart.","error":"seat_unavailable",` +
+				`"message":"Your seat is no longer in the org chart. Ask an admin to move you to another seat."}`,
+			want: "Your seat, founder, is not in the org chart.",
+		},
+		{
+			name: "a message only",
+			body: `{"error":"token_refused","grants":["admin"],` +
+				`"message":"Access tokens can't do this. Sign in and try again.","reason":"token_refused"}`,
+			want: "Access tokens can't do this. Sign in and try again.",
+		},
+		{name: "neither", body: `{"error":"token_refused"}`, want: "Forbidden"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			f.handle("PUT /config", answer(http.StatusForbidden, c.body))
+			_, err := apply(f, write)
+			var apiErr *engine.APIError
+			if !errors.As(err, &apiErr) || apiErr.Message != c.want {
+				t.Fatalf("ApplyConfig() = %v, want an *APIError whose message is %q", err, c.want)
+			}
+		})
+	}
+}
+
+// TestAuthorityRefusalNamesItsGrants reads the reason and the grants of a
+// refusal on authority, as the engine's authority table writes them: what a
+// status message names when the operator's token lacks a grant.
+func TestAuthorityRefusalNamesItsGrants(t *testing.T) {
+	f := newFakeEngine(t)
+	f.handle("PUT /config", answer(http.StatusForbidden, `{"error":"unauthorized","grants":["admin"],`+
+		`"message":"You don't have the access this needs (Admin, Tracker or Knowledge). Ask an admin for it.",`+
+		`"reason":"no_grant"}`))
+	_, err := apply(f, write)
+	var apiErr *engine.APIError
+	if !errors.As(err, &apiErr) || !errors.Is(err, engine.ErrForbidden) {
+		t.Fatalf("ApplyConfig() = %v, want an *APIError matching ErrForbidden", err)
+	}
+	if apiErr.Reason != "no_grant" || !slices.Equal(apiErr.Grants, []string{"admin"}) {
+		t.Fatalf("APIError reason %q, grants %v, want no_grant and [admin]", apiErr.Reason, apiErr.Grants)
+	}
+}
+
+// TestUnavailableCarriesTheEnginesRetryAfter reads when the engine asked to
+// be sent a request again: a 503's Retry-After in whole seconds, which is
+// what the engine writes. A date is not read, nor is the header on anything
+// but a 503.
+func TestUnavailableCarriesTheEnginesRetryAfter(t *testing.T) {
+	const identityUnavailable = `{"error":"identity_unavailable",` +
+		`"hint":"This write removes a human seat, and this node could not read the identity directory to see ` +
+		`whether anybody holds it; nothing was written.",` +
+		`"message":"Can't check who you are right now. Try again in a moment.","seats":["founder"]}`
+	for _, c := range []struct {
+		name   string
+		status int
+		header string
+		want   time.Duration
+	}{
+		{name: "seconds", status: http.StatusServiceUnavailable, header: "2", want: 2 * time.Second},
+		{name: "none", status: http.StatusServiceUnavailable},
+		{name: "a date", status: http.StatusServiceUnavailable, header: "Fri, 16 Oct 2026 23:59:00 GMT"},
+		{name: "not a 503", status: http.StatusConflict, header: "2"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			f.handle("PUT /config", func(w http.ResponseWriter, r *http.Request) {
+				if c.header != "" {
+					w.Header().Set("Retry-After", c.header)
+				}
+				answer(c.status, identityUnavailable)(w, r)
+			})
+			_, err := apply(f, write)
+			var apiErr *engine.APIError
+			if !errors.As(err, &apiErr) || apiErr.RetryAfter != c.want {
+				t.Fatalf("ApplyConfig() = %v, want an *APIError with RetryAfter %s", err, c.want)
+			}
+			if got, want := errors.Is(err, engine.ErrUnavailable), c.status == http.StatusServiceUnavailable; got != want {
+				t.Fatalf("errors.Is(err, ErrUnavailable) = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+// seatFounder is the human seat the seat_held tests find a person on, and
+// stageActive the stage of a person or a service account who has finished
+// enrolling, both as the engine names them.
+const (
+	seatFounder = "founder"
+	stageActive = "active"
+)
+
+// TestSeatHeldNamesEachHolderButNotTheirLogin decodes the engine's refusal of
+// a write that takes held human seats away: what holds each seat, a person by
+// kind and stage and an invitation as one, and nothing a status must not
+// carry: neither the person's login, an email address here, nor any id.
+func TestSeatHeldNamesEachHolderButNotTheirLogin(t *testing.T) {
+	f := newFakeEngine(t)
+	f.handle("PUT /config", answer(http.StatusConflict, `{"detail":"This change removes human seats that `+
+		`people still hold: ana (held by an open invitation (inv-1)); founder (held by jane.doe@nimbus.example); `+
+		`release (held by service account svc:release).",`+
+		`"error":"seat_held",`+
+		`"held":{"ana":{"invitation":"inv-1","expires_at":"2026-10-23T09:00:00Z"},`+
+		`"founder":{"person":"p-1","kind":"person","login":"jane.doe@nimbus.example","stage":"active"},`+
+		`"release":{"person":"p-2","kind":"machine","login":"svc:release","stage":"active"}},`+
+		`"hint":"Move each person to another human seat (PATCH /iam/people/{person} with seat) or remove them, `+
+		`unbind a service account (PATCH /iam/people/{person} with no seat), cancel an open invitation `+
+		`(DELETE /iam/invitations/{id}) — each an admin's gesture — then send the write again.",`+
+		`"message":"This change removes a seat someone holds or is invited to. Move or remove them, or cancel `+
+		`the invitation, first. The detail says who."}`))
+	_, err := apply(f, write)
+	var held *engine.SeatHeldError
+	if !errors.As(err, &held) {
+		t.Fatalf("ApplyConfig() = %v, want a *SeatHeldError", err)
+	}
+	want := map[string]engine.SeatHolder{
+		"ana":       {Kind: engine.HolderInvitation},
+		seatFounder: {Kind: engine.HolderPerson, Stage: stageActive},
+		"release":   {Kind: engine.HolderServiceAccount, Stage: stageActive},
+	}
+	if !maps.Equal(held.Held, want) {
+		t.Fatalf("Held = %v, want %v", held.Held, want)
+	}
+	if !strings.HasPrefix(held.Hint, "Move each person") {
+		t.Fatalf("Hint = %q, want the engine's", held.Hint)
+	}
+	for _, leak := range []string{"jane.doe", "svc:release", "p-1", "inv-1"} {
+		if strings.Contains(err.Error(), leak) {
+			t.Fatalf("the error says %q: %v", leak, err)
+		}
+	}
+	for _, said := range []string{"founder (held by a person, active)", "ana (held by an open invitation)",
+		"release (held by a service account, active)"} {
+		if !strings.Contains(err.Error(), said) {
+			t.Fatalf("the error does not say %q: %v", said, err)
+		}
 	}
 }
 

@@ -1425,6 +1425,68 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(err).To(MatchError(engine.ErrNoActiveRevision))
 	})
 
+	It("reports a document that takes a human seat a person holds as SeatHeld, and keeps the revision the engine runs", func() {
+		const name = "held"
+		e := startEngine(name)
+		secret(name+"-llm", map[string]string{llmKey: "k1"})
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
+		founder := newSeat(namespace, name, "founder", func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.Kind, s.Spec.Goal = crewletaiv1alpha1.SeatKindHuman, ""
+		})
+		standIn(c)
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		good := runsRendered(e, c)
+		// A person on the seat, as an admin of the company puts one there;
+		// the address is theirs, and no status may carry it.
+		const address = "founder@held.example"
+		e.AddPerson(GinkgoT(), address, founder.Name)
+		heldBy := founder.Name + " (held by a person, active)"
+
+		By("making the founder's seat an agent's")
+		updateLive(founder, func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.Kind, s.Spec.Goal = crewletaiv1alpha1.SeatKindAgent, "Found the company."
+		})
+		Eventually(reasonOf(founder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonSeatHeld))
+		Expect(conditionOf(founder, crewletaiv1alpha1.ConditionApplied)(Default).Message).To(ContainSubstring("a person, active"))
+		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonSeatHeld))
+		got := conditionOf(c, crewletaiv1alpha1.ConditionConfigApplied)(Default)
+		Expect(got.Message).To(ContainSubstring(heldBy))
+		Expect(got.Message).To(ContainSubstring("a person is moved to another human seat or removed"))
+		Expect(got.Message).NotTo(ContainSubstring(address))
+		Expect(reasonOf(seat(name+"-ana"), crewletaiv1alpha1.ConditionApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonInRevision),
+			"ana's generation still runs; only the change to the founder's seat is held back")
+		Expect(log.of(name)).To(ContainElement(HavePrefix("Warning SeatHeld")))
+		active, err := e.Client().ActiveConfig(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(active.RevisionID).To(Equal(good.RevisionID))
+
+		By("making it Human again")
+		updateLive(founder, func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.Kind, s.Spec.Goal = crewletaiv1alpha1.SeatKindHuman, ""
+		})
+		Eventually(func(g Gomega) metav1.ConditionStatus {
+			return conditionOf(c, crewletaiv1alpha1.ConditionConfigApplied)(g).Status
+		}).WithTimeout(settle).Should(Equal(metav1.ConditionTrue))
+
+		By("deleting the founder's Seat")
+		Expect(k8sClient.Delete(ctx, founder)).To(Succeed())
+		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonSeatHeld))
+		Expect(conditionOf(c, crewletaiv1alpha1.ConditionConfigApplied)(Default).Message).To(ContainSubstring(heldBy))
+		active, err = e.Client().ActiveConfig(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(active.RevisionID).To(Equal(good.RevisionID))
+		Expect(revisions(e)).To(HaveLen(1))
+
+		By("restoring it")
+		newSeat(namespace, name, "founder", func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.Kind, s.Spec.Goal = crewletaiv1alpha1.SeatKindHuman, ""
+		})
+		Eventually(func(g Gomega) metav1.ConditionStatus {
+			return conditionOf(c, crewletaiv1alpha1.ConditionConfigApplied)(g).Status
+		}).WithTimeout(settle).Should(Equal(metav1.ConditionTrue))
+		runsRendered(e, c)
+	})
+
 	It("reports the parts of a Company that is not accepted as not accepted either", func() {
 		c := company("refused", crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
 		Eventually(func(g Gomega) {

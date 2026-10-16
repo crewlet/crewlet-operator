@@ -8,11 +8,13 @@
 // It speaks the engine's API as the engine documents it
 // (docs/reference/api-endpoints.md in github.com/crewlet/crewlet) and maps
 // every refusal onto a typed error: a refused document becomes a
-// *ValidationError whose problems carry their place in the document, a lost
-// compare-and-set matches ErrRevisionAdvanced, a refused token ErrUnauthorized,
-// a write a managed document refuses this token ErrConfigManaged,
-// a draining or unconfigured engine ErrNotReady, and anything else an
-// *APIError with the engine's code and message.
+// *ValidationError whose problems carry their place in the document, a write
+// that takes a held human seat away a *SeatHeldError, a lost compare-and-set
+// matches ErrRevisionAdvanced, a refused token ErrUnauthorized, a token the
+// engine will not let do this ErrForbidden, a write a managed document
+// refuses this token ErrConfigManaged, a request the engine asks to be sent
+// again ErrUnavailable, a draining or unconfigured engine ErrNotReady, and
+// anything else an *APIError with the engine's code and message.
 //
 // No error this package returns carries a secret value: the engine never
 // echoes one, and a secret written with PutSecret travels only in the request
@@ -492,7 +494,7 @@ func (r *response) refusal() error {
 				http.StatusText(r.status), r.header.Get("Location")),
 		})
 	}
-	return fmt.Errorf("%s %s: %w", r.method, r.path, errorFromResponse(r.status, r.body))
+	return fmt.Errorf("%s %s: %w", r.method, r.path, errorFromResponse(r.status, r.header, r.body))
 }
 
 // call sends r and decodes a `want` answer's JSON body into out (unless out is
