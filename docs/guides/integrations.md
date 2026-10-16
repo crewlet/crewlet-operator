@@ -470,11 +470,6 @@ it up. GitHub logins, GitLab usernames and Mattermost usernames are compared
 without case, as those platforms compare them; Slack member ids and
 Atlassian accounts exactly.
 
-Crewlet's `crewlet_operator_id`, which binds one of the engine's API tokens
-to a person so that whoever writes with it acts as them, has no field: the
-engines the operator runs hold two tokens, the operator's own and the one
-`Company.status.apiAccessSecretRef` hands every consumer of the company, and
-neither is one person's.
 [Humans in the Org Chart](https://github.com/crewlet/crewlet/blob/main/docs/concepts/humans-in-the-org.md)
 describes what Crewlet does with each account.
 

@@ -331,12 +331,6 @@ type SeatIntegrations struct {
 // Conflict. Each field is compared as Crewlet compares it: githubLogin,
 // gitlabUsername and mattermostUsername without case, as GitHub, GitLab and
 // Mattermost compare them; slackUserID and atlassianAccount exactly.
-//
-// Crewlet's `crewlet_operator_id` has no field here. It binds one of the
-// engine's API tokens to the person, so that whoever writes with that token
-// acts as them, and the engines the operator runs hold two tokens, neither
-// of them one person's: the operator's own, and the one
-// Company.status.apiAccessSecretRef hands every consumer of the company.
 // +kubebuilder:validation:MinProperties=1
 type SeatContact struct {
 	// slackUserID is the person's Slack member id, such as U0123ABCD.

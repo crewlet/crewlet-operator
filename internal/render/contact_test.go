@@ -22,15 +22,6 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 )
 
-// contactNotOffered are the keys of Crewlet's role contact no field of
-// SeatContact writes, each with why. SeatContact's doc comment says the same
-// to whoever reads the API.
-var contactNotOffered = map[string]string{
-	"crewlet_operator_id": "it binds one of the engine's API tokens to the person, and the engines the operator " +
-		"runs hold two, neither of them one person's: the operator's own and the one every consumer of the " +
-		"company is handed",
-}
-
 // janeAccount is the account the tests claim for the sample company's
 // founder, on whichever surface.
 const janeAccount = "jane.founder"
@@ -121,11 +112,10 @@ func TestContactAccountsNameTheirCrewletKey(t *testing.T) {
 }
 
 // TestContactKeysAreTheEngines holds the keys the render writes a contact
-// under, and the ones it offers no field for, to the engine's schema of a
-// role's contact, in both directions: a key Crewlet adds fails here until
-// SeatContact has a field for it or contactNotOffered says why not, and a
-// key it drops fails here rather than refusing every Human seat that sets
-// the field.
+// under to the engine's schema of a role's contact, in both directions: a
+// key Crewlet adds fails here until SeatContact has a field for it, or a
+// reason not to beside this test, and a key it drops fails here rather than
+// refusing every Human seat that sets the field.
 func TestContactKeysAreTheEngines(t *testing.T) {
 	schema := engineSchema(t, tierCompany)
 	defs, _ := schema["$defs"].(map[string]any)
@@ -140,17 +130,13 @@ func TestContactKeysAreTheEngines(t *testing.T) {
 	properties, _ := def["properties"].(map[string]any)
 	engineKeys := slices.Sorted(maps.Keys(properties))
 
-	var keys []string
+	keys := make([]string, 0, len(contactAccounts))
 	for _, a := range contactAccounts {
-		if _, ok := contactNotOffered[a.key]; ok {
-			t.Errorf("%s is written by spec.contact.%s and listed as not offered", a.key, a.field)
-		}
 		keys = append(keys, a.key)
 	}
-	keys = slices.Concat(keys, slices.Collect(maps.Keys(contactNotOffered)))
 	slices.Sort(keys)
 	if !slices.Equal(keys, engineKeys) {
-		t.Errorf("the engine's role contact has the keys %v; SeatContact writes or declines %v", engineKeys, keys)
+		t.Errorf("the engine's role contact has the keys %v; SeatContact writes %v", engineKeys, keys)
 	}
 }
 
