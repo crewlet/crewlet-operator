@@ -20,6 +20,7 @@ import (
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine"
+	"github.com/crewlet/crewlet-operator/internal/render"
 )
 
 // TestPodOf pins how a node is told to be a pod of a StatefulSet: the engine
@@ -111,6 +112,20 @@ func TestSeatReadyFollowsTheFleet(t *testing.T) {
 			!strings.Contains(ready.Message, "2026-10-09T08:00:00Z") {
 			t.Errorf("Ready = %+v, node %q; want True, LeaseHeld, at generation 3, held by %s-1 since its tenure",
 				ready, seat.Status.Placement.Node, workload)
+		}
+	})
+
+	t.Run("held, as a node that does not run the seat names it", func(t *testing.T) {
+		// A node that runs no company, or has not applied the revision
+		// that added the seat, names its lease by the seat's id.
+		run, p := seatRun("")
+		run.company.Spec.CompanyName = "Acme"
+		run.fleet = &engine.Fleet{Seats: []engine.SeatLease{{Handle: render.SeatID("Acme", seatAna), Node: workload + "-1", Epoch: 4}}}
+		seat := p.obj.(*crewletaiv1alpha1.Seat)
+		run.decideReady(p, seat)
+		if ready := readyOf(p); ready.Status != metav1.ConditionTrue || ready.Reason != crewletaiv1alpha1.ReasonLeaseHeld ||
+			seat.Status.Placement.Node != workload+"-1" {
+			t.Errorf("Ready = %+v, node %q; want True, LeaseHeld, held by %s-1", ready, seat.Status.Placement.Node, workload)
 		}
 	})
 

@@ -974,6 +974,9 @@ func TestHealthReadsThePosture(t *testing.T) {
 // writes it: each node's roles, broker, labels and apply record, which node
 // holds each seat since when, and the handles of the seats no node may run.
 func TestFleetReadsNodesAndSeatLeases(t *testing.T) {
+	// seatsNode is the node that answers, a pod of a seat pool, and holds
+	// two of the leases the answer names.
+	const seatsNode = "nimbus-seats-general-0"
 	const fleet = `{
   "nodes": [
     {"id": "nimbus-data-0", "roles": ["data", "ingress", "seats", "workers"], "broker": "member",
@@ -989,7 +992,9 @@ func TestFleetReadsNodesAndSeatLeases(t *testing.T) {
     {"handle": "ana", "node": "nimbus-data-0", "owner": "nimbus-data-0:8f2a", "epoch": 4, "expires_in": 41,
      "acquired_at": "2026-09-23T08:02:11.482Z"},
     {"handle": "bo", "node": "nimbus-seats-general-0", "owner": "nimbus-seats-general-0:11aa", "epoch": 2,
-     "expires_in": 40, "acquired_at": ""}
+     "expires_in": 40, "acquired_at": ""},
+    {"handle": "0f6d6a43-5d3c-5a8e-9d8b-6a1f0c2e4b7d", "node": "nimbus-seats-general-0",
+     "owner": "nimbus-seats-general-0:11aa", "epoch": 1, "expires_in": 40, "acquired_at": ""}
   ],
   "duties": [{"duty": "maintenance", "node": "nimbus-data-0", "expires_in": 41}],
   "unplaceable": [{"handle": "cy", "placement": {"Node": "", "Labels": {"crewlet.ai/seat": "cy"}}}],
@@ -1004,7 +1009,7 @@ func TestFleetReadsNodesAndSeatLeases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ThisNode != "nimbus-seats-general-0" || got.TargetEpoch != 7 || len(got.UnmannedRoles) != 0 {
+	if got.ThisNode != seatsNode || got.TargetEpoch != 7 || len(got.UnmannedRoles) != 0 {
 		t.Errorf("Fleet() = this node %q, target %d, unmanned %v", got.ThisNode, got.TargetEpoch, got.UnmannedRoles)
 	}
 	data, ok := got.Node("nimbus-data-0")
@@ -1016,15 +1021,25 @@ func TestFleetReadsNodesAndSeatLeases(t *testing.T) {
 	if _, ok := got.Node("nimbus-data-1"); ok {
 		t.Error("Node(nimbus-data-1) found a node the fleet does not list")
 	}
-	ana, ok := got.Holder("ana")
+	ana, ok := got.Holder("ana", "")
 	if want := time.Date(2026, 9, 23, 8, 2, 11, 482_000_000, time.UTC); !ok || ana.Node != "nimbus-data-0" || ana.Epoch != 4 ||
 		!ana.AcquiredAt.Equal(want) {
 		t.Errorf("Holder(ana) = %+v, %t, want nimbus-data-0 at epoch 4 since %s", ana, ok, want)
 	}
-	if bo, ok := got.Holder("bo"); !ok || bo.Node != "nimbus-seats-general-0" || !bo.AcquiredAt.IsZero() {
+	if bo, ok := got.Holder("bo", ""); !ok || bo.Node != seatsNode || !bo.AcquiredAt.IsZero() {
 		t.Errorf("Holder(bo) = %+v, %t, want nimbus-seats-general-0 with no tenure", bo, ok)
 	}
-	if _, ok := got.Holder("cy"); ok || !slices.Equal(got.Unplaceable, []string{"cy"}) {
+	// A lease the answering node names by the seat's id, as a node that does
+	// not have the seat in the company it runs does: found by the id, and
+	// not by the handle alone.
+	const deeID = "0f6d6a43-5d3c-5a8e-9d8b-6a1f0c2e4b7d"
+	if dee, ok := got.Holder("dee", deeID); !ok || dee.Node != seatsNode || dee.Epoch != 1 {
+		t.Errorf("Holder(dee, %s) = %+v, %t, want nimbus-seats-general-0 at epoch 1", deeID, dee, ok)
+	}
+	if _, ok := got.Holder("dee", ""); ok {
+		t.Error("Holder(dee) without its id found a lease named by an id")
+	}
+	if _, ok := got.Holder("cy", ""); ok || !slices.Equal(got.Unplaceable, []string{"cy"}) {
 		t.Errorf("cy: held %t, unplaceable %v; want held by nobody and unplaceable", ok, got.Unplaceable)
 	}
 	// The answering node's own record, failed.

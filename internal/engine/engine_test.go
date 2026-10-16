@@ -138,7 +138,7 @@ func TestEngineFleetNamesTheSeatsHolder(t *testing.T) {
 		if fleet, err = client.Fleet(ctx); err != nil {
 			return err
 		}
-		if lease, ok := fleet.Holder("ana"); !ok || lease.Node != node || lease.Epoch < 1 || lease.AcquiredAt.IsZero() {
+		if lease, ok := fleet.Holder("ana", ""); !ok || lease.Node != node || lease.Epoch < 1 || lease.AcquiredAt.IsZero() {
 			return fmt.Errorf("Holder(ana) = %+v, %t, want %s with an epoch and a tenure", lease, ok, node)
 		}
 		return nil
@@ -149,7 +149,7 @@ func TestEngineFleetNamesTheSeatsHolder(t *testing.T) {
 		t.Errorf("Fleet() = this node %q, node %+v (%t); want %s, a member labelled for data that holds one seat",
 			fleet.ThisNode, self, ok, node)
 	}
-	if _, held := fleet.Holder("bo"); held || !slices.Equal(fleet.Unplaceable, []string{"bo"}) {
+	if _, held := fleet.Holder("bo", ""); held || !slices.Equal(fleet.Unplaceable, []string{"bo"}) {
 		t.Errorf("bo: held %t, unplaceable %v; want held by nobody and unplaceable, as no node is labelled for its pool",
 			held, fleet.Unplaceable)
 	}

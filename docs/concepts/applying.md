@@ -393,7 +393,7 @@ never a value.
 | False | `Suspended` | The Company is suspended. |
 | False | `AgentModeBridgeUnsupported` | The head of the seat's executor's chain is a `CLIAgent` provider in `mode: Agent`, and the seat is in a seat pool, whose pods serve no tool bridge a run can call back through. |
 | False | `NotExposed` | The same provider heads the chain, and the Company has no public address. |
-| True | `LeaseHeld` | An engine pod holds the seat's lease, as the engine's `GET /fleet` reports. The message names the pod, and says so when it is not a pod of the seat's StatefulSet yet, while the engine moves it. |
+| True | `LeaseHeld` | An engine pod holds the seat's lease, as the engine's `GET /fleet` reports. The message names the pod, and says so when it is not a pod of the seat's StatefulSet yet, while the engine moves it. The engine names a lease by the seat's handle, or by its id (`status.seatID`) when the engine pod that answered does not run the seat yet; the operator finds it either way. |
 | False | `PoolNotFound` | No pod holds the seat and none can: the Company does not declare its pool. |
 | False | `Unplaced` | No pod holds the seat: it is not in the revision the engine runs, its pool runs no pod, or the engine has not claimed it yet. The message says which. |
 | Unknown | `EngineUnavailable` | The engine's fleet could not be read. |

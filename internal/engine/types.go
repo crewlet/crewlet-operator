@@ -329,11 +329,18 @@ type Fleet struct {
 	TargetEpoch int64
 }
 
-// Holder returns the lease of the seat with handle, and whether a node holds
-// it.
-func (f *Fleet) Holder(handle string) (SeatLease, bool) {
+// Holder returns the lease of the seat with handle and the id the engine
+// derives for it, and whether a node holds it.
+//
+// Crewlet names a seat's lease by the seat's id and resolves it to the handle
+// through the company the answering node runs; a node that runs no company,
+// or one that does not have the seat yet (it has not applied the revision that
+// added it), names the lease by the id instead (Crewlet's
+// internal/api/queries, seatHandleOf). Matching the handle alone would read
+// a held seat as held by nobody for as long as that lasts.
+func (f *Fleet) Holder(handle, id string) (SeatLease, bool) {
 	for i := range f.Seats {
-		if f.Seats[i].Handle == handle {
+		if named := f.Seats[i].Handle; named == handle || named == id {
 			return f.Seats[i], true
 		}
 	}
@@ -406,7 +413,8 @@ const (
 
 // SeatLease is which node holds a seat's lease, and so runs the seat.
 type SeatLease struct {
-	// Handle is the seat's handle.
+	// Handle is the seat's handle, or the seat's id when the answering node
+	// does not have the seat in the company it runs (see Fleet.Holder).
 	Handle string
 
 	// Node is the id of the node that holds the lease.

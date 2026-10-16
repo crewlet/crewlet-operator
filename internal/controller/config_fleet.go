@@ -19,6 +19,7 @@ import (
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine"
+	"github.com/crewlet/crewlet-operator/internal/render"
 )
 
 // Where the engine runs each agent seat is the engine's to decide: every node
@@ -123,6 +124,14 @@ func (run *configRun) lookAtFleet(ctx context.Context) {
 	_, _ = run.fleetOf(ctx, eng)
 }
 
+// leaseOf is the lease of the seat with handle in the fleet the reconcile
+// read, found by its handle or by the id the engine derives for it, which a
+// node that does not run the seat names the lease by (engine.Fleet.Holder).
+// run.fleet must be set.
+func (run *configRun) leaseOf(handle string) (engine.SeatLease, bool) {
+	return run.fleet.Holder(handle, render.SeatID(run.company.Spec.CompanyName, handle))
+}
+
 // decideReady sets an agent Seat's Ready condition and status.placement.node
 // from the engine's fleet: True (LeaseHeld) while a node holds the seat's
 // lease, False (Unplaced) while none does. Neither changes when this
@@ -146,7 +155,7 @@ func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 		message := p.executor.Field + ": " + p.executor.Message + "."
 		lease, held := engine.SeatLease{}, false
 		if run.fleet != nil {
-			lease, held = run.fleet.Holder(handle)
+			lease, held = run.leaseOf(handle)
 		}
 		switch {
 		case held:
@@ -159,7 +168,7 @@ func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 		}
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionReady, false, p.executor.Reason, message)
 	case run.fleet != nil:
-		lease, held := run.fleet.Holder(handle)
+		lease, held := run.leaseOf(handle)
 		if held {
 			s.Status.Placement.Node = lease.Node
 			setCondition(conditions, gen, crewletaiv1alpha1.ConditionReady, true, crewletaiv1alpha1.ReasonLeaseHeld,
@@ -328,7 +337,7 @@ func (run *configRun) settlingSeats(ctx context.Context) ([]string, error) {
 			continue
 		}
 		placed[workload]++
-		lease, isHeld := run.fleet.Holder(s.Status.Handle)
+		lease, isHeld := run.leaseOf(s.Status.Handle)
 		if !isHeld || !podOf(lease.Node, workload) {
 			out = append(out, s.Status.Handle)
 			continue
