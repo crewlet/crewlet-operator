@@ -21,14 +21,17 @@ import (
 // seats are paused (the engine's roster, GET /agents) and calls the two
 // tools.
 //
-// The tools are served only over MCP (POST /operator/mcp): the engine's other
-// transport for them, /operator/act, admits only a token bound to a person's
-// seat, and the operator's token is bound to nobody. The client is the
-// official MCP SDK's, because the transport is streamable HTTP, whose answers
-// may arrive as a server-sent event stream and whose session has a
-// negotiated protocol version: a hand-rolled client would have to agree with
-// the engine's server, which is the same SDK, on both, for every release of
-// either.
+// The tools are called over MCP (POST /operator/mcp) rather than the engine's
+// other transport for them, /operator/act. Act names each gesture with a
+// UUIDv7 Idempotency-Key and answers a retry under the same key as the one
+// gesture; for that to hold across a crash of the operator, the key would
+// have to be persisted before the call and read back after it. A pause or a
+// resume needs none of that: one repeated by value finds the seat in the
+// state it asks for and changes nothing. The client is the official MCP
+// SDK's, because the transport is streamable HTTP, whose answers may arrive
+// as a server-sent event stream and whose session has a negotiated protocol
+// version: a hand-rolled client would have to agree with the engine's server,
+// which is the same SDK, on both, for every release of either.
 
 // OperatorMCPPath is where the engine serves the operator catalogue over MCP.
 const OperatorMCPPath = "/operator/mcp"
@@ -49,9 +52,10 @@ type SeatPause struct {
 	// Paused is whether a person (or the operator) has the seat paused: it
 	// starts no new turn and its mail waits on its inbox.
 	Paused bool
-	// By is who paused it: the seat of the person whose token paused it,
-	// or the token's id when no seat is bound to the token (the operator's
-	// own is "operator"). Empty when the seat is not paused.
+	// By is who paused it, as Crewlet records the author of a write: the
+	// seat of the person who paused it, or, for a Tier A token, its login
+	// TokenLogin(id), since no seat is bound to one; the operator's own
+	// pause reads "token:operator". Empty when the seat is not paused.
 	By string
 	// At is when the pause was taken. Zero when the seat is not paused.
 	At time.Time
@@ -158,18 +162,21 @@ func (c *Client) ResumeSeat(ctx context.Context, handle string) (PauseResult, er
 	return c.pauseTool(ctx, toolResumeSeat, map[string]any{"handle": handle})
 }
 
-// pauseAnswer is what pause_seat and resume_seat answer.
+// pauseAnswer is what pause_seat and resume_seat answer. paused_by is the
+// author Crewlet records for the caller, which is already the seat of a
+// person and the login of a token, so it is the whole of who paused it; the
+// answer's paused_by_kind and operator_id (the credential it came through)
+// are not read, since the roster names a pauser by the author alone.
 type pauseAnswer struct {
-	Handle       string `json:"handle"`
-	Outcome      string `json:"outcome"`
-	Paused       bool   `json:"paused"`
-	Changed      bool   `json:"changed"`
-	PausedBy     string `json:"paused_by"`
-	PausedBySeat string `json:"paused_by_seat"`
-	PausedAt     string `json:"paused_at"`
-	Reason       string `json:"reason"`
-	StopRunning  bool   `json:"stop_running"`
-	Detail       string `json:"detail"`
+	Handle      string `json:"handle"`
+	Outcome     string `json:"outcome"`
+	Paused      bool   `json:"paused"`
+	Changed     bool   `json:"changed"`
+	PausedBy    string `json:"paused_by"`
+	PausedAt    string `json:"paused_at"`
+	Reason      string `json:"reason"`
+	StopRunning bool   `json:"stop_running"`
+	Detail      string `json:"detail"`
 }
 
 // The outcomes a pause tool answers with (Crewlet's statelog outcomes).
@@ -201,13 +208,9 @@ func (c *Client) pauseTool(ctx context.Context, tool string, args map[string]any
 		if err != nil {
 			return PauseResult{}, fmt.Errorf("%s %s: paused_at: %w", OperatorMCPPath, tool, err)
 		}
-		// The person's seat when one is bound to the token, as the
-		// engine's roster names who paused a seat.
-		by := answer.PausedBySeat
-		if by == "" {
-			by = answer.PausedBy
+		result.SeatPause = SeatPause{
+			Paused: true, By: answer.PausedBy, At: at, Reason: answer.Reason, StopRunning: answer.StopRunning,
 		}
-		result.SeatPause = SeatPause{Paused: true, By: by, At: at, Reason: answer.Reason, StopRunning: answer.StopRunning}
 	}
 	return result, nil
 }

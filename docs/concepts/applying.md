@@ -275,6 +275,12 @@ seats the engine runs at all. A call the engine may or may not have
 recorded, or refused (the record changed under it, say), is made again ten
 seconds later, and so is every owned pause while the roster cannot be read.
 
+A Seat's `status.pause.pausedBy` names who paused it as Crewlet records the
+author of any write: the seat of the person who paused it, or `token:<id>`
+for a token no seat is bound to. A pause the operator took reads
+`token:operator`, and one taken with the token the Company publishes,
+`token:access`.
+
 > **Who owns a pause.** Only a Seat that sets `spec.paused`, and only under
 > `Enforce`. A pause or resume made in the dashboard of such a seat is undone on
 > the operator's next look, at most five minutes later, with a `Drifted`

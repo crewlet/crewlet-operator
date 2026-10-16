@@ -44,7 +44,9 @@ import (
 // binary is found.
 const BinaryEnv = "CREWLET_BIN"
 
-// Token ids the engine records as the author of each revision a token writes.
+// The ids of the engine's two tokens. Crewlet records each write made with one
+// under its login, engine.TokenLogin(id): a revision's created_by, a stored
+// secret's updated_by, a seat pause's paused_by.
 const (
 	// OperatorTokenID is the id of the token the operator holds.
 	OperatorTokenID = "crewlet-operator"

@@ -429,7 +429,7 @@ var _ = Describe("Company config", Ordered, func() {
 		active := runsRendered(e, nimbus)
 		history := revisions(e)
 		Expect(history).To(HaveLen(1), "one write, the whole document")
-		Expect(history[0].CreatedBy).To(Equal(enginetest.OperatorTokenID))
+		Expect(history[0].CreatedBy).To(Equal(engine.TokenLogin(enginetest.OperatorTokenID)))
 		Expect(history[0].Summary).To(HavePrefix("crewlet-operator: Company/nimbus"))
 		Expect(nimbus.Status.Config.RevisionID).To(Equal(active.RevisionID))
 		Expect(nimbus.Status.Config.Epoch).NotTo(BeNil())
@@ -849,7 +849,7 @@ var _ = Describe("Company config", Ordered, func() {
 			s.Spec.PauseReason = "Deploy freeze"
 		})
 		Eventually(reasonOf(ana, crewletaiv1alpha1.ConditionPaused)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonSeatPaused))
-		Expect(ana.Status.Pause.PausedBy).To(Equal(enginetest.OperatorTokenID))
+		Expect(ana.Status.Pause.PausedBy).To(Equal(engine.TokenLogin(enginetest.OperatorTokenID)))
 		Expect(ana.Status.Pause.Reason).To(Equal("Deploy freeze"))
 		Expect(ana.Status.Pause.PausedAt).NotTo(BeNil())
 		Expect(enginePause(name + "-ana")(Default).Paused).To(BeTrue())
@@ -866,7 +866,7 @@ var _ = Describe("Company config", Ordered, func() {
 		_, err = person.PauseSeat(ctx, name+"-bo", "Looking into a bad answer", false)
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(reasonOf(bo, crewletaiv1alpha1.ConditionPaused)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonSeatPaused))
-		Expect(bo.Status.Pause.PausedBy).To(Equal(enginetest.AccessTokenID))
+		Expect(bo.Status.Pause.PausedBy).To(Equal(engine.TokenLogin(enginetest.AccessTokenID)))
 		Expect(bo.Status.Pause.Reason).To(Equal("Looking into a bad answer"))
 		Consistently(func(g Gomega) bool { return enginePause(name + "-bo")(g).Paused }).WithTimeout(3 * time.Second).Should(BeTrue())
 
@@ -895,8 +895,8 @@ var _ = Describe("Company config", Ordered, func() {
 		runsRendered(e, c)
 		history := revisions(e)
 		Expect(history).To(HaveLen(3))
-		Expect(history[0].CreatedBy).To(Equal(enginetest.OperatorTokenID))
-		Expect(history[1].CreatedBy).To(Equal(enginetest.AccessTokenID))
+		Expect(history[0].CreatedBy).To(Equal(engine.TokenLogin(enginetest.OperatorTokenID)))
+		Expect(history[1].CreatedBy).To(Equal(engine.TokenLogin(enginetest.AccessTokenID)))
 		Expect(log.of(name)).To(ContainElement(HavePrefix("Warning Drifted The engine ran revision " + history[1].ID)))
 	})
 
@@ -927,7 +927,7 @@ var _ = Describe("Company config", Ordered, func() {
 
 		Consistently(func(g Gomega) {
 			for _, r := range revisions(e) {
-				g.Expect(r.CreatedBy).To(Equal(enginetest.AccessTokenID))
+				g.Expect(r.CreatedBy).To(Equal(engine.TokenLogin(enginetest.AccessTokenID)))
 			}
 			g.Expect(storeListing(e)).To(BeEmpty())
 		}).WithTimeout(3 * quietPeriod).Should(Succeed())
@@ -1403,7 +1403,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Eventually(reasonOf(seat(name+"-bo"), crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
 		Expect(revisions(e)).To(HaveLen(2))
 		for _, r := range revisions(e) {
-			Expect(r.CreatedBy).To(Equal(enginetest.OperatorTokenID))
+			Expect(r.CreatedBy).To(Equal(engine.TokenLogin(enginetest.OperatorTokenID)))
 		}
 		runsRendered(e, c)
 	})

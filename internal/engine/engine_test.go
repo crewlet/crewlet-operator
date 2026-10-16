@@ -289,9 +289,10 @@ func TestEngineSecretsRoundTrip(t *testing.T) {
 	if i < 0 {
 		t.Fatalf("ListSecrets() = %+v, want %s listed", listed, name)
 	}
-	if s := listed[i]; s.Source != "operator" || s.UpdatedBy != enginetest.OperatorTokenID || s.KeyID == "" ||
+	if s := listed[i]; s.Source != "operator" || s.UpdatedBy != engine.TokenLogin(enginetest.OperatorTokenID) || s.KeyID == "" ||
 		s.UpdatedAt.IsZero() {
-		t.Fatalf("listed secret = %+v, want source operator, written by %s, sealed and timestamped", s, enginetest.OperatorTokenID)
+		t.Fatalf("listed secret = %+v, want source operator, written by %s, sealed and timestamped",
+			s, engine.TokenLogin(enginetest.OperatorTokenID))
 	}
 
 	for _, want := range []bool{true, false} {

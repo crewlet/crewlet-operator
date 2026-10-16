@@ -17,6 +17,7 @@ import (
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine"
+	"github.com/crewlet/crewlet-operator/internal/render"
 )
 
 // pauseEngine stands in for an engine's roster (GET /agents) and its pause
@@ -59,7 +60,7 @@ func (f *pauseEngine) client(t *testing.T) *engine.Client {
 				f.record[args.Handle] = paused
 				answer := map[string]any{"handle": args.Handle, "outcome": "applied", "paused": paused, "changed": changed}
 				if paused {
-					answer["paused_by"], answer["paused_at"] = "operator", "2026-10-09T08:00:00Z"
+					answer["paused_by"], answer["paused_at"] = engine.TokenLogin(render.TokenOperator), "2026-10-09T08:00:00Z"
 				}
 				text, err := json.Marshal(answer)
 				if err != nil {
@@ -119,7 +120,7 @@ func TestAnOwnedPauseFollowsTheRecordNotTheRoster(t *testing.T) {
 	if !f.record[seatAna] {
 		t.Fatalf("the seat runs after the reconcile (calls %v): a stale roster held back the brake", f.calls)
 	}
-	if p.pause == nil || p.pause.status != metav1.ConditionTrue || p.pause.pause.By != "operator" {
+	if p.pause == nil || p.pause.status != metav1.ConditionTrue || p.pause.pause.By != engine.TokenLogin(render.TokenOperator) {
 		t.Errorf("the verdict is %+v, want the record's pause, by the operator", p.pause)
 	}
 }

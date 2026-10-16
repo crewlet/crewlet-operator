@@ -48,14 +48,15 @@ func fakeCatalogue(t *testing.T, answer string, failed bool) (*engine.Client, fu
 // engine refuses.
 func TestPauseSeatSendsTheBearerOnEveryRequestOfTheSession(t *testing.T) {
 	client, bearers := fakeCatalogue(t,
-		`{"handle":"ana","outcome":"applied","paused":true,"changed":true,"paused_by":"ops-bot","paused_by_seat":"",`+
+		`{"handle":"ana","outcome":"applied","paused":true,"changed":true,"paused_by":"token:ops-bot",`+
+			`"paused_by_kind":"operator","operator_id":"token:ops-bot",`+
 			`"paused_at":"2026-06-08T07:30:02Z","reason":"","stop_running":false}`, false)
 	got, err := client.PauseSeat(context.Background(), "ana", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got.Paused || !got.Changed || got.By != "ops-bot" {
-		t.Fatalf("PauseSeat() = %+v, want a changed pause by ops-bot", got)
+	if !got.Paused || !got.Changed || got.By != engine.TokenLogin("ops-bot") {
+		t.Fatalf("PauseSeat() = %+v, want a changed pause by token:ops-bot", got)
 	}
 	seen := bearers()
 	if len(seen) < 2 {
@@ -65,6 +66,43 @@ func TestPauseSeatSendsTheBearerOnEveryRequestOfTheSession(t *testing.T) {
 		if b != "Bearer "+testAuth {
 			t.Errorf("request %d carried Authorization %q", i, b)
 		}
+	}
+}
+
+// TestPauseSeatNamesThePauserAsCrewletRecordsThem pins who a pause is by,
+// read from the answer Crewlet's pause_seat gives (its pauseAnswer): the
+// author it records, paused_by, which is a Tier A token's login and a
+// person's seat. The credential beside it (operator_id) is not who paused
+// the seat: for a person it is their session, which the roster never names.
+func TestPauseSeatNamesThePauserAsCrewletRecordsThem(t *testing.T) {
+	for _, c := range []struct {
+		name, answer, by string
+	}{
+		{
+			name: "the operator's own token",
+			answer: `{"handle":"ana","outcome":"applied","paused":true,"changed":true,"paused_by":"token:operator",` +
+				`"paused_by_kind":"operator","operator_id":"token:operator","paused_at":"2026-06-08T07:30:02Z",` +
+				`"reason":"","stop_running":false}`,
+			by: engine.TokenLogin("operator"),
+		},
+		{
+			name: "a person on their seat",
+			answer: `{"handle":"ana","outcome":"applied","paused":true,"changed":false,"paused_by":"founder",` +
+				`"paused_by_kind":"human","operator_id":"session:0199aa00-0000-7000-8000-000000000001",` +
+				`"paused_at":"2026-06-08T07:30:02Z","reason":"Rollout","stop_running":true}`,
+			by: "founder",
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			client, _ := fakeCatalogue(t, c.answer, false)
+			got, err := client.PauseSeat(context.Background(), "ana", "", false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !got.Paused || got.By != c.by {
+				t.Fatalf("PauseSeat() = %+v, want a pause by %s", got, c.by)
+			}
+		})
 	}
 }
 

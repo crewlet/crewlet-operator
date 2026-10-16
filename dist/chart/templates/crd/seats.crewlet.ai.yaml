@@ -1441,9 +1441,10 @@ spec:
                     type: string
                   pausedBy:
                     description: |-
-                      pausedBy is who paused the seat: the seat of the person whose engine
-                      token paused it, or the token's id when no seat is bound to it. A
-                      pause the operator took is its token's, operator.
+                      pausedBy is who paused the seat, as Crewlet records the author of a
+                      write: the seat of the person who paused it, or token:<id> for a
+                      token no seat is bound to. A pause the operator took reads
+                      token:operator.
                     maxLength: 256
                     minLength: 1
                     type: string

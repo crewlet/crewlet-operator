@@ -68,9 +68,9 @@ const (
 	LeafPort = 7422
 )
 
-// The API tokens of an engine. Each id is recorded by Crewlet as the author
-// of the revisions written with the token, and is also the key that holds
-// the token in the company's API tokens Secret.
+// The API tokens of an engine. Crewlet records every write made with a token
+// under its login, token:<id> (a revision's author, a pause's), and the id is
+// also the key that holds the token in the company's API tokens Secret.
 const (
 	// TokenOperator is the operator's own token. It is never handed out, so
 	// revoking a consumer's token never locks the operator out.

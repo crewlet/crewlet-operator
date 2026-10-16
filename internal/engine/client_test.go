@@ -487,14 +487,14 @@ func TestDrainingWriteIsNotReady(t *testing.T) {
 func TestListSecrets(t *testing.T) {
 	f := newFakeEngine(t)
 	f.handle("GET /secrets", answer(http.StatusOK, `{"secrets":[{"name":"K8S_A","key_id":"k1",
-		"updated_at":"2026-10-08T19:31:10.31209515Z","updated_by":"crewlet-operator","source":"operator"}]}`))
+		"updated_at":"2026-10-08T19:31:10.31209515Z","updated_by":"token:crewlet-operator","source":"operator"}]}`))
 	got, err := f.client().ListSecrets(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := engine.SecretInfo{
 		Name: storedName, KeyID: "k1", UpdatedAt: time.Date(2026, 10, 8, 19, 31, 10, 312095150, time.UTC),
-		UpdatedBy: "crewlet-operator", Source: "operator",
+		UpdatedBy: "token:crewlet-operator", Source: "operator",
 	}
 	if len(got) != 1 || got[0] != want {
 		t.Fatalf("ListSecrets() = %+v, want [%+v]", got, want)

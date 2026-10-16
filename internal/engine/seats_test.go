@@ -63,8 +63,9 @@ func TestEnginePausesAndResumesASeat(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !paused.Changed || !paused.Paused || paused.Reason != reason || paused.StopRunning ||
-		paused.By != enginetest.OperatorTokenID || paused.At.Before(start) {
-		t.Fatalf("PauseSeat() = %+v, want a changed pause by %s with the reason, taken now", paused, enginetest.OperatorTokenID)
+		paused.By != engine.TokenLogin(enginetest.OperatorTokenID) || paused.At.Before(start) {
+		t.Fatalf("PauseSeat() = %+v, want a changed pause by %s with the reason, taken now",
+			paused, engine.TokenLogin(enginetest.OperatorTokenID))
 	}
 	eventually(t, "the roster reporting the pause", func() error {
 		pauses, err := client.SeatPauses(ctx)

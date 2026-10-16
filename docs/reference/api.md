@@ -3022,7 +3022,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `pausedBy` _string_ | pausedBy is who paused the seat: the seat of the person whose engine<br />token paused it, or the token's id when no seat is bound to it. A<br />pause the operator took is its token's, operator. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `pausedBy` _string_ | pausedBy is who paused the seat, as Crewlet records the author of a<br />write: the seat of the person who paused it, or token:<id> for a<br />token no seat is bound to. A pause the operator took reads<br />token:operator. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `pausedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#time-v1-meta)_ | pausedAt is when the seat was paused, to the second. |  | Optional: \{\} <br /> |
 | `reason` _string_ | reason is why, in the pauser's words. |  | MaxLength: 500 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `stopRunning` _boolean_ | stopRunning is whether the pause also ended the turn the seat was on. |  | Optional: \{\} <br /> |

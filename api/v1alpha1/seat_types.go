@@ -677,9 +677,10 @@ type SeatPlacementStatus struct {
 // SeatPauseStatus is a seat's pause, as the engine reports it.
 // +kubebuilder:validation:MinProperties=1
 type SeatPauseStatus struct {
-	// pausedBy is who paused the seat: the seat of the person whose engine
-	// token paused it, or the token's id when no seat is bound to it. A
-	// pause the operator took is its token's, operator.
+	// pausedBy is who paused the seat, as Crewlet records the author of a
+	// write: the seat of the person who paused it, or token:<id> for a
+	// token no seat is bound to. A pause the operator took reads
+	// token:operator.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256

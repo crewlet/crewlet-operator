@@ -2,6 +2,17 @@ package engine
 
 import "time"
 
+// tokenLoginPrefix is the class of a Tier A token's login.
+const tokenLoginPrefix = "token:"
+
+// TokenLogin is the login a Tier A token (one of the engine's
+// api.auth.tokens) acts under, "token:<id>" (Crewlet's iam.TokenLogin). It is
+// what Crewlet records as the author of every write made with the token: a
+// revision's created_by, a stored secret's updated_by, a seat pause's
+// paused_by. A caller compares an author with it rather than spelling the
+// prefix, so the one place that knows the engine's grammar is here.
+func TokenLogin(id string) string { return tokenLoginPrefix + id }
+
 // ActiveConfig is the company document an engine is running.
 type ActiveConfig struct {
 	// RevisionID is the active revision, the id an ApplyRequest.IfMatch
@@ -199,7 +210,9 @@ type SecretInfo struct {
 	// UpdatedAt is when the value was last written.
 	UpdatedAt time.Time
 
-	// UpdatedBy is the API token id that wrote it.
+	// UpdatedBy is who wrote it, as Crewlet records the author of a write:
+	// TokenLogin(id) for a Tier A token, the operator's included, and the
+	// seat of a person.
 	UpdatedBy string
 
 	// Source is the provenance the writer recorded, such as "api" or
