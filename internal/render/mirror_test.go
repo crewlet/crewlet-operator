@@ -68,6 +68,17 @@ const (
 	addressRead     = "v0.1.1-0.20261012231821-14c93cab2ee6"
 
 	credentialNameRead = "v0.1.1-0.20261012231821-14c93cab2ee6"
+
+	// identityRead is crewlet#195's engine, which every mirror it changed
+	// was read again at: the run_sandbox launch and the agent-mode launch
+	// find the seat's sandbox by handle and take their setup through
+	// boxSetup, which writes a file whose body is one whole ${VAR} as that
+	// value, byte for byte (every setup file the render writes is one); the
+	// agent-mode launch refuses a surface bound to no seat, a fault of its
+	// own assembly no configuration reaches; sandboxEnv takes the org's
+	// sandbox type; and the tool bridge takes the keyring's material and
+	// still builds nothing without CREWLET_MCP_BRIDGE_URL.
+	identityRead = "v0.1.1-0.20261016092541-a677e638f19b"
 )
 
 // atlassianAccount is every operator file that copies which deployment the
@@ -142,8 +153,8 @@ var mirrored = []mirror{
 		against: []string{codeWorkGo},
 		decides: "a run_sandbox launch runs the head of the seat's sandbox phase with role.sandbox.coding_agent or " +
 			"the catalogue's default, and refuses before a box exists what newCodingRun and sandboxCredentials refuse",
-		digest: "53107d935c906582978a09c5690b861b69e761ced6d63dbba559e211fdaca62f",
-		read:   firstRead,
+		digest: "b9fbe0dbb82fa41563957f23e33a5aa990db356b41b8bbd7505950438d52cb00",
+		read:   identityRead,
 	},
 	{
 		file: sandboxGo, function: "buildSandbox",
@@ -201,8 +212,8 @@ var mirrored = []mirror{
 		against: []string{codeWorkGo},
 		decides: "a run's environment is the env of the catalogue's and the seat's setup steps, then the seat's " +
 			"role.sandbox.env",
-		digest: "47a6af92c5c2fd83aab61a8c6c6012ca63b572b35f801edc2313c71222ea183c",
-		read:   firstRead,
+		digest: "d6aff5239a57ba7f269dcc08e693b71f762f54c3eee83a92d06c4cedf906aeea",
+		read:   identityRead,
 	},
 	{
 		file: doctorGo, function: "(*Provider).CredentialEnvNames",
@@ -251,8 +262,8 @@ var mirrored = []mirror{
 		decides: "an agent-mode turn on a node that serves no tool bridge is refused, never run on the engine's own " +
 			"tool loop (AgentModeBridgeUnsupported, NotExposed), and so is one whose CLI login cannot follow it " +
 			"into the remote sandbox (sandboxCredentials at phase Execute)",
-		digest: "918a3f2ddb7e5327f9b05f2dbea7454f97ade87ebee8ba5a5c946b470aff56d9",
-		read:   firstRead,
+		digest: "833a43cf285e977637f99849e7b2d4402d4ac7f6e7c3ac51c00d73a28e63e5e6",
+		read:   identityRead,
 	},
 	{
 		file: agentRunGo, function: "(*agentLauncher).executorRun",
@@ -427,8 +438,8 @@ var mirrored = []mirror{
 		file: "internal/api/mcpbridge/build.go", function: "Build",
 		against: []string{executorGo},
 		decides: "a node given no CREWLET_MCP_BRIDGE_URL builds no tool bridge",
-		digest:  "99b4eabe6c10792f110b1391e9c768d802b18f077c07ce01477c4055f98e5b54",
-		read:    firstRead,
+		digest:  "12ef602a6fe89130eb28edbdf23f59248877c2a8144010ae34914c927b10cd7e",
+		read:    identityRead,
 	},
 }
 
