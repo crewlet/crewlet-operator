@@ -168,7 +168,7 @@ func WithTierA(operator, access string, render func(port int, dir string) []byte
 // names ids as api.auth.company_writers, the token ids that alone may change
 // the document, and the engine refuses every other token a change with 403
 // config_managed. Its reads, a reload and the secret store stay open to
-// every token. The engine ignores a WithCompany seed when the document is
+// both tokens, which hold admin. The engine ignores a WithCompany seed when the document is
 // managed, so the two do not combine; nor does WithTierA, whose Tier A is
 // the caller's to write, list included.
 func WithCompanyWriters(ids ...string) Option {
@@ -363,22 +363,38 @@ func (e *Engine) stop(t T, cmd *exec.Cmd, exited <-chan error) {
 	}
 }
 
-// streamMaxBytes is the embedded broker's declared limit: Crewlet's floor,
-// 5 GiB, which its four state logs fit inside. A suite runs many engines at
-// once on one filesystem, and an engine with no declared limit takes three
-// quarters of the free space it finds at boot, so on a machine with a few
-// gibibytes free, or busy writing a build cache, the engine that boots last
-// refuses its own logs ("insufficient storage resources available") and
-// never applies a document. A declared limit is a reservation the broker
-// keeps count of, not a check against the disk, and a test's streams hold
-// kilobytes.
-const streamMaxBytes = 5 << 30
+// streamMaxBytes is the embedded broker's declared limit: Crewlet's floor
+// (config.StoreMaxBytesFloor), 6 GiB, because every node reserves all five of
+// its state logs' ceilings whatever it runs, 4.5 GiB at their smallest, and
+// the floor leaves room beside them for the mailboxes and the coordination
+// buckets. A suite runs many engines at once on one filesystem, and an
+// engine with no declared limit takes three quarters of the free space it
+// finds at boot, so on a machine with a few gibibytes free, or busy writing
+// a build cache, the engine that boots last refuses its own logs
+// ("insufficient storage resources available") and never applies a
+// document. A declared limit is a reservation the broker keeps count of, not
+// a check against the disk, and a test's streams hold kilobytes.
+const streamMaxBytes = 6 << 30
 
 // tierA is the engine's bootstrap: the embedded broker with its own store, the
 // local store and coordination of a single node, an encrypted secret store,
 // and the API on the loopback interface with two tokens. Every credential is a
 // ${VAR} the engine resolves from the environment Start gives it, so none is
 // written to disk. writers, when there are any, are api.auth.company_writers.
+//
+// Crewlet asks a node that serves the API three things beyond its port, and
+// refuses to start without them. api.external_url is where a browser reaches
+// the engine: the loopback address the API binds, which is also where a test
+// reaches it, and which Crewlet reads as loopback, so neither its plain-http
+// advisory nor its trusted-proxies one fires. api.auth.admin is serve, since
+// the operator's own calls are admin's. Each token states its grants: the
+// operator's token is admin because every route the operator calls (the
+// company document, the secret store, the fleet, the integrations and the
+// pause tools) is admin's in Crewlet's authority table, and admin cannot be
+// split; the access token stands for the token the operator publishes to a
+// company's consumers, which the operator renders with admin too, and a test
+// of the managed document needs it to reach the refusal it tests
+// (config_managed) rather than be refused at the route for lack of a grant.
 func tierA(port int, writers []string, node *nodeOption) []byte {
 	var companyWriters string
 	if len(writers) > 0 {
@@ -409,14 +425,18 @@ coordination:
   type: local
 api:
   host: 127.0.0.1
-  port: %d
+  port: %[3]d
+  external_url: http://127.0.0.1:%[3]d
   auth:
+    admin: serve
     tokens:
-      - id: %s
+      - id: %[4]s
         token: "${ENGINETEST_OPERATOR_TOKEN}"
-      - id: %s
+        grants: [admin]
+      - id: %[5]s
         token: "${ENGINETEST_ACCESS_TOKEN}"
-%ssecrets:
+        grants: [admin]
+%[6]ssecrets:
   active_key_id: enginetest
   keys:
     - id: enginetest

@@ -416,7 +416,19 @@ func TestEngineRefusesAManagedDocumentToEveryOtherToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("an edit with the operator token: %v", err)
 	}
-	if active, err := operator.ActiveConfig(ctx); err != nil || active.RevisionID != second.RevisionID {
-		t.Fatalf("after the operator's edit the engine runs %+v (%v), want revision %s", active.RevisionID, err, second.RevisionID)
-	}
+	// Waited for rather than read once: the write marks its revision this
+	// node's active one, and the node's apply of the first revision, still
+	// finishing, can mark that one active again a moment later (Crewlet's
+	// engine/reconcile.go, holdLocalCopy, compares no epochs), until the
+	// node applies the second and marks it active once more.
+	eventually(t, "the engine running the operator's edit", func() error {
+		active, err := operator.ActiveConfig(ctx)
+		if err != nil {
+			return err
+		}
+		if active.RevisionID != second.RevisionID {
+			return fmt.Errorf("it runs revision %s, want %s", active.RevisionID, second.RevisionID)
+		}
+		return nil
+	})
 }
