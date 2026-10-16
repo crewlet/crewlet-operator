@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -41,6 +42,15 @@ const (
 	className         = "e2e"
 	companyName       = "acme"
 	providerSecret    = "model-gateway"
+
+	// engineeringUnit is the company's one Unit, which its agent seats sit
+	// in and its founder manages.
+	engineeringUnit = "engineering"
+
+	// founderSeat is the company's Human seat, which the suite puts the
+	// company's first person on, and founderEmail that person's address.
+	founderSeat  = "founder"
+	founderEmail = "founder@acme.example"
 
 	// fieldManager is the suite's field manager. It writes the objects the
 	// way a control plane does: server-side apply of typed objects.
@@ -134,11 +144,15 @@ var _ = Describe("Company", Ordered, func() {
 		company := waitForCompanyReady()
 		Expect(company.Status.Config.RevisionID).NotTo(BeEmpty(), "ConfigApplied=True names no revision")
 		Expect(company.Status.Config.Objects).To(Equal(v1.AppliedObjectCounts{
-			Units: new(int32(1)), Seats: new(int32(2)), LLMProviders: new(int32(1)),
+			Units: new(int32(1)), Seats: new(int32(3)), LLMProviders: new(int32(1)),
 			MCPServers: new(int32(0)), Integrations: new(int32(0)), Schedules: new(int32(0)),
 		}))
 		Expect(company.Status.Endpoints.API).To(Equal(engineURL))
 		Expect(company.Status.APIAccessSecretRef.Name).To(Equal(accessSecret))
+		// What the getting-started guide shows a reader at this step.
+		for _, c := range company.Status.Conditions {
+			GinkgoWriter.Printf("condition %s=%s %s\n", c.Type, c.Status, c.Reason)
+		}
 
 		By("finding the data pod Ready")
 		pod := &corev1.Pod{}
@@ -257,6 +271,68 @@ var _ = Describe("Company", Ordered, func() {
 		}).WithTimeout(10 * time.Second).Should(Succeed())
 	})
 
+	It("reports nobody in the company until its first person joins, and refuses to take that person's seat", func() {
+		identity := func(g Gomega) *metav1.Condition {
+			c := meta.FindStatusCondition(getCompany().Status.Conditions, v1.ConditionIdentityClaimed)
+			g.Expect(c).NotTo(BeNil(), "the Company reports no IdentityClaimed")
+			return c
+		}
+
+		By("finding the company unclaimed, naming its Human seat")
+		Eventually(func(g Gomega) {
+			c := identity(g)
+			g.Expect(c.Reason).To(Equal(v1.ReasonUnclaimed), c.Message)
+			g.Expect(c.Message).To(ContainSubstring("Its Human seats are " + founderSeat + "."))
+		}).Should(Succeed())
+
+		By("adding the first person onto the Human seat with the published token, as a control plane would")
+		key, err := uuid.NewV7()
+		Expect(err).NotTo(HaveOccurred())
+		const addPod = "add-founder"
+		apply(curlPod(consumerNamespace, addPod, addPerson(key.String())))
+		phase := curlPhase(consumerNamespace, addPod)
+		out, err := utils.Run(exec.Command("kubectl", "logs", addPod, "-n", consumerNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(phase).To(Equal(corev1.PodSucceeded), "the engine did not add the person: %s", out)
+
+		By("finding the company's first person enrolled")
+		Eventually(func(g Gomega) {
+			c := identity(g)
+			g.Expect(c.Status).To(Equal(metav1.ConditionTrue), "%s: %s", c.Reason, c.Message)
+			g.Expect(c.Reason).To(Equal(v1.ReasonPersonEnrolled))
+		}).Should(Succeed())
+
+		By("deleting the person's Human Seat, which the engine refuses while they hold it")
+		before := getCompany().Status.Config.RevisionID
+		Expect(k8sClient.Delete(ctx, &v1.Seat{Namespace: tenantNamespace, Name: founderSeat})).To(Succeed())
+		Eventually(func(g Gomega) {
+			c := meta.FindStatusCondition(getCompany().Status.Conditions, v1.ConditionConfigApplied)
+			g.Expect(c).NotTo(BeNil())
+			g.Expect(c.Reason).To(Equal(v1.ReasonSeatHeld), c.Message)
+			g.Expect(c.Message).To(ContainSubstring(founderSeat + " (held by a person, active)"))
+			g.Expect(c.Message).NotTo(ContainSubstring(founderEmail))
+		}).Should(Succeed())
+		Expect(getCompany().Status.Config.RevisionID).To(Equal(before), "the engine runs another revision")
+
+		By("restoring the Seat, which the engine runs again with nothing to apply")
+		apply(founder())
+		Eventually(func(g Gomega) {
+			company := getCompany()
+			g.Expect(conditionStatus(company.Status.Conditions, v1.ConditionConfigApplied)).To(Equal(metav1.ConditionTrue))
+			g.Expect(company.Status.Config.RevisionID).To(Equal(before))
+		}).Should(Succeed())
+
+		By("recording the data pod's peak memory, as its cgroup counts it")
+		peak, err := utils.Run(exec.Command("kubectl", "exec", "-n", tenantNamespace, dataPod, "--",
+			"cat", "/sys/fs/cgroup/memory.peak"))
+		if err != nil {
+			// A measurement, not a guard: a node whose cgroup keeps no peak
+			// says so in the report rather than failing the suite.
+			peak = "not read: " + err.Error()
+		}
+		AddReportEntry("data pod peak memory (bytes)", strings.TrimSpace(peak))
+	})
+
 	// The engine's NetworkPolicy at work, which needs a CNI that enforces
 	// NetworkPolicy: kind's kindnet does, on a kernel with nftables' queue
 	// support (CONFIG_NFT_QUEUE).
@@ -358,7 +434,7 @@ func applyCompany(deletion v1.DeletionPolicy) {
 	})
 	applyProvider(tenantNamespace, companyName)
 	apply(&v1.Unit{
-		Namespace: tenantNamespace, Name: "engineering",
+		Namespace: tenantNamespace, Name: engineeringUnit,
 		Spec: v1.UnitSpec{
 			CompanyRef:  v1.CompanyReference{Name: companyName},
 			DisplayName: "Engineering",
@@ -368,6 +444,21 @@ func applyCompany(deletion v1.DeletionPolicy) {
 	})
 	apply(leadSeat("Lead engineering."))
 	apply(seat("dev", "Developer", "Write the code."))
+	apply(founder())
+}
+
+// founder is the company's Human seat, for its first person. It names no
+// chat contact: the person works through the dashboard.
+func founder() *v1.Seat {
+	return &v1.Seat{
+		Namespace: tenantNamespace, Name: founderSeat,
+		Spec: v1.SeatSpec{
+			CompanyRef:  v1.CompanyReference{Name: companyName},
+			Kind:        v1.SeatKindHuman,
+			DisplayName: "Founder",
+			Manages:     []v1.ManagedReference{{Kind: v1.ManagedKindUnit, Name: engineeringUnit}},
+		},
+	}
 }
 
 func leadSeat(goal string) *v1.Seat { return seat("lead", "Engineering Lead", goal) }
@@ -378,7 +469,7 @@ func seat(name, displayName, goal string) *v1.Seat {
 		Spec: v1.SeatSpec{
 			CompanyRef:  v1.CompanyReference{Name: companyName},
 			DisplayName: displayName,
-			UnitRef:     v1.LocalObjectReference{Name: "engineering"},
+			UnitRef:     v1.LocalObjectReference{Name: engineeringUnit},
 			Goal:        goal,
 			LLM:         v1.SeatLLM{Default: []v1.LLMProviderReference{{Name: providerName}}},
 		},
@@ -601,6 +692,21 @@ const curlPodName = "read-config"
 const editConfig = `curl -sS --max-time 20 -X PUT -H "Authorization: Bearer ${TOKEN}" ` +
 	`-H "X-Summary: an edit the operator would overwrite" -H "Content-Type: application/yaml" ` +
 	`--data-binary "name: Edited by hand" -w "\nstatus=%{http_code}\n" "${URL}/config" && ` + readConfig
+
+// addPerson, run as the consumer, adds the company's first person onto the
+// founder seat with the published token, under the Idempotency-Key key, so
+// that a retry of the same request would be the same operation. The engine's
+// answer carries the person's first password link, a credential, so only its
+// status is printed; the whole answer is printed only when it is a refusal,
+// which carries none.
+func addPerson(key string) string {
+	body := `{"kind":"person","email":"` + founderEmail + `","seat":"` + founderSeat + `","grants":["admin"]}`
+	return `out=$(curl -sS --max-time 20 -X POST -H "Authorization: Bearer ${TOKEN}" ` +
+		`-H "Content-Type: application/json" -H "Idempotency-Key: ` + key + `" ` +
+		`--data '` + body + `' -w '\nstatus=%{http_code}' "${URL}/iam/people") || exit 1; ` +
+		`status=$(printf '%s\n' "$out" | tail -n 1); ` +
+		`case "$status" in status=201|status=202) echo "$status" ;; *) printf '%s\n' "$out"; exit 1 ;; esac`
+}
 
 // curlPod is a pod named name in namespace that runs script with curl, with
 // the API access Secret's token and URL in its environment as TOKEN and URL.
