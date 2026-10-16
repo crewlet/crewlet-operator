@@ -113,7 +113,6 @@ const (
 	msgBlankEmbeddingModel         = "refuses an embeddings provider that names no model"
 	msgSeatName                    = "without spec.handle the Seat's name is its handle"
 	msgHandleImmutable             = "the seat's handle is immutable"
-	msgHumanContact                = "a Human seat needs contact"
 	msgAgentContact                = "contact and availability apply to Human seats only"
 	msgHumanForbidden              = "a Human seat is never run by the engine"
 	msgSlackUserID                 = "spec.contact.slackUserID in body should match"

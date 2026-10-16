@@ -128,8 +128,14 @@ spec:
                   rule: self == oldSelf
               contact:
                 description: |-
-                  contact is how agents reach the person in a Human seat. Required for,
-                  and only for, kind Human.
+                  contact is how agents reach the person in a Human seat on a chat
+                  surface, and how what the person does there reaches the engine as
+                  theirs. It applies to Human seats only, and is optional: a person who
+                  works only through the engine's dashboard has no account to name, and
+                  signs in on the seat through the engine's own identity directory. The
+                  engine warns of a Human seat without one, since nothing addressed to it
+                  on a chat surface reaches anybody, and the operator records the warning
+                  as an EngineWarnings event on the Company.
                 minProperties: 1
                 properties:
                   atlassianAccount:
@@ -1285,8 +1291,6 @@ spec:
             - companyRef
             type: object
             x-kubernetes-validations:
-            - message: 'a Human seat needs contact: how agents reach the person'
-              rule: self.kind != 'Human' || has(self.contact)
             - message: contact and availability apply to Human seats only
               rule: self.kind != 'Agent' || (!has(self.contact) && !has(self.availability))
             - message: 'a Human seat is never run by the engine: llm, tokenBudget,

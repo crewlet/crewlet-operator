@@ -406,7 +406,6 @@ type SeatContact struct {
 
 // SeatSpec is one seat of a company: an AI agent or a person. It renders to
 // one entry of Crewlet's roles, nested under its unit's.
-// +kubebuilder:validation:XValidation:rule="self.kind != 'Human' || has(self.contact)",message="a Human seat needs contact: how agents reach the person"
 // +kubebuilder:validation:XValidation:rule="self.kind != 'Agent' || (!has(self.contact) && !has(self.availability))",message="contact and availability apply to Human seats only"
 // +kubebuilder:validation:XValidation:rule="self.kind != 'Human' || !(has(self.llm) || has(self.tokenBudget) || has(self.workers) || has(self.learningEnabled) || has(self.mcp) || has(self.sandbox) || has(self.integrations) || has(self.behavioralGuidelines) || has(self.project) || has(self.space) || has(self.placement) || has(self.paused))",message="a Human seat is never run by the engine: llm, tokenBudget, workers, learningEnabled, mcp, sandbox, integrations, behavioralGuidelines, project, space, placement and paused apply to Agent seats only"
 // +kubebuilder:validation:XValidation:rule="(!has(self.pauseReason) && !has(self.stopRunning)) || (has(self.paused) && self.paused)",message="pauseReason and stopRunning describe a pause: they apply only while paused is true"
@@ -605,8 +604,14 @@ type SeatSpec struct {
 	// +kubebuilder:validation:Pattern=`^[A-Z][A-Z0-9]{1,9}$`
 	Space string `json:"space,omitempty"`
 
-	// contact is how agents reach the person in a Human seat. Required for,
-	// and only for, kind Human.
+	// contact is how agents reach the person in a Human seat on a chat
+	// surface, and how what the person does there reaches the engine as
+	// theirs. It applies to Human seats only, and is optional: a person who
+	// works only through the engine's dashboard has no account to name, and
+	// signs in on the seat through the engine's own identity directory. The
+	// engine warns of a Human seat without one, since nothing addressed to it
+	// on a chat surface reaches anybody, and the operator records the warning
+	// as an EngineWarnings event on the Company.
 	// +optional
 	Contact SeatContact `json:"contact,omitzero"`
 

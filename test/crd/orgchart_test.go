@@ -174,9 +174,10 @@ func TestSeatValidation(t *testing.T) {
 		// Kinds.
 		{name: "a human seat with contact is accepted", mutate: asHuman(nothing)},
 		{
-			name:   "a human seat without contact is refused",
+			// A person who works only through the dashboard has no chat
+			// account to name; Crewlet advises rather than refuses.
+			name:   "a human seat without contact is accepted",
 			mutate: func(s *v1.Seat) { s.Spec.Kind = v1.SeatKindHuman },
-			want:   msgHumanContact,
 		},
 		{
 			name:   "contact on an agent seat is refused",

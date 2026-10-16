@@ -387,8 +387,13 @@ The engine creates no account for a person. A Human seat is tied to the
 person's own account on each surface by its `spec.contact`, which renders to
 the role's `contact` in Crewlet: agents mention the person there and message
 them directly, and what the person does there, a post, a comment or a
-review, reaches the engine as theirs. A Human seat needs at least one, and
-takes one field for each surface it is reached on:
+review, reaches the engine as theirs. A Human seat takes one field for each
+chat surface or tool it is reached on, and needs none: a person who works
+only through the engine's dashboard has no account to name, and signs in on
+their seat through the engine's identity directory. The engine warns of a
+Human seat with no chat contact, since a message addressed to it there
+reaches nobody, and the operator records the warning as an `EngineWarnings`
+event on the Company:
 
 | Field | Surface | The value | Where to find it |
 |---|---|---|---|
