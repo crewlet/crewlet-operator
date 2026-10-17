@@ -176,6 +176,50 @@ run `crewlet iam invalidate-all` as above, which ends every person's sessions
 and machine tokens too. People's own sessions and passwords are not touched
 by a rotation.
 
+## If the access token leaked
+
+Rotating ends the leaked value, not what was done with it. The access token
+holds `admin`, so whoever had it could also have:
+
+- read every value in the engine's secret store (`GET /secrets/<name>?reveal=true`)
+  and replaced any of them: vendor tokens, model keys, webhook secrets;
+- under `Observe` or `Seed`, changed the company document, which only the
+  operator's token may write under `Enforce`
+  ([Choosing a management policy](management-policies.md));
+- invited or created people with `admin`, created service accounts and minted
+  their tokens, bound an account to a seat, changed someone's permissions, or
+  reset a person's password and two-step verification to sign in as them.
+
+All of that outlasts the token. First collect the data pod's log, before the
+rotation rolls the pod: every reveal is logged as `secret_revealed` with the
+name and who asked (`token:access`). Then rotate, and with the new access
+token in `CREWLET_API_TOKEN` as [above](#the-first-person):
+
+1. Run `crewlet iam invalidate-all` at once. It ends every session and machine
+   token in the company, a dashboard session opened with the leaked token and
+   any token minted for an account somebody created included, so nothing done
+   while the token was out can carry on during the clean-up. Everyone signs in
+   again.
+2. Read what was done. `crewlet iam audit` is the directory's trail, each
+   change with the principal that made it; what the access token did names
+   `token:access`. `crewlet iam people`, `crewlet iam invitations -all` and
+   `crewlet iam credentials -person <id>` list who exists now and what they
+   hold.
+3. Undo what nobody you know did: `crewlet iam cancel-invite` an invitation,
+   `crewlet iam remove` a person or service account, `crewlet iam grant`
+   permissions back, `crewlet iam bind` or `unbind` a service account.
+4. Rotate every credential the company's objects reference: write a new value
+   into each Secret key. The operator pushes each new value into the engine's
+   store, which also replaces a value somebody overwrote there, and nothing
+   read from the store before still works. Under `Observe` or `Seed`, read the
+   document's revisions too: `GET /config/revisions` names who wrote each one,
+   and `POST /config/revisions/<id>/revert` goes back to the last one you
+   trust.
+5. Last, for each person whose password or two-step verification was reset,
+   run `crewlet iam reset-mfa` and then `crewlet iam reset-password`, and hand
+   them the new link yourself. A link issued before step 1 no longer works:
+   `invalidate-all`, like `reset-mfa`, cancels every outstanding one.
+
 ## See also
 
 - [Exposure and Network Policy](exposure.md) — the address people sign in at, and the routes to it
