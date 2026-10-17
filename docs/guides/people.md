@@ -143,6 +143,14 @@ the dashboard, so a seat is added as a `Seat` object, not there
 themselves are never in the document, and are managed in the engine under
 every policy.
 
+While the company is reached at `http://localhost:8080`, every invitation
+and password link the engine hands out leads to `localhost` on the machine
+of whoever opens it. Send one only to somebody who opens it through their own
+port-forward: whatever else listens on their port 8080 receives the link,
+and with it the right to choose the account's password. Give the company an
+address people reach first
+([Where people reach the dashboard](exposure.md#where-people-reach-the-dashboard)).
+
 A Human Seat somebody holds cannot be taken away while they hold it: deleting
 it, or turning it into an Agent seat, is refused by the engine, and the
 Company reports `ConfigApplied=False SeatHeld` naming the seat and what holds

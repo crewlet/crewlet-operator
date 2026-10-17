@@ -87,7 +87,12 @@ exact address its vendor delivers to, `<publicBaseURL>/webhooks/<vendor>`:
 | Atlassian | none: the organization is where accounts are made | — |
 
 Without a public address an Integration whose vendor delivers webhooks
-reports `Healthy=False NotExposed`; Mattermost and Atlassian need none.
+reports `Healthy=False NotExposed`; Mattermost and Atlassian need none. The
+engine still registers the webhooks it registers, at the only address its
+public listener has then, `http://<company>-engine.<namespace>.svc:8081`: no
+vendor reaches it, and it names the company's Service and namespace to the
+vendor. Give the company a public address before an Integration holds the
+credentials the engine registers with.
 `Healthy` is otherwise the engine's own check of the vendor. Jira,
 Confluence and the Atlassian organization are one tool to the engine,
 `atlassian`, so their three Integrations report one verdict.
