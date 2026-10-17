@@ -258,21 +258,30 @@ func TestContractRefusesListenersThatCannotOpen(t *testing.T) {
 // TestContractExternalURLShapes ties the API's rules on
 // spec.exposure.dashboardBaseURL and publicBaseURL, which become
 // api.external_url and api.public.external_url, to Crewlet's
-// (config.checkExternalURL): an address with a query or a fragment is
-// refused, so the API refuses it on the Company rather than crash-loop the
-// data pod; and a path, a trailing '/' and plain http on localhost are
-// accepted, so the API refuses no address the engine runs on.
+// (config.checkExternalURL): an address with a query or a fragment, or
+// with its scheme in upper case, is refused, so the API refuses it on the
+// Company rather than crash-loop the data pod; and a path, a trailing '/'
+// and plain http on localhost are accepted, so the API refuses no address
+// the engine runs on.
 func TestContractExternalURLShapes(t *testing.T) {
+	const (
+		queryOrFragment = "query or fragment"
+		scheme          = "must start with http:// or https://"
+		pathExternal    = "api.external_url"
+		pathPublic      = "api.public.external_url"
+	)
 	for _, c := range []struct {
 		name             string
 		external, public string
-		refused          string
+		refused, because string
 		advisories       []advisory
 	}{
-		{name: "a query on the external address", external: "https://crewlet.example.com/?tenant=nimbus", refused: "api.external_url"},
-		{name: "a fragment on the external address", external: "https://crewlet.example.com/#/work", refused: "api.external_url"},
-		{name: "a query on the public address", public: "https://hooks.example.com/?tenant=nimbus", refused: "api.public.external_url"},
-		{name: "a fragment on the public address", public: "https://hooks.example.com/nimbus#hooks", refused: "api.public.external_url"},
+		{name: "a query on the external address", external: "https://crewlet.example.com/?tenant=nimbus", refused: pathExternal, because: queryOrFragment},
+		{name: "a fragment on the external address", external: "https://crewlet.example.com/#/work", refused: pathExternal, because: queryOrFragment},
+		{name: "a query on the public address", public: "https://hooks.example.com/?tenant=nimbus", refused: pathPublic, because: queryOrFragment},
+		{name: "a fragment on the public address", public: "https://hooks.example.com/nimbus#hooks", refused: pathPublic, because: queryOrFragment},
+		{name: "an upper-case scheme on the external address", external: "HTTPS://crewlet.example.com", refused: pathExternal, because: scheme},
+		{name: "an upper-case scheme on the public address", public: "Https://hooks.example.com", refused: pathPublic, because: scheme},
 		{
 			name: "a path and a trailing slash", external: "https://crewlet.example.com/nimbus/", public: "https://hooks.example.com/nimbus/",
 			advisories: []advisory{advisoryNoTrustedProxy},
@@ -294,10 +303,64 @@ func TestContractExternalURLShapes(t *testing.T) {
 			got, stdout, stderr, _ := verdict(t, bootstrapEnv(doc), args...)
 			refused := slices.ContainsFunc(got.Problems, func(raw json.RawMessage) bool {
 				var p struct{ Path, Message string }
-				return json.Unmarshal(raw, &p) == nil && p.Path == c.refused && strings.Contains(p.Message, "query or fragment")
+				return json.Unmarshal(raw, &p) == nil && p.Path == c.refused && strings.Contains(p.Message, c.because)
 			})
 			if got.Valid || !refused {
-				t.Errorf("crewlet validate did not refuse %s for its query or fragment:\n%s\n%s", c.refused, stdout, stderr)
+				t.Errorf("crewlet validate did not refuse %s with %q:\n%s\n%s", c.refused, c.because, stdout, stderr)
+			}
+		})
+	}
+}
+
+// TestContractVendorURLsAreReadAsWritten ties the API's rules on the vendor
+// addresses an Integration names to Crewlet's (config.hasHTTPScheme), which
+// reads a scheme as written: each address refused with its scheme in upper
+// case, so the API refusing HTTPS:// on the Integration refuses nothing the
+// engine would apply.
+func TestContractVendorURLsAreReadAsWritten(t *testing.T) {
+	tierA, err := Bootstrap(bootstrapCases()[0].input(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := write(t, "crewlet.yaml", tierA.YAML)
+	// The case names each Integration after its vendor.
+	for _, c := range []struct {
+		integration, path string
+		set               func(*v1alpha1.IntegrationSpec)
+	}{
+		{VendorGitHub, "integrations.github.url", func(s *v1alpha1.IntegrationSpec) { s.GitHub.URL = "HTTPS://github.example.com" }},
+		{VendorGitLab, "integrations.gitlab.url", func(s *v1alpha1.IntegrationSpec) { s.GitLab.URL = "HTTPS://gitlab.example.com" }},
+		{VendorMattermost, "integrations.mattermost.url", func(s *v1alpha1.IntegrationSpec) { s.Mattermost.URL = "Https://chat.example.com" }},
+		{VendorJira, "integrations.jira.url", func(s *v1alpha1.IntegrationSpec) { s.Jira.URL = "HTTP://jira.example.com" }},
+		{VendorJira, "integrations.jira.site_url", func(s *v1alpha1.IntegrationSpec) { s.Jira.SiteURL = "HTTPS://jira.example.com" }},
+		{VendorConfluence, "integrations.confluence.url", func(s *v1alpha1.IntegrationSpec) { s.Confluence.URL = "HTTPS://wiki.example.com" }},
+		{VendorConfluence, "integrations.confluence.site_url", func(s *v1alpha1.IntegrationSpec) { s.Confluence.SiteURL = "HTTPS://wiki.example.com" }},
+	} {
+		t.Run(c.path, func(t *testing.T) {
+			in := companyCaseNamed(t, "secret-positions").input(t)
+			i := slices.IndexFunc(in.Integrations, func(i v1alpha1.Integration) bool { return i.Name == c.integration })
+			if i < 0 {
+				t.Fatalf("the case has no Integration named %s", c.integration)
+			}
+			c.set(&in.Integrations[i].Spec)
+			doc, err := Company(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			env := bootstrapEnv(tierA)
+			for _, k := range doc.Refs {
+				env[secretsync.StoreName(k)] = dummyCredential(k)
+			}
+			for _, name := range doc.Provisioned {
+				env[name] = "minted-" + name
+			}
+			got, stdout, stderr, _ := verdict(t, env, "-config", config, "-company", write(t, "company.yaml", doc.YAML))
+			refused := slices.ContainsFunc(got.Problems, func(raw json.RawMessage) bool {
+				var p struct{ Path, Message string }
+				return json.Unmarshal(raw, &p) == nil && p.Path == c.path && strings.Contains(p.Message, "must start with http:// or https://")
+			})
+			if got.Valid || !refused {
+				t.Errorf("crewlet validate did not refuse %s for its upper-case scheme:\n%s\n%s", c.path, stdout, stderr)
 			}
 		})
 	}

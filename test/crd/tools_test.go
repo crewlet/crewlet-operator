@@ -278,7 +278,13 @@ func TestIntegrationValidation(t *testing.T) {
 		{
 			name:   "an http GitHub url is refused",
 			mutate: asGitHub(func(gh *v1.GitHubIntegration) { gh.URL = "http://github.example.com" }),
-			want:   "url must be an absolute https URL",
+			want:   "url must be an absolute URL starting with https://",
+		},
+		{
+			// Crewlet reads the scheme as written and refuses HTTPS://.
+			name:   "a GitHub url with an upper-case scheme is refused",
+			mutate: asGitHub(func(gh *v1.GitHubIntegration) { gh.URL = "HTTPS://github.example.com" }),
+			want:   "url must be an absolute URL starting with https://",
 		},
 		{
 			name:   "an org webhook mode outside Auto, Require and Never is refused",

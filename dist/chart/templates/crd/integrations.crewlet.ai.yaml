@@ -154,8 +154,9 @@ spec:
                     minLength: 1
                     type: string
                     x-kubernetes-validations:
-                    - message: siteURL must be an absolute http or https URL
-                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                    - message: siteURL must be an absolute URL starting with http://
+                        or https://
+                      rule: isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))
                     - message: 'siteURL may not hold a ${NAME} reference: the engine
                         would resolve it from its own secret store and environment,
                         which hold credentials that are not this object''s to name'
@@ -191,8 +192,9 @@ spec:
                     minLength: 1
                     type: string
                     x-kubernetes-validations:
-                    - message: url must be an absolute http or https URL
-                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                    - message: url must be an absolute URL starting with http:// or
+                        https://
+                      rule: isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))
                     - message: 'url may not hold a ${NAME} reference: the engine would
                         resolve it from its own secret store and environment, which
                         hold credentials that are not this object''s to name'
@@ -477,8 +479,8 @@ spec:
                     minLength: 1
                     type: string
                     x-kubernetes-validations:
-                    - message: url must be an absolute https URL
-                      rule: isURL(self) && url(self).getScheme() == 'https'
+                    - message: url must be an absolute URL starting with https://
+                      rule: isURL(self) && self.startsWith('https://')
                     - message: 'url may not hold a ${NAME} reference: the engine would
                         resolve it from its own secret store and environment, which
                         hold credentials that are not this object''s to name'
@@ -696,8 +698,9 @@ spec:
                     minLength: 1
                     type: string
                     x-kubernetes-validations:
-                    - message: url must be an absolute http or https URL
-                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                    - message: url must be an absolute URL starting with http:// or
+                        https://
+                      rule: isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))
                     - message: 'url may not hold a ${NAME} reference: the engine would
                         resolve it from its own secret store and environment, which
                         hold credentials that are not this object''s to name'
@@ -754,8 +757,9 @@ spec:
                     minLength: 1
                     type: string
                     x-kubernetes-validations:
-                    - message: siteURL must be an absolute http or https URL
-                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                    - message: siteURL must be an absolute URL starting with http://
+                        or https://
+                      rule: isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))
                     - message: 'siteURL may not hold a ${NAME} reference: the engine
                         would resolve it from its own secret store and environment,
                         which hold credentials that are not this object''s to name'
@@ -792,8 +796,9 @@ spec:
                     minLength: 1
                     type: string
                     x-kubernetes-validations:
-                    - message: url must be an absolute http or https URL
-                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                    - message: url must be an absolute URL starting with http:// or
+                        https://
+                      rule: isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))
                     - message: 'url may not hold a ${NAME} reference: the engine would
                         resolve it from its own secret store and environment, which
                         hold credentials that are not this object''s to name'
@@ -944,8 +949,9 @@ spec:
                     minLength: 1
                     type: string
                     x-kubernetes-validations:
-                    - message: url must be an absolute http or https URL
-                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                    - message: url must be an absolute URL starting with http:// or
+                        https://
+                      rule: isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))
                     - message: 'url may not hold a ${NAME} reference: the engine would
                         resolve it from its own secret store and environment, which
                         hold credentials that are not this object''s to name'

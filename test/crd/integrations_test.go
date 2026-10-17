@@ -16,10 +16,16 @@ const (
 	msgRouteTo         = "give exactly one of seatRef and dismiss: true"
 	msgSeatSource      = "exactly one of secretKeyRef and provisioned must be set"
 	msgUnitProvisioned = "a unit's credentials come from Secrets"
-	msgURLScheme       = "url must be an absolute http or https URL"
+	msgURLScheme       = "url must be an absolute URL starting with http:// or https://"
 	msgURLReference    = "url may not hold a ${NAME} reference"
-	msgSiteURL         = "siteURL must be an absolute http or https URL"
+	msgSiteURL         = "siteURL must be an absolute URL starting with http:// or https://"
 )
+
+// nameUpperCaseURL names the case that offers a vendor's url with its scheme
+// in upper case: Crewlet reads a vendor's scheme as written and refuses
+// HTTPS://, so the API does too, rather than admit an Integration the engine
+// will not apply.
+const nameUpperCaseURL = "a url with an upper-case scheme is refused"
 
 // The names the vendor fixtures share.
 const (
@@ -117,6 +123,11 @@ func TestIntegrationVendors(t *testing.T) {
 				{
 					name:   "a url that is no URL is refused",
 					mutate: func(i *v1.Integration) { i.Spec.GitLab.URL = "gitlab.example.com" },
+					want:   msgURLScheme,
+				},
+				{
+					name:   nameUpperCaseURL,
+					mutate: func(i *v1.Integration) { i.Spec.GitLab.URL = "HTTPS://gitlab.example.com" },
 					want:   msgURLScheme,
 				},
 				{
@@ -219,6 +230,11 @@ func TestIntegrationVendors(t *testing.T) {
 					mutate: func(i *v1.Integration) { i.Spec.Mattermost.Team = "Nimbus HQ" },
 					want:   "spec.mattermost.team: Invalid value",
 				},
+				{
+					name:   nameUpperCaseURL,
+					mutate: func(i *v1.Integration) { i.Spec.Mattermost.URL = "Https://chat.example.com" },
+					want:   msgURLScheme,
+				},
 			},
 		},
 		{
@@ -252,6 +268,16 @@ func TestIntegrationVendors(t *testing.T) {
 				{
 					name:   "a siteURL that is no URL is refused",
 					mutate: func(i *v1.Integration) { i.Spec.Jira.SiteURL = "nimbus.atlassian.net" },
+					want:   msgSiteURL,
+				},
+				{
+					name:   nameUpperCaseURL,
+					mutate: func(i *v1.Integration) { i.Spec.Jira.URL = "HTTP://jira.example.com" },
+					want:   msgURLScheme,
+				},
+				{
+					name:   "a siteURL with an upper-case scheme is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Jira.SiteURL = "HTTPS://nimbus.atlassian.net" },
 					want:   msgSiteURL,
 				},
 				{
@@ -294,6 +320,19 @@ func TestIntegrationVendors(t *testing.T) {
 					name:   "a siteURL that is no URL is refused",
 					mutate: func(i *v1.Integration) { i.Spec.Confluence.SiteURL = "nimbus.atlassian.net" },
 					want:   msgSiteURL,
+				},
+				{
+					name:   "a siteURL with an upper-case scheme is refused",
+					mutate: func(i *v1.Integration) { i.Spec.Confluence.SiteURL = "HTTPS://nimbus.atlassian.net" },
+					want:   msgSiteURL,
+				},
+				{
+					name: nameUpperCaseURL,
+					mutate: func(i *v1.Integration) {
+						i.Spec.Confluence.CloudID = ""
+						i.Spec.Confluence.URL = "HTTPS://wiki.example.com"
+					},
+					want: msgURLScheme,
 				},
 				{
 					name:   "a siteURL naming a variable of the engine is refused",

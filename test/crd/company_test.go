@@ -231,6 +231,13 @@ func TestCompanyValidation(t *testing.T) {
 			want:   msgPublicBaseURL,
 		},
 		{
+			// Crewlet reads the scheme as written and refuses HTTPS://, so
+			// the API does too, rather than crash-loop the data pod.
+			name:   "a publicBaseURL with an upper-case scheme is refused",
+			mutate: func(c *v1.Company) { c.Spec.Exposure.PublicBaseURL = "HTTPS://hooks.nimbus.example" },
+			want:   msgPublicBaseURL,
+		},
+		{
 			// An internal network's dashboard may be plain HTTP; Crewlet
 			// takes either scheme.
 			name:   "an http dashboardBaseURL is accepted",
@@ -244,6 +251,11 @@ func TestCompanyValidation(t *testing.T) {
 		{
 			name:   "a dashboardBaseURL of another scheme is refused",
 			mutate: func(c *v1.Company) { c.Spec.Exposure.DashboardBaseURL = "ftp://crewlet.nimbus.example" },
+			want:   msgDashboardBaseURL,
+		},
+		{
+			name:   "a dashboardBaseURL with an upper-case scheme is refused",
+			mutate: func(c *v1.Company) { c.Spec.Exposure.DashboardBaseURL = "Https://crewlet.nimbus.example" },
 			want:   msgDashboardBaseURL,
 		},
 		{

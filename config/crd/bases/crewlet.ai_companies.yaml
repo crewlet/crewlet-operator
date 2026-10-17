@@ -306,9 +306,9 @@ spec:
                     minLength: 1
                     type: string
                     x-kubernetes-validations:
-                    - message: dashboardBaseURL must be an absolute http or https
-                        URL
-                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                    - message: dashboardBaseURL must be an absolute URL starting with
+                        http:// or https://
+                      rule: isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))
                         && url(self).getHostname() != ''
                     - message: 'dashboardBaseURL may not have a query or a fragment:
                         Crewlet builds every link a person follows, an invitation
@@ -333,8 +333,9 @@ spec:
                     minLength: 1
                     type: string
                     x-kubernetes-validations:
-                    - message: publicBaseURL must be an absolute https URL
-                      rule: isURL(self) && url(self).getScheme() == 'https' && url(self).getHostname()
+                    - message: publicBaseURL must be an absolute URL starting with
+                        https://
+                      rule: isURL(self) && self.startsWith('https://') && url(self).getHostname()
                         != ''
                     - message: 'publicBaseURL may not have a query or a fragment:
                         Crewlet builds every webhook and sandbox address by appending

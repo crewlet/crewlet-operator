@@ -596,7 +596,7 @@ type CompanyExposure struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
-	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() == 'https' && url(self).getHostname() != ''",message="publicBaseURL must be an absolute https URL"
+	// +kubebuilder:validation:XValidation:rule="isURL(self) && self.startsWith('https://') && url(self).getHostname() != ''",message="publicBaseURL must be an absolute URL starting with https://"
 	// +kubebuilder:validation:XValidation:rule="!self.contains('?') && !self.contains('#')",message="publicBaseURL may not have a query or a fragment: Crewlet builds every webhook and sandbox address by appending a path to it"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="publicBaseURL may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
 	PublicBaseURL string `json:"publicBaseURL,omitempty"`
@@ -619,7 +619,7 @@ type CompanyExposure struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
-	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() in ['http', 'https'] && url(self).getHostname() != ''",message="dashboardBaseURL must be an absolute http or https URL"
+	// +kubebuilder:validation:XValidation:rule="isURL(self) && (self.startsWith('http://') || self.startsWith('https://')) && url(self).getHostname() != ''",message="dashboardBaseURL must be an absolute URL starting with http:// or https://"
 	// +kubebuilder:validation:XValidation:rule="!self.contains('?') && !self.contains('#')",message="dashboardBaseURL may not have a query or a fragment: Crewlet builds every link a person follows, an invitation and a password link included, by appending a path to it"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="dashboardBaseURL may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
 	DashboardBaseURL string `json:"dashboardBaseURL,omitempty"`
