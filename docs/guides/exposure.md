@@ -312,8 +312,9 @@ restarts the data pod. With the third, every link the engine gives a person,
 an invitation's included, leads to a `localhost` only a port-forwarding
 browser reaches, and the Company's `Exposed` condition says so in its
 message. An `http` address on a routable host works, but its cookie travels
-unencrypted and Crewlet warns of it at every start: route the API over HTTPS
-for anyone who signs in from elsewhere.
+unencrypted: route the API over HTTPS for anyone who signs in from
+elsewhere. Crewlet names this only when its `crewlet.yaml` is checked with
+`crewlet validate`, which nothing in the cluster runs, so nothing reports it.
 
 When the Company's own address is not on the route's origin, the route is
 still an address the engine is reached on: the operator adds the route's
