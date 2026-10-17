@@ -1275,7 +1275,8 @@ func (run *configRun) readHealth(ctx context.Context, eng *engine.Client) (engin
 		logf.FromContext(ctx).V(1).Info("Failed to read the engine's health", "error", healthErr.Error())
 	}
 	run.engineHealthy = engineHealthy(health.Alarms, healthErr)
-	run.identityClaimed = identityClaimed(health, healthErr, run.humanSeats(ctx), apiAccessSecretName(run.company))
+	run.identityClaimed = identityClaimed(health, healthErr, run.humanSeats(ctx), apiAccessSecretName(run.company),
+		dataStatefulSetName(run.company)+"-0")
 
 	tools, err := eng.Integrations(ctx)
 	if err != nil {
@@ -1365,13 +1366,15 @@ func (run *configRun) identityResync(result ctrl.Result) ctrl.Result {
 // /health says about its identity directory, or for the error that kept it
 // from saying. humanSeats are the handles of the company's human seats, and
 // accessSecret the Secret that holds the access token the operator publishes,
-// with which the first person is brought in.
+// with which the first person is brought in, and dataPod the pod `crewlet
+// iam` runs in: it reads the node to reach from a crewlet.yaml, which only
+// the engine's pods hold.
 //
 // A company that has never had anybody join is the state of every new
 // company, and nothing else tells whoever created it that the next step is
 // theirs: the engine signs nobody in until a person is invited or added,
 // and only a holder of an admin credential can do that.
-func identityClaimed(health engine.Health, err error, humanSeats []string, accessSecret string) *metav1.Condition {
+func identityClaimed(health engine.Health, err error, humanSeats []string, accessSecret, dataPod string) *metav1.Condition {
 	c := &metav1.Condition{Type: crewletaiv1alpha1.ConditionIdentityClaimed}
 	switch {
 	case err != nil:
@@ -1394,8 +1397,9 @@ func identityClaimed(health engine.Health, err error, humanSeats []string, acces
 		}
 		c.Message = fmt.Sprintf("Nobody has joined the company yet. Its Human seats are %s. Bring the first person in "+
 			"with the access token in Secret %s (status.apiAccessSecretRef): sign in to the dashboard with it and "+
-			"invite or add yourself onto your seat, or run `crewlet iam invite <email> -seat <handle> -grants admin` "+
-			"with it.", seats, accessSecret)
+			"invite or add yourself onto your seat, or run `crewlet iam invite <email> -seat <handle> -grants admin "+
+			"-config %s/%s -api http://127.0.0.1:%d` in pod %s with it in CREWLET_API_TOKEN.",
+			seats, accessSecret, configDir, configFile, render.APIPort, dataPod)
 	case health.Identity == "":
 		c.Status, c.Reason = metav1.ConditionUnknown, crewletaiv1alpha1.ReasonIdentityNotReported
 		c.Message = "The engine did not say whether anybody has joined the company."

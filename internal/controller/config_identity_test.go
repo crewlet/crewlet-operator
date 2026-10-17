@@ -22,7 +22,10 @@ import (
 // for want of a Human seat, and every answer that is no answer, which is
 // never read as nobody.
 func TestIdentityClaimedFollowsTheEngine(t *testing.T) {
-	const access = "acme-api-access"
+	const (
+		access  = "acme-api-access"
+		dataPod = "acme-data-0"
+	)
 	seven := []string{seatAna, "bo", "cy", "dee", "eve", "fay", "gus"}
 	for _, c := range []struct {
 		name    string
@@ -42,7 +45,8 @@ func TestIdentityClaimedFollowsTheEngine(t *testing.T) {
 			name: "nobody yet", health: engine.Health{Identity: engine.IdentityUnclaimed}, seats: []string{seatFounder},
 			status: metav1.ConditionFalse, reason: crewletaiv1alpha1.ReasonUnclaimed,
 			says: []string{"Its Human seats are founder.", "Secret " + access, "status.apiAccessSecretRef",
-				"crewlet iam invite <email> -seat <handle> -grants admin"},
+				"crewlet iam invite <email> -seat <handle> -grants admin -config /etc/crewlet/crewlet.yaml " +
+					"-api http://127.0.0.1:8080` in pod " + dataPod},
 		},
 		{
 			name: "nobody yet, and many seats", health: engine.Health{Identity: engine.IdentityUnclaimed}, seats: seven,
@@ -69,7 +73,7 @@ func TestIdentityClaimedFollowsTheEngine(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			got := identityClaimed(c.health, c.err, c.seats, access)
+			got := identityClaimed(c.health, c.err, c.seats, access, dataPod)
 			if got.Type != crewletaiv1alpha1.ConditionIdentityClaimed || got.Status != c.status || got.Reason != c.reason {
 				t.Fatalf("identityClaimed() = %s %s %s, want %s %s", got.Type, got.Status, got.Reason, c.status, c.reason)
 			}
