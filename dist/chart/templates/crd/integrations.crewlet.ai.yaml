@@ -157,6 +157,9 @@ spec:
                     - message: siteURL must be an absolute URL starting with http://
                         or https://
                       rule: isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))
+                    - message: 'siteURL may not hold a user name or password: a credential
+                        is named through a Secret, never written into an address'
+                      rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
                     - message: 'siteURL may not hold a ${NAME} reference: the engine
                         would resolve it from its own secret store and environment,
                         which hold credentials that are not this object''s to name'
@@ -195,6 +198,9 @@ spec:
                     - message: url must be an absolute URL starting with http:// or
                         https://
                       rule: isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))
+                    - message: 'url may not hold a user name or password: a credential
+                        is named through a Secret, never written into an address'
+                      rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
                     - message: 'url may not hold a ${NAME} reference: the engine would
                         resolve it from its own secret store and environment, which
                         hold credentials that are not this object''s to name'
@@ -481,6 +487,9 @@ spec:
                     x-kubernetes-validations:
                     - message: url must be an absolute URL starting with https://
                       rule: isURL(self) && self.startsWith('https://')
+                    - message: 'url may not hold a user name or password: a credential
+                        is named through a Secret, never written into an address'
+                      rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
                     - message: 'url may not hold a ${NAME} reference: the engine would
                         resolve it from its own secret store and environment, which
                         hold credentials that are not this object''s to name'
@@ -701,6 +710,9 @@ spec:
                     - message: url must be an absolute URL starting with http:// or
                         https://
                       rule: isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))
+                    - message: 'url may not hold a user name or password: a credential
+                        is named through a Secret, never written into an address'
+                      rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
                     - message: 'url may not hold a ${NAME} reference: the engine would
                         resolve it from its own secret store and environment, which
                         hold credentials that are not this object''s to name'
@@ -760,6 +772,9 @@ spec:
                     - message: siteURL must be an absolute URL starting with http://
                         or https://
                       rule: isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))
+                    - message: 'siteURL may not hold a user name or password: a credential
+                        is named through a Secret, never written into an address'
+                      rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
                     - message: 'siteURL may not hold a ${NAME} reference: the engine
                         would resolve it from its own secret store and environment,
                         which hold credentials that are not this object''s to name'
@@ -799,6 +814,9 @@ spec:
                     - message: url must be an absolute URL starting with http:// or
                         https://
                       rule: isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))
+                    - message: 'url may not hold a user name or password: a credential
+                        is named through a Secret, never written into an address'
+                      rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
                     - message: 'url may not hold a ${NAME} reference: the engine would
                         resolve it from its own secret store and environment, which
                         hold credentials that are not this object''s to name'
@@ -952,6 +970,9 @@ spec:
                     - message: url must be an absolute URL starting with http:// or
                         https://
                       rule: isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))
+                    - message: 'url may not hold a user name or password: a credential
+                        is named through a Secret, never written into an address'
+                      rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
                     - message: 'url may not hold a ${NAME} reference: the engine would
                         resolve it from its own secret store and environment, which
                         hold credentials that are not this object''s to name'

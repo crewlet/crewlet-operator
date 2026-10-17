@@ -20,7 +20,9 @@ units' `children[]` it sits.
 > a row for a position Crewlet no longer marks. Another holds the rule on a
 > Company's `engineConfig` to the same marks: it refuses every top-level block
 > Crewlet holds a credential under, so a credential can never be written there
-> as a literal.
+> as a literal. Nor in an address: every URL field refuses a user name and
+> password (`https://user:password@host`), which an HTTP client sends as
+> Basic authentication to whatever the address names.
 
 How references work is explained in
 [How the operator models a company](overview.md#credentials-by-reference-never-by-value).

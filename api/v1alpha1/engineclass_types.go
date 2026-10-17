@@ -259,6 +259,7 @@ type S3ObjectSettings struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() in ['http', 'https']",message="endpoint must be an absolute http or https URL"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="endpoint may not hold a user name or password: a credential is named through a Secret, never written into an address"
 	Endpoint string `json:"endpoint,omitempty"`
 
 	// region is the bucket's region. Every request is signed for one, even
@@ -834,6 +835,7 @@ type TelemetrySettings struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() in ['http', 'https']",message="otlpEndpoint must be an absolute http or https URL"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="otlpEndpoint may not hold a user name or password: a credential is named through a Secret, never written into an address"
 	OTLPEndpoint string `json:"otlpEndpoint,omitempty"`
 
 	// headersSecretRef is a Secret key holding the headers sent to the

@@ -152,6 +152,9 @@ spec:
                     x-kubernetes-validations:
                     - message: baseURL must be an absolute http or https URL
                       rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                    - message: 'baseURL may not hold a user name or password: a credential
+                        is named through a Secret, never written into an address'
+                      rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
                     - message: 'baseURL may not hold a ${NAME} reference: the engine
                         would resolve it from its own secret store and environment,
                         which hold credentials that are not this object''s to name'
@@ -310,6 +313,10 @@ spec:
                         http:// or https://
                       rule: isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))
                         && url(self).getHostname() != ''
+                    - message: 'dashboardBaseURL may not hold a user name or password:
+                        a credential is named through a Secret, never written into
+                        an address'
+                      rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
                     - message: 'dashboardBaseURL may not have a query or a fragment:
                         Crewlet builds every link a person follows, an invitation
                         and a password link included, by appending a path to it'
@@ -337,6 +344,10 @@ spec:
                         https://
                       rule: isURL(self) && self.startsWith('https://') && url(self).getHostname()
                         != ''
+                    - message: 'publicBaseURL may not hold a user name or password:
+                        a credential is named through a Secret, never written into
+                        an address'
+                      rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
                     - message: 'publicBaseURL may not have a query or a fragment:
                         Crewlet builds every webhook and sandbox address by appending
                         a path to it'
