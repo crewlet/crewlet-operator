@@ -2131,7 +2131,7 @@ _Appears in:_
 | `headers` _[MCPHeader](#mcpheader) array_ | headers are sent with every request to an HTTP server, shared by every<br />instance; per-seat values belong in a Seat's or a Unit's spec.mcp.<br />Header names are case-insensitive, so names must differ in more than<br />case. Crewlet's `headers`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `toolPrefix` _string_ | toolPrefix is put in front of the server's tool names, to keep them<br />apart from another server's. Crewlet's `tool_prefix`. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[A-Za-z][A-Za-z0-9_-]*$` <br />Optional: \{\} <br /> |
 | `toolAnnotations` _[MCPToolAnnotations](#mcptoolannotations) array_ | toolAnnotations correct the hints individual tools advertise.<br />Crewlet's `tool_annotations`. |  | MaxItems: 128 <br />Optional: \{\} <br /> |
-| `startupTimeoutSeconds` _integer_ | startupTimeoutSeconds bounds starting the server, the handshake and<br />its first tool listing. Unset takes Crewlet's default of 60. Crewlet's<br />`startup_timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `startupTimeoutSeconds` _integer_ | startupTimeoutSeconds bounds starting the server and the handshake,<br />and separately its first tool listing, so a start can take up to twice<br />it before Crewlet gives the server up. Unset takes Crewlet's default<br />of 120. Crewlet's `startup_timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `requestTimeoutSeconds` _integer_ | requestTimeoutSeconds bounds one tool call. Unset takes Crewlet's<br />default of 300. Crewlet's `request_timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 
 

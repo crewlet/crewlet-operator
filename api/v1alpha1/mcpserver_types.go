@@ -216,9 +216,10 @@ type MCPServerSpec struct {
 	// +kubebuilder:validation:MaxItems=128
 	ToolAnnotations []MCPToolAnnotations `json:"toolAnnotations,omitempty"`
 
-	// startupTimeoutSeconds bounds starting the server, the handshake and
-	// its first tool listing. Unset takes Crewlet's default of 60. Crewlet's
-	// `startup_timeout_seconds`.
+	// startupTimeoutSeconds bounds starting the server and the handshake,
+	// and separately its first tool listing, so a start can take up to twice
+	// it before Crewlet gives the server up. Unset takes Crewlet's default
+	// of 120. Crewlet's `startup_timeout_seconds`.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	StartupTimeoutSeconds int32 `json:"startupTimeoutSeconds,omitempty"`
