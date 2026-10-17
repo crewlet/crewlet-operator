@@ -333,6 +333,46 @@ spec:                       # Company
     dashboardBaseURL: https://crewlet.sso.example.com/acme
 ```
 
+## Name the proxies in front of the engine
+
+Behind a route, every request reaches the engine from the Gateway's proxy or
+the Ingress controller, and the engine sees that address for every caller
+unless it is told the request came through a proxy it trusts. Crewlet then
+counts every person's failed sign-ins at one login together, so a stranger
+guessing at somebody's login holds up that person's own sign-in, and the
+audit trail records the proxy rather than the caller. Nothing in the cluster
+reports this: Crewlet names it only when its `crewlet.yaml` is checked with
+`crewlet validate`.
+
+List the address blocks of whatever forwards to the engine in the class's
+`spec.exposure.trustedProxies`, Crewlet's `api.trusted_proxies`: the Gateway's
+proxies or the Ingress controller, and a load balancer in front of them that
+does not pass the client's address through. The engine then reads the
+client's address from `X-Forwarded-For` on a request from one of them, and
+believes the header from nobody else.
+
+**Every address in the list can choose the client address the engine sees**,
+and with it its own place in the sign-in throttle, so list the narrowest
+blocks that hold only the proxies: the proxies' own addresses where they are
+stable, or the pod range of a node pool that runs nothing else. Not the whole
+pod network. That includes the data pod itself, whose tool servers and local
+sandbox runs can reach its API at its own address whatever the network
+policy says, and under `networkPolicy.mode: None` every workload in the
+cluster.
+
+```yaml
+spec:                       # EngineClass
+  exposure:
+    trustedProxies:
+      - 10.244.12.0/24      # the pod range of the node pool that runs only
+                            #   the Gateway's proxies
+```
+
+Each entry is a canonical CIDR; a single host is a `/32` or `/128`, and a
+block of the whole address space (`0.0.0.0/0`, `::/0`) is refused, since it
+would believe a forwarded address any caller sends. A change rolls the data
+pods, which read it at start.
+
 ## Network policy
 
 With `networkPolicy.mode: Isolated`, the default, the operator creates a

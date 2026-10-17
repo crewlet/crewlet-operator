@@ -191,11 +191,12 @@ type nodeDoc struct {
 }
 
 type apiDoc struct {
-	Host        string        `json:"host"`
-	Port        int           `json:"port"`
-	ExternalURL string        `json:"external_url,omitempty"`
-	Public      *apiPublicDoc `json:"public,omitempty"`
-	Auth        *apiAuthDoc   `json:"auth,omitempty"`
+	Host           string        `json:"host"`
+	Port           int           `json:"port"`
+	ExternalURL    string        `json:"external_url,omitempty"`
+	TrustedProxies []string      `json:"trusted_proxies,omitempty"`
+	Public         *apiPublicDoc `json:"public,omitempty"`
+	Auth           *apiAuthDoc   `json:"auth,omitempty"`
 }
 
 // apiPublicDoc is api.public. Its host is left to the engine's default,
@@ -361,10 +362,11 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 			Labels: map[string]string{PoolLabel: v1alpha1.DataPool},
 		},
 		API: &apiDoc{
-			Host:        "0.0.0.0",
-			Port:        APIPort,
-			ExternalURL: in.ExternalURL,
-			Public:      &apiPublicDoc{Port: PublicPort, ExternalURL: in.PublicURL},
+			Host:           "0.0.0.0",
+			Port:           APIPort,
+			ExternalURL:    in.ExternalURL,
+			TrustedProxies: in.Class.Spec.Exposure.TrustedProxies,
+			Public:         &apiPublicDoc{Port: PublicPort, ExternalURL: in.PublicURL},
 			Auth: &apiAuthDoc{
 				Admin: adminServe,
 				Tokens: []apiTokenDoc{

@@ -574,6 +574,26 @@ type ExposureSettings struct {
 	// +optional
 	// +default={"mode": "ClusterInternal"}
 	API APIExposure `json:"api,omitzero"`
+
+	// trustedProxies are the address blocks of what forwards requests to
+	// the engine: the Gateway's proxies or the Ingress controller of the
+	// class's routes, and whatever balances in front of them. Crewlet takes
+	// a request's client address from its X-Forwarded-For header only when
+	// the request arrives from one of these, and otherwise uses the address
+	// it arrives from, which behind a proxy is the proxy's for every
+	// caller: the sign-in throttle then counts everyone's attempts at one
+	// login together, so a stranger guessing at a person's login holds up
+	// that person's own sign-in, and the audit trail names the proxy. Each
+	// is a canonical IPv4 or IPv6 CIDR narrower than the whole address
+	// space; a single host is a /32 or /128. Unset, no forwarded header is
+	// believed. Crewlet's api.trusted_proxies.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=16
+	// +kubebuilder:validation:items:MaxLength=43
+	// +kubebuilder:validation:XValidation:rule="self.all(c, isCIDR(c) && cidr(c).prefixLength() > 0 && string(cidr(c).masked()) == c)",message="trustedProxies must be canonical CIDRs such as 10.0.0.0/8 or fd00::/8, narrower than /0: a /0 believes the forwarded address any caller sends"
+	TrustedProxies []string `json:"trustedProxies,omitempty"`
 }
 
 // NetworkPolicySettings is the NetworkPolicy the operator puts around each

@@ -75,5 +75,5 @@ an address from every Company would refuse the getting-started company.
 
 This record does not decide where an engine is reached from outside the
 cluster, which the EngineClass's exposure does, nor which proxies' forwarded
-headers the engine believes (Crewlet's `api.trusted_proxies`), which no field
-of the operator's sets.
+headers the engine believes (Crewlet's `api.trusted_proxies`), which the
+EngineClass's `spec.exposure.trustedProxies` sets in the data pod's Tier A.

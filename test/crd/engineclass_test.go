@@ -178,7 +178,13 @@ func TestEngineClassExposure(t *testing.T) {
 	apiGatewayHost := func(hostname string) func(*v1.EngineClass) {
 		return api(v1.APIExposure{Mode: v1.APIExposureGateway, Gateway: gatewayExposure(), Hostname: hostname})
 	}
-	const apiHost = "{{uid}}.api.internal.example.com"
+	proxies := func(blocks ...string) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) { c.Spec.Exposure.TrustedProxies = blocks }
+	}
+	const (
+		apiHost           = "{{uid}}.api.internal.example.com"
+		msgTrustedProxies = "trustedProxies must be canonical CIDRs"
+	)
 
 	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
 		{name: "Gateway webhooks are accepted", mutate: gatewayHost(webhookHost)},
@@ -412,6 +418,16 @@ func TestEngineClassExposure(t *testing.T) {
 			},
 			want: "spec.exposure.webhooks.gateway.proxyNamespaces[0]",
 		},
+		{name: "trusted proxies are accepted", mutate: proxies("10.244.0.0/16", "192.0.2.7/32", "fd00:10:244::/56")},
+		{
+			// Crewlet reads a bare address as a host or as a typo for a
+			// block, and guesses neither.
+			name:   "a trusted proxy that is an address, not a block, is refused",
+			mutate: proxies("10.0.0.7"),
+			want:   msgTrustedProxies,
+		},
+		{name: "a trusted proxy of the whole address space is refused", mutate: proxies("::/0"), want: msgTrustedProxies},
+		{name: "a trusted proxy with host bits set is refused", mutate: proxies("10.0.0.7/8"), want: msgTrustedProxies},
 	})
 }
 

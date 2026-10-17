@@ -1264,6 +1264,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `webhooks` _[WebhookExposure](#webhookexposure)_ | webhooks is how vendors' webhooks reach the engine. | \{ mode:None \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `api` _[APIExposure](#apiexposure)_ | api is how the engine's API is reached. | \{ mode:ClusterInternal \} | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `trustedProxies` _string array_ | trustedProxies are the address blocks of what forwards requests to<br />the engine: the Gateway's proxies or the Ingress controller of the<br />class's routes, and whatever balances in front of them. Crewlet takes<br />a request's client address from its X-Forwarded-For header only when<br />the request arrives from one of these, and otherwise uses the address<br />it arrives from, which behind a proxy is the proxy's for every<br />caller: the sign-in throttle then counts everyone's attempts at one<br />login together, so a stranger guessing at a person's login holds up<br />that person's own sign-in, and the audit trail names the proxy. Each<br />is a canonical IPv4 or IPv6 CIDR narrower than the whole address<br />space; a single host is a /32 or /128. Unset, no forwarded header is<br />believed. Crewlet's api.trusted_proxies. |  | MaxItems: 16 <br />MinItems: 1 <br />items:MaxLength: 43 <br />Optional: \{\} <br /> |
 
 
 #### ExternalExposure

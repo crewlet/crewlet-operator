@@ -312,6 +312,33 @@ func TestContractExternalURLShapes(t *testing.T) {
 	}
 }
 
+// TestContractTrustedProxies ties the API's rule on an EngineClass's
+// spec.exposure.trustedProxies, which becomes api.trusted_proxies, to
+// Crewlet's (config.checkTrustedProxy): an address that is not a block, a
+// block of the whole address space and one with host bits set are each
+// refused by the engine, so the API refusing them on the class refuses
+// nothing the data pod would start with.
+func TestContractTrustedProxies(t *testing.T) {
+	for _, block := range []string{"10.0.0.7", "0.0.0.0/0", "10.0.0.7/8"} {
+		t.Run(block, func(t *testing.T) {
+			c := bootstrapCases()[0]
+			c.proxies = []string{block}
+			doc, err := Bootstrap(c.input(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, stdout, stderr, _ := verdict(t, bootstrapEnv(doc), "-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML))
+			refused := slices.ContainsFunc(got.Problems, func(raw json.RawMessage) bool {
+				var p struct{ Path string }
+				return json.Unmarshal(raw, &p) == nil && p.Path == "api.trusted_proxies[0]"
+			})
+			if got.Valid || !refused {
+				t.Errorf("crewlet validate did not refuse api.trusted_proxies[0] %q:\n%s\n%s", block, stdout, stderr)
+			}
+		})
+	}
+}
+
 // TestContractVendorURLsAreReadAsWritten ties the API's rules on the vendor
 // addresses an Integration names to Crewlet's (config.hasHTTPScheme), which
 // reads a scheme as written: each address refused with its scheme in upper

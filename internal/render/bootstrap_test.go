@@ -53,6 +53,9 @@ type bootstrapCase struct {
 	// address inside the cluster.
 	external, public string
 	origins          []string
+	// proxies are the class's trusted proxies, which a case rendered from
+	// another's input adds to that input's class.
+	proxies []string
 	// advisories are the advisories Crewlet's validator gives the Tier A,
 	// about a choice of the platform's that the render carries through.
 	advisories []advisory
@@ -61,9 +64,16 @@ type bootstrapCase struct {
 // advisoryNoTrustedProxy is Crewlet's advisory on an https api.external_url
 // with no api.trusted_proxies: something in front of the engine terminates
 // TLS, and unless it is named every caller shows its address. Only the
-// platform knows its proxies' addresses, and no field of the operator's
-// offers them, so a routed engine reached over https draws it.
+// platform knows its proxies' addresses, so a routed engine reached over
+// https draws it until its class names them (spec.exposure.trustedProxies).
 var advisoryNoTrustedProxy = advisory{path: "api.trusted_proxies", says: "trusts no proxy"}
+
+// nimbusAPI and nimbusHooks are the API and public addresses of the cases
+// whose class routes both over HTTPS.
+const (
+	nimbusAPI   = "https://nimbus.api.example.com"
+	nimbusHooks = "https://nimbus.hooks.example.com"
+)
 
 // caseNATS is the bootstrap case of the defaults: a class whose object store
 // is the company's own event stream, and a Company under Enforce. The cases
@@ -90,15 +100,22 @@ func bootstrapCases() []bootstrapCase {
 		// A class that routes the API and the webhooks over HTTPS.
 		{
 			name: "https-route", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
-			external: "https://nimbus.api.example.com", public: "https://nimbus.hooks.example.com",
+			external: nimbusAPI, public: nimbusHooks,
 			advisories: []advisory{advisoryNoTrustedProxy},
 		},
 		// A Company that states where people reach the dashboard, ahead of
 		// the class's API route, which stays an origin it is reached on.
 		{
 			name: "route-origin", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
-			external: "https://crewlet.sso.example.com/nimbus", origins: []string{"https://nimbus.api.example.com"},
+			external: "https://crewlet.sso.example.com/nimbus", origins: []string{nimbusAPI},
 			advisories: []advisory{advisoryNoTrustedProxy},
+		},
+		// The https route of a class that names the proxies in front of
+		// the engine, which Crewlet then has nothing to advise about.
+		{
+			name: "https-route-proxied", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
+			external: nimbusAPI, public: nimbusHooks,
+			proxies: []string{"10.244.0.0/16", "fd00:10:244::/56"},
 		},
 	}
 }
@@ -112,6 +129,9 @@ func (c *bootstrapCase) input(t *testing.T) *BootstrapInput {
 	})
 	in.ExternalURL = cmp.Or(c.external, in.ExternalURL)
 	in.PublicURL = cmp.Or(c.public, in.PublicURL)
+	if c.proxies != nil {
+		in.Class.Spec.Exposure.TrustedProxies = c.proxies
+	}
 	return in
 }
 
