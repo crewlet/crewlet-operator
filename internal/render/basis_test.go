@@ -785,3 +785,18 @@ func datadogIn(t *testing.T, doc map[string]any) map[string]any {
 	}
 	return block
 }
+
+// TestTheTestEngineNamesTheTokensAsTheRenderDoes: the engine every suite runs
+// gives the two tokens the ids the render gives them. The operator recognises
+// its own writes by the login the engine records for its token, so a test
+// engine that named it otherwise would read every write the operator makes as
+// somebody else's, and a suite would test a controller that production never
+// runs. enginetest cannot import this package (these tests import it), so the
+// ids are copied there and held here.
+func TestTheTestEngineNamesTheTokensAsTheRenderDoes(t *testing.T) {
+	t.Parallel()
+	if enginetest.OperatorTokenID != TokenOperator || enginetest.AccessTokenID != TokenAccess {
+		t.Fatalf("enginetest names the tokens %q and %q, the render %q and %q",
+			enginetest.OperatorTokenID, enginetest.AccessTokenID, TokenOperator, TokenAccess)
+	}
+}

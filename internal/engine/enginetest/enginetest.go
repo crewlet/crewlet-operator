@@ -46,16 +46,24 @@ import (
 // binary is found.
 const BinaryEnv = "CREWLET_BIN"
 
-// The ids of the engine's two tokens. Crewlet records each write made with one
-// under its login, engine.TokenLogin(id): a revision's created_by, a stored
-// secret's updated_by, a seat pause's paused_by.
+// The ids of the engine's two tokens, the ones the operator renders into
+// every engine's Tier A. Crewlet records each write made with one under its
+// login, engine.TokenLogin(id): a revision's created_by, a stored secret's
+// updated_by and operator_id, a seat pause's paused_by.
 const (
-	// OperatorTokenID is the id of the token the operator holds.
-	OperatorTokenID = "crewlet-operator"
+	// OperatorTokenID is the id of the token the operator holds. It is the
+	// id the operator gives its own token in production (render's
+	// TokenOperator, which this package cannot import: render's own tests
+	// import this one, and render holds the two equal), because the
+	// controllers recognise their own writes by it: a test engine that named
+	// it otherwise would have every write the operator makes read as
+	// somebody else's.
+	OperatorTokenID = "operator"
 
 	// AccessTokenID is the id of a second token, standing for a person or a
 	// control plane that reaches the same engine: a test of attribution or
 	// of concurrent writers needs two credentials the engine tells apart.
+	// It is render's TokenAccess, the token the operator publishes.
 	AccessTokenID = "access"
 )
 
