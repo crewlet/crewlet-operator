@@ -313,8 +313,9 @@ an invitation's included, leads to a `localhost` only a port-forwarding
 browser reaches, and the Company's `Exposed` condition says so in its
 message. An `http` address on a routable host works, but its cookie travels
 unencrypted: route the API over HTTPS for anyone who signs in from
-elsewhere. Crewlet names this only when its `crewlet.yaml` is checked with
-`crewlet validate`, which nothing in the cluster runs, so nothing reports it.
+elsewhere. The data pod says so in its log at every start, as a
+`config_advisory` line at `WARN` for `api.external_url`
+([Read what the engine is worth telling you](troubleshooting.md#read-what-the-engine-is-worth-telling-you)).
 
 When the Company's own address is not on the route's origin, the route is
 still an address the engine is reached on: the operator adds the route's
@@ -341,9 +342,12 @@ the Ingress controller, and the engine sees that address for every caller
 unless it is told the request came through a proxy it trusts. Crewlet then
 counts every person's failed sign-ins at one login together, so a stranger
 guessing at somebody's login holds up that person's own sign-in, and the
-audit trail records the proxy rather than the caller. Nothing in the cluster
-reports this: Crewlet names it only when its `crewlet.yaml` is checked with
-`crewlet validate`.
+audit trail records the proxy rather than the caller. While the API's
+address is `https` and the class lists no proxy, the data pod says so in its
+log at every start, as a `config_advisory` line at `WARN` for
+`api.trusted_proxies`: Crewlet cannot tell a proxy that hides the caller from
+a load balancer that passes the caller's own address through, so it warns
+rather than refuses.
 
 List the address blocks of whatever forwards to the engine in the class's
 `spec.exposure.trustedProxies`, Crewlet's `api.trusted_proxies`: the Gateway's

@@ -41,6 +41,7 @@ flowchart TD
     SYM -->|"SeatsPlaced=False"| SP["Seat pods do not run"]
     SYM -->|"a vendor's webhooks"| WH["Webhooks do not arrive"]
     SYM -->|"an agent never answers,<br/>a tool is missing"| TS["A tool server does not start"]
+    SYM -->|"a warning, nothing broken"| AD["Read what the engine<br/>is worth telling you"]
 ```
 
 Each condition's `observedGeneration` says which generation of the object it
@@ -515,6 +516,37 @@ API's [`GET /mcp-servers`](https://github.com/crewlet/crewlet/blob/main/docs/ref
   or refused, as by Mattermost's own `Forward80To443`, which answers a write
   over `http://` with `400 Use HTTPS`. Give it the Integration's `url`
   ([Mattermost](integrations.md#mattermost)).
+
+## Read what the engine is worth telling you
+
+Some settings the engine runs are still worth knowing about. Plain `http` on
+a routable address sends passwords unencrypted. An `https` address with no
+proxy listed shows every caller as the proxy. A company may have no human seat
+anyone can sign in to, or a token ceiling another leaves idle. None of these
+stops the engine. It says so in two places:
+
+- **The Company's events**: the engine's answer to each revision the operator
+  writes, as an `EngineWarnings` event (`The engine runs revision … with
+  warnings: …`).
+- **The data pod's log**: a `config_advisory` line at `WARN` for each one.
+  - `config=company`: the company's, again each time the node applies a
+    revision.
+  - `config=bootstrap`: those of the pod's own `crewlet.yaml`, once per start.
+    No write answers for that file: the operator renders it from the class and
+    the Company, and only the engine reads it.
+
+```bash
+kubectl events -n acme --for company/acme | grep EngineWarnings
+kubectl logs acme-data-0 -n acme | grep config_advisory
+```
+
+A line's `path` is the Crewlet setting at fault, and `detail` says what to do.
+The operator writes the `crewlet.yaml` settings from the objects:
+
+- `api.external_url`: the Company's address
+  ([Where people reach the dashboard](exposure.md#where-people-reach-the-dashboard)).
+- `api.trusted_proxies`: the class's `spec.exposure.trustedProxies`
+  ([Name the proxies in front of the engine](exposure.md#name-the-proxies-in-front-of-the-engine)).
 
 ## Collecting what to report
 
