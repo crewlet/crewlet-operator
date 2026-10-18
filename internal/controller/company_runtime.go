@@ -284,10 +284,11 @@ func (r *CompanyReconciler) runWorkload(
 		replicas = value(existing.Spec.Replicas)
 	}
 	sts, err := r.applyStatefulSet(ctx, c, class, existing, replicas, &workload{
-		image:         image,
-		bootstrap:     bootstrap,
-		bootstrapHash: bootstrapHash,
-		bridgeURL:     in.bridgeURL,
+		image:          image,
+		bootstrap:      bootstrap,
+		bootstrapHash:  bootstrapHash,
+		bridgeURL:      in.bridgeURL,
+		startupSeconds: dataPodStartupSeconds(class, dataVolumeSize(existing, class)),
 	})
 	if err != nil {
 		return metav1.Condition{}, err

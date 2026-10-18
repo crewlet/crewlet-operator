@@ -71,8 +71,9 @@ const (
 	// place to go.
 	seatPodMinReadySeconds = 10
 	// seatPodStartupSeconds is how long a seat pod's engine may take to
-	// answer /health at all, which it does only once it has started: six
-	// minutes, the engine's own bounds on a leaf's boot laid end to end.
+	// answer /health 200, which it does once it has recovered what it holds
+	// (503 before, from the moment it binds): six minutes, the engine's own
+	// bounds on a leaf's boot laid end to end.
 	// It waits up to a minute for its leaf link to reach a data pod, then
 	// provisions what it uses on the company's event stream within five
 	// minutes, the bound the engine puts on a bring-up across a leaf link,

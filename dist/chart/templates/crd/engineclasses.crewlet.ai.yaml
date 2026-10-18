@@ -208,6 +208,31 @@ spec:
                           More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                         type: object
                     type: object
+                  startupSeconds:
+                    description: |-
+                      startupSeconds is how long a data pod's engine may take, from its
+                      start, to answer /health 200: the time it takes to recover what it holds
+                      on its volume (the store, the event stream, the replicated estate) and
+                      bring its broker up. Crewlet waits that recovery out rather than
+                      bounding it, because it grows with the data, so the startup probe is
+                      what bounds it. A boot that runs past this is restarted and begins its
+                      recovery again, so err long: a window that is too long costs nothing
+                      on a healthy boot, only the time to restart one that hung.
+
+                      Unset derives it from the data volume: five minutes for what every
+                      boot does within Crewlet's own bounds (a first start extracts the
+                      store's native library, migrates the store and provisions the event
+                      stream, which Crewlet bounds at two minutes on one broker member), plus
+                      six seconds per GiB of the volume. That is four times the second and a
+                      half per GiB Crewlet measured recovering after a crash on a fast local
+                      disk, for volumes that are network-attached; set this for disks slower
+                      than that. Nothing the company configures counts: the engine answers
+                      /health once it has recovered, while the company's tool servers start.
+                      Changing it changes the data pods' template, which restarts them.
+                    format: int32
+                    maximum: 86400
+                    minimum: 300
+                    type: integer
                   storage:
                     description: storage is the data volume each data pod gets.
                     properties:

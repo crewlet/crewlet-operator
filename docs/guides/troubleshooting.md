@@ -193,6 +193,7 @@ not ready until `ConfigApplied` is `True`. When `ConfigApplied` is `True` and
 ```bash
 kubectl describe pod acme-data-0 -n acme
 kubectl logs acme-data-0 -n acme | grep -E 'WARN|ERROR' | tail
+kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_listening'
 ```
 
 - **`insufficient storage resources available`**: the engine could not
@@ -207,6 +208,20 @@ kubectl logs acme-data-0 -n acme | grep -E 'WARN|ERROR' | tail
 - **The pod restarts** (`kubectl get pod` shows restarts): the engine refused
   its own configuration at boot, and the first lines of the previous log say
   why (`kubectl logs acme-data-0 -n acme --previous`).
+- **The pod restarts, its events saying `Startup probe failed`, and the
+  previous log has no `engine_recovered` line**: the recovery of what the
+  volume holds took longer than the startup probe allows, and every restart
+  starts it again. The window is five minutes plus six seconds per GiB of the
+  volume; a disk that reads slower than that needs a longer one. Set the
+  class's `data.startupSeconds` (up to a day), which rolls the data pods once,
+  and let the next boot finish.
+- **The log has `engine_recovered` and no `api_listening` after it**: the
+  engine has recovered what the volume holds and is starting what the company
+  configures, its shared tool servers above all. `/health` answers `200`
+  there, so no probe restarts the pod, and a restart would wait on the same
+  thing: the lines after `engine_recovered` say what the engine is starting.
+  A tool server that never answers is its MCPServer's to fix
+  ([A tool server does not start](#a-tool-server-does-not-start)).
 - **The pod restarts, and the previous log refuses a setting of its
   `crewlet.yaml` by name**: `"external_url" isn't a setting. Check the
   spelling and the block it's under`, or, for a setting Crewlet has removed,

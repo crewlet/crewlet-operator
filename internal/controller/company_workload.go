@@ -112,12 +112,51 @@ const livenessFailureThreshold = 6
 // seat pod's admission within one pass.
 const probePeriodSeconds = 5
 
+// The data pod's startup window when the class sets none: what every boot does
+// within the engine's own bounds, and the recovery of what the volume holds,
+// which the engine waits out unbounded because it grows with the data. See
+// DataPodSettings.StartupSeconds for the reasoning behind both numbers.
+const (
+	// dataPodBootSeconds covers a first start: the store's native library
+	// extracted, the store migrated, and the event stream's streams and
+	// buckets created, which the engine bounds by two minutes on a broker
+	// of one member.
+	dataPodBootSeconds = 300
+	// dataPodRecoverySecondsPerGiB is four times the 1.5 s/GiB the engine
+	// measured recovering after a crash on a fast local disk: a network-
+	// attached volume reads slower, and a window too short restarts a
+	// recovery that would have finished, which then starts over.
+	dataPodRecoverySecondsPerGiB = 6
+)
+
 // dataPodStartupSeconds is how long a data pod's engine may take to answer
-// /health at all: five minutes, for a first start that extracts the store's
-// native library, migrates the store and creates the event stream's streams
-// and buckets (which the engine bounds by two minutes on a broker of one
-// member).
-const dataPodStartupSeconds = 300
+// /health 200, which it does once it has recovered what its volume holds (503
+// before, from the moment it binds): the class's spec.data.startupSeconds,
+// or, unset, the boot's own bounds plus the recovery of a full volume. The
+// volume is the size the pod's claim is made with, which never changes for an
+// existing company, so the window does not move under a running one.
+func dataPodStartupSeconds(class *crewletaiv1alpha1.EngineClass, volume resource.Quantity) int32 {
+	if s := class.Spec.Data.StartupSeconds; s > 0 {
+		return s
+	}
+	const gibibyte = 1 << 30
+	seconds := dataPodBootSeconds + (volume.Value()+gibibyte-1)/gibibyte*dataPodRecoverySecondsPerGiB
+	if seconds > maxStartupSeconds {
+		return maxStartupSeconds
+	}
+	// Never under the boot's own window: a quantity below zero, which no
+	// claim has, would otherwise take a recovery's seconds away from it. The
+	// bound is also what lets the conversion below be checked rather than
+	// assumed.
+	if seconds < dataPodBootSeconds {
+		return dataPodBootSeconds
+	}
+	return int32(seconds)
+}
+
+// maxStartupSeconds is the longest startup window the API admits, a day: past
+// it a recovery is a disk to look at, not a boot to wait for.
+const maxStartupSeconds = 86400
 
 // workload is everything a data pod's template is built from.
 type workload struct {
@@ -128,6 +167,9 @@ type workload struct {
 	// bridgeURL is the base URL a sandbox reaches the engine's tool bridge
 	// at, or empty for an engine that serves none.
 	bridgeURL string
+	// startupSeconds is the data pod's startup window
+	// (dataPodStartupSeconds).
+	startupSeconds int32
 }
 
 // applyBootstrap writes the Secret the data pods start from: their
@@ -463,12 +505,11 @@ func engineContainerOf(
 	if err != nil {
 		return nil, err
 	}
-	// The first start extracts the store's native library and migrates
-	// the store; the startup probe gives it five minutes before the
-	// liveness probe may restart it. /ready answers 503 while the engine
-	// has no document, sheds load, or drains, which takes the pod out of
-	// the engine Service.
-	container := withProbes(engineContainerBase(class, w.image, env), dataPodStartupSeconds).
+	// The startup probe gives the engine its whole recovery before the
+	// liveness probe may restart it (dataPodStartupSeconds). /ready answers
+	// 503 while the engine starts, has no document, sheds load, or drains,
+	// which takes the pod out of the engine Service.
+	container := withProbes(engineContainerBase(class, w.image, env), w.startupSeconds).
 		WithVolumeMounts(
 			corev1ac.VolumeMount().WithName(dataVolume).WithMountPath(render.DataDir),
 			corev1ac.VolumeMount().WithName(configVolumeName).WithMountPath(configDir).WithReadOnly(true),
@@ -515,18 +556,25 @@ func withProbes(container *corev1ac.ContainerApplyConfiguration, startupSeconds 
 			WithName(portName).
 			WithContainerPort(render.APIPort).
 			WithProtocol(corev1.ProtocolTCP)).
+		// Five seconds to answer, as liveness and readiness have: /health
+		// reads the coordination plane under a budget of its own (about two
+		// seconds), and the Kubernetes default of one would count a slow
+		// plane as a failed start.
 		WithStartupProbe(corev1ac.Probe().
 			WithHTTPGet(get("/health")).
 			WithPeriodSeconds(probePeriodSeconds).
+			WithTimeoutSeconds(5).
 			WithFailureThreshold(startupSeconds / probePeriodSeconds)).
-		// /health answers 200 for as long as the process lives, through a
-		// drain too, so liveness never kills a pod that is finishing its
-		// turns. A minute of failures before a restart, as the engine's own
-		// deployment guide sets: its watchdog ends a process whose watched
-		// duty stalls for a seat lease's TTL (45 seconds) by itself, so
-		// liveness is the backstop for a process too wedged to do even
-		// that, and the Kubernetes default of three failures (30 seconds)
-		// would restart one the watchdog was about to judge.
+		// /health answers 200 from the end of the recovery for as long as
+		// the process lives, through the company's part of the boot and a
+		// drain too, so liveness never kills a pod that is starting its
+		// company's tool servers or finishing its turns. A minute of
+		// failures before a restart, as the engine's own deployment guide
+		// sets: its watchdog ends a process whose watched duty stalls for a
+		// seat lease's TTL (45 seconds) by itself, so liveness is the
+		// backstop for a process too wedged to do even that, and the
+		// Kubernetes default of three failures (30 seconds) would restart
+		// one the watchdog was about to judge.
 		WithLivenessProbe(corev1ac.Probe().
 			WithHTTPGet(get("/health")).
 			WithPeriodSeconds(10).
