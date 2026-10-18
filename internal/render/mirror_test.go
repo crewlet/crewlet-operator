@@ -79,6 +79,18 @@ const (
 	// sandbox type; and the tool bridge takes the keyring's material and
 	// still builds nothing without CREWLET_MCP_BRIDGE_URL.
 	identityRead = "v0.1.1-0.20261016092541-a677e638f19b"
+
+	// bootBindRead is crewlet#257's engine, which binds api.port, and
+	// api.public where the node serves one, before its boot: whether a node
+	// has a tool bridge is now one function (mcpbridge.Configured) that
+	// crewlet run asks before the engine exists, and which node binds
+	// api.public is another (api.PublicListener). A node given no
+	// CREWLET_MCP_BRIDGE_URL still builds no bridge, and one without the
+	// ingress role still binds api.public only for a bridge it serves.
+	bootBindRead = "v0.1.1-0.20261018071555-ae6e5c16db2e"
+	bootstrapGo  = "internal/render/bootstrap.go"
+	mcpbridgeGo  = "internal/api/mcpbridge/build.go"
+	bootGo       = "internal/api/boot.go"
 )
 
 // atlassianAccount is every operator file that copies which deployment the
@@ -435,11 +447,34 @@ var mirrored = []mirror{
 		read:   credentialNameRead,
 	},
 	{
-		file: "internal/api/mcpbridge/build.go", function: "Build",
+		file: mcpbridgeGo, function: "Build",
 		against: []string{executorGo},
-		decides: "a node given no CREWLET_MCP_BRIDGE_URL builds no tool bridge",
-		digest:  "12ef602a6fe89130eb28edbdf23f59248877c2a8144010ae34914c927b10cd7e",
-		read:    identityRead,
+		decides: "a node given no CREWLET_MCP_BRIDGE_URL builds no tool bridge (the test is Configured's)",
+		digest:  "108e637e5417c3bd768bbb6785ede3313232fb828e519f32c1a833125c37e58b",
+		read:    bootBindRead,
+	},
+	{
+		file: mcpbridgeGo, function: "Configured",
+		against: []string{executorGo, bootstrapGo},
+		decides: "a node has a tool bridge only when CREWLET_MCP_BRIDGE_URL is set to more than spaces, which the " +
+			"operator gives the data pods alone",
+		digest: "8cb9750e7647eb66a8474b39608e911a2975c99bbc36c1362e88ee30431b6950",
+		read:   bootBindRead,
+	},
+	{
+		file: bootGo, function: "PublicListener",
+		against: []string{bootstrapGo},
+		decides: "a node without the ingress role binds api.public only where it serves its tool bridge, so a seat " +
+			"pod, given no bridge address, is given no api.public block",
+		digest: "a83eb8f588e04b36bb5f222173246f63bb564bb521f5a0d9eddf34ba6a1b4b11",
+		read:   bootBindRead,
+	},
+	{
+		file: bootGo, function: "servesBridge",
+		against: []string{bootstrapGo, executorGo},
+		decides: "a node without the ingress role serves a tool bridge only when it runs seats and has a bridge address",
+		digest:  "53129c12fa32a9938afa3d793112e1c700d3ae679f3683f9957cb522b5effa8c",
+		read:    bootBindRead,
 	},
 }
 
