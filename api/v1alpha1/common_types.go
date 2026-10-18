@@ -428,6 +428,16 @@ const (
 	// what to repair.
 	ReasonKeyringInvalid = "KeyringInvalid"
 
+	// ReasonInsecureSignInNotAcknowledged is RuntimeReady=False when the
+	// Company's EngineClass lets people sign in with a password alone
+	// (spec.signIn.secondFactor Optional) and the engine is told people
+	// reach it at an address that is not on loopback, without the class's
+	// acknowledgement (spec.signIn.acceptInsecure): Crewlet refuses to start
+	// on that, so the operator holds the pods back as they are rather than
+	// start an engine that cannot boot. The message names the address and
+	// the field.
+	ReasonInsecureSignInNotAcknowledged = "InsecureSignInNotAcknowledged"
+
 	// ReasonNoAlarms is EngineHealthy=True: the engine raises no alarm.
 	ReasonNoAlarms = "NoAlarms"
 

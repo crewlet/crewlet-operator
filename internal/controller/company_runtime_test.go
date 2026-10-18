@@ -749,6 +749,64 @@ var _ = Describe("Company runtime", func() {
 		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
 	})
 
+	It("lets people sign in with a password alone where the engine allows it, and holds the pods back where it does not", func() {
+		const offLoopback = "https://crewlet.example.com/nimbus"
+		class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.SignIn = crewletaiv1alpha1.SignInSettings{SecondFactor: crewletaiv1alpha1.SecondFactorOptional}
+		})
+		tierA := func() string {
+			GinkgoHelper()
+			bootstrap := &corev1.Secret{}
+			get(bootstrap, bootstrapName)
+			Expect(statefulSet().Spec.Template.Annotations[BootstrapHashAnnotation]).To(Equal(hashOf(bootstrap.Data)))
+			return string(bootstrap.Data[configFile])
+		}
+		heldBack := func(company *crewletaiv1alpha1.Company) {
+			GinkgoHelper()
+			runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+			Expect(runtimeReady.Status).To(Equal(metav1.ConditionFalse))
+			Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonInsecureSignInNotAcknowledged))
+			Expect(runtimeReady.Message).To(ContainSubstring("EngineClass " + class.Name))
+			Expect(runtimeReady.Message).To(ContainSubstring(offLoopback))
+			Expect(runtimeReady.Message).To(ContainSubstring("spec.signIn.acceptInsecure"))
+		}
+
+		By("never starting the engine of a company people reach off loopback, which would refuse to boot")
+		company := reconciled(newCompany(class.Name, func(c *crewletaiv1alpha1.Company) {
+			c.Spec.Exposure.DashboardBaseURL = offLoopback
+		}))
+		heldBack(company)
+		absent(&appsv1.StatefulSet{}, dataName)
+		absent(&corev1.Secret{}, bootstrapName)
+
+		By("running it through a port-forward, on loopback, where no acknowledgement is needed")
+		updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Exposure.DashboardBaseURL = "" })
+		company = reconciled(company)
+		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+		Expect([]byte(tierA())).To(Equal(expectedBootstrap(company, class).YAML))
+		Expect(tierA()).To(ContainSubstring("totp: optional\n"))
+		Expect(tierA()).NotTo(ContainSubstring("accept_insecure"))
+		rollOut()
+		running := statefulSet()
+
+		By("holding the running pods as they are once people reach it off loopback again")
+		updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Exposure.DashboardBaseURL = offLoopback })
+		company = reconciled(company)
+		heldBack(company)
+		Expect(statefulSet().Spec.Template).To(Equal(running.Spec.Template), "the pods rolled onto a crewlet.yaml the engine refuses")
+		Expect(tierA()).To(ContainSubstring("external_url: "+portForwarded+"\n"), "the bootstrap Secret was rewritten")
+
+		By("running it there once the class acknowledges it")
+		updateClass(class, func(c *crewletaiv1alpha1.EngineClass) { c.Spec.SignIn.AcceptInsecure = new(true) })
+		company = reconciled(company)
+		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+		Expect(tierA()).To(ContainSubstring("external_url: " + offLoopback + "\n"))
+		Expect(tierA()).To(ContainSubstring("totp: optional\n"))
+		Expect(tierA()).To(ContainSubstring("accept_insecure: true\n"))
+		Expect(statefulSet().Spec.Template.Annotations[BootstrapHashAnnotation]).
+			NotTo(Equal(running.Spec.Template.Annotations[BootstrapHashAnnotation]))
+	})
+
 	It("waits for the Secrets of an earlier Company of the same name to be collected", func() {
 		class := newClass()
 		// What a deletionPolicy Delete of an earlier nimbus leaves until the

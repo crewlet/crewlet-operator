@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -138,6 +140,15 @@ type BootstrapInput struct {
 // api.public.external_url, so the render refuses it first.
 var ErrNoAddress = errors.New("a data pod's crewlet.yaml needs the addresses the engine is reached at")
 
+// ErrSignInNotAcknowledged is a data pod's Tier A asked for with a class that
+// lets people sign in with a password alone (spec.signIn.secondFactor
+// Optional), an address the engine is reached at that is not on loopback, and
+// no acknowledgement of the two together (spec.signIn.acceptInsecure).
+// Crewlet refuses to start a node that serves the API so
+// (config.APIAuth.validatePasswords), so the render refuses it first, and the
+// caller holds the pods back on it rather than start one that crash-loops.
+var ErrSignInNotAcknowledged = errors.New("password-only sign-in off loopback needs the class's acknowledgement")
+
 // Keyring is the engine's secret-store keyring: the keys it can open, and
 // the one it seals new writes with. Crewlet decrypts with every key and
 // encrypts with the active one, which is what lets a key be rotated without
@@ -206,11 +217,19 @@ type apiPublicDoc struct {
 	ExternalURL string `json:"external_url"`
 }
 
+// apiAuthDoc is api.auth. TOTP is left out for a class that requires a
+// second factor, which is Crewlet's own reading of an unset totp: written
+// out, it would change the crewlet.yaml of every data pod whose class says
+// nothing about sign-in, and so restart each of them on the operator's
+// upgrade, for no change in what any of them does. AcceptInsecure is left out
+// unless it is set, as Crewlet leaves it.
 type apiAuthDoc struct {
 	Admin          string        `json:"admin"`
 	Tokens         []apiTokenDoc `json:"tokens"`
 	CompanyWriters []string      `json:"company_writers,omitempty"`
 	AllowedOrigins []string      `json:"allowed_origins,omitempty"`
+	TOTP           string        `json:"totp,omitempty"`
+	AcceptInsecure bool          `json:"accept_insecure,omitempty"`
 }
 
 type apiTokenDoc struct {
@@ -340,12 +359,23 @@ const keyringKeyBytes = 32
 // is one anyone who can write such a field, or hold the API's access token,
 // can have the engine send anywhere. A file is read once, at start.
 //
-// It fails when an address is missing (ErrNoAddress), and when the keyring
-// cannot be used: no keys, an active key it does not hold, an id that is not
-// a valid key id, or material that is not base64 of 32 bytes.
+// How people sign in is the class's (spec.signIn): api.auth.totp and
+// api.auth.accept_insecure.
+//
+// It fails when an address is missing (ErrNoAddress); when the class lets
+// people sign in with a password alone at an ExternalURL that is not on
+// loopback without acknowledging it (ErrSignInNotAcknowledged); and when the
+// keyring cannot be used: no keys, an active key it does not hold, an id that
+// is not a valid key id, or material that is not base64 of 32 bytes.
 func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 	if in.ExternalURL == "" || in.PublicURL == "" {
 		return nil, fmt.Errorf("%w: api.external_url is %q and api.public.external_url %q", ErrNoAddress, in.ExternalURL, in.PublicURL)
+	}
+	signIn := in.Class.Spec.SignIn
+	acknowledged := signIn.AcceptInsecure != nil && *signIn.AcceptInsecure
+	if signIn.SecondFactor == v1alpha1.SecondFactorOptional && !acknowledged && !loopback(in.ExternalURL) {
+		return nil, fmt.Errorf("%w: EngineClass %s sets spec.signIn.secondFactor Optional, and api.external_url is %s",
+			ErrSignInNotAcknowledged, in.Class.Name, in.ExternalURL)
 	}
 	keyring, err := keyringOf(in.Keyring)
 	if err != nil {
@@ -375,6 +405,8 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 				},
 				CompanyWriters: companyWriters(ManagementPolicyOf(in.Company)),
 				AllowedOrigins: in.AllowedOrigins,
+				TOTP:           secondFactor(signIn.SecondFactor),
+				AcceptInsecure: acknowledged,
 			},
 		},
 		Store: storeDoc{
@@ -618,6 +650,33 @@ func companyWriters(policy v1alpha1.ManagementPolicy) []string {
 		return []string{TokenOperator}
 	}
 	return nil
+}
+
+// loopback reports whether address, a data pod's api.external_url, names a
+// host on the loopback interface: localhost in any case, which a browser
+// reads as its own localhost, or a loopback IP (127.0.0.0/8, ::1). An address
+// that does not parse is not on loopback.
+//
+// It is Crewlet's own judgement, copied (config.API.externalLoopback, over
+// config.API.ExternalBase, which TestMirroredEngineFunctionsAreUnchanged
+// holds): the engine refuses to start with a second factor optional on any
+// other address unless the acknowledgement is given, and the operator has to
+// know the verdict before the engine does, to hold the pods back rather than
+// start one that crash-loops. It is made on where the engine is told a browser
+// reaches it, never on where the engine binds, which is every interface of
+// the pod: the bind says who can open a socket, and the address where a
+// person types their password.
+func loopback(address string) bool {
+	parsed, err := url.Parse(strings.TrimRight(strings.TrimSpace(address), "/"))
+	if err != nil {
+		return false
+	}
+	host := parsed.Hostname()
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // ManagementPolicyOf is a Company's spec.config.managementPolicy, with the

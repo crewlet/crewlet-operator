@@ -940,6 +940,69 @@ type RetentionSettings struct {
 	BackupOwner string `json:"backupOwner,omitempty"`
 }
 
+// SecondFactor is whether a person signing in to a company's dashboard with a
+// password must also prove a second factor. It maps onto Crewlet's
+// api.auth.totp (Required is `required`, Optional is `optional`).
+// +kubebuilder:validation:Enum=Required;Optional
+type SecondFactor string
+
+// The second-factor postures.
+const (
+	// SecondFactorRequired has everyone who signs in with a password also
+	// give a code from an authenticator app, or one of their recovery
+	// codes, and has a person without one set it up at their first sign-in,
+	// before anything else. It is Crewlet's default.
+	SecondFactorRequired SecondFactor = "Required"
+	// SecondFactorOptional lets a person sign in with a password alone. A
+	// person may still set up an authenticator app, and is then asked for
+	// its code like everyone under Required; nobody is made to.
+	SecondFactorOptional SecondFactor = "Optional"
+)
+
+// SignInSettings is how people prove who they are when they sign in to the
+// dashboards of a class's companies.
+//
+// It is the class's, not the Company's, because it weakens how people prove
+// who they are, which is the platform's decision: a tenant could otherwise
+// lower it for every person of its company, and the people who sign in are
+// often not the people who write the Company. A platform offers it the way it
+// offers exposure.trustedProxies, on a class it writes for the companies that
+// may run with it (a test rig, a demo tier).
+// +kubebuilder:validation:MinProperties=1
+// +kubebuilder:validation:XValidation:rule="!has(self.acceptInsecure) || !self.acceptInsecure || (has(self.secondFactor) && self.secondFactor == 'Optional')",message="acceptInsecure applies to secondFactor Optional only: it acknowledges password-only sign-in and lifts nothing else, and set alone it has the engine warn of an insecure posture at every start about nothing"
+type SignInSettings struct {
+	// secondFactor is whether a person who signs in with a password must
+	// also give a code from an authenticator app (Required), or may sign
+	// in with the password alone (Optional). Crewlet's api.auth.totp.
+	//
+	// Optional is refused by Crewlet on an address a browser reaches over
+	// the network unless acceptInsecure acknowledges it, and the engine
+	// judges that by where it is told people reach it, the Company's
+	// status.endpoints.dashboardBaseURL: a host of localhost (in any case)
+	// or a loopback IP, such as the http://localhost:8080 of a company
+	// reached through kubectl port-forward, needs no acknowledgement, and
+	// any other host does. A company of the class whose address needs one
+	// it does not have keeps its engine's pods as they are, with
+	// RuntimeReady=False InsecureSignInNotAcknowledged, rather than start
+	// an engine that refuses to boot. The engine reads it only at start, so
+	// a change to Optional or back restarts each company's data pod.
+	// +optional
+	// +default="Required"
+	SecondFactor SecondFactor `json:"secondFactor,omitempty"`
+
+	// acceptInsecure acknowledges that a company of the class lets people
+	// sign in with a password alone on an address a browser reaches over
+	// the network: it is what lets secondFactor Optional run there, and
+	// applies to secondFactor Optional only. It lifts nothing else, plain
+	// http on such an address included, which the engine warns of either
+	// way. While it is set the engine logs a config_advisory line at WARN
+	// at every start, saying the insecure sign-in settings are allowed at
+	// its address, for as long as the class sets it. Crewlet's
+	// api.auth.accept_insecure.
+	// +optional
+	AcceptInsecure *bool `json:"acceptInsecure,omitempty"`
+}
+
 // EngineClassSpec is the defaults and guard rails a platform sets once for
 // every Company that names the class, the way a StorageClass does for volumes.
 // +kubebuilder:validation:XValidation:rule="self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress) || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress) || has(self.exposure.api.ingress.controllerNamespaces)))",message="networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces: without them the policy refuses everything the Ingress forwards"
@@ -1033,6 +1096,12 @@ type EngineClassSpec struct {
 	// retention is who answers for backups.
 	// +optional
 	Retention RetentionSettings `json:"retention,omitzero"`
+
+	// signIn is how people prove who they are when they sign in to each
+	// company's dashboard. Unset, everyone gives a second factor, as
+	// Crewlet requires by default.
+	// +optional
+	SignIn SignInSettings `json:"signIn,omitzero"`
 }
 
 // EngineClassStatus is what the operator observed about an EngineClass.

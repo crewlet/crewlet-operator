@@ -418,8 +418,12 @@ and keeps what runs: a keyring Secret it cannot read as a keyring
 (`KeyringInvalid`; the operator never rewrites a keyring, since the engine's
 sealed data opens only with its keys), a tokens Secret the platform supplied
 that lacks a token or holds one shorter than 43 characters or outside
-base64, base64url and hex (`APITokensInvalid`), or a platform Secret the
-class references that is missing (`SecretNotFound`). Suspending still
+base64, base64url and hex (`APITokensInvalid`), a platform Secret the
+class references that is missing (`SecretNotFound`), or a class that lets
+people sign in with a password alone at an address Crewlet does not read as
+loopback without acknowledging it (`InsecureSignInNotAcknowledged`; Crewlet
+refuses to start so, [Two-step
+verification](../guides/people.md#two-step-verification)). Suspending still
 scales the pod to zero meanwhile.
 
 ---

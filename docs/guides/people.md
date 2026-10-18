@@ -1,8 +1,8 @@
 # Bringing People In
 
 Crewlet signs people in as themselves: each person holds a Human seat of the
-company, signs in to its dashboard with a password and two-step verification,
-and acts as that seat. A new company has nobody in it. This guide brings the
+company, signs in to its dashboard with a password and, unless the platform's
+EngineClass makes it optional, two-step verification, and acts as that seat. A new company has nobody in it. This guide brings the
 first person in, then everyone after them, and says what the operator does
 and does not do about people.
 
@@ -79,6 +79,74 @@ Open <http://localhost:8080>. Another local port, or `127.0.0.1` in place of
 `localhost`, is another origin: the dashboard loads, and the engine refuses
 the sign-in.
 
+## Two-step verification
+
+Crewlet asks everyone who signs in with a password for a code from an
+authenticator app as well, and has a person who holds none set one up at
+their first sign-in, before anything else. A company keeps that unless its
+EngineClass says otherwise: how people prove who they are is the platform's
+decision, so it is the class's `spec.signIn`, never the Company's, and a
+tenant cannot lower it for the people of its company.
+
+A class may let people sign in with a password alone, for a test rig or a
+demo tier:
+
+```yaml
+spec:                       # EngineClass
+  signIn:
+    secondFactor: Optional
+```
+
+Each person may still set up an authenticator app, from their **Account**
+page, and is then asked for its code at every sign-in, as everyone is under
+`Required`; nobody is made to.
+
+On its own, that runs only where Crewlet calls the address people reach the
+engine at loopback: the Company's `status.endpoints.dashboardBaseURL`, when
+its host is `localhost` (in any case) or a loopback IP such as `127.0.0.1` or
+`[::1]`, as it is for a company reached through a port-forward at
+`http://localhost:8080`. Anywhere else, at the class's API route or at an
+address the Company's `spec.exposure.dashboardBaseURL` names, Crewlet refuses
+to start with a password alone unless the class acknowledges it:
+
+```yaml
+spec:                       # EngineClass
+  signIn:
+    secondFactor: Optional
+    acceptInsecure: true
+```
+
+Without the acknowledgement the operator does not start an engine that would
+refuse to boot: the Company reports `RuntimeReady=False
+InsecureSignInNotAcknowledged`, naming the address and the field, and its
+pods keep running what they ran. `acceptInsecure` applies to
+`secondFactor: Optional` alone, which the API holds it to, and lifts nothing
+else: plain `http` on a routable address is warned of with it or without it.
+Nor is it said once and forgotten: while the class sets it, every start of
+each of its companies' data pods logs a `config_advisory` line at `WARN` for
+`api.auth.accept_insecure`, saying that insecure sign-in settings are allowed
+at the company's address
+([Read what the engine is worth telling you](troubleshooting.md#read-what-the-engine-is-worth-telling-you)).
+
+What it costs: with no second factor, a person's password is the whole of
+their account. A password phished, reused from another site's breach, or
+guessed one attempt at a time at the pace the sign-in throttle allows signs a
+stranger in as that person, with everything their seat and permissions
+reach, and a person who holds `admin` reaches every credential in the
+company's secret store. Over plain `http` the password crosses the network in
+the clear, so whoever sees the traffic holds all it takes. Keep it to a class
+whose companies hold nothing a password alone should be enough for.
+
+The engine reads both settings only at start, so a change to either restarts
+the data pod of each company of the class. Going back to `Required` asks
+everyone who holds no authenticator app to set one up at their next sign-in;
+a session somebody opened on a password alone keeps working until it ends,
+so end every session at once with `crewlet iam invalidate-all`, as under
+[If the access token leaked](#if-the-access-token-leaked), when that matters.
+Crewlet's
+[A required second factor is enrolled before anything else](https://github.com/crewlet/crewlet/blob/main/docs/concepts/identity-and-access.md#a-required-second-factor-is-enrolled-before-anything-else)
+describes the sign-in either way.
+
 ## The first person
 
 Until somebody joins, the Company reports `IdentityClaimed=False Unclaimed`,
@@ -123,9 +191,9 @@ for a week.
 
 Give the first person `admin`: anybody after them is invited by a person who
 holds it, and otherwise only the token can. Crewlet requires two-step
-verification by default, and the operator does not change that: the first
-sign-in with a password asks you to set up an authenticator app before
-anything else.
+verification by default: the first sign-in with a password asks you to set up
+an authenticator app before anything else, unless the company's class makes
+it optional ([Two-step verification](#two-step-verification)).
 
 The Company turns `IdentityClaimed=True PersonEnrolled` within half a
 minute: while nobody has joined, the operator asks the engine every 30

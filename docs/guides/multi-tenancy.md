@@ -433,6 +433,13 @@ keys and the class's env values too.
     [Choosing where seats run](topology.md) says what each shape buys, and
     what a pod of its own does not isolate: every pod of a company can read
     all of its credentials.
+- **Sign-in** is a tier's too: a class's `spec.signIn.secondFactor: Optional`
+  lets its companies' people sign in with a password alone, which only the
+  platform decides, since a tenant cannot lower it on its Company. Off
+  loopback it needs the class's `acceptInsecure: true` as well, and the
+  engine warns of it at every start
+  ([Two-step verification](people.md#two-step-verification)). Keep it to a
+  tier meant for testing.
 - **Suspending** a tenant's company is `spec.suspend: true`: the engine stops
   and its volume is kept, whatever else the Company reports, so a tenant
   cannot keep a suspended engine running by declaring more than its class

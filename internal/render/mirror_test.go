@@ -24,10 +24,12 @@ import (
 // against which the render reports a person's Atlassian account
 // (atlassianAccounts); and how a name says it holds a credential, which the
 // tool-server API's refusal of a literal value copies and the engine never
-// applies to a tool server's values, taking any literal there. A contract
-// test cannot hold those to the engine, so the operator holds the code it
-// read: the digest of each function as it was when it was read against the
-// operator files that copy it.
+// applies to a tool server's values, taking any literal there; and whether
+// the address a data pod's engine is told is on loopback, which the render
+// holds a data pod back on and the engine shows only for the addresses a test
+// tries. A contract test cannot hold those to the engine, so the operator
+// holds the code it read: the digest of each function as it was when it was
+// read against the operator files that copy it.
 type mirror struct {
 	// file and function are the function's file in the crewlet module and
 	// its name, as enginetest.Fingerprint takes it.
@@ -91,7 +93,17 @@ const (
 	bootstrapGo  = "internal/render/bootstrap.go"
 	mcpbridgeGo  = "internal/api/mcpbridge/build.go"
 	bootGo       = "internal/api/boot.go"
+
+	// signInRead is the engine the loopback judgement was first read at.
+	signInRead  = "v0.1.1-0.20261018171039-c28489c9c9ca"
+	apiConfigGo = "internal/config/api.go"
 )
+
+// signInPosture is every operator file that copies where Crewlet lets a
+// second factor be optional without the acknowledgement: the render, which
+// holds a data pod back on it, the EngineClass API's spec.signIn, which says
+// so, and the guide that tells a platform when to acknowledge it.
+var signInPosture = []string{bootstrapGo, "api/v1alpha1/engineclass_types.go", "docs/guides/people.md"}
 
 // atlassianAccount is every operator file that copies which deployment the
 // company's Jira and Confluence are on, and what names a person there: the
@@ -159,6 +171,19 @@ var agentLogin = []string{
 // BaseURL over a copy of the block it resolves itself rather than through
 // confluenceBaseURL, since everything else it does would make every change to
 // its wiring a read.
+//
+// The last two, externalLoopback and the ExternalBase it reads, are the one
+// decision here the engine shows without a run: `crewlet validate` refuses
+// totp optional off loopback, and TestContractSignInPosture holds the render's
+// verdict to the engine's at every address it tries. The operator makes that
+// verdict on whatever address a Company or its class's route gives the
+// engine, before the engine sees it, and holds the data pod back on it, so a
+// change to the judgement that moves an address no case tries would have the
+// operator hold back a company the engine runs, or start one that refuses to
+// boot, with every contract test green. The rule that asks it
+// (validatePasswords) is held by the contract test alone, whose cases take
+// each of its branches: Optional with and without the acknowledgement, on
+// loopback and off it.
 var mirrored = []mirror{
 	{
 		file: sandboxGo, function: "(*launcher).Launch",
@@ -475,6 +500,23 @@ var mirrored = []mirror{
 		decides: "a node without the ingress role serves a tool bridge only when it runs seats and has a bridge address",
 		digest:  "53129c12fa32a9938afa3d793112e1c700d3ae679f3683f9957cb522b5effa8c",
 		read:    bootBindRead,
+	},
+	{
+		file: apiConfigGo, function: "API.externalLoopback",
+		against: signInPosture,
+		decides: "a node is reached on loopback when the host of its api.external_url is localhost, case aside, or a " +
+			"loopback IP, where totp optional needs no accept_insecure, and on no other address, where the node " +
+			"refuses to start without it",
+		digest: "fa3825b5e04b0790d1336150a10d421dfbfbbda3a21c962868a8c0795ff6134f",
+		read:   signInRead,
+	},
+	{
+		file: apiConfigGo, function: "API.ExternalBase",
+		against: signInPosture,
+		decides: "the address externalLoopback judges is api.external_url with its surrounding spaces and trailing " +
+			"'/' removed",
+		digest: "783e12fe587aeebcb7817c63074c01025e278b1885608e55a927740aed6f5d6b",
+		read:   signInRead,
 	},
 }
 

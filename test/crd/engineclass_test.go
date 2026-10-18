@@ -724,3 +724,65 @@ func TestEngineClassStartupWindow(t *testing.T) {
 		{name: "over a day is refused", mutate: window(86401), want: "should be less than or equal to 86400"},
 	})
 }
+
+// TestEngineClassSignIn: a class may let people sign in with a password alone,
+// and acknowledge it, but the acknowledgement applies to an optional second
+// factor only: it lifts nothing else, and set alone it has the engine warn of
+// an insecure posture at every start about nothing. secondFactor takes the
+// API's PascalCase values, never Crewlet's own spelling.
+func TestEngineClassSignIn(t *testing.T) {
+	signIn := func(s v1.SignInSettings) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) { c.Spec.SignIn = s }
+	}
+	const msgAcceptInsecure = "acceptInsecure applies to secondFactor Optional only"
+	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
+		{name: "a class that says nothing about sign-in is accepted"},
+		{name: "Required is accepted", mutate: signIn(v1.SignInSettings{SecondFactor: v1.SecondFactorRequired})},
+		{name: "Optional is accepted", mutate: signIn(v1.SignInSettings{SecondFactor: v1.SecondFactorOptional})},
+		{
+			name:   "Optional acknowledged is accepted",
+			mutate: signIn(v1.SignInSettings{SecondFactor: v1.SecondFactorOptional, AcceptInsecure: new(true)}),
+		},
+		{
+			name:   "Optional with the acknowledgement false is accepted",
+			mutate: signIn(v1.SignInSettings{SecondFactor: v1.SecondFactorOptional, AcceptInsecure: new(false)}),
+		},
+		{
+			name:   "Required with the acknowledgement false is accepted",
+			mutate: signIn(v1.SignInSettings{SecondFactor: v1.SecondFactorRequired, AcceptInsecure: new(false)}),
+		},
+		{
+			name:   "Required acknowledged is refused",
+			mutate: signIn(v1.SignInSettings{SecondFactor: v1.SecondFactorRequired, AcceptInsecure: new(true)}),
+			want:   msgAcceptInsecure,
+		},
+		{
+			// secondFactor defaults to Required, which the rule then reads.
+			name:   "the acknowledgement alone is refused",
+			mutate: signIn(v1.SignInSettings{AcceptInsecure: new(true)}),
+			want:   msgAcceptInsecure,
+		},
+		{
+			name:   "Crewlet's own spelling is refused",
+			mutate: signIn(v1.SignInSettings{SecondFactor: "optional"}),
+			want:   `spec.signIn.secondFactor: Unsupported value: "optional"`,
+		},
+	})
+}
+
+// TestEngineClassSignInDefaults: a signIn that names no secondFactor requires
+// one, and says so, so a reader of the class sees what its companies require.
+func TestEngineClassSignInDefaults(t *testing.T) {
+	class := engineClass("", namespacePrefix(newNamespace(t))+"-sign-in")
+	class.Spec.SignIn = v1.SignInSettings{AcceptInsecure: new(false)}
+	if err := k8sClient.Create(ctx, class); err != nil {
+		t.Fatal(err)
+	}
+	got := &v1.EngineClass{}
+	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(class), got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Spec.SignIn.SecondFactor != v1.SecondFactorRequired {
+		t.Errorf("signIn.secondFactor defaulted to %q, want %q", got.Spec.SignIn.SecondFactor, v1.SecondFactorRequired)
+	}
+}

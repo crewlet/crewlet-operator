@@ -290,3 +290,17 @@ func datadogSite(s v1alpha1.DatadogSite) string {
 	}
 	return ""
 }
+
+// secondFactor maps onto Crewlet's api.auth.totp. Required, and an unset
+// value, which is the API's default, Required, map to nothing: an unset totp
+// is Crewlet's required, so the document leaves it out (see apiAuthDoc for
+// why it is not written).
+func secondFactor(f v1alpha1.SecondFactor) string {
+	switch f {
+	case v1alpha1.SecondFactorOptional:
+		return "optional"
+	case v1alpha1.SecondFactorRequired, "":
+		return ""
+	}
+	return ""
+}

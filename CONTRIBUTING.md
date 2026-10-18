@@ -174,9 +174,13 @@ names every engine function whose decision the operator copies at a launch —
 `newCodingRun`, `claudeCodeOnForeignEntry`, `sandboxCredentials` and the
 launch, catalogue and helpers around them in Crewlet's
 `internal/engine/sandbox.go`, `internal/sandbox/manager.go` and the CLI
-provider, and config's write-time twins of two of them in
-`internal/config/company.go` — with every operator file that copies it and
-a digest of the function as it was read. Those files are the renderer's
+provider, config's write-time twins of two of them in
+`internal/config/company.go`, and the one start-time decision the renderer
+holds a data pod back on, whether the address the engine is told is on
+loopback (`externalLoopback` in `internal/config/api.go`, which
+`TestContractSignInPosture` also holds at the addresses it tries) — with
+every operator file that copies it and a digest of the function as it was
+read. Those files are the renderer's
 and, for how an agent-mode run's CLI signs in inside the remote sandbox,
 also the LLMProvider API's rule on a CLI of mode `Agent`, the
 [CLI agents guide](docs/guides/cli-agents.md) that states it and `test/crd`'s
