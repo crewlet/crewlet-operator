@@ -2997,6 +2997,55 @@ spec:
                     maxProperties: 16
                     type: object
                 type: object
+              signIn:
+                description: |-
+                  signIn is how people prove who they are when they sign in to each
+                  company's dashboard. Unset, everyone gives a second factor, as
+                  Crewlet requires by default.
+                minProperties: 1
+                properties:
+                  acceptInsecure:
+                    description: |-
+                      acceptInsecure acknowledges that a company of the class lets people
+                      sign in with a password alone on an address a browser reaches over
+                      the network: it is what lets secondFactor Optional run there, and
+                      applies to secondFactor Optional only. It lifts nothing else, plain
+                      http on such an address included, which the engine warns of either
+                      way. While it is set the engine logs a config_advisory line at WARN
+                      at every start, saying the insecure sign-in settings are allowed at
+                      its address, for as long as the class sets it. Crewlet's
+                      api.auth.accept_insecure.
+                    type: boolean
+                  secondFactor:
+                    default: Required
+                    description: |-
+                      secondFactor is whether a person who signs in with a password must
+                      also give a code from an authenticator app (Required), or may sign
+                      in with the password alone (Optional). Crewlet's api.auth.totp.
+
+                      Optional is refused by Crewlet on an address a browser reaches over
+                      the network unless acceptInsecure acknowledges it, and the engine
+                      judges that by where it is told people reach it, the Company's
+                      status.endpoints.dashboardBaseURL: a host of localhost (in any case)
+                      or a loopback IP, such as the http://localhost:8080 of a company
+                      reached through kubectl port-forward, needs no acknowledgement, and
+                      any other host does. A company of the class whose address needs one
+                      it does not have keeps its engine's pods as they are, with
+                      RuntimeReady=False InsecureSignInNotAcknowledged, rather than start
+                      an engine that refuses to boot. The engine reads it only at start, so
+                      a change to Optional or back restarts each company's data pod.
+                    enum:
+                    - Required
+                    - Optional
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: 'acceptInsecure applies to secondFactor Optional only:
+                    it acknowledges password-only sign-in and lifts nothing else,
+                    and set alone it has the engine warn of an insecure posture at
+                    every start about nothing'
+                  rule: '!has(self.acceptInsecure) || !self.acceptInsecure || (has(self.secondFactor)
+                    && self.secondFactor == ''Optional'')'
               stream:
                 default:
                   mode: Embedded

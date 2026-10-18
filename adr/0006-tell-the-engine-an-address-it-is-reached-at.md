@@ -76,4 +76,11 @@ an address from every Company would refuse the getting-started company.
 This record does not decide where an engine is reached from outside the
 cluster, which the EngineClass's exposure does, nor which proxies' forwarded
 headers the engine believes (Crewlet's `api.trusted_proxies`), which the
-EngineClass's `spec.exposure.trustedProxies` sets in the data pod's Tier A.
+EngineClass's `spec.exposure.trustedProxies` sets in the data pod's Tier A,
+nor whether people may sign in with a password alone, which the
+EngineClass's `spec.signIn` decides. Crewlet judges that last on the address
+this record chooses for a browser: `http://localhost:<APIPort>` is loopback
+and needs no acknowledgement, any routed or stated address off loopback
+needs the class's `acceptInsecure`, and `render.Bootstrap` refuses a Tier A
+that lacks it (`render.ErrSignInNotAcknowledged`), so the pod is held back
+rather than crash-loop.

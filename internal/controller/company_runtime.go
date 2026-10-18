@@ -173,7 +173,8 @@ func (q *requeue) within(d time.Duration) {
 // returns the RuntimeReady condition.
 //
 // What cannot be rendered (a keyring the engine could not open or that is
-// gone, a platform Secret that is missing) holds the pods back: the StatefulSet keeps running
+// gone, a platform Secret that is missing, a sign-in the engine would refuse
+// at the address it is reached at) holds the pods back: the StatefulSet keeps running
 // what it runs, and is only scaled to zero if the Company is suspended
 // meanwhile. An engine image that is refused does not hold back anything else:
 // the pods keep the image they run, and every other change still applies.
@@ -248,6 +249,17 @@ func (r *CompanyReconciler) runWorkload(
 		// engineAddressesOf always names both, so this is the operator's
 		// own fault, not the keyring's.
 		return metav1.Condition{}, err
+	}
+	if errors.Is(err, render.ErrSignInNotAcknowledged) {
+		// The engine would refuse this crewlet.yaml at every start, so the
+		// pods keep the one they run, which requires a second factor or
+		// was given at an address that needed no acknowledgement.
+		return holdBack(crewletaiv1alpha1.ReasonInsecureSignInNotAcknowledged, fmt.Sprintf(
+			"EngineClass %s lets people sign in with a password alone (spec.signIn.secondFactor Optional), and the engine "+
+				"is told people reach it at %s, which is not a loopback address: Crewlet refuses to start so without the "+
+				"class's acknowledgement. Set the class's spec.signIn.acceptInsecure to true to allow password-only sign-in "+
+				"there, or its spec.signIn.secondFactor to Required. The pods are held as they are.",
+			class.Name, in.addresses.external))
 	}
 	if err != nil {
 		return holdBack(crewletaiv1alpha1.ReasonKeyringInvalid,

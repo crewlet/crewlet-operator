@@ -74,6 +74,7 @@ with your last change yet.
 | | False | `NameConflict` | An object the operator writes for the Company (a Service, Secret, ConfigMap, ServiceAccount, StatefulSet, PodDisruptionBudget or NetworkPolicy named after it) exists and is someone else's. The message names it. The operator never changes or adopts it: rename or delete it, or give the Company another name. The pod is held as it is. |
 | | False | `SecretNotFound` | A Secret the pods are given values from is missing: one the class references (telemetry headers, `podTemplate.spec.env`) in the platform's namespace, or the Company's own object-store keys (`spec.objects.credentialsSecretRef`). The pod is held as it is. |
 | | False | `APITokensInvalid` | `<company>-api-tokens`, as a platform supplied it, lacks a token or holds one shorter than 43 characters or outside base64, base64url and hex. Repair it, or delete it to have the operator generate it. The pod is held as it is. |
+| | False | `InsecureSignInNotAcknowledged` | The class lets people sign in with a password alone (`spec.signIn.secondFactor: Optional`), and the Company is reached at an address Crewlet does not read as loopback, which the message names: Crewlet refuses to start so without the class's `spec.signIn.acceptInsecure: true`. The platform acknowledges it on the class or requires a second factor again ([Two-step verification](people.md#two-step-verification)). The pod is held as it is. |
 | `Exposed` | True | `RouteAccepted` | Every route the class asks for was accepted. When the message adds that the engine is told people reach it at `http://localhost:8080`, every link it gives a person, an invitation's included, leads there through a port-forward: set the Company's `spec.exposure.dashboardBaseURL`, or route the API ([Where people reach the dashboard](exposure.md#where-people-reach-the-dashboard)). |
 | | True | `NoRoutes` | The class routes nothing (webhooks `None` or `External`, API `ClusterInternal`). The message says the same about the dashboard's address as under `RouteAccepted`. |
 | | False | `RouteNotAccepted` | A Gateway has not attached the HTTPRoute, or the Ingress controller has not published an address. The message carries the controller's own reason; a Gateway listener's `allowedRoutes` that does not admit the tenant's namespace is the usual cause. |
@@ -541,9 +542,10 @@ API's [`GET /mcp-servers`](https://github.com/crewlet/crewlet/blob/main/docs/ref
 
 Some settings the engine runs are still worth knowing about. Plain `http` on
 a routable address sends passwords unencrypted. An `https` address with no
-proxy listed shows every caller as the proxy. A company may have no human seat
-anyone can sign in to, or a token ceiling another leaves idle. None of these
-stops the engine. It says so in two places:
+proxy listed shows every caller as the proxy. A class may let people sign in
+with a password alone at a routable address, which it acknowledged. A company
+may have no human seat anyone can sign in to, or a token ceiling another
+leaves idle. None of these stops the engine. It says so in two places:
 
 - **The Company's events**: the engine's answer to each revision the operator
   writes, as an `EngineWarnings` event (`The engine runs revision … with
@@ -567,6 +569,9 @@ The operator writes the `crewlet.yaml` settings from the objects:
   ([Where people reach the dashboard](exposure.md#where-people-reach-the-dashboard)).
 - `api.trusted_proxies`: the class's `spec.exposure.trustedProxies`
   ([Name the proxies in front of the engine](exposure.md#name-the-proxies-in-front-of-the-engine)).
+- `api.auth.accept_insecure`: the class's `spec.signIn.acceptInsecure`, which
+  the engine says at every start while it is set
+  ([Two-step verification](people.md#two-step-verification)).
 
 ## Collecting what to report
 

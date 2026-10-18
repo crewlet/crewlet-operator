@@ -339,6 +339,143 @@ func TestContractTrustedProxies(t *testing.T) {
 	}
 }
 
+// TestContractSignInPosture ties the render's verdict on a class's sign-in to
+// Crewlet's (config.APIAuth.validatePasswords, over config.API.
+// externalLoopback), at every address of loopbackCases. A second factor
+// Optional without the class's acknowledgement renders exactly where the
+// engine accepts it, and is refused by the render (ErrSignInNotAcknowledged)
+// exactly where the engine refuses to start on it, so the operator neither
+// holds back a company the engine would run nor starts one it refuses.
+// Acknowledged, it renders at every address and the engine accepts it, with
+// its warning that the insecure sign-in settings are allowed.
+func TestContractSignInPosture(t *testing.T) {
+	optional := v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional}
+	acknowledged := v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional, AcceptInsecure: new(true)}
+	for _, c := range loopbackCases {
+		t.Run(c.address, func(t *testing.T) {
+			render := func(signIn v1alpha1.SignInSettings) (*BootstrapDocument, error) {
+				in := bootstrapCases()[0].input(t)
+				in.ExternalURL, in.Class.Spec.SignIn = c.address, signIn
+				return Bootstrap(in)
+			}
+			// What Crewlet says of the address whatever the sign-in: an
+			// https address trusts no proxy here, and plain http off
+			// loopback sends passwords in the clear.
+			var advisories []advisory
+			switch {
+			case strings.HasPrefix(c.address, "https://"):
+				advisories = append(advisories, advisoryNoTrustedProxy)
+			case !c.loopback:
+				advisories = append(advisories, advisoryPlainHTTP)
+			}
+
+			doc, err := render(acknowledged)
+			if err != nil {
+				t.Fatal(err)
+			}
+			validate(t, bootstrapEnv(doc), append(slices.Clone(advisories), advisoryInsecureSignIn),
+				"-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML))
+
+			if _, err := render(optional); c.loopback {
+				if err != nil {
+					t.Fatalf("Bootstrap() = %v, want the crewlet.yaml of a class whose second factor is optional on loopback", err)
+				}
+			} else if !errors.Is(err, ErrSignInNotAcknowledged) {
+				t.Fatalf("Bootstrap() = %v, want ErrSignInNotAcknowledged", err)
+			}
+			// The acknowledged document without its acknowledgement, which
+			// is the document the render refuses off loopback, and renders
+			// on it.
+			var tierA map[string]any
+			if err := yaml.Unmarshal(doc.YAML, &tierA); err != nil {
+				t.Fatal(err)
+			}
+			delete(tierA["api"].(map[string]any)["auth"].(map[string]any), "accept_insecure")
+			unacknowledged, err := yaml.Marshal(tierA)
+			if err != nil {
+				t.Fatal(err)
+			}
+			file := write(t, "crewlet.yaml", unacknowledged)
+			if c.loopback {
+				validate(t, bootstrapEnv(doc), advisories, "-tier", "bootstrap", file)
+				return
+			}
+			got, stdout, stderr, _ := verdict(t, bootstrapEnv(doc), "-tier", "bootstrap", file)
+			refused := slices.ContainsFunc(got.Problems, func(raw json.RawMessage) bool {
+				var p struct{ Path, Message string }
+				return json.Unmarshal(raw, &p) == nil && p.Path == "api.auth.totp" && strings.Contains(p.Message, "password-only sign-in")
+			})
+			if got.Valid || !refused {
+				t.Errorf("crewlet validate did not refuse api.auth.totp optional at %s, which the render refuses:\n%s\n%s", c.address, stdout, stderr)
+			}
+		})
+	}
+}
+
+// TestContractSecondFactorReachesTheEngine runs the engine on a data pod's
+// rendered crewlet.yaml and asks it what a sign-in page asks before anybody
+// signs in (GET /auth/config): the crewlet.yaml of a class that says nothing
+// about sign-in, which leaves api.auth.totp out, requires a second factor, and
+// that of a class whose secondFactor is Optional does not. No validation can
+// say so: an unset totp is valid whichever way the engine reads it, and only
+// the running engine says which.
+func TestContractSecondFactorReachesTheEngine(t *testing.T) {
+	for _, c := range []struct {
+		signIn v1alpha1.SignInSettings
+		want   string
+	}{
+		{want: "required"},
+		{signIn: v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional}, want: totpOptional},
+	} {
+		t.Run(c.want, func(t *testing.T) {
+			in := bootstrapCases()[0].input(t)
+			in.Class.Spec.SignIn = c.signIn
+			tierA, err := Bootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			e := enginetest.Start(t, enginetest.WithTierA(in.Tokens.Operator, in.Tokens.Access, func(port int, dir string) []byte {
+				var doc map[string]any
+				if err := yaml.Unmarshal(tierA.YAML, &doc); err != nil {
+					t.Fatal(err)
+				}
+				api := doc["api"].(map[string]any)
+				api["host"], api["port"] = "127.0.0.1", port
+				// The public listener's port is fixed, which an engine
+				// another package's suite runs meanwhile may hold, and
+				// nothing here reaches it.
+				delete(api, "public")
+				doc["store"].(map[string]any)["path"] = filepath.Join(dir, "store", "crewlet.db")
+				doc["stream"].(map[string]any)["store_dir"] = filepath.Join(dir, "stream")
+				out, err := yaml.Marshal(doc)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return out
+			}, EnvNodeID+"=nimbus-data-0"))
+
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, e.URL+"/auth/config", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			var posture struct {
+				SecondFactor string `json:"second_factor"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&posture); err != nil || resp.StatusCode != http.StatusOK {
+				t.Fatalf("GET /auth/config: %d, %v", resp.StatusCode, err)
+			}
+			if posture.SecondFactor != c.want {
+				t.Errorf("the engine reports second_factor %q for the crewlet.yaml\n%s\nwant %q", posture.SecondFactor, tierA.YAML, c.want)
+			}
+		})
+	}
+}
+
 // TestContractVendorURLsAreReadAsWritten ties the API's rules on the vendor
 // addresses an Integration names to Crewlet's (config.hasHTTPScheme), which
 // reads a scheme as written: each address refused with its scheme in upper

@@ -1016,6 +1016,7 @@ _Appears in:_
 | `limits` _[EngineLimits](#enginelimits)_ | limits caps what a company may declare. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `telemetry` _[TelemetrySettings](#telemetrysettings)_ | telemetry sends the engine's traces to a collector. Unset exports<br />nothing. |  | Optional: \{\} <br /> |
 | `retention` _[RetentionSettings](#retentionsettings)_ | retention is who answers for backups. |  | Optional: \{\} <br /> |
+| `signIn` _[SignInSettings](#signinsettings)_ | signIn is how people prove who they are when they sign in to each<br />company's dashboard. Unset, everyone gives a second factor, as<br />Crewlet requires by default. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### EngineClassStatus
@@ -3289,6 +3290,26 @@ _Appears in:_
 | `pause` _[SeatPauseStatus](#seatpausestatus)_ | pause is the seat's pause while the engine holds it paused, whoever<br />paused it: the operator, for spec.paused, or a person in the engine's<br />dashboard. Unset while the seat takes work. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
+#### SecondFactor
+
+_Underlying type:_ _string_
+
+SecondFactor is whether a person signing in to a company's dashboard with a
+password must also prove a second factor. It maps onto Crewlet's
+api.auth.totp (Required is `required`, Optional is `optional`).
+
+_Validation:_
+- Enum: [Required Optional]
+
+_Appears in:_
+- [SignInSettings](#signinsettings)
+
+| Field | Description |
+| --- | --- |
+| `Required` | SecondFactorRequired has everyone who signs in with a password also<br />give a code from an authenticator app, or one of their recovery<br />codes, and has a person without one set it up at their first sign-in,<br />before anything else. It is Crewlet's default.<br /> |
+| `Optional` | SecondFactorOptional lets a person sign in with a password alone. A<br />person may still set up an authenticator app, and is then asked for<br />its code like everyone under Required; nobody is made to.<br /> |
+
+
 #### SecretEnvVar
 
 
@@ -3385,6 +3406,32 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `secretKeyRef` _[SecretKeyReference](#secretkeyreference)_ | secretKeyRef selects the Secret key that holds the value. |  | Required: \{\} <br /> |
+
+
+#### SignInSettings
+
+
+
+SignInSettings is how people prove who they are when they sign in to the
+dashboards of a class's companies.
+
+It is the class's, not the Company's, because it weakens how people prove
+who they are, which is the platform's decision: a tenant could otherwise
+lower it for every person of its company, and the people who sign in are
+often not the people who write the Company. A platform offers it the way it
+offers exposure.trustedProxies, on a class it writes for the companies that
+may run with it (a test rig, a demo tier).
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [EngineClassSpec](#engineclassspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `secondFactor` _[SecondFactor](#secondfactor)_ | secondFactor is whether a person who signs in with a password must<br />also give a code from an authenticator app (Required), or may sign<br />in with the password alone (Optional). Crewlet's api.auth.totp.<br />Optional is refused by Crewlet on an address a browser reaches over<br />the network unless acceptInsecure acknowledges it, and the engine<br />judges that by where it is told people reach it, the Company's<br />status.endpoints.dashboardBaseURL: a host of localhost (in any case)<br />or a loopback IP, such as the http://localhost:8080 of a company<br />reached through kubectl port-forward, needs no acknowledgement, and<br />any other host does. A company of the class whose address needs one<br />it does not have keeps its engine's pods as they are, with<br />RuntimeReady=False InsecureSignInNotAcknowledged, rather than start<br />an engine that refuses to boot. The engine reads it only at start, so<br />a change to Optional or back restarts each company's data pod. | Required | Enum: [Required Optional] <br />Optional: \{\} <br /> |
+| `acceptInsecure` _boolean_ | acceptInsecure acknowledges that a company of the class lets people<br />sign in with a password alone on an address a browser reaches over<br />the network: it is what lets secondFactor Optional run there, and<br />applies to secondFactor Optional only. It lifts nothing else, plain<br />http on such an address included, which the engine warns of either<br />way. While it is set the engine logs a config_advisory line at WARN<br />at every start, saying the insecure sign-in settings are allowed at<br />its address, for as long as the class sets it. Crewlet's<br />api.auth.accept_insecure. |  | Optional: \{\} <br /> |
 
 
 #### SlackIntegration

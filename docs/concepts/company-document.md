@@ -253,6 +253,16 @@ administrator or a lead inside their own part of the chart. The pod reads
 `crewlet.yaml` only at start, so changing the policy to or from `Enforce`
 restarts it ([Switching policies](../guides/management-policies.md#switching-policies)).
 
+How people sign in is the class's (`spec.signIn`). Its `secondFactor:
+Optional` is `api.auth.totp: optional`, and `Required`, the default, leaves
+`totp` out: an absent `totp` is Crewlet's `required`, and written out it
+would change, and so restart, every data pod whose class says nothing about
+sign-in. Its `acceptInsecure: true` is `api.auth.accept_insecure: true`. A
+class that lets people sign in with a password alone at an address Crewlet
+does not read as loopback, without the acknowledgement, renders no new
+`crewlet.yaml`: Crewlet refuses to start on one, so the pod is held as it is,
+on the one it runs ([Two-step verification](../guides/people.md#two-step-verification)).
+
 ---
 
 ## A seat pod's `crewlet.yaml`
@@ -275,9 +285,10 @@ pods share one `crewlet.yaml`, kept like the data pod's in a Secret,
 Its `api` block is `host: 0.0.0.0` and `port: 8080`, with no `auth`, no API
 token and no `public` listener: a node without the `ingress` role serves
 only `/health` and `/ready` on its `api.port`, which the pod's probes ask,
-and refuses every other route as an unknown one. Without the port the engine
-would bind nothing, and nothing could tell a seat pod that has joined the
-fleet from one still starting ([Seat pools](runtime.md#seat-pools)).
+and refuses every other route as an unknown one. Nobody signs in on it, so
+nothing of the class's `spec.signIn` reaches it either. Without the port the
+engine would bind nothing, and nothing could tell a seat pod that has joined
+the fleet from one still starting ([Seat pools](runtime.md#seat-pools)).
 
 ---
 

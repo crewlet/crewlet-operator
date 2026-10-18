@@ -305,7 +305,9 @@ operator writes it from, in order:
 3. `http://localhost:8080`, where
    `kubectl port-forward svc/<company>-engine 8080` serves the engine's API
    port: the one address every company has. Crewlet reads `localhost` as
-   loopback, so the cookie needs no TLS there and nothing warns.
+   loopback, so the cookie needs no TLS there and nothing warns, and a class
+   that lets people sign in with a password alone needs no acknowledgement
+   there ([Two-step verification](people.md#two-step-verification)).
 
 The result is `status.endpoints.dashboardBaseURL`, and a change of it
 restarts the data pod. With the third, every link the engine gives a person,

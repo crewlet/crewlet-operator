@@ -56,6 +56,9 @@ type bootstrapCase struct {
 	// proxies are the class's trusted proxies, which a case rendered from
 	// another's input adds to that input's class.
 	proxies []string
+	// signIn is the class's sign-in, which a case rendered from another's
+	// input gives that input's class.
+	signIn v1alpha1.SignInSettings
 	// advisories are the advisories Crewlet's validator gives the Tier A,
 	// about a choice of the platform's that the render carries through.
 	advisories []advisory
@@ -115,10 +118,42 @@ func bootstrapCases() []bootstrapCase {
 		{
 			name: "https-route-proxied", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
 			external: nimbusAPI, public: nimbusHooks,
-			proxies: []string{"10.244.0.0/16", "fd00:10:244::/56"},
+			proxies: testProxies,
+		},
+		// A class that lets people sign in with a password alone, reached
+		// through a port-forward: on loopback, Crewlet needs no
+		// acknowledgement and says nothing.
+		{
+			name: "sign-in-optional", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
+			signIn: v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional},
+		},
+		// The same over the class's https route, which needs the class's
+		// acknowledgement, and which Crewlet then warns of at every start.
+		{
+			name: "sign-in-acknowledged", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
+			external: nimbusAPI, public: nimbusHooks, proxies: testProxies,
+			signIn:     v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional, AcceptInsecure: new(true)},
+			advisories: []advisory{advisoryInsecureSignIn},
 		},
 	}
 }
+
+// testProxies are the trusted proxies of the cases whose class names them.
+var testProxies = []string{"10.244.0.0/16", "fd00:10:244::/56"}
+
+// advisoryInsecureSignIn is Crewlet's advisory on api.auth.accept_insecure,
+// which it gives at every start of a node that serves the API with it set:
+// the acknowledgement makes the posture legal and is still said out loud.
+var advisoryInsecureSignIn = advisory{path: "api.auth.accept_insecure", says: "insecure sign-in settings are allowed"}
+
+// totpOptional is Crewlet's api.auth.totp for a second factor nobody is made
+// to give, spelled here rather than taken from the render, so that the tests
+// hold the render to the engine's spelling.
+const totpOptional = "optional"
+
+// advisoryPlainHTTP is Crewlet's advisory on an http api.external_url whose
+// host is not on loopback: the session cookie cannot be Secure there.
+var advisoryPlainHTTP = advisory{path: "api.external_url", says: "uses plain http"}
 
 func (c *bootstrapCase) input(t *testing.T) *BootstrapInput {
 	t.Helper()
@@ -131,6 +166,9 @@ func (c *bootstrapCase) input(t *testing.T) *BootstrapInput {
 	in.PublicURL = cmp.Or(c.public, in.PublicURL)
 	if c.proxies != nil {
 		in.Class.Spec.Exposure.TrustedProxies = c.proxies
+	}
+	if c.signIn != (v1alpha1.SignInSettings{}) {
+		in.Class.Spec.SignIn = c.signIn
 	}
 	return in
 }
@@ -402,6 +440,190 @@ func TestBootstrapNeedsTheEnginesAddresses(t *testing.T) {
 			c.mutate(in)
 			if _, err := Bootstrap(in); !errors.Is(err, ErrNoAddress) {
 				t.Fatalf("Bootstrap() = %v, want ErrNoAddress", err)
+			}
+		})
+	}
+}
+
+// loopbackCases are addresses a data pod's engine may be told people reach it
+// at, each with whether Crewlet reads it as on loopback, and so lets a second
+// factor be optional there without the acknowledgement. TestLoopback holds
+// the render's verdict to them, and TestContractSignInPosture the engine's.
+// They include what a browser would call localhost and the engine does not,
+// an absolute name's trailing dot: the operator follows the engine, which is
+// what refuses to start.
+var loopbackCases = []struct {
+	address  string
+	loopback bool
+}{
+	{"http://localhost:8080", true},
+	{"http://LOCALHOST:8080", true},
+	{"http://LocalHost", true},
+	{"https://localhost", true},
+	{"http://localhost:8080/nimbus/", true},
+	{"http://127.0.0.1:8080", true},
+	{"http://127.0.0.2:8080", true},
+	{"http://127.255.255.254", true},
+	{"http://[::1]:8080", true},
+	{"http://[::1]", true},
+	{"http://[::ffff:127.0.0.1]:8080", true},
+	{"http://10.1.2.3:8080", false},
+	{"http://0.0.0.0:8080", false},
+	{"http://[2001:db8::1]:8080", false},
+	{"https://crewlet.example.com", false},
+	{"https://localhost.example.com", false},
+	{"http://nimbus-engine.tenant-nimbus.svc:8080", false},
+	{"http://localhost.", false},
+}
+
+// TestLoopback holds the render's reading of an address to Crewlet's
+// (config.API.externalLoopback): a host of localhost in any case, or a
+// loopback IP of either family, and nothing else. Beyond loopbackCases, which
+// the engine is asked about too, come the addresses the engine refuses for
+// their shape before it asks where they are: one that does not parse is not
+// on loopback, nor is an IPv4 address shortened as a browser would read it,
+// which is no IP to Go; and the spaces around an address are not part of it,
+// as config.API.ExternalBase trims them before the engine judges.
+func TestLoopback(t *testing.T) {
+	cases := append(slices.Clone(loopbackCases), []struct {
+		address  string
+		loopback bool
+	}{
+		{"http://::1:8080", false},
+		{"http://[::1", false},
+		{"http://127.1:8080", false},
+		{" http://localhost:8080 ", true},
+	}...)
+	for _, c := range cases {
+		t.Run(c.address, func(t *testing.T) {
+			if got := loopback(c.address); got != c.loopback {
+				t.Errorf("loopback(%q) = %v, want %v", c.address, got, c.loopback)
+			}
+		})
+	}
+}
+
+// TestBootstrapSignInFollowsTheClass pins api.auth.totp and
+// api.auth.accept_insecure to the class's spec.signIn: Required, the API's
+// default, is left out, since an unset totp is Crewlet's required and a
+// written one would restart every data pod on the operator's upgrade for
+// nothing; Optional is written, with accept_insecure while the class
+// acknowledges it. A class that lets people sign in with a password alone at
+// an address off loopback, without the acknowledgement, is refused
+// (ErrSignInNotAcknowledged): Crewlet refuses to start on it.
+func TestBootstrapSignInFollowsTheClass(t *testing.T) {
+	const routed = nimbusAPI
+	for _, c := range []struct {
+		name           string
+		signIn         v1alpha1.SignInSettings
+		external       string
+		totp           any
+		acceptInsecure any
+		refused        bool
+	}{
+		{name: "unset"},
+		{name: "unset, routed", external: routed},
+		{name: "Required", signIn: v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorRequired}, external: routed},
+		{name: "Optional on loopback", signIn: v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional}, totp: totpOptional},
+		{
+			name:   "Optional on loopback, acknowledged anyway",
+			signIn: v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional, AcceptInsecure: new(true)},
+			totp:   totpOptional, acceptInsecure: true,
+		},
+		{
+			name:   "Optional off loopback, acknowledged",
+			signIn: v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional, AcceptInsecure: new(true)},
+			totp:   totpOptional, acceptInsecure: true, external: routed,
+		},
+		{
+			name:     "Optional off loopback, acknowledgement false",
+			signIn:   v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional, AcceptInsecure: new(false)},
+			external: routed, refused: true,
+		},
+		{
+			name:     "Optional off loopback, unacknowledged",
+			signIn:   v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional},
+			external: routed, refused: true,
+		},
+		{
+			name:     "Optional on an in-cluster address, unacknowledged",
+			signIn:   v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional},
+			external: "http://nimbus-engine.tenant-nimbus.svc:8080", refused: true,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := bootstrapCases()[0].input(t)
+			in.Class.Spec.SignIn = c.signIn
+			in.ExternalURL = cmp.Or(c.external, in.ExternalURL)
+			doc, err := Bootstrap(in)
+			if c.refused {
+				if !errors.Is(err, ErrSignInNotAcknowledged) {
+					t.Fatalf("Bootstrap() = %v, want ErrSignInNotAcknowledged", err)
+				}
+				if !strings.Contains(err.Error(), in.ExternalURL) || !strings.Contains(err.Error(), in.Class.Name) {
+					t.Errorf("the refusal names neither the address nor the class: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			leaves := flatten(t, doc.YAML)
+			if got := leaves["api.auth.totp"]; got != c.totp {
+				t.Errorf("api.auth.totp = %v, want %v", got, c.totp)
+			}
+			if got := leaves["api.auth.accept_insecure"]; got != c.acceptInsecure {
+				t.Errorf("api.auth.accept_insecure = %v, want %v", got, c.acceptInsecure)
+			}
+		})
+	}
+}
+
+// TestBootstrapLeavesAnUnsetSignInAsItWas holds a class that requires a second
+// factor, by saying nothing or saying Required, to the crewlet.yaml the
+// operator rendered before spec.signIn existed: the bootstrap Secret's hash
+// rolls the data pod, so any difference would restart every company on the
+// operator's upgrade.
+func TestBootstrapLeavesAnUnsetSignInAsItWas(t *testing.T) {
+	in := bootstrapCases()[0].input(t)
+	unset, err := Bootstrap(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in.Class.Spec.SignIn = v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorRequired}
+	required, err := Bootstrap(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if required.Hash != unset.Hash {
+		t.Errorf("secondFactor Required renders another crewlet.yaml than an unset signIn:\n%s\nwant\n%s", required.YAML, unset.YAML)
+	}
+	for key := range flatten(t, unset.YAML) {
+		if key == "api.auth.totp" || key == "api.auth.accept_insecure" {
+			t.Errorf("a class that says nothing about sign-in renders %s", key)
+		}
+	}
+}
+
+// TestSeatPodsCarryNoSignIn holds a seat pod's Tier A to the same document
+// whatever the class says about sign-in: a node without the ingress role
+// serves no sign-in, only its probes, so there is nothing for it to be told,
+// and a difference would only restart every seat pod for nothing.
+func TestSeatPodsCarryNoSignIn(t *testing.T) {
+	for _, c := range seatPodCases() {
+		t.Run(c.name, func(t *testing.T) {
+			in, _ := c.input(t)
+			before, err := SeatPodBootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			in.Class.Spec.SignIn = v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional, AcceptInsecure: new(true)}
+			after, err := SeatPodBootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if after.Hash != before.Hash {
+				t.Errorf("a seat pod's crewlet.yaml follows the class's sign-in:\n%s", after.YAML)
 			}
 		})
 	}
