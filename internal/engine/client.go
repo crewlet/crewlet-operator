@@ -125,7 +125,8 @@ func refuseRedirects(*http.Request, []*http.Request) error { return http.ErrUseL
 
 // Ready reports whether the engine is ready for work: nil when its /ready
 // answers 200, a *NotReadyError (matching ErrNotReady) naming the engine's
-// reason when it answers 503 — draining, unconfigured, shed or stuck.
+// reason when it answers 503 — starting, draining, unconfigured, shed, stuck
+// or estate_behind among them.
 //
 // An engine with no company yet is not ready ("unconfigured"), yet it serves
 // /config so that the first company can be applied: a caller about to apply

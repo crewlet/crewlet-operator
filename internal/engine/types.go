@@ -36,9 +36,14 @@ type ActiveConfig struct {
 
 // Health is what an engine's /health says about the node that answered.
 type Health struct {
-	// Status is the engine's one-word verdict on the node, in its order of
-	// precedence: "shutting_down", a diverged posture ("shed", "stuck" or
-	// "isolated"), "unconfigured", or "ok". A newer engine may add one.
+	// Status is the engine's one-word verdict on the node. Until the node
+	// serves it is "starting" (with "shutting_down" for one stopped before
+	// then), answered 200 once the node has recovered what it holds and its
+	// company's part of the boot is under way, and 503, which this client
+	// reports as an *APIError, before that. Once the node serves it is, in
+	// its order of precedence, "shutting_down", a diverged posture ("shed",
+	// "stuck" or "isolated"), "unconfigured", or "ok". A newer engine may
+	// add one.
 	Status string
 
 	// Configured is whether a company revision is active on the node.

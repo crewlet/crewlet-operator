@@ -162,6 +162,12 @@ func TestReady(t *testing.T) {
 			handler:    answer(http.StatusServiceUnavailable, `{"ready":false,"reason":"draining"}`),
 			wantReason: "draining",
 		},
+		{
+			name: "starting",
+			handler: answer(http.StatusServiceUnavailable,
+				`{"ready":false,"configured":false,"draining":false,"posture":"","reason":"starting"}`),
+			wantReason: "starting",
+		},
 		{name: "a proxy's 502", handler: page(http.StatusBadGateway), wantStatus: http.StatusBadGateway},
 	}
 	for _, tc := range cases {
@@ -661,6 +667,28 @@ func TestDrainingWriteIsNotReady(t *testing.T) {
 	f.handle("PUT /config", answer(http.StatusServiceUnavailable, `{"error":"draining","detail":"this node is draining"}`))
 	if _, err := apply(f, write); !errors.Is(err, engine.ErrNotReady) {
 		t.Fatalf("ApplyConfig() during a drain = %v, want ErrNotReady", err)
+	}
+}
+
+// TestStartingWriteIsAskedAgainWhenTheEngineSays maps the 503 every route but
+// the probes answers while an engine starts onto ErrUnavailable with the
+// engine's Retry-After, so the reconcile asks again when the engine said
+// rather than after its own interval. It is not ErrNotReady: the node is not
+// up yet, which is a request to come back, where a draining one is leaving.
+func TestStartingWriteIsAskedAgainWhenTheEngineSays(t *testing.T) {
+	f := newFakeEngine(t)
+	f.handle("PUT /config", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "10")
+		answer(http.StatusServiceUnavailable, `{"error":"starting","message":"This node is starting.",`+
+			`"hint":"retry after the Retry-After; /health stops answering status \"starting\" once the node serves"}`)(w, r)
+	})
+	_, err := apply(f, write)
+	var apiErr *engine.APIError
+	if !errors.Is(err, engine.ErrUnavailable) || !errors.As(err, &apiErr) || apiErr.RetryAfter != 10*time.Second {
+		t.Fatalf("ApplyConfig() while the engine starts = %v, want ErrUnavailable with RetryAfter 10s", err)
+	}
+	if errors.Is(err, engine.ErrNotReady) {
+		t.Fatalf("ApplyConfig() while the engine starts = %v, which matches ErrNotReady", err)
 	}
 }
 

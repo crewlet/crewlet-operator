@@ -333,6 +333,11 @@ requests to `http://<company>-data-0.<company>-data.<namespace>.svc:8080` fail:
   pod's DNS name.
 - The `<company>-api-tokens` Secret was changed by hand and the pod has not
   restarted yet: it rolls on its own once the operator sees the change.
+- The engine is still starting: the message names `starting`. Until the
+  engine serves, it answers every request but its probes `503 starting`,
+  with a `Retry-After` the operator follows, so `ConfigApplied` turns once
+  the boot is over. One that never ends is
+  [The data pod is not ready](#the-data-pod-is-not-ready).
 
 ## Nobody can sign in
 
