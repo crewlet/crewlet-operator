@@ -625,7 +625,7 @@ func TestContractChainlessSeatRunsOnTheFirstProviderAlone(t *testing.T) {
 	e := enginetest.Start(t)
 	client := e.Client()
 	for _, k := range doc.Refs {
-		if err := client.PutSecret(t.Context(), secretsync.StoreName(k), []byte(dummyCredential(k)), ""); err != nil {
+		if err := client.PutSecret(t.Context(), secretsync.StoreName(k), []byte(dummyCredential(k))); err != nil {
 			t.Fatal(err)
 		}
 	}

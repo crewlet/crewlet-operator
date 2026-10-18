@@ -667,14 +667,15 @@ func TestDrainingWriteIsNotReady(t *testing.T) {
 func TestListSecrets(t *testing.T) {
 	f := newFakeEngine(t)
 	f.handle("GET /secrets", answer(http.StatusOK, `{"secrets":[{"name":"K8S_A","key_id":"k1",
-		"updated_at":"2026-10-08T19:31:10.31209515Z","updated_by":"token:crewlet-operator","source":"operator"}]}`))
+		"updated_at":"2026-10-08T19:31:10.31209515Z","updated_by":"ana","updated_by_kind":"human",
+		"operator_id":"token:operator","source":"api"}]}`))
 	got, err := f.client().ListSecrets(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := engine.SecretInfo{
 		Name: storedName, KeyID: "k1", UpdatedAt: time.Date(2026, 10, 8, 19, 31, 10, 312095150, time.UTC),
-		UpdatedBy: "token:crewlet-operator", Source: "operator",
+		UpdatedBy: seatAna, OperatorID: "token:operator", Source: "api",
 	}
 	if len(got) != 1 || got[0] != want {
 		t.Fatalf("ListSecrets() = %+v, want [%+v]", got, want)
@@ -685,15 +686,18 @@ func TestPutSecretSendsTheRawValue(t *testing.T) {
 	f := newFakeEngine(t)
 	f.handle("PUT "+storedPath, answer(http.StatusOK, `{"name":"K8S_A","bytes":9}`))
 	value := []byte("line1\n\"x\"")
-	if err := f.client().PutSecret(context.Background(), storedName, value, "operator"); err != nil {
+	if err := f.client().PutSecret(context.Background(), storedName, value); err != nil {
 		t.Fatal(err)
 	}
 	sent := f.only()
 	if !bytes.Equal(sent.body, value) {
 		t.Errorf("body = %q, want the value byte for byte", sent.body)
 	}
-	if sent.query != "source=operator" {
-		t.Errorf("query = %q, want source=operator", sent.query)
+	// Who wrote the value is the engine's record of this client's
+	// credential; a word in the request would be a claim, which the engine
+	// refuses.
+	if sent.query != "" {
+		t.Errorf("query = %q, want none", sent.query)
 	}
 }
 
@@ -712,7 +716,7 @@ func TestPutSecretErrorsNeverContainTheValue(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := newFakeEngine(t)
 			f.handle("PUT "+storedPath, h)
-			err := f.client().PutSecret(context.Background(), storedName, []byte(value), "")
+			err := f.client().PutSecret(context.Background(), storedName, []byte(value))
 			if err == nil {
 				t.Fatal("PutSecret() succeeded, want an error")
 			}
@@ -725,7 +729,7 @@ func TestPutSecretErrorsNeverContainTheValue(t *testing.T) {
 		f := newFakeEngine(t)
 		url := f.server.URL
 		f.server.Close()
-		err := engine.New(url, testAuth).PutSecret(context.Background(), storedName, []byte(value), "")
+		err := engine.New(url, testAuth).PutSecret(context.Background(), storedName, []byte(value))
 		if err == nil || strings.Contains(err.Error(), value) {
 			t.Fatalf("PutSecret() = %v, want an error without the value", err)
 		}
@@ -737,7 +741,7 @@ func TestPutSecretErrorsNeverContainTheValue(t *testing.T) {
 func TestSecretNamesOutsideTheGrammarNeverReachTheEngine(t *testing.T) {
 	for _, name := range []string{"", "../config", "a-b", "1A", "A B", "A/B"} {
 		f := newFakeEngine(t)
-		if err := f.client().PutSecret(context.Background(), name, []byte("v"), ""); err == nil {
+		if err := f.client().PutSecret(context.Background(), name, []byte("v")); err == nil {
 			t.Errorf("PutSecret(%q) succeeded, want an error", name)
 		}
 		if _, err := f.client().DeleteSecret(context.Background(), name); err == nil {
@@ -886,7 +890,7 @@ func TestRedirectsAreNotFollowed(t *testing.T) {
 			f.handle("GET /ready", redirect)
 
 			calls := map[string]error{
-				"PutSecret": f.client().PutSecret(context.Background(), "GITHUB_TOKEN", []byte("ghp_value"), ""),
+				"PutSecret": f.client().PutSecret(context.Background(), "GITHUB_TOKEN", []byte("ghp_value")),
 				"Ready":     f.client().Ready(context.Background()),
 			}
 			_, calls["ApplyConfig"] = apply(f, write)

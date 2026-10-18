@@ -30,6 +30,12 @@
 // names Owns accepts, so entries a person or a provisioner wrote under any
 // other name are never touched, whatever the operator's state says.
 //
+// Whether the value under an owned name is still the operator's is the
+// engine's record of the credential that last wrote it
+// (engine.SecretInfo.OperatorID), which the engine takes from the write's
+// authentication. A value written with any other credential, however the
+// writer described itself, is written back and reported (Result.Overwritten).
+//
 // A seat's credential the engine provisions is the one entry the document
 // names that the operator does not fill: ProvisionedName derives its name
 // (ProvisionedPrefix, never Prefix), the engine's provisioning writes it, and

@@ -40,7 +40,7 @@ func TestEnginesDoNotShareState(t *testing.T) {
 	if a.URL == b.URL || a.OperatorToken == b.OperatorToken || a.Dir == b.Dir {
 		t.Fatalf("two engines share a port, a token or a directory: %s %s", a.URL, b.URL)
 	}
-	if err := a.Client().PutSecret(ctx, "ONLY_IN_A", []byte("v"), ""); err != nil {
+	if err := a.Client().PutSecret(ctx, "ONLY_IN_A", []byte("v")); err != nil {
 		t.Fatal(err)
 	}
 	listed, err := b.Client().ListSecrets(ctx)

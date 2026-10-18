@@ -292,12 +292,16 @@ namespaces — still have entries of their own. Key `botToken` of Secret
 than 90 characters. A reference keeps its name for as long as it exists, so
 rotating a Secret rewrites an entry rather than replacing it.
 
-> **Names of that shape are reserved.** The operator writes them with the
-> provenance `operator`, rewrites one whose value someone else replaced, and
-> deletes one once nothing references it. It never touches a name of any other
-> shape, so credentials written into the store by hand or by Crewlet's own
-> provisioning are left alone. A name the running configuration still
-> references is kept until the next configuration is applied.
+> **Names of that shape are reserved.** The operator writes them with its own
+> token, rewrites one that the engine lists as last written with any other
+> credential (a person's session, the published access token), records a
+> Warning event `SecretOverwritten` naming who, and deletes one once nothing
+> references it. Who wrote an entry is what the engine records from the
+> write's authentication, so nothing a writer says can make its value pass for
+> the operator's. It never touches a name of any other shape, so credentials
+> written into the store by hand or by Crewlet's own provisioning are left
+> alone. A name the running configuration still references is kept until the
+> next configuration is applied.
 
 A seat's provisioned credential has an entry of another shape, which the
 engine fills and the operator never writes or deletes:

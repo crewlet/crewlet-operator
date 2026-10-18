@@ -10,11 +10,6 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/engine"
 )
 
-// Source is the provenance the operator records on every entry it writes
-// (PUT /secrets/{name}?source=operator). An owned entry the engine lists
-// with any other source was last written by someone else.
-const Source = "operator"
-
 // EngineSecrets is the part of the engine's API Sync needs: the /secrets
 // routes. *engine.Client implements it; Sync takes the interface so its
 // tests can script an engine that fails between two writes, which the real
@@ -22,8 +17,9 @@ const Source = "operator"
 type EngineSecrets interface {
 	// ListSecrets lists every entry in the store (GET /secrets).
 	ListSecrets(ctx context.Context) ([]engine.SecretInfo, error)
-	// PutSecret stores or replaces one value (PUT /secrets/{name}).
-	PutSecret(ctx context.Context, name string, value []byte, source string) error
+	// PutSecret stores or replaces one value (PUT /secrets/{name}). The
+	// engine records the credential that wrote it (SecretInfo.OperatorID).
+	PutSecret(ctx context.Context, name string, value []byte) error
 	// DeleteSecret removes one entry, reporting whether it existed
 	// (DELETE /secrets/{name}). Removing an absent entry is not an error.
 	DeleteSecret(ctx context.Context, name string) (removed bool, err error)
@@ -39,16 +35,38 @@ type Result struct {
 	Put []string
 	// Deleted are the names Sync removed.
 	Deleted []string
+	// Overwritten are the names in Put the engine listed as last written by
+	// a credential other than the operator's: somebody replaced a value the
+	// operator owns, and Sync wrote the operator's back.
+	Overwritten []Overwrite
+}
+
+// Overwrite is one owned entry somebody other than the operator wrote.
+type Overwrite struct {
+	// Name is the store name.
+	Name string
+	// By is who wrote it, as the engine records the author
+	// (SecretInfo.UpdatedBy).
+	By string
+	// Credential is what that write authenticated with
+	// (SecretInfo.OperatorID).
+	Credential string
 }
 
 // Sync makes the engine's secret store hold desired, given prev, what the
-// operator last pushed into it, and returns what the store now holds.
+// operator last pushed into it, and returns what the store now holds. self is
+// the credential the engine records for this operator's writes, as it lists
+// it in SecretInfo.OperatorID: engine.TokenLogin of the operator's own token.
 //
 // It writes a desired name when its value differs from the one prev
 // recorded, when the engine does not list it (the engine's data was lost or
-// someone deleted the entry), or when the engine lists it with a source other
-// than Source (someone else wrote over it; Kubernetes is the source of truth
-// for every owned name). Then it deletes every name the engine lists that
+// someone deleted the entry), or when the engine lists it as written by a
+// credential other than self (someone else wrote over it; Kubernetes is the
+// source of truth for every owned name). Who wrote an entry is the engine's
+// record of the authenticated credential, never a word the writer chose:
+// any caller can say anything about itself, and the operator would then take
+// a value somebody else put there for its own and never notice. Then it
+// deletes every name the engine lists that
 // Owns accepts and desired neither pushes nor keeps. Writes come first, in
 // name order, and deletes after them, so an engine never misses a name the
 // next document references because a delete failed first; a failed write
@@ -61,15 +79,15 @@ type Result struct {
 // state: a retry from it repeats only what is not known to have happened.
 // A name whose write failed has no fingerprint in it, because the engine may
 // or may not have stored the value.
-func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State) (State, Result, error) {
+func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, self string) (State, Result, error) {
 	var res Result
 	listing, err := eng.ListSecrets(ctx)
 	if err != nil {
 		return prev, res, fmt.Errorf("listing the engine's secret store: %w", err)
 	}
-	listed := make(map[string]string, len(listing))
+	listed := make(map[string]engine.SecretInfo, len(listing))
 	for _, info := range listing {
-		listed[info.Name] = info.Source
+		listed[info.Name] = info
 	}
 
 	next := State{key: prev.key, fingerprints: make(map[string][]byte, len(desired.values))}
@@ -87,15 +105,19 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State) (
 	for _, name := range desired.Names() {
 		value := desired.values[name]
 		fp := next.fingerprint(name, value)
-		if source, ok := listed[name]; ok && source == Source && hmac.Equal(next.fingerprints[name], fp) {
+		info, ok := listed[name]
+		if ok && info.OperatorID == self && hmac.Equal(next.fingerprints[name], fp) {
 			continue
 		}
 		delete(next.fingerprints, name)
-		if err := eng.PutSecret(ctx, name, value, Source); err != nil {
+		if err := eng.PutSecret(ctx, name, value); err != nil {
 			return next, res, fmt.Errorf("writing %s into the engine's secret store: %w", name, err)
 		}
 		next.fingerprints[name] = fp
 		res.Put = append(res.Put, name)
+		if ok && info.OperatorID != self {
+			res.Overwritten = append(res.Overwritten, Overwrite{Name: name, By: info.UpdatedBy, Credential: info.OperatorID})
+		}
 	}
 
 	for _, name := range slices.Sorted(maps.Keys(listed)) {

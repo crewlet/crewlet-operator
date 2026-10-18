@@ -86,16 +86,23 @@ flowchart TD
    (`GET /health`, then `GET /config`) and lists the engine's encrypted
    secret store. Each referenced key is one entry in the store, named as the
    document refers to it (`K8S_<SECRET>_<KEY>_<hash>`). Only values that
-   changed since the last push are written. The entries the running document
-   still references are kept until the next document replaces it; an entry
-   of the operator's shape that neither document references is deleted now.
+   changed since the last push are written, and any entry the store lost or
+   the engine lists as last written with a credential other than the
+   operator's own token: somebody with an admin credential replaced it, and
+   the operator writes its value back. The engine records that credential
+   from the write's authentication, so no writer can pass for the operator.
+   The entries the running document still references are kept until the next
+   document replaces it; an entry of the operator's shape that neither
+   document references is deleted now.
 4. **Compare.** The operator compares the engine's active document with the
    rendered one, and compares a hash of the rendered document and
    of the values it references with the one it recorded when it last applied
    (`status.config.appliedHash`). If both match, there is nothing to write.
    A changed value alone is a reason to write: the engine reads a rotated
    value only when a revision activates, so rewriting a Secret produces a new
-   revision with the same document, and its summary names the Secret.
+   revision with the same document, and its summary names the Secret. So is
+   a value written back in step 3, for the same reason: since it was
+   replaced, a reload may have handed the engine the other value.
 5. **Dry-run** the document. The engine checks everything the API server
    cannot: rules that span objects, such as a Seat that asks for a sandbox
    the Company does not offer. Each problem the engine reports is traced back,
@@ -379,8 +386,9 @@ pause, which is recorded on the Seat (`SeatPaused`, `SeatResumed`, and
 `Drifted` when it undid a change made in the engine): `Activated`
 with the revision, its epoch and its summary, `Applied` once the engine has
 applied it, `ApplyFailed` when it did not, `SecretsSynced` with the store
-entries it wrote and deleted, `Drifted`, `Invalid` with the engine's problems,
-and
+entries it wrote and deleted, a Warning `SecretOverwritten` naming each entry
+it wrote back and who had replaced it, `Drifted`, `Invalid` with the engine's
+problems, and
 `EngineWarnings` when the engine applied a revision it has something to say
 about. Events, conditions and logs name Secrets, keys and store entries,
 never a value.

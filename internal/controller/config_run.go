@@ -411,7 +411,13 @@ func (run *configRun) enforce(
 		return ctrl.Result{}, err
 	}
 	recorded := c.Status.Config
-	if active != nil && len(diffs) == 0 && hash == recorded.AppliedHash {
+	// A value written back although no Secret changed (one somebody else
+	// overwrote, or one the store lost) leaves the hash where it was, but the
+	// engine reads its store only when a revision activates: since the
+	// overwrite, a reload may have handed it the other value, which it would
+	// keep running. So the same document is applied again, which is how a
+	// rotated credential reaches a running engine anyway.
+	if active != nil && len(diffs) == 0 && hash == recorded.AppliedHash && len(pushed.Put) == 0 {
 		run.inSync(active)
 		return ctrl.Result{RequeueAfter: run.resyncInterval()}, nil
 	}
@@ -468,7 +474,7 @@ func (run *configRun) enforce(
 func (run *configRun) sync(
 	ctx context.Context, eng *engine.Client, desired secretsync.Desired, state secretsync.State, ref types.NamespacedName,
 ) (secretsync.State, secretsync.Result, error) {
-	next, result, syncErr := secretsync.Sync(ctx, eng, desired, state)
+	next, result, syncErr := secretsync.Sync(ctx, eng, desired, state, engine.TokenLogin(render.TokenOperator))
 	if err := secretsync.SaveState(ctx, run.Client, ref, run.company, next); err != nil {
 		return next, result, errors.Join(syncErr, err)
 	}
@@ -484,6 +490,19 @@ func (run *configRun) sync(
 		// the value.
 		run.event(corev1.EventTypeNormal, "SecretsSynced", "SyncSecrets", "Wrote %d and deleted %d values in the engine's secret store: %s",
 			len(result.Put), len(result.Deleted), strings.Join(slices.Concat(result.Put, result.Deleted), ", "))
+	}
+	if len(result.Overwritten) > 0 {
+		// A Warning, because somebody holding a credential with the
+		// operator's grant replaced a value Kubernetes is the source of, and
+		// whoever did should hear that it was put back rather than find out
+		// when their value stops working.
+		by := make([]string, 0, len(result.Overwritten))
+		for _, o := range result.Overwritten {
+			by = append(by, fmt.Sprintf("%s (written by %s, with %s)", o.Name, o.By, o.Credential))
+		}
+		run.event(corev1.EventTypeWarning, "SecretOverwritten", "SyncSecrets",
+			"Wrote back %d values somebody else had replaced in the engine's secret store; the Kubernetes Secret each refers to is their source: %s",
+			len(result.Overwritten), strings.Join(by, ", "))
 	}
 	run.secretsSynced = &metav1.Condition{
 		Type: crewletaiv1alpha1.ConditionSecretsSynced, Status: metav1.ConditionTrue, Reason: crewletaiv1alpha1.ReasonSynced,

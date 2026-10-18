@@ -342,11 +342,12 @@ func messages(warnings []warning) []string {
 func (c *Client) ListSecrets(ctx context.Context) ([]SecretInfo, error) {
 	var listing struct {
 		Secrets []struct {
-			Name      string    `json:"name"`
-			KeyID     string    `json:"key_id"`
-			UpdatedAt time.Time `json:"updated_at"`
-			UpdatedBy string    `json:"updated_by"`
-			Source    string    `json:"source"`
+			Name       string    `json:"name"`
+			KeyID      string    `json:"key_id"`
+			UpdatedAt  time.Time `json:"updated_at"`
+			UpdatedBy  string    `json:"updated_by"`
+			OperatorID string    `json:"operator_id"`
+			Source     string    `json:"source"`
 		} `json:"secrets"`
 	}
 	if err := c.call(ctx, request{method: http.MethodGet, path: "/secrets"}, http.StatusOK, &listing); err != nil {
@@ -355,32 +356,31 @@ func (c *Client) ListSecrets(ctx context.Context) ([]SecretInfo, error) {
 	out := make([]SecretInfo, 0, len(listing.Secrets))
 	for _, s := range listing.Secrets {
 		out = append(out, SecretInfo{
-			Name: s.Name, KeyID: s.KeyID, UpdatedAt: s.UpdatedAt, UpdatedBy: s.UpdatedBy, Source: s.Source,
+			Name: s.Name, KeyID: s.KeyID, UpdatedAt: s.UpdatedAt, UpdatedBy: s.UpdatedBy,
+			OperatorID: s.OperatorID, Source: s.Source,
 		})
 	}
 	return out, nil
 }
 
 // PutSecret stores or rotates the value of name in the engine's encrypted
-// secret store, recording source as its provenance ("api" when empty). A
-// ${name} in the company document resolves to it at the next apply.
+// secret store. A ${name} in the company document resolves to it at the next
+// apply. The engine records who wrote it from the credential this client
+// authenticates with, never from anything the request says: see
+// SecretInfo.OperatorID.
 //
 // The value is the request body, sent as raw bytes: the engine stores exactly
 // what it receives, and an encoding step in between is a credential the
 // vendor then refuses. Nothing this returns contains it.
-func (c *Client) PutSecret(ctx context.Context, name string, value []byte, source string) error {
+func (c *Client) PutSecret(ctx context.Context, name string, value []byte) error {
 	if err := checkSecretName(name); err != nil {
 		return err
 	}
-	r := request{
+	return c.call(ctx, request{
 		method: http.MethodPut, path: "/secrets/" + name,
 		header: http.Header{"Content-Type": {"application/octet-stream"}},
 		body:   value,
-	}
-	if source != "" {
-		r.query = url.Values{"source": {source}}
-	}
-	return c.call(ctx, r, http.StatusOK, nil)
+	}, http.StatusOK, nil)
 }
 
 // DeleteSecret removes name from the engine's secret store, and reports

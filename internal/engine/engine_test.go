@@ -272,14 +272,15 @@ func TestEngineDryRunLocatesProblems(t *testing.T) {
 }
 
 // TestEngineSecretsRoundTrip pins the secret store's surface: a put is listed
-// with its provenance and author, a delete says whether it removed anything.
+// with its author and the credential it authenticated with, a delete says
+// whether it removed anything.
 func TestEngineSecretsRoundTrip(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	client := enginetest.Start(t).Client()
 	const name = "K8S_SECRET_SLACK_BOTTOKEN_ABCD"
 
-	if err := client.PutSecret(ctx, name, []byte("xoxb-not-a-real-token\n"), "operator"); err != nil {
+	if err := client.PutSecret(ctx, name, []byte("xoxb-not-a-real-token\n")); err != nil {
 		t.Fatal(err)
 	}
 	listed, err := client.ListSecrets(ctx)
@@ -290,10 +291,10 @@ func TestEngineSecretsRoundTrip(t *testing.T) {
 	if i < 0 {
 		t.Fatalf("ListSecrets() = %+v, want %s listed", listed, name)
 	}
-	if s := listed[i]; s.Source != "operator" || s.UpdatedBy != engine.TokenLogin(enginetest.OperatorTokenID) || s.KeyID == "" ||
+	self := engine.TokenLogin(enginetest.OperatorTokenID)
+	if s := listed[i]; s.Source != "api" || s.UpdatedBy != self || s.OperatorID != self || s.KeyID == "" ||
 		s.UpdatedAt.IsZero() {
-		t.Fatalf("listed secret = %+v, want source operator, written by %s, sealed and timestamped",
-			s, engine.TokenLogin(enginetest.OperatorTokenID))
+		t.Fatalf("listed secret = %+v, want source api, written by and with %s, sealed and timestamped", s, self)
 	}
 
 	for _, want := range []bool{true, false} {
@@ -410,7 +411,7 @@ func TestEngineRefusesAManagedDocumentToEveryOtherToken(t *testing.T) {
 	if active.RevisionID != first.RevisionID || strings.Contains(string(active.Document), "Edited") {
 		t.Fatalf("the engine runs revision %s:\n%s\nwant the operator's %s, unchanged", active.RevisionID, active.Document, first.RevisionID)
 	}
-	if err := access.PutSecret(ctx, "ENGINETEST_ROTATED", []byte("rotated"), ""); err != nil {
+	if err := access.PutSecret(ctx, "ENGINETEST_ROTATED", []byte("rotated")); err != nil {
 		t.Fatalf("writing the secret store with the access token: %v", err)
 	}
 

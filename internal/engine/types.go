@@ -231,8 +231,17 @@ type SecretInfo struct {
 	// seat of a person.
 	UpdatedBy string
 
-	// Source is the provenance the writer recorded, such as "api" or
-	// "operator".
+	// OperatorID is the credential the write authenticated with, which
+	// Crewlet takes from the request's authentication and never from the
+	// request: TokenLogin(id) for a Tier A token, "session:…" for a signed-in
+	// person, "pat:…" for a personal token. Unlike UpdatedBy, it stays the
+	// token's login when the token is bound to a seat, so it is what tells
+	// the operator's own writes from anyone else's.
+	OperatorID string
+
+	// Source is the surface the value arrived by, as the engine names it:
+	// "api" for every write through PUT /secrets, "setup", "provision" or
+	// "migrated" for the engine's own. It says how, not who.
 	Source string
 }
 

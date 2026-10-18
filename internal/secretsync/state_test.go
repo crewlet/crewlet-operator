@@ -67,7 +67,7 @@ func TestLoadStateWithoutASecretIsEmpty(t *testing.T) {
 		t.Fatalf("LoadState: %v", err)
 	}
 	eng := newFakeEngine()
-	eng.entries[nameA] = fakeEntry{"a1", Source}
+	eng.entries[nameA] = fakeEntry{"a1", self}
 	_, res := mustSync(t, eng, desiredOf(map[string]string{nameA: "a1"}), state)
 	if !slices.Equal(res.Put, []string{nameA}) {
 		t.Fatalf("Put = %v: an empty state must not vouch for any entry", res.Put)

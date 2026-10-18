@@ -449,7 +449,7 @@ var _ = Describe("Company config", Ordered, func() {
 		listed := storeListing(e)
 		Expect(slices.Sorted(maps.Keys(listed))).To(Equal(slices.Sorted(maps.Keys(values))))
 		for storeName, value := range values {
-			Expect(listed[storeName].Source).To(Equal(secretsync.Source))
+			Expect(listed[storeName].OperatorID).To(Equal(engine.TokenLogin(render.TokenOperator)))
 			Expect(storedValue(e, storeName)).To(Equal(value), "the value of %s", storeName)
 		}
 
@@ -597,6 +597,34 @@ var _ = Describe("Company config", Ordered, func() {
 		updateLive(key, func(s *corev1.Secret) { s.Labels = map[string]string{"rotated-by": "a-test"} })
 		Consistently(func() []revision { return revisions(e) }).WithTimeout(3 * quietPeriod).Should(HaveLen(2))
 		Expect(storeListing(e)[storeName].UpdatedAt).To(Equal(updatedAt), "an unchanged value is not written again")
+	})
+
+	It("writes back a value somebody else replaced in the engine's store, says who, and has the engine read it again", func() {
+		const name = "overwrite"
+		e := startEngine(name)
+		secret(name+"-llm", map[string]string{llmKey: "ours"})
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
+		standIn(c)
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		storeName := secretsync.StoreName(secretref.Key{Namespace: namespace, Name: name + "-llm", Key: llmKey})
+		Expect(revisions(e)).To(HaveLen(1))
+
+		By("replacing the value with the access token, which holds the operator's grant")
+		Expect(engine.New(e.URL, e.AccessToken).PutSecret(ctx, storeName, []byte("theirs"))).To(Succeed())
+		access := engine.TokenLogin(enginetest.AccessTokenID)
+
+		Eventually(func() string { return storedValue(e, storeName) }).WithTimeout(settle).Should(Equal("ours"))
+		Expect(storeListing(e)[storeName].OperatorID).To(Equal(engine.TokenLogin(enginetest.OperatorTokenID)))
+		Eventually(func() []revision { return revisions(e) }).WithTimeout(settle).Should(HaveLen(2),
+			"the engine reads the value written back only when a revision activates")
+		Expect(revisions(e)[0].Summary).To(Equal("crewlet-operator: Secret " + namespace + "/" + name + "-llm"))
+		Expect(log.of(name)).To(ContainElement(SatisfyAll(
+			HavePrefix("Warning SecretOverwritten Wrote back 1 values somebody else had replaced"),
+			ContainSubstring(storeName+" (written by "+access+", with "+access+")"),
+		)))
+
+		By("leaving the store alone once it holds the operator's value again")
+		Consistently(func() []revision { return revisions(e) }).WithTimeout(3 * quietPeriod).Should(HaveLen(2))
 	})
 
 	It("reports a missing Secret on the part that references it and applies nothing until it exists", func() {
@@ -970,8 +998,8 @@ var _ = Describe("Company config", Ordered, func() {
 
 		By("leaving an entry of the operator's shape that nothing references, and one of a person's")
 		stale := secretsync.StoreName(secretref.Key{Namespace: namespace, Name: "gone", Key: "value"})
-		Expect(e.Client().PutSecret(ctx, stale, []byte("old"), secretsync.Source)).To(Succeed())
-		Expect(e.Client().PutSecret(ctx, "MANUAL_TOKEN", []byte("mine"), "")).To(Succeed())
+		Expect(e.Client().PutSecret(ctx, stale, []byte("old"))).To(Succeed())
+		Expect(e.Client().PutSecret(ctx, "MANUAL_TOKEN", []byte("mine"))).To(Succeed())
 
 		By("deleting the Seat")
 		Expect(k8sClient.Delete(ctx, bo)).To(Succeed())
