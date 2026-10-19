@@ -18,9 +18,21 @@ agents use.
   Nothing goes into the image.
 - **`transport: Stdio`**, the default, starts `command` with `args` as a
   process of the engine's own container, as the engine's user (uid 10001),
-  and speaks MCP over its standard input and output. The process gets the
-  engine's environment, the server's `env` on top of it, and, for a server
-  with `shared: false`, the values of the seat it serves.
+  and speaks MCP over its standard input and output. The process does not
+  get the engine's environment, only the part Crewlet hands a tool server:
+  `PATH`, the locale, the TLS and proxy variables and the engine user's
+  `HOME`, among a few others
+  ([Crewlet's list](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#what-a-stdio-servers-environment-is)).
+  The server's `env` goes on top of that, and, for a server with
+  `shared: false`, the values of the seat it serves on top again.
+
+A variable the image sets with `ENV`, or the class's `podTemplate.spec.env`
+or the Company's `runtime.env` sets on the pod, reaches a stdio server only
+when that list names it, as it names the proxy variables. Give the server
+every other variable it reads in its `env`
+([Settings and credentials](#settings-and-credentials)): one that relies on
+anything else of the engine's starts without it, and fails or behaves as
+though it were unset.
 
 A server with `shared: false` is a template rather than a process: each agent
 seat that names it in `spec.mcp`, its own or its unit's, gets a process of its
@@ -70,8 +82,13 @@ out. The rule keeps a token from being typed where a setting goes; it cannot
 keep every secret out, and a credential under a name that says nothing, such
 as a database address with a password in it, is still yours to put in a
 Secret. A `value` lands in the company document as written, where anyone who
-can read the object reads it, and may not hold a `${NAME}` reference, which
-the engine would resolve from its own secret store.
+can read the object reads it. It may not hold a `${NAME}` reference: the
+engine resolves one from its own secret store and then from its own
+environment, which is how Crewlet passes one of the engine's own variables
+on to a server, and the API does not offer that, since both hold credentials
+that are not the object's to name. So a variable beyond what Crewlet's
+allowlist hands every server is written out here or read from a Secret,
+never named from the engine's secret store or environment.
 
 A setting is the server's when every seat runs with it, and a seat's when
 each seat needs its own: Slack's channel cache is one, a path no two seats
@@ -180,10 +197,6 @@ RUN --mount=from=uv,source=/uv,target=/bin/uv \
     && uv tool install --managed-python --compile-bytecode --python "${PYTHON_VERSION}" \
       "mcp-atlassian==${MCP_ATLASSIAN_VERSION}"
 COPY --from=fetch /fetch/glab /fetch/slack-mcp-server /usr/local/bin/
-# The image is how glab is updated. The engine hands a stdio server its own
-# environment, so this reaches every glab it starts, which would otherwise ask
-# gitlab.com for a newer release.
-ENV GLAB_CHECK_UPDATE=false
 USER crewlet
 ```
 
@@ -211,24 +224,31 @@ docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
   -t <your registry>/crewlet-tool-servers:<crewlet commit> .
 ```
 
-check that each server starts in it as the engine's pod would start it, as
+check that each server starts in it as the engine's pod would start it: as
 uid 10001 on a read-only root, with an empty `HOME` and `/tmp`, no
-capabilities and no network, and answers what the engine first asks a server:
-MCP's `initialize`, then `tools/list`, which has to name a tool the
-integration's agents act with. The client is the image's own `bash`, so your
-machine needs nothing but `docker`, and the settings are placeholders, since
-nothing is reached:
+capabilities and no network, and with no environment but `PATH`, `HOME`
+and the values it needs to start, as its `MCPServer` and a seat would give
+them. That is stricter than the pod, which also hands a server each variable
+on Crewlet's allowlist that the image or the pod sets
+([Stdio and HTTP](#stdio-and-http)). And check
+that it answers what the engine first asks a server: MCP's `initialize`,
+then `tools/list`, which has to name a tool the integration's agents act
+with. The client is the image's own `bash`, so your machine needs nothing but
+`docker`, and the settings are placeholders, since nothing is reached:
 
 ```bash
 image=<your registry>/crewlet-tool-servers:<crewlet commit>
 pod=(--rm --read-only --network none --user 10001:10001 --cap-drop ALL
   --tmpfs /tmp --tmpfs /home/crewlet:uid=10001,gid=10001 -e HOME=/home/crewlet)
-# lists TOOL COMMAND [ARG...]: COMMAND answers MCP on stdio and lists TOOL.
+# lists [-q] TOOL [NAME=VALUE...] COMMAND [ARG...]: COMMAND, started with
+# PATH, HOME and each NAME=VALUE and nothing else, answers MCP on stdio and
+# lists TOOL; with -q, it also writes nothing to its standard error.
 lists() {
-  docker run -i "${pod[@]}" --entrypoint bash "$image" -s "$@" <<'CHECK'
+  docker run -i "${pod[@]}" --entrypoint bash "$image" -s -- "$@" <<'CHECK'
+quiet=; if [[ $1 == -q ]]; then quiet=1; shift; fi
 tool=$1; shift
 mkfifo /tmp/requests /tmp/answers
-"$@" </tmp/requests >/tmp/answers 2>/tmp/stderr &
+env -i PATH="$PATH" HOME="$HOME" "$@" </tmp/requests >/tmp/answers 2>/tmp/stderr &
 exec 3>/tmp/requests 4</tmp/answers
 trap '' PIPE
 printf '%s\n' >&3 \
@@ -238,28 +258,46 @@ printf '%s\n' >&3 \
 while IFS= read -r -t 60 line <&4 && [[ $line != *'"id":2'* ]]; do :; done
 exec 3>&-
 wait
-if [[ $line == *"\"name\":\"$tool\""* ]]; then echo "lists $tool"
-else echo "lists no $tool:" >&2; tail -n 20 /tmp/stderr >&2; exit 1; fi
+if [[ $line != *"\"name\":\"$tool\""* ]]; then
+  echo "lists no $tool:" >&2; tail -n 20 /tmp/stderr >&2; exit 1
+elif [[ $quiet && -s /tmp/stderr ]]; then
+  echo "lists $tool, and wrote:" >&2; cat /tmp/stderr >&2; exit 1
+fi
+echo "lists $tool"
 CHECK
 }
-lists post_message env MATTERMOST_URL=https://chat.example.invalid \
+lists post_message MATTERMOST_URL=https://chat.example.invalid \
   MATTERMOST_TOKEN=placeholder /usr/local/bin/mcp-server-mattermost
-lists jira_add_comment env JIRA_URL=https://jira.example.invalid \
+lists jira_add_comment JIRA_URL=https://jira.example.invalid \
   JIRA_USERNAME=check JIRA_API_TOKEN=placeholder /usr/local/bin/mcp-atlassian
-lists glab_mr_note /usr/local/bin/glab mcp serve
+lists -q glab_mr_note GLAB_CHECK_UPDATE=false GLAB_SHOW_WHATS_NEW=false \
+  GLAB_SEND_TELEMETRY=false /usr/local/bin/glab mcp serve
 docker run "${pod[@]}" --entrypoint /usr/local/bin/slack-mcp-server "$image" --help 2>/dev/null &&
   echo "runs slack-mcp-server"
 ```
 
 A failing check prints the last lines the server wrote to its standard error,
-as the engine's `server_stderr_tail` does. The requests go in through a pipe
-kept open until the answer is read: a server that sees the end of its input
-stops, and may stop before it answers what it read. `--help` would prove much
-less: a Python server parses its arguments before it imports its own code, so
-its `--help` succeeds with none of its dependencies installed.
-`slack-mcp-server` gets only `--help`, since it checks its token with Slack as
-it starts, which needs the network: it shows that the binary runs in the
-image, and no more.
+as the engine's `server_stderr_tail` does. Each line hands its server the
+values it needs to start, as the `MCPServer` below and a seat would give
+them, and `env -i` starts the server with nothing else but `PATH` and
+`HOME`: a server that relied on a variable of the image's `ENV` that
+Crewlet's allowlist does not name, or on one Docker sets, would pass a check
+that handed it the container's environment and fail in the pod. `glab`'s
+line is `-q` because `glab` puts whatever a tool's command writes to its
+standard error into the agent's answer ([GitLab](#gitlab)), and as
+`glab mcp serve` itself stops, it writes to its own standard error what a
+command would add to an answer: without `GLAB_CHECK_UPDATE` the update check
+that cannot reach gitlab.com, without `GLAB_SHOW_WHATS_NEW`
+`What's new in glab`, so the check fails. Without `GLAB_SEND_TELEMETRY` it
+writes nothing there: what that switch stops is a request to the GitLab
+instance, which a check with no network cannot see. The requests go in
+through a pipe kept open until the answer is read: a server that sees the
+end of its input stops, and may stop before it answers what it read.
+`--help` would prove much less: a Python server parses its arguments before
+it imports its own code, so its `--help` succeeds with none of its
+dependencies installed. `slack-mcp-server` gets only `--help`, since it
+checks its token with Slack as it starts, which needs the network: it shows
+that the binary runs in the image, and no more.
 
 Then name the image in the class; every company of the class runs it:
 
@@ -374,6 +412,23 @@ engine does not derive them from the Integrations. Each seat gives it its
 Atlassian account ([Jira and Confluence](integrations.md#jira-and-confluence);
 Crewlet's [Jira](https://github.com/crewlet/crewlet/blob/main/docs/integrations/jira.md#mcp-server-agents-control-jira)).
 
+Behind an egress proxy, `mcp-atlassian` takes the pod's `HTTPS_PROXY`,
+which the engine hands it, spelled in capitals: signed in with a personal
+access token it reads no `https_proxy`. A proxy for one product alone goes in
+the server's `env`, as `JIRA_HTTPS_PROXY` or `CONFLUENCE_HTTPS_PROXY`, and so
+does a proxy auto-config file, `ATLASSIAN_PROXY_WPAD_ENABLE` and
+`ATLASSIAN_PROXY_WPAD_URL`, which also needs the server installed with its
+`wpad` extra (`"mcp-atlassian[wpad]==${MCP_ATLASSIAN_VERSION}"` in the
+Dockerfile above): the engine hands it none of those from the pod.
+`mcp-atlassian` reads that file only when no `HTTP_PROXY`, `HTTPS_PROXY` or
+`SOCKS_PROXY` reaches it, the pod's included, and otherwise ignores it
+without a word. So where the pod sets a proxy, give `JIRA_HTTP_PROXY` and
+`JIRA_HTTPS_PROXY`, and `CONFLUENCE_HTTP_PROXY` and `CONFLUENCE_HTTPS_PROXY`,
+an empty `value` in the server's `env` beside the two settings: it takes a
+product's variable, empty too, in place of the pod's, and the engine names
+the four in its `empty_env_vars` warning, which here is expected
+([its source at 0.23.1](https://github.com/sooperset/mcp-atlassian/blob/v0.23.1/src/mcp_atlassian/utils/proxy.py)).
+
 ### Slack
 
 ```yaml
@@ -436,6 +491,15 @@ setting, not a credential, so it is a `value`
 keeps there, so a file in it is written; `HOME` is emptied when the pod
 starts, so a new pod's server asks Slack again, for its own bot alone.
 
+**Behind an egress proxy, give it `SLACK_MCP_PROXY`.** `slack-mcp-server`
+reads no `HTTPS_PROXY`: it makes its own connections, through the proxy
+`SLACK_MCP_PROXY` names and otherwise none, so the pod's proxy, which the
+engine hands it, does not reach its calls, and it cannot reach Slack. Set it
+in the server's `env`, as a `value` unless the address holds a password. A
+CA it trusts beside the system's, such as a proxy's that reads the traffic,
+goes in `SLACK_MCP_SERVER_CA`, the path of a file in the image
+([its source at 1.3.0](https://github.com/korotovsky/slack-mcp-server/blob/v1.3.0/pkg/transport/transport.go)).
+
 ### GitLab
 
 ```yaml
@@ -448,13 +512,52 @@ spec:
   shared: false
   command: /usr/local/bin/glab
   args: [mcp, serve]
+  env:
+    - name: GLAB_CHECK_UPDATE           # no update notice (or failed check) in an answer
+      value: "false"
+    - name: GLAB_SHOW_WHATS_NEW         # no "What's new" banner after an upgrade
+      value: "false"
+    - name: GLAB_SEND_TELEMETRY         # no usage report to the instance per call
+      value: "false"
 ```
 
 Each seat gives it `GITLAB_TOKEN` ([GitLab](integrations.md#gitlab)); on a
-self-managed instance, give it `GITLAB_HOST` as well, in the server's `env`.
+self-managed instance, give it `GITLAB_HOST` as well, in the server's `env`,
+and, when that instance serves plain HTTP, `GLAB_API_PROTOCOL` with the
+value `http` beside it: `glab` takes the API's scheme from that setting,
+`https` unless it says otherwise, never from the address in `GITLAB_HOST`.
 GitLab marks `glab mcp serve` experimental, liable to change or go away, so
 read `glab`'s release notes before you move its pin (Crewlet's
 [GitLab](https://github.com/crewlet/crewlet/blob/main/docs/integrations/gitlab.md#mcp-tool-server)).
+
+**`GLAB_CHECK_UPDATE` and `GLAB_SHOW_WHATS_NEW` keep `glab`'s own notices
+out of an agent's answers, and `GLAB_SEND_TELEMETRY` keeps its usage reports
+off the instance.**
+`glab mcp serve` runs every tool call as a `glab` command of its own and
+answers with everything that command wrote, its standard error as well as
+its output, and after a command `glab` writes two notices to its standard
+error unasked. Once a day, by a timestamp it keeps under `HOME`, which a new
+pod starts without, it asks gitlab.com for a newer release and writes
+`A new version of glab is available`, or, where gitlab.com cannot be reached,
+`ERROR: failed checking for glab updates`, once the call has waited out the
+connection; `GLAB_CHECK_UPDATE` turns that off. And the first command it runs
+in a `HOME` it has not run in, which is every new pod's, and the first after
+an upgrade, write `What's new in glab` and `Run: glab whatsnew`, which only
+`GLAB_SHOW_WHATS_NEW` turns off. Either lands after the JSON the agent asked
+for, so the answer is no longer that JSON. `glab` also reports every command
+it runs to the GitLab instance, under the seat's token, and waits up to two
+seconds for the instance to answer, so against a slow instance each tool call
+takes two seconds longer, and so does the server's stop, which then runs
+into the two seconds the engine allows a server before it signals it;
+`GLAB_SEND_TELEMETRY` turns that off, and leaving it out lets GitLab's usage
+statistics count your agents' commands. The three go in the server's `env`,
+which every seat's process starts with: the engine hands a stdio server none
+of the image's `ENV` but what Crewlet's allowlist names, and it names no
+`GLAB_` variable ([Stdio and HTTP](#stdio-and-http)), so an `ENV` in the
+Dockerfile above would reach a shell in the container and no `glab` the
+engine starts. Spell each `"false"`: `glab` reads two of them as Go reads a
+boolean, and a value it cannot read, such as `"no"` or `"off"`, puts a
+warning of its own into every answer.
 
 ### GitHub
 
