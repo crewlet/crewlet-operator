@@ -227,10 +227,15 @@ func holdVerdicts(t *testing.T, verdicts map[string]map[string]verdict, agentRun
 		agentMode := strings.HasSuffix(shape, ", mode "+string(v1.CLIAgentModeAgent))
 		for agent, v := range byAgent {
 			admitted := v.refusal == ""
-			// A bundle signs the CLI in from the login files the engine
-			// restores, which `llm list` cannot see before a restore; an
-			// Agent-mode run is given none of them, so there the bundle is
-			// no sign-in.
+			// A bundle signs the CLI in from the login the engine restores
+			// from it (the CLI's credential files, or the document
+			// OpenCode's export printed). `llm list` restores the configured
+			// bundle before it reports, as the engine does, but the probe's
+			// is a placeholder no restore can read, so the column cannot
+			// show it: a bundle that restored would be written under the
+			// rendered state directory, in /var/lib/crewlet of the machine
+			// running the test. An Agent-mode run is given none of it, so
+			// there the bundle is no sign-in.
 			signedIn := slices.Contains([]string{"token", "api key", "environment"}, v.signIn) ||
 				(strings.HasPrefix(shape, "bundle") && !agentMode)
 			// What the API admits the engine admits, without a doubt, so a
