@@ -725,6 +725,63 @@ func TestContractStreamFloor(t *testing.T) {
 	}
 }
 
+// TestContractStreamCeiling ties the render's stream share of a large data
+// volume to Crewlet's ceiling on stream.store_max_bytes
+// (config.StoreMaxBytesCeiling): the ceiling is taken and a byte more is
+// refused, so storeMaxBytesCeiling is the engine's and not a guess; and every
+// volume the API admits past what three quarters of fits under it, up to
+// sizes no int64 holds, renders a stream Crewlet accepts.
+func TestContractStreamCeiling(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		bytes  int64
+		accept bool
+	}{
+		{name: "the ceiling", bytes: storeMaxBytesCeiling, accept: true},
+		{name: "a byte more", bytes: storeMaxBytesCeiling + 1},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			doc, err := Bootstrap(bootstrapCases()[0].input(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var tierA map[string]any
+			if err := yaml.Unmarshal(doc.YAML, &tierA); err != nil {
+				t.Fatal(err)
+			}
+			tierA["stream"].(map[string]any)["store_max_bytes"] = c.bytes
+			encoded, err := json.Marshal(tierA)
+			if err != nil {
+				t.Fatal(err)
+			}
+			written, err := yamlOf(encoded)
+			if err != nil {
+				t.Fatal(err)
+			}
+			args := []string{"-tier", "bootstrap", write(t, "crewlet.yaml", written)}
+			if c.accept {
+				validate(t, bootstrapEnv(doc), nil, args...)
+				return
+			}
+			got, stdout, stderr, _ := verdict(t, bootstrapEnv(doc), args...)
+			if got.Valid || !strings.Contains(stdout+stderr, "store_max_bytes") {
+				t.Errorf("crewlet validate did not refuse stream.store_max_bytes %d:\n%s\n%s", c.bytes, stdout, stderr)
+			}
+		})
+	}
+	for _, size := range []string{"85Ti", "86Ti", "1Pi", "1Ei", "16Ei", "9223372036854775808", "1e30"} {
+		t.Run(size, func(t *testing.T) {
+			in := bootstrapCases()[0].input(t)
+			in.VolumeSize = resource.MustParse(size)
+			doc, err := Bootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			validate(t, bootstrapEnv(doc), nil, "-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML))
+		})
+	}
+}
+
 // TestContractCompany validates every company case together with the Tier
 // A of the pod that runs it, so the rules that need both tiers are checked
 // too. Every secret-store reference resolves to a dummy value, as the

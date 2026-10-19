@@ -215,7 +215,10 @@ node's whole free space, and engines that share it over-commit it until the
 last one is refused with `insufficient storage resources available`. Crewlet
 needs at least 6 GiB for the stream, since every node reserves the ceilings of
 all five of its state logs, 4.5 GiB at their smallest, and keeps room beside
-them, so an EngineClass's `data.storage.size` is at least `8Gi`.
+them, so an EngineClass's `data.storage.size` is at least `8Gi`. Nor does it
+start on more than 64 TiB, a guard against a unit mistake rather than a
+limit on the volume, so a volume larger than about 85 TiB gives the stream
+64 TiB and leaves the rest to the store and its snapshots.
 
 It holds the node's credentials as values: the two API tokens (the
 operator's own, and the one published for consumers in

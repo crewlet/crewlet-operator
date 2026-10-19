@@ -91,6 +91,26 @@ func TestEngineClassObjects(t *testing.T) {
 			name:   "a storage size in bytes is accepted",
 			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("10737418240")) },
 		},
+		// A volume of any size past the floor is admitted: the render takes
+		// no more of it than Crewlet's ceiling on the stream (64 TiB), and
+		// computes what it takes exactly for a size no int64 holds
+		// (internal/render's TestContractStreamCeiling).
+		{
+			name:   "a storage size past what the engine's stream ceiling is three quarters of is accepted",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("1Pi")) },
+		},
+		{
+			name:   "a storage size no int64 holds is accepted",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("1e30")) },
+		},
+		{
+			name:   "a storage size of 16Ei, which no int64 holds, is accepted",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("16Ei")) },
+		},
+		{
+			name:   "a storage size one past the largest int64 is accepted",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("9223372036854775808")) },
+		},
 		{
 			name:   "a version override with an image by tag is accepted",
 			mutate: func(c *v1.EngineClass) { c.Spec.Engine.AllowVersionOverride = new(true) },

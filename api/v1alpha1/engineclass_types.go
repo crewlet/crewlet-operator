@@ -65,7 +65,10 @@ type DataStorage struct {
 	// that share up front. Crewlet's own floor for it is 6Gi
 	// (config.StoreMaxBytesFloor: every node reserves all five of its state
 	// logs' ceilings, 4.5Gi at their smallest, and keeps room beside them for
-	// its mailboxes and coordination), so a volume must be at least 8Gi.
+	// its mailboxes and coordination), so a volume must be at least 8Gi. Its
+	// ceiling is 64Ti (config.StoreMaxBytesCeiling, a guard against a unit
+	// mistake), so a volume larger than about 85Ti gives the stream 64Ti and
+	// the rest to the store and its snapshots.
 	//
 	// It applies to the data volumes of companies created after it is set.
 	// An existing company's volumes keep the size they were created with:

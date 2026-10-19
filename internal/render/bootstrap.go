@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"net"
 	"net/url"
 	"regexp"
@@ -315,6 +316,29 @@ const (
 	streamShareDenominator = 4
 )
 
+// storeMaxBytesCeiling is the largest stream.store_max_bytes Crewlet starts
+// on (config.StoreMaxBytesCeiling, 64 TiB), a guard against a unit mistake
+// rather than a policy: it is more than an order of magnitude above what the
+// engine's own logs can be configured to hold. TestContractStreamCeiling
+// holds it to the engine's.
+const storeMaxBytesCeiling int64 = 64 << 40
+
+// streamShare is the stream's share of a data volume of the given size,
+// stream.store_max_bytes: three quarters of it, and no more than
+// storeMaxBytesCeiling. A volume over about 85 TiB is not wrong, and the
+// engine refuses to start on a larger share, so what the share would take
+// past the ceiling is left to the store and its snapshots.
+//
+// The size is compared before its Value is read: a quantity at or past the
+// largest int64 has no exact one (Value saturates at it, wraps below zero or
+// reads 0, by how the quantity is written), and the API admits such a size.
+func streamShare(volume resource.Quantity) int64 {
+	if volume.CmpInt64(math.MaxInt64) >= 0 {
+		return storeMaxBytesCeiling
+	}
+	return min(volume.Value()/streamShareDenominator*streamShareNumerator, storeMaxBytesCeiling)
+}
+
 type coordinationDoc struct {
 	Type string `json:"type"`
 }
@@ -442,7 +466,7 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 			// stream is created last is refused with "insufficient
 			// storage resources available". The claim's size is the space
 			// this engine was promised, so the share is taken of that.
-			StoreMaxBytes: in.VolumeSize.Value() / streamShareDenominator * streamShareNumerator,
+			StoreMaxBytes: streamShare(in.VolumeSize),
 			Replicas:      streamReplicas,
 		},
 		Coordination: coordinationDoc{Type: "embedded-kv"},

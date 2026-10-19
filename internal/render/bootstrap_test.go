@@ -632,24 +632,42 @@ func TestSeatPodsCarryNoSignIn(t *testing.T) {
 
 // TestBootstrapBoundsTheStreamByTheVolume pins the event stream's share of
 // the volume: three quarters of the claim the pod runs on, whatever the
-// class says now, since the claim is what the pod was given.
+// class says now, since the claim is what the pod was given, and never more
+// than the engine's ceiling, however large the claim, a size no int64 holds
+// included.
 func TestBootstrapBoundsTheStreamByTheVolume(t *testing.T) {
-	in := bootstrapCases()[0].input(t)
-	in.VolumeSize = resource.MustParse("8Gi")
-	doc, err := Bootstrap(in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got struct {
-		Stream struct {
-			StoreMaxBytes int64 `json:"store_max_bytes"`
-		} `json:"stream"`
-	}
-	if err := yaml.Unmarshal(doc.YAML, &got); err != nil {
-		t.Fatal(err)
-	}
-	if want := int64(6 << 30); got.Stream.StoreMaxBytes != want {
-		t.Fatalf("stream.store_max_bytes = %d for an 8Gi volume, want %d", got.Stream.StoreMaxBytes, want)
+	for _, c := range []struct {
+		size string
+		want int64
+	}{
+		{size: "8Gi", want: 6 << 30},
+		{size: "85Ti", want: 85 << 40 / 4 * 3},
+		{size: "93824992236884", want: 70368744177663},
+		{size: "93824992236888", want: storeMaxBytesCeiling},
+		{size: "86Ti", want: storeMaxBytesCeiling},
+		{size: "16Ei", want: storeMaxBytesCeiling},
+		{size: "9223372036854775808", want: storeMaxBytesCeiling},
+		{size: "1e30", want: storeMaxBytesCeiling},
+	} {
+		t.Run(c.size, func(t *testing.T) {
+			in := bootstrapCases()[0].input(t)
+			in.VolumeSize = resource.MustParse(c.size)
+			doc, err := Bootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got struct {
+				Stream struct {
+					StoreMaxBytes int64 `json:"store_max_bytes"`
+				} `json:"stream"`
+			}
+			if err := yaml.Unmarshal(doc.YAML, &got); err != nil {
+				t.Fatal(err)
+			}
+			if got.Stream.StoreMaxBytes != c.want {
+				t.Fatalf("stream.store_max_bytes = %d for a %s volume, want %d", got.Stream.StoreMaxBytes, c.size, c.want)
+			}
+		})
 	}
 }
 
