@@ -7,10 +7,12 @@ import (
 )
 
 // Crewlet expands a ${NAME} in the company document from its secret store and
-// then from its process environment, in fields that are no credential too.
-// Every such field the API renders refuses one, so that a tenant can name only
-// the credentials its own Secret references give the engine. Each case names
-// a variable the engine could resolve and a field it would expand.
+// then from its process environment, in many fields that are no credential
+// too, and passes others on as written (a sandbox setup command, a Stdio
+// server's command and args). The API refuses one in either kind, so that a
+// tenant can name only the credentials its own Secret references give the
+// engine, in the fields Crewlet expands today and in any it expands later.
+// Each case names a variable the engine could resolve.
 
 // leak is a reference a tenant would write to have the engine send a value
 // elsewhere.

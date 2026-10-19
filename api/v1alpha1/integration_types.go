@@ -132,7 +132,7 @@ type GitHubIntegration struct {
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && self.startsWith('https://')",message="url must be an absolute URL starting with https://"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="url may not hold a user name or password: a credential is named through a Secret, never written into an address"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	URL string `json:"url,omitempty"`
 
 	// webhookSecretRef is the Secret key holding the secret that verifies
@@ -307,7 +307,7 @@ type GitLabIntegration struct {
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))",message="url must be an absolute URL starting with http:// or https://"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="url may not hold a user name or password: a credential is named through a Secret, never written into an address"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	URL string `json:"url,omitempty"`
 
 	// signingSecretRef is the Secret key holding the signing token every
@@ -333,7 +333,7 @@ type GitLabIntegration struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=255
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="webhookName may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="webhookName may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	WebhookName string `json:"webhookName,omitempty"`
 
 	// engineProvisioning is how the engine creates the seats' accounts.
@@ -380,7 +380,7 @@ type MattermostEngineProvisioning struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=64
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="displayNameSuffix may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="displayNameSuffix may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	DisplayNameSuffix string `json:"displayNameSuffix,omitempty"`
 }
 
@@ -408,7 +408,7 @@ type MattermostIntegration struct {
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))",message="url must be an absolute URL starting with http:// or https://"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="url may not hold a user name or password: a credential is named through a Secret, never written into an address"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	URL string `json:"url,omitempty"`
 
 	// team is the team, by name (the URL slug), the bots belong to.
@@ -446,7 +446,7 @@ type JiraIntegration struct {
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))",message="url must be an absolute URL starting with http:// or https://"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="url may not hold a user name or password: a credential is named through a Secret, never written into an address"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	URL string `json:"url,omitempty"`
 
 	// cloudID is an Atlassian Cloud site's id; requests go through the API
@@ -469,7 +469,7 @@ type JiraIntegration struct {
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))",message="siteURL must be an absolute URL starting with http:// or https://"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="siteURL may not hold a user name or password: a credential is named through a Secret, never written into an address"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="siteURL may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="siteURL may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	SiteURL string `json:"siteURL,omitempty"`
 
 	// email is the account's address, for Jira Cloud's basic
@@ -505,7 +505,7 @@ type JiraIntegration struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=255
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="webhookName may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="webhookName may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	WebhookName string `json:"webhookName,omitempty"`
 }
 
@@ -525,7 +525,7 @@ type ConfluenceIntegration struct {
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))",message="url must be an absolute URL starting with http:// or https://"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="url may not hold a user name or password: a credential is named through a Secret, never written into an address"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	URL string `json:"url,omitempty"`
 
 	// cloudID is an Atlassian Cloud site's id; requests go through the API
@@ -548,7 +548,7 @@ type ConfluenceIntegration struct {
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && (self.startsWith('http://') || self.startsWith('https://'))",message="siteURL must be an absolute URL starting with http:// or https://"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="siteURL may not hold a user name or password: a credential is named through a Secret, never written into an address"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="siteURL may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="siteURL may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	SiteURL string `json:"siteURL,omitempty"`
 
 	// email is the account's address, for Confluence Cloud's basic
@@ -658,7 +658,7 @@ type DatadogIntegration struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="role may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="role may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Role string `json:"role,omitempty"`
 
 	// emailDomain is the domain the service accounts' addresses are built
@@ -678,7 +678,7 @@ type DatadogIntegration struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	// +kubebuilder:validation:Pattern=`^[^ @,]+$`
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="webhookName may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="webhookName may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	WebhookName string `json:"webhookName,omitempty"`
 
 	// handleTag is the monitor tag key whose value names the seat an alert

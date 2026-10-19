@@ -197,7 +197,7 @@ type EmbeddingSettings struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
 	// +kubebuilder:validation:XValidation:rule="self.trim().size() > 0",message="model may not be white space alone: Crewlet trims it, and refuses an embeddings provider that names no model"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="model may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="model may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Model string `json:"model,omitempty"`
 
 	// apiKeySecretRef is the Secret key holding the API key. Crewlet's
@@ -215,7 +215,7 @@ type EmbeddingSettings struct {
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() in ['http', 'https']",message="baseURL must be an absolute http or https URL"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="baseURL may not hold a user name or password: a credential is named through a Secret, never written into an address"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="baseURL may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="baseURL may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	BaseURL string `json:"baseURL,omitempty"`
 
 	// dimensions is the vector width. Unset takes the model's own width,
@@ -292,18 +292,24 @@ type SandboxSetupStep struct {
 	Files []SandboxFile `json:"files,omitempty"`
 
 	// commands are shell commands run in order; one that exits non-zero
-	// fails the sandbox. Crewlet's `commands`. Crewlet substitutes every
-	// ${NAME} in them (NAME an identifier) from the engine's own secret
-	// store and environment before the sandbox runs them, so ${HOME} would be
-	// the engine's, not the sandbox's, and the API refuses ${NAME}: write a
+	// fails the sandbox. Crewlet's `commands`. Crewlet resolves nothing in a
+	// command: the sandbox's login shell expands $NAME and ${NAME} from the
+	// box's own environment (its HOME and PATH among it) and the run's,
+	// never from the engine's. The run's is the steps' env, the Seat's
+	// sandbox env, and what Crewlet adds: the agent's handle and, when it
+	// has one, its email, and the variables that sign the coding agent in
+	// to the provider its code work runs on (docs/guides/credentials.md
+	// says which, and when the seat's own env leaves them out). The API
+	// refuses ${NAME} (NAME an identifier) all the same, as the operator
+	// refuses every ${NAME} it did not write in a string it renders: write a
 	// sandbox variable as $NAME. Parameter expansions such as ${1:-x} are
-	// not substituted and are allowed.
+	// allowed.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MaxItems=32
 	// +kubebuilder:validation:items:MinLength=1
 	// +kubebuilder:validation:items:MaxLength=4096
-	// +kubebuilder:validation:XValidation:rule="self.all(x, !x.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]'))",message="commands may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="self.all(x, !x.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]'))",message="commands may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name; write a sandbox variable as $NAME"
 	Commands []string `json:"commands,omitempty"`
 
 	// env is merged into the environment of the commands and of the run.
@@ -340,7 +346,7 @@ type E2BSandbox struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="domain may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="domain may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Domain string `json:"domain,omitempty"`
 
 	// template is the sandbox template, which also fixes each sandbox's CPU,
@@ -357,7 +363,7 @@ type E2BSandbox struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="template may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="template may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Template string `json:"template,omitempty"`
 }
 
@@ -616,7 +622,7 @@ type CompanyExposure struct {
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://') || self.matches('^[^:/?#]+://([^/?#]*@)?([[](([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,7}:|:(:[0-9A-Fa-f]{1,4}){1,7}|::|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){1,6}|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){1,5}|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){1,4}|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){1,3}|([0-9A-Fa-f]{1,4}:){5}(:[0-9A-Fa-f]{1,4}){1,2}|([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){6}|:(:[0-9A-Fa-f]{1,4}){0,5}:|([0-9A-Fa-f]{1,4}:){5}:|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){0,4}:|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){0,3}:|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){0,2}:|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){0,1}:)(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])([.](25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})(%25[^]/?#]+)?[]]|[^/?#:[]*)(:[0-9]*)?([/?#]|$)')",message="publicBaseURL's host must be a name, an IPv4 address or an IPv6 address in brackets, and at most one ':' and a port may follow it: Crewlet refuses to start on any other address, or starts on one no vendor reaches (write https://[2001:db8::1]:8443, not https://2001:db8::1:8443)"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="publicBaseURL may not hold a user name or password: a credential is named through a Secret, never written into an address"
 	// +kubebuilder:validation:XValidation:rule="!self.contains('?') && !self.contains('#')",message="publicBaseURL may not have a query or a fragment: Crewlet builds every webhook and sandbox address by appending a path to it"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="publicBaseURL may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="publicBaseURL may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	PublicBaseURL string `json:"publicBaseURL,omitempty"`
 
 	// dashboardBaseURL is where a browser reaches the engine: its dashboard,
@@ -658,7 +664,7 @@ type CompanyExposure struct {
 	// +kubebuilder:validation:XValidation:rule="!isURL(self) || !self.matches('^https?://([^/:]*[.])?([0-9]+|0[xX][0-9a-fA-F]*)[.]?(:[0-9]*)?(/|$)') || self.matches('^https?://((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])[.]){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(:[0-9]*)?(/|$)')",message="dashboardBaseURL's host ends in a number, which a browser reads as an IPv4 address and rewrites before it sends it: write an IPv4 address as four decimal octets, such as 127.0.0.1, and a host name whose last label is not a number"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="dashboardBaseURL may not hold a user name or password: a credential is named through a Secret, never written into an address"
 	// +kubebuilder:validation:XValidation:rule="!self.contains('?') && !self.contains('#')",message="dashboardBaseURL may not have a query or a fragment: Crewlet builds every link a person follows, an invitation and a password link included, by appending a path to it"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="dashboardBaseURL may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="dashboardBaseURL may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	DashboardBaseURL string `json:"dashboardBaseURL,omitempty"`
 }
 

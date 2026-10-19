@@ -648,7 +648,7 @@ Nor is Crewlet's `inherit-env` login, which gives the CLI whichever token or
 key the engine's container environment holds. A credential there is outside
 the engine's encrypted store: every process the engine runs (the CLI, a
 stdio MCP server) can read it, and the engine resolves a `${NAME}` written in
-any field of the company document from its environment too, so whoever can
+many fields of the company document from its environment too, so whoever can
 write such a field can have the engine send the value anywhere. The operator
 puts no credential of the engine's own into its environment for the same
 reason ([Credential Positions](../concepts/credentials.md)); `tokenSecretRef`,

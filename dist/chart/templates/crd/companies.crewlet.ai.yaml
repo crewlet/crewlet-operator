@@ -158,8 +158,9 @@ spec:
                     - message: 'baseURL may not hold a user name or password: a credential
                         is named through a Secret, never written into an address'
                       rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
-                    - message: 'baseURL may not hold a ${NAME} reference: the engine
-                        would resolve it from its own secret store and environment,
+                    - message: 'baseURL may not hold a ${NAME} reference: the operator
+                        refuses every one it did not write, since in many fields the
+                        engine resolves one from its own secret store and environment,
                         which hold credentials that are not this object''s to name'
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   dimensions:
@@ -205,8 +206,9 @@ spec:
                     - message: 'model may not be white space alone: Crewlet trims
                         it, and refuses an embeddings provider that names no model'
                       rule: self.trim().size() > 0
-                    - message: 'model may not hold a ${NAME} reference: the engine
-                        would resolve it from its own secret store and environment,
+                    - message: 'model may not hold a ${NAME} reference: the operator
+                        refuses every one it did not write, since in many fields the
+                        engine resolves one from its own secret store and environment,
                         which hold credentials that are not this object''s to name'
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   type:
@@ -364,9 +366,10 @@ spec:
                         and a password link included, by appending a path to it'
                       rule: '!self.contains(''?'') && !self.contains(''#'')'
                     - message: 'dashboardBaseURL may not hold a ${NAME} reference:
-                        the engine would resolve it from its own secret store and
-                        environment, which hold credentials that are not this object''s
-                        to name'
+                        the operator refuses every one it did not write, since in
+                        many fields the engine resolves one from its own secret store
+                        and environment, which hold credentials that are not this
+                        object''s to name'
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   publicBaseURL:
                     description: |-
@@ -413,8 +416,10 @@ spec:
                         a path to it'
                       rule: '!self.contains(''?'') && !self.contains(''#'')'
                     - message: 'publicBaseURL may not hold a ${NAME} reference: the
-                        engine would resolve it from its own secret store and environment,
-                        which hold credentials that are not this object''s to name'
+                        operator refuses every one it did not write, since in many
+                        fields the engine resolves one from its own secret store and
+                        environment, which hold credentials that are not this object''s
+                        to name'
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                 type: object
               integrations:
@@ -752,10 +757,11 @@ spec:
                         minLength: 1
                         type: string
                         x-kubernetes-validations:
-                        - message: 'domain may not hold a ${NAME} reference: the engine
-                            would resolve it from its own secret store and environment,
-                            which hold credentials that are not this object''s to
-                            name'
+                        - message: 'domain may not hold a ${NAME} reference: the operator
+                            refuses every one it did not write, since in many fields
+                            the engine resolves one from its own secret store and
+                            environment, which hold credentials that are not this
+                            object''s to name'
                           rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                       template:
                         description: |-
@@ -775,9 +781,10 @@ spec:
                         type: string
                         x-kubernetes-validations:
                         - message: 'template may not hold a ${NAME} reference: the
-                            engine would resolve it from its own secret store and
-                            environment, which hold credentials that are not this
-                            object''s to name'
+                            operator refuses every one it did not write, since in
+                            many fields the engine resolves one from its own secret
+                            store and environment, which hold credentials that are
+                            not this object''s to name'
                           rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                     required:
                     - apiKeySecretRef
@@ -801,12 +808,18 @@ spec:
                         commands:
                           description: |-
                             commands are shell commands run in order; one that exits non-zero
-                            fails the sandbox. Crewlet's `commands`. Crewlet substitutes every
-                            ${NAME} in them (NAME an identifier) from the engine's own secret
-                            store and environment before the sandbox runs them, so ${HOME} would be
-                            the engine's, not the sandbox's, and the API refuses ${NAME}: write a
+                            fails the sandbox. Crewlet's `commands`. Crewlet resolves nothing in a
+                            command: the sandbox's login shell expands $NAME and ${NAME} from the
+                            box's own environment (its HOME and PATH among it) and the run's,
+                            never from the engine's. The run's is the steps' env, the Seat's
+                            sandbox env, and what Crewlet adds: the agent's handle and, when it
+                            has one, its email, and the variables that sign the coding agent in
+                            to the provider its code work runs on (docs/guides/credentials.md
+                            says which, and when the seat's own env leaves them out). The API
+                            refuses ${NAME} (NAME an identifier) all the same, as the operator
+                            refuses every ${NAME} it did not write in a string it renders: write a
                             sandbox variable as $NAME. Parameter expansions such as ${1:-x} are
-                            not substituted and are allowed.
+                            allowed.
                           items:
                             maxLength: 4096
                             minLength: 1
@@ -816,9 +829,11 @@ spec:
                           x-kubernetes-list-type: atomic
                           x-kubernetes-validations:
                           - message: 'commands may not hold a ${NAME} reference: the
-                              engine would resolve it from its own secret store and
-                              environment, which hold credentials that are not this
-                              object''s to name'
+                              operator refuses every one it did not write, since in
+                              many fields the engine resolves one from its own secret
+                              store and environment, which hold credentials that are
+                              not this object''s to name; write a sandbox variable
+                              as $NAME'
                             rule: self.all(x, !x.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]'))
                         env:
                           description: |-

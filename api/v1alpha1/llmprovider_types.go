@@ -101,8 +101,8 @@ const (
 // Crewlet's `inherit-env`, which hands the CLI whichever token or key the
 // engine's own environment holds, is not offered: a credential in the
 // engine's environment is outside the encrypted store, readable by every
-// process the engine runs, and resolvable by a ${NAME} written in any field of
-// the company document, so it would be the one credential the API takes by
+// process the engine runs, and resolvable by a ${NAME} written in many fields
+// of the company document, so it would be the one credential the API takes by
 // another route than a Secret reference. Subscription and APIKey cover what
 // it is for.
 // +kubebuilder:validation:Enum=Subscription;APIKey
@@ -358,7 +358,7 @@ type LLMProviderSettings struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
 	// +kubebuilder:validation:XValidation:rule="self.trim().size() > 0",message="model may not be white space alone: Crewlet trims it, and refuses a provider that names no model"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="model may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="model may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Model string `json:"model,omitempty"`
 
 	// claudeModel names the Claude model whose request shape an Anthropic
@@ -378,7 +378,7 @@ type LLMProviderSettings struct {
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() in ['http', 'https']",message="baseURL must be an absolute http or https URL"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="baseURL may not hold a user name or password: a credential is named through a Secret, never written into an address"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="baseURL may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="baseURL may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	BaseURL string `json:"baseURL,omitempty"`
 
 	// reasoning turns on an OpenAI reasoning model's effort, so that

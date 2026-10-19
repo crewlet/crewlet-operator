@@ -742,8 +742,12 @@ const (
 	// that holds a ${NAME} reference in a field the operator renders into the
 	// company document. Crewlet resolves one from the engine's own secret
 	// store and environment in many fields that hold no credential (an MCP
-	// server's url, a sandbox setup command), so it would name values that
-	// are not the object's. A credential is given with a Secret reference.
+	// server's url, a provider's base_url), so it would name values that are
+	// not the object's. The operator refuses one in every string it
+	// renders, a string Crewlet passes on as written (a sandbox setup
+	// command) included, except the references it writes itself, so a
+	// field Crewlet starts expanding later names none either. A credential
+	// is given with a Secret reference.
 	ReasonReferenceNotAllowed = "ReferenceNotAllowed"
 
 	// ReasonCycle is ResolvedRefs=False on a Unit whose parentRef chain

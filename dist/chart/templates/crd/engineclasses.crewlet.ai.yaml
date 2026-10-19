@@ -1448,8 +1448,9 @@ spec:
                           credential is named through a Secret, never written into
                           an address'
                         rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
-                      - message: 'baseURL may not hold a ${NAME} reference: the engine
-                          would resolve it from its own secret store and environment,
+                      - message: 'baseURL may not hold a ${NAME} reference: the operator
+                          refuses every one it did not write, since in many fields
+                          the engine resolves one from its own secret store and environment,
                           which hold credentials that are not this object''s to name'
                         rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                     claudeModel:
@@ -1515,8 +1516,9 @@ spec:
                       - message: 'model may not be white space alone: Crewlet trims
                           it, and refuses a provider that names no model'
                         rule: self.trim().size() > 0
-                      - message: 'model may not hold a ${NAME} reference: the engine
-                          would resolve it from its own secret store and environment,
+                      - message: 'model may not hold a ${NAME} reference: the operator
+                          refuses every one it did not write, since in many fields
+                          the engine resolves one from its own secret store and environment,
                           which hold credentials that are not this object''s to name'
                         rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                     name:

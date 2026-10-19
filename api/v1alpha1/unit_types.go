@@ -55,7 +55,7 @@ type MCPCredentialValue struct {
 	// why the field is a pointer.
 	// +optional
 	// +kubebuilder:validation:MaxLength=4096
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="value may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="value may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Value *string `json:"value,omitempty"`
 
 	// valueFrom is where a credential comes from: a Secret key, or, for a
