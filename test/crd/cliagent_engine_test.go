@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -243,9 +244,13 @@ func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
 // rule's cases are built from (homeIsolation and cliIsolation). Then every
 // name any CLI's list holds is tried on every CLI: the API refuses it with
 // its isolation rule exactly where the engine's list for that CLI holds it.
-// A crewlet change that gives a profile another config_env, work_config_env
-// or isolation_env variable, or drops one, fails here until the rule
-// follows it.
+// The rule quotes no name beyond those lists, and the lists are also stated
+// where a person reads them, in the rule's message, which the API server
+// answers a refused provider with, and in the table of
+// docs/guides/cli-agents.md: both are held to the engine's lists too. A
+// crewlet change that gives a profile another config_env, work_config_env
+// or isolation_env variable, or drops one, fails here until the rule, its
+// message and the guide follow it.
 func TestCLIAgentIsolationFollowsTheEngine(t *testing.T) {
 	namespace := newNamespace(t)
 	agents := enumOf(t, "llmproviders.crewlet.ai", "spec", "cli", "agent")
@@ -304,6 +309,156 @@ func TestCLIAgentIsolationFollowsTheEngine(t *testing.T) {
 			}
 		}
 	}
+
+	// The probe above tries the engine's names alone, so a name the rule
+	// refuses that no list holds, a provider the API refuses and the engine
+	// runs, is read off the rule instead.
+	rule := validationOf(t, "llmproviders.crewlet.ai", msgCLIIsolation, "spec", "cli")
+	quoted := quotedVariable.FindAllStringSubmatch(rule.Rule, -1)
+	named := make([]string, 0, len(quoted))
+	for _, m := range quoted {
+		named = append(named, m[1])
+	}
+	if got := slices.Compact(slices.Sorted(slices.Values(named))); !slices.Equal(got, everyName) {
+		t.Errorf("the API's isolation rule refuses %v in env, the variables of the engine's lists are %v", got, everyName)
+	}
+	isolationMessageFollows(t, rule.Message, agents, engineLists)
+	isolationTableFollows(t, agents, engineLists)
+}
+
+// quotedVariable is a variable's name quoted in a CEL rule: upper case, so
+// never a CLI's name, which is written in mixed case.
+var quotedVariable = regexp.MustCompile(`'([A-Z][A-Z0-9_]*)'`)
+
+// validationOf is the validation the installed CRD crd declares on the field
+// at path whose message starts with message.
+func validationOf(t *testing.T, crd, message string, path ...string) apiextensionsv1.ValidationRule {
+	t.Helper()
+	for _, c := range installedCRDs {
+		if c.Name != crd {
+			continue
+		}
+		node := c.Spec.Versions[0].Schema.OpenAPIV3Schema
+		for _, field := range path {
+			child, ok := node.Properties[field]
+			if !ok {
+				t.Fatalf("%s has no field %s", crd, strings.Join(path, "."))
+			}
+			node = &child
+		}
+		for _, rule := range node.XValidations {
+			if strings.HasPrefix(rule.Message, message) {
+				return rule
+			}
+		}
+		t.Fatalf("%s %s declares no rule whose message starts %q", crd, strings.Join(path, "."), message)
+	}
+	t.Fatalf("no CRD %s was installed", crd)
+	return apiextensionsv1.ValidationRule{}
+}
+
+// isolationMessageFollows holds the isolation rule's message to the engine's
+// lists. Its first sentence names, after its colon, the variables of every
+// CLI ahead of "for any CLI", and then each CLI's own after "<CLI>'s", so a
+// CLI's list as the message states it is the first group and its own.
+func isolationMessageFollows(t *testing.T, message string, agents []string, lists map[v1.CLIAgentName][]string) {
+	t.Helper()
+	_, named, colon := strings.Cut(message, ": ")
+	named, _, _ = strings.Cut(named, ". ")
+	every, own, group := strings.Cut(named, " for any CLI")
+	if !colon || !group || len(variableName.FindAllString(every, -1)) == 0 {
+		t.Fatalf("the API's isolation rule's message names no variables for every CLI ahead of %q: %s",
+			" for any CLI", message)
+	}
+	stated := map[v1.CLIAgentName][]string{}
+	for _, agent := range agents {
+		stated[v1.CLIAgentName(agent)] = variableName.FindAllString(every, -1)
+	}
+	marks := possessive.FindAllStringSubmatchIndex(own, -1)
+	if len(marks) == 0 || len(variableName.FindAllString(own[:marks[0][0]], -1)) > 0 {
+		t.Errorf("the API's isolation rule's message names variables of no CLI after %q: %s", " for any CLI", message)
+	}
+	for i, m := range marks {
+		agent, end := own[m[2]:m[3]], len(own)
+		if i+1 < len(marks) {
+			end = marks[i+1][0]
+		}
+		if !slices.Contains(agents, agent) {
+			t.Errorf("the API's isolation rule's message names variables of %s, which the API does not offer: %s",
+				agent, message)
+			continue
+		}
+		stated[v1.CLIAgentName(agent)] = append(stated[v1.CLIAgentName(agent)],
+			variableName.FindAllString(own[m[1]:end], -1)...)
+	}
+	for _, agent := range agents {
+		name := v1.CLIAgentName(agent)
+		got, want := slices.Sorted(slices.Values(stated[name])), slices.Sorted(slices.Values(lists[name]))
+		if !slices.Equal(got, want) {
+			t.Errorf("the API's isolation rule's message says env may not set %v for %s, the engine refuses %v",
+				got, agent, want)
+		}
+	}
+}
+
+// possessive is a CLI's name ahead of the variables a message names for it,
+// as in "Codex's CODEX_HOME".
+var possessive = regexp.MustCompile(`\b([A-Z][A-Za-z]+)'s `)
+
+// variableName is an environment variable's name in prose: upper case words
+// joined by underscores.
+var variableName = regexp.MustCompile(`\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*\b`)
+
+// isolationTableFollows holds the table docs/guides/cli-agents.md lists the
+// variables env may not set in to the engine's lists: a row of the variables
+// of every CLI, and a row of each CLI's own, every CLI the API offers covered.
+func isolationTableFollows(t *testing.T, agents []string, lists map[v1.CLIAgentName][]string) {
+	t.Helper()
+	const guide = "docs/guides/cli-agents.md"
+	rows, err := docs.Table(filepath.Join("..", "..", guide), "`env` may not set")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) == 0 {
+		t.Fatalf("%s has no table headed %q", guide, "`env` may not set")
+	}
+	stated := map[v1.CLIAgentName][]string{}
+	for _, row := range rows {
+		names := codeSpans(row[0])
+		if row[1] == "every CLI" {
+			for _, agent := range agents {
+				stated[v1.CLIAgentName(agent)] = append(stated[v1.CLIAgentName(agent)], names...)
+			}
+			continue
+		}
+		for _, agent := range codeSpans(row[1]) {
+			if !slices.Contains(agents, agent) {
+				t.Errorf("%s: the isolation table names %s, which the API does not offer", guide, agent)
+			}
+			stated[v1.CLIAgentName(agent)] = append(stated[v1.CLIAgentName(agent)], names...)
+		}
+	}
+	for _, agent := range agents {
+		name := v1.CLIAgentName(agent)
+		got, want := slices.Sorted(slices.Values(stated[name])), slices.Sorted(slices.Values(lists[name]))
+		if !slices.Equal(got, want) {
+			t.Errorf("%s: the isolation table says env may not set %v for %s, the engine refuses %v",
+				guide, got, agent, want)
+		}
+	}
+}
+
+// codeSpan is a Markdown code span.
+var codeSpan = regexp.MustCompile("`([^`]+)`")
+
+// codeSpans is the text of every code span in cell, in order.
+func codeSpans(cell string) []string {
+	matches := codeSpan.FindAllStringSubmatch(cell, -1)
+	out := make([]string, 0, len(matches))
+	for _, m := range matches {
+		out = append(out, m[1])
+	}
+	return out
 }
 
 // isolationRefusal is the engine's refusal of a variable in a cli-agent

@@ -156,10 +156,15 @@ engine whose profiles move a token or key variable fails it. It holds the
 rule over an OpenCode provider's `model` the same way, trying every CLI with
 models with and without a provider, and with segments of white space, so an
 engine that marks another profile as reading `<provider>/<model>` fails it
-too. And it holds the `claudeModel` enum to the engine's table of Claude
-models, read from its refusal of an id the table does not list, so an
-engine that adds or drops a row fails it. A mock would agree with the code by construction; the real engine is
-what tells the two apart when Crewlet's API or schema moves.
+too. It reads the variables the engine sets to keep each CLI inside a seat's
+own home from its refusal of `HOME` in `cli.env`, which names every one for
+that CLI, and tries each on every CLI, so an engine that gives a profile
+another such variable, or drops one, fails the rule over `env`, the list its
+message states and the guide's table of them. And it holds the
+`claudeModel` enum to the engine's table of Claude models, read from its
+refusal of an id the table does not list, so an engine that adds or drops a
+row fails it. A mock would agree with the code by construction; the real
+engine is what tells the two apart when Crewlet's API or schema moves.
 
 What no validation shows is what a launch runs and signs a coding agent in
 with, which the renderer's verdict on a seat's code work turns on. The renderer's
