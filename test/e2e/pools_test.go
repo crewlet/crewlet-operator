@@ -335,7 +335,114 @@ var _ = Describe("Seat pools", Ordered, func() {
 		}).WithTimeout(placed).Should(Succeed())
 		expectSeatsFollowTheFleet()
 	})
+
+	// The operator leaves a seat StatefulSet's rollout to the cluster's
+	// StatefulSet controller, which has to replace a pod that is not ready
+	// on an older template: a seat pod that only a new template would let
+	// join is one, and a controller that counted it against maxUnavailable
+	// and replaced none would leave that rollout waiting for ever, as the
+	// controller of some Kubernetes releases did. A seat pod cannot be made
+	// unready on demand without breaking what else it needs, so the spec
+	// rolls StatefulSets that roll as the operator's seat StatefulSets do
+	// (rolloutProbe), with pods whose readiness it sets.
+	It("has the cluster replace a pod not ready on an older template as it rolls a seat StatefulSet", func() {
+		for _, source := range []string{sharedStatefulSet, soloStatefulSet} {
+			sts := &appsv1.StatefulSet{}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Namespace: poolsNamespace, Name: source}, sts)
+			}).WithTimeout(engineReady).Should(Succeed())
+			expectRolloutPastUnreadyPod(rolloutProbe(sts))
+		}
+	})
 })
+
+// rolloutProbeLabel labels the StatefulSets rolloutProbe makes, and their
+// pods, with the seat StatefulSet each copies.
+const rolloutProbeLabel = "e2e.crewlet.ai/rollout-probe"
+
+// rolloutProbe is a StatefulSet that rolls as the seat StatefulSet seat does:
+// its replicas, pod management policy, update strategy and minReadySeconds,
+// and its pods' termination grace and readiness timing, are seat's. Its pods
+// run curl's image, ready while /tmp/ready exists, which each creates as it
+// starts, and stop at once on SIGTERM, as a seat pod with no turn to finish
+// does.
+func rolloutProbe(seat *appsv1.StatefulSet) *appsv1.StatefulSet {
+	GinkgoHelper()
+	probe := seat.Spec.Template.Spec.Containers[0].ReadinessProbe
+	Expect(probe).NotTo(BeNil(), "StatefulSet %s's pods have no readiness probe", seat.Name)
+	readiness := probe.DeepCopy()
+	readiness.ProbeHandler = corev1.ProbeHandler{
+		Exec: &corev1.ExecAction{Command: []string{"/bin/sh", "-c", "test -f /tmp/ready"}},
+	}
+	name := "rollout-" + seat.Name
+	labels := map[string]string{rolloutProbeLabel: seat.Name}
+	pod := curlPodWith(poolsNamespace, "", poolsAccessSecret,
+		`touch /tmp/ready; trap 'exit 0' TERM; while :; do sleep 1; done`)
+	pod.Spec.RestartPolicy = corev1.RestartPolicyAlways
+	pod.Spec.TerminationGracePeriodSeconds = seat.Spec.Template.Spec.TerminationGracePeriodSeconds
+	container := &pod.Spec.Containers[0]
+	container.Env = nil
+	container.ReadinessProbe = readiness
+	container.VolumeMounts = []corev1.VolumeMount{{Name: "tmp", MountPath: "/tmp"}}
+	pod.Spec.Volumes = []corev1.Volume{{Name: "tmp", EmptyDir: &corev1.EmptyDirVolumeSource{}}}
+	return &appsv1.StatefulSet{
+		Namespace: poolsNamespace, Name: name, Labels: labels,
+		Spec: appsv1.StatefulSetSpec{
+			Replicas:            seat.Spec.Replicas,
+			ServiceName:         name,
+			Selector:            &metav1.LabelSelector{MatchLabels: labels},
+			PodManagementPolicy: seat.Spec.PodManagementPolicy,
+			UpdateStrategy:      *seat.Spec.UpdateStrategy.DeepCopy(),
+			MinReadySeconds:     seat.Spec.MinReadySeconds,
+			Template:            corev1.PodTemplateSpec{Labels: labels, Spec: pod.Spec},
+		},
+	}
+}
+
+// expectRolloutPastUnreadyPod runs sts, makes its lowest ordinal unready, gives
+// it a new template and waits for the StatefulSet controller to finish the
+// rollout, replacing that pod: the lowest, which a rollout of ready pods
+// reaches last. The StatefulSet is deleted when the spec ends.
+func expectRolloutPastUnreadyPod(sts *appsv1.StatefulSet) {
+	GinkgoHelper()
+	By("running " + sts.Name + ", which rolls as " + sts.Labels[rolloutProbeLabel] + " does")
+	Expect(k8sClient.Create(ctx, sts)).To(Succeed())
+	DeferCleanup(func() {
+		Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, sts))).To(Succeed())
+	})
+	replicas := *sts.Spec.Replicas
+	key := client.ObjectKeyFromObject(sts)
+	Eventually(func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, key, sts)).To(Succeed())
+		g.Expect(sts.Status.AvailableReplicas).To(Equal(replicas))
+	}).Should(Succeed())
+
+	unready := sts.Name + "-0"
+	By("making " + unready + " unready on its template")
+	_, err := utils.Run(exec.Command("kubectl", "exec", unready, "-n", poolsNamespace, "--", "rm", "/tmp/ready"))
+	Expect(err).NotTo(HaveOccurred())
+	pod := &corev1.Pod{}
+	Eventually(func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: poolsNamespace, Name: unready}, pod)).To(Succeed())
+		g.Expect(podReady(pod)).To(BeFalse(), "pod %s is still Ready", unready)
+	}).Should(Succeed())
+	uid := pod.UID
+
+	By("giving " + sts.Name + " a new template, and waiting for every pod to be on it and available")
+	base := sts.DeepCopy()
+	sts.Spec.Template.Annotations = map[string]string{rolloutProbeLabel + "-template": "2"}
+	Expect(k8sClient.Patch(ctx, sts, client.MergeFrom(base))).To(Succeed())
+	Eventually(func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, key, sts)).To(Succeed())
+		g.Expect(sts.Status.ObservedGeneration).To(Equal(sts.Generation))
+		g.Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: poolsNamespace, Name: unready}, pod)).To(Succeed())
+		g.Expect(pod.UID).NotTo(Equal(uid), "the StatefulSet controller has not replaced %s, not ready on the older "+
+			"template: the rollout waits on it", unready)
+		g.Expect(sts.Status.CurrentRevision).To(Equal(sts.Status.UpdateRevision), "the rollout has not finished")
+		g.Expect(sts.Status.UpdatedReplicas).To(Equal(replicas))
+		g.Expect(sts.Status.AvailableReplicas).To(Equal(replicas))
+	}).WithTimeout(3 * time.Minute).Should(Succeed())
+}
 
 // applyPoolsCompany writes the company of the Seat pools specs, its Shared
 // pool at shared pods.
@@ -441,6 +548,7 @@ func expectSeatsFollowTheFleet() {
 // dumpPools prints what a failed spec of the pools needs to be understood.
 func dumpPools() {
 	dumpNamespace(poolsNamespace, poolsDataPod, sharedStatefulSet+"-0", soloPod)
+	dump("describe", "statefulsets,pods", "-l", rolloutProbeLabel, "-n", poolsNamespace)
 }
 
 // leafAddress is the data pod's leaf listener, as a seat pod dials it.

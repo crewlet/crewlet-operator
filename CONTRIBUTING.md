@@ -108,10 +108,13 @@ Two more suites are not part of `make check`:
   becomes a new revision, and deleting the Company keeps or deletes its
   volume and keyring as its `deletionPolicy` says; and that a company's seat
   pools run, the engine places each seat in its own pool, and the data pod's
-  leaf listener admits the company's own seat pods and no other pod. Then it
-  deletes the cluster, unless the suite failed: the cluster is left for a
-  look, and `make cleanup-test-e2e` deletes it. CI runs it on every pull
-  request and every push to `main`. The engine image is `CREWLET_IMG`,
+  leaf listener admits the company's own seat pods and no other pod; and
+  that the cluster's StatefulSet controller replaces a pod not ready on an
+  older template as it rolls a StatefulSet that rolls as a seat StatefulSet
+  does, which the operator leaves to it. Then it deletes the cluster, unless
+  the suite failed: the cluster is left for a look, and
+  `make cleanup-test-e2e` deletes it. CI runs it on every pull request and
+  every push to `main`. The engine image is `CREWLET_IMG`,
   Crewlet's `main` image unless you name another, which `make crewlet-image`
   pulls for this machine's platform, printing the Crewlet commit it was
   built from; another image Docker already has is run as it is. So an

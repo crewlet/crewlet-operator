@@ -35,15 +35,14 @@ const drainPollInterval = 5 * time.Second
 // its Secrets, bootstrap document, ServiceAccount, Services, routes, network
 // policy and data StatefulSet. It records what it finds in the Company's
 // status (RuntimeReady, Exposed, the endpoints, the engine and topology), which
-// the caller writes, and in retry when it has to run again for a change
-// nothing it watches announces.
+// the caller writes.
 //
 // An error is one to retry (the API server did not answer, a write
 // conflicted); everything about the Company or its class is a condition.
 func (r *CompanyReconciler) reconcileRuntime(
-	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, retry *requeue,
+	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 ) error {
-	err := r.reconcileRuntimeObjects(ctx, c, class, retry)
+	err := r.reconcileRuntimeObjects(ctx, c, class)
 	conflict, ok := errors.AsType[*nameConflictError](err)
 	if !ok {
 		return err
@@ -67,7 +66,7 @@ func (r *CompanyReconciler) reconcileRuntime(
 // reconcileRuntimeObjects writes the objects of an accepted Company's
 // runtime, in order; see reconcileRuntime.
 func (r *CompanyReconciler) reconcileRuntimeObjects(
-	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, retry *requeue,
+	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 ) error {
 	keyring, keyringHeld, err := r.ensureKeyring(ctx, c)
 	if err != nil {
@@ -124,7 +123,7 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 		bridgeURL = c.Status.Endpoints.PublicBaseURL
 	}
 	runtimeReady, err := r.reconcileWorkload(ctx, c, class,
-		&workloadInputs{keyring, tokens, objects, platform, missing, hold, bridgeURL, addresses, retry})
+		&workloadInputs{keyring, tokens, objects, platform, missing, hold, bridgeURL, addresses})
 	if err != nil {
 		return err
 	}
@@ -152,21 +151,6 @@ type workloadInputs struct {
 	// addresses are where the engine is reached, which its crewlet.yaml
 	// tells it.
 	addresses engineAddresses
-	// retry collects when the reconcile has to run again.
-	retry *requeue
-}
-
-// requeue is the soonest a reconcile has to run again for a change that no
-// object the operator watches announces, such as a pod staying unready for
-// long enough; zero is never.
-type requeue struct{ after time.Duration }
-
-// within asks for the reconcile to run again within d, unless something
-// already asked for sooner; a d of zero asks for nothing.
-func (q *requeue) within(d time.Duration) {
-	if d > 0 && (q.after == 0 || d < q.after) {
-		q.after = d
-	}
 }
 
 // reconcileWorkload writes the bootstrap Secret and the data StatefulSet and
@@ -328,7 +312,6 @@ func (r *CompanyReconciler) runWorkload(
 		platform:  platform,
 		image:     *sts.Spec.Template.Spec.Containers[0].Image,
 		dataReady: progress.ready && *sts.Spec.Replicas > 0,
-		retry:     in.retry,
 	}); err != nil {
 		return metav1.Condition{}, err
 	}

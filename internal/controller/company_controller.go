@@ -128,10 +128,9 @@ func (r *CompanyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// data, and it needs nothing a refusal could be about, so it takes effect
 	// whatever else is wrong: otherwise a tenant could keep a suspended
 	// engine running by declaring one Seat more than its class allows.
-	retry := &requeue{}
 	switch {
 	case accepted.Status == metav1.ConditionTrue:
-		if err := r.reconcileRuntime(ctx, company, class, retry); err != nil {
+		if err := r.reconcileRuntime(ctx, company, class); err != nil {
 			return ctrl.Result{}, err
 		}
 	case suspended(company):
@@ -162,9 +161,9 @@ func (r *CompanyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		runtime.Reason == crewletaiv1alpha1.ReasonSuspending {
 		// The data pods stop once the seat pods are gone, which nothing
 		// the operator watches announces reliably: it does not watch Pods.
-		retry.within(drainPollInterval)
+		return ctrl.Result{RequeueAfter: drainPollInterval}, nil
 	}
-	return ctrl.Result{RequeueAfter: retry.after}, nil
+	return ctrl.Result{}, nil
 }
 
 // accept returns the EngineClass of a Company and its Accepted condition,
