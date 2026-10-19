@@ -185,8 +185,10 @@ spec:
                       credentialBundleSecretRef:
                         description: |-
                           credentialBundleSecretRef is the Secret key holding a credential
-                          bundle `crewlet llm export` wrote. Crewlet's `credential_bundle`, a
-                          credential position.
+                          bundle `crewlet llm export` wrote. A bundle holding a login OpenCode
+                          1.x made (its auth.json) is refused when the engine restores it, and
+                          the provider runs signed out: export it again from OpenCode 2.
+                          Crewlet's `credential_bundle`, a credential position.
                         properties:
                           key:
                             description: key is the key within the Secret's data.
@@ -251,10 +253,13 @@ spec:
                       sign in under auth mode Subscription with no login of their own: their
                       model provider's key, under a name Crewlet reads as a credential, such
                       as OPENROUTER_API_KEY. It may not set the CLI's own token or key
-                      variable, which auth owns. An OpenCode provider's credential-named
-                      variables also travel into every box of an Agent-mode run, and of a
-                      seat's code work that runs on it, where the coding agent can read
-                      them. Crewlet's `env`, a credential position.
+                      variable, which auth owns, nor a variable Crewlet sets to keep the CLI
+                      inside its seat's home and its call's working directory: HOME, the XDG
+                      directories, TMPDIR, and the CLI's own configuration directory or
+                      switch (docs/guides/cli-agents.md). An OpenCode provider's
+                      credential-named variables also travel into every box of an
+                      Agent-mode run, and of a seat's code work that runs on it, where the
+                      coding agent can read them. Crewlet's `env`, a credential position.
                     items:
                       description: |-
                         SecretEnvVar is a named credential delivered as an environment variable,
@@ -319,7 +324,8 @@ spec:
                   maxConcurrent:
                     description: |-
                       maxConcurrent is how many CLI processes the provider runs at once;
-                      each takes 200 to 400 MB of the engine pod's memory. Unset takes
+                      each takes 200 to 450 MB of the engine pod's memory, OpenCode's at the
+                      top of that range (docs/guides/cli-agents.md). Unset takes
                       Crewlet's default of 4. Crewlet's `max_concurrent`.
                     format: int32
                     maximum: 64
@@ -407,6 +413,25 @@ spec:
                     || (self.agent == ''Copilot'' && e.name == ''GITHUB_TOKEN'') ||
                     (self.agent == ''Grok'' && e.name == ''XAI_API_KEY'') || (self.agent
                     == ''MuseCode'' && e.name == ''META_API_KEY''))'
+                - fieldPath: .env
+                  message: 'env may not set a variable Crewlet sets on every call
+                    of the CLI to keep it inside its seat''s own home and its call''s
+                    working directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME,
+                    XDG_CACHE_HOME or TMPDIR for any CLI, and ClaudeCode''s CLAUDE_CONFIG_DIR,
+                    Codex''s CODEX_HOME, OpenCode''s OPENCODE_CONFIG_DIR and OPENCODE_CONFIG_PROJECT_DISABLE,
+                    CursorAgent''s CURSOR_CONFIG_DIR, KimiCode''s KIMI_CODE_HOME,
+                    Hermes''s HERMES_HOME or Pi''s PI_CODING_AGENT_DIR. A value there
+                    would replace that isolation for every seat on the provider, so
+                    Crewlet refuses the document: drop it'
+                  rule: '!has(self.env) || !self.env.exists(e, e.name in [''HOME'',
+                    ''XDG_CONFIG_HOME'', ''XDG_DATA_HOME'', ''XDG_STATE_HOME'', ''XDG_CACHE_HOME'',
+                    ''TMPDIR''] || (self.agent == ''ClaudeCode'' && e.name == ''CLAUDE_CONFIG_DIR'')
+                    || (self.agent == ''Codex'' && e.name == ''CODEX_HOME'') || (self.agent
+                    == ''OpenCode'' && e.name in [''OPENCODE_CONFIG_DIR'', ''OPENCODE_CONFIG_PROJECT_DISABLE''])
+                    || (self.agent == ''CursorAgent'' && e.name == ''CURSOR_CONFIG_DIR'')
+                    || (self.agent == ''KimiCode'' && e.name == ''KIMI_CODE_HOME'')
+                    || (self.agent == ''Hermes'' && e.name == ''HERMES_HOME'') ||
+                    (self.agent == ''Pi'' && e.name == ''PI_CODING_AGENT_DIR''))'
                 - message: 'a Subscription login reaches an Agent-mode run in a remote
                     sandbox only as a variable of its environment: give ClaudeCode
                     auth.tokenSecretRef, or use auth mode APIKey, and give OpenCode
@@ -559,10 +584,11 @@ spec:
                 at its first slash: a model with no slash, or with nothing but white
                 space before or after it, names no provider or no model, and every
                 call the provider makes, an Agent-mode run''s included, would fail
-                inside OpenCode with Model not found. Name the provider as OpenCode
-                spells it (opencode models lists them), such as anthropic/claude-sonnet-5
-                or openrouter/anthropic/claude-sonnet-5, with that provider''s key
-                in cli.env'
+                inside OpenCode, which OpenCode 2 refuses as Invalid model reference.
+                Name the provider as OpenCode spells it (opencode models --standalone
+                lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5,
+                with that provider''s key in cli.env or, in mode Text, a login of
+                OpenCode''s own in auth.credentialBundleSecretRef'
               rule: self.type != 'CLIAgent' || !has(self.cli) || self.cli.agent !=
                 'OpenCode' || !has(self.model) || (self.model.indexOf('/') >= 0 &&
                 self.model.substring(0, self.model.indexOf('/')).trim().size() > 0

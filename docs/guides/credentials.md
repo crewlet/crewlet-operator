@@ -238,10 +238,13 @@ says how it is named.
 ### A coding CLI's login
 
 A `CLIAgent` provider signs its CLI in with a headless subscription token or
-with a credential bundle `crewlet llm export` wrote, each a Secret key; with
-`auth.mode: APIKey`, with the provider's `apiKeySecretRefs` key; or, for
-Hermes, Pi and OpenCode, with its model provider's key in `cli.env`, which
-may never set the CLI's own token or key variable, since `auth` owns it:
+with a credential bundle `crewlet llm export` wrote (for OpenCode, its
+exported login: [An OpenCode login in a bundle](cli-agents.md#an-opencode-login-in-a-bundle)),
+each a Secret key; with `auth.mode: APIKey`, with the provider's
+`apiKeySecretRefs` key; or, for Hermes, Pi and OpenCode, with its model
+provider's key in `cli.env`, which may never set the CLI's own token or key
+variable, since `auth` owns it, nor a variable the engine sets to keep the
+CLI inside its seat's home ([Signing in](cli-agents.md#signing-in)):
 
 ```yaml
 spec:                       # LLMProvider claude-code
@@ -359,7 +362,17 @@ provider that backs code work, add the new key first in
 for that revision and for the coding runs already going to end, and only
 then revoke the old key.
 
-What the engine reads when it starts is the exception. The values in its
+A `CLIAgent` provider's `credentialBundleSecretRef` is an exception. The
+engine restores a bundle only into an empty login, when it starts and at
+every revision it applies, so a new bundle in the Secret reaches nothing
+while the provider's login on the data volume exists, and that refreshed
+login is the one to keep ([Signing in](cli-agents.md#signing-in)). To move a
+provider onto a new bundle, give it, and every provider sharing its login, a
+new `cli.loginName`: its login directory is then empty, and the revision that
+moves it restores the bundle there, with no restart. The old directory's
+login and seat homes stay on the data volume.
+
+What the engine reads when it starts is the other exception. The values in its
 `crewlet.yaml` (the API tokens, the keyring, the Company's object-store keys,
 the class's telemetry headers and env values) are read once: the operator
 watches the Secrets they come from and rolls the data pod when one changes.

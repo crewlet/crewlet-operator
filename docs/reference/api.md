@@ -137,12 +137,15 @@ A subscription login is made at a terminal, by `crewlet llm login` or the
 CLI's own command, and a pod has no terminal: Subscription signs in with a
 headless token, such as the CLAUDE_CODE_OAUTH_TOKEN `claude setup-token`
 mints, or with a credential bundle `crewlet llm export` wrote from a login
-made elsewhere. A bundle is restored only while the provider's login on the
-data volume is empty, so the refreshed login a running engine keeps there
-wins over the bundle; a token never needs refreshing, which makes it the
-better of the two wherever the CLI mints one. A provider names one of the
-two: given both, which login the CLI acts on would be the CLI's choice
-between its environment and its own files, which nothing here can see.
+made elsewhere: the CLI's login, which is its credential files, or, for
+OpenCode, which keeps its logins in a database of its own, the document
+OpenCode 2's auth export printed. A bundle is restored only while the
+provider's login on the data volume is empty, so the refreshed login a
+running engine keeps there wins over the bundle; a token never needs
+refreshing, which makes it the better of the two wherever the CLI mints
+one. A provider names one of the two: given both, which login the CLI acts
+on would be the CLI's choice between its environment and its own files,
+which nothing here can see.
 
 Crewlet hands a CLI a token or a key only through the variable its profile
 names, and refuses one for a CLI whose profile names none, since it would
@@ -176,7 +179,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `mode` _[CLIAgentAuthMode](#cliagentauthmode)_ | mode is how the CLI signs in. Unset is Subscription. Crewlet's<br />`mode`. |  | Enum: [Subscription APIKey] <br />Optional: \{\} <br /> |
 | `tokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | tokenSecretRef is the Secret key holding a long-lived subscription<br />token the CLI mints for headless use. Crewlet's `token`, a credential<br />position. |  | Optional: \{\} <br /> |
-| `credentialBundleSecretRef` _[SecretKeyReference](#secretkeyreference)_ | credentialBundleSecretRef is the Secret key holding a credential<br />bundle `crewlet llm export` wrote. Crewlet's `credential_bundle`, a<br />credential position. |  | Optional: \{\} <br /> |
+| `credentialBundleSecretRef` _[SecretKeyReference](#secretkeyreference)_ | credentialBundleSecretRef is the Secret key holding a credential<br />bundle `crewlet llm export` wrote. A bundle holding a login OpenCode<br />1.x made (its auth.json) is refused when the engine restores it, and<br />the provider runs signed out: export it again from OpenCode 2.<br />Crewlet's `credential_bundle`, a credential position. |  | Optional: \{\} <br /> |
 
 
 #### CLIAgentAuthMode
@@ -289,9 +292,11 @@ Crewlet's providers.llm entry's cli block.
 
 The CLI is a binary in the engine's image, which the official image does
 not ship: a class running such a provider names an image derived from the
-engine's with the CLI installed (docs/guides/cli-agents.md). Its login, and
-the per-seat homes the CLI keeps, are on the data volume, so a restart or a
-new pod keeps them.
+engine's with the CLI installed (docs/guides/cli-agents.md). For OpenCode
+that is OpenCode 2, the @opencode/cli package: Crewlet drives no other
+release, and every command it runs carries --standalone, which OpenCode 1.x
+(npm's opencode-ai) rejects. Its login, and the per-seat homes the CLI
+keeps, are on the data volume, so a restart or a new pod keeps them.
 
 Its rules hold every credential to a variable Crewlet's profile for the
 CLI reads, as Crewlet's own admission does (providers.llm.*.cli): the
@@ -299,7 +304,14 @@ engine refuses a write that names a credential its CLI would never be
 given, so the API refuses it on the object instead. The lists of CLIs the
 rules name are those whose profiles set token_env, api_key_env or
 env_sign_in in the engine the operator is tested against, Crewlet's main;
-a test holds them to that engine's own verdict.
+a test holds them to that engine's own verdict. The rules also keep env off
+the variables Crewlet sets on every call to keep each seat's CLI inside its
+own home and its call's working directory (HOME, the XDG directories,
+TMPDIR, and the configuration directory or switch each CLI's profile names
+in config_env, work_config_env and isolation_env): env is layered over
+them, so a value there would replace that isolation for every seat on the
+provider, and Crewlet refuses the document. A test holds that list to the
+engine's refusals too.
 
 Mode Agent runs the CLIs Crewlet has a sandbox runner for, ClaudeCode and
 OpenCode: the Company's coding agents. Crewlet hands an Agent-mode run its
@@ -322,9 +334,9 @@ _Appears in:_
 | `mode` _[CLIAgentMode](#cliagentmode)_ | mode is how the engine uses the CLI. Unset is Text. Crewlet's `mode`. |  | Enum: [Text Agent] <br />Optional: \{\} <br /> |
 | `runIn` _[CLIAgentRunIn](#cliagentrunin)_ | runIn is where an Agent-mode run happens. Unset is the Company's<br />sandbox, which is E2B. Crewlet's `run_in`. |  | Enum: [E2B] <br />Optional: \{\} <br /> |
 | `auth` _[CLIAgentAuth](#cliagentauth)_ | auth is how the CLI signs in. |  | MinProperties: 1 <br />Required: \{\} <br /> |
-| `env` _[SecretEnvVar](#secretenvvar) array_ | env is extra environment of every invocation of the CLI: the child<br />gets an allowlisted environment, not the engine's, so a variable the<br />CLI needs beyond that is given here. It is how Hermes, Pi and OpenCode<br />sign in under auth mode Subscription with no login of their own: their<br />model provider's key, under a name Crewlet reads as a credential, such<br />as OPENROUTER_API_KEY. It may not set the CLI's own token or key<br />variable, which auth owns. An OpenCode provider's credential-named<br />variables also travel into every box of an Agent-mode run, and of a<br />seat's code work that runs on it, where the coding agent can read<br />them. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `env` _[SecretEnvVar](#secretenvvar) array_ | env is extra environment of every invocation of the CLI: the child<br />gets an allowlisted environment, not the engine's, so a variable the<br />CLI needs beyond that is given here. It is how Hermes, Pi and OpenCode<br />sign in under auth mode Subscription with no login of their own: their<br />model provider's key, under a name Crewlet reads as a credential, such<br />as OPENROUTER_API_KEY. It may not set the CLI's own token or key<br />variable, which auth owns, nor a variable Crewlet sets to keep the CLI<br />inside its seat's home and its call's working directory: HOME, the XDG<br />directories, TMPDIR, and the CLI's own configuration directory or<br />switch (docs/guides/cli-agents.md). An OpenCode provider's<br />credential-named variables also travel into every box of an<br />Agent-mode run, and of a seat's code work that runs on it, where the<br />coding agent can read them. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds caps one invocation of the CLI, launch included. Unset<br />takes Crewlet's default of 300. Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `maxConcurrent` _integer_ | maxConcurrent is how many CLI processes the provider runs at once;<br />each takes 200 to 400 MB of the engine pod's memory. Unset takes<br />Crewlet's default of 4. Crewlet's `max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `maxConcurrent` _integer_ | maxConcurrent is how many CLI processes the provider runs at once;<br />each takes 200 to 450 MB of the engine pod's memory, OpenCode's at the<br />top of that range (docs/guides/cli-agents.md). Unset takes<br />Crewlet's default of 4. Crewlet's `max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 | `loginName` _string_ | loginName names the login, and the per-seat homes, the provider<br />keeps on the data volume. Providers of the company with the same<br />loginName share one login, which is how several models run off one<br />subscription; they must drive the same CLI. Unset is the provider's<br />own metadata.name. Crewlet's `state_dir`, as<br />/var/lib/crewlet/llm-cli/<loginName>. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9-]*$` <br />Optional: \{\} <br /> |
 
 
@@ -913,7 +925,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `apiKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | apiKeySecretRef is the Secret key holding the service's API key.<br />Crewlet's `api_key`, a credential position. |  | Required: \{\} <br /> |
 | `domain` _string_ | domain points at a self-hosted cluster of the service. Unset is the<br />vendor's cloud. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `template` _string_ | template is the sandbox template, which also fixes each sandbox's CPU,<br />memory and disk. Unset, each run gets the vendor's prebuilt template<br />for its coding agent's CLI (claude or opencode); a template set here is<br />used for every run, so it must carry the CLI of every coding agent and<br />Agent-mode CLIAgent provider the company runs. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `template` _string_ | template is the sandbox template, which also fixes each sandbox's CPU,<br />memory and disk. Unset, each run gets the vendor's prebuilt template<br />for its coding agent's CLI (claude or opencode); a template set here is<br />used for every run, so it must carry the CLI of every coding agent and<br />Agent-mode CLIAgent provider the company runs. For OpenCode that is<br />OpenCode 2, the @opencode/cli package (opencode --version prints<br />opencode v2.…): Crewlet's OpenCode runner ends a run at once in a box<br />with OpenCode 1.x (npm's opencode-ai), and E2B does not say which<br />release its prebuilt opencode template carries, so a company whose<br />OpenCode runs end that way sets template to one built with<br />@opencode/cli. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### EmbeddingProviderType

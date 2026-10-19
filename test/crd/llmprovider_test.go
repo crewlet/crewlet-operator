@@ -139,6 +139,15 @@ func TestLLMProviderValidation(t *testing.T) {
 	})
 }
 
+// The phrases the OpenCode model rule's message quotes from the engine's own
+// refusal of such a model: the error OpenCode 2 refuses it with, and the
+// command that lists the providers OpenCode knows. TestCLIAgentModelFollowsTheEngine
+// holds the rule's message and the engine's refusal to both.
+const (
+	openCodeModelRefusal = "Invalid model reference"
+	openCodeModelListing = "opencode models --standalone"
+)
+
 // The messages of the rules over a CLIAgent provider.
 const (
 	msgCLIBlock       = "cli is required with type CLIAgent and not allowed otherwise"
@@ -157,6 +166,8 @@ const (
 	msgCLINoLogin     = "a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef"
 	msgCLILoginFields = "tokenSecretRef and credentialBundleSecretRef sign in to a subscription"
 	msgCLIOwnVariable = "env may not set the CLI's own token or key variable"
+	msgCLIIsolation   = "env may not set a variable Crewlet sets on every call of the CLI to keep it inside its " +
+		"seat's own home"
 )
 
 func TestCLIAgentProviderValidation(t *testing.T) {
@@ -545,6 +556,50 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			// reads ANTHROPIC_API_KEY as its model provider's key.
 			name:   "another CLI's key variable in env is accepted",
 			mutate: keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey),
+		},
+	)
+	// Crewlet sets HOME, the XDG directories and TMPDIR on every call of
+	// every CLI, and each profile's own configuration directory or switch,
+	// to keep the CLI inside its seat's home and its call's working
+	// directory; env is layered over them, so Crewlet refuses each in env.
+	// Each CLI is signed in with a bundle in mode Text, which the API admits
+	// for every one, so the variable is the only fault.
+	inEnvBesideBundle := func(agent v1.CLIAgentName, variable string) func(*v1.LLMProvider) {
+		return func(p *v1.LLMProvider) {
+			p.Spec.Model = modelViaAnthropic
+			p.Spec.CLI.Agent = agent
+			p.Spec.CLI.Auth = bundle
+			p.Spec.CLI.Env = []v1.SecretEnvVar{{Name: variable, ValueFrom: fromSecret("cli", "value")}}
+		}
+	}
+	for _, agent := range enumOf(t, "llmproviders.crewlet.ai", "spec", "cli", "agent") {
+		name := v1.CLIAgentName(agent)
+		for _, variable := range append(slices.Clone(homeIsolation), cliIsolation[name]...) {
+			cases = append(cases, createCase[*v1.LLMProvider]{
+				name:   fmt.Sprintf("%s with %s in env is refused", agent, variable),
+				mutate: inEnvBesideBundle(name, variable),
+				want:   msgCLIIsolation,
+			})
+		}
+	}
+	cases = append(cases,
+		createCase[*v1.LLMProvider]{
+			// The rule sits on cli, and reports the field to change.
+			name:   "an isolation variable in env is reported at env",
+			mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, "HOME"),
+			want:   "spec.cli.env: Invalid value",
+		},
+		createCase[*v1.LLMProvider]{
+			// A profile's own directory is its CLI's alone: OpenCode
+			// does not read Codex's.
+			name:   "another CLI's configuration directory in env is accepted",
+			mutate: inEnvBesideBundle(v1.CLIAgentOpenCode, "CODEX_HOME"),
+		},
+		createCase[*v1.LLMProvider]{
+			// Crewlet matches a variable's name exactly, as the
+			// environment does.
+			name:   "an isolation variable's name in lower case is accepted",
+			mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, "home"),
 		},
 	)
 	// OpenCode splits its model at the first slash into a provider and a
