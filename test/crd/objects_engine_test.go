@@ -99,6 +99,12 @@ var s3Shapes = []s3Shape{
 	{region: plainRegion, bucket: plainBucket, endpoint: "https://bücher.example"},
 	{region: plainRegion, bucket: plainBucket, endpoint: "https://[fe80::1%25eth0]:9000"},
 	{region: plainRegion, bucket: plainBucket, endpoint: "https://[fe80::1%25e%20th0]:9000"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "https://[fe80::1%25eth0]]:9000"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "https://[fe80::1%25eth0]]/"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "https://minio.storage.example:9000:9000"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "https://minio.storage.example::9000"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "https://::1:9000"},
+	{region: plainRegion, bucket: plainBucket, endpoint: "https://x[::1]:9000"},
 }
 
 // s3RefusesMore are the shapes the API refuses although Crewlet's S3 client
@@ -122,7 +128,8 @@ var s3RefusesMore = map[s3Shape]string{
 // which the engine sends its first request to the bucket, so no Company of
 // the class crash-loops its pods on it; and every shape it refuses is one on
 // which the engine refuses to start before it sends any, but for
-// s3RefusesMore.
+// s3RefusesMore. Each shape is offered to both API servers, as a Company's
+// addresses are (TestAddressShapesFollowTheEngine).
 //
 // `crewlet validate` cannot say so: it checks only that a region and a bucket
 // are given. The engine reaches the bucket (HeadBucket) as it starts, and
@@ -147,17 +154,21 @@ func TestS3SettingsFollowTheEngine(t *testing.T) {
 			}
 			class := engineClass("", fmt.Sprintf("%s-s3-%02d", prefix, i))
 			class.Spec.Objects = v1.ObjectSettings{Backend: v1.ObjectBackendS3, S3: settings}
-			ok := admitted(t, class.DeepCopy())
+			admits := admissions(t, class)
 			sent := engineSendsToBucket(t, class, bucket)
 			why, more := s3RefusesMore[shape]
-			switch {
-			case ok && !sent:
-				t.Errorf("the API admits %+v, and the engine refuses to start on it", settings)
-			case !ok && sent && !more:
-				t.Errorf("the API refuses %+v, and the engine sends its request on it", settings)
-			case more && (ok || !sent):
-				t.Errorf("s3RefusesMore lists %+v (%s), and the API admits it: %v, the engine sends its request: %v",
-					settings, why, ok, sent)
+			if more && !sent {
+				t.Errorf("s3RefusesMore lists %+v (%s), and the engine refuses to start on it", settings, why)
+			}
+			for _, a := range admits {
+				switch {
+				case a.admitted && !sent:
+					t.Errorf("%s admits %+v, and the engine refuses to start on it", a.server, settings)
+				case !a.admitted && sent && !more:
+					t.Errorf("%s refuses %+v, and the engine sends its request on it", a.server, settings)
+				case more && a.admitted:
+					t.Errorf("s3RefusesMore lists %+v (%s), and %s admits it", settings, why, a.server)
+				}
 			}
 		})
 	}

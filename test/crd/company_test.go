@@ -336,10 +336,10 @@ func TestCompanyValidation(t *testing.T) {
 			mutate: dashboard("http://crewlet.nimbus.internal:08080"),
 		},
 		// A second ':' or a bracket outside an IPv6 address: refused by
-		// Crewlet's URL parser and by the API server's on Kubernetes 1.36
-		// and later, while the older Go net/url of 1.35 takes a second ':'
-		// and a bracket after a name, and that of 1.34 brackets around
-		// anything too, so the rule states the host's shape itself.
+		// Crewlet's URL parser, and by the API server's only as its Go
+		// net/url was built and is run (run with GODEBUG
+		// urlstrictcolons=0 it takes a second ':'), so the rule states the
+		// host's shape itself.
 		{
 			name:   "a dashboardBaseURL with two ports is refused",
 			mutate: dashboard("http://crewlet.nimbus.internal:80:80"),

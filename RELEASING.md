@@ -21,7 +21,7 @@ flowchart TD
     I["image<br/>buildx: linux/amd64 + linux/arm64<br/>ghcr.io/crewlet/crewlet-operator:v0.2.0, :v0.2, :latest"] --> S
     S["sign + attest<br/>cosign keyless signature<br/>GitHub build-provenance attestation<br/>the engine tagged v0.2.0 and signed"] --> C
     C["chart<br/>helm package --version 0.2.0 --app-version v0.2.0<br/>push to oci://ghcr.io/crewlet/charts, sign"] --> R
-    R["GitHub Release<br/>notes: the engine, then the merged pull requests<br/>install.yaml with the image pinned by digest"]
+    R["GitHub Release<br/>notes: the engine and the Kubernetes minor, then the merged pull requests<br/>install.yaml with the image pinned by digest"]
 ```
 
 What a release publishes:
@@ -48,8 +48,10 @@ What a release publishes:
   pull requests merged since the previous tag (sorted by
   [`.github/release.yml`](.github/release.yml)) after a line naming the
   engine image by tag and digest and the Crewlet commit it was built from,
-  and `install.yaml`: the kustomize-rendered CRDs and manager, with the image
-  pinned by digest.
+  and one naming the Kubernetes minor the release was tested against, the
+  only one it supports (`ENVTEST_K8S_VERSION`'s, which the `gate` job's
+  `make check` runs on); and `install.yaml`: the kustomize-rendered CRDs and
+  manager, with the image pinned by digest.
 
 A tag with a pre-release suffix (`v0.2.0-rc.1`) is published as a GitHub
 pre-release and does not move `latest`.

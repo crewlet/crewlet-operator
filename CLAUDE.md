@@ -162,6 +162,12 @@ reason in a comment at the pin. Indirect Go dependencies stay where the direct
 ones put them (the k8s.io modules move in lockstep). CONTRIBUTING.md,
 "Latest versions", lists the pins Dependabot cannot see.
 
+Kubernetes is supported and tested at one minor alone, 1.37: the newest
+that both the pinned kind (its default node image) and setup-envtest offer.
+The operator moves to the next minor once both do, and code, tests and docs
+that exist only for an older release go with the move. CONTRIBUTING.md,
+"Latest versions", lists every place the minor is written.
+
 The Crewlet engine is the one deliberate exception: never pinned. Every
 suite runs Crewlet's `main` as `ghcr.io/crewlet/crewlet:main` publishes it
 (`CREWLET_MAIN_IMG`, `CREWLET_IMG`'s default; `make crewlet` installs the

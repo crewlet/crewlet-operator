@@ -15,7 +15,7 @@ live configuration equal to what the resources say.
 [![CI](https://github.com/crewlet/crewlet-operator/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/crewlet/crewlet-operator/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-7c56ff?style=flat-square)](LICENSE)
 [![Go 1.27+](https://img.shields.io/badge/go-1.27%2B-7c56ff?style=flat-square)](go.mod)
-[![Kubernetes 1.34–1.37](https://img.shields.io/badge/kubernetes-1.34%E2%80%931.37-7c56ff?style=flat-square)](docs/guides/installing.md#before-you-install)
+[![Kubernetes 1.37](https://img.shields.io/badge/kubernetes-1.37-7c56ff?style=flat-square)](docs/guides/installing.md#before-you-install)
 [![API: crewlet.ai/v1alpha1](https://img.shields.io/badge/api-crewlet.ai%2Fv1alpha1-7c56ff?style=flat-square)](docs/reference/api.md)
 [![Docs](https://img.shields.io/badge/docs-read-7c56ff?style=flat-square)](https://docs.crewlet.ai/operator/latest/)
 
@@ -222,8 +222,11 @@ again.
 
 ## Requirements
 
-- A Kubernetes cluster on one of the four newest minor releases (1.34 to 1.37
-  today). The e2e suite runs on kind's default node image, Kubernetes 1.37.
+- A Kubernetes cluster on 1.37. The operator supports one minor release of
+  Kubernetes, the one it is tested against: a release supports the minor its
+  tests ran on, and the operator moves to each new minor once kind and
+  envtest, which the tests run on, ship it. The e2e suite runs on kind's
+  default node image, Kubernetes 1.37.
 - A CNI that enforces NetworkPolicy, for the isolation the operator sets up
   around each engine.
 - To build and run from source: Go (the version in [`go.mod`](go.mod)),

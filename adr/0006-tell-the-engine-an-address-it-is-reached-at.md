@@ -59,17 +59,25 @@ IPv6 address in brackets followed by at most one port, a port outside 1 to
 also a host a browser rewrites before it sends it (outside ASCII,
 percent-encoded, a number that is not four decimal octets, an IPv6 zone); and
 on the class's `api.hostname` template a last label that is a number. The
-rules judge the host and the port themselves, since the API server's URL
-parser, which `isURL()` and `url()` are, takes more on some of the Kubernetes
-versions the operator supports than Crewlet's does; `test/crd` runs against
-the oldest and the newest of them. What the operator derives from objects it
-does not own can still be one, the API route's host made of a namespace named
-`4711` or `0x1f`, or of a name after a literal `0x` in the template, so
-`render.Bootstrap` refuses an address the engine would
-(`render.ErrAddressRefused`, the engine's own checks copied and fingerprinted)
-and the pods are held back as `RuntimeReady=False AddressRefused`. It also
-refuses to render a data pod's `crewlet.yaml` without both
-(`render.ErrNoAddress`).
+rules judge the host and the port themselves rather than through `isURL()`
+and `url()`, which are Go's `net/url` as the API server was built and is run:
+the Go release and the `GODEBUG` defaults each Kubernetes release is built
+with, and the `GODEBUG` of the API server's environment. As Kubernetes builds
+it, it reads every `]` up to the last into an IPv6 zone
+(`http://[fe80::1%25eth0]]/`); run with `GODEBUG=urlstrictcolons=0` it also
+takes a second `:` after a host (`http://h.example:80:80`). Left to them, the
+API's verdict would follow how the cluster's API server was built and is run
+rather than what Crewlet takes. (As `publicBaseURL` the engine starts on a
+`]` in a zone, which no vendor reaches; the API refuses it.) `test/crd` holds
+the API to the engine's verdict on every shape it lists, on an API server as
+it is built and on one run with that setting. What the operator derives from
+objects it does not own can still be one, the API route's host made of a
+namespace named `4711` or `0x1f`, or of a name after a literal `0x` in the
+template, so `render.Bootstrap` refuses an address the engine would
+(`render.ErrAddressRefused`, the engine's own checks copied and
+fingerprinted) and the pods are held back as
+`RuntimeReady=False AddressRefused`. It also refuses to render a data pod's
+`crewlet.yaml` without both (`render.ErrNoAddress`).
 
 ## Consequences
 
