@@ -214,6 +214,16 @@ spec:                       # Company
 > **Never forward to port 8080.** That is the admin API, and it answers a
 > webhook `404` anyway.
 
+The address is an `https` URL with a host, and a path if your forwarder
+routes by one. Its host is a name, an IPv4 address or an IPv6 address in
+brackets, followed by at most one port, of 1 to 65535: Crewlet refuses to
+start on any other, so the API refuses the Company rather than the data pod
+crash-looping. Crewlet also refuses a query or a fragment, and the API
+refuses even an empty one, a bare `?` or `#`, which Crewlet would take,
+since every address the engine builds on this one appends a path to it;
+and it refuses a user name, which Crewlet would take too, since a
+credential is never written into an address.
+
 Under `networkPolicy.mode: Isolated`, name the pods that
 forward (a tunnel's or a relay's pods in the cluster) in the class, so the
 policy admits them to the public port and to nothing else. The class is
@@ -272,6 +282,21 @@ Ingress controller would pick which port answers, and the public host could
 serve the admin API.
 `status.endpoints.exposedAPI` is its address once accepted. Every request
 still needs a credential: a person signed in at the dashboard, or a token.
+
+The route's address is also where a browser reaches the engine, and an
+origin the engine accepts a person's write from ([Where people reach the
+dashboard](#where-people-reach-the-dashboard)), so its host's last label
+may not be a number: a browser reads `{{uid}}.123` or `{{uid}}.0x1f` as an
+IPv4 address and rewrites it before it sends it, and Crewlet refuses to
+start on such an address, so the API refuses the class. A last label a
+variable fills, as in `{{name}}.{{namespace}}`, is a number only for some
+Companies: one whose namespace is a number, `4711` or `0x1f` say, or whose
+namespace or name makes one with the template's own characters beside it,
+as `{{uid}}.0x{{name}}` does for a Company named `cafe` (a Company's name
+begins with a letter, so it is never a number alone). The operator then
+holds that Company's engine back, with `RuntimeReady=False AddressRefused`,
+rather than start one that refuses to boot. End the template in a domain of
+your own, as above, and no Company meets it.
 
 ## Where people reach the dashboard
 
@@ -336,6 +361,35 @@ spec:                       # Company
   exposure:
     dashboardBaseURL: https://crewlet.sso.example.com/acme
 ```
+
+The engine compares the origin a browser sends with this address in the
+browser's own spelling, and refuses to start on an address whose host a
+browser rewrites before it sends it, or that is not a host and a port at
+all. So the API refuses, on the Company rather than in a crash-looping data
+pod:
+
+| Refused | Write instead |
+|---|---|
+| A host outside ASCII, as it is or percent-encoded: `https://bücher.example`, `https://b%C3%BCcher.example` | Its ASCII (`xn--`) form, the one a browser sends: `https://xn--bcher-kva.example` |
+| A host whose last label is a number and that is not four decimal octets: `http://127.1`, `http://2130706433`, `http://0x7f.0.0.1`, `http://192.168.010.1` (a leading zero is octal to a browser), `http://1.2.3.4.`, `https://crewlet.123` | The IPv4 address as four decimal octets, `http://127.0.0.1`, or a host name whose last label is not a number |
+| An IPv6 address with a zone, which no browser can address: `http://[fe80::1%25eth0]:8080` | An address a browser reaches without one, such as a host name |
+| A second `:` after the host, or brackets around anything but an IPv6 address: `http://h.example:80:80`, `http://::1:8080`, `http://[1.2.3.4]` | One port after the host, and an IPv6 address in brackets: `http://[::1]:8080` |
+| A port outside 1 to 65535: `:0`, `:65536` | A port in that range, or none for the scheme's own |
+
+The API checks the host and the port itself rather than leaving them to the
+API server's URL parser, which takes more on some Kubernetes versions than
+on others: a 1.34 or 1.35 API server parses `http://h.example:80:80`, and
+Crewlet does not.
+
+It also refuses three things Crewlet would take: an empty query or
+fragment, a bare `?` or `#` (Crewlet refuses any other, as the API does),
+since every link the engine builds on the address appends a path to it; a
+user name, with or without a password, since a credential is never written
+into an address; and white space around the address. Write the address
+alone, with a path if a proxy serves the engine under one.
+
+An IPv4 address of four decimal octets, an IPv6 address in brackets,
+`localhost` in any case, a path and a trailing `/` are all taken.
 
 ## Name the proxies in front of the engine
 

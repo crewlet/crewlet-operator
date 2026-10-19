@@ -1,6 +1,7 @@
 package render
 
 import (
+	"errors"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -214,6 +215,10 @@ func TestSeatPodBootstrapRefusesWhatItCannotRender(t *testing.T) {
 			_, err := SeatPodBootstrap(in)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("err = %v, want one saying %q", err, c.want)
+			}
+			// Only the keyring's own refusal is the keyring's.
+			if keyring := c.name == "an unusable keyring"; errors.Is(err, ErrKeyringInvalid) != keyring {
+				t.Errorf("errors.Is(err, ErrKeyringInvalid) = %v for %v", !keyring, err)
 			}
 		})
 	}

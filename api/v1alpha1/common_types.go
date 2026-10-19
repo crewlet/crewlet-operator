@@ -438,6 +438,21 @@ const (
 	// the field.
 	ReasonInsecureSignInNotAcknowledged = "InsecureSignInNotAcknowledged"
 
+	// ReasonAddressRefused is RuntimeReady=False when an address the
+	// operator would tell the engine it is reached at (api.external_url,
+	// api.public.external_url or an api.auth.allowed_origins entry of the
+	// data pod's crewlet.yaml) is one Crewlet refuses to start on. The API
+	// refuses such an address where a Company or its class states it, so
+	// what reaches this is in practice one the operator derives: the host of
+	// the class's API route, expanded for a Company whose namespace makes
+	// its last label a number (4711, 0x1f), or whose namespace or name does
+	// with the template's own characters beside it (0x{{name}} for a Company
+	// named cafe), which a browser reads as an IPv4 address. The operator
+	// holds the pods back as they are rather than start an engine that
+	// cannot boot; the message names the address, where it comes from and
+	// what to change.
+	ReasonAddressRefused = "AddressRefused"
+
 	// ReasonNoAlarms is EngineHealthy=True: the engine raises no alarm.
 	ReasonNoAlarms = "NoAlarms"
 

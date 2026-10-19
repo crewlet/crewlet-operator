@@ -2,9 +2,11 @@ package controller
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
+	"github.com/crewlet/crewlet-operator/internal/render"
 )
 
 // portForwarded is where a browser reaches an engine nothing routes to:
@@ -75,6 +77,84 @@ func TestEngineAddressesFollowWhereTheEngineIsReached(t *testing.T) {
 			got := engineAddressesOf(company, c.routed)
 			if got.external != c.external || got.public != c.publicURL || !slices.Equal(got.origins, c.origins) {
 				t.Fatalf("engineAddressesOf() = %+v, want external %s, public %s, origins %v", got, c.external, c.publicURL, c.origins)
+			}
+		})
+	}
+}
+
+// routeOfNamespace is an API host name template whose last label a
+// Company's namespace fills, and statedDashboard an address a Company states
+// beside its class's route.
+const (
+	routeOfNamespace = "{{name}}.{{namespace}}"
+	statedDashboard  = "https://crewlet.example.com"
+)
+
+// TestAddressRefusalNamesWhereTheAddressCameFrom pins RuntimeReady's message
+// for an address Crewlet would refuse to start on: it names the Tier A key,
+// the address and the engine's reason, and sends the reader to where
+// engineAddressesOf took it from, the Company's own field or the class's API
+// host name template; and names no source for an address the operator chose
+// itself for an engine nothing routes to, nor for the webhooks route's.
+func TestAddressRefusalNamesWhereTheAddressCameFrom(t *testing.T) {
+	const reason = "has a host a browser reads as an IPv4 address"
+	for _, c := range []struct {
+		name                  string
+		field                 string
+		dashboard, public     string
+		apiHost, webhooksHost string
+		want                  []string
+		wantNot               []string
+	}{
+		{
+			name: "the Company's dashboard address", field: render.FieldExternalURL,
+			dashboard: "http://127.1", apiHost: routeOfNamespace,
+			want: []string{"spec.exposure.dashboardBaseURL: correct it"}, wantNot: []string{"hostname"},
+		},
+		{
+			name: "the API route's address", field: render.FieldExternalURL, apiHost: routeOfNamespace,
+			want: []string{`the API route of EngineClass standard, its spec.exposure.api.hostname "` + routeOfNamespace + `"`},
+		},
+		{
+			name: "the API route's origin", field: render.FieldAllowedOrigins,
+			dashboard: statedDashboard, apiHost: routeOfNamespace,
+			want: []string{`the API route of EngineClass standard, its spec.exposure.api.hostname`},
+		},
+		{
+			name: "the Company's public address", field: render.FieldPublicURL,
+			public: "https://hooks.example.com:0", webhooksHost: webhooksHostname,
+			want: []string{"spec.exposure.publicBaseURL: correct it"}, wantNot: []string{"hostname"},
+		},
+		{
+			// No refusal names it, since Crewlet takes every address the
+			// route's rules let through; nor is it sent to the API route.
+			name: "the webhooks route's address", field: render.FieldPublicURL,
+			apiHost: routeOfNamespace, webhooksHost: webhooksHostname,
+			wantNot: []string{"It is"},
+		},
+		{
+			name: "an address the operator chose", field: render.FieldExternalURL,
+			wantNot: []string{"It is"},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			company := &crewletaiv1alpha1.Company{}
+			company.Name, company.Namespace = companyName, "4711"
+			company.Spec.Exposure.DashboardBaseURL, company.Spec.Exposure.PublicBaseURL = c.dashboard, c.public
+			class := &crewletaiv1alpha1.EngineClass{}
+			class.Name = "standard"
+			class.Spec.Exposure.API.Hostname, class.Spec.Exposure.Webhooks.Hostname = c.apiHost, c.webhooksHost
+			const address = "http://nimbus.4711"
+			got := addressRefusalMessage(company, class, &render.AddressError{Field: c.field, Address: address, Reason: reason})
+			for _, want := range append([]string{c.field + " set to " + address + ", which " + reason, "The pods are held as they are."}, c.want...) {
+				if !strings.Contains(got, want) {
+					t.Errorf("the message %q does not say %q", got, want)
+				}
+			}
+			for _, not := range c.wantNot {
+				if strings.Contains(got, not) {
+					t.Errorf("the message %q says %q", got, not)
+				}
 			}
 		})
 	}

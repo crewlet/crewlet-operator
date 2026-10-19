@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"net"
 	"net/url"
 	"regexp"
@@ -17,7 +18,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"sigs.k8s.io/yaml"
 
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
 )
@@ -148,6 +148,15 @@ var ErrNoAddress = errors.New("a data pod's crewlet.yaml needs the addresses the
 // (config.APIAuth.validatePasswords), so the render refuses it first, and the
 // caller holds the pods back on it rather than start one that crash-loops.
 var ErrSignInNotAcknowledged = errors.New("password-only sign-in off loopback needs the class's acknowledgement")
+
+// ErrKeyringInvalid is a Tier A asked for with a keyring the engine could not
+// use: no key, an active key it does not hold, an id that is not a valid key
+// id, or material that is not base64 of 32 bytes. The keyring is a Secret's,
+// which the operator never rewrites, so the caller reports it and holds the
+// pods back rather than start an engine that would refuse it; it is the only
+// failure of Bootstrap that is the keyring's, so it is told apart from every
+// other by this error alone.
+var ErrKeyringInvalid = errors.New("the keyring is not one the engine can use")
 
 // Keyring is the engine's secret-store keyring: the keys it can open, and
 // the one it seals new writes with. Crewlet decrypts with every key and
@@ -307,6 +316,29 @@ const (
 	streamShareDenominator = 4
 )
 
+// storeMaxBytesCeiling is the largest stream.store_max_bytes Crewlet starts
+// on (config.StoreMaxBytesCeiling, 64 TiB), a guard against a unit mistake
+// rather than a policy: it is more than an order of magnitude above what the
+// engine's own logs can be configured to hold. TestContractStreamCeiling
+// holds it to the engine's.
+const storeMaxBytesCeiling int64 = 64 << 40
+
+// streamShare is the stream's share of a data volume of the given size,
+// stream.store_max_bytes: three quarters of it, and no more than
+// storeMaxBytesCeiling. A volume over about 85 TiB is not wrong, and the
+// engine refuses to start on a larger share, so what the share would take
+// past the ceiling is left to the store and its snapshots.
+//
+// The size is compared before its Value is read: a quantity at or past the
+// largest int64 has no exact one (Value saturates at it, wraps below zero or
+// reads 0, by how the quantity is written), and the API admits such a size.
+func streamShare(volume resource.Quantity) int64 {
+	if volume.CmpInt64(math.MaxInt64) >= 0 {
+		return storeMaxBytesCeiling
+	}
+	return min(volume.Value()/streamShareDenominator*streamShareNumerator, storeMaxBytesCeiling)
+}
+
 type coordinationDoc struct {
 	Type string `json:"type"`
 }
@@ -362,14 +394,19 @@ const keyringKeyBytes = 32
 // How people sign in is the class's (spec.signIn): api.auth.totp and
 // api.auth.accept_insecure.
 //
-// It fails when an address is missing (ErrNoAddress); when the class lets
-// people sign in with a password alone at an ExternalURL that is not on
-// loopback without acknowledging it (ErrSignInNotAcknowledged); and when the
-// keyring cannot be used: no keys, an active key it does not hold, an id that
-// is not a valid key id, or material that is not base64 of 32 bytes.
+// It fails when an address is missing (ErrNoAddress); when an address is one
+// Crewlet refuses to start on (an *AddressError, ErrAddressRefused); when the
+// class lets people sign in with a password alone at an ExternalURL that is
+// not on loopback without acknowledging it (ErrSignInNotAcknowledged); and
+// when the keyring cannot be used (ErrKeyringInvalid): no keys, an active key
+// it does not hold, an id that is not a valid key id, or material that is not
+// base64 of 32 bytes.
 func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 	if in.ExternalURL == "" || in.PublicURL == "" {
 		return nil, fmt.Errorf("%w: api.external_url is %q and api.public.external_url %q", ErrNoAddress, in.ExternalURL, in.PublicURL)
+	}
+	if err := refusedAddress(in.ExternalURL, in.PublicURL, in.AllowedOrigins); err != nil {
+		return nil, err
 	}
 	signIn := in.Class.Spec.SignIn
 	acknowledged := signIn.AcceptInsecure != nil && *signIn.AcceptInsecure
@@ -429,7 +466,7 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 			// stream is created last is refused with "insufficient
 			// storage resources available". The claim's size is the space
 			// this engine was promised, so the share is taken of that.
-			StoreMaxBytes: in.VolumeSize.Value() / streamShareDenominator * streamShareNumerator,
+			StoreMaxBytes: streamShare(in.VolumeSize),
 			Replicas:      streamReplicas,
 		},
 		Coordination: coordinationDoc{Type: "embedded-kv"},
@@ -616,7 +653,7 @@ func encodeBootstrap(doc *bootstrapDoc, env []corev1.EnvVar) (*BootstrapDocument
 	if err != nil {
 		return nil, fmt.Errorf("encoding the bootstrap document: %w", err)
 	}
-	out, err := yaml.JSONToYAML(encoded)
+	out, err := yamlOf(encoded)
 	if err != nil {
 		return nil, fmt.Errorf("converting the bootstrap document to YAML: %w", err)
 	}
@@ -694,19 +731,21 @@ func ManagementPolicyOf(c *v1alpha1.Company) v1alpha1.ManagementPolicy {
 // found only when the engine refuses to start, or, for a short key, never.
 func keyringOf(k Keyring) (keyringDoc, error) {
 	if len(k.Keys) == 0 {
-		return keyringDoc{}, errors.New("the keyring holds no key: the engine needs one to seal its secret store")
+		return keyringDoc{}, fmt.Errorf("%w: it holds no key, and the engine needs one to seal its secret store", ErrKeyringInvalid)
 	}
 	if _, ok := k.Keys[k.ActiveKeyID]; !ok {
-		return keyringDoc{}, fmt.Errorf("the keyring holds no key %q, which is the active one", k.ActiveKeyID)
+		return keyringDoc{}, fmt.Errorf("%w: it holds no key %q, which is the active one", ErrKeyringInvalid, k.ActiveKeyID)
 	}
 	doc := keyringDoc{ActiveKeyID: k.ActiveKeyID}
 	for _, id := range slices.Sorted(maps.Keys(k.Keys)) {
 		if !keyIDPattern.MatchString(id) {
-			return keyringDoc{}, fmt.Errorf("the keyring holds a key %q: a key id holds only letters, digits, '.', '_' and '-'", id)
+			return keyringDoc{}, fmt.Errorf("%w: it holds a key %q, and a key id holds only letters, digits, '.', '_' and '-'",
+				ErrKeyringInvalid, id)
 		}
 		material := strings.TrimSpace(k.Keys[id])
 		if key, err := base64.StdEncoding.DecodeString(material); err != nil || len(key) != keyringKeyBytes {
-			return keyringDoc{}, fmt.Errorf("the keyring's key %q is not base64 of %d bytes, the form `crewlet secrets keygen` prints", id, keyringKeyBytes)
+			return keyringDoc{}, fmt.Errorf("%w: its key %q is not base64 of %d bytes, the form `crewlet secrets keygen` prints",
+				ErrKeyringInvalid, id, keyringKeyBytes)
 		}
 		doc.Keys = append(doc.Keys, secretKeyDoc{ID: id, Material: material})
 	}

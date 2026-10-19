@@ -280,6 +280,41 @@ func engineAddressesOf(c *crewletaiv1alpha1.Company, routed string) engineAddres
 	return a
 }
 
+// addressRefusalMessage is RuntimeReady's message when Crewlet would refuse to
+// start on an address engineAddressesOf chose: which it is, where it came
+// from and what to change. The API refuses the addresses a Company states
+// that Crewlet would refuse, so the one that reaches here is in practice the
+// API route's host, which the class's template makes of the Company's
+// namespace and name. A Company's own address reaches here only when the
+// API admitted it before it had the rule that refuses it, or on an API
+// server whose URL parser takes a shape Crewlet's refuses that no rule
+// covers.
+func addressRefusalMessage(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, refused *render.AddressError) string {
+	// Where the address came from, as engineAddressesOf chose it. The
+	// addresses the operator chooses for an engine nothing routes to
+	// (localhost, the public listener's in-cluster name) are ones Crewlet
+	// takes, so they need no sentence; and so is the webhooks route's,
+	// https:// and a host name the class's rules hold to a DNS name, with no
+	// port, query or fragment, which is all Crewlet asks of
+	// api.public.external_url.
+	var where string
+	switch {
+	case refused.Field == render.FieldPublicURL && c.Spec.Exposure.PublicBaseURL != "":
+		where = " It is the Company's spec.exposure.publicBaseURL: correct it."
+	case refused.Field == render.FieldExternalURL && c.Spec.Exposure.DashboardBaseURL != "":
+		where = " It is the Company's spec.exposure.dashboardBaseURL: correct it."
+	case refused.Field != render.FieldPublicURL && class.Spec.Exposure.API.Hostname != "":
+		where = fmt.Sprintf(" It is the address of the API route of EngineClass %s, its spec.exposure.api.hostname %q "+
+			"expanded for this Company. A template whose last label holds {{namespace}} or {{name}} ends in a number "+
+			"for some Companies: one whose namespace is a number (4711, or 0x and hex digits such as 0x1f), or whose "+
+			"namespace or name makes one with the template's own characters beside it (0x{{name}} for a Company named "+
+			"cafe). End the template in a domain of your own, such as {{name}}.{{namespace}}.crewlet.example.com, or run "+
+			"the Company in a namespace of another name.", class.Name, class.Spec.Exposure.API.Hostname)
+	}
+	return fmt.Sprintf("Crewlet refuses to start with %s set to %s, which %s.%s The pods are held as they are.",
+		refused.Field, refused.Address, refused.Reason, where)
+}
+
 // originOf is a URL's origin, scheme://host[:port], as a browser sends it, or
 // the URL itself when it does not parse (the API refused such a URL).
 func originOf(raw string) string {

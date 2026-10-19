@@ -32,6 +32,11 @@ func TestDataPodStartupSeconds(t *testing.T) {
 		{"a part of a GiB counts as one", classWith(0), "10737418241", 300 + 11*6},
 		{"a volume in decimal units", classWith(0), "500G", 300 + 466*6},
 		{"a volume whose window would pass a day", classWith(0), "20Ti", maxStartupSeconds},
+		{"the largest volume whose window is a day", classWith(0), "14350Gi", maxStartupSeconds},
+		{"a GiB less", classWith(0), "14349Gi", maxStartupSeconds - 6},
+		{"a volume whose Value saturates", classWith(0), "16Ei", maxStartupSeconds},
+		{"a volume whose Value wraps below zero", classWith(0), "9223372036854775808", maxStartupSeconds},
+		{"a volume whose Value reads zero", classWith(0), "1e30", maxStartupSeconds},
 		{"the class's window, whatever the volume", classWith(1200), "1Ti", 1200},
 	} {
 		t.Run(c.name, func(t *testing.T) {

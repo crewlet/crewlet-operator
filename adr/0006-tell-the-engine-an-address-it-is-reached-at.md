@@ -5,7 +5,8 @@
   `reconcileExposure`; `docs/guides/exposure.md`, "Where people reach the
   dashboard"
 - **Enforced-by:** `internal/render.TestContractBootstrap`,
-  `internal/render.TestContractExternalURLShapes`,
+  `internal/render.TestContractAddressShapes`,
+  `test/crd.TestAddressShapesFollowTheEngine`,
   `internal/render.TestBootstrapNeedsTheEnginesAddresses`,
   `internal/controller.TestEngineAddressesFollowWhereTheEngineIsReached`,
   the runtime suite's exposure specs
@@ -49,9 +50,25 @@ order (`engineAddressesOf`):
   is not the route's, the route's origin goes into `api.auth.allowed_origins`,
   so that a person who signs in through the route is not refused every write.
 
-The API refuses an address with a query or a fragment on both fields, as the
-engine does, so a Company is refused rather than its data pod crash-looping.
-`render.Bootstrap` refuses to render a data pod's `crewlet.yaml` without both
+Crewlet refuses to start on an address of a shape no client can use, so the
+API refuses what the engine refuses where a Company or its class states an
+address, and a Company is refused rather than its data pod crash-looping: on
+both of the Company's fields a host that is not a name, an IPv4 address or an
+IPv6 address in brackets followed by at most one port, a port outside 1 to
+65535, a query and a fragment; on `dashboardBaseURL`, a browser's address,
+also a host a browser rewrites before it sends it (outside ASCII,
+percent-encoded, a number that is not four decimal octets, an IPv6 zone); and
+on the class's `api.hostname` template a last label that is a number. The
+rules judge the host and the port themselves, since the API server's URL
+parser, which `isURL()` and `url()` are, takes more on some of the Kubernetes
+versions the operator supports than Crewlet's does; `test/crd` runs against
+the oldest and the newest of them. What the operator derives from objects it
+does not own can still be one, the API route's host made of a namespace named
+`4711` or `0x1f`, or of a name after a literal `0x` in the template, so
+`render.Bootstrap` refuses an address the engine would
+(`render.ErrAddressRefused`, the engine's own checks copied and fingerprinted)
+and the pods are held back as `RuntimeReady=False AddressRefused`. It also
+refuses to render a data pod's `crewlet.yaml` without both
 (`render.ErrNoAddress`).
 
 ## Consequences

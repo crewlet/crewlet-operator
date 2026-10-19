@@ -255,61 +255,160 @@ func TestContractRefusesListenersThatCannotOpen(t *testing.T) {
 	}
 }
 
-// TestContractExternalURLShapes ties the API's rules on
-// spec.exposure.dashboardBaseURL and publicBaseURL, which become
-// api.external_url and api.public.external_url, to Crewlet's
-// (config.checkExternalURL): an address with a query or a fragment, or
-// with its scheme in upper case, is refused, so the API refuses it on the
-// Company rather than crash-loop the data pod; and a path, a trailing '/'
-// and plain http on localhost are accepted, so the API refuses no address
-// the engine runs on.
-func TestContractExternalURLShapes(t *testing.T) {
-	const (
-		queryOrFragment = "query or fragment"
-		scheme          = "must start with http:// or https://"
-		pathExternal    = "api.external_url"
-		pathPublic      = "api.public.external_url"
-	)
-	for _, c := range []struct {
-		name             string
-		external, public string
-		refused, because string
-		advisories       []advisory
+// addressShapes are the addresses TestContractAddressShapes tries in every
+// place a data pod's Tier A names one: the shapes Crewlet refuses at start
+// (a host a browser rewrites before it sends it: IPv4 short forms, decimal,
+// hexadecimal and octal, leading zeros, a trailing dot, a name whose last
+// label is a number; a host outside ASCII, written as it is or
+// percent-encoded, a NEL or a C1 control character among them; an IPv6
+// zone; a port outside 1 to 65535; a second ':' or a bracket outside an
+// IPv6 address; a scheme in upper case; a query or a fragment, with or
+// without a path; no host) and their neighbours it takes (four decimal
+// octets, a name with digits beside letters, punycode, IPv6 with and without
+// brackets' port, a port with leading zeros, a path, a NEL or a C1 control
+// character in it, a trailing slash, white space around the address, a user,
+// localhost in any case). test/crd's TestAddressShapesFollowTheEngine holds
+// the API's rules to the engine at shapes of its own.
+var addressShapes = []string{
+	"http://127.1:8080", "http://127.1", "http://2130706433", "http://0x7f.0.0.1", "http://0177.0.0.1",
+	"http://192.168.010.1", "http://1.2.3.4.", "http://01.2.3.4", "http://1.2.3.04", "http://256.1.1.1",
+	"http://1.2.3", "http://1.2.3.4", "http://0.0.0.0", "http://255.255.255.255", "http://127.0.0.1:8080",
+	"http://foo.123", "http://foo.123.", "http://foo.123..", "http://foo.0x1f", "http://foo.0X1F", "http://foo.0x",
+	"http://0x.", "http://123.", "http://.1", "http://foo123", "http://123foo", "http://foo.1x", "http://1e1.example",
+	"http://example.com.", "http://" + strings.Repeat("a", 2030) + ".1",
+	"https://bücher.example", "https://xn--bcher-kva.example", "http://b%C3%BCcher.example", "http://a%C3.example",
+	"http://%31.2.3.4", "http://a%25b.example",
+	"http://[::1]", "http://[::1]:8080", "http://[fe80::1]", "http://[::ffff:127.0.0.1]",
+	"http://[fe80::1%25eth0]:8080", "http://[fe80::1%eth0]", "http://::1:8080", "http://[1.2.3.4]",
+	"http://h.example:80:80", "http://x[::1]:8080", "http://[v1.x]", "http://[12345::1]",
+	"http://h.example:0", "http://h.example:00000", "http://h.example:1", "http://h.example:080",
+	"http://h.example:0000000000000000080", "http://h.example:65535", "http://h.example:65535/",
+	"http://h.example:65536", "http://h.example:99999", "http://h.example:123456789012345678901234567890",
+	"http://h.example:" + strings.Repeat("9", 2000), "http://h.example:",
+	"HTTP://h.example", "Https://h.example", "ftp://h.example", "h.example", "http://", "http://:8080",
+	"http://h.example/?tenant=nimbus", "http://h.example/#/work", "http://h.example/?", "http://h.example?",
+	"http://h.example?a=b", "http://h.example#x", "http://h.example#", "http://u:p@h.example", "http://u@h.example",
+	" http://h.example", "http://h.example ", "  ", "http://a b.example",
+	"http://h.example/a\u0080b", "http://h.example/a\u0085b", "http://h.ex\u0085ample", "http://\u0085h.example",
+	"http://h.ex\u0080ample",
+	"http://h.example/", "http://h.example/nimbus/path", "http://h.example/nimbus/", "http://h.example/ü",
+	"http://h.example:8080/a%2Fb", "http://localhost:8080", "http://LOCALHOST:8080", "https://crewlet.example.com",
+	"*",
+}
+
+// TestContractAddressShapes holds the render's verdict on the addresses a
+// data pod's engine is told it is reached at to Crewlet's, both ways, at
+// every shape of addressShapes in each place a Tier A names one: as
+// api.external_url, as api.public.external_url and as an
+// api.auth.allowed_origins entry. Bootstrap refuses a shape there with an
+// AddressError naming the place exactly where `crewlet validate` refuses a
+// Tier A holding the shape there, at that path, and renders it wherever the
+// engine takes it; so the render holds back no data pod the engine would
+// run, and starts none it would refuse to boot.
+func TestContractAddressShapes(t *testing.T) {
+	base := func(t *testing.T) *BootstrapInput {
+		t.Helper()
+		return bootstrapCases()[0].input(t)
+	}
+	doc, err := Bootstrap(base(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// engineRefuses is whether the engine refuses the rendered Tier A once
+	// set puts a shape in it, at path; and fails the test where it refuses
+	// it for anything else.
+	engineRefuses := func(t *testing.T, set func(api map[string]any), paths ...string) map[string]bool {
+		t.Helper()
+		var tierA map[string]any
+		if err := yaml.Unmarshal(doc.YAML, &tierA); err != nil {
+			t.Fatal(err)
+		}
+		set(tierA["api"].(map[string]any))
+		// Written as the render writes, so that a shape reaches the engine
+		// as the render would hand it over.
+		encoded, err := json.Marshal(tierA)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mutated, err := yamlOf(encoded)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, stdout, _, _ := verdict(t, bootstrapEnv(doc), "-tier", "bootstrap", write(t, "crewlet.yaml", mutated))
+		refused := map[string]bool{}
+		for _, raw := range got.Problems {
+			var p struct{ Path string }
+			if err := json.Unmarshal(raw, &p); err != nil || !slices.Contains(paths, p.Path) {
+				t.Fatalf("crewlet validate refused the Tier A elsewhere than at %v:\n%s", paths, stdout)
+			}
+			refused[p.Path] = true
+		}
+		if got.Valid == (len(refused) > 0) {
+			t.Fatalf("crewlet validate is valid %v with problems at %v:\n%s", got.Valid, refused, stdout)
+		}
+		return refused
+	}
+	// renderRefuses is whether Bootstrap refuses a shape at field, and fails
+	// the test where it refuses it for anything else.
+	renderRefuses := func(t *testing.T, in *BootstrapInput, field, shape string) bool {
+		t.Helper()
+		_, err := Bootstrap(in)
+		refused, ok := errors.AsType[*AddressError](err)
+		switch {
+		case err == nil:
+			return false
+		case !ok || refused.Field != field || refused.Address != shape:
+			t.Fatalf("Bootstrap refused %s %q with %v", field, shape, err)
+		}
+		return true
+	}
+	for _, place := range []struct {
+		field string
+		set   func(in *BootstrapInput, shape string)
+		patch func(api map[string]any, shape string)
 	}{
-		{name: "a query on the external address", external: "https://crewlet.example.com/?tenant=nimbus", refused: pathExternal, because: queryOrFragment},
-		{name: "a fragment on the external address", external: "https://crewlet.example.com/#/work", refused: pathExternal, because: queryOrFragment},
-		{name: "a query on the public address", public: "https://hooks.example.com/?tenant=nimbus", refused: pathPublic, because: queryOrFragment},
-		{name: "a fragment on the public address", public: "https://hooks.example.com/nimbus#hooks", refused: pathPublic, because: queryOrFragment},
-		{name: "an upper-case scheme on the external address", external: "HTTPS://crewlet.example.com", refused: pathExternal, because: scheme},
-		{name: "an upper-case scheme on the public address", public: "Https://hooks.example.com", refused: pathPublic, because: scheme},
 		{
-			name: "a path and a trailing slash", external: "https://crewlet.example.com/nimbus/", public: "https://hooks.example.com/nimbus/",
-			advisories: []advisory{advisoryNoTrustedProxy},
+			field: FieldExternalURL,
+			set:   func(in *BootstrapInput, shape string) { in.ExternalURL = shape },
+			patch: func(api map[string]any, shape string) { api["external_url"] = shape },
 		},
-		{name: "plain http on localhost", external: "http://localhost:8080"},
+		{
+			field: FieldPublicURL,
+			set:   func(in *BootstrapInput, shape string) { in.PublicURL = shape },
+			patch: func(api map[string]any, shape string) { api["public"].(map[string]any)["external_url"] = shape },
+		},
 	} {
-		t.Run(c.name, func(t *testing.T) {
-			in := bootstrapCases()[0].input(t)
-			in.ExternalURL, in.PublicURL = cmp.Or(c.external, in.ExternalURL), cmp.Or(c.public, in.PublicURL)
-			doc, err := Bootstrap(in)
-			if err != nil {
-				t.Fatal(err)
-			}
-			args := []string{"-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML)}
-			if c.refused == "" {
-				validate(t, bootstrapEnv(doc), c.advisories, args...)
-				return
-			}
-			got, stdout, stderr, _ := verdict(t, bootstrapEnv(doc), args...)
-			refused := slices.ContainsFunc(got.Problems, func(raw json.RawMessage) bool {
-				var p struct{ Path, Message string }
-				return json.Unmarshal(raw, &p) == nil && p.Path == c.refused && strings.Contains(p.Message, c.because)
-			})
-			if got.Valid || !refused {
-				t.Errorf("crewlet validate did not refuse %s with %q:\n%s\n%s", c.refused, c.because, stdout, stderr)
+		t.Run(place.field, func(t *testing.T) {
+			for _, shape := range addressShapes {
+				t.Run(fmt.Sprintf("%.40q", shape), func(t *testing.T) {
+					t.Parallel()
+					engine := engineRefuses(t, func(api map[string]any) { place.patch(api, shape) }, place.field)[place.field]
+					in := base(t)
+					place.set(in, shape)
+					if render := renderRefuses(t, in, place.field, shape); render != engine {
+						t.Errorf("the render refuses %s %q: %v; crewlet validate refuses it: %v", place.field, shape, render, engine)
+					}
+				})
 			}
 		})
 	}
+	t.Run(FieldAllowedOrigins, func(t *testing.T) {
+		// One Tier A holds every shape, each at its own index.
+		paths := make([]string, len(addressShapes))
+		for i := range addressShapes {
+			paths[i] = fmt.Sprintf("%s[%d]", FieldAllowedOrigins, i)
+		}
+		engine := engineRefuses(t, func(api map[string]any) {
+			api["auth"].(map[string]any)["allowed_origins"] = addressShapes
+		}, paths...)
+		for i, shape := range addressShapes {
+			in := base(t)
+			in.AllowedOrigins = []string{shape}
+			if render := renderRefuses(t, in, FieldAllowedOrigins, shape); render != engine[paths[i]] {
+				t.Errorf("the render refuses %s %q: %v; crewlet validate refuses it: %v", FieldAllowedOrigins, shape, render, engine[paths[i]])
+			}
+		}
+	})
 }
 
 // TestContractTrustedProxies ties the API's rule on an EngineClass's
@@ -334,6 +433,43 @@ func TestContractTrustedProxies(t *testing.T) {
 			})
 			if got.Valid || !refused {
 				t.Errorf("crewlet validate did not refuse api.trusted_proxies[0] %q:\n%s\n%s", block, stdout, stderr)
+			}
+		})
+	}
+}
+
+// TestContractS3BucketAndRegion ties the API's rules on an EngineClass's
+// spec.objects.s3 region and bucket, which become store.objects.s3's, to
+// Crewlet's (config.StoreObjects.validate, over the trim of every Tier A
+// string, config.Bootstrap.normalize): a region or a bucket of white space
+// alone is refused, so the API refusing it on the class refuses nothing a
+// data or seat pod would start with; and one with white space around it is
+// taken, so the API, which takes it too, crash-loops no pod on it.
+func TestContractS3BucketAndRegion(t *testing.T) {
+	for _, c := range []struct {
+		name, region, bucket, refused string
+	}{
+		{name: "a region of white space", region: " \t", bucket: "crewlet", refused: "store.objects.s3.region"},
+		{name: "a bucket of white space", region: "eu-central-1", bucket: "   ", refused: "store.objects.s3.bucket"},
+		{name: "white space around both", region: " eu-central-1 ", bucket: " crewlet "},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := bootstrapCases()[1].input(t)
+			in.Class.Spec.Objects.S3.Region, in.Class.Spec.Objects.S3.Bucket = c.region, c.bucket
+			doc, err := Bootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, stdout, stderr, _ := verdict(t, bootstrapEnv(doc), "-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML))
+			refused := slices.ContainsFunc(got.Problems, func(raw json.RawMessage) bool {
+				var p struct{ Path string }
+				return json.Unmarshal(raw, &p) == nil && p.Path == c.refused
+			})
+			switch {
+			case c.refused == "" && (!got.Valid || len(got.Problems) > 0):
+				t.Errorf("crewlet validate refused the Tier A:\n%s\n%s", stdout, stderr)
+			case c.refused != "" && (got.Valid || !refused):
+				t.Errorf("crewlet validate did not refuse %s:\n%s\n%s", c.refused, stdout, stderr)
 			}
 		})
 	}
@@ -585,6 +721,63 @@ func TestContractStreamFloor(t *testing.T) {
 			if got.Valid || !strings.Contains(stdout+stderr, "store_max_bytes") {
 				t.Errorf("crewlet validate did not refuse stream.store_max_bytes for a %s volume:\n%s\n%s", c.size, stdout, stderr)
 			}
+		})
+	}
+}
+
+// TestContractStreamCeiling ties the render's stream share of a large data
+// volume to Crewlet's ceiling on stream.store_max_bytes
+// (config.StoreMaxBytesCeiling): the ceiling is taken and a byte more is
+// refused, so storeMaxBytesCeiling is the engine's and not a guess; and every
+// volume the API admits past what three quarters of fits under it, up to
+// sizes no int64 holds, renders a stream Crewlet accepts.
+func TestContractStreamCeiling(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		bytes  int64
+		accept bool
+	}{
+		{name: "the ceiling", bytes: storeMaxBytesCeiling, accept: true},
+		{name: "a byte more", bytes: storeMaxBytesCeiling + 1},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			doc, err := Bootstrap(bootstrapCases()[0].input(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var tierA map[string]any
+			if err := yaml.Unmarshal(doc.YAML, &tierA); err != nil {
+				t.Fatal(err)
+			}
+			tierA["stream"].(map[string]any)["store_max_bytes"] = c.bytes
+			encoded, err := json.Marshal(tierA)
+			if err != nil {
+				t.Fatal(err)
+			}
+			written, err := yamlOf(encoded)
+			if err != nil {
+				t.Fatal(err)
+			}
+			args := []string{"-tier", "bootstrap", write(t, "crewlet.yaml", written)}
+			if c.accept {
+				validate(t, bootstrapEnv(doc), nil, args...)
+				return
+			}
+			got, stdout, stderr, _ := verdict(t, bootstrapEnv(doc), args...)
+			if got.Valid || !strings.Contains(stdout+stderr, "store_max_bytes") {
+				t.Errorf("crewlet validate did not refuse stream.store_max_bytes %d:\n%s\n%s", c.bytes, stdout, stderr)
+			}
+		})
+	}
+	for _, size := range []string{"85Ti", "86Ti", "1Pi", "1Ei", "16Ei", "9223372036854775808", "1e30"} {
+		t.Run(size, func(t *testing.T) {
+			in := bootstrapCases()[0].input(t)
+			in.VolumeSize = resource.MustParse(size)
+			doc, err := Bootstrap(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			validate(t, bootstrapEnv(doc), nil, "-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML))
 		})
 	}
 }
