@@ -104,7 +104,10 @@ const (
 	// first read at.
 	addressShapeRead = "v0.1.1-0.20261019003935-7cf6955f22ea"
 	addressGo        = "internal/render/address.go"
-	normalizeGo      = "internal/config/normalize.go"
+	// engineClassGo is the EngineClass API, which several decisions copied
+	// from the engine are written into.
+	engineClassGo = "api/v1alpha1/engineclass_types.go"
+	normalizeGo   = "internal/config/normalize.go"
 
 	// openCode2Read is crewlet#262's engine, which drives OpenCode 2 alone
 	// and keeps the login of a CLI that holds it in a database of its own as
@@ -131,7 +134,7 @@ const (
 // which namespaces and names make a number of a template's last label, and
 // the guides that tell people what to write and what that message means.
 var addressCopies = []string{
-	addressGo, "api/v1alpha1/company_types.go", "api/v1alpha1/engineclass_types.go",
+	addressGo, "api/v1alpha1/company_types.go", engineClassGo,
 	"internal/controller/company_exposure.go", "docs/guides/exposure.md", "docs/guides/troubleshooting.md",
 }
 
@@ -139,7 +142,7 @@ var addressCopies = []string{
 // second factor be optional without the acknowledgement: the render, which
 // holds a data pod back on it, the EngineClass API's spec.signIn, which says
 // so, and the guide that tells a platform when to acknowledge it.
-var signInPosture = []string{bootstrapGo, "api/v1alpha1/engineclass_types.go", "docs/guides/people.md"}
+var signInPosture = []string{bootstrapGo, engineClassGo, "docs/guides/people.md"}
 
 // atlassianAccount is every operator file that copies which deployment the
 // company's Jira and Confluence are on, and what names a person there: the

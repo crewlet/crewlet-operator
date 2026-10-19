@@ -59,7 +59,7 @@ var _ = Describe("Company controller", Ordered, func() {
 			Spec: crewletaiv1alpha1.EngineClassSpec{
 				Engine: crewletaiv1alpha1.EngineSettings{Image: "ghcr.io/crewlet/crewlet:v0.1.0"},
 				Data: crewletaiv1alpha1.DataPodSettings{
-					Storage: crewletaiv1alpha1.DataStorage{Size: new(resource.MustParse("10Gi"))},
+					Storage: crewletaiv1alpha1.DataStorage{Size: new(resource.MustParse("16Gi"))},
 				},
 				Limits: limits,
 			},

@@ -707,38 +707,6 @@ func TestContractSeatPoolsCompany(t *testing.T) {
 		"-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
 }
 
-// TestContractStreamFloor ties the API's floor on data.storage.size to
-// Crewlet's on stream.store_max_bytes: the smallest volume an EngineClass
-// admits renders a stream Crewlet accepts, and a volume a gibibyte smaller
-// one it refuses, so the floor is the engine's and not a guess.
-func TestContractStreamFloor(t *testing.T) {
-	for _, c := range []struct {
-		size   string
-		accept bool
-	}{
-		{size: "8Gi", accept: true},
-		{size: "7Gi", accept: false},
-	} {
-		t.Run(c.size, func(t *testing.T) {
-			in := bootstrapCases()[0].input(t)
-			in.VolumeSize = resource.MustParse(c.size)
-			doc, err := Bootstrap(in)
-			if err != nil {
-				t.Fatal(err)
-			}
-			args := []string{"-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML)}
-			if c.accept {
-				validate(t, bootstrapEnv(doc), nil, args...)
-				return
-			}
-			got, stdout, stderr, _ := verdict(t, bootstrapEnv(doc), args...)
-			if got.Valid || !strings.Contains(stdout+stderr, "store_max_bytes") {
-				t.Errorf("crewlet validate did not refuse stream.store_max_bytes for a %s volume:\n%s\n%s", c.size, stdout, stderr)
-			}
-		})
-	}
-}
-
 // TestContractStreamCeiling ties the render's stream share of a large data
 // volume to Crewlet's ceiling on stream.store_max_bytes
 // (config.StoreMaxBytesCeiling): the ceiling is taken and a byte more is

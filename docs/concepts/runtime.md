@@ -687,10 +687,12 @@ include it: an engine with an alarm still runs the company.
 ## Backups
 
 The operator takes no backup, and Crewlet needs them for more than recovery:
-it trims its logs (the work tracker, the knowledge base's pages and
-vectors, usage) only behind a verified backup younger than its
+it trims every one of its state logs only behind a verified backup younger
+than its
 `stream.tracker_retention.backup_max_age`, 24 hours by default, which the
-operator leaves as it is. Without one the logs grow until they reach the
+operator leaves as it is
+([a company that never backs up never trims](https://github.com/crewlet/crewlet/blob/main/docs/guides/retention.md#a-company-that-never-backs-up-never-trims)).
+Without one the logs grow until they reach the
 ceilings the data volume is sized for, and the engine then refuses ordinary
 writes. A new company raises the `backup_age` and `trim_blocked` alarms from
 the start, which `EngineHealthy=False Alarms` shows.

@@ -303,7 +303,7 @@ func bootstrapInput(external, public string, origins []string) *render.Bootstrap
 			ActiveKeyID: "k1", Keys: map[string]string{"k1": base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))},
 		},
 		Tokens:         render.APITokens{Operator: strings.Repeat("o", 43), Access: strings.Repeat("a", 43)},
-		VolumeSize:     resource.MustParse("10Gi"),
+		VolumeSize:     resource.MustParse("16Gi"),
 		ExternalURL:    external,
 		PublicURL:      public,
 		AllowedOrigins: origins,

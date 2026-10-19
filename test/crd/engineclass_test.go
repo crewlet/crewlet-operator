@@ -62,7 +62,7 @@ func TestEngineClassObjects(t *testing.T) {
 		return func(c *v1.EngineClass) {
 			c.Spec.Objects = v1.ObjectSettings{
 				Backend: v1.ObjectBackendS3,
-				S3:      v1.S3ObjectSettings{Region: "eu-central-1", Bucket: "crewlet-tenants", Prefix: prefix},
+				S3:      v1.S3ObjectSettings{Region: tenantsRegion, Bucket: tenantsBucket, Prefix: prefix},
 			}
 		}
 	}
@@ -79,17 +79,45 @@ func TestEngineClassObjects(t *testing.T) {
 			want:   msgStorageFloor,
 		},
 		{
-			name:   "a storage size just under the engine's floor is refused",
-			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("8191Mi")) },
-			want:   msgStorageFloor,
+			name:   "a storage size just under the floor with files in the stream's bucket is refused",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("12287Mi")) },
+			want:   msgStorageFloorNATS,
 		},
 		{
-			name:   "a storage size of exactly the floor is accepted",
-			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("8Gi")) },
+			name:   "a 9Gi volume with files in the stream's bucket, the default, is refused",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("9Gi")) },
+			want:   msgStorageFloorNATS,
+		},
+		{
+			name: "a 9Gi volume with files in the stream's bucket, named, is refused",
+			mutate: func(c *v1.EngineClass) {
+				c.Spec.Data.Storage.Size = new(resource.MustParse("9Gi"))
+				c.Spec.Objects = v1.ObjectSettings{Backend: v1.ObjectBackendNATS}
+			},
+			want: msgStorageFloorNATS,
+		},
+		{
+			name:   "a storage size of exactly the floor with files in the stream's bucket is accepted",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("12Gi")) },
+		},
+		{
+			name: "a storage size just under the floor with files in S3 is refused",
+			mutate: func(c *v1.EngineClass) {
+				s3("")(c)
+				c.Spec.Data.Storage.Size = new(resource.MustParse("9215Mi"))
+			},
+			want: msgStorageFloor,
+		},
+		{
+			name: "a storage size of exactly the floor with files in S3 is accepted",
+			mutate: func(c *v1.EngineClass) {
+				s3("")(c)
+				c.Spec.Data.Storage.Size = new(resource.MustParse("9Gi"))
+			},
 		},
 		{
 			name:   "a storage size in bytes is accepted",
-			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("10737418240")) },
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("17179869184")) },
 		},
 		// A volume of any size past the floor is admitted: the render takes
 		// no more of it than Crewlet's ceiling on the stream (64 TiB), and
@@ -971,4 +999,33 @@ func TestEngineClassSignInDefaults(t *testing.T) {
 	if got.Spec.SignIn.SecondFactor != v1.SecondFactorRequired {
 		t.Errorf("signIn.secondFactor defaulted to %q, want %q", got.Spec.SignIn.SecondFactor, v1.SecondFactorRequired)
 	}
+}
+
+// TestEngineClassFloorFollowsTheObjects covers the floor on a class's data
+// volume across a change of where it keeps files: a class at the S3 floor
+// may not move its files into the stream's bucket, whose floor is higher,
+// and one at that floor may move them to S3.
+func TestEngineClassFloorFollowsTheObjects(t *testing.T) {
+	inS3 := func(c *v1.EngineClass) {
+		c.Spec.Objects = v1.ObjectSettings{
+			Backend: v1.ObjectBackendS3,
+			S3:      v1.S3ObjectSettings{Region: tenantsRegion, Bucket: tenantsBucket},
+		}
+	}
+	runUpdateCases(t, engineClass, []updateCase[*v1.EngineClass]{
+		{
+			name: "a 9Gi class moving its files from S3 into the stream's bucket is refused",
+			before: func(c *v1.EngineClass) {
+				inS3(c)
+				c.Spec.Data.Storage.Size = new(resource.MustParse("9Gi"))
+			},
+			mutate: func(c *v1.EngineClass) { c.Spec.Objects = v1.ObjectSettings{Backend: v1.ObjectBackendNATS} },
+			want:   msgStorageFloorNATS,
+		},
+		{
+			name:   "a 12Gi class moving its files from the stream's bucket to S3 is accepted",
+			before: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("12Gi")) },
+			mutate: inS3,
+		},
+	})
 }

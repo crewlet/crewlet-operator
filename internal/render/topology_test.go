@@ -112,7 +112,7 @@ func TestEveryPodMatchesExactlyOnePlacementGroup(t *testing.T) {
 	keyring := Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}
 	data, err := Bootstrap(reachedAtDefaults(&BootstrapInput{
 		Company: in.Company, Class: in.Class, Keyring: keyring, Tokens: testTokens,
-		VolumeSize: resource.MustParse("10Gi"),
+		VolumeSize: resource.MustParse("16Gi"),
 	}))
 	if err != nil {
 		t.Fatal(err)

@@ -777,7 +777,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `storageClassName` _string_ | storageClassName is the StorageClass of the data volumes. Unset uses<br />the cluster's default class. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | size is the capacity requested for each data volume. It holds the<br />store, the event stream and the store's cache. There is no default: how<br />much a tenant may keep is a platform decision.<br />Three quarters of it is the engine's event stream, Crewlet's<br />stream.store_max_bytes: the stream reserves its logs' ceilings against<br />that share up front. Crewlet's own floor for it is 6Gi<br />(config.StoreMaxBytesFloor: every node reserves all five of its state<br />logs' ceilings, 4.5Gi at their smallest, and keeps room beside them for<br />its mailboxes and coordination), so a volume must be at least 8Gi. Its<br />ceiling is 64Ti (config.StoreMaxBytesCeiling, a guard against a unit<br />mistake), so a volume larger than about 85Ti gives the stream 64Ti and<br />the rest to the store and its snapshots.<br />It applies to the data volumes of companies created after it is set.<br />An existing company's volumes keep the size they were created with:<br />they are claimed through the StatefulSet's volume claim templates,<br />which Kubernetes does not let change, and resizing a volume is a<br />decision about one company's storage class and data, not the class's. |  | Required: \{\} <br /> |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | size is the capacity requested for each data volume. It holds the<br />store, the event stream and the store's cache. There is no default: how<br />much a tenant may keep is a platform decision.<br />Three quarters of it is the engine's event stream, Crewlet's<br />stream.store_max_bytes: the stream reserves what a node keeps there up<br />front, and a fresh node refuses to boot on a share that cannot hold it<br />(Crewlet's engine.BrokerFloor, and its deployment guide's "minimum room<br />for a fresh node"). Its seven state logs' ceilings at their smallest<br />come to 6979321856 bytes, so a volume must be at least 9Gi, whose share<br />of 6.75Gi holds them. With objects.backend NATS, the default, the object<br />store's bucket reserves a quarter of the share beside them, 9305762474<br />bytes in all, so such a class must give at least 12Gi, whose share is<br />9Gi. That is the least that boots: the mailboxes and coordination<br />buckets grow into what is left, so give a company that runs for long<br />more. The stream's ceiling is 64Ti (config.StoreMaxBytesCeiling, a<br />guard against a unit mistake), so a volume larger than about 85Ti gives<br />the stream 64Ti and the rest to the store and its snapshots.<br />It applies to the data volumes of companies created after it is set.<br />An existing company's volumes keep the size they were created with:<br />they are claimed through the StatefulSet's volume claim templates,<br />which Kubernetes does not let change, and resizing a volume is a<br />decision about one company's storage class and data, not the class's. |  | Required: \{\} <br /> |
 
 
 #### DataTopology
@@ -1005,6 +1005,10 @@ namespaces its spec.allowedNamespaces selects, and no others.
 
 EngineClassSpec is the defaults and guard rails a platform sets once for
 every Company that names the class, the way a StorageClass does for volumes.
+The data volume's floor follows where the class keeps files (see
+DataStorage.size): a company's object store cannot move under it, since
+Crewlet refuses to start a node that names another store than the one it
+recorded, so the backend a volume was sized for is the one it runs with.
 
 
 

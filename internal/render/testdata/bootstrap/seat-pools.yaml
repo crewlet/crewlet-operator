@@ -45,5 +45,5 @@ stream:
     port: 7422
   replicas: 1
   store_dir: /var/lib/crewlet/stream
-  store_max_bytes: 8053063680
+  store_max_bytes: 12884901888
   type: embedded

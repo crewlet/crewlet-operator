@@ -27,7 +27,7 @@ func TestDataPodStartupSeconds(t *testing.T) {
 	}{
 		{"a volume of no size", classWith(0), "0", 300},
 		{"a quantity below zero, which no claim has", classWith(0), "-2Gi", 300},
-		{"the smallest volume", classWith(0), "8Gi", 300 + 8*6},
+		{"the smallest volume", classWith(0), "12Gi", 300 + 12*6},
 		{"a volume of whole GiB", classWith(0), "100Gi", 300 + 100*6},
 		{"a part of a GiB counts as one", classWith(0), "10737418241", 300 + 11*6},
 		{"a volume in decimal units", classWith(0), "500G", 300 + 466*6},

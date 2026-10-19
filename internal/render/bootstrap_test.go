@@ -640,7 +640,7 @@ func TestBootstrapBoundsTheStreamByTheVolume(t *testing.T) {
 		size string
 		want int64
 	}{
-		{size: "8Gi", want: 6 << 30},
+		{size: "12Gi", want: 9 << 30},
 		{size: "85Ti", want: 85 << 40 / 4 * 3},
 		{size: "93824992236884", want: 70368744177663},
 		{size: "93824992236888", want: storeMaxBytesCeiling},

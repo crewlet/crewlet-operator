@@ -63,7 +63,7 @@ func TestAddressesInEngineClasses(t *testing.T) {
 				c.Spec.Objects = v1.ObjectSettings{
 					Backend: v1.ObjectBackendS3,
 					S3: v1.S3ObjectSettings{
-						Region: "eu-central-1", Bucket: "crewlet-tenants", Prefix: "{{uid}}/", Endpoint: withUser + "minio.storage:9000",
+						Region: tenantsRegion, Bucket: tenantsBucket, Prefix: "{{uid}}/", Endpoint: withUser + "minio.storage:9000",
 					},
 				}
 			},
