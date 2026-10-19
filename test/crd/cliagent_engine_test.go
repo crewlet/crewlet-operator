@@ -155,15 +155,18 @@ func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
 		"   ", "\u3000",
 	}
 	refusedModels := map[v1.CLIAgentName]bool{}
+	quoted := false
 	for _, mode := range []v1.CLIAgentMode{v1.CLIAgentModeText, v1.CLIAgentModeAgent} {
 		for _, model := range models {
 			providers := make([]v1.LLMProvider, 0, len(agents))
 			refused := map[string]bool{}
+			refusals := map[string]string{}
 			for _, agent := range agents {
 				shape := admittedSignIn(v1.CLIAgentName(agent), variables)
 				p := shapedProvider(namespace, v1.CLIAgentName(agent), mode, &shape)
 				p.Spec.Model = model
 				refusal := apiVerdict(t, p)
+				refusals[p.Name] = refusal
 				refused[p.Name] = strings.Contains(refusal, msgOpenCodeModel) || strings.Contains(refusal, msgBlankModel)
 				// The shape is admitted but for its model, so the model
 				// rule is the question; in mode Agent, but for a CLI with
@@ -193,14 +196,122 @@ func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
 				if engineRefuses {
 					refusedModels[p.Spec.CLI.Agent] = true
 				}
+				// The rule's message quotes the engine's refusal of a
+				// model naming no provider: the error OpenCode refuses it
+				// with, and the command that lists OpenCode's providers.
+				// Held on both sides, so an engine that rewords either
+				// fails here until the message follows it.
+				// A model of white space alone is refused by the blank
+				// rules on both sides, whose words are their own.
+				if !engineRefuses || !strings.Contains(refusals[p.Name], msgOpenCodeModel) ||
+					strings.Contains(refusals[p.Name], msgBlankModel) {
+					continue
+				}
+				quoted = true
+				engineRefusal := strings.Join(report.models[p.Name], "\n")
+				for _, phrase := range []string{openCodeModelRefusal, openCodeModelListing} {
+					if !strings.Contains(engineRefusal, phrase) {
+						t.Errorf("%s, mode %s, model %q: the engine's refusal no longer says %q, which the API's "+
+							"rule quotes: %s", p.Spec.CLI.Agent, mode, model, phrase, engineRefusal)
+					}
+					if !strings.Contains(refusals[p.Name], phrase) {
+						t.Errorf("%s, mode %s, model %q: the API's refusal does not say %q, as the engine's does: %s",
+							p.Spec.CLI.Agent, mode, model, phrase, refusals[p.Name])
+					}
+				}
 			}
 		}
 	}
-	// The probe can fail: the engine refuses some model of OpenCode's.
+	// The probe can fail: the engine refuses some model of OpenCode's, and
+	// the API refuses it with the rule whose message quotes the engine.
 	if !refusedModels[v1.CLIAgentOpenCode] {
 		t.Errorf("the engine refused no OpenCode model; the probe's models no longer reach its rule")
 	}
+	if !quoted {
+		t.Errorf("neither side refused an OpenCode model with its model rule; the wording was held on nothing")
+	}
 }
+
+// TestCLIAgentIsolationFollowsTheEngine holds the LLMProvider API's rule over
+// the variables env may not set, because Crewlet sets them on every call of
+// the CLI to keep it inside its seat's own home and its call's working
+// directory, to the engine every suite runs. The engine refuses one in a
+// cli-agent entry's cli.env naming every variable of the list for that CLI
+// (crewlet's validateCLICredentials, over cliprofile's IsolationVariables), so
+// one provider of each CLI the API offers sets HOME, which every CLI's list
+// holds, and the list is read from the refusal and held to the copy the
+// rule's cases are built from (homeIsolation and cliIsolation). Then every
+// name any CLI's list holds is tried on every CLI: the API refuses it with
+// its isolation rule exactly where the engine's list for that CLI holds it.
+// A crewlet change that gives a profile another config_env, work_config_env
+// or isolation_env variable, or drops one, fails here until the rule
+// follows it.
+func TestCLIAgentIsolationFollowsTheEngine(t *testing.T) {
+	namespace := newNamespace(t)
+	agents := enumOf(t, "llmproviders.crewlet.ai", "spec", "cli", "agent")
+	bundle := signInShape{
+		name: shapeBundle + ", env HOME",
+		auth: v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("cli", "bundle")},
+		env:  []string{"HOME"},
+	}
+	providers := make([]v1.LLMProvider, 0, len(agents))
+	for _, agent := range agents {
+		providers = append(providers, *shapedProvider(namespace, v1.CLIAgentName(agent), v1.CLIAgentModeText, &bundle))
+	}
+	report := askEngine(t, providers, false)
+
+	engineLists := map[v1.CLIAgentName][]string{}
+	var everyName []string
+	for i := range providers {
+		p := &providers[i]
+		var lists [][]string
+		for _, problem := range report.problems[p.Name] {
+			if m := isolationRefusal.FindStringSubmatch(problem); m != nil {
+				lists = append(lists, strings.Split(m[1], ", "))
+			}
+		}
+		if len(lists) != 1 {
+			t.Fatalf("%s: want one problem matching %q, got %q", p.Spec.CLI.Agent, isolationRefusal, report.problems[p.Name])
+		}
+		got := slices.Sorted(slices.Values(lists[0]))
+		engineLists[p.Spec.CLI.Agent] = got
+		want := slices.Sorted(slices.Values(append(slices.Clone(homeIsolation), cliIsolation[p.Spec.CLI.Agent]...)))
+		if !slices.Equal(got, want) {
+			t.Errorf("%s: the engine sets %v on every call to isolate the CLI, the API's rule refuses %v in env",
+				p.Spec.CLI.Agent, got, want)
+		}
+		for _, name := range got {
+			if !slices.Contains(everyName, name) {
+				everyName = append(everyName, name)
+			}
+		}
+	}
+	slices.Sort(everyName)
+
+	for _, agent := range agents {
+		name := v1.CLIAgentName(agent)
+		for _, variable := range everyName {
+			shape := bundle
+			shape.env = []string{variable}
+			refusal := apiVerdict(t, shapedProvider(namespace, name, v1.CLIAgentModeText, &shape))
+			switch engineRefuses := slices.Contains(engineLists[name], variable); {
+			case engineRefuses && !strings.Contains(refusal, msgCLIIsolation):
+				t.Errorf("%s with %s in env: the engine refuses it and the API's isolation rule does not: %q",
+					agent, variable, refusal)
+			case !engineRefuses && refusal != "":
+				t.Errorf("%s with %s in env: the engine sets no such variable for it and the API refuses it: %s",
+					agent, variable, refusal)
+			}
+		}
+	}
+}
+
+// isolationRefusal is the engine's refusal of a variable in a cli-agent
+// entry's cli.env that it sets on every call of the CLI, naming every such
+// variable for that CLI (crewlet's internal/config, validateCLICredentials):
+// here, of HOME.
+var isolationRefusal = regexp.MustCompile(`HOME is a variable the engine sets for every call of this CLI to ` +
+	`keep it inside its seat's own home and its call's working directory \(([A-Za-z0-9_, ]+)\)`)
 
 // admittedSignIn is a sign-in the API admits for agent, one of signInShapes:
 // its headless token, its key, its model provider's key in env, or a bundle,
@@ -227,10 +338,15 @@ func holdVerdicts(t *testing.T, verdicts map[string]map[string]verdict, agentRun
 		agentMode := strings.HasSuffix(shape, ", mode "+string(v1.CLIAgentModeAgent))
 		for agent, v := range byAgent {
 			admitted := v.refusal == ""
-			// A bundle signs the CLI in from the login files the engine
-			// restores, which `llm list` cannot see before a restore; an
-			// Agent-mode run is given none of them, so there the bundle is
-			// no sign-in.
+			// A bundle signs the CLI in from the login the engine restores
+			// from it (the CLI's credential files, or the document
+			// OpenCode's export printed). `llm list` restores the configured
+			// bundle before it reports, as the engine does, but the probe's
+			// is a placeholder no restore can read, so the column cannot
+			// show it: a bundle that restored would be written under the
+			// rendered state directory, in /var/lib/crewlet of the machine
+			// running the test. An Agent-mode run is given none of it, so
+			// there the bundle is no sign-in.
 			signedIn := slices.Contains([]string{"token", "api key", "environment"}, v.signIn) ||
 				(strings.HasPrefix(shape, "bundle") && !agentMode)
 			// What the API admits the engine admits, without a doubt, so a

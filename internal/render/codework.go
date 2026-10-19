@@ -29,9 +29,10 @@ import (
 //     a wire ClaudeCode does not: unless the seat's own environment signs
 //     ClaudeCode in, when it runs on that sign-in and its own model choice.
 //   - A CLIAgent provider whose login cannot follow the run into the remote
-//     sandbox: the credential files of a bundle stay on the engine's data
-//     volume, because they carry a refresh token the engine keeps rotating
-//     there, so the run needs a token or a key in its environment.
+//     sandbox: the login a bundle restores (a CLI's credential files, or the
+//     document OpenCode 2's export printed) stays on the engine's data volume,
+//     because it carries a refresh token the engine keeps rotating there, so
+//     the run needs a token or a key in its environment.
 //
 // Crewlet applies a document holding either of the last two and refuses each
 // launch of the seat's code work, while the seat runs its turns. They are

@@ -105,6 +105,15 @@ const (
 	addressShapeRead = "v0.1.1-0.20261019003935-7cf6955f22ea"
 	addressGo        = "internal/render/address.go"
 	normalizeGo      = "internal/config/normalize.go"
+
+	// openCode2Read is crewlet#262's engine, which drives OpenCode 2 alone
+	// and keeps the login of a CLI that holds it in a database of its own as
+	// the document its export printed: newCodingRun maps that document into
+	// the files only a local box is seeded with, which no E2B box reads, and
+	// sandboxCredentials words its refusal as the login rather than credential
+	// files. v1alpha1 offers E2B alone, so no verdict the operator copies
+	// moved.
+	openCode2Read = "v0.1.1-0.20261019055339-d826c86f2b7e"
 )
 
 // addressCopies is every operator file that copies which addresses Crewlet
@@ -249,9 +258,11 @@ var mirrored = []mirror{
 		decides: "a CLIAgent head another CLI's coding agent cannot run (CodingAgentMismatch), ClaudeCode on a " +
 			"head that is no Anthropic provider (SandboxModelUnsupported), and a CLIAgent head's run, a " +
 			"run_sandbox launch or an agent-mode run alike, carrying its provider's own sign-in (SandboxEnv) " +
-			"under what the seat's environment sets",
-		digest: "baeb63889217d2f01b87cce93be5b9e5d4a1682935599f38dbb94d3080b524dc",
-		read:   firstRead,
+			"under what the seat's environment sets, and its login, the CLI's credential files or the document " +
+			"a CLI that keeps its login in a database of its own exported (OpenCode 2's), only as files a local " +
+			"box is seeded with, which no E2B box reads",
+		digest: "897358b8ffbd0228fc359e6f20f02e0440a40a63be4935b9eac6475145f48edb",
+		read:   openCode2Read,
 	},
 	{
 		file: sandboxGo, function: "claudeCodeOnForeignEntry",
@@ -274,8 +285,8 @@ var mirrored = []mirror{
 		decides: "a CLIAgent head whose login cannot follow the run into a remote sandbox is refused unless the run's " +
 			"environment signs its CLI in: a run_sandbox launch (SandboxLoginNotPortable), and at phase Execute an " +
 			"agent-mode run, which the LLMProvider API refuses on a Subscription login no variable carries",
-		digest: "898c033d6df0b834eea9f102df1095424243de2578e288fe00220e572a3a6686",
-		read:   firstRead,
+		digest: "073072efcd21f1199160c73d79fdfc606c52787f2cf65a94eac847fc2f2e5ec6",
+		read:   openCode2Read,
 	},
 	{
 		file: sandboxGo, function: "(*Engine).sandboxEnv",

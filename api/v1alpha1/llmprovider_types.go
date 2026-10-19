@@ -128,12 +128,15 @@ const (
 // CLI's own command, and a pod has no terminal: Subscription signs in with a
 // headless token, such as the CLAUDE_CODE_OAUTH_TOKEN `claude setup-token`
 // mints, or with a credential bundle `crewlet llm export` wrote from a login
-// made elsewhere. A bundle is restored only while the provider's login on the
-// data volume is empty, so the refreshed login a running engine keeps there
-// wins over the bundle; a token never needs refreshing, which makes it the
-// better of the two wherever the CLI mints one. A provider names one of the
-// two: given both, which login the CLI acts on would be the CLI's choice
-// between its environment and its own files, which nothing here can see.
+// made elsewhere: the CLI's login, which is its credential files, or, for
+// OpenCode, which keeps its logins in a database of its own, the document
+// OpenCode 2's auth export printed. A bundle is restored only while the
+// provider's login on the data volume is empty, so the refreshed login a
+// running engine keeps there wins over the bundle; a token never needs
+// refreshing, which makes it the better of the two wherever the CLI mints
+// one. A provider names one of the two: given both, which login the CLI acts
+// on would be the CLI's choice between its environment and its own files,
+// which nothing here can see.
 //
 // Crewlet hands a CLI a token or a key only through the variable its profile
 // names, and refuses one for a CLI whose profile names none, since it would
@@ -172,8 +175,10 @@ type CLIAgentAuth struct {
 	TokenSecretRef SecretKeyReference `json:"tokenSecretRef,omitzero"`
 
 	// credentialBundleSecretRef is the Secret key holding a credential
-	// bundle `crewlet llm export` wrote. Crewlet's `credential_bundle`, a
-	// credential position.
+	// bundle `crewlet llm export` wrote. A bundle holding a login OpenCode
+	// 1.x made (its auth.json) is refused when the engine restores it, and
+	// the provider runs signed out: export it again from OpenCode 2.
+	// Crewlet's `credential_bundle`, a credential position.
 	// +optional
 	CredentialBundleSecretRef SecretKeyReference `json:"credentialBundleSecretRef,omitzero"`
 }
@@ -183,9 +188,11 @@ type CLIAgentAuth struct {
 //
 // The CLI is a binary in the engine's image, which the official image does
 // not ship: a class running such a provider names an image derived from the
-// engine's with the CLI installed (docs/guides/cli-agents.md). Its login, and
-// the per-seat homes the CLI keeps, are on the data volume, so a restart or a
-// new pod keeps them.
+// engine's with the CLI installed (docs/guides/cli-agents.md). For OpenCode
+// that is OpenCode 2, the @opencode/cli package: Crewlet drives no other
+// release, and every command it runs carries --standalone, which OpenCode 1.x
+// (npm's opencode-ai) rejects. Its login, and the per-seat homes the CLI
+// keeps, are on the data volume, so a restart or a new pod keeps them.
 //
 // Its rules hold every credential to a variable Crewlet's profile for the
 // CLI reads, as Crewlet's own admission does (providers.llm.*.cli): the
@@ -193,7 +200,14 @@ type CLIAgentAuth struct {
 // given, so the API refuses it on the object instead. The lists of CLIs the
 // rules name are those whose profiles set token_env, api_key_env or
 // env_sign_in in the engine the operator is tested against, Crewlet's main;
-// a test holds them to that engine's own verdict.
+// a test holds them to that engine's own verdict. The rules also keep env off
+// the variables Crewlet sets on every call to keep each seat's CLI inside its
+// own home and its call's working directory (HOME, the XDG directories,
+// TMPDIR, and the configuration directory or switch each CLI's profile names
+// in config_env, work_config_env and isolation_env): env is layered over
+// them, so a value there would replace that isolation for every seat on the
+// provider, and Crewlet refuses the document. A test holds that list to the
+// engine's refusals too.
 //
 // Mode Agent runs the CLIs Crewlet has a sandbox runner for, ClaudeCode and
 // OpenCode: the Company's coding agents. Crewlet hands an Agent-mode run its
@@ -210,6 +224,7 @@ type CLIAgentAuth struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.tokenSecretRef) || self.agent == 'ClaudeCode'",message="auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode (CLAUDE_CODE_OAUTH_TOKEN): its profile for every other CLI names no token variable. Sign that CLI in with auth.credentialBundleSecretRef, with auth mode APIKey where it has a key variable, or, for Hermes, Pi and OpenCode, with its model provider's key in env"
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'APIKey' || self.agent in ['ClaudeCode', 'Codex', 'GeminiCLI', 'QwenCode', 'CursorAgent', 'Copilot', 'Grok', 'MuseCode']",message="auth mode APIKey takes a CLI Crewlet hands a key to: ClaudeCode, Codex, GeminiCLI, QwenCode, CursorAgent, Copilot, Grok or MuseCode. Crewlet's profiles for OpenCode, KimiCode, Hermes and Pi name no key variable: sign Hermes, Pi or OpenCode in with its model provider's key in env under mode Subscription, and KimiCode, which reads a key only from its own files, with auth.credentialBundleSecretRef"
 // +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, (self.agent == 'ClaudeCode' && e.name in ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']) || (self.agent == 'Codex' && e.name == 'OPENAI_API_KEY') || (self.agent == 'GeminiCLI' && e.name == 'GEMINI_API_KEY') || (self.agent == 'QwenCode' && e.name == 'DASHSCOPE_API_KEY') || (self.agent == 'CursorAgent' && e.name == 'CURSOR_API_KEY') || (self.agent == 'Copilot' && e.name == 'GITHUB_TOKEN') || (self.agent == 'Grok' && e.name == 'XAI_API_KEY') || (self.agent == 'MuseCode' && e.name == 'META_API_KEY'))",message="env may not set the CLI's own token or key variable (ClaudeCode's CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY, Codex's OPENAI_API_KEY, GeminiCLI's GEMINI_API_KEY, QwenCode's DASHSCOPE_API_KEY, CursorAgent's CURSOR_API_KEY, Copilot's GITHUB_TOKEN, Grok's XAI_API_KEY, MuseCode's META_API_KEY): Crewlet's auth owns it, and whether a value in env reaches the CLI would turn on the auth mode. Give a token as auth.tokenSecretRef, and a key as apiKeySecretRefs with auth mode APIKey",fieldPath=".env"
+// +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, e.name in ['HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME', 'TMPDIR'] || (self.agent == 'ClaudeCode' && e.name == 'CLAUDE_CONFIG_DIR') || (self.agent == 'Codex' && e.name == 'CODEX_HOME') || (self.agent == 'OpenCode' && e.name in ['OPENCODE_CONFIG_DIR', 'OPENCODE_CONFIG_PROJECT_DISABLE']) || (self.agent == 'CursorAgent' && e.name == 'CURSOR_CONFIG_DIR') || (self.agent == 'KimiCode' && e.name == 'KIMI_CODE_HOME') || (self.agent == 'Hermes' && e.name == 'HERMES_HOME') || (self.agent == 'Pi' && e.name == 'PI_CODING_AGENT_DIR'))",message="env may not set a variable Crewlet sets on every call of the CLI to keep it inside its seat's own home and its call's working directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME or TMPDIR for any CLI, and ClaudeCode's CLAUDE_CONFIG_DIR, Codex's CODEX_HOME, OpenCode's OPENCODE_CONFIG_DIR and OPENCODE_CONFIG_PROJECT_DISABLE, CursorAgent's CURSOR_CONFIG_DIR, KimiCode's KIMI_CODE_HOME, Hermes's HERMES_HOME or Pi's PI_CODING_AGENT_DIR. A value there would replace that isolation for every seat on the provider, so Crewlet refuses the document: drop it",fieldPath=".env"
 // +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'Agent' || (has(self.auth) && has(self.auth.mode) && self.auth.mode != 'Subscription') || (self.agent == 'ClaudeCode' && has(self.auth) && has(self.auth.tokenSecretRef)) || (self.agent == 'OpenCode' && has(self.env) && self.env.exists(e, e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)')))",message="a Subscription login reaches an Agent-mode run in a remote sandbox only as a variable of its environment: give ClaudeCode auth.tokenSecretRef, or use auth mode APIKey, and give OpenCode its model provider's key in env under a name Crewlet reads as a credential, such as ANTHROPIC_API_KEY or OPENROUTER_API_KEY. A credential bundle stays on the engine's data volume"
 type CLIAgentSettings struct {
 	// agent is which CLI to drive. The provider's model is written as this
@@ -238,10 +253,13 @@ type CLIAgentSettings struct {
 	// sign in under auth mode Subscription with no login of their own: their
 	// model provider's key, under a name Crewlet reads as a credential, such
 	// as OPENROUTER_API_KEY. It may not set the CLI's own token or key
-	// variable, which auth owns. An OpenCode provider's credential-named
-	// variables also travel into every box of an Agent-mode run, and of a
-	// seat's code work that runs on it, where the coding agent can read
-	// them. Crewlet's `env`, a credential position.
+	// variable, which auth owns, nor a variable Crewlet sets to keep the CLI
+	// inside its seat's home and its call's working directory: HOME, the XDG
+	// directories, TMPDIR, and the CLI's own configuration directory or
+	// switch (docs/guides/cli-agents.md). An OpenCode provider's
+	// credential-named variables also travel into every box of an
+	// Agent-mode run, and of a seat's code work that runs on it, where the
+	// coding agent can read them. Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
@@ -255,7 +273,8 @@ type CLIAgentSettings struct {
 	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
 
 	// maxConcurrent is how many CLI processes the provider runs at once;
-	// each takes 200 to 400 MB of the engine pod's memory. Unset takes
+	// each takes 200 to 450 MB of the engine pod's memory, OpenCode's at the
+	// top of that range (docs/guides/cli-agents.md). Unset takes
 	// Crewlet's default of 4. Crewlet's `max_concurrent`.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
@@ -398,7 +417,7 @@ type LLMProviderSettings struct {
 // +kubebuilder:validation:XValidation:rule="self.type != 'CLIAgent' || !(has(self.baseURL) || has(self.timeoutSeconds) || has(self.cooldowns))",message="baseURL, timeoutSeconds and cooldowns configure an HTTP client, and a CLIAgent provider runs a process: its timeout is cli.timeoutSeconds"
 // +kubebuilder:validation:XValidation:rule="self.type != 'CLIAgent' || !has(self.cli) || has(self.apiKeySecretRefs) == (has(self.cli.auth) && has(self.cli.auth.mode) && self.cli.auth.mode == 'APIKey')",message="a CLIAgent provider takes apiKeySecretRefs with cli.auth.mode APIKey, and only then"
 // +kubebuilder:validation:XValidation:rule="self.type != 'CLIAgent' || !has(self.apiKeySecretRefs) || self.apiKeySecretRefs.size() == 1",message="a CLIAgent provider gives its CLI one key: it rotates none"
-// +kubebuilder:validation:XValidation:rule="self.type != 'CLIAgent' || !has(self.cli) || self.cli.agent != 'OpenCode' || !has(self.model) || (self.model.indexOf('/') >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size() > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size() > 0)",message="an OpenCode model is <provider>/<model>, which OpenCode splits at its first slash: a model with no slash, or with nothing but white space before or after it, names no provider or no model, and every call the provider makes, an Agent-mode run's included, would fail inside OpenCode with Model not found. Name the provider as OpenCode spells it (opencode models lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5, with that provider's key in cli.env",fieldPath=".model"
+// +kubebuilder:validation:XValidation:rule="self.type != 'CLIAgent' || !has(self.cli) || self.cli.agent != 'OpenCode' || !has(self.model) || (self.model.indexOf('/') >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size() > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size() > 0)",message="an OpenCode model is <provider>/<model>, which OpenCode splits at its first slash: a model with no slash, or with nothing but white space before or after it, names no provider or no model, and every call the provider makes, an Agent-mode run's included, would fail inside OpenCode, which OpenCode 2 refuses as Invalid model reference. Name the provider as OpenCode spells it (opencode models --standalone lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5, with that provider's key in cli.env or, in mode Text, a login of OpenCode's own in auth.credentialBundleSecretRef",fieldPath=".model"
 type LLMProviderSpec struct {
 	// companyRef names the Company this provider belongs to. Immutable.
 	// +required

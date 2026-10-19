@@ -13,17 +13,43 @@ the engine runs in a pod: the image, the login, and agent mode.
 
 The CLI is a program the engine starts, in the engine's own container, and
 Crewlet's image ships none: a derived image adds it, with whatever runtime it
-needs (Node.js for most of them; Claude Code needs none, being one native
-binary). Build one from the engine image you run, named by digest: the engine
-of the operator's release, or the copy of Crewlet's `main` image that
-[Installing](installing.md#engine-image) makes in your registry. Pin both the
-engine and the CLI. For Claude Code, Anthropic's installer runs in a build
-stage of its own and only the binary it installed is kept:
+needs (Node.js for most of them; Claude Code and OpenCode need none, each
+being one native binary). Build one from the engine image you run, named by
+digest: the engine of the operator's release, or the copy of Crewlet's `main`
+image that [Installing](installing.md#engine-image) makes in your registry.
+Pin both the engine and the CLI.
+
+A class names one engine image, so a company that runs two CLIs, or a CLI
+and stdio tool servers, needs one image with all of them. Each Dockerfile
+here and the one of [Building the image](tool-servers.md#building-the-image)
+takes the image it extends as `ENGINE_IMAGE`: push the first image, then
+build the next Dockerfile with its `ENGINE_IMAGE` naming it, rather than
+pasting one Dockerfile into another
+([One image with a coding CLI](tool-servers.md#one-image-with-a-coding-cli)).
+
+The engine's root filesystem is read-only: a CLI writes under the home the
+engine gives each seat and under `/tmp`, both writable. Each running CLI
+takes 200 to 450 MB, so size the class's `data.resources` for
+`cli.maxConcurrent` of them per provider. An OpenCode call is at the top of
+that range: measured on OpenCode 2.0.32, one call held about 440 MB at its
+peak, some 365 MB of it the private server every call starts, and each call
+running beside it about 250 to 350 MB more, the binary's pages being shared
+between them; a short `opencode api session.get` reading a call's usage
+follows each. OpenCode also unpacks about 19 MB of native libraries into
+each seat's home, under the `TMPDIR` the engine gives it (`<home>/tmp`),
+beside a database of about 7 MB while a seat's calls run: about 26 MB per
+OpenCode seat on the data volume, and on a seat pod's scratch volume
+(`scratchSizeLimit`) for each seat the pod holds.
+
+### Claude Code
+
+Anthropic's installer runs in a build stage of its own and only the binary it
+installed is kept:
 
 ```dockerfile
 # The engine image you run, by digest, and the Claude Code release to add.
 ARG ENGINE_IMAGE
-ARG CLAUDE_CODE_VERSION=2.1.296
+ARG CLAUDE_CODE_VERSION=2.1.303
 
 # The installer needs curl, which the engine image does not ship, and leaves a
 # download cache, a launcher and the build user's ~/.claude.json behind, none
@@ -70,16 +96,117 @@ spec:
     image: <your registry>/crewlet-claude-code@sha256:<digest>   # crewlet <commit>
 ```
 
-A class names one engine image, so a company that also runs stdio tool
-servers needs one image with both: push this one, then build the Dockerfile
-of [Building the image](tool-servers.md#building-the-image) on it, with its
-`ENGINE_IMAGE` naming this image, rather than pasting one Dockerfile into the
-other ([One image with a coding CLI](tool-servers.md#one-image-with-a-coding-cli)).
+### OpenCode
 
-The engine's root filesystem is read-only: a CLI writes under the home the
-engine gives each seat and under `/tmp`, both writable. Each running CLI
-takes 200 to 400 MB, so size the class's `data.resources` for
-`cli.maxConcurrent` of them per provider.
+Crewlet drives OpenCode 2 only, npm's `@opencode/cli`. npm's `opencode-ai` is
+OpenCode 1.x and rejects the `--standalone` every command of Crewlet's
+profile carries, so on it every call fails. The package's install script
+puts the binary of one of its platform packages in place, a self-contained
+program that needs no Node.js. This Dockerfile takes that binary straight
+from the platform package and checks it against the integrity npm's registry
+records, as the Slack server's is ([Building the image](tool-servers.md#building-the-image)):
+
+```dockerfile
+# The engine image you run, by digest.
+ARG ENGINE_IMAGE
+
+# The platform package is fetched and checked here, with a curl the engine
+# image does not ship: only the binary leaves this stage.
+FROM ${ENGINE_IMAGE} AS opencode
+ARG TARGETARCH
+# The OpenCode 2 release, and each platform package's dist.integrity on npm's
+# registry. amd64 takes the baseline build, which runs on any x86-64 node: the
+# other needs AVX2, and the image runs on whichever node its pod lands on.
+ARG OPENCODE_VERSION=2.0.32
+ARG OPENCODE_INTEGRITY_AMD64=sha512-NrB4iglJb7vGZWJ6B0qVH1EMHhWBZ4ADsAG9W0xLanzgxJ6eLEEsGBvxRX0cm/KPag5E/N0yZGsDVDZYcnz/OQ==
+ARG OPENCODE_INTEGRITY_ARM64=sha512-YR5O03irvmot/G0f8W49ehvhn5uqCFN3vf9JTsChvf47W6ldjKCNvsaCSXS2SP26dPOUMQBn7WqbKnyHzrNR5w==
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+WORKDIR /fetch
+RUN case "${TARGETARCH}" in \
+      amd64) package=cli-linux-x64-baseline integrity=${OPENCODE_INTEGRITY_AMD64} ;; \
+      arm64) package=cli-linux-arm64 integrity=${OPENCODE_INTEGRITY_ARM64} ;; \
+      *) echo "no OpenCode build for ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSLo opencode.tgz "https://registry.npmjs.org/@opencode/${package}/-/${package}-${OPENCODE_VERSION}.tgz"; \
+    test "sha512-$(openssl dgst -sha512 -binary opencode.tgz | base64 -w0)" = "${integrity}"; \
+    tar -xzf opencode.tgz --strip-components=2 package/bin/opencode
+
+FROM ${ENGINE_IMAGE}
+COPY --from=opencode --chown=0:0 /fetch/opencode /usr/local/bin/opencode
+```
+
+Pin the newest `@opencode/cli` of npm's `latest` tag, never its `beta` or
+`dev`, within the major Crewlet's opencode profile is written for (OpenCode 2
+today), with the `dist.integrity` of its `cli-linux-x64-baseline` and
+`cli-linux-arm64` packages at that version. The obvious alternatives are
+wrong:
+
+- **OpenCode's own installer**, `curl https://opencode.ai/v2/install`,
+  fetches the same package with no checksum, and picks the baseline or musl
+  build from the CPU and libc of the machine running the build, not of the
+  node the pod runs on.
+- **No update switch** is needed, unlike Claude Code's. Every call the engine
+  makes carries `update: disable` in the configuration it writes for that
+  call, and the commands it runs outside a call (`auth import`, `auth
+  export`, `auth list`, `--version`) check for no release. OpenCode's updater
+  replaces only what a package manager (npm, pnpm, Bun, Yarn, Vite+,
+  Homebrew or WinGet) or its own installer put in place, so it cannot touch
+  `/usr/local/bin/opencode`, and the root filesystem is read-only anyway.
+- **Never add an `/etc/opencode` configuration** to the image: OpenCode reads
+  it as machine-wide managed configuration over every seat's call, and
+  nothing the engine sets overrides it
+  ([Tool calls in text mode](https://github.com/crewlet/crewlet/blob/main/docs/concepts/subscription-llm-backends.md#tool-calls-in-text-mode)).
+- **The binary links glibc**, which the engine image's Debian has; the
+  `musl` packages are for Alpine. Of the native libraries it unpacks, only
+  its file watcher's needs more, libstdc++ and libgcc_s, which Debian has
+  too. The engine switches the watcher off on every command it runs
+  (`OPENCODE_FILEWATCHER_DISABLE`), and the check below loads it anyway,
+  since `cli.env` can switch it back on.
+
+Build it from the engine image, or from another image of
+[One image with a coding CLI](tool-servers.md#one-image-with-a-coding-cli),
+
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-opencode:<crewlet commit> .
+```
+
+check that OpenCode runs in it as the engine's pod runs it, as uid 10001 on
+a read-only root, with an empty `HOME` and `/tmp` that, like the pod's,
+allow running what is written there, no capabilities and no network,
+
+```bash
+image=<your registry>/crewlet-opencode:<crewlet commit>
+docker run --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
+  --tmpfs /tmp:exec --tmpfs /home/crewlet:exec,uid=10001,gid=10001 -e HOME=/home/crewlet \
+  --entrypoint /usr/local/bin/opencode "$image" auth list --standalone --print-logs 2>&1 |
+  grep -E 'level=ERROR|No authenticated integrations'
+```
+
+which passes when it prints one line, `No authenticated integrations`. It
+starts the private server on loopback that every call the engine makes
+starts, and loads every native library the binary unpacks, where
+`--version` alone loads one. A library that does not load is no failure to
+OpenCode: it carries on without it, prints the same answer, exits 0, and
+says so only in its log, as `level=ERROR` with `watcher backend not
+supported`, which is why the check reads the log. That is what a missing
+libstdc++ looks like, and what a plain `--tmpfs` does, which mounts
+`noexec`: the pod's `/tmp` and home are `emptyDir` volumes, which allow
+exec, and each seat's `TMPDIR` is on the data volume, which ordinarily does
+too. Run the check on a machine of the platform the image is for: under
+emulation, as `docker buildx` runs another platform's image, OpenCode
+misses its own five-second deadline for activating its plugins and fails
+with `Location plugins did not finish activating`. The binary adds about
+210 MB to the image. Then name it in the class:
+
+```yaml
+# EngineClass with-opencode, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-opencode@sha256:<digest>   # crewlet <commit>
+```
 
 ## Signing in
 
@@ -92,7 +219,7 @@ takes none and signs in with that key in `cli.env`:
 | Sign-in | What the Secret holds | Use it when |
 |---|---|---|
 | `auth.tokenSecretRef` | a long-lived headless token the CLI mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the CLI is Claude Code, the one CLI whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins an agent-mode run can carry (an agent-mode OpenCode carries its model provider's key in `env` instead) |
-| `auth.credentialBundleSecretRef` | a bundle of the CLI's credential files, from `crewlet llm export <key>` on a machine where you logged in | any CLI: the others mint no token Crewlet hands on |
+| `auth.credentialBundleSecretRef` | a bundle of the CLI's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any CLI: the others mint no token Crewlet hands on |
 | `auth.mode: APIKey` with one `apiKeySecretRefs` key | the CLI's metered API key | the CLI's Crewlet profile names a key variable ([below](#a-metered-key)) |
 | `env`, with `auth.mode: Subscription` | the key of the model provider the CLI runs on, in the variable the CLI reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the CLI is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
 
@@ -144,6 +271,20 @@ a credential, so the engine refuses the document and the API server refuses
 the provider first. Another CLI's variable is no such conflict:
 `ANTHROPIC_API_KEY` is OpenCode's Anthropic key.
 
+Nor may `env` set a variable the engine sets on every call to keep the CLI
+inside its seat's own home and the call's working directory: `HOME`,
+`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME` and
+`TMPDIR` for every CLI, and the CLI's own configuration directory
+(`CLAUDE_CONFIG_DIR` for `ClaudeCode`, `CODEX_HOME` for `Codex`,
+`CURSOR_CONFIG_DIR` for `CursorAgent`, `KIMI_CODE_HOME` for `KimiCode`,
+`HERMES_HOME` for `Hermes`, `PI_CODING_AGENT_DIR` for `Pi`), or, for
+`OpenCode`, its configuration directory `OPENCODE_CONFIG_DIR` and
+`OPENCODE_CONFIG_PROJECT_DISABLE`, the switch that keeps OpenCode from reading
+project configuration from the directories above a seat's call. `env` is
+layered over them, so a value there would replace that isolation for every
+seat on the provider: the engine refuses the document, and the API server
+refuses the provider first. A test holds the API's list to the engine's.
+
 ```yaml
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
@@ -166,11 +307,12 @@ spec:
 OpenCode reads its model as `<provider>/<model>`, splitting it at the first
 slash: `anthropic/claude-sonnet-5` runs Anthropic's model on
 `ANTHROPIC_API_KEY`, and `openrouter/anthropic/claude-sonnet-5` runs it
-through OpenRouter on `OPENROUTER_API_KEY` (`opencode models` lists the
-providers it knows). A model with no slash, or with nothing but white space
-before or after it, names no provider or no model, and every call the
-provider made would fail inside OpenCode with `Model not found`, so the
-engine refuses it and the API server refuses it first, at `spec.model`.
+through OpenRouter on `OPENROUTER_API_KEY` (`opencode models --standalone`
+lists the providers it knows). A model with no slash, or with nothing but
+white space before or after it, names no provider or no model, and every call
+the provider made would fail inside OpenCode, which OpenCode 2 refuses with
+`Invalid model reference`, so the engine refuses it and the API server
+refuses it first, at `spec.model`.
 
 For Claude Code, on a headless token:
 
@@ -197,16 +339,51 @@ spec:
 The login, and the homes the CLI keeps for each seat, live on the data
 volume, under `/var/lib/crewlet/llm-cli/<loginName>`, so a restarted data pod
 keeps them; a seat pod keeps them on a scratch volume it loses at every start
-(see [Seat pools](#seat-pools)). That matters for a bundle: the engine restores one only while
-the login there is empty, so the login the running engine refreshed wins
-over the bundle in the Secret, whose refresh token the vendor may have
-retired since. A bundle restored over a newer login is how a vendor that
-rotates refresh tokens logs a deployment out, which is why a token is the
-better of the two wherever the CLI mints one.
+(see [Seat pools](#seat-pools)). That matters for a bundle: the engine
+restores one, when it starts and at every revision it applies, only while the
+login there is empty, so the login the running engine refreshed wins over the
+bundle in the Secret, whose refresh token the vendor may have retired since,
+and a new bundle in the Secret reaches nothing until the provider moves to
+another `loginName` ([Rotating a credential](credentials.md#rotating-a-credential)).
+Nor does it restore one into a login `crewlet llm logout` emptied
+([A seat on a coding CLI runs signed out](troubleshooting.md#a-seat-on-a-coding-cli-runs-signed-out)).
+A bundle restored over a newer login is how a vendor that rotates refresh
+tokens logs a deployment out, which is why a token is the better of the two
+wherever the CLI mints one.
 
 Providers that set the same `loginName` share one login and its seats'
 homes, which is how several models run off one subscription; they must
 drive the same CLI, or the engine refuses the document.
+
+### An OpenCode login in a bundle
+
+OpenCode 2 keeps its logins in a database of its own rather than in files,
+so an OpenCode bundle holds one file: the document `opencode auth export
+--standalone` printed. The engine keeps it as the login of record
+(`credentials/exported-credentials` under
+`/var/lib/crewlet/llm-cli/<loginName>`), imports it into an empty database in
+a seat's home before the seat's calls, and exports it back when OpenCode
+refreshed it
+([Token refresh across seats](https://github.com/crewlet/crewlet/blob/main/docs/concepts/subscription-llm-backends.md#token-refresh-across-seats)).
+
+Make it on a machine with OpenCode 2, npm's `@opencode/cli`:
+`crewlet llm login <key>` runs OpenCode's own `opencode auth login
+--standalone` in a login home of the entry's own, or sign in with OpenCode
+yourself and adopt that login with `crewlet llm login <key> -from-host`,
+which reads it through your OpenCode's export
+([Broker the vendor's own login](https://github.com/crewlet/crewlet/blob/main/docs/concepts/subscription-llm-backends.md#1-broker-the-vendors-own-login-any-cli));
+then `crewlet llm export <key>`. The export prints every login the OpenCode
+it runs in holds, keys stored with `opencode auth login` included, so a
+bundle adopted from your own home carries every provider you signed in to
+there: adopt from a home holding only the login the provider should run on
+(`-from-host -home <dir>`), or sign in with `crewlet llm login`, whose login
+home holds the entry's login alone.
+
+A login OpenCode 1.x made (`~/.local/share/opencode/auth.json`) is not read:
+a bundle holding one is refused when the engine restores it, which it logs
+as `cli_agent_bundle_restore_failed`, and the provider runs signed out, so
+export it again from OpenCode 2. A bundle serves mode Text only: an
+agent-mode run never receives it ([Text mode and agent mode](#text-mode-and-agent-mode)).
 
 ### Which `env` entries sign a CLI in
 
@@ -291,9 +468,18 @@ In agent mode:
   `spec.sandbox.e2b.template`, each run gets E2B's prebuilt template for its
   CLI (`claude` for Claude Code, `opencode` for OpenCode); a template you
   set is used for every run, so it must carry the CLI of every coding agent
-  and agent-mode provider the company runs. `cli.runIn` is `E2B`, the only
-  cell v1alpha1 offers: Crewlet's local cells would run every seat's code in
-  the engine's pod, with its credentials.
+  and agent-mode provider the company runs. For OpenCode that is OpenCode 2,
+  the `@opencode/cli` package (`opencode --version` prints `opencode
+  v2.…`): Crewlet's runner ends a run at once in a box that has OpenCode
+  1.x, npm's `opencode-ai`, with `this box runs OpenCode 1.…; the opencode
+  runner drives OpenCode 2 (the @opencode/cli package)` in the run's report.
+  E2B does not say which OpenCode its prebuilt `opencode` template carries,
+  so where runs end that way, set `spec.sandbox.e2b.template` to a template
+  built with `@opencode/cli`, which, used for every run, must also carry
+  Claude Code if any seat's code work runs it
+  ([Crewlet's OpenCode runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#opencode)).
+  `cli.runIn` is `E2B`, the only cell v1alpha1 offers: Crewlet's local cells
+  would run every seat's code in the engine's pod, with its credentials.
 - Claude Code and OpenCode run in agent mode: they are the CLIs the engine
   has a sandbox runner for, the coding agents `spec.sandbox` offers, and the
   API server refuses `mode: Agent` for any other. The run is handed `model`
@@ -390,7 +576,9 @@ time the condition becomes `False` or its reason changes.
   `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY`; it then runs on
   that sign-in and its own model choice (`ANTHROPIC_MODEL` in
   `spec.sandbox.env` picks one; like every variable there, it is read from
-  a Secret key). `OpenCode` reads either wire.
+  a Secret key). `OpenCode` reads either wire. An `OpenCode` coding run
+  needs OpenCode 2 in the box, as an agent-mode run does
+  ([Text mode and agent mode](#text-mode-and-agent-mode)).
 - **The login must reach the remote sandbox.** A credential bundle never
   does, so a `ClaudeCode` provider signed in by a bundle, with neither
   `CLAUDE_CODE_OAUTH_TOKEN` nor `ANTHROPIC_API_KEY` in the seat's sandbox

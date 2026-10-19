@@ -65,6 +65,27 @@ var cliVariables = map[v1.CLIAgentName]cliVariable{
 // TestCLIAgentSignInFollowsTheEngine holds it to the engine too.
 var envSignIn = []v1.CLIAgentName{v1.CLIAgentHermes, v1.CLIAgentPi, v1.CLIAgentOpenCode}
 
+// homeIsolation are the variables Crewlet sets on every call of every CLI to
+// keep it inside its seat's own home (cliprofile.HomeIsolation), and
+// cliIsolation those each CLI's profile adds for its own configuration
+// directory or switch (config_env, work_config_env, isolation_env), in the
+// engine every suite runs: the variables the LLMProvider API's isolation rule
+// refuses in env. TestCLIAgentIsolationFollowsTheEngine reads them from the
+// engine's refusals and fails while this copy, which the rule's cases are
+// built from, differs.
+var (
+	homeIsolation = []string{"HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "TMPDIR"}
+	cliIsolation  = map[v1.CLIAgentName][]string{
+		v1.CLIAgentClaudeCode:  {"CLAUDE_CONFIG_DIR"},
+		v1.CLIAgentCodex:       {"CODEX_HOME"},
+		v1.CLIAgentOpenCode:    {"OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_PROJECT_DISABLE"},
+		v1.CLIAgentCursorAgent: {"CURSOR_CONFIG_DIR"},
+		v1.CLIAgentKimiCode:    {"KIMI_CODE_HOME"},
+		v1.CLIAgentHermes:      {"HERMES_HOME"},
+		v1.CLIAgentPi:          {"PI_CODING_AGENT_DIR"},
+	}
+)
+
 // The kinds the tests that apply manifests treat specially.
 const (
 	kindEngineClass = "EngineClass"

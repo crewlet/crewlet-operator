@@ -479,7 +479,17 @@ envtest: $(LOCALBIN) ## Download setup-envtest locally if necessary.
 # used once, to build the custom binary that bin/golangci-lint then points at.
 # The binary's name carries a hash of .custom-gcl.yml, so a plugin change
 # rebuilds it just as a version bump does.
-GOLANGCI_LINT_BUILD = $(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION)-$(shell sha256sum .custom-gcl.yml | cut -c1-12)
+#
+# Both steps are built with this module's own Go toolchain (GOLANGCI_LINT_GO,
+# what go.mod names, which GOTOOLCHAIN=auto fetches), and the name carries it
+# too. A golangci-lint built with an older Go refuses to load a module whose
+# go line is newer, and left to itself the build takes an older one on any
+# machine whose default Go is older than go.mod's: `go install pkg@version`
+# and the custom build's own module each pick the toolchain golangci-lint's
+# go line asks for, not this module's. A go.mod that moves its go line then
+# rebuilds the binary rather than keeping one that can no longer lint it.
+GOLANGCI_LINT_GO = $(shell go env GOVERSION)
+GOLANGCI_LINT_BUILD = $(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION)-$(GOLANGCI_LINT_GO)-$(shell sha256sum .custom-gcl.yml | cut -c1-12)
 .PHONY: golangci-lint
 golangci-lint: $(LOCALBIN) ## Build golangci-lint with the plugins in .custom-gcl.yml locally if necessary.
 	@grep -qx 'version: $(GOLANGCI_LINT_VERSION)' .custom-gcl.yml || { \
@@ -491,8 +501,9 @@ golangci-lint: $(LOCALBIN) ## Build golangci-lint with the plugins in .custom-gc
 		stock="$$(mktemp -d)"; \
 		trap 'rm -rf "$$stock"' EXIT; \
 		echo "Downloading github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)"; \
+		export GOTOOLCHAIN="$(GOLANGCI_LINT_GO)"; \
 		GOBIN="$$stock" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
-		echo "Building golangci-lint $(GOLANGCI_LINT_VERSION) with the plugins in .custom-gcl.yml"; \
+		echo "Building golangci-lint $(GOLANGCI_LINT_VERSION) with the plugins in .custom-gcl.yml, on $$GOTOOLCHAIN"; \
 		"$$stock/golangci-lint" custom --destination "$(LOCALBIN)" --name "$$(basename "$(GOLANGCI_LINT_BUILD)")"; \
 	}
 	@ln -sf "$(GOLANGCI_LINT_BUILD)" "$(GOLANGCI_LINT)"

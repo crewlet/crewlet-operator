@@ -749,7 +749,13 @@ spec:
                           memory and disk. Unset, each run gets the vendor's prebuilt template
                           for its coding agent's CLI (claude or opencode); a template set here is
                           used for every run, so it must carry the CLI of every coding agent and
-                          Agent-mode CLIAgent provider the company runs.
+                          Agent-mode CLIAgent provider the company runs. For OpenCode that is
+                          OpenCode 2, the @opencode/cli package (opencode --version prints
+                          opencode v2.…): Crewlet's OpenCode runner ends a run at once in a box
+                          with OpenCode 1.x (npm's opencode-ai), and E2B does not say which
+                          release its prebuilt opencode template carries, so a company whose
+                          OpenCode runs end that way sets template to one built with
+                          @opencode/cli.
                         maxLength: 253
                         minLength: 1
                         type: string
