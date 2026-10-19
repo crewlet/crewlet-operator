@@ -250,6 +250,11 @@ func (r *CompanyReconciler) runWorkload(
 		// own fault, not the keyring's.
 		return metav1.Condition{}, err
 	}
+	if refused, ok := errors.AsType[*render.AddressError](err); ok {
+		// The engine would refuse this crewlet.yaml at every start, so the
+		// pods keep the one they run, which named an address it took.
+		return holdBack(crewletaiv1alpha1.ReasonAddressRefused, addressRefusalMessage(c, class, refused))
+	}
 	if errors.Is(err, render.ErrSignInNotAcknowledged) {
 		// The engine would refuse this crewlet.yaml at every start, so the
 		// pods keep the one they run, which requires a second factor or

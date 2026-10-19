@@ -370,15 +370,19 @@ const keyringKeyBytes = 32
 // How people sign in is the class's (spec.signIn): api.auth.totp and
 // api.auth.accept_insecure.
 //
-// It fails when an address is missing (ErrNoAddress); when the class lets
-// people sign in with a password alone at an ExternalURL that is not on
-// loopback without acknowledging it (ErrSignInNotAcknowledged); and when the
-// keyring cannot be used (ErrKeyringInvalid): no keys, an active key it does
-// not hold, an id that is not a valid key id, or material that is not base64
-// of 32 bytes.
+// It fails when an address is missing (ErrNoAddress); when an address is one
+// Crewlet refuses to start on (an *AddressError, ErrAddressRefused); when the
+// class lets people sign in with a password alone at an ExternalURL that is
+// not on loopback without acknowledging it (ErrSignInNotAcknowledged); and
+// when the keyring cannot be used (ErrKeyringInvalid): no keys, an active key
+// it does not hold, an id that is not a valid key id, or material that is not
+// base64 of 32 bytes.
 func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 	if in.ExternalURL == "" || in.PublicURL == "" {
 		return nil, fmt.Errorf("%w: api.external_url is %q and api.public.external_url %q", ErrNoAddress, in.ExternalURL, in.PublicURL)
+	}
+	if err := refusedAddress(in.ExternalURL, in.PublicURL, in.AllowedOrigins); err != nil {
+		return nil, err
 	}
 	signIn := in.Class.Spec.SignIn
 	acknowledged := signIn.AcceptInsecure != nil && *signIn.AcceptInsecure

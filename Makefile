@@ -85,12 +85,16 @@ gateway-api-crds: ## Copy the Gateway API CRDs of the release go.mod requires in
 # test/docs) runs the crewlet binary `make crewlet` installed
 # (internal/engine/enginetest), named explicitly so a CREWLET_BIN in the
 # caller's environment cannot swap in another engine; test/chart renders the
-# chart with the pinned helm.
+# chart with the pinned helm. test/crd runs a second time against
+# ENVTEST_K8S_OLDEST's API server, the oldest the operator supports, since
+# what a CEL rule's isURL() and url() take is the API server's Go net/url.
 .PHONY: test
 test: manifests generate fmt vet setup-envtest crewlet helm ## Run the unit, envtest, engine and chart suites of both modules.
 	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" \
 		CREWLET_BIN="$(CREWLET)" HELM="$(HELM)" \
 		go test -race $$(go list ./... | grep -v /test/e2e) -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_OLDEST) --bin-dir "$(LOCALBIN)" -p path)" \
+		CREWLET_BIN="$(CREWLET)" go test -race ./test/crd/
 	cd api && go test -race ./... -coverprofile cover.out
 
 KIND_CLUSTER ?= crewlet-operator-test-e2e
@@ -364,6 +368,13 @@ ENVTEST_VERSION ?= $(shell v='$(call gomodver,sigs.k8s.io/controller-runtime)'; 
 # download (`bin/setup-envtest list`), pinned to the patch rather than derived
 # from k8s.io/api's minor so a test run never changes under a fixed tree.
 ENVTEST_K8S_VERSION ?= 1.37.0
+# ENVTEST_K8S_OLDEST is the newest release setup-envtest can download of the
+# oldest Kubernetes minor the operator supports (README.md), whose API server
+# test/crd also runs against. It moves to the next minor when the supported
+# range does: 1.34's servers are built with Go 1.24, whose net/url takes
+# addresses those of 1.36 and 1.37 refuse (a second ':' after a host,
+# anything in brackets), and the API's address rules must hold on it too.
+ENVTEST_K8S_OLDEST ?= 1.34.1
 
 .PHONY: kubectl
 kubectl: $(LOCALBIN) ## Download kubectl locally if necessary.
@@ -450,12 +461,14 @@ controller-gen: $(LOCALBIN) ## Download controller-gen locally if necessary.
 	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
 
 .PHONY: setup-envtest
-setup-envtest: envtest ## Download the envtest binaries (kube-apiserver, etcd) for ENVTEST_K8S_VERSION.
-	@echo "Setting up envtest binaries for Kubernetes version $(ENVTEST_K8S_VERSION)..."
-	@"$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path >/dev/null || { \
-		echo "Error: Failed to set up envtest binaries for version $(ENVTEST_K8S_VERSION)."; \
-		exit 1; \
-	}
+setup-envtest: envtest ## Download the envtest binaries (kube-apiserver, etcd) for ENVTEST_K8S_VERSION and ENVTEST_K8S_OLDEST.
+	@for version in $(ENVTEST_K8S_VERSION) $(ENVTEST_K8S_OLDEST); do \
+		echo "Setting up envtest binaries for Kubernetes version $$version..."; \
+		"$(ENVTEST)" use $$version --bin-dir "$(LOCALBIN)" -p path >/dev/null || { \
+			echo "Error: Failed to set up envtest binaries for version $$version."; \
+			exit 1; \
+		}; \
+	done
 
 .PHONY: envtest
 envtest: $(LOCALBIN) ## Download setup-envtest locally if necessary.

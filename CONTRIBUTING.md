@@ -88,7 +88,7 @@ change?* It runs, in order:
 | `lint` | golangci-lint in both modules, with the logcheck and kube-api-linter plugins |
 | `helm-lint` | the Helm chart passes `helm lint --strict` and renders with its default values |
 | `build` | the manager binary builds |
-| `test` | unit, envtest and engine suites of both modules, under `-race` |
+| `test` | unit, envtest and engine suites of both modules, under `-race`, and `test/crd` again against the oldest supported Kubernetes |
 | `signoff-check` | every commit your branch adds carries a DCO sign-off |
 | `signoff-test` | the sign-off gate's own suite |
 
@@ -175,14 +175,24 @@ names every engine function whose decision the operator copies at a launch —
 launch, catalogue and helpers around them in Crewlet's
 `internal/engine/sandbox.go`, `internal/sandbox/manager.go` and the CLI
 provider, config's write-time twins of two of them in
-`internal/config/company.go`, and the one start-time decision the renderer
-holds a data pod back on, whether the address the engine is told is on
+`internal/config/company.go`, and the two start-time decisions the renderer
+holds a data pod back on: whether the address the engine is told is on
 loopback (`externalLoopback` in `internal/config/api.go`, which
-`TestContractSignInPosture` also holds at the addresses it tries) — with
+`TestContractSignInPosture` also holds at the addresses it tries), and
+whether an address is one the engine refuses to start on at all
+(`checkExternalURL`, `checkPort`, `checkBrowserHost`, `endsInNumber`,
+`checkOrigin` and their callers in `internal/config/api.go`, `hasHTTPScheme`
+in `internal/config/integrations.go`, and the trim of every Tier A string in
+`internal/config/normalize.go`, which `TestContractAddressShapes` holds the
+render to and test/crd's `TestAddressShapesFollowTheEngine` the API's rules
+on a Company's and a class's addresses, at the shapes they try) — with
 every operator file that copies it and a digest of the function as it was
-read. Those files are the renderer's
-and, for how an agent-mode run's CLI signs in inside the remote sandbox,
-also the LLMProvider API's rule on a CLI of mode `Agent`, the
+read. Those files are the renderer's; for the addresses, also the Company
+and EngineClass API types whose rules refuse them, the controller's message
+on a Company held back for one, and the [exposure](docs/guides/exposure.md)
+and [troubleshooting](docs/guides/troubleshooting.md) guides that state
+them; and, for how an agent-mode run's CLI signs in inside the remote
+sandbox, also the LLMProvider API's rule on a CLI of mode `Agent`, the
 [CLI agents guide](docs/guides/cli-agents.md) that states it and `test/crd`'s
 reading of the engine's verdicts on it. The digest
 (`enginetest.Fingerprint`) is taken over the function as `go/printer` lays it
@@ -358,7 +368,14 @@ Every API change comes with a test that the API server enforces it. The
 suite in [`test/crd/`](test/crd) installs the generated CRDs into envtest and
 is table-driven per kind: a valid object first, then, for each rule, the
 object it must refuse and the rule's message; transition rules are tested by
-an update. It also applies every sample in `config/samples`. The suite in
+an update. It also applies every sample in `config/samples`. `make test`
+runs it twice, against the newest Kubernetes envtest offers and against
+`ENVTEST_K8S_OLDEST`, the oldest minor the operator supports, because
+`isURL()` and `url()` in a rule are the API server's own Go `net/url`, and
+what that takes differs between the two (a second `:` after a host, brackets
+around something other than an IPv6 address). A rule that has to agree with
+Crewlet on an address states the shape itself rather than leaning on
+`isURL()`. The suite in
 [`test/chart/`](test/chart) does the same for the chart's RBAC and admission
 policies: it renders the chart with `bin/helm`, installs them, and acts as
 the manager and the tenant provisioner to check what each may do. `make lint` runs
@@ -415,6 +432,7 @@ commit:
 | tool versions (`*_VERSION`) | `Makefile` | the Go module proxy, or the project's releases |
 | the Crewlet engine (`CREWLET_MAIN_IMG`) | `Makefile` | not a pin: Crewlet's `main` image, whose commit `make crewlet` reads at every run ([The engine suite](#the-engine-suite)); a release keeps the one it was tested against ([RELEASING.md](RELEASING.md)) |
 | `ENVTEST_K8S_VERSION` | `Makefile` | `bin/setup-envtest list` |
+| `ENVTEST_K8S_OLDEST` | `Makefile` | `bin/setup-envtest list`: the newest release of the oldest minor in the supported Kubernetes range |
 | golangci-lint and its plugins | `.custom-gcl.yml` (version must equal `GOLANGCI_LINT_VERSION`) | the Go module proxy |
 | the curl image | `test/e2e/e2e_test.go` | Docker Hub |
 | the Gateway API CRDs the controller suite installs | `internal/controller/testdata/gateway-api` | `make gateway-api-crds`, after Dependabot bumps `sigs.k8s.io/gateway-api`; the suite fails until the two match |
@@ -423,7 +441,7 @@ commit:
 | uv (`UV_IMAGE`), Python (`PYTHON_VERSION`), `mcp-server-mattermost` and `mcp-atlassian` (`MCP_*_VERSION`), and `RESOLVED_AT` | the Dockerfile in `docs/guides/tool-servers.md` | `ghcr.io/astral-sh/uv`, by digest; `https://pypi.org/pypi/<package>/json`; the newest Python of the minor version the comment at the pin holds it to, which the pinned uv must offer; `RESOLVED_AT` the day the versions were read |
 | glab (`GLAB_VERSION`, `GLAB_SHA256_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases/permalink/latest`, the digests from the release's `checksums.txt` |
 | slack-mcp-server (`SLACK_MCP_SERVER_VERSION`, `SLACK_MCP_SERVER_INTEGRITY_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://registry.npmjs.org/slack-mcp-server/latest`, the integrities each platform package's `dist.integrity` |
-| the supported Kubernetes range (1.34 to 1.37) | `README.md` (its badge and Requirements), `docs/guides/installing.md` | Kubernetes' releases: the four newest minor versions |
+| the supported Kubernetes range (1.34 to 1.37) | `README.md` (its badge and Requirements), `docs/guides/installing.md`, and its oldest minor in `ENVTEST_K8S_OLDEST` | Kubernetes' releases: the four newest minor versions |
 
 No CI job builds the Dockerfiles in `docs/guides/`: after moving one of their
 pins, build it from the engine image, and for the tool servers run the guide's

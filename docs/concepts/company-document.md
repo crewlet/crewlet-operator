@@ -188,7 +188,13 @@ that serves its API and reads only at start:
 
 A change of any of them restarts the data pod
 ([ADR-0006](../../adr/0006-tell-the-engine-an-address-it-is-reached-at.md)
-records why each is chosen as it is).
+records why each is chosen as it is). Crewlet refuses to start on an address
+of a shape no client can use, such as a browser's address whose host a
+browser rewrites before it sends it or a port outside 1 to 65535: the API
+refuses each where a Company or its class states it, and the operator holds
+the pods back on one it derives (`RuntimeReady=False AddressRefused`;
+[Where people reach the
+dashboard](../guides/exposure.md#where-people-reach-the-dashboard)).
 
 When the EngineClass's `seatPools.policy` is `Allowed`, the data pod also
 opens the leaf listener seat pods join the event stream through

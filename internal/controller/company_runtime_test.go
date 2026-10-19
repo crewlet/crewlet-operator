@@ -807,6 +807,59 @@ var _ = Describe("Company runtime", func() {
 			NotTo(Equal(running.Spec.Template.Annotations[BootstrapHashAnnotation]))
 	})
 
+	It("holds the pods back on an address its class's route makes that the engine refuses, and runs them on one it takes", func() {
+		// A namespace named as a number: the class's template ends in it,
+		// so the API route's host ends in a label a browser reads as an
+		// IPv4 address, which Crewlet refuses to start on.
+		numeric := &corev1.Namespace{Name: "4711"}
+		Expect(k8sClient.Create(ctx, numeric)).To(Succeed())
+		DeferCleanup(func() { Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, numeric))).To(Succeed()) })
+		namespace = numeric.Name
+		const refused = "http://" + companyName + ".4711"
+		class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.Exposure.API = crewletaiv1alpha1.APIExposure{
+				Mode:     crewletaiv1alpha1.APIExposureGateway,
+				Gateway:  crewletaiv1alpha1.GatewayExposure{ParentRefs: []crewletaiv1alpha1.GatewayParentReference{{Namespace: gatewayNamespace, Name: internalGateway}}},
+				Hostname: routeOfNamespace,
+			}
+		})
+		heldBack := func(company *crewletaiv1alpha1.Company, field string) {
+			GinkgoHelper()
+			runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+			Expect(runtimeReady.Status).To(Equal(metav1.ConditionFalse))
+			Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonAddressRefused))
+			Expect(runtimeReady.Message).To(ContainSubstring(field + " set to " + refused))
+			Expect(runtimeReady.Message).To(ContainSubstring("IPv4"))
+			Expect(runtimeReady.Message).To(ContainSubstring("EngineClass " + class.Name))
+			Expect(runtimeReady.Message).To(ContainSubstring(`spec.exposure.api.hostname "` + routeOfNamespace + `"`))
+		}
+
+		By("never starting the engine where it is told people reach it there")
+		company := reconciled(newCompany(class.Name))
+		Expect(company.Status.Endpoints.DashboardBaseURL).To(Equal(refused))
+		heldBack(company, "api.external_url")
+		absent(&appsv1.StatefulSet{}, dataName)
+		absent(&corev1.Secret{}, bootstrapName)
+
+		By("nor where the route stays an origin it is reached on")
+		updateCompany(company, func(c *crewletaiv1alpha1.Company) {
+			c.Spec.Exposure.DashboardBaseURL = statedDashboard
+		})
+		company = reconciled(company)
+		heldBack(company, "api.auth.allowed_origins")
+		absent(&appsv1.StatefulSet{}, dataName)
+
+		By("running it once the class's template ends in a domain of its own")
+		updateClass(class, func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.Exposure.API.Hostname = "{{name}}.{{namespace}}.crewlet.example.com"
+		})
+		company = reconciled(company)
+		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+		bootstrap := &corev1.Secret{}
+		get(bootstrap, bootstrapName)
+		Expect(string(bootstrap.Data[configFile])).To(ContainSubstring("- " + refused + ".crewlet.example.com\n"))
+	})
+
 	It("waits for the Secrets of an earlier Company of the same name to be collected", func() {
 		class := newClass()
 		// What a deletionPolicy Delete of an earlier nimbus leaves until the
