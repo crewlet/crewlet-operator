@@ -339,12 +339,17 @@ spec:
 The login, and the homes the CLI keeps for each seat, live on the data
 volume, under `/var/lib/crewlet/llm-cli/<loginName>`, so a restarted data pod
 keeps them; a seat pod keeps them on a scratch volume it loses at every start
-(see [Seat pools](#seat-pools)). That matters for a bundle: the engine restores one only while
-the login there is empty, so the login the running engine refreshed wins
-over the bundle in the Secret, whose refresh token the vendor may have
-retired since. A bundle restored over a newer login is how a vendor that
-rotates refresh tokens logs a deployment out, which is why a token is the
-better of the two wherever the CLI mints one.
+(see [Seat pools](#seat-pools)). That matters for a bundle: the engine
+restores one, when it starts and at every revision it applies, only while the
+login there is empty, so the login the running engine refreshed wins over the
+bundle in the Secret, whose refresh token the vendor may have retired since,
+and a new bundle in the Secret reaches nothing until the provider moves to
+another `loginName` ([Rotating a credential](credentials.md#rotating-a-credential)).
+Nor does it restore one into a login `crewlet llm logout` emptied
+([A seat on a coding CLI runs signed out](troubleshooting.md#a-seat-on-a-coding-cli-runs-signed-out)).
+A bundle restored over a newer login is how a vendor that rotates refresh
+tokens logs a deployment out, which is why a token is the better of the two
+wherever the CLI mints one.
 
 Providers that set the same `loginName` share one login and its seats'
 homes, which is how several models run off one subscription; they must
