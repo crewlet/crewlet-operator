@@ -156,10 +156,18 @@ engine whose profiles move a token or key variable fails it. It holds the
 rule over an OpenCode provider's `model` the same way, trying every CLI with
 models with and without a provider, and with segments of white space, so an
 engine that marks another profile as reading `<provider>/<model>` fails it
-too. And it holds the `claudeModel` enum to the engine's table of Claude
-models, read from its refusal of an id the table does not list, so an
-engine that adds or drops a row fails it. A mock would agree with the code by construction; the real engine is
-what tells the two apart when Crewlet's API or schema moves.
+too, as does one whose refusal of such a model quotes another error of
+OpenCode's, or another command listing its providers, than the rule's
+message and the guide quote. It reads the variables the engine sets to keep
+each CLI inside a seat's own home from its refusal of `HOME` in `cli.env`,
+which names every one for that CLI, and tries each on every CLI, so an
+engine that gives a profile another such variable, or drops one, fails the
+rule over `env`, the list its message states and the guide's table of them.
+And it holds the `claudeModel` enum to the engine's table of Claude models,
+read from its refusal of an id the table does not list, so an engine that
+adds or drops a row fails it. A mock would agree with the code by
+construction; the real engine is what tells the two apart when Crewlet's API
+or schema moves.
 
 What no validation shows is what a launch runs and signs a coding agent in
 with, which the renderer's verdict on a seat's code work turns on. The renderer's
@@ -174,18 +182,20 @@ names every engine function whose decision the operator copies at a launch —
 `newCodingRun`, `claudeCodeOnForeignEntry`, `sandboxCredentials` and the
 launch, catalogue and helpers around them in Crewlet's
 `internal/engine/sandbox.go`, `internal/sandbox/manager.go` and the CLI
-provider, config's write-time twins of two of them in
-`internal/config/company.go`, and the two start-time decisions the renderer
-holds a data pod back on: whether the address the engine is told is on
-loopback (`externalLoopback` in `internal/config/api.go`, which
-`TestContractSignInPosture` also holds at the addresses it tries), and
-whether an address is one the engine refuses to start on at all
-(`checkExternalURL`, `checkPort`, `checkBrowserHost`, `endsInNumber`,
-`checkOrigin` and their callers in `internal/config/api.go`, `hasHTTPScheme`
-in `internal/config/integrations.go`, and the trim of every Tier A string in
-`internal/config/normalize.go`, which `TestContractAddressShapes` holds the
-render to and test/crd's `TestAddressShapesFollowTheEngine` the API's rules
-on a Company's and a class's addresses, at the shapes they try) — with
+provider, what the E2B backend creates a box from (`internal/sandbox/e2b.go`),
+which is why a CLI's login never reaches one, config's write-time twins of
+two of them in `internal/config/company.go`, and the two start-time
+decisions the renderer holds a data pod back on: whether the address the
+engine is told is on loopback (`externalLoopback` in
+`internal/config/api.go`, which `TestContractSignInPosture` also holds at the
+addresses it tries), and whether an address is one the engine refuses to
+start on at all (`checkExternalURL`, `checkPort`, `checkBrowserHost`,
+`endsInNumber`, `checkOrigin` and their callers in `internal/config/api.go`,
+`hasHTTPScheme` in `internal/config/integrations.go`, and the trim of every
+Tier A string in `internal/config/normalize.go`, which
+`TestContractAddressShapes` holds the render to and test/crd's
+`TestAddressShapesFollowTheEngine` the API's rules on a Company's and a
+class's addresses, at the shapes they try) — with
 every operator file that copies it and a digest of the function as it was
 read. Those files are the renderer's; for the addresses, also the Company
 and EngineClass API types whose rules refuse them, the controller's message
@@ -194,7 +204,9 @@ and [troubleshooting](docs/guides/troubleshooting.md) guides that state
 them; and, for how an agent-mode run's CLI signs in inside the remote
 sandbox, also the LLMProvider API's rule on a CLI of mode `Agent`, the
 [CLI agents guide](docs/guides/cli-agents.md) that states it and `test/crd`'s
-reading of the engine's verdicts on it. The digest
+reading of the engine's verdicts on it, and, for what a coding box carries of
+its provider, the [credentials guide](docs/guides/credentials.md#what-a-coding-box-carries)
+and the [credentials concept page](docs/concepts/credentials.md). The digest
 (`enginetest.Fingerprint`) is taken over the function as `go/printer` lays it
 out without its comments or the source's line breaks, so a comment or a
 rewrapped line leaves it alone and a changed statement, spread or alias

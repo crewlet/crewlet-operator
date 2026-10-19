@@ -272,18 +272,27 @@ the provider first. Another CLI's variable is no such conflict:
 `ANTHROPIC_API_KEY` is OpenCode's Anthropic key.
 
 Nor may `env` set a variable the engine sets on every call to keep the CLI
-inside its seat's own home and the call's working directory: `HOME`,
-`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME` and
-`TMPDIR` for every CLI, and the CLI's own configuration directory
-(`CLAUDE_CONFIG_DIR` for `ClaudeCode`, `CODEX_HOME` for `Codex`,
-`CURSOR_CONFIG_DIR` for `CursorAgent`, `KIMI_CODE_HOME` for `KimiCode`,
-`HERMES_HOME` for `Hermes`, `PI_CODING_AGENT_DIR` for `Pi`), or, for
-`OpenCode`, its configuration directory `OPENCODE_CONFIG_DIR` and
+inside its seat's own home and the call's working directory: the home, the
+XDG directories and the temporary directory of every CLI, and the CLI's own
+configuration directory, or, for `OpenCode`, its configuration directory and
 `OPENCODE_CONFIG_PROJECT_DISABLE`, the switch that keeps OpenCode from reading
 project configuration from the directories above a seat's call. `env` is
 layered over them, so a value there would replace that isolation for every
 seat on the provider: the engine refuses the document, and the API server
-refuses the provider first. A test holds the API's list to the engine's.
+refuses the provider first. Another CLI's variable is no conflict here
+either: `CODEX_HOME` means nothing to OpenCode. A test holds the API's rule,
+its message and this table to the engine's lists:
+
+| `env` may not set | For |
+|---|---|
+| `HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, `TMPDIR` | every CLI |
+| `CLAUDE_CONFIG_DIR` | `ClaudeCode` |
+| `CODEX_HOME` | `Codex` |
+| `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_PROJECT_DISABLE` | `OpenCode` |
+| `CURSOR_CONFIG_DIR` | `CursorAgent` |
+| `KIMI_CODE_HOME` | `KimiCode` |
+| `HERMES_HOME` | `Hermes` |
+| `PI_CODING_AGENT_DIR` | `Pi` |
 
 ```yaml
 apiVersion: crewlet.ai/v1alpha1
