@@ -520,9 +520,20 @@ API's [`GET /mcp-servers`](https://github.com/crewlet/crewlet/blob/main/docs/ref
 - **The command is not in the engine image.** Crewlet's image has no Python
   or Node.js: build one with the server installed and name its command
   ([Running Tool Servers](tool-servers.md#the-image-needs-the-server)).
+- **The server reads a variable it is not given.** The engine hands a stdio
+  server only the part of its environment Crewlet's allowlist names, and
+  the server's `env` and the seat's values
+  ([Stdio and HTTP](tool-servers.md#stdio-and-http)). A variable the image
+  sets with `ENV`, or the class or the Company sets on the pod, does not
+  reach it otherwise, and the server fails or behaves as though it were
+  unset, often naming the variable in `server_stderr_tail`. Give it in the
+  server's `env`.
 - **`empty_env_vars` names a variable.** Its value is empty: a Secret key
-  that holds nothing, or a provisioned credential the engine has not minted
-  yet. A value that arrives later reaches the server at the next revision
+  that holds nothing, a provisioned credential the engine has not minted
+  yet, or a `value` written empty on purpose, which needs nothing, such as
+  the Atlassian server's per-product proxy variables beside a proxy
+  auto-config ([Jira and Confluence](tool-servers.md#jira-and-confluence)).
+  A value that arrives later reaches the server at the next revision
   the engine applies, which starts or restarts it with the value: the
   engine's pass applies one once it has sealed the credentials it minted,
   and the operator applies one once it has pushed a Secret's new value

@@ -66,9 +66,10 @@ FROM ${ENGINE_IMAGE}
 ARG CLAUDE_CODE_VERSION
 COPY --from=claude-code --chown=0:0 \
     /home/crewlet/.local/share/claude/versions/${CLAUDE_CODE_VERSION} /usr/local/bin/claude
-# The image is how the CLI is updated. The engine starts it with an
-# allowlisted environment, which an ENV here never reaches, so the switch goes
-# in the managed settings every claude reads.
+# The image is how the CLI is updated. The engine starts it with only an
+# allowlist of its own environment, which DISABLE_UPDATES is not on, so an ENV
+# here would not reach it: the switch goes in the managed settings every
+# claude reads.
 COPY <<'JSON' /etc/claude-code/managed-settings.json
 {"env": {"DISABLE_UPDATES": "1"}}
 JSON

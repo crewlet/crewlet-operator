@@ -41,9 +41,14 @@ uses is readable by the company's tenant:
 
 - The engine runs the tenant's code in its own container, as its own user:
   a `Stdio` MCP server, a coding CLI, and whatever an
-  agent's tool calls have them do. That code can read the engine's
-  environment and `crewlet.yaml` and open the secret store on the data
-  volume with the keyring the pod holds.
+  agent's tool calls have them do. It hands such a process only an
+  allowlist of its environment
+  ([Stdio and HTTP](../guides/tool-servers.md#stdio-and-http)), and a
+  coding CLI also the variables its Crewlet profile passes through, but the
+  process can read the rest of it, read `crewlet.yaml`, and open the secret
+  store on the data volume with the keyring the pod holds: the allowlist
+  keeps the engine from handing its values over, not a process from reading
+  them.
 - The access token the Company publishes (`status.apiAccessSecretRef`)
   holds Crewlet's `admin` grant, which takes in every app: the engine's API
   reveals any value in the secret store to it and lets it write one, and it
@@ -270,7 +275,13 @@ document. The operator handles them without a field:
   Neither accepts `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`: Crewlet reads
   those as the key of a provider that names none, which would make them
   credentials outside the secret store, so a provider's key always comes
-  from its own Secret reference.
+  from its own Secret reference. That environment is the engine's alone: a
+  stdio tool server the engine starts is handed only the part of it
+  Crewlet's allowlist names, the proxy and TLS variables among it
+  ([Stdio and HTTP](../guides/tool-servers.md#stdio-and-http)), and a
+  coding CLI that part and the variables its Crewlet profile passes
+  through, so a setting a tool server reads goes in its `MCPServer`'s
+  `env`, and one a coding CLI reads in its `LLMProvider`'s `cli.env`.
 
 ---
 
