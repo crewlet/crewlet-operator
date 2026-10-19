@@ -182,17 +182,20 @@ names every engine function whose decision the operator copies at a launch —
 `newCodingRun`, `claudeCodeOnForeignEntry`, `sandboxCredentials` and the
 launch, catalogue and helpers around them in Crewlet's
 `internal/engine/sandbox.go`, `internal/sandbox/manager.go` and the CLI
-provider, config's write-time twins of two of them in
-`internal/config/company.go`, and the one start-time decision the renderer
-holds a data pod back on, whether the address the engine is told is on
-loopback (`externalLoopback` in `internal/config/api.go`, which
+provider, what the E2B backend creates a box from (`internal/sandbox/e2b.go`),
+which is why a CLI's login never reaches one, config's write-time twins of
+two of them in `internal/config/company.go`, and the one start-time decision
+the renderer holds a data pod back on, whether the address the engine is
+told is on loopback (`externalLoopback` in `internal/config/api.go`, which
 `TestContractSignInPosture` also holds at the addresses it tries) — with
 every operator file that copies it and a digest of the function as it was
 read. Those files are the renderer's
 and, for how an agent-mode run's CLI signs in inside the remote sandbox,
 also the LLMProvider API's rule on a CLI of mode `Agent`, the
 [CLI agents guide](docs/guides/cli-agents.md) that states it and `test/crd`'s
-reading of the engine's verdicts on it. The digest
+reading of the engine's verdicts on it, and, for what a coding box carries of
+its provider, the [credentials guide](docs/guides/credentials.md#what-a-coding-box-carries)
+and the [credentials concept page](docs/concepts/credentials.md). The digest
 (`enginetest.Fingerprint`) is taken over the function as `go/printer` lays it
 out without its comments or the source's line breaks, so a comment or a
 rewrapped line leaves it alone and a changed statement, spread or alias

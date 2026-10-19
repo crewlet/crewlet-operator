@@ -101,11 +101,18 @@ const (
 	// openCode2Read is crewlet#262's engine, which drives OpenCode 2 alone
 	// and keeps the login of a CLI that holds it in a database of its own as
 	// the document its export printed: newCodingRun maps that document into
-	// the files only a local box is seeded with, which no E2B box reads, and
-	// sandboxCredentials words its refusal as the login rather than credential
-	// files. v1alpha1 offers E2B alone, so no verdict the operator copies
+	// the run's credential files beside the CLI's own, whatever box the run
+	// is placed in, and sandboxCredentials words its refusal as the login
+	// rather than credential files. What a box does with those files is its
+	// backend's to decide, and the E2B backend's Create gives its box none,
+	// so for v1alpha1, which offers E2B alone, no verdict the operator copies
 	// moved.
 	openCode2Read = "v0.1.1-0.20261019055339-d826c86f2b7e"
+
+	// e2bGo is the engine's E2B backend, and e2bCreateRead the engine its
+	// Create was first read at.
+	e2bGo         = "internal/sandbox/e2b.go"
+	e2bCreateRead = "v0.1.1-0.20261019061838-6c1b4361a915"
 )
 
 // signInPosture is every operator file that copies where Crewlet lets a
@@ -145,6 +152,13 @@ var agentLogin = []string{
 	"api/v1alpha1/llmprovider_types.go", "docs/guides/cli-agents.md", "test/crd/cliagent_engine_test.go",
 }
 
+// codingBox is every operator page that states what a coding box carries of
+// the provider its run is on, a CLIAgent provider's token, key or
+// credential-named variables of its cli.env and never its credential bundle:
+// the credentials guide's "What a coding box carries" and the credentials
+// concept page.
+var codingBox = []string{"docs/guides/credentials.md", "docs/concepts/credentials.md"}
+
 // mirrored is every engine function the operator's run-time verdicts copy a
 // decision of, and no other: a function changed here sends somebody to read
 // it, so one that copies nothing would only cost a read. What the engine
@@ -158,7 +172,10 @@ var agentLogin = []string{
 // TestAtlassianDeploymentFollowsTheEngineSource and
 // TestCredentialNameFollowsTheEngineSource read.
 //
-// Most of them are the launch's own code. Two are config's write-time twins
+// Most of them are the launch's own code. One is a sandbox backend's: what an
+// E2B box is created from, (*E2BProvider).Create, since the launch hands a
+// run's credential files to whatever box it is placed in and each backend
+// decides what to do with them. Two are config's write-time twins
 // of a launch decision, read because the launch's own is spread through a
 // registry or a manager: (*Company).sandboxProvider, which crewlet's
 // TestBothPathsToTheSandboxEntryAgree holds to the head the phase registry
@@ -221,15 +238,26 @@ var mirrored = []mirror{
 	},
 	{
 		file: sandboxGo, function: "newCodingRun",
-		against: append([]string{codeWorkGo}, agentLogin...),
+		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
 		decides: "a CLIAgent head another CLI's coding agent cannot run (CodingAgentMismatch), ClaudeCode on a " +
 			"head that is no Anthropic provider (SandboxModelUnsupported), and a CLIAgent head's run, a " +
 			"run_sandbox launch or an agent-mode run alike, carrying its provider's own sign-in (SandboxEnv) " +
 			"under what the seat's environment sets, and its login, the CLI's credential files or the document " +
-			"a CLI that keeps its login in a database of its own exported (OpenCode 2's), only as files a local " +
-			"box is seeded with, which no E2B box reads",
+			"a CLI that keeps its login in a database of its own exported (OpenCode 2's), as the run's " +
+			"credential files, whatever box the run is placed in: what the box does with them is its backend's " +
+			"to decide ((*E2BProvider).Create)",
 		digest: "897358b8ffbd0228fc359e6f20f02e0440a40a63be4935b9eac6475145f48edb",
 		read:   openCode2Read,
+	},
+	{
+		file: e2bGo, function: "(*E2BProvider).Create",
+		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
+		decides: "a box in the Company's E2B sandbox is created from its template, the run's timeout and the run's " +
+			"environment alone, never from the run's credential files, so a CLIAgent head's login (its credential " +
+			"files, or the document OpenCode 2's export printed) never reaches it, and only a variable of the " +
+			"run's environment signs its CLI in there",
+		digest: "65305f3ecc87afac5544b7bddb91062389e5a0e0b76a63481f6f191e778e2a03",
+		read:   e2bCreateRead,
 	},
 	{
 		file: sandboxGo, function: "claudeCodeOnForeignEntry",
@@ -265,7 +293,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: doctorGo, function: "(*Provider).CredentialEnvNames",
-		against: append([]string{codeWorkGo}, agentLogin...),
+		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
 		decides: "the variables that sign a CLI in inside a box: its token and key variables, and for an env " +
 			"sign-in CLI the credential-named variables of its cli.env",
 		digest: "091501e8498192be36fc8619232c358a2276c32bae8f412e7197fcc0a8b89667",
@@ -273,7 +301,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: doctorGo, function: "(*Provider).SandboxEnv",
-		against: append([]string{codeWorkGo}, agentLogin...),
+		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
 		decides: "a CLIAgent provider's own sign-in follows the run into the box when it is one of those variables",
 		digest:  "f81f2bc4b7fca996eaac300c1ab530d2e357500bd4b76145551412788cc9ddb9",
 		read:    firstRead,
