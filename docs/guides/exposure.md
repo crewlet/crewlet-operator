@@ -377,9 +377,9 @@ pod:
 | A port outside 1 to 65535: `:0`, `:65536` | A port in that range, or none for the scheme's own |
 
 The API checks the host and the port itself rather than leaving them to the
-API server's URL parser, which takes more on some Kubernetes versions than
-on others: a 1.34 or 1.35 API server parses `http://h.example:80:80`, and
-Crewlet does not.
+API server's URL parser, which is Go's `net/url` as the API server was built
+and is run: an API server run with Go's `GODEBUG=urlstrictcolons=0` parses
+`http://h.example:80:80`, and Crewlet does not.
 
 It also refuses three things Crewlet would take: an empty query or
 fragment, a bare `?` or `#` (Crewlet refuses any other, as the API does),

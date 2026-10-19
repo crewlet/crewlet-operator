@@ -601,16 +601,19 @@ type CompanyExposure struct {
 	// in the data pod's crewlet.yaml, which the engine reads only at start:
 	// changing it restarts the data pod. Its host is a name, an IPv4
 	// address or an IPv6 address in brackets, followed by at most one port,
-	// 1 to 65535: Crewlet refuses to start on any other. The API judges the
-	// host and the port itself rather than leaving them to the API server's
-	// URL parser, which takes more on some Kubernetes versions than on
-	// others (https://h.example:80:80 on 1.34 and 1.35).
+	// 1 to 65535: Crewlet refuses to start on any other, but for an IPv6
+	// address whose zone holds a ']' (https://[fe80::1%25eth0]]/), which it
+	// starts on and no vendor reaches. The API judges the host and the port
+	// itself rather than leaving them to the API server's URL parser, which
+	// is Go's net/url as the API server was built and is run: it takes such
+	// a zone, and under Go's GODEBUG setting urlstrictcolons=0
+	// https://h.example:80:80 too.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && self.startsWith('https://') && url(self).getHostname() != ''",message="publicBaseURL must be an absolute URL starting with https://"
 	// +kubebuilder:validation:XValidation:rule="!isURL(self) || !self.matches('^https?://[^/]*:(0+|0*([1-9][0-9]{5,}|[7-9][0-9]{4}|6[6-9][0-9]{3}|65[6-9][0-9]{2}|655[4-9][0-9]|6553[6-9]))(/|$)')",message="publicBaseURL's port must be 1 to 65535: Crewlet refuses to start on any other; leave the port out for https's own, 443"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://') || self.matches('^[^:/?#]+://([^/?#]*@)?([[](([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,7}:|:(:[0-9A-Fa-f]{1,4}){1,7}|::|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){1,6}|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){1,5}|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){1,4}|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){1,3}|([0-9A-Fa-f]{1,4}:){5}(:[0-9A-Fa-f]{1,4}){1,2}|([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){6}|:(:[0-9A-Fa-f]{1,4}){0,5}:|([0-9A-Fa-f]{1,4}:){5}:|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){0,4}:|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){0,3}:|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){0,2}:|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){0,1}:)(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])([.](25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})(%25[^]/?#]+)?[]]|[^/?#:[]*)(:[0-9]*)?([/?#]|$)')",message="publicBaseURL's host must be a name, an IPv4 address or an IPv6 address in brackets, and at most one ':' and a port may follow it: Crewlet refuses to start on any other address (write https://[2001:db8::1]:8443, not https://2001:db8::1:8443)"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://') || self.matches('^[^:/?#]+://([^/?#]*@)?([[](([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,7}:|:(:[0-9A-Fa-f]{1,4}){1,7}|::|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){1,6}|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){1,5}|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){1,4}|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){1,3}|([0-9A-Fa-f]{1,4}:){5}(:[0-9A-Fa-f]{1,4}){1,2}|([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){6}|:(:[0-9A-Fa-f]{1,4}){0,5}:|([0-9A-Fa-f]{1,4}:){5}:|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){0,4}:|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){0,3}:|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){0,2}:|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){0,1}:)(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])([.](25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})(%25[^]/?#]+)?[]]|[^/?#:[]*)(:[0-9]*)?([/?#]|$)')",message="publicBaseURL's host must be a name, an IPv4 address or an IPv6 address in brackets, and at most one ':' and a port may follow it: Crewlet refuses to start on any other address, or starts on one no vendor reaches (write https://[2001:db8::1]:8443, not https://2001:db8::1:8443)"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="publicBaseURL may not hold a user name or password: a credential is named through a Secret, never written into an address"
 	// +kubebuilder:validation:XValidation:rule="!self.contains('?') && !self.contains('#')",message="publicBaseURL may not have a query or a fragment: Crewlet builds every webhook and sandbox address by appending a path to it"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="publicBaseURL may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"

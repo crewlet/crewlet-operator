@@ -246,30 +246,23 @@ always means what it says.
 A seat pod that is not ready may still hold seats: one its placement pass
 does not admit keeps what it holds, and one that lost its link or its
 presence keeps its leases until they lapse. Stopping it drains it, which
-hands back what it holds. The StatefulSet controller replaces an unready pod
-of an older template like any other, except on the releases that turned the
-`MaxUnavailableStatefulSet` feature gate on by default before it was fixed:
-there the controller counts unavailable pods against `maxUnavailable` and
-then replaces none of them
-([kubernetes#137409](https://github.com/kubernetes/kubernetes/issues/137409)).
+hands back what it holds.
 
-| Kubernetes | `MaxUnavailableStatefulSet` | An unready pod of an older template |
-|---|---|---|
-| 1.34 | off by default | replaced by the controller |
-| 1.35.0 to 1.35.3 | on by default | never replaced: the rollout waits for ever |
-| 1.35.4 and later 1.35 patches, 1.36 | off by default | replaced by the controller |
-| 1.37 | on by default, with the fix | replaced by the controller |
-
-A seat pod that only the new template would let join never becomes ready,
-so on the releases that wait the rollout would never end. The operator
-therefore deletes, while a seat StatefulSet rolls, one of its pods that has
-not been ready on an older template for 45 seconds (a seat lease's TTL in
-the engine, so that a brief blip never qualifies), and the controller starts
-it again on the new one. It takes the highest ordinal first, as the
-controller does, one at a time, and none while a pod of the StatefulSet is
-terminating or missing or a pod of the new template is not yet available:
-no more pods are down at once than the `maxUnavailable` of one the rollout
-itself allows. Ready pods are left to the controller.
+The operator leaves a seat StatefulSet's rollout to the StatefulSet
+controller. With the `MaxUnavailableStatefulSet` feature on, as it is by
+default, a rolling update of a `Parallel` StatefulSet first replaces every
+pod of an older template that is not available, all at once and past
+`maxUnavailable`: one that is not ready, and one ready for less than
+`minReadySeconds`. Then it replaces the available ones, highest ordinal
+first, one at a time for a seat StatefulSet: the next once no pod of it is
+unavailable. So a seat pod that only a new template would let join is
+replaced as soon as that template lands. What it costs is that every seat
+pod of the StatefulSet that is not available then, ready or not, stops at
+once and hands back the seats it holds. A change that rolls the data pods
+and the seat pods alike (an image, the keyring) gives the seat StatefulSets
+their new template as soon as every data pod is ready again, so every seat
+pod that has not rejoined the restarted data pods by then is replaced
+together.
 
 A seat pool's objects are named `<company>-seats-<pool>`,
 `<company>-seat-<handle>` and `<company>-bootstrap-<pool>`, then a dash and

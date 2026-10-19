@@ -88,7 +88,7 @@ change?* It runs, in order:
 | `lint` | golangci-lint in both modules, with the logcheck and kube-api-linter plugins |
 | `helm-lint` | the Helm chart passes `helm lint --strict` and renders with its default values |
 | `build` | the manager binary builds |
-| `test` | unit, envtest and engine suites of both modules, under `-race`, and `test/crd` again against the oldest supported Kubernetes |
+| `test` | unit, envtest and engine suites of both modules, under `-race` |
 | `signoff-check` | every commit your branch adds carries a DCO sign-off |
 | `signoff-test` | the sign-off gate's own suite |
 
@@ -108,10 +108,13 @@ Two more suites are not part of `make check`:
   becomes a new revision, and deleting the Company keeps or deletes its
   volume and keyring as its `deletionPolicy` says; and that a company's seat
   pools run, the engine places each seat in its own pool, and the data pod's
-  leaf listener admits the company's own seat pods and no other pod. Then it
-  deletes the cluster, unless the suite failed: the cluster is left for a
-  look, and `make cleanup-test-e2e` deletes it. CI runs it on every pull
-  request and every push to `main`. The engine image is `CREWLET_IMG`,
+  leaf listener admits the company's own seat pods and no other pod; and
+  that the cluster's StatefulSet controller replaces a pod not ready on an
+  older template as it rolls a StatefulSet that rolls as a seat StatefulSet
+  does, which the operator leaves to it. Then it deletes the cluster, unless
+  the suite failed: the cluster is left for a look, and
+  `make cleanup-test-e2e` deletes it. CI runs it on every pull request and
+  every push to `main`. The engine image is `CREWLET_IMG`,
   Crewlet's `main` image unless you name another, which `make crewlet-image`
   pulls for this machine's platform, printing the Crewlet commit it was
   built from; another image Docker already has is run as it is. So an
@@ -380,14 +383,16 @@ Every API change comes with a test that the API server enforces it. The
 suite in [`test/crd/`](test/crd) installs the generated CRDs into envtest and
 is table-driven per kind: a valid object first, then, for each rule, the
 object it must refuse and the rule's message; transition rules are tested by
-an update. It also applies every sample in `config/samples`. `make test`
-runs it twice, against the newest Kubernetes envtest offers and against
-`ENVTEST_K8S_OLDEST`, the oldest minor the operator supports, because
-`isURL()` and `url()` in a rule are the API server's own Go `net/url`, and
-what that takes differs between the two (a second `:` after a host, brackets
-around something other than an IPv6 address). A rule that has to agree with
-Crewlet on an address states the shape itself rather than leaning on
-`isURL()`. The suite in
+an update. It also applies every sample in `config/samples`. A rule that
+has to agree with Crewlet on an address states the shape itself rather than
+leaning on `isURL()` and `url()`, which are the API server's own Go
+`net/url` as it was built and is run: as Kubernetes builds it, it reads a
+`]` after an IPv6 zone into the zone, and run with
+`GODEBUG=urlstrictcolons=0` it takes a second `:` after a host. The suite
+offers the addresses the engine is handed to a second API server run with
+that setting as well, and holds both to the engine
+(`TestAddressShapesFollowTheEngine`, `TestS3SettingsFollowTheEngine`), so
+a rule that leaned on `isURL()` there fails. The suite in
 [`test/chart/`](test/chart) does the same for the chart's RBAC and admission
 policies: it renders the chart with `bin/helm`, installs them, and acts as
 the manager and the tenant provisioner to check what each may do. `make lint` runs
@@ -443,8 +448,7 @@ commit:
 |---|---|---|
 | tool versions (`*_VERSION`) | `Makefile` | the Go module proxy, or the project's releases |
 | the Crewlet engine (`CREWLET_MAIN_IMG`) | `Makefile` | not a pin: Crewlet's `main` image, whose commit `make crewlet` reads at every run ([The engine suite](#the-engine-suite)); a release keeps the one it was tested against ([RELEASING.md](RELEASING.md)) |
-| `ENVTEST_K8S_VERSION` | `Makefile` | `bin/setup-envtest list` |
-| `ENVTEST_K8S_OLDEST` | `Makefile` | `bin/setup-envtest list`: the newest release of the oldest minor in the supported Kubernetes range |
+| `ENVTEST_K8S_VERSION` | `Makefile` | `bin/setup-envtest list`: the newest release of the supported Kubernetes minor |
 | golangci-lint and its plugins | `.custom-gcl.yml` (version must equal `GOLANGCI_LINT_VERSION`) | the Go module proxy |
 | the curl image | `test/e2e/e2e_test.go` | Docker Hub |
 | the Gateway API CRDs the controller suite installs | `internal/controller/testdata/gateway-api` | `make gateway-api-crds`, after Dependabot bumps `sigs.k8s.io/gateway-api`; the suite fails until the two match |
@@ -454,7 +458,7 @@ commit:
 | uv (`UV_IMAGE`), Python (`PYTHON_VERSION`), `mcp-server-mattermost` and `mcp-atlassian` (`MCP_*_VERSION`), and `RESOLVED_AT` | the Dockerfile in `docs/guides/tool-servers.md` | `ghcr.io/astral-sh/uv`, by digest; `https://pypi.org/pypi/<package>/json`; the newest Python of the minor version the comment at the pin holds it to, which the pinned uv must offer; `RESOLVED_AT` the day the versions were read |
 | glab (`GLAB_VERSION`, `GLAB_SHA256_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases/permalink/latest`, the digests from the release's `checksums.txt` |
 | slack-mcp-server (`SLACK_MCP_SERVER_VERSION`, `SLACK_MCP_SERVER_INTEGRITY_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://registry.npmjs.org/slack-mcp-server/latest`, the integrities each platform package's `dist.integrity` |
-| the supported Kubernetes range (1.34 to 1.37) | `README.md` (its badge and Requirements), `docs/guides/installing.md`, and its oldest minor in `ENVTEST_K8S_OLDEST` | Kubernetes' releases: the four newest minor versions |
+| the supported Kubernetes minor (1.37) | `README.md` (its badge and Requirements), `docs/guides/installing.md` and `CLAUDE.md`'s Versions; it is also the minor of `ENVTEST_K8S_VERSION`, of the pinned kind's default node image and of `kubernetesVersion` in `hack/crd-ref-docs/config.yaml` | the newest minor that both the pinned kind (its default node image) and `bin/setup-envtest list` offer, moved to once both do; the minor alone is supported, so code, tests and docs kept only for an older one go with the move. A release names the minor it was tested against in its notes ([RELEASING.md](RELEASING.md)) |
 
 No CI job builds the Dockerfiles in `docs/guides/`: after moving one of their
 pins, build it from the engine image, and run the guide's checks against what

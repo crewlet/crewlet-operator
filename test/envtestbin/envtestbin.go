@@ -22,10 +22,8 @@ import (
 //
 // It picks the newest rather than the first: setup-envtest leaves the binaries
 // of a release it installed in place when ENVTEST_K8S_VERSION moves, so after
-// a bump base holds both, and the Makefile always pins the newest; base also
-// holds ENVTEST_K8S_OLDEST's, which make runs test/crd against a second time.
-// Directory order is lexical, which puts 1.36.4 before 1.37.0 and 1.9.0 after
-// both.
+// a bump base holds both, and the Makefile always pins the newest. Directory
+// order is lexical, which puts 1.36.4 before 1.37.0 and 1.9.0 after both.
 func Dir(base string) (string, error) {
 	entries, err := os.ReadDir(base)
 	if errors.Is(err, fs.ErrNotExist) {

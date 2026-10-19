@@ -10,9 +10,12 @@ page installs it on a cluster you run companies on. The
 
 ## Before you install
 
-- Kubernetes on one of its four newest minor releases (1.34 to 1.37 today);
-  the chart's admission policies are ValidatingAdmissionPolicies, built into
-  the API server.
+- Kubernetes 1.37. The operator supports one minor release of Kubernetes,
+  the one it is tested against: a release supports the minor its tests ran
+  on, which its release notes name, and the operator moves to each new minor
+  once kind and envtest, which the tests run on, ship it. A cluster on any
+  other minor is not supported. The chart's admission policies are
+  ValidatingAdmissionPolicies, built into the API server.
 - A CNI that enforces NetworkPolicy, for the isolation around each engine
   ([Exposure and network policy](exposure.md#network-policy)).
 - A default StorageClass, or the one your EngineClasses name, that provisions

@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -22,7 +21,6 @@ import (
 	metav1ac "k8s.io/client-go/applyconfigurations/meta/v1"
 	policyv1ac "k8s.io/client-go/applyconfigurations/policy/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/render"
@@ -371,9 +369,6 @@ type seatInputs struct {
 	image string
 	// dataReady is every data pod ready on the current template.
 	dataReady bool
-	// retry collects when the reconcile has to run again for a seat pod
-	// it waits on.
-	retry *requeue
 }
 
 // reconcileSeatPools writes the seat pools' objects and records what they
@@ -524,11 +519,6 @@ func (r *CompanyReconciler) writeSeatPool(
 		if sts.Status != nil {
 			w.status = statefulSetStatusOf(sts.Status)
 		}
-		wait, err := r.replaceUnreadyStalePods(ctx, c, sts)
-		if err != nil {
-			return err
-		}
-		in.retry.within(wait)
 		if err := r.resumed(ctx, w); err != nil {
 			return err
 		}
@@ -537,153 +527,6 @@ func (r *CompanyReconciler) writeSeatPool(
 		}
 	}
 	return nil
-}
-
-// replaceUnreadyStalePods deletes, while a seat StatefulSet rolls to a new
-// template, one of its pods that still runs an older one and has not been
-// ready for staleUnreadyGrace, for the StatefulSet controller to start again
-// on the new one. sts is the StatefulSet as the API server answered the
-// operator's write. It returns how long until a pod it left may be deleted,
-// or zero.
-//
-// The controller itself does not, on some of the Kubernetes releases the
-// operator runs on. Where the MaxUnavailableStatefulSet feature is on by
-// default in 1.35.0 to 1.35.3 (it is off from 1.35.4 through 1.36, and on
-// again from 1.37 with the fix for kubernetes#137409), the controller counts
-// every unready pod against maxUnavailable, and with the one pod a seat
-// StatefulSet allows already unready it replaces nothing, that pod
-// included. A seat pod is unready for reasons a new template can be the cure
-// for (an engine the data pods no longer admit, after they moved to a new
-// image), so there the rollout would wait for ever on the pods it exists to
-// replace.
-//
-// The deletion is bounded to what the controller's own rollout would do,
-// because an unready seat pod is not one that holds nothing: one its
-// placement pass does not admit (admission_withheld) keeps the seats it
-// holds, and one that lost its link or its presence keeps its leases until
-// they lapse. Deleting it drains it, which hands back what it still holds,
-// so it costs what replacing a pod costs, and no more is replaced at once
-// than the StatefulSet's maxUnavailable of one: see staleUnreadyPod.
-//
-// Only once the StatefulSet's status describes its current generation: until
-// the controller has seen the new template, the revision it names as the
-// update is the old one, and the pods that run the new one would read as
-// stale.
-func (r *CompanyReconciler) replaceUnreadyStalePods(
-	ctx context.Context, c *crewletaiv1alpha1.Company, sts *appsv1ac.StatefulSetApplyConfiguration,
-) (time.Duration, error) {
-	status := sts.Status
-	if status == nil || sts.Generation == nil || value(status.ObservedGeneration) != *sts.Generation {
-		return 0, nil
-	}
-	update := value(status.UpdateRevision)
-	if update == "" || update == value(status.CurrentRevision) {
-		return 0, nil
-	}
-	pods := &corev1.PodList{}
-	if err := r.APIReader.List(ctx, pods, client.InNamespace(c.Namespace), client.MatchingLabels(sts.Spec.Selector.MatchLabels)); err != nil {
-		return 0, fmt.Errorf("listing the pods of StatefulSet %s/%s: %w", c.Namespace, *sts.Name, err)
-	}
-	pod, wait := staleUnreadyPod(pods.Items, *sts.Name, value(sts.Spec.Replicas), update, time.Now())
-	if pod == nil {
-		return wait, nil
-	}
-	if err := r.Delete(ctx, pod, client.Preconditions{UID: &pod.UID}); err != nil && !apierrors.IsNotFound(err) {
-		return 0, fmt.Errorf("deleting pod %s/%s, which is not ready on an older template of StatefulSet %s: %w",
-			pod.Namespace, pod.Name, *sts.Name, err)
-	}
-	logf.FromContext(ctx).Info("Deleted a seat pod that is not ready on an older template, for its StatefulSet to replace",
-		"pod", pod.Name, "statefulSet", *sts.Name, "updateRevision", update)
-	return wait, nil
-}
-
-// staleUnreadyGrace is how long a seat pod on an older template must have
-// been unready before the operator deletes it: a seat lease's TTL in the
-// engine (45 seconds). A blip (a data pod restarting, coordination answering
-// late) clears well within it, so a pod that is merely between two ready
-// spells is left to the controller; and a pod cut off from the fleet for as
-// long has let every lease it held lapse. It is measured from the Ready
-// condition's last transition, which the kubelet records only after three
-// failed probes, so the engine has been unready for longer still.
-const staleUnreadyGrace = 45 * time.Second
-
-// staleUnreadyPod picks, from the pods of StatefulSet set, the one
-// replaceUnreadyStalePods deletes, or nil, and how long until another pod it
-// would delete has been unready for staleUnreadyGrace (zero when none is
-// waiting).
-//
-// It picks one at a time, as the controller's rollout replaces them, and
-// only while the StatefulSet has no pod missing or going: while one is
-// terminating, any of its replicas is not there, or a pod of the update
-// revision is not yet available (ready for seatPodMinReadySeconds), the
-// pool is already short of the one pod maxUnavailable allows, and a
-// deletion would take a second. Of the pods that qualify it picks the
-// highest ordinal, the one the controller replaces first.
-func staleUnreadyPod(pods []corev1.Pod, set string, replicas int32, update string, now time.Time) (*corev1.Pod, time.Duration) {
-	var pick *corev1.Pod
-	pickOrdinal := -1
-	var wait time.Duration
-	live := int32(0)
-	for i := range pods {
-		pod := &pods[i]
-		owner := metav1.GetControllerOf(pod)
-		if owner == nil || owner.Kind != "StatefulSet" || owner.Name != set {
-			continue
-		}
-		if !pod.DeletionTimestamp.IsZero() {
-			return nil, 0
-		}
-		live++
-		if pod.Labels[appsv1.ControllerRevisionHashLabelKey] == update {
-			readyFor, ready := podReadyFor(pod, now)
-			if !ready {
-				return nil, 0
-			}
-			if minReady := seatPodMinReadySeconds * time.Second; readyFor < minReady {
-				return nil, minReady - readyFor
-			}
-			continue
-		}
-		unreadyFor, ready := podReadyFor(pod, now)
-		if ready {
-			continue
-		}
-		if left := staleUnreadyGrace - unreadyFor; left > 0 {
-			if wait == 0 || left < wait {
-				wait = left
-			}
-			continue
-		}
-		if ordinal := podOrdinal(pod.Name, set); ordinal > pickOrdinal {
-			pick, pickOrdinal = pod, ordinal
-		}
-	}
-	if live < replicas {
-		return nil, 0
-	}
-	return pick, wait
-}
-
-// podReadyFor reports whether a pod is ready, and for how long it has been
-// in that state: since its Ready condition last changed, or, for a pod that
-// has none yet, since it was created.
-func podReadyFor(pod *corev1.Pod, now time.Time) (time.Duration, bool) {
-	for _, condition := range pod.Status.Conditions {
-		if condition.Type == corev1.PodReady {
-			return now.Sub(condition.LastTransitionTime.Time), condition.Status == corev1.ConditionTrue
-		}
-	}
-	return now.Sub(pod.CreationTimestamp.Time), false
-}
-
-// podOrdinal is the ordinal of a pod of StatefulSet set, from its name, or
-// -1 for a name the StatefulSet controller would not have given it.
-func podOrdinal(name, set string) int {
-	ordinal, err := strconv.Atoi(strings.TrimPrefix(name, set+"-"))
-	if err != nil || !strings.HasPrefix(name, set+"-") || ordinal < 0 {
-		return -1
-	}
-	return ordinal
 }
 
 // PodTemplateHashAnnotation records, on a seat StatefulSet, a hash of the pod

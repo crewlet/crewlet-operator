@@ -2,7 +2,9 @@
 // real kube-apiserver (envtest) and checks that the API server enforces what
 // the types promise: every CEL rule refuses what it must with its own
 // message, valid objects are accepted, defaults are applied, and every sample
-// in config/samples is accepted.
+// in config/samples is accepted. The tests of an address the engine is
+// handed also ask a second API server of the same release, whose URL parser
+// is Go's looser one (looseURLParser).
 //
 // These are tests of the generated CRDs, not of Go code: a marker with a typo,
 // a rule controller-gen dropped, or a rule whose cost the API server refuses
@@ -12,6 +14,7 @@ package crd_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,6 +27,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
@@ -38,19 +42,30 @@ var (
 	// server: a case that has to cover every value of an enum reads the
 	// enum here, so a value added later is covered without a second list.
 	installedCRDs []*apiextensionsv1.CustomResourceDefinition
+	// looseClient talks to a second API server of the same release, run
+	// with looseURLParser: the tests of an address the engine is handed
+	// (addresses_engine_test.go, objects_engine_test.go) hold its verdict
+	// to the engine's as well as k8sClient's, so that what Crewlet refuses
+	// in an address's host and port is refused by a rule of the CRD rather
+	// than by how the API server's Go net/url was built and is run.
+	looseClient client.Client
 )
+
+// looseURLParser is the GODEBUG setting under which Go's net/url, and so a
+// CEL rule's isURL() and url(), take an authority with a second ':' after
+// its host (http://h.example:80:80, http://::1:8080), as it did before Go
+// 1.26: Go's own way back to that parser, which the API server's
+// environment can carry.
+const looseURLParser = "urlstrictcolons=0"
 
 func TestMain(m *testing.M) {
 	os.Exit(run(m))
 }
 
-// run starts the API server, runs the tests and stops it again; it is a
-// function of its own so that the deferred Stop runs before os.Exit.
+// run starts the API servers, runs the tests and stops them again; it is a
+// function of its own so that the deferred Stops run before os.Exit.
 func run(m *testing.M) int {
-	testEnv := &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
-		ErrorIfCRDPathMissing: true,
-	}
+	strict, loose := newEnvironment(), newEnvironment()
 	// Outside make (an IDE, a bare go test) KUBEBUILDER_ASSETS is unset;
 	// fall back to the binaries `make setup-envtest` put into bin/k8s.
 	if os.Getenv("KUBEBUILDER_ASSETS") == "" {
@@ -59,19 +74,21 @@ func run(m *testing.M) int {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
-		testEnv.BinaryAssetsDirectory = dir
+		strict.BinaryAssetsDirectory, loose.BinaryAssetsDirectory = dir, dir
 	}
 
 	// Stop is deferred before Start is checked: a Start that fails after
 	// launching etcd or the API server leaves them running otherwise.
-	defer func() {
-		if err := testEnv.Stop(); err != nil {
-			fmt.Fprintln(os.Stderr, "stopping envtest:", err)
-		}
-	}()
-	cfg, err := testEnv.Start()
+	defer stop(strict)
+	defer stop(loose)
+	cfg, err := strict.Start()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "starting envtest:", err)
+		return 1
+	}
+	looseCfg, err := startWithGODEBUG(loose, looseURLParser)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "starting envtest with GODEBUG=%s: %v\n", looseURLParser, err)
 		return 1
 	}
 
@@ -84,13 +101,57 @@ func run(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme})
-	if err != nil {
+	if k8sClient, err = client.New(cfg, client.Options{Scheme: scheme}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	installedCRDs = testEnv.CRDs
+	if looseClient, err = client.New(looseCfg, client.Options{Scheme: scheme}); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	installedCRDs = strict.CRDs
 	return m.Run()
+}
+
+// stop stops env, saying so when it cannot.
+func stop(env *envtest.Environment) {
+	if err := env.Stop(); err != nil {
+		fmt.Fprintln(os.Stderr, "stopping envtest:", err)
+	}
+}
+
+// newEnvironment is an envtest environment with the generated CRDs.
+func newEnvironment() *envtest.Environment {
+	return &envtest.Environment{
+		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		ErrorIfCRDPathMissing: true,
+	}
+}
+
+// startWithGODEBUG starts env with setting added to GODEBUG in the
+// environment of its processes. envtest starts etcd and the API server with
+// this process's own environment and offers no other, so the setting is
+// put there for the Start alone and taken out again. It reaches this
+// process's own GODEBUG settings meanwhile, which govern nothing then but
+// how envtest reads its loopback addresses, and never `crewlet validate`'s
+// or an engine's: those are run with an environment of their own.
+func startWithGODEBUG(env *envtest.Environment, setting string) (cfg *rest.Config, err error) {
+	old, had := os.LookupEnv("GODEBUG")
+	value := setting
+	if old != "" {
+		value = old + "," + setting
+	}
+	if err := os.Setenv("GODEBUG", value); err != nil {
+		return nil, err
+	}
+	defer func() {
+		restore := func() error { return os.Unsetenv("GODEBUG") }
+		if had {
+			restore = func() error { return os.Setenv("GODEBUG", old) }
+		}
+		err = errors.Join(err, restore())
+	}()
+	return env.Start()
 }
 
 // newNamespace creates a namespace for one test, so that the names a test

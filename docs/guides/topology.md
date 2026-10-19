@@ -185,10 +185,12 @@ every seat.
 - **Start and resume.** Seat pods start only once the data pod is ready on
   its current template.
 - **Rollouts.** The data pod rolls first; the seat pods keep their template
-  until it is ready, then every seat StatefulSet rolls at once. Pods are
-  replaced one at a time: the next once the last is ready, so has joined the
-  fleet and may claim seats, and ten seconds after, while the others give
-  back to it what is past their share.
+  until it is ready, then every seat StatefulSet rolls at once. Within one,
+  every pod not yet available (not ready, or ready for under ten seconds) is
+  replaced at once, handing back the seats it holds; the others one at a
+  time: the next once every pod is ready, so has joined the fleet and may
+  claim seats, and has been for ten seconds, while the others give back to
+  it what is past their share.
 - **Moving a seat to another pool** keeps it where it runs until a pod of
   the new pool is ready (the Seat reports `Applied=False`,
   `PlacementPending` meanwhile), then moves it with one release and one
