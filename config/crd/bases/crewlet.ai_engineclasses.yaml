@@ -1047,12 +1047,14 @@ spec:
                   egress:
                     description: |-
                       egress narrows where the engine may connect to. The engine runs code
-                      the tenant supplies (stdio MCP servers, sandbox commands, what its
-                      agents write), so under Isolated its pods may reach DNS, the pods of
-                      their own namespace, and every address outside the cluster except the
-                      cloud metadata endpoints (169.254.169.254, fd00:ec2::254), which hand
-                      out the node's credentials. What else is in the cluster is
-                      unreachable only if listed in exceptCIDRs.
+                      the tenant supplies in its pod (stdio MCP servers, coding CLIs, and
+                      what its agents have them do), so under Isolated its pods may reach
+                      DNS, the pods of their own namespace, and every address outside the
+                      cluster except the cloud metadata endpoints (169.254.169.254,
+                      fd00:ec2::254), which hand out the node's credentials. What else is in
+                      the cluster is unreachable only if listed in exceptCIDRs. A seat's
+                      code work, its sandbox's setup commands included, runs in the
+                      Company's E2B sandbox, which this policy does not reach.
                     minProperties: 1
                     properties:
                       exceptCIDRs:

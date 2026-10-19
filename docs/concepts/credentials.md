@@ -39,10 +39,11 @@ those referenced from an `EngineClass` name their namespace.
 By reference does not mean out of the tenant's reach. A value the engine
 uses is readable by the company's tenant:
 
-- The engine runs the tenant's code (a `Stdio` MCP server, sandbox setup
-  commands, agents' tool calls) as its own user, which can read the
-  engine's environment and `crewlet.yaml` and open the secret store on the
-  data volume with the keyring the pod holds.
+- The engine runs the tenant's code in its own container, as its own user:
+  a `Stdio` MCP server, a coding CLI, and whatever an
+  agent's tool calls have them do. That code can read the engine's
+  environment and `crewlet.yaml` and open the secret store on the data
+  volume with the keyring the pod holds.
 - The access token the Company publishes (`status.apiAccessSecretRef`)
   holds Crewlet's `admin` grant, which takes in every app: the engine's API
   reveals any value in the secret store to it and lets it write one, and it
@@ -51,8 +52,9 @@ uses is readable by the company's tenant:
   `crewlet.yaml` names the operator's token the document's only writer
   (`api.auth.company_writers`); a value the document references can still
   be replaced through the secret store.
-- A seat's code work runs in the Company's E2B sandbox, in the Company's
-  own E2B account, where the coding agent runs with every permission.
+- A seat's code work, its sandbox's setup commands included, runs in the
+  Company's E2B sandbox, in the Company's own E2B account, where the coding
+  agent runs with every permission.
   Crewlet exports into each box the first `apiKeySecretRefs` key of the
   provider the code work runs on, an `Anthropic`, `OpenAI` or
   `OpenAICompatible` `LLMProvider` or platform provider (as

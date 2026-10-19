@@ -277,8 +277,8 @@ const (
 // The bucket's credentials are each Company's own (its
 // spec.objects.credentialsSecretRef), not the class's: whatever reaches a
 // company's engine pod is readable by code the tenant runs there (a stdio
-// MCP server, a sandbox setup command), so a key the class shared would let
-// every tenant read and write every other tenant's files.
+// MCP server, a coding CLI), so a key the class shared would let every
+// tenant read and write every other tenant's files.
 //
 // Crewlet reaches the bucket when it starts (a HeadBucket request, on the data
 // pods and the seat pods alike), and refuses to start when it cannot. Some
@@ -696,12 +696,14 @@ type NetworkPolicySettings struct {
 	APIConsumers []NetworkPolicyPeer `json:"apiConsumers,omitempty"`
 
 	// egress narrows where the engine may connect to. The engine runs code
-	// the tenant supplies (stdio MCP servers, sandbox commands, what its
-	// agents write), so under Isolated its pods may reach DNS, the pods of
-	// their own namespace, and every address outside the cluster except the
-	// cloud metadata endpoints (169.254.169.254, fd00:ec2::254), which hand
-	// out the node's credentials. What else is in the cluster is
-	// unreachable only if listed in exceptCIDRs.
+	// the tenant supplies in its pod (stdio MCP servers, coding CLIs, and
+	// what its agents have them do), so under Isolated its pods may reach
+	// DNS, the pods of their own namespace, and every address outside the
+	// cluster except the cloud metadata endpoints (169.254.169.254,
+	// fd00:ec2::254), which hand out the node's credentials. What else is in
+	// the cluster is unreachable only if listed in exceptCIDRs. A seat's
+	// code work, its sandbox's setup commands included, runs in the
+	// Company's E2B sandbox, which this policy does not reach.
 	// +optional
 	Egress NetworkPolicyEgress `json:"egress,omitzero"`
 }

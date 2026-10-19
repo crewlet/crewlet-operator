@@ -134,10 +134,13 @@ Two cases are refused rather than guessed at:
 The pod runs under the `restricted` Pod Security Standard: as the image's
 user (uid 10001, `runAsNonRoot`), with the `RuntimeDefault` seccomp profile,
 no privilege escalation and every capability dropped. Its root filesystem is
-read-only. The engine writes only to its data volume, its home and `/tmp`;
-the processes it spawns (git, stdio MCP servers, coding agents) write to the
+read-only. The engine writes only to its data volume, its home and `/tmp`.
+A stdio MCP server it starts is handed the engine's `HOME` and writes to the
 latter two, which are `emptyDir` volumes, and `HOME` is set explicitly so an
-image built on another base still has a writable one.
+image built on another base still has a writable one. A coding CLI is handed
+a home, a `TMPDIR` and XDG directories of its seat's own instead, under
+`/var/lib/crewlet/llm-cli` on the data volume, and a seat's code work runs in
+the Company's E2B sandbox, outside the pod.
 
 The pod template carries the annotation `crewlet.ai/bootstrap-hash`, the hash
 of the bootstrap Secret's data, which rolls the pod when what it reads at

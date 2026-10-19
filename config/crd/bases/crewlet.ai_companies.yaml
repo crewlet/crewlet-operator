@@ -555,8 +555,8 @@ spec:
                       Issue them per company, with a policy that admits the company's own
                       prefix of the bucket only (the class's objects.s3.prefix, expanded):
                       they are written into the engine pod's crewlet.yaml, and code the
-                      tenant runs in the pod (a stdio MCP server, a sandbox setup command)
-                      can read them. Unset uses the pod's own credentials through the SDK's
+                      tenant runs in the pod (a stdio MCP server, a coding CLI) can read
+                      them. Unset uses the pod's own credentials through the SDK's
                       default chain: a workload identity bound through the class's
                       serviceAccount.annotations, which every company of the class shares
                       unless it is scoped per tenant.

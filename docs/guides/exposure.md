@@ -488,10 +488,12 @@ spec:
 Only whoever writes EngineClasses decides this; no label a tenant or a
 namespace editor can set admits anything.
 
-The engine runs code its tenant supplies: stdio MCP servers, sandbox commands,
-whatever its agents write. So the policy also limits where the engine
-connects to. It may reach DNS (port 53), the pods of its own namespace, and
-every address except the cloud metadata endpoints (`169.254.169.254`,
+The engine runs code its tenant supplies in its own pod: stdio MCP servers,
+coding CLIs, and whatever its agents have them do. So the policy also limits
+where the engine connects to. A seat's code work, a sandbox's setup commands
+included, runs in the Company's E2B sandbox, which this policy does not
+reach. The engine may reach DNS (port 53), the pods of its own namespace,
+and every address except the cloud metadata endpoints (`169.254.169.254`,
 `fd00:ec2::254`), which hand the node's credentials to whatever asks. A
 NetworkPolicy cannot tell an address inside the cluster from one outside it,
 so list the cluster's pod, Service and node networks in `egress.exceptCIDRs`;

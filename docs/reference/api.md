@@ -524,7 +524,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `credentialsSecretRef` _[SecretReference](#secretreference)_ | credentialsSecretRef is a Secret, in the Company's namespace, holding<br />the keys accessKeyID and secretAccessKey (S3AccessKeyIDKey,<br />S3SecretAccessKeyKey) the engine reaches its class's S3 bucket with:<br />Crewlet's store.objects.s3.access_key_id and secret_access_key. Used<br />only while the class's objects.backend is S3.<br />Issue them per company, with a policy that admits the company's own<br />prefix of the bucket only (the class's objects.s3.prefix, expanded):<br />they are written into the engine pod's crewlet.yaml, and code the<br />tenant runs in the pod (a stdio MCP server, a sandbox setup command)<br />can read them. Unset uses the pod's own credentials through the SDK's<br />default chain: a workload identity bound through the class's<br />serviceAccount.annotations, which every company of the class shares<br />unless it is scoped per tenant. |  | Optional: \{\} <br /> |
+| `credentialsSecretRef` _[SecretReference](#secretreference)_ | credentialsSecretRef is a Secret, in the Company's namespace, holding<br />the keys accessKeyID and secretAccessKey (S3AccessKeyIDKey,<br />S3SecretAccessKeyKey) the engine reaches its class's S3 bucket with:<br />Crewlet's store.objects.s3.access_key_id and secret_access_key. Used<br />only while the class's objects.backend is S3.<br />Issue them per company, with a policy that admits the company's own<br />prefix of the bucket only (the class's objects.s3.prefix, expanded):<br />they are written into the engine pod's crewlet.yaml, and code the<br />tenant runs in the pod (a stdio MCP server, a coding CLI) can read<br />them. Unset uses the pod's own credentials through the SDK's<br />default chain: a workload identity bound through the class's<br />serviceAccount.annotations, which every company of the class shares<br />unless it is scoped per tenant. |  | Optional: \{\} <br /> |
 
 
 #### CompanyReference
@@ -2470,7 +2470,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `mode` _[NetworkPolicyMode](#networkpolicymode)_ | mode is whether the operator restricts the engine's traffic. | Isolated | Enum: [Isolated None] <br />Optional: \{\} <br /> |
 | `apiConsumers` _[NetworkPolicyPeer](#networkpolicypeer) array_ | apiConsumers are the pods admitted to the engine's API port besides<br />the operator and the Gateway proxies or Ingress controller of the<br />class's API route, and to nothing else of the engine (the public<br />port, which the webhooks reach, admits only where they arrive from):<br />the platform's own components (a control plane, a dashboard) that<br />call the engines of this class's companies. Each holds an access<br />token, which the engine still requires. |  | MaxItems: 16 <br />MinItems: 1 <br />Optional: \{\} <br /> |
-| `egress` _[NetworkPolicyEgress](#networkpolicyegress)_ | egress narrows where the engine may connect to. The engine runs code<br />the tenant supplies (stdio MCP servers, sandbox commands, what its<br />agents write), so under Isolated its pods may reach DNS, the pods of<br />their own namespace, and every address outside the cluster except the<br />cloud metadata endpoints (169.254.169.254, fd00:ec2::254), which hand<br />out the node's credentials. What else is in the cluster is<br />unreachable only if listed in exceptCIDRs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `egress` _[NetworkPolicyEgress](#networkpolicyegress)_ | egress narrows where the engine may connect to. The engine runs code<br />the tenant supplies in its pod (stdio MCP servers, coding CLIs, and<br />what its agents have them do), so under Isolated its pods may reach<br />DNS, the pods of their own namespace, and every address outside the<br />cluster except the cloud metadata endpoints (169.254.169.254,<br />fd00:ec2::254), which hand out the node's credentials. What else is in<br />the cluster is unreachable only if listed in exceptCIDRs. A seat's<br />code work, its sandbox's setup commands included, runs in the<br />Company's E2B sandbox, which this policy does not reach. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### ObjectBackend
@@ -2640,8 +2640,8 @@ store.objects.s3.
 The bucket's credentials are each Company's own (its
 spec.objects.credentialsSecretRef), not the class's: whatever reaches a
 company's engine pod is readable by code the tenant runs there (a stdio
-MCP server, a sandbox setup command), so a key the class shared would let
-every tenant read and write every other tenant's files.
+MCP server, a coding CLI), so a key the class shared would let every
+tenant read and write every other tenant's files.
 
 Crewlet reaches the bucket when it starts (a HeadBucket request, on the data
 pods and the seat pods alike), and refuses to start when it cannot. Some
