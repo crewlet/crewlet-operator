@@ -33,6 +33,7 @@ mcp_servers:
   - serve
   command: glab
   env:
+    GITLAB_HOST: gitlab.nimbus.example
     GLAB_CHECK_UPDATE: "false"
     GLAB_SEND_TELEMETRY: "false"
     GLAB_SHOW_WHATS_NEW: "false"
