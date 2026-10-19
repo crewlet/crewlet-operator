@@ -180,11 +180,12 @@ spec:
 OpenCode reads its model as `<provider>/<model>`, splitting it at the first
 slash: `anthropic/claude-sonnet-5` runs Anthropic's model on
 `ANTHROPIC_API_KEY`, and `openrouter/anthropic/claude-sonnet-5` runs it
-through OpenRouter on `OPENROUTER_API_KEY` (`opencode models` lists the
-providers it knows). A model with no slash, or with nothing but white space
-before or after it, names no provider or no model, and every call the
-provider made would fail inside OpenCode with `Model not found`, so the
-engine refuses it and the API server refuses it first, at `spec.model`.
+through OpenRouter on `OPENROUTER_API_KEY` (`opencode models --standalone`
+lists the providers it knows). A model with no slash, or with nothing but
+white space before or after it, names no provider or no model, and every call
+the provider made would fail inside OpenCode, which OpenCode 2 refuses with
+`Invalid model reference`, so the engine refuses it and the API server
+refuses it first, at `spec.model`.
 
 For Claude Code, on a headless token:
 

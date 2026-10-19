@@ -581,10 +581,11 @@ spec:
                 at its first slash: a model with no slash, or with nothing but white
                 space before or after it, names no provider or no model, and every
                 call the provider makes, an Agent-mode run''s included, would fail
-                inside OpenCode with Model not found. Name the provider as OpenCode
-                spells it (opencode models lists them), such as anthropic/claude-sonnet-5
-                or openrouter/anthropic/claude-sonnet-5, with that provider''s key
-                in cli.env'
+                inside OpenCode, which OpenCode 2 refuses as Invalid model reference.
+                Name the provider as OpenCode spells it (opencode models --standalone
+                lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5,
+                with that provider''s key in cli.env or, in mode Text, a login of
+                OpenCode''s own in auth.credentialBundleSecretRef'
               rule: self.type != 'CLIAgent' || !has(self.cli) || self.cli.agent !=
                 'OpenCode' || !has(self.model) || (self.model.indexOf('/') >= 0 &&
                 self.model.substring(0, self.model.indexOf('/')).trim().size() > 0

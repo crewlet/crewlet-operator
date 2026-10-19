@@ -155,15 +155,18 @@ func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
 		"   ", "\u3000",
 	}
 	refusedModels := map[v1.CLIAgentName]bool{}
+	quoted := false
 	for _, mode := range []v1.CLIAgentMode{v1.CLIAgentModeText, v1.CLIAgentModeAgent} {
 		for _, model := range models {
 			providers := make([]v1.LLMProvider, 0, len(agents))
 			refused := map[string]bool{}
+			refusals := map[string]string{}
 			for _, agent := range agents {
 				shape := admittedSignIn(v1.CLIAgentName(agent), variables)
 				p := shapedProvider(namespace, v1.CLIAgentName(agent), mode, &shape)
 				p.Spec.Model = model
 				refusal := apiVerdict(t, p)
+				refusals[p.Name] = refusal
 				refused[p.Name] = strings.Contains(refusal, msgOpenCodeModel) || strings.Contains(refusal, msgBlankModel)
 				// The shape is admitted but for its model, so the model
 				// rule is the question; in mode Agent, but for a CLI with
@@ -193,12 +196,39 @@ func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
 				if engineRefuses {
 					refusedModels[p.Spec.CLI.Agent] = true
 				}
+				// The rule's message quotes the engine's refusal of a
+				// model naming no provider: the error OpenCode refuses it
+				// with, and the command that lists OpenCode's providers.
+				// Held on both sides, so an engine that rewords either
+				// fails here until the message follows it.
+				// A model of white space alone is refused by the blank
+				// rules on both sides, whose words are their own.
+				if !engineRefuses || !strings.Contains(refusals[p.Name], msgOpenCodeModel) ||
+					strings.Contains(refusals[p.Name], msgBlankModel) {
+					continue
+				}
+				quoted = true
+				engineRefusal := strings.Join(report.models[p.Name], "\n")
+				for _, phrase := range []string{openCodeModelRefusal, openCodeModelListing} {
+					if !strings.Contains(engineRefusal, phrase) {
+						t.Errorf("%s, mode %s, model %q: the engine's refusal no longer says %q, which the API's "+
+							"rule quotes: %s", p.Spec.CLI.Agent, mode, model, phrase, engineRefusal)
+					}
+					if !strings.Contains(refusals[p.Name], phrase) {
+						t.Errorf("%s, mode %s, model %q: the API's refusal does not say %q, as the engine's does: %s",
+							p.Spec.CLI.Agent, mode, model, phrase, refusals[p.Name])
+					}
+				}
 			}
 		}
 	}
-	// The probe can fail: the engine refuses some model of OpenCode's.
+	// The probe can fail: the engine refuses some model of OpenCode's, and
+	// the API refuses it with the rule whose message quotes the engine.
 	if !refusedModels[v1.CLIAgentOpenCode] {
 		t.Errorf("the engine refused no OpenCode model; the probe's models no longer reach its rule")
+	}
+	if !quoted {
+		t.Errorf("neither side refused an OpenCode model with its model rule; the wording was held on nothing")
 	}
 }
 
