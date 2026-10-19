@@ -425,8 +425,11 @@ var _ = Describe("Company runtime", func() {
 		Expect(container.LivenessProbe.PeriodSeconds*container.LivenessProbe.FailureThreshold).To(BeNumerically(">", 45),
 			"liveness restarts the engine before its watchdog's 45 seconds")
 		Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/health"))
-		Expect(container.StartupProbe.PeriodSeconds*container.StartupProbe.FailureThreshold).To(Equal(int32(300+10*6)),
-			"the startup probe gives the boot five minutes and six seconds for every GiB of the class's 10Gi volume")
+		Expect(container.StartupProbe.PeriodSeconds).To(Equal(int32(probePeriodSeconds)))
+		Expect((container.StartupProbe.FailureThreshold-1)*container.StartupProbe.PeriodSeconds).
+			To(BeNumerically(">=", 300+10*6),
+				"the startup probe gives the boot five minutes and six seconds for every GiB of the class's 10Gi volume, "+
+					"counted from a first probe that may land at once")
 		Expect(container.StartupProbe.TimeoutSeconds).To(Equal(int32(5)),
 			"/health reads the coordination plane under a budget of about two seconds, longer than Kubernetes' default of one")
 		Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/ready"))

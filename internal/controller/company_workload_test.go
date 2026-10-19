@@ -47,3 +47,17 @@ func TestDataPodStartupSeconds(t *testing.T) {
 		})
 	}
 }
+
+// TestStartupFailureThreshold holds the startup probe's failures to the window
+// they make up, counted as the kubelet counts it: from a first probe that may
+// land at once, threshold-1 periods, never shorter than the window and short
+// of a period more.
+func TestStartupFailureThreshold(t *testing.T) {
+	t.Parallel()
+	for _, seconds := range []int32{300, 301, 304, 305, 306, 360, 396, 1200, maxStartupSeconds - 1, maxStartupSeconds} {
+		threshold := startupFailureThreshold(seconds)
+		if window := (threshold - 1) * probePeriodSeconds; window < seconds || window >= seconds+probePeriodSeconds {
+			t.Errorf("startupFailureThreshold(%d) = %d, a window of %ds after the first probe", seconds, threshold, window)
+		}
+	}
+}

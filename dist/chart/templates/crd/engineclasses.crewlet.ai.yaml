@@ -215,9 +215,11 @@ spec:
                       on its volume (the store, the event stream, the replicated estate) and
                       bring its broker up. Crewlet waits that recovery out rather than
                       bounding it, because it grows with the data, so the startup probe is
-                      what bounds it. A boot that runs past this is restarted and begins its
-                      recovery again, so err long: a window that is too long costs nothing
-                      on a healthy boot, only the time to restart one that hung.
+                      what bounds it: it allows at least this long from the container's
+                      start, and less than ten seconds more. A boot that runs past it is
+                      restarted and begins its recovery again, so err long: a window that is
+                      too long costs nothing on a healthy boot, only the time to restart one
+                      that hung.
 
                       Unset derives it from the data volume: five minutes for what every
                       boot does within Crewlet's own bounds (a first start extracts the
