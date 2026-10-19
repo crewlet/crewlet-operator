@@ -169,7 +169,7 @@ triage            nimbus    Agent          True      True    False              
 | `status.placement.pool` | the pool the seat is placed in |
 | `status.placement.workload` | the StatefulSet whose pods may run it |
 | `status.placement.node` | the pod whose engine holds the seat's lease and runs it, unset while none does |
-| `CodeWorkRunnable` (the `CODEWORK` column) | whether the seat's coding agent can run on its sandbox provider, or on the sign-in its sandbox environment gives it; blank on a seat without `spec.sandbox` ([Code work](cli-agents.md#code-work)) |
+| `CodeWorkRunnable` (the `CODEWORK` column) | whether the seat's coding agent can run on its sandbox provider, or on the sign-in its sandbox environment gives it; blank on a seat without `spec.sandbox`, and on one whose executor runs in agent mode ([Code work](cli-agents.md#code-work)) |
 | `Ready` | `True`, `LeaseHeld`, while a pod holds it; `False`, `Unplaced`, while none does, saying why: its pool runs no pod, the seat is not in the revision the engine runs yet, or the engine has not claimed it yet (a few seats every five seconds); `False`, `Suspended`, while the Company is suspended; `Unknown`, `EngineUnavailable`, when the engine's fleet could not be read |
 
 A Human seat is never run by the engine and has no `Ready`. On the Company,

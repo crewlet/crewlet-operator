@@ -349,14 +349,15 @@ const (
 	// can run on the provider at the head of its sandbox chain, or on the
 	// sign-in the seat's sandbox environment gives it, so that a run_sandbox
 	// launch of the seat can start. It is set on an Agent seat with
-	// spec.sandbox in a Company with spec.sandbox, the seats Crewlet offers
-	// run_sandbox, and is computed from the spec under every management
-	// policy: under Observe or Seed it judges the Seat's objects, which may
-	// not be the document the engine runs (Applied says whether they are).
-	// Only CodingAgentMismatch also holds the document (Applied=False), as
-	// Crewlet refuses it on every write; with SandboxModelUnsupported or
-	// SandboxLoginNotPortable the seat is applied and runs its turns, and
-	// Crewlet refuses each of its coding runs.
+	// spec.sandbox whose executor does not run in agent mode, in a Company
+	// with spec.sandbox (the seats Crewlet offers run_sandbox), and is
+	// computed from the spec under every management policy: under Observe or
+	// Seed it judges the Seat's objects, which may not be the document the
+	// engine runs (Applied says whether they are). Only CodingAgentMismatch
+	// also holds the document (Applied=False), as Crewlet refuses it on every
+	// write; with SandboxModelUnsupported or SandboxLoginNotPortable the seat
+	// is applied and runs its turns, and Crewlet refuses each of its coding
+	// runs.
 	ConditionCodeWorkRunnable = "CodeWorkRunnable"
 
 	// ConditionAgentModeRunnable reports whether an LLMProvider of type
@@ -893,10 +894,15 @@ const (
 	// driving another CLI than the seat's coding agent
 	// (spec.sandbox.codingAgent, else the Company's
 	// spec.sandbox.defaultCodingAgent, else ClaudeCode): the head of
-	// spec.llm.sandbox, else of spec.llm.default, else of the Company's
-	// model order. The provider's model is written in its own CLI's grammar
-	// and its sign-in is that CLI's, so the coding agent can read neither,
-	// and Crewlet refuses the pairing on every write.
+	// spec.llm.sandbox, else of spec.llm.default, else of the Company's model
+	// order. The provider's model is written in its own CLI's grammar and its
+	// sign-in is that CLI's, so the coding agent can read neither, and
+	// Crewlet refuses the pairing on every write. It is also Applied=False
+	// alone on a Seat whose executor runs in agent mode (a CLIAgent provider in
+	// mode Agent heads its executor's chain) and whose spec.sandbox.codingAgent
+	// names another CLI than that provider's: Crewlet never offers such a seat
+	// run_sandbox, as it codes in its executor's run, and refuses on every
+	// write a coding agent that would drive nothing.
 	ReasonCodingAgentMismatch = "CodingAgentMismatch"
 
 	// ReasonSandboxModelUnsupported is CodeWorkRunnable=False on a Seat

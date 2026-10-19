@@ -330,12 +330,13 @@ type SandboxSetupStep struct {
 	// never from the engine's. The run's is the steps' env, the Seat's
 	// sandbox env, and what Crewlet adds: the agent's handle and, when it
 	// has one, its email, and the variables that sign the coding agent in
-	// to the provider its code work runs on (docs/guides/credentials.md
-	// says which, and when the seat's own env leaves them out). The API
-	// refuses ${NAME} (NAME an identifier) all the same, as the operator
-	// refuses every ${NAME} it did not write in a string it renders: write a
-	// sandbox variable as $NAME. Parameter expansions such as ${1:-x} are
-	// allowed.
+	// to the provider its code work runs on, or, in an agent-mode
+	// executor's run, those of the executor's own provider
+	// (docs/guides/credentials.md says which, and when the seat's own env
+	// leaves them out). The API refuses ${NAME} (NAME an identifier) all
+	// the same, as the operator refuses every ${NAME} it did not write in a
+	// string it renders: write a sandbox variable as $NAME. Parameter
+	// expansions such as ${1:-x} are allowed.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MaxItems=32

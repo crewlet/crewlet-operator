@@ -126,6 +126,11 @@ const (
 	e2bGo         = "internal/sandbox/e2b.go"
 	e2bCreateRead = "v0.1.1-0.20261019061838-6c1b4361a915"
 
+	// offersSandboxRead is crewlet#271's engine, whose runner was first read
+	// for which seats it offers run_sandbox: never one whose executor runs in
+	// agent mode, which the render reports no code work for.
+	offersSandboxRead = "v0.1.1-0.20261020054845-2b4e0d71bce5"
+
 	// bootBoundsRead is the engine every bound on a data pod's and a seat
 	// pod's boot the controller adds up was read at.
 	bootBoundsRead = "v0.1.1-0.20261019181514-fb36f0c31127"
@@ -199,6 +204,19 @@ var agentLogin = []string{
 // concept page.
 var codingBox = []string{"docs/guides/credentials.md", "docs/concepts/credentials.md"}
 
+// agentModeCodeWork is every operator file that copies which seats Crewlet
+// offers run_sandbox, and so which have code work of their own: the render's
+// code-work verdicts (CodeWorkOf), which leave an agent-mode seat out, and
+// agentModeExecutor, which finds the executor they leave it out by; the Seat
+// API, whose spec.llm.sandbox, spec.sandbox.codingAgent and status say what
+// is read for such a seat, and the condition and reason docs beside it; and
+// the guide that states the rule (Code work) and the troubleshooting row that
+// gives CodingAgentMismatch's remedy for either kind of seat.
+var agentModeCodeWork = []string{
+	codeWorkGo, executorGo, "api/v1alpha1/seat_types.go", "api/v1alpha1/common_types.go",
+	"docs/guides/cli-agents.md", troubleshootingMd,
+}
+
 // bootWindows is every operator file that copies the bounds the engine puts
 // on its own boot: the controller's data pod and seat pod startup windows,
 // which add them up, the test that pins their sums, the EngineClass API's
@@ -214,7 +232,8 @@ var bootWindows = []string{
 // read it, so one that copies nothing would only cost a read. What the engine
 // shows without a run is held by a contract test instead, never here: the
 // head of a seat's chain (TestContractChainlessSeatRunsOnTheFirstProviderAlone),
-// the CodingAgentMismatch it refuses on a write (TestContractCodeWorkOnWrite),
+// the CodingAgentMismatch it refuses on a write, over a seat's sandbox chain
+// or an agent-mode seat's coding agent (TestContractCodeWorkOnWrite),
 // the sign-in a CLIAgent provider's settings give it (test/crd's
 // TestCLIAgentSignInFollowsTheEngine), the deployment its validation reads a
 // Jira or Confluence address on (TestContractAtlassianDeploymentIsTheEngines),
@@ -222,12 +241,13 @@ var bootWindows = []string{
 // TestAtlassianDeploymentFollowsTheEngineSource and
 // TestCredentialNameFollowsTheEngineSource read.
 //
-// Most of them are the launch's own code. One is a sandbox backend's: what an
-// E2B box is created from, (*E2BProvider).Create, since the launch hands a
-// run's credential files to whatever box it is placed in and each backend
-// decides what to do with them. Two are config's write-time twins
-// of a launch decision, read because the launch's own is spread through a
-// registry or a manager: (*Company).sandboxProvider, which crewlet's
+// Most of them are the launch's own code; one is the runner's, which seats it
+// offers run_sandbox at all ((*Runner).offersSandbox). One is a sandbox
+// backend's: what an E2B box is created from, (*E2BProvider).Create, since the
+// launch hands a run's credential files to whatever box it is placed in and
+// each backend decides what to do with them. Two are config's write-time
+// twins of a launch decision, read because the launch's own is spread through
+// a registry or a manager: (*Company).sandboxProvider, which crewlet's
 // TestBothPathsToTheSandboxEntryAgree holds to the head the phase registry
 // gives a launch, and (*Company).codingAgent, which nothing in crewlet holds
 // to the launch's order, so that order is read too (Launch, NewManager,
@@ -397,6 +417,14 @@ var mirrored = []mirror{
 			"nothing in crewlet holds it to the launch's (Launch, NewManager)",
 		digest: "ea194ad5e34803abb6f736efecb3fea988605855d66d9e7a5dfc2daecf3e9873",
 		read:   firstRead,
+	},
+	{
+		file: "internal/agent/runner/phases.go", name: "(*Runner).offersSandbox",
+		against: agentModeCodeWork,
+		decides: "a seat whose executor runs in agent mode is never offered run_sandbox, so it has no code work " +
+			"of its own: what it codes, it codes in its executor's run",
+		digest: "7dd4fb18d5bc2aaf097938b4b13a600c5a631c3e43d1f0dfd3cc9283ba893f77",
+		read:   offersSandboxRead,
 	},
 	{
 		file: agentRunGo, name: "(*Company).executorRuntime",

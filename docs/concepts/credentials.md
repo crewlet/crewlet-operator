@@ -57,18 +57,20 @@ uses is readable by the company's tenant:
   `crewlet.yaml` names the operator's token the document's only writer
   (`api.auth.company_writers`); a value the document references can still
   be replaced through the secret store.
-- A seat's code work, its sandbox's setup commands included, runs in the
-  Company's E2B sandbox, in the Company's own E2B account, where the coding
-  agent runs with every permission.
-  Crewlet exports into each box the first `apiKeySecretRefs` key of the
-  provider the code work runs on, an `Anthropic`, `OpenAI` or
+- A seat's code work and an agent-mode executor's run, the sandbox's setup
+  commands included, run in the Company's E2B sandbox, in the Company's own
+  E2B account, where the coding agent, or the executor's CLI, runs with
+  every permission.
+  Crewlet exports into each box of code work the first `apiKeySecretRefs`
+  key of the provider the code work runs on, an `Anthropic`, `OpenAI` or
   `OpenAICompatible` `LLMProvider` or platform provider (as
   `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`), and under Claude Code its
   `baseURL` (`ANTHROPIC_BASE_URL`), unless the seat's own sandbox
   environment signs Claude Code in; a `CLIAgent` provider's token, key or
-  key in `cli.env` travels the same way. The coding agent can read it, and
-  the run's report is redacted by the shape of a credential, not by its
-  value ([What a coding box
+  credential-named variable in `cli.env` travels the same way, and so does
+  an agent-mode provider's into each of its executor's runs. The coding
+  agent or the CLI can read it, and the run's report is redacted by the
+  shape of a credential, not by its value ([What a coding box
   carries](../guides/credentials.md#what-a-coding-box-carries)).
 
 > **Caution: what a class gives its companies is every tenant's.** A

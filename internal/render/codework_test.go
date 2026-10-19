@@ -3,6 +3,7 @@ package render
 import (
 	"cmp"
 	"encoding/json"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -18,6 +19,7 @@ import (
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine"
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
+	"github.com/crewlet/crewlet-operator/internal/secretref"
 	"github.com/crewlet/crewlet-operator/internal/secretsync"
 )
 
@@ -186,10 +188,7 @@ func TestCodeWork(t *testing.T) {
 			// The Company's default coding agent is OpenCode; unset,
 			// ClaudeCode.
 			name: "the default coding agent on an OpenAI provider", head: api(v1alpha1.LLMProviderOpenAI),
-			mutate: func(in *Input) {
-				in.Company.Spec.Sandbox.DefaultCodingAgent = ""
-				seat(in, "porter").Spec.Sandbox.CodingAgent = v1alpha1.CodingAgentOpenCode
-			},
+			mutate:   func(in *Input) { in.Company.Spec.Sandbox.DefaultCodingAgent = "" },
 			reported: foreign,
 		},
 		{
@@ -376,6 +375,122 @@ func TestCodeWork(t *testing.T) {
 	}
 }
 
+// The agent-mode seat of the opencode-agent case, whose executor is
+// LLMProvider opencode, OpenCode in mode Agent, and the field the render
+// refuses on it.
+const (
+	agentModeSeat     = "porter"
+	agentModeProvider = "opencode"
+	atCodingAgent     = "spec.sandbox.codingAgent"
+)
+
+// TestAgentModeSeatHasNoCodeWork covers a seat whose executor runs in agent
+// mode, which Crewlet never offers run_sandbox: it codes in its executor's
+// run, on that provider's CLI, so the render reports no code work for it
+// whatever its sandbox chain and coding agent, and refuses, as Crewlet does
+// on every write, a spec.sandbox.codingAgent other than that CLI, which
+// drives nothing. The Company's default coding agent is not the seat's own,
+// and is refused nowhere.
+func TestAgentModeSeatHasNoCodeWork(t *testing.T) {
+	refusal := "Seat/" + agentModeSeat + " " + atCodingAgent + " " + v1alpha1.ReasonCodingAgentMismatch
+	sandboxOn := func(head v1alpha1.LLMProvider, runner v1alpha1.CodingAgent) func(*Input) {
+		return func(in *Input) {
+			in.LLMProviders = append(in.LLMProviders, head)
+			s := seat(in, agentModeSeat)
+			s.Spec.LLM.Sandbox = []v1alpha1.LLMProviderReference{{Name: head.Name}}
+			s.Spec.Sandbox.CodingAgent = runner
+		}
+	}
+	for _, c := range []struct {
+		name   string
+		mutate func(*Input)
+		// refused is the render's refusals of the document.
+		refused []string
+		// says is what the refusal's message must say.
+		says []string
+		// reported is whether CodeWorkOf has an entry for the seat.
+		reported bool
+	}{
+		{name: "a seat that names no coding agent"},
+		{
+			// Its own CLI's coding agent is the run it codes in.
+			name: "a seat naming its executor's own CLI",
+			mutate: func(in *Input) {
+				seat(in, agentModeSeat).Spec.Sandbox.CodingAgent = v1alpha1.CodingAgentOpenCode
+			},
+		},
+		{
+			// No run_sandbox launch ever pairs the coding agent with a
+			// CLIAgent provider of another CLI.
+			name:   "a seat whose sandbox chain is a Codex provider",
+			mutate: sandboxOn(codeWorkProvider(v1alpha1.LLMProviderCLIAgent, v1alpha1.CLIAgentCodex), v1alpha1.CodingAgentOpenCode),
+		},
+		{
+			name:    "a seat naming Claude Code beside an Anthropic sandbox chain",
+			mutate:  sandboxOn(codeWorkProvider(v1alpha1.LLMProviderAnthropic, ""), v1alpha1.CodingAgentClaudeCode),
+			refused: []string{refusal},
+			says: []string{
+				"names the ClaudeCode coding agent, but the seat's executor runs in agent mode on LLMProvider " +
+					"opencode, at spec.llm.default[0].name:",
+				"in that OpenCode run", "Leave it out",
+			},
+		},
+		{
+			// The Company's default is the catalogue's, which an agent-mode
+			// seat's run never reads.
+			name: "the Company's default coding agent, Claude Code",
+			mutate: func(in *Input) {
+				in.Company.Spec.Sandbox.DefaultCodingAgent = v1alpha1.CodingAgentClaudeCode
+			},
+		},
+		{
+			name: "a chainless seat on the agent-mode head of the Company's order naming Claude Code",
+			mutate: func(in *Input) {
+				in.Company.Spec.LLM.Order = []v1alpha1.LLMProviderReference{{Name: agentModeProvider}}
+				s := seat(in, agentModeSeat)
+				s.Spec.LLM.Default = nil
+				s.Spec.Sandbox.CodingAgent = v1alpha1.CodingAgentClaudeCode
+			},
+			refused: []string{refusal},
+			says:    []string{"on LLMProvider opencode, which a seat whose spec.llm.default is empty runs on:"},
+		},
+		{
+			// With no executor in agent mode it is an ordinary seat's code
+			// work again, judged on its sandbox chain.
+			name: "the seat in text mode",
+			mutate: func(in *Input) {
+				for i := range in.LLMProviders {
+					if in.LLMProviders[i].Name == agentModeProvider {
+						in.LLMProviders[i].Spec.CLI.Mode = v1alpha1.CLIAgentModeText
+					}
+				}
+				seat(in, agentModeSeat).Spec.Sandbox.CodingAgent = v1alpha1.CodingAgentClaudeCode
+			},
+			refused:  []string{"Seat/" + agentModeSeat + " " + fieldLLMDefault + "[0].name " + v1alpha1.ReasonCodingAgentMismatch},
+			reported: true,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := companyCaseNamed(t, "opencode-agent").input(t)
+			if c.mutate != nil {
+				c.mutate(in)
+			}
+			_, err := Company(in)
+			if got := refusalsOf(err); !slices.Equal(got, c.refused) {
+				t.Fatalf("refused %v (%v), want %v", got, err, c.refused)
+			}
+			if _, reported := CodeWorkOf(in)[agentModeSeat]; reported != c.reported {
+				t.Errorf("CodeWorkOf reports the seat's code work: %v, want %v", reported, c.reported)
+			}
+			for _, phrase := range c.says {
+				if !strings.Contains(err.Error(), phrase) {
+					t.Errorf("the refusal does not say %q: %v", phrase, err)
+				}
+			}
+		})
+	}
+}
+
 // TestContractCodeWorkOnWrite holds the render's verdict on a seat's code work
 // to the engine's on a write. Every coding agent the API offers is
 // paired with every kind of provider at the head of the seat's sandbox chain,
@@ -386,9 +501,14 @@ func TestCodeWork(t *testing.T) {
 // the seat (SandboxModelUnsupported, SandboxLoginNotPortable) the engine
 // accepts the document the render writes, which is what makes reporting
 // rather than refusing them right: an engine that refused them on a write
-// would hold the company on its last revision over them anyway. A refused
-// seat is handed to the engine in the document the render writes without its
-// sandbox, with the block put back as the render writes it.
+// would hold the company on its last revision over them anyway. A seat whose
+// executor runs in agent mode is paired with each coding agent, and none, and
+// with a sandbox chain of a CLIAgent provider of another CLI and of an API
+// provider: the render reports no code work for it and refuses a coding agent
+// other than its executor's CLI alone, and `crewlet validate` refuses that
+// alone, at the seat's sandbox coding_agent, and never its sandbox chain. A
+// refused seat is handed to the engine in the document the render writes
+// without its sandbox, with the block put back as the render writes it.
 func TestContractCodeWorkOnWrite(t *testing.T) {
 	runners := []v1alpha1.CodingAgent{v1alpha1.CodingAgentClaudeCode, v1alpha1.CodingAgentOpenCode}
 	agents := cliAgentNames(t)
@@ -419,42 +539,50 @@ func TestContractCodeWorkOnWrite(t *testing.T) {
 				}
 				var document []byte
 				if refused {
-					in = codeWorkInput(t, &head, runner)
-					seat(in, codeWorkSeat).Spec.Sandbox = nil
-					if doc, err = Company(in); err != nil {
-						t.Fatalf("rendering the seat without its sandbox: %v", err)
-					}
-					gate, err := json.Marshal(roleSandboxDoc{Enabled: true, CodingAgent: codingAgent(runner)})
-					if err != nil {
-						t.Fatal(err)
-					}
-					document = withRoleSandbox(t, doc.YAML, codeWorkSeat, gate)
+					doc, document = withoutThenWithSandbox(t, codeWorkInput(t, &head, runner), codeWorkSeat, runner)
 				} else {
 					document = doc.YAML
 				}
-				env := map[string]string{}
-				for _, k := range doc.Refs {
-					env[secretsync.StoreName(k)] = dummyCredential(k)
-				}
-				got, _, _, _ := verdict(t, env, "-tier", "company", write(t, "company.yaml", document))
-				engineRefuses := false
-				for _, raw := range got.Problems {
-					var p struct {
-						Segments []engine.Segment `json:"segments"`
-						Message  string           `json:"message"`
-					}
-					if err := json.Unmarshal(raw, &p); err != nil {
-						t.Fatal(err)
-					}
-					path := PathOf(p.Segments)
-					if len(path) > 0 && path[len(path)-1] == "llm_sandbox" {
-						engineRefuses = true
-						continue
-					}
-					t.Errorf("crewlet validate refuses the document elsewhere: %s", raw)
-				}
+				engineRefuses := engineRefusesOnlyAt(t, doc.Refs, document, "llm_sandbox")
 				if refused != engineRefuses {
 					t.Errorf("the render refuses the pairing (%q): %v; the engine refuses it: %v", w.Reason, refused, engineRefuses)
+				}
+			})
+		}
+	}
+	agentModeInput := func(head v1alpha1.LLMProvider, runner v1alpha1.CodingAgent) *Input {
+		in := companyCaseNamed(t, "opencode-agent").input(t)
+		in.LLMProviders = append(in.LLMProviders, head)
+		s := seat(in, agentModeSeat)
+		s.Spec.LLM.Sandbox = []v1alpha1.LLMProviderReference{{Name: head.Name}}
+		s.Spec.Sandbox.CodingAgent = runner
+		return in
+	}
+	for _, runner := range []v1alpha1.CodingAgent{"", v1alpha1.CodingAgentOpenCode, v1alpha1.CodingAgentClaudeCode} {
+		for _, head := range []v1alpha1.LLMProvider{
+			codeWorkProvider(v1alpha1.LLMProviderCLIAgent, v1alpha1.CLIAgentCodex),
+			codeWorkProvider(v1alpha1.LLMProviderAnthropic, ""),
+		} {
+			t.Run(fmt.Sprintf("an agent-mode OpenCode seat naming %q on %s", runner, head.Name), func(t *testing.T) {
+				in := agentModeInput(head, runner)
+				if w, ok := CodeWorkOf(in)[agentModeSeat]; ok {
+					t.Errorf("the render reports code work for the seat: %s %s", w.Field, w.Message)
+				}
+				doc, err := Company(in)
+				refused := err != nil
+				want := []string{"Seat/" + agentModeSeat + " " + atCodingAgent + " " + v1alpha1.ReasonCodingAgentMismatch}
+				if refused && !slices.Equal(refusalsOf(err), want) {
+					t.Fatalf("the render refuses %v (%v), want %v or nothing", refusalsOf(err), err, want)
+				}
+				var document []byte
+				if refused {
+					doc, document = withoutThenWithSandbox(t, agentModeInput(head, runner), agentModeSeat, runner)
+				} else {
+					document = doc.YAML
+				}
+				engineRefuses := engineRefusesOnlyAt(t, doc.Refs, document, "coding_agent")
+				if refused != engineRefuses {
+					t.Errorf("the render refuses the coding agent: %v; the engine refuses it: %v", refused, engineRefuses)
 				}
 			})
 		}
@@ -468,6 +596,51 @@ func TestContractCodeWorkOnWrite(t *testing.T) {
 			t.Errorf("no pairing reaches %q", reason)
 		}
 	}
+}
+
+// withoutThenWithSandbox is the document the render writes from in without
+// the sandbox of seat name, which it refuses with it, and that document with
+// the seat's sandbox block put back as the render writes it, naming runner.
+func withoutThenWithSandbox(t *testing.T, in *Input, name string, runner v1alpha1.CodingAgent) (*Document, []byte) {
+	t.Helper()
+	seat(in, name).Spec.Sandbox = nil
+	doc, err := Company(in)
+	if err != nil {
+		t.Fatalf("rendering the seat without its sandbox: %v", err)
+	}
+	gate, err := json.Marshal(roleSandboxDoc{Enabled: true, CodingAgent: codingAgent(runner)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return doc, withRoleSandbox(t, doc.YAML, name, gate)
+}
+
+// engineRefusesOnlyAt is whether `crewlet validate`, given a value for every
+// Secret key refs names, refuses document at a path whose last segment is
+// last; a refusal anywhere else fails the test.
+func engineRefusesOnlyAt(t *testing.T, refs []secretref.Key, document []byte, last string) bool {
+	t.Helper()
+	env := map[string]string{}
+	for _, k := range refs {
+		env[secretsync.StoreName(k)] = dummyCredential(k)
+	}
+	got, _, _, _ := verdict(t, env, "-tier", "company", write(t, "company.yaml", document))
+	refuses := false
+	for _, raw := range got.Problems {
+		var p struct {
+			Segments []engine.Segment `json:"segments"`
+			Message  string           `json:"message"`
+		}
+		if err := json.Unmarshal(raw, &p); err != nil {
+			t.Fatal(err)
+		}
+		if path := PathOf(p.Segments); len(path) > 0 && path[len(path)-1] == last {
+			refuses = true
+			continue
+		}
+		t.Errorf("crewlet validate refuses the document elsewhere: %s", raw)
+	}
+	return refuses
 }
 
 // withRoleSandbox is document with the role of handle given gate as its

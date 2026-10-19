@@ -571,11 +571,7 @@ time the condition becomes `False` or its reason changes.
   is written for its CLI and its sign-in is that CLI's, so Crewlet refuses
   the pairing on every write (`CodingAgentMismatch`). Codex, Gemini CLI,
   Kimi Code, Hermes, Pi and the other CLIs have no coding agent, so they
-  cannot back code work: put an API provider first in `spec.llm.sandbox`. A
-  seat whose executor runs OpenCode in agent mode and that has
-  `spec.sandbox` runs its code work on the same provider unless
-  `spec.llm.sandbox` says otherwise, so it sets `spec.sandbox.codingAgent:
-  OpenCode`.
+  cannot back code work: put an API provider first in `spec.llm.sandbox`.
 - **`ClaudeCode` reads Anthropic's API alone.** On a provider of type
   `OpenAI` or `OpenAICompatible` it can read neither the model nor the key,
   and Crewlet refuses each coding run (`SandboxModelUnsupported`), unless
@@ -595,6 +591,15 @@ time the condition becomes `False` or its reason changes.
   environment, or an `OpenCode` one with no credential-named variable in
   `cli.env` or the seat's sandbox environment, has each coding run refused
   (`SandboxLoginNotPortable`).
+
+A seat whose executor runs in agent mode has no code work of its own:
+Crewlet never offers it `run_sandbox`, since it codes in its executor's run,
+on that provider's CLI, so none of the pairings above applies, its
+`spec.llm.sandbox` is not read for one, and it has no `CodeWorkRunnable`.
+Its `spec.sandbox.codingAgent` drives nothing: leave it out. Crewlet refuses
+one that names another CLI than the executor's on every write, and the
+operator refuses it too (`CodingAgentMismatch` on `Applied`, at
+`spec.sandbox.codingAgent`).
 
 The operator sees the names of the seat's variables, not their values: a
 variable named above whose Secret holds nothing passes it, and the engine

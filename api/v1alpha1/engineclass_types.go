@@ -720,8 +720,9 @@ type NetworkPolicySettings struct {
 	// cluster except the cloud metadata endpoints (169.254.169.254,
 	// fd00:ec2::254), which hand out the node's credentials. What else is in
 	// the cluster is unreachable only if listed in exceptCIDRs. A seat's
-	// code work, its sandbox's setup commands included, runs in the
-	// Company's E2B sandbox, which this policy does not reach.
+	// code work and an agent-mode executor's run, the sandbox's setup
+	// commands included, run in the Company's E2B sandbox, which this policy
+	// does not reach.
 	// +optional
 	Egress NetworkPolicyEgress `json:"egress,omitzero"`
 }

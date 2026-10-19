@@ -64,20 +64,31 @@ func ExecutorOf(in *Input) map[string]Executor {
 	out := map[string]Executor{}
 	for i := range in.Seats {
 		s := &in.Seats[i]
-		if s.Spec.Kind == v1alpha1.SeatKindHuman {
-			continue
+		if head, _, ok := r.agentModeExecutor(s); ok {
+			out[s.Name] = r.executor(s, head)
 		}
-		head, ok := r.executorHead(s.Spec.LLM.Default, fieldLLMDefault)
-		if !ok {
-			continue
-		}
-		cli := r.cliProviders[head.provider]
-		if cli == nil || cli.Mode != v1alpha1.CLIAgentModeAgent {
-			continue
-		}
-		out[s.Name] = r.executor(s, head)
 	}
 	return out
+}
+
+// agentModeExecutor is the head of an Agent seat's executor chain, with its
+// cli block, when it is an LLMProvider of type CLIAgent in mode Agent: the
+// seat's every turn is that CLI's own agentic run. Crewlet never offers such
+// a seat run_sandbox (its Runner.offersSandbox), so the seat has no code work
+// of its own: what it codes, it codes in that run, on that CLI.
+func (r *renderer) agentModeExecutor(s *v1alpha1.Seat) (chainLink, *v1alpha1.CLIAgentSettings, bool) {
+	if s.Spec.Kind == v1alpha1.SeatKindHuman {
+		return chainLink{}, nil, false
+	}
+	head, ok := r.executorHead(s.Spec.LLM.Default, fieldLLMDefault)
+	if !ok {
+		return chainLink{}, nil, false
+	}
+	cli := r.cliProviders[head.provider]
+	if cli == nil || cli.Mode != v1alpha1.CLIAgentModeAgent {
+		return chainLink{}, nil, false
+	}
+	return head, cli, true
 }
 
 // executor is the verdict on a seat whose executor's head is the agent-mode

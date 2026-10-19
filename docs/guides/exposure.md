@@ -490,9 +490,9 @@ namespace editor can set admits anything.
 
 The engine runs code its tenant supplies in its own pod: stdio MCP servers,
 coding CLIs, and whatever its agents have them do. So the policy also limits
-where the engine connects to. A seat's code work, a sandbox's setup commands
-included, runs in the Company's E2B sandbox, which this policy does not
-reach. The engine may reach DNS (port 53), the pods of its own namespace,
+where the engine connects to. A seat's code work and an agent-mode
+executor's run, a sandbox's setup commands included, run in the Company's
+E2B sandbox, which this policy does not reach. The engine may reach DNS (port 53), the pods of its own namespace,
 and every address except the cloud metadata endpoints (`169.254.169.254`,
 `fd00:ec2::254`), which hand the node's credentials to whatever asks. A
 NetworkPolicy cannot tell an address inside the cluster from one outside it,
