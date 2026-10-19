@@ -32,6 +32,10 @@ mcp_servers:
   - mcp
   - serve
   command: glab
+  env:
+    GLAB_CHECK_UPDATE: "false"
+    GLAB_SEND_TELEMETRY: "false"
+    GLAB_SHOW_WHATS_NEW: "false"
   name: gitlab
   shared: false
   transport: stdio

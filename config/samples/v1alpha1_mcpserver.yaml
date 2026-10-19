@@ -34,3 +34,17 @@ spec:
   args:
     - mcp
     - serve
+  # glab answers a tool call with what the call's command wrote to stderr
+  # too, so its update notice and its "What's new" banner would land in the
+  # agent's answer, and each call would report itself to the GitLab
+  # instance: these turn the three off. They are the server's env because
+  # the engine hands a stdio server none of the image's ENV but what
+  # Crewlet's allowlist names, and it names no GLAB_ variable
+  # (docs/guides/tool-servers.md).
+  env:
+    - name: GLAB_CHECK_UPDATE
+      value: "false"
+    - name: GLAB_SHOW_WHATS_NEW
+      value: "false"
+    - name: GLAB_SEND_TELEMETRY
+      value: "false"
