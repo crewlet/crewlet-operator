@@ -299,7 +299,14 @@ engine refuses a write that names a credential its CLI would never be
 given, so the API refuses it on the object instead. The lists of CLIs the
 rules name are those whose profiles set token_env, api_key_env or
 env_sign_in in the engine the operator is tested against, Crewlet's main;
-a test holds them to that engine's own verdict.
+a test holds them to that engine's own verdict. The rules also keep env off
+the variables Crewlet sets on every call to keep each seat's CLI inside its
+own home and its call's working directory (HOME, the XDG directories,
+TMPDIR, and the configuration directory or switch each CLI's profile names
+in config_env, work_config_env and isolation_env): env is layered over
+them, so a value there would replace that isolation for every seat on the
+provider, and Crewlet refuses the document. A test holds that list to the
+engine's refusals too.
 
 Mode Agent runs the CLIs Crewlet has a sandbox runner for, ClaudeCode and
 OpenCode: the Company's coding agents. Crewlet hands an Agent-mode run its
@@ -322,7 +329,7 @@ _Appears in:_
 | `mode` _[CLIAgentMode](#cliagentmode)_ | mode is how the engine uses the CLI. Unset is Text. Crewlet's `mode`. |  | Enum: [Text Agent] <br />Optional: \{\} <br /> |
 | `runIn` _[CLIAgentRunIn](#cliagentrunin)_ | runIn is where an Agent-mode run happens. Unset is the Company's<br />sandbox, which is E2B. Crewlet's `run_in`. |  | Enum: [E2B] <br />Optional: \{\} <br /> |
 | `auth` _[CLIAgentAuth](#cliagentauth)_ | auth is how the CLI signs in. |  | MinProperties: 1 <br />Required: \{\} <br /> |
-| `env` _[SecretEnvVar](#secretenvvar) array_ | env is extra environment of every invocation of the CLI: the child<br />gets an allowlisted environment, not the engine's, so a variable the<br />CLI needs beyond that is given here. It is how Hermes, Pi and OpenCode<br />sign in under auth mode Subscription with no login of their own: their<br />model provider's key, under a name Crewlet reads as a credential, such<br />as OPENROUTER_API_KEY. It may not set the CLI's own token or key<br />variable, which auth owns. An OpenCode provider's credential-named<br />variables also travel into every box of an Agent-mode run, and of a<br />seat's code work that runs on it, where the coding agent can read<br />them. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `env` _[SecretEnvVar](#secretenvvar) array_ | env is extra environment of every invocation of the CLI: the child<br />gets an allowlisted environment, not the engine's, so a variable the<br />CLI needs beyond that is given here. It is how Hermes, Pi and OpenCode<br />sign in under auth mode Subscription with no login of their own: their<br />model provider's key, under a name Crewlet reads as a credential, such<br />as OPENROUTER_API_KEY. It may not set the CLI's own token or key<br />variable, which auth owns, nor a variable Crewlet sets to keep the CLI<br />inside its seat's home and its call's working directory: HOME, the XDG<br />directories, TMPDIR, and the CLI's own configuration directory or<br />switch (docs/guides/cli-agents.md). An OpenCode provider's<br />credential-named variables also travel into every box of an<br />Agent-mode run, and of a seat's code work that runs on it, where the<br />coding agent can read them. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds caps one invocation of the CLI, launch included. Unset<br />takes Crewlet's default of 300. Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many CLI processes the provider runs at once;<br />each takes 200 to 400 MB of the engine pod's memory. Unset takes<br />Crewlet's default of 4. Crewlet's `max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 | `loginName` _string_ | loginName names the login, and the per-seat homes, the provider<br />keeps on the data volume. Providers of the company with the same<br />loginName share one login, which is how several models run off one<br />subscription; they must drive the same CLI. Unset is the provider's<br />own metadata.name. Crewlet's `state_dir`, as<br />/var/lib/crewlet/llm-cli/<loginName>. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9-]*$` <br />Optional: \{\} <br /> |

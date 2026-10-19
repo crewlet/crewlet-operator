@@ -144,6 +144,20 @@ a credential, so the engine refuses the document and the API server refuses
 the provider first. Another CLI's variable is no such conflict:
 `ANTHROPIC_API_KEY` is OpenCode's Anthropic key.
 
+Nor may `env` set a variable the engine sets on every call to keep the CLI
+inside its seat's own home and the call's working directory: `HOME`,
+`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME` and
+`TMPDIR` for every CLI, and the CLI's own configuration directory
+(`CLAUDE_CONFIG_DIR` for `ClaudeCode`, `CODEX_HOME` for `Codex`,
+`CURSOR_CONFIG_DIR` for `CursorAgent`, `KIMI_CODE_HOME` for `KimiCode`,
+`HERMES_HOME` for `Hermes`, `PI_CODING_AGENT_DIR` for `Pi`), or, for
+`OpenCode`, its configuration directory `OPENCODE_CONFIG_DIR` and
+`OPENCODE_CONFIG_PROJECT_DISABLE`, the switch that keeps OpenCode from reading
+project configuration from the directories above a seat's call. `env` is
+layered over them, so a value there would replace that isolation for every
+seat on the provider: the engine refuses the document, and the API server
+refuses the provider first. A test holds the API's list to the engine's.
+
 ```yaml
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
