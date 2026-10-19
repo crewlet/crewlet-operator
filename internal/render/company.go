@@ -11,8 +11,6 @@ import (
 	"slices"
 	"strings"
 
-	"sigs.k8s.io/yaml"
-
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/secretref"
 )
@@ -94,7 +92,7 @@ func Company(in *Input) (*Document, error) {
 	if err != nil {
 		return nil, err
 	}
-	out, err := yaml.JSONToYAML(merged)
+	out, err := yamlOf(merged)
 	if err != nil {
 		return nil, fmt.Errorf("converting the company document to YAML: %w", err)
 	}
@@ -171,7 +169,7 @@ func renderJSON(
 			r.source(Path{key}, r.owner)
 		}
 	}
-	// encoding/json writes map keys sorted, and JSONToYAML keeps them so.
+	// encoding/json writes map keys sorted, and yamlOf keeps them so.
 	merged, err := json.Marshal(top)
 	if err != nil {
 		return nil, nil, fmt.Errorf("encoding the company document: %w", err)

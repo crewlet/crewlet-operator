@@ -260,7 +260,8 @@ func TestBootstrapKeepsEveryCredentialOutOfTheEnvironment(t *testing.T) {
 
 // TestBootstrapRefusesAKeyringItCannotReference covers the keyring Secret's
 // ids and material, which come from a Secret anyone allowed to edit it can
-// change.
+// change. Each refusal is ErrKeyringInvalid, which is what the controller
+// holds the pods back as KeyringInvalid on, and no other failure is.
 func TestBootstrapRefusesAKeyringItCannotReference(t *testing.T) {
 	for _, c := range []struct {
 		name    string
@@ -277,8 +278,8 @@ func TestBootstrapRefusesAKeyringItCannotReference(t *testing.T) {
 			in := bootstrapCases()[0].input(t)
 			in.Keyring = c.keyring
 			_, err := Bootstrap(in)
-			if err == nil || !strings.Contains(err.Error(), c.want) {
-				t.Fatalf("err = %v, want one naming %s", err, c.want)
+			if !errors.Is(err, ErrKeyringInvalid) || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("err = %v, want ErrKeyringInvalid naming %s", err, c.want)
 			}
 		})
 	}

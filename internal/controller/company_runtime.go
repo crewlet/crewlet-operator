@@ -261,11 +261,18 @@ func (r *CompanyReconciler) runWorkload(
 				"there, or its spec.signIn.secondFactor to Required. The pods are held as they are.",
 			class.Name, in.addresses.external))
 	}
-	if err != nil {
+	if errors.Is(err, render.ErrKeyringInvalid) {
 		return holdBack(crewletaiv1alpha1.ReasonKeyringInvalid,
 			fmt.Sprintf("Secret %s/%s is not a keyring the engine can use: %s. The operator never rewrites a keyring, since the "+
 				"engine's sealed data opens only with its keys: repair the Secret, setting the annotation %s to the id of the key "+
 				"that seals new writes.", keyring.Namespace, keyring.Name, err, KeyringActiveKeyAnnotation))
+	}
+	if err != nil {
+		// Every refusal that is the Company's, its class's or its Secrets'
+		// is one of the errors above; anything else is the operator's own
+		// fault, which no edit of theirs clears, so it is the reconcile's
+		// error rather than a reason on the Company naming a cause it is not.
+		return metav1.Condition{}, fmt.Errorf("rendering the data pods' crewlet.yaml: %w", err)
 	}
 
 	claims, err := r.cachedDataClaims(ctx, c)
