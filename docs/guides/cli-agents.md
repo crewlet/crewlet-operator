@@ -49,7 +49,7 @@ installed is kept:
 ```dockerfile
 # The engine image you run, by digest, and the Claude Code release to add.
 ARG ENGINE_IMAGE
-ARG CLAUDE_CODE_VERSION=2.1.296
+ARG CLAUDE_CODE_VERSION=2.1.303
 
 # The installer needs curl, which the engine image does not ship, and leaves a
 # download cache, a launcher and the build user's ~/.claude.json behind, none

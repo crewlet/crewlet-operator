@@ -118,7 +118,7 @@ your company does not run.
 # The engine image you run, by digest, and uv, which installs the Python
 # servers and is not kept.
 ARG ENGINE_IMAGE
-ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.13.1@sha256:4a1f3666816dafadd20ceb71eac9a7d56d7ef30279f7d64048519ab901ada336
 
 FROM ${UV_IMAGE} AS uv
 
@@ -128,9 +128,9 @@ FROM ${ENGINE_IMAGE} AS fetch
 ARG TARGETARCH
 # GitLab: glab, whose `glab mcp serve` is the server. The digests are the
 # release's checksums.txt.
-ARG GLAB_VERSION=1.122.0
-ARG GLAB_SHA256_AMD64=242326668011a110ea6dcbe865cfbf3ab763f9909851c90ef0da23ab1f2f3808
-ARG GLAB_SHA256_ARM64=78910c21b6b517c0936e413df96e59f942558a3a4e4109370a452761f7d0f253
+ARG GLAB_VERSION=1.123.0
+ARG GLAB_SHA256_AMD64=9c9ac4c2b74ec8709dec4819a4041050f3680c6aaa18f0ed30434081f4fe9bef
+ARG GLAB_SHA256_ARM64=1f2d0a885b28d08de341a597b2eb7204ce03d4e67b008efecab9951e4b014f0c
 # Slack: slack-mcp-server, a Go program npm delivers. The binary is taken from
 # its platform package, checked against the registry's dist.integrity, so no
 # Node.js is needed to run it.
@@ -164,7 +164,7 @@ ARG MCP_SERVER_MATTERMOST_VERSION=0.6.1
 ARG MCP_ATLASSIAN_VERSION=0.23.1
 # The servers' own dependencies are resolved as PyPI had them on this date,
 # so a rebuild installs what was tested. Move it with the versions.
-ARG RESOLVED_AT=2026-10-12T00:00:00Z
+ARG RESOLVED_AT=2026-10-19T00:00:00Z
 USER root
 # The interpreter, its standard library compiled, and each server's
 # environment go under /opt/uv, the servers' commands into /usr/local/bin.
