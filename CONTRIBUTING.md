@@ -147,7 +147,11 @@ each Company an engine of its own, run against it. The renderer in
 [`internal/render`](internal/render) hands every document it renders to the
 same binary's `crewlet validate`, with the secret sync's store names in every
 credential position, and applies it to a running engine to check that the
-engine's encoding of it reads back as no difference. The CRD suite in
+engine's encoding of it reads back as no difference. It also runs the engine
+as a data pod, with variables in its environment, and holds what the
+[tool-servers guide](docs/guides/tool-servers.md#stdio-and-http) and the
+`MCPServer` API say a stdio tool server is handed of it to what the engine
+starts one with. The CRD suite in
 [`test/crd`](test/crd) holds the `LLMProvider` rules over a `CLIAgent`
 provider's sign-in, and the sign-in table of
 [`docs/guides/cli-agents.md`](docs/guides/cli-agents.md), to the same binary:
