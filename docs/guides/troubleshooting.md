@@ -41,6 +41,7 @@ flowchart TD
     SYM -->|"SeatsPlaced=False"| SP["Seat pods do not run"]
     SYM -->|"a vendor's webhooks"| WH["Webhooks do not arrive"]
     SYM -->|"an agent never answers,<br/>a tool is missing"| TS["A tool server does not start"]
+    SYM -->|"a seat on a coding CLI<br/>is signed in to nothing"| SO["A seat on a coding CLI<br/>runs signed out"]
     SYM -->|"a warning, nothing broken"| AD["Read what the engine<br/>is worth telling you"]
 ```
 
@@ -537,6 +538,79 @@ API's [`GET /mcp-servers`](https://github.com/crewlet/crewlet/blob/main/docs/ref
   or refused, as by Mattermost's own `Forward80To443`, which answers a write
   over `http://` with `400 Use HTTPS`. Give it the Integration's `url`
   ([Mattermost](integrations.md#mattermost)).
+
+## A seat on a coding CLI runs signed out
+
+A `CLIAgent` LLMProvider reports `Applied=True` once the engine runs the
+document that names it; whether its CLI signs in is the engine's to see, at
+run time, and a provider signed in to nothing fails every call, so its
+seats' chains move on to the next provider. The engine restores a
+credential bundle on the data pod, when it starts and at every revision it
+applies, and runs the CLI on the pod that holds each seat, which the Seat's
+`status.placement.node` names (a seat on a bundle runs in `data`:
+[Seat pools](cli-agents.md#seat-pools)):
+
+```bash
+pod=$(kubectl get seat triage -n acme -o jsonpath='{.status.placement.node}')
+kubectl logs "$pod" -n acme | grep -E 'cli_agent_(carry_out_failed|sweep_failed|login_superseded)'
+kubectl logs acme-data-0 -n acme | grep -E 'cli_agent_bundle_(restore_failed|withheld)'
+```
+
+- **`cli_agent_bundle_restore_failed`** names the provider whose bundle did
+  not restore, and why, and the provider runs signed out. An OpenCode bundle
+  holding a login OpenCode 1.x made (its `auth.json`) is refused: export it
+  again from OpenCode 2
+  ([An OpenCode login in a bundle](cli-agents.md#an-opencode-login-in-a-bundle)).
+  The login is still empty, so a good bundle in the Secret is restored at
+  the next revision the operator applies, with no restart.
+- **`cli_agent_bundle_withheld`** names a provider somebody logged out with
+  `crewlet llm logout` on the data pod. The logout is recorded in the
+  provider's login directory on the data volume, and while it stands the
+  engine restores the bundle there at no start and no revision, until a
+  login is written there again, by one of the commands the warning names
+  for that CLI (a headless token does not end it). To run the provider on
+  its bundle without one, give it, and every provider sharing its login, a
+  new `cli.loginName`
+  ([Rotating a credential](credentials.md#rotating-a-credential)).
+- **Every call fails, saying the CLI refused to import the shared login.**
+  OpenCode cannot read the login the bundle restored, usually because
+  another 2.x release than the image's exported it. The error names three
+  ways out, each run on the data pod (`kubectl exec`), and none fits a pod:
+  `crewlet llm login`, which replaces the login (and logs
+  `cli_agent_shared_login_refused`), signs in at a terminal; `-from-host`
+  adopts a login made at one in the pod's own home; and `crewlet llm
+  logout`, which needs neither, empties the login and then keeps the bundle
+  out of it, as above. Export the bundle again with the OpenCode release
+  the image runs, and move the provider onto it with a new
+  `cli.loginName`.
+- **Every call of an OpenCode provider fails, the CLI rejecting
+  `--standalone`.** The image has npm's `opencode-ai`, OpenCode 1.x, where
+  Crewlet drives OpenCode 2 alone ([OpenCode](cli-agents.md#opencode)).
+- **`cli_agent_carry_out_failed`** names a seat whose home was left open
+  (its last call could not carry its login out, or the engine stopped
+  mid-call) and which another seat of the provider, sweeping such homes
+  before its own call, could not carry out either, such as an OpenCode
+  export that failed, whether or not the CLI had refreshed anything; it says
+  when the other seats try again (`retry_in`), after a minute, doubling to
+  half an hour. The seat's own next call tries every time and is refused
+  meanwhile, so its chain moves on. If it repeats, the export cannot
+  succeed, as after an image moved to an OpenCode that broke it; Crewlet's
+  [Token refresh across seats](https://github.com/crewlet/crewlet/blob/main/docs/concepts/subscription-llm-backends.md#token-refresh-across-seats)
+  says how to discard a login that can never be handed back.
+- **`cli_agent_sweep_failed`**: the engine could not list the provider's
+  seat homes on the volume to hand their logins back, and says why.
+- **`cli_agent_login_superseded`** names the provider, the login file and
+  how its shared login moved (`shared=changed` or `removed`): a seat's
+  refreshed login was dropped because the shared login moved after the seat
+  started from it, at another seat's refresh, a `crewlet llm login` or
+  `-from-host`, or a `crewlet llm logout`. The newer login is kept, so it
+  is informational; a run of them on one provider is worth a look.
+- **An OpenCode coding run, or an agent-mode OpenCode turn, ends at once**
+  with `this box runs OpenCode 1.…` in the run's report, which the engine's
+  dashboard shows on the run. The box has OpenCode 1.x: name a template
+  built with `@opencode/cli`
+  ([Text mode and agent mode](cli-agents.md#text-mode-and-agent-mode)). No
+  condition of the operator's can see it.
 
 ## Read what the engine is worth telling you
 
