@@ -42,6 +42,7 @@ flowchart TD
     SYM -->|"a vendor's webhooks"| WH["Webhooks do not arrive"]
     SYM -->|"an agent never answers,<br/>a tool is missing"| TS["A tool server does not start"]
     SYM -->|"a seat on a coding CLI<br/>is signed in to nothing"| SO["A seat on a coding CLI<br/>runs signed out"]
+    SYM -->|"an OpenCode call<br/>or run fails at once"| SO
     SYM -->|"a warning, nothing broken"| AD["Read what the engine<br/>is worth telling you"]
 ```
 
