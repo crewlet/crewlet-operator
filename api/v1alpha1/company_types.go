@@ -678,7 +678,14 @@ type CompanyRuntime struct {
 	// env adds environment variables to the engine container, for platform
 	// wiring the engine reads from its environment. They are merged over the
 	// class's podTemplate.spec.env by name: a variable here replaces the
-	// class's variable of the same name.
+	// class's variable of the same name. They are the engine's environment,
+	// not that of the processes it starts: a Stdio tool server is handed only
+	// the part Crewlet's allowlist names, such as PATH and the TLS and proxy
+	// variables, a coding CLI that part and the variables its Crewlet profile
+	// passes through, such as GeminiCLI's GOOGLE_CLOUD_PROJECT and
+	// GOOGLE_CLOUD_LOCATION, and a sandbox run none of it. So a variable a tool
+	// server reads goes in its MCPServer's env (docs/guides/tool-servers.md),
+	// and any other a coding CLI reads in its LLMProvider's spec.cli.env.
 	//
 	// Names starting with CREWLET_ or OTEL_ are the operator's own.
 	// ANTHROPIC_API_KEY and OPENAI_API_KEY are refused too: Crewlet reads them

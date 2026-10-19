@@ -172,8 +172,15 @@ type MCPServerSpec struct {
 	Args []string `json:"args,omitempty"`
 
 	// env is the environment of a Stdio server's process, shared by every
-	// instance; per-seat values belong in a Seat's or a Unit's spec.mcp.
-	// Crewlet's `env`, a credential position.
+	// instance; per-seat values belong in a Seat's or a Unit's spec.mcp,
+	// which win over these. It is laid over the part of the engine's own
+	// environment Crewlet hands a tool server: PATH, the locale, the TLS and
+	// proxy variables and the engine user's HOME, among a few others
+	// (docs/guides/tool-servers.md). Nothing else of the engine's
+	// environment reaches the server: a variable the engine image sets with
+	// ENV, or the class or the Company sets on the pod, reaches it only when
+	// it is one of those, so every other variable the server reads is given
+	// here. Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name

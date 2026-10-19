@@ -2568,10 +2568,18 @@ spec:
                           Company of the class: platform wiring that is the same for all of
                           them, such as the address of the platform's own API. Every value,
                           one from a Secret included, reaches every tenant of the class: code
-                          the tenant runs in the engine's pod can read its environment. A Company's
-                          spec.runtime.env is merged over it by name. The same names are
-                          refused as there: those starting with CREWLET_ or OTEL_, and
-                          ANTHROPIC_API_KEY and OPENAI_API_KEY.
+                          the tenant runs in the engine's pod can read its environment. They are
+                          the engine's environment, not that of the processes it starts: a Stdio
+                          tool server is handed only the part Crewlet's allowlist names, such as
+                          PATH and the TLS and proxy variables, a coding CLI that part and the
+                          variables its Crewlet profile passes through, such as GeminiCLI's
+                          GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION, and a sandbox run none
+                          of it. So a variable a tool server reads goes in its MCPServer's env
+                          (docs/guides/tool-servers.md), and any other a coding CLI reads in its
+                          LLMProvider's spec.cli.env. A Company's spec.runtime.env is merged over
+                          this env by name. The same names are refused as there: those
+                          starting with CREWLET_ or OTEL_, and ANTHROPIC_API_KEY and
+                          OPENAI_API_KEY.
                         items:
                           description: |-
                             ClassEnvVar is an environment variable an EngineClass sets on the engine
