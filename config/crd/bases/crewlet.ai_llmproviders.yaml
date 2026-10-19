@@ -185,8 +185,10 @@ spec:
                       credentialBundleSecretRef:
                         description: |-
                           credentialBundleSecretRef is the Secret key holding a credential
-                          bundle `crewlet llm export` wrote. Crewlet's `credential_bundle`, a
-                          credential position.
+                          bundle `crewlet llm export` wrote. A bundle holding a login OpenCode
+                          1.x made (its auth.json) is refused when the engine restores it, and
+                          the provider runs signed out: export it again from OpenCode 2.
+                          Crewlet's `credential_bundle`, a credential position.
                         properties:
                           key:
                             description: key is the key within the Secret's data.

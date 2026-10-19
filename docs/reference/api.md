@@ -137,12 +137,15 @@ A subscription login is made at a terminal, by `crewlet llm login` or the
 CLI's own command, and a pod has no terminal: Subscription signs in with a
 headless token, such as the CLAUDE_CODE_OAUTH_TOKEN `claude setup-token`
 mints, or with a credential bundle `crewlet llm export` wrote from a login
-made elsewhere. A bundle is restored only while the provider's login on the
-data volume is empty, so the refreshed login a running engine keeps there
-wins over the bundle; a token never needs refreshing, which makes it the
-better of the two wherever the CLI mints one. A provider names one of the
-two: given both, which login the CLI acts on would be the CLI's choice
-between its environment and its own files, which nothing here can see.
+made elsewhere: the CLI's login, which is its credential files, or, for
+OpenCode, which keeps its logins in a database of its own, the document
+OpenCode 2's auth export printed. A bundle is restored only while the
+provider's login on the data volume is empty, so the refreshed login a
+running engine keeps there wins over the bundle; a token never needs
+refreshing, which makes it the better of the two wherever the CLI mints
+one. A provider names one of the two: given both, which login the CLI acts
+on would be the CLI's choice between its environment and its own files,
+which nothing here can see.
 
 Crewlet hands a CLI a token or a key only through the variable its profile
 names, and refuses one for a CLI whose profile names none, since it would
@@ -176,7 +179,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `mode` _[CLIAgentAuthMode](#cliagentauthmode)_ | mode is how the CLI signs in. Unset is Subscription. Crewlet's<br />`mode`. |  | Enum: [Subscription APIKey] <br />Optional: \{\} <br /> |
 | `tokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | tokenSecretRef is the Secret key holding a long-lived subscription<br />token the CLI mints for headless use. Crewlet's `token`, a credential<br />position. |  | Optional: \{\} <br /> |
-| `credentialBundleSecretRef` _[SecretKeyReference](#secretkeyreference)_ | credentialBundleSecretRef is the Secret key holding a credential<br />bundle `crewlet llm export` wrote. Crewlet's `credential_bundle`, a<br />credential position. |  | Optional: \{\} <br /> |
+| `credentialBundleSecretRef` _[SecretKeyReference](#secretkeyreference)_ | credentialBundleSecretRef is the Secret key holding a credential<br />bundle `crewlet llm export` wrote. A bundle holding a login OpenCode<br />1.x made (its auth.json) is refused when the engine restores it, and<br />the provider runs signed out: export it again from OpenCode 2.<br />Crewlet's `credential_bundle`, a credential position. |  | Optional: \{\} <br /> |
 
 
 #### CLIAgentAuthMode
@@ -289,9 +292,11 @@ Crewlet's providers.llm entry's cli block.
 
 The CLI is a binary in the engine's image, which the official image does
 not ship: a class running such a provider names an image derived from the
-engine's with the CLI installed (docs/guides/cli-agents.md). Its login, and
-the per-seat homes the CLI keeps, are on the data volume, so a restart or a
-new pod keeps them.
+engine's with the CLI installed (docs/guides/cli-agents.md). For OpenCode
+that is OpenCode 2, the @opencode/cli package: Crewlet drives no other
+release, and every command it runs carries --standalone, which OpenCode 1.x
+(npm's opencode-ai) rejects. Its login, and the per-seat homes the CLI
+keeps, are on the data volume, so a restart or a new pod keeps them.
 
 Its rules hold every credential to a variable Crewlet's profile for the
 CLI reads, as Crewlet's own admission does (providers.llm.*.cli): the
@@ -920,7 +925,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `apiKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | apiKeySecretRef is the Secret key holding the service's API key.<br />Crewlet's `api_key`, a credential position. |  | Required: \{\} <br /> |
 | `domain` _string_ | domain points at a self-hosted cluster of the service. Unset is the<br />vendor's cloud. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `template` _string_ | template is the sandbox template, which also fixes each sandbox's CPU,<br />memory and disk. Unset, each run gets the vendor's prebuilt template<br />for its coding agent's CLI (claude or opencode); a template set here is<br />used for every run, so it must carry the CLI of every coding agent and<br />Agent-mode CLIAgent provider the company runs. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `template` _string_ | template is the sandbox template, which also fixes each sandbox's CPU,<br />memory and disk. Unset, each run gets the vendor's prebuilt template<br />for its coding agent's CLI (claude or opencode); a template set here is<br />used for every run, so it must carry the CLI of every coding agent and<br />Agent-mode CLIAgent provider the company runs. For OpenCode that is<br />OpenCode 2, the @opencode/cli package (opencode --version prints<br />opencode v2.…): Crewlet's OpenCode runner ends a run at once in a box<br />with OpenCode 1.x (npm's opencode-ai), and E2B does not say which<br />release its prebuilt opencode template carries, so a company whose<br />OpenCode runs end that way sets template to one built with<br />@opencode/cli. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### EmbeddingProviderType

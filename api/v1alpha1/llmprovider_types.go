@@ -128,12 +128,15 @@ const (
 // CLI's own command, and a pod has no terminal: Subscription signs in with a
 // headless token, such as the CLAUDE_CODE_OAUTH_TOKEN `claude setup-token`
 // mints, or with a credential bundle `crewlet llm export` wrote from a login
-// made elsewhere. A bundle is restored only while the provider's login on the
-// data volume is empty, so the refreshed login a running engine keeps there
-// wins over the bundle; a token never needs refreshing, which makes it the
-// better of the two wherever the CLI mints one. A provider names one of the
-// two: given both, which login the CLI acts on would be the CLI's choice
-// between its environment and its own files, which nothing here can see.
+// made elsewhere: the CLI's login, which is its credential files, or, for
+// OpenCode, which keeps its logins in a database of its own, the document
+// OpenCode 2's auth export printed. A bundle is restored only while the
+// provider's login on the data volume is empty, so the refreshed login a
+// running engine keeps there wins over the bundle; a token never needs
+// refreshing, which makes it the better of the two wherever the CLI mints
+// one. A provider names one of the two: given both, which login the CLI acts
+// on would be the CLI's choice between its environment and its own files,
+// which nothing here can see.
 //
 // Crewlet hands a CLI a token or a key only through the variable its profile
 // names, and refuses one for a CLI whose profile names none, since it would
@@ -172,8 +175,10 @@ type CLIAgentAuth struct {
 	TokenSecretRef SecretKeyReference `json:"tokenSecretRef,omitzero"`
 
 	// credentialBundleSecretRef is the Secret key holding a credential
-	// bundle `crewlet llm export` wrote. Crewlet's `credential_bundle`, a
-	// credential position.
+	// bundle `crewlet llm export` wrote. A bundle holding a login OpenCode
+	// 1.x made (its auth.json) is refused when the engine restores it, and
+	// the provider runs signed out: export it again from OpenCode 2.
+	// Crewlet's `credential_bundle`, a credential position.
 	// +optional
 	CredentialBundleSecretRef SecretKeyReference `json:"credentialBundleSecretRef,omitzero"`
 }
@@ -183,9 +188,11 @@ type CLIAgentAuth struct {
 //
 // The CLI is a binary in the engine's image, which the official image does
 // not ship: a class running such a provider names an image derived from the
-// engine's with the CLI installed (docs/guides/cli-agents.md). Its login, and
-// the per-seat homes the CLI keeps, are on the data volume, so a restart or a
-// new pod keeps them.
+// engine's with the CLI installed (docs/guides/cli-agents.md). For OpenCode
+// that is OpenCode 2, the @opencode/cli package: Crewlet drives no other
+// release, and every command it runs carries --standalone, which OpenCode 1.x
+// (npm's opencode-ai) rejects. Its login, and the per-seat homes the CLI
+// keeps, are on the data volume, so a restart or a new pod keeps them.
 //
 // Its rules hold every credential to a variable Crewlet's profile for the
 // CLI reads, as Crewlet's own admission does (providers.llm.*.cli): the

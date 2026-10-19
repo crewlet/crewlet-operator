@@ -238,12 +238,13 @@ says how it is named.
 ### A coding CLI's login
 
 A `CLIAgent` provider signs its CLI in with a headless subscription token or
-with a credential bundle `crewlet llm export` wrote, each a Secret key; with
-`auth.mode: APIKey`, with the provider's `apiKeySecretRefs` key; or, for
-Hermes, Pi and OpenCode, with its model provider's key in `cli.env`, which
-may never set the CLI's own token or key variable, since `auth` owns it, nor
-a variable the engine sets to keep the CLI inside its seat's home
-([Signing in](cli-agents.md#signing-in)):
+with a credential bundle `crewlet llm export` wrote (for OpenCode, its
+exported login: [An OpenCode login in a bundle](cli-agents.md#an-opencode-login-in-a-bundle)),
+each a Secret key; with `auth.mode: APIKey`, with the provider's
+`apiKeySecretRefs` key; or, for Hermes, Pi and OpenCode, with its model
+provider's key in `cli.env`, which may never set the CLI's own token or key
+variable, since `auth` owns it, nor a variable the engine sets to keep the
+CLI inside its seat's home ([Signing in](cli-agents.md#signing-in)):
 
 ```yaml
 spec:                       # LLMProvider claude-code

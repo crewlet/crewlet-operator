@@ -92,7 +92,7 @@ takes none and signs in with that key in `cli.env`:
 | Sign-in | What the Secret holds | Use it when |
 |---|---|---|
 | `auth.tokenSecretRef` | a long-lived headless token the CLI mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the CLI is Claude Code, the one CLI whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins an agent-mode run can carry (an agent-mode OpenCode carries its model provider's key in `env` instead) |
-| `auth.credentialBundleSecretRef` | a bundle of the CLI's credential files, from `crewlet llm export <key>` on a machine where you logged in | any CLI: the others mint no token Crewlet hands on |
+| `auth.credentialBundleSecretRef` | a bundle of the CLI's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any CLI: the others mint no token Crewlet hands on |
 | `auth.mode: APIKey` with one `apiKeySecretRefs` key | the CLI's metered API key | the CLI's Crewlet profile names a key variable ([below](#a-metered-key)) |
 | `env`, with `auth.mode: Subscription` | the key of the model provider the CLI runs on, in the variable the CLI reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the CLI is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
 
@@ -223,6 +223,36 @@ Providers that set the same `loginName` share one login and its seats'
 homes, which is how several models run off one subscription; they must
 drive the same CLI, or the engine refuses the document.
 
+### An OpenCode login in a bundle
+
+OpenCode 2 keeps its logins in a database of its own rather than in files,
+so an OpenCode bundle holds one file: the document `opencode auth export
+--standalone` printed. The engine keeps it as the login of record
+(`credentials/exported-credentials` under
+`/var/lib/crewlet/llm-cli/<loginName>`), imports it into an empty database in
+a seat's home before the seat's calls, and exports it back when OpenCode
+refreshed it
+([Token refresh across seats](https://github.com/crewlet/crewlet/blob/main/docs/concepts/subscription-llm-backends.md#token-refresh-across-seats)).
+
+Make it on a machine with OpenCode 2, npm's `@opencode/cli`:
+`crewlet llm login <key>` runs OpenCode's own `opencode auth login
+--standalone` in a login home of the entry's own, or sign in with OpenCode
+yourself and adopt that login with `crewlet llm login <key> -from-host`,
+which reads it through your OpenCode's export
+([Broker the vendor's own login](https://github.com/crewlet/crewlet/blob/main/docs/concepts/subscription-llm-backends.md#1-broker-the-vendors-own-login-any-cli));
+then `crewlet llm export <key>`. The export prints every login the OpenCode
+it runs in holds, keys stored with `opencode auth login` included, so a
+bundle adopted from your own home carries every provider you signed in to
+there: adopt from a home holding only the login the provider should run on
+(`-from-host -home <dir>`), or sign in with `crewlet llm login`, whose login
+home holds the entry's login alone.
+
+A login OpenCode 1.x made (`~/.local/share/opencode/auth.json`) is not read:
+a bundle holding one is refused when the engine restores it, which it logs
+as `cli_agent_bundle_restore_failed`, and the provider runs signed out, so
+export it again from OpenCode 2. A bundle serves mode Text only: an
+agent-mode run never receives it ([Text mode and agent mode](#text-mode-and-agent-mode)).
+
 ### Which `env` entries sign a CLI in
 
 This is the sign-in of a Hermes, Pi or OpenCode provider in
@@ -306,9 +336,18 @@ In agent mode:
   `spec.sandbox.e2b.template`, each run gets E2B's prebuilt template for its
   CLI (`claude` for Claude Code, `opencode` for OpenCode); a template you
   set is used for every run, so it must carry the CLI of every coding agent
-  and agent-mode provider the company runs. `cli.runIn` is `E2B`, the only
-  cell v1alpha1 offers: Crewlet's local cells would run every seat's code in
-  the engine's pod, with its credentials.
+  and agent-mode provider the company runs. For OpenCode that is OpenCode 2,
+  the `@opencode/cli` package (`opencode --version` prints `opencode
+  v2.…`): Crewlet's runner ends a run at once in a box that has OpenCode
+  1.x, npm's `opencode-ai`, with `this box runs OpenCode 1.…; the opencode
+  runner drives OpenCode 2 (the @opencode/cli package)` in the run's report.
+  E2B does not say which OpenCode its prebuilt `opencode` template carries,
+  so where runs end that way, set `spec.sandbox.e2b.template` to a template
+  built with `@opencode/cli`, which, used for every run, must also carry
+  Claude Code if any seat's code work runs it
+  ([Crewlet's OpenCode runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#opencode)).
+  `cli.runIn` is `E2B`, the only cell v1alpha1 offers: Crewlet's local cells
+  would run every seat's code in the engine's pod, with its credentials.
 - Claude Code and OpenCode run in agent mode: they are the CLIs the engine
   has a sandbox runner for, the coding agents `spec.sandbox` offers, and the
   API server refuses `mode: Agent` for any other. The run is handed `model`
@@ -405,7 +444,9 @@ time the condition becomes `False` or its reason changes.
   `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY`; it then runs on
   that sign-in and its own model choice (`ANTHROPIC_MODEL` in
   `spec.sandbox.env` picks one; like every variable there, it is read from
-  a Secret key). `OpenCode` reads either wire.
+  a Secret key). `OpenCode` reads either wire. An `OpenCode` coding run
+  needs OpenCode 2 in the box, as an agent-mode run does
+  ([Text mode and agent mode](#text-mode-and-agent-mode)).
 - **The login must reach the remote sandbox.** A credential bundle never
   does, so a `ClaudeCode` provider signed in by a bundle, with neither
   `CLAUDE_CODE_OAUTH_TOKEN` nor `ANTHROPIC_API_KEY` in the seat's sandbox
