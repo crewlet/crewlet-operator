@@ -273,7 +273,8 @@ type CLIAgentSettings struct {
 	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
 
 	// maxConcurrent is how many CLI processes the provider runs at once;
-	// each takes 200 to 400 MB of the engine pod's memory. Unset takes
+	// each takes 200 to 450 MB of the engine pod's memory, OpenCode's at the
+	// top of that range (docs/guides/cli-agents.md). Unset takes
 	// Crewlet's default of 4. Crewlet's `max_concurrent`.
 	// +optional
 	// +kubebuilder:validation:Minimum=1

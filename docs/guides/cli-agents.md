@@ -13,12 +13,38 @@ the engine runs in a pod: the image, the login, and agent mode.
 
 The CLI is a program the engine starts, in the engine's own container, and
 Crewlet's image ships none: a derived image adds it, with whatever runtime it
-needs (Node.js for most of them; Claude Code needs none, being one native
-binary). Build one from the engine image you run, named by digest: the engine
-of the operator's release, or the copy of Crewlet's `main` image that
-[Installing](installing.md#engine-image) makes in your registry. Pin both the
-engine and the CLI. For Claude Code, Anthropic's installer runs in a build
-stage of its own and only the binary it installed is kept:
+needs (Node.js for most of them; Claude Code and OpenCode need none, each
+being one native binary). Build one from the engine image you run, named by
+digest: the engine of the operator's release, or the copy of Crewlet's `main`
+image that [Installing](installing.md#engine-image) makes in your registry.
+Pin both the engine and the CLI.
+
+A class names one engine image, so a company that runs two CLIs, or a CLI
+and stdio tool servers, needs one image with all of them. Each Dockerfile
+here and the one of [Building the image](tool-servers.md#building-the-image)
+takes the image it extends as `ENGINE_IMAGE`: push the first image, then
+build the next Dockerfile with its `ENGINE_IMAGE` naming it, rather than
+pasting one Dockerfile into another
+([One image with a coding CLI](tool-servers.md#one-image-with-a-coding-cli)).
+
+The engine's root filesystem is read-only: a CLI writes under the home the
+engine gives each seat and under `/tmp`, both writable. Each running CLI
+takes 200 to 450 MB, so size the class's `data.resources` for
+`cli.maxConcurrent` of them per provider. An OpenCode call is at the top of
+that range: measured on OpenCode 2.0.32, one call held about 440 MB at its
+peak, some 365 MB of it the private server every call starts, and each call
+running beside it about 250 to 350 MB more, the binary's pages being shared
+between them; a short `opencode api session.get` reading a call's usage
+follows each. OpenCode also unpacks about 19 MB of native libraries into
+each seat's home, under the `TMPDIR` the engine gives it (`<home>/tmp`),
+beside a database of about 7 MB while a seat's calls run: about 26 MB per
+OpenCode seat on the data volume, and on a seat pod's scratch volume
+(`scratchSizeLimit`) for each seat the pod holds.
+
+### Claude Code
+
+Anthropic's installer runs in a build stage of its own and only the binary it
+installed is kept:
 
 ```dockerfile
 # The engine image you run, by digest, and the Claude Code release to add.
@@ -70,16 +96,117 @@ spec:
     image: <your registry>/crewlet-claude-code@sha256:<digest>   # crewlet <commit>
 ```
 
-A class names one engine image, so a company that also runs stdio tool
-servers needs one image with both: push this one, then build the Dockerfile
-of [Building the image](tool-servers.md#building-the-image) on it, with its
-`ENGINE_IMAGE` naming this image, rather than pasting one Dockerfile into the
-other ([One image with a coding CLI](tool-servers.md#one-image-with-a-coding-cli)).
+### OpenCode
 
-The engine's root filesystem is read-only: a CLI writes under the home the
-engine gives each seat and under `/tmp`, both writable. Each running CLI
-takes 200 to 400 MB, so size the class's `data.resources` for
-`cli.maxConcurrent` of them per provider.
+Crewlet drives OpenCode 2 only, npm's `@opencode/cli`. npm's `opencode-ai` is
+OpenCode 1.x and rejects the `--standalone` every command of Crewlet's
+profile carries, so on it every call fails. The package's install script
+puts the binary of one of its platform packages in place, a self-contained
+program that needs no Node.js. This Dockerfile takes that binary straight
+from the platform package and checks it against the integrity npm's registry
+records, as the Slack server's is ([Building the image](tool-servers.md#building-the-image)):
+
+```dockerfile
+# The engine image you run, by digest.
+ARG ENGINE_IMAGE
+
+# The platform package is fetched and checked here, with a curl the engine
+# image does not ship: only the binary leaves this stage.
+FROM ${ENGINE_IMAGE} AS opencode
+ARG TARGETARCH
+# The OpenCode 2 release, and each platform package's dist.integrity on npm's
+# registry. amd64 takes the baseline build, which runs on any x86-64 node: the
+# other needs AVX2, and the image runs on whichever node its pod lands on.
+ARG OPENCODE_VERSION=2.0.32
+ARG OPENCODE_INTEGRITY_AMD64=sha512-NrB4iglJb7vGZWJ6B0qVH1EMHhWBZ4ADsAG9W0xLanzgxJ6eLEEsGBvxRX0cm/KPag5E/N0yZGsDVDZYcnz/OQ==
+ARG OPENCODE_INTEGRITY_ARM64=sha512-YR5O03irvmot/G0f8W49ehvhn5uqCFN3vf9JTsChvf47W6ldjKCNvsaCSXS2SP26dPOUMQBn7WqbKnyHzrNR5w==
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+WORKDIR /fetch
+RUN case "${TARGETARCH}" in \
+      amd64) package=cli-linux-x64-baseline integrity=${OPENCODE_INTEGRITY_AMD64} ;; \
+      arm64) package=cli-linux-arm64 integrity=${OPENCODE_INTEGRITY_ARM64} ;; \
+      *) echo "no OpenCode build for ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSLo opencode.tgz "https://registry.npmjs.org/@opencode/${package}/-/${package}-${OPENCODE_VERSION}.tgz"; \
+    test "sha512-$(openssl dgst -sha512 -binary opencode.tgz | base64 -w0)" = "${integrity}"; \
+    tar -xzf opencode.tgz --strip-components=2 package/bin/opencode
+
+FROM ${ENGINE_IMAGE}
+COPY --from=opencode --chown=0:0 /fetch/opencode /usr/local/bin/opencode
+```
+
+Pin the newest `@opencode/cli` of npm's `latest` tag, never its `beta` or
+`dev`, within the major Crewlet's opencode profile is written for (OpenCode 2
+today), with the `dist.integrity` of its `cli-linux-x64-baseline` and
+`cli-linux-arm64` packages at that version. The obvious alternatives are
+wrong:
+
+- **OpenCode's own installer**, `curl https://opencode.ai/v2/install`,
+  fetches the same package with no checksum, and picks the baseline or musl
+  build from the CPU and libc of the machine running the build, not of the
+  node the pod runs on.
+- **No update switch** is needed, unlike Claude Code's. Every call the engine
+  makes carries `update: disable` in the configuration it writes for that
+  call, and the commands it runs outside a call (`auth import`, `auth
+  export`, `auth list`, `--version`) check for no release. OpenCode's updater
+  replaces only what a package manager (npm, pnpm, Bun, Yarn, Vite+,
+  Homebrew or WinGet) or its own installer put in place, so it cannot touch
+  `/usr/local/bin/opencode`, and the root filesystem is read-only anyway.
+- **Never add an `/etc/opencode` configuration** to the image: OpenCode reads
+  it as machine-wide managed configuration over every seat's call, and
+  nothing the engine sets overrides it
+  ([Tool calls in text mode](https://github.com/crewlet/crewlet/blob/main/docs/concepts/subscription-llm-backends.md#tool-calls-in-text-mode)).
+- **The binary links glibc**, which the engine image's Debian has; the
+  `musl` packages are for Alpine. Of the native libraries it unpacks, only
+  its file watcher's needs more, libstdc++ and libgcc_s, which Debian has
+  too. The engine switches the watcher off on every command it runs
+  (`OPENCODE_FILEWATCHER_DISABLE`), and the check below loads it anyway,
+  since `cli.env` can switch it back on.
+
+Build it from the engine image, or from another image of
+[One image with a coding CLI](tool-servers.md#one-image-with-a-coding-cli),
+
+```bash
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
+  -t <your registry>/crewlet-opencode:<crewlet commit> .
+```
+
+check that OpenCode runs in it as the engine's pod runs it, as uid 10001 on
+a read-only root, with an empty `HOME` and `/tmp` that, like the pod's,
+allow running what is written there, no capabilities and no network,
+
+```bash
+image=<your registry>/crewlet-opencode:<crewlet commit>
+docker run --rm --read-only --network none --user 10001:10001 --cap-drop ALL \
+  --tmpfs /tmp:exec --tmpfs /home/crewlet:exec,uid=10001,gid=10001 -e HOME=/home/crewlet \
+  --entrypoint /usr/local/bin/opencode "$image" auth list --standalone --print-logs 2>&1 |
+  grep -E 'level=ERROR|No authenticated integrations'
+```
+
+which passes when it prints one line, `No authenticated integrations`. It
+starts the private server on loopback that every call the engine makes
+starts, and loads every native library the binary unpacks, where
+`--version` alone loads one. A library that does not load is no failure to
+OpenCode: it carries on without it, prints the same answer, exits 0, and
+says so only in its log, as `level=ERROR` with `watcher backend not
+supported`, which is why the check reads the log. That is what a missing
+libstdc++ looks like, and what a plain `--tmpfs` does, which mounts
+`noexec`: the pod's `/tmp` and home are `emptyDir` volumes, which allow
+exec, and each seat's `TMPDIR` is on the data volume, which ordinarily does
+too. Run the check on a machine of the platform the image is for: under
+emulation, as `docker buildx` runs another platform's image, OpenCode
+misses its own five-second deadline for activating its plugins and fails
+with `Location plugins did not finish activating`. The binary adds about
+210 MB to the image. Then name it in the class:
+
+```yaml
+# EngineClass with-opencode, excerpt
+spec:
+  engine:
+    image: <your registry>/crewlet-opencode@sha256:<digest>   # crewlet <commit>
+```
 
 ## Signing in
 

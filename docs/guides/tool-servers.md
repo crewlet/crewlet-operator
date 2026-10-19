@@ -282,20 +282,22 @@ seat, so size the class's
 
 A class names one engine image, so a company that also runs a seat on a
 coding CLI needs one image with both. Build one on the other: build the image
-of [The image needs the CLI](cli-agents.md#the-image-needs-the-cli) and push
-it, then build this Dockerfile with `ENGINE_IMAGE` naming it,
+of [The image needs the CLI](cli-agents.md#the-image-needs-the-cli) for each
+CLI the company runs (Claude Code's, OpenCode's, or one built on the other)
+and push it, then build this Dockerfile with `ENGINE_IMAGE` naming it,
 
 ```bash
-docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet-claude-code@sha256:<digest> \
+docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet-cli@sha256:<digest> \
   -t <your registry>/crewlet-agents:<crewlet commit> .
 ```
 
-run the checks above against the result, and name it in the class. Both
-Dockerfiles take the image they extend as `ENGINE_IMAGE`, so neither is
-edited. Pasting one into the other does not work: the second file's `ARG`s
-land inside the first one's last stage, where the second's `FROM` lines cannot
-see them, and a build produces only its last stage, so the paste either fails
-on a blank base image or leaves out the first file's additions.
+run the checks above against the result, and [OpenCode's](cli-agents.md#opencode)
+too where OpenCode is in it, and name it in the class. Each Dockerfile takes
+the image it extends as `ENGINE_IMAGE`, so none is edited. Pasting one into
+another does not work: the second file's `ARG`s land inside the first one's
+last stage, where the second's `FROM` lines cannot see them, and a build
+produces only its last stage, so the paste either fails on a blank base image
+or leaves out the first file's additions.
 
 ## Each integration's server
 
