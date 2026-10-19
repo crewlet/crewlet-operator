@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"strings"
 
@@ -140,6 +141,14 @@ func dataPodStartupSeconds(class *crewletaiv1alpha1.EngineClass, volume resource
 		return s
 	}
 	const gibibyte = 1 << 30
+	// A volume too large for the sum below to be taken in an int64 takes the
+	// longest window, as every volume over about 14 TiB does. The comparison
+	// is exact for a quantity of any size, where Value is not: for a size at
+	// or past the largest int64, which the API admits, it saturates there,
+	// wraps below zero or reads 0.
+	if volume.CmpInt64(math.MaxInt64-gibibyte) > 0 {
+		return maxStartupSeconds
+	}
 	seconds := dataPodBootSeconds + (volume.Value()+gibibyte-1)/gibibyte*dataPodRecoverySecondsPerGiB
 	if seconds > maxStartupSeconds {
 		return maxStartupSeconds

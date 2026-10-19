@@ -180,5 +180,4 @@ units:
       labels:
         crewlet.ai/pool: data
   type: department
-vision: A control plane that turns bare metal, cloud and edge hardware into Kubernetes
-  clusters ready to serve AI workloads, and an open framework that runs on them.
+vision: A control plane that turns bare metal, cloud and edge hardware into Kubernetes clusters ready to serve AI workloads, and an open framework that runs on them.

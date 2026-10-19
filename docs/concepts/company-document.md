@@ -188,7 +188,13 @@ that serves its API and reads only at start:
 
 A change of any of them restarts the data pod
 ([ADR-0006](../../adr/0006-tell-the-engine-an-address-it-is-reached-at.md)
-records why each is chosen as it is).
+records why each is chosen as it is). Crewlet refuses to start on an address
+of a shape no client can use, such as a browser's address whose host a
+browser rewrites before it sends it or a port outside 1 to 65535: the API
+refuses each where a Company or its class states it, and the operator holds
+the pods back on one it derives (`RuntimeReady=False AddressRefused`;
+[Where people reach the
+dashboard](../guides/exposure.md#where-people-reach-the-dashboard)).
 
 When the EngineClass's `seatPools.policy` is `Allowed`, the data pod also
 opens the leaf listener seat pods join the event stream through
@@ -209,7 +215,10 @@ node's whole free space, and engines that share it over-commit it until the
 last one is refused with `insufficient storage resources available`. Crewlet
 needs at least 6 GiB for the stream, since every node reserves the ceilings of
 all five of its state logs, 4.5 GiB at their smallest, and keeps room beside
-them, so an EngineClass's `data.storage.size` is at least `8Gi`.
+them, so an EngineClass's `data.storage.size` is at least `8Gi`. Nor does it
+start on more than 64 TiB, a guard against a unit mistake rather than a
+limit on the volume, so a volume larger than about 85 TiB gives the stream
+64 TiB and leaves the rest to the store and its snapshots.
 
 It holds the node's credentials as values: the two API tokens (the
 operator's own, and the one published for consumers in

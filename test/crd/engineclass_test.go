@@ -1,6 +1,7 @@
 package crd_test
 
 import (
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -90,6 +91,26 @@ func TestEngineClassObjects(t *testing.T) {
 			name:   "a storage size in bytes is accepted",
 			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("10737418240")) },
 		},
+		// A volume of any size past the floor is admitted: the render takes
+		// no more of it than Crewlet's ceiling on the stream (64 TiB), and
+		// computes what it takes exactly for a size no int64 holds
+		// (internal/render's TestContractStreamCeiling).
+		{
+			name:   "a storage size past what the engine's stream ceiling is three quarters of is accepted",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("1Pi")) },
+		},
+		{
+			name:   "a storage size no int64 holds is accepted",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("1e30")) },
+		},
+		{
+			name:   "a storage size of 16Ei, which no int64 holds, is accepted",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("16Ei")) },
+		},
+		{
+			name:   "a storage size one past the largest int64 is accepted",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("9223372036854775808")) },
+		},
 		{
 			name:   "a version override with an image by tag is accepted",
 			mutate: func(c *v1.EngineClass) { c.Spec.Engine.AllowVersionOverride = new(true) },
@@ -107,6 +128,30 @@ func TestEngineClassObjects(t *testing.T) {
 			mutate: func(c *v1.EngineClass) { c.Spec.Engine.Image = engineDigestImage },
 		},
 		{name: "S3 with a per-company prefix is accepted", mutate: s3("{{uid}}/")},
+		{
+			name: "an S3 region of white space alone is refused",
+			mutate: func(c *v1.EngineClass) {
+				s3("{{uid}}/")(c)
+				c.Spec.Objects.S3.Region = " \t"
+			},
+			want: msgS3RegionBlank,
+		},
+		{
+			name: "an S3 bucket of white space alone is refused",
+			mutate: func(c *v1.EngineClass) {
+				s3("{{uid}}/")(c)
+				c.Spec.Objects.S3.Bucket = "\t \t"
+			},
+			want: msgS3BucketBlank,
+		},
+		{
+			// Crewlet trims every string of its Tier A before it reads one.
+			name: "an S3 region and bucket with white space around them are accepted",
+			mutate: func(c *v1.EngineClass) {
+				s3("{{uid}}/")(c)
+				c.Spec.Objects.S3.Region, c.Spec.Objects.S3.Bucket = " eu-central-1 ", " crewlet-tenants "
+			},
+		},
 		{name: "S3 with the default prefix is accepted", mutate: s3("")},
 		{
 			name:   "S3 backend without s3 is refused",
@@ -158,7 +203,117 @@ func TestEngineClassObjects(t *testing.T) {
 			},
 			want: "endpoint must be an absolute http or https URL",
 		},
+		// What Crewlet's S3 client refuses at start, before it sends a
+		// request, whatever the bucket; test/crd's
+		// TestS3SettingsFollowTheEngine holds each to an engine's start.
+		{name: "an S3 region with a space is refused", mutate: s3Set(s3Region("eu central 1")), want: msgS3Region},
+		{name: "an S3 region with an underscore is refused", mutate: s3Set(s3Region("eu_central_1")), want: msgS3Region},
+		{name: "an S3 region ending in '.' is refused", mutate: s3Set(s3Region("eu-central-1.")), want: msgS3Region},
+		{name: "an S3 region starting with '-' is refused", mutate: s3Set(s3Region("-eu")), want: msgS3Region},
+		{name: "an S3 region ending in '-' is refused", mutate: s3Set(s3Region("eu-")), want: msgS3Region},
+		{
+			name:   "an S3 region of a label of 64 is refused",
+			mutate: s3Set(s3Region(strings.Repeat("a", 64))),
+			want:   msgS3Region,
+		},
+		{name: "an S3 region outside ASCII is refused", mutate: s3Set(s3Region("eü-central-1")), want: msgS3Region},
+		{name: "an S3 region in upper case is accepted", mutate: s3Set(s3Region("EU-CENTRAL-1"))},
+		{name: "an S3 region of a label of 63 is accepted", mutate: s3Set(s3Region(strings.Repeat("a", 63)))},
+		{name: "R2's S3 region auto is accepted", mutate: s3Set(s3Region("auto"))},
+		{
+			name:   "an S3 region holding a '.' without path style is refused",
+			mutate: s3Set(s3Region("eu.central")),
+			want:   msgS3RegionDot,
+		},
+		{
+			name:   "an S3 region holding a '.' with path style is accepted",
+			mutate: s3Set(s3Region("eu.central"), func(s *v1.S3ObjectSettings) { s.PathStyle = new(true) }),
+		},
+		{
+			name:   "an S3 FIPS region beside an endpoint is refused",
+			mutate: s3Set(s3Region("fips-us-east-1"), s3Endpoint("https://minio.storage.example")),
+			want:   msgS3RegionFIPSEndpoint,
+		},
+		{
+			name:   "an S3 region holding -fips beside an endpoint is refused",
+			mutate: s3Set(s3Region("us-fipsy-1"), s3Endpoint("https://minio.storage.example")),
+			want:   msgS3RegionFIPSEndpoint,
+		},
+		{name: "an S3 FIPS region on Amazon's endpoint is accepted", mutate: s3Set(s3Region("us-east-1-fips"))},
+		{name: "an S3 FIPS region of AWS GovCloud is accepted", mutate: s3Set(s3Region("fips-us-gov-west-1"))},
+		{
+			name:   "an S3 FIPS region in China is refused",
+			mutate: s3Set(s3Region("fips-cn-north-1")),
+			want:   msgS3RegionFIPSChina,
+		},
+		{name: "an S3 region in China is accepted", mutate: s3Set(s3Region("cn-north-1"))},
+		{name: "an S3 bucket named by an ARN is refused", mutate: s3Set(s3Bucket("arn:aws:s3:::crewlet")), want: msgS3Bucket},
+		{name: "an S3 directory bucket is refused", mutate: s3Set(s3Bucket("crewlet--use1-az4--x-s3")), want: msgS3Bucket},
+		{
+			name:   "an S3 Local Zone directory bucket is refused",
+			mutate: s3Set(s3Bucket("crewlet--use1-az4--xa-s3")),
+			want:   msgS3Bucket,
+		},
+		{name: "an S3 Outposts alias is refused", mutate: s3Set(s3Bucket("crewlet--op-s3")), want: msgS3Bucket},
+		{name: "an S3 bucket holding '.' is accepted", mutate: s3Set(s3Bucket("crewlet.tenants"))},
+		{
+			name:   "an S3 endpoint with a query is refused",
+			mutate: s3Set(s3Endpoint("https://minio.storage.example/?tenant=nimbus")),
+			want:   msgS3EndpointQuery,
+		},
+		{name: "an S3 endpoint with an empty query is accepted", mutate: s3Set(s3Endpoint("https://minio.storage.example?"))},
+		{
+			name:   "an S3 endpoint on port 0 is refused",
+			mutate: s3Set(s3Endpoint("http://minio.storage:0")),
+			want:   msgS3EndpointPort,
+		},
+		{
+			name:   "an S3 endpoint on port 65536 is refused",
+			mutate: s3Set(s3Endpoint("http://minio.storage:65536")),
+			want:   msgS3EndpointPort,
+		},
+		{name: "an S3 endpoint on port 9000 is accepted", mutate: s3Set(s3Endpoint("http://minio.storage:9000"))},
+		{
+			name:   "an S3 endpoint with two ports is refused",
+			mutate: s3Set(s3Endpoint("http://minio.storage:9000:9000")),
+			want:   msgS3EndpointHost,
+		},
+		{
+			// Crewlet's S3 client decodes the zone and parses the address
+			// again, which fails on what the decoding left.
+			name:   "an S3 endpoint whose IPv6 zone is percent-encoded is refused",
+			mutate: s3Set(s3Endpoint("https://[fe80::1%25e%20th0]:9000")),
+			want:   msgS3EndpointHost,
+		},
+		{name: "an S3 endpoint with an IPv6 zone is accepted", mutate: s3Set(s3Endpoint("https://[fe80::1%25eth0]:9000"))},
+		{
+			name:   "an S3 endpoint with an upper-case scheme is accepted",
+			mutate: s3Set(s3Endpoint("HTTPS://minio.storage.example")),
+		},
 	})
+}
+
+// s3Set is an EngineClass mutation to S3, of region eu-west-1 and bucket
+// crewlet-files, with each of set applied to its settings.
+func s3Set(set ...func(*v1.S3ObjectSettings)) func(*v1.EngineClass) {
+	return func(c *v1.EngineClass) {
+		s3 := v1.S3ObjectSettings{Region: "eu-west-1", Bucket: "crewlet-files"}
+		for _, f := range set {
+			f(&s3)
+		}
+		c.Spec.Objects = v1.ObjectSettings{Backend: v1.ObjectBackendS3, S3: s3}
+	}
+}
+
+// s3Region, s3Bucket and s3Endpoint set one of an S3ObjectSettings' fields.
+func s3Region(r string) func(*v1.S3ObjectSettings) {
+	return func(s *v1.S3ObjectSettings) { s.Region = r }
+}
+func s3Bucket(b string) func(*v1.S3ObjectSettings) {
+	return func(s *v1.S3ObjectSettings) { s.Bucket = b }
+}
+func s3Endpoint(e string) func(*v1.S3ObjectSettings) {
+	return func(s *v1.S3ObjectSettings) { s.Endpoint = e }
 }
 
 // engineDigestImage is the engine image pinned by digest.
@@ -369,6 +524,37 @@ func TestEngineClassExposure(t *testing.T) {
 			name:   "an API hostname that is no DNS name is refused",
 			mutate: apiGatewayHost("{{uid}}..example.com"),
 			want:   msgHostnameDNS,
+		},
+		// The API's host is a browser's address, which Crewlet refuses to
+		// start on when its last label is a number.
+		{
+			name:   "an API hostname ending in a number is refused",
+			mutate: apiGatewayHost("{{uid}}.123"),
+			want:   msgHostnameNumber,
+		},
+		{
+			name:   "an API hostname ending in a hexadecimal number is refused",
+			mutate: apiGatewayHost("{{uid}}.0x1f"),
+			want:   msgHostnameNumber,
+		},
+		{name: "an API hostname ending in 0x is refused", mutate: apiGatewayHost("{{uid}}.0x"), want: msgHostnameNumber},
+		{
+			name:   "an API hostname ending in an IPv4 address is refused",
+			mutate: apiGatewayHost("{{uid}}.10.0.0.1"),
+			want:   msgHostnameNumber,
+		},
+		{name: "an API hostname ending in a label with a letter is accepted", mutate: apiGatewayHost("{{uid}}.123x")},
+		{name: "an API hostname ending in a hexadecimal word is accepted", mutate: apiGatewayHost("{{uid}}.0xg")},
+		{
+			// Whether {{namespace}} is a number is the Company's to say,
+			// so the operator decides it per Company (AddressRefused).
+			name:   "an API hostname ending in a variable is accepted",
+			mutate: apiGatewayHost("{{uid}}.{{name}}.{{namespace}}"),
+		},
+		{
+			// The webhooks' host is no browser's address.
+			name:   "a webhooks hostname ending in a number is accepted",
+			mutate: gatewayHost("{{uid}}.hooks.123"),
 		},
 
 		// Under networkPolicy Isolated the operator has to know where an

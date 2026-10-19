@@ -423,8 +423,14 @@ class references that is missing (`SecretNotFound`), or a class that lets
 people sign in with a password alone at an address Crewlet does not read as
 loopback without acknowledging it (`InsecureSignInNotAcknowledged`; Crewlet
 refuses to start so, [Two-step
-verification](../guides/people.md#two-step-verification)). Suspending still
-scales the pod to zero meanwhile.
+verification](../guides/people.md#two-step-verification)), or an address the
+engine would be told it is reached at that Crewlet refuses to start on
+(`AddressRefused`): the API refuses such an address where a Company or its
+class states it, so this is in practice the class's API route made of a
+Company's namespace or name, whose last label is a number as
+`{{name}}.{{namespace}}`'s is in a namespace named `4711` or `0x1f` ([Reach
+the API from elsewhere](../guides/exposure.md#reach-the-api-from-elsewhere)).
+Suspending still scales the pod to zero meanwhile.
 
 ---
 

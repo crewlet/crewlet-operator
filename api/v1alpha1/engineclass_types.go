@@ -65,7 +65,10 @@ type DataStorage struct {
 	// that share up front. Crewlet's own floor for it is 6Gi
 	// (config.StoreMaxBytesFloor: every node reserves all five of its state
 	// logs' ceilings, 4.5Gi at their smallest, and keeps room beside them for
-	// its mailboxes and coordination), so a volume must be at least 8Gi.
+	// its mailboxes and coordination), so a volume must be at least 8Gi. Its
+	// ceiling is 64Ti (config.StoreMaxBytesCeiling, a guard against a unit
+	// mistake), so a volume larger than about 85Ti gives the stream 64Ti and
+	// the rest to the store and its snapshots.
 	//
 	// It applies to the data volumes of companies created after it is set.
 	// An existing company's volumes keep the size they were created with:
@@ -276,27 +279,58 @@ const (
 // company's engine pod is readable by code the tenant runs there (a stdio
 // MCP server, a sandbox setup command), so a key the class shared would let
 // every tenant read and write every other tenant's files.
+//
+// Crewlet reaches the bucket when it starts (a HeadBucket request, on the data
+// pods and the seat pods alike), and refuses to start when it cannot. Some
+// settings fail that request before it is sent, through the S3 client Crewlet
+// is built with (the AWS SDK for Go), however the bucket is set up, so the API
+// refuses them where they are written rather than every pod crash-looping on
+// them: each rule below names one.
+// +kubebuilder:validation:XValidation:rule="!has(self.region) || (has(self.pathStyle) && self.pathStyle) || !self.region.contains('.')",message="region may not hold a '.' unless pathStyle is true: Crewlet's S3 client names the bucket's host after the region, and refuses at start a region holding a '.' wherever it addresses the bucket by host name; name the region without one, such as eu-central-1, or set pathStyle to true"
+// +kubebuilder:validation:XValidation:rule="!has(self.region) || !has(self.endpoint) || !(self.region.contains('fips-') || self.region.contains('-fips'))",message="region names a FIPS endpoint (fips- or -fips in it), which Crewlet's S3 client refuses at start beside a custom endpoint: leave the endpoint out to reach Amazon S3's FIPS endpoint for the region, or name the region without fips"
+// +kubebuilder:validation:XValidation:rule="!has(self.region) || has(self.endpoint) || !(self.region.contains('fips-') || self.region.contains('-fips')) || !self.region.trim().replace('-fips-', '-').replace('fips-', \"\").replace('-fips', \"\").matches('^cn-[0-9A-Za-z_]+-[0-9]+$')",message="region names a FIPS endpoint in Amazon's China regions, which have none, and Crewlet's S3 client refuses it at start: name the region without fips, such as cn-north-1"
 type S3ObjectSettings struct {
 	// endpoint is the S3 API's base URL. Unset is Amazon S3's own endpoint
-	// for the region.
+	// for the region. Crewlet's S3 client refuses at start an endpoint with a
+	// query, one whose host is not a name, an IPv4 address or an IPv6
+	// address in brackets (with no percent-encoding in its zone) followed by
+	// at most one port, and no connection is made on a port outside 1 to
+	// 65535, so the API refuses each.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() in ['http', 'https']",message="endpoint must be an absolute http or https URL"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="endpoint may not hold a user name or password: a credential is named through a Secret, never written into an address"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^#]*[?][^#]')",message="endpoint may not have a query: Crewlet's S3 client refuses at start a custom endpoint with one, before it sends a request"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://') || self.matches('^[^:/?#]+://([^/?#]*@)?([[](([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,7}:|:(:[0-9A-Fa-f]{1,4}){1,7}|::|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){1,6}|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){1,5}|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){1,4}|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){1,3}|([0-9A-Fa-f]{1,4}:){5}(:[0-9A-Fa-f]{1,4}){1,2}|([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){6}|:(:[0-9A-Fa-f]{1,4}){0,5}:|([0-9A-Fa-f]{1,4}:){5}:|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){0,4}:|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){0,3}:|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){0,2}:|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){0,1}:)(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])([.](25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})(%25[^]%/?#]+)?[]]|[^/?#:[]*)(:[0-9]*)?([/?#]|$)')",message="endpoint's host must be a name, an IPv4 address or an IPv6 address in brackets, with no percent-encoding in its zone, and at most one ':' and a port may follow it: Crewlet's S3 client refuses any other at start (write http://[::1]:9000, not http://::1:9000)"
+	// +kubebuilder:validation:XValidation:rule="!isURL(self) || !self.matches('^[^:/?#]+://[^/?#]*:(0+|0*([1-9][0-9]{5,}|[7-9][0-9]{4}|6[6-9][0-9]{3}|65[6-9][0-9]{2}|655[4-9][0-9]|6553[6-9]))([/?#]|$)')",message="endpoint's port must be 1 to 65535: no connection is made on another, and Crewlet refuses to start without its bucket; leave the port out for the scheme's own"
 	Endpoint string `json:"endpoint,omitempty"`
 
 	// region is the bucket's region. Every request is signed for one, even
 	// where the provider ignores it (Cloudflare R2: auto, MinIO: us-east-1).
+	// Crewlet's S3 client puts it into a host name, and refuses at start a
+	// region that is not one: letters, digits and '-' in labels of at most 63
+	// joined by '.', none starting or ending with '-'. Crewlet trims the white
+	// space around it first, and refuses one of white space alone.
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:XValidation:rule="self.trim().size() > 0",message="region may not be white space alone: Crewlet signs every request for a region, and refuses to start without one"
+	// +kubebuilder:validation:XValidation:rule="self.trim().size() == 0 || self.trim().matches('^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?([.][A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$')",message="region must be letters, digits and '-', in labels of at most 63 joined by '.' and neither starting nor ending with '-', such as eu-central-1: Crewlet's S3 client puts it into a host name, and refuses any other at start, before it sends a request"
 	Region string `json:"region,omitempty"`
 
-	// bucket is the bucket's name.
+	// bucket is the bucket's name: a general purpose bucket's. Crewlet's S3
+	// client reads a name that begins with arn: as an access point's ARN, and
+	// one that ends with --x-s3, --xa-s3 or --op-s3 as an S3 Express One Zone
+	// directory bucket or an Outposts access point alias, each of which it
+	// addresses in a way of its own and refuses at start where it cannot, so
+	// the API refuses those names. Crewlet trims the white space around it,
+	// and refuses one of white space alone.
 	// +required
 	// +kubebuilder:validation:MinLength=3
 	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:XValidation:rule="self.trim().size() > 0",message="bucket may not be white space alone: Crewlet keeps the company's files in it, and refuses to start without one"
+	// +kubebuilder:validation:XValidation:rule="!(self.trim().startsWith('arn:') || self.trim().endsWith('--x-s3') || self.trim().endsWith('--xa-s3') || self.trim().endsWith('--op-s3'))",message="bucket must name a general purpose bucket: Crewlet's S3 client reads a name that begins with arn: as an access point's ARN, and one that ends with --x-s3, --xa-s3 or --op-s3 as an S3 Express One Zone directory bucket or an Outposts access point alias, and refuses at start each it cannot resolve as one; name the bucket itself"
 	Bucket string `json:"bucket,omitempty"`
 
 	// prefix is Crewlet's store.objects.s3.prefix, prepended to every key as
@@ -574,14 +608,32 @@ type APIExposure struct {
 	// +optional
 	Ingress *IngressExposure `json:"ingress,omitempty"`
 
-	// hostname is the API's host name, as a template with the same
-	// variables and rules as webhooks.hostname.
+	// hostname is the API's host name, as a template with the variables and
+	// rules of webhooks.hostname, and one rule more.
+	//
+	// It is also where a browser reaches the engine (the Company's
+	// status.endpoints.dashboardBaseURL, unless the Company states its own),
+	// and an origin the engine accepts a person's write from, and Crewlet
+	// refuses to start on a browser's address whose host ends in a label
+	// that is a number: a browser reads such a host as an IPv4 address and
+	// rewrites it before it sends it. So its last label may not be one
+	// ({{uid}}.123, {{uid}}.0x1f), where webhooks.hostname's may. A last
+	// label a variable fills is a number only for some Companies: one whose
+	// namespace is a number (4711, 0x1f) under {{name}}.{{namespace}}, or
+	// whose namespace or name makes one with the template's own characters
+	// beside it ({{uid}}.0x{{name}} for a Company named cafe; a Company's
+	// name begins with a letter, so it is never a number alone). That
+	// Company's engine is held back, with RuntimeReady=False AddressRefused,
+	// rather than started to refuse. Ending the template in a domain of your
+	// own, as in {{name}}.{{namespace}}.crewlet.example.com, leaves it to no
+	// Company.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:XValidation:rule="!self.replace('{{namespace}}', '').replace('{{name}}', '').replace('{{uid}}', '').contains('{' + '{')",message="hostname may use only the variables {{namespace}}, {{name}} and {{uid}}"
 	// +kubebuilder:validation:XValidation:rule="self.contains('{{uid}}') || self.contains('{{name}}.{{namespace}}') || self.contains('{{namespace}}.{{name}}')",message="hostname must contain {{uid}}, or {{name}} and {{namespace}} joined by a '.', so that no two companies share a host name: names and namespaces hold '-', so {{namespace}}-{{name}} is team-a-b-web for both team-a/b-web and team-a-b/web"
 	// +kubebuilder:validation:XValidation:rule="self.replace('{{namespace}}', 'n').replace('{{name}}', 'n').replace('{{uid}}', 'u').matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')",message="hostname must be a lowercase DNS name once its variables are replaced"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('(^|[.])([0-9]+|0x[0-9a-f]*)$')",message="hostname may not end in a label that is a number, such as {{uid}}.123 or {{uid}}.0x1f: a browser reads the host as an IPv4 address and rewrites it before it sends it, and Crewlet refuses to start on such an address; end it in a label that is not one, such as a domain of your own"
 	Hostname string `json:"hostname,omitempty"`
 }
 

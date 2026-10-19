@@ -90,6 +90,12 @@ func TestCompanyValidation(t *testing.T) {
 	rename := func(name string) func(*v1.Company) {
 		return func(c *v1.Company) { c.Name = name }
 	}
+	dashboard := func(address string) func(*v1.Company) {
+		return func(c *v1.Company) { c.Spec.Exposure.DashboardBaseURL = address }
+	}
+	public := func(address string) func(*v1.Company) {
+		return func(c *v1.Company) { c.Spec.Exposure.PublicBaseURL = address }
+	}
 
 	runCreateCases(t, company, []createCase[*v1.Company]{
 		{name: "minimal company is accepted"},
@@ -275,6 +281,209 @@ func TestCompanyValidation(t *testing.T) {
 			name:   "a dashboardBaseURL with a fragment is refused",
 			mutate: func(c *v1.Company) { c.Spec.Exposure.DashboardBaseURL = "https://crewlet.nimbus.example/#/work" },
 			want:   msgDashboardBaseURLQuery,
+		},
+		// Crewlet refuses to start on a browser's address whose host a
+		// browser rewrites before it sends it, and on any port outside 1 to
+		// 65535, so the API refuses each; their neighbours it takes.
+		{
+			name:   "a dashboardBaseURL on port 0 is refused",
+			mutate: dashboard("http://crewlet.nimbus.internal:0"),
+			want:   msgDashboardBaseURLPort,
+		},
+		{
+			name:   "a dashboardBaseURL on port 65536 is refused",
+			mutate: dashboard("http://crewlet.nimbus.internal:65536"),
+			want:   msgDashboardBaseURLPort,
+		},
+		{
+			// A port no int holds is refused by the rule's message, not by
+			// an evaluation error.
+			name:   "a dashboardBaseURL on a port of fifty digits is refused",
+			mutate: dashboard("http://crewlet.nimbus.internal:" + strings.Repeat("9", 50)),
+			want:   msgDashboardBaseURLPort,
+		},
+		// One port beyond 65535 for each branch of the rule's pattern, and
+		// leading zeros before one and before the largest that is not.
+		{
+			name:   "a dashboardBaseURL on port 65540 is refused",
+			mutate: dashboard("http://crewlet.nimbus.internal:65540"),
+			want:   msgDashboardBaseURLPort,
+		},
+		{
+			name:   "a dashboardBaseURL on port 65600 is refused",
+			mutate: dashboard("http://crewlet.nimbus.internal:65600"),
+			want:   msgDashboardBaseURLPort,
+		},
+		{
+			name:   "a dashboardBaseURL on port 66000 is refused",
+			mutate: dashboard("http://crewlet.nimbus.internal:66000"),
+			want:   msgDashboardBaseURLPort,
+		},
+		{
+			name:   "a dashboardBaseURL on port 70000 is refused",
+			mutate: dashboard("http://crewlet.nimbus.internal:70000"),
+			want:   msgDashboardBaseURLPort,
+		},
+		{
+			name:   "a dashboardBaseURL on port 065536 is refused",
+			mutate: dashboard("http://crewlet.nimbus.internal:065536"),
+			want:   msgDashboardBaseURLPort,
+		},
+		{name: "a dashboardBaseURL on port 65535 is accepted", mutate: dashboard("http://crewlet.nimbus.internal:65535")},
+		{name: "a dashboardBaseURL on port 065535 is accepted", mutate: dashboard("http://crewlet.nimbus.internal:065535")},
+		{
+			name:   "a dashboardBaseURL on a port with leading zeros is accepted",
+			mutate: dashboard("http://crewlet.nimbus.internal:08080"),
+		},
+		// A second ':' or a bracket outside an IPv6 address: refused by
+		// Crewlet's URL parser and by the API server's on Kubernetes 1.36
+		// and later, while the older Go net/url of 1.35 takes a second ':'
+		// and a bracket after a name, and that of 1.34 brackets around
+		// anything too, so the rule states the host's shape itself.
+		{
+			name:   "a dashboardBaseURL with two ports is refused",
+			mutate: dashboard("http://crewlet.nimbus.internal:80:80"),
+			want:   msgDashboardBaseURLHost,
+		},
+		{
+			name:   "a dashboardBaseURL of an IPv6 address without brackets is refused",
+			mutate: dashboard("http://::1:8080"),
+			want:   msgDashboardBaseURLHost,
+		},
+		{
+			name:   "a dashboardBaseURL whose IPv6 address does not start the host is refused",
+			mutate: dashboard("http://x[::1]:8080"),
+			want:   msgDashboardBaseURLHost,
+		},
+		{
+			name:   "a dashboardBaseURL of an IPv4 address in brackets is refused",
+			mutate: dashboard("http://[1.2.3.4]"),
+			want:   msgDashboardBaseURLHost,
+		},
+		{
+			name:   "a dashboardBaseURL of an IPv6 address with a group of five digits is refused",
+			mutate: dashboard("http://[12345::1]:8080"),
+			want:   msgDashboardBaseURLHost,
+		},
+		{
+			name:   "a dashboardBaseURL of an IPv6 address with two :: is refused",
+			mutate: dashboard("http://[1::2::3]"),
+			want:   msgDashboardBaseURLHost,
+		},
+		{
+			name:   "a dashboardBaseURL of an IPv4-mapped IPv6 address is accepted",
+			mutate: dashboard("http://[::ffff:10.0.0.1]:8080"),
+		},
+		{
+			name:   "a dashboardBaseURL of a full IPv6 address is accepted",
+			mutate: dashboard("https://[2001:db8:0:0:0:0:0:1]"),
+		},
+		{
+			name:   "a dashboardBaseURL whose host is outside ASCII is refused",
+			mutate: dashboard("https://bücher.example"),
+			want:   msgDashboardBaseURLASCII,
+		},
+		{name: "a dashboardBaseURL whose host is punycode is accepted", mutate: dashboard("https://xn--bcher-kva.example")},
+		{
+			name:   "a dashboardBaseURL whose host is percent-encoded is refused",
+			mutate: dashboard("https://b%C3%BCcher.example"),
+			want:   msgDashboardBaseURLPercent,
+		},
+		{
+			name:   "a dashboardBaseURL with an IPv6 zone is refused",
+			mutate: dashboard("http://[fe80::1%25eth0]:8080"),
+			want:   msgDashboardBaseURLPercent,
+		},
+		{name: "a dashboardBaseURL of an IPv6 address is accepted", mutate: dashboard("http://[::1]:8080")},
+		{name: "a dashboardBaseURL on localhost is accepted", mutate: dashboard("http://localhost:8080")},
+		{name: "a dashboardBaseURL of four decimal octets is accepted", mutate: dashboard("http://127.0.0.1:8080")},
+		// An octet of each branch of the rule's pattern: one and two
+		// digits, 100 to 199, 200 to 249 and 250 to 255.
+		{name: "a dashboardBaseURL of octets of one and two digits is accepted", mutate: dashboard("http://10.20.3.40:8080")},
+		{name: "a dashboardBaseURL of octets of 100 to 249 is accepted", mutate: dashboard("http://199.200.249.100")},
+		{name: "a dashboardBaseURL of octets of 250 to 255 is accepted", mutate: dashboard("http://255.250.255.251")},
+		{
+			name:   "a dashboardBaseURL of an octet of 256 is refused",
+			mutate: dashboard("http://10.0.0.256"),
+			want:   msgDashboardBaseURLNumber,
+		},
+		{
+			name:   "a dashboardBaseURL of an IPv4 short form is refused",
+			mutate: dashboard("http://127.1:8080"),
+			want:   msgDashboardBaseURLNumber,
+		},
+		{
+			name:   "a dashboardBaseURL of an IPv4 address as one number is refused",
+			mutate: dashboard("http://2130706433"),
+			want:   msgDashboardBaseURLNumber,
+		},
+		{
+			name:   "a dashboardBaseURL of a hexadecimal IPv4 address is refused",
+			mutate: dashboard("http://0x7f.0.0.1"),
+			want:   msgDashboardBaseURLNumber,
+		},
+		{
+			// A browser reads a leading zero as octal.
+			name:   "a dashboardBaseURL of an IPv4 address with a leading zero is refused",
+			mutate: dashboard("http://192.168.010.1"),
+			want:   msgDashboardBaseURLNumber,
+		},
+		{
+			name:   "a dashboardBaseURL of an IPv4 address with a trailing dot is refused",
+			mutate: dashboard("http://1.2.3.4./"),
+			want:   msgDashboardBaseURLNumber,
+		},
+		{
+			name:   "a dashboardBaseURL whose host name ends in a number is refused",
+			mutate: dashboard("https://crewlet.nimbus.123"),
+			want:   msgDashboardBaseURLNumber,
+		},
+		{
+			name:   "a dashboardBaseURL whose host name ends in a hexadecimal number is refused",
+			mutate: dashboard("https://crewlet.nimbus.0x1F:8443"),
+			want:   msgDashboardBaseURLNumber,
+		},
+		{
+			name:   "a dashboardBaseURL whose last label holds a letter is accepted",
+			mutate: dashboard("https://crewlet.nimbus.1x"),
+		},
+		{
+			name:   "a publicBaseURL on port 0 is refused",
+			mutate: public("https://hooks.nimbus.example:0"),
+			want:   msgPublicBaseURLPort,
+		},
+		{
+			name:   "a publicBaseURL on port 99999 is refused",
+			mutate: public("https://hooks.nimbus.example:99999/hooks"),
+			want:   msgPublicBaseURLPort,
+		},
+		{name: "a publicBaseURL on port 8443 is accepted", mutate: public("https://hooks.nimbus.example:8443")},
+		{
+			name:   "a publicBaseURL with two ports is refused",
+			mutate: public("https://hooks.nimbus.example:443:443"),
+			want:   msgPublicBaseURLHost,
+		},
+		{
+			name:   "a publicBaseURL of an IPv6 address without brackets is refused",
+			mutate: public("https://2001:db8::1:8443"),
+			want:   msgPublicBaseURLHost,
+		},
+		{
+			name:   "a publicBaseURL with an empty IPv6 zone is refused",
+			mutate: public("https://[fe80::1%25]:8443"),
+			want:   msgPublicBaseURLHost,
+		},
+		{
+			// No browser reaches the public address, and Crewlet takes a
+			// zone there.
+			name:   "a publicBaseURL with an IPv6 zone is accepted",
+			mutate: public("https://[fe80::1%25eth0]:8443"),
+		},
+		{
+			// No browser compares an origin with the public address, so
+			// Crewlet takes a host there that it refuses as a browser's.
+			name:   "a publicBaseURL of an IPv4 short form is accepted",
+			mutate: public("https://127.1"),
 		},
 		{
 			name:   "a publicBaseURL with a path is accepted",

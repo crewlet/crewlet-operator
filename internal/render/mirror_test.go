@@ -25,9 +25,11 @@ import (
 // (atlassianAccounts); and how a name says it holds a credential, which the
 // tool-server API's refusal of a literal value copies and the engine never
 // applies to a tool server's values, taking any literal there; and whether
-// the address a data pod's engine is told is on loopback, which the render
-// holds a data pod back on and the engine shows only for the addresses a test
-// tries. A contract test cannot hold those to the engine, so the operator
+// the address a data pod's engine is told is on loopback, and whether it is
+// one the engine refuses to start on at all, which the render holds a data
+// pod back on (and the API refuses where a Company or its class states it)
+// and the engine shows only for the addresses a test tries. A contract test
+// cannot hold those to the engine, so the operator
 // holds the code it read: the digest of each function as it was when it was
 // read against the operator files that copy it.
 type mirror struct {
@@ -98,6 +100,12 @@ const (
 	signInRead  = "v0.1.1-0.20261018171039-c28489c9c9ca"
 	apiConfigGo = "internal/config/api.go"
 
+	// addressShapeRead is the engine the judgement of an address's shape was
+	// first read at.
+	addressShapeRead = "v0.1.1-0.20261019003935-7cf6955f22ea"
+	addressGo        = "internal/render/address.go"
+	normalizeGo      = "internal/config/normalize.go"
+
 	// openCode2Read is crewlet#262's engine, which drives OpenCode 2 alone
 	// and keeps the login of a CLI that holds it in a database of its own as
 	// the document its export printed: newCodingRun maps that document into
@@ -114,6 +122,18 @@ const (
 	e2bGo         = "internal/sandbox/e2b.go"
 	e2bCreateRead = "v0.1.1-0.20261019061838-6c1b4361a915"
 )
+
+// addressCopies is every operator file that copies which addresses Crewlet
+// refuses to start on: the render, which holds a data pod back on one the
+// operator derives, the API's rules on the addresses a Company states
+// (dashboardBaseURL, publicBaseURL) and on the API route's host name template
+// of a class, the message the controller holds the pods back with, which says
+// which namespaces and names make a number of a template's last label, and
+// the guides that tell people what to write and what that message means.
+var addressCopies = []string{
+	addressGo, "api/v1alpha1/company_types.go", "api/v1alpha1/engineclass_types.go",
+	"internal/controller/company_exposure.go", "docs/guides/exposure.md", "docs/guides/troubleshooting.md",
+}
 
 // signInPosture is every operator file that copies where Crewlet lets a
 // second factor be optional without the acknowledgement: the render, which
@@ -198,10 +218,10 @@ var codingBox = []string{"docs/guides/credentials.md", "docs/concepts/credential
 // confluenceBaseURL, since everything else it does would make every change to
 // its wiring a read.
 //
-// The last two, externalLoopback and the ExternalBase it reads, are the one
-// decision here the engine shows without a run: `crewlet validate` refuses
-// totp optional off loopback, and TestContractSignInPosture holds the render's
-// verdict to the engine's at every address it tries. The operator makes that
+// externalLoopback and the ExternalBase it reads are a decision the engine
+// shows without a run: `crewlet validate` refuses totp optional off loopback,
+// and TestContractSignInPosture holds the render's verdict to the engine's at
+// every address it tries. The operator makes that
 // verdict on whatever address a Company or its class's route gives the
 // engine, before the engine sees it, and holds the data pod back on it, so a
 // change to the judgement that moves an address no case tries would have the
@@ -210,6 +230,19 @@ var codingBox = []string{"docs/guides/credentials.md", "docs/concepts/credential
 // (validatePasswords) is held by the contract test alone, whose cases take
 // each of its branches: Optional with and without the acknowledgement, on
 // loopback and off it.
+//
+// The address shapes after them are the same kind of decision: `crewlet
+// validate` refuses each, and TestContractAddressShapes holds the render's
+// verdict to the engine's, and test/crd's TestAddressShapesFollowTheEngine
+// the API's, at every address they try. The operator makes the verdict
+// before the engine sees the address, at admission for one a Company or its
+// class states and in the render for one it derives (the API route's host,
+// from the Company's namespace and name), so a change that refuses an
+// address no case tries would crash-loop a data pod the API admitted, with
+// every test green.
+// Which addresses each is asked of is the wiring that calls them
+// (API.validate, APIAuth.validate), which the contract tests hold, since
+// their every shape reaches the engine through it.
 var mirrored = []mirror{
 	{
 		file: sandboxGo, function: "(*launcher).Launch",
@@ -556,6 +589,76 @@ var mirrored = []mirror{
 			"'/' removed",
 		digest: "783e12fe587aeebcb7817c63074c01025e278b1885608e55a927740aed6f5d6b",
 		read:   signInRead,
+	},
+	{
+		file: normalizeGo, function: "(*Bootstrap).normalize",
+		against: addressCopies,
+		decides: "every string of a Tier A is judged and used with the white space around it removed, an " +
+			"api.auth.allowed_origins entry included",
+		digest: "5a9cb62c15c8dcbadadd8f8723365499b907bf074ea072a57b2b9e67c4574a9e",
+		read:   addressShapeRead,
+	},
+	{
+		file: apiConfigGo, function: "(*API).validateExternalURL",
+		against: addressCopies,
+		decides: "api.external_url is judged with its surrounding spaces removed, by checkExternalURL and then, as " +
+			"a browser's address, by checkBrowserHost",
+		digest: "9ae3a0bc910a331cf4c7e823c65a4c4343fa497b911f1f9670687004909588d9",
+		read:   addressShapeRead,
+	},
+	{
+		file: apiConfigGo, function: "(*APIPublic).validate",
+		against: addressCopies,
+		decides: "api.public.external_url is judged with its surrounding spaces removed by checkExternalURL alone, " +
+			"since no browser compares an origin with it",
+		digest: "06e5094cc09c9a382f12536b7483c70b34d6ca93efc26feb485fb3cae5c708c9",
+		read:   addressShapeRead,
+	},
+	{
+		file: apiConfigGo, function: "checkExternalURL",
+		against: addressCopies,
+		decides: "an address a node is reached at starts with http:// or https:// in lower case, parses as a URL, " +
+			"has a host, a port checkPort takes, and no query or fragment; a path is taken",
+		digest: "60a7a52edb8851b986b55a57ccbe60e49652ac1669a357b4607c3a2d9fec9635",
+		read:   addressShapeRead,
+	},
+	{
+		file: integrationsGo, function: "hasHTTPScheme",
+		against: addressCopies,
+		decides: "the scheme checkExternalURL takes is http:// or https:// spelled in lower case",
+		digest:  "a76612d926d38783c3ef5be235aa48a1f5dadd645271cc1ea44e70edb2b77130",
+		read:    addressShapeRead,
+	},
+	{
+		file: apiConfigGo, function: "checkPort",
+		against: addressCopies,
+		decides: "a URL's port, when it has one, is a number from 1 to 65535",
+		digest:  "4dfe1cf753019e1c41f3e579509d5a5e790c28fa4bdc953170954e1e8aff4858",
+		read:    addressShapeRead,
+	},
+	{
+		file: apiConfigGo, function: "checkBrowserHost",
+		against: addressCopies,
+		decides: "a browser's address has a host in ASCII, holding no '%', and one whose last label is a number " +
+			"(endsInNumber) only as an IPv4 address of four decimal octets",
+		digest: "ab83e9286e1d46a7ec8a9fbde1ad32e031f1f1a408d1659425d5c3be39a81fca",
+		read:   addressShapeRead,
+	},
+	{
+		file: apiConfigGo, function: "endsInNumber",
+		against: addressCopies,
+		decides: "a host's last label, one trailing dot aside, is a number when it is all digits or 0x and hex " +
+			"digits, in either case",
+		digest: "9dac04214bdf618b1a3663e98c90e93c66ad5e8a52839b2c22a69da014ccb6c0",
+		read:   addressShapeRead,
+	},
+	{
+		file: apiConfigGo, function: "checkOrigin",
+		against: addressCopies,
+		decides: "an api.auth.allowed_origins entry, as written, is scheme://host[:port] and nothing more, on http " +
+			"or https, with a port checkPort takes and a host checkBrowserHost takes",
+		digest: "b1847a33a8f613437ac8c52830fe6abbf7840d4dd9f0ce79f0550b2c8702f8cc",
+		read:   addressShapeRead,
 	},
 }
 

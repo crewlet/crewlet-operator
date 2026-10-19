@@ -275,7 +275,8 @@ func checkTokens(tokens *corev1.Secret) *held {
 }
 
 // keyringOf reads the keys a keyring Secret holds. render.Bootstrap refuses
-// a keyring the engine could not use, which is reported as KeyringInvalid.
+// a keyring the engine could not use (render.ErrKeyringInvalid), which is
+// reported as KeyringInvalid.
 func keyringOf(secret *corev1.Secret) render.Keyring {
 	keys := make(map[string]string, len(secret.Data))
 	for id, material := range secret.Data {
