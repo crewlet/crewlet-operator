@@ -142,7 +142,8 @@ func TestLLMProviderValidation(t *testing.T) {
 // The phrases the OpenCode model rule's message quotes from the engine's own
 // refusal of such a model: the error OpenCode 2 refuses it with, and the
 // command that lists the providers OpenCode knows. TestCLIAgentModelFollowsTheEngine
-// holds the rule's message and the engine's refusal to both.
+// holds the rule's message, the engine's refusal and docs/guides/cli-agents.md
+// to both.
 const (
 	openCodeModelRefusal = "Invalid model reference"
 	openCodeModelListing = "opencode models --standalone"

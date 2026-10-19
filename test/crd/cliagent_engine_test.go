@@ -134,7 +134,11 @@ func TestCLIAgentSignInFollowsTheEngine(t *testing.T) {
 // space, Go's and Unicode's beyond ASCII's among it: the API refuses with its
 // model rules exactly the providers whose model the engine refuses. A crewlet
 // change that marks another profile as naming its provider, or stops marking
-// OpenCode's, fails here until the API follows it.
+// OpenCode's, fails here until the API follows it. The engine's refusal of a
+// model naming no provider quotes the error OpenCode answers it with and the
+// command that lists OpenCode's providers, and so do the rule's message and
+// docs/guides/cli-agents.md, where a person reads why their model was
+// refused: all three are held to the same two phrases.
 //
 // The API's rule is the engine's test, transcribed: a slash, and something
 // other than white space on each side of the first one, where white space is
@@ -230,6 +234,18 @@ func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
 	}
 	if !quoted {
 		t.Errorf("neither side refused an OpenCode model with its model rule; the wording was held on nothing")
+	}
+	// The guide wraps its lines, so it is read as words.
+	guide, err := os.ReadFile(filepath.Join("..", "..", "docs", "guides", "cli-agents.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	prose := strings.Join(strings.Fields(string(guide)), " ")
+	for _, phrase := range []string{openCodeModelRefusal, openCodeModelListing} {
+		if !strings.Contains(prose, "`"+phrase+"`") {
+			t.Errorf("docs/guides/cli-agents.md does not quote %q, as the engine's refusal of an OpenCode model "+
+				"naming no provider does", phrase)
+		}
 	}
 }
 
