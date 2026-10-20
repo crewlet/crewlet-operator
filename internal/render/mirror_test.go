@@ -74,16 +74,21 @@ const (
 
 	credentialNameRead = "v0.1.1-0.20261012231821-14c93cab2ee6"
 
-	// identityRead is crewlet#195's engine, which every mirror it changed
-	// was read again at: the run_sandbox launch and the agent-mode launch
-	// find the seat's sandbox by handle and take their setup through
-	// boxSetup, which writes a file whose body is one whole ${VAR} as that
-	// value, byte for byte (every setup file the render writes is one); the
-	// agent-mode launch refuses a surface bound to no seat, a fault of its
-	// own assembly no configuration reaches; sandboxEnv takes the org's
-	// sandbox type; and the tool bridge takes the keyring's material and
-	// still builds nothing without CREWLET_MCP_BRIDGE_URL.
-	identityRead = "v0.1.1-0.20261016092541-a677e638f19b"
+	// seatCredentialRead is crewlet#291's engine, which every mirror it
+	// changed was read again at: the run_sandbox launch and the agent-mode
+	// launch give the box only those of the seat's scoped tool servers whose
+	// credentials in the seat's own block all resolve (boxServers), and
+	// boxSetup and sandboxEnv take the company, to say whether a provisioning
+	// pass is minting a variable that resolved to nothing. Since crewlet#195
+	// the launches have found the seat's sandbox by handle and taken their
+	// setup through boxSetup, which writes a file whose body is one whole
+	// ${VAR} as that value, byte for byte (every setup file the render writes
+	// is one), and the agent-mode launch has refused a surface bound to no
+	// seat, a fault of its own assembly no configuration reaches. The coding
+	// agent a launch runs, the head it runs on, the run's environment and
+	// every refusal before a box exists are as they were, so no verdict the
+	// operator copies moved.
+	seatCredentialRead = "v0.1.1-0.20261020205524-cecc88425294"
 
 	// bootBindRead is crewlet#257's engine, which binds api.port, and
 	// api.public where the node serves one, before its boot: whether a node
@@ -405,8 +410,8 @@ var mirrored = []mirror{
 		against: []string{codeWorkGo},
 		decides: "a run_sandbox launch runs the head of the seat's sandbox phase with role.sandbox.coding_agent or " +
 			"the catalogue's default, and refuses before a box exists what newCodingRun and sandboxCredentials refuse",
-		digest: "b9fbe0dbb82fa41563957f23e33a5aa990db356b41b8bbd7505950438d52cb00",
-		read:   identityRead,
+		digest: "03c28ecab42612b9eedff1b46f7a2eb67e189797d901bdc29e2d2e0f5f2ab869",
+		read:   seatCredentialRead,
 	},
 	{
 		file: sandboxGo, name: "buildSandbox",
@@ -477,8 +482,8 @@ var mirrored = []mirror{
 		against: []string{codeWorkGo},
 		decides: "a run's environment is the env of the catalogue's and the seat's setup steps, then the seat's " +
 			"role.sandbox.env",
-		digest: "d6aff5239a57ba7f269dcc08e693b71f762f54c3eee83a92d06c4cedf906aeea",
-		read:   identityRead,
+		digest: "d5caf22beb5b4f226137fe981123c6c2fc2636788caf7e157fa877fbefc17fe5",
+		read:   seatCredentialRead,
 	},
 	{
 		file: doctorGo, name: "(*Provider).CredentialEnvNames",
@@ -535,8 +540,8 @@ var mirrored = []mirror{
 		decides: "an agent-mode turn on a node that serves no tool bridge is refused, never run on the engine's own " +
 			"tool loop (AgentModeBridgeUnsupported, NotExposed), and so is one whose CLI login cannot follow it " +
 			"into the remote sandbox (sandboxCredentials at phase Execute)",
-		digest: "833a43cf285e977637f99849e7b2d4402d4ac7f6e7c3ac51c00d73a28e63e5e6",
-		read:   identityRead,
+		digest: "531189d0f30f42f220ff4c9b33d6fa66a2d9b0ee1eabeec7fb6b7c330a294097",
+		read:   seatCredentialRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).executorRun",
