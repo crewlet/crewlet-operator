@@ -146,6 +146,16 @@ key nor its endpoint: its own sign-in is what the run uses. Under OpenCode
 the provider's key is added beneath the seat's variables, so a seat variable
 of the same name wins.
 
+A seat whose executor runs in agent mode has no code work of its own, but
+its executor's every run is a box of the same sandbox, with the same
+setup and the seat's sandbox environment, and the engine exports into it
+the executor's own `CLIAgent` provider's headless token, its key, or the
+credential-named variables of its `cli.env`, beneath the seat's variables,
+never its credential bundle
+([Text mode and agent mode](cli-agents.md#text-mode-and-agent-mode)). The
+CLI runs there with every permission and can read them, as a coding agent
+can.
+
 ### An agent's Slack app
 
 Each agent seat is its own Slack app, so it posts and is mentioned as itself.

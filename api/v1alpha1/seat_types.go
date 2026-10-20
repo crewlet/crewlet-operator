@@ -106,10 +106,13 @@ type SeatLLM struct {
 	// OpenCode an OpenAI or OpenAICompatible one too, or a CLIAgent provider
 	// of the coding agent's own CLI. The operator refuses a CLIAgent provider
 	// of another CLI (CodingAgentMismatch), and reports any other head the
-	// coding agent cannot run on in the CodeWorkRunnable condition. Every
-	// box of the seat carries the head's first API key, and under ClaudeCode
-	// its baseURL, unless spec.sandbox.env signs ClaudeCode in itself: give
-	// code work a provider whose key is scoped for it. Crewlet's `sandbox`.
+	// coding agent cannot run on in the CodeWorkRunnable condition. Every box
+	// of the seat carries the head's first API key, and under ClaudeCode its
+	// baseURL, unless spec.sandbox.env signs ClaudeCode in itself: give code
+	// work a provider whose key is scoped for it. A seat whose executor runs
+	// in agent mode (a CLIAgent provider in mode Agent heads its executor's
+	// chain: default, else the Company's spec.llm.order) has no code work of
+	// its own, so nothing reads this chain for one. Crewlet's `sandbox`.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MinItems=1
@@ -125,9 +128,13 @@ type SeatSandbox struct {
 	// codingAgent is the coding agent the seat's sandbox runs. Unset takes
 	// the Company's spec.sandbox.defaultCodingAgent. ClaudeCode runs on an
 	// Anthropic provider or a ClaudeCode CLIAgent one, unless the seat's
-	// sandbox environment signs it in itself; OpenCode runs on an
-	// Anthropic, OpenAI or OpenAICompatible provider or an OpenCode
-	// CLIAgent one. Crewlet's `coding_agent`.
+	// sandbox environment signs it in itself; OpenCode runs on an Anthropic,
+	// OpenAI or OpenAICompatible provider or an OpenCode CLIAgent one. A seat
+	// whose executor runs in agent mode (a CLIAgent provider in mode Agent
+	// heads its executor's chain) is never offered run_sandbox: it codes in
+	// its executor's run, on that provider's CLI, so this drives nothing, and
+	// the operator refuses one other than that CLI (CodingAgentMismatch), as
+	// Crewlet does. Crewlet's `coding_agent`.
 	// +optional
 	CodingAgent CodingAgent `json:"codingAgent,omitempty"`
 
@@ -725,15 +732,15 @@ type SeatStatus struct {
 	// ResolvedRefs (the unit, the providers, the tool servers and every
 	// Secret key exist), Applied (the seat is in the revision the engine
 	// runs) and, on an Agent seat, Ready (an engine node holds the seat's
-	// lease and runs it: LeaseHeld, or Unplaced, or PoolNotFound; or the
-	// seat can run no turn wherever it is held, AgentModeBridgeUnsupported or
+	// lease and runs it: LeaseHeld, or Unplaced, or PoolNotFound; or the seat
+	// can run no turn wherever it is held, AgentModeBridgeUnsupported or
 	// NotExposed) and, once the engine runs it, Paused (whether the engine
-	// holds it paused, and whether that is what spec.paused asks), and, on
-	// an Agent seat with spec.sandbox in a Company with spec.sandbox,
-	// CodeWorkRunnable (whether its coding agent can run on the head of its
-	// sandbox chain or on the sign-in the seat's sandbox environment gives
-	// it; it does not count towards Ready, as the seat runs its turns either
-	// way).
+	// holds it paused, and whether that is what spec.paused asks), and, on an
+	// Agent seat with spec.sandbox whose executor does not run in agent mode,
+	// in a Company with spec.sandbox, CodeWorkRunnable (whether its coding
+	// agent can run on the head of its sandbox chain or on the sign-in the
+	// seat's sandbox environment gives it; it does not count towards Ready,
+	// as the seat runs its turns either way).
 	// +optional
 	// +listType=map
 	// +listMapKey=type

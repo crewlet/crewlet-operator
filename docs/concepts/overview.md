@@ -237,7 +237,7 @@ part is in the running revision, and only it suffers what is reported
 | `EngineClass` | `Accepted` |
 | `Unit`, `MCPServer`, `Schedule` | `Accepted`, `ResolvedRefs`, `Applied` |
 | `LLMProvider` | `Accepted`, `ResolvedRefs`, `Applied`, and on a `CLIAgent` provider in `mode: Agent` `AgentModeRunnable` (whether its runs can call a seat's tools back: `False`, `NotExposed`, while the Company has no public address) |
-| `Seat` | `Accepted`, `ResolvedRefs`, `Applied`, and on an Agent seat `Ready` (whether it runs: `True`, `LeaseHeld`, while an engine pod holds it; `False` with `Unplaced` while none does, `PoolNotFound` when its pool is not one the Company declares, or `AgentModeBridgeUnsupported` or `NotExposed` when the engine refuses every one of its turns), once the engine runs it `Paused`, and with `spec.sandbox` in a Company with one `CodeWorkRunnable` (whether its coding agent can run on its sandbox provider; not part of `Ready`) |
+| `Seat` | `Accepted`, `ResolvedRefs`, `Applied`, and on an Agent seat `Ready` (whether it runs: `True`, `LeaseHeld`, while an engine pod holds it; `False` with `Unplaced` while none does, `PoolNotFound` when its pool is not one the Company declares, or `AgentModeBridgeUnsupported` or `NotExposed` when the engine refuses every one of its turns), once the engine runs it `Paused`, and with `spec.sandbox` and an executor that does not run in agent mode, in a Company with `spec.sandbox`, `CodeWorkRunnable` (whether its coding agent can run on its sandbox provider; not part of `Ready`) |
 | `Integration` | `Accepted`, `ResolvedRefs`, `Applied`, `Healthy` |
 
 A Company also reports the revision the engine runs, its endpoints and the

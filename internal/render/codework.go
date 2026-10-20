@@ -46,6 +46,14 @@ import (
 // Secret's values are given under, not the values: a name counts here where
 // Crewlet would count a non-blank value under it.
 //
+// A seat whose executor is a CLI in mode Agent has no code work of its own:
+// Crewlet never offers it run_sandbox (its Runner.offersSandbox), as it codes
+// in its executor's run, on that provider's CLI, and none of the three applies
+// to it. Its spec.sandbox.codingAgent drives nothing, so Crewlet refuses on
+// every write one other than that CLI (config's validateSandboxGates), and the
+// render refuses it too (agentModeCodingAgent); config's
+// validateSandboxCodingAgents judges every other seat alone.
+//
 // Crewlet decides all of it at a launch, where no validation shows it, so
 // TestMirroredEngineDeclarationsAreUnchanged holds the engine functions this
 // copies to the ones it was read against, and fails when one changes.
@@ -101,11 +109,12 @@ type CodeWork struct {
 }
 
 // CodeWorkOf is the code work of every Seat Crewlet offers run_sandbox,
-// keyed by the Seat's name: an Agent seat with spec.sandbox, in a Company
-// with a sandbox. A Seat none of whose sandbox chain resolves has no entry,
-// as each reference that does not is refused on its own. It is apart from
-// Company because it is a statement about each Seat's spec, which holds while
-// another object's refusal keeps Company from returning a document.
+// keyed by the Seat's name: an Agent seat with spec.sandbox whose executor
+// is no CLI in mode Agent, in a Company with a sandbox. A Seat none of
+// whose sandbox chain resolves has no entry, as each reference that does
+// not is refused on its own. It is apart from Company because it is a
+// statement about each Seat's spec, which holds while another object's
+// refusal keeps Company from returning a document.
 func CodeWorkOf(in *Input) map[string]CodeWork {
 	r := newRenderer(in)
 	out := map[string]CodeWork{}
@@ -124,9 +133,34 @@ func CodeWorkOf(in *Input) map[string]CodeWork {
 // offersCodeWork reports whether Crewlet offers a seat run_sandbox: a seat
 // with spec.sandbox, which the Seat API admits on an Agent seat only, in a
 // Company whose spec.sandbox is the catalogue of boxes Crewlet requires for
-// it (without one the engine refuses the seat's gate instead).
+// it (without one the engine refuses the seat's gate instead), unless the
+// seat's executor is a CLI in mode Agent, whose run is the one box the seat
+// codes in (Runner.offersSandbox).
 func (r *renderer) offersCodeWork(s *v1alpha1.Seat) bool {
+	if _, _, agentMode := r.agentModeExecutor(s); agentMode {
+		return false
+	}
 	return s.Spec.Sandbox != nil && r.in.Company.Spec.Sandbox.E2B.APIKeySecretRef.Name != ""
+}
+
+// agentModeCodingAgent is the refusal of an agent-mode seat's
+// spec.sandbox.codingAgent (config's validateSandboxGates): empty when the
+// seat's executor is no CLI in mode Agent, or when the field is unset or names
+// that CLI, which is the run the seat codes in.
+func (r *renderer) agentModeCodingAgent(s *v1alpha1.Seat) string {
+	head, cli, ok := r.agentModeExecutor(s)
+	if !ok || s.Spec.Sandbox == nil || s.Spec.Sandbox.CodingAgent == "" ||
+		string(s.Spec.Sandbox.CodingAgent) == string(cli.Agent) {
+		return ""
+	}
+	named := "at " + head.field
+	if head.field == fieldLLM {
+		named = "which a seat whose spec.llm.default is empty runs on"
+	}
+	return fmt.Sprintf("names the %s coding agent, but the seat's executor runs in agent mode on LLMProvider %s, "+
+		"%s: Crewlet never offers such a seat run_sandbox, as it does its code work in that %s run, so the field "+
+		"drives nothing, and Crewlet refuses one naming another CLI than %s on every write. Leave it out",
+		s.Spec.Sandbox.CodingAgent, head.provider, named, cli.Agent, cli.Agent)
 }
 
 // codeWork is a seat's code work, as the comment above describes; false when
