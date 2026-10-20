@@ -213,11 +213,18 @@ sandbox, also the LLMProvider API's rule on a CLI of mode `Agent`, the
 [CLI agents guide](docs/guides/cli-agents.md) that states it and `test/crd`'s
 reading of the engine's verdicts on it, and, for what a coding box carries of
 its provider, the [credentials guide](docs/guides/credentials.md#what-a-coding-box-carries)
-and the [credentials concept page](docs/concepts/credentials.md). The digest
-(`enginetest.Fingerprint`) is taken over the function, or over the one spec
-that declares a constant, as `go/printer` lays it out without its comments
-or the source's line breaks, so a comment or a rewrapped line leaves it
-alone and a changed statement, value, spread or alias moves it. When the engine the suites run changes one, the test
+and the [credentials concept page](docs/concepts/credentials.md). The table
+also names every constant and function that bounds a wait on a data pod's or
+a seat pod's boot, which the controller's startup windows add up
+(`dataPodBootSeconds` and `seatPodBootSeconds` in `internal/controller`), the
+EngineClass API floors `data.startupSeconds` at, and the runtime and
+troubleshooting pages quote; which steps a boot runs, and in what order, is
+`engine.New`'s, which is not read, since it changes with most of the
+engine's work. The digest (`enginetest.Fingerprint`) is taken over the
+function, or over the one spec that declares a constant, as `go/printer`
+lays it out without its comments or the source's line breaks, so a comment
+or a rewrapped line leaves it alone and a changed statement, value, spread
+or alias moves it. When the engine the suites run changes one, the test
 fails, naming the declaration, what the operator copies from it, the files
 to read it against and the `git log` that shows the change; read it, make
 the operator follow it, and record the digest and version the failure

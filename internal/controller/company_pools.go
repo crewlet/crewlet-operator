@@ -68,17 +68,65 @@ const (
 	// next pod would drain while the seats it holds still had one fewer
 	// place to go.
 	seatPodMinReadySeconds = 10
-	// seatPodStartupSeconds is how long a seat pod's engine may take to
-	// answer /health 200, which it does once it has recovered what it holds
-	// (503 before, from the moment it binds): six minutes, the engine's own
-	// bounds on a leaf's boot laid end to end.
-	// It waits up to a minute for its leaf link to reach a data pod, then
-	// provisions what it uses on the company's event stream within five
-	// minutes, the bound the engine puts on a bring-up across a leaf link,
-	// whose cluster it cannot see the size of. Past either it exits by
-	// itself, so the kubelet never ends a boot the engine would finish.
-	seatPodStartupSeconds = 360
+	// seatPodBootSeconds is every bound the engine puts on a seat pod's
+	// boot but its object store's, laid end to end, each step waiting
+	// after the one before it on the boot's one goroutine, read from
+	// Crewlet's source (the mirrors in internal/render/mirror_test.go name
+	// each declaration):
+	//   - 60: its connection to its own leaf broker, a 30 s handshake and
+	//     a 30 s flush that reads the broker's max_payload (listenTimeout);
+	//   - 61: the leaf link to a data pod and the fleet's JetStream
+	//     answering across it (clusterReadyTimeout, 60 s, whose deadline is
+	//     checked before an ask of a second, clusterReadyAsk);
+	//   - 300: the event stream's streams, looked up or created across the
+	//     link, which counts as clustered (clusterSequenceBudget);
+	//   - 60: a second connection, for coordination (listenTimeout twice);
+	//   - 300: the coordination buckets, a window of their own
+	//     (clusterSequenceBudget);
+	//   - 90: the fleet's record of its object store (AgreeObjectBackend):
+	//     eight rounds of a write and a read at the client's 5 s default and
+	//     a read after them, begun again within 5 s; a boot meets more than
+	//     three of those requests only if something removes the record
+	//     while it runs, but the rounds are the engine's bound;
+	//   - 61: the lock on the store's native library, which a container
+	//     killed while extracting it leaves on the scratch volume a restart
+	//     keeps (tursoPrepareTimeout, a minute, polled every 25 ms);
+	//   - 20: two registrations of what the node answers, 10 s each
+	//     (flushBudget);
+	//   - 20: the listing of the company's secrets (refreshSecrets: two 5 s
+	//     reads beside the watch, a 5 s idle pass and the 5 s stop of its
+	//     consumer).
+	// Its object store's step is S3's probe (s3ProbeSeconds) or the one
+	// below. Nothing on a seat pod's boot waits on what the company
+	// configures, and only the listing grows with what it holds, by 5 s
+	// for each secret (10 for one deleted in the last three hours) it may
+	// read back one at a time, which is not counted, as a data pod's
+	// recovery is not.
+	seatPodBootSeconds = 60 + 61 + 300 + 60 + 300 + 90 + 61 + 20 + 20
+	// seatPodNATSObjectsSeconds is the object store's step on the default
+	// backend: the broker's limit read to size the bucket (LookupBudget,
+	// 30 s), then the bucket looked up (30 s), created (2 min, Budget),
+	// read back (5 s, ReadBack) and bound (5 s), inside a window of five
+	// minutes that never binds them (natsobj.Open). A bucket given its
+	// ceiling by store.objects.nats_max_bytes would trade the limit read
+	// for a 2 min update, but the render never sets it.
+	seatPodNATSObjectsSeconds = 30 + 30 + 120 + 5 + 5
 )
+
+// seatPodStartupSeconds is how long a seat pod's engine may take to answer
+// /health 200, which it does once it has recovered what it holds (503
+// before, from the moment it binds): every bound the engine puts on a leaf's
+// boot laid end to end, its object store's by the class's backend. Past any
+// of them the engine exits by itself (or, past the lock, the listing or the
+// limit read, carries on without them), so the kubelet never ends a boot the
+// engine would finish. Most of it waits on a data pod: a seat pod started
+// while the data pod is down or recovering waits the whole of it.
+func seatPodStartupSeconds(class *crewletaiv1alpha1.EngineClass) int32 {
+	if class.Spec.Objects.Backend == crewletaiv1alpha1.ObjectBackendS3 {
+		return seatPodBootSeconds + s3ProbeSeconds
+	}
+	return seatPodBootSeconds + seatPodNATSObjectsSeconds
+}
 
 // seatWorkload is one StatefulSet of seat pods.
 type seatWorkload struct {
@@ -717,7 +765,7 @@ func seatPodTemplate(
 	if err != nil {
 		return nil, err
 	}
-	container := withProbes(engineContainerBase(class, image, env), seatPodStartupSeconds).
+	container := withProbes(engineContainerBase(class, image, env), seatPodStartupSeconds(class)).
 		WithVolumeMounts(
 			corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath(render.DataDir),
 			corev1ac.VolumeMount().WithName(configVolumeName).WithMountPath(configDir).WithReadOnly(true),

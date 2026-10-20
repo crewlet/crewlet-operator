@@ -220,10 +220,11 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **The pod restarts, its events saying `Startup probe failed`, and the
   previous log has no `engine_recovered` line**: the recovery of what the
   volume holds took longer than the startup probe allows, and every restart
-  starts it again. The window is five minutes plus six seconds per GiB of the
-  volume; a disk that reads slower than that needs a longer one. Set the
-  class's `data.startupSeconds` (up to a day), which rolls the data pods once,
-  and let the next boot finish.
+  starts it again. The window is 1,676 seconds (1,816 when the class keeps
+  files in S3) plus six seconds per GiB of the volume; a disk that reads
+  slower than that needs a longer one. Set the class's `data.startupSeconds`
+  (up to a day), which rolls the data pods once, and let the next boot
+  finish.
 - **The log has `engine_recovered` and no `api_listening` after it**: the
   engine has recovered what the volume holds and is starting what the company
   configures, its shared tool servers above all. `/health` answers `200`
@@ -279,8 +280,9 @@ kubectl logs -n acme acme-seats-general-159f80d7-0
 | `no_presence` | It does not hold its presence lease, so the fleet does not count it. |
 | `admission_withheld` | No data pod has answered that its copy of the company's records admits a seat (the data pod is starting, catching up, or unreachable), or the pod cannot serve the seats it holds. It claims nothing until then. |
 
-A seat pod restarted every six minutes, its events saying `Startup probe
-failed` with `connection refused` while its log shows it running, binds no
+A seat pod restarted every 19 minutes or so (20 when the class keeps files
+in S3), its events saying `Startup probe failed` with `connection refused`
+while its log shows it running, binds no
 port for its probes: the engine it runs (the class's `engine.image`, with the
 Company's `spec.runtime.version` as its tag when that is set) and the
 operator come from different points of Crewlet's `main`, older or newer than

@@ -419,8 +419,8 @@ var _ = Describe("Company seat pools", func() {
 			"liveness restarts the engine before its watchdog's 45 seconds")
 		Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/ready"), "ready once the pod has joined and may claim seats")
 		Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/health"))
-		Expect(container.StartupProbe.PeriodSeconds*container.StartupProbe.FailureThreshold).To(BeNumerically(">=", 360),
-			"the engine's own bounds on a leaf's boot: a minute for the link and five for the bring-up")
+		Expect((container.StartupProbe.FailureThreshold-1)*container.StartupProbe.PeriodSeconds).To(BeNumerically(">=", 1162),
+			"every bound the engine puts on a leaf's boot, with its object store on the event stream")
 		Expect(*container.SecurityContext.ReadOnlyRootFilesystem).To(BeTrue())
 		Expect(container.Env[:len(want.Env)]).To(Equal(want.Env))
 		Expect(container.Env).To(ContainElement(corev1.EnvVar{Name: "TURSO_GO_CACHE_DIR", Value: "/var/lib/crewlet/cache"}))
