@@ -99,6 +99,9 @@ touching types or RBAC markers run `make manifests generate chart api-docs` and
 commit the output; `make verify-generated` fails otherwise. Scaffold new kinds
 with `bin/kubebuilder` (`make kubebuilder`), with no `--group` (the group is
 the domain, `crewlet.ai`), and keep every `// +kubebuilder:scaffold:*` marker.
+`.github/workflows/auto_update.yml` came from the autoupdate plugin and is
+curated by hand: never re-run `kubebuilder edit --plugins=autoupdate/v1-alpha`,
+which overwrites it.
 
 ## Principles
 
@@ -161,6 +164,13 @@ registry), never from memory. A version held back on purpose carries its
 reason in a comment at the pin. Indirect Go dependencies stay where the direct
 ones put them (the k8s.io modules move in lockstep). CONTRIBUTING.md,
 "Latest versions", lists the pins Dependabot cannot see.
+
+Dependabot's pull requests approve themselves and merge once CI passes
+(`.github/workflows/dependabot-merge.yml`). Never push onto a Dependabot
+branch: a bump that needs a code change goes into a pull request of your own.
+A newer Kubebuilder release arrives as an issue and a branch from
+`.github/workflows/auto_update.yml` (CONTRIBUTING.md, "A newer Kubebuilder
+scaffold is proposed").
 
 Kubernetes is supported and tested at one minor alone, 1.37: the newest
 that both the pinned kind (its default node image) and setup-envtest offer.

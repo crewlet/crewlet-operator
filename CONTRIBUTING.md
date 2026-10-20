@@ -481,6 +481,83 @@ OpenCode's log for a library that did not load, since OpenCode carries on
 without one. Run OpenCode's on a machine of each platform the image is built
 for: under emulation it misses a deadline of OpenCode's own and fails.
 
+### A Dependabot bump merges itself
+
+[`.github/workflows/dependabot-merge.yml`](.github/workflows/dependabot-merge.yml)
+approves a pull request Dependabot opened and queues it with `gh pr merge
+--auto --squash`, so a bump lands without waiting on a maintainer. It does not
+land without review: CI *is* the review a dependency change gets here, and
+`--auto` holds the merge until every check `main`'s protection rule requires
+has passed. A bump CI rejects sits there red until a person looks at it, which
+is exactly where it would have sat anyway. It is the same workflow
+[Crewlet](https://github.com/crewlet/crewlet) runs.
+
+Three settings hold that up, and none of them is in this repository's files:
+
+- `main`'s protection rule must **require** the checks [`ci.yml`](.github/workflows/ci.yml)
+  runs on a pull request: `lint`, `test (envtest)`, `verify (generated files,
+  go.mod)`, `build (binary, image)`, `sign-off` and `e2e (kind)`. `--auto`
+  waits for the checks a rule names and for nothing else, so with no rule a
+  bump merges the instant it is mergeable. A rule matches a check by its exact
+  name, so renaming a job is a change to the rule too.
+- **Allow auto-merge** must be on (Settings → General), or the merge step
+  fails.
+- **Allow GitHub Actions to create and approve pull requests** must be on
+  (Settings → Actions → General), or the approval step fails.
+
+The job runs only when Dependabot is both the pull request's author *and* the
+actor that triggered the run: anyone with write access can push a commit onto
+a Dependabot branch, and the workflow must not hand that commit an approval.
+So do not push onto a Dependabot branch. A bump that needs a code change goes
+into a pull request of your own, with the change; Dependabot closes its own
+once `main` has the version. Left to itself, Dependabot rebases a bump that
+falls into conflict, which is why this repository does without Crewlet's
+`dependabot-recreate.yml`. If you clicked **Update branch** on a bump,
+Dependabot will not rebase it again and, under a rule that dismisses stale
+approvals, it is left unapproved: comment `@dependabot recreate` and Dependabot
+rebuilds it as its own.
+
+Nothing checks the workflow for you, and its job holds `contents: write` and
+`pull-requests: write`: read its `if:`, the approval's condition and the merge
+command on any diff that touches it.
+
+### A newer Kubebuilder scaffold is proposed
+
+[`.github/workflows/auto_update.yml`](.github/workflows/auto_update.yml) runs
+every Tuesday, and by hand from the Actions tab. When Kubebuilder has a
+release newer than `PROJECT`'s `cliVersion`, it runs `kubebuilder alpha
+update`: the scaffold of both releases is regenerated from `PROJECT`, this
+repository is merged into the newer one, and the result is pushed as one
+commit on the branch `kubebuilder-update-from-<from>-to-<to>`, with an issue
+whose link opens a pull request from it. Kubebuilder's `autoupdate/v1-alpha`
+plugin wrote the workflow (`bin/kubebuilder edit
+--plugins=autoupdate/v1-alpha`, which also lists the plugin in `PROJECT`), and
+it is curated by hand since: running that command again puts the plugin's
+template back.
+
+The branch is where an update starts, not a change to merge as it is. In the
+pull request from it, whoever takes the update over:
+
+- resolves the conflicts. The merge is committed with its markers (`--force`)
+  rather than stopping the run, and this repository's files differ enough
+  from the scaffold's that some are to be expected.
+- deletes again what the merge brings back of the scaffold that this
+  repository does without, the scaffold's own workflows beside `ci.yml` among
+  them (`make chart` deletes `test-chart.yml` for the same reason).
+- moves `KUBEBUILDER_VERSION` in the Makefile to the release `PROJECT` now
+  names, so `make chart` and new kinds are scaffolded by it, then runs `make
+  manifests generate chart api-docs` and `make check`.
+- signs the update's commit off: the workflow's commit carries no
+  `Signed-off-by`, and the sign-off gate fails the pull request until someone
+  certifies it (`git rebase --signoff <merge-base>`, the remedy the gate
+  prints).
+- titles the pull request like any other, since the title is the release note.
+
+While that branch is still there, a later run for the same two releases fails
+at the push rather than overwrite it, so delete the branch once its pull
+request is merged or closed. The job's token can push to any branch and open
+issues; `main`'s protection rule is what keeps its push off `main`.
+
 ## Documentation
 
 Docs are part of the change. A pull request that changes an API field,
