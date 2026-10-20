@@ -159,12 +159,14 @@ func (r *EngineClassReconciler) check(ctx context.Context, class *crewletaiv1alp
 // gatewayGVK is the kind the class's routes attach to, read as metadata.
 var gatewayGVK = schema.GroupVersionKind{Group: gatewayv1.GroupName, Version: gatewayv1.GroupVersion.Version, Kind: "Gateway"}
 
-// gatewayParents are the Gateways a class's routes attach to: the webhooks'
-// and the API's, each once.
+// gatewayParents are the Gateways a class's routes attach to: the webhooks',
+// the API's and the artifacts', each once.
 func gatewayParents(class *crewletaiv1alpha1.EngineClass) []crewletaiv1alpha1.GatewayParentReference {
 	var out []crewletaiv1alpha1.GatewayParentReference
 	exposure := class.Spec.Exposure
-	for _, g := range []*crewletaiv1alpha1.GatewayExposure{&exposure.Webhooks.Gateway, &exposure.API.Gateway} {
+	for _, g := range []*crewletaiv1alpha1.GatewayExposure{
+		&exposure.Webhooks.Gateway, &exposure.API.Gateway, &exposure.Artifacts.Gateway,
+	} {
 		for _, p := range g.ParentRefs {
 			p.SectionName = ""
 			if !slices.Contains(out, p) {

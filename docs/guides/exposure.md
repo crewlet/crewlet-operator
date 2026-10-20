@@ -2,6 +2,9 @@
 
 A company's engine listens on two ports: 8080 for its API, dashboard and
 probes, and 8081, its public listener, the only one vendors and sandboxes call.
+A company with an artifact origin opens a third, 8082, which serves the
+artifacts its people and agents publish and nothing else
+([Serve artifacts from an origin of their own](#serve-artifacts-from-an-origin-of-their-own)).
 
 Port 8081 serves only the routes outside parties call, each of which
 authenticates itself without an operator credential: vendors' webhooks
@@ -391,6 +394,95 @@ alone, with a path if a proxy serves the engine under one.
 An IPv4 address of four decimal octets, an IPv6 address in brackets,
 `localhost` in any case, a path and a trailing `/` are all taken.
 
+## Serve artifacts from an origin of their own
+
+An artifact is a page a person or an agent wrote, so the engine never serves
+it where the dashboard's session runs. It serves artifacts on a listener of
+their own, port 8082 (Crewlet's `api.artifacts`), with no session, no cookie
+and no API route, and the dashboard frames HTML pages and designs from that
+listener's address. Documents, slides, dashboards and sheets are drawn by
+the dashboard itself and need none of this.
+
+The data pod opens the listener only while its Company has an address for
+it. Without one, the dashboard lists every artifact and opens documents,
+slides, dashboards and sheets, but no HTML page or design, and the
+Company's `Exposed` condition says so in its message. The operator writes
+the address, Crewlet's `api.artifacts.external_url`, from, in order:
+
+1. the Company's `spec.exposure.artifactsBaseURL`, for an origin the class
+   does not route: a tunnel, or `http://localhost:8082` for a browser that
+   runs `kubectl port-forward svc/<company>-engine 8080 8082`;
+2. the class's artifacts route, while it serves `https`.
+
+The result is `status.endpoints.artifactsBaseURL`, and a change of it
+restarts the data pod, which reads it only at start.
+
+### Route the artifacts
+
+```yaml
+spec:                       # EngineClass
+  exposure:
+    artifacts:
+      mode: Gateway
+      gateway:
+        parentRefs:
+          - {namespace: gateway-system, name: usercontent}
+      hostname: "{{uid}}.crewletusercontent.example"
+```
+
+The route `<company>-artifacts` sends every path of its host to the
+artifact listener (the engine Service's port `artifacts`, 8082) and to
+nothing else. `origins` decides how artifacts are kept apart in a browser:
+
+| `exposure.artifacts.origins` | The route's host | The engine is told | What it needs |
+|---|---|---|---|
+| `PerArtifact` (unset) | `*.<hostname>` | `https://{artifact}.<hostname>` | A wildcard DNS record and a wildcard certificate for `*.<hostname>` |
+| `Shared` | `<hostname>` | `https://<hostname>` | One DNS name and one certificate |
+
+Under `PerArtifact` every artifact has a browser origin of its own, so one
+artifact's browser storage is never another's. Under `Shared` every
+artifact is served from the one host with an opaque origin, and pages have
+no browser storage.
+
+Crewlet refuses an artifact origin reached over plain `http` on a routable
+host, since every byte a page loads would travel in the clear, so the route
+serves `https` alone: an `Ingress` needs `ingress.tls` (the class is refused
+otherwise), and under `Gateway` a listener the route attaches to must be
+HTTPS. Until one is, the data pod opens no artifact origin and the Company
+reports `Exposed=False RouteNotHTTPS`.
+
+Give `hostname` a registrable domain other than the dashboard's, as above:
+browsers draw the line between sites there, and on the dashboard's own site
+an artifact's requests would carry the dashboard's `SameSite` cookies.
+Crewlet serves every artifact with an opaque origin there whatever
+`origins` says, and advises against it in the data pod's log at every start
+(a `config_advisory` line for `api.artifacts.external_url`). The same holds
+for `http://localhost:8082`, on a port-forwarded dashboard's own site.
+
+`artifacts.hostname` must differ from `api.hostname` and
+`webhooks.hostname`, and neither may be under it: Crewlet refuses an
+artifact origin on the API's host or on a parent of it, where a cookie
+scoped to it would reach the API. A Company's own `artifactsBaseURL` is
+held to the same rule beside the Company's other addresses, and its data
+pod is held back with `RuntimeReady=False AddressRefused` on one that breaks
+it. `artifactsBaseURL` is `https://` and a lowercase host name with at most
+a port after it, or `http://` on `localhost`, a name under it or a
+`127.x.x.x` address; `{artifact}` may start its host's first label, followed
+by at most 37 characters of that label, for an origin per artifact:
+
+```yaml
+spec:                       # Company
+  exposure:
+    artifactsBaseURL: https://{artifact}.acme.crewletusercontent.example
+```
+
+Under `networkPolicy.mode: Isolated` the artifact port admits only the
+route's proxies or Ingress controller ([Network policy](#network-policy)).
+Publishing an artifact uploads its files through the API port, not this
+one: an Ingress controller in front of the API with a small request body
+limit (ingress-nginx's default is 1 MiB) refuses larger uploads, so raise
+it with the controller's annotation under `api.ingress.annotations`.
+
 ## Name the proxies in front of the engine
 
 Behind a route, every request reaches the engine from the Gateway's proxy or
@@ -438,7 +530,7 @@ pods, which read it at start.
 
 With `networkPolicy.mode: Isolated`, the default, the operator creates a
 NetworkPolicy `<company>-engine` around the company's data pods. It admits
-each of the engine's two ports from its own sources and from nothing else.
+each of the engine's ports from its own sources and from nothing else.
 The API port, 8080, only from:
 
 - the operator's own pods (its namespace, and the pod labels its
@@ -454,23 +546,32 @@ The public port, 8081, only from where webhooks arrive: `exposure.webhooks`'
 `ingress.controllerNamespaces`, or `external.forwarders`. Under
 `webhooks.mode: None` nothing is admitted to it.
 
+The artifact port, 8082, only from where the artifacts' route arrives:
+`exposure.artifacts`' `gateway.proxyNamespaces` (its Gateways' own
+namespaces when unset) or `ingress.controllerNamespaces`. A browser that
+port-forwards it reaches the pod through its kubelet, which a NetworkPolicy
+does not police.
+
 ```mermaid
 flowchart LR
     OP["<b>The operator's pods</b>"] -->|8080| A
     AC["<b>apiConsumers</b>"] -->|8080| A
     AR["<b>The API route's proxy</b>"] -->|8080| A
     WR["<b>The webhooks' proxy</b><br/><i>or forwarders</i>"] -->|8081| P
+    XR["<b>The artifacts' proxy</b>"] -->|8082| X
     SP["<b>The company's seat pods</b>"] -.->|"7422, under the broker policy,<br/>while the class allows seat pools"| L
     subgraph pod["Data pod, under Isolated"]
         A["<b>:8080</b> API"]
         P["<b>:8081</b> public listener"]
+        X["<b>:8082</b> artifact listener"]
         L["<b>:7422</b> leaf listener"]
     end
     pod -->|"DNS, its namespace, egress.to,<br/>any address but exceptCIDRs<br/>and the metadata endpoints"| OUT["<b>Outward</b>"]
 ```
 
-So a webhook's proxy reaches no admin route, and an API consumer cannot
-reach the port published to the internet. Everything else, other tenants and
+So a webhook's proxy reaches no admin route, an API consumer cannot reach
+the port published to the internet, and the artifacts' proxy, which carries
+pages anyone in the company may have written, reaches neither. Everything else, other tenants and
 the tenant's own other pods included, is refused. Name your consumers in the
 class, by namespace and pod labels:
 
@@ -534,8 +635,8 @@ operator create two more policies per company, under either mode:
 - `<company>-broker` admits the data pods' leaf listener (port 7422) from the
   company's own seat pods and from nothing else, since Crewlet's broker port
   takes any connection without authentication or TLS. Under `None` it also
-  admits ports 8080 and 8081 from anywhere, so the data pods stay as open as
-  they are without a policy.
+  admits ports 8080, 8081 and 8082 from anywhere, so the data pods stay as
+  open as they are without a policy.
 - `<company>-seats`, while the company runs seat pods, admits no connection to
   a seat pod from any pod and, under `Isolated`, holds the seat pods to the
   egress above. A seat pod's probes (port 8080, `/health` and `/ready`) still

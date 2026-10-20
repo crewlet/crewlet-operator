@@ -39,7 +39,7 @@ flowchart LR
         POD[("<b>nimbus-data-0</b><br/>data-nimbus-data-0")]
     end
     subgraph reach["How it is reached"]
-        SVC["<b>Service</b> nimbus-engine<br/><i>http 8080 · public 8081</i>"]
+        SVC["<b>Service</b> nimbus-engine<br/><i>http 8080 · public 8081 · artifacts 8082</i>"]
         HL["<b>Service</b> nimbus-data<br/><i>headless</i>"]
         RT["<b>HTTPRoute or Ingress</b><br/>nimbus-webhooks · nimbus-api"]
         NP["<b>NetworkPolicy</b><br/>nimbus-engine · nimbus-broker"]
@@ -69,9 +69,9 @@ flowchart LR
 | Secret `nimbus-secret-sync` | What the config reconciler last pushed into the engine's secret store: a keyed fingerprint of each value, never the value, by which it decides what to push or remove next ([Applying the document](applying.md)). |
 | ServiceAccount `nimbus-engine` | The engine's identity, carrying the class's `serviceAccount.annotations` for a workload identity. Its token is never mounted: the engine does not call the Kubernetes API. |
 | StatefulSet `nimbus-data` | The data pod. |
-| Service `nimbus-engine` | ClusterIP routing to ready data pods, with two ports: `http` (8080), the engine's API, dashboard and probes, which `status.endpoints.api` and the API's route point at; and `public` (8081), the engine's public listener, which the webhooks' route points at. It carries the class's `service.annotations`, for a load balancer controller that reads a backend's health check there ([Load balancer health checks](../guides/exposure.md#load-balancer-health-checks)). |
+| Service `nimbus-engine` | ClusterIP routing to ready data pods, with three ports: `http` (8080), the engine's API, dashboard and probes, which `status.endpoints.api` and the API's route point at; `public` (8081), the engine's public listener, which the webhooks' route points at; and `artifacts` (8082), the artifact listener, which the artifacts' route points at and the data pods open while the company has an artifact origin. It carries the class's `service.annotations`, for a load balancer controller that reads a backend's health check there ([Load balancer health checks](../guides/exposure.md#load-balancer-health-checks)). |
 | Service `nimbus-data` | Headless, the StatefulSet's governing Service, publishing each data pod's address before it is ready. |
-| HTTPRoute or Ingress `nimbus-webhooks`, `nimbus-api` | The routes the class asks for; see [Exposure](#exposure). |
+| HTTPRoute or Ingress `nimbus-webhooks`, `nimbus-api`, `nimbus-artifacts` | The routes the class asks for; see [Exposure](#exposure). |
 | NetworkPolicy `nimbus-engine` | With the class's `networkPolicy.mode: Isolated`; see [Network policy](#network-policy). |
 | NetworkPolicy `nimbus-broker` | While the class's `seatPools.policy` is `Allowed`, whatever its `networkPolicy` says: who may reach the data pods' leaf listener; see [Network policy](#network-policy). |
 | Secret `nimbus-bootstrap-<pool>-<hash>` | A seat pool's `crewlet.yaml` ([A seat pod's `crewlet.yaml`](company-document.md#a-seat-pods-crewletyaml)), with the class's environment values as in `nimbus-bootstrap`. One per pool, a PerSeat pool's seats included. |
@@ -125,7 +125,7 @@ Two cases are refused rather than guessed at:
 | **Command** | `crewlet run -config /etc/crewlet/crewlet.yaml`, the bootstrap Secret's `crewlet.yaml` mounted read-only, readable by the engine's user alone (mode `0440`, group `fsGroup`). |
 | **Storage** | One volume claim per pod (`data-nimbus-data-0`) at `/var/lib/crewlet`, from the class's `data.storage`: the store, the event stream (three quarters of the volume, [sized from the claim](company-document.md#the-data-pods-crewletyaml)), and the store's native library cache (`TURSO_GO_CACHE_DIR`), so a restart does not extract it again. |
 | **Environment** | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the Company's public address, while an LLMProvider of the company runs a CLI in `mode: Agent` (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`, and with them `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, the Company's public address, while the Company has one (see [Exposure](#exposure)); then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). All of it is the engine's: a stdio tool server the engine starts is handed only the part of it [Crewlet's allowlist](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#what-a-stdio-servers-environment-is) names, the proxy and TLS variables among it, a coding CLI that part and the variables its Crewlet profile passes through, and a sandbox none ([Stdio and HTTP](../guides/tool-servers.md#stdio-and-http)). |
-| **Ports** | 8080 (`http`), the API, the dashboard and the probes; 8081 (`public`), the public listener: the webhooks, and a remote sandbox's `/otlp/` and `/mcp/`; and 7422 (`leaf`), the leaf listener seat pods join the event stream through, while the class's `seatPools.policy` is `Allowed`. The headless Service `nimbus-data` names 8080 and 7422; `nimbus-engine` names 8080 and 8081. |
+| **Ports** | 8080 (`http`), the API, the dashboard and the probes; 8081 (`public`), the public listener: the webhooks, and a remote sandbox's `/otlp/` and `/mcp/`; 8082 (`artifacts`), the artifact listener, while the company has an artifact origin; and 7422 (`leaf`), the leaf listener seat pods join the event stream through, while the class's `seatPools.policy` is `Allowed`. The headless Service `nimbus-data` names 8080 and 7422; `nimbus-engine` names 8080, 8081 and 8082. |
 | **Probes** | `/health` for startup and liveness, `/ready` for readiness. Startup allows at least the class's `data.startupSeconds`, counted from the container's start, or, unset, 1,676 seconds (1,816 when the class keeps files in S3) plus six seconds per GiB of the data volume. The first figure is every bound the engine puts on a data pod's boot, laid end to end, and the API refuses a `startupSeconds` below it: its waits for its own broker and store, never for a peer. A few of them grow with what the company holds and are left to the second figure, as the recovery is: a listing of its secrets, at up to 5 s a secret; moving a secret an offline `crewlet secrets set` left on the node, 10 s each; the claim of each batch of a seat pod's events a crash left unsettled, 15 s a batch; and the restore of each CLI's credential bundle, 10 s each. The second is for what the engine waits out unbounded: it recovers what it holds on the volume before `/health` answers `200`, which takes longer the more it holds, and a pod restarted mid-recovery starts it again. The company's tool servers do not count: `/health` answers once the recovery is over, while they start, and `/ready` answers `503` `starting` until the engine serves. Liveness allows a minute of failures before a restart, longer than the 45 seconds in which the engine's watchdog ends a wedged process itself. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
 | **Stopping** | A five-second `preStop` sleep, so the endpoint is gone from the Services and Gateways before the engine drains, and the class's `data.terminationGracePeriodSeconds` (default five minutes) for the drain: running turns finish, waiting ones are handed back. |
 | **Updates** | `RollingUpdate` with `maxUnavailable: 1`, `podManagementPolicy: Parallel`. |
@@ -539,6 +539,20 @@ address once the route is accepted: `https://` when the Ingress has TLS or a
 Gateway listener the route attaches to is HTTPS. `status.endpoints.api` is
 always the in-cluster address, `http://<name>-engine.<namespace>.svc:8080`.
 
+`exposure.artifacts.mode` `Gateway` or `Ingress` creates `<name>-artifacts`
+for every path of port `artifacts`, on `*.<hostname>` under `origins`
+`PerArtifact` (unset) and on `<hostname>` under `Shared`. Port 8082
+(`api.artifacts`), the **artifact listener**, serves the artifacts the
+company's people and agents publish and nothing else, with no session, no
+cookie and no API route; the dashboard frames HTML pages and designs from
+it. `status.endpoints.artifactsBaseURL` is where a browser reaches it: the
+Company's `spec.exposure.artifactsBaseURL`, else the route's address while
+it serves `https` (`https://{artifact}.<hostname>`, or `https://<hostname>`
+under `Shared`), else unset. It is the engine's `api.artifacts.external_url`,
+and the data pod opens the listener only while it is set: without it the
+dashboard opens no HTML page or design, and the `Exposed` condition's message
+says so ([Serve artifacts from an origin of their own](../guides/exposure.md#serve-artifacts-from-an-origin-of-their-own)).
+
 `status.endpoints.dashboardBaseURL` is where a browser reaches the engine,
 its dashboard and its people's sign-in: the Company's
 `spec.exposure.dashboardBaseURL`, else the API route's address on the same
@@ -559,7 +573,10 @@ route exists and was accepted: an HTTPRoute when each Gateway it names reports
 it `Accepted`, an Ingress when its controller published an address for it.
 Until then it is `False` with `RouteNotAccepted` and what the controller
 reported. A class that routes nothing gives `Exposed=True` with `NoRoutes`.
-`External` without the Company's `publicBaseURL` is `PublicBaseURLMissing`.
+`External` without the Company's `publicBaseURL` is `PublicBaseURLMissing`. An
+artifacts route through Gateways none of whose listeners it attaches to is
+HTTPS is `RouteNotHTTPS`, since Crewlet refuses an artifact origin over plain
+`http` on a routable host.
 
 The Gateway API is optional. The operator checks for its HTTPRoute kind when
 it starts and runs without it; a class that routes through Gateways is then
@@ -584,9 +601,11 @@ traffic to port 8080 only from:
   `ingress.controllerNamespaces`, which `Isolated` requires;
 
 and to port 8081 only from where the webhooks' route arrives from: the same
-fields of `exposure.webhooks`, or its `external.forwarders`. Neither port
-admits the other's sources, so a webhook's proxy reaches no admin route and
-an API consumer cannot reach the port published to the internet. Everything
+fields of `exposure.webhooks`, or its `external.forwarders`; and to port 8082
+only from where the artifacts' route arrives from, the same fields of
+`exposure.artifacts`. No port admits another's sources, so a webhook's proxy
+reaches no admin route, an API consumer cannot reach the port published to
+the internet, and the artifacts' proxy reaches neither. Everything
 else is refused. Outward, the engine, which runs code its tenant
 supplies, may reach DNS, the pods of its own namespace, the class's
 `networkPolicy.egress.to`, and every address but the cloud metadata
@@ -605,9 +624,9 @@ Two more policies come with seat pools:
   connection, with no authentication and no TLS, and whoever joins it reads
   and writes the company's whole event stream. It selects the data pods and
   admits port 7422 only from pods labelled as this company's seat pods. Under
-  `None` it also admits ports 8080 and 8081 from anywhere, which keeps the
-  API and the public listener as open as they are without a policy and
-  closes only the broker.
+  `None` it also admits ports 8080, 8081 and 8082 from anywhere, which keeps
+  the API, the public listener and the artifact listener as open as they are
+  without a policy and closes only the broker.
 - `nimbus-seats` exists while the company runs seat pods. It selects them and
   admits nothing: a seat pod serves no other pod, and the kubelet probes it
   from its own node, which no policy polices. Under `Isolated` it also holds

@@ -17,14 +17,18 @@ const portForwarded = "http://localhost:8080"
 // crewlet.yaml tells the engine about where it is reached, for each source of
 // each address: a browser at the Company's stated address, else at the class's
 // API route, else through a port-forward; the public listener at the
-// Company's public address, else inside the cluster; and the route's origin
-// allowed when the stated address is somewhere else. routed is what
-// routeScheme and the class's hostname make of the API's route: https behind
-// a Gateway listener that terminates TLS, http behind an Ingress without it.
+// Company's public address, else inside the cluster; the route's origin
+// allowed when the stated address is somewhere else; and the artifact origin
+// at the Company's stated address, else at the class's artifacts route, else
+// nowhere. routed is what routeScheme and the class's hostname make of the
+// API's route: https behind a Gateway listener that terminates TLS, http
+// behind an Ingress without it; artifactsRouted is the artifacts route's
+// address, which reconcileExposure gives only a route that serves https.
 func TestEngineAddressesFollowWhereTheEngineIsReached(t *testing.T) {
 	const (
-		inCluster = "http://nimbus-engine.tenant-nimbus.svc:8081"
-		routedAPI = "https://nimbus.api.example.com"
+		inCluster       = "http://nimbus-engine.tenant-nimbus.svc:8081"
+		routedAPI       = "https://nimbus.api.example.com"
+		routedArtifacts = "https://{artifact}.nimbus.crewletusercontent.example"
 	)
 	for _, c := range []struct {
 		name                string
@@ -32,6 +36,10 @@ func TestEngineAddressesFollowWhereTheEngineIsReached(t *testing.T) {
 		routed              string
 		external, publicURL string
 		origins             []string
+		// statedArtifacts is the Company's artifactsBaseURL, and
+		// artifactsRouted and artifacts the route's address and the one
+		// the engine is told.
+		statedArtifacts, artifactsRouted, artifacts string
 	}{
 		{
 			name:     "a class that routes nothing",
@@ -65,6 +73,22 @@ func TestEngineAddressesFollowWhereTheEngineIsReached(t *testing.T) {
 			public: "https://nimbus.hooks.example.com", external: portForwarded,
 			publicURL: "https://nimbus.hooks.example.com",
 		},
+		{
+			name:     "artifacts routed over https",
+			external: portForwarded, publicURL: inCluster,
+			artifactsRouted: routedArtifacts, artifacts: routedArtifacts,
+		},
+		{
+			name:     "a stated artifact origin ahead of the route",
+			external: portForwarded, publicURL: inCluster,
+			statedArtifacts: "https://artifacts.tunnel.example/", artifactsRouted: routedArtifacts,
+			artifacts: "https://artifacts.tunnel.example",
+		},
+		{
+			name:     "a stated port-forward artifact origin",
+			external: portForwarded, publicURL: inCluster,
+			statedArtifacts: "http://localhost:8082", artifacts: "http://localhost:8082",
+		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			company := &crewletaiv1alpha1.Company{}
@@ -74,13 +98,20 @@ func TestEngineAddressesFollowWhereTheEngineIsReached(t *testing.T) {
 			// address, unset under webhooks None and under External
 			// before the Company states one.
 			company.Status.Endpoints.PublicBaseURL = c.public
-			got := engineAddressesOf(company, c.routed)
-			if got.external != c.external || got.public != c.publicURL || !slices.Equal(got.origins, c.origins) {
-				t.Fatalf("engineAddressesOf() = %+v, want external %s, public %s, origins %v", got, c.external, c.publicURL, c.origins)
+			company.Spec.Exposure.ArtifactsBaseURL = c.statedArtifacts
+			got := engineAddressesOf(company, c.routed, c.artifactsRouted)
+			if got.external != c.external || got.public != c.publicURL || !slices.Equal(got.origins, c.origins) ||
+				got.artifacts != c.artifacts {
+				t.Fatalf("engineAddressesOf() = %+v, want external %s, public %s, origins %v, artifacts %q",
+					got, c.external, c.publicURL, c.origins, c.artifacts)
 			}
 		})
 	}
 }
+
+// hostnameWord is in a refusal's message only where it sends the reader to a
+// class's host name template.
+const hostnameWord = "hostname"
 
 // routeOfNamespace is an API host name template whose last label a
 // Company's namespace fills, and statedDashboard an address a Company states
@@ -102,14 +133,16 @@ func TestAddressRefusalNamesWhereTheAddressCameFrom(t *testing.T) {
 		name                  string
 		field                 string
 		dashboard, public     string
+		artifacts             string
 		apiHost, webhooksHost string
+		artifactsHost         string
 		want                  []string
 		wantNot               []string
 	}{
 		{
 			name: "the Company's dashboard address", field: render.FieldExternalURL,
 			dashboard: "http://127.1", apiHost: routeOfNamespace,
-			want: []string{"spec.exposure.dashboardBaseURL: correct it"}, wantNot: []string{"hostname"},
+			want: []string{"spec.exposure.dashboardBaseURL: correct it"}, wantNot: []string{hostnameWord},
 		},
 		{
 			name: "the API route's address", field: render.FieldExternalURL, apiHost: routeOfNamespace,
@@ -123,7 +156,7 @@ func TestAddressRefusalNamesWhereTheAddressCameFrom(t *testing.T) {
 		{
 			name: "the Company's public address", field: render.FieldPublicURL,
 			public: "https://hooks.example.com:0", webhooksHost: webhooksHostname,
-			want: []string{"spec.exposure.publicBaseURL: correct it"}, wantNot: []string{"hostname"},
+			want: []string{"spec.exposure.publicBaseURL: correct it"}, wantNot: []string{hostnameWord},
 		},
 		{
 			// No refusal names it, since Crewlet takes every address the
@@ -136,14 +169,29 @@ func TestAddressRefusalNamesWhereTheAddressCameFrom(t *testing.T) {
 			name: "an address the operator chose", field: render.FieldExternalURL,
 			wantNot: []string{"It is"},
 		},
+		{
+			name: "the Company's artifact origin", field: render.FieldArtifactsURL,
+			artifacts: "https://crewlet.example.com", apiHost: routeOfNamespace, artifactsHost: "{{uid}}.usercontent.example",
+			want: []string{"spec.exposure.artifactsBaseURL: correct it"}, wantNot: []string{hostnameWord},
+		},
+		{
+			// It is never sent to the API route, though the API route's
+			// address is the one it meets.
+			name: "the artifacts route's address", field: render.FieldArtifactsURL,
+			apiHost: routeOfNamespace, artifactsHost: "{{uid}}.usercontent.example",
+			want:    []string{`the artifacts route of EngineClass standard, its spec.exposure.artifacts.hostname "{{uid}}.usercontent.example"`},
+			wantNot: []string{"api.hostname"},
+		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			company := &crewletaiv1alpha1.Company{}
 			company.Name, company.Namespace = companyName, "4711"
 			company.Spec.Exposure.DashboardBaseURL, company.Spec.Exposure.PublicBaseURL = c.dashboard, c.public
+			company.Spec.Exposure.ArtifactsBaseURL = c.artifacts
 			class := &crewletaiv1alpha1.EngineClass{}
 			class.Name = "standard"
 			class.Spec.Exposure.API.Hostname, class.Spec.Exposure.Webhooks.Hostname = c.apiHost, c.webhooksHost
+			class.Spec.Exposure.Artifacts.Hostname = c.artifactsHost
 			const address = "http://nimbus.4711"
 			got := addressRefusalMessage(company, class, &render.AddressError{Field: c.field, Address: address, Reason: reason})
 			for _, want := range append([]string{c.field + " set to " + address + ", which " + reason, "The pods are held as they are."}, c.want...) {

@@ -168,8 +168,9 @@ that fills it.
 ## The data pod's `crewlet.yaml`
 
 The data pod holds the company's estate, serves the API on port 8080
-(`api.port`) and the routes outside parties call on port 8081 (`api.public`,
-which every data pod opens, whatever its class routes), runs
+(`api.port`), the routes outside parties call on port 8081 (`api.public`,
+which every data pod opens, whatever its class routes), and, while the
+company has an artifact origin, artifacts on port 8082 (`api.artifacts`), runs
 the background workers and runs the seats placed in `data` (`node.roles:
 [data, ingress, seats, workers]`, `node.labels: {crewlet.ai/pool: data}`).
 Its `crewlet.yaml` is shaped for a company that adds seat pods, so that
@@ -185,6 +186,7 @@ that serves its API and reads only at start:
 | `api.external_url` | Where a browser reaches the engine: its dashboard and its people's sign-in. The engine takes from it the origin a person's write must come from, whether the session cookie is `Secure`, and every link a person follows, an invitation's included. | The Company's `status.endpoints.dashboardBaseURL`: its `spec.exposure.dashboardBaseURL`, else the class's API route, else `http://localhost:8080`, the address `kubectl port-forward` serves it at |
 | `api.public.external_url` | Where vendors and sandboxes reach the public listener: the base of every webhook address and app manifest the engine builds. | The Company's `status.endpoints.publicBaseURL`, else the listener's address inside the cluster, `http://<company>-engine.<namespace>.svc:8081`, which no vendor reaches |
 | `api.auth.allowed_origins` | Another origin a browser reaches the engine on. | The class's API route, when the Company's `spec.exposure.dashboardBaseURL` is somewhere else |
+| `api.artifacts.external_url` | Where a browser reaches the artifact listener, which the dashboard frames HTML pages and designs from; `{artifact}` in it gives every artifact a host of its own. Written with `api.artifacts.port: 8082`, and only for a company that has one. | The Company's `status.endpoints.artifactsBaseURL`: its `spec.exposure.artifactsBaseURL`, else the class's artifacts route while it serves `https` ([ADR-0007](../../adr/0007-open-the-artifact-origin-only-where-it-is-reached.md)) |
 
 A change of any of them restarts the data pod
 ([ADR-0006](../../adr/0006-tell-the-engine-an-address-it-is-reached-at.md)
