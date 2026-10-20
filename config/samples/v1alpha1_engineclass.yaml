@@ -36,6 +36,14 @@ spec:
       hostname: "{{uid}}.hooks.example.com"
     api:
       mode: ClusterInternal
+    artifacts:
+      mode: Gateway
+      gateway:
+        parentRefs:
+          - namespace: gateway-system
+            name: usercontent
+      # A domain of its own, so no artifact shares the dashboard's site.
+      hostname: "{{uid}}.crewletusercontent.example"
   networkPolicy:
     mode: Isolated
     egress:

@@ -69,7 +69,7 @@ flowchart LR
 | Secret `nimbus-secret-sync` | What the config reconciler last pushed into the engine's secret store: a keyed fingerprint of each value, never the value, by which it decides what to push or remove next ([Applying the document](applying.md)). |
 | ServiceAccount `nimbus-engine` | The engine's identity, carrying the class's `serviceAccount.annotations` for a workload identity. Its token is never mounted: the engine does not call the Kubernetes API. |
 | StatefulSet `nimbus-data` | The data pod. |
-| Service `nimbus-engine` | ClusterIP routing to ready data pods, with three ports: `http` (8080), the engine's API, dashboard and probes, which `status.endpoints.api` and the API's route point at; `public` (8081), the engine's public listener, which the webhooks' route points at; and `artifacts` (8082), the artifact listener, which the artifacts' route points at and the data pods open while the company has an artifact origin. It carries the class's `service.annotations`, for a load balancer controller that reads a backend's health check there ([Load balancer health checks](../guides/exposure.md#load-balancer-health-checks)). |
+| Service `nimbus-engine` | ClusterIP routing to ready data pods, with three ports: `http` (8080), the engine's API, dashboard and probes, which `status.endpoints.api` and the API's route point at; `public` (8081), the engine's public listener, which the webhooks' route points at; and `artifacts` (8082), the artifact listener, which the artifacts' route points at. It carries the class's `service.annotations`, for a load balancer controller that reads a backend's health check there ([Load balancer health checks](../guides/exposure.md#load-balancer-health-checks)). |
 | Service `nimbus-data` | Headless, the StatefulSet's governing Service, publishing each data pod's address before it is ready. |
 | HTTPRoute or Ingress `nimbus-webhooks`, `nimbus-api`, `nimbus-artifacts` | The routes the class asks for; see [Exposure](#exposure). |
 | NetworkPolicy `nimbus-engine` | With the class's `networkPolicy.mode: Isolated`; see [Network policy](#network-policy). |
@@ -540,18 +540,11 @@ Gateway listener the route attaches to is HTTPS. `status.endpoints.api` is
 always the in-cluster address, `http://<name>-engine.<namespace>.svc:8080`.
 
 `exposure.artifacts.mode` `Gateway` or `Ingress` creates `<name>-artifacts`
-for every path of port `artifacts`, on `*.<hostname>` under `origins`
-`PerArtifact` (unset) and on `<hostname>` under `Shared`. Port 8082
-(`api.artifacts`), the **artifact listener**, serves the artifacts the
-company's people and agents publish and nothing else, with no session, no
-cookie and no API route; the dashboard frames HTML pages and designs from
-it. `status.endpoints.artifactsBaseURL` is where a browser reaches it: the
-Company's `spec.exposure.artifactsBaseURL`, else the route's address while
-it serves `https` (`https://{artifact}.<hostname>`, or `https://<hostname>`
-under `Shared`), else unset. It is the engine's `api.artifacts.external_url`,
-and the data pod opens the listener only while it is set: without it the
-dashboard opens no HTML page or design, and the `Exposed` condition's message
-says so ([Serve artifacts from an origin of their own](../guides/exposure.md#serve-artifacts-from-an-origin-of-their-own)).
+for every path of port `artifacts` (8082, `api.artifacts`), on `*.<hostname>`
+or, under `origins: Shared`, `<hostname>`. `status.endpoints.artifactsBaseURL`
+is the Company's `spec.exposure.artifactsBaseURL`, else the route's address
+while it serves `https`; the data pod opens the artifact listener only while
+it is set ([Serve artifacts from an origin of their own](../guides/exposure.md#serve-artifacts-from-an-origin-of-their-own)).
 
 `status.endpoints.dashboardBaseURL` is where a browser reaches the engine,
 its dashboard and its people's sign-in: the Company's
@@ -573,10 +566,8 @@ route exists and was accepted: an HTTPRoute when each Gateway it names reports
 it `Accepted`, an Ingress when its controller published an address for it.
 Until then it is `False` with `RouteNotAccepted` and what the controller
 reported. A class that routes nothing gives `Exposed=True` with `NoRoutes`.
-`External` without the Company's `publicBaseURL` is `PublicBaseURLMissing`. An
-artifacts route through Gateways none of whose listeners it attaches to is
-HTTPS is `RouteNotHTTPS`, since Crewlet refuses an artifact origin over plain
-`http` on a routable host.
+`External` without the Company's `publicBaseURL` is `PublicBaseURLMissing`, and
+an artifacts route with no HTTPS Gateway listener `RouteNotHTTPS`.
 
 The Gateway API is optional. The operator checks for its HTTPRoute kind when
 it starts and runs without it; a class that routes through Gateways is then
@@ -602,10 +593,9 @@ traffic to port 8080 only from:
 
 and to port 8081 only from where the webhooks' route arrives from: the same
 fields of `exposure.webhooks`, or its `external.forwarders`; and to port 8082
-only from where the artifacts' route arrives from, the same fields of
-`exposure.artifacts`. No port admits another's sources, so a webhook's proxy
-reaches no admin route, an API consumer cannot reach the port published to
-the internet, and the artifacts' proxy reaches neither. Everything
+only from where the artifacts' route arrives from. No port admits another's
+sources, so a webhook's proxy reaches no admin route and an API consumer
+cannot reach the port published to the internet. Everything
 else is refused. Outward, the engine, which runs code its tenant
 supplies, may reach DNS, the pods of its own namespace, the class's
 `networkPolicy.egress.to`, and every address but the cloud metadata
