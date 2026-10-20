@@ -265,8 +265,10 @@ spec:
                           It applies to the data volumes of companies created after it is set.
                           An existing company's volumes keep the size they were created with:
                           they are claimed through the StatefulSet's volume claim templates,
-                          which Kubernetes does not let change, and resizing a volume is a
+                          which Kubernetes does not let change, and growing a volume is a
                           decision about one company's storage class and data, not the class's.
+                          Its owner expands the company's claim instead, and once the expansion
+                          lands the operator sizes the stream from what the claim then has.
                         pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                         x-kubernetes-int-or-string: true
                         x-kubernetes-validations:

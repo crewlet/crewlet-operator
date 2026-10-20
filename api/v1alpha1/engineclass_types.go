@@ -78,8 +78,10 @@ type DataStorage struct {
 	// It applies to the data volumes of companies created after it is set.
 	// An existing company's volumes keep the size they were created with:
 	// they are claimed through the StatefulSet's volume claim templates,
-	// which Kubernetes does not let change, and resizing a volume is a
+	// which Kubernetes does not let change, and growing a volume is a
 	// decision about one company's storage class and data, not the class's.
+	// Its owner expands the company's claim instead, and once the expansion
+	// lands the operator sizes the stream from what the claim then has.
 	// +required
 	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('9Gi'))",message="size must be at least 9Gi: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 6979321856 bytes of it for its state logs"
 	Size *resource.Quantity `json:"size,omitempty"`

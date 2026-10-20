@@ -24,8 +24,9 @@ const lastAppliedAnnotation = corev1.LastAppliedConfigAnnotation
 //     held in memory, also the last-applied-configuration annotation, which
 //     carries the whole Secret, values included, for every Secret created
 //     with kubectl apply;
-//   - data volume claims, read for the engine version recorded on them, only
-//     when the operator manages them (the claim template labels them);
+//   - data volume claims, read for the engine version recorded on them and
+//     the size each has, only when the operator manages them (the claim
+//     template labels them);
 //   - StatefulSets, cached whole because the runtime reconciler reads their
 //     status, only when the operator manages them. The one read that must
 //     also see a StatefulSet of someone else's (existingStatefulSet) asks the
@@ -36,7 +37,7 @@ func CacheOptions() cache.Options {
 		ByObject: map[client.Object]cache.ByObject{
 			&appsv1.StatefulSet{}: {Label: labels.SelectorFromSet(labels.Set{managedByLabel: FieldOwner})},
 			&corev1.Secret{}:      {Transform: stripSecretMetadata()},
-			// Read as metadata, for the engine version recorded on them.
+			// Read for the engine version recorded on them and their sizes.
 			&corev1.PersistentVolumeClaim{}: {Label: labels.SelectorFromSet(labels.Set{managedByLabel: FieldOwner})},
 		},
 	}

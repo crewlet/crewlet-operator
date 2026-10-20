@@ -3,7 +3,11 @@ package controller
 import (
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 )
@@ -59,5 +63,117 @@ func TestStartupFailureThreshold(t *testing.T) {
 		if window := (threshold - 1) * probePeriodSeconds; window < seconds || window >= seconds+probePeriodSeconds {
 			t.Errorf("startupFailureThreshold(%d) = %d, a window of %ds after the first probe", seconds, threshold, window)
 		}
+	}
+}
+
+// TestDataVolumeSize holds the size the engine's event stream is sized from
+// to the volumes the data pods actually have: the claim template's size (the
+// existing StatefulSet's, or the class's before there is one), grown by an
+// expansion of every claim once the expansion has landed, never shrunk by a
+// claim given less than it asked for, and the smallest across the pods.
+func TestDataVolumeSize(t *testing.T) {
+	t.Parallel()
+	// kept is the size the existing StatefulSet's claim template asks for.
+	const kept = "16Gi"
+	class := &crewletaiv1alpha1.EngineClass{}
+	class.Spec.Data.Storage.Size = new(resource.MustParse("32Gi"))
+	existing := &appsv1.StatefulSet{}
+	existing.Spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
+		{Name: "scratch", Spec: claimRequesting("1Gi").Spec},
+		{Name: dataVolume, Spec: claimRequesting(kept).Spec},
+	}
+	bound := func(requested, granted string) corev1.PersistentVolumeClaim {
+		claim := claimRequesting(requested)
+		claim.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(granted)}
+		return claim
+	}
+	deleting := bound("64Gi", "64Gi")
+	deleting.DeletionTimestamp = new(metav1.Now())
+	for _, c := range []struct {
+		name     string
+		existing *appsv1.StatefulSet
+		claims   []corev1.PersistentVolumeClaim
+		want     string
+	}{
+		{"the class's size before there is a StatefulSet", nil, nil, "32Gi"},
+		{"the StatefulSet's template, not the class's new size", existing, nil, kept},
+		{"a claim not bound yet", existing, []corev1.PersistentVolumeClaim{claimRequesting(kept)}, kept},
+		{"a claim bound at its size", existing, []corev1.PersistentVolumeClaim{bound(kept, kept)}, kept},
+		{"a claim rounded up when it was made", existing, []corev1.PersistentVolumeClaim{bound(kept, "20Gi")}, kept},
+		{"a claim given less than it asked", existing, []corev1.PersistentVolumeClaim{bound(kept, "8Gi")}, kept},
+		{"an expansion not landed yet", existing, []corev1.PersistentVolumeClaim{bound("64Gi", kept)}, kept},
+		{"an expansion partly landed", existing, []corev1.PersistentVolumeClaim{bound("64Gi", "48Gi")}, "48Gi"},
+		{"an expansion landed", existing, []corev1.PersistentVolumeClaim{bound("64Gi", "64Gi")}, "64Gi"},
+		{"an expansion landed past what was asked", existing, []corev1.PersistentVolumeClaim{bound("64Gi", "70Gi")}, "64Gi"},
+		{
+			"the smallest of the pods' claims", existing,
+			[]corev1.PersistentVolumeClaim{bound("64Gi", "64Gi"), bound(kept, kept)}, kept,
+		},
+		{"a claim being deleted", existing, []corev1.PersistentVolumeClaim{deleting}, kept},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			if got := dataVolumeSize(c.existing, class, c.claims); !got.Equal(resource.MustParse(c.want)) {
+				t.Errorf("dataVolumeSize = %s, want %s", got.String(), c.want)
+			}
+		})
+	}
+}
+
+// claimRequesting is a data volume claim that asks for size, not bound.
+func claimRequesting(size string) corev1.PersistentVolumeClaim {
+	return corev1.PersistentVolumeClaim{
+		Spec: corev1.PersistentVolumeClaimSpec{
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(size)},
+			},
+		},
+	}
+}
+
+// TestDataClaimWatch holds the watch that brings a claim's expansion to its
+// Company: a data claim maps to the Company its labels name, any other claim
+// to nothing, and only a change of the storage a claim asks for or was given
+// queues it.
+func TestDataClaimWatch(t *testing.T) {
+	t.Parallel()
+	company := &crewletaiv1alpha1.Company{Namespace: "tenant-a", Name: companyName}
+	claim := claimRequesting("16Gi")
+	claim.Namespace = company.Namespace
+	claim.Labels = labelsFor(company, componentData)
+	if got := companyOfDataClaim(t.Context(), &claim); len(got) != 1 ||
+		got[0].Namespace != company.Namespace || got[0].Name != company.Name {
+		t.Errorf("a data claim maps to %v, want %s/%s", got, company.Namespace, company.Name)
+	}
+	for _, labels := range []map[string]string{nil, labelsFor(company, componentSeats)} {
+		other := claim.DeepCopy()
+		other.Labels = labels
+		if got := companyOfDataClaim(t.Context(), other); got != nil {
+			t.Errorf("a claim labelled %v maps to %v, want nothing", labels, got)
+		}
+	}
+
+	resized := claimResized()
+	grown := claim.DeepCopy()
+	grown.Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("32Gi")
+	granted := claim.DeepCopy()
+	granted.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("16Gi")}
+	annotated := claim.DeepCopy()
+	annotated.Annotations = map[string]string{EngineVersionAnnotation: "v0.2.0"}
+	for _, c := range []struct {
+		name    string
+		updated *corev1.PersistentVolumeClaim
+		want    bool
+	}{
+		{"a request grown", grown, true},
+		{"a capacity granted", granted, true},
+		{"an annotation set", annotated, false},
+	} {
+		if got := resized.Update(event.UpdateEvent{ObjectOld: &claim, ObjectNew: c.updated}); got != c.want {
+			t.Errorf("%s: claimResized = %v, want %v", c.name, got, c.want)
+		}
+	}
+	if resized.Create(event.CreateEvent{Object: &claim}) || resized.Delete(event.DeleteEvent{Object: &claim}) {
+		t.Error("claimResized queues a claim's creation or deletion, which the StatefulSet reports")
 	}
 }

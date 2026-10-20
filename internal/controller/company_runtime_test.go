@@ -15,6 +15,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -1029,6 +1030,70 @@ var _ = Describe("Company runtime", func() {
 		Expect(after.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests.Storage().String()).To(Equal("16Gi"))
 		Expect(string(bootstrap.Data[configFile])).To(ContainSubstring("store_max_bytes: 12884901888"),
 			"the event stream is three quarters of the 16Gi volume the pod keeps, not of the class's new 50Gi")
+	})
+
+	It("grows the event stream with a data volume claim its owner expanded, once the expansion lands", func() {
+		class := newClass()
+		company := reconciled(newCompany(class.Name))
+		// The API server lets a claim grow only on a class that allows it,
+		// which is what a company's volume needs to be grown at all.
+		expandable := &storagev1.StorageClass{
+			Name:                 "expandable-" + namespace,
+			Provisioner:          "example.com/expandable",
+			AllowVolumeExpansion: new(true),
+		}
+		Expect(k8sClient.Create(ctx, expandable)).To(Succeed())
+		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, expandable)).To(Succeed()) })
+		claim := &corev1.PersistentVolumeClaim{
+			Namespace: namespace,
+			Name:      dataClaimName,
+			Labels:    labelsFor(company, componentData),
+			Spec: corev1.PersistentVolumeClaimSpec{
+				StorageClassName: &expandable.Name,
+				AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("16Gi")},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, claim)).To(Succeed())
+		grant := func(size string) {
+			GinkgoHelper()
+			claim.Status.Phase = corev1.ClaimBound
+			claim.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(size)}
+			Expect(k8sClient.Status().Update(ctx, claim)).To(Succeed())
+		}
+		streamOf := func() string {
+			GinkgoHelper()
+			bootstrap := &corev1.Secret{}
+			get(bootstrap, bootstrapName)
+			return string(bootstrap.Data[configFile])
+		}
+		grant("16Gi")
+		company = reconciled(company)
+		before := statefulSet()
+		Expect(streamOf()).To(ContainSubstring("store_max_bytes: 12884901888"))
+
+		By("keeping the stream while the expansion has not landed")
+		claim.Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("32Gi")
+		Expect(k8sClient.Update(ctx, claim)).To(Succeed())
+		company = reconciled(company)
+		Expect(streamOf()).To(ContainSubstring("store_max_bytes: 12884901888"),
+			"the stream grew before the volume did")
+		Expect(statefulSet().Spec.Template.Annotations).To(Equal(before.Spec.Template.Annotations))
+
+		By("growing it, and rolling the pod onto it, once it has")
+		grant("32Gi")
+		reconciled(company)
+		after := statefulSet()
+		Expect(streamOf()).To(ContainSubstring("store_max_bytes: 25769803776"),
+			"the event stream is three quarters of the 32Gi the claim now has")
+		Expect(after.Spec.Template.Annotations[BootstrapHashAnnotation]).
+			NotTo(Equal(before.Spec.Template.Annotations[BootstrapHashAnnotation]))
+		Expect(after.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests.Storage().String()).To(Equal("16Gi"),
+			"the template stays as it was made")
+		Expect(engine(after).StartupProbe.FailureThreshold).To(Equal(startupFailureThreshold(300+32*6)),
+			"the startup window covers the recovery of the volume the pod has")
 	})
 
 	It("rolls the pods when a value they read at start changes, and only then", func() {

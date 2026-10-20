@@ -209,6 +209,7 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
   `data.storage.size` admits no less than `12Gi` (`9Gi` with the files in
   S3), so this is a company whose volume was made smaller: under an older
   floor, or before an engine that keeps more on its stream.
+  [Grow its volume](../concepts/runtime.md#growing-a-companys-data-volume).
 - **`config_apply_failed`**: the revision was stored but this node could not
   start it; the message says why. The engine keeps running the previous
   revision, and the Company reports `ConfigApplied=False ApplyFailed` (see

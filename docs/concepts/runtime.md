@@ -375,7 +375,40 @@ A change to the class or the Company that changes the pod (an image, the
 resources, a toleration, the bootstrap document) rolls the data pod. The data
 volume is the exception: a StatefulSet's volume claims cannot change, so a
 class's `data.storage` applies to companies created after it changes, and an
-existing company keeps its volume.
+existing company keeps its volume until its owner grows it.
+
+### Growing a company's data volume
+
+A company's event stream is three quarters of its data volume, and the
+engine refuses to boot on a stream smaller than what a fresh node reserves
+([the class's floor](company-document.md)). A volume made under an older
+floor, or before an engine that keeps more on its stream, can fall short, and
+a company that keeps more than its volume holds needs room too. Grow the
+claim, not the class:
+
+1. The claim's StorageClass must allow it (`allowVolumeExpansion: true`);
+   the API server refuses an expansion otherwise.
+2. Expand the data pod's claim, `data-<company>-data-0`:
+
+   ```bash
+   kubectl patch pvc data-acme-data-0 -n acme \
+     -p '{"spec":{"resources":{"requests":{"storage":"16Gi"}}}}'
+   ```
+
+3. Once the volume has grown (the claim's `status.capacity` shows the new
+   size; some drivers finish the resize only when the pod mounts the volume
+   again, which a pod the engine refused to boot does by itself), the
+   operator gives the stream three quarters of it, the startup window grows
+   with it, and the data pod rolls onto the new `crewlet.yaml`.
+
+The operator reads the size the claim has, the smaller of what it asks for
+and what it was given, and never less than the size it was made with, so an
+expansion counts once it has landed and a provisioner that rounded a claim up
+moves nothing. The class's `data.storage.size` is not involved, and the
+StatefulSet keeps the template it was created with. A StorageClass that
+cannot expand leaves only a new volume: take a backup and keep the keyring
+Secret with it ([Backups](#backups)), then restore it onto a large enough
+volume as Crewlet's backup guide describes.
 
 The engine migrates its data forward only. The operator records the image the
 data pod last ran *and was ready on* in `status.engine.image`, and its tag in
@@ -688,13 +721,11 @@ include it: an engine with an alarm still runs the company.
 
 The operator takes no backup, and Crewlet needs them for more than recovery:
 it trims every one of its state logs only behind a verified backup younger
-than its
-`stream.tracker_retention.backup_max_age`, 24 hours by default, which the
-operator leaves as it is
+than its `stream.tracker_retention.backup_max_age`, 24 hours by default,
+which the operator leaves as it is
 ([a company that never backs up never trims](https://github.com/crewlet/crewlet/blob/main/docs/guides/retention.md#a-company-that-never-backs-up-never-trims)).
-Without one the logs grow until they reach the
-ceilings the data volume is sized for, and the engine then refuses ordinary
-writes. A new company raises the `backup_age` and `trim_blocked` alarms from
+Without one the logs grow until they reach the ceilings the data volume is
+sized for, and the engine then refuses ordinary writes. A new company raises the `backup_age` and `trim_blocked` alarms from
 the start, which `EngineHealthy=False Alarms` shows.
 
 Take backups through the engine, which is the only process that can read its
