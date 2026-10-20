@@ -428,7 +428,8 @@ type GatewayExposure struct {
 	// proxyNamespaces are the namespaces the pods that carry the Gateways'
 	// traffic run in. Under networkPolicy Isolated they are admitted to the
 	// one port of the engine the route reaches: the public listener for the
-	// webhooks' route, the API port for the API's. Unset is the namespaces
+	// webhooks' route, the API port for the API's, the artifact listener for
+	// the artifacts'. Unset is the namespaces
 	// of parentRefs, which is right for
 	// implementations that run a proxy beside each Gateway (Istio, for
 	// example); implementations with a shared data plane run it elsewhere
@@ -481,7 +482,8 @@ type IngressExposure struct {
 	// controllerNamespaces are the namespaces the Ingress controller's pods
 	// run in. Under networkPolicy Isolated they are admitted to the one port
 	// of the engine the Ingress reaches (the public listener for the
-	// webhooks' Ingress, the API port for the API's), and they are required
+	// webhooks' Ingress, the API port for the API's, the artifact listener
+	// for the artifacts'), and they are required
 	// there: an Ingress does not say which pods
 	// serve it, and without them the policy would refuse every request the
 	// Ingress forwards.
@@ -655,9 +657,115 @@ type APIExposure struct {
 	Hostname string `json:"hostname,omitempty"`
 }
 
+// ArtifactExposureMode is how browsers reach a company's artifact origin.
+// +kubebuilder:validation:Enum=None;Gateway;Ingress
+type ArtifactExposureMode string
+
+// The artifact exposure modes.
+const (
+	// ArtifactExposureNone routes nothing to the artifact origin. The data
+	// pod opens it only for a Company that states where it is reached
+	// (spec.exposure.artifactsBaseURL); without one the dashboard opens no
+	// artifact it frames (HTML pages and designs).
+	ArtifactExposureNone ArtifactExposureMode = "None"
+	// ArtifactExposureGateway routes the artifact host names to the
+	// engine's artifact listener with an HTTPRoute.
+	ArtifactExposureGateway ArtifactExposureMode = "Gateway"
+	// ArtifactExposureIngress does the same with an Ingress.
+	ArtifactExposureIngress ArtifactExposureMode = "Ingress"
+)
+
+// ArtifactOrigins is how one artifact is kept apart from another, and from
+// the dashboard, in a browser.
+// +kubebuilder:validation:Enum=PerArtifact;Shared
+type ArtifactOrigins string
+
+// The artifact origin shapes.
+const (
+	// ArtifactOriginsPerArtifact gives every artifact a host of its own,
+	// directly under the route's host name: a real browser origin per
+	// artifact, which keeps its storage (localStorage, IndexedDB) apart from
+	// every other artifact's. It needs a wildcard DNS record and a wildcard
+	// certificate for *.<hostname>.
+	ArtifactOriginsPerArtifact ArtifactOrigins = "PerArtifact"
+	// ArtifactOriginsShared serves every artifact from the route's one host
+	// name, each document under an opaque origin: one DNS name and one
+	// certificate, and no browser storage for the pages.
+	ArtifactOriginsShared ArtifactOrigins = "Shared"
+)
+
+// ArtifactExposure is how browsers reach a company's artifact origin: the
+// engine's third listener (Crewlet's api.artifacts), which serves the bytes
+// of artifacts and nothing else, with no session, no cookie and no API route.
+// An artifact is a page a person or an agent wrote, so it is never served
+// where the dashboard's session runs: the dashboard frames HTML pages and
+// designs from this origin. The data pod opens the listener, on the engine
+// Service's port artifacts (8082), while its Company has an address for it:
+// this route's, or the Company's spec.exposure.artifactsBaseURL.
+//
+// Crewlet refuses to start on an artifact origin reached over plain http on a
+// host that is not on loopback, so a route serves it over https only: an
+// Ingress needs ingress.tls, and a Gateway route needs an HTTPS listener to
+// attach to, without which the engine opens no artifact origin and the
+// Company's Exposed condition says why.
+// +kubebuilder:validation:XValidation:rule="self.mode == 'Gateway' ? has(self.gateway) : !has(self.gateway)",message="gateway is required with mode Gateway and not allowed otherwise"
+// +kubebuilder:validation:XValidation:rule="self.mode == 'Ingress' ? has(self.ingress) : !has(self.ingress)",message="ingress is required with mode Ingress and not allowed otherwise"
+// +kubebuilder:validation:XValidation:rule="self.mode in ['Gateway', 'Ingress'] ? has(self.hostname) : !has(self.hostname)",message="hostname is required with modes Gateway and Ingress and not allowed otherwise"
+// +kubebuilder:validation:XValidation:rule="self.mode in ['Gateway', 'Ingress'] || !has(self.origins)",message="origins is allowed with modes Gateway and Ingress only"
+// +kubebuilder:validation:XValidation:rule="self.mode != 'Ingress' || (has(self.ingress) && has(self.ingress.tls))",message="an Ingress for artifacts needs ingress.tls: Crewlet refuses to start on an artifact origin reached over plain http on a routable host, since every byte a page loads would travel in the clear"
+// +kubebuilder:validation:MinProperties=1
+type ArtifactExposure struct {
+	// mode is how the artifact origin is reached.
+	// +optional
+	// +default="None"
+	Mode ArtifactExposureMode `json:"mode,omitempty"`
+
+	// gateway is the Gateways to attach to, for mode Gateway. A listener
+	// the route attaches to must be HTTPS, with a certificate for
+	// *.<hostname> under origins PerArtifact.
+	// +optional
+	Gateway GatewayExposure `json:"gateway,omitzero"`
+
+	// ingress is the Ingress settings, for mode Ingress, where tls is
+	// required. Under origins PerArtifact the Ingress's host and its TLS
+	// host are *.<hostname>, so the Secret holds a wildcard certificate.
+	// +optional
+	Ingress *IngressExposure `json:"ingress,omitempty"`
+
+	// hostname is the artifact origin's host name, as a template with the
+	// variables and rules of api.hostname. Under origins PerArtifact it is
+	// the parent of every artifact's host: the route takes *.<hostname>, and
+	// the engine is told https://{artifact}.<hostname>. Under Shared it is
+	// the one host every artifact is served from, https://<hostname>.
+	//
+	// Give it a registrable domain other than the dashboard's (a separate
+	// domain such as crewletusercontent.example, as browsers draw the line
+	// between sites there): on the dashboard's own site, an artifact's
+	// requests would carry the dashboard's SameSite cookies, so Crewlet
+	// serves every artifact with an opaque origin there whatever origins
+	// says, and pages lose their browser storage.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=200
+	// +kubebuilder:validation:XValidation:rule="!self.replace('{{namespace}}', '').replace('{{name}}', '').replace('{{uid}}', '').contains('{' + '{')",message="hostname may use only the variables {{namespace}}, {{name}} and {{uid}}"
+	// +kubebuilder:validation:XValidation:rule="self.contains('{{uid}}') || self.contains('{{name}}.{{namespace}}') || self.contains('{{namespace}}.{{name}}')",message="hostname must contain {{uid}}, or {{name}} and {{namespace}} joined by a '.', so that no two companies share a host name: names and namespaces hold '-', so {{namespace}}-{{name}} is team-a-b-web for both team-a/b-web and team-a-b/web"
+	// +kubebuilder:validation:XValidation:rule="self.replace('{{namespace}}', 'n').replace('{{name}}', 'n').replace('{{uid}}', 'u').matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')",message="hostname must be a lowercase DNS name once its variables are replaced"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('(^|[.])([0-9]+|0x[0-9a-f]*)$')",message="hostname may not end in a label that is a number, such as {{uid}}.123 or {{uid}}.0x1f: a browser reads the host as an IPv4 address and rewrites it before it sends it, and Crewlet refuses to start on such an address; end it in a label that is not one, such as a domain of your own"
+	Hostname string `json:"hostname,omitempty"`
+
+	// origins is how one artifact is kept apart from another in a browser:
+	// PerArtifact gives each its own host under hostname, and Shared serves
+	// every one from hostname itself with an opaque origin. Unset is
+	// PerArtifact. Crewlet's api.artifacts.external_url, which names
+	// {artifact} for PerArtifact.
+	// +optional
+	Origins ArtifactOrigins `json:"origins,omitempty"`
+}
+
 // ExposureSettings is how a class's companies are reached.
 // +kubebuilder:validation:MinProperties=1
 // +kubebuilder:validation:XValidation:rule="!has(self.webhooks) || !has(self.api) || !has(self.webhooks.hostname) || !has(self.api.hostname) || self.webhooks.hostname != self.api.hostname",message="webhooks.hostname and api.hostname must differ: both routes take every path of their host, and the public host must reach the public listener alone"
+// +kubebuilder:validation:XValidation:rule="!has(self.artifacts) || !has(self.artifacts.hostname) || ((!has(self.api) || !has(self.api.hostname) || (self.api.hostname != self.artifacts.hostname && !self.api.hostname.endsWith('.' + self.artifacts.hostname))) && (!has(self.webhooks) || !has(self.webhooks.hostname) || (self.webhooks.hostname != self.artifacts.hostname && !self.webhooks.hostname.endsWith('.' + self.artifacts.hostname))))",message="artifacts.hostname must differ from api.hostname and webhooks.hostname, and neither may be under it: an artifact must never be served where the API's session runs, and Crewlet refuses an artifact origin whose host is the API's or a parent of it"
 type ExposureSettings struct {
 	// webhooks is how vendors' webhooks reach the engine.
 	// +optional
@@ -668,6 +776,12 @@ type ExposureSettings struct {
 	// +optional
 	// +default={"mode": "ClusterInternal"}
 	API APIExposure `json:"api,omitzero"`
+
+	// artifacts is how browsers reach the artifact origin, which the
+	// dashboard frames every artifact from.
+	// +optional
+	// +default={"mode": "None"}
+	Artifacts ArtifactExposure `json:"artifacts,omitzero"`
 
 	// trustedProxies are the address blocks of what forwards requests to
 	// the engine: the Gateway's proxies or the Ingress controller of the
@@ -1093,7 +1207,7 @@ type SignInSettings struct {
 // backend a volume and a window were sized for is the one it runs with.
 // +kubebuilder:validation:XValidation:rule="(has(self.objects) && has(self.objects.backend) && self.objects.backend == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('12Gi'))",message="data.storage.size must be at least 12Gi with objects.backend NATS: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 9305762474 bytes of it for its state logs and the object store's bucket"
 // +kubebuilder:validation:XValidation:rule="!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend) || self.objects.backend != 'S3' || self.data.startupSeconds >= 1816",message="data.startupSeconds must be at least 1816 with objects.backend S3: every boot of a data pod probes the bucket, and Crewlet's bounds on the boot then add up to 1816 seconds, which a shorter window can cut short"
-// +kubebuilder:validation:XValidation:rule="self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress) || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress) || has(self.exposure.api.ingress.controllerNamespaces)))",message="networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces: without them the policy refuses everything the Ingress forwards"
+// +kubebuilder:validation:XValidation:rule="self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress) || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress) || has(self.exposure.api.ingress.controllerNamespaces)) && (!has(self.exposure.artifacts) || !has(self.exposure.artifacts.ingress) || has(self.exposure.artifacts.ingress.controllerNamespaces)))",message="networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces: without them the policy refuses everything the Ingress forwards"
 // +kubebuilder:validation:XValidation:rule="!has(self.networkPolicy) || !has(self.networkPolicy.mode) || self.networkPolicy.mode != 'Isolated' || !has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.mode) || self.exposure.webhooks.mode != 'External' || has(self.exposure.webhooks.external)",message="networkPolicy Isolated with External webhooks needs webhooks.external.forwarders: without them the policy refuses everything forwarded to the public port"
 // +kubebuilder:validation:XValidation:rule="!has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.external) || (has(self.networkPolicy) && has(self.networkPolicy.mode) && self.networkPolicy.mode == 'Isolated')",message="webhooks.external.forwarders apply to networkPolicy mode Isolated only: no other mode has a policy to admit them to"
 type EngineClassSpec struct {
@@ -1141,7 +1255,7 @@ type EngineClassSpec struct {
 
 	// exposure is how each company is reached from outside its namespace.
 	// +optional
-	// +default={"webhooks": {"mode": "None"}, "api": {"mode": "ClusterInternal"}}
+	// +default={"webhooks": {"mode": "None"}, "api": {"mode": "ClusterInternal"}, "artifacts": {"mode": "None"}}
 	Exposure ExposureSettings `json:"exposure,omitzero"`
 
 	// networkPolicy is the NetworkPolicy the operator puts around each

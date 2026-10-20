@@ -441,10 +441,13 @@ const (
 
 	// ReasonAddressRefused is RuntimeReady=False when an address the
 	// operator would tell the engine it is reached at (api.external_url,
-	// api.public.external_url or an api.auth.allowed_origins entry of the
-	// data pod's crewlet.yaml) is one Crewlet refuses to start on. The API
-	// refuses such an address where a Company or its class states it, so
-	// what reaches this is in practice one the operator derives: the host of
+	// api.public.external_url, api.artifacts.external_url or an
+	// api.auth.allowed_origins entry of the data pod's crewlet.yaml) is one
+	// Crewlet refuses to start on. The API refuses such an address where a
+	// Company or its class states it, but for an artifact origin that is
+	// the dashboard's or the public listener's, or a parent of either's
+	// host, which a rule on one field cannot see; what reaches this is
+	// otherwise one the operator derives: the host of
 	// the class's API route, expanded for a Company whose namespace makes
 	// its last label a number (4711, 0x1f), or whose namespace or name does
 	// with the template's own characters beside it (0x{{name}} for a Company
@@ -628,7 +631,8 @@ const (
 	ReasonRouteAccepted = "RouteAccepted"
 
 	// ReasonNoRoutes is Exposed=True when the class asks for no route at
-	// all: webhooks None or External, and the API ClusterInternal. There is
+	// all: webhooks None or External, the API ClusterInternal, and the
+	// artifacts None. There is
 	// nothing to wait for, so it does not hold Ready back.
 	ReasonNoRoutes = "NoRoutes"
 
@@ -654,6 +658,14 @@ const (
 	// Secret <company>-secret-sync, where the operator keeps what it pushed
 	// into the engine's secret store, is someone else's.
 	ReasonNameConflict = "NameConflict"
+
+	// ReasonRouteNotHTTPS is Exposed=False when the class routes the
+	// artifact origin through Gateways and no listener the route attaches to
+	// is HTTPS (or none exists yet). Crewlet refuses an artifact origin
+	// reached over plain http on a routable host, so the data pod opens no
+	// artifact origin until a listener is, unless the Company states its
+	// own address (spec.exposure.artifactsBaseURL).
+	ReasonRouteNotHTTPS = "RouteNotHTTPS"
 
 	// ReasonPublicBaseURLMissing is Exposed=False when the class's
 	// webhooks.mode is External and the Company does not state its address

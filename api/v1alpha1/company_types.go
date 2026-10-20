@@ -699,6 +699,46 @@ type CompanyExposure struct {
 	// +kubebuilder:validation:XValidation:rule="!self.contains('?') && !self.contains('#')",message="dashboardBaseURL may not have a query or a fragment: Crewlet builds every link a person follows, an invitation and a password link included, by appending a path to it"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="dashboardBaseURL may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	DashboardBaseURL string `json:"dashboardBaseURL,omitempty"`
+
+	// artifactsBaseURL is where a browser reaches the company's artifact
+	// origin, the engine's listener that serves artifacts and nothing else,
+	// ahead of the address of the class's artifacts route. Set it when
+	// something other than the class's route forwards it to the engine
+	// Service's port artifacts (8082), such as a tunnel, or to
+	// http://localhost:8082 for a browser that port-forwards that port. The
+	// data pod opens the artifact listener only while the company has such
+	// an address, here or from its class's route: without one the dashboard
+	// opens no artifact it frames (HTML pages and designs). Crewlet's
+	// api.artifacts.external_url, in the data pod's crewlet.yaml, which the
+	// engine reads only at start: changing it restarts the data pod. A
+	// trailing '/' is dropped.
+	//
+	// It is https:// and a lowercase host name with at most a port after it,
+	// or http:// on localhost, a name under localhost or a 127.x.x.x
+	// address: Crewlet refuses an artifact origin reached over plain http
+	// on a routable host, and serves it from the root of its host. A host
+	// whose first label starts with {artifact} gives every artifact a host
+	// of its own (https://{artifact}.artifacts.example.net, which needs a
+	// wildcard DNS record and certificate); {artifact} may be followed by up
+	// to 37 characters of the same label (https://{artifact}--acme.example.net),
+	// as every artifact's label is 26 characters and a DNS label holds 63.
+	// Without it every artifact is served from the one host with an opaque
+	// origin (https://artifacts.example.com). On the dashboard's own
+	// registrable domain, and on localhost, Crewlet serves every artifact
+	// opaque whatever the address says, and pages lose their browser
+	// storage. It must not be the dashboard's or the public listener's
+	// origin, nor a parent of either's host: Crewlet refuses to start on
+	// such an address, and the data pod is held back with
+	// RuntimeReady=False AddressRefused.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	// +kubebuilder:validation:XValidation:rule="self.matches('^https?://([{]artifact[}][a-z0-9-]*[.])?[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*(:[0-9]+)?/?$')",message="artifactsBaseURL must be a scheme and a lowercase host name, with at most a port and a '/' after it, and {artifact} only at the start of its first label, such as https://{artifact}.artifacts.example.net or https://artifacts.example.com: Crewlet serves artifacts from the root of their host"
+	// +kubebuilder:validation:XValidation:rule="!self.startsWith('http://') || self.matches('^http://([^/:]*[.])?localhost(:[0-9]+)?/?$') || self.matches('^http://127([.][0-9]{1,3}){3}(:[0-9]+)?/?$')",message="artifactsBaseURL may use plain http only on localhost, a name under it or a 127.x.x.x address: Crewlet refuses an artifact origin reached over plain http on a routable host, since every byte a page loads would travel in the clear"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('^https?://[^/]*:(0+|0*([1-9][0-9]{5,}|[7-9][0-9]{4}|6[6-9][0-9]{3}|65[6-9][0-9]{2}|655[4-9][0-9]|6553[6-9]))(/|$)')",message="artifactsBaseURL's port must be 1 to 65535: Crewlet refuses to start on any other; leave the port out for the scheme's own"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('^https?://[{]artifact[}][a-z0-9-]{38,}[.]')",message="artifactsBaseURL may follow {artifact} with at most 37 characters of its label: every artifact's label is 26 characters and that suffix, and a DNS label holds 63"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('^https?://([^/:]*[.])?([0-9]+|0x[0-9a-f]*)(:[0-9]+)?/?$') || self.matches('^https?://((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])[.]){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(:[0-9]+)?/?$')",message="artifactsBaseURL's host ends in a number, which a browser reads as an IPv4 address and rewrites before it sends it: write an IPv4 address as four decimal octets, such as 127.0.0.1, and a host name whose last label is not a number"
+	ArtifactsBaseURL string `json:"artifactsBaseURL,omitempty"`
 }
 
 // CompanyRuntime is a company's bounded overrides of its class.
@@ -1239,6 +1279,20 @@ type CompanyEndpoints struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	DashboardBaseURL string `json:"dashboardBaseURL,omitempty"`
+
+	// artifactsBaseURL is where a browser reaches the artifact origin, which
+	// the dashboard frames HTML pages and designs from:
+	// spec.exposure.artifactsBaseURL, else the address of the class's
+	// artifacts route while it serves https (https://{artifact}.<hostname>
+	// under origins PerArtifact, https://<hostname> under Shared). Unset
+	// while the company has neither: the data pod then opens no artifact
+	// listener. It is the engine's api.artifacts.external_url, which the
+	// engine reads only at start, so like dashboardBaseURL it does not wait
+	// for the route to be accepted.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	ArtifactsBaseURL string `json:"artifactsBaseURL,omitempty"`
 }
 
 // CompanyStatus is what the operator observed about a Company.

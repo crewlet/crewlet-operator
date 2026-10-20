@@ -48,6 +48,7 @@ func TestEngineClassDefaults(t *testing.T) {
 		{"objects.backend", s.Objects.Backend, v1.ObjectBackendNATS},
 		{"exposure.webhooks.mode", s.Exposure.Webhooks.Mode, v1.WebhookExposureNone},
 		{"exposure.api.mode", s.Exposure.API.Mode, v1.APIExposureClusterInternal},
+		{"exposure.artifacts.mode", s.Exposure.Artifacts.Mode, v1.ArtifactExposureNone},
 		{"networkPolicy.mode", s.NetworkPolicy.Mode, v1.NetworkPolicyIsolated},
 		{"seatPools", s.SeatPools, v1.SeatPoolSettings{Policy: v1.SeatPoolsForbidden}},
 	} {
@@ -364,9 +365,20 @@ func TestEngineClassExposure(t *testing.T) {
 	proxies := func(blocks ...string) func(*v1.EngineClass) {
 		return func(c *v1.EngineClass) { c.Spec.Exposure.TrustedProxies = blocks }
 	}
+	artifacts := func(a v1.ArtifactExposure) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) { c.Spec.Exposure.Artifacts = a }
+	}
+	artifactsGatewayHost := func(hostname string) func(*v1.EngineClass) {
+		return artifacts(v1.ArtifactExposure{
+			Mode: v1.ArtifactExposureGateway, Gateway: gatewayExposure(), Hostname: hostname,
+		})
+	}
 	const (
 		apiHost           = "{{uid}}.api.internal.example.com"
+		artifactsHost     = "{{uid}}.crewletusercontent.example"
 		msgTrustedProxies = "trustedProxies must be canonical CIDRs"
+		msgArtifactsHost  = "artifacts.hostname must differ from api.hostname and webhooks.hostname, " +
+			"and neither may be under it"
 	)
 
 	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
@@ -631,6 +643,100 @@ func TestEngineClassExposure(t *testing.T) {
 				c.Spec.Exposure.Webhooks.Gateway.ProxyNamespaces = []string{"Envoy_Gateway"}
 			},
 			want: "spec.exposure.webhooks.gateway.proxyNamespaces[0]",
+		},
+		// The artifacts' route, which serves https alone.
+		{name: "a Gateway artifacts route is accepted", mutate: artifactsGatewayHost(artifactsHost)},
+		{
+			name: "an artifacts route of one shared host is accepted",
+			mutate: func(c *v1.EngineClass) {
+				artifactsGatewayHost(artifactsHost)(c)
+				c.Spec.Exposure.Artifacts.Origins = v1.ArtifactOriginsShared
+			},
+		},
+		{
+			name: "an Ingress artifacts route with TLS is accepted",
+			mutate: artifacts(v1.ArtifactExposure{
+				Mode: v1.ArtifactExposureIngress, Ingress: ingressWithTLS("{{name}}-artifacts-tls"), Hostname: artifactsHost,
+			}),
+		},
+		{
+			// Crewlet refuses an artifact origin over plain http on a
+			// routable host.
+			name: "an Ingress artifacts route without TLS is refused",
+			mutate: artifacts(v1.ArtifactExposure{
+				Mode: v1.ArtifactExposureIngress, Hostname: artifactsHost,
+				Ingress: &v1.IngressExposure{ClassName: ingressClass, ControllerNamespaces: []string{"ingress-nginx"}},
+			}),
+			want: "an Ingress for artifacts needs ingress.tls",
+		},
+		{
+			name: "an Isolated Ingress artifacts route without controllerNamespaces is refused",
+			mutate: func(c *v1.EngineClass) {
+				ingress := ingressWithTLS("{{name}}-artifacts-tls")
+				ingress.ControllerNamespaces = nil
+				c.Spec.Exposure.Artifacts = v1.ArtifactExposure{
+					Mode: v1.ArtifactExposureIngress, Ingress: ingress, Hostname: artifactsHost,
+				}
+			},
+			want: msgIngressControllerNamespaces,
+		},
+		{
+			name:   "an artifacts Gateway without gateway is refused",
+			mutate: artifacts(v1.ArtifactExposure{Mode: v1.ArtifactExposureGateway, Hostname: artifactsHost}),
+			want:   msgGatewayMode,
+		},
+		{
+			name:   "an artifacts hostname with mode None is refused",
+			mutate: artifacts(v1.ArtifactExposure{Mode: v1.ArtifactExposureNone, Hostname: artifactsHost}),
+			want:   msgHostnameMode,
+		},
+		{
+			name:   "artifacts origins with mode None are refused",
+			mutate: artifacts(v1.ArtifactExposure{Mode: v1.ArtifactExposureNone, Origins: v1.ArtifactOriginsShared}),
+			want:   "origins is allowed with modes Gateway and Ingress only",
+		},
+		{
+			name:   "an artifacts hostname ending in a number is refused",
+			mutate: artifactsGatewayHost("{{uid}}.123"),
+			want:   "hostname may not end in a label that is a number",
+		},
+		{
+			name:   "an artifacts hostname shared by two companies is refused",
+			mutate: artifactsGatewayHost("{{name}}-{{namespace}}.crewletusercontent.example"),
+			want:   "hostname must contain {{uid}}",
+		},
+		{
+			name: "an artifacts route on the API's host is refused",
+			mutate: func(c *v1.EngineClass) {
+				apiGatewayHost(apiHost)(c)
+				artifactsGatewayHost(apiHost)(c)
+			},
+			want: msgArtifactsHost,
+		},
+		{
+			// A cookie scoped to the artifacts' host would reach the API.
+			name: "an API host under the artifacts' host is refused",
+			mutate: func(c *v1.EngineClass) {
+				apiGatewayHost("api." + artifactsHost)(c)
+				artifactsGatewayHost(artifactsHost)(c)
+			},
+			want: msgArtifactsHost,
+		},
+		{
+			name: "a webhooks host under the artifacts' host is refused",
+			mutate: func(c *v1.EngineClass) {
+				gatewayHost("hooks." + artifactsHost)(c)
+				artifactsGatewayHost(artifactsHost)(c)
+			},
+			want: msgArtifactsHost,
+		},
+		{
+			name: "artifacts on a domain of their own beside the API and the webhooks are accepted",
+			mutate: func(c *v1.EngineClass) {
+				gatewayHost(webhookHost)(c)
+				apiGatewayHost(apiHost)(c)
+				artifactsGatewayHost(artifactsHost)(c)
+			},
 		},
 		{name: "trusted proxies are accepted", mutate: proxies("10.244.0.0/16", "192.0.2.7/32", "fd00:10:244::/56")},
 		{
