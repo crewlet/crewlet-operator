@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -184,6 +185,101 @@ func TestAddressShapesFollowTheEngine(t *testing.T) {
 	}
 }
 
+// artifactsBaseURLShapes are the addresses TestArtifactsBaseURLFollowsTheEngine
+// offers as a Company's spec.exposure.artifactsBaseURL, beside a dashboard at
+// takenExternal: either side of each line Crewlet draws for an artifact origin
+// (the placeholder's position, count, label characters and label length; a
+// path, a query, a fragment and a port outside 1 to 65535; plain http on a
+// routable host), and the neighbours it takes. internal/render's
+// TestContractArtifactAddressShapes holds the render to the engine at these
+// and at the origins that meet another address.
+var artifactsBaseURLShapes = []string{
+	"https://{artifact}.artifacts.example.net", "https://artifacts.example.com", "https://artifacts.example.com/",
+	"https://artifacts.example.com:8443", "http://localhost:8082", "http://{artifact}.localhost:8082",
+	"http://127.0.0.1:8082", "http://127.0.0.2", "https://{artifact}--acme.example.net",
+	"https://{artifact}-" + strings.Repeat("a", 36) + ".example.net", "https://1.2.3.4",
+	"http://artifacts.example.com", "http://10.0.0.1:8082", "ftp://artifacts.example.com",
+	"https://{artifact}{artifact}.example.net", "https://x{artifact}.example.net", "https://{artifact}",
+	"https://{artifact}:8443", "https://{artifact}_x.example.net", "https://{artifact}X.example.net",
+	"https://{artifact}-" + strings.Repeat("a", 37) + ".example.net",
+	"https://artifacts.example.com/pages", "https://artifacts.example.com?x=1", "https://artifacts.example.com#x",
+	"https://artifacts.example.com:0", "https://artifacts.example.com:65536",
+	"http://[::1]:8082", "https://Artifacts.example.com", spacedArtifactsURL, "https://artifacts.example.com.",
+	"https://u@artifacts.example.com", "https://127.1", "https://artifacts.123",
+}
+
+// spacedArtifactsURL is an artifact origin with white space before it.
+const spacedArtifactsURL = " https://artifacts.example.com"
+
+// artifactsAPIRefusesMore are the shapes the API refuses as an artifactsBaseURL
+// although Crewlet would take them, and why it does on purpose.
+var artifactsAPIRefusesMore = map[string]string{
+	"http://[::1]:8082": "an IPv6 loopback address: the API takes plain http on localhost, a name under it and " +
+		"127.x.x.x, which a port-forwarding browser reaches",
+	"https://Artifacts.example.com":  "a host in upper case, which a browser lowers before it compares an origin",
+	spacedArtifactsURL:               "white space around the address, which the engine trims",
+	"https://artifacts.example.com.": "a trailing dot, which names the host a browser treats as another site",
+	"https://u@artifacts.example.com": "a user: a credential is never written into an address, and an artifact " +
+		"origin is reached anonymously",
+	"https://127.1": "a host whose last label is a number and that is not four decimal octets, which a browser " +
+		"rewrites before it sends it",
+	"https://artifacts.123": "a host whose last label is a number, which a browser reads as an IPv4 address",
+}
+
+// artifactsHeldBack are the artifactsBaseURL shapes the API admits and Crewlet
+// refuses beside the dashboard at takenExternal, since a rule on one field
+// cannot see another: the dashboard's own origin, and a parent of its host.
+// The render refuses them, so the data pod is held back rather than started
+// to crash-loop.
+var artifactsHeldBack = []string{takenExternal}
+
+// TestArtifactsBaseURLFollowsTheEngine holds the API's verdict on a Company's
+// spec.exposure.artifactsBaseURL, which the data pod's engine is told as
+// api.artifacts.external_url, to the engine's: every shape the API admits
+// renders to a crewlet.yaml `crewlet validate` takes, but for the origins
+// that meet the dashboard's, which the render refuses as the engine does;
+// and every shape it refuses, the engine refuses too, but for those
+// artifactsAPIRefusesMore lists.
+func TestArtifactsBaseURLFollowsTheEngine(t *testing.T) {
+	namespace := newNamespace(t)
+	for i, shape := range append(slices.Clone(artifactsBaseURLShapes), artifactsHeldBack...) {
+		t.Run(fmt.Sprintf("%.40q", shape), func(t *testing.T) {
+			c := company(namespace, fmt.Sprintf("a%03d", i))
+			c.Spec.Exposure.ArtifactsBaseURL = shape
+			ok := admitted(t, k8sClient, c)
+			// The operator drops a trailing '/' before the engine sees it.
+			address := strings.TrimRight(shape, "/")
+			engine := engineRefuses(t, render.FieldArtifactsURL, address)
+			why, more := artifactsAPIRefusesMore[shape]
+			heldBack := slices.Contains(artifactsHeldBack, shape)
+			switch {
+			case more && (ok || engine):
+				t.Errorf("%q is listed as refused by the API alone (%s): the API admits it: %v, crewlet validate "+
+					"refuses it: %v", shape, why, ok, engine)
+			case more:
+			case heldBack && (!ok || !engine || !renderRefuses(t, render.FieldArtifactsURL, address)):
+				t.Errorf("%q is listed as held back by the render: the API admits it: %v, crewlet validate refuses "+
+					"it: %v", shape, ok, engine)
+			case heldBack:
+			case ok && engine:
+				t.Errorf("the API admits artifactsBaseURL %q, and crewlet validate refuses it, so the data pod "+
+					"would crash-loop", shape)
+			case ok:
+				doc, err := render.Bootstrap(inputWith(render.FieldArtifactsURL, address))
+				if err != nil {
+					t.Fatalf("the API admits artifactsBaseURL %q, and the render refuses it: %v", shape, err)
+				}
+				if problems, out := validate(t, doc.YAML); len(problems) > 0 {
+					t.Errorf("the API admits artifactsBaseURL %q, and crewlet validate refuses the crewlet.yaml "+
+						"the render writes for it:\n%s", shape, out)
+				}
+			case !engine:
+				t.Errorf("the API refuses artifactsBaseURL %q, and crewlet validate takes it", shape)
+			}
+		})
+	}
+}
+
 // admitted is whether the API server c talks to admits obj, which fails the
 // test when it refuses it for another reason than validation.
 func admitted(t *testing.T, c client.Client, obj client.Object) bool {
@@ -327,6 +423,8 @@ func inputWith(field, address string) *render.BootstrapInput {
 		in.PublicURL = address
 	case render.FieldAllowedOrigins:
 		in.AllowedOrigins = []string{address}
+	case render.FieldArtifactsURL:
+		in.ArtifactsURL = address
 	}
 	return in
 }
@@ -371,6 +469,8 @@ func engineRefuses(t *testing.T, field, address string) bool {
 	case render.FieldAllowedOrigins:
 		api["auth"].(map[string]any)["allowed_origins"] = []string{address}
 		path += "[0]"
+	case render.FieldArtifactsURL:
+		api["artifacts"] = map[string]any{"port": render.ArtifactsPort, "external_url": address}
 	}
 	problems, out := validate(t, []byte(yamlFlow(tierA)))
 	for _, p := range problems {

@@ -129,7 +129,7 @@ func mcpTransport(t v1alpha1.MCPTransport) string {
 		// An unset transport is the API's default, Stdio.
 		return "stdio"
 	case v1alpha1.MCPTransportHTTP:
-		return "http"
+		return schemeHTTP
 	}
 	return ""
 }

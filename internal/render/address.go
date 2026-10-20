@@ -3,6 +3,7 @@ package render
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 	"net/url"
 	"strconv"
@@ -16,7 +17,23 @@ const (
 	FieldExternalURL    = "api.external_url"
 	FieldPublicURL      = "api.public.external_url"
 	FieldAllowedOrigins = "api.auth.allowed_origins"
+	FieldArtifactsURL   = "api.artifacts.external_url"
 )
+
+// ArtifactPlaceholder is what an artifact origin's address names an
+// artifact's host label with (Crewlet's config.ArtifactPlaceholder): present,
+// at the start of the host, every artifact is reached on a host of its own.
+const ArtifactPlaceholder = "{artifact}"
+
+// The schemes an address a node is reached at may have.
+const (
+	schemeHTTP  = "http"
+	schemeHTTPS = "https"
+)
+
+// artifactLabelLen is the length of every artifact's host label (Crewlet's
+// artifacts.LabelLen), which the placeholder stands for.
+const artifactLabelLen = 26
 
 // ErrAddressRefused is a data pod's Tier A asked for with an address Crewlet
 // refuses to start on (an *AddressError says which). The API refuses such an
@@ -33,7 +50,7 @@ var ErrAddressRefused = errors.New("crewlet refuses to start on an address the d
 // AddressError is the address Crewlet refuses, and why.
 type AddressError struct {
 	// Field is the Tier A key the address is written to: FieldExternalURL,
-	// FieldPublicURL or FieldAllowedOrigins.
+	// FieldPublicURL, FieldArtifactsURL or FieldAllowedOrigins.
 	Field string
 	// Address is the address as the render was given it.
 	Address string
@@ -61,8 +78,10 @@ func (e *AddressError) Unwrap() error { return ErrAddressRefused }
 // string of its Tier A before it judges any (config.Bootstrap.normalize). A
 // ${NAME} reference, which the engine would resolve before it judges the
 // address, is not read as one: the API refuses one in every address a
-// Company states, and the operator derives none.
-func refusedAddress(external, public string, origins []string) error {
+// Company states, and the operator derives none. api.artifacts.external_url,
+// where the data pod opens the artifact listener at all, is judged last
+// (artifactsURLRefusal), since its verdict reads the other addresses.
+func refusedAddress(external, public, artifacts string, origins []string) error {
 	if reason := externalURLRefusal(strings.TrimSpace(external), true); reason != "" {
 		return &AddressError{Field: FieldExternalURL, Address: external, Reason: reason}
 	}
@@ -74,7 +93,142 @@ func refusedAddress(external, public string, origins []string) error {
 			return &AddressError{Field: FieldAllowedOrigins, Address: origin, Reason: reason}
 		}
 	}
+	if artifacts == "" {
+		return nil
+	}
+	if reason := artifactsURLRefusal(artifacts, external, public, origins); reason != "" {
+		return &AddressError{Field: FieldArtifactsURL, Address: artifacts, Reason: reason}
+	}
 	return nil
+}
+
+// artifactsURLRefusal is why Crewlet refuses raw as the address a browser
+// reaches the artifact origin at, on a node that opens the artifact listener
+// and serves the API at external and its public listener at public, with the
+// browser origins origins beside external's own (config.APIArtifacts.validate,
+// with checkArtifactTemplate and checkCollisions), or "".
+//
+// The artifact origin is where every artifact, a page a person or an agent
+// wrote, runs, so Crewlet refuses one a browser would treat as the API's: the
+// dashboard's or the public listener's own origin, an origin the API admits
+// writes from, a parent of the API's host (a cookie scoped to it would reach
+// the API), and for an origin per artifact, a template that would give some
+// artifact the API's host.
+func artifactsURLRefusal(raw, external, public string, origins []string) string {
+	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
+	if raw == "" {
+		return "is empty, and a node that opens the artifact listener needs the address browsers reach it at"
+	}
+	perArtifact := strings.Contains(raw, ArtifactPlaceholder)
+	if strings.Count(raw, ArtifactPlaceholder) > 1 {
+		return "names " + ArtifactPlaceholder + " more than once, and an artifact's host carries its label once"
+	}
+	if perArtifact {
+		if reason := artifactTemplateRefusal(raw); reason != "" {
+			return reason
+		}
+	}
+	rendered := strings.Replace(raw, ArtifactPlaceholder, strings.Repeat("a", artifactLabelLen), 1)
+	if reason := externalURLRefusal(rendered, false); reason != "" {
+		return reason
+	}
+	parsed, err := url.Parse(rendered)
+	if err != nil {
+		return fmt.Sprintf("is not a URL (%v)", err)
+	}
+	if strings.Trim(parsed.Path, "/") != "" {
+		return "has a path, and the artifact origin serves its routes from the root of its host"
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if parsed.Scheme == schemeHTTP && !artifactLoopbackHost(host) {
+		return "uses plain http on a routable host, so every byte an artifact's page loads would travel in the clear"
+	}
+	apex := host
+	if perArtifact {
+		_, apex, _ = strings.Cut(host, ".")
+	}
+	origin := parsed.Scheme + "://" + parsed.Host
+	for _, other := range []string{external, public} {
+		theirs, err := url.Parse(strings.TrimRight(strings.TrimSpace(other), "/"))
+		if other == "" || err != nil || theirs.Hostname() == "" {
+			continue
+		}
+		theirHost := strings.ToLower(theirs.Hostname())
+		switch {
+		case !perArtifact && strings.EqualFold(theirs.Scheme+"://"+theirs.Host, origin):
+			return "is the origin " + other + " is served on, and an artifact must never run where the API's session runs"
+		case perArtifact && artifactHostShape(theirHost, raw, apex):
+			return "would give an artifact the host " + other + " is served on"
+		case theirHost != apex && strings.HasSuffix(theirHost, "."+apex) && !perArtifact:
+			return "is a parent domain of " + other + ", so a cookie scoped to it would reach the API"
+		}
+	}
+	if !perArtifact {
+		for _, allowed := range origins {
+			if strings.EqualFold(strings.TrimRight(strings.TrimSpace(allowed), "/"), origin) {
+				return "is an api.auth.allowed_origins entry, so the API would admit writes and sockets from artifact pages"
+			}
+		}
+	}
+	return ""
+}
+
+// artifactTemplateRefusal is why Crewlet refuses an artifact origin that names
+// ArtifactPlaceholder anywhere but its one legal position, the start of the
+// host's first label, followed only by label characters, the whole label
+// fitting the 63 bytes a DNS label holds (config.checkArtifactTemplate), or "".
+func artifactTemplateRefusal(raw string) string {
+	scheme, rest, ok := strings.Cut(raw, "://")
+	if !ok || (scheme != schemeHTTPS && scheme != schemeHTTP) {
+		return "does not start with https:// or http://"
+	}
+	if !strings.HasPrefix(rest, ArtifactPlaceholder) {
+		return "does not begin its host with " + ArtifactPlaceholder + ", where an artifact's label goes"
+	}
+	label := strings.TrimPrefix(rest, ArtifactPlaceholder)
+	i := strings.IndexAny(label, ".:/")
+	switch {
+	case i < 0:
+		return "has no parent domain after the artifact's label"
+	case label[i] != '.':
+		return "puts " + ArtifactPlaceholder + " in the whole host, and an artifact host needs a parent domain"
+	}
+	label = label[:i]
+	if strings.IndexFunc(label, func(r rune) bool {
+		return (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-'
+	}) >= 0 {
+		return "follows " + ArtifactPlaceholder + " with characters a host label does not hold, which are lowercase letters, digits and hyphens"
+	}
+	if n := artifactLabelLen + len(label); n > 63 {
+		return fmt.Sprintf("makes every artifact's label %d bytes long, over the 63 a DNS label holds", n)
+	}
+	return ""
+}
+
+// artifactHostShape reports whether host is one the template would give some
+// artifact: directly under the apex, with a first label of an artifact's
+// label's length followed by the template's own suffix
+// (config.artifactHostShape).
+func artifactHostShape(host, template, apex string) bool {
+	first, rest, ok := strings.Cut(host, ".")
+	if !ok || rest != apex {
+		return false
+	}
+	_, after, _ := strings.Cut(template, ArtifactPlaceholder)
+	suffix, _, _ := strings.Cut(after, ".")
+	return len(first) == artifactLabelLen+len(suffix) && strings.HasSuffix(first, suffix)
+}
+
+// artifactLoopbackHost reports whether a browser reaches host on its own
+// machine: a loopback address, localhost or a name under localhost
+// (config.loopbackHost).
+func artifactLoopbackHost(host string) bool {
+	host = strings.ToLower(strings.Trim(host, "[]"))
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // externalURLRefusal is why Crewlet refuses raw as an address a node is

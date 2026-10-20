@@ -1,4 +1,7 @@
 api:
+  artifacts:
+    external_url: https://{artifact}.nimbus.crewletusercontent.example
+    port: 8082
   auth:
     admin: serve
     company_writers:
