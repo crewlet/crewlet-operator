@@ -162,6 +162,10 @@ reason in a comment at the pin. Indirect Go dependencies stay where the direct
 ones put them (the k8s.io modules move in lockstep). CONTRIBUTING.md,
 "Latest versions", lists the pins Dependabot cannot see.
 
+Dependabot's pull requests approve themselves and merge once CI passes
+(`.github/workflows/dependabot-merge.yml`). Never push onto a Dependabot
+branch: a bump that needs a code change goes into a pull request of your own.
+
 Kubernetes is supported and tested at one minor alone, 1.37: the newest
 that both the pinned kind (its default node image) and setup-envtest offer.
 The operator moves to the next minor once both do, and code, tests and docs

@@ -481,6 +481,46 @@ OpenCode's log for a library that did not load, since OpenCode carries on
 without one. Run OpenCode's on a machine of each platform the image is built
 for: under emulation it misses a deadline of OpenCode's own and fails.
 
+### A Dependabot bump merges itself
+
+[`.github/workflows/dependabot-merge.yml`](.github/workflows/dependabot-merge.yml)
+approves a pull request Dependabot opened and queues it with `gh pr merge
+--auto --squash`, so a bump lands without waiting on a maintainer. It does not
+land without review: CI *is* the review a dependency change gets here, and
+`--auto` holds the merge until every check `main`'s protection rule requires
+has passed. A bump CI rejects sits there red until a person looks at it, which
+is exactly where it would have sat anyway. It is the same workflow
+[Crewlet](https://github.com/crewlet/crewlet) runs.
+
+Three settings hold that up, and none of them is in this repository's files:
+
+- `main`'s protection rule must **require** the checks [`ci.yml`](.github/workflows/ci.yml)
+  runs on a pull request: `lint`, `test (envtest)`, `verify (generated files,
+  go.mod)`, `build (binary, image)`, `sign-off` and `e2e (kind)`. `--auto`
+  waits for the checks a rule names and for nothing else, so with no rule a
+  bump merges the instant it is mergeable. A rule matches a check by its exact
+  name, so renaming a job is a change to the rule too.
+- **Allow auto-merge** must be on (Settings → General), or the merge step
+  fails.
+- **Allow GitHub Actions to create and approve pull requests** must be on
+  (Settings → Actions → General), or the approval step fails.
+
+The job runs only when Dependabot is both the pull request's author *and* the
+actor that triggered the run: anyone with write access can push a commit onto
+a Dependabot branch, and the workflow must not hand that commit an approval.
+So do not push onto a Dependabot branch. A bump that needs a code change goes
+into a pull request of your own, with the change; Dependabot closes its own
+once `main` has the version. Left to itself, Dependabot rebases a bump that
+falls into conflict, which is why this repository does without Crewlet's
+`dependabot-recreate.yml`. If you clicked **Update branch** on a bump,
+Dependabot will not rebase it again and, under a rule that dismisses stale
+approvals, it is left unapproved: comment `@dependabot recreate` and Dependabot
+rebuilds it as its own.
+
+Nothing checks the workflow for you, and its job holds `contents: write` and
+`pull-requests: write`: read its `if:`, the approval's condition and the merge
+command on any diff that touches it.
+
 ## Documentation
 
 Docs are part of the change. A pull request that changes an API field,
