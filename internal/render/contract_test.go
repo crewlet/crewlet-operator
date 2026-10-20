@@ -187,7 +187,9 @@ func startDataPod(t *testing.T, in *BootstrapInput, env ...string) (*enginetest.
 		}
 		api := doc["api"].(map[string]any)
 		api["host"], api["port"] = "127.0.0.1", port
+		// Fixed ports every case would share.
 		delete(api, "public")
+		delete(api, "artifacts")
 		doc["store"].(map[string]any)["path"] = filepath.Join(dir, "store", "crewlet.db")
 		doc["stream"].(map[string]any)["store_dir"] = filepath.Join(dir, "stream")
 		out, err := yaml.Marshal(doc)
@@ -442,6 +444,136 @@ func TestContractAddressShapes(t *testing.T) {
 			in.AllowedOrigins = []string{shape}
 			if render := renderRefuses(t, in, FieldAllowedOrigins, shape); render != engine[paths[i]] {
 				t.Errorf("the render refuses %s %q: %v; crewlet validate refuses it: %v", FieldAllowedOrigins, shape, render, engine[paths[i]])
+			}
+		}
+	})
+}
+
+// artifactShapes are artifact origins either side of each line Crewlet draws,
+// read beside a dashboard at nimbusAPI and a public listener at nimbusHooks.
+var artifactShapes = []string{
+	nimbusArtifacts, "https://artifacts.crewletusercontent.example", "https://artifacts.crewletusercontent.example/",
+	" https://artifacts.crewletusercontent.example ", "   ",
+	"http://localhost:8082", "http://{artifact}.localhost:8082", "http://127.0.0.1:8082", "http://[::1]:8082",
+	"http://artifacts.crewletusercontent.example", "ftp://artifacts.crewletusercontent.example",
+	"https://{artifact}--acme.crewletusercontent.example", "https://{artifact}-" + strings.Repeat("a", 36) + ".crewletusercontent.example",
+	"https://{artifact}-" + strings.Repeat("a", 37) + ".crewletusercontent.example",
+	"https://{artifact}{artifact}.crewletusercontent.example", "https://x{artifact}.crewletusercontent.example",
+	"https://{artifact}", "https://{artifact}:8443", "https://{artifact}/x", "https://{artifact}_x.crewletusercontent.example",
+	"https://{artifact}X.crewletusercontent.example",
+	"https://artifacts.crewletusercontent.example/pages", "https://artifacts.crewletusercontent.example?x=1",
+	"https://artifacts.crewletusercontent.example#x", "https://artifacts.crewletusercontent.example:0",
+	"https://artifacts.crewletusercontent.example:65536", "https://artifacts.crewletusercontent.example:8443",
+	nimbusAPI, nimbusHooks, nimbusAPI + ":443", "https://api.example.com", "https://example.com",
+	"https://{artifact}.api.example.com", "https://{artifact}.example.com",
+}
+
+// TestContractArtifactAddressShapes holds the render's refusal of an artifact
+// origin to crewlet validate's, shape by shape.
+func TestContractArtifactAddressShapes(t *testing.T) {
+	base := func(t *testing.T) *BootstrapInput {
+		t.Helper()
+		in := bootstrapCases()[0].input(t)
+		in.ExternalURL, in.PublicURL, in.ArtifactsURL = nimbusAPI, nimbusHooks, nimbusArtifacts
+		return in
+	}
+	// engineRefuses is whether crewlet validate refuses shape as in's artifact
+	// origin.
+	engineRefuses := func(t *testing.T, in *BootstrapInput, shape string) bool {
+		t.Helper()
+		doc, err := Bootstrap(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var tierA map[string]any
+		if err := yaml.Unmarshal(doc.YAML, &tierA); err != nil {
+			t.Fatal(err)
+		}
+		tierA["api"].(map[string]any)["artifacts"].(map[string]any)["external_url"] = shape
+		encoded, err := json.Marshal(tierA)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mutated, err := yamlOf(encoded)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, stdout, _, _ := verdict(t, bootstrapEnv(doc), "-tier", "bootstrap", write(t, "crewlet.yaml", mutated))
+		for _, raw := range got.Problems {
+			var p struct{ Path string }
+			if err := json.Unmarshal(raw, &p); err != nil || p.Path != FieldArtifactsURL {
+				t.Fatalf("crewlet validate refused the Tier A elsewhere than at %s:\n%s", FieldArtifactsURL, stdout)
+			}
+		}
+		if got.Valid == (len(got.Problems) > 0) {
+			t.Fatalf("crewlet validate is valid %v with problems %s", got.Valid, stdout)
+		}
+		return !got.Valid
+	}
+	// renderRefuses is whether Bootstrap refuses shape as in's artifact origin.
+	renderRefuses := func(t *testing.T, in *BootstrapInput, shape string) bool {
+		t.Helper()
+		in.ArtifactsURL = shape
+		_, err := Bootstrap(in)
+		refused, ok := errors.AsType[*AddressError](err)
+		switch {
+		case err == nil:
+			return false
+		case !ok || refused.Field != FieldArtifactsURL || refused.Address != shape:
+			t.Fatalf("Bootstrap refused %s %q with %v", FieldArtifactsURL, shape, err)
+		}
+		return true
+	}
+	for _, shape := range artifactShapes {
+		t.Run(fmt.Sprintf("%.60q", shape), func(t *testing.T) {
+			t.Parallel()
+			engine, render := engineRefuses(t, base(t), shape), renderRefuses(t, base(t), shape)
+			if render != engine {
+				t.Errorf("the render refuses %s %q: %v; crewlet validate refuses it: %v", FieldArtifactsURL, shape, render, engine)
+			}
+		})
+	}
+	for _, c := range []struct{ name, external, shape string }{
+		{
+			// The dashboard's first label is an artifact label's length.
+			name:     "an origin per artifact that would give one the dashboard's host",
+			external: "https://" + strings.Repeat("d", 26) + ".apps.example.com",
+			shape:    "https://{artifact}.apps.example.com",
+		},
+		{
+			name:     "an origin per artifact beside a dashboard of another label length",
+			external: "https://" + strings.Repeat("d", 25) + ".apps.example.com",
+			shape:    "https://{artifact}.apps.example.com",
+		},
+		{
+			name:     "a template with a suffix that would give one the dashboard's host",
+			external: "https://" + strings.Repeat("d", 26) + "--acme.apps.example.com",
+			shape:    "https://{artifact}--acme.apps.example.com",
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := func() *BootstrapInput {
+				in := base(t)
+				in.ExternalURL = c.external
+				return in
+			}
+			engine, render := engineRefuses(t, in(), c.shape), renderRefuses(t, in(), c.shape)
+			if render != engine {
+				t.Errorf("beside %s, the render refuses %q: %v; crewlet validate refuses it: %v", c.external, c.shape, render, engine)
+			}
+		})
+	}
+	t.Run("an allowed origin", func(t *testing.T) {
+		in := func() *BootstrapInput {
+			in := base(t)
+			in.ExternalURL, in.AllowedOrigins = "https://crewlet.sso.example.com/nimbus", []string{nimbusAPI}
+			return in
+		}
+		for _, shape := range []string{nimbusAPI, "https://{artifact}.nimbus.api.example.com"} {
+			engine, render := engineRefuses(t, in(), shape), renderRefuses(t, in(), shape)
+			if render != engine {
+				t.Errorf("beside the allowed origin %s, the render refuses %q: %v; crewlet validate refuses it: %v",
+					nimbusAPI, shape, render, engine)
 			}
 		}
 	})

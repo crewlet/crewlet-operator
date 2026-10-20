@@ -66,6 +66,10 @@ const (
 	// Crewlet's validator refuses a Tier A whose listeners share a port, and
 	// the contract tests run it over every document rendered here.
 	PublicPort = 8081
+	// ArtifactsPort is the port of a data pod's artifact listener,
+	// api.artifacts, which serves artifacts and nothing else. It is opened
+	// only for a Company with an artifact origin (ADR-0007).
+	ArtifactsPort = 8082
 	// LeafPort is the port of a data pod's leaf listener, which the seat
 	// pods join the company's event stream through. It is open only when
 	// the class's seatPools.policy is Allowed. Like every port of
@@ -132,6 +136,9 @@ type BootstrapInput struct {
 	// AllowedOrigins are the browser origins the engine is reached on
 	// beside ExternalURL's own, Crewlet's api.auth.allowed_origins.
 	AllowedOrigins []string
+	// ArtifactsURL is Crewlet's api.artifacts.external_url, the Company's
+	// status.endpoints.artifactsBaseURL. Empty opens no artifact listener.
+	ArtifactsURL string
 }
 
 // ErrNoAddress is a data pod's Tier A asked for without an address the engine
@@ -211,12 +218,13 @@ type nodeDoc struct {
 }
 
 type apiDoc struct {
-	Host           string        `json:"host"`
-	Port           int           `json:"port"`
-	ExternalURL    string        `json:"external_url,omitempty"`
-	TrustedProxies []string      `json:"trusted_proxies,omitempty"`
-	Public         *apiPublicDoc `json:"public,omitempty"`
-	Auth           *apiAuthDoc   `json:"auth,omitempty"`
+	Host           string           `json:"host"`
+	Port           int              `json:"port"`
+	ExternalURL    string           `json:"external_url,omitempty"`
+	TrustedProxies []string         `json:"trusted_proxies,omitempty"`
+	Public         *apiPublicDoc    `json:"public,omitempty"`
+	Artifacts      *apiArtifactsDoc `json:"artifacts,omitempty"`
+	Auth           *apiAuthDoc      `json:"auth,omitempty"`
 }
 
 // apiPublicDoc is api.public. Its host is left to the engine's default,
@@ -225,6 +233,23 @@ type apiPublicDoc struct {
 	Port        int    `json:"port"`
 	ExternalURL string `json:"external_url"`
 }
+
+// apiArtifactsDoc is api.artifacts; its host is the engine's default.
+type apiArtifactsDoc struct {
+	Port        int    `json:"port"`
+	ExternalURL string `json:"external_url"`
+}
+
+// artifactsOf is api.artifacts for an artifact origin at address, or nil.
+func artifactsOf(address string) *apiArtifactsDoc {
+	if address == "" {
+		return nil
+	}
+	return &apiArtifactsDoc{Port: ArtifactsPort, ExternalURL: address}
+}
+
+// ArtifactsOpen reports whether a data pod opens the artifact listener.
+func ArtifactsOpen(address string) bool { return artifactsOf(address) != nil }
 
 // apiAuthDoc is api.auth. TOTP is left out for a class that requires a
 // second factor, which is Crewlet's own reading of an unset totp: written
@@ -371,7 +396,8 @@ const keyringKeyBytes = 32
 // Bootstrap renders the Tier A of a company's data pods in the v1alpha1
 // topology: one data pod that holds the estate, serves the API, runs the
 // workers and runs the seats placed in the pool data. It serves the API on
-// APIPort and the routes outside parties call on PublicPort alone. It serves
+// APIPort, the routes outside parties call on PublicPort alone, and artifacts
+// on ArtifactsPort where the Company has an artifact origin. It serves
 // admin, and both API tokens hold admin (see grantAdmin); every other
 // credential is a person's, which Crewlet's own identity directory holds.
 //
@@ -405,7 +431,7 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 	if in.ExternalURL == "" || in.PublicURL == "" {
 		return nil, fmt.Errorf("%w: api.external_url is %q and api.public.external_url %q", ErrNoAddress, in.ExternalURL, in.PublicURL)
 	}
-	if err := refusedAddress(in.ExternalURL, in.PublicURL, in.AllowedOrigins); err != nil {
+	if err := refusedAddress(in.ExternalURL, in.PublicURL, in.ArtifactsURL, in.AllowedOrigins); err != nil {
 		return nil, err
 	}
 	signIn := in.Class.Spec.SignIn
@@ -434,6 +460,7 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 			ExternalURL:    in.ExternalURL,
 			TrustedProxies: in.Class.Spec.Exposure.TrustedProxies,
 			Public:         &apiPublicDoc{Port: PublicPort, ExternalURL: in.PublicURL},
+			Artifacts:      artifactsOf(in.ArtifactsURL),
 			Auth: &apiAuthDoc{
 				Admin: adminServe,
 				Tokens: []apiTokenDoc{

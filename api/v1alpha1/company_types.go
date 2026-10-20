@@ -699,6 +699,23 @@ type CompanyExposure struct {
 	// +kubebuilder:validation:XValidation:rule="!self.contains('?') && !self.contains('#')",message="dashboardBaseURL may not have a query or a fragment: Crewlet builds every link a person follows, an invitation and a password link included, by appending a path to it"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="dashboardBaseURL may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	DashboardBaseURL string `json:"dashboardBaseURL,omitempty"`
+
+	// artifactsBaseURL is where a browser reaches the artifact origin,
+	// ahead of the class's artifacts route: a tunnel, or http://localhost:8082
+	// for a browser that port-forwards it. Crewlet's api.artifacts.external_url;
+	// changing it restarts the data pod. https, or http on localhost or
+	// 127.x.x.x; {artifact} at the start of the host gives each artifact a host
+	// of its own. It may not be the dashboard's or the public listener's
+	// origin, nor a parent of either's host (RuntimeReady=False AddressRefused).
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	// +kubebuilder:validation:XValidation:rule="self.matches('^https?://([{]artifact[}][a-z0-9-]*[.])?[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*(:[0-9]+)?/?$')",message="artifactsBaseURL must be a scheme and a lowercase host name, with at most a port and a '/' after it, and {artifact} only at the start of its first label, such as https://{artifact}.artifacts.example.net or https://artifacts.example.com: Crewlet serves artifacts from the root of their host"
+	// +kubebuilder:validation:XValidation:rule="!self.startsWith('http://') || self.matches('^http://([^/:]*[.])?localhost(:[0-9]+)?/?$') || self.matches('^http://127([.][0-9]{1,3}){3}(:[0-9]+)?/?$')",message="artifactsBaseURL may use plain http only on localhost, a name under it or a 127.x.x.x address: Crewlet refuses an artifact origin reached over plain http on a routable host, since every byte a page loads would travel in the clear"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('^https?://[^/]*:(0+|0*([1-9][0-9]{5,}|[7-9][0-9]{4}|6[6-9][0-9]{3}|65[6-9][0-9]{2}|655[4-9][0-9]|6553[6-9]))(/|$)')",message="artifactsBaseURL's port must be 1 to 65535: Crewlet refuses to start on any other; leave the port out for the scheme's own"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('^https?://[{]artifact[}][a-z0-9-]{38,}[.]')",message="artifactsBaseURL may follow {artifact} with at most 37 characters of its label: every artifact's label is 26 characters and that suffix, and a DNS label holds 63"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('^https?://([^/:]*[.])?([0-9]+|0x[0-9a-f]*)(:[0-9]+)?/?$') || self.matches('^https?://((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])[.]){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(:[0-9]+)?/?$')",message="artifactsBaseURL's host ends in a number, which a browser reads as an IPv4 address and rewrites before it sends it: write an IPv4 address as four decimal octets, such as 127.0.0.1, and a host name whose last label is not a number"
+	ArtifactsBaseURL string `json:"artifactsBaseURL,omitempty"`
 }
 
 // CompanyRuntime is a company's bounded overrides of its class.
@@ -1239,6 +1256,14 @@ type CompanyEndpoints struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	DashboardBaseURL string `json:"dashboardBaseURL,omitempty"`
+
+	// artifactsBaseURL is where a browser reaches the artifact origin:
+	// spec.exposure.artifactsBaseURL, else the class's artifacts route while it
+	// serves https. Unset, the data pod opens no artifact listener.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	ArtifactsBaseURL string `json:"artifactsBaseURL,omitempty"`
 }
 
 // CompanyStatus is what the operator observed about a Company.

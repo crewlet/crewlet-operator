@@ -146,7 +146,21 @@ const (
 	positionsGo       = "internal/coord/kv/positions.go"
 	natsObjGo         = "internal/objstore/natsobj/natsobj.go"
 	troubleshootingMd = "docs/guides/troubleshooting.md"
+
+	// artifactOriginRead is the engine the artifact origin was first read at.
+	artifactOriginRead = "v0.1.1-0.20261020171236-91f9788515e6"
+	artifactsConfigGo  = "internal/config/artifacts.go"
+	exposureMd         = "docs/guides/exposure.md"
+	companyTypesGo     = "api/v1alpha1/company_types.go"
+	companyExposureGo  = "internal/controller/company_exposure.go"
 )
+
+// artifactOriginCopies is every operator file that copies which artifact
+// origins Crewlet refuses to start on.
+var artifactOriginCopies = []string{addressGo, companyTypesGo, engineClassGo, companyExposureGo, exposureMd}
+
+// framedKinds is every operator file that states which artifacts are framed.
+var framedKinds = []string{companyTypesGo, engineClassGo, companyExposureGo, exposureMd}
 
 // addressCopies is every operator file that copies which addresses Crewlet
 // refuses to start on: the render, which holds a data pod back on one the
@@ -155,10 +169,7 @@ const (
 // of a class, the message the controller holds the pods back with, which says
 // which namespaces and names make a number of a template's last label, and
 // the guides that tell people what to write and what that message means.
-var addressCopies = []string{
-	addressGo, "api/v1alpha1/company_types.go", engineClassGo,
-	"internal/controller/company_exposure.go", "docs/guides/exposure.md", troubleshootingMd,
-}
+var addressCopies = []string{addressGo, companyTypesGo, engineClassGo, companyExposureGo, exposureMd, troubleshootingMd}
 
 // signInPosture is every operator file that copies where Crewlet lets a
 // second factor be optional without the acknowledgement: the render, which
@@ -305,6 +316,90 @@ var bootWindows = []string{
 // changes with most of the engine's work, and a read of it at each change
 // would be a read of everything else it does.
 var mirrored = []mirror{
+	{
+		file: bootGo, name: "ArtifactsListener",
+		against: []string{bootstrapGo},
+		decides: "only an ingress node with an api.port binds api.artifacts, so a seat pod is given none",
+		digest:  "383ced277b7ee737b539b49fd1ae9c0336235275cbda2d7733f49140f13719ea",
+		read:    artifactOriginRead,
+	},
+	{
+		file: artifactsConfigGo, name: "(*APIArtifacts).validate",
+		against: artifactOriginCopies,
+		decides: "which api.artifacts.external_url Crewlet refuses to start on",
+		digest:  "42d77db202b845f630e41b3e688675ff1f9c7a091ecfd89fafe8daf66daacb94",
+		read:    artifactOriginRead,
+	},
+	{
+		file: artifactsConfigGo, name: "checkArtifactTemplate",
+		against: artifactOriginCopies,
+		decides: "where {artifact} may stand in an artifact origin",
+		digest:  "a915329e877dd0f1bceef5997a1e7be769ddaad24de0b4f1c43d4d7090558015",
+		read:    artifactOriginRead,
+	},
+	{
+		file: artifactsConfigGo, name: "(*APIArtifacts).checkCollisions",
+		against: artifactOriginCopies,
+		decides: "which artifact origins meet the dashboard's or the public listener's",
+		digest:  "faca0faed45645d25dafb3b9072f0e9cf7f51ec04cbe7a890b0d2226549e4d01",
+		read:    artifactOriginRead,
+	},
+	{
+		file: artifactsConfigGo, name: "artifactHostShape",
+		against: artifactOriginCopies,
+		decides: "which hosts a template gives an artifact",
+		digest:  "c309e00278dfcd12fbb92d3774db0c96cffcb9da5634a2d0b9d278d72e5e5803",
+		read:    artifactOriginRead,
+	},
+	{
+		file: artifactsConfigGo, name: "loopbackHost",
+		against: artifactOriginCopies,
+		decides: "where an artifact origin may be plain http",
+		digest:  "76966b0c99f8dbf36aba2e771fbd549851109be987a7884430adf043f2ac89bb",
+		read:    artifactOriginRead,
+	},
+	{
+		file: artifactsConfigGo, name: "APIArtifacts.ExternalBase",
+		against: artifactOriginCopies,
+		decides: "an artifact origin is judged trimmed of space and a trailing '/'",
+		digest:  "9158e653553093b67e644a4b58e8621ed0ad6ab7b289b7b60cb9a75ec894a367",
+		read:    artifactOriginRead,
+	},
+	{
+		file: artifactsConfigGo, name: "APIArtifacts.rendered",
+		against: artifactOriginCopies,
+		decides: "a template is judged with {artifact} filled by a label",
+		digest:  "918a47aa3972d93aae0f1c976c84c31a927904dc9d40dac42bde10d2233d977e",
+		read:    artifactOriginRead,
+	},
+	{
+		file: artifactsConfigGo, name: "APIArtifacts.apex",
+		against: artifactOriginCopies,
+		decides: "the host every artifact host shares",
+		digest:  "a1d1cc61930dfe853e620efe7846f81da270d6daa9ea355cf79b0546640ccae5",
+		read:    artifactOriginRead,
+	},
+	{
+		file: artifactsConfigGo, name: "ArtifactPlaceholder",
+		against: artifactOriginCopies,
+		decides: "the placeholder an artifact origin names a label with",
+		digest:  "207300ebf3e0ac1da5df8ad140c03178e321a2bafa82938fd8aa680efd931fac",
+		read:    artifactOriginRead,
+	},
+	{
+		file: "internal/artifacts/types.go", name: "LabelLen",
+		against: artifactOriginCopies,
+		decides: "an artifact's host label is 26 characters",
+		digest:  "fc2d5f83b48b92a4a9864d4da1b087a5cd1cdb58fbfc609f83c9c480207bd8e0",
+		read:    artifactOriginRead,
+	},
+	{
+		file: "internal/artifacts/kind.go", name: "kindSpecs",
+		against: framedKinds,
+		decides: "HTML pages and designs are the kinds framed from the artifact origin",
+		digest:  "0ee79203c1ad48ff3c0bd97cc629209bb284ca1f514193c4c432740640544994",
+		read:    artifactOriginRead,
+	},
 	{
 		file: sandboxGo, name: "(*launcher).Launch",
 		against: []string{codeWorkGo},

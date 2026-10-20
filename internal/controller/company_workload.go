@@ -56,6 +56,8 @@ const (
 	// publicPortName names the public port (render.PublicPort) on the data
 	// pods and the engine Service.
 	publicPortName = "public"
+	// artifactsPortName names the artifact port (render.ArtifactsPort).
+	artifactsPortName = "artifacts"
 )
 
 // BootstrapHashAnnotation is the pod template annotation that rolls the
@@ -271,6 +273,8 @@ type workload struct {
 	// startupSeconds is the data pod's startup window
 	// (dataPodStartupSeconds).
 	startupSeconds int32
+	// artifacts is render.ArtifactsOpen.
+	artifacts bool
 }
 
 // applyBootstrap writes the Secret the data pods start from: their
@@ -322,8 +326,10 @@ func (r *CompanyReconciler) applyServiceAccount(
 
 // applyServices writes the company's two Services. <c>-engine routes to
 // ready data pods and backs the routes and status.endpoints.api: its port
-// http is the engine's API, which the API's route reaches, and its port
-// public the engine's public listener, which the webhooks' route reaches. It
+// http is the engine's API, which the API's route reaches, its port public
+// the engine's public listener, which the webhooks' route reaches, and its
+// port artifacts the artifact listener, named even while closed so that the
+// artifacts' route resolves. It
 // carries the class's service annotations, for a load balancer controller
 // that reads a backend's health check there. <c>-data is the StatefulSet's headless governing Service: it gives each
 // data pod a stable DNS name, published before the pod is ready, because an
@@ -348,7 +354,12 @@ func (r *CompanyReconciler) applyServices(ctx context.Context, c *crewletaiv1alp
 				WithName(publicPortName).
 				WithProtocol(corev1.ProtocolTCP).
 				WithPort(render.PublicPort).
-				WithTargetPort(intstr.FromString(publicPortName))))
+				WithTargetPort(intstr.FromString(publicPortName)),
+				corev1ac.ServicePort().
+					WithName(artifactsPortName).
+					WithProtocol(corev1.ProtocolTCP).
+					WithPort(render.ArtifactsPort).
+					WithTargetPort(intstr.FromString(artifactsPortName))))
 	if annotations := class.Spec.Service.Annotations; len(annotations) > 0 {
 		engine.WithAnnotations(annotations)
 	}
@@ -621,12 +632,19 @@ func engineContainerOf(
 			WithPreStop(corev1ac.LifecycleHandler().
 				WithSleep(corev1ac.SleepAction().WithSeconds(preStopSleepSeconds))))
 	// The public listener, which every data pod's bootstrap document opens,
-	// and the leaf listener the seat pods join through, which it opens when
+	// the artifact listener while the Company has an artifact origin, and the
+	// leaf listener the seat pods join through, which it opens when
 	// render.LeafOpen says so.
 	container.WithPorts(corev1ac.ContainerPort().
 		WithName(publicPortName).
 		WithContainerPort(render.PublicPort).
 		WithProtocol(corev1.ProtocolTCP))
+	if w.artifacts {
+		container.WithPorts(corev1ac.ContainerPort().
+			WithName(artifactsPortName).
+			WithContainerPort(render.ArtifactsPort).
+			WithProtocol(corev1.ProtocolTCP))
+	}
 	if render.LeafOpen(c, class) {
 		container.WithPorts(corev1ac.ContainerPort().
 			WithName(leafPortName).

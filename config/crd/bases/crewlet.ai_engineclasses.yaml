@@ -372,6 +372,8 @@ spec:
                 default:
                   api:
                     mode: ClusterInternal
+                  artifacts:
+                    mode: None
                   webhooks:
                     mode: None
                 description: exposure is how each company is reached from outside
@@ -427,7 +429,8 @@ spec:
                               proxyNamespaces are the namespaces the pods that carry the Gateways'
                               traffic run in. Under networkPolicy Isolated they are admitted to the
                               one port of the engine the route reaches: the public listener for the
-                              webhooks' route, the API port for the API's. Unset is the namespaces
+                              webhooks' route, the API port for the API's, the artifact listener for
+                              the artifacts'. Unset is the namespaces
                               of parentRefs, which is right for
                               implementations that run a proxy beside each Gateway (Istio, for
                               example); implementations with a shared data plane run it elsewhere
@@ -514,7 +517,8 @@ spec:
                               controllerNamespaces are the namespaces the Ingress controller's pods
                               run in. Under networkPolicy Isolated they are admitted to the one port
                               of the engine the Ingress reaches (the public listener for the
-                              webhooks' Ingress, the API port for the API's), and they are required
+                              webhooks' Ingress, the API port for the API's, the artifact listener
+                              for the artifacts'), and they are required
                               there: an Ingress does not say which pods
                               serve it, and without them the policy would refuse every request the
                               Ingress forwards.
@@ -573,6 +577,204 @@ spec:
                         and not allowed otherwise
                       rule: 'self.mode in [''Gateway'', ''Ingress''] ? has(self.hostname)
                         : !has(self.hostname)'
+                  artifacts:
+                    default:
+                      mode: None
+                    description: artifacts is how browsers reach the artifact origin.
+                    minProperties: 1
+                    properties:
+                      gateway:
+                        description: |-
+                          gateway is the Gateways to attach to, for mode Gateway; a listener the
+                          route attaches to must be HTTPS.
+                        properties:
+                          parentRefs:
+                            description: parentRefs are the Gateways the HTTPRoute
+                              attaches to.
+                            items:
+                              description: |-
+                                GatewayParentReference names a Gateway API Gateway (or one listener of it)
+                                that the operator attaches a company's HTTPRoute to.
+                              properties:
+                                name:
+                                  description: name is the Gateway's name.
+                                  maxLength: 253
+                                  minLength: 1
+                                  type: string
+                                namespace:
+                                  description: |-
+                                    namespace is the Gateway's namespace. Unset is the Company's own
+                                    namespace.
+                                  maxLength: 63
+                                  minLength: 1
+                                  type: string
+                                sectionName:
+                                  description: |-
+                                    sectionName is the name of one listener of the Gateway. Unset attaches
+                                    to every listener that accepts the route.
+                                  maxLength: 253
+                                  minLength: 1
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                            maxItems: 8
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          proxyNamespaces:
+                            description: |-
+                              proxyNamespaces are the namespaces the pods that carry the Gateways'
+                              traffic run in. Under networkPolicy Isolated they are admitted to the
+                              one port of the engine the route reaches: the public listener for the
+                              webhooks' route, the API port for the API's, the artifact listener for
+                              the artifacts'. Unset is the namespaces
+                              of parentRefs, which is right for
+                              implementations that run a proxy beside each Gateway (Istio, for
+                              example); implementations with a shared data plane run it elsewhere
+                              (Envoy Gateway in envoy-gateway-system, for example) and need it named
+                              here.
+                            items:
+                              maxLength: 63
+                              minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                              type: string
+                            maxItems: 8
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: set
+                        required:
+                        - parentRefs
+                        type: object
+                      hostname:
+                        description: |-
+                          hostname is the artifact origin's host name, a template with the
+                          variables and rules of api.hostname. Use a registrable domain of its
+                          own: on the dashboard's site Crewlet serves every artifact opaque.
+                        maxLength: 200
+                        minLength: 1
+                        type: string
+                        x-kubernetes-validations:
+                        - message: hostname may use only the variables {{namespace}},
+                            {{name}} and {{uid}}
+                          rule: '!self.replace(''{{namespace}}'', '''').replace(''{{name}}'',
+                            '''').replace(''{{uid}}'', '''').contains(''{'' + ''{'')'
+                        - message: 'hostname must contain {{uid}}, or {{name}} and
+                            {{namespace}} joined by a ''.'', so that no two companies
+                            share a host name: names and namespaces hold ''-'', so
+                            {{namespace}}-{{name}} is team-a-b-web for both team-a/b-web
+                            and team-a-b/web'
+                          rule: self.contains('{{uid}}') || self.contains('{{name}}.{{namespace}}')
+                            || self.contains('{{namespace}}.{{name}}')
+                        - message: hostname must be a lowercase DNS name once its
+                            variables are replaced
+                          rule: self.replace('{{namespace}}', 'n').replace('{{name}}',
+                            'n').replace('{{uid}}', 'u').matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')
+                        - message: 'hostname may not end in a label that is a number,
+                            such as {{uid}}.123 or {{uid}}.0x1f: a browser reads the
+                            host as an IPv4 address and rewrites it before it sends
+                            it, and Crewlet refuses to start on such an address; end
+                            it in a label that is not one, such as a domain of your
+                            own'
+                          rule: '!self.matches(''(^|[.])([0-9]+|0x[0-9a-f]*)$'')'
+                      ingress:
+                        description: ingress is the Ingress settings, for mode Ingress;
+                          tls is required.
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            description: |-
+                              annotations are added to the Ingress, for the controller that serves it
+                              or a certificate controller.
+                            maxProperties: 32
+                            type: object
+                          className:
+                            description: className is the IngressClass. Unset uses
+                              the cluster's default class.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                          controllerNamespaces:
+                            description: |-
+                              controllerNamespaces are the namespaces the Ingress controller's pods
+                              run in. Under networkPolicy Isolated they are admitted to the one port
+                              of the engine the Ingress reaches (the public listener for the
+                              webhooks' Ingress, the API port for the API's, the artifact listener
+                              for the artifacts'), and they are required
+                              there: an Ingress does not say which pods
+                              serve it, and without them the policy would refuse every request the
+                              Ingress forwards.
+                            items:
+                              maxLength: 63
+                              minLength: 1
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                              type: string
+                            maxItems: 8
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: set
+                          tls:
+                            description: |-
+                              tls terminates TLS on the Ingress. Unset serves plain HTTP, which is
+                              right only behind something else that terminates TLS: vendors deliver
+                              webhooks over HTTPS only.
+                            properties:
+                              secretName:
+                                description: |-
+                                  secretName is the TLS Secret, in the Company's namespace, the Ingress
+                                  presents. It is a template like the hostname: {{namespace}}, {{name}}
+                                  and {{uid}} are replaced. A certificate controller that issues
+                                  certificates from Ingress annotations creates it; set those annotations
+                                  under ingress.annotations.
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                                x-kubernetes-validations:
+                                - message: secretName may use only the variables {{namespace}},
+                                    {{name}} and {{uid}}
+                                  rule: '!self.replace(''{{namespace}}'', '''').replace(''{{name}}'',
+                                    '''').replace(''{{uid}}'', '''').contains(''{''
+                                    + ''{'')'
+                            required:
+                            - secretName
+                            type: object
+                        type: object
+                      mode:
+                        default: None
+                        description: mode is how the artifact origin is reached.
+                        enum:
+                        - None
+                        - Gateway
+                        - Ingress
+                        type: string
+                      origins:
+                        description: |-
+                          origins is PerArtifact (unset), where the route takes *.<hostname>, or
+                          Shared, where it takes <hostname>.
+                        enum:
+                        - PerArtifact
+                        - Shared
+                        type: string
+                    type: object
+                    x-kubernetes-validations:
+                    - message: gateway is required with mode Gateway and not allowed
+                        otherwise
+                      rule: 'self.mode == ''Gateway'' ? has(self.gateway) : !has(self.gateway)'
+                    - message: ingress is required with mode Ingress and not allowed
+                        otherwise
+                      rule: 'self.mode == ''Ingress'' ? has(self.ingress) : !has(self.ingress)'
+                    - message: hostname is required with modes Gateway and Ingress
+                        and not allowed otherwise
+                      rule: 'self.mode in [''Gateway'', ''Ingress''] ? has(self.hostname)
+                        : !has(self.hostname)'
+                    - message: origins is allowed with modes Gateway and Ingress only
+                      rule: self.mode in ['Gateway', 'Ingress'] || !has(self.origins)
+                    - message: 'an Ingress for artifacts needs ingress.tls: Crewlet
+                        refuses to start on an artifact origin reached over plain
+                        http on a routable host, since every byte a page loads would
+                        travel in the clear'
+                      rule: self.mode != 'Ingress' || (has(self.ingress) && has(self.ingress.tls))
                   trustedProxies:
                     description: |-
                       trustedProxies are the address blocks of what forwards requests to
@@ -777,7 +979,8 @@ spec:
                               proxyNamespaces are the namespaces the pods that carry the Gateways'
                               traffic run in. Under networkPolicy Isolated they are admitted to the
                               one port of the engine the route reaches: the public listener for the
-                              webhooks' route, the API port for the API's. Unset is the namespaces
+                              webhooks' route, the API port for the API's, the artifact listener for
+                              the artifacts'. Unset is the namespaces
                               of parentRefs, which is right for
                               implementations that run a proxy beside each Gateway (Istio, for
                               example); implementations with a shared data plane run it elsewhere
@@ -849,7 +1052,8 @@ spec:
                               controllerNamespaces are the namespaces the Ingress controller's pods
                               run in. Under networkPolicy Isolated they are admitted to the one port
                               of the engine the Ingress reaches (the public listener for the
-                              webhooks' Ingress, the API port for the API's), and they are required
+                              webhooks' Ingress, the API port for the API's, the artifact listener
+                              for the artifacts'), and they are required
                               there: an Ingress does not say which pods
                               serve it, and without them the policy would refuse every request the
                               Ingress forwards.
@@ -918,6 +1122,16 @@ spec:
                     the public listener alone'
                   rule: '!has(self.webhooks) || !has(self.api) || !has(self.webhooks.hostname)
                     || !has(self.api.hostname) || self.webhooks.hostname != self.api.hostname'
+                - message: 'artifacts.hostname must differ from api.hostname and webhooks.hostname,
+                    and neither may be under it: an artifact must never be served
+                    where the API''s session runs, and Crewlet refuses an artifact
+                    origin whose host is the API''s or a parent of it'
+                  rule: '!has(self.artifacts) || !has(self.artifacts.hostname) ||
+                    ((!has(self.api) || !has(self.api.hostname) || (self.api.hostname
+                    != self.artifacts.hostname && !self.api.hostname.endsWith(''.''
+                    + self.artifacts.hostname))) && (!has(self.webhooks) || !has(self.webhooks.hostname)
+                    || (self.webhooks.hostname != self.artifacts.hostname && !self.webhooks.hostname.endsWith(''.''
+                    + self.artifacts.hostname))))'
               limits:
                 description: limits caps what a company may declare.
                 minProperties: 1
@@ -3265,7 +3479,8 @@ spec:
                 without them the policy refuses everything the Ingress forwards'
               rule: self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress)
                 || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress)
-                || has(self.exposure.api.ingress.controllerNamespaces)))
+                || has(self.exposure.api.ingress.controllerNamespaces)) && (!has(self.exposure.artifacts)
+                || !has(self.exposure.artifacts.ingress) || has(self.exposure.artifacts.ingress.controllerNamespaces)))
             - message: 'networkPolicy Isolated with External webhooks needs webhooks.external.forwarders:
                 without them the policy refuses everything forwarded to the public
                 port'

@@ -102,6 +102,66 @@ _Appears in:_
 | `schedules` _integer_ | schedules is the number of Schedules. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 
 
+#### ArtifactExposure
+
+
+
+ArtifactExposure is how browsers reach the engine's artifact listener
+(Crewlet's api.artifacts), which serves artifacts and nothing else. Crewlet
+refuses it over plain http on a routable host, so a route serves https only.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [ExposureSettings](#exposuresettings)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `mode` _[ArtifactExposureMode](#artifactexposuremode)_ | mode is how the artifact origin is reached. | None | Enum: [None Gateway Ingress] <br />Optional: \{\} <br /> |
+| `gateway` _[GatewayExposure](#gatewayexposure)_ | gateway is the Gateways to attach to, for mode Gateway; a listener the<br />route attaches to must be HTTPS. |  | Optional: \{\} <br /> |
+| `ingress` _[IngressExposure](#ingressexposure)_ | ingress is the Ingress settings, for mode Ingress; tls is required. |  | Optional: \{\} <br /> |
+| `hostname` _string_ | hostname is the artifact origin's host name, a template with the<br />variables and rules of api.hostname. Use a registrable domain of its<br />own: on the dashboard's site Crewlet serves every artifact opaque. |  | MaxLength: 200 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `origins` _[ArtifactOrigins](#artifactorigins)_ | origins is PerArtifact (unset), where the route takes *.<hostname>, or<br />Shared, where it takes <hostname>. |  | Enum: [PerArtifact Shared] <br />Optional: \{\} <br /> |
+
+
+#### ArtifactExposureMode
+
+_Underlying type:_ _string_
+
+ArtifactExposureMode is how browsers reach a company's artifact origin.
+
+_Validation:_
+- Enum: [None Gateway Ingress]
+
+_Appears in:_
+- [ArtifactExposure](#artifactexposure)
+
+| Field | Description |
+| --- | --- |
+| `None` | ArtifactExposureNone routes nothing; the Company may state an address<br />(spec.exposure.artifactsBaseURL).<br /> |
+| `Gateway` | ArtifactExposureGateway routes the artifact hosts with an HTTPRoute.<br /> |
+| `Ingress` | ArtifactExposureIngress does the same with an Ingress.<br /> |
+
+
+#### ArtifactOrigins
+
+_Underlying type:_ _string_
+
+ArtifactOrigins is how artifacts are kept apart in a browser.
+
+_Validation:_
+- Enum: [PerArtifact Shared]
+
+_Appears in:_
+- [ArtifactExposure](#artifactexposure)
+
+| Field | Description |
+| --- | --- |
+| `PerArtifact` | ArtifactOriginsPerArtifact gives each artifact a host under the route's<br />host name: its own origin, which needs a wildcard DNS name and certificate.<br /> |
+| `Shared` | ArtifactOriginsShared serves every artifact from one host, each with an<br />opaque origin and no browser storage.<br /> |
+
+
 #### AtlassianIntegration
 
 
@@ -454,6 +514,7 @@ _Appears in:_
 | `exposedAPI` _string_ | exposedAPI is the base URL of the engine's API through the class's<br />exposure.api, for callers outside the cluster: https://<hostname><br />when the route terminates TLS (the Ingress has tls, or the Gateway<br />listener the route attaches to is HTTPS), http://<hostname> otherwise,<br />with the hostname template expanded. Set only while exposure.api.mode<br />is Gateway or Ingress and the route has been accepted. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `publicBaseURL` _string_ | publicBaseURL is the address vendors deliver webhooks to, when the<br />company has one: spec.exposure.publicBaseURL, or https://<hostname><br />from the class's webhooks.hostname. It reaches the engine's public<br />listener, and every vendor route is a path under it, such as<br />/webhooks/forge for an Atlassian Forge relay. Unset while the class's<br />webhooks.mode is None, which exposes nothing, and under External<br />before the Company states its address: the engine is then told the<br />listener's address inside the cluster, http://<company>-engine.<br /><namespace>.svc:8081, which no vendor can reach. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `dashboardBaseURL` _string_ | dashboardBaseURL is where a browser reaches the engine, its dashboard<br />and its people's sign-in: spec.exposure.dashboardBaseURL, else the<br />address of the class's API route, on the scheme exposedAPI takes, else<br />http://localhost:8080, the address kubectl port-forward serves the<br />engine Service's API port at. It does not wait for the route to be<br />accepted, as exposedAPI does: it is the engine's api.external_url,<br />which the engine reads only at start, and a flip of acceptance would<br />otherwise restart the data pod. The engine builds every link a person<br />follows on it, an invitation's included, so with the third these lead<br />to a localhost only a port-forwarding browser reaches. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `artifactsBaseURL` _string_ | artifactsBaseURL is where a browser reaches the artifact origin:<br />spec.exposure.artifactsBaseURL, else the class's artifacts route while it<br />serves https. Unset, the data pod opens no artifact listener. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### CompanyExposure
@@ -472,6 +533,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `publicBaseURL` _string_ | publicBaseURL is the HTTPS address vendors deliver webhooks to, and a<br />remote sandbox calls the engine back on, overriding the one the class's<br />webhooks.hostname derives. Required when the class's webhooks.mode is<br />External, where something outside the operator (a relay, an API<br />gateway) forwards it to the engine's public listener. A trailing '/'<br />is dropped, as Crewlet drops it. Crewlet's api.public.external_url,<br />in the data pod's crewlet.yaml, which the engine reads only at start:<br />changing it restarts the data pod. Its host is a name, an IPv4<br />address or an IPv6 address in brackets, followed by at most one port,<br />1 to 65535: Crewlet refuses to start on any other, but for an IPv6<br />address whose zone holds a ']' (https://[fe80::1%25eth0]]/), which it<br />starts on and no vendor reaches. The API judges the host and the port<br />itself rather than leaving them to the API server's URL parser, which<br />is Go's net/url as the API server was built and is run: it takes such<br />a zone, and under Go's GODEBUG setting urlstrictcolons=0<br />https://h.example:80:80 too. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `dashboardBaseURL` _string_ | dashboardBaseURL is where a browser reaches the engine: its dashboard,<br />and the sign-in of the company's people. It overrides the address of<br />the class's API route: set it when the class routes no API, or people<br />reach it through something in front of the route (a single sign-on<br />proxy, say). Crewlet's api.external_url, in the data pod's<br />crewlet.yaml, which the engine reads only at start: changing it<br />restarts the data pod. The engine takes from it the origin a person's<br />write must come from, whether the session cookie is Secure (https)<br />and its scope, and the base of every link a person follows: a link an<br />agent composes, an invitation (/dashboard#/invite/...), a password<br />link. An address other than the route's must serve the engine, its<br />/dashboard and its /auth routes included. The route, when the class<br />has one, stays an origin the engine accepts. It is never the public<br />address: the public listener serves no dashboard. A trailing '/' is<br />dropped.<br />Crewlet compares the origin of a person's write with this address as a<br />browser spells it, and refuses to start on an address whose host a<br />browser rewrites before it sends it, so the API refuses it too: a host<br />outside ASCII, as it is or percent-encoded (write its xn-- form,<br />https://xn--bcher-kva.example for https://bücher.example), a host<br />whose last label is a number and that is not an IPv4 address of four<br />decimal octets (127.1, 2130706433, 0x7f.0.0.1, 192.168.010.1,<br />crewlet.123: write 127.0.0.1, or a name that ends in a word), and an<br />IPv6 address with a zone ([fe80::1%25eth0]). Its host is a name, an<br />IPv4 address or an IPv6 address in brackets, followed by at most one<br />port, 1 to 65535 (http://[::1]:8080, not http://::1:8080), which the<br />API judges itself, as for publicBaseURL. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `artifactsBaseURL` _string_ | artifactsBaseURL is where a browser reaches the artifact origin,<br />ahead of the class's artifacts route: a tunnel, or http://localhost:8082<br />for a browser that port-forwards it. Crewlet's api.artifacts.external_url;<br />changing it restarts the data pod. https, or http on localhost or<br />127.x.x.x; \{artifact\} at the start of the host gives each artifact a host<br />of its own. It may not be the dashboard's or the public listener's<br />origin, nor a parent of either's host (RuntimeReady=False AddressRefused). |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### CompanyIntegrationSettings
@@ -1024,7 +1086,7 @@ _Appears in:_
 | `seatPools` _[SeatPoolSettings](#seatpoolsettings)_ | seatPools is whether each company may run seats on stateless pods of<br />its own, and how many. | \{ policy:Forbidden \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `stream` _[StreamSettings](#streamsettings)_ | stream is how each company's event stream runs. | \{ mode:Embedded \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `objects` _[ObjectSettings](#objectsettings)_ | objects is where each company's files are kept. | \{ backend:NATS \} | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `exposure` _[ExposureSettings](#exposuresettings)_ | exposure is how each company is reached from outside its namespace. | \{ api:map[mode:ClusterInternal] webhooks:map[mode:None] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `exposure` _[ExposureSettings](#exposuresettings)_ | exposure is how each company is reached from outside its namespace. | \{ api:map[mode:ClusterInternal] artifacts:map[mode:None] webhooks:map[mode:None] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `networkPolicy` _[NetworkPolicySettings](#networkpolicysettings)_ | networkPolicy is the NetworkPolicy the operator puts around each<br />company's engine pods. | \{ mode:Isolated \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `podTemplate` _[EnginePodTemplate](#enginepodtemplate)_ | podTemplate is what is added to every engine pod. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `serviceAccount` _[EngineServiceAccount](#engineserviceaccount)_ | serviceAccount is what is added to each company's engine<br />ServiceAccount. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -1283,6 +1345,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `webhooks` _[WebhookExposure](#webhookexposure)_ | webhooks is how vendors' webhooks reach the engine. | \{ mode:None \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `api` _[APIExposure](#apiexposure)_ | api is how the engine's API is reached. | \{ mode:ClusterInternal \} | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `artifacts` _[ArtifactExposure](#artifactexposure)_ | artifacts is how browsers reach the artifact origin. | \{ mode:None \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `trustedProxies` _string array_ | trustedProxies are the address blocks of what forwards requests to<br />the engine: the Gateway's proxies or the Ingress controller of the<br />class's routes, and whatever balances in front of them. Crewlet takes<br />a request's client address from its X-Forwarded-For header only when<br />the request arrives from one of these, and otherwise uses the address<br />it arrives from, which behind a proxy is the proxy's for every<br />caller: the sign-in throttle then counts everyone's attempts at one<br />login together, so a stranger guessing at a person's login holds up<br />that person's own sign-in, and the audit trail names the proxy. Each<br />is a canonical IPv4 or IPv6 CIDR narrower than the whole address<br />space; a single host is a /32 or /128. Unset, no forwarded header is<br />believed. Crewlet's api.trusted_proxies. |  | MaxItems: 16 <br />MinItems: 1 <br />items:MaxLength: 43 <br />Optional: \{\} <br /> |
 
 
@@ -1314,12 +1377,13 @@ GatewayExposure attaches a company's routes to Gateways.
 
 _Appears in:_
 - [APIExposure](#apiexposure)
+- [ArtifactExposure](#artifactexposure)
 - [WebhookExposure](#webhookexposure)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `parentRefs` _[GatewayParentReference](#gatewayparentreference) array_ | parentRefs are the Gateways the HTTPRoute attaches to. |  | MaxItems: 8 <br />MinItems: 1 <br />Required: \{\} <br /> |
-| `proxyNamespaces` _string array_ | proxyNamespaces are the namespaces the pods that carry the Gateways'<br />traffic run in. Under networkPolicy Isolated they are admitted to the<br />one port of the engine the route reaches: the public listener for the<br />webhooks' route, the API port for the API's. Unset is the namespaces<br />of parentRefs, which is right for<br />implementations that run a proxy beside each Gateway (Istio, for<br />example); implementations with a shared data plane run it elsewhere<br />(Envoy Gateway in envoy-gateway-system, for example) and need it named<br />here. |  | MaxItems: 8 <br />MinItems: 1 <br />items:MaxLength: 63 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
+| `proxyNamespaces` _string array_ | proxyNamespaces are the namespaces the pods that carry the Gateways'<br />traffic run in. Under networkPolicy Isolated they are admitted to the<br />one port of the engine the route reaches: the public listener for the<br />webhooks' route, the API port for the API's, the artifact listener for<br />the artifacts'. Unset is the namespaces<br />of parentRefs, which is right for<br />implementations that run a proxy beside each Gateway (Istio, for<br />example); implementations with a shared data plane run it elsewhere<br />(Envoy Gateway in envoy-gateway-system, for example) and need it named<br />here. |  | MaxItems: 8 <br />MinItems: 1 <br />items:MaxLength: 63 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
 
 
 #### GatewayParentReference
@@ -1585,6 +1649,7 @@ IngressExposure puts a company's routes on an Ingress.
 
 _Appears in:_
 - [APIExposure](#apiexposure)
+- [ArtifactExposure](#artifactexposure)
 - [WebhookExposure](#webhookexposure)
 
 | Field | Description | Default | Validation |
@@ -1592,7 +1657,7 @@ _Appears in:_
 | `className` _string_ | className is the IngressClass. Unset uses the cluster's default class. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `annotations` _object (keys:string, values:string)_ | annotations are added to the Ingress, for the controller that serves it<br />or a certificate controller. |  | MaxProperties: 32 <br />Optional: \{\} <br /> |
 | `tls` _[IngressTLS](#ingresstls)_ | tls terminates TLS on the Ingress. Unset serves plain HTTP, which is<br />right only behind something else that terminates TLS: vendors deliver<br />webhooks over HTTPS only. |  | Optional: \{\} <br /> |
-| `controllerNamespaces` _string array_ | controllerNamespaces are the namespaces the Ingress controller's pods<br />run in. Under networkPolicy Isolated they are admitted to the one port<br />of the engine the Ingress reaches (the public listener for the<br />webhooks' Ingress, the API port for the API's), and they are required<br />there: an Ingress does not say which pods<br />serve it, and without them the policy would refuse every request the<br />Ingress forwards. |  | MaxItems: 8 <br />MinItems: 1 <br />items:MaxLength: 63 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
+| `controllerNamespaces` _string array_ | controllerNamespaces are the namespaces the Ingress controller's pods<br />run in. Under networkPolicy Isolated they are admitted to the one port<br />of the engine the Ingress reaches (the public listener for the<br />webhooks' Ingress, the API port for the API's, the artifact listener<br />for the artifacts'), and they are required<br />there: an Ingress does not say which pods<br />serve it, and without them the policy would refuse every request the<br />Ingress forwards. |  | MaxItems: 8 <br />MinItems: 1 <br />items:MaxLength: 63 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
 
 
 #### IngressTLS

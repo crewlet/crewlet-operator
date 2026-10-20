@@ -233,6 +233,7 @@ func (r *CompanyReconciler) runWorkload(
 		ExternalURL:    in.addresses.external,
 		PublicURL:      in.addresses.public,
 		AllowedOrigins: in.addresses.origins,
+		ArtifactsURL:   in.addresses.artifacts,
 	})
 	if errors.Is(err, render.ErrNoAddress) {
 		// engineAddressesOf always names both, so this is the operator's
@@ -298,6 +299,7 @@ func (r *CompanyReconciler) runWorkload(
 		bootstrapHash:  bootstrapHash,
 		bridgeURL:      in.bridgeURL,
 		startupSeconds: dataPodStartupSeconds(class, volume),
+		artifacts:      render.ArtifactsOpen(in.addresses.artifacts),
 	})
 	if err != nil {
 		return metav1.Condition{}, err

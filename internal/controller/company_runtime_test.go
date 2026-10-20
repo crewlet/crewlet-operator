@@ -374,13 +374,16 @@ var _ = Describe("Company runtime", func() {
 		ownedByCompany(engineSvc, company)
 		Expect(engineSvc.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
 		Expect(engineSvc.Spec.Selector).To(Equal(dataSelector))
-		Expect(engineSvc.Spec.Ports).To(HaveLen(2))
+		Expect(engineSvc.Spec.Ports).To(HaveLen(3))
 		Expect(engineSvc.Spec.Ports[0].Name).To(Equal("http"))
 		Expect(engineSvc.Spec.Ports[0].Port).To(Equal(int32(8080)))
 		Expect(engineSvc.Spec.Ports[0].TargetPort).To(Equal(intstr.FromString("http")))
 		Expect(engineSvc.Spec.Ports[1].Name).To(Equal(publicPortName))
 		Expect(engineSvc.Spec.Ports[1].Port).To(Equal(int32(8081)))
 		Expect(engineSvc.Spec.Ports[1].TargetPort).To(Equal(intstr.FromString(publicPortName)))
+		Expect(engineSvc.Spec.Ports[2].Name).To(Equal(artifactsPortName))
+		Expect(engineSvc.Spec.Ports[2].Port).To(Equal(int32(8082)))
+		Expect(engineSvc.Spec.Ports[2].TargetPort).To(Equal(intstr.FromString(artifactsPortName)))
 		dataSvc := &corev1.Service{}
 		get(dataSvc, dataName)
 		Expect(dataSvc.Spec.ClusterIP).To(Equal(corev1.ClusterIPNone))
@@ -438,7 +441,7 @@ var _ = Describe("Company runtime", func() {
 		Expect(container.Ports).To(ConsistOf(
 			corev1.ContainerPort{Name: portName, ContainerPort: 8080, Protocol: corev1.ProtocolTCP},
 			corev1.ContainerPort{Name: publicPortName, ContainerPort: 8081, Protocol: corev1.ProtocolTCP},
-		))
+		), "a Company with no artifact origin opens no artifact listener")
 		Expect(container.Lifecycle.PreStop.Sleep.Seconds).To(BeNumerically(">", 0))
 		// The environment starts with exactly what the bootstrap document
 		// references, wired as render says.
@@ -1714,6 +1717,117 @@ var _ = Describe("Company runtime", func() {
 			Expect(tierA()).To(ContainSubstring("external_url: https://crewlet.sso.example.com/nimbus\n"))
 			Expect(tierA()).To(ContainSubstring("allowed_origins:\n    - " + apiURL + "\n"))
 			Expect(hash()).NotTo(Equal(before), "a new address the engine reads only at start rolled no pod")
+		})
+
+		It("routes artifacts through an HTTPS Gateway to the artifact listener alone, a host per artifact", func() {
+			const artifactsRoute = "nimbus-artifacts"
+			gateway := &gatewayv1.Gateway{
+				Namespace: namespace,
+				Name:      internalGateway,
+				Spec: gatewayv1.GatewaySpec{
+					GatewayClassName: internalGateway,
+					Listeners: []gatewayv1.Listener{{
+						Name: "http", Port: 80, Protocol: gatewayv1.HTTPProtocolType,
+					}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
+			class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+				c.Spec.Exposure.Artifacts = crewletaiv1alpha1.ArtifactExposure{
+					Mode:     crewletaiv1alpha1.ArtifactExposureGateway,
+					Gateway:  crewletaiv1alpha1.GatewayExposure{ParentRefs: []crewletaiv1alpha1.GatewayParentReference{{Name: internalGateway}}},
+					Hostname: "{{uid}}.crewletusercontent.example",
+				}
+			})
+			company := reconciled(newCompany(class.Name))
+			host := string(company.UID) + ".crewletusercontent.example"
+			tierA := func() string {
+				GinkgoHelper()
+				bootstrap := &corev1.Secret{}
+				get(bootstrap, bootstrapName)
+				return string(bootstrap.Data[configFile])
+			}
+
+			route := &gatewayv1.HTTPRoute{}
+			get(route, artifactsRoute)
+			ownedByCompany(route, company)
+			Expect(route.Spec.Hostnames).To(Equal([]gatewayv1.Hostname{gatewayv1.Hostname("*." + host)}),
+				"every artifact's host, one label under the class's host name")
+			Expect(*route.Spec.Rules[0].BackendRefs[0].Port).To(Equal(gatewayv1.PortNumber(8082)))
+
+			By("opening no artifact origin while no listener the route attaches to is HTTPS")
+			Expect(company.Status.Endpoints.ArtifactsBaseURL).To(BeEmpty())
+			Expect(tierA()).NotTo(ContainSubstring("artifacts:"))
+			exposed := condition(company, crewletaiv1alpha1.ConditionExposed)
+			Expect(exposed.Status).To(Equal(metav1.ConditionFalse))
+			Expect(exposed.Reason).To(Equal(crewletaiv1alpha1.ReasonRouteNotAccepted), "the route waits on acceptance first")
+			accept(artifactsRoute, namespace, internalGateway)
+			company = reconciled(company)
+			exposed = condition(company, crewletaiv1alpha1.ConditionExposed)
+			Expect(exposed.Reason).To(Equal(crewletaiv1alpha1.ReasonRouteNotHTTPS))
+			Expect(exposed.Message).To(ContainSubstring("*." + host))
+			Expect(engine(statefulSet()).Ports).NotTo(ContainElement(HaveField("Name", artifactsPortName)))
+
+			By("admitting the Gateway's namespace to the artifact port alone")
+			policy := &networkingv1.NetworkPolicy{}
+			get(policy, engineName)
+			Expect(ingressRules(policy)).To(ContainElement(fromNamespaces(8082, namespace)))
+			Expect(ingressRules(policy)).NotTo(ContainElement(fromNamespaces(8080, namespace)))
+			Expect(ingressRules(policy)).NotTo(ContainElement(fromNamespaces(8081, namespace)))
+
+			By("telling the engine the template once the listener is HTTPS, and opening the listener")
+			get(gateway, internalGateway)
+			gateway.Spec.Listeners = []gatewayv1.Listener{{
+				Name: "https", Port: 443, Protocol: gatewayv1.HTTPSProtocolType,
+				TLS: &gatewayv1.ListenerTLSConfig{CertificateRefs: []gatewayv1.SecretObjectReference{{Name: "usercontent-tls"}}},
+			}}
+			Expect(k8sClient.Update(ctx, gateway)).To(Succeed())
+			hash := statefulSet().Spec.Template.Annotations[BootstrapHashAnnotation]
+			company = reconciled(company)
+			want := "https://{artifact}." + host
+			Expect(company.Status.Endpoints.ArtifactsBaseURL).To(Equal(want))
+			Expect(tierA()).To(ContainSubstring("artifacts:\n    external_url: " + want + "\n    port: 8082\n"))
+			Expect(statefulSet().Spec.Template.Annotations[BootstrapHashAnnotation]).NotTo(Equal(hash),
+				"an artifact origin the engine reads only at start rolled no pod")
+			Expect(engine(statefulSet()).Ports).To(ContainElement(
+				corev1.ContainerPort{Name: artifactsPortName, ContainerPort: 8082, Protocol: corev1.ProtocolTCP}))
+			exposed = condition(company, crewletaiv1alpha1.ConditionExposed)
+			Expect(exposed.Status).To(Equal(metav1.ConditionTrue))
+			Expect(exposed.Reason).To(Equal(crewletaiv1alpha1.ReasonRouteAccepted))
+
+			By("serving every artifact from one host under origins Shared")
+			updateClass(class, func(c *crewletaiv1alpha1.EngineClass) {
+				c.Spec.Exposure.Artifacts.Origins = crewletaiv1alpha1.ArtifactOriginsShared
+			})
+			company = reconciled(company)
+			get(route, artifactsRoute)
+			Expect(route.Spec.Hostnames).To(Equal([]gatewayv1.Hostname{gatewayv1.Hostname(host)}))
+			Expect(company.Status.Endpoints.ArtifactsBaseURL).To(Equal("https://" + host))
+
+			By("taking the Company's own artifact origin over the route's, without its trailing '/'")
+			updateCompany(company, func(c *crewletaiv1alpha1.Company) {
+				c.Spec.Exposure.ArtifactsBaseURL = "https://{artifact}.tunnel.crewletusercontent.example/"
+			})
+			company = reconciled(company)
+			Expect(company.Status.Endpoints.ArtifactsBaseURL).To(Equal("https://{artifact}.tunnel.crewletusercontent.example"))
+		})
+
+		It("holds the pods back on an artifact origin that is the dashboard's", func() {
+			class := newClass()
+			company := reconciled(newCompany(class.Name))
+			Expect(company.Status.Endpoints.ArtifactsBaseURL).To(BeEmpty())
+			exposed := condition(company, crewletaiv1alpha1.ConditionExposed)
+			Expect(exposed.Message).To(ContainSubstring("opens no HTML page or design"))
+			updateCompany(company, func(c *crewletaiv1alpha1.Company) {
+				c.Spec.Exposure.DashboardBaseURL = "https://crewlet.nimbus.example"
+				c.Spec.Exposure.ArtifactsBaseURL = "https://crewlet.nimbus.example"
+			})
+			company = reconciled(company)
+			runtime := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+			Expect(runtime.Status).To(Equal(metav1.ConditionFalse))
+			Expect(runtime.Reason).To(Equal(crewletaiv1alpha1.ReasonAddressRefused))
+			Expect(runtime.Message).To(ContainSubstring("api.artifacts.external_url"))
+			Expect(runtime.Message).To(ContainSubstring("spec.exposure.artifactsBaseURL: correct it"))
 		})
 
 		It("takes the dashboard's address from an API Ingress whose controller publishes none", func() {

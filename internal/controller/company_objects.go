@@ -26,11 +26,12 @@ const managedByLabel = "app.kubernetes.io/managed-by"
 // The components a Company's objects are labelled with
 // (app.kubernetes.io/component).
 const (
-	componentData     = "data"
-	componentSeats    = "seats"
-	componentAPI      = "api"
-	componentWebhooks = "webhooks"
-	componentKeyring  = "keyring"
+	componentData      = "data"
+	componentSeats     = "seats"
+	componentAPI       = "api"
+	componentWebhooks  = "webhooks"
+	componentArtifacts = "artifacts"
+	componentKeyring   = "keyring"
 )
 
 // The names of the objects the operator creates for a Company. Every one is
@@ -48,6 +49,7 @@ func dataServiceName(c *crewletaiv1alpha1.Company) string     { return c.Name + 
 func dataStatefulSetName(c *crewletaiv1alpha1.Company) string { return c.Name + "-data" }
 func webhooksRouteName(c *crewletaiv1alpha1.Company) string   { return c.Name + "-webhooks" }
 func apiRouteName(c *crewletaiv1alpha1.Company) string        { return c.Name + "-api" }
+func artifactsRouteName(c *crewletaiv1alpha1.Company) string  { return c.Name + "-artifacts" }
 func networkPolicyName(c *crewletaiv1alpha1.Company) string   { return c.Name + "-engine" }
 func brokerPolicyName(c *crewletaiv1alpha1.Company) string    { return c.Name + "-broker" }
 func seatsPolicyName(c *crewletaiv1alpha1.Company) string     { return c.Name + "-seats" }

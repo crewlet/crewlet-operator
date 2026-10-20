@@ -47,12 +47,12 @@ type bootstrapCase struct {
 	from    string
 	keyring Keyring
 	objects *S3Credentials
-	// external, public and origins are the addresses the engine is
-	// reached at, as the controller derives them: unset, the port-forward
-	// address of a class that routes no API, and the public listener's
-	// address inside the cluster.
-	external, public string
-	origins          []string
+	// external, public, artifacts and origins are the addresses the engine
+	// is reached at, as the controller derives them: unset, the
+	// port-forward address of a class that routes no API, the public
+	// listener's address inside the cluster, and no artifact origin.
+	external, public, artifacts string
+	origins                     []string
 	// proxies are the class's trusted proxies, which a case rendered from
 	// another's input adds to that input's class.
 	proxies []string
@@ -71,11 +71,16 @@ type bootstrapCase struct {
 // https draws it until its class names them (spec.exposure.trustedProxies).
 var advisoryNoTrustedProxy = advisory{path: "api.trusted_proxies", says: "trusts no proxy"}
 
-// nimbusAPI and nimbusHooks are the API and public addresses of the cases
-// whose class routes both over HTTPS.
+// advisoryArtifactsSameSite is Crewlet's advisory on an artifact origin on the
+// dashboard's site, as a port-forwarded one is.
+var advisoryArtifactsSameSite = advisory{path: "api.artifacts.external_url", says: "same site as the dashboard"}
+
+// nimbusAPI, nimbusHooks and nimbusArtifacts are the addresses of the cases
+// whose class routes them over HTTPS.
 const (
-	nimbusAPI   = "https://nimbus.api.example.com"
-	nimbusHooks = "https://nimbus.hooks.example.com"
+	nimbusAPI       = "https://nimbus.api.example.com"
+	nimbusHooks     = "https://nimbus.hooks.example.com"
+	nimbusArtifacts = "https://{artifact}.nimbus.crewletusercontent.example"
 )
 
 // caseNATS is the bootstrap case of the defaults: a class whose object store
@@ -100,24 +105,32 @@ func bootstrapCases() []bootstrapCase {
 		// A class that allows seat pools: the data pod opens its leaf
 		// listener.
 		{name: caseSeatPools, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}},
-		// A class that routes the API and the webhooks over HTTPS.
+		// A Company that states a port-forwarded artifact origin.
+		{
+			name: "artifacts-port-forward", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
+			artifacts:  fmt.Sprintf("http://localhost:%d", ArtifactsPort),
+			advisories: []advisory{advisoryArtifactsSameSite},
+		},
+		// A class that routes the API, the webhooks and the artifacts over HTTPS.
 		{
 			name: "https-route", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
-			external: nimbusAPI, public: nimbusHooks,
+			external: nimbusAPI, public: nimbusHooks, artifacts: nimbusArtifacts,
 			advisories: []advisory{advisoryNoTrustedProxy},
 		},
 		// A Company that states where people reach the dashboard, ahead of
-		// the class's API route, which stays an origin it is reached on.
+		// the class's API route, which stays an origin it is reached on; and
+		// a shared artifact origin.
 		{
 			name: "route-origin", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
 			external: "https://crewlet.sso.example.com/nimbus", origins: []string{nimbusAPI},
+			artifacts:  "https://artifacts.crewletusercontent.example",
 			advisories: []advisory{advisoryNoTrustedProxy},
 		},
 		// The https route of a class that names the proxies in front of
 		// the engine, which Crewlet then has nothing to advise about.
 		{
 			name: "https-route-proxied", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
-			external: nimbusAPI, public: nimbusHooks,
+			external: nimbusAPI, public: nimbusHooks, artifacts: nimbusArtifacts,
 			proxies: testProxies,
 		},
 		// A class that lets people sign in with a password alone, reached
@@ -131,7 +144,7 @@ func bootstrapCases() []bootstrapCase {
 		// acknowledgement, and which Crewlet then warns of at every start.
 		{
 			name: "sign-in-acknowledged", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
-			external: nimbusAPI, public: nimbusHooks, proxies: testProxies,
+			external: nimbusAPI, public: nimbusHooks, artifacts: nimbusArtifacts, proxies: testProxies,
 			signIn:     v1alpha1.SignInSettings{SecondFactor: v1alpha1.SecondFactorOptional, AcceptInsecure: new(true)},
 			advisories: []advisory{advisoryInsecureSignIn},
 		},
@@ -164,6 +177,7 @@ func (c *bootstrapCase) input(t *testing.T) *BootstrapInput {
 	})
 	in.ExternalURL = cmp.Or(c.external, in.ExternalURL)
 	in.PublicURL = cmp.Or(c.public, in.PublicURL)
+	in.ArtifactsURL = cmp.Or(c.artifacts, in.ArtifactsURL)
 	if c.proxies != nil {
 		in.Class.Spec.Exposure.TrustedProxies = c.proxies
 	}
@@ -299,10 +313,11 @@ func TestBootstrapPlacesTheDataPodInTheDataPool(t *testing.T) {
 }
 
 // TestBootstrapServesOutsidePartiesOnTheirOwnListener pins the data pod's
-// two listeners: the admin API on APIPort and the routes outside parties
-// call on PublicPort, opened on every data pod whatever its class routes,
-// so that a class's exposure never decides which routes the admin port
-// serves; and a seat pod, which serves no public route, opens none.
+// listeners: the admin API on APIPort and the routes outside parties call on
+// PublicPort, opened on every data pod whatever its class routes, so that a
+// class's exposure never decides which routes the admin port serves;
+// artifacts on ArtifactsPort only for an artifact origin; and a seat pod
+// opens neither.
 func TestBootstrapServesOutsidePartiesOnTheirOwnListener(t *testing.T) {
 	for _, c := range bootstrapCases() {
 		t.Run(c.name, func(t *testing.T) {
@@ -317,6 +332,14 @@ func TestBootstrapServesOutsidePartiesOnTheirOwnListener(t *testing.T) {
 			if got := leaves["api.public.port"]; fmt.Sprint(got) != fmt.Sprint(PublicPort) {
 				t.Errorf("api.public.port = %v, want %d: the webhooks would share the admin API's listener", got, PublicPort)
 			}
+			in := c.input(t)
+			port, address := leaves["api.artifacts.port"], leaves["api.artifacts.external_url"]
+			switch {
+			case in.ArtifactsURL == "" && (port != nil || address != nil):
+				t.Errorf("api.artifacts is port %v at %v for a Company with no artifact origin", port, address)
+			case in.ArtifactsURL != "" && (fmt.Sprint(port) != fmt.Sprint(ArtifactsPort) || address != in.ArtifactsURL):
+				t.Errorf("api.artifacts is port %v at %v, want %d at %s", port, address, ArtifactsPort, in.ArtifactsURL)
+			}
 		})
 	}
 	for _, c := range seatPodCases() {
@@ -327,8 +350,8 @@ func TestBootstrapServesOutsidePartiesOnTheirOwnListener(t *testing.T) {
 				t.Fatal(err)
 			}
 			for key := range flatten(t, doc.YAML) {
-				if strings.HasPrefix(key, "api.public") {
-					t.Errorf("a seat pod's Tier A sets %s: it serves no public route", key)
+				if strings.HasPrefix(key, "api.public") || strings.HasPrefix(key, "api.artifacts") {
+					t.Errorf("a seat pod's Tier A sets %s: it serves no public route and frames nothing", key)
 				}
 			}
 		})

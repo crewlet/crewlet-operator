@@ -16,7 +16,7 @@ Crewlet runs one binary in two shapes, chosen only by its `crewlet.yaml`:
 | Crewlet roles | `data`, `ingress`, `seats`, `workers` | `seats` |
 | Holds | the company's store, its event stream and its coordination buckets, on a volume | nothing: a scratch store deleted at every start |
 | Event stream | a broker member | a NATS leaf of the data pods, with JetStream off, holding nothing and voting in nothing |
-| Serves | the API and the dashboard on port 8080, the webhooks and a sandbox's calls back on its public listener, port 8081; the scheduler, the sandbox waiter, integration reconciles and maintenance | its probes on port 8080, and nothing else |
+| Serves | the API and the dashboard on port 8080, the webhooks and a sandbox's calls back on its public listener, port 8081, artifacts on port 8082 while the company has an artifact origin; the scheduler, the sandbox waiter, integration reconciles and maintenance | its probes on port 8080, and nothing else |
 | Company document | applied to it by the operator | taken from the data pod at start |
 | Can be a company's only pod | yes | no: without a data pod it has nothing to join, and gives up within a minute |
 

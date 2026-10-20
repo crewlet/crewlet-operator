@@ -342,9 +342,9 @@ var _ = Describe("Company seat pools", func() {
 		}))
 		engineSvc := &corev1.Service{}
 		get(engineSvc, engineName)
-		Expect(engineSvc.Spec.Ports).To(HaveLen(2), "the engine Service must route the API and the public listener and never the leaf port, which only the headless data Service names")
+		Expect(engineSvc.Spec.Ports).To(HaveLen(3), "the engine Service must route the API, the public listener and the artifact listener and never the leaf port, which only the headless data Service names")
 		for _, port := range engineSvc.Spec.Ports {
-			Expect(port.Name).To(BeElementOf(portName, publicPortName), "the engine Service must route the API and the public listener and never the leaf port, which only the headless data Service names")
+			Expect(port.Name).To(BeElementOf(portName, publicPortName, artifactsPortName), "the engine Service must route the API, the public listener and the artifact listener and never the leaf port, which only the headless data Service names")
 		}
 
 		By("creating no seat pod while the data pod is not ready")
@@ -983,7 +983,8 @@ var _ = Describe("Company seat pools", func() {
 			"TCP/7422 from pods {"+metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: selectorFor(company, componentSeats)})+"} in the policy's namespace",
 			"TCP/8080 from anywhere",
 			"TCP/8081 from anywhere",
-		), "the API and public ports are as open as they were without the policy")
+			"TCP/8082 from anywhere",
+		), "the API, public and artifact ports are as open as they were without the policy")
 		seats := &networkingv1.NetworkPolicy{}
 		get(seats, seatsPolicy)
 		Expect(seats.Spec.PolicyTypes).To(Equal([]networkingv1.PolicyType{networkingv1.PolicyTypeIngress}))
