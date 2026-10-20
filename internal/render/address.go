@@ -52,7 +52,7 @@ func (e *AddressError) Unwrap() error { return ErrAddressRefused }
 // start on, or nil.
 //
 // It is Crewlet's own judgement, copied, which `crewlet validate` shows and
-// TestMirroredEngineFunctionsAreUnchanged holds the code of: api.external_url
+// TestMirroredEngineDeclarationsAreUnchanged holds the code of: api.external_url
 // as config.API.validateExternalURL judges it (checkExternalURL, then
 // checkBrowserHost), api.public.external_url as config.APIPublic.validate
 // does (checkExternalURL alone: no browser compares an origin with it), and

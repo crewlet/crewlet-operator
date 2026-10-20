@@ -47,7 +47,7 @@ import (
 // Crewlet would count a non-blank value under it.
 //
 // Crewlet decides all of it at a launch, where no validation shows it, so
-// TestMirroredEngineFunctionsAreUnchanged holds the engine functions this
+// TestMirroredEngineDeclarationsAreUnchanged holds the engine functions this
 // copies to the ones it was read against, and fails when one changes.
 
 // claudeCodeSignIn are the variables that sign ClaudeCode in from its own

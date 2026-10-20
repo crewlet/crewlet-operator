@@ -458,7 +458,7 @@ func TestContractAtlassianDeploymentIsTheEngines(t *testing.T) {
 // TestAtlassianDeploymentFollowsTheEngineSource holds the Clouds the render
 // reads a Jira or Confluence address on as Atlassian Cloud's own to
 // Crewlet's atlassianhost.environments, which
-// TestMirroredEngineFunctionsAreUnchanged does not: it holds the functions
+// TestMirroredEngineDeclarationsAreUnchanged does not: it holds the functions
 // that read the table, not the table. It holds the table's type too, whose
 // every field a literal may leave out: a field Crewlet adds to an
 // environment is one more thing that may place a host, which the render

@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Authority:** `internal/engine/enginetest` — the package doc
 - **Enforced-by:** `internal/engine/enginetest.TestBinaryFailsWithoutTheEngine`,
-  `internal/render.TestMirroredEngineFunctionsAreUnchanged`,
+  `internal/render.TestMirroredEngineDeclarationsAreUnchanged`,
   `test/crd.TestSamplesAreAccepted`, `test/crd.TestGettingStartedIsAccepted`
 
 ## Context
@@ -41,8 +41,8 @@ workflow or whose build fails. Those suites reach it
 through `internal/engine/enginetest`: `crewlet validate` for rendered
 documents, a running engine for the API, and the engine's module source for
 the decisions the engine makes only at run time, whose lists the operator
-copies and whose functions it fingerprints
-(`TestMirroredEngineFunctionsAreUnchanged`). The samples and the guide that
+copies and whose functions and constants it fingerprints
+(`TestMirroredEngineDeclarationsAreUnchanged`). The samples and the guide that
 name an engine image name this one.
 
 A test that needs the binary and does not find it fails, naming the command
@@ -86,10 +86,10 @@ The test and e2e jobs each read `main` when they start, so a run in which
 log. A release reads it once, and its gate tests the commit it kept.
 
 What the engine decides only at run time, the operator can hold only by its
-code: a fingerprinted function the engine changes fails the build until
-somebody has read it against the operator file that copies it and recorded
-its new digest, which costs a read for every change to those functions,
-comment edits and reflowed lines aside.
+code: a fingerprinted function or constant the engine changes fails the
+build until somebody has read it against the operator file that copies it
+and recorded its new digest, which costs a read for every change to those
+declarations, comment edits and reflowed lines aside.
 
 The cost of running the engine at all is a Go build of it whenever `main`
 moves, an engine process per test that needs one, a network read of the

@@ -126,7 +126,7 @@ Two cases are refused rather than guessed at:
 | **Storage** | One volume claim per pod (`data-nimbus-data-0`) at `/var/lib/crewlet`, from the class's `data.storage`: the store, the event stream (three quarters of the volume, [sized from the claim](company-document.md#the-data-pods-crewletyaml)), and the store's native library cache (`TURSO_GO_CACHE_DIR`), so a restart does not extract it again. |
 | **Environment** | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the Company's public address, while an LLMProvider of the company runs a CLI in `mode: Agent` (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`, and with them `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, the Company's public address, while the Company has one (see [Exposure](#exposure)); then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). All of it is the engine's: a stdio tool server the engine starts is handed only the part of it [Crewlet's allowlist](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#what-a-stdio-servers-environment-is) names, the proxy and TLS variables among it, a coding CLI that part and the variables its Crewlet profile passes through, and a sandbox none ([Stdio and HTTP](../guides/tool-servers.md#stdio-and-http)). |
 | **Ports** | 8080 (`http`), the API, the dashboard and the probes; 8081 (`public`), the public listener: the webhooks, and a remote sandbox's `/otlp/` and `/mcp/`; and 7422 (`leaf`), the leaf listener seat pods join the event stream through, while the class's `seatPools.policy` is `Allowed`. The headless Service `nimbus-data` names 8080 and 7422; `nimbus-engine` names 8080 and 8081. |
-| **Probes** | `/health` for startup and liveness, `/ready` for readiness. Startup allows at least the class's `data.startupSeconds`, counted from the container's start, or, unset, five minutes plus six seconds per GiB of the data volume: the engine recovers what it holds on the volume before `/health` answers `200`, which takes longer the more it holds, and a pod restarted mid-recovery starts it again. The company's tool servers do not count: `/health` answers once the recovery is over, while they start, and `/ready` answers `503` `starting` until the engine serves. Liveness allows a minute of failures before a restart, longer than the 45 seconds in which the engine's watchdog ends a wedged process itself. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
+| **Probes** | `/health` for startup and liveness, `/ready` for readiness. Startup allows at least the class's `data.startupSeconds`, counted from the container's start, or, unset, 1,676 seconds (1,816 when the class keeps files in S3) plus six seconds per GiB of the data volume. The first figure is every bound the engine puts on a data pod's boot, laid end to end, and the API refuses a `startupSeconds` below it: its waits for its own broker and store, never for a peer. A few of them grow with what the company holds and are left to the second figure, as the recovery is: a listing of its secrets, at up to 5 s a secret; moving a secret an offline `crewlet secrets set` left on the node, 10 s each; the claim of each batch of a seat pod's events a crash left unsettled, 15 s a batch; and the restore of each CLI's credential bundle, 10 s each. The second is for what the engine waits out unbounded: it recovers what it holds on the volume before `/health` answers `200`, which takes longer the more it holds, and a pod restarted mid-recovery starts it again. The company's tool servers do not count: `/health` answers once the recovery is over, while they start, and `/ready` answers `503` `starting` until the engine serves. Liveness allows a minute of failures before a restart, longer than the 45 seconds in which the engine's watchdog ends a wedged process itself. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
 | **Stopping** | A five-second `preStop` sleep, so the endpoint is gone from the Services and Gateways before the engine drains, and the class's `data.terminationGracePeriodSeconds` (default five minutes) for the drain: running turns finish, waiting ones are handed back. |
 | **Updates** | `RollingUpdate` with `maxUnavailable: 1`, `podManagementPolicy: Parallel`. |
 | **Scheduling** | The class's `podTemplate`: labels, annotations, node selector, tolerations, affinity, topology spread, runtime and priority class; and its `data.resources`. |
@@ -193,7 +193,7 @@ flowchart LR
 | Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `TURSO_GO_CACHE_DIR` on the scratch volume; the OpenTelemetry variables and `CREWLET_SANDBOX_OTEL_RECEIVER_URL` as on a data pod (never `CREWLET_MCP_BRIDGE_URL`); the class's and the Company's variables, as on a data pod | the same, and `CREWLET_SEAT: cy` |
 | Storage | one `emptyDir` at `/var/lib/crewlet`, of the class's `seatPools.defaults.scratchSizeLimit` (2Gi unless set), holding the scratch store, the store's native library, `/tmp` and `HOME`: the limit bounds what the processes the engine runs write too | the same |
 | Stopping | the pool's `terminationGracePeriodSeconds`, else the class's default, else five minutes: running turns finish, waiting ones are handed back, and the seats are released with their mailboxes for another pod to claim | the same |
-| Port and probes | 8080, the probes alone: `/health` for startup (up to six minutes) and liveness, `/ready` for readiness | the same |
+| Port and probes | 8080, the probes alone: `/health` for startup (1,162 seconds, 1,212 with an S3 object store) and liveness, `/ready` for readiness | the same |
 | Updates | `RollingUpdate`, `maxUnavailable: 1`, `podManagementPolicy: Parallel`, `minReadySeconds: 10` | the same |
 | Resources | the class's `seatPools.defaults.resources`: the class sizes every seat pod, as it sizes the data pods, and a Company chooses only how many its pools run, within `maxPods` | the same |
 
@@ -219,10 +219,17 @@ pods publishes no port.
 The probes are the data pod's: `/health` answers while the process is alive,
 through a drain, and liveness restarts it after a minute of failures, the
 backstop for a process too wedged for the engine's own watchdog to end
-(with code 75) within 45 seconds. Startup allows six minutes, the engine's
-own bounds on a seat pod's boot laid end to end: a minute for its leaf link
-to reach a data pod and five for what it provisions on the event stream,
-past either of which it exits by itself. `/ready` answers whether the pod is
+(with code 75) within 45 seconds. Startup allows at least 1,162 seconds,
+about 19 minutes, or 1,212 when the class keeps files in S3: every bound
+the engine puts on a seat pod's boot, laid end to end. Most of them wait on
+the data pod: a minute for the leaf link to reach it and its JetStream to
+answer, five for the streams the seat pod uses, five more for the
+coordination buckets, and the object store's three minutes on the event
+stream, or four for the probe of an S3 bucket. Past any of them the engine
+exits by itself (a seat pod that cannot reach a data pod at all exits after
+the first minute), so the kubelet never ends a boot the engine would
+finish, with one exception that grows with what the company holds: the
+listing of its secrets, which can read them back at up to 5 s a secret. `/ready` answers whether the pod is
 **doing its work**, and is `503`, its JSON body naming the first reason in
 `reason`, while it
 
@@ -375,7 +382,40 @@ A change to the class or the Company that changes the pod (an image, the
 resources, a toleration, the bootstrap document) rolls the data pod. The data
 volume is the exception: a StatefulSet's volume claims cannot change, so a
 class's `data.storage` applies to companies created after it changes, and an
-existing company keeps its volume.
+existing company keeps its volume until its owner grows it.
+
+### Growing a company's data volume
+
+A company's event stream is three quarters of its data volume, and the
+engine refuses to boot on a stream smaller than what a fresh node reserves
+([the class's floor](company-document.md)). A volume made under an older
+floor, or before an engine that keeps more on its stream, can fall short, and
+a company that keeps more than its volume holds needs room too. Grow the
+claim, not the class:
+
+1. The claim's StorageClass must allow it (`allowVolumeExpansion: true`);
+   the API server refuses an expansion otherwise.
+2. Expand the data pod's claim, `data-<company>-data-0`:
+
+   ```bash
+   kubectl patch pvc data-acme-data-0 -n acme \
+     -p '{"spec":{"resources":{"requests":{"storage":"16Gi"}}}}'
+   ```
+
+3. Once the volume has grown (the claim's `status.capacity` shows the new
+   size; some drivers finish the resize only when the pod mounts the volume
+   again, which a pod the engine refused to boot does by itself), the
+   operator gives the stream three quarters of it, the startup window grows
+   with it, and the data pod rolls onto the new `crewlet.yaml`.
+
+The operator reads the size the claim has, the smaller of what it asks for
+and what it was given, and never less than the size it was made with, so an
+expansion counts once it has landed and a provisioner that rounded a claim up
+moves nothing. The class's `data.storage.size` is not involved, and the
+StatefulSet keeps the template it was created with. A StorageClass that
+cannot expand leaves only a new volume: take a backup and keep the keyring
+Secret with it ([Backups](#backups)), then restore it onto a large enough
+volume as Crewlet's backup guide describes.
 
 The engine migrates its data forward only. The operator records the image the
 data pod last ran *and was ready on* in `status.engine.image`, and its tag in
@@ -688,13 +728,11 @@ include it: an engine with an alarm still runs the company.
 
 The operator takes no backup, and Crewlet needs them for more than recovery:
 it trims every one of its state logs only behind a verified backup younger
-than its
-`stream.tracker_retention.backup_max_age`, 24 hours by default, which the
-operator leaves as it is
+than its `stream.tracker_retention.backup_max_age`, 24 hours by default,
+which the operator leaves as it is
 ([a company that never backs up never trims](https://github.com/crewlet/crewlet/blob/main/docs/guides/retention.md#a-company-that-never-backs-up-never-trims)).
-Without one the logs grow until they reach the
-ceilings the data volume is sized for, and the engine then refuses ordinary
-writes. A new company raises the `backup_age` and `trim_blocked` alarms from
+Without one the logs grow until they reach the ceilings the data volume is
+sized for, and the engine then refuses ordinary writes. A new company raises the `backup_age` and `trim_blocked` alarms from
 the start, which `EngineHealthy=False Alarms` shows.
 
 Take backups through the engine, which is the only process that can read its

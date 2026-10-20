@@ -10,8 +10,9 @@ import (
 
 // fingerprinted is a source file shaped like the engine's: a function, a
 // method on a pointer and one on a value receiver of the same name, a
-// function that joins a value into a message and declares an alias, and a
-// neighbour.
+// function that joins a value into a message and declares an alias, a
+// neighbour, a constant of its own, constants in a block, one of them iota's
+// repetition, and a variable.
 const fingerprinted = `package engine
 
 import "fmt"
@@ -43,9 +44,21 @@ func why(name string) error {
 }
 
 func neighbour() int { return 1 }
+
+// budget bounds a boot.
+const budget = 30 * time.Second
+
+const (
+	// soloBudget bounds one create.
+	soloBudget, clusterBudget = 30 * time.Second, 2 * time.Minute
+	first                     = iota
+	second
+)
+
+var poll = 100 * time.Millisecond
 `
 
-// fingerprint is the digest of the function name in src.
+// fingerprint is the digest of the declaration name in src.
 func fingerprint(t *testing.T, src, name string) string {
 	t.Helper()
 	digest, err := enginetest.Fingerprint("engine.go", []byte(src), name)
@@ -168,26 +181,86 @@ func TestFingerprintNamesAMethodByItsReceiver(t *testing.T) {
 		t.Error("(*launcher).Launch and value.Launch have one digest")
 	}
 	for _, name := range []string{"launcher.Launch", "(*value).Launch", "Launch"} {
-		if _, err := enginetest.Fingerprint("engine.go", []byte(fingerprinted), name); !errors.Is(err, enginetest.ErrNoFunction) {
-			t.Errorf("Fingerprint(%s) = %v, want ErrNoFunction", name, err)
+		if _, err := enginetest.Fingerprint("engine.go", []byte(fingerprinted), name); !errors.Is(err, enginetest.ErrNoDeclaration) {
+			t.Errorf("Fingerprint(%s) = %v, want ErrNoDeclaration", name, err)
 		}
 	}
 }
 
-// TestFingerprintRefusesWhatIsNotThere: a function the engine removed or
-// renamed fails as absent, and a name declared twice or a file that does not
-// parse fails as itself, so none of them reads as a function that did not
-// change.
+// TestFingerprintRefusesWhatIsNotThere: a declaration the engine removed or
+// renamed fails as absent, and a name declared twice, a constant that only
+// repeats the one before it and a file that does not parse fail as
+// themselves, so none of them reads as a declaration that did not change.
 func TestFingerprintRefusesWhatIsNotThere(t *testing.T) {
-	if _, err := enginetest.Fingerprint("engine.go", []byte(fingerprinted), "choose"); !errors.Is(err, enginetest.ErrNoFunction) {
-		t.Errorf("Fingerprint of a function the file does not declare = %v, want ErrNoFunction", err)
+	for _, name := range []string{"choose", "timeout"} {
+		if _, err := enginetest.Fingerprint("engine.go", []byte(fingerprinted), name); !errors.Is(err, enginetest.ErrNoDeclaration) {
+			t.Errorf("Fingerprint of %s, which the file does not declare, = %v, want ErrNoDeclaration", name, err)
+		}
 	}
 	twice := fingerprinted + "\nfunc init() {}\n\nfunc init() {}\n"
-	if _, err := enginetest.Fingerprint("engine.go", []byte(twice), "init"); err == nil || errors.Is(err, enginetest.ErrNoFunction) {
+	if _, err := enginetest.Fingerprint("engine.go", []byte(twice), "init"); err == nil || errors.Is(err, enginetest.ErrNoDeclaration) {
 		t.Errorf("Fingerprint of a function declared twice = %v, want a refusal", err)
 	}
+	if _, err := enginetest.Fingerprint("engine.go", []byte(fingerprinted), "second"); err == nil ||
+		errors.Is(err, enginetest.ErrNoDeclaration) || !strings.Contains(err.Error(), "repeats") {
+		t.Errorf("Fingerprint of a constant that repeats the one before it = %v, want a refusal saying so", err)
+	}
 	broken := strings.Replace(fingerprinted, "func neighbour() int {", "func neighbour() int", 1)
-	if _, err := enginetest.Fingerprint("engine.go", []byte(broken), "pick"); err == nil || errors.Is(err, enginetest.ErrNoFunction) {
+	if _, err := enginetest.Fingerprint("engine.go", []byte(broken), "pick"); err == nil || errors.Is(err, enginetest.ErrNoDeclaration) {
 		t.Errorf("Fingerprint of a file that does not parse = %v, want the parse error", err)
+	}
+}
+
+// TestFingerprintNamesAConstantOrAVariable: a constant is held by the spec
+// that declares it, so its value moves its digest and its comment, its
+// neighbours in a block and the block itself do not; and a constant made a
+// variable is not the declaration that was read.
+func TestFingerprintNamesAConstantOrAVariable(t *testing.T) {
+	// The constants the source declares on their own and in a block.
+	const alone, inBlock = "budget", "clusterBudget"
+	budget := fingerprint(t, fingerprinted, alone)
+	cluster := fingerprint(t, fingerprinted, inBlock)
+	if solo := fingerprint(t, fingerprinted, "soloBudget"); solo != cluster {
+		t.Error("two constants of one spec have two digests")
+	}
+	fingerprint(t, fingerprinted, "first")
+	poll := fingerprint(t, fingerprinted, "poll")
+	if budget == cluster || budget == poll {
+		t.Error("two declarations share a digest")
+	}
+	for name, c := range map[string]struct {
+		src, of, want string
+	}{
+		"the doc comment rewritten": {
+			edit(t, "// budget bounds a boot.", "// budget bounds\n// a boot."), alone, budget,
+		},
+		"moved into a block": {
+			edit(t, "const budget = 30 * time.Second", "const (\n\tbudget = 30 * time.Second\n)"), alone, budget,
+		},
+		"its value spelled over lines": {
+			edit(t, "const budget = 30 * time.Second", "const budget = 30 *\n\ttime.Second"), alone, budget,
+		},
+		"a neighbour in its block changed": {edit(t, "first                     = iota", "first = 1"), inBlock, cluster},
+		"a constant after it added": {
+			edit(t, "\tsecond\n)", "\tsecond\n\tthird = 3\n)"), inBlock, cluster,
+		},
+	} {
+		if got := fingerprint(t, c.src, c.of); got != c.want {
+			t.Errorf("%s moved the digest of %s", name, c.of)
+		}
+	}
+	for name, c := range map[string]struct {
+		src, of, was string
+	}{
+		"its value":              {edit(t, "const budget = 30 * time.Second", "const budget = 60 * time.Second"), alone, budget},
+		"its unit":               {edit(t, "const budget = 30 * time.Second", "const budget = 30 * time.Minute"), alone, budget},
+		"its type":               {edit(t, "const budget = 30 * time.Second", "const budget time.Duration = 30 * time.Second"), alone, budget},
+		"made a variable":        {edit(t, "const budget = 30 * time.Second", "var budget = 30 * time.Second"), alone, budget},
+		"its spec's other value": {edit(t, "30 * time.Second, 2 * time.Minute", "30 * time.Second, 5 * time.Minute"), inBlock, cluster},
+		"a variable's value":     {edit(t, "var poll = 100 * time.Millisecond", "var poll = time.Second"), "poll", poll},
+	} {
+		if got := fingerprint(t, c.src, c.of); got == c.was {
+			t.Errorf("%s left the digest of %s as it was", name, c.of)
+		}
 	}
 }

@@ -112,7 +112,7 @@ with your last change yet.
 | | False | `NameConflict` | The Secret `<company>-secret-sync`, where the operator keeps what it pushed to the engine's store, exists and is someone else's; `SecretsSynced` says the same. Rename or delete it; nothing is applied meanwhile. |
 | | False | `SeatPoolsNotAllowed` | The Company declares `spec.topology.seatPools`, and its class's `seatPools.policy` is not `Allowed`. Remove the pools, or run the company with a class that allows them. |
 | | False | `PoolCapacityExceeded` | The company's seat pods would number more than its class's `seatPools.maxPods`: its Shared pools' replicas alone (the message says so; lower them), or with the pods of its PerSeat seats, each of which reports it too. |
-| | False | `Invalid` | The engine's dry run refused the document, in its own words. Each problem is also reported on the object that rendered it, as `Applied=False Invalid`. |
+| | False | `Invalid` | The engine's dry run refused the document, in its own words, every problem in this message. A problem at a place a part rendered (a Seat, Unit, LLMProvider, MCPServer, Integration or Schedule) is also reported on that part, as `Applied=False Invalid`; one at a place the Company renders itself (its own fields, `spec.embeddings`, `spec.sandbox` and its setup steps) is in this message alone. |
 | | False | `Drifted` | Under `Observe`, the engine runs another document; the message names the places that differ. |
 | | False | `Applying` | The operator activated the revision and the engine has not applied it yet; it runs the previous one meanwhile. Usually gone within seconds; it turns into `ApplyFailed` when the engine fails the revision or has not applied it 72 seconds after the write. |
 | | False | `ApplyFailed` | The engine did not apply the revision, and keeps running the one it applied last. The message carries the engine's status, its posture (`isolated` on a single node, `shed` or `stuck` beside peers that applied it) and its own account of the failure; see [The engine did not apply a revision](#the-engine-did-not-apply-a-revision). |
@@ -209,6 +209,7 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
   `data.storage.size` admits no less than `12Gi` (`9Gi` with the files in
   S3), so this is a company whose volume was made smaller: under an older
   floor, or before an engine that keeps more on its stream.
+  [Grow its volume](../concepts/runtime.md#growing-a-companys-data-volume).
 - **`config_apply_failed`**: the revision was stored but this node could not
   start it; the message says why. The engine keeps running the previous
   revision, and the Company reports `ConfigApplied=False ApplyFailed` (see
@@ -219,10 +220,11 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **The pod restarts, its events saying `Startup probe failed`, and the
   previous log has no `engine_recovered` line**: the recovery of what the
   volume holds took longer than the startup probe allows, and every restart
-  starts it again. The window is five minutes plus six seconds per GiB of the
-  volume; a disk that reads slower than that needs a longer one. Set the
-  class's `data.startupSeconds` (up to a day), which rolls the data pods once,
-  and let the next boot finish.
+  starts it again. The window is 1,676 seconds (1,816 when the class keeps
+  files in S3) plus six seconds per GiB of the volume; a disk that reads
+  slower than that needs a longer one. Set the class's `data.startupSeconds`
+  (up to a day), which rolls the data pods once, and let the next boot
+  finish.
 - **The log has `engine_recovered` and no `api_listening` after it**: the
   engine has recovered what the volume holds and is starting what the company
   configures, its shared tool servers above all. `/health` answers `200`
@@ -278,8 +280,9 @@ kubectl logs -n acme acme-seats-general-159f80d7-0
 | `no_presence` | It does not hold its presence lease, so the fleet does not count it. |
 | `admission_withheld` | No data pod has answered that its copy of the company's records admits a seat (the data pod is starting, catching up, or unreachable), or the pod cannot serve the seats it holds. It claims nothing until then. |
 
-A seat pod restarted every six minutes, its events saying `Startup probe
-failed` with `connection refused` while its log shows it running, binds no
+A seat pod restarted every 19 minutes or so (20 when the class keeps files
+in S3), its events saying `Startup probe failed` with `connection refused`
+while its log shows it running, binds no
 port for its probes: the engine it runs (the class's `engine.image`, with the
 Company's `spec.runtime.version` as its tag when that is set) and the
 operator come from different points of Crewlet's `main`, older or newer than

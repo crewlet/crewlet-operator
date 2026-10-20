@@ -221,11 +221,20 @@ spec:
                       too long costs nothing on a healthy boot, only the time to restart one
                       that hung.
 
-                      Unset derives it from the data volume: five minutes for what every
-                      boot does within Crewlet's own bounds (a first start extracts the
-                      store's native library, migrates the store and provisions the event
-                      stream, which Crewlet bounds at two minutes on one broker member), plus
-                      six seconds per GiB of the volume. That is four times the second and a
+                      It is at least every bound Crewlet puts on a data pod's boot, laid end
+                      to end, which a window may not cut short: 1676 seconds, or 1816 with
+                      objects.backend S3, whose bucket every boot probes. Those are its waits
+                      for its own broker and store (provisioning the event stream, the
+                      coordination buckets, the object store and the state logs, two minutes
+                      a window on the broker of one member a data pod runs, and the requests
+                      around them), never for a peer or a seat pod. A few of them grow with
+                      what the company holds and are left to the recovery's share, as the
+                      recovery is: a listing of its secrets, at up to 5 s a secret; moving a
+                      secret an offline `crewlet secrets set` left on the node, 10 s each;
+                      the claim of each batch of a seat pod's events a crash left unsettled,
+                      15 s a batch; and the restore of each CLI's credential bundle, 10 s
+                      each. Unset derives it from the data volume: that floor plus six
+                      seconds per GiB of the volume. That is four times the second and a
                       half per GiB Crewlet measured recovering after a crash on a fast local
                       disk, for volumes that are network-attached; set this for disks slower
                       than that. Nothing the company configures counts: the engine answers
@@ -233,7 +242,7 @@ spec:
                       Changing it changes the data pods' template, which restarts them.
                     format: int32
                     maximum: 86400
-                    minimum: 300
+                    minimum: 1676
                     type: integer
                   storage:
                     description: storage is the data volume each data pod gets.
@@ -265,8 +274,10 @@ spec:
                           It applies to the data volumes of companies created after it is set.
                           An existing company's volumes keep the size they were created with:
                           they are claimed through the StatefulSet's volume claim templates,
-                          which Kubernetes does not let change, and resizing a volume is a
+                          which Kubernetes does not let change, and growing a volume is a
                           decision about one company's storage class and data, not the class's.
+                          Its owner expands the company's claim instead, and once the expansion
+                          lands the operator sizes the stream from what the claim then has.
                         pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                         x-kubernetes-int-or-string: true
                         x-kubernetes-validations:
@@ -3246,6 +3257,12 @@ spec:
                 it for its state logs and the object store''s bucket'
               rule: (has(self.objects) && has(self.objects.backend) && self.objects.backend
                 == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('12Gi'))
+            - message: 'data.startupSeconds must be at least 1816 with objects.backend
+                S3: every boot of a data pod probes the bucket, and Crewlet''s bounds
+                on the boot then add up to 1816 seconds, which a shorter window can
+                cut short'
+              rule: '!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend)
+                || self.objects.backend != ''S3'' || self.data.startupSeconds >= 1816'
             - message: 'networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces:
                 without them the policy refuses everything the Ingress forwards'
               rule: self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress)

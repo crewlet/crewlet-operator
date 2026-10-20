@@ -925,17 +925,52 @@ func TestPlatformLLMProviders(t *testing.T) {
 }
 
 // TestEngineClassStartupWindow: a class may name its data pods' startup window,
-// from the five minutes a first start takes within the engine's own bounds up
-// to a day, past which a recovery is a disk to look at.
+// from every bound Crewlet puts on a data pod's boot laid end to end, which
+// is longer when the class keeps files in S3, whose bucket every boot probes,
+// up to a day, past which a recovery is a disk to look at.
 func TestEngineClassStartupWindow(t *testing.T) {
 	window := func(seconds int32) func(*v1.EngineClass) {
 		return func(c *v1.EngineClass) { c.Spec.Data.StartupSeconds = seconds }
 	}
+	inS3 := func(seconds int32) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) {
+			c.Spec.Objects = v1.ObjectSettings{
+				Backend: v1.ObjectBackendS3,
+				S3:      v1.S3ObjectSettings{Region: tenantsRegion, Bucket: tenantsBucket},
+			}
+			c.Spec.Data.StartupSeconds = seconds
+		}
+	}
 	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
-		{name: "five minutes is accepted", mutate: window(300)},
+		{name: "the boot's own bounds are accepted", mutate: window(1676)},
 		{name: "a day is accepted", mutate: window(86400)},
-		{name: "under five minutes is refused", mutate: window(299), want: "should be greater than or equal to 300"},
+		{
+			name: "under the boot's own bounds is refused", mutate: window(1675),
+			want: "should be greater than or equal to 1676",
+		},
 		{name: "over a day is refused", mutate: window(86401), want: "should be less than or equal to 86400"},
+		{name: "the boot's own bounds with objects in S3 are accepted", mutate: inS3(1816)},
+		{name: "under them with objects in S3 is refused", mutate: inS3(1815), want: msgStartupFloorS3},
+		{name: "objects in S3 and no window is accepted", mutate: inS3(0)},
+	})
+}
+
+// TestEngineClassStartupWindowFollowsTheObjects covers the floor on a class's
+// startup window across a change of where it keeps files: a class at the
+// stream's floor may not move its files to S3, whose floor is higher.
+func TestEngineClassStartupWindowFollowsTheObjects(t *testing.T) {
+	runUpdateCases(t, engineClass, []updateCase[*v1.EngineClass]{
+		{
+			name:   "a class at 1676 seconds moving its files to S3 is refused",
+			before: func(c *v1.EngineClass) { c.Spec.Data.StartupSeconds = 1676 },
+			mutate: func(c *v1.EngineClass) {
+				c.Spec.Objects = v1.ObjectSettings{
+					Backend: v1.ObjectBackendS3,
+					S3:      v1.S3ObjectSettings{Region: tenantsRegion, Bucket: tenantsBucket},
+				}
+			},
+			want: msgStartupFloorS3,
+		},
 	})
 }
 

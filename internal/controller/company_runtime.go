@@ -218,13 +218,18 @@ func (r *CompanyReconciler) runWorkload(
 		}
 		return r.holdBack(ctx, c, existing, reason, message)
 	}
+	claims, err := r.cachedDataClaims(ctx, c)
+	if err != nil {
+		return metav1.Condition{}, err
+	}
+	volume := dataVolumeSize(existing, class, claims)
 	bootstrap, err := render.Bootstrap(&render.BootstrapInput{
 		Company:        c,
 		Class:          class,
 		Keyring:        keyringOf(keyring),
 		Tokens:         tokensOf(tokens),
 		Objects:        in.objects,
-		VolumeSize:     dataVolumeSize(existing, class),
+		VolumeSize:     volume,
 		ExternalURL:    in.addresses.external,
 		PublicURL:      in.addresses.public,
 		AllowedOrigins: in.addresses.origins,
@@ -264,10 +269,6 @@ func (r *CompanyReconciler) runWorkload(
 		return metav1.Condition{}, fmt.Errorf("rendering the data pods' crewlet.yaml: %w", err)
 	}
 
-	claims, err := r.cachedDataClaims(ctx, c)
-	if err != nil {
-		return metav1.Condition{}, err
-	}
 	image, refusal := engineImage(c, class, versionFloor(c, claims))
 	if refusal != nil {
 		if existing == nil {
@@ -296,7 +297,7 @@ func (r *CompanyReconciler) runWorkload(
 		bootstrap:      bootstrap,
 		bootstrapHash:  bootstrapHash,
 		bridgeURL:      in.bridgeURL,
-		startupSeconds: dataPodStartupSeconds(class, dataVolumeSize(existing, class)),
+		startupSeconds: dataPodStartupSeconds(class, volume),
 	})
 	if err != nil {
 		return metav1.Condition{}, err

@@ -1065,7 +1065,10 @@ spec:
                     items:
                       description: |-
                         SandboxSetupStep is one provisioning step applied to a sandbox before the
-                        coding agent starts. It maps onto a Crewlet sandbox setup step.
+                        coding agent starts. It maps onto a Crewlet sandbox setup step, which
+                        Crewlet refuses when it does nothing (no files, commands, env or brief):
+                        that is almost always an unfinished edit, which would otherwise apply
+                        cleanly for ever and look like it was working.
                       properties:
                         brief:
                           description: |-
@@ -1212,11 +1215,17 @@ spec:
                           - path
                           x-kubernetes-list-type: map
                         name:
-                          description: name identifies the step in logs and failure
-                            messages.
+                          description: |-
+                            name identifies the step in logs and failure messages, so Crewlet
+                            refuses one of white space alone, and so does the API.
                           maxLength: 63
                           minLength: 1
                           type: string
+                          x-kubernetes-validations:
+                          - message: 'name may not be white space alone: Crewlet refuses
+                              a setup step with no name, since it is what a failure
+                              message points at'
+                            rule: self.trim().size() > 0
                         timeoutSeconds:
                           description: timeoutSeconds caps each command of the step.
                           format: int32
@@ -1225,6 +1234,12 @@ spec:
                       required:
                       - name
                       type: object
+                      x-kubernetes-validations:
+                      - message: 'a setup step must give files, commands, env or a
+                          brief: Crewlet refuses a step that does nothing'
+                        rule: (has(self.files) && size(self.files) > 0) || (has(self.commands)
+                          && size(self.commands) > 0) || (has(self.env) && size(self.env)
+                          > 0) || has(self.brief)
                     maxItems: 16
                     type: array
                     x-kubernetes-list-map-keys:

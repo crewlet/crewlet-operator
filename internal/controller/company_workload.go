@@ -127,22 +127,82 @@ const probePeriodSeconds = 5
 // period short of threshold periods. So the threshold covers the window with
 // threshold-1 periods, rounded up. A threshold of the window over the period
 // truncated, as it was, cut a window that is no multiple of the period (a
-// class's startupSeconds of 301, the 396 seconds a 16Gi volume derives) by
+// class's startupSeconds of 1677, the 1772 seconds a 16Gi volume derives) by
 // up to four seconds more on top of that period.
 func startupFailureThreshold(seconds int32) int32 {
 	return (seconds+probePeriodSeconds-1)/probePeriodSeconds + 1
 }
 
-// The data pod's startup window when the class sets none: what every boot does
-// within the engine's own bounds, and the recovery of what the volume holds,
-// which the engine waits out unbounded because it grows with the data. See
-// DataPodSettings.StartupSeconds for the reasoning behind both numbers.
+// The data pod's startup window when the class sets none: every bound the
+// engine puts on its own boot, laid end to end, and the recovery of what the
+// volume holds, which the engine waits out unbounded because it grows with
+// the data. See DataPodSettings.StartupSeconds for the reasoning.
 const (
-	// dataPodBootSeconds covers a first start: the store's native library
-	// extracted, the store migrated, and the event stream's streams and
-	// buckets created, which the engine bounds by two minutes on a broker
-	// of one member.
-	dataPodBootSeconds = 300
+	// dataPodBootSeconds is every bound the engine puts on a data pod's
+	// boot but its object store's, each step waiting after the one before
+	// it on the boot's one goroutine, read from Crewlet's source (the
+	// mirrors in internal/render/mirror_test.go name each declaration). A
+	// data pod is a lone broker member, so every create is a local one, on
+	// the solo budgets: a minute each and two for a whole bring-up.
+	//   - 60: the lock on the store's native library, which a container
+	//     killed while extracting it leaves on the volume
+	//     (tursoPrepareTimeout);
+	//   - 30: its broker's listeners ready (listenTimeout);
+	//   - 60: its connection to its own broker, a 30 s handshake and a 30 s
+	//     flush that reads the broker's max_payload (listenTimeout twice);
+	//   - 120: the event stream's own streams (soloSequenceBudget);
+	//   - 60: a second connection, for coordination;
+	//   - 120: the coordination buckets, a window of their own;
+	//   - 90: the fleet's record of its object store, as on a seat pod
+	//     (seatPodBootSeconds);
+	//   - 40: four registrations of what the node answers (flushBudget);
+	//   - 40: its admission, a write and seven reads at 5 s (admit);
+	//   - 20: a listing of the company's secrets to move onto them the rows
+	//     an offline `crewlet secrets set` left in the node's store
+	//     (migrateSecrets), only when there are such rows;
+	//   - 20: the listing of the company's secrets (refreshSecrets): the key
+	//     index and the watch, a 5 s idle pass and the 5 s delete of the
+	//     watch's consumer;
+	//   - 10: the estate service's registration;
+	//   - 100: the custody keeper's consumer, looked up, created and read
+	//     back, then looked up and read back again to attach;
+	//   - 10: the fleet broker's registration;
+	//   - 35: the state logs' ceilings, read together under LookupBudget,
+	//     then the broker's limit at 5 s;
+	//   - 120: the state logs' streams (soloSequenceBudget);
+	//   - 500: the join's reads of where the fleet stands: a listing of the
+	//     nodes' positions (25 s: 20 for a listing, and 5 to read back its
+	//     one row), eight of the logs' trim floors (55 s each: 20, and 5 for
+	//     each of the seven floors), and each log's stats at 5 s;
+	//   - 10: the window for a donor's offer, when the node is behind, and
+	//     the 5 s delete of the consumer a listing in it leaves;
+	//   - 130: each state log's consumer (soloSequenceBudget) and the two 5 s
+	//     reads that verify the last one's checkpoint past that window;
+	//   - 1: the 25 ms polls of the library lock and the listeners.
+	// Those counts are the topology's: one data node, seven logs. What
+	// grows with what the company holds is not counted, as its recovery is
+	// not: 5 s for each secret its store holds (10 for one deleted in the
+	// last three hours), which each listing of them may read back one at a
+	// time, 10 s for each row an offline `crewlet secrets set` left, 15 s
+	// for each batch of a seat pod's events a crash left unsettled, which
+	// the custody keeper claims before it attaches, and 10 s for each CLI
+	// whose credential bundle is restored, behind a lock a `crewlet llm`
+	// command in the container may hold.
+	dataPodBootSeconds = 60 + 30 + 60 + 120 + 60 + 120 + 90 + 40 + 40 + 20 + 20 + 10 + 100 + 10 + 35 + 120 + 500 + 10 + 130 + 1
+	// dataPodNATSObjectsSeconds is the object store's step on the default
+	// backend: the broker's limit read (LookupBudget, 30 s), then the bucket
+	// looked up (30 s), created (30 s, soloBudget), read back and bound
+	// (5 s each), inside a window of soloSequenceBudget that never binds
+	// them (natsobj.Open).
+	dataPodNATSObjectsSeconds = 30 + 30 + 30 + 5 + 5
+	// s3ProbeSeconds is the object store's step on an S3 backend, a data
+	// pod's or a seat pod's: the probe of the bucket every boot makes
+	// (s3obj's probe), a put of a probe object (60 s, callBudget and
+	// objstore.MiBPace for its body), its delete, three presigned puts, the
+	// delete of a probe a provider stored that it should have refused, and
+	// the delete of the probe however the probe ends (30 s each,
+	// callBudget).
+	s3ProbeSeconds = 60 + 30 + 3*30 + 30 + 30
 	// dataPodRecoverySecondsPerGiB is four times the 1.5 s/GiB the engine
 	// measured recovering after a crash on a fast local disk: a network-
 	// attached volume reads slower, and a window too short restarts a
@@ -150,12 +210,23 @@ const (
 	dataPodRecoverySecondsPerGiB = 6
 )
 
+// dataPodBootWindow is every bound the engine puts on a data pod's boot, its
+// object store's by the class's backend: the least window a data pod is
+// given, whatever its volume.
+func dataPodBootWindow(class *crewletaiv1alpha1.EngineClass) int32 {
+	if class.Spec.Objects.Backend == crewletaiv1alpha1.ObjectBackendS3 {
+		return dataPodBootSeconds + s3ProbeSeconds
+	}
+	return dataPodBootSeconds + dataPodNATSObjectsSeconds
+}
+
 // dataPodStartupSeconds is how long a data pod's engine may take to answer
 // /health 200, which it does once it has recovered what its volume holds (503
 // before, from the moment it binds): the class's spec.data.startupSeconds,
-// or, unset, the boot's own bounds plus the recovery of a full volume. The
-// volume is the size the pod's claim is made with, which never changes for an
-// existing company, so the window does not move under a running one.
+// which the API holds to dataPodBootWindow at least, or, unset, the boot's
+// own bounds plus the recovery of a full volume. The volume is
+// dataVolumeSize's, which moves under a running company only when its owner
+// grows its claim, and the window grows with what it then holds.
 func dataPodStartupSeconds(class *crewletaiv1alpha1.EngineClass, volume resource.Quantity) int32 {
 	if s := class.Spec.Data.StartupSeconds; s > 0 {
 		return s
@@ -169,18 +240,19 @@ func dataPodStartupSeconds(class *crewletaiv1alpha1.EngineClass, volume resource
 	if volume.CmpInt64(math.MaxInt64-gibibyte) > 0 {
 		return maxStartupSeconds
 	}
-	seconds := dataPodBootSeconds + (volume.Value()+gibibyte-1)/gibibyte*dataPodRecoverySecondsPerGiB
-	if seconds > maxStartupSeconds {
+	boot := dataPodBootWindow(class)
+	recovery := (volume.Value() + gibibyte - 1) / gibibyte * dataPodRecoverySecondsPerGiB
+	// Never under the boot's own window: a quantity below zero, which no
+	// claim has, would otherwise take a recovery's seconds away from it.
+	if recovery <= 0 {
+		return boot
+	}
+	// Bounded by the day before it is converted, the recovery converts
+	// checked rather than assumed, and the sum cannot overflow.
+	if recovery >= maxStartupSeconds {
 		return maxStartupSeconds
 	}
-	// Never under the boot's own window: a quantity below zero, which no
-	// claim has, would otherwise take a recovery's seconds away from it. The
-	// bound is also what lets the conversion below be checked rather than
-	// assumed.
-	if seconds < dataPodBootSeconds {
-		return dataPodBootSeconds
-	}
-	return int32(seconds)
+	return min(boot+int32(recovery), maxStartupSeconds)
 }
 
 // maxStartupSeconds is the longest startup window the API admits, a day: past
@@ -775,20 +847,77 @@ func (r *CompanyReconciler) statefulSetNamed(ctx context.Context, namespace, nam
 	return sts, nil
 }
 
-// dataVolumeSize is the capacity the data pods' volume claims request: the
-// existing StatefulSet's own claim template, which a change of the class's
-// storage does not move, or the class's for a StatefulSet not created yet.
-// The engine's event stream is sized from it, so it has to be the volume
-// the pod actually gets.
-func dataVolumeSize(existing *appsv1.StatefulSet, class *crewletaiv1alpha1.EngineClass) resource.Quantity {
+// dataVolumeSize is the capacity of the smallest data volume the company's
+// pods have. The engine's event stream is sized from it (three quarters of
+// it), and the startup window too, so it has to be a volume the pods
+// actually get: every data pod shares one bootstrap, so the stream fits the
+// smallest.
+//
+// A volume is first the size of the claim template it was made from: the
+// existing StatefulSet's own, which a change of the class's storage does not
+// move, or the class's for a StatefulSet not created yet. A claim its owner
+// has since expanded counts at the size it now has, the smaller of what it
+// asks for and what it was given, so an expansion counts once it has landed.
+// A claim is never counted below its template: a provisioner that rounded a
+// claim up when it made it moves nothing (the claim still asks for the
+// template's size), and one that gave less than asked leaves the stream
+// where it was sized. Without this, a company whose volume was too small for
+// what its engine reserves (made under an older floor, or before an engine
+// that keeps more on its stream) had no way out: the template cannot change,
+// and an expanded claim left the stream as small as it was.
+func dataVolumeSize(
+	existing *appsv1.StatefulSet, class *crewletaiv1alpha1.EngineClass, claims []corev1.PersistentVolumeClaim,
+) resource.Quantity {
+	template := *class.Spec.Data.Storage.Size
 	if existing != nil {
 		for i := range existing.Spec.VolumeClaimTemplates {
 			if claim := &existing.Spec.VolumeClaimTemplates[i]; claim.Name == dataVolume {
-				return *claim.Spec.Resources.Requests.Storage()
+				template = *claim.Spec.Resources.Requests.Storage()
 			}
 		}
 	}
-	return *class.Spec.Data.Storage.Size
+	var smallest *resource.Quantity
+	for i := range claims {
+		claim := &claims[i]
+		if !claim.DeletionTimestamp.IsZero() {
+			// Its data goes with it, and its pod gets a new claim from
+			// the template.
+			continue
+		}
+		size := template
+		requested, asked := claim.Spec.Resources.Requests[corev1.ResourceStorage]
+		granted, bound := claim.Status.Capacity[corev1.ResourceStorage]
+		if asked && bound {
+			grown := requested
+			if granted.Cmp(grown) < 0 {
+				grown = granted
+			}
+			if grown.Cmp(size) > 0 {
+				size = grown
+			}
+		}
+		if smallest == nil || size.Cmp(*smallest) < 0 {
+			smallest = &size
+		}
+	}
+	if smallest == nil {
+		return template
+	}
+	return *smallest
+}
+
+// cachedDataClaims lists a Company's data volume claims from the cache
+// (CacheOptions keeps the operator's): the engine version recorded on each
+// (versionFloor) and the size each has (dataVolumeSize), whose change queues
+// the Company (claimResized).
+func (r *CompanyReconciler) cachedDataClaims(
+	ctx context.Context, c *crewletaiv1alpha1.Company,
+) ([]corev1.PersistentVolumeClaim, error) {
+	claims := &corev1.PersistentVolumeClaimList{}
+	if err := r.List(ctx, claims, client.InNamespace(c.Namespace), client.MatchingLabels(selectorFor(c, componentData))); err != nil {
+		return nil, fmt.Errorf("listing the data volume claims of Company %s/%s: %w", c.Namespace, c.Name, err)
+	}
+	return claims.Items, nil
 }
 
 // runningImage is the engine image in a StatefulSet's pod template.
@@ -860,7 +989,7 @@ const EngineVersionAnnotation = "crewlet.ai/engine-version"
 // versionFloor is the newest of status.engine.version and the claims'
 // EngineVersionAnnotation, by semantic version; values that are not one are
 // ignored, as engineImage ignores them.
-func versionFloor(c *crewletaiv1alpha1.Company, claims []metav1.PartialObjectMetadata) string {
+func versionFloor(c *crewletaiv1alpha1.Company, claims []corev1.PersistentVolumeClaim) string {
 	floor := c.Status.Engine.Version
 	newest := semver(floor)
 	for i := range claims {
@@ -881,22 +1010,11 @@ func semver(s string) *utilversion.Version {
 	return v
 }
 
-// cachedDataClaims lists the metadata of a Company's data volume claims from
-// the cache (CacheOptions keeps the operator's).
-func (r *CompanyReconciler) cachedDataClaims(ctx context.Context, c *crewletaiv1alpha1.Company) ([]metav1.PartialObjectMetadata, error) {
-	claims := &metav1.PartialObjectMetadataList{}
-	claims.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PersistentVolumeClaimList"))
-	if err := r.List(ctx, claims, client.InNamespace(c.Namespace), client.MatchingLabels(selectorFor(c, componentData))); err != nil {
-		return nil, fmt.Errorf("listing the data volume claims of Company %s/%s: %w", c.Namespace, c.Name, err)
-	}
-	return claims.Items, nil
-}
-
 // recordVersionOnClaims sets EngineVersionAnnotation on every data volume
 // claim to status.engine.version, once that is newer than what the claim
 // says: only a version the pods ran ready on is recorded, as in the status.
 func (r *CompanyReconciler) recordVersionOnClaims(
-	ctx context.Context, c *crewletaiv1alpha1.Company, claims []metav1.PartialObjectMetadata,
+	ctx context.Context, c *crewletaiv1alpha1.Company, claims []corev1.PersistentVolumeClaim,
 ) error {
 	// A tag that is no version cannot be ordered (see engineImage), so it
 	// sets no floor.

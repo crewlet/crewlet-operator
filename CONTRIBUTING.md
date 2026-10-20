@@ -183,7 +183,7 @@ with, which the renderer's verdict on a seat's code work turns on. The renderer'
 coding agent of a seat and a catalogue that name none, the
 variables that sign Claude Code in from a seat's environment, and Claude
 Code's token and key variables. The rules around those lists decide only at
-a launch, which no engine test reaches, so `TestMirroredEngineFunctionsAreUnchanged`
+a launch, which no engine test reaches, so `TestMirroredEngineDeclarationsAreUnchanged`
 holds their code: [`internal/render/mirror_test.go`](internal/render/mirror_test.go)
 names every engine function whose decision the operator copies at a launch —
 `newCodingRun`, `claudeCodeOnForeignEntry`, `sandboxCredentials` and the
@@ -213,17 +213,24 @@ sandbox, also the LLMProvider API's rule on a CLI of mode `Agent`, the
 [CLI agents guide](docs/guides/cli-agents.md) that states it and `test/crd`'s
 reading of the engine's verdicts on it, and, for what a coding box carries of
 its provider, the [credentials guide](docs/guides/credentials.md#what-a-coding-box-carries)
-and the [credentials concept page](docs/concepts/credentials.md). The digest
-(`enginetest.Fingerprint`) is taken over the function as `go/printer` lays it
-out without its comments or the source's line breaks, so a comment or a
-rewrapped line leaves it alone and a changed statement, spread or alias
-moves it. When the engine the suites run changes one, the test fails,
-naming the function, what the operator copies from it, the files to read it
-against and the `git log` that shows the change; read it, make the operator
-follow it, and record the digest and version the failure prints. When the
-engine removes or renames one, the test says so: name the function that
-decides it now in its place, with any digest at first, and the next run
-prints the digest to record. Of the renderer's three code-work verdicts,
+and the [credentials concept page](docs/concepts/credentials.md). The table
+also names every constant and function that bounds a wait on a data pod's or
+a seat pod's boot, which the controller's startup windows add up
+(`dataPodBootSeconds` and `seatPodBootSeconds` in `internal/controller`), the
+EngineClass API floors `data.startupSeconds` at, and the runtime and
+troubleshooting pages quote; which steps a boot runs, and in what order, is
+`engine.New`'s, which is not read, since it changes with most of the
+engine's work. The digest (`enginetest.Fingerprint`) is taken over the
+function, or over the one spec that declares a constant, as `go/printer`
+lays it out without its comments or the source's line breaks, so a comment
+or a rewrapped line leaves it alone and a changed statement, value, spread
+or alias moves it. When the engine the suites run changes one, the test
+fails, naming the declaration, what the operator copies from it, the files
+to read it against and the `git log` that shows the change; read it, make
+the operator follow it, and record the digest and version the failure
+prints. When the engine removes or renames one, the test says so: name the
+declaration that decides it now in its place, with any digest at first, and
+the next run prints the digest to record. Of the renderer's three code-work verdicts,
 `SandboxModelUnsupported` and `SandboxLoginNotPortable` mirror what the
 engine refuses only when a seat launches a coding run, never on a write, so
 the operator reports them on the Seat's `CodeWorkRunnable` and applies the
@@ -275,7 +282,7 @@ are statements about the spec beside the render (`CodeWorkOf`, `ExecutorOf`,
 the engine builds its tool bridge and refuses an agent-mode turn without
 one; `TestExecutorFollowsTheEngineSource` holds the variable the operator
 sets to the engine's, and `TestContractAgentModeIsAppliedWhereItCannotRun`
-holds the documents to the engine, and `TestMirroredEngineFunctionsAreUnchanged`
+holds the documents to the engine, and `TestMirroredEngineDeclarationsAreUnchanged`
 holds the code that runs a turn in agent mode and refuses it on a node with no
 tool bridge (`executorRuntime`, `executorRun` and `LaunchExecutor` in Crewlet's
 `internal/engine/agentrun.go`, `Build` in `internal/api/mcpbridge/build.go`)

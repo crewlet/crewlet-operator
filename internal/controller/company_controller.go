@@ -386,7 +386,12 @@ func (r *CompanyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// An LLMProvider's mode decides whether the engine serves its tool
 		// bridge (toolBridge), which only a spec change can move.
 		Watches(&crewletaiv1alpha1.LLMProvider{}, handler.EnqueueRequestsFromMapFunc(companyOfChild),
-			builder.WithPredicates(predicate.GenerationChangedPredicate{}))
+			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		// A data volume claim its owner expanded grows the engine's event
+		// stream once the expansion lands (dataVolumeSize); no other change
+		// of a claim moves what the Company runs.
+		Watches(&corev1.PersistentVolumeClaim{}, handler.EnqueueRequestsFromMapFunc(companyOfDataClaim),
+			builder.WithPredicates(claimResized()))
 	// Without the Gateway API's CRDs a watch on HTTPRoutes would fail the
 	// manager's start; GatewayAPI is false there, and nothing reads them.
 	if r.GatewayAPI {
@@ -575,4 +580,38 @@ func companyOfChild(_ context.Context, obj client.Object) []reconcile.Request {
 		return nil
 	}
 	return []reconcile.Request{{Namespace: obj.GetNamespace(), Name: company}}
+}
+
+// companyOfDataClaim maps a data volume claim to the Company whose data pod
+// it holds, by the labels its claim template gave it.
+func companyOfDataClaim(_ context.Context, obj client.Object) []reconcile.Request {
+	claimLabels := obj.GetLabels()
+	company := claimLabels[crewletaiv1alpha1.CompanyLabel]
+	if company == "" || claimLabels["app.kubernetes.io/component"] != componentData {
+		return nil
+	}
+	return []reconcile.Request{{Namespace: obj.GetNamespace(), Name: company}}
+}
+
+// claimResized passes a data volume claim update that changes the storage it
+// asks for or the storage it was given, which is what dataVolumeSize reads.
+// A claim's creation and deletion are already the StatefulSet's to report.
+func claimResized() predicate.Funcs {
+	return predicate.Funcs{
+		CreateFunc: func(event.CreateEvent) bool { return false },
+		DeleteFunc: func(event.DeleteEvent) bool { return false },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			old, ok := e.ObjectOld.(*corev1.PersistentVolumeClaim)
+			if !ok {
+				return false
+			}
+			updated, ok := e.ObjectNew.(*corev1.PersistentVolumeClaim)
+			if !ok {
+				return false
+			}
+			return !old.Spec.Resources.Requests.Storage().Equal(*updated.Spec.Resources.Requests.Storage()) ||
+				!old.Status.Capacity.Storage().Equal(*updated.Status.Capacity.Storage())
+		},
+		GenericFunc: func(event.GenericEvent) bool { return false },
+	}
 }

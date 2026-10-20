@@ -134,7 +134,7 @@ func bootstrapCaseNamed(t *testing.T, name string) *bootstrapCase {
 var streamFloorQuotes = map[string][]int64{
 	engineClassGo:                              {freshNodeLogsFloor, freshNodeBucketFloor},
 	"docs/concepts/company-document.md":        {freshNodeLogsFloor, freshNodeBucketFloor},
-	"docs/guides/troubleshooting.md":           {freshNodeLogsFloor, freshNodeBucketFloor},
+	troubleshootingMd:                          {freshNodeLogsFloor, freshNodeBucketFloor},
 	"internal/engine/enginetest/enginetest.go": {freshNodeBucketFloor},
 }
 

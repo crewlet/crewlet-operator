@@ -147,6 +147,9 @@ const (
 	msgThreeReplicas               = "Unsupported value: 3"
 	msgStorageFloor                = "size must be at least 9Gi"
 	msgStorageFloorNATS            = "data.storage.size must be at least 12Gi with objects.backend NATS"
+	msgStartupFloorS3              = "data.startupSeconds must be at least 1816 with objects.backend S3"
+	msgSetupStepName               = "name may not be white space alone"
+	msgSetupStepEmpty              = "a setup step must give files, commands, env or a brief"
 	msgHeaderCase                  = "names must differ in more than case: HTTP header names are case-insensitive"
 	msgContainerKey                = `should match '^[A-Z][A-Z0-9]{1,9}$'`
 	msgProviderKeyEnv              = "ANTHROPIC_API_KEY and OPENAI_API_KEY are model provider keys"

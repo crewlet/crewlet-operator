@@ -375,8 +375,12 @@ syntax such as `${1:-x}`.
 Everything else Crewlet checks itself, when the operator dry-runs the
 rendered document. Crewlet locates each problem by its path in the document
 (`units[0].roles[1].llm`), and the operator traces that path back to the
-object that rendered that part of it, which reports `Applied=False` with the
-reason `Invalid` and the engine's own words. The secret sync holds the
+object that rendered that part of it. A part (a Seat, Unit, LLMProvider,
+MCPServer, Integration or Schedule) reports `Applied=False` with the reason
+`Invalid` and the engine's own words; a place the Company renders itself (its
+own fields, `spec.embeddings`, `spec.sandbox` and its setup steps) is
+reported only in the Company's `ConfigApplied=False Invalid` message, which
+carries every problem. The secret sync holds the
 document too, before the engine is asked: for a referenced value over the
 64 KiB the engine's store takes (`SecretTooLarge`, Engine), and for a
 referenced Secret or key that does not exist (`SecretNotFound`, Harm: one

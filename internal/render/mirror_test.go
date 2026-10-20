@@ -13,7 +13,7 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 )
 
-// mirror is a function of the engine whose decision the operator copies
+// mirror is a declaration of the engine whose decision the operator copies
 // where no engine test can show the engine making it: the verdicts on a
 // seat's code work (CodeWorkOf) and on an agent-mode executor (ExecutorOf),
 // and the LLMProvider API's rule on an Agent-mode CLI's login, which Crewlet
@@ -30,19 +30,20 @@ import (
 // pod back on (and the API refuses where a Company or its class states it)
 // and the engine shows only for the addresses a test tries. A contract test
 // cannot hold those to the engine, so the operator
-// holds the code it read: the digest of each function as it was when it was
-// read against the operator files that copy it.
+// holds the code it read: the digest of each declaration as it was when it
+// was read against the operator files that copy it.
 type mirror struct {
-	// file and function are the function's file in the crewlet module and
-	// its name, as enginetest.Fingerprint takes it.
-	file, function string
+	// file and name are the declaration's file in the crewlet module and
+	// its name, as enginetest.Fingerprint takes it: a function's, a
+	// method's or a constant's.
+	file, name string
 	// against is every operator file that copies the decision, each of
-	// which a change to the function sends its reader to.
+	// which a change to the declaration sends its reader to.
 	against []string
 	// decides is what the operator copies from it, for the reader the
 	// test sends to it.
 	decides string
-	// digest is the function's enginetest.Fingerprint as it was read, at
+	// digest is the declaration's enginetest.Fingerprint as it was read, at
 	// the crewlet version read.
 	digest, read string
 }
@@ -124,6 +125,22 @@ const (
 	// Create was first read at.
 	e2bGo         = "internal/sandbox/e2b.go"
 	e2bCreateRead = "v0.1.1-0.20261019061838-6c1b4361a915"
+
+	// bootBoundsRead is the engine every bound on a data pod's and a seat
+	// pod's boot the controller adds up was read at.
+	bootBoundsRead = "v0.1.1-0.20261019181514-fb36f0c31127"
+
+	// The engine files most of the bounds on a boot are read from, and the
+	// guide that quotes the windows they add up to.
+	jsprovisionGo     = "internal/jsprovision/jsprovision.go"
+	embeddedGo        = "internal/queue/jetstream/embedded.go"
+	queueGo           = "internal/queue/jetstream/queue.go"
+	stateLogGo        = "internal/engine/statelog.go"
+	backendsGo        = "internal/engine/backends.go"
+	walkGo            = "internal/coord/kv/walk.go"
+	positionsGo       = "internal/coord/kv/positions.go"
+	natsObjGo         = "internal/objstore/natsobj/natsobj.go"
+	troubleshootingMd = "docs/guides/troubleshooting.md"
 )
 
 // addressCopies is every operator file that copies which addresses Crewlet
@@ -135,7 +152,7 @@ const (
 // the guides that tell people what to write and what that message means.
 var addressCopies = []string{
 	addressGo, "api/v1alpha1/company_types.go", engineClassGo,
-	"internal/controller/company_exposure.go", "docs/guides/exposure.md", "docs/guides/troubleshooting.md",
+	"internal/controller/company_exposure.go", "docs/guides/exposure.md", troubleshootingMd,
 }
 
 // signInPosture is every operator file that copies where Crewlet lets a
@@ -182,9 +199,19 @@ var agentLogin = []string{
 // concept page.
 var codingBox = []string{"docs/guides/credentials.md", "docs/concepts/credentials.md"}
 
-// mirrored is every engine function the operator's run-time verdicts copy a
-// decision of, and no other: a function changed here sends somebody to read
-// it, so one that copies nothing would only cost a read. What the engine
+// bootWindows is every operator file that copies the bounds the engine puts
+// on its own boot: the controller's data pod and seat pod startup windows,
+// which add them up, the test that pins their sums, the EngineClass API's
+// floor on data.startupSeconds, and the pages that quote them.
+var bootWindows = []string{
+	"internal/controller/company_workload.go", "internal/controller/company_pools.go",
+	"internal/controller/company_workload_test.go", engineClassGo,
+	"docs/concepts/runtime.md", troubleshootingMd,
+}
+
+// mirrored is every engine declaration the operator's run-time verdicts copy
+// a decision of, and no other: a declaration changed here sends somebody to
+// read it, so one that copies nothing would only cost a read. What the engine
 // shows without a run is held by a contract test instead, never here: the
 // head of a seat's chain (TestContractChainlessSeatRunsOnTheFirstProviderAlone),
 // the CodingAgentMismatch it refuses on a write (TestContractCodeWorkOnWrite),
@@ -246,9 +273,20 @@ var codingBox = []string{"docs/guides/credentials.md", "docs/concepts/credential
 // Which addresses each is asked of is the wiring that calls them
 // (API.validate, APIAuth.validate), which the contract tests hold, since
 // their every shape reaches the engine through it.
+//
+// The boot's bounds after them are what the controller's startup windows
+// add up (dataPodBootSeconds, seatPodBootSeconds and the object stores'
+// steps): every constant a wait is bounded by, and every function that
+// arranges such waits on the boot of a data pod or a seat pod. The engine
+// shows none of them without a boot that stalls at each, so a bound that grew,
+// or a step that waits twice where it waited once, would have the kubelet
+// restart a boot the engine would finish, with every test green. Which steps
+// a boot runs, and in what order, is engine.New's, which is not read here: it
+// changes with most of the engine's work, and a read of it at each change
+// would be a read of everything else it does.
 var mirrored = []mirror{
 	{
-		file: sandboxGo, function: "(*launcher).Launch",
+		file: sandboxGo, name: "(*launcher).Launch",
 		against: []string{codeWorkGo},
 		decides: "a run_sandbox launch runs the head of the seat's sandbox phase with role.sandbox.coding_agent or " +
 			"the catalogue's default, and refuses before a box exists what newCodingRun and sandboxCredentials refuse",
@@ -256,7 +294,7 @@ var mirrored = []mirror{
 		read:   identityRead,
 	},
 	{
-		file: sandboxGo, function: "buildSandbox",
+		file: sandboxGo, name: "buildSandbox",
 		against: []string{codeWorkGo},
 		decides: "the catalogue a launch reads is built from providers.sandbox, with its default_coding_agent as the " +
 			"default coding agent and its setup steps as the setup every run is given, and a company with no " +
@@ -265,7 +303,7 @@ var mirrored = []mirror{
 		read:   firstRead,
 	},
 	{
-		file: "internal/sandbox/manager.go", function: "NewManager",
+		file: "internal/sandbox/manager.go", name: "NewManager",
 		against: []string{codeWorkGo},
 		decides: "a catalogue that names no default coding agent runs DefaultCodingAgent, Claude Code, whose value " +
 			"TestCodeWorkFollowsTheEngineSource holds",
@@ -273,7 +311,7 @@ var mirrored = []mirror{
 		read:   firstRead,
 	},
 	{
-		file: sandboxGo, function: "newCodingRun",
+		file: sandboxGo, name: "newCodingRun",
 		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
 		decides: "a CLIAgent head another CLI's coding agent cannot run (CodingAgentMismatch), ClaudeCode on a " +
 			"head that is no Anthropic provider (SandboxModelUnsupported), and a CLIAgent head's run, a " +
@@ -286,7 +324,7 @@ var mirrored = []mirror{
 		read:   openCode2Read,
 	},
 	{
-		file: e2bGo, function: "(*E2BProvider).Create",
+		file: e2bGo, name: "(*E2BProvider).Create",
 		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
 		decides: "a box in the Company's E2B sandbox is created from its template, the run's timeout and the run's " +
 			"environment alone, never from the run's credential files, so a CLIAgent head's login (its credential " +
@@ -296,7 +334,7 @@ var mirrored = []mirror{
 		read:   e2bCreateRead,
 	},
 	{
-		file: sandboxGo, function: "claudeCodeOnForeignEntry",
+		file: sandboxGo, name: "claudeCodeOnForeignEntry",
 		against: []string{codeWorkGo},
 		decides: "ClaudeCode on a head that is no Anthropic provider runs on the seat's own sign-in when it has one, " +
 			"and is refused otherwise (SandboxModelUnsupported)",
@@ -304,14 +342,14 @@ var mirrored = []mirror{
 		read:   firstRead,
 	},
 	{
-		file: sandboxGo, function: "signsIn",
+		file: sandboxGo, name: "signsIn",
 		against: []string{codeWorkGo},
 		decides: "a variable of the seat's environment signs ClaudeCode in when it holds a value",
 		digest:  "d67892b7c02c1053a5a38c588fe26d93a39b9525b01879a0d6dc3ef923280798",
 		read:    firstRead,
 	},
 	{
-		file: sandboxGo, function: "sandboxCredentials",
+		file: sandboxGo, name: "sandboxCredentials",
 		against: append([]string{codeWorkGo}, agentLogin...),
 		decides: "a CLIAgent head whose login cannot follow the run into a remote sandbox is refused unless the run's " +
 			"environment signs its CLI in: a run_sandbox launch (SandboxLoginNotPortable), and at phase Execute an " +
@@ -320,7 +358,7 @@ var mirrored = []mirror{
 		read:   openCode2Read,
 	},
 	{
-		file: sandboxGo, function: "(*Engine).sandboxEnv",
+		file: sandboxGo, name: "(*Engine).sandboxEnv",
 		against: []string{codeWorkGo},
 		decides: "a run's environment is the env of the catalogue's and the seat's setup steps, then the seat's " +
 			"role.sandbox.env",
@@ -328,7 +366,7 @@ var mirrored = []mirror{
 		read:   identityRead,
 	},
 	{
-		file: doctorGo, function: "(*Provider).CredentialEnvNames",
+		file: doctorGo, name: "(*Provider).CredentialEnvNames",
 		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
 		decides: "the variables that sign a CLI in inside a box: its token and key variables, and for an env " +
 			"sign-in CLI the credential-named variables of its cli.env",
@@ -336,14 +374,14 @@ var mirrored = []mirror{
 		read:   firstRead,
 	},
 	{
-		file: doctorGo, function: "(*Provider).SandboxEnv",
+		file: doctorGo, name: "(*Provider).SandboxEnv",
 		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
 		decides: "a CLIAgent provider's own sign-in follows the run into the box when it is one of those variables",
 		digest:  "f81f2bc4b7fca996eaac300c1ab530d2e357500bd4b76145551412788cc9ddb9",
 		read:    firstRead,
 	},
 	{
-		file: companyGo, function: "(*Company).sandboxProvider",
+		file: companyGo, name: "(*Company).sandboxProvider",
 		against: []string{codeWorkGo},
 		decides: "config's twin of the head the phase registry gives a seat's code work, which crewlet's " +
 			"TestBothPathsToTheSandboxEntryAgree holds to it: the first configured provider of its llm_sandbox, " +
@@ -352,7 +390,7 @@ var mirrored = []mirror{
 		read:   firstRead,
 	},
 	{
-		file: companyGo, function: "(*Company).codingAgent",
+		file: companyGo, name: "(*Company).codingAgent",
 		against: []string{codeWorkGo},
 		decides: "config's twin, on a write, of the coding agent a launch runs, by which it refuses " +
 			"CodingAgentMismatch: the seat's own coding_agent, else the catalogue's default, else Claude Code; " +
@@ -361,7 +399,7 @@ var mirrored = []mirror{
 		read:   firstRead,
 	},
 	{
-		file: agentRunGo, function: "(*Company).executorRuntime",
+		file: agentRunGo, name: "(*Company).executorRuntime",
 		against: []string{executorGo, headsGo},
 		decides: "a seat's executor runs as an agentic run of a CLI when the head of its executor's chain alone is a " +
 			"CLIAgent provider in agent mode",
@@ -369,7 +407,7 @@ var mirrored = []mirror{
 		read:   firstRead,
 	},
 	{
-		file: agentRunGo, function: "(*agentLauncher).LaunchExecutor",
+		file: agentRunGo, name: "(*agentLauncher).LaunchExecutor",
 		against: append([]string{executorGo}, agentLogin...),
 		decides: "an agent-mode turn on a node that serves no tool bridge is refused, never run on the engine's own " +
 			"tool loop (AgentModeBridgeUnsupported, NotExposed), and so is one whose CLI login cannot follow it " +
@@ -378,7 +416,7 @@ var mirrored = []mirror{
 		read:   identityRead,
 	},
 	{
-		file: agentRunGo, function: "(*agentLauncher).executorRun",
+		file: agentRunGo, name: "(*agentLauncher).executorRun",
 		against: append([]string{executorGo}, agentLogin...),
 		decides: "an agent-mode run is the executor itself: it runs on the head of the seat's executor chain " +
 			"(phase Execute), never on its llm_sandbox, so that head's sign-in is the one that must reach the box",
@@ -386,7 +424,7 @@ var mirrored = []mirror{
 		read:   firstRead,
 	},
 	{
-		file: jiraClient, function: "DeploymentOf",
+		file: jiraClient, name: "DeploymentOf",
 		against: atlassianAccount,
 		decides: "Jira is on Atlassian Cloud exactly where atlassianhost.Of answers Cloud for the address the engine " +
 			"reads it at and the deployment the company declared, and on Data Center otherwise",
@@ -394,7 +432,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: confluenceGo, function: "DeploymentOf",
+		file: confluenceGo, name: "DeploymentOf",
 		against: atlassianAccount,
 		decides: "Confluence is on Atlassian Cloud by the same rule as Jira, atlassianhost.Of, and on Data Center " +
 			"otherwise",
@@ -402,7 +440,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: atlassianHostGo, function: "Of",
+		file: atlassianHostGo, name: "Of",
 		against: atlassianAccount,
 		decides: "an address whose written host is Atlassian Cloud's own (isCloudHost) is Cloud whatever was " +
 			"declared, any other is the deployment the company declared, and one that declared none is Data Center",
@@ -410,7 +448,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: atlassianHostGo, function: "isCloudHost",
+		file: atlassianHostGo, name: "isCloudHost",
 		against: atlassianAccount,
 		decides: "a host is Atlassian Cloud's own when it is a site of one of its environments or one of their " +
 			"gateways",
@@ -418,14 +456,14 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: atlassianHostGo, function: "isGatewayHost",
+		file: atlassianHostGo, name: "isGatewayHost",
 		against: atlassianAccount,
 		decides: "a gateway is the host of one of the environments' gateways exactly, never a host under it",
 		digest:  "e8f3b84b85bfd1a5657b4919e1df1b9620660b0b9046ec8f4f203076e82171ac",
 		read:    cloudRuleRead,
 	},
 	{
-		file: atlassianHostGo, function: "environmentOfSite",
+		file: atlassianHostGo, name: "environmentOfSite",
 		against: atlassianAccount,
 		decides: "a site is a host under one of an environment's site domains, the environments table " +
 			"TestAtlassianDeploymentFollowsTheEngineSource holds",
@@ -433,7 +471,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: atlassianHostGo, function: "hostOf",
+		file: atlassianHostGo, name: "hostOf",
 		against: atlassianAccount,
 		decides: "an address holding no ${NAME}, as every url the API admits, has its host written, and is judged " +
 			"by that host",
@@ -441,7 +479,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: atlassianHostGo, function: "host",
+		file: atlassianHostGo, name: "host",
 		against: atlassianAccount,
 		decides: "a host compares without case and without an absolute name's trailing dot, and an address that " +
 			"does not parse has none",
@@ -449,7 +487,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: atlassianHostGo, function: "Gateway",
+		file: atlassianHostGo, name: "Gateway",
 		against: cloudIDGateway,
 		decides: "a cloud id is read through the gateway of its site's environment, Government Cloud's for a site " +
 			"under atlassian-us-gov-mod.net and the commercial Cloud's for any other, so always through one of " +
@@ -458,14 +496,14 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: integrationsGo, function: "atlassianGatewayURL",
+		file: integrationsGo, name: "atlassianGatewayURL",
 		against: cloudIDGateway,
 		decides: "a cloud_id's address is on the host of the gateway Gateway names for its site",
 		digest:  "45027e6bb99e10f82f436c16f02b6bbca826dae57f16214143c191ec997b5210",
 		read:    cloudRuleRead,
 	},
 	{
-		file: integrationsGo, function: "(*Jira).BaseURL",
+		file: integrationsGo, name: "(*Jira).BaseURL",
 		against: cloudIDGateway,
 		decides: "Jira named by a cloud_id is read at its gateway address (atlassianGatewayURL), and by a url at " +
 			"the url",
@@ -473,7 +511,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: integrationsGo, function: "(*Confluence).BaseURL",
+		file: integrationsGo, name: "(*Confluence).BaseURL",
 		against: cloudIDGateway,
 		decides: "Confluence named by a cloud_id is read at its gateway address (atlassianGatewayURL), and by a " +
 			"url at the url",
@@ -481,7 +519,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: integrationsGo, function: "(*Jira).ResolvedBaseURL",
+		file: integrationsGo, name: "(*Jira).ResolvedBaseURL",
 		against: atlassianAccount,
 		decides: "Jira is read at BaseURL of its url, cloud_id and site_url, each with its ${NAME} references " +
 			"resolved and its spaces trimmed, which leaves the url the operator renders, holding none, as written",
@@ -489,7 +527,7 @@ var mirrored = []mirror{
 		read:   addressRead,
 	},
 	{
-		file: integrationsGo, function: "(*Confluence).ResolvedBaseURL",
+		file: integrationsGo, name: "(*Confluence).ResolvedBaseURL",
 		against: atlassianAccount,
 		decides: "Confluence is read at BaseURL of its url, cloud_id and site_url, each with its ${NAME} " +
 			"references resolved and its spaces trimmed, which leaves the url the operator renders, holding none, " +
@@ -498,7 +536,7 @@ var mirrored = []mirror{
 		read:   addressRead,
 	},
 	{
-		file: "internal/engine/jira.go", function: "jiraBaseURL",
+		file: "internal/engine/jira.go", name: "jiraBaseURL",
 		against: atlassianAccount,
 		decides: "the engine derives Jira's deployment and builds its clients (startJira, rewireJira and the " +
 			"setup pass) at ResolvedBaseURL of the company's jira block",
@@ -506,7 +544,7 @@ var mirrored = []mirror{
 		read:   addressRead,
 	},
 	{
-		file: "internal/engine/integrations.go", function: "confluenceBaseURL",
+		file: "internal/engine/integrations.go", name: "confluenceBaseURL",
 		against: atlassianAccount,
 		decides: "the setup pass, which registers Confluence's webhooks as its deployment has them, builds its " +
 			"client at ResolvedBaseURL of the company's confluence block",
@@ -514,7 +552,7 @@ var mirrored = []mirror{
 		read:   addressRead,
 	},
 	{
-		file: integrationsGo, function: "(*Atlassian).Declared",
+		file: integrationsGo, name: "(*Atlassian).Declared",
 		against: atlassianAccount,
 		decides: "a company whose integrations.atlassian names no deployment, as every document the operator " +
 			"renders, declares none (atlassianhost.Unknown), never the form's default of cloud",
@@ -522,7 +560,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: "internal/jira/payload.go", function: "personID",
+		file: "internal/jira/payload.go", name: "personID",
 		against: atlassianAccount,
 		decides: "a Jira webhook names a person by accountId on Cloud and by name, the username, on Data Center, " +
 			"which is what a person's atlassian_account_id is matched against",
@@ -530,7 +568,7 @@ var mirrored = []mirror{
 		read:   atlassianRead,
 	},
 	{
-		file: "internal/confluence/parse.go", function: "(*Parser).base",
+		file: "internal/confluence/parse.go", name: "(*Parser).base",
 		against: atlassianAccount,
 		decides: "a Confluence webhook names its actor by accountId on Cloud and by username, else the user key, on " +
 			"Data Center, which is what a person's atlassian_account_id is matched against",
@@ -538,7 +576,7 @@ var mirrored = []mirror{
 		read:   atlassianRead,
 	},
 	{
-		file: profileFile, function: "IsCredentialName",
+		file: profileFile, name: "IsCredentialName",
 		against: credentialNames,
 		decides: "a name says it holds a credential when one of its parts, cut at every character that is not a " +
 			"letter or a digit and read without case, is one of credentialWords (which " +
@@ -547,14 +585,14 @@ var mirrored = []mirror{
 		read:   credentialNameRead,
 	},
 	{
-		file: mcpbridgeGo, function: "Build",
+		file: mcpbridgeGo, name: "Build",
 		against: []string{executorGo},
 		decides: "a node given no CREWLET_MCP_BRIDGE_URL builds no tool bridge (the test is Configured's)",
 		digest:  "108e637e5417c3bd768bbb6785ede3313232fb828e519f32c1a833125c37e58b",
 		read:    bootBindRead,
 	},
 	{
-		file: mcpbridgeGo, function: "Configured",
+		file: mcpbridgeGo, name: "Configured",
 		against: []string{executorGo, bootstrapGo},
 		decides: "a node has a tool bridge only when CREWLET_MCP_BRIDGE_URL is set to more than spaces, which the " +
 			"operator gives the data pods alone",
@@ -562,7 +600,7 @@ var mirrored = []mirror{
 		read:   bootBindRead,
 	},
 	{
-		file: bootGo, function: "PublicListener",
+		file: bootGo, name: "PublicListener",
 		against: []string{bootstrapGo},
 		decides: "a node without the ingress role binds api.public only where it serves its tool bridge, so a seat " +
 			"pod, given no bridge address, is given no api.public block",
@@ -570,14 +608,14 @@ var mirrored = []mirror{
 		read:   bootBindRead,
 	},
 	{
-		file: bootGo, function: "servesBridge",
+		file: bootGo, name: "servesBridge",
 		against: []string{bootstrapGo, executorGo},
 		decides: "a node without the ingress role serves a tool bridge only when it runs seats and has a bridge address",
 		digest:  "53129c12fa32a9938afa3d793112e1c700d3ae679f3683f9957cb522b5effa8c",
 		read:    bootBindRead,
 	},
 	{
-		file: apiConfigGo, function: "API.externalLoopback",
+		file: apiConfigGo, name: "API.externalLoopback",
 		against: signInPosture,
 		decides: "a node is reached on loopback when the host of its api.external_url is localhost, case aside, or a " +
 			"loopback IP, where totp optional needs no accept_insecure, and on no other address, where the node " +
@@ -586,7 +624,7 @@ var mirrored = []mirror{
 		read:   signInRead,
 	},
 	{
-		file: apiConfigGo, function: "API.ExternalBase",
+		file: apiConfigGo, name: "API.ExternalBase",
 		against: signInPosture,
 		decides: "the address externalLoopback judges is api.external_url with its surrounding spaces and trailing " +
 			"'/' removed",
@@ -594,7 +632,7 @@ var mirrored = []mirror{
 		read:   signInRead,
 	},
 	{
-		file: normalizeGo, function: "(*Bootstrap).normalize",
+		file: normalizeGo, name: "(*Bootstrap).normalize",
 		against: addressCopies,
 		decides: "every string of a Tier A is judged and used with the white space around it removed, an " +
 			"api.auth.allowed_origins entry included",
@@ -602,7 +640,7 @@ var mirrored = []mirror{
 		read:   addressShapeRead,
 	},
 	{
-		file: apiConfigGo, function: "(*API).validateExternalURL",
+		file: apiConfigGo, name: "(*API).validateExternalURL",
 		against: addressCopies,
 		decides: "api.external_url is judged with its surrounding spaces removed, by checkExternalURL and then, as " +
 			"a browser's address, by checkBrowserHost",
@@ -610,7 +648,7 @@ var mirrored = []mirror{
 		read:   addressShapeRead,
 	},
 	{
-		file: apiConfigGo, function: "(*APIPublic).validate",
+		file: apiConfigGo, name: "(*APIPublic).validate",
 		against: addressCopies,
 		decides: "api.public.external_url is judged with its surrounding spaces removed by checkExternalURL alone, " +
 			"since no browser compares an origin with it",
@@ -618,7 +656,7 @@ var mirrored = []mirror{
 		read:   addressShapeRead,
 	},
 	{
-		file: apiConfigGo, function: "checkExternalURL",
+		file: apiConfigGo, name: "checkExternalURL",
 		against: addressCopies,
 		decides: "an address a node is reached at starts with http:// or https:// in lower case, parses as a URL, " +
 			"has a host, a port checkPort takes, and no query or fragment; a path is taken",
@@ -626,21 +664,21 @@ var mirrored = []mirror{
 		read:   addressShapeRead,
 	},
 	{
-		file: integrationsGo, function: "hasHTTPScheme",
+		file: integrationsGo, name: "hasHTTPScheme",
 		against: addressCopies,
 		decides: "the scheme checkExternalURL takes is http:// or https:// spelled in lower case",
 		digest:  "a76612d926d38783c3ef5be235aa48a1f5dadd645271cc1ea44e70edb2b77130",
 		read:    addressShapeRead,
 	},
 	{
-		file: apiConfigGo, function: "checkPort",
+		file: apiConfigGo, name: "checkPort",
 		against: addressCopies,
 		decides: "a URL's port, when it has one, is a number from 1 to 65535",
 		digest:  "4dfe1cf753019e1c41f3e579509d5a5e790c28fa4bdc953170954e1e8aff4858",
 		read:    addressShapeRead,
 	},
 	{
-		file: apiConfigGo, function: "checkBrowserHost",
+		file: apiConfigGo, name: "checkBrowserHost",
 		against: addressCopies,
 		decides: "a browser's address has a host in ASCII, holding no '%', and one whose last label is a number " +
 			"(endsInNumber) only as an IPv4 address of four decimal octets",
@@ -648,7 +686,7 @@ var mirrored = []mirror{
 		read:   addressShapeRead,
 	},
 	{
-		file: apiConfigGo, function: "endsInNumber",
+		file: apiConfigGo, name: "endsInNumber",
 		against: addressCopies,
 		decides: "a host's last label, one trailing dot aside, is a number when it is all digits or 0x and hex " +
 			"digits, in either case",
@@ -656,22 +694,567 @@ var mirrored = []mirror{
 		read:   addressShapeRead,
 	},
 	{
-		file: apiConfigGo, function: "checkOrigin",
+		file: apiConfigGo, name: "checkOrigin",
 		against: addressCopies,
 		decides: "an api.auth.allowed_origins entry, as written, is scheme://host[:port] and nothing more, on http " +
 			"or https, with a port checkPort takes and a host checkBrowserHost takes",
 		digest: "b1847a33a8f613437ac8c52830fe6abbf7840d4dd9f0ce79f0550b2c8702f8cc",
 		read:   addressShapeRead,
 	},
+	{
+		file: "internal/coord/kv/objects.go", name: "(*FleetStore).AgreeObjectBackend",
+		against: bootWindows,
+		decides: "the object store's fleet record is created, or read back, in requests bounded only by the " +
+			"client's 5 s default",
+		digest: "df14c1a0c958506e2c63dc1d02480705ef8a34a0d6c0cd6e24e2406eec4f29a8",
+		read:   bootBoundsRead,
+	},
+	{
+		file: positionsGo, name: "(*FleetStore).Floors",
+		against: bootWindows,
+		decides: "the fleet's trim floors are one certified listing",
+		digest:  "bfa507886b1a36731fb7ef23a0c0025ebd6e64a7eaebcad7d9664789cfdcd09b",
+		read:    bootBoundsRead,
+	},
+	{
+		file: positionsGo, name: "(*FleetStore).Maintenance",
+		against: bootWindows,
+		decides: "a log's maintenance window is one leader read at the client's 5 s default",
+		digest:  "2d64c1ab6c4955dc784ad67efb803ed1847947257f81d1aa09b1c6d7ea808e69",
+		read:    bootBoundsRead,
+	},
+	{
+		file: positionsGo, name: "(*FleetStore).Positions",
+		against: bootWindows,
+		decides: "the fleet's positions are one certified listing",
+		digest:  "138413da5b12c93bcc094b3e9a44623b5395b25f4c1f29d9038b0b3cd54d20b5",
+		read:    bootBoundsRead,
+	},
+	{
+		file: positionsGo, name: "(*FleetStore).PutAdmission",
+		against: bootWindows,
+		decides: "an admission is one write at the client's 5 s default",
+		digest:  "3ce67a6c90426322796c9c4cd723235bccef5221a9479c0c53aaf1cb1712ee9d",
+		read:    bootBoundsRead,
+	},
+	{
+		file: walkGo, name: "beginPass",
+		against: bootWindows,
+		decides: "a pass reads the key index beside the creation of its watcher",
+		digest:  "1bade1490d991bab472776aff1e3fe15872c3ec771b62a2f2c068ec16e79dd0f",
+		read:    bootBoundsRead,
+	},
+	{
+		file: walkGo, name: "listUnder",
+		against: bootWindows,
+		decides: "a certified listing begins a pass, walks it to its end, stops its watcher and certifies it",
+		digest:  "826316a80dc0d32207d7580e1c37d4f3d0e3bec11277cdd503ea80bc58acea74",
+		read:    bootBoundsRead,
+	},
+	{
+		file: walkGo, name: "passIdle",
+		against: bootWindows,
+		decides: "a certified listing ends a pass that delivered nothing for 5 s",
+		digest:  "a4e20590cf172727d11914965721b0568320621fdb22673a56eac5a14eeb237f",
+		read:    bootBoundsRead,
+	},
+	{
+		file: walkGo, name: "passOver",
+		against: bootWindows,
+		decides: "a pass ends on its end marker, or once it has gone passIdle without a delivery after the index " +
+			"answered",
+		digest: "c35d03701efa142d2d79312757ee4923e8b028ce5b336ab3cafa30777b125f95",
+		read:   bootBoundsRead,
+	},
+	{
+		file: backendsGo, name: "attachCoordination",
+		against: bootWindows,
+		decides: "the coordination buckets are opened under one sequence ceiling of their own",
+		digest:  "f5e65acfd07add41b5831c2e593e55405c36745610b0d7110f66d48013c32bd4",
+		read:    bootBoundsRead,
+	},
+	{
+		file: backendsGo, name: "clusteredStream",
+		against: bootWindows,
+		decides: "a node that is not a broker member, or one with a cluster, provisions coordination and objects " +
+			"on the clustered budgets",
+		digest: "be2b4afb51da5337abf7c792b01b2ad2ccdbf2ce42b7380ecfd3f9d79d3b03b7",
+		read:   bootBoundsRead,
+	},
+	{
+		file: backendsGo, name: "objectsReservation",
+		against: bootWindows,
+		decides: "sizing the nats bucket reads the broker's limit under LookupBudget, and carries on from the " +
+			"volume's free space past it",
+		digest: "7ba9b5772807a60484d6bbe24850daf0e6b09617a7bd9c95a28722822c38aa45",
+		read:   bootBoundsRead,
+	},
+	{
+		file: backendsGo, name: "openObjects",
+		against: bootWindows,
+		decides: "the object store agrees the fleet's backend, then opens the nats bucket under a sequence ceiling" +
+			" of its own or probes the S3 bucket",
+		digest: "19bd69c70076d83dff808d97561d6408d2bde7f1f1d48819f82b1ac874f28af1",
+		read:   bootBoundsRead,
+	},
+	{
+		file: "internal/engine/core.go", name: "(*Engine).startCore",
+		against: bootWindows,
+		decides: "a data node starts its state logs before it reports itself recovered",
+		digest:  "390b726e7489f221da2395b93fcac08ac91d63f213772b0afc1dda556b6a884d",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/engine/evicted.go", name: "(*stateLog).fleetGenerations",
+		against: bootWindows,
+		decides: "the join's generations are one listing of the fleet's floors",
+		digest:  "c7b4b8ded7d5a90a16ccdf3879fa9b6e74d8741208d43f845f0d5f732908ee45",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/engine/fleetbroker.go", name: "(*Engine).serveFleetBroker",
+		against: bootWindows,
+		decides: "a broker member registers its fleet broker answerer, one flush",
+		digest:  "acd95e184e9549186af2396272a788ee488cf511b1ce3357fbe96d506dd28d99",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/engine/history.go", name: "(*Engine).armHistory",
+		against: bootWindows,
+		decides: "a data node registers its history answerer, one flush",
+		digest:  "a9ece00e3267829897fa33ad1a020dae4cc28592402905630304cc9f44dd97a6",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/engine/inboxrelay.go", name: "(*Engine).armInboxRelay",
+		against: bootWindows,
+		decides: "a data node registers its inbox relay, one flush",
+		digest:  "673a18d6bcdf74dad77ace48bd70a663d2879b58bd0e5590de638434cb204d53",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/engine/maintenance_mode.go", name: "(*Engine).admit",
+		against: bootWindows,
+		decides: "a data node's admission writes its record and reads each log's maintenance window",
+		digest:  "053e5edea1b55b86e8eb47fda76435d074ff5c1ae42b15c542d177293b116d20",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/engine/presence.go", name: "(*Engine).armPresence",
+		against: bootWindows,
+		decides: "every node registers its presence answerer, one flush",
+		digest:  "4c0d3b84ff37218350fee94835fede14371d3dd70a6fc0e967fafba1f1b8bf71",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/engine/remote.go", name: "(*Engine).serveEstate",
+		against: bootWindows,
+		decides: "a data node registers its estate service, one flush",
+		digest:  "d6a146c8e4b638098a187a7b279dd60361f25c6c251590a3243bb1b1a66c720a",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/engine/remote.go", name: "(*Engine).takeCustody",
+		against: bootWindows,
+		decides: "a data node attaches its custody keeper to the custody group",
+		digest:  "bf26445c8ed37c6bf4aee6c4805b6bac4410ecf8cb058477d09c99433a4cebc8",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/engine/secrets.go", name: "(*Engine).refreshSecrets",
+		against: bootWindows,
+		decides: "a boot lists the company's secrets once, logging and carrying on when it cannot",
+		digest:  "c81b2f82061002102de88ad8c82472702299cc41afd4f8df450dea16f3240868",
+		read:    bootBoundsRead,
+	},
+	{
+		file: stateLogGo, name: "(*Engine).join",
+		against: bootWindows,
+		decides: "a node's join reads whether its rows can replay, and asks for a donor only when they cannot",
+		digest:  "961e7d97e8219d0f757b7a1f5425e129d72cc00eb0d5af1f865bcb442e53a14b",
+		read:    bootBoundsRead,
+	},
+	{
+		file: stateLogGo, name: "(*Engine).startStateLog",
+		against: bootWindows,
+		decides: "the state logs read their ceilings, are provisioned under one sequence ceiling, joined, and " +
+			"started under another",
+		digest: "5bd1540643c33476574c5f5f4848762e11da1258456ed969852567ad77c56777",
+		read:   bootBoundsRead,
+	},
+	{
+		file: stateLogGo, name: "(*stateLog).provisionAll",
+		against: bootWindows,
+		decides: "every registered domain's log is provisioned in turn",
+		digest:  "1cb3ef19075fc9b3537ad040be545f6e995da3862bf96d78855d0e697bd0bc34",
+		read:    bootBoundsRead,
+	},
+	{
+		file: stateLogGo, name: "(*stateLog).replayable",
+		against: bootWindows,
+		decides: "the join lists the fleet's positions and floors, then reads each log's stats and trim floor",
+		digest:  "ea1c92e0718f299efaab001075f05a54cf8525842627b3f323f7191fc1b6dd0f",
+		read:    bootBoundsRead,
+	},
+	{
+		file: stateLogGo, name: "(*stateLog).start",
+		against: bootWindows,
+		decides: "a log's start reads its stats, attaches its consumer and verifies its checkpoint",
+		digest:  "db62104d27fe1aba85ff011579ef018f65c2862a9b20930cf31eeed5771bcceb",
+		read:    bootBoundsRead,
+	},
+	{
+		file: stateLogGo, name: "(*stateLog).startLog",
+		against: bootWindows,
+		decides: "each log is started in turn, under the consumers' sequence ceiling",
+		digest:  "501906b3addfef47df47b6da4a96209f955b9da2788e709d41f9d3c34a748efe",
+		read:    bootBoundsRead,
+	},
+	{
+		file: stateLogGo, name: "(*stateLog).trimFloor",
+		against: bootWindows,
+		decides: "a log's trim floor is one listing of the fleet's floors",
+		digest:  "579fb7d3962be4896893e798a1b511f22be5d4d789580da7c70ebf962ee52dc9",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/engine/statelogceilings.go", name: "ceilingsFor",
+		against: bootWindows,
+		decides: "the state logs' ceilings are read together, then the broker's limit once",
+		digest:  "2a5d1f293d143df9260721484834d6fa2ed5858e7c578d59eefb035e4106da8e",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/engine/statelogceilings.go", name: "readHeld",
+		against: bootWindows,
+		decides: "every log's ceiling is read concurrently, each under LookupBudget",
+		digest:  "f55d995c036ee5fb4a72a67308b8e55fcc75889795a2af49de0d9358438db8b8",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/engine/steer.go", name: "(*Engine).armSteer",
+		against: bootWindows,
+		decides: "every node registers its steer answerer, one flush",
+		digest:  "4ee600edf7605e6d684024ab1fb004dad231aab572c6f0dae31e80ad18fb07f1",
+		read:    bootBoundsRead,
+	},
+	{
+		file: jsprovisionGo, name: "LookupBudget",
+		against: bootWindows,
+		decides: "a lookup of a stream or bucket, and the broker's limit read, are bounded at 30 s",
+		digest:  "fa87cb9b864068dc2bf52d7f9d17a79b008f788acbf791b1f3737e298adf9de0",
+		read:    bootBoundsRead,
+	},
+	{
+		file: jsprovisionGo, name: "ReadBack",
+		against: bootWindows,
+		decides: "a create's read-back is bounded at 5 s",
+		digest:  "0a5a56836bb851f95d3e62cf9eb7aadfe894766f2899274f59f46ee66daabe59",
+		read:    bootBoundsRead,
+	},
+	{
+		file: jsprovisionGo, name: "ReadTerm",
+		against: bootWindows,
+		decides: "a read of a stream's existence is given a second",
+		digest:  "9b1814c736031af0d54ea98aad986deea84fdf3beb58a962ae0e4bf8bcf36ac9",
+		read:    bootBoundsRead,
+	},
+	{
+		file: jsprovisionGo, name: "clusterBudget",
+		against: bootWindows,
+		decides: "one clustered create is bounded at two minutes",
+		digest:  "44ca09aac04b2b49fca3652db639bd8dad3c1203e22740bbaa2b6f5ed8f652a7",
+		read:    bootBoundsRead,
+	},
+	{
+		file: jsprovisionGo, name: "clusterSequenceBudget",
+		against: bootWindows,
+		decides: "a clustered bring-up of many creates is bounded at five minutes",
+		digest:  "06979cf6f3c68a0eebdea814a96ac2cb8bfa9a09acfa49e70ad2eb3bec3f749e",
+		read:    bootBoundsRead,
+	},
+	{
+		file: jsprovisionGo, name: "soloBudget",
+		against: bootWindows,
+		decides: "one create on a lone member is bounded at 30 s",
+		digest:  "714fc4a3fac977cf4ce24b797a61b4ed5ac4abdb6e7cceb1c357f57bfebbb360",
+		read:    bootBoundsRead,
+	},
+	{
+		file: jsprovisionGo, name: "soloSequenceBudget",
+		against: bootWindows,
+		decides: "a lone member's bring-up of many creates is bounded at two minutes",
+		digest:  "b1ea5d569d918231b9f10db39bd61597d725f546f6a0880dbdc94285f8ad960d",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/objstore/backend.go", name: "MiBPace",
+		against: bootWindows,
+		decides: "a body is given 30 s a started mebibyte",
+		digest:  "5a7270aaad55629662d0fafb7703ad817c56817ff6984bb48b1e89842ec274e7",
+		read:    bootBoundsRead,
+	},
+	{
+		file: natsObjGo, name: "Open",
+		against: bootWindows,
+		decides: "the nats bucket is looked up, created, read back and bound, each under its own budget",
+		digest:  "9e93e8da5662ef36648f50c6eeb77004b986bd479534d398a0be174d55a7c47e",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/objstore/s3obj/probe.go", name: "(*Backend).probe",
+		against: bootWindows,
+		decides: "the S3 probe makes a put, a delete, three presigned puts, a conditional delete and a cleanup " +
+			"delete",
+		digest: "0a32835a0c0716b17e34546b8b6ef8bc10e9fe6a2dc1440a933559687fd50a5e",
+		read:   bootBoundsRead,
+	},
+	{
+		file: "internal/objstore/s3obj/s3obj.go", name: "callBudget",
+		against: bootWindows,
+		decides: "an S3 request is bounded at 30 s, plus MiBPace for a body",
+		digest:  "84d7159868e348fb81b3350f140d50d338cf34adc68c7788c7dc5ffde6002f24",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/observe/custody.go", name: "(*Keeper).Start",
+		against: bootWindows,
+		decides: "the custody keeper reconciles what it holds, then attaches to its group",
+		digest:  "1fa472fde8f947abeb6decd310f3ef13b878eb2fd283dc54e23e8a69b3f6ddb3",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/queue/jetstream/attach.go", name: "(*Queue).attach",
+		against: bootWindows,
+		decides: "attaching a durable group looks up, creates and reads back its consumer, then looks it up and " +
+			"reads it back again",
+		digest: "c10a5e667bc9202dd55d2322b9a559a79adfde4884020720c8f933c7e196e118",
+		read:   bootBoundsRead,
+	},
+	{
+		file: embeddedGo, name: "(*embeddedServer).awaitLeafReady",
+		against: bootWindows,
+		decides: "a leaf asks for the fleet's JetStream until clusterReadyTimeout, checking the deadline only " +
+			"before each ask",
+		digest: "18c689dfdc9356ecd3d8d273914a0c19d393047d2a9c69234146979fa92fadd3",
+		read:   bootBoundsRead,
+	},
+	{
+		file: embeddedGo, name: "(*embeddedServer).connect",
+		against: bootWindows,
+		decides: "a connection to the node's own broker is a handshake bounded by listenTimeout, then held to the " +
+			"contract",
+		digest: "879f96f323d34070554be24a1ff2aede52334a0cb153d33147d42a1bb4c072a3",
+		read:   bootBoundsRead,
+	},
+	{
+		file: embeddedGo, name: "awaitBoot",
+		against: bootWindows,
+		decides: "a member's listeners are waited for under listenTimeout once the broker has started, and a " +
+			"leaf's pass at once",
+		digest: "034f931f369cf60c59727138f592c3abb4a017386adf9250a8a8b7dbf13faba3",
+		read:   bootBoundsRead,
+	},
+	{
+		file: embeddedGo, name: "clusterReadyAsk",
+		against: bootWindows,
+		decides: "each ask of a leaf's readiness wait is a ReadTerm, begun before its deadline is checked again",
+		digest:  "47d1f25a48ce5a2d0b6d22c23ed1fd2385abd80cc2738b213966e72e5e39038b",
+		read:    bootBoundsRead,
+	},
+	{
+		file: embeddedGo, name: "clusterReadyTimeout",
+		against: bootWindows,
+		decides: "a leaf waits 60 s for its link to a member and the fleet's JetStream to answer across it",
+		digest:  "e113ad46469a3410dbdfb88eb60d1797073b03de61d9248f4ad4264bc23d45b2",
+		read:    bootBoundsRead,
+	},
+	{
+		file: embeddedGo, name: "listenTimeout",
+		against: bootWindows,
+		decides: "a connection to the node's own broker has 30 s for its handshake and 30 s for the flush that " +
+			"reads max_payload, and a member's listeners 30 s to be ready",
+		digest: "c86fc21135cf320e770660373a8825aeb93af3f01077e8041adc80e107d477a1",
+		read:   bootBoundsRead,
+	},
+	{
+		file: "internal/queue/jetstream/payload.go", name: "announcedMaxPayload",
+		against: bootWindows,
+		decides: "holding a connection to the contract flushes it once, under the connection's own timeout",
+		digest:  "68b9138e708c957990f490b4e67734758eb6968950ac8198524ef08a39356b86",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/queue/jetstream/payload.go", name: "heldToTheContract",
+		against: bootWindows,
+		decides: "every connection to the node's own broker reads the broker's max_payload before it is used",
+		digest:  "3763a4087ba9c572f2b5ce5296ad09c660bb52822269b9a1fa6bb54ab67fdab7",
+		read:    bootBoundsRead,
+	},
+	{
+		file: queueGo, name: "(*Queue).DialWatched",
+		against: bootWindows,
+		decides: "the coordination connection is a second connection to the node's own broker",
+		digest:  "2f2801f816363be34f7e0e54a083e0ecce03a2c9a341de51f2d18f4eb7d84dd7",
+		read:    bootBoundsRead,
+	},
+	{
+		file: queueGo, name: "(*Queue).ensureStreams",
+		against: bootWindows,
+		decides: "the engine's streams are provisioned under one sequence ceiling",
+		digest:  "7a6b1d446cebce85a83447482dae05456724529c94eaf9405202e5a8915ffb16",
+		read:    bootBoundsRead,
+	},
+	{
+		file: queueGo, name: "Config.Clustered",
+		against: bootWindows,
+		decides: "a leaf, and a member with a cluster or a URL, provisions on the clustered budgets, and a lone " +
+			"member on the solo ones",
+		digest: "18ddd1c5ce31decde14d4b90b5447baff44efcc20777bd54b549bf225b4a1558",
+		read:   bootBoundsRead,
+	},
+	{
+		file: queueGo, name: "newQueueOn",
+		against: bootWindows,
+		decides: "the queue's boot connects, waits for a leaf's link and a member's cluster, then provisions the " +
+			"streams, in that order",
+		digest: "050788e956291f25654a7097134e229a46c6e4cbc8d8c86d76ff23432a9a6d48",
+		read:   bootBoundsRead,
+	},
+	{
+		file: "internal/queue/jetstream/scatter.go", name: "flushBudget",
+		against: bootWindows,
+		decides: "registering what a node answers flushes its subscription within 10 s",
+		digest:  "d30349eb1ca8de06f83cefe4a40a5f7a04a530d0c795602242581534196ac1e6",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/statelog/apply.go", name: "(*Runner).VerifyCheckpoint",
+		against: bootWindows,
+		decides: "verifying a log's checkpoint reads the stream's info and one message",
+		digest:  "da09d1e9aa0b0bb83183b96b050fdebfe9d0cc61817751163153caca768b2277",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/statelog/transfer.go", name: "OfferWindow",
+		against: bootWindows,
+		decides: "a node behind its logs waits 5 s for a donor's offer",
+		digest:  "cc939f4812fb244a16ecd0c6a1d5104a92c132f0d7eb0c697d5bead6a2c427e3",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/store/turso.go", name: "acquireTursoLock",
+		against: bootWindows,
+		decides: "the native library's extraction lock is polled until its deadline",
+		digest:  "0b94f18ab1dd1f9d9d0a1e4a96ba52b81550992149cc965f48fc2258133d83bd",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/store/turso.go", name: "tursoPrepareTimeout",
+		against: bootWindows,
+		decides: "the native library's extraction lock is waited for a minute, then the store carries on without " +
+			"it",
+		digest: "642997e5d66a77954f7a4dcc1a90d12572440f35fa5e750cd2fb0283c01c5807",
+		read:   bootBoundsRead,
+	},
+	{
+		file: walkGo, name: "certify",
+		against: bootWindows,
+		decides: "a certified listing reads back from the leader, one at a time, every key its index names that the " +
+			"pass did not deliver live",
+		digest: "6d82be18f819632018c6a01071a9b1d2b5dd8971038bf0afe8d8e367cc5d5013",
+		read:   bootBoundsRead,
+	},
+	{
+		file: "internal/jsapi/leader.go", name: "(*Leader).get",
+		against: bootWindows,
+		decides: "a leader read on a context with no deadline is bounded by the client's DefaultTimeout",
+		digest:  "2f238e2e50c4fd88d34c368d06b29acb40575b09da6c5e30a6cc0441ad372fe1",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/statelog/transfer.go", name: "collectOffers",
+		against: bootWindows,
+		decides: "a donor's offers are collected for the window, and the collection then waits for the listing it " +
+			"started to stop",
+		digest: "f6d5e70fdf06b6a53652075f759399e7290302067bc534e9a57f59102a6c23a5",
+		read:   bootBoundsRead,
+	},
+	{
+		file: "internal/coord/kv/race.go", name: "(*FleetStore).retryRaces",
+		against: bootWindows,
+		decides: "a fleet write that loses a race is attempted again for as long as the client's 5 s default since" +
+			" the first",
+		digest: "5ab491aab57c57858b1b8b719c64a820599a4b5ae4a3bf1c474ba5980a5cc4b2",
+		read:   bootBoundsRead,
+	},
+	{
+		file: "internal/coord/kv/markers.go", name: "createRounds",
+		against: bootWindows,
+		decides: "a create-only write goes on for at most eight rounds over removal markers",
+		digest:  "cd96404addaa827263e86bb4eb59cb3faa86b3fc2f0fca0c562541ea65946431",
+		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/coord/kv/markers.go", name: "createKey",
+		against: bootWindows,
+		decides: "each round of a create-only write is a settled update and a leader read, each at the client's 5 " +
+			"s default",
+		digest: "d52d5def68b8d33f4b3f0e48d94386f5632a0f24fd0c5e470bd98032c32ce6c0",
+		read:   bootBoundsRead,
+	},
+	{
+		file: "internal/engine/secrets.go", name: "(*Engine).migrateSecrets",
+		against: bootWindows,
+		decides: "a boot moves the secrets an offline write left on the node onto the fleet, logging and carrying " +
+			"on when it cannot",
+		digest: "41eec3a0e737a5a5d232c7efe52ecda8dba4485747481926d7e32d5d3d41a652",
+		read:   bootBoundsRead,
+	},
+	{
+		file: "internal/fleetsecrets/migrate.go", name: "Migrate",
+		against: bootWindows,
+		decides: "moving offline secrets lists the fleet's secrets, then puts and deletes each row",
+		digest:  "1806d14862d2cd93f3fe2e08d37226c4d259caa14e27a7b7fb87b95f8af30db8",
+		read:    bootBoundsRead,
+	},
+	{
+		file: natsObjGo, name: "open",
+		against: bootWindows,
+		decides: "the nats bucket is looked up, created and read back, then bound, under the window it is handed",
+		digest:  "19f98c44b5091f2ee1e02867c3c43c2fdb58d7725922de6e02fad24b4660b5b1",
+		read:    bootBoundsRead,
+	},
+	{
+		file: natsObjGo, name: "lookupBucket",
+		against: bootWindows,
+		decides: "the bucket's lookup is bounded by the timing's Lookup",
+		digest:  "5f6d37bb7d8d6d15f34240329eb52abdaf6fadfcbadc5c71ca953f790d6eca98",
+		read:    bootBoundsRead,
+	},
+	{
+		file: natsObjGo, name: "createBucket",
+		against: bootWindows,
+		decides: "the bucket's create is bounded by the timing's Budget, and read back under ReadBack",
+		digest:  "9b6c501a360dc5fa65d799d42ee922e15fe8569074a9fa0c0171b7be007cc36b",
+		read:    bootBoundsRead,
+	},
+	{
+		file: natsObjGo, name: "boundBucket",
+		against: bootWindows,
+		decides: "a bucket with no ceiling is given one only when the ceiling is named explicitly",
+		digest:  "07f0675b5fe636195f957377fe60140f3158d85b2fdabfe55a2a4bdc2f6cb79c",
+		read:    bootBoundsRead,
+	},
 }
 
-// TestMirroredEngineFunctionsAreUnchanged holds every function in mirrored to
-// the engine the suites run: one whose digest moved is a function somebody
-// reads again against the operator file named, and one that is gone is a
-// decision somebody finds again. The test fails until its new digest is
+// TestMirroredEngineDeclarationsAreUnchanged holds every declaration in
+// mirrored to the engine the suites run: one whose digest moved is a
+// declaration somebody reads again against the operator file named, and one
+// that is gone is a decision somebody finds again. The test fails until its new digest is
 // recorded, so the read is made before the change lands, not when a seat
 // first meets the difference.
-func TestMirroredEngineFunctionsAreUnchanged(t *testing.T) {
+func TestMirroredEngineDeclarationsAreUnchanged(t *testing.T) {
 	source, version := openSource(t, enginetest.Source(t)), enginetest.Version(t)
 	for i := range mirrored {
 		if problem := mirrored[i].check(source, version); problem != "" {
@@ -692,27 +1275,27 @@ func openSource(t *testing.T, dir string) *os.Root {
 }
 
 // check is what is wrong with m in the crewlet module source at version, or
-// nothing when the function there is the one that was read.
+// nothing when the declaration there is the one that was read.
 func (m *mirror) check(source *os.Root, version string) string {
-	at := fmt.Sprintf("%s %s, in crewlet %s,", m.file, m.function, version)
+	at := fmt.Sprintf("%s %s, in crewlet %s,", m.file, m.name, version)
 	copies := strings.Join(m.against, ", ")
 	src, err := source.ReadFile(m.file)
 	if err == nil {
 		var digest string
-		if digest, err = enginetest.Fingerprint(m.file, src, m.function); err == nil {
+		if digest, err = enginetest.Fingerprint(m.file, src, m.name); err == nil {
 			if digest == m.digest {
 				return ""
 			}
-			return fmt.Sprintf("%s is not the function the operator's copies of it were read against, which copy "+
+			return fmt.Sprintf("%s is not the declaration the operator's copies of it were read against, which copy "+
 				"from it that %s. `git log -p %s..%s -- %s` in a crewlet checkout shows what changed since. Read it "+
 				"against each of %s, make the operator follow it where it no longer does, then record digest %q "+
 				"and read %q for it in %s",
 				at, m.decides, gitRev(m.read), gitRev(version), m.file, copies, digest, version, mirrorTable)
 		}
 	}
-	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, enginetest.ErrNoFunction) {
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, enginetest.ErrNoDeclaration) {
 		return fmt.Sprintf("%s is gone (%v), and the operator copies from it that %s. Find where the engine "+
-			"decides that now, read it against each of %s, and name that function in %s in place of this one, "+
+			"decides that now, read it against each of %s, and name that declaration in %s in place of this one, "+
 			"with any digest at first: the next run fails with the digest and version to record for it",
 			at, err, m.decides, copies, mirrorTable)
 	}
@@ -734,12 +1317,12 @@ func gitRev(version string) string {
 	return strings.TrimSuffix(version, "+incompatible")
 }
 
-// TestAMirroredFunctionThatMovedFails holds check to its job, on a module
+// TestAMirroredDeclarationThatMovedFails holds check to its job, on a module
 // source of its own: the function as read passes, and a digest that differs,
 // a function the file no longer declares and a file that is gone each fail,
 // naming the function, the operator file to read it against, and what to
 // record.
-func TestAMirroredFunctionThatMovedFails(t *testing.T) {
+func TestAMirroredDeclarationThatMovedFails(t *testing.T) {
 	dir := t.TempDir()
 	const file, decides = sandboxGo, "a pick"
 	src := []byte("package engine\n\nfunc pick(n int) int { return n }\n")
@@ -755,7 +1338,7 @@ func TestAMirroredFunctionThatMovedFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	const version = "v0.1.1-0.20261011000000-0123456789ab"
-	read := mirror{file: file, function: "pick", against: []string{codeWorkGo, executorGo}, decides: decides,
+	read := mirror{file: file, name: "pick", against: []string{codeWorkGo, executorGo}, decides: decides,
 		digest: digest, read: "v0.1.1-0.20261010000000-ba9876543210"}
 	if problem := read.check(source, version); problem != "" {
 		t.Fatalf("the function as read fails: %s", problem)
@@ -764,7 +1347,7 @@ func TestAMirroredFunctionThatMovedFails(t *testing.T) {
 	moved := read
 	moved.digest = strings.Repeat("0", len(digest))
 	gone := read
-	gone.function = "choose"
+	gone.name = "choose"
 	elsewhere := read
 	elsewhere.file = "internal/engine/launch.go"
 	for name, c := range map[string]struct {

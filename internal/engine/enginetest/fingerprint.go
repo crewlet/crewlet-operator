@@ -14,29 +14,36 @@ import (
 	"strconv"
 )
 
-// ErrNoFunction is a source that declares no function of the name asked for.
-var ErrNoFunction = errors.New("no such function")
+// ErrNoDeclaration is a source that declares nothing of the name asked for.
+var ErrNoDeclaration = errors.New("no such declaration")
 
-// Fingerprint is the SHA-256, in hex, of the declaration of the function name
-// in the Go source src of file: a function by its name (newCodingRun), a
-// method by its receiver's type and its name, written as Go writes a method
-// expression ((*launcher).Launch, or T.M on a value receiver).
+// Fingerprint is the SHA-256, in hex, of the declaration of name in the Go
+// source src of file: a function by its name (newCodingRun), a method by its
+// receiver's type and its name, written as Go writes a method expression
+// ((*launcher).Launch, or T.M on a value receiver), and a constant or a
+// variable by its name (listenTimeout), as the one spec that declares it,
+// written as a declaration of its own (const listenTimeout = 30 *
+// time.Second).
 //
 // It is how a test holds a decision the operator copies from the engine's
 // code, where no validation or API answer shows the engine making it, to the
-// engine the suites run: the test records the digest of the function the
-// operator was last read against, and a digest that differs is a function
-// somebody has to read again. So the digest moves with what the function does
-// and with nothing else. It is taken over the declaration as go/printer lays
-// it out afresh: parsed without its comments, every position cleared so that
-// none of the source's line breaks survives, each string literal written in
-// double quotes and each run of them joined by + folded into one, beside a
+// engine the suites run: the test records the digest of the declaration the
+// operator was last read against, and a digest that differs is a declaration
+// somebody has to read again. So the digest moves with what the declaration
+// says and with nothing else. It is taken over the declaration as go/printer
+// lays it out afresh: parsed without its comments, every position cleared so
+// that none of the source's line breaks survives, each string literal written
+// in double quotes and each run of them joined by + folded into one, beside a
 // value it is joined to or not. A comment rewritten, a call split over several
-// lines or a long message rewrapped leaves it as it was; a statement, a
-// condition, a name, a spread (f(xs...)), an alias's = or the text of a
-// literal changed moves it. A digest of the file would move with every edit
-// to its other functions, and one of the function's bytes with every comment
-// in it.
+// lines, a long message rewrapped or a constant moved into or out of a
+// parenthesised block leaves it as it was; a statement, a condition, a name, a
+// value, a spread (f(xs...)), an alias's = or the text of a literal changed
+// moves it. A digest of the file would move with every edit to its other
+// declarations, and one of the declaration's bytes with every comment in it.
+//
+// A constant that repeats the expression of the one before it in a block
+// (iota's idiom) has no value of its own to hold, so it is refused rather
+// than fingerprinted as the bare name it is written as.
 func Fingerprint(file string, src []byte, name string) (string, error) {
 	// No comments, and no object resolution, whose objects point back into
 	// the tree and would send the walk below round in a cycle.
@@ -45,10 +52,13 @@ func Fingerprint(file string, src []byte, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var found *ast.FuncDecl
+	var found ast.Decl
 	for _, decl := range parsed.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || funcName(fn) != name {
+		named, err := declares(decl, name)
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", file, err)
+		}
+		if named == nil {
 			continue
 		}
 		if found != nil {
@@ -56,10 +66,10 @@ func Fingerprint(file string, src []byte, name string) (string, error) {
 			// anybody's to mirror.
 			return "", fmt.Errorf("%s declares %s more than once", file, name)
 		}
-		found = fn
+		found = named
 	}
 	if found == nil {
-		return "", fmt.Errorf("%s declares no %s: %w", file, name, ErrNoFunction)
+		return "", fmt.Errorf("%s declares no %s: %w", file, name, ErrNoDeclaration)
 	}
 	canonical(reflect.ValueOf(found))
 	var out bytes.Buffer
@@ -70,7 +80,41 @@ func Fingerprint(file string, src []byte, name string) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-// funcName is how Fingerprint names a declaration: name, T.name or
+// declares is the declaration of name that decl makes, or nil: decl itself
+// for a function or a method, and for a constant or a variable a declaration
+// of its own holding the one spec that names it, so that its digest moves
+// with that spec alone and not with its neighbours in a block.
+func declares(decl ast.Decl, name string) (ast.Decl, error) {
+	switch d := decl.(type) {
+	case *ast.FuncDecl:
+		if funcName(d) == name {
+			return d, nil
+		}
+	case *ast.GenDecl:
+		if d.Tok != token.CONST && d.Tok != token.VAR {
+			return nil, nil
+		}
+		for _, spec := range d.Specs {
+			value, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for _, ident := range value.Names {
+				if ident.Name != name {
+					continue
+				}
+				if len(value.Values) == 0 && value.Type == nil && d.Tok == token.CONST {
+					return nil, fmt.Errorf("%s repeats the expression of the constant before it, "+
+						"which holds no value of its own", name)
+				}
+				return &ast.GenDecl{Tok: d.Tok, Specs: []ast.Spec{value}}, nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+// funcName is how Fingerprint names a function: name, T.name or
 // (*T).name, with a generic receiver's type parameters left out.
 func funcName(fn *ast.FuncDecl) string {
 	if fn.Recv == nil || len(fn.Recv.List) != 1 {

@@ -176,9 +176,9 @@ Crewlet ships next: a Crewlet change that breaks it fails the operator's
 next run (ADR-0002). `CREWLET_VERSION` runs another engine, to
 reproduce a run whose log names it. A release keeps the engine it was tested
 against (`ghcr.io/crewlet/crewlet-operator/engine:<version>`, RELEASING.md).
-An engine function the operator copies a run-time decision from is
-fingerprinted (`internal/render/mirror_test.go`): when one changes, read it
-against every operator file named and record its new digest.
+An engine function or constant the operator copies a run-time decision from
+is fingerprinted (`internal/render/mirror_test.go`): when one changes, read
+it against every operator file named and record its new digest.
 
 ## Commits
 

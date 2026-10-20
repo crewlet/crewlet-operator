@@ -275,12 +275,18 @@ type SandboxFile struct {
 }
 
 // SandboxSetupStep is one provisioning step applied to a sandbox before the
-// coding agent starts. It maps onto a Crewlet sandbox setup step.
+// coding agent starts. It maps onto a Crewlet sandbox setup step, which
+// Crewlet refuses when it does nothing (no files, commands, env or brief):
+// that is almost always an unfinished edit, which would otherwise apply
+// cleanly for ever and look like it was working.
+// +kubebuilder:validation:XValidation:rule="(has(self.files) && size(self.files) > 0) || (has(self.commands) && size(self.commands) > 0) || (has(self.env) && size(self.env) > 0) || has(self.brief)",message="a setup step must give files, commands, env or a brief: Crewlet refuses a step that does nothing"
 type SandboxSetupStep struct {
-	// name identifies the step in logs and failure messages.
+	// name identifies the step in logs and failure messages, so Crewlet
+	// refuses one of white space alone, and so does the API.
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:XValidation:rule="self.trim().size() > 0",message="name may not be white space alone: Crewlet refuses a setup step with no name, since it is what a failure message points at"
 	Name string `json:"name,omitempty"`
 
 	// files are written into the sandbox before the commands run. Crewlet's
