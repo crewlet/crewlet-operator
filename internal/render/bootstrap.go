@@ -67,26 +67,8 @@ const (
 	// the contract tests run it over every document rendered here.
 	PublicPort = 8081
 	// ArtifactsPort is the port of a data pod's artifact listener,
-	// api.artifacts: the bytes of artifacts and nothing else, with no
-	// session, no cookie and no API route. An artifact is a page a person or
-	// an agent wrote, and the dashboard frames it from this listener's
-	// origin, so that it never runs where the dashboard's session runs.
-	// Crewlet serves it on a socket of its own rather than on a host name of
-	// the API's listener, so that the absence of every API route there is a
-	// property of the handler chain and not of a header the client sends.
-	//
-	// A data pod opens it only while its Company has an address for it
-	// (BootstrapInput.ArtifactsURL, Crewlet's api.artifacts.external_url,
-	// which Crewlet requires beside the port and reads only at start).
-	// Unlike PublicPort, the engine does not need it to start, and the one
-	// address every company has, a port-forward to localhost, is on the
-	// dashboard's own site, where Crewlet serves every artifact opaque and
-	// advises against it: opening it there unasked would also restart every
-	// running data pod on the operator's upgrade for an origin nobody
-	// reaches.
-	//
-	// It is 8082: plain HTTP like the others, beside PublicPort, and none of
-	// the ports an engine pod binds otherwise.
+	// api.artifacts, which serves artifacts and nothing else. It is opened
+	// only for a Company with an artifact origin (ADR-0007).
 	ArtifactsPort = 8082
 	// LeafPort is the port of a data pod's leaf listener, which the seat
 	// pods join the company's event stream through. It is open only when
@@ -154,10 +136,7 @@ type BootstrapInput struct {
 	// AllowedOrigins are the browser origins the engine is reached on
 	// beside ExternalURL's own, Crewlet's api.auth.allowed_origins.
 	AllowedOrigins []string
-	// ArtifactsURL is where a browser reaches the data pod's artifact
-	// listener (ArtifactsPort), Crewlet's api.artifacts.external_url: the
-	// origin the dashboard frames HTML pages and designs from, naming
-	// ArtifactPlaceholder for an origin per artifact. The Company's
+	// ArtifactsURL is Crewlet's api.artifacts.external_url, the Company's
 	// status.endpoints.artifactsBaseURL. Empty opens no artifact listener.
 	ArtifactsURL string
 }
@@ -255,15 +234,13 @@ type apiPublicDoc struct {
 	ExternalURL string `json:"external_url"`
 }
 
-// apiArtifactsDoc is api.artifacts. Its host is left to the engine's
-// default, every interface, as api.public's is.
+// apiArtifactsDoc is api.artifacts; its host is the engine's default.
 type apiArtifactsDoc struct {
 	Port        int    `json:"port"`
 	ExternalURL string `json:"external_url"`
 }
 
-// artifactsOf is api.artifacts for an artifact origin reached at address, or
-// nil, which opens no artifact listener, for none.
+// artifactsOf is api.artifacts for an artifact origin at address, or nil.
 func artifactsOf(address string) *apiArtifactsDoc {
 	if address == "" {
 		return nil
@@ -271,9 +248,7 @@ func artifactsOf(address string) *apiArtifactsDoc {
 	return &apiArtifactsDoc{Port: ArtifactsPort, ExternalURL: address}
 }
 
-// ArtifactsOpen reports whether a data pod whose Company's artifact origin is
-// reached at address opens the artifact listener (ArtifactsPort): the
-// controller declares the port on the pod by the rule Bootstrap writes it by.
+// ArtifactsOpen reports whether a data pod opens the artifact listener.
 func ArtifactsOpen(address string) bool { return artifactsOf(address) != nil }
 
 // apiAuthDoc is api.auth. TOTP is left out for a class that requires a
@@ -421,8 +396,8 @@ const keyringKeyBytes = 32
 // Bootstrap renders the Tier A of a company's data pods in the v1alpha1
 // topology: one data pod that holds the estate, serves the API, runs the
 // workers and runs the seats placed in the pool data. It serves the API on
-// APIPort, the routes outside parties call on PublicPort alone, and, where its
-// Company has an artifact origin, artifacts on ArtifactsPort alone. It serves
+// APIPort, the routes outside parties call on PublicPort alone, and artifacts
+// on ArtifactsPort where the Company has an artifact origin. It serves
 // admin, and both API tokens hold admin (see grantAdmin); every other
 // credential is a person's, which Crewlet's own identity directory holds.
 //

@@ -85,8 +85,8 @@ type route struct {
 	port    int32
 	gateway *crewletaiv1alpha1.GatewayExposure
 	ingress *crewletaiv1alpha1.IngressExposure
-	// hostname is the host the route takes: the expanded host name
-	// template, or for an origin per artifact the wildcard under it.
+	// hostname is the expanded host name template, or the wildcard under it
+	// for an origin per artifact.
 	hostname string
 }
 
@@ -110,9 +110,8 @@ type engineAddresses struct {
 	public string
 	// origins are the browser origins beside external's own.
 	origins []string
-	// artifacts is where a browser reaches the artifact origin: the
-	// Company's status.endpoints.artifactsBaseURL, or empty for a company
-	// that has none, whose data pod opens no artifact listener.
+	// artifacts is the Company's status.endpoints.artifactsBaseURL; empty
+	// opens no artifact listener.
 	artifacts string
 }
 
@@ -122,12 +121,10 @@ type engineAddresses struct {
 // addresses the engine is told it is reached at.
 //
 // Crewlet requires a node that serves the API to know where a browser reaches
-// it (api.external_url), while its public listener is open where that is
-// reached (api.public.external_url), and while its artifact listener is open
-// where a browser reaches that (api.artifacts.external_url); it reads each
-// only at start, so a change of any restarts the data pod. ADR-0006 records
-// how the first two are chosen when nothing names one, and ADR-0007 why the
-// artifact listener opens only for an address.
+// it (api.external_url) and, while its public listener is open, where that is
+// reached (api.public.external_url); it reads both only at start, so a change
+// of either restarts the data pod. ADR-0006 records how each is chosen when
+// nothing names one, and ADR-0007 the artifact origin's address.
 func (r *CompanyReconciler) reconcileExposure(
 	ctx context.Context, c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
 ) (metav1.Condition, engineAddresses, error) {
@@ -186,8 +183,6 @@ func (r *CompanyReconciler) reconcileExposure(
 			c.Status.Endpoints.ExposedAPI = routed
 		}
 	}
-	// The artifact origin's address is fixed by the class and its Gateways
-	// as the dashboard's is, for the same reason.
 	artifactsScheme, err := r.routeScheme(ctx, c, &artifacts)
 	if err != nil {
 		return metav1.Condition{}, engineAddresses{}, err
@@ -282,10 +277,8 @@ func apiRouteOf(c *crewletaiv1alpha1.Company, a *crewletaiv1alpha1.APIExposure) 
 	return rt
 }
 
-// artifactsRouteOf is the route a class's artifacts exposure asks for. Under
-// an origin per artifact it takes the wildcard under the expanded host name,
-// which matches every artifact's host and no host deeper, since a wildcard
-// matches one label, the artifact's.
+// artifactsRouteOf is the route a class's artifacts exposure asks for: under
+// an origin per artifact, the wildcard that matches every artifact's host.
 func artifactsRouteOf(c *crewletaiv1alpha1.Company, a *crewletaiv1alpha1.ArtifactExposure) route {
 	rt := route{what: "artifacts", name: artifactsRouteName(c), component: componentArtifacts, port: render.ArtifactsPort}
 	switch a.Mode {
@@ -305,10 +298,7 @@ func artifactsRouteOf(c *crewletaiv1alpha1.Company, a *crewletaiv1alpha1.Artifac
 }
 
 // artifactsAddressOf is the artifact origin's address through the class's
-// artifacts route, on the scheme routeScheme found for it: empty unless the
-// route serves https, since Crewlet refuses an artifact origin reached over
-// plain http on a routable host. Under an origin per artifact it names
-// render.ArtifactPlaceholder where the route's wildcard is.
+// route, empty unless the route serves https, which Crewlet requires.
 func artifactsAddressOf(c *crewletaiv1alpha1.Company, a *crewletaiv1alpha1.ArtifactExposure, scheme string) string {
 	if scheme != schemeHTTPS || a.Hostname == "" {
 		return ""
@@ -336,8 +326,8 @@ func portForwardURL() string {
 	return fmt.Sprintf("http://localhost:%d", render.APIPort)
 }
 
-// perArtifact reports whether a class's artifacts route gives every artifact
-// a host of its own, which is origins' default.
+// perArtifact reports whether every artifact gets a host of its own, origins'
+// default.
 func perArtifact(a *crewletaiv1alpha1.ArtifactExposure) bool {
 	return a.Origins != crewletaiv1alpha1.ArtifactOriginsShared
 }
@@ -350,8 +340,7 @@ func publicListenerURL(c *crewletaiv1alpha1.Company) string {
 
 // engineAddressesOf is where the engine is reached, given the address of the
 // class's API route (scheme and host, or empty when it routes none) and of its
-// artifacts route (the artifact origin's address, or empty when it routes
-// none over https).
+// artifacts route.
 //
 // A browser reaches it at the Company's spec.exposure.dashboardBaseURL, else
 // at the route, else through a port-forward. The public listener is reached
@@ -368,10 +357,8 @@ func publicListenerURL(c *crewletaiv1alpha1.Company) string {
 // route's origin is allowed, or a person signing in through the route would
 // be refused every write.
 //
-// A browser reaches the artifact origin at the Company's
-// spec.exposure.artifactsBaseURL, else at the artifacts route, else nowhere:
-// unlike the other two, the engine starts without one, and opens no artifact
-// listener then (ADR-0007).
+// The artifact origin is the Company's spec.exposure.artifactsBaseURL, else
+// the artifacts route, else none (ADR-0007).
 func engineAddressesOf(c *crewletaiv1alpha1.Company, routed, artifactsRouted string) engineAddresses {
 	stated := strings.TrimRight(c.Spec.Exposure.DashboardBaseURL, "/")
 	a := engineAddresses{
@@ -671,11 +658,10 @@ func (r *CompanyReconciler) reconcileNetworkPolicy(
 // operator's pods, the Gateway proxies or Ingress controller of the class's
 // API route, and the class's apiConsumers; the public port from where the
 // webhooks' route arrives from alone (its Gateway proxies or Ingress
-// controller, or the class's external forwarders); the artifact port from
-// where the artifacts' route arrives from alone. None admits another's
-// peers: a webhook's proxy reaches no admin route, an API consumer has no
-// business on the port published to the internet, and the artifacts' proxy,
-// which carries pages anyone may have written, reaches neither. A rule
+// controller, or the class's external forwarders); the artifact port from the
+// artifacts' route alone. None admits another's peers: a webhook's proxy
+// reaches no admin route, and an API consumer has no business on the port
+// published to the internet. A rule
 // with no peer is left out rather than written empty, which would admit
 // every source. Egress is engineEgress.
 func (r *CompanyReconciler) reconcileEnginePolicy(
@@ -972,8 +958,7 @@ func artifactRouteNamespaces(c *crewletaiv1alpha1.Company, a *crewletaiv1alpha1.
 	case crewletaiv1alpha1.ArtifactExposureIngress:
 		return routeNamespaces(c, nil, a.Ingress)
 	case crewletaiv1alpha1.ArtifactExposureNone:
-		// No route: a port-forwarding browser reaches the pod through the
-		// kubelet, which no policy polices.
+		// No route.
 	}
 	return nil
 }

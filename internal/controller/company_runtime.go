@@ -236,7 +236,7 @@ func (r *CompanyReconciler) runWorkload(
 		ArtifactsURL:   in.addresses.artifacts,
 	})
 	if errors.Is(err, render.ErrNoAddress) {
-		// engineAddressesOf always names all three, so this is the operator's
+		// engineAddressesOf always names both, so this is the operator's
 		// own fault, not the keyring's.
 		return metav1.Condition{}, err
 	}

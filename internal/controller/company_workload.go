@@ -56,8 +56,7 @@ const (
 	// publicPortName names the public port (render.PublicPort) on the data
 	// pods and the engine Service.
 	publicPortName = "public"
-	// artifactsPortName names the artifact listener's port
-	// (render.ArtifactsPort) on the data pods and the engine Service.
+	// artifactsPortName names the artifact port (render.ArtifactsPort).
 	artifactsPortName = "artifacts"
 )
 
@@ -274,8 +273,7 @@ type workload struct {
 	// startupSeconds is the data pod's startup window
 	// (dataPodStartupSeconds).
 	startupSeconds int32
-	// artifacts is whether the data pod opens the artifact listener
-	// (render.ArtifactsOpen).
+	// artifacts is render.ArtifactsOpen.
 	artifacts bool
 }
 
@@ -330,10 +328,8 @@ func (r *CompanyReconciler) applyServiceAccount(
 // ready data pods and backs the routes and status.endpoints.api: its port
 // http is the engine's API, which the API's route reaches, its port public
 // the engine's public listener, which the webhooks' route reaches, and its
-// port artifacts the artifact listener, which the artifacts' route reaches.
-// The artifacts port is there whether or not the data pods open the
-// listener, so that a route written before they do resolves its backend; a
-// Service port changes no pod. It
+// port artifacts the artifact listener, named even while closed so that the
+// artifacts' route resolves. It
 // carries the class's service annotations, for a load balancer controller
 // that reads a backend's health check there. <c>-data is the StatefulSet's headless governing Service: it gives each
 // data pod a stable DNS name, published before the pod is ready, because an
@@ -636,12 +632,9 @@ func engineContainerOf(
 			WithPreStop(corev1ac.LifecycleHandler().
 				WithSleep(corev1ac.SleepAction().WithSeconds(preStopSleepSeconds))))
 	// The public listener, which every data pod's bootstrap document opens,
-	// the artifact listener, which it opens for a Company with an artifact
-	// origin, and the leaf listener the seat pods join through, which it
-	// opens when render.LeafOpen says so. A port is declared only where the
-	// engine listens on it: the declaration is part of the pod template, and
-	// one declared for nothing would restart every data pod on the
-	// operator's upgrade.
+	// the artifact listener while the Company has an artifact origin, and the
+	// leaf listener the seat pods join through, which it opens when
+	// render.LeafOpen says so.
 	container.WithPorts(corev1ac.ContainerPort().
 		WithName(publicPortName).
 		WithContainerPort(render.PublicPort).

@@ -295,36 +295,13 @@ spec:
                 properties:
                   artifactsBaseURL:
                     description: |-
-                      artifactsBaseURL is where a browser reaches the company's artifact
-                      origin, the engine's listener that serves artifacts and nothing else,
-                      ahead of the address of the class's artifacts route. Set it when
-                      something other than the class's route forwards it to the engine
-                      Service's port artifacts (8082), such as a tunnel, or to
-                      http://localhost:8082 for a browser that port-forwards that port. The
-                      data pod opens the artifact listener only while the company has such
-                      an address, here or from its class's route: without one the dashboard
-                      opens no artifact it frames (HTML pages and designs). Crewlet's
-                      api.artifacts.external_url, in the data pod's crewlet.yaml, which the
-                      engine reads only at start: changing it restarts the data pod. A
-                      trailing '/' is dropped.
-
-                      It is https:// and a lowercase host name with at most a port after it,
-                      or http:// on localhost, a name under localhost or a 127.x.x.x
-                      address: Crewlet refuses an artifact origin reached over plain http
-                      on a routable host, and serves it from the root of its host. A host
-                      whose first label starts with {artifact} gives every artifact a host
-                      of its own (https://{artifact}.artifacts.example.net, which needs a
-                      wildcard DNS record and certificate); {artifact} may be followed by up
-                      to 37 characters of the same label (https://{artifact}--acme.example.net),
-                      as every artifact's label is 26 characters and a DNS label holds 63.
-                      Without it every artifact is served from the one host with an opaque
-                      origin (https://artifacts.example.com). On the dashboard's own
-                      registrable domain, and on localhost, Crewlet serves every artifact
-                      opaque whatever the address says, and pages lose their browser
-                      storage. It must not be the dashboard's or the public listener's
-                      origin, nor a parent of either's host: Crewlet refuses to start on
-                      such an address, and the data pod is held back with
-                      RuntimeReady=False AddressRefused.
+                      artifactsBaseURL is where a browser reaches the artifact origin,
+                      ahead of the class's artifacts route: a tunnel, or http://localhost:8082
+                      for a browser that port-forwards it. Crewlet's api.artifacts.external_url;
+                      changing it restarts the data pod. https, or http on localhost or
+                      127.x.x.x; {artifact} at the start of the host gives each artifact a host
+                      of its own. It may not be the dashboard's or the public listener's
+                      origin, nor a parent of either's host (RuntimeReady=False AddressRefused).
                     maxLength: 2048
                     minLength: 1
                     type: string
@@ -1520,15 +1497,9 @@ spec:
                     type: string
                   artifactsBaseURL:
                     description: |-
-                      artifactsBaseURL is where a browser reaches the artifact origin, which
-                      the dashboard frames HTML pages and designs from:
-                      spec.exposure.artifactsBaseURL, else the address of the class's
-                      artifacts route while it serves https (https://{artifact}.<hostname>
-                      under origins PerArtifact, https://<hostname> under Shared). Unset
-                      while the company has neither: the data pod then opens no artifact
-                      listener. It is the engine's api.artifacts.external_url, which the
-                      engine reads only at start, so like dashboardBaseURL it does not wait
-                      for the route to be accepted.
+                      artifactsBaseURL is where a browser reaches the artifact origin:
+                      spec.exposure.artifactsBaseURL, else the class's artifacts route while it
+                      serves https. Unset, the data pod opens no artifact listener.
                     maxLength: 2048
                     minLength: 1
                     type: string

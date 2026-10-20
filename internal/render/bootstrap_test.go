@@ -72,15 +72,11 @@ type bootstrapCase struct {
 var advisoryNoTrustedProxy = advisory{path: "api.trusted_proxies", says: "trusts no proxy"}
 
 // advisoryArtifactsSameSite is Crewlet's advisory on an artifact origin on the
-// dashboard's own site, where it serves every artifact with an opaque origin:
-// a port-forwarded artifact origin is on localhost, as a port-forwarded
-// dashboard is, so a Company that states one draws it.
+// dashboard's site, as a port-forwarded one is.
 var advisoryArtifactsSameSite = advisory{path: "api.artifacts.external_url", says: "same site as the dashboard"}
 
-// nimbusAPI, nimbusHooks and nimbusArtifacts are the API, public and artifact
-// origin addresses of the cases whose class routes them over HTTPS; the
-// artifact origin is a template on a registrable domain of its own, which
-// gives every artifact a real origin.
+// nimbusAPI, nimbusHooks and nimbusArtifacts are the addresses of the cases
+// whose class routes them over HTTPS.
 const (
 	nimbusAPI       = "https://nimbus.api.example.com"
 	nimbusHooks     = "https://nimbus.hooks.example.com"
@@ -109,24 +105,21 @@ func bootstrapCases() []bootstrapCase {
 		// A class that allows seat pools: the data pod opens its leaf
 		// listener.
 		{name: caseSeatPools, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}}},
-		// A Company that states the port-forward address of its artifact
-		// origin: on localhost, the dashboard's own site, Crewlet serves
-		// every artifact opaque and says so.
+		// A Company that states a port-forwarded artifact origin.
 		{
 			name: "artifacts-port-forward", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
 			artifacts:  fmt.Sprintf("http://localhost:%d", ArtifactsPort),
 			advisories: []advisory{advisoryArtifactsSameSite},
 		},
-		// A class that routes the API, the webhooks and the artifacts over
-		// HTTPS, the artifacts with an origin per artifact.
+		// A class that routes the API, the webhooks and the artifacts over HTTPS.
 		{
 			name: "https-route", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
 			external: nimbusAPI, public: nimbusHooks, artifacts: nimbusArtifacts,
 			advisories: []advisory{advisoryNoTrustedProxy},
 		},
 		// A Company that states where people reach the dashboard, ahead of
-		// the class's API route, which stays an origin it is reached on,
-		// and an artifact origin of one host, every artifact opaque on it.
+		// the class's API route, which stays an origin it is reached on; and
+		// a shared artifact origin.
 		{
 			name: "route-origin", from: caseNATS, keyring: Keyring{ActiveKeyID: "k1", Keys: map[string]string{"k1": testKeyMaterial}},
 			external: "https://crewlet.sso.example.com/nimbus", origins: []string{nimbusAPI},
@@ -196,8 +189,8 @@ func (c *bootstrapCase) input(t *testing.T) *BootstrapInput {
 
 // reachedAtDefaults gives in the addresses the controller gives the data pod
 // of a Company that states none and whose class routes nothing: where
-// kubectl port-forward serves the API, the public listener inside the
-// cluster, and no artifact origin.
+// kubectl port-forward serves the API, and the public listener inside the
+// cluster.
 func reachedAtDefaults(in *BootstrapInput) *BootstrapInput {
 	in.ExternalURL = fmt.Sprintf("http://localhost:%d", APIPort)
 	in.PublicURL = fmt.Sprintf("http://%s-engine.%s.svc:%d", in.Company.Name, in.Company.Namespace, PublicPort)
@@ -322,9 +315,8 @@ func TestBootstrapPlacesTheDataPodInTheDataPool(t *testing.T) {
 // TestBootstrapServesOutsidePartiesOnTheirOwnListener pins the data pod's
 // listeners: the admin API on APIPort and the routes outside parties call on
 // PublicPort, opened on every data pod whatever its class routes, so that a
-// class's exposure never decides which routes the admin port serves; the
-// artifact origin on ArtifactsPort, at the address it is given and only for
-// one; and a seat pod, which serves no public route and frames nothing,
+// class's exposure never decides which routes the admin port serves;
+// artifacts on ArtifactsPort only for an artifact origin; and a seat pod
 // opens neither.
 func TestBootstrapServesOutsidePartiesOnTheirOwnListener(t *testing.T) {
 	for _, c := range bootstrapCases() {

@@ -187,8 +187,7 @@ func startDataPod(t *testing.T, in *BootstrapInput, env ...string) (*enginetest.
 		}
 		api := doc["api"].(map[string]any)
 		api["host"], api["port"] = "127.0.0.1", port
-		// The public and artifact listeners would each bind a fixed port
-		// on the machine running the suite, which every case shares.
+		// Fixed ports every case would share.
 		delete(api, "public")
 		delete(api, "artifacts")
 		doc["store"].(map[string]any)["path"] = filepath.Join(dir, "store", "crewlet.db")
@@ -450,14 +449,8 @@ func TestContractAddressShapes(t *testing.T) {
 	})
 }
 
-// artifactShapes are artifact origin addresses on either side of each line
-// Crewlet draws (config.APIArtifacts.validate), read beside a dashboard at
-// nimbusAPI, a public listener at nimbusHooks and no other browser origin: the
-// placeholder's one position, at the start of the host and once, followed by
-// label characters within 63 bytes and a parent domain; the shape of the
-// address once the placeholder is filled, with no path, query or fragment and
-// a port 1 to 65535; plain http on loopback alone; and an origin that is the
-// dashboard's or the public listener's, or a parent of the dashboard's host.
+// artifactShapes are artifact origins either side of each line Crewlet draws,
+// read beside a dashboard at nimbusAPI and a public listener at nimbusHooks.
 var artifactShapes = []string{
 	nimbusArtifacts, "https://artifacts.crewletusercontent.example", "https://artifacts.crewletusercontent.example/",
 	" https://artifacts.crewletusercontent.example ", "   ",
@@ -476,12 +469,7 @@ var artifactShapes = []string{
 }
 
 // TestContractArtifactAddressShapes holds the render's refusal of an artifact
-// origin address (artifactsURLRefusal) to the engine's, shape by shape: what
-// crewlet validate refuses at api.artifacts.external_url the render refuses,
-// so the data pod is held back on it rather than crash-loop, and what the
-// engine takes the render takes. It also reads the address beside a
-// dashboard whose host is the very one an origin per artifact would give some
-// artifact, and beside an allowed origin it shares.
+// origin to crewlet validate's, shape by shape.
 func TestContractArtifactAddressShapes(t *testing.T) {
 	base := func(t *testing.T) *BootstrapInput {
 		t.Helper()
@@ -489,9 +477,8 @@ func TestContractArtifactAddressShapes(t *testing.T) {
 		in.ExternalURL, in.PublicURL, in.ArtifactsURL = nimbusAPI, nimbusHooks, nimbusArtifacts
 		return in
 	}
-	// engineRefuses is whether crewlet validate refuses the Tier A of in
-	// with shape as its artifact origin, which it may only refuse at
-	// api.artifacts.external_url.
+	// engineRefuses is whether crewlet validate refuses shape as in's artifact
+	// origin.
 	engineRefuses := func(t *testing.T, in *BootstrapInput, shape string) bool {
 		t.Helper()
 		doc, err := Bootstrap(in)
@@ -523,8 +510,7 @@ func TestContractArtifactAddressShapes(t *testing.T) {
 		}
 		return !got.Valid
 	}
-	// renderRefuses is whether Bootstrap refuses in with shape as its
-	// artifact origin, which it may only refuse as that address.
+	// renderRefuses is whether Bootstrap refuses shape as in's artifact origin.
 	renderRefuses := func(t *testing.T, in *BootstrapInput, shape string) bool {
 		t.Helper()
 		in.ArtifactsURL = shape
@@ -549,9 +535,7 @@ func TestContractArtifactAddressShapes(t *testing.T) {
 	}
 	for _, c := range []struct{ name, external, shape string }{
 		{
-			// A dashboard whose first label is an artifact's length, on
-			// the template's parent domain: some artifact would be given
-			// the dashboard's host.
+			// The dashboard's first label is an artifact label's length.
 			name:     "an origin per artifact that would give one the dashboard's host",
 			external: "https://" + strings.Repeat("d", 26) + ".apps.example.com",
 			shape:    "https://{artifact}.apps.example.com",

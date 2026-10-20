@@ -580,16 +580,13 @@ spec:
                   artifacts:
                     default:
                       mode: None
-                    description: |-
-                      artifacts is how browsers reach the artifact origin, which the
-                      dashboard frames every artifact from.
+                    description: artifacts is how browsers reach the artifact origin.
                     minProperties: 1
                     properties:
                       gateway:
                         description: |-
-                          gateway is the Gateways to attach to, for mode Gateway. A listener
-                          the route attaches to must be HTTPS, with a certificate for
-                          *.<hostname> under origins PerArtifact.
+                          gateway is the Gateways to attach to, for mode Gateway; a listener the
+                          route attaches to must be HTTPS.
                         properties:
                           parentRefs:
                             description: parentRefs are the Gateways the HTTPRoute
@@ -651,18 +648,9 @@ spec:
                         type: object
                       hostname:
                         description: |-
-                          hostname is the artifact origin's host name, as a template with the
-                          variables and rules of api.hostname. Under origins PerArtifact it is
-                          the parent of every artifact's host: the route takes *.<hostname>, and
-                          the engine is told https://{artifact}.<hostname>. Under Shared it is
-                          the one host every artifact is served from, https://<hostname>.
-
-                          Give it a registrable domain other than the dashboard's (a separate
-                          domain such as crewletusercontent.example, as browsers draw the line
-                          between sites there): on the dashboard's own site, an artifact's
-                          requests would carry the dashboard's SameSite cookies, so Crewlet
-                          serves every artifact with an opaque origin there whatever origins
-                          says, and pages lose their browser storage.
+                          hostname is the artifact origin's host name, a template with the
+                          variables and rules of api.hostname. Use a registrable domain of its
+                          own: on the dashboard's site Crewlet serves every artifact opaque.
                         maxLength: 200
                         minLength: 1
                         type: string
@@ -690,10 +678,8 @@ spec:
                             own'
                           rule: '!self.matches(''(^|[.])([0-9]+|0x[0-9a-f]*)$'')'
                       ingress:
-                        description: |-
-                          ingress is the Ingress settings, for mode Ingress, where tls is
-                          required. Under origins PerArtifact the Ingress's host and its TLS
-                          host are *.<hostname>, so the Secret holds a wildcard certificate.
+                        description: ingress is the Ingress settings, for mode Ingress;
+                          tls is required.
                         properties:
                           annotations:
                             additionalProperties:
@@ -764,11 +750,8 @@ spec:
                         type: string
                       origins:
                         description: |-
-                          origins is how one artifact is kept apart from another in a browser:
-                          PerArtifact gives each its own host under hostname, and Shared serves
-                          every one from hostname itself with an opaque origin. Unset is
-                          PerArtifact. Crewlet's api.artifacts.external_url, which names
-                          {artifact} for PerArtifact.
+                          origins is PerArtifact (unset), where the route takes *.<hostname>, or
+                          Shared, where it takes <hostname>.
                         enum:
                         - PerArtifact
                         - Shared

@@ -19,11 +19,9 @@ const portForwarded = "http://localhost:8080"
 // API route, else through a port-forward; the public listener at the
 // Company's public address, else inside the cluster; the route's origin
 // allowed when the stated address is somewhere else; and the artifact origin
-// at the Company's stated address, else at the class's artifacts route, else
-// nowhere. routed is what routeScheme and the class's hostname make of the
-// API's route: https behind a Gateway listener that terminates TLS, http
-// behind an Ingress without it; artifactsRouted is the artifacts route's
-// address, which reconcileExposure gives only a route that serves https.
+// at the Company's address, else the artifacts route's. routed is what
+// routeScheme and the class's hostname make of the API's route: https behind
+// a Gateway listener that terminates TLS, http behind an Ingress without it.
 func TestEngineAddressesFollowWhereTheEngineIsReached(t *testing.T) {
 	const (
 		inCluster       = "http://nimbus-engine.tenant-nimbus.svc:8081"
@@ -36,9 +34,8 @@ func TestEngineAddressesFollowWhereTheEngineIsReached(t *testing.T) {
 		routed              string
 		external, publicURL string
 		origins             []string
-		// statedArtifacts is the Company's artifactsBaseURL, and
-		// artifactsRouted and artifacts the route's address and the one
-		// the engine is told.
+		// statedArtifacts, artifactsRouted and artifacts are the Company's,
+		// the route's and the engine's artifact origin.
 		statedArtifacts, artifactsRouted, artifacts string
 	}{
 		{
@@ -109,8 +106,7 @@ func TestEngineAddressesFollowWhereTheEngineIsReached(t *testing.T) {
 	}
 }
 
-// hostnameWord is in a refusal's message only where it sends the reader to a
-// class's host name template.
+// hostnameWord appears in a refusal only where it names a class's template.
 const hostnameWord = "hostname"
 
 // routeOfNamespace is an API host name template whose last label a

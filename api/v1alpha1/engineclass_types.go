@@ -663,51 +663,32 @@ type ArtifactExposureMode string
 
 // The artifact exposure modes.
 const (
-	// ArtifactExposureNone routes nothing to the artifact origin. The data
-	// pod opens it only for a Company that states where it is reached
-	// (spec.exposure.artifactsBaseURL); without one the dashboard opens no
-	// artifact it frames (HTML pages and designs).
+	// ArtifactExposureNone routes nothing; the Company may state an address
+	// (spec.exposure.artifactsBaseURL).
 	ArtifactExposureNone ArtifactExposureMode = "None"
-	// ArtifactExposureGateway routes the artifact host names to the
-	// engine's artifact listener with an HTTPRoute.
+	// ArtifactExposureGateway routes the artifact hosts with an HTTPRoute.
 	ArtifactExposureGateway ArtifactExposureMode = "Gateway"
 	// ArtifactExposureIngress does the same with an Ingress.
 	ArtifactExposureIngress ArtifactExposureMode = "Ingress"
 )
 
-// ArtifactOrigins is how one artifact is kept apart from another, and from
-// the dashboard, in a browser.
+// ArtifactOrigins is how artifacts are kept apart in a browser.
 // +kubebuilder:validation:Enum=PerArtifact;Shared
 type ArtifactOrigins string
 
 // The artifact origin shapes.
 const (
-	// ArtifactOriginsPerArtifact gives every artifact a host of its own,
-	// directly under the route's host name: a real browser origin per
-	// artifact, which keeps its storage (localStorage, IndexedDB) apart from
-	// every other artifact's. It needs a wildcard DNS record and a wildcard
-	// certificate for *.<hostname>.
+	// ArtifactOriginsPerArtifact gives each artifact a host under the route's
+	// host name: its own origin, which needs a wildcard DNS name and certificate.
 	ArtifactOriginsPerArtifact ArtifactOrigins = "PerArtifact"
-	// ArtifactOriginsShared serves every artifact from the route's one host
-	// name, each document under an opaque origin: one DNS name and one
-	// certificate, and no browser storage for the pages.
+	// ArtifactOriginsShared serves every artifact from one host, each with an
+	// opaque origin and no browser storage.
 	ArtifactOriginsShared ArtifactOrigins = "Shared"
 )
 
-// ArtifactExposure is how browsers reach a company's artifact origin: the
-// engine's third listener (Crewlet's api.artifacts), which serves the bytes
-// of artifacts and nothing else, with no session, no cookie and no API route.
-// An artifact is a page a person or an agent wrote, so it is never served
-// where the dashboard's session runs: the dashboard frames HTML pages and
-// designs from this origin. The data pod opens the listener, on the engine
-// Service's port artifacts (8082), while its Company has an address for it:
-// this route's, or the Company's spec.exposure.artifactsBaseURL.
-//
-// Crewlet refuses to start on an artifact origin reached over plain http on a
-// host that is not on loopback, so a route serves it over https only: an
-// Ingress needs ingress.tls, and a Gateway route needs an HTTPS listener to
-// attach to, without which the engine opens no artifact origin and the
-// Company's Exposed condition says why.
+// ArtifactExposure is how browsers reach the engine's artifact listener
+// (Crewlet's api.artifacts), which serves artifacts and nothing else. Crewlet
+// refuses it over plain http on a routable host, so a route serves https only.
 // +kubebuilder:validation:XValidation:rule="self.mode == 'Gateway' ? has(self.gateway) : !has(self.gateway)",message="gateway is required with mode Gateway and not allowed otherwise"
 // +kubebuilder:validation:XValidation:rule="self.mode == 'Ingress' ? has(self.ingress) : !has(self.ingress)",message="ingress is required with mode Ingress and not allowed otherwise"
 // +kubebuilder:validation:XValidation:rule="self.mode in ['Gateway', 'Ingress'] ? has(self.hostname) : !has(self.hostname)",message="hostname is required with modes Gateway and Ingress and not allowed otherwise"
@@ -720,30 +701,18 @@ type ArtifactExposure struct {
 	// +default="None"
 	Mode ArtifactExposureMode `json:"mode,omitempty"`
 
-	// gateway is the Gateways to attach to, for mode Gateway. A listener
-	// the route attaches to must be HTTPS, with a certificate for
-	// *.<hostname> under origins PerArtifact.
+	// gateway is the Gateways to attach to, for mode Gateway; a listener the
+	// route attaches to must be HTTPS.
 	// +optional
 	Gateway GatewayExposure `json:"gateway,omitzero"`
 
-	// ingress is the Ingress settings, for mode Ingress, where tls is
-	// required. Under origins PerArtifact the Ingress's host and its TLS
-	// host are *.<hostname>, so the Secret holds a wildcard certificate.
+	// ingress is the Ingress settings, for mode Ingress; tls is required.
 	// +optional
 	Ingress *IngressExposure `json:"ingress,omitempty"`
 
-	// hostname is the artifact origin's host name, as a template with the
-	// variables and rules of api.hostname. Under origins PerArtifact it is
-	// the parent of every artifact's host: the route takes *.<hostname>, and
-	// the engine is told https://{artifact}.<hostname>. Under Shared it is
-	// the one host every artifact is served from, https://<hostname>.
-	//
-	// Give it a registrable domain other than the dashboard's (a separate
-	// domain such as crewletusercontent.example, as browsers draw the line
-	// between sites there): on the dashboard's own site, an artifact's
-	// requests would carry the dashboard's SameSite cookies, so Crewlet
-	// serves every artifact with an opaque origin there whatever origins
-	// says, and pages lose their browser storage.
+	// hostname is the artifact origin's host name, a template with the
+	// variables and rules of api.hostname. Use a registrable domain of its
+	// own: on the dashboard's site Crewlet serves every artifact opaque.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=200
@@ -753,11 +722,8 @@ type ArtifactExposure struct {
 	// +kubebuilder:validation:XValidation:rule="!self.matches('(^|[.])([0-9]+|0x[0-9a-f]*)$')",message="hostname may not end in a label that is a number, such as {{uid}}.123 or {{uid}}.0x1f: a browser reads the host as an IPv4 address and rewrites it before it sends it, and Crewlet refuses to start on such an address; end it in a label that is not one, such as a domain of your own"
 	Hostname string `json:"hostname,omitempty"`
 
-	// origins is how one artifact is kept apart from another in a browser:
-	// PerArtifact gives each its own host under hostname, and Shared serves
-	// every one from hostname itself with an opaque origin. Unset is
-	// PerArtifact. Crewlet's api.artifacts.external_url, which names
-	// {artifact} for PerArtifact.
+	// origins is PerArtifact (unset), where the route takes *.<hostname>, or
+	// Shared, where it takes <hostname>.
 	// +optional
 	Origins ArtifactOrigins `json:"origins,omitempty"`
 }
@@ -777,8 +743,7 @@ type ExposureSettings struct {
 	// +default={"mode": "ClusterInternal"}
 	API APIExposure `json:"api,omitzero"`
 
-	// artifacts is how browsers reach the artifact origin, which the
-	// dashboard frames every artifact from.
+	// artifacts is how browsers reach the artifact origin.
 	// +optional
 	// +default={"mode": "None"}
 	Artifacts ArtifactExposure `json:"artifacts,omitzero"`

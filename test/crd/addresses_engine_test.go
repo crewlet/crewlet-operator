@@ -185,14 +185,8 @@ func TestAddressShapesFollowTheEngine(t *testing.T) {
 	}
 }
 
-// artifactsBaseURLShapes are the addresses TestArtifactsBaseURLFollowsTheEngine
-// offers as a Company's spec.exposure.artifactsBaseURL, beside a dashboard at
-// takenExternal: either side of each line Crewlet draws for an artifact origin
-// (the placeholder's position, count, label characters and label length; a
-// path, a query, a fragment and a port outside 1 to 65535; plain http on a
-// routable host), and the neighbours it takes. internal/render's
-// TestContractArtifactAddressShapes holds the render to the engine at these
-// and at the origins that meet another address.
+// artifactsBaseURLShapes are artifactsBaseURLs either side of each line Crewlet
+// draws for an artifact origin, beside a dashboard at takenExternal.
 var artifactsBaseURLShapes = []string{
 	"https://{artifact}.artifacts.example.net", "https://artifacts.example.com", "https://artifacts.example.com/",
 	"https://artifacts.example.com:8443", "http://localhost:8082", "http://{artifact}.localhost:8082",
@@ -211,8 +205,8 @@ var artifactsBaseURLShapes = []string{
 // spacedArtifactsURL is an artifact origin with white space before it.
 const spacedArtifactsURL = " https://artifacts.example.com"
 
-// artifactsAPIRefusesMore are the shapes the API refuses as an artifactsBaseURL
-// although Crewlet would take them, and why it does on purpose.
+// artifactsAPIRefusesMore are the shapes the API refuses although Crewlet
+// takes them, and why.
 var artifactsAPIRefusesMore = map[string]string{
 	"http://[::1]:8082": "an IPv6 loopback address: the API takes plain http on localhost, a name under it and " +
 		"127.x.x.x, which a port-forwarding browser reaches",
@@ -226,20 +220,12 @@ var artifactsAPIRefusesMore = map[string]string{
 	"https://artifacts.123": "a host whose last label is a number, which a browser reads as an IPv4 address",
 }
 
-// artifactsHeldBack are the artifactsBaseURL shapes the API admits and Crewlet
-// refuses beside the dashboard at takenExternal, since a rule on one field
-// cannot see another: the dashboard's own origin, and a parent of its host.
-// The render refuses them, so the data pod is held back rather than started
-// to crash-loop.
+// artifactsHeldBack are the shapes the API admits and Crewlet refuses beside
+// the dashboard, which only the render can see and refuses.
 var artifactsHeldBack = []string{takenExternal}
 
-// TestArtifactsBaseURLFollowsTheEngine holds the API's verdict on a Company's
-// spec.exposure.artifactsBaseURL, which the data pod's engine is told as
-// api.artifacts.external_url, to the engine's: every shape the API admits
-// renders to a crewlet.yaml `crewlet validate` takes, but for the origins
-// that meet the dashboard's, which the render refuses as the engine does;
-// and every shape it refuses, the engine refuses too, but for those
-// artifactsAPIRefusesMore lists.
+// TestArtifactsBaseURLFollowsTheEngine holds the API's rules on
+// artifactsBaseURL to crewlet validate.
 func TestArtifactsBaseURLFollowsTheEngine(t *testing.T) {
 	namespace := newNamespace(t)
 	for i, shape := range append(slices.Clone(artifactsBaseURLShapes), artifactsHeldBack...) {
