@@ -66,7 +66,7 @@ flowchart TD
     push --> same{"engine runs this document<br/>with these values?"}
     same -- yes --> done["nothing to write"]
     same -- no --> dry{"engine dry run"}
-    dry -- refused --> invalid["Applied=False Invalid<br/>on the part at fault"]
+    dry -- refused --> invalid["ConfigApplied=False Invalid on the Company<br/>Applied=False Invalid on the part at fault,<br/>where a part rendered it"]
     dry --> apply["apply the whole document<br/>as one revision"]
     apply --> gc["delete the store entries<br/>nothing references any more"]
 ```
