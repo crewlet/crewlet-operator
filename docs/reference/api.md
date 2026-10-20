@@ -2719,7 +2719,10 @@ _Appears in:_
 
 
 SandboxSetupStep is one provisioning step applied to a sandbox before the
-coding agent starts. It maps onto a Crewlet sandbox setup step.
+coding agent starts. It maps onto a Crewlet sandbox setup step, which
+Crewlet refuses when it does nothing (no files, commands, env or brief):
+that is almost always an unfinished edit, which would otherwise apply
+cleanly for ever and look like it was working.
 
 
 
@@ -2729,7 +2732,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | name identifies the step in logs and failure messages. |  | MaxLength: 63 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `name` _string_ | name identifies the step in logs and failure messages, so Crewlet<br />refuses one of white space alone, and so does the API. |  | MaxLength: 63 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `files` _[SandboxFile](#sandboxfile) array_ | files are written into the sandbox before the commands run. Crewlet's<br />`files`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `commands` _string array_ | commands are shell commands run in order; one that exits non-zero<br />fails the sandbox. Crewlet's `commands`. Crewlet resolves nothing in a<br />command: the sandbox's login shell expands $NAME and $\{NAME\} from the<br />box's own environment (its HOME and PATH among it) and the run's,<br />never from the engine's. The run's is the steps' env, the Seat's<br />sandbox env, and what Crewlet adds: the agent's handle and, when it<br />has one, its email, and the variables that sign the coding agent in<br />to the provider its code work runs on (docs/guides/credentials.md<br />says which, and when the seat's own env leaves them out). The API<br />refuses $\{NAME\} (NAME an identifier) all the same, as the operator<br />refuses every $\{NAME\} it did not write in a string it renders: write a<br />sandbox variable as $NAME. Parameter expansions such as $\{1:-x\} are<br />allowed. |  | MaxItems: 32 <br />items:MaxLength: 4096 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
 | `env` _[SecretEnvVar](#secretenvvar) array_ | env is merged into the environment of the commands and of the run.<br />Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |

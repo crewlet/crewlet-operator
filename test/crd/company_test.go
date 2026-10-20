@@ -746,3 +746,50 @@ func TestCompanyImmutability(t *testing.T) {
 		},
 	})
 }
+
+// TestSandboxSetupStepValidation covers the API's rules on a setup step
+// itself, on a Company's steps and a Seat's: a name of white space alone and
+// a step that does nothing are refused (TestSetupStepShapesFollowTheEngine
+// holds the rules to the engine).
+func TestSandboxSetupStepValidation(t *testing.T) {
+	onCompany := func(step v1.SandboxSetupStep) func(*v1.Company) {
+		return func(c *v1.Company) {
+			c.Spec.Sandbox = v1.SandboxSettings{
+				E2B:   v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
+				Setup: []v1.SandboxSetupStep{step},
+			}
+		}
+	}
+	runCreateCases(t, company, []createCase[*v1.Company]{
+		{
+			name:   "a step named with white space alone is refused",
+			mutate: onCompany(v1.SandboxSetupStep{Name: " \t", Brief: "b"}),
+			want:   msgSetupStepName,
+		},
+		{
+			name:   "a step that does nothing is refused",
+			mutate: onCompany(v1.SandboxSetupStep{Name: "x"}),
+			want:   msgSetupStepEmpty,
+		},
+		{
+			name:   "a step whose lists are empty does nothing and is refused",
+			mutate: onCompany(v1.SandboxSetupStep{Name: "x", Commands: []string{}, Files: []v1.SandboxFile{}}),
+			want:   msgSetupStepEmpty,
+		},
+		{name: "a step with only a brief is accepted", mutate: onCompany(v1.SandboxSetupStep{Name: "x", Brief: "b"})},
+	})
+	runCreateCases(t, seat, []createCase[*v1.Seat]{
+		{
+			name: "a seat's step named with white space alone is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Sandbox = &v1.SeatSandbox{Setup: []v1.SandboxSetupStep{{Name: " ", Brief: "b"}}}
+			},
+			want: msgSetupStepName,
+		},
+		{
+			name:   "a seat's step that does nothing is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{Setup: []v1.SandboxSetupStep{{Name: "x"}}} },
+			want:   msgSetupStepEmpty,
+		},
+	})
+}
