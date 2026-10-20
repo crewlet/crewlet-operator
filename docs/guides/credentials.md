@@ -97,6 +97,17 @@ Variables and files the sandbox sets up for every run (`sandbox.setup[].env`,
 `sandbox.setup[].files`) and a Seat's own sandbox variables
 (`Seat.spec.sandbox.env`) take `valueFrom.secretKeyRef` for every entry.
 
+A file's `path` is where the seat's E2B box writes it. Name it relative to
+the box's home, `/home/user` (`.npmrc`), or under `~/` (`~/.npmrc`); a `..`
+that climbs out of the home lands where it resolves. An absolute path works
+only where the box's account may write, which is not `/root`, and a path that
+names a directory, such as `/tmp`, fails every box at setup. The API refuses
+a path of white space alone or under another account's home (`~root/…`).
+Crewlet refuses one that names the home itself or a directory above it (`~`,
+`/home`): a step of the Company's own reports it on the Company as
+`ConfigApplied=False Invalid`, and a Seat's on the Seat as
+`Applied=False Invalid`.
+
 ### What a coding box carries
 
 A seat's code work signs its coding agent in with the provider it runs on:

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -18,6 +19,100 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/render"
 	"github.com/crewlet/crewlet-operator/internal/secretsync"
 )
+
+// setupFilePaths are the paths TestSetupFilePathsFollowTheEngine offers as a
+// sandbox setup step's file:
+//   - ones the seat's E2B box writes: relative to its home, under ~/,
+//     absolute inside the home or not, one that climbs out of the home with
+//     .., and one with a backslash after the ~, which the box's tilde check
+//     takes as it takes a / but which stays in the file's name (~\.npmrc is
+//     the file \.npmrc in /home/user), and a zero-width space, which is no
+//     white space to Crewlet or the API;
+//   - the home and each directory above it, however .. and repeated
+//     separators spell them;
+//   - another account's home in its shapes: a name, a second ~, a character
+//     outside ASCII after the ~;
+//   - white space alone, which names no file.
+var setupFilePaths = []string{
+	".npmrc", "./.npmrc", "a/../.npmrc", ".config/gh/hosts.yml", "~/.npmrc", "~//.npmrc", `~\.npmrc`,
+	"/home/user/.npmrc", "/home/user//.npmrc", "/home/user/../user/.npmrc", "/tmp/x", "/etc/x", "/root/.npmrc",
+	"/home/x", "../x", "~/../x", "\u200b",
+	"~", "~/", "~//", ".", "./", "..", "../..", "a/..", "/", "//", "/home", "/home/", "/home/user",
+	"/home/user/", "/home//user", "/home/user/.", "/home/user/x/..", "/home/../home/user", "~/..", "~/../..",
+	"~/a/../..",
+	"~root/.npmrc", "~root", "~~", "~.npmrc", "~é/x",
+	" ", "\t", " \u3000 ",
+}
+
+// namesTheHome are the shapes of setupFilePaths that name the box's home or a
+// directory above it, which the API admits and Crewlet refuses: whether a
+// path names one depends on how .. and repeated separators resolve, which no
+// rule the API server runs can follow. Crewlet's refusal is reported instead:
+// on the Company's ConfigApplied for a step of the Company's own, as every one
+// this test offers is, and on the Seat's Applied for a step of a Seat's.
+var namesTheHome = []string{
+	"~", "~/", "~//", ".", "./", "..", "../..", "a/..", "/", "//", "/home", "/home/", "/home/user",
+	"/home/user/", "/home//user", "/home/user/.", "/home/user/x/..", "/home/../home/user", "~/..", "~/../..",
+	"~/a/../..",
+}
+
+// TestSetupFilePathsFollowTheEngine holds the API's verdict on a sandbox
+// setup step's file path to Crewlet's, both ways where that is honest: every
+// path the API refuses Crewlet refuses too, so no Company is refused a file
+// its seats' boxes would write; and every path Crewlet refuses the API
+// refuses too, but for namesTheHome, each of which Crewlet must still
+// refuse. Every box the operator renders is an E2B one (default_run_in: e2b,
+// and an agent-mode CLI runs in E2B too), so Crewlet judges each path as such
+// a box writes it.
+func TestSetupFilePathsFollowTheEngine(t *testing.T) {
+	namespace := newNamespace(t)
+	steps := make([]v1.SandboxSetupStep, len(setupFilePaths))
+	for i, path := range setupFilePaths {
+		steps[i] = setupStepWritingFile(fmt.Sprintf("s%02d", i), path)
+	}
+	refused := engineRefusesSetupSteps(t, steps, func(i int, rest []engine.Segment) bool {
+		// At the step's files, or at the file's own entry under them.
+		return len(rest) >= 1 && rest[0].Key == "files" &&
+			(len(rest) == 1 || (len(rest) == 2 && rest[1].Key == setupFilePaths[i]))
+	})
+	apiRefused := 0
+	for i, path := range setupFilePaths {
+		c := company(namespace, fmt.Sprintf("f%02d", i))
+		c.Spec.Sandbox = v1.SandboxSettings{
+			E2B:   v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
+			Setup: []v1.SandboxSetupStep{setupStepWritingFile("files", path)},
+		}
+		apiAdmits := admitted(t, k8sClient, c)
+		crewletRefuses := refused[i]
+		home := slices.Contains(namesTheHome, path)
+		if !apiAdmits {
+			apiRefused++
+		}
+		switch {
+		case !apiAdmits && !crewletRefuses:
+			t.Errorf("the API refuses the setup file %q, and crewlet validate takes it", path)
+		case !apiAdmits && home:
+			t.Errorf("%q is listed as one the API admits for naming the home, and the API refuses it", path)
+		case apiAdmits && crewletRefuses && !home:
+			t.Errorf("the API admits the setup file %q, and crewlet validate refuses it, so the Company is "+
+				"applied nowhere", path)
+		case !crewletRefuses && home:
+			t.Errorf("%q is listed as naming the box's home, and crewlet validate takes it", path)
+		}
+	}
+	if apiRefused == 0 {
+		t.Error("the API refuses none of the setup files: its rules on a path are tried nowhere")
+	}
+}
+
+// setupStepWritingFile is a setup step named name that writes one file, at
+// path, from a Secret.
+func setupStepWritingFile(name, path string) v1.SandboxSetupStep {
+	return v1.SandboxSetupStep{
+		Name:  name,
+		Files: []v1.SandboxFile{{Path: path, ValueFrom: fromSecret("company-sandbox", "file")}},
+	}
+}
 
 // stepShape is a setup step TestSetupStepShapesFollowTheEngine offers.
 type stepShape struct {

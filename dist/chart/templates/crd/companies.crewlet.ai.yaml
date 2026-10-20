@@ -903,11 +903,45 @@ spec:
                               registry login), so it always comes from a Secret.
                             properties:
                               path:
-                                description: path is where the file is written inside
-                                  the sandbox.
+                                description: |-
+                                  path is where the file is written in the seat's E2B box. The box's own
+                                  agent writes it as the account every template runs as, and creates any
+                                  directory it needs. A relative path, such as .npmrc, and one starting
+                                  ~/ are joined onto that account's home, /home/user, and cleaned, so one
+                                  that climbs with .. (../x) lands outside the home. An absolute path is
+                                  written where it names, which works only where that account may write
+                                  (not under /root, for one). Crewlet's `files` key.
+
+                                  The box refuses a path that names a directory rather than a file, and
+                                  a path starting ~ and a name, such as ~root/.npmrc, since it does not
+                                  expand another account's home. A path naming a directory only the
+                                  template made, such as /tmp, fails every box at setup: nothing can tell
+                                  beforehand. Crewlet refuses a company document that gives a seat's box
+                                  one of the shapes it can judge without the template: another account's
+                                  home, and the home or a directory above it (such as ~, . or /home),
+                                  which every template has. It also refuses a path of white space alone
+                                  on every step.
+
+                                  The API refuses white space alone and another account's home itself.
+                                  Whether a path names the home depends on how .. and repeated
+                                  separators resolve, so that is left to Crewlet, whose refusal is
+                                  reported on the Company as ConfigApplied=False Invalid for a step of
+                                  the Company's own, and on the Seat as Applied=False Invalid for a step
+                                  of a Seat's. Either way the document is held and the running revision
+                                  stays.
                                 maxLength: 1024
                                 minLength: 1
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'path may not be white space alone: Crewlet
+                                    refuses a setup file whose path names nothing'
+                                  rule: self.trim().size() > 0
+                                - message: 'path may not start with ~ followed by
+                                    a name, such as ~root: the sandbox''s box does
+                                    not expand another account''s home, so write the
+                                    file relative to its own, or under ~/'
+                                  rule: '!self.startsWith(''~'') || size(self) ==
+                                    1 || self.substring(1, 2) in [''/'', ''\\'']'
                               valueFrom:
                                 description: valueFrom is the Secret key holding the
                                   file's content.
