@@ -113,6 +113,26 @@ const livenessFailureThreshold = 6
 // seat pod's admission within one pass.
 const probePeriodSeconds = 5
 
+// startupFailureThreshold is how many failed startup probes, one every
+// probePeriodSeconds, give a container at least a startup window of seconds
+// from its start, and less than two periods more.
+//
+// The kubelet does not count the window from the container's start. Its
+// startup prober ticks from when the pod's probe worker began, and only
+// readiness is ever triggered early, so a container's first probe lands
+// anywhere in the period after the container runs. The engine answers each
+// probe at once (connection refused, then 503 while it recovers), and the
+// kubelet restarts the container on the threshold-th failure in a row: at
+// that first probe plus threshold-1 periods, which can be all but a whole
+// period short of threshold periods. So the threshold covers the window with
+// threshold-1 periods, rounded up. A threshold of the window over the period
+// truncated, as it was, cut a window that is no multiple of the period (a
+// class's startupSeconds of 301, the 396 seconds a 16Gi volume derives) by
+// up to four seconds more on top of that period.
+func startupFailureThreshold(seconds int32) int32 {
+	return (seconds+probePeriodSeconds-1)/probePeriodSeconds + 1
+}
+
 // The data pod's startup window when the class sets none: what every boot does
 // within the engine's own bounds, and the recovery of what the volume holds,
 // which the engine waits out unbounded because it grows with the data. See
@@ -573,7 +593,7 @@ func withProbes(container *corev1ac.ContainerApplyConfiguration, startupSeconds 
 			WithHTTPGet(get("/health")).
 			WithPeriodSeconds(probePeriodSeconds).
 			WithTimeoutSeconds(5).
-			WithFailureThreshold(startupSeconds / probePeriodSeconds)).
+			WithFailureThreshold(startupFailureThreshold(startupSeconds))).
 		// /health answers 200 from the end of the recovery for as long as
 		// the process lives, through the company's part of the boot and a
 		// drain too, so liveness never kills a pod that is starting its

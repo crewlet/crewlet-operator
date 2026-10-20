@@ -27,7 +27,7 @@ func TestDataPodStartupSeconds(t *testing.T) {
 	}{
 		{"a volume of no size", classWith(0), "0", 300},
 		{"a quantity below zero, which no claim has", classWith(0), "-2Gi", 300},
-		{"the smallest volume", classWith(0), "8Gi", 300 + 8*6},
+		{"the smallest volume", classWith(0), "12Gi", 300 + 12*6},
 		{"a volume of whole GiB", classWith(0), "100Gi", 300 + 100*6},
 		{"a part of a GiB counts as one", classWith(0), "10737418241", 300 + 11*6},
 		{"a volume in decimal units", classWith(0), "500G", 300 + 466*6},
@@ -45,5 +45,19 @@ func TestDataPodStartupSeconds(t *testing.T) {
 				t.Errorf("dataPodStartupSeconds(%s) = %d, want %d", c.volume, got, c.seconds)
 			}
 		})
+	}
+}
+
+// TestStartupFailureThreshold holds the startup probe's failures to the window
+// they make up, counted as the kubelet counts it: from a first probe that may
+// land at once, threshold-1 periods, never shorter than the window and short
+// of a period more.
+func TestStartupFailureThreshold(t *testing.T) {
+	t.Parallel()
+	for _, seconds := range []int32{300, 301, 304, 305, 306, 360, 396, 1200, maxStartupSeconds - 1, maxStartupSeconds} {
+		threshold := startupFailureThreshold(seconds)
+		if window := (threshold - 1) * probePeriodSeconds; window < seconds || window >= seconds+probePeriodSeconds {
+			t.Errorf("startupFailureThreshold(%d) = %d, a window of %ds after the first probe", seconds, threshold, window)
+		}
 	}
 }

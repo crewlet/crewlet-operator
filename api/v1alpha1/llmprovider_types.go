@@ -101,8 +101,8 @@ const (
 // Crewlet's `inherit-env`, which hands the CLI whichever token or key the
 // engine's own environment holds, is not offered: a credential in the
 // engine's environment is outside the encrypted store, readable by every
-// process the engine runs, and resolvable by a ${NAME} written in any field of
-// the company document, so it would be the one credential the API takes by
+// process the engine runs, and resolvable by a ${NAME} written in many fields
+// of the company document, so it would be the one credential the API takes by
 // another route than a Secret reference. Subscription and APIKey cover what
 // it is for.
 // +kubebuilder:validation:Enum=Subscription;APIKey
@@ -247,19 +247,29 @@ type CLIAgentSettings struct {
 	// +required
 	Auth CLIAgentAuth `json:"auth,omitzero"`
 
-	// env is extra environment of every invocation of the CLI: the child
-	// gets an allowlisted environment, not the engine's, so a variable the
-	// CLI needs beyond that is given here. It is how Hermes, Pi and OpenCode
-	// sign in under auth mode Subscription with no login of their own: their
-	// model provider's key, under a name Crewlet reads as a credential, such
-	// as OPENROUTER_API_KEY. It may not set the CLI's own token or key
-	// variable, which auth owns, nor a variable Crewlet sets to keep the CLI
-	// inside its seat's home and its call's working directory: HOME, the XDG
-	// directories, TMPDIR, and the CLI's own configuration directory or
-	// switch (docs/guides/cli-agents.md). An OpenCode provider's
-	// credential-named variables also travel into every box of an
-	// Agent-mode run, and of a seat's code work that runs on it, where the
-	// coding agent can read them. Crewlet's `env`, a credential position.
+	// env is extra environment of the CLI where it runs in the engine's pod,
+	// as a model behind the engine's own tool loop: in every phase a
+	// Text-mode provider runs, and in every phase but the executor's of an
+	// Agent-mode one. There the CLI does not get the engine's environment: it
+	// gets the part Crewlet's allowlist names, such as PATH and the TLS and
+	// proxy variables, and the variables the CLI's Crewlet profile passes
+	// through, such as GeminiCLI's GOOGLE_CLOUD_PROJECT, with a HOME, a
+	// TMPDIR and XDG directories of its seat's own rather than the engine's.
+	// So a variable the CLI needs beyond that is given here. It is how
+	// Hermes, Pi and OpenCode sign in under auth mode Subscription with no
+	// login of their own: their model provider's key, under a name Crewlet
+	// reads as a credential, such as OPENROUTER_API_KEY. It may not set the
+	// CLI's own token or key variable, which auth owns, nor a variable
+	// Crewlet sets to keep the CLI inside its seat's home and its call's
+	// working directory: HOME, the XDG directories, TMPDIR, and the CLI's own
+	// configuration directory or switch (docs/guides/cli-agents.md).
+	//
+	// An Agent-mode run, and a seat's code work on the provider, run the CLI
+	// in the Company's E2B sandbox. There it gets none of that environment,
+	// and of env only an OpenCode provider's credential-named variables,
+	// where the coding agent can read them; a variable of no credential that
+	// such a run needs goes in the Seat's spec.sandbox.env. Crewlet's `env`,
+	// a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
@@ -348,7 +358,7 @@ type LLMProviderSettings struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
 	// +kubebuilder:validation:XValidation:rule="self.trim().size() > 0",message="model may not be white space alone: Crewlet trims it, and refuses a provider that names no model"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="model may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="model may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Model string `json:"model,omitempty"`
 
 	// claudeModel names the Claude model whose request shape an Anthropic
@@ -368,7 +378,7 @@ type LLMProviderSettings struct {
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() in ['http', 'https']",message="baseURL must be an absolute http or https URL"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="baseURL may not hold a user name or password: a credential is named through a Secret, never written into an address"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="baseURL may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="baseURL may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	BaseURL string `json:"baseURL,omitempty"`
 
 	// reasoning turns on an OpenAI reasoning model's effort, so that

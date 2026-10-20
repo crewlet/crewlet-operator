@@ -352,10 +352,12 @@ the Seat sets it, and is left to the dashboard when it does not
 ## What a tenant can read
 
 Treat a tenant's namespace and its engine's pod as readable by the tenant.
-The engine runs the tenant's code: a `Stdio` MCP server's command, a sandbox
-setup step's commands, agents' tool calls. That code runs as the engine's
-user, so it can read the engine's environment and its `crewlet.yaml`, and
-open the secret store on the data volume with the keyring the pod holds.
+The engine runs the tenant's code in its own pod: a `Stdio` MCP server's
+command, a coding CLI, and whatever an agent's tool calls have them do. That
+code runs as the engine's user. The engine hands it only an allowlist of its
+environment, but it can read the rest of it, and the engine's
+`crewlet.yaml`, and open the secret store on the data volume with the
+keyring the pod holds.
 And the access token in `status.apiAccessSecretRef` holds Crewlet's `admin`
 grant, which takes in every app, so whoever holds it can reveal every value
 in the secret store, write new ones, and invite or create the company's

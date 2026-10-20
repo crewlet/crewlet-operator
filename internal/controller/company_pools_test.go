@@ -149,7 +149,7 @@ var _ = Describe("Company seat pools", func() {
 			Spec: crewletaiv1alpha1.EngineClassSpec{
 				Engine: crewletaiv1alpha1.EngineSettings{Image: engineImageV020},
 				Data: crewletaiv1alpha1.DataPodSettings{
-					Storage: crewletaiv1alpha1.DataStorage{Size: new(resource.MustParse("10Gi"))},
+					Storage: crewletaiv1alpha1.DataStorage{Size: new(resource.MustParse("16Gi"))},
 				},
 				Retention: crewletaiv1alpha1.RetentionSettings{BackupOwner: "platform-oncall"},
 				SeatPools: crewletaiv1alpha1.SeatPoolSettings{

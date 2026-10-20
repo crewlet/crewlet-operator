@@ -178,7 +178,7 @@ var _ = Describe("Company runtime", func() {
 			Spec: crewletaiv1alpha1.EngineClassSpec{
 				Engine: crewletaiv1alpha1.EngineSettings{Image: engineImageV020},
 				Data: crewletaiv1alpha1.DataPodSettings{
-					Storage: crewletaiv1alpha1.DataStorage{Size: new(resource.MustParse("10Gi"))},
+					Storage: crewletaiv1alpha1.DataStorage{Size: new(resource.MustParse("16Gi"))},
 				},
 				Retention: crewletaiv1alpha1.RetentionSettings{BackupOwner: "platform-oncall"},
 			},
@@ -292,7 +292,7 @@ var _ = Describe("Company runtime", func() {
 			Tokens:  tokensOf(tokens),
 			// Every data StatefulSet here is created from newClass's
 			// volume, and keeps it when the class changes later.
-			VolumeSize: resource.MustParse("10Gi"),
+			VolumeSize: resource.MustParse("16Gi"),
 			// newClass routes nothing: a browser reaches the engine
 			// through a port-forward, and its public listener at its
 			// address inside the cluster.
@@ -401,7 +401,7 @@ var _ = Describe("Company runtime", func() {
 		Expect(sts.Spec.VolumeClaimTemplates).To(HaveLen(1))
 		claim := sts.Spec.VolumeClaimTemplates[0]
 		Expect(claim.Name).To(Equal("data"))
-		Expect(claim.Spec.Resources.Requests.Storage().String()).To(Equal("10Gi"))
+		Expect(claim.Spec.Resources.Requests.Storage().String()).To(Equal("16Gi"))
 		Expect(claim.Labels).To(HaveKeyWithValue(crewletaiv1alpha1.CompanyLabel, companyName))
 
 		pod := sts.Spec.Template
@@ -425,8 +425,11 @@ var _ = Describe("Company runtime", func() {
 		Expect(container.LivenessProbe.PeriodSeconds*container.LivenessProbe.FailureThreshold).To(BeNumerically(">", 45),
 			"liveness restarts the engine before its watchdog's 45 seconds")
 		Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/health"))
-		Expect(container.StartupProbe.PeriodSeconds*container.StartupProbe.FailureThreshold).To(Equal(int32(300+10*6)),
-			"the startup probe gives the boot five minutes and six seconds for every GiB of the class's 10Gi volume")
+		Expect(container.StartupProbe.PeriodSeconds).To(Equal(int32(probePeriodSeconds)))
+		Expect((container.StartupProbe.FailureThreshold-1)*container.StartupProbe.PeriodSeconds).
+			To(BeNumerically(">=", 300+16*6),
+				"the startup probe gives the boot five minutes and six seconds for every GiB of the class's 16Gi volume, "+
+					"counted from a first probe that may land at once")
 		Expect(container.StartupProbe.TimeoutSeconds).To(Equal(int32(5)),
 			"/health reads the coordination plane under a budget of about two seconds, longer than Kubernetes' default of one")
 		Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/ready"))
@@ -717,7 +720,7 @@ var _ = Describe("Company runtime", func() {
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 				Resources: corev1.VolumeResourceRequirements{
-					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
+					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("16Gi")},
 				},
 			},
 		}
@@ -1023,9 +1026,9 @@ var _ = Describe("Company runtime", func() {
 		Expect(bootstrap.Data[configFile]).To(Equal(expectedBootstrap(company, class).YAML))
 		Expect(after.Spec.Template.Annotations[BootstrapHashAnnotation]).To(Equal(hashOf(bootstrap.Data)))
 		Expect(after.Spec.Template.Annotations[BootstrapHashAnnotation]).NotTo(Equal(before.Spec.Template.Annotations[BootstrapHashAnnotation]))
-		Expect(after.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests.Storage().String()).To(Equal("10Gi"))
-		Expect(string(bootstrap.Data[configFile])).To(ContainSubstring("store_max_bytes: 8053063680"),
-			"the event stream is three quarters of the 10Gi volume the pod keeps, not of the class's new 50Gi")
+		Expect(after.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests.Storage().String()).To(Equal("16Gi"))
+		Expect(string(bootstrap.Data[configFile])).To(ContainSubstring("store_max_bytes: 12884901888"),
+			"the event stream is three quarters of the 16Gi volume the pod keeps, not of the class's new 50Gi")
 	})
 
 	It("rolls the pods when a value they read at start changes, and only then", func() {
@@ -1149,7 +1152,7 @@ var _ = Describe("Company runtime", func() {
 				Spec: corev1.PersistentVolumeClaimSpec{
 					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
+						Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("16Gi")},
 					},
 				},
 			}
@@ -1825,7 +1828,7 @@ var _ = Describe("Company runtime", func() {
 				Spec: corev1.PersistentVolumeClaimSpec{
 					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
+						Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("16Gi")},
 					},
 				},
 			}
@@ -1972,7 +1975,7 @@ var _ = Describe("Company status writes", func() {
 			Spec: crewletaiv1alpha1.EngineClassSpec{
 				Engine: crewletaiv1alpha1.EngineSettings{Image: engineImageV020},
 				Data: crewletaiv1alpha1.DataPodSettings{
-					Storage: crewletaiv1alpha1.DataStorage{Size: new(resource.MustParse("10Gi"))},
+					Storage: crewletaiv1alpha1.DataStorage{Size: new(resource.MustParse("16Gi"))},
 				},
 			},
 		}

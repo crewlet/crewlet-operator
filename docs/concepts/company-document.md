@@ -212,13 +212,20 @@ finds on the filesystem, which is the volume only when the volume is a disk
 of its own: a provisioner that carves claims out of one node filesystem
 (local-path, hostPath, kind's default) shows every engine on the node the
 node's whole free space, and engines that share it over-commit it until the
-last one is refused with `insufficient storage resources available`. Crewlet
-needs at least 6 GiB for the stream, since every node reserves the ceilings of
-all five of its state logs, 4.5 GiB at their smallest, and keeps room beside
-them, so an EngineClass's `data.storage.size` is at least `8Gi`. Nor does it
-start on more than 64 TiB, a guard against a unit mistake rather than a
-limit on the volume, so a volume larger than about 85 TiB gives the stream
-64 TiB and leaves the rest to the store and its snapshots.
+last one is refused with `insufficient storage resources available`. A fresh
+node reserves what it keeps on the stream when it starts, and refuses to boot
+on a stream that cannot hold it
+([the minimum room for a fresh node](https://github.com/crewlet/crewlet/blob/main/docs/guides/deployment.md#the-minimum-room-for-a-fresh-node)):
+the ceilings of its seven state logs, 6979321856 bytes at their smallest,
+and, with the class's `objects.backend` `NATS` (the default), the object
+store's bucket beside them at a quarter of the stream, 9305762474 bytes in
+all. So an EngineClass's `data.storage.size` is at least `12Gi`, whose three
+quarters is 9 GiB, or `9Gi` for a class that keeps its files in S3. That is
+the least that boots: the mailboxes and the coordination buckets grow into
+what is left. Nor does Crewlet start on more
+than 64 TiB, a guard against a unit mistake rather than a limit on the
+volume, so a volume larger than about 85 TiB gives the stream 64 TiB and
+leaves the rest to the store and its snapshots.
 
 It holds the node's credentials as values: the two API tokens (the
 operator's own, and the one published for consumers in
@@ -349,16 +356,21 @@ that holds the reference:
 
 The last row is the operator's, not Crewlet's. Crewlet resolves a `${NAME}`
 from the engine's secret store and then its environment in many fields that
-hold no credential (an MCP server's `url`, a provider's `base_url`, a
-sandbox setup command, a skill variable), so a reference an object holds
-itself would name values that are not its own: the class's platform model
-keys in the store, or the engine's environment. The only references in a
-rendered document are the ones the operator writes for a Secret key the
-object references, and for a seat's credentials the engine provisions
-([Credential Positions](credentials.md#credentials-the-engine-provisions)). The API server already refuses a `${NAME}` in the typed
-fields Crewlet is known to expand; the render check covers every other
-string. A sandbox setup command keeps shell syntax Crewlet leaves alone,
-such as `$HOME` and `${1:-x}`.
+hold no credential (an MCP server's `url`, a provider's `base_url`, a skill
+variable), so a reference an object holds itself would name values that are
+not its own: the class's platform model keys in the store, or the engine's
+environment. The only references in a rendered document are the ones the
+operator writes for a Secret key the object references, and for a seat's
+credentials the engine provisions
+([Credential Positions](credentials.md#credentials-the-engine-provisions)).
+The operator refuses every other reference, in the strings Crewlet passes
+on as written too, such as a sandbox setup command and a stdio server's
+`command` and `args`, so a field Crewlet starts expanding names nothing the
+day it does. The API server refuses one in many typed fields as they are
+written; the render check covers every string. Crewlet expands nothing in a
+sandbox setup command: the sandbox's shell does, from the run's own
+environment, so a command writes a variable as `$NAME`, and keeps shell
+syntax such as `${1:-x}`.
 
 Everything else Crewlet checks itself, when the operator dry-runs the
 rendered document. Crewlet locates each problem by its path in the document

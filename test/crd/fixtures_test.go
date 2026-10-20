@@ -18,6 +18,8 @@ const (
 	apiKeyKey     = "apiKey"
 	webhookHost   = "{{uid}}.hooks.example.com"
 	engineImage   = "ghcr.io/crewlet/crewlet:v0.1.0"
+	tenantsBucket = "crewlet-tenants"
+	tenantsRegion = "eu-central-1"
 	githubKeys    = "nimbus-github"
 	githubServer  = "https://api.githubcopilot.com/mcp/"
 	platformKeyNS = "crewlet-system"
@@ -143,7 +145,8 @@ const (
 	msgUnitID                      = "a Unit's name is its Crewlet unit id"
 	msgDuplicate                   = "Duplicate value"
 	msgThreeReplicas               = "Unsupported value: 3"
-	msgStorageFloor                = "size must be at least 8Gi"
+	msgStorageFloor                = "size must be at least 9Gi"
+	msgStorageFloorNATS            = "data.storage.size must be at least 12Gi with objects.backend NATS"
 	msgHeaderCase                  = "names must differ in more than case: HTTP header names are case-insensitive"
 	msgContainerKey                = `should match '^[A-Z][A-Z0-9]{1,9}$'`
 	msgProviderKeyEnv              = "ANTHROPIC_API_KEY and OPENAI_API_KEY are model provider keys"
@@ -200,7 +203,7 @@ func engineClass(_, name string) *v1.EngineClass {
 		Spec: v1.EngineClassSpec{
 			Engine: v1.EngineSettings{Image: engineImage},
 			Data: v1.DataPodSettings{
-				Storage: v1.DataStorage{Size: new(resource.MustParse("10Gi"))},
+				Storage: v1.DataStorage{Size: new(resource.MustParse("16Gi"))},
 			},
 		},
 	}

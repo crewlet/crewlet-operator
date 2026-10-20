@@ -10,7 +10,7 @@ spec:
     image: ghcr.io/crewlet/crewlet:v0.1.0
   data:
     storage:
-      size: 10Gi
+      size: 16Gi
   seatPools:
     policy: Allowed
     maxPods: 6

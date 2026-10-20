@@ -124,9 +124,9 @@ Two cases are refused rather than guessed at:
 | **Image** | The class's `engine.image`; with `engine.allowVersionOverride`, its tag replaced by the Company's `spec.runtime.version`. |
 | **Command** | `crewlet run -config /etc/crewlet/crewlet.yaml`, the bootstrap Secret's `crewlet.yaml` mounted read-only, readable by the engine's user alone (mode `0440`, group `fsGroup`). |
 | **Storage** | One volume claim per pod (`data-nimbus-data-0`) at `/var/lib/crewlet`, from the class's `data.storage`: the store, the event stream (three quarters of the volume, [sized from the claim](company-document.md#the-data-pods-crewletyaml)), and the store's native library cache (`TURSO_GO_CACHE_DIR`), so a restart does not extract it again. |
-| **Environment** | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the Company's public address, while an LLMProvider of the company runs a CLI in `mode: Agent` (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`, and with them `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, the Company's public address, while the Company has one (see [Exposure](#exposure)); then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). |
+| **Environment** | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the Company's public address, while an LLMProvider of the company runs a CLI in `mode: Agent` (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`, and with them `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, the Company's public address, while the Company has one (see [Exposure](#exposure)); then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). All of it is the engine's: a stdio tool server the engine starts is handed only the part of it [Crewlet's allowlist](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#what-a-stdio-servers-environment-is) names, the proxy and TLS variables among it, a coding CLI that part and the variables its Crewlet profile passes through, and a sandbox none ([Stdio and HTTP](../guides/tool-servers.md#stdio-and-http)). |
 | **Ports** | 8080 (`http`), the API, the dashboard and the probes; 8081 (`public`), the public listener: the webhooks, and a remote sandbox's `/otlp/` and `/mcp/`; and 7422 (`leaf`), the leaf listener seat pods join the event stream through, while the class's `seatPools.policy` is `Allowed`. The headless Service `nimbus-data` names 8080 and 7422; `nimbus-engine` names 8080 and 8081. |
-| **Probes** | `/health` for startup and liveness, `/ready` for readiness. Startup allows the class's `data.startupSeconds`, or, unset, five minutes plus six seconds per GiB of the data volume: the engine recovers what it holds on the volume before `/health` answers `200`, which takes longer the more it holds, and a pod restarted mid-recovery starts it again. The company's tool servers do not count: `/health` answers once the recovery is over, while they start, and `/ready` answers `503` `starting` until the engine serves. Liveness allows a minute of failures before a restart, longer than the 45 seconds in which the engine's watchdog ends a wedged process itself. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
+| **Probes** | `/health` for startup and liveness, `/ready` for readiness. Startup allows at least the class's `data.startupSeconds`, counted from the container's start, or, unset, five minutes plus six seconds per GiB of the data volume: the engine recovers what it holds on the volume before `/health` answers `200`, which takes longer the more it holds, and a pod restarted mid-recovery starts it again. The company's tool servers do not count: `/health` answers once the recovery is over, while they start, and `/ready` answers `503` `starting` until the engine serves. Liveness allows a minute of failures before a restart, longer than the 45 seconds in which the engine's watchdog ends a wedged process itself. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
 | **Stopping** | A five-second `preStop` sleep, so the endpoint is gone from the Services and Gateways before the engine drains, and the class's `data.terminationGracePeriodSeconds` (default five minutes) for the drain: running turns finish, waiting ones are handed back. |
 | **Updates** | `RollingUpdate` with `maxUnavailable: 1`, `podManagementPolicy: Parallel`. |
 | **Scheduling** | The class's `podTemplate`: labels, annotations, node selector, tolerations, affinity, topology spread, runtime and priority class; and its `data.resources`. |
@@ -134,10 +134,13 @@ Two cases are refused rather than guessed at:
 The pod runs under the `restricted` Pod Security Standard: as the image's
 user (uid 10001, `runAsNonRoot`), with the `RuntimeDefault` seccomp profile,
 no privilege escalation and every capability dropped. Its root filesystem is
-read-only. The engine writes only to its data volume, its home and `/tmp`;
-the processes it spawns (git, stdio MCP servers, coding agents) write to the
+read-only. The engine writes only to its data volume, its home and `/tmp`.
+A stdio MCP server it starts is handed the engine's `HOME` and writes to the
 latter two, which are `emptyDir` volumes, and `HOME` is set explicitly so an
-image built on another base still has a writable one.
+image built on another base still has a writable one. A coding CLI is handed
+a home, a `TMPDIR` and XDG directories of its seat's own instead, under
+`/var/lib/crewlet/llm-cli` on the data volume, and a seat's code work runs in
+the Company's E2B sandbox, outside the pod.
 
 The pod template carries the annotation `crewlet.ai/bootstrap-hash`, the hash
 of the bootstrap Secret's data, which rolls the pod when what it reads at
@@ -684,10 +687,12 @@ include it: an engine with an alarm still runs the company.
 ## Backups
 
 The operator takes no backup, and Crewlet needs them for more than recovery:
-it trims its logs (the work tracker, the knowledge base's pages and
-vectors, usage) only behind a verified backup younger than its
+it trims every one of its state logs only behind a verified backup younger
+than its
 `stream.tracker_retention.backup_max_age`, 24 hours by default, which the
-operator leaves as it is. Without one the logs grow until they reach the
+operator leaves as it is
+([a company that never backs up never trims](https://github.com/crewlet/crewlet/blob/main/docs/guides/retention.md#a-company-that-never-backs-up-never-trims)).
+Without one the logs grow until they reach the
 ceilings the data volume is sized for, and the engine then refuses ordinary
 writes. A new company raises the `backup_age` and `trim_blocked` alarms from
 the start, which `EngineHealthy=False Alarms` shows.

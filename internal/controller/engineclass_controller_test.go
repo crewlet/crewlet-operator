@@ -72,7 +72,7 @@ var _ = Describe("EngineClass controller in a manager", Ordered, func() {
 			Spec: crewletaiv1alpha1.EngineClassSpec{
 				Engine: crewletaiv1alpha1.EngineSettings{Image: engineImageV020},
 				Data: crewletaiv1alpha1.DataPodSettings{
-					Storage: crewletaiv1alpha1.DataStorage{Size: new(resource.MustParse("10Gi"))},
+					Storage: crewletaiv1alpha1.DataStorage{Size: new(resource.MustParse("16Gi"))},
 				},
 				Exposure: crewletaiv1alpha1.ExposureSettings{Webhooks: crewletaiv1alpha1.WebhookExposure{
 					Mode:     crewletaiv1alpha1.WebhookExposureGateway,
@@ -159,7 +159,7 @@ var _ = Describe("EngineClass controller", func() {
 			Spec: crewletaiv1alpha1.EngineClassSpec{
 				Engine: crewletaiv1alpha1.EngineSettings{Image: engineImageV020},
 				Data: crewletaiv1alpha1.DataPodSettings{
-					Storage: crewletaiv1alpha1.DataStorage{Size: new(resource.MustParse("10Gi"))},
+					Storage: crewletaiv1alpha1.DataStorage{Size: new(resource.MustParse("16Gi"))},
 				},
 				Exposure: crewletaiv1alpha1.ExposureSettings{Webhooks: crewletaiv1alpha1.WebhookExposure{
 					Mode:     crewletaiv1alpha1.WebhookExposureGateway,

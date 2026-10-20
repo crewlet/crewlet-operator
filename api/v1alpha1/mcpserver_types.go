@@ -88,7 +88,7 @@ type MCPEnvVar struct {
 	// why the field is a pointer.
 	// +optional
 	// +kubebuilder:validation:MaxLength=4096
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="value may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="value may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Value *string `json:"value,omitempty"`
 
 	// valueFrom reads a credential from a Secret key.
@@ -116,7 +116,7 @@ type MCPHeader struct {
 	// why the field is a pointer.
 	// +optional
 	// +kubebuilder:validation:MaxLength=4096
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="value may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="value may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Value *string `json:"value,omitempty"`
 
 	// valueFrom reads a credential from a Secret key, which holds the whole
@@ -156,24 +156,33 @@ type MCPServerSpec struct {
 	// command is the executable a Stdio server is launched with, as a process
 	// of the engine's container, by the engine's user. It must be installed
 	// in the engine image, and Crewlet's image ships no Python or Node.js
-	// runtime (docs/guides/tool-servers.md). Crewlet's `command`.
+	// runtime (docs/guides/tool-servers.md). Crewlet's `command`, which it
+	// passes on as written: it resolves no ${NAME} in it.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=1024
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="command may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="command may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Command string `json:"command,omitempty"`
 
-	// args are the executable's arguments. Crewlet's `args`.
+	// args are the executable's arguments. Crewlet's `args`, which it passes
+	// on as written: it resolves no ${NAME} in them.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MaxItems=64
 	// +kubebuilder:validation:items:MaxLength=4096
-	// +kubebuilder:validation:XValidation:rule="self.all(x, !x.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]'))",message="args may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="self.all(x, !x.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]'))",message="args may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Args []string `json:"args,omitempty"`
 
 	// env is the environment of a Stdio server's process, shared by every
-	// instance; per-seat values belong in a Seat's or a Unit's spec.mcp.
-	// Crewlet's `env`, a credential position.
+	// instance; per-seat values belong in a Seat's or a Unit's spec.mcp,
+	// which win over these. It is laid over the part of the engine's own
+	// environment Crewlet hands a tool server: PATH, the locale, the TLS and
+	// proxy variables and the engine user's HOME, among a few others
+	// (docs/guides/tool-servers.md). Nothing else of the engine's
+	// environment reaches the server: a variable the engine image sets with
+	// ENV, or the class or the Company sets on the pod, reaches it only when
+	// it is one of those, so every other variable the server reads is given
+	// here. Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
@@ -186,7 +195,7 @@ type MCPServerSpec struct {
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() in ['http', 'https']",message="url must be an absolute http or https URL"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="url may not hold a user name or password: a credential is named through a Secret, never written into an address"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the engine would resolve it from its own secret store and environment, which hold credentials that are not this object's to name"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	URL string `json:"url,omitempty"`
 
 	// headers are sent with every request to an HTTP server, shared by every

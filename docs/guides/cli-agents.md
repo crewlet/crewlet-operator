@@ -66,9 +66,10 @@ FROM ${ENGINE_IMAGE}
 ARG CLAUDE_CODE_VERSION
 COPY --from=claude-code --chown=0:0 \
     /home/crewlet/.local/share/claude/versions/${CLAUDE_CODE_VERSION} /usr/local/bin/claude
-# The image is how the CLI is updated. The engine starts it with an
-# allowlisted environment, which an ENV here never reaches, so the switch goes
-# in the managed settings every claude reads.
+# The image is how the CLI is updated. The engine starts it with only an
+# allowlist of its own environment, which DISABLE_UPDATES is not on, so an ENV
+# here would not reach it: the switch goes in the managed settings every
+# claude reads.
 COPY <<'JSON' /etc/claude-code/managed-settings.json
 {"env": {"DISABLE_UPDATES": "1"}}
 JSON
@@ -647,7 +648,7 @@ Nor is Crewlet's `inherit-env` login, which gives the CLI whichever token or
 key the engine's container environment holds. A credential there is outside
 the engine's encrypted store: every process the engine runs (the CLI, a
 stdio MCP server) can read it, and the engine resolves a `${NAME}` written in
-any field of the company document from its environment too, so whoever can
+many fields of the company document from its environment too, so whoever can
 write such a field can have the engine send the value anywhere. The operator
 puts no credential of the engine's own into its environment for the same
 reason ([Credential Positions](../concepts/credentials.md)); `tokenSecretRef`,

@@ -157,8 +157,9 @@ spec:
                     - message: 'siteURL may not hold a user name or password: a credential
                         is named through a Secret, never written into an address'
                       rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
-                    - message: 'siteURL may not hold a ${NAME} reference: the engine
-                        would resolve it from its own secret store and environment,
+                    - message: 'siteURL may not hold a ${NAME} reference: the operator
+                        refuses every one it did not write, since in many fields the
+                        engine resolves one from its own secret store and environment,
                         which hold credentials that are not this object''s to name'
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   tokenSecretRef:
@@ -198,9 +199,10 @@ spec:
                     - message: 'url may not hold a user name or password: a credential
                         is named through a Secret, never written into an address'
                       rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
-                    - message: 'url may not hold a ${NAME} reference: the engine would
-                        resolve it from its own secret store and environment, which
-                        hold credentials that are not this object''s to name'
+                    - message: 'url may not hold a ${NAME} reference: the operator
+                        refuses every one it did not write, since in many fields the
+                        engine resolves one from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   webhookSecretRef:
                     description: |-
@@ -324,8 +326,9 @@ spec:
                     minLength: 1
                     type: string
                     x-kubernetes-validations:
-                    - message: 'role may not hold a ${NAME} reference: the engine
-                        would resolve it from its own secret store and environment,
+                    - message: 'role may not hold a ${NAME} reference: the operator
+                        refuses every one it did not write, since in many fields the
+                        engine resolves one from its own secret store and environment,
                         which hold credentials that are not this object''s to name'
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   routeTo:
@@ -382,8 +385,10 @@ spec:
                     type: string
                     x-kubernetes-validations:
                     - message: 'webhookName may not hold a ${NAME} reference: the
-                        engine would resolve it from its own secret store and environment,
-                        which hold credentials that are not this object''s to name'
+                        operator refuses every one it did not write, since in many
+                        fields the engine resolves one from its own secret store and
+                        environment, which hold credentials that are not this object''s
+                        to name'
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   webhookTokenSecretRef:
                     description: |-
@@ -487,9 +492,10 @@ spec:
                     - message: 'url may not hold a user name or password: a credential
                         is named through a Secret, never written into an address'
                       rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
-                    - message: 'url may not hold a ${NAME} reference: the engine would
-                        resolve it from its own secret store and environment, which
-                        hold credentials that are not this object''s to name'
+                    - message: 'url may not hold a ${NAME} reference: the operator
+                        refuses every one it did not write, since in many fields the
+                        engine resolves one from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   webhookSecretRef:
                     description: |-
@@ -710,9 +716,10 @@ spec:
                     - message: 'url may not hold a user name or password: a credential
                         is named through a Secret, never written into an address'
                       rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
-                    - message: 'url may not hold a ${NAME} reference: the engine would
-                        resolve it from its own secret store and environment, which
-                        hold credentials that are not this object''s to name'
+                    - message: 'url may not hold a ${NAME} reference: the operator
+                        refuses every one it did not write, since in many fields the
+                        engine resolves one from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   webhookName:
                     description: |-
@@ -725,8 +732,10 @@ spec:
                     type: string
                     x-kubernetes-validations:
                     - message: 'webhookName may not hold a ${NAME} reference: the
-                        engine would resolve it from its own secret store and environment,
-                        which hold credentials that are not this object''s to name'
+                        operator refuses every one it did not write, since in many
+                        fields the engine resolves one from its own secret store and
+                        environment, which hold credentials that are not this object''s
+                        to name'
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                 required:
                 - signingSecretRef
@@ -772,8 +781,9 @@ spec:
                     - message: 'siteURL may not hold a user name or password: a credential
                         is named through a Secret, never written into an address'
                       rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
-                    - message: 'siteURL may not hold a ${NAME} reference: the engine
-                        would resolve it from its own secret store and environment,
+                    - message: 'siteURL may not hold a ${NAME} reference: the operator
+                        refuses every one it did not write, since in many fields the
+                        engine resolves one from its own secret store and environment,
                         which hold credentials that are not this object''s to name'
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   tokenSecretRef:
@@ -814,9 +824,10 @@ spec:
                     - message: 'url may not hold a user name or password: a credential
                         is named through a Secret, never written into an address'
                       rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
-                    - message: 'url may not hold a ${NAME} reference: the engine would
-                        resolve it from its own secret store and environment, which
-                        hold credentials that are not this object''s to name'
+                    - message: 'url may not hold a ${NAME} reference: the operator
+                        refuses every one it did not write, since in many fields the
+                        engine resolves one from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   webhookName:
                     description: |-
@@ -829,8 +840,10 @@ spec:
                     type: string
                     x-kubernetes-validations:
                     - message: 'webhookName may not hold a ${NAME} reference: the
-                        engine would resolve it from its own secret store and environment,
-                        which hold credentials that are not this object''s to name'
+                        operator refuses every one it did not write, since in many
+                        fields the engine resolves one from its own secret store and
+                        environment, which hold credentials that are not this object''s
+                        to name'
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   webhookSecretRef:
                     description: |-
@@ -912,9 +925,10 @@ spec:
                         type: string
                         x-kubernetes-validations:
                         - message: 'displayNameSuffix may not hold a ${NAME} reference:
-                            the engine would resolve it from its own secret store
-                            and environment, which hold credentials that are not this
-                            object''s to name'
+                            the operator refuses every one it did not write, since
+                            in many fields the engine resolves one from its own secret
+                            store and environment, which hold credentials that are
+                            not this object''s to name'
                           rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                       usernamePrefix:
                         description: |-
@@ -970,9 +984,10 @@ spec:
                     - message: 'url may not hold a user name or password: a credential
                         is named through a Secret, never written into an address'
                       rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
-                    - message: 'url may not hold a ${NAME} reference: the engine would
-                        resolve it from its own secret store and environment, which
-                        hold credentials that are not this object''s to name'
+                    - message: 'url may not hold a ${NAME} reference: the operator
+                        refuses every one it did not write, since in many fields the
+                        engine resolves one from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                 required:
                 - team

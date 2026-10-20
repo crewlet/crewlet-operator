@@ -445,18 +445,22 @@ func (e *Engine) stop(t T, cmd *exec.Cmd, exited <-chan error) {
 	}
 }
 
-// streamMaxBytes is the embedded broker's declared limit: Crewlet's floor
-// (config.StoreMaxBytesFloor), 6 GiB, because every node reserves all five of
-// its state logs' ceilings whatever it runs, 4.5 GiB at their smallest, and
-// the floor leaves room beside them for the mailboxes and the coordination
-// buckets. A suite runs many engines at once on one filesystem, and an
-// engine with no declared limit takes three quarters of the free space it
-// finds at boot, so on a machine with a few gibibytes free, or busy writing
-// a build cache, the engine that boots last refuses its own logs
-// ("insufficient storage resources available") and never applies a
-// document. A declared limit is a reservation the broker keeps count of, not
-// a check against the disk, and a test's streams hold kilobytes.
-const streamMaxBytes = 6 << 30
+// streamMaxBytes is the embedded broker's declared limit: 9 GiB, the share
+// the render gives the smallest data volume an EngineClass that keeps its
+// files in the stream's bucket admits (three quarters of 12Gi), as every
+// engine here does. A fresh node reserves at least 9305762474 bytes of it
+// whatever it runs (Crewlet's engine.BrokerFloor: its seven state logs'
+// ceilings at their smallest and the object store's bucket, a quarter of the
+// limit) and refuses to boot on less, and what is left holds the mailboxes
+// and the coordination buckets. A suite runs many engines at
+// once on one filesystem, and an engine with no declared limit takes three
+// quarters of the free space it finds at boot, so on a machine with a few
+// gibibytes free, or busy writing a build cache, the engine that boots last
+// refuses its own logs ("insufficient storage resources available") and
+// never applies a document. A declared limit is a reservation the broker
+// keeps count of, not a check against the disk, and a test's streams hold
+// kilobytes.
+const streamMaxBytes = 9 << 30
 
 // tierA is the engine's bootstrap: the embedded broker with its own store, the
 // local store and coordination of a single node, an encrypted secret store,

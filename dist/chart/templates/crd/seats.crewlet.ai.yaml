@@ -755,9 +755,10 @@ spec:
                             type: string
                             x-kubernetes-validations:
                             - message: 'value may not hold a ${NAME} reference: the
-                                engine would resolve it from its own secret store
-                                and environment, which hold credentials that are not
-                                this object''s to name'
+                                operator refuses every one it did not write, since
+                                in many fields the engine resolves one from its own
+                                secret store and environment, which hold credentials
+                                that are not this object''s to name'
                               rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                           valueFrom:
                             description: |-
@@ -1076,12 +1077,18 @@ spec:
                         commands:
                           description: |-
                             commands are shell commands run in order; one that exits non-zero
-                            fails the sandbox. Crewlet's `commands`. Crewlet substitutes every
-                            ${NAME} in them (NAME an identifier) from the engine's own secret
-                            store and environment before the sandbox runs them, so ${HOME} would be
-                            the engine's, not the sandbox's, and the API refuses ${NAME}: write a
+                            fails the sandbox. Crewlet's `commands`. Crewlet resolves nothing in a
+                            command: the sandbox's login shell expands $NAME and ${NAME} from the
+                            box's own environment (its HOME and PATH among it) and the run's,
+                            never from the engine's. The run's is the steps' env, the Seat's
+                            sandbox env, and what Crewlet adds: the agent's handle and, when it
+                            has one, its email, and the variables that sign the coding agent in
+                            to the provider its code work runs on (docs/guides/credentials.md
+                            says which, and when the seat's own env leaves them out). The API
+                            refuses ${NAME} (NAME an identifier) all the same, as the operator
+                            refuses every ${NAME} it did not write in a string it renders: write a
                             sandbox variable as $NAME. Parameter expansions such as ${1:-x} are
-                            not substituted and are allowed.
+                            allowed.
                           items:
                             maxLength: 4096
                             minLength: 1
@@ -1091,9 +1098,11 @@ spec:
                           x-kubernetes-list-type: atomic
                           x-kubernetes-validations:
                           - message: 'commands may not hold a ${NAME} reference: the
-                              engine would resolve it from its own secret store and
-                              environment, which hold credentials that are not this
-                              object''s to name'
+                              operator refuses every one it did not write, since in
+                              many fields the engine resolves one from its own secret
+                              store and environment, which hold credentials that are
+                              not this object''s to name; write a sandbox variable
+                              as $NAME'
                             rule: self.all(x, !x.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]'))
                         env:
                           description: |-

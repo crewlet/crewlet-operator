@@ -94,7 +94,7 @@ gives each company the smallest data volume the API admits.
 
 > **Watch for disk space.** The engine reserves three quarters of that volume
 > for its event stream, and kind's provisioner puts it on the node's disk
-> without enforcing the size: the Docker host needs about 7 GiB free for each
+> without enforcing the size: the Docker host needs about 10 GiB free for each
 > company, or its pod never becomes ready.
 
 ```bash
@@ -112,7 +112,7 @@ spec:
         cpu: 100m
         memory: 256Mi
     storage:
-      size: 8Gi
+      size: 12Gi
   exposure:
     webhooks:
       mode: None

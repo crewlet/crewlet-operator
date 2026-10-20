@@ -470,7 +470,7 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 		},
 		{
 			// A credential in the engine's environment is one a ${NAME}
-			// in any field of the company document can have the engine
+			// in many fields of the company document can have the engine
 			// send anywhere, and the CLI's own children can read.
 			name:   "a login inherited from the engine's environment is not offered",
 			mutate: func(p *v1.LLMProvider) { p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: "InheritEnv"} },

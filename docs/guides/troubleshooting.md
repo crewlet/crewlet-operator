@@ -150,7 +150,7 @@ conditions. `kubectl get engineclasses` shows it.
 | | False | `HumanSeat` | A Schedule's `target.seatRef` or a Datadog Integration's `routeTo.seatRef` names a Human seat, for whom the engine runs no turn, which holds the document. Name an Agent seat (a Schedule may target the person's unit with `fanOut: Each`). On a GitLab Integration's `accessLevels` entry it holds nothing: the engine creates no GitLab account for a person, so the entry grants nothing, and the Integration is applied. |
 | | False | `NoProvisioner` | A Seat names a provisioned credential, and no Integration of its company has `provisioning: Engine`, so nothing creates the value, and the seat's tool or chat app starts without it. The seat is applied all the same, and gets the value once an Integration provisions. Give the value from a Secret, or provision the vendor with the engine ([Connecting integrations](integrations.md#who-creates-the-seats-accounts)). |
 | | False | `NotAnAccountID` | A person's Seat sets `contact.atlassianAccount` to something that is no Atlassian account id, such as an email address, while its company reaches Jira or Confluence on Atlassian Cloud, which names a person by account id alone: what the person does there reaches no seat, and an agent's mention of them names nobody. The message names each product on Cloud. The seat is applied all the same. Give the person's account id ([A person's accounts](integrations.md#a-persons-accounts)). |
-| | False | `ReferenceNotAllowed` | A string it renders into the document holds a `${NAME}` reference, which the engine would resolve from its own secret store and environment. The message names the place in the document. Give a credential with a Secret reference; in a sandbox command, write a variable as `$NAME`. |
+| | False | `ReferenceNotAllowed` | A string it renders into the document holds a `${NAME}` reference. The operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment ([What blocks a document](../concepts/company-document.md#what-blocks-a-document)). The message names the place in the document. Give a credential with a Secret reference; in a sandbox command, write a variable as `$NAME`, which the sandbox's shell expands. |
 | | False | `SecretNotFound` | A Secret or key it references is missing. |
 | | False | `SecretTooLarge` | A value it references is over 64 KiB. |
 | `Applied` | True | `InRevision` | It is in the revision the engine runs, which the message names; the condition's `observedGeneration` is the generation that revision holds. |
@@ -200,11 +200,15 @@ kubectl logs acme-data-0 -n acme | grep -E 'WARN|ERROR' | tail
 kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_listening'
 ```
 
-- **`insufficient storage resources available`**: the engine could not
-  reserve its event stream's logs. The stream is given three quarters of the
-  data volume and needs at least 6 GiB of it; the class's `data.storage.size`
-  admits no less than `8Gi`, but a provisioner that hands out less than it
-  was asked for can leave it too small. Give the company a larger volume.
+- **`the broker refused to reserve the … log's ceiling`**, ending
+  `insufficient storage resources available`: the engine could not reserve
+  what a fresh node keeps on its event stream. The stream is given three
+  quarters of the data volume, and a fresh node reserves at least 9305762474
+  bytes of it, or 6979321856 when the class keeps its files in S3; the
+  message names the figure it needed and breaks it down. The class's
+  `data.storage.size` admits no less than `12Gi` (`9Gi` with the files in
+  S3), so this is a company whose volume was made smaller: under an older
+  floor, or before an engine that keeps more on its stream.
 - **`config_apply_failed`**: the revision was stored but this node could not
   start it; the message says why. The engine keeps running the previous
   revision, and the Company reports `ConfigApplied=False ApplyFailed` (see
@@ -520,9 +524,20 @@ API's [`GET /mcp-servers`](https://github.com/crewlet/crewlet/blob/main/docs/ref
 - **The command is not in the engine image.** Crewlet's image has no Python
   or Node.js: build one with the server installed and name its command
   ([Running Tool Servers](tool-servers.md#the-image-needs-the-server)).
+- **The server reads a variable it is not given.** The engine hands a stdio
+  server only the part of its environment Crewlet's allowlist names, and
+  the server's `env` and the seat's values
+  ([Stdio and HTTP](tool-servers.md#stdio-and-http)). A variable the image
+  sets with `ENV`, or the class or the Company sets on the pod, does not
+  reach it otherwise, and the server fails or behaves as though it were
+  unset, often naming the variable in `server_stderr_tail`. Give it in the
+  server's `env`.
 - **`empty_env_vars` names a variable.** Its value is empty: a Secret key
-  that holds nothing, or a provisioned credential the engine has not minted
-  yet. A value that arrives later reaches the server at the next revision
+  that holds nothing, a provisioned credential the engine has not minted
+  yet, or a `value` written empty on purpose, which needs nothing, such as
+  the Atlassian server's per-product proxy variables beside a proxy
+  auto-config ([Jira and Confluence](tool-servers.md#jira-and-confluence)).
+  A value that arrives later reaches the server at the next revision
   the engine applies, which starts or restarts it with the value: the
   engine's pass applies one once it has sealed the credentials it minted,
   and the operator applies one once it has pushed a Secret's new value

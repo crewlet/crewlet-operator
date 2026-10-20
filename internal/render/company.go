@@ -189,14 +189,16 @@ var reference = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 //
 // Crewlet resolves a ${NAME} in the company document from its secret store
 // and then from its process environment, and not only where a credential
-// goes: an MCP server's url, a provider's base_url, a sandbox setup command,
-// a skill variable. A reference anywhere else would let whoever writes the
-// object name any value the engine can resolve (the class's platform model
-// keys in its store, its environment) and have the engine send it where they
-// chose. The API refuses one in the typed fields the engine is known to
-// expand; this check covers every string, engineConfig's included, and
-// whatever field Crewlet expands next. A string that merely equals a
-// reference the renderer wrote elsewhere is refused too: it names that
+// goes: an MCP server's url, a provider's base_url, a skill variable. A
+// reference anywhere else would let whoever writes the object name any value
+// the engine can resolve (the class's platform model keys in its store, its
+// environment) and have the engine send it where they chose. Crewlet passes
+// other strings on as written, such as a sandbox setup command, which the
+// sandbox's shell expands from the run's own environment; a reference is
+// refused there too, so that a field Crewlet starts expanding names nothing
+// the day it does. The API refuses one in many typed fields; this check
+// covers every string, engineConfig's included. A string that merely equals
+// a reference the renderer wrote elsewhere is refused too: it names that
 // value where no credential goes.
 func checkReferences(doc *Document, company ObjectRef, encoded, probe []byte) error {
 	var tree, probed any
@@ -213,8 +215,9 @@ func checkReferences(doc *Document, company ObjectRef, encoded, probe []byte) er
 			owner = company
 		}
 		errs.add(HarmsBeyond, owner.Kind, owner.Name, "document "+at.String(), v1alpha1.ReasonReferenceNotAllowed, fmt.Sprintf(
-			"holds the reference %s, which the engine would resolve from its own secret store and environment: "+
-				"name a credential only with a Secret reference, which the operator turns into a reference of its own",
+			"holds the reference %s, and the operator refuses every one it did not write, since in many fields the engine "+
+				"resolves one from its own secret store and environment: name a credential only with a Secret reference, "+
+				"which the operator turns into a reference of its own",
 			reference.FindString(s)))
 	}
 	var walk func(at Path, v, p any)

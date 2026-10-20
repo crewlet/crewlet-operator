@@ -163,6 +163,42 @@ func bootstrapEnv(doc *BootstrapDocument) map[string]string {
 	return env
 }
 
+// startDataPod runs the engine as the operator configures a data pod: on the
+// crewlet.yaml it renders, with the test's PATH and a HOME in the engine's
+// directory (enginetest's), the environment the pod gives it (bootstrapEnv)
+// and env, and nothing else. The pod's paths move into the engine's
+// directory and its API onto the loopback interface. The public listener is
+// dropped: its port is fixed, an engine another package's suite runs
+// meanwhile may hold it, and nothing a contract test asks reaches it.
+func startDataPod(t *testing.T, in *BootstrapInput, env ...string) (*enginetest.Engine, *BootstrapDocument) {
+	t.Helper()
+	tierA, err := Bootstrap(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pod := make([]string, 0, len(tierA.Env)+len(env))
+	for name, value := range bootstrapEnv(tierA) {
+		pod = append(pod, name+"="+value)
+	}
+	e := enginetest.Start(t, enginetest.WithTierA(in.Tokens.Operator, in.Tokens.Access, func(port int, dir string) []byte {
+		var doc map[string]any
+		if err := yaml.Unmarshal(tierA.YAML, &doc); err != nil {
+			t.Fatal(err)
+		}
+		api := doc["api"].(map[string]any)
+		api["host"], api["port"] = "127.0.0.1", port
+		delete(api, "public")
+		doc["store"].(map[string]any)["path"] = filepath.Join(dir, "store", "crewlet.db")
+		doc["stream"].(map[string]any)["store_dir"] = filepath.Join(dir, "stream")
+		out, err := yaml.Marshal(doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}, append(pod, env...)...))
+	return e, tierA
+}
+
 // TestContractBootstrap validates every Tier A case on its own.
 func TestContractBootstrap(t *testing.T) {
 	for _, c := range bootstrapCases() {
@@ -566,29 +602,7 @@ func TestContractSecondFactorReachesTheEngine(t *testing.T) {
 		t.Run(c.want, func(t *testing.T) {
 			in := bootstrapCases()[0].input(t)
 			in.Class.Spec.SignIn = c.signIn
-			tierA, err := Bootstrap(in)
-			if err != nil {
-				t.Fatal(err)
-			}
-			e := enginetest.Start(t, enginetest.WithTierA(in.Tokens.Operator, in.Tokens.Access, func(port int, dir string) []byte {
-				var doc map[string]any
-				if err := yaml.Unmarshal(tierA.YAML, &doc); err != nil {
-					t.Fatal(err)
-				}
-				api := doc["api"].(map[string]any)
-				api["host"], api["port"] = "127.0.0.1", port
-				// The public listener's port is fixed, which an engine
-				// another package's suite runs meanwhile may hold, and
-				// nothing here reaches it.
-				delete(api, "public")
-				doc["store"].(map[string]any)["path"] = filepath.Join(dir, "store", "crewlet.db")
-				doc["stream"].(map[string]any)["store_dir"] = filepath.Join(dir, "stream")
-				out, err := yaml.Marshal(doc)
-				if err != nil {
-					t.Fatal(err)
-				}
-				return out
-			}, EnvNodeID+"=nimbus-data-0"))
+			e, tierA := startDataPod(t, in)
 
 			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, e.URL+"/auth/config", nil)
 			if err != nil {
@@ -691,38 +705,6 @@ func TestContractSeatPoolsCompany(t *testing.T) {
 	}
 	validate(t, env, companyCaseNamed(t, caseSeatPools).advisories,
 		"-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
-}
-
-// TestContractStreamFloor ties the API's floor on data.storage.size to
-// Crewlet's on stream.store_max_bytes: the smallest volume an EngineClass
-// admits renders a stream Crewlet accepts, and a volume a gibibyte smaller
-// one it refuses, so the floor is the engine's and not a guess.
-func TestContractStreamFloor(t *testing.T) {
-	for _, c := range []struct {
-		size   string
-		accept bool
-	}{
-		{size: "8Gi", accept: true},
-		{size: "7Gi", accept: false},
-	} {
-		t.Run(c.size, func(t *testing.T) {
-			in := bootstrapCases()[0].input(t)
-			in.VolumeSize = resource.MustParse(c.size)
-			doc, err := Bootstrap(in)
-			if err != nil {
-				t.Fatal(err)
-			}
-			args := []string{"-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML)}
-			if c.accept {
-				validate(t, bootstrapEnv(doc), nil, args...)
-				return
-			}
-			got, stdout, stderr, _ := verdict(t, bootstrapEnv(doc), args...)
-			if got.Valid || !strings.Contains(stdout+stderr, "store_max_bytes") {
-				t.Errorf("crewlet validate did not refuse stream.store_max_bytes for a %s volume:\n%s\n%s", c.size, stdout, stderr)
-			}
-		})
-	}
 }
 
 // TestContractStreamCeiling ties the render's stream share of a large data
@@ -859,12 +841,12 @@ func dummyCredential(k secretref.Key) string {
 }
 
 // TestContractNoCredentialLeavesThroughAReference runs the engine as the
-// operator configures a data pod (the rendered Tier A, and only the pod's
-// name in its environment) and applies a company document that names the
-// variables the operator once put the credentials in, in a field that is no
-// credential: an MCP server's URL, which the engine expands from its secret
-// store and then from its environment before it connects. The engine must
-// reach the server with none of its credentials in the request.
+// operator configures a data pod (startDataPod) and applies a company
+// document that names the variables the operator once put the credentials
+// in, in a field that is no credential: an MCP server's URL, which the
+// engine expands from its secret store and then from its environment before
+// it connects. The engine must reach the server with none of its credentials
+// in the request.
 func TestContractNoCredentialLeavesThroughAReference(t *testing.T) {
 	type request struct{ url, header, body string }
 	requests := make(chan request, 64)
@@ -878,30 +860,7 @@ func TestContractNoCredentialLeavesThroughAReference(t *testing.T) {
 	tokens := APITokens{Operator: "operator-" + strings.Repeat("o", 40), Access: "access-" + strings.Repeat("a", 40)}
 	in := bootstrapCases()[0].input(t)
 	in.Tokens = tokens
-	tierA, err := Bootstrap(in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(tierA.Env) != 1 || tierA.Env[0].Name != EnvNodeID {
-		t.Fatalf("the pod's environment is %v; this test gives the engine its name alone", tierA.Env)
-	}
-	e := enginetest.Start(t, enginetest.WithTierA(tokens.Operator, tokens.Access, func(port int, dir string) []byte {
-		// The data pod's paths and address, moved into the test's
-		// directory and onto the loopback interface.
-		var doc map[string]any
-		if err := yaml.Unmarshal(tierA.YAML, &doc); err != nil {
-			t.Fatal(err)
-		}
-		api := doc["api"].(map[string]any)
-		api["host"], api["port"] = "127.0.0.1", port
-		doc["store"].(map[string]any)["path"] = filepath.Join(dir, "store", "crewlet.db")
-		doc["stream"].(map[string]any)["store_dir"] = filepath.Join(dir, "stream")
-		out, err := yaml.Marshal(doc)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return out
-	}, EnvNodeID+"=nimbus-data-0"))
+	e, _ := startDataPod(t, in)
 
 	// Every variable a credential has ever been given to the engine in.
 	url := listener.URL + "/mcp/${CREWLET_TOKEN_OPERATOR}/${CREWLET_TOKEN_ACCESS}/${CREWLET_SECRET_KEY_K1}/" +

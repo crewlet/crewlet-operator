@@ -198,9 +198,10 @@ spec:
                             type: string
                             x-kubernetes-validations:
                             - message: 'value may not hold a ${NAME} reference: the
-                                engine would resolve it from its own secret store
-                                and environment, which hold credentials that are not
-                                this object''s to name'
+                                operator refuses every one it did not write, since
+                                in many fields the engine resolves one from its own
+                                secret store and environment, which hold credentials
+                                that are not this object''s to name'
                               rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                           valueFrom:
                             description: |-
