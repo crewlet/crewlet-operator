@@ -747,6 +747,52 @@ func TestCompanyImmutability(t *testing.T) {
 	})
 }
 
+// TestSandboxSetupFileValidation covers the API's rules on a setup file's
+// path, on a Company's steps and a Seat's: another account's home and white
+// space alone are refused, the box's own home under ~/ is taken, and so is ~
+// alone, which names the home and which Crewlet refuses instead
+// (TestSetupFilePathsFollowTheEngine holds the rules to the engine).
+func TestSandboxSetupFileValidation(t *testing.T) {
+	writing := func(path string) []v1.SandboxSetupStep {
+		return []v1.SandboxSetupStep{setupStepWritingFile("registry", path)}
+	}
+	onCompany := func(path string) func(*v1.Company) {
+		return func(c *v1.Company) {
+			c.Spec.Sandbox = v1.SandboxSettings{
+				E2B:   v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
+				Setup: writing(path),
+			}
+		}
+	}
+	runCreateCases(t, company, []createCase[*v1.Company]{
+		{name: "a file under another account's home is refused", mutate: onCompany("~root/.npmrc"), want: msgSetupFileTilde},
+		{name: "a file under a second ~ is refused", mutate: onCompany("~~/.npmrc"), want: msgSetupFileTilde},
+		{name: "a file under ~/ is accepted", mutate: onCompany("~/.npmrc")},
+		{name: "a file after ~ and a backslash is accepted", mutate: onCompany(`~\.npmrc`)},
+		{name: "~ alone is accepted", mutate: onCompany("~")},
+		{name: "a relative file is accepted", mutate: onCompany(".npmrc")},
+		{name: "a path of white space alone is refused", mutate: onCompany(" \t "), want: msgSetupFileBlank},
+		{name: "a path of wide white space alone is refused", mutate: onCompany("\u3000"), want: msgSetupFileBlank},
+		{name: "a zero-width space, which is no white space, is accepted", mutate: onCompany("\u200b")},
+	})
+	runCreateCases(t, seat, []createCase[*v1.Seat]{
+		{
+			name:   "a seat's file under another account's home is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{Setup: writing("~root/.npmrc")} },
+			want:   msgSetupFileTilde,
+		},
+		{
+			name:   "a seat's file of white space alone is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{Setup: writing(" ")} },
+			want:   msgSetupFileBlank,
+		},
+		{
+			name:   "a seat's file under ~/ is accepted",
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{Setup: writing("~/.npmrc")} },
+		},
+	})
+}
+
 // TestSandboxSetupStepValidation covers the API's rules on a setup step
 // itself, on a Company's steps and a Seat's: a name of white space alone and
 // a step that does nothing are refused (TestSetupStepShapesFollowTheEngine
