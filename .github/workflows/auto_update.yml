@@ -1,0 +1,94 @@
+name: Auto Update
+
+# Proposes the scaffold of a newer Kubebuilder release. Every Tuesday, if
+# Kubebuilder has a release newer than PROJECT's cliVersion, `kubebuilder
+# alpha update` regenerates the scaffold of both releases from PROJECT, merges
+# this repository into the newer one, squashes the result onto a branch named
+# kubebuilder-update-from-<from>-to-<to>, pushes it, and opens an issue with
+# the link that opens a pull request from it. Nothing reaches main but through
+# that pull request, which ci.yml gates like any other. With no newer release
+# the run ends green, having done nothing.
+#
+# Kubebuilder's autoupdate/v1-alpha plugin wrote this file (`bin/kubebuilder
+# edit --plugins=autoupdate/v1-alpha`, which also lists the plugin in PROJECT),
+# and it is curated by hand since: running that command again puts the
+# plugin's template back, and the comments below say where this file differs
+# from it. What to do with an update is in CONTRIBUTING.md, "A newer
+# Kubebuilder scaffold is proposed".
+#
+# The job can push to any branch. A protection rule on main that requires a
+# pull request is what keeps that push off main.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 2" # Every Tuesday at 00:00 UTC
+
+permissions: {}
+
+env:
+  # go.mod names the toolchain; auto lets setup-go's Go fetch it.
+  GOTOOLCHAIN: auto
+
+jobs:
+  auto-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the update branch
+      issues: write # open the issue that links its pull request
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The author of the commits the update makes. The one it pushes carries
+      # no Signed-off-by: whoever takes the update over signs it off.
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # go.mod rather than the template's floating `stable`, as in ci.yml. No
+      # cache: what a run downloads is mostly the modules of the scaffolds it
+      # generates, which nothing else here reuses.
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # The Makefile's pinned kubebuilder runs the update, where the template
+      # downloads the latest binary onto PATH. The two releases it compares
+      # are not this binary: the update downloads both, and looks the newest
+      # one up when it runs. Installed outside the checkout, which the update
+      # empties while it regenerates the scaffold.
+      - name: Install Kubebuilder
+        run: make kubebuilder LOCALBIN="$RUNNER_TEMP/bin"
+
+      # The update pushes with plain git, and `persist-credentials: false`
+      # leaves git no credential to push with. gh hands it the run's token
+      # when git asks, without writing the token to disk.
+      - name: Let git push with the run's token
+        run: gh auth setup-git
+
+      # --force commits a merge with conflicts, markers and all, instead of
+      #   stopping: the pull request is where they are resolved.
+      # --push pushes the branch to origin. While a branch of that name is
+      #   still there, the push is refused and the run fails, rather than
+      #   overwrite it.
+      # --restore-path keeps every file main has under .github/workflows as
+      #   main has it, this one included. A workflow the scaffold adds that
+      #   main does not have still comes through.
+      # --open-gh-issue opens the issue, unless an open one has its title.
+      # More: https://kubebuilder.io/reference/commands/alpha_update
+      - name: Run kubebuilder alpha update
+        run: |
+          "$RUNNER_TEMP/bin/kubebuilder" alpha update \
+            --force \
+            --push \
+            --restore-path .github/workflows \
+            --open-gh-issue

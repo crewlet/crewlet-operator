@@ -521,6 +521,43 @@ Nothing checks the workflow for you, and its job holds `contents: write` and
 `pull-requests: write`: read its `if:`, the approval's condition and the merge
 command on any diff that touches it.
 
+### A newer Kubebuilder scaffold is proposed
+
+[`.github/workflows/auto_update.yml`](.github/workflows/auto_update.yml) runs
+every Tuesday, and by hand from the Actions tab. When Kubebuilder has a
+release newer than `PROJECT`'s `cliVersion`, it runs `kubebuilder alpha
+update`: the scaffold of both releases is regenerated from `PROJECT`, this
+repository is merged into the newer one, and the result is pushed as one
+commit on the branch `kubebuilder-update-from-<from>-to-<to>`, with an issue
+whose link opens a pull request from it. Kubebuilder's `autoupdate/v1-alpha`
+plugin wrote the workflow (`bin/kubebuilder edit
+--plugins=autoupdate/v1-alpha`, which also lists the plugin in `PROJECT`), and
+it is curated by hand since: running that command again puts the plugin's
+template back.
+
+The branch is where an update starts, not a change to merge as it is. In the
+pull request from it, whoever takes the update over:
+
+- resolves the conflicts. The merge is committed with its markers (`--force`)
+  rather than stopping the run, and this repository's files differ enough
+  from the scaffold's that some are to be expected.
+- deletes again what the merge brings back of the scaffold that this
+  repository does without, the scaffold's own workflows beside `ci.yml` among
+  them (`make chart` deletes `test-chart.yml` for the same reason).
+- moves `KUBEBUILDER_VERSION` in the Makefile to the release `PROJECT` now
+  names, so `make chart` and new kinds are scaffolded by it, then runs `make
+  manifests generate chart api-docs` and `make check`.
+- signs the update's commit off: the workflow's commit carries no
+  `Signed-off-by`, and the sign-off gate fails the pull request until someone
+  certifies it (`git rebase --signoff <merge-base>`, the remedy the gate
+  prints).
+- titles the pull request like any other, since the title is the release note.
+
+While that branch is still there, a later run for the same two releases fails
+at the push rather than overwrite it, so delete the branch once its pull
+request is merged or closed. The job's token can push to any branch and open
+issues; `main`'s protection rule is what keeps its push off `main`.
+
 ## Documentation
 
 Docs are part of the change. A pull request that changes an API field,
