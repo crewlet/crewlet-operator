@@ -13,7 +13,7 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 )
 
-// mirror is a function of the engine whose decision the operator copies
+// mirror is a declaration of the engine whose decision the operator copies
 // where no engine test can show the engine making it: the verdicts on a
 // seat's code work (CodeWorkOf) and on an agent-mode executor (ExecutorOf),
 // and the LLMProvider API's rule on an Agent-mode CLI's login, which Crewlet
@@ -30,19 +30,20 @@ import (
 // pod back on (and the API refuses where a Company or its class states it)
 // and the engine shows only for the addresses a test tries. A contract test
 // cannot hold those to the engine, so the operator
-// holds the code it read: the digest of each function as it was when it was
-// read against the operator files that copy it.
+// holds the code it read: the digest of each declaration as it was when it
+// was read against the operator files that copy it.
 type mirror struct {
-	// file and function are the function's file in the crewlet module and
-	// its name, as enginetest.Fingerprint takes it.
-	file, function string
+	// file and name are the declaration's file in the crewlet module and
+	// its name, as enginetest.Fingerprint takes it: a function's, a
+	// method's or a constant's.
+	file, name string
 	// against is every operator file that copies the decision, each of
-	// which a change to the function sends its reader to.
+	// which a change to the declaration sends its reader to.
 	against []string
 	// decides is what the operator copies from it, for the reader the
 	// test sends to it.
 	decides string
-	// digest is the function's enginetest.Fingerprint as it was read, at
+	// digest is the declaration's enginetest.Fingerprint as it was read, at
 	// the crewlet version read.
 	digest, read string
 }
@@ -182,9 +183,9 @@ var agentLogin = []string{
 // concept page.
 var codingBox = []string{"docs/guides/credentials.md", "docs/concepts/credentials.md"}
 
-// mirrored is every engine function the operator's run-time verdicts copy a
-// decision of, and no other: a function changed here sends somebody to read
-// it, so one that copies nothing would only cost a read. What the engine
+// mirrored is every engine declaration the operator's run-time verdicts copy
+// a decision of, and no other: a declaration changed here sends somebody to
+// read it, so one that copies nothing would only cost a read. What the engine
 // shows without a run is held by a contract test instead, never here: the
 // head of a seat's chain (TestContractChainlessSeatRunsOnTheFirstProviderAlone),
 // the CodingAgentMismatch it refuses on a write (TestContractCodeWorkOnWrite),
@@ -248,7 +249,7 @@ var codingBox = []string{"docs/guides/credentials.md", "docs/concepts/credential
 // their every shape reaches the engine through it.
 var mirrored = []mirror{
 	{
-		file: sandboxGo, function: "(*launcher).Launch",
+		file: sandboxGo, name: "(*launcher).Launch",
 		against: []string{codeWorkGo},
 		decides: "a run_sandbox launch runs the head of the seat's sandbox phase with role.sandbox.coding_agent or " +
 			"the catalogue's default, and refuses before a box exists what newCodingRun and sandboxCredentials refuse",
@@ -256,7 +257,7 @@ var mirrored = []mirror{
 		read:   identityRead,
 	},
 	{
-		file: sandboxGo, function: "buildSandbox",
+		file: sandboxGo, name: "buildSandbox",
 		against: []string{codeWorkGo},
 		decides: "the catalogue a launch reads is built from providers.sandbox, with its default_coding_agent as the " +
 			"default coding agent and its setup steps as the setup every run is given, and a company with no " +
@@ -265,7 +266,7 @@ var mirrored = []mirror{
 		read:   firstRead,
 	},
 	{
-		file: "internal/sandbox/manager.go", function: "NewManager",
+		file: "internal/sandbox/manager.go", name: "NewManager",
 		against: []string{codeWorkGo},
 		decides: "a catalogue that names no default coding agent runs DefaultCodingAgent, Claude Code, whose value " +
 			"TestCodeWorkFollowsTheEngineSource holds",
@@ -273,7 +274,7 @@ var mirrored = []mirror{
 		read:   firstRead,
 	},
 	{
-		file: sandboxGo, function: "newCodingRun",
+		file: sandboxGo, name: "newCodingRun",
 		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
 		decides: "a CLIAgent head another CLI's coding agent cannot run (CodingAgentMismatch), ClaudeCode on a " +
 			"head that is no Anthropic provider (SandboxModelUnsupported), and a CLIAgent head's run, a " +
@@ -286,7 +287,7 @@ var mirrored = []mirror{
 		read:   openCode2Read,
 	},
 	{
-		file: e2bGo, function: "(*E2BProvider).Create",
+		file: e2bGo, name: "(*E2BProvider).Create",
 		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
 		decides: "a box in the Company's E2B sandbox is created from its template, the run's timeout and the run's " +
 			"environment alone, never from the run's credential files, so a CLIAgent head's login (its credential " +
@@ -296,7 +297,7 @@ var mirrored = []mirror{
 		read:   e2bCreateRead,
 	},
 	{
-		file: sandboxGo, function: "claudeCodeOnForeignEntry",
+		file: sandboxGo, name: "claudeCodeOnForeignEntry",
 		against: []string{codeWorkGo},
 		decides: "ClaudeCode on a head that is no Anthropic provider runs on the seat's own sign-in when it has one, " +
 			"and is refused otherwise (SandboxModelUnsupported)",
@@ -304,14 +305,14 @@ var mirrored = []mirror{
 		read:   firstRead,
 	},
 	{
-		file: sandboxGo, function: "signsIn",
+		file: sandboxGo, name: "signsIn",
 		against: []string{codeWorkGo},
 		decides: "a variable of the seat's environment signs ClaudeCode in when it holds a value",
 		digest:  "d67892b7c02c1053a5a38c588fe26d93a39b9525b01879a0d6dc3ef923280798",
 		read:    firstRead,
 	},
 	{
-		file: sandboxGo, function: "sandboxCredentials",
+		file: sandboxGo, name: "sandboxCredentials",
 		against: append([]string{codeWorkGo}, agentLogin...),
 		decides: "a CLIAgent head whose login cannot follow the run into a remote sandbox is refused unless the run's " +
 			"environment signs its CLI in: a run_sandbox launch (SandboxLoginNotPortable), and at phase Execute an " +
@@ -320,7 +321,7 @@ var mirrored = []mirror{
 		read:   openCode2Read,
 	},
 	{
-		file: sandboxGo, function: "(*Engine).sandboxEnv",
+		file: sandboxGo, name: "(*Engine).sandboxEnv",
 		against: []string{codeWorkGo},
 		decides: "a run's environment is the env of the catalogue's and the seat's setup steps, then the seat's " +
 			"role.sandbox.env",
@@ -328,7 +329,7 @@ var mirrored = []mirror{
 		read:   identityRead,
 	},
 	{
-		file: doctorGo, function: "(*Provider).CredentialEnvNames",
+		file: doctorGo, name: "(*Provider).CredentialEnvNames",
 		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
 		decides: "the variables that sign a CLI in inside a box: its token and key variables, and for an env " +
 			"sign-in CLI the credential-named variables of its cli.env",
@@ -336,14 +337,14 @@ var mirrored = []mirror{
 		read:   firstRead,
 	},
 	{
-		file: doctorGo, function: "(*Provider).SandboxEnv",
+		file: doctorGo, name: "(*Provider).SandboxEnv",
 		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
 		decides: "a CLIAgent provider's own sign-in follows the run into the box when it is one of those variables",
 		digest:  "f81f2bc4b7fca996eaac300c1ab530d2e357500bd4b76145551412788cc9ddb9",
 		read:    firstRead,
 	},
 	{
-		file: companyGo, function: "(*Company).sandboxProvider",
+		file: companyGo, name: "(*Company).sandboxProvider",
 		against: []string{codeWorkGo},
 		decides: "config's twin of the head the phase registry gives a seat's code work, which crewlet's " +
 			"TestBothPathsToTheSandboxEntryAgree holds to it: the first configured provider of its llm_sandbox, " +
@@ -352,7 +353,7 @@ var mirrored = []mirror{
 		read:   firstRead,
 	},
 	{
-		file: companyGo, function: "(*Company).codingAgent",
+		file: companyGo, name: "(*Company).codingAgent",
 		against: []string{codeWorkGo},
 		decides: "config's twin, on a write, of the coding agent a launch runs, by which it refuses " +
 			"CodingAgentMismatch: the seat's own coding_agent, else the catalogue's default, else Claude Code; " +
@@ -361,7 +362,7 @@ var mirrored = []mirror{
 		read:   firstRead,
 	},
 	{
-		file: agentRunGo, function: "(*Company).executorRuntime",
+		file: agentRunGo, name: "(*Company).executorRuntime",
 		against: []string{executorGo, headsGo},
 		decides: "a seat's executor runs as an agentic run of a CLI when the head of its executor's chain alone is a " +
 			"CLIAgent provider in agent mode",
@@ -369,7 +370,7 @@ var mirrored = []mirror{
 		read:   firstRead,
 	},
 	{
-		file: agentRunGo, function: "(*agentLauncher).LaunchExecutor",
+		file: agentRunGo, name: "(*agentLauncher).LaunchExecutor",
 		against: append([]string{executorGo}, agentLogin...),
 		decides: "an agent-mode turn on a node that serves no tool bridge is refused, never run on the engine's own " +
 			"tool loop (AgentModeBridgeUnsupported, NotExposed), and so is one whose CLI login cannot follow it " +
@@ -378,7 +379,7 @@ var mirrored = []mirror{
 		read:   identityRead,
 	},
 	{
-		file: agentRunGo, function: "(*agentLauncher).executorRun",
+		file: agentRunGo, name: "(*agentLauncher).executorRun",
 		against: append([]string{executorGo}, agentLogin...),
 		decides: "an agent-mode run is the executor itself: it runs on the head of the seat's executor chain " +
 			"(phase Execute), never on its llm_sandbox, so that head's sign-in is the one that must reach the box",
@@ -386,7 +387,7 @@ var mirrored = []mirror{
 		read:   firstRead,
 	},
 	{
-		file: jiraClient, function: "DeploymentOf",
+		file: jiraClient, name: "DeploymentOf",
 		against: atlassianAccount,
 		decides: "Jira is on Atlassian Cloud exactly where atlassianhost.Of answers Cloud for the address the engine " +
 			"reads it at and the deployment the company declared, and on Data Center otherwise",
@@ -394,7 +395,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: confluenceGo, function: "DeploymentOf",
+		file: confluenceGo, name: "DeploymentOf",
 		against: atlassianAccount,
 		decides: "Confluence is on Atlassian Cloud by the same rule as Jira, atlassianhost.Of, and on Data Center " +
 			"otherwise",
@@ -402,7 +403,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: atlassianHostGo, function: "Of",
+		file: atlassianHostGo, name: "Of",
 		against: atlassianAccount,
 		decides: "an address whose written host is Atlassian Cloud's own (isCloudHost) is Cloud whatever was " +
 			"declared, any other is the deployment the company declared, and one that declared none is Data Center",
@@ -410,7 +411,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: atlassianHostGo, function: "isCloudHost",
+		file: atlassianHostGo, name: "isCloudHost",
 		against: atlassianAccount,
 		decides: "a host is Atlassian Cloud's own when it is a site of one of its environments or one of their " +
 			"gateways",
@@ -418,14 +419,14 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: atlassianHostGo, function: "isGatewayHost",
+		file: atlassianHostGo, name: "isGatewayHost",
 		against: atlassianAccount,
 		decides: "a gateway is the host of one of the environments' gateways exactly, never a host under it",
 		digest:  "e8f3b84b85bfd1a5657b4919e1df1b9620660b0b9046ec8f4f203076e82171ac",
 		read:    cloudRuleRead,
 	},
 	{
-		file: atlassianHostGo, function: "environmentOfSite",
+		file: atlassianHostGo, name: "environmentOfSite",
 		against: atlassianAccount,
 		decides: "a site is a host under one of an environment's site domains, the environments table " +
 			"TestAtlassianDeploymentFollowsTheEngineSource holds",
@@ -433,7 +434,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: atlassianHostGo, function: "hostOf",
+		file: atlassianHostGo, name: "hostOf",
 		against: atlassianAccount,
 		decides: "an address holding no ${NAME}, as every url the API admits, has its host written, and is judged " +
 			"by that host",
@@ -441,7 +442,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: atlassianHostGo, function: "host",
+		file: atlassianHostGo, name: "host",
 		against: atlassianAccount,
 		decides: "a host compares without case and without an absolute name's trailing dot, and an address that " +
 			"does not parse has none",
@@ -449,7 +450,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: atlassianHostGo, function: "Gateway",
+		file: atlassianHostGo, name: "Gateway",
 		against: cloudIDGateway,
 		decides: "a cloud id is read through the gateway of its site's environment, Government Cloud's for a site " +
 			"under atlassian-us-gov-mod.net and the commercial Cloud's for any other, so always through one of " +
@@ -458,14 +459,14 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: integrationsGo, function: "atlassianGatewayURL",
+		file: integrationsGo, name: "atlassianGatewayURL",
 		against: cloudIDGateway,
 		decides: "a cloud_id's address is on the host of the gateway Gateway names for its site",
 		digest:  "45027e6bb99e10f82f436c16f02b6bbca826dae57f16214143c191ec997b5210",
 		read:    cloudRuleRead,
 	},
 	{
-		file: integrationsGo, function: "(*Jira).BaseURL",
+		file: integrationsGo, name: "(*Jira).BaseURL",
 		against: cloudIDGateway,
 		decides: "Jira named by a cloud_id is read at its gateway address (atlassianGatewayURL), and by a url at " +
 			"the url",
@@ -473,7 +474,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: integrationsGo, function: "(*Confluence).BaseURL",
+		file: integrationsGo, name: "(*Confluence).BaseURL",
 		against: cloudIDGateway,
 		decides: "Confluence named by a cloud_id is read at its gateway address (atlassianGatewayURL), and by a " +
 			"url at the url",
@@ -481,7 +482,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: integrationsGo, function: "(*Jira).ResolvedBaseURL",
+		file: integrationsGo, name: "(*Jira).ResolvedBaseURL",
 		against: atlassianAccount,
 		decides: "Jira is read at BaseURL of its url, cloud_id and site_url, each with its ${NAME} references " +
 			"resolved and its spaces trimmed, which leaves the url the operator renders, holding none, as written",
@@ -489,7 +490,7 @@ var mirrored = []mirror{
 		read:   addressRead,
 	},
 	{
-		file: integrationsGo, function: "(*Confluence).ResolvedBaseURL",
+		file: integrationsGo, name: "(*Confluence).ResolvedBaseURL",
 		against: atlassianAccount,
 		decides: "Confluence is read at BaseURL of its url, cloud_id and site_url, each with its ${NAME} " +
 			"references resolved and its spaces trimmed, which leaves the url the operator renders, holding none, " +
@@ -498,7 +499,7 @@ var mirrored = []mirror{
 		read:   addressRead,
 	},
 	{
-		file: "internal/engine/jira.go", function: "jiraBaseURL",
+		file: "internal/engine/jira.go", name: "jiraBaseURL",
 		against: atlassianAccount,
 		decides: "the engine derives Jira's deployment and builds its clients (startJira, rewireJira and the " +
 			"setup pass) at ResolvedBaseURL of the company's jira block",
@@ -506,7 +507,7 @@ var mirrored = []mirror{
 		read:   addressRead,
 	},
 	{
-		file: "internal/engine/integrations.go", function: "confluenceBaseURL",
+		file: "internal/engine/integrations.go", name: "confluenceBaseURL",
 		against: atlassianAccount,
 		decides: "the setup pass, which registers Confluence's webhooks as its deployment has them, builds its " +
 			"client at ResolvedBaseURL of the company's confluence block",
@@ -514,7 +515,7 @@ var mirrored = []mirror{
 		read:   addressRead,
 	},
 	{
-		file: integrationsGo, function: "(*Atlassian).Declared",
+		file: integrationsGo, name: "(*Atlassian).Declared",
 		against: atlassianAccount,
 		decides: "a company whose integrations.atlassian names no deployment, as every document the operator " +
 			"renders, declares none (atlassianhost.Unknown), never the form's default of cloud",
@@ -522,7 +523,7 @@ var mirrored = []mirror{
 		read:   cloudRuleRead,
 	},
 	{
-		file: "internal/jira/payload.go", function: "personID",
+		file: "internal/jira/payload.go", name: "personID",
 		against: atlassianAccount,
 		decides: "a Jira webhook names a person by accountId on Cloud and by name, the username, on Data Center, " +
 			"which is what a person's atlassian_account_id is matched against",
@@ -530,7 +531,7 @@ var mirrored = []mirror{
 		read:   atlassianRead,
 	},
 	{
-		file: "internal/confluence/parse.go", function: "(*Parser).base",
+		file: "internal/confluence/parse.go", name: "(*Parser).base",
 		against: atlassianAccount,
 		decides: "a Confluence webhook names its actor by accountId on Cloud and by username, else the user key, on " +
 			"Data Center, which is what a person's atlassian_account_id is matched against",
@@ -538,7 +539,7 @@ var mirrored = []mirror{
 		read:   atlassianRead,
 	},
 	{
-		file: profileFile, function: "IsCredentialName",
+		file: profileFile, name: "IsCredentialName",
 		against: credentialNames,
 		decides: "a name says it holds a credential when one of its parts, cut at every character that is not a " +
 			"letter or a digit and read without case, is one of credentialWords (which " +
@@ -547,14 +548,14 @@ var mirrored = []mirror{
 		read:   credentialNameRead,
 	},
 	{
-		file: mcpbridgeGo, function: "Build",
+		file: mcpbridgeGo, name: "Build",
 		against: []string{executorGo},
 		decides: "a node given no CREWLET_MCP_BRIDGE_URL builds no tool bridge (the test is Configured's)",
 		digest:  "108e637e5417c3bd768bbb6785ede3313232fb828e519f32c1a833125c37e58b",
 		read:    bootBindRead,
 	},
 	{
-		file: mcpbridgeGo, function: "Configured",
+		file: mcpbridgeGo, name: "Configured",
 		against: []string{executorGo, bootstrapGo},
 		decides: "a node has a tool bridge only when CREWLET_MCP_BRIDGE_URL is set to more than spaces, which the " +
 			"operator gives the data pods alone",
@@ -562,7 +563,7 @@ var mirrored = []mirror{
 		read:   bootBindRead,
 	},
 	{
-		file: bootGo, function: "PublicListener",
+		file: bootGo, name: "PublicListener",
 		against: []string{bootstrapGo},
 		decides: "a node without the ingress role binds api.public only where it serves its tool bridge, so a seat " +
 			"pod, given no bridge address, is given no api.public block",
@@ -570,14 +571,14 @@ var mirrored = []mirror{
 		read:   bootBindRead,
 	},
 	{
-		file: bootGo, function: "servesBridge",
+		file: bootGo, name: "servesBridge",
 		against: []string{bootstrapGo, executorGo},
 		decides: "a node without the ingress role serves a tool bridge only when it runs seats and has a bridge address",
 		digest:  "53129c12fa32a9938afa3d793112e1c700d3ae679f3683f9957cb522b5effa8c",
 		read:    bootBindRead,
 	},
 	{
-		file: apiConfigGo, function: "API.externalLoopback",
+		file: apiConfigGo, name: "API.externalLoopback",
 		against: signInPosture,
 		decides: "a node is reached on loopback when the host of its api.external_url is localhost, case aside, or a " +
 			"loopback IP, where totp optional needs no accept_insecure, and on no other address, where the node " +
@@ -586,7 +587,7 @@ var mirrored = []mirror{
 		read:   signInRead,
 	},
 	{
-		file: apiConfigGo, function: "API.ExternalBase",
+		file: apiConfigGo, name: "API.ExternalBase",
 		against: signInPosture,
 		decides: "the address externalLoopback judges is api.external_url with its surrounding spaces and trailing " +
 			"'/' removed",
@@ -594,7 +595,7 @@ var mirrored = []mirror{
 		read:   signInRead,
 	},
 	{
-		file: normalizeGo, function: "(*Bootstrap).normalize",
+		file: normalizeGo, name: "(*Bootstrap).normalize",
 		against: addressCopies,
 		decides: "every string of a Tier A is judged and used with the white space around it removed, an " +
 			"api.auth.allowed_origins entry included",
@@ -602,7 +603,7 @@ var mirrored = []mirror{
 		read:   addressShapeRead,
 	},
 	{
-		file: apiConfigGo, function: "(*API).validateExternalURL",
+		file: apiConfigGo, name: "(*API).validateExternalURL",
 		against: addressCopies,
 		decides: "api.external_url is judged with its surrounding spaces removed, by checkExternalURL and then, as " +
 			"a browser's address, by checkBrowserHost",
@@ -610,7 +611,7 @@ var mirrored = []mirror{
 		read:   addressShapeRead,
 	},
 	{
-		file: apiConfigGo, function: "(*APIPublic).validate",
+		file: apiConfigGo, name: "(*APIPublic).validate",
 		against: addressCopies,
 		decides: "api.public.external_url is judged with its surrounding spaces removed by checkExternalURL alone, " +
 			"since no browser compares an origin with it",
@@ -618,7 +619,7 @@ var mirrored = []mirror{
 		read:   addressShapeRead,
 	},
 	{
-		file: apiConfigGo, function: "checkExternalURL",
+		file: apiConfigGo, name: "checkExternalURL",
 		against: addressCopies,
 		decides: "an address a node is reached at starts with http:// or https:// in lower case, parses as a URL, " +
 			"has a host, a port checkPort takes, and no query or fragment; a path is taken",
@@ -626,21 +627,21 @@ var mirrored = []mirror{
 		read:   addressShapeRead,
 	},
 	{
-		file: integrationsGo, function: "hasHTTPScheme",
+		file: integrationsGo, name: "hasHTTPScheme",
 		against: addressCopies,
 		decides: "the scheme checkExternalURL takes is http:// or https:// spelled in lower case",
 		digest:  "a76612d926d38783c3ef5be235aa48a1f5dadd645271cc1ea44e70edb2b77130",
 		read:    addressShapeRead,
 	},
 	{
-		file: apiConfigGo, function: "checkPort",
+		file: apiConfigGo, name: "checkPort",
 		against: addressCopies,
 		decides: "a URL's port, when it has one, is a number from 1 to 65535",
 		digest:  "4dfe1cf753019e1c41f3e579509d5a5e790c28fa4bdc953170954e1e8aff4858",
 		read:    addressShapeRead,
 	},
 	{
-		file: apiConfigGo, function: "checkBrowserHost",
+		file: apiConfigGo, name: "checkBrowserHost",
 		against: addressCopies,
 		decides: "a browser's address has a host in ASCII, holding no '%', and one whose last label is a number " +
 			"(endsInNumber) only as an IPv4 address of four decimal octets",
@@ -648,7 +649,7 @@ var mirrored = []mirror{
 		read:   addressShapeRead,
 	},
 	{
-		file: apiConfigGo, function: "endsInNumber",
+		file: apiConfigGo, name: "endsInNumber",
 		against: addressCopies,
 		decides: "a host's last label, one trailing dot aside, is a number when it is all digits or 0x and hex " +
 			"digits, in either case",
@@ -656,7 +657,7 @@ var mirrored = []mirror{
 		read:   addressShapeRead,
 	},
 	{
-		file: apiConfigGo, function: "checkOrigin",
+		file: apiConfigGo, name: "checkOrigin",
 		against: addressCopies,
 		decides: "an api.auth.allowed_origins entry, as written, is scheme://host[:port] and nothing more, on http " +
 			"or https, with a port checkPort takes and a host checkBrowserHost takes",
@@ -665,13 +666,13 @@ var mirrored = []mirror{
 	},
 }
 
-// TestMirroredEngineFunctionsAreUnchanged holds every function in mirrored to
-// the engine the suites run: one whose digest moved is a function somebody
-// reads again against the operator file named, and one that is gone is a
-// decision somebody finds again. The test fails until its new digest is
+// TestMirroredEngineDeclarationsAreUnchanged holds every declaration in
+// mirrored to the engine the suites run: one whose digest moved is a
+// declaration somebody reads again against the operator file named, and one
+// that is gone is a decision somebody finds again. The test fails until its new digest is
 // recorded, so the read is made before the change lands, not when a seat
 // first meets the difference.
-func TestMirroredEngineFunctionsAreUnchanged(t *testing.T) {
+func TestMirroredEngineDeclarationsAreUnchanged(t *testing.T) {
 	source, version := openSource(t, enginetest.Source(t)), enginetest.Version(t)
 	for i := range mirrored {
 		if problem := mirrored[i].check(source, version); problem != "" {
@@ -692,27 +693,27 @@ func openSource(t *testing.T, dir string) *os.Root {
 }
 
 // check is what is wrong with m in the crewlet module source at version, or
-// nothing when the function there is the one that was read.
+// nothing when the declaration there is the one that was read.
 func (m *mirror) check(source *os.Root, version string) string {
-	at := fmt.Sprintf("%s %s, in crewlet %s,", m.file, m.function, version)
+	at := fmt.Sprintf("%s %s, in crewlet %s,", m.file, m.name, version)
 	copies := strings.Join(m.against, ", ")
 	src, err := source.ReadFile(m.file)
 	if err == nil {
 		var digest string
-		if digest, err = enginetest.Fingerprint(m.file, src, m.function); err == nil {
+		if digest, err = enginetest.Fingerprint(m.file, src, m.name); err == nil {
 			if digest == m.digest {
 				return ""
 			}
-			return fmt.Sprintf("%s is not the function the operator's copies of it were read against, which copy "+
+			return fmt.Sprintf("%s is not the declaration the operator's copies of it were read against, which copy "+
 				"from it that %s. `git log -p %s..%s -- %s` in a crewlet checkout shows what changed since. Read it "+
 				"against each of %s, make the operator follow it where it no longer does, then record digest %q "+
 				"and read %q for it in %s",
 				at, m.decides, gitRev(m.read), gitRev(version), m.file, copies, digest, version, mirrorTable)
 		}
 	}
-	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, enginetest.ErrNoFunction) {
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, enginetest.ErrNoDeclaration) {
 		return fmt.Sprintf("%s is gone (%v), and the operator copies from it that %s. Find where the engine "+
-			"decides that now, read it against each of %s, and name that function in %s in place of this one, "+
+			"decides that now, read it against each of %s, and name that declaration in %s in place of this one, "+
 			"with any digest at first: the next run fails with the digest and version to record for it",
 			at, err, m.decides, copies, mirrorTable)
 	}
@@ -734,12 +735,12 @@ func gitRev(version string) string {
 	return strings.TrimSuffix(version, "+incompatible")
 }
 
-// TestAMirroredFunctionThatMovedFails holds check to its job, on a module
+// TestAMirroredDeclarationThatMovedFails holds check to its job, on a module
 // source of its own: the function as read passes, and a digest that differs,
 // a function the file no longer declares and a file that is gone each fail,
 // naming the function, the operator file to read it against, and what to
 // record.
-func TestAMirroredFunctionThatMovedFails(t *testing.T) {
+func TestAMirroredDeclarationThatMovedFails(t *testing.T) {
 	dir := t.TempDir()
 	const file, decides = sandboxGo, "a pick"
 	src := []byte("package engine\n\nfunc pick(n int) int { return n }\n")
@@ -755,7 +756,7 @@ func TestAMirroredFunctionThatMovedFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	const version = "v0.1.1-0.20261011000000-0123456789ab"
-	read := mirror{file: file, function: "pick", against: []string{codeWorkGo, executorGo}, decides: decides,
+	read := mirror{file: file, name: "pick", against: []string{codeWorkGo, executorGo}, decides: decides,
 		digest: digest, read: "v0.1.1-0.20261010000000-ba9876543210"}
 	if problem := read.check(source, version); problem != "" {
 		t.Fatalf("the function as read fails: %s", problem)
@@ -764,7 +765,7 @@ func TestAMirroredFunctionThatMovedFails(t *testing.T) {
 	moved := read
 	moved.digest = strings.Repeat("0", len(digest))
 	gone := read
-	gone.function = "choose"
+	gone.name = "choose"
 	elsewhere := read
 	elsewhere.file = "internal/engine/launch.go"
 	for name, c := range map[string]struct {

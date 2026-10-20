@@ -695,7 +695,7 @@ func companyWriters(policy v1alpha1.ManagementPolicy) []string {
 // that does not parse is not on loopback.
 //
 // It is Crewlet's own judgement, copied (config.API.externalLoopback, over
-// config.API.ExternalBase, which TestMirroredEngineFunctionsAreUnchanged
+// config.API.ExternalBase, which TestMirroredEngineDeclarationsAreUnchanged
 // holds): the engine refuses to start with a second factor optional on any
 // other address unless the acknowledgement is given, and the operator has to
 // know the verdict before the engine does, to hold the pods back rather than

@@ -608,7 +608,7 @@ var credentialNameRules = map[string]int{
 // reads a credential's name with to the engine's source, and every rule of
 // the API that reads one to that pattern. The words are Crewlet's
 // credentialWords, in its order; how a name is cut into parts is
-// IsCredentialName's, which TestMirroredEngineFunctionsAreUnchanged holds, as
+// IsCredentialName's, which TestMirroredEngineDeclarationsAreUnchanged holds, as
 // it holds the function and not the list. The LLMProvider API's rules are
 // also held to the engine's sign-in by the CRD suite, and the tool-server
 // API's to the names the engine reads a seat's tool credentials under.

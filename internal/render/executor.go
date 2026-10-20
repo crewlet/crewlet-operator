@@ -31,7 +31,7 @@ import (
 // behind a chain's head or in another phase.
 //
 // Crewlet decides it at a turn, where no validation shows it, so
-// TestMirroredEngineFunctionsAreUnchanged holds the engine functions this
+// TestMirroredEngineDeclarationsAreUnchanged holds the engine functions this
 // copies to the ones it was read against, and fails when one changes.
 
 // Executor is what the operator can tell from the objects of a seat whose
