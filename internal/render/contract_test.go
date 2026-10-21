@@ -977,8 +977,14 @@ func dummyCredential(k secretref.Key) string {
 // document that names the variables the operator once put the credentials
 // in, in a field that is no credential: an MCP server's URL, which the
 // engine expands from its secret store and then from its environment before
-// it connects. The engine must reach the server with none of its credentials
-// in the request.
+// it connects. None of them may resolve. Crewlet dials no server whose url
+// holds a reference that resolves to nothing, so the engine must hold the
+// server back and name every one of them as set nowhere: a variable the
+// operator gave the engine would be missing from that list, and would be
+// sent to the server the moment the others were set. A control server with
+// no reference, at the same address, is dialled, so a listener that hears
+// nothing from the probe is one the engine could reach, and no request it
+// hears may carry a credential.
 func TestContractNoCredentialLeavesThroughAReference(t *testing.T) {
 	type request struct{ url, header, body string }
 	requests := make(chan request, 64)
@@ -995,33 +1001,98 @@ func TestContractNoCredentialLeavesThroughAReference(t *testing.T) {
 	e, _ := startDataPod(t, in)
 
 	// Every variable a credential has ever been given to the engine in.
-	url := listener.URL + "/mcp/${CREWLET_TOKEN_OPERATOR}/${CREWLET_TOKEN_ACCESS}/${CREWLET_SECRET_KEY_K1}/" +
-		"${CREWLET_S3_ACCESS_KEY_ID}/${CREWLET_S3_SECRET_ACCESS_KEY}"
-	company := fmt.Appendf(nil, "name: Nimbus\nmcp_servers:\n  - name: probe\n    transport: http\n    url: %q\n", url)
+	variables := []string{
+		"CREWLET_TOKEN_OPERATOR", "CREWLET_TOKEN_ACCESS", "CREWLET_SECRET_KEY_K1",
+		"CREWLET_S3_ACCESS_KEY_ID", "CREWLET_S3_SECRET_ACCESS_KEY",
+	}
+	url := listener.URL + "/mcp"
+	for _, name := range variables {
+		url += "/${" + name + "}"
+	}
+	company := fmt.Appendf(nil, "name: Nimbus\nmcp_servers:\n  - name: probe\n    transport: http\n    url: %q\n"+
+		"  - name: control\n    transport: http\n    url: %q\n", url, listener.URL+"/control")
 	if _, err := e.Client().ApplyConfig(t.Context(), engine.ApplyRequest{Document: company, CreateOnly: true, Summary: "a probe for leaked credentials"}); err != nil {
 		t.Fatalf("applying the company document: %v", err)
 	}
 
-	select {
-	case got := <-requests:
-		seen := []request{got}
-		for drained := false; !drained; {
-			select {
-			case r := <-requests:
-				seen = append(seen, r)
-			case <-time.After(time.Second):
-				drained = true
+	var seen []request
+	for dialled := false; !dialled; {
+		select {
+		case r := <-requests:
+			seen = append(seen, r)
+			dialled = strings.HasPrefix(r.url, "/control")
+		case <-time.After(30 * time.Second):
+			t.Fatal("the engine never reached the control server, so the test proves nothing")
+		}
+	}
+
+	held := heldBack(t, e, "probe")
+	if !strings.Contains(held, "not set") {
+		t.Errorf("the engine holds the probe server back for another reason than variables set nowhere: %s", held)
+	}
+	for _, name := range variables {
+		if !strings.Contains(held, "${"+name+"}") {
+			t.Errorf("the engine does not name %s among the variables set nowhere, so it holds a value under it: %s", name, held)
+		}
+	}
+
+	for drained := false; !drained; {
+		select {
+		case r := <-requests:
+			seen = append(seen, r)
+		case <-time.After(time.Second):
+			drained = true
+		}
+	}
+	for _, r := range seen {
+		if strings.HasPrefix(r.url, "/mcp") {
+			t.Errorf("the engine dialled the probe server's url: %+v", r)
+		}
+		for _, credential := range []string{tokens.Operator, tokens.Access, testKeyMaterial} {
+			if strings.Contains(r.url+r.header+r.body, credential) {
+				t.Errorf("the engine sent a credential to the MCP server's URL: %+v", r)
 			}
 		}
-		for _, r := range seen {
-			for _, credential := range []string{tokens.Operator, tokens.Access, testKeyMaterial} {
-				if strings.Contains(r.url+r.header+r.body, credential) {
-					t.Errorf("the engine sent a credential to the MCP server's URL: %+v", r)
+	}
+}
+
+// heldBack is why e holds the tool server named server back, as its GET
+// /mcp-servers reports a failed instance of it (the reason of its
+// mcp_server_credential_missing line). The report rides each node's
+// heartbeat, so it is waited for.
+func heldBack(t *testing.T, e *enginetest.Engine, server string) string {
+	t.Helper()
+	deadline := time.Now().Add(time.Minute)
+	for {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, e.URL+"/mcp-servers", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+e.OperatorToken)
+		var status struct {
+			Servers []struct {
+				Name  string `json:"name"`
+				Nodes []struct {
+					Error string `json:"error"`
+				} `json:"nodes"`
+			} `json:"servers"`
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err == nil {
+			err = json.NewDecoder(resp.Body).Decode(&status)
+			_ = resp.Body.Close()
+		}
+		for _, row := range status.Servers {
+			for _, node := range row.Nodes {
+				if row.Name == server && node.Error != "" {
+					return node.Error
 				}
 			}
 		}
-	case <-time.After(30 * time.Second):
-		t.Fatal("the engine never reached the MCP server, so the test proves nothing")
+		if time.Now().After(deadline) {
+			t.Fatalf("the engine reports no failed instance of %s after a minute (%v): %+v", server, err, status)
+		}
+		time.Sleep(time.Second)
 	}
 }
 
