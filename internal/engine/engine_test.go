@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -351,6 +352,11 @@ func TestEngineStaleIfMatchIsRevisionAdvanced(t *testing.T) {
 	var apiErr *engine.APIError
 	if !errors.As(err, &apiErr) || apiErr.CurrentRevisionID != next.RevisionID {
 		t.Fatalf("ApplyConfig() with a stale If-Match = %v, want the current revision %q named", err, next.RevisionID)
+	}
+	// A failed precondition, as HTTP says of a condition the request
+	// stated: only a write that named no revision loses with a 409.
+	if apiErr.StatusCode != http.StatusPreconditionFailed {
+		t.Errorf("ApplyConfig() with a stale If-Match answered %d, want 412", apiErr.StatusCode)
 	}
 }
 

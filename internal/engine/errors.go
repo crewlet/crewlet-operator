@@ -24,9 +24,13 @@ var (
 
 	// ErrRevisionAdvanced is a compare-and-set the caller lost: the active
 	// revision is not the one an If-Match named, or another write activated
-	// between this write's read and its activation. Re-read the active
-	// configuration and render again; the engine may have kept this write's
-	// revision as inert history.
+	// between this write's read and its activation. The engine answers it
+	// 412 to a write whose If-Match named a revision, as the operator's
+	// writes over a running document do, and 409 to one that named none, as
+	// its activation of the running revision again (ReloadConfig) does; a
+	// create-only write that loses its race is ErrAlreadyConfigured instead.
+	// Re-read the active configuration and render again; the engine may have
+	// kept this write's revision as inert history.
 	ErrRevisionAdvanced = errors.New("the engine's active configuration revision has advanced")
 
 	// ErrAlreadyConfigured is a create-only write (ApplyRequest.CreateOnly)
@@ -218,6 +222,9 @@ func (e *APIError) Is(target error) bool {
 		// same way. A draining engine's 503 is a *NotReadyError instead.
 		return e.StatusCode == http.StatusServiceUnavailable
 	case ErrRevisionAdvanced:
+		// By code alone: the engine writes it 412 for a write that named
+		// the revision it was built on and 409 for one that named none,
+		// and either way what moved is the company's revision.
 		return e.Code == codeRevisionAdvanced
 	case ErrAlreadyConfigured:
 		return e.Code == codeAlreadyConfigured

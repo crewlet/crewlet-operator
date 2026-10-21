@@ -362,10 +362,10 @@ func (c *Client) Revision(ctx context.Context, id string) (Revision, error) {
 //
 // A document the engine refuses fails with a *ValidationError locating each
 // problem; a stale req.IfMatch, or a write that lost a race with another
-// writer, with ErrRevisionAdvanced; req.CreateOnly on a configured engine with
-// ErrAlreadyConfigured; and a write while the engine's keyring does not open
-// the fleet's revision, which the write reads first, with
-// ErrRevisionUnreadable.
+// writer, with ErrRevisionAdvanced (a 412 when req.IfMatch is set, a 409 when
+// it is not); req.CreateOnly on a configured engine with ErrAlreadyConfigured;
+// and a write while the engine's keyring does not open the fleet's revision,
+// which the write reads first, with ErrRevisionUnreadable.
 func (c *Client) ApplyConfig(ctx context.Context, req ApplyRequest) (ApplyResult, error) {
 	if req.IfMatch != "" && req.CreateOnly {
 		return ApplyResult{}, errors.New("apply the company document: IfMatch and CreateOnly are mutually exclusive: " +

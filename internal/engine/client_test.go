@@ -33,6 +33,10 @@ const (
 
 	baseRevision = "rev-1"
 
+	// revisionAdvanced is the code of a write or a reload that lost its race
+	// to another writer.
+	revisionAdvanced = "revision_advanced"
+
 	// poolLabel and dataPool are the placement label the operator gives a
 	// data pod, and its value.
 	poolLabel = "crewlet.ai/pool"
@@ -397,18 +401,34 @@ func TestUnlocatedDocumentRefusalIsStillAValidationError(t *testing.T) {
 }
 
 func TestErrorMapping(t *testing.T) {
+	// staleWrite is the write the operator makes: conditioned on the
+	// revision it read, which another write has moved past.
+	staleWrite := write
+	staleWrite.IfMatch = "rev-1"
 	cases := []struct {
 		name       string
+		req        *engine.ApplyRequest
 		handler    http.HandlerFunc
 		sentinel   error
 		wantCode   string
 		wantStatus int
 	}{
 		{
+			// A failed precondition: the request named the revision it
+			// was built on, and it is not the active one.
 			name: "stale if-match",
-			handler: answer(http.StatusConflict,
+			req:  &staleWrite,
+			handler: answer(http.StatusPreconditionFailed,
 				`{"error":"revision_advanced","current_revision_id":"rev-9","your_base":"\"rev-1\""}`),
-			sentinel: engine.ErrRevisionAdvanced, wantCode: "revision_advanced", wantStatus: http.StatusConflict,
+			sentinel: engine.ErrRevisionAdvanced, wantCode: revisionAdvanced, wantStatus: http.StatusPreconditionFailed,
+		},
+		{
+			// A conflict: a write that named no revision lost the race
+			// to another. The code is the same, and so is the sentinel.
+			name: "a lost race with no if-match",
+			handler: answer(http.StatusConflict,
+				`{"error":"revision_advanced","current_revision_id":"rev-9","stored_revision_id":"rev-10"}`),
+			sentinel: engine.ErrRevisionAdvanced, wantCode: revisionAdvanced, wantStatus: http.StatusConflict,
 		},
 		{
 			name:     "create-only on a configured engine",
@@ -434,7 +454,7 @@ func TestErrorMapping(t *testing.T) {
 		{
 			name: "a token without the grant",
 			handler: answer(http.StatusForbidden, `{"error":"unauthorized","grants":["admin"],`+
-				`"message":"You don't have the access this needs (Admin, Worklet, Doclet or Artifacts). Ask an admin for it.",`+
+				`"message":"You don't have the access this needs (Admin). Ask an admin for it.",`+
 				`"reason":"no_grant"}`),
 			sentinel: engine.ErrForbidden, wantCode: "unauthorized", wantStatus: http.StatusForbidden,
 		},
@@ -498,7 +518,11 @@ func TestErrorMapping(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFakeEngine(t)
 			f.handle("PUT /config", tc.handler)
-			_, err := apply(f, write)
+			req := write
+			if tc.req != nil {
+				req = *tc.req
+			}
+			_, err := apply(f, req)
 			var apiErr *engine.APIError
 			if !errors.As(err, &apiErr) {
 				t.Fatalf("ApplyConfig() = %v, want an *APIError", err)
@@ -568,14 +592,21 @@ func TestAnUnreadableRevisionNamesItAndItsRemedy(t *testing.T) {
 	}
 }
 
+// TestRevisionAdvancedNamesTheCurrentRevision reads both revisions a lost
+// compare-and-set names, from the answer the operator meets: its writes are
+// conditioned on the revision they were built on, so the engine refuses one
+// another write moved past with 412.
 func TestRevisionAdvancedNamesTheCurrentRevision(t *testing.T) {
 	f := newFakeEngine(t)
-	f.handle("PUT /config", answer(http.StatusConflict,
+	f.handle("PUT /config", answer(http.StatusPreconditionFailed,
 		`{"error":"revision_advanced","current_revision_id":"rev-9","stored_revision_id":"rev-10"}`))
-	_, err := apply(f, write)
+	req := write
+	req.IfMatch = "rev-1"
+	_, err := apply(f, req)
 	var apiErr *engine.APIError
-	if !errors.As(err, &apiErr) || apiErr.CurrentRevisionID != "rev-9" || apiErr.StoredRevisionID != "rev-10" {
-		t.Fatalf("ApplyConfig() = %v, want the current and the stored revision named", err)
+	if !errors.As(err, &apiErr) || apiErr.CurrentRevisionID != "rev-9" || apiErr.StoredRevisionID != "rev-10" ||
+		apiErr.StatusCode != http.StatusPreconditionFailed {
+		t.Fatalf("ApplyConfig() = %v, want a 412 naming the current and the stored revision", err)
 	}
 }
 
@@ -619,7 +650,7 @@ func TestRefusalMessageIsWhatTheEngineSaid(t *testing.T) {
 func TestAuthorityRefusalNamesItsGrants(t *testing.T) {
 	f := newFakeEngine(t)
 	f.handle("PUT /config", answer(http.StatusForbidden, `{"error":"unauthorized","grants":["admin"],`+
-		`"message":"You don't have the access this needs (Admin, Worklet, Doclet or Artifacts). Ask an admin for it.",`+
+		`"message":"You don't have the access this needs (Admin). Ask an admin for it.",`+
 		`"reason":"no_grant"}`))
 	_, err := apply(f, write)
 	var apiErr *engine.APIError
@@ -854,7 +885,7 @@ func TestPutSecretsSendsOneBody(t *testing.T) {
 		"the re-activation lost a race": {
 			reload: `{"error":"revision_advanced","detail":"another configuration write activated first",
 				"stored_revision_id":"rev-3","node":"node-a"}`,
-			want: &engine.Reload{Error: "revision_advanced", Detail: "another configuration write activated first",
+			want: &engine.Reload{Error: revisionAdvanced, Detail: "another configuration write activated first",
 				StoredRevisionID: "rev-3", Node: "node-a"},
 		},
 	} {

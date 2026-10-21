@@ -236,8 +236,10 @@ type ApplyRequest struct {
 	Summary string
 
 	// IfMatch makes the write conditional on the active revision being this
-	// one; a stale one fails with ErrRevisionAdvanced before anything is
-	// stored. Empty is unconditional. Mutually exclusive with CreateOnly.
+	// one: a stale one fails with ErrRevisionAdvanced, a 412, before anything
+	// is stored; a write another activated past once it was stored fails
+	// with it too. Empty is unconditional. Mutually exclusive with
+	// CreateOnly.
 	IfMatch string
 
 	// CreateOnly makes the write land only on an engine, and a fleet, with no
