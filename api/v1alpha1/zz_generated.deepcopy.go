@@ -1836,6 +1836,11 @@ func (in *MCPServerSpec) DeepCopyInto(out *MCPServerSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.OptionalKeys != nil {
+		in, out := &in.OptionalKeys, &out.OptionalKeys
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.ToolAnnotations != nil {
 		in, out := &in.ToolAnnotations, &out.ToolAnnotations
 		*out = make([]MCPToolAnnotations, len(*in))
@@ -2293,6 +2298,11 @@ func (in *SandboxSetupStep) DeepCopyInto(out *SandboxSetupStep) {
 	if in.Env != nil {
 		in, out := &in.Env, &out.Env
 		*out = make([]SecretEnvVar, len(*in))
+		copy(*out, *in)
+	}
+	if in.OptionalKeys != nil {
+		in, out := &in.OptionalKeys, &out.OptionalKeys
+		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
 }
@@ -2795,6 +2805,11 @@ func (in *SeatSandbox) DeepCopyInto(out *SeatSandbox) {
 	if in.Env != nil {
 		in, out := &in.Env, &out.Env
 		*out = make([]SeatEnvVar, len(*in))
+		copy(*out, *in)
+	}
+	if in.OptionalKeys != nil {
+		in, out := &in.OptionalKeys, &out.OptionalKeys
+		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
 	if in.Setup != nil {

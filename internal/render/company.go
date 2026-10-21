@@ -638,7 +638,8 @@ func (r *renderer) setup(steps []v1alpha1.SandboxSetupStep) []setupStepDoc {
 		return nil
 	}
 	out := make([]setupStepDoc, len(steps))
-	for i, s := range steps {
+	for i := range steps {
+		s := &steps[i]
 		out[i] = setupStepDoc{
 			Name:           s.Name,
 			Commands:       s.Commands,

@@ -403,8 +403,8 @@ func (r *renderer) sandboxEnvNames(s *v1alpha1.Seat) envNames {
 		names[e.Name] = true
 	}
 	for _, steps := range [][]v1alpha1.SandboxSetupStep{s.Spec.Sandbox.Setup, r.in.Company.Spec.Sandbox.Setup} {
-		for _, step := range steps {
-			for _, e := range step.Env {
+		for i := range steps {
+			for _, e := range steps[i].Env {
 				names[e.Name] = true
 			}
 		}

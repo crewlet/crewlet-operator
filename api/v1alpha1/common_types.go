@@ -333,8 +333,12 @@ const (
 	// document, and the part reports it on Applied too, except for the
 	// findings the operator applies and reports only, because only the part
 	// at fault suffers them: a Seat's PoolNotFound, NoProvisioner and
-	// NotAnAccountID, and a Human seat named in a GitLab Integration's
-	// accessLevels (HumanSeat). Applied says which.
+	// NotAnAccountID, a Human seat named in a GitLab Integration's
+	// accessLevels (HumanSeat), and a value a tool server or a coding run is
+	// started with that a Secret holds empty (SecretValueEmpty). Applied says
+	// which. True names, in its message, every value the child gives a tool
+	// server or a coding run under a key an optionalKeys list lets go
+	// without it whose Secret or key does not exist, or holds nothing.
 	ConditionResolvedRefs = "ResolvedRefs"
 
 	// ConditionApplied reports whether a child is part of the revision the
@@ -347,17 +351,18 @@ const (
 
 	// ConditionCodeWorkRunnable reports whether an agent Seat's coding agent
 	// can run on the provider at the head of its sandbox chain, or on the
-	// sign-in the seat's sandbox environment gives it, so that a run_sandbox
-	// launch of the seat can start. It is set on an Agent seat with
-	// spec.sandbox whose executor does not run in agent mode, in a Company
-	// with spec.sandbox (the seats Crewlet offers run_sandbox), and is
-	// computed from the spec under every management policy: under Observe or
-	// Seed it judges the Seat's objects, which may not be the document the
-	// engine runs (Applied says whether they are). Only CodingAgentMismatch
-	// also holds the document (Applied=False), as Crewlet refuses it on every
-	// write; with SandboxModelUnsupported or SandboxLoginNotPortable the seat
-	// is applied and runs its turns, and Crewlet refuses each of its coding
-	// runs.
+	// sign-in the seat's sandbox environment gives it, with every value its
+	// runs are given, so that a run_sandbox launch of the seat can start. It
+	// is set on an Agent seat with spec.sandbox whose executor does not run in
+	// agent mode, in a Company with spec.sandbox (the seats Crewlet offers
+	// run_sandbox), and is computed from the spec, and from the Secrets once
+	// they are read, under every management policy: under Observe or Seed it
+	// judges the Seat's objects, which may not be the document the engine
+	// runs (Applied says whether they are). Only CodingAgentMismatch also
+	// holds the document (Applied=False), as Crewlet refuses it on every
+	// write; with SandboxModelUnsupported, SandboxLoginNotPortable,
+	// SecretValueEmpty or NoProvisioner the seat is applied and runs its
+	// turns, and Crewlet refuses each of its coding runs.
 	ConditionCodeWorkRunnable = "CodeWorkRunnable"
 
 	// ConditionAgentModeRunnable reports whether an LLMProvider of type
@@ -679,9 +684,13 @@ const (
 	// ReasonNoProvisioner is ResolvedRefs=False on a Seat that names a
 	// provisioned credential while no Integration of its Company has
 	// provisioning Engine: nothing creates the value, so the engine starts
-	// none of the seat's tool servers that take it, and the seat's chat app
-	// or code work runs without it. The seat is applied, with the reference
-	// the engine fills once an Integration provisions.
+	// none of the seat's tool servers that take it and refuses each of its
+	// run_sandbox coding runs whose environment holds it, unless the key the
+	// value is written under is optional, when each starts without it; its
+	// chat app, and an agent-mode run of its executor, run without it. It is
+	// CodeWorkRunnable=False on such a Seat whose coding runs it refuses. The
+	// seat is applied, with the reference the engine fills once an
+	// Integration provisions.
 	ReasonNoProvisioner = "NoProvisioner"
 
 	// ReasonNotAnAccountID is ResolvedRefs=False on a Seat whose
@@ -724,7 +733,9 @@ const (
 	ReasonSecretTooLarge = "SecretTooLarge"
 
 	// ReasonSecretNotFound is ResolvedRefs=False (or SecretsSynced=False)
-	// when a referenced Secret or Secret key does not exist, and
+	// when a referenced Secret or Secret key does not exist, but for a value
+	// a tool server or a coding run is started with under a key an
+	// optionalKeys list lets go without it, which holds nothing back; and
 	// RuntimeReady=False when a Secret the engine's pods are given values
 	// from does not: one the EngineClass references (telemetry.headersSecretRef,
 	// a podTemplate.spec.env valueFrom) or the Company's
@@ -732,6 +743,31 @@ const (
 	// Accepted=False when a Secret or key the class references does not
 	// exist.
 	ReasonSecretNotFound = "SecretNotFound"
+
+	// ReasonSecretValueEmpty is ResolvedRefs=False on an object that gives a
+	// tool server or a coding run a value from a Secret key that holds
+	// nothing, under a key no optionalKeys list lets go without it, where the
+	// value is the one the engine starts with: Crewlet starts no tool server,
+	// and no run_sandbox coding run, with a value that resolves to nothing, so
+	// the server it is given to does not start, for a seat or for the
+	// company, and the seat's coding runs are refused, which is
+	// CodeWorkRunnable=False with this reason on the Seat. The object is
+	// applied, and the value reaches the engine once the Secret holds one.
+	// Listing the key in the optionalKeys list that governs it has it left
+	// out instead: the MCPServer's spec.optionalKeys for a value a tool
+	// server is started with, the server's own or a Seat's or a Unit's, though
+	// a seat's own credential, the identity its instance acts as, is not one
+	// to start without; a Seat's spec.sandbox.optionalKeys, or the step's own,
+	// for a coding run's.
+	ReasonSecretValueEmpty = "SecretValueEmpty"
+
+	// ReasonOptionalKeyUnused is ResolvedRefs=False on an MCPServer whose
+	// spec.optionalKeys names a key no value read from a Secret, or
+	// provisioned, is written under: not by its own env or headers, nor by
+	// any Seat's or Unit's spec.mcp for it. Nothing is left out for the
+	// entry, and the key it was meant for stays one the server is not
+	// started without, so Crewlet refuses the document, which is held.
+	ReasonOptionalKeyUnused = "OptionalKeyUnused"
 
 	// ReasonConflict is Accepted=False when the object collides with
 	// another of its company in a way Crewlet refuses: two Integrations for
@@ -741,8 +777,11 @@ const (
 	// displayName or a name, compared without case); or an LLMProvider
 	// whose name is also the name of one of the EngineClass's
 	// platformLLMProviders the company uses, since both are keys of
-	// Crewlet's one providers.llm mapping. The message names the other
-	// object.
+	// Crewlet's one providers.llm mapping; or a Seat whose spec.mcp gives an
+	// HTTP server a header its Unit's spec.mcp gives the server in another
+	// case, since Crewlet lays a unit's values under its members' by the
+	// name as written and would send either one. The message names the
+	// other object.
 	ReasonConflict = "Conflict"
 
 	// ReasonReferenceNotAllowed is ResolvedRefs=False on an object (or
