@@ -107,7 +107,7 @@ var findings = []struct {
 	{site{fnMcpEnv, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the credentials would go to whichever server takes the name later"},
 	{site{fnSeatCredential, Reported, v1alpha1.ReasonNoProvisioner},
-		"the engine applies the reference; only the seat's own tool starts without it"},
+		"the engine applies the reference; only the seat's own tool goes without it"},
 	{site{fnPlanTopology, ClassPolicy, v1alpha1.ReasonSeatPoolsNotAllowed}, "the class forbids seat pools"},
 	{site{fnPlanTopology, Reported, v1alpha1.ReasonPoolNotFound},
 		"the engine accepts any pin; only the seat runs nowhere"},

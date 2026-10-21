@@ -380,7 +380,8 @@ func reportedCases() []reportedCase {
 	return []reportedCase{
 		{
 			// Nothing creates the value until an Integration provisions:
-			// the seat's tool starts without it.
+			// the seat's tool server is not started, and its code work runs
+			// without it.
 			name: "a seat names a provisioned credential and no integration provisions", fn: fnSeatCredential,
 			input: sampleCompany,
 			mutate: func(in *Input) {

@@ -678,8 +678,9 @@ const (
 
 	// ReasonNoProvisioner is ResolvedRefs=False on a Seat that names a
 	// provisioned credential while no Integration of its Company has
-	// provisioning Engine: nothing creates the value, and the seat's tool or
-	// chat app starts without it. The seat is applied, with the reference
+	// provisioning Engine: nothing creates the value, so the engine starts
+	// none of the seat's tool servers that take it, and the seat's chat app
+	// or code work runs without it. The seat is applied, with the reference
 	// the engine fills once an Integration provisions.
 	ReasonNoProvisioner = "NoProvisioner"
 
