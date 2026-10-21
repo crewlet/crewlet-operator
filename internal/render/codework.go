@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
+	"github.com/crewlet/crewlet-operator/internal/secretref"
 )
 
 // What a seat's code work, a run_sandbox launch in the Company's E2B sandbox,
@@ -44,7 +45,17 @@ import (
 // spec.sandbox.setup steps' env and the Company's spec.sandbox.setup steps'
 // env, which Crewlet merges into every run. The operator sees the names a
 // Secret's values are given under, not the values: a name counts here where
-// Crewlet would count a non-blank value under it.
+// Crewlet would count a non-blank value under it. A name whose value is
+// missing or empty and declared optional is left out of every run, so it
+// counts for nothing once the reconcile has read the Secrets (Input.Unset);
+// a required one that is missing holds the document, whose running revision
+// keeps the value it had, so it counts. A required value Crewlet reads as
+// nothing wherever the document is applied, an empty one (Input.Empty) or a
+// provisioned one nothing mints, has every run refused before a box exists
+// (runEnvironment), whatever the head, and so does a step's file that is
+// empty and not optional: that is the verdict then, SecretValueEmpty or
+// NoProvisioner, which the Seat's ResolvedRefs reports too, or the Company's
+// SecretsSynced for a value of the Company's own steps.
 //
 // A seat whose executor is a CLI in mode Agent has no code work of its own:
 // Crewlet never offers it run_sandbox (its Runner.offersSandbox), as it codes
@@ -99,9 +110,10 @@ type CodeWork struct {
 	// the head of the document's llm_order.
 	Field string
 	// Reason is empty when the coding agent can run, on the head or on the
-	// seat's own sign-in, and otherwise v1alpha1.ReasonCodingAgentMismatch, which the render refuses,
-	// v1alpha1.ReasonSandboxModelUnsupported or
-	// v1alpha1.ReasonSandboxLoginNotPortable, which it only reports.
+	// seat's own sign-in, and otherwise v1alpha1.ReasonCodingAgentMismatch,
+	// which the render refuses, or v1alpha1.ReasonSandboxModelUnsupported,
+	// v1alpha1.ReasonSandboxLoginNotPortable, v1alpha1.ReasonSecretValueEmpty
+	// or v1alpha1.ReasonNoProvisioner, which it only reports.
 	Reason string
 	// Message says what the coding agent runs on and, when it cannot, what
 	// to change, for a condition message after Field.
@@ -171,11 +183,14 @@ func (r *renderer) codeWork(s *v1alpha1.Seat) (CodeWork, bool) {
 		return CodeWork{}, false
 	}
 	runner := cmp.Or(s.Spec.Sandbox.CodingAgent, r.in.Company.Spec.Sandbox.DefaultCodingAgent, defaultCodingAgent)
-	env := r.sandboxEnvNames(s)
+	env, gone, refused := r.sandboxEnvNames(s)
 	w := CodeWork{Field: head.field}
 	switch {
 	case head.cli != nil && string(head.cli.Agent) != string(runner):
 		w.Reason, w.Message = v1alpha1.ReasonCodingAgentMismatch, codingAgentMismatch(runner, head)
+	case len(refused) > 0:
+		w.Field = "spec.sandbox"
+		w.Reason, w.Message = r.refusedRun(&refused[0])
 	case head.cli == nil && runner == v1alpha1.CodingAgentClaudeCode && head.kind != v1alpha1.LLMProviderAnthropic:
 		if signIn := env.among(claudeCodeSignIn); len(signIn) > 0 {
 			// Crewlet hands the run none of the provider then, so the
@@ -192,8 +207,8 @@ func (r *renderer) codeWork(s *v1alpha1.Seat) (CodeWork, bool) {
 				"each run_sandbox launch of the seat. Name a provider of type Anthropic first in "+
 				"spec.llm.sandbox, set spec.sandbox.codingAgent: OpenCode, which reads the OpenAI wire too, or "+
 				"sign ClaudeCode in for the seat in spec.sandbox.env (%s), on which it runs under its own model "+
-				"choice",
-			head.describe(), head.kind, strings.Join(claudeCodeSignIn, ", "))
+				"choice%s",
+			head.describe(), head.kind, strings.Join(claudeCodeSignIn, ", "), leftOutNote(gone.among(claudeCodeSignIn)))
 	case head.cli != nil:
 		own, seat := head.remoteSignIn(env)
 		switch {
@@ -205,12 +220,24 @@ func (r *renderer) codeWork(s *v1alpha1.Seat) (CodeWork, bool) {
 				"follow the run into the Company's E2B sandbox",
 				runner, head.describe(), strings.Join(seat, ", "), head.cli.Agent)
 		default:
-			w.Reason, w.Message = v1alpha1.ReasonSandboxLoginNotPortable, loginNotPortable(head)
+			_, lost := head.remoteSignIn(gone)
+			w.Reason, w.Message = v1alpha1.ReasonSandboxLoginNotPortable, loginNotPortable(head)+leftOutNote(lost)
 		}
 	default:
 		w.Message = runsOn(runner, head)
 	}
 	return w, true
+}
+
+// leftOutNote is the end of a message saying that names, variables of the
+// seat's sandbox environment that would sign its coding agent in, are left
+// out of every run, or nothing when there are none.
+func leftOutNote(names []string) string {
+	if len(names) == 0 {
+		return ""
+	}
+	return fmt.Sprintf(". The seat's sandbox environment gives %s, and leaves it out of every run: its value is "+
+		"missing, and the optionalKeys beside it let a run go without it", strings.Join(names, ", "))
 }
 
 // runsOn is the message of a seat whose coding agent runs on the model and
@@ -394,20 +421,106 @@ func (e envNames) among(names []string) []string {
 	return slices.DeleteFunc(slices.Clone(names), func(name string) bool { return !e[name] })
 }
 
+// runValue is a value a seat's sandbox runs are given: a variable of their
+// environment, or a setup step's file.
+type runValue struct {
+	// name is the variable or the file's path, field the field it is written
+	// at and list the optionalKeys that governs it, each of the Seat's own or
+	// named with the Company's.
+	name, field, list string
+	// key is the Secret key the value is read from, zero for a provisioned
+	// one, which provisioned names.
+	key         secretref.Key
+	provisioned string
+	optional    bool
+}
+
 // sandboxEnvNames is the names the seat's sandbox runs are given values
-// under: its own spec.sandbox.env and setup steps', and the Company's setup
-// steps'.
-func (r *renderer) sandboxEnvNames(s *v1alpha1.Seat) envNames {
-	names := envNames{}
-	for _, e := range s.Spec.Sandbox.Env {
-		names[e.Name] = true
+// under, the names left out of them, and the values every run is refused for:
+// its own spec.sandbox.env and setup steps', and the Company's setup steps'.
+// Crewlet lays them as its runEnvironment does, the Company's steps, then the
+// seat's, then its env, each later one winning a name, and every step's files
+// alike. It leaves a name out of every run where the value that wins is under
+// a key its block declares optional and is known to hold nothing: its Secret
+// key is one the reconcile found missing or empty (Input.Unset), or it is
+// provisioned and no Integration provisions. Under a key not declared
+// optional, such a value refuses every run, before a box exists, where it is
+// known to stay so: an empty value (Input.Empty), which the engine reads as
+// nothing, and a provisioned one nothing mints. A missing one holds the
+// document, whose running revision keeps the value it had.
+func (r *renderer) sandboxEnvNames(s *v1alpha1.Seat) (names, leftOut envNames, refused []runValue) {
+	won := map[string]runValue{}
+	stepsAt := []struct {
+		owner string
+		steps []v1alpha1.SandboxSetupStep
+	}{
+		{owner: fmt.Sprintf("Company %s's ", r.in.Company.Name), steps: r.in.Company.Spec.Sandbox.Setup},
+		{steps: s.Spec.Sandbox.Setup},
 	}
-	for _, steps := range [][]v1alpha1.SandboxSetupStep{s.Spec.Sandbox.Setup, r.in.Company.Spec.Sandbox.Setup} {
-		for i := range steps {
-			for _, e := range steps[i].Env {
-				names[e.Name] = true
+	for _, at := range stepsAt {
+		for i := range at.steps {
+			step := &at.steps[i]
+			list := fmt.Sprintf("%sspec.sandbox.setup[%d].optionalKeys", at.owner, i)
+			for j, e := range step.Env {
+				won[e.Name] = runValue{
+					name: e.Name, field: fmt.Sprintf("%sspec.sandbox.setup[%d].env[%d].valueFrom", at.owner, i, j), list: list,
+					key: r.key(e.ValueFrom.SecretKeyRef), optional: slices.Contains(step.OptionalKeys, e.Name),
+				}
+			}
+			for j, f := range step.Files {
+				file := runValue{
+					name: f.Path, field: fmt.Sprintf("%sspec.sandbox.setup[%d].files[%d].valueFrom", at.owner, i, j), list: list,
+					key: r.key(f.ValueFrom.SecretKeyRef), optional: slices.Contains(step.OptionalKeys, f.Path),
+				}
+				if !file.optional && r.empty[file.key] {
+					refused = append(refused, file)
+				}
 			}
 		}
 	}
-	return names
+	for j, e := range s.Spec.Sandbox.Env {
+		v := runValue{
+			name: e.Name, field: fmt.Sprintf("spec.sandbox.env[%d].valueFrom", j), list: "spec.sandbox.optionalKeys",
+			provisioned: e.ValueFrom.Provisioned.Name, optional: slices.Contains(s.Spec.Sandbox.OptionalKeys, e.Name),
+		}
+		if e.ValueFrom.SecretKeyRef.Name != "" {
+			v.key = r.key(e.ValueFrom.SecretKeyRef)
+		}
+		won[e.Name] = v
+	}
+	names, leftOut = envNames{}, envNames{}
+	for _, name := range slices.Sorted(maps.Keys(won)) {
+		v := won[name]
+		unminted := v.provisioned != "" && !r.engineProvisions()
+		switch {
+		case v.optional && (r.unset[v.key] || unminted):
+			leftOut[name] = true
+			continue
+		case r.empty[v.key] || unminted:
+			refused = append(refused, v)
+		}
+		names[name] = true
+	}
+	return names, leftOut, refused
+}
+
+// refusedRun is the verdict on a seat every run of which Crewlet refuses for
+// v, a value it is given under a key not declared optional that holds
+// nothing.
+func (r *renderer) refusedRun(v *runValue) (reason, message string) {
+	held := fmt.Sprintf("Secret %s/%s holds an empty value under %q", v.key.Namespace, v.key.Name, v.key.Key)
+	reason = v1alpha1.ReasonSecretValueEmpty
+	if v.provisioned != "" {
+		held = fmt.Sprintf("it is the provisioned credential %s, and no Integration of Company %s has provisioning "+
+			"Engine to create it", v.provisioned, r.in.Company.Name)
+		reason = v1alpha1.ReasonNoProvisioner
+	}
+	return reason, fmt.Sprintf("Crewlet refuses each run_sandbox launch of the seat before a box exists, as its "+
+		"sandbox gives it %s at %s and %s: a run is started only with every value it is given. Give it a value, "+
+		"or list %s in %s to have the run go without it", v.name, v.field, held, v.name, v.list)
+}
+
+// key is ref's Secret key, in the Company's namespace.
+func (r *renderer) key(ref v1alpha1.SecretKeyReference) secretref.Key {
+	return secretref.Key{Namespace: r.namespace(), Name: ref.Name, Key: ref.Key}
 }

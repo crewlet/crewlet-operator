@@ -15,6 +15,7 @@ import (
 
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine"
+	"github.com/crewlet/crewlet-operator/internal/secretref"
 	"github.com/crewlet/crewlet-operator/internal/secretsync"
 )
 
@@ -227,4 +228,121 @@ func TestContractAToolServerGetsTheAllowlistAndItsEnvAlone(t *testing.T) {
 func has(m map[string]string, name string) bool {
 	_, ok := m[name]
 	return ok
+}
+
+// TestContractAnOptionalKeyIsLeftOut holds what the MCPServer API says of
+// optionalKeys to the engine that starts the server: a key whose value is
+// read from a Secret the secret sync pushed nothing for, as it pushes nothing
+// for an optional key whose Secret or key does not exist, or from one that
+// holds an empty value, is left out of the server's environment, whole, and
+// the server starts without it; the server's own literal and the values that
+// are there reach it as written. It holds a shared server's own env and a
+// per-seat server's values a Seat gives it alike, as the engine starts each
+// with the rendered document.
+func TestContractAnOptionalKeyIsLeftOut(t *testing.T) {
+	const (
+		present = "PROBE_PRESENT"
+		missing = "PROBE_MISSING"
+		empty   = "PROBE_EMPTY"
+		setting = "PROBE_SETTING"
+		seatOwn = "PROBE_SEAT_TOKEN"
+		seatGap = "PROBE_SEAT_MISSING"
+		secret  = "probe"
+	)
+	dir := t.TempDir()
+	sharedFile, seatFile := filepath.Join(dir, "shared.env"), filepath.Join(dir, "seat.env")
+	in := companyCaseNamed(t, "minimal-agent").input(t)
+	fromSecret := func(key string) v1alpha1.SecretValueSource {
+		return v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: secret, Key: key}}
+	}
+	server := func(name string, shared bool, file string) v1alpha1.MCPServer {
+		return v1alpha1.MCPServer{
+			Name:      name,
+			Namespace: in.Company.Namespace,
+			Spec: v1alpha1.MCPServerSpec{
+				CompanyRef:            v1alpha1.CompanyReference{Name: in.Company.Name},
+				Transport:             v1alpha1.MCPTransportStdio,
+				Shared:                new(shared),
+				Command:               "/bin/sh",
+				Args:                  append(slices.Clone(toolServerShell), file),
+				Env:                   []v1alpha1.MCPEnvVar{{Name: setting, Value: new(name)}},
+				StartupTimeoutSeconds: 1,
+			},
+		}
+	}
+	shared := server("probe-shared", true, sharedFile)
+	shared.Spec.Env = append(shared.Spec.Env,
+		v1alpha1.MCPEnvVar{Name: present, ValueFrom: fromSecret("present")},
+		v1alpha1.MCPEnvVar{Name: missing, ValueFrom: fromSecret("missing")},
+		v1alpha1.MCPEnvVar{Name: empty, ValueFrom: fromSecret("empty")})
+	shared.Spec.OptionalKeys = []string{present, missing, empty}
+	perSeat := server("probe-seat", false, seatFile)
+	perSeat.Spec.OptionalKeys = []string{seatGap}
+	in.MCPServers = append(in.MCPServers, shared, perSeat)
+	in.Seats[0].Spec.MCP = append(in.Seats[0].Spec.MCP, v1alpha1.MCPCredentials{
+		Name: perSeat.Name,
+		Env: []v1alpha1.MCPCredentialValue{
+			{Name: seatOwn, ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: fromSecret("seat-token").SecretKeyRef}},
+			{Name: seatGap, ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: fromSecret("seat-missing").SecretKeyRef}},
+		},
+	})
+	doc, err := Company(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e, _ := startDataPod(t, bootstrapCases()[0].input(t))
+	client := e.Client()
+	// What the secret sync leaves in the store: nothing for a Secret key
+	// that does not exist, under an optional key, and the empty value a
+	// Secret key holds as it is.
+	values := map[string]string{"empty": ""}
+	for _, k := range doc.Refs {
+		value, set := values[k.Key]
+		if !set {
+			value = dummyCredential(k)
+		}
+		if k.Name == secret && (k.Key == "missing" || k.Key == "seat-missing") {
+			continue
+		}
+		if err := client.PutSecret(t.Context(), secretsync.StoreName(k), []byte(value)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := client.ApplyConfig(t.Context(), engine.ApplyRequest{Document: doc.YAML, CreateOnly: true, Summary: "optional keys"}); err != nil {
+		t.Fatalf("applying the company document: %v", err)
+	}
+
+	probe := func(key string) string {
+		return dummyCredential(secretref.Key{Namespace: testNamespace, Name: secret, Key: key})
+	}
+	want := map[string]map[string]string{
+		sharedFile: {setting: shared.Name, present: probe("present")},
+		seatFile:   {setting: perSeat.Name, seatOwn: probe("seat-token")},
+	}
+	gone := map[string][]string{sharedFile: {missing, empty}, seatFile: {seatGap}}
+	for _, file := range []string{sharedFile, seatFile} {
+		for deadline := time.Now().Add(2 * time.Minute); ; {
+			if _, err := os.Stat(file); err == nil {
+				break
+			} else if !errors.Is(err, os.ErrNotExist) {
+				t.Fatal(err)
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("the engine never started the server that writes %s: an optional key held it back", file)
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		got := envFile(t, file)
+		for name, value := range want[file] {
+			if got[name] != value {
+				t.Errorf("%s: the server was handed %s=%q, want %q", file, name, got[name], value)
+			}
+		}
+		for _, name := range gone[file] {
+			if value, ok := got[name]; ok {
+				t.Errorf("%s: the server was handed %s=%q, which its optionalKeys leaves out without a value", file, name, value)
+			}
+		}
+	}
 }

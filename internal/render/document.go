@@ -120,6 +120,7 @@ type setupStepDoc struct {
 	Files          map[string]string `json:"files,omitempty"`
 	Commands       []string          `json:"commands,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
+	OptionalKeys   []string          `json:"optional_keys,omitempty"`
 	Brief          string            `json:"brief,omitempty"`
 	TimeoutSeconds int32             `json:"timeout_seconds,omitempty"`
 }
@@ -251,6 +252,7 @@ type mcpServerDoc struct {
 	Env                   map[string]string             `json:"env,omitempty"`
 	URL                   string                        `json:"url,omitempty"`
 	Headers               map[string]string             `json:"headers,omitempty"`
+	OptionalKeys          []string                      `json:"optional_keys,omitempty"`
 	ToolPrefix            string                        `json:"tool_prefix,omitempty"`
 	ToolAnnotations       map[string]toolAnnotationsDoc `json:"tool_annotations,omitempty"`
 	StartupTimeoutSeconds int32                         `json:"startup_timeout_seconds,omitempty"`
@@ -339,6 +341,7 @@ type roleSandboxDoc struct {
 	MaxTurns        *int32            `json:"max_turns,omitempty"`
 	MCP             *roleSandboxMCP   `json:"mcp,omitempty"`
 	Env             map[string]string `json:"env,omitempty"`
+	OptionalKeys    []string          `json:"optional_keys,omitempty"`
 	Setup           []setupStepDoc    `json:"setup,omitempty"`
 }
 

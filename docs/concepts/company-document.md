@@ -350,6 +350,8 @@ that holds the reference:
 | `Unit` | `leadRef` names a Seat that does not exist: Crewlet would run the unit, and every unit below that inherits its lead, with no lead | `RefNotFound` | Harm |
 | `Unit` | a `spec.mcp` entry names an MCPServer that does not exist | `RefNotFound` | Harm |
 | `LLMProvider` | its name is also the name of a platform provider the company uses: one would replace the other | `Conflict` | Harm |
+| `MCPServer` | an `optionalKeys` entry names a key no value read from a Secret, or provisioned, is written under, not by its own `env` or `headers` nor by any Seat's or Unit's `spec.mcp` for it (none at all, or literal `value`s only, which are never missing): nothing is left out for it, and the key it was meant for stays one the server is not started without | `OptionalKeyUnused` | Engine |
+| `Seat` | a `spec.mcp` entry spells a header unlike the Seat's Unit spells it for the same HTTP server (`authorization` beside `Authorization`): Crewlet lays the unit's values under the member's by the name as written, and the server would be sent either | `Conflict` (on `Accepted`) | Engine |
 | `Integration` | another Integration of the company, earlier by name, connects the same vendor: a new one would displace the running one | `Conflict` | Harm |
 | `Integration` | Datadog's `routeTo.seatRef` names a Seat that does not exist, or a Human seat | `RefNotFound`, `HumanSeat` | Engine |
 | `Integration` | a GitLab `accessLevels` entry names a Seat that does not exist: written by its handle, the level would go to whichever seat takes it later | `RefNotFound` | Harm |
@@ -406,8 +408,11 @@ revision:
   `Ready=False`, `PoolNotFound` too while no pod holds it;
   a Seat that names a provisioned credential while no Integration of the
   company has `provisioning: Engine` (`NoProvisioner`), which goes without
-  the value until one does, its tool servers that take it not started and
-  its chat app or code work running without it; a GitLab `accessLevels`
+  the value until one does: its tool server that takes it is not started,
+  and Crewlet refuses each of its `run_sandbox` coding runs, unless the
+  `optionalKeys` that governs the value lets them go without it (the
+  MCPServer's, or the seat's `spec.sandbox.optionalKeys`), and its chat app
+  runs without it; a GitLab `accessLevels`
   entry naming a Human seat (`HumanSeat`), which grants nothing, as the
   engine creates no GitLab account for a person; and a person's
   `contact.atlassianAccount` that is no Atlassian account id, such as an

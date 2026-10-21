@@ -36,6 +36,8 @@ var (
 	fnGitLabAccessLevels = nameOf((*renderer).gitLabAccessLevels)
 	fnDatadogRouteTo     = nameOf((*renderer).datadogRouteTo)
 	fnMcpEnv             = nameOf((*renderer).mcpEnv)
+	fnMcpOptionalKeys    = nameOf((*renderer).mcpOptionalKeys)
+	fnHeaderSpellings    = nameOf((*renderer).headerSpellings)
 	fnSeatCredential     = nameOf((*renderer).seatCredential)
 	fnPlanTopology       = nameOf(planTopology)
 	fnCheckCapacity      = nameOf(checkCapacity)
@@ -106,6 +108,10 @@ var findings = []struct {
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonHumanSeat}, "route_to naming a person"},
 	{site{fnMcpEnv, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the credentials would go to whichever server takes the name later"},
+	{site{fnMcpOptionalKeys, EngineRefuses, v1alpha1.ReasonOptionalKeyUnused},
+		"an optional key no value read from a Secret or provisioned is written under leaves nothing out"},
+	{site{fnHeaderSpellings, EngineRefuses, v1alpha1.ReasonConflict},
+		"a seat's header spelled unlike its unit's: the seat's instance would send either value"},
 	{site{fnSeatCredential, Reported, v1alpha1.ReasonNoProvisioner},
 		"the engine applies the reference; only the seat's own tool goes without it"},
 	{site{fnPlanTopology, ClassPolicy, v1alpha1.ReasonSeatPoolsNotAllowed}, "the class forbids seat pools"},
@@ -398,7 +404,75 @@ func engineCases() []engineCase {
 			at: keyName, says: a.key,
 		})
 	}
+	// optionalKeysAt is where the engine refuses the first optional key.
+	const optionalKeysAt = "optional_keys[0]"
+	// optionalKey writes key as the optional_keys of the tool server named.
+	optionalKey := func(name, key string) func(*testing.T, map[string]any) {
+		return func(t *testing.T, doc map[string]any) {
+			t.Helper()
+			for _, server := range doc[keyMCPServers].([]any) {
+				if entry := server.(map[string]any); entry[keyName] == name {
+					entry["optional_keys"] = []any{key}
+					return
+				}
+			}
+			t.Fatalf("the document has no tool server %s", name)
+		}
+	}
 	return append([]engineCase{
+		{
+			name: "an optional key nothing writes", site: site{fnMcpOptionalKeys, EngineRefuses, v1alpha1.ReasonOptionalKeyUnused},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { toolServer(in, sampleGitHub).Spec.OptionalKeys = []string{"X-Api-Key"} },
+			refused: "MCPServer/github spec.optionalKeys[0]",
+			write:   optionalKey(sampleGitHub, "X-Api-Key"),
+			at:      optionalKeysAt, says: "is not a key of",
+		},
+		{
+			// A Stdio server's keys are variables, whose names an
+			// environment tells apart by case.
+			name: "a Stdio server's optional key in another case", site: site{fnMcpOptionalKeys, EngineRefuses, v1alpha1.ReasonOptionalKeyUnused},
+			input:   sampleCompany,
+			mutate:  func(in *Input) { toolServer(in, sampleGitLab).Spec.OptionalKeys = []string{"gitlab_token"} },
+			refused: "MCPServer/gitlab spec.optionalKeys[0]",
+			write:   optionalKey(sampleGitLab, "gitlab_token"),
+			at:      optionalKeysAt, says: "is not a key of",
+		},
+		{
+			// Ana's own Authorization, under a header her unit writes as
+			// authorization.
+			name: "a seat's header spelled unlike its unit's", site: site{fnHeaderSpellings, EngineRefuses, v1alpha1.ReasonConflict},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				unit(in, unitPlatform).Spec.MCP = []v1alpha1.MCPCredentials{{Name: sampleGitHub, Env: []v1alpha1.MCPCredentialValue{{
+					Name: headerLower, ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "platform-github", Key: headerLower}},
+				}}}}
+			},
+			refused: "Seat/ana spec.mcp[0].env[0].name",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				platform := unitHolding(t, doc, seatAna)
+				platform["mcp_env"] = map[string]any{sampleGitHub: map[string]any{headerLower: "${PLATFORM_GITHUB}"}}
+			},
+			at: headerAuthorization, says: "names the header its unit's block writes as",
+		},
+		{
+			name: "an optional key only literals are written under", site: site{fnMcpOptionalKeys, EngineRefuses, v1alpha1.ReasonOptionalKeyUnused},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				toolServer(in, sampleGitHub).Spec.OptionalKeys = []string{sampleToolsets}
+				seat(in, seatAna).Spec.MCP[0].Env = append(seat(in, seatAna).Spec.MCP[0].Env,
+					v1alpha1.MCPCredentialValue{Name: sampleToolsets, Value: new("repos")})
+			},
+			refused: "MCPServer/github spec.optionalKeys[0]",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				optionalKey(sampleGitHub, sampleToolsets)(t, doc)
+				env := role(t, doc, seatAna)["mcp_env"].(map[string]any)[sampleGitHub].(map[string]any)
+				env[sampleToolsets] = "repos"
+			},
+			at: optionalKeysAt, says: "carries a ${VAR} reference",
+		},
 		{
 			name: "a seat's chain names no provider", site: site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
 			input:   sampleCompany,
@@ -774,6 +848,39 @@ func roleIn(doc map[string]any, handle string) map[string]any {
 		}
 	}
 	return nil
+}
+
+// unitHolding is the entry of the unit whose own roles hold handle, at any
+// depth of a decoded document.
+func unitHolding(t *testing.T, doc map[string]any, handle string) map[string]any {
+	t.Helper()
+	var find func(map[string]any) map[string]any
+	find = func(m map[string]any) map[string]any {
+		for _, key := range []string{keyUnits, keyChildren} {
+			units, _ := m[key].([]any)
+			for _, u := range units {
+				unit, ok := u.(map[string]any)
+				if !ok {
+					continue
+				}
+				roles, _ := unit["roles"].([]any)
+				for _, r := range roles {
+					if role, ok := r.(map[string]any); ok && role["handle"] == handle {
+						return unit
+					}
+				}
+				if found := find(unit); found != nil {
+					return found
+				}
+			}
+		}
+		return nil
+	}
+	unit := find(doc)
+	if unit == nil {
+		t.Fatalf("no unit of the document holds %s", handle)
+	}
+	return unit
 }
 
 // datadogIn is the datadog block of a decoded document.

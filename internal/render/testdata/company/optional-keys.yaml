@@ -1,0 +1,80 @@
+mcp_servers:
+- headers:
+    X-MCP-Toolsets: repos,issues
+  name: github
+  optional_keys:
+  - authorization
+  shared: false
+  transport: http
+  url: https://api.githubcopilot.com/mcp/
+- args:
+  - -y
+  - tavily-mcp@0.2.22
+  command: npx
+  env:
+    NPM_CONFIG_REGISTRY: ${K8S_NPM_REGISTRY_ASWLOYTAQ36C}
+    TAVILY_API_KEY: ${K8S_TAVILY_API_KEY_AMB2VQN5F2XL}
+  name: tavily
+  optional_keys:
+  - NPM_CONFIG_REGISTRY
+  transport: stdio
+name: Optional
+providers:
+  llm:
+    claude:
+      api_keys:
+      - ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+      model: claude-sonnet-5
+      type: anthropic
+  llm_order:
+  - claude
+  sandbox:
+    default_run_in: e2b
+    e2b:
+      api_key: ${K8S_E2B_API_KEY_GSEHAAV5THN5}
+    setup:
+    - env:
+        NPM_TOKEN: ${K8S_NPM_TOKEN_7UQYJYMEKTJS}
+      files:
+        .npmrc: ${K8S_NPM_NPMRC_L375H6UWCEPD}
+      name: npm
+      optional_keys:
+      - .npmrc
+roles:
+- contact:
+    github_login: optional-founder
+  handle: founder
+  kind: human
+  name: founder
+units:
+- id: eng
+  mcp_env:
+    github:
+      Authorization: ${K8S_ENG_GITHUB_AUTHORIZATION_TNZSUXRLCVER}
+  name: eng
+  roles:
+  - goal: Keep the build green.
+    handle: coder
+    kind: agent
+    mcp_env:
+      github:
+        Authorization: ${K8S_CODER_GITHUB_AUTHORIZATION_O5XXIVYQLUVV}
+    name: coder
+    placement:
+      labels:
+        crewlet.ai/pool: data
+    sandbox:
+      enabled: true
+      env:
+        DATABASE_URL: ${K8S_CODER_DB_URL_TUUCUBLXXNYK}
+        GITHUB_TOKEN: ${K8S_CODER_GITHUB_TOKEN_GBSENFRBCM2H}
+      optional_keys:
+      - DATABASE_URL
+      setup:
+      - env:
+          PGUSER: ${K8S_CODER_DB_USER_YSYGSSC7EKTC}
+        files:
+          .pgpass: ${K8S_CODER_DB_PGPASS_ZWIAGTJBHBW2}
+        name: postgres
+        optional_keys:
+        - .pgpass
