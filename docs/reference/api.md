@@ -4360,7 +4360,7 @@ _Appears in:_
 | Field | Description |
 | --- | --- |
 | `Always` | WorkingStatusAlways shows it on every turn a chat message started.<br /> |
-| `Addressed` | WorkingStatusAddressed shows it only when a person is plausibly<br />waiting: a direct message, a mention, or a thread the seat follows.<br /> |
+| `Addressed` | WorkingStatusAddressed shows it only when a person is plausibly<br />waiting on the seat: a direct message, a mention of it by name, and<br />on Slack or Mattermost a thread it is in because it was named there,<br />on Chatlet a reply in a thread it started or a person's message in a<br />unit's room that reached nobody else and so falls to it as the unit's<br />lead. Never a message it reached through a room-wide address, or only<br />by having spoken in the thread before.<br /> |
 
 
 #### WorkletSettings
