@@ -1,7 +1,8 @@
 # Nimbus, an example company. Its units, seats, model provider, tool server
 # and integrations are the other samples in this directory; each names the
 # Company in spec.companyRef. The Secrets they reference are not included:
-# create them in the same namespace before the company can be applied.
+# create them in the same namespace before the company can be applied, all
+# but nimbus-npm, which the company goes without (below).
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -44,6 +45,22 @@ spec:
         key: apiKey
     defaultCodingAgent: ClaudeCode
     defaultPauseTTLSeconds: 1800
+    # Every coding run's box logs npm in to the company's own registry,
+    # where the Secret holds a login. optionalKeys lets a run go without
+    # it: without the Secret, or with the key empty, the file is not
+    # written and the run starts all the same. Unlisted, a missing Secret
+    # would hold the company's document, and an empty key have every run
+    # refused.
+    setup:
+      - name: npm-registry
+        files:
+          - path: .npmrc
+            valueFrom:
+              secretKeyRef:
+                name: nimbus-npm
+                key: npmrc
+        optionalKeys:
+          - .npmrc
   # Engine tuning without a typed field, written as Crewlet spells it and
   # validated by the engine before every apply.
   engineConfig:

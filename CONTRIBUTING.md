@@ -213,7 +213,21 @@ sandbox, also the LLMProvider API's rule on a CLI of mode `Agent`, the
 [CLI agents guide](docs/guides/cli-agents.md) that states it and `test/crd`'s
 reading of the engine's verdicts on it, and, for what a coding box carries of
 its provider, the [credentials guide](docs/guides/credentials.md#what-a-coding-box-carries)
-and the [credentials concept page](docs/concepts/credentials.md). The table
+and the [credentials concept page](docs/concepts/credentials.md). For a
+value a tool server or a coding run may go without, the table names what
+the engine starts each with (`resolveServer` and `(*refGap).hold` in
+`internal/engine/toolcredentials.go`, `(*Engine).runEnvironment` in
+`internal/engine/sandbox.go`), which instances of a server it starts and
+with whose values (`startSharedServers` and `seatSpecs` in
+`internal/engine/mcp.go`, `sandboxMCP` in `internal/engine/sandbox.go`,
+`(*MCPServer).Grants` in `internal/config/mcp.go`,
+`(*Organization).inheritMCPEnv` in `internal/org/organization.go`), and
+the spellings of a header it refuses (`validateHeaderSpellings` and
+`spelledUnlike` in `internal/config/filerules.go`); those are read against
+the controller's report of such a value as well
+(`internal/controller/config_optional.go`), the MCPServer, Seat and
+Company API types, and the [tool servers](docs/guides/tool-servers.md),
+[CLI agents](docs/guides/cli-agents.md) and credentials guides. The table
 also names every constant and function that bounds a wait on a data pod's or
 a seat pod's boot, which the controller's startup windows add up
 (`dataPodBootSeconds` and `seatPodBootSeconds` in `internal/controller`), the

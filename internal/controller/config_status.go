@@ -22,6 +22,12 @@ import (
 // writeStatus records the reconcile's verdict: every part's status, then the
 // Company's conditions and status.config.
 func (run *configRun) writeStatus(ctx context.Context) error {
+	if run.objectsChecked {
+		// Whether a seat's code work can run is a fact about its own spec
+		// and the Secrets read for it, so it is decided whatever became of
+		// the document, once they have been read (Input.Unset).
+		run.checkCodeWork(render.CodeWorkOf(run.input()))
+	}
 	vendors := run.vendors()
 	units := unitTree(run.parts)
 	var errs []error
@@ -66,6 +72,9 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 	case len(p.reported) > 0:
 		// Applied says that this holds nothing.
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionResolvedRefs, false, p.reportedReason, sentences(p.reported))
+	case run.secretsChecked && len(p.leftOut) > 0:
+		setCondition(conditions, gen, crewletaiv1alpha1.ConditionResolvedRefs, true, crewletaiv1alpha1.ReasonResolved,
+			leftOutMessage(run.leftOutLines(p.leftOut)))
 	case run.secretsChecked:
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionResolvedRefs, true, crewletaiv1alpha1.ReasonResolved,
 			"Every object and Secret key it references exists.")

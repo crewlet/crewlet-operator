@@ -48,6 +48,19 @@ reason `SecretNotFound`, naming the Secret and key, and the Company reports
 operator waits two quiet seconds before it renders, so objects and Secrets
 written together are applied together.
 
+A tool server or a coding run may go without a value whose key an
+`optionalKeys` list names (the MCPServer's for a tool server, the Seat's
+`spec.sandbox` or a setup step's for a coding run), the way a pod goes without
+an `optional` `secretKeyRef`: a missing Secret or key there holds nothing
+back, the engine starts the server or the run without the value, and the
+object that gives the value names it in its `ResolvedRefs=True` message, or
+the Company, which has no `ResolvedRefs`, in its `SecretsSynced` message for
+its own setup steps
+([A key that may go without its value](tool-servers.md#a-key-that-may-go-without-its-value),
+[A value a run may go without](cli-agents.md#a-value-a-run-may-go-without)).
+Every other value a server or a run is started with must hold something:
+Crewlet starts neither with an empty one.
+
 ## Each credential
 
 ### A model provider's API keys
@@ -142,9 +155,11 @@ written.
 A seat that signs Claude Code in itself, with `CLAUDE_CODE_OAUTH_TOKEN`,
 `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or a `CLAUDE_CODE_USE_*` toggle
 in `spec.sandbox.env` or a setup step's `env`, gets neither the provider's
-key nor its endpoint: its own sign-in is what the run uses. Under OpenCode
-the provider's key is added beneath the seat's variables, so a seat variable
-of the same name wins.
+key nor its endpoint: its own sign-in is what the run uses. A sign-in the run
+goes without, its key listed in `optionalKeys` and its Secret or key missing
+or empty, signs nothing in: the run is given the provider's key and endpoint,
+as one with no sign-in is. Under OpenCode the provider's key is added beneath
+the seat's variables, so a seat variable of the same name wins.
 
 A seat whose executor runs in agent mode has no code work of its own, but
 its executor's every run is a box of the same sandbox, with the same
@@ -452,7 +467,8 @@ keyring that opens everything it did); removing one is not.
 | `RuntimeReady=False SecretNotFound` | A Secret the EngineClass references for the pods is missing in the platform's namespace, or the Company's `spec.objects.credentialsSecretRef` is. |
 | `RuntimeReady=False APITokensInvalid` | A supplied `<company>-api-tokens` lacks a token or holds one the engine should not be guarded by; the message says which. |
 | `Integration` `Healthy=False CheckFailed` | The engine reached the vendor and the credential did not work; the message carries the vendor's answer. |
-| `Seat` `ResolvedRefs=False NoProvisioner` | The Seat names a provisioned credential, and no Integration of its company has `provisioning: Engine` to create it. The seat is applied; until one does, the engine starts none of its tool servers that take the value, and its chat app or code work runs without it. |
+| `ResolvedRefs=False SecretValueEmpty` | A Secret key the object gives a tool server or a coding run holds an empty value, under a key no `optionalKeys` lists: the object is applied, and the engine does not start the server, or refuses each coding run, until the key holds a value. The message names the Secret, the key, the variable, and the `optionalKeys` that could list it where Crewlet offers one: never for a Seat's or a Unit's value for a tool server, the identity the seat's instance acts as. The Company's own setup steps say it in `SecretsSynced`. |
+| `Seat` `ResolvedRefs=False NoProvisioner` | The Seat names a provisioned credential, and no Integration of its company has `provisioning: Engine` to create it. The seat is applied; until one does, the engine starts none of its tool servers that take the value and refuses each of its coding runs, unless the `optionalKeys` that governs the value lets them go without it (the MCPServer's, or the seat's `spec.sandbox.optionalKeys`), and its chat app runs without it. |
 
 [Troubleshooting](troubleshooting.md) lists every condition.
 

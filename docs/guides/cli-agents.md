@@ -601,9 +601,72 @@ one that names another CLI than the executor's on every write, and the
 operator refuses it too (`CodingAgentMismatch` on `Applied`, at
 `spec.sandbox.codingAgent`).
 
-The operator sees the names of the seat's variables, not their values: a
-variable named above whose Secret holds nothing passes it, and the engine
-refuses the run. What the box receives from the provider is in
+### A value a run may go without
+
+Crewlet starts a `run_sandbox` coding run only once every value of its
+environment and files holds something: a value read from a Secret that does
+not exist, holds no such key or holds an empty value has every run refused
+before a box exists. A value the run can do without is listed by its key:
+in `spec.sandbox.optionalKeys`, a variable of `spec.sandbox.env`; in a setup
+step's `optionalKeys`, the Company's or the Seat's, a variable of the step's
+`env` or a path of its `files`.
+
+```yaml
+spec:                       # Company nimbus
+  sandbox:
+    setup:
+      - name: npm-registry
+        files:
+          - path: .npmrc
+            valueFrom:
+              secretKeyRef: {name: nimbus-npm, key: npmrc}
+        optionalKeys: [.npmrc]
+```
+
+Under a listed key, such a value is left out: the variable is not set, or
+the file not written, and the run starts without it. A missing Secret or key
+there holds nothing back, and the object that gives the value names it in its
+`ResolvedRefs=True` message, with the list that lets it go: the Seat for its
+own `spec.sandbox` and steps, and the Company, which has no `ResolvedRefs`,
+in its `SecretsSynced` message for its own steps. Once the Secret is back,
+the operator pushes its value and applies the document again. When it is
+deleted, the operator, under the `Enforce` policy, takes the value out of the
+engine's secret store and has the engine read the store again, by applying
+the next document or, while that one is held, by activating the revision the
+engine runs again, so no run starts with a deleted Secret's value, but in a
+revision the engine runs that reads the key as required, as one from before
+the key was listed does, or whose reading the operator does not know, which
+keeps the value until the next document runs, the new revision activating
+once with it and then again without it
+([Applying a document](../concepts/applying.md#what-one-reconcile-does)); a
+Secret key also read where it is required holds the document instead, and
+keeps its value in a revision the engine runs that requires it too until the
+next one applies. The layers of a run's environment are laid in order, the
+Company's steps, then the Seat's, then `spec.sandbox.env`, a later one
+winning a variable, and the list beside the value that wins is the one that
+counts for it; a step's files are its own. A provisioned value an
+Integration mints for the seat is never left out, whatever the list says:
+until it is minted, each run is refused, the seat told to try again. One
+nothing mints, while no Integration of the company has
+`provisioning: Engine`, is left out. An agent-mode executor's run starts
+without a value that holds nothing, listed or not (Crewlet's
+[Credentials and the run environment](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#credentials-and-the-run-environment)).
+
+The API refuses an entry naming no variable or path of its own block. A
+Secret key that holds an empty value under a key nothing lists does not hold
+the document, since Crewlet applies the seat and refuses each run: the
+object that gives the value reports `ResolvedRefs=False SecretValueEmpty`,
+with a Warning event, or the Company's `SecretsSynced` for its own steps, and
+the Seat's `CodeWorkRunnable=False SecretValueEmpty`, as does a provisioned
+value nothing mints (`NoProvisioner`). Either is reported only where it is
+the value a run is given: a step's variable the Seat's own `env` replaces is
+none.
+
+The verdict above reads the variables that sign the coding agent in once the
+reconcile has read their Secrets: one a run goes without, listed and missing
+or empty, signs nothing in, and the box is given the provider's key and
+endpoint as it is with no sign-in. What the box receives from the provider
+is in
 [What a coding box carries](credentials.md#what-a-coding-box-carries).
 
 ## Seat pools

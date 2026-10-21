@@ -67,7 +67,10 @@ that takes it once it has minted it. A provisioned value anywhere else is
 never filled, and so is one no Integration of the seat's company creates:
 while none has `provisioning: Engine`, the seat is applied and reports
 `ResolvedRefs=False NoProvisioner`. A tool server that takes a value nothing
-fills is not started, and a chat app or code work runs without it
+fills is not started, and each coding run is refused, unless the
+`optionalKeys` that governs the value lets them go without it (the
+MCPServer's for a tool server's value, the seat's `spec.sandbox.optionalKeys`
+for its coding runs'); a chat app runs without it
 ([A tool server does not start](troubleshooting.md#a-tool-server-does-not-start)).
 A Unit's credentials always come from Secrets.
 

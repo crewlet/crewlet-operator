@@ -42,8 +42,32 @@ type configRun struct {
 	// eng is the client of the Company's engine, once resolved.
 	eng *engine.Client
 	doc *render.Document
-	// desired is the store entries the document calls for, once read.
-	desired *secretsync.Desired
+	// read is what the reconcile read of the Secrets the document
+	// references, and desired the store entries the document calls for once
+	// every one of them could be read: nil while that is not so. missing is
+	// every reference read whose Secret or key does not exist, those the
+	// document lets go without and those it holds for alike.
+	read, desired *secretsync.Desired
+	missing       []*secretsync.MissingError
+	// companyEmpty are the values the Company's own setup steps give a
+	// coding run from a Secret key that holds an empty value, under a key
+	// they do not declare optional, and companyLeftOut those under a key
+	// they do whose Secret or key does not exist or holds nothing
+	// (checkSecretValues).
+	companyEmpty   []string
+	companyLeftOut []leftOutValue
+	// retained are the references whose Secret or key does not exist, which
+	// the document lets go without, whose value the engine's store keeps for
+	// the revision the engine runs, which reads them as required, or is one
+	// whose reading the operator does not know (retainedUnknown), and so
+	// takes to (see config_withdraw.go), as the last secret sync of this
+	// reconcile left them. kept are the store names of those it has not yet
+	// said it keeps (keep), keptBy the revision it keeps them for, and told
+	// the names the state the reconcile loaded says it said it keeps.
+	retained        []secretref.Key
+	retainedUnknown bool
+	kept, told      []string
+	keptBy          string
 
 	// The Company's conditions this reconcile decided, nil where it left
 	// one as it was, and status.config when it changed it.
@@ -186,9 +210,10 @@ func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error
 	// render reports every reference that does not resolve at once, so
 	// the parts it does not name have none.
 	run.objectsChecked = true
-	// Whatever became of the document: whether a seat's code work can run,
-	// and whether its turns can, are facts about its own spec.
-	run.checkCodeWork(render.CodeWorkOf(run.input()))
+	// Whatever became of the document: whether a seat's turns can run is a
+	// fact about its own spec. Whether its code work can is decided once the
+	// Secrets are read, when writeStatus asks: a sign-in it lets go without
+	// may be missing.
 	run.checkExecutors(render.ExecutorOf(run.input()), render.AgentModeOf(run.input()))
 	run.checkReported(render.ReportedOf(run.input()))
 	if err != nil {
@@ -198,7 +223,14 @@ func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error
 		}
 		run.refused(refusals)
 		run.lookAtFleet(ctx)
-		return ctrl.Result{}, nil
+		if run.policy() != crewletaiv1alpha1.ManagementPolicyEnforce {
+			return ctrl.Result{}, nil
+		}
+		read, err := run.readOptional(ctx)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		return run.withdrawHeld(ctx, read)
 	}
 	run.doc = doc
 	rendered, err := revisionPlacement(doc.YAML)
@@ -213,11 +245,13 @@ func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error
 	// owns the document, the Secrets are no longer the operator's concern.
 	// Under Observe nothing is pushed, so they are never read.
 	if run.policy() == crewletaiv1alpha1.ManagementPolicyEnforce {
-		if blocked, err := run.resolveSecrets(ctx); blocked || err != nil {
-			if blocked {
-				run.lookAtFleet(ctx)
-			}
+		blocked, err := run.resolveSecrets(ctx)
+		if err != nil {
 			return ctrl.Result{}, err
+		}
+		if blocked {
+			run.lookAtFleet(ctx)
+			return run.withdrawHeld(ctx, *run.read)
 		}
 	}
 
@@ -258,17 +292,34 @@ func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error
 // references into run.desired. blocked reports keys that are missing or too
 // large, which it records on the parts that reference them.
 func (run *configRun) resolveSecrets(ctx context.Context) (blocked bool, err error) {
-	desired, err := secretsync.Resolve(ctx, run.APIReader, run.doc.Refs, nil)
+	desired, err := secretsync.Resolve(ctx, run.APIReader, run.doc.Refs, run.doc.Optional)
 	if err != nil {
 		if !run.secretsMissing(err) {
 			return false, err
 		}
-		run.secretsChecked = true
+		run.readSecrets(desired, err)
 		return true, nil
 	}
-	run.secretsChecked = true
+	run.readSecrets(desired, nil)
 	run.desired = &desired
 	return false, nil
+}
+
+// readSecrets records what the reconcile read of the Secrets: desired, which
+// Resolve returned with problems, the references whose Secret or key does not
+// exist among them included. What was read of the other references holds
+// whatever became of the missing ones: which a part goes without, which holds
+// nothing.
+func (run *configRun) readSecrets(desired secretsync.Desired, problems error) {
+	run.secretsChecked = true
+	run.read = &desired
+	run.missing = desired.Missing()
+	for _, e := range joined(problems) {
+		if missing, ok := errors.AsType[*secretsync.MissingError](e); ok {
+			run.missing = append(run.missing, missing)
+		}
+	}
+	run.checkSecretValues(desired)
 }
 
 // isAPIServerError reports whether err came from the Kubernetes API server
@@ -285,6 +336,12 @@ func (run *configRun) input() *render.Input {
 		StoreName:       secretsync.StoreName,
 		ProvisionedName: secretsync.ProvisionedName,
 		PublicBaseURL:   run.company.Status.Endpoints.PublicBaseURL,
+	}
+	for _, m := range run.missing {
+		in.Unset = append(in.Unset, m.Key)
+	}
+	if run.read != nil {
+		in.Empty = run.read.Empty()
 	}
 	for _, p := range run.parts {
 		switch o := p.obj.(type) {
@@ -393,23 +450,36 @@ func (run *configRun) enforce(
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	run.told = state.Retained()
+	diffs, err := diffWith(run.doc, active)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	// The running document keeps its names until the next one replaces
 	// it: deleting one now would leave the engine resolving it to nothing
-	// for as long as the new document fails to apply.
+	// for as long as the new document fails to apply. That holds for the
+	// value of a deleted Secret too, where the running revision reads it as
+	// required; where it lets the value go, the value goes now, whatever
+	// the next document reads of it (see config_withdraw.go).
 	pushing := desired
 	if active != nil {
+		state = run.adopt(state, active, diffs)
 		pushing.Keep(active.RevisionID, storeNamesIn(active.Document)...)
+		released, err := secretsync.Absent(ctx, run.APIReader, state.LetGoKeys(active.RevisionID))
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		pushing.Release(released...)
 	}
+	// SecretKept is said of what the reconcile ends up keeping: a value the
+	// sync below keeps for the running revision goes after the apply.
+	defer run.tellKept()
 	state, pushed, err := run.sync(ctx, eng, pushing, state, stateRef)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
 	hash := appliedHash(run.doc, state, desired.Names())
-	diffs, err := diffWith(run.doc, active)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
 	recorded := c.Status.Config
 	// A value written back although no Secret changed (one somebody else
 	// overwrote, or one the store lost) leaves the hash where it was, but the
@@ -419,6 +489,13 @@ func (run *configRun) enforce(
 	// rotated credential reaches a running engine anyway.
 	if active != nil && len(diffs) == 0 && hash == recorded.AppliedHash && len(pushed.Put) == 0 {
 		run.inSync(active)
+		failed, err := run.settle(ctx, eng, active, state, stateRef)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if failed {
+			return ctrl.Result{RequeueAfter: min(engineRetryInterval, run.resyncInterval())}, nil
+		}
 		return ctrl.Result{RequeueAfter: run.resyncInterval()}, nil
 	}
 	// A revision the operator did not write, with other content: an edit
@@ -429,7 +506,9 @@ func (run *configRun) enforce(
 	checked, err := eng.ApplyConfig(ctx, engine.ApplyRequest{Document: run.doc.YAML, DryRun: true})
 	if err != nil {
 		if run.invalid(err) {
-			return ctrl.Result{}, nil
+			// The sync above may have withdrawn a value the running
+			// revision lets go: it is activated again instead.
+			return run.settleRefused(ctx, eng, active, state, stateRef)
 		}
 		return ctrl.Result{}, err
 	}
@@ -455,22 +534,70 @@ func (run *configRun) enforce(
 	applied, err := eng.ApplyConfig(ctx, req)
 	if err != nil {
 		if run.invalid(err) {
-			return ctrl.Result{}, nil
+			return run.settleRefused(ctx, eng, active, state, stateRef)
 		}
 		return ctrl.Result{}, err
 	}
 	run.recordApply(applied, hash, drifted, active, diffs, req.Summary)
 
-	// The engine runs the new document's names now; the old ones go.
-	if _, _, err := run.sync(ctx, eng, desired, state, stateRef); err != nil {
+	// The engine runs the new document now, which read the store without
+	// every name the sync above withdrew: its activation is recorded, with
+	// the Secret keys its document lets go without, before anything else is
+	// deleted, so that a later reconcile knows a deletion whose own record a
+	// failed write lost is one this revision goes without, and withdraws it.
+	state = state.Activated(applied.RevisionID, run.doc.Optional)
+	if err := secretsync.SaveState(ctx, run.Client, stateRef, c, state); err != nil {
+		return ctrl.Result{}, err
+	}
+	// Then the names it no longer references go, and so does the value of
+	// a deleted Secret the revision before it read as required, which the
+	// new one lets go: every absent name of desired is one the new document
+	// lets go without, or Resolve would have refused it. Which, is decided
+	// by the revision the engine runs as read now: somebody may have
+	// activated another one since the apply, which keeps every name it
+	// references. The new revision activated with that value still in the
+	// store, so settle activates it again at once, for the engine to read
+	// the store without it.
+	after, err := activeConfig(ctx, eng)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	pushing = desired
+	if after != nil {
+		pushing.Keep(after.RevisionID, storeNamesIn(after.Document)...)
+	}
+	state, _, err = run.sync(ctx, eng, pushing, state, stateRef)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if _, err := run.settle(ctx, eng, after, state, stateRef); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{RequeueAfter: applyPollInterval}, nil
 }
 
+// adopt is state recording the reading of active, the revision the engine
+// runs, where its document is the one this reconcile rendered: diffs, where
+// the two differ, is empty, and the engine's document references every store
+// name as often as the rendered one. The operator knows then how that
+// revision reads every name, render.Document.Optional of the rendered
+// document, whoever activated it: a person who activated the operator's
+// document again (crewlet config reload, the engine's gesture for a rotated
+// credential), or the operator itself, where a failed write lost the record
+// it made of the activation. It is the revision inSync adopts into
+// status.config. Any other revision keeps the reading state records, or none.
+func (run *configRun) adopt(state secretsync.State, active *engine.ActiveConfig, diffs []render.Path) secretsync.State {
+	if len(diffs) > 0 || !maps.Equal(storeReferences(run.doc.YAML), storeReferences(active.Document)) {
+		return state
+	}
+	return state.Adopted(active.RevisionID, run.doc.Optional)
+}
+
 // sync pushes the desired values into the engine's secret store, deletes
-// what nothing references, and saves what it did, whether or not it got
-// through.
+// what nothing references and what the revision the engine runs goes
+// without, and saves what it did, whether or not it got through. What it
+// keeps for that revision is recorded (keep), for the reconcile to say once
+// it knows it ends up keeping it (tellKept).
 func (run *configRun) sync(
 	ctx context.Context, eng *engine.Client, desired secretsync.Desired, state secretsync.State, ref types.NamespacedName,
 ) (secretsync.State, secretsync.Result, error) {
@@ -504,10 +631,30 @@ func (run *configRun) sync(
 			"Wrote back %d values somebody else had replaced in the engine's secret store; the Kubernetes Secret each refers to is their source: %s",
 			len(result.Overwritten), strings.Join(by, ", "))
 	}
+	run.keep(desired, next, result.Retained)
+	message := fmt.Sprintf("The engine's secret store holds the current value of each of the %d Secret keys the document references.",
+		len(desired.Names()))
+	var gone []string
+	for _, m := range desired.Missing() {
+		if !slices.Contains(run.retained, m.Key) {
+			gone = append(gone, m.Key.String())
+		}
+	}
+	if len(gone) > 0 {
+		message += fmt.Sprintf(" It holds none for the %d it lets go without, whose Secret or key does not exist (%s): "+
+			"the engine leaves each out.", len(gone), strings.Join(gone, ", "))
+	}
+	message += run.retainedSentence()
+	if len(run.companyLeftOut) > 0 {
+		message += " The Company's own setup steps give values they let go without: " +
+			strings.Join(run.leftOutLines(run.companyLeftOut), "; ") + "."
+	}
+	if len(run.companyEmpty) > 0 {
+		message += " " + sentences(run.companyEmpty)
+	}
 	run.secretsSynced = &metav1.Condition{
 		Type: crewletaiv1alpha1.ConditionSecretsSynced, Status: metav1.ConditionTrue, Reason: crewletaiv1alpha1.ReasonSynced,
-		Message: fmt.Sprintf("The engine's secret store holds the current value of each of the %d Secret keys the document references.",
-			len(desired.Names())),
+		Message: message,
 	}
 	return next, result, nil
 }
@@ -524,13 +671,19 @@ var storeNamePattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 // reference written as a whole ${NAME}, which is how the operator writes
 // them all.
 func storeNamesIn(document []byte) []string {
-	var names []string
+	return slices.Sorted(maps.Keys(storeReferences(document)))
+}
+
+// storeReferences counts the references of document, rendered or served by
+// the engine, to each secret-store name the operator owns.
+func storeReferences(document []byte) map[string]int {
+	refs := map[string]int{}
 	for _, m := range storeNamePattern.FindAllSubmatch(document, -1) {
-		if name := string(m[1]); secretsync.Owns(name) && !slices.Contains(names, name) {
-			names = append(names, name)
+		if name := string(m[1]); secretsync.Owns(name) {
+			refs[name]++
 		}
 	}
-	return names
+	return refs
 }
 
 // appliedHash is status.config.appliedHash: the rendered document's hash and
@@ -903,7 +1056,7 @@ func (run *configRun) secretsMissing(err error) bool {
 		}
 		findings = append(findings, e.Error())
 		for _, p := range run.parts {
-			if slices.ContainsFunc(p.refs, func(ref secretref.Key) bool { return references(ref, key) }) {
+			if p.requires(key, run.doc.StartValues) {
 				if p.unresolvedReason == "" {
 					p.unresolvedReason = r
 				}

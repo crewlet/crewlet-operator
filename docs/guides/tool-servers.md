@@ -94,6 +94,105 @@ A setting is the server's when every seat runs with it, and a seat's when
 each seat needs its own: Slack's channel cache is one, a path no two seats
 may share ([below](#slack)).
 
+### A key that may go without its value
+
+Crewlet starts a server only once every value it is started with holds
+something: its own `env` or `headers`, and what a Seat or its Unit gives it.
+A value read from a Secret that does not exist, holds no such key or holds an
+empty value keeps the server from starting, shared or a seat's, rather than
+handing it an empty token it would refuse or act as nobody with. A value the
+server can run without, such as the key Context7's server takes for higher
+rate limits and serves without, is listed by its key in `optionalKeys`:
+
+```yaml
+spec:                       # MCPServer context7
+  transport: HTTP
+  url: https://mcp.context7.com/mcp
+  headers:
+    - name: Authorization             # Bearer and the key
+      valueFrom:
+        secretKeyRef: {name: context7, key: authorization}
+  optionalKeys: [Authorization]
+```
+
+Under a listed key, a value whose Secret or key does not exist, or that holds
+an empty value, is left out whole: the server starts without the variable, or
+its requests go without the header, as Kubernetes starts a container without
+an `optional` `secretKeyRef`. Nothing holds the company's document, and the
+object that gives the value reports `ResolvedRefs=True`, its message naming
+each value it goes without and the list that lets it: the MCPServer for its
+own `env` or `headers`, a Seat or a Unit for what its `spec.mcp` gives. When
+the Secret appears, the operator pushes its value and applies the document
+again, as it does for a rotated credential
+([Rotating a credential](credentials.md#rotating-a-credential)), and the
+engine starts the server with it. When it is deleted, the operator takes the
+value out of the engine's secret store and has the engine read the store
+again: by applying the next document, or, while that document is held for
+something else, by activating the revision the engine runs again, unchanged,
+so the server is not started again with a deleted Secret's value. That is the
+operator's under the `Enforce` policy, under which it keeps the store in step
+with the Secrets ([Management policies](../concepts/applying.md#management-policies)),
+and it holds where the revision the engine runs goes without the value too.
+A revision that reads the key as required, as the one from before you listed
+the key does, or another document somebody else activated, whose reading the
+operator does not know, keeps the value it holds until the next document
+runs, as the last good revision keeps every value it requires; the Company's
+`SecretsSynced`, the object's `ResolvedRefs` message and a `SecretKept` event
+say so (a document the render holds is told by the event alone). Once the
+next document runs, the operator deletes the value and activates the new
+revision again without it at once, so that revision may start the server with
+the deleted Secret's value once, in between
+([Applying a document](../concepts/applying.md#what-one-reconcile-does)). A
+Secret key that is also read where it is required, by this server or anything
+else, is not one the company goes without: its deletion holds the document
+(`SecretNotFound`), and the revision the engine runs keeps the value until
+the next one applies if it requires it too, and goes without it if it lets it
+go.
+
+- **The list covers every value the server is started with**: its own `env`
+  (a Stdio server, by the variable's name, as written) or `headers` (an HTTP
+  server, a header in any case), and every Seat's and Unit's `spec.mcp` entry
+  for it, which may give a Stdio server a key outside a variable's grammar. A
+  seat's value for a key replaces the server's own whole, so one that goes
+  missing leaves the key out rather than handing the server's own value back.
+  It is the server's settings the list is for: a seat's own credential is the
+  identity its instance acts as, and one started without it acts as nobody.
+- **A provisioned value is waited for whatever the list says**: an
+  Integration mints it for the seat, and the server starts once it has. One
+  nothing mints, while no Integration of the company has
+  `provisioning: Engine`, is left out.
+- **An entry must leave something out.** The API refuses one spelling an
+  HTTP server's header twice, in two cases, and a key no Seat or Unit could
+  write. One under which no value is read from a Secret, or provisioned, by
+  the server or by any Seat or Unit for it, every value there being a literal
+  `value`, which is never missing, or there being none, holds the company's
+  document: the MCPServer reports `ResolvedRefs=False OptionalKeyUnused`,
+  naming the objects that write the literals, since Crewlet refuses it. A
+  change to a Seat or a Unit can make it so: deleting the only Seat that
+  gives the key from a Secret holds the document, the deletion included,
+  until the entry is removed or another value is.
+- **A Seat and its Unit spell a header alike.** Crewlet lays a Unit's
+  `spec.mcp` under each agent member's own by the name as written, so a
+  member's `authorization` beside its Unit's `Authorization` would send
+  either value; the Seat reports `Accepted=False Conflict`, and the document
+  is held, as Crewlet refuses it.
+- **A required value that holds nothing is reported.** Where the key is not
+  listed, a value read from a Secret key that holds an empty value does not
+  hold the document: the engine applies it and does not start what the value
+  is given to. The object that gives the value reports `ResolvedRefs=False
+  SecretValueEmpty`, with a Warning event, naming the Secret, the key, the
+  variable and what does not start; it says so only of a value the engine
+  would start something with, so a server's own value that every seat
+  granted the server replaces is not one. A missing Secret or key holds the
+  document, as anywhere else (`SecretNotFound`).
+
+A Seat's `spec.sandbox` and a setup step take an `optionalKeys` of their own
+for a coding run's environment and files
+([A value a run may go without](cli-agents.md#a-value-a-run-may-go-without)).
+Crewlet's
+[A key that may go without its value](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#a-key-that-may-go-without-its-value)
+has the engine's side.
+
 ## The image needs the server
 
 Crewlet's image is Debian with `ca-certificates`, `git`, `tini` and the

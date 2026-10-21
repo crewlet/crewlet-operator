@@ -100,6 +100,10 @@ const (
 	// renderOptionalGo is the render's start values and its check of an
 	// MCPServer's optionalKeys against the company.
 	renderOptionalGo = "internal/render/optional.go"
+	// configOptionalGo is the config reconciler's report of a start value
+	// whose Secret holds nothing: left out under an optional key, and
+	// otherwise an empty value that keeps a server or a run from starting.
+	configOptionalGo = "internal/controller/config_optional.go"
 	// seatTypesGo is the Seat API.
 	seatTypesGo = "api/v1alpha1/seat_types.go"
 	// mcpServerTypesGo is the MCPServer API.
@@ -290,8 +294,8 @@ var bootWindows = []string{
 // code-work verdict and the render's NoProvisioner report copy them; what a
 // tool server is started with is shown by a running engine instead
 // (TestContractAnOptionalKeyIsLeftOut). Which values each instance of a tool
-// server is started with, which the render's StartValue.Started copies, is
-// decided by five more:
+// server is started with, which the render's StartValue.Started copies and the
+// config reconciler reports an empty value by, is decided by five more:
 // startSharedServers, seatSpecs and Grants (which instances run, the company's
 // and the seats'), inheritMCPEnv (a unit's block under its members') and
 // sandboxMCP (a coding run's box). And validateHeaderSpellings, with
@@ -448,7 +452,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: sandboxGo, name: "(*launcher).Launch",
-		against: []string{codeWorkGo, renderCompanyGo},
+		against: []string{codeWorkGo, renderCompanyGo, configOptionalGo},
 		decides: "a run_sandbox launch runs the head of the seat's sandbox phase with role.sandbox.coding_agent or " +
 			"the catalogue's default, and refuses before a box exists what newCodingRun and sandboxCredentials " +
 			"refuse, and a run whose environment holds a value that resolves to nothing under a key nothing " +
@@ -523,7 +527,7 @@ var mirrored = []mirror{
 	{
 		file: sandboxGo, name: "(*Engine).runEnvironment",
 		against: append([]string{
-			codeWorkGo, renderCompanyGo, renderOptionalGo, seatTypesGo, companyTypesGo, cliAgentsMd,
+			codeWorkGo, renderCompanyGo, renderOptionalGo, configOptionalGo, seatTypesGo, companyTypesGo, cliAgentsMd,
 		}, codingBox...),
 		decides: "a run's environment is the env of the catalogue's and the seat's setup steps, then the seat's " +
 			"role.sandbox.env, each later layer winning a name, and a value that resolves to nothing is left out " +
@@ -534,7 +538,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: toolCredentialsGo, name: "resolveServer",
-		against: []string{renderOptionalGo, mcpServerTypesGo, toolServersMd},
+		against: []string{renderOptionalGo, configOptionalGo, mcpServerTypesGo, toolServersMd},
 		decides: "a tool server starts with its env (stdio) or headers (http), a seat's mcp_env for it over them key " +
 			"by key, merged by the key the server reads (a header in any case) before anything resolves, so a seat's " +
 			"key replaces the server's whole; a value that resolves to nothing, or to an empty value, is left out " +
@@ -553,21 +557,21 @@ var mirrored = []mirror{
 	},
 	{
 		file: engineMCPGo, name: "(*Engine).startSharedServers",
-		against: []string{renderOptionalGo, toolServersMd},
+		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
 		decides: "a shared server is started once for the company, with its own values alone (no seat's block)",
 		digest:  "f88ef4e48075a9adde25d5a5296cd9c82919d2792fff3e65f5d0404a5525f7d5",
 		read:    optionalKeysRead,
 	},
 	{
 		file: engineMCPGo, name: "seatSpecs",
-		against: []string{renderOptionalGo, toolServersMd},
+		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
 		decides: "a seat's instance is started of every per-seat server it is granted, with the seat's block for it",
 		digest:  "f173aa5f383a5c87f0897455a9545d3ef6e70c05d42b4a7a1f7b3b710e37f3a5",
 		read:    optionalKeysRead,
 	},
 	{
 		file: mcpConfigGo, name: "(*MCPServer).Grants",
-		against: []string{renderOptionalGo},
+		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "a per-seat server is granted to every agent seat with a block of values for it, its own or its " +
 			"unit's, and a shared one to every agent seat",
 		digest: "68e24eca130819612cd092985ec133b3f1a494fd4a5ee4d5c73801daf2cc5a99",
@@ -575,7 +579,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: orgGo, name: "(*Organization).inheritMCPEnv",
-		against: []string{renderOptionalGo, toolServersMd},
+		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
 		decides: "a unit's block for a server is laid under each of its direct agent members' own, which wins a key " +
 			"as written",
 		digest: "dacbba6d65ca753f5b914c2804aa7ca95f2a17a405fcce1e829b93957eba440c",
@@ -583,7 +587,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: sandboxGo, name: "sandboxMCP",
-		against: []string{renderOptionalGo},
+		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "a coding run's box is given every server its seat's sandbox scopes, shared or not, with the seat's " +
 			"block for it",
 		digest: "7cd2c2e82ba70b3327284d26e450b09b34549baacc50b22e8927405c3e9fc0a6",
@@ -655,7 +659,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).LaunchExecutor",
-		against: append([]string{executorGo, renderCompanyGo}, agentLogin...),
+		against: append([]string{executorGo, renderCompanyGo, configOptionalGo}, agentLogin...),
 		decides: "an agent-mode turn on a node that serves no tool bridge is refused, never run on the engine's own " +
 			"tool loop (AgentModeBridgeUnsupported, NotExposed), and so is one whose CLI login cannot follow it " +
 			"into the remote sandbox (sandboxCredentials at phase Execute); a run whose environment holds a " +
