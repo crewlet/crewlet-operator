@@ -1,6 +1,7 @@
 package engine_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -57,6 +58,51 @@ func TestEngineReadyFollowsTheFirstApply(t *testing.T) {
 		t.Fatal(err)
 	}
 	eventually(t, "Ready() after the first apply", func() error { return client.Ready(ctx) })
+}
+
+// TestEngineReloadActivatesTheDocumentAgain pins the gesture the config
+// reconciler makes after it removes a value from the engine's store while the
+// next document cannot be applied: the active document is activated again,
+// unchanged, as a new revision at a later epoch, so the engine reads its
+// store again; with no document there is none to activate.
+func TestEngineReloadActivatesTheDocumentAgain(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client := enginetest.Start(t).Client()
+
+	if _, err := client.ReloadConfig(ctx, "enginetest: nothing to reload"); !errors.Is(err, engine.ErrNoActiveRevision) {
+		t.Fatalf("ReloadConfig() before the first apply = %v, want ErrNoActiveRevision", err)
+	}
+	applied, err := client.ApplyConfig(ctx, engine.ApplyRequest{
+		Document: []byte(enginetest.MinimalCompany), Summary: "enginetest: reload", CreateOnly: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := client.ActiveConfig(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const summary = "enginetest: read the store again"
+	reloaded, err := client.ReloadConfig(ctx, summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.RevisionID == "" || reloaded.RevisionID == applied.RevisionID || reloaded.Epoch <= applied.Epoch {
+		t.Fatalf("ReloadConfig() = %+v after the apply's %+v, want a new revision at a later epoch", reloaded, applied)
+	}
+	eventually(t, "the reloaded revision active", func() error {
+		after, err := client.ActiveConfig(ctx)
+		switch {
+		case err != nil:
+			return err
+		case after.RevisionID != reloaded.RevisionID:
+			return fmt.Errorf("the active revision is %s, want %s", after.RevisionID, reloaded.RevisionID)
+		case !bytes.Equal(after.Document, before.Document):
+			return fmt.Errorf("the reloaded document differs:\n%s\nwant\n%s", after.Document, before.Document)
+		}
+		return nil
+	})
 }
 
 // TestEngineHealthReportsTheAppliedEpoch pins what the config reconciler

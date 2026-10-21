@@ -325,6 +325,33 @@ func (c *Client) ApplyConfig(ctx context.Context, req ApplyRequest) (ApplyResult
 	return ApplyResult{RevisionID: applied.RevisionID, Epoch: applied.Epoch, Warnings: messages(applied.Warnings)}, nil
 }
 
+// ReloadConfig activates the engine's active document again, unchanged, as a
+// new revision (POST /config/reload), with summary as its summary when it is
+// not empty.
+//
+// It is the engine's own gesture for a value its secret store holds that the
+// running document references: the engine reads the store only when a
+// revision activates, so a value written or removed since changes nothing it
+// runs until one does. Nothing is sent but the request, so nothing the
+// operator renders reaches the engine through it, and it races no other
+// writer: whichever document is active when it lands is the one activated
+// again. An engine with no active document fails with ErrNoActiveRevision.
+func (c *Client) ReloadConfig(ctx context.Context, summary string) (ApplyResult, error) {
+	header := http.Header{}
+	if summary != "" {
+		header.Set("X-Summary", summary)
+	}
+	var reloaded struct {
+		RevisionID string    `json:"revision_id"`
+		Epoch      int64     `json:"epoch"`
+		Warnings   []warning `json:"warnings"`
+	}
+	if err := c.call(ctx, request{method: http.MethodPost, path: "/config/reload", header: header}, http.StatusCreated, &reloaded); err != nil {
+		return ApplyResult{}, err
+	}
+	return ApplyResult{RevisionID: reloaded.RevisionID, Epoch: reloaded.Epoch, Warnings: messages(reloaded.Warnings)}, nil
+}
+
 // warning is the part of an engine warning this client reports.
 type warning struct {
 	Message string `json:"message"`
