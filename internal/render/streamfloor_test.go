@@ -1,6 +1,7 @@
 package render
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,17 +13,6 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/yaml"
-)
-
-// What a fresh node of Crewlet reserves on its event stream before it boots
-// (its engine.BrokerFloorFor): its nine state logs' ceilings at their
-// floors, and, with the objects in the stream's own bucket, that bucket
-// beside them at a quarter of the stream. TestContractStreamFloor holds both
-// to the figure `crewlet validate` names, and TestStreamFloorFiguresAreTheEngines
-// holds every hand-written comment and page that quotes one to these.
-const (
-	freshNodeLogsFloor   int64 = 8120172544
-	freshNodeBucketFloor int64 = 10826896725
 )
 
 // The EngineClass rules that floor the data volume, as controller-gen writes
@@ -44,7 +34,10 @@ var (
 // as an advisory at stream.store_max_bytes rather than a refusal: the setting
 // is valid (above config.StoreMaxBytesFloor), and what refuses is the broker,
 // when the node reserves its logs and its object bucket on an empty stream
-// directory.
+// directory. And each floor is the least volume, in whole gibibytes, whose
+// share holds what a fresh node reserves (leastDataVolume), which is where
+// the render refuses a volume as one no node boots on (Bootstrap's
+// *VolumeError).
 func TestContractStreamFloor(t *testing.T) {
 	s3Floor, natsFloor := engineClassFloors(t)
 	for _, c := range []struct {
@@ -68,14 +61,43 @@ func TestContractStreamFloor(t *testing.T) {
 			}}},
 		} {
 			t.Run(c.bootstrap+"/"+v.size.String(), func(t *testing.T) {
+				// Rendered at the floor, its stream then set to v.size's share:
+				// the render refuses a volume under the floor (a *VolumeError),
+				// and what this holds is the engine's word on such a stream.
 				in := bootstrapCaseNamed(t, c.bootstrap).input(t)
-				in.VolumeSize = v.size
+				in.VolumeSize = c.floor
 				doc, err := Bootstrap(in)
 				if err != nil {
 					t.Fatal(err)
 				}
-				validate(t, bootstrapEnv(doc), v.warns, "-tier", "bootstrap", write(t, "crewlet.yaml", doc.YAML))
+				var tierA map[string]any
+				if err := yaml.Unmarshal(doc.YAML, &tierA); err != nil {
+					t.Fatal(err)
+				}
+				tierA["stream"].(map[string]any)["store_max_bytes"] = streamShare(v.size)
+				encoded, err := json.Marshal(tierA)
+				if err != nil {
+					t.Fatal(err)
+				}
+				written, err := yamlOf(encoded)
+				if err != nil {
+					t.Fatal(err)
+				}
+				validate(t, bootstrapEnv(doc), v.warns, "-tier", "bootstrap", write(t, "crewlet.yaml", written))
 			})
+		}
+	}
+	for _, c := range []struct {
+		bootstrap string
+		floor     resource.Quantity
+		reserves  int64
+	}{
+		{bootstrap: caseNATS, floor: natsFloor, reserves: freshNodeBucketFloor},
+		{bootstrap: "s3", floor: s3Floor, reserves: freshNodeLogsFloor},
+	} {
+		if least := leastDataVolume(c.reserves); c.floor.Cmp(least) != 0 {
+			t.Errorf("the EngineClass's %s floor of %s is not leastDataVolume of %d, %s, where the render refuses "+
+				"a volume", c.bootstrap, c.floor.String(), c.reserves, least.String())
 		}
 	}
 }
@@ -133,6 +155,7 @@ func bootstrapCaseNamed(t *testing.T, name string) *bootstrapCase {
 // the engine, so this is what keeps them the engine's.
 var streamFloorQuotes = map[string][]int64{
 	engineClassGo:                              {freshNodeLogsFloor, freshNodeBucketFloor},
+	commonTypesGo:                              {freshNodeLogsFloor, freshNodeBucketFloor},
 	"docs/concepts/company-document.md":        {freshNodeLogsFloor, freshNodeBucketFloor},
 	troubleshootingMd:                          {freshNodeLogsFloor, freshNodeBucketFloor},
 	"internal/engine/enginetest/enginetest.go": {freshNodeBucketFloor},

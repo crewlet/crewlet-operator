@@ -234,6 +234,15 @@ func (r *CompanyReconciler) runWorkload(
 		// pods keep the one they run, which named an address it took.
 		return holdBack(crewletaiv1alpha1.ReasonAddressRefused, addressRefusalMessage(c, class, refused))
 	}
+	if small, ok := errors.AsType[*render.VolumeError](err); ok {
+		// The engine could not reserve its state logs on this stream at a
+		// start with a log to create, so the pods keep the one they run: an
+		// engine whose logs the stream already holds runs on, and one that
+		// already refuses it at least has its cause named here rather than
+		// in a restart loop's previous log.
+		return holdBack(crewletaiv1alpha1.ReasonDataVolumeTooSmall,
+			volumeTooSmallMessage(c, class, existing != nil || liveClaim(claims), small))
+	}
 	if errors.Is(err, render.ErrSignInNotAcknowledged) {
 		// The engine would refuse this crewlet.yaml at every start, so the
 		// pods keep the one they run, which requires a second factor or

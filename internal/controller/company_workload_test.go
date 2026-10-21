@@ -194,6 +194,71 @@ func TestDataVolumeSize(t *testing.T) {
 	}
 }
 
+// TestAVolumeUnderTheFloorNamesWhatToGrow holds DataVolumeTooSmall's message
+// to the remedy that exists. A company with a data claim, or a StatefulSet
+// that makes one, is told to grow that claim. One with neither has its volume
+// from its class, a class stored before the floor rose (which the API
+// server's ratcheting keeps), and is told to raise the class's size: there is
+// no claim to grow, and naming one sent its owner looking for a claim that
+// does not exist.
+func TestAVolumeUnderTheFloorNamesWhatToGrow(t *testing.T) {
+	t.Parallel()
+	company := &crewletaiv1alpha1.Company{Namespace: "tenant-a", Name: companyName}
+	class := &crewletaiv1alpha1.EngineClass{Name: "small"}
+	small := &render.VolumeError{Volume: resource.MustParse("12Gi"), Stream: 9663676416, Floor: 10826896725,
+		Least: resource.MustParse("14Gi")}
+	for _, c := range []struct {
+		name          string
+		claimed       bool
+		says, saysNot []string
+	}{
+		{
+			name: "a company with a claim", claimed: true,
+			says:    []string{"The data volume is 12Gi", "Grow the claim data-" + companyName + "-data-0 to at least 14Gi", "held as they are"},
+			saysNot: []string{"EngineClass", "spec.data.storage.size"},
+		},
+		{
+			name: "a new company of a class under the floor",
+			says: []string{"EngineClass small gives a new company a data volume of 12Gi",
+				"spec.data.storage.size to at least 14Gi", "is 9663676416 bytes", "reserves 10826896725 bytes"},
+			saysNot: []string{"Grow the claim", "data-" + companyName + "-data-0"},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			message := volumeTooSmallMessage(company, class, c.claimed, small)
+			for _, s := range c.says {
+				if !strings.Contains(message, s) {
+					t.Errorf("the message does not say %q: %s", s, message)
+				}
+			}
+			for _, s := range c.saysNot {
+				if strings.Contains(message, s) {
+					t.Errorf("the message says %q: %s", s, message)
+				}
+			}
+			if !endsOnce(message) {
+				t.Errorf("the message does not end with one full stop: %s", message)
+			}
+		})
+	}
+	deleting := claimRequesting("12Gi")
+	deleting.DeletionTimestamp = new(metav1.Now())
+	for _, c := range []struct {
+		name   string
+		claims []corev1.PersistentVolumeClaim
+		live   bool
+	}{
+		{"no claim", nil, false},
+		{"a claim being deleted", []corev1.PersistentVolumeClaim{deleting}, false},
+		{"a claim", []corev1.PersistentVolumeClaim{deleting, claimRequesting("12Gi")}, true},
+	} {
+		if got := liveClaim(c.claims); got != c.live {
+			t.Errorf("liveClaim of %s = %t, want %t", c.name, got, c.live)
+		}
+	}
+}
+
 // claimRequesting is a data volume claim that asks for size, not bound.
 func claimRequesting(size string) corev1.PersistentVolumeClaim {
 	return corev1.PersistentVolumeClaim{

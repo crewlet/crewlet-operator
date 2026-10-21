@@ -1128,6 +1128,78 @@ var _ = Describe("Company runtime", func() {
 			"the startup window covers the recovery of the volume the pod has")
 	})
 
+	It("holds the pods back on a data volume under what a fresh node reserves, and runs them once its claim grows", func() {
+		class := newClass()
+		company := reconciled(newCompany(class.Name))
+		// A company claimed under an older floor: its StatefulSet as the
+		// operator made it then, with a 12Gi claim template. A template
+		// cannot change, so the StatefulSet is made again around one, as
+		// the operator would have made it. (envtest runs no garbage
+		// collector, so deleting it leaves nothing else to go with it.)
+		made := statefulSet()
+		old := made.DeepCopy()
+		old.ObjectMeta = metav1.ObjectMeta{
+			Namespace: made.Namespace, Name: made.Name, Labels: made.Labels, Annotations: made.Annotations,
+			OwnerReferences: made.OwnerReferences,
+		}
+		old.Status = appsv1.StatefulSetStatus{}
+		old.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("12Gi")
+		Expect(k8sClient.Delete(ctx, made)).To(Succeed())
+		Eventually(func() bool {
+			return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(made), &appsv1.StatefulSet{}))
+		}).Should(BeTrue())
+		Expect(k8sClient.Create(ctx, old)).To(Succeed())
+		running := statefulSet()
+		bootstrap := &corev1.Secret{}
+		get(bootstrap, bootstrapName)
+		tierA := bootstrap.Data[configFile]
+
+		By("holding the pods as they are, naming the volume and what clears it")
+		company = reconciled(company)
+		runtimeReady := condition(company, crewletaiv1alpha1.ConditionRuntimeReady)
+		Expect(runtimeReady.Status).To(Equal(metav1.ConditionFalse))
+		Expect(runtimeReady.Reason).To(Equal(crewletaiv1alpha1.ReasonDataVolumeTooSmall))
+		Expect(runtimeReady.Message).To(ContainSubstring("The data volume is 12Gi"))
+		Expect(runtimeReady.Message).To(ContainSubstring("is 9663676416 bytes"))
+		Expect(runtimeReady.Message).To(ContainSubstring("reserves 10826896725 bytes"))
+		Expect(runtimeReady.Message).To(ContainSubstring("Grow the claim " + dataClaimName + " to at least 14Gi"))
+		Expect(statefulSet().Spec.Template).To(Equal(running.Spec.Template), "the pods rolled onto a crewlet.yaml the engine refuses")
+		get(bootstrap, bootstrapName)
+		Expect(bootstrap.Data[configFile]).To(Equal(tierA), "the bootstrap Secret was rewritten")
+
+		By("running them on the stream of the claim its owner grew, once the expansion lands")
+		expandable := &storagev1.StorageClass{
+			Name:                 "expandable-" + namespace,
+			Provisioner:          "example.com/expandable",
+			AllowVolumeExpansion: new(true),
+		}
+		Expect(k8sClient.Create(ctx, expandable)).To(Succeed())
+		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, expandable)).To(Succeed()) })
+		claim := &corev1.PersistentVolumeClaim{
+			Namespace: namespace,
+			Name:      dataClaimName,
+			Labels:    labelsFor(company, componentData),
+			Spec: corev1.PersistentVolumeClaimSpec{
+				StorageClassName: &expandable.Name,
+				AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("14Gi")},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, claim)).To(Succeed())
+		claim.Status.Phase = corev1.ClaimBound
+		claim.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("14Gi")}
+		Expect(k8sClient.Status().Update(ctx, claim)).To(Succeed())
+		company = reconciled(company)
+		Expect(condition(company, crewletaiv1alpha1.ConditionRuntimeReady).Reason).To(Equal(crewletaiv1alpha1.ReasonPodsNotReady))
+		get(bootstrap, bootstrapName)
+		Expect(string(bootstrap.Data[configFile])).To(ContainSubstring("store_max_bytes: 11274289152"),
+			"the event stream is three quarters of the 14Gi the claim now has")
+		Expect(statefulSet().Spec.VolumeClaimTemplates[0].Spec.Resources.Requests.Storage().String()).To(Equal("12Gi"),
+			"the template stays as it was made")
+	})
+
 	It("rolls the pods when a value they read at start changes, and only then", func() {
 		class := newClass()
 		reconciled(newCompany(class.Name))

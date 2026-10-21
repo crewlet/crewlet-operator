@@ -483,6 +483,28 @@ const (
 	// what to change.
 	ReasonAddressRefused = "AddressRefused"
 
+	// ReasonDataVolumeTooSmall is RuntimeReady=False when the company's data
+	// volume gives the engine an event stream (three quarters of it, Crewlet's
+	// stream.store_max_bytes) under what a fresh node of Crewlet reserves on
+	// it: its nine state logs at their floors, 8120172544 bytes, and with the
+	// files in the stream's own bucket that bucket beside them, 10826896725
+	// bytes in all. The EngineClass API admits no data.storage.size under
+	// 11Gi, or 14Gi with the files in the bucket, so what reaches this is a
+	// volume claimed under an older floor: a running company's, whose claim
+	// template cannot change, or one a class stored before the floor rose
+	// stamps on a new company. Crewlet refuses to boot on such a stream
+	// wherever it has a state log to create, a fresh node's every log and the
+	// chat log an engine adds to a stream made before it, so the operator
+	// holds the pods back as they are rather than roll an engine that cannot
+	// boot; an engine whose image has already moved still cannot run on the
+	// volume, and what the hold changes is that the cause is named. The
+	// message names the volume, the stream it gives, what a fresh node
+	// reserves and the least volume that holds it, and what clears it:
+	// growing the claim (docs/concepts/runtime.md, "Growing a company's data
+	// volume"), or, for a new company with no claim yet, raising its class's
+	// data.storage.size, at which the operator then creates its volume.
+	ReasonDataVolumeTooSmall = "DataVolumeTooSmall"
+
 	// ReasonNoAlarms is EngineHealthy=True: the engine raises no alarm.
 	ReasonNoAlarms = "NoAlarms"
 

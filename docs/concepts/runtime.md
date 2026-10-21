@@ -521,8 +521,18 @@ A company's event stream is three quarters of its data volume, and the
 engine refuses to boot on a stream smaller than what a fresh node reserves
 ([the class's floor](company-document.md)). A volume made under an older
 floor, or before an engine that keeps more on its stream, can fall short, and
-a company that keeps more than its volume holds needs room too. Grow the
-claim, not the class:
+a company that keeps more than its volume holds needs room too. The operator
+holds the pods of a company whose volume falls short as they are, with
+`RuntimeReady=False`, reason `DataVolumeTooSmall`, naming the volume and its
+claim, rather than roll them onto an engine that cannot reserve its state
+logs; a pod whose image has already moved to such an engine restarts all the
+same, and the condition says why. A new company made from a class stored
+before the floor rose, which the API server lets keep a size it no longer
+admits until the size itself is changed, has no claim yet: the condition
+names the class instead, and setting the class's `data.storage.size` to at
+least its floor (`14Gi`, or `11Gi` with the files in S3) clears it, since the
+operator then creates the company's volume at that size. A company that has
+its claim grows the claim, not the class:
 
 1. The claim's StorageClass must allow it (`allowVolumeExpansion: true`);
    the API server refuses an expansion otherwise.
@@ -599,7 +609,10 @@ engine would be told it is reached at that Crewlet refuses to start on
 class states it, so this is in practice the class's API route made of a
 Company's namespace or name, whose last label is a number as
 `{{name}}.{{namespace}}`'s is in a namespace named `4711` or `0x1f` ([Reach
-the API from elsewhere](../guides/exposure.md#reach-the-api-from-elsewhere)).
+the API from elsewhere](../guides/exposure.md#reach-the-api-from-elsewhere)),
+or a data volume whose stream is under what a fresh node reserves on it
+(`DataVolumeTooSmall`, [Growing a company's data
+volume](#growing-a-companys-data-volume)).
 Suspending still scales the pod to zero meanwhile.
 
 ---
