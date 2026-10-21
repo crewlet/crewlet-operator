@@ -1238,7 +1238,7 @@ func TestContractContactAdvisoryFollowsTheChatSurface(t *testing.T) {
 		{name: "a Slack member id", contact: v1alpha1.SeatContact{SlackUserID: "U0JANEDOE", GitHubLogin: "jane-doe"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			in := companyCaseNamed(t, "slack").input(t)
+			in := companyCaseNamed(t, caseSlack).input(t)
 			person := v1alpha1.Seat{
 				Namespace: in.Company.Namespace, Name: "jane",
 				Spec: v1alpha1.SeatSpec{
@@ -1343,6 +1343,75 @@ func TestContractScheduleRefusalsReachTheSchedule(t *testing.T) {
 			for _, p := range verr.Problems {
 				if got, ok := doc.Attribute(PathOf(p.Segments)); !ok || got != want {
 					t.Errorf("the engine's problem at %q (%s) is attributed to %v, %v; want %v", p.Path, p.Message, got, ok, want)
+				}
+			}
+		})
+	}
+}
+
+// TestContractChatSettingsFollowTheEngine has the engine's dry run judge the
+// chat settings no API rule can, because each turns on the company's
+// Integrations and seats. Chatlet beside a Slack Integration would split the
+// company's conversations between two surfaces, Vendor on a company with no
+// chat Integration has nothing to talk through, and a chatlet block with no
+// backend beside a Slack Integration sets a policy for a chat the company does
+// not run: each is refused where Crewlet says, and the document attributes it
+// to the Company, which is where the controller reports it. A chatlet block
+// with no backend on a company with no chat Integration is Chatlet's policy,
+// which the API admits as the engine does, and the engine takes it.
+func TestContractChatSettingsFollowTheEngine(t *testing.T) {
+	client := enginetest.Start(t).Client()
+	chatlet := v1alpha1.ChatletSettings{DefaultChannelPrivate: new(true)}
+	for _, c := range []struct {
+		name      string
+		from      string
+		chat      v1alpha1.ChatSettings
+		refusedAt string
+	}{
+		{
+			name: "Chatlet beside a Slack Integration", from: caseSlack,
+			chat: v1alpha1.ChatSettings{Backend: v1alpha1.ChatChatlet}, refusedAt: "chat.backend",
+		},
+		{
+			name: "Vendor with no chat Integration", from: caseMinimal,
+			chat: v1alpha1.ChatSettings{Backend: v1alpha1.ChatVendor}, refusedAt: "chat.backend",
+		},
+		{
+			name: "a chatlet block with no backend beside a Slack Integration", from: caseSlack,
+			chat: v1alpha1.ChatSettings{Chatlet: chatlet}, refusedAt: "chat.chatlet",
+		},
+		{
+			name: "a chatlet block with no backend and no chat Integration", from: caseMinimal,
+			chat: v1alpha1.ChatSettings{Chatlet: chatlet},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := companyCaseNamed(t, c.from).input(t)
+			in.Company.Spec.Chat = c.chat
+			doc, err := Company(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = client.ApplyConfig(t.Context(), engine.ApplyRequest{Document: doc.YAML, DryRun: true})
+			if c.refusedAt == "" {
+				if err != nil {
+					t.Fatalf("the dry run refused a chat the API admits: %v", err)
+				}
+				return
+			}
+			verr, ok := errors.AsType[*engine.ValidationError](err)
+			if !ok {
+				t.Fatalf("the dry run answered %v, want a refusal", err)
+			}
+			if len(verr.Problems) == 0 {
+				t.Fatalf("the refusal names no problem: %v", verr)
+			}
+			want := ObjectRef{Kind: KindCompany, Name: in.Company.Name}
+			for _, p := range verr.Problems {
+				got, ok := doc.Attribute(PathOf(p.Segments))
+				if path := PathOf(p.Segments).String(); path != c.refusedAt || !ok || got != want {
+					t.Errorf("the engine's problem at %q (%s) is attributed to %v, %v; want %s, on %v",
+						path, p.Message, got, ok, c.refusedAt, want)
 				}
 			}
 		})

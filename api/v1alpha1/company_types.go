@@ -111,6 +111,75 @@ type KnowledgeSettings struct {
 	Vectors *bool `json:"vectors,omitempty"`
 }
 
+// ChatBackend is which chat surface a company runs. It maps onto Crewlet's
+// chat.backend (Chatlet is `chatlet`, Vendor is `vendor`, None is `none`).
+// +kubebuilder:validation:Enum=Chatlet;Vendor;None
+type ChatBackend string
+
+// The chat backends.
+const (
+	// ChatChatlet is Chatlet, Crewlet's own chat: rooms the engine keeps, a
+	// room for each unit's channel, read on the dashboard.
+	ChatChatlet ChatBackend = "Chatlet"
+	// ChatVendor is the Slack or Mattermost the company's Integrations (or
+	// a seat's Slack app) connect it to.
+	ChatVendor ChatBackend = "Vendor"
+	// ChatNone is a company with no chat.
+	ChatNone ChatBackend = "None"
+)
+
+// ChatletSettings is the policy of Chatlet. It maps onto Crewlet's
+// chat.chatlet.
+// +kubebuilder:validation:MinProperties=1
+type ChatletSettings struct {
+	// messageRetentionDays is how long a message lives before the engine
+	// prunes it: 0 keeps messages for ever, and a horizon is 30 to 3650
+	// days, since under a month somebody away could miss a decision before
+	// reading it. Unset takes Crewlet's default of 365. Crewlet's
+	// `message_retention_days`.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=3650
+	// +kubebuilder:validation:XValidation:rule="self == 0 || self >= 30",message="messageRetentionDays must be 0, which keeps messages for ever, or 30 to 3650"
+	MessageRetentionDays *int32 `json:"messageRetentionDays,omitempty"`
+
+	// defaultChannelPrivate makes a room created without a stated
+	// visibility private; unset, such a room is public, readable by the
+	// company's seats. A room created with a visibility keeps it. Crewlet's
+	// `default_channel_private`.
+	// +optional
+	DefaultChannelPrivate *bool `json:"defaultChannelPrivate,omitempty"`
+
+	// typingStatus is when a seat shows in a room that it is working on a
+	// message. Unset takes Crewlet's default, Always. Crewlet's
+	// `typing_status`.
+	// +optional
+	TypingStatus WorkingStatus `json:"typingStatus,omitempty"`
+}
+
+// ChatSettings is which chat surface a company runs and the policy of
+// Chatlet. It maps onto Crewlet's chat block.
+// +kubebuilder:validation:XValidation:rule="!has(self.chatlet) || !has(self.backend) || self.backend == 'Chatlet'",message="chatlet applies to backend Chatlet only, or to no backend, which Crewlet derives Chatlet for a company with no Slack or Mattermost"
+// +kubebuilder:validation:MinProperties=1
+type ChatSettings struct {
+	// backend is which chat surface the company runs. Unset derives it, as
+	// Crewlet does: Vendor for a company with a Slack or Mattermost
+	// Integration or a seat with a Slack app, Chatlet for every other. So
+	// there is no default here: a Chatlet written beside such an
+	// Integration, or a Vendor without one, is refused by the engine's dry
+	// run, reported on the Company, since a company's conversations cannot
+	// live in two places.
+	// +optional
+	Backend ChatBackend `json:"backend,omitempty"`
+
+	// chatlet is the policy of Chatlet: for backend Chatlet, or for no
+	// backend on a company Crewlet derives Chatlet for. On a company whose
+	// chat is a vendor's nothing would read it, so the engine's dry run
+	// refuses it there, reported on the Company.
+	// +optional
+	Chatlet ChatletSettings `json:"chatlet,omitzero"`
+}
+
 // LLMProviderKind is the kind of model provider a reference names.
 // +kubebuilder:validation:Enum=LLMProvider;PlatformLLMProvider
 type LLMProviderKind string
@@ -1201,6 +1270,11 @@ type CompanySpec struct {
 	// +optional
 	Knowledge KnowledgeSettings `json:"knowledge,omitzero"`
 
+	// chat is which chat surface the company runs: Chatlet, Crewlet's own,
+	// unless it is connected to Slack or Mattermost. Crewlet's `chat`.
+	// +optional
+	Chat ChatSettings `json:"chat,omitzero"`
+
 	// tokenBudget caps the tokens all seats together may spend per window.
 	// Each window binds every agent seat, so Crewlet refuses one below
 	// turn_engine.executor_min_budget_tokens (25000 unless spec.engineConfig
@@ -1244,20 +1318,19 @@ type CompanySpec struct {
 	// apply, and a refusal is reported on the Company.
 	//
 	// It may not set what another field or object of this API owns: name,
-	// mission, vision, policies, timezone, tracker, knowledge, token_budget,
-	// assistant, providers, integrations, mcp_servers, roles, units or
-	// seat_access_migrated, which the operator writes with every
-	// integration kind so the engine acts on each Seat's
-	// spec.integrations. Every
-	// position Crewlet holds a credential in lives under one of those keys, so
-	// engineConfig can never carry a credential: the API server refuses a
-	// Company whose engineConfig names one of them, before anything is
-	// stored.
+	// mission, vision, policies, timezone, tracker, knowledge, chat,
+	// token_budget, assistant, providers, integrations, mcp_servers, roles,
+	// units or seat_access_migrated, which the operator writes with every
+	// integration kind so the engine acts on each Seat's spec.integrations.
+	// Every position Crewlet holds a credential in lives under one of those
+	// keys, so engineConfig can never carry a credential: the API server
+	// refuses a Company whose engineConfig names one of them, before anything
+	// is stored.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=64
-	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, token_budget, assistant, providers, integrations, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'chat', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, token_budget, assistant, providers, integrations, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
 	EngineConfig []EngineConfigEntry `json:"engineConfig,omitempty"`
 
 	// config is how the operator manages the company's document.

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -332,6 +333,12 @@ func engineConfigValidator(t *testing.T) func(entries ...any) field.ErrorList {
 	}
 }
 
+// engineConfigEntry is an engineConfig entry setting the top-level key of the
+// company document to an empty block.
+func engineConfigEntry(key string) map[string]any {
+	return map[string]any{keyName: key, keyValue: map[string]any{}}
+}
+
 // TestEngineConfigCannotNameACredentialBlock: engineConfig passes a
 // top-level block of the company document through as written, so it may
 // never name a block Crewlet holds a credential under, or a literal could
@@ -365,22 +372,41 @@ func TestEngineConfigCannotNameACredentialBlock(t *testing.T) {
 	}
 }
 
-// engineConfigEntry is a Company.spec.engineConfig entry setting key to an
-// empty block.
-func engineConfigEntry(key string) map[string]any {
-	return map[string]any{keyName: key, "value": map[string]any{}}
-}
-
-// TestEngineConfigCannotNameATypedKey holds the rule on
-// Company.spec.engineConfig to typedKeys: an entry under a key the render
-// writes from a field would be merged over it, or replace it.
-func TestEngineConfigCannotNameATypedKey(t *testing.T) {
+// TestEngineConfigRefusesEveryTypedKey: the render writes every top-level key
+// a field or object of this API owns, and merges a Company's engineConfig
+// entries over the result, so an entry naming such a key would replace what
+// the render wrote; and Diff tells a key the render writes from one an
+// engineConfig entry does by typedKeys. So typedKeys must be every top-level
+// key the company document's type renders, and the CRD's rule on
+// spec.engineConfig must refuse each of them, while a tuning block the API
+// does not type is let through. A key typed without both fails here.
+func TestEngineConfigRefusesEveryTypedKey(t *testing.T) {
+	doc := reflect.TypeFor[companyDoc]()
+	rendered := make([]string, 0, doc.NumField())
+	for f := range doc.Fields() {
+		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		rendered = append(rendered, name)
+	}
+	slices.Sort(rendered)
+	typed := slices.Sorted(slices.Values(typedKeys))
+	if !slices.Equal(rendered, typed) {
+		t.Errorf("the company document renders the top-level keys %v, and typedKeys is %v", rendered, typed)
+	}
 	validate := engineConfigValidator(t)
+	refused := func(key string) bool {
+		return slices.ContainsFunc(validate(engineConfigEntry(key)), func(e *field.Error) bool {
+			return strings.HasPrefix(e.Detail, engineConfigRefusal)
+		})
+	}
 	for _, key := range typedKeys {
-		errs := validate(engineConfigEntry(key))
-		if !slices.ContainsFunc(errs, func(e *field.Error) bool { return strings.HasPrefix(e.Detail, engineConfigRefusal) }) {
-			t.Errorf("the render writes %s from the API, and the CRD lets engineConfig set it: add it to the rule "+
-				"on Company.spec.engineConfig", key)
+		if !refused(key) {
+			t.Errorf("the render writes %s itself, and the CRD lets engineConfig set it too: add it to the rule on "+
+				"Company.spec.engineConfig", key)
+		}
+	}
+	for _, key := range []string{"turn_engine", "learning", "scheduling", "artifacts"} {
+		if refused(key) {
+			t.Errorf("engineConfig may not set %s, a tuning block the API does not type", key)
 		}
 	}
 }

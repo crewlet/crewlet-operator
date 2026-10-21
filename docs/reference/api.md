@@ -366,6 +366,65 @@ _Appears in:_
 | `Denied` | CLIAgentWebToolsDenied runs the CLI with its web tools off.<br /> |
 
 
+#### ChatBackend
+
+_Underlying type:_ _string_
+
+ChatBackend is which chat surface a company runs. It maps onto Crewlet's
+chat.backend (Chatlet is `chatlet`, Vendor is `vendor`, None is `none`).
+
+_Validation:_
+- Enum: [Chatlet Vendor None]
+
+_Appears in:_
+- [ChatSettings](#chatsettings)
+
+| Field | Description |
+| --- | --- |
+| `Chatlet` | ChatChatlet is Chatlet, Crewlet's own chat: rooms the engine keeps, a<br />room for each unit's channel, read on the dashboard.<br /> |
+| `Vendor` | ChatVendor is the Slack or Mattermost the company's Integrations (or<br />a seat's Slack app) connect it to.<br /> |
+| `None` | ChatNone is a company with no chat.<br /> |
+
+
+#### ChatSettings
+
+
+
+ChatSettings is which chat surface a company runs and the policy of
+Chatlet. It maps onto Crewlet's chat block.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [CompanySpec](#companyspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `backend` _[ChatBackend](#chatbackend)_ | backend is which chat surface the company runs. Unset derives it, as<br />Crewlet does: Vendor for a company with a Slack or Mattermost<br />Integration or a seat with a Slack app, Chatlet for every other. So<br />there is no default here: a Chatlet written beside such an<br />Integration, or a Vendor without one, is refused by the engine's dry<br />run, reported on the Company, since a company's conversations cannot<br />live in two places. |  | Enum: [Chatlet Vendor None] <br />Optional: \{\} <br /> |
+| `chatlet` _[ChatletSettings](#chatletsettings)_ | chatlet is the policy of Chatlet: for backend Chatlet, or for no<br />backend on a company Crewlet derives Chatlet for. On a company whose<br />chat is a vendor's nothing would read it, so the engine's dry run<br />refuses it there, reported on the Company. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+
+
+#### ChatletSettings
+
+
+
+ChatletSettings is the policy of Chatlet. It maps onto Crewlet's
+chat.chatlet.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [ChatSettings](#chatsettings)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `messageRetentionDays` _integer_ | messageRetentionDays is how long a message lives before the engine<br />prunes it: 0 keeps messages for ever, and a horizon is 30 to 3650<br />days, since under a month somebody away could miss a decision before<br />reading it. Unset takes Crewlet's default of 365. Crewlet's<br />`message_retention_days`. |  | Maximum: 3650 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `defaultChannelPrivate` _boolean_ | defaultChannelPrivate makes a room created without a stated<br />visibility private; unset, such a room is public, readable by the<br />company's seats. A room created with a visibility keeps it. Crewlet's<br />`default_channel_private`. |  | Optional: \{\} <br /> |
+| `typingStatus` _[WorkingStatus](#workingstatus)_ | typingStatus is when a seat shows in a room that it is working on a<br />message. Unset takes Crewlet's default, Always. Crewlet's<br />`typing_status`. |  | Enum: [Always Addressed] <br />Optional: \{\} <br /> |
+
+
 #### ClassEnvVar
 
 
@@ -667,13 +726,14 @@ _Appears in:_
 | `timeZone` _string_ | timeZone is the company's clock, an IANA time zone such as<br />Europe/Berlin: where its days begin for budgets, due dates and<br />schedules. Unset is UTC. Crewlet's `timezone`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)*$` <br />Optional: \{\} <br /> |
 | `tracker` _[TrackerSettings](#trackersettings)_ | tracker is which work tracker the company runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `knowledge` _[KnowledgeSettings](#knowledgesettings)_ | knowledge is which knowledge base the company runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `chat` _[ChatSettings](#chatsettings)_ | chat is which chat surface the company runs: Chatlet, Crewlet's own,<br />unless it is connected to Slack or Mattermost. Crewlet's `chat`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens all seats together may spend per window.<br />Each window binds every agent seat, so Crewlet refuses one below<br />turn_engine.executor_min_budget_tokens (25000 unless spec.engineConfig<br />sets turn_engine): an executor launch needs that much of every window<br />left, and a seat under a smaller ceiling would never launch one. The<br />refusal comes from the engine's dry run, Invalid on the Company.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `llm` _[CompanyLLMSettings](#companyllmsettings)_ | llm is how the company chooses among its model providers. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `assistant` _[CompanyAssistant](#companyassistant)_ | assistant configures Ask Crewlet. Unset leaves it off.<br />Crewlet's `assistant`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `embeddings` _[EmbeddingSettings](#embeddingsettings)_ | embeddings is the provider vectors are computed with. Unset leaves<br />search keyword-only. Crewlet's providers.embeddings. |  | Optional: \{\} <br /> |
 | `sandbox` _[SandboxSettings](#sandboxsettings)_ | sandbox is where the company's agent seats' executors run. Required<br />of a company with an Agent seat and a model provider, which Crewlet<br />refuses without it (SandboxRequired). Crewlet's providers.sandbox. |  | Optional: \{\} <br /> |
 | `integrations` _[CompanyIntegrationSettings](#companyintegrationsettings)_ | integrations is company-wide integration behaviour. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables, artifacts and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, token_budget,<br />assistant, providers, integrations, mcp_servers, roles, units or<br />seat_access_migrated, which the operator writes with every<br />integration kind so the engine acts on each Seat's<br />spec.integrations. Every<br />position Crewlet holds a credential in lives under one of those keys, so<br />engineConfig can never carry a credential: the API server refuses a<br />Company whose engineConfig names one of them, before anything is<br />stored. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables, artifacts and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, chat,<br />token_budget, assistant, providers, integrations, mcp_servers, roles,<br />units or seat_access_migrated, which the operator writes with every<br />integration kind so the engine acts on each Seat's spec.integrations.<br />Every position Crewlet holds a credential in lives under one of those<br />keys, so engineConfig can never carry a credential: the API server<br />refuses a Company whose engineConfig names one of them, before anything<br />is stored. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
 | `config` _[ConfigSettings](#configsettings)_ | config is how the operator manages the company's document. | \{ managementPolicy:Enforce \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `topology` _[CompanyTopology](#companytopology)_ | topology is how the engine is laid out in pods. | \{ data:map[replicas:1] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `exposure` _[CompanyExposure](#companyexposure)_ | exposure overrides how the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -4293,6 +4353,7 @@ _Validation:_
 - Enum: [Always Addressed]
 
 _Appears in:_
+- [ChatletSettings](#chatletsettings)
 - [MattermostIntegration](#mattermostintegration)
 - [SlackIntegration](#slackintegration)
 

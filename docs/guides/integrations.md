@@ -20,7 +20,16 @@ Crewlet's own chat, which needs no Integration: the engine opens a room for
 each unit's `channel`, whose members follow the org chart, and its seats and
 people talk there, a person on the dashboard as their seat
 ([Chatlet](https://github.com/crewlet/crewlet/blob/main/docs/concepts/chatlet.md)).
-Connecting Slack or Mattermost moves the company onto that vendor's chat.
+Connecting Slack or Mattermost moves the company onto that vendor's chat. The
+Company's `spec.chat` names the backend instead of leaving the engine to
+derive it (`None` turns chat off), and sets the policy of Chatlet under
+`chatlet`, beside `Chatlet` or no backend at all: how long a message is
+kept (`messageRetentionDays`, 365 by default, `0` for ever), whether a room
+is private unless its creator says otherwise (`defaultChannelPrivate`), and
+when a seat shows it is working (`typingStatus`). The engine's dry run
+refuses, on the Company, `Chatlet` beside a Slack or Mattermost Integration,
+`Vendor` without one, and a `chatlet` block on a company whose chat is a
+vendor's, which nothing would read.
 
 An Integration connects the engine to the vendor. An agent acts there, its
 chat replies included, through a tool server: an `MCPServer` its Seat gives
