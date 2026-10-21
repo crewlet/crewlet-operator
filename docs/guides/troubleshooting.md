@@ -518,7 +518,7 @@ engine pod:
 
 ```bash
 pod=$(kubectl get seat triage -n acme -o jsonpath='{.status.placement.node}')
-kubectl logs "$pod" -n acme | grep -E 'mcp_server_failed|server_stderr_tail|empty_env_vars'
+kubectl logs "$pod" -n acme | grep -E 'mcp_server_(failed|credential_missing|awaiting_credential)|server_stderr_tail|empty_env_vars'
 kubectl logs acme-data-0 -n acme | grep -E 'mcp_server_failed|server_stderr_tail|empty_env_vars'   # a shared server
 ```
 
@@ -536,17 +536,40 @@ API's [`GET /mcp-servers`](https://github.com/crewlet/crewlet/blob/main/docs/ref
   reach it otherwise, and the server fails or behaves as though it were
   unset, often naming the variable in `server_stderr_tail`. Give it in the
   server's `env`.
-- **`empty_env_vars` names a variable.** Its value is empty: a Secret key
-  that holds nothing, a provisioned credential the engine has not minted
-  yet, or a `value` written empty on purpose, which needs nothing, such as
-  the Atlassian server's per-product proxy variables beside a proxy
-  auto-config ([Jira and Confluence](tool-servers.md#jira-and-confluence)).
-  A value that arrives later reaches the server at the next revision
-  the engine applies, which starts or restarts it with the value: the
-  engine's pass applies one once it has sealed the credentials it minted,
-  and the operator applies one once it has pushed a Secret's new value
-  ([Rotating a credential](credentials.md#rotating-a-credential); Crewlet's
+- **A seat's server waits for its credential, or is not started without
+  it.** The engine starts a seat's server only once every credential the
+  Seat, or its Unit, gives it in `spec.mcp` with `valueFrom` has a value:
+  handed an empty token, a vendor's server refuses to start, or starts and
+  acts as nobody. One the engine's own provisioning has yet to mint is
+  waited for (`mcp_server_awaiting_credential`, at info, and *Waiting for
+  credentials* on the engine's dashboard), and the server starts once the
+  value is sealed. Any other is `mcp_server_credential_missing`, an error
+  naming the variable, `K8S_…` for a Secret's key and `PROVISIONED_…` for a
+  provisioned value
+  ([Names in the engine's secret store](../concepts/credentials.md#names-in-the-engines-secret-store)):
+  a Secret key that holds nothing; a provisioned value nothing creates, of
+  which the Seat reports `ResolvedRefs=False NoProvisioner`; or one its
+  Integration cannot mint until somebody acts, such as by giving it a
+  working administrator credential, which the line says in the
+  integration's own words. Once the value is there the server starts: at
+  the next revision for a Secret's, which the operator applies once it has
+  pushed the new value
+  ([Rotating a credential](credentials.md#rotating-a-credential)), and as
+  soon as the engine has sealed a provisioned one. A running server whose
+  credential stops resolving is stopped, its `mcp_server_retired` line
+  naming the variable (Crewlet's
   [Shared vs per-role servers](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#shared-vs-per-role-servers)).
+- **`empty_env_vars` names a variable.** A value the server is handed is
+  empty, and the engine starts it with that value: a `value` written empty
+  on purpose, which needs nothing, such as the Atlassian server's
+  per-product proxy variables beside a proxy auto-config
+  ([Jira and Confluence](tool-servers.md#jira-and-confluence)), or a Secret
+  key that holds nothing in the server's own `env`. A credential a Seat
+  gives never arrives empty (above), but one in a server's own `env` does:
+  a shared server whose key is empty starts, fails to sign in, and is
+  retried. A value that arrives later reaches the server at the next
+  revision, which the operator applies once it has pushed the Secret's new
+  value.
 - **The server started without a tool you expected.** Some servers offer a
   tool only when a setting asks for it, such as Slack's posting tool
   ([Slack](tool-servers.md#slack)).
