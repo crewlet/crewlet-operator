@@ -449,9 +449,13 @@ adding the new one, making it active, re-sealing both its secret store and
 its stored company configuration under it (`crewlet secrets rekey` and
 `crewlet config rekey`), and only then dropping the old one; the operator
 runs none of those steps, and a key removed before the re-seal leaves
-whatever it sealed unreadable, the engine refusing a snapshot it cannot
-open whole. Adding a key to the Secret is safe (the pod rolls onto a
-keyring that opens everything it did); removing one is not.
+whatever it sealed unreadable. No engine boots while its secret store holds
+a value its keyring cannot open, so such a removal stops every data pod and
+seat pod of the company, each restarting until the key is back in
+`<company>-keyring`
+([The data pod is not ready](troubleshooting.md#the-data-pod-is-not-ready)).
+Adding a key to the Secret is safe (the pod rolls onto a keyring that opens
+everything it did); removing one is not.
 
 ## When a credential does not arrive
 
