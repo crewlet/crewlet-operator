@@ -169,11 +169,12 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/health":
-		answer(http.StatusOK, map[string]any{"status": "ok", "configured": true, "posture": "serving", "applied_epoch": len(e.revisions)})
+		answer(http.StatusOK, map[string]any{"status": "ok", "configured": true, "posture": engine.PostureServe,
+			"applied_epoch": len(e.revisions)})
 	case r.Method == http.MethodGet && r.URL.Path == configRoute:
 		e.readActive(w, active)
 	case r.Method == http.MethodPut && r.URL.Path == configRoute && e.refuse:
-		answer(http.StatusUnprocessableEntity, map[string]any{"error": "validation_error", "detail": "refused",
+		answer(http.StatusBadRequest, map[string]any{"error": "validation_error", "detail": "refused",
 			"problems": []map[string]string{{"path": "roles", "kind": "invalid", "message": "refused"}}})
 	case r.Method == http.MethodPut && r.URL.Path == configRoute && r.URL.Query().Get("dry_run") == "true":
 		answer(http.StatusOK, map[string]any{"base_revision_id": active.id})
