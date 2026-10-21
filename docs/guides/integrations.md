@@ -15,6 +15,13 @@ Every credential is a Secret reference ([Supplying credentials](credentials.md))
 [Credential Positions](../concepts/credentials.md) lists every position and
 the field that fills it.
 
+A company with no Slack or Mattermost Integration talks on Chatlet instead,
+Crewlet's own chat, which needs no Integration: the engine opens a room for
+each unit's `channel`, whose members follow the org chart, and its seats and
+people talk there, a person on the dashboard as their seat
+([Chatlet](https://github.com/crewlet/crewlet/blob/main/docs/concepts/chatlet.md)).
+Connecting Slack or Mattermost moves the company onto that vendor's chat.
+
 An Integration connects the engine to the vendor. An agent acts there, its
 chat replies included, through a tool server: an `MCPServer` its Seat gives
 its own credentials. Most of those servers are programs the engine starts in

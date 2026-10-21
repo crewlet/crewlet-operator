@@ -1237,7 +1237,7 @@ type CompanySpec struct {
 
 	// engineConfig is passed through into the company document as written,
 	// for the engine's tuning blocks that have no field here: turn_engine,
-	// learning, scheduling, workers, skill_variables and the
+	// learning, scheduling, workers, skill_variables, artifacts and the
 	// notification_* settings, spelled as Crewlet spells them. Each entry is
 	// one top-level key of the document and its value. The operator does not
 	// interpret it; the engine validates it in the dry run before every
