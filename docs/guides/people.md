@@ -44,8 +44,10 @@ spec:
 
 - `contact` is optional. It names the person's chat accounts, so that an
   agent can mention or message them on Slack or Mattermost; a person who
-  works only through the dashboard needs none. Crewlet warns of a Human seat
-  without one, which the operator reports as an `EngineWarnings` event
+  works only through the dashboard needs none. On a company that talks on
+  either, Crewlet warns of a Human seat with no account there, which the
+  operator reports as an `EngineWarnings` event; on Chatlet, which a company
+  with neither talks on, it warns of nothing
   ([A person's accounts](integrations.md#a-persons-accounts)).
 - `email` is optional too, and unique: two Seats of one company may not
   declare one address, compared as Crewlet compares them (case aside, and

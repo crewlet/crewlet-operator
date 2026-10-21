@@ -124,14 +124,19 @@ spec:
                   rule: self == oldSelf
               contact:
                 description: |-
-                  contact is how agents reach the person in a Human seat on a chat
-                  surface, and how what the person does there reaches the engine as
-                  theirs. It applies to Human seats only, and is optional: a person who
-                  works only through the engine's dashboard has no account to name, and
-                  signs in on the seat through the engine's own identity directory. The
-                  engine warns of a Human seat without one, since nothing addressed to it
-                  on a chat surface reaches anybody, and the operator records the warning
-                  as an EngineWarnings event on the Company.
+                  contact is how agents reach the person in a Human seat on a vendor's
+                  chat surface or tool, and how what the person does there reaches the
+                  engine as theirs. It applies to Human seats only, and is optional: a
+                  person who works only through the engine's dashboard has no account to
+                  name, and signs in on the seat through the engine's own identity
+                  directory. On a company that talks on Slack or Mattermost (an
+                  Integration of either, or a seat's Slack app) the engine warns of a
+                  Human seat with no account there, a slackUserID or a
+                  mattermostUsername, since nothing addressed to it there reaches
+                  anybody; a GitHub, GitLab or Atlassian account does not count, and the
+                  operator records the warning as an EngineWarnings event on the
+                  Company. On Chatlet, which a company with neither talks on, the person
+                  reads the rooms on the dashboard as their seat, and nothing is warned.
                 minProperties: 1
                 properties:
                   atlassianAccount:

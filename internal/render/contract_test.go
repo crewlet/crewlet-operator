@@ -1215,6 +1215,68 @@ func TestContractGettingStarted(t *testing.T) {
 		"-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
 }
 
+// TestContractContactAdvisoryFollowsTheChatSurface holds what the Seat API
+// and the guides say of a Human seat with no chat account to the engine: on a
+// company that talks on Slack, here through its Slack Integration, Crewlet
+// warns at the seat's contact of a Human seat that names no Slack account, a
+// GitHub login not counting, since it says nothing of whether a Slack mention
+// reaches the person; and it says nothing of one that names its Slack member
+// id. On Chatlet it warns of neither, which TestContractGettingStarted
+// holds.
+func TestContractContactAdvisoryFollowsTheChatSurface(t *testing.T) {
+	tierA, err := Bootstrap(bootstrapCases()[0].input(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := write(t, "crewlet.yaml", tierA.YAML)
+	for _, c := range []struct {
+		name    string
+		contact v1alpha1.SeatContact
+		warns   bool
+	}{
+		{name: "a GitHub login alone", contact: v1alpha1.SeatContact{GitHubLogin: "jane-doe"}, warns: true},
+		{name: "a Slack member id", contact: v1alpha1.SeatContact{SlackUserID: "U0JANEDOE", GitHubLogin: "jane-doe"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := companyCaseNamed(t, "slack").input(t)
+			person := v1alpha1.Seat{
+				Namespace: in.Company.Namespace, Name: "jane",
+				Spec: v1alpha1.SeatSpec{
+					CompanyRef: v1alpha1.CompanyReference{Name: in.Company.Name},
+					Kind:       v1alpha1.SeatKindHuman,
+					Contact:    c.contact,
+				},
+			}
+			in.Seats = append(in.Seats, person)
+			doc, err := Company(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			i := slices.IndexFunc(doc.Sources, func(s Source) bool {
+				return s.Object == ObjectRef{Kind: KindSeat, Name: person.Name}
+			})
+			if i < 0 {
+				t.Fatalf("the document renders Seat %s nowhere", person.Name)
+			}
+			var want []advisory
+			if c.warns {
+				want = append(want, advisory{
+					path: doc.Sources[i].Path.String() + ".contact",
+					says: person.Name + " is a human seat with no account on Slack",
+				})
+			}
+			env := bootstrapEnv(tierA)
+			for _, k := range doc.Refs {
+				env[secretsync.StoreName(k)] = dummyCredential(k)
+			}
+			for _, name := range doc.Provisioned {
+				env[name] = "minted-" + name
+			}
+			validate(t, env, want, "-config", config, "-company", write(t, "company.yaml", doc.YAML))
+		})
+	}
+}
+
 // TestContractScheduleRefusalsReachTheSchedule has the engine's dry run
 // refuse each of a schedule's mistakes no API rule can see, and checks that
 // the document attributes every problem to the Schedule, which is what the

@@ -182,7 +182,8 @@ func TestSeatValidation(t *testing.T) {
 		{name: "a human seat with contact is accepted", mutate: asHuman(nothing)},
 		{
 			// A person who works only through the dashboard has no chat
-			// account to name; Crewlet advises rather than refuses.
+			// account to name; on Slack or Mattermost Crewlet advises
+			// rather than refuses, and on Chatlet says nothing.
 			name:   "a human seat without contact is accepted",
 			mutate: func(s *v1.Seat) { s.Spec.Kind = v1.SeatKindHuman },
 		},

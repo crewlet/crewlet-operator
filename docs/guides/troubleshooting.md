@@ -820,8 +820,10 @@ Some settings the engine runs are still worth knowing about. Plain `http` on
 a routable address sends passwords unencrypted. An `https` address with no
 proxy listed shows every caller as the proxy. A class may let people sign in
 with a password alone at a routable address, which it acknowledged. A company
-may have no human seat anyone can sign in to, or a token ceiling another
-leaves idle. None of these stops the engine. It says so in two places:
+may have no human seat anyone can sign in to, a token ceiling another leaves
+idle, a person on Slack or Mattermost nobody can mention there, or, on
+Chatlet, no unit with a `channel`, and so no team with a room the chart
+keeps. None of these stops the engine. It says so in two places:
 
 - **The Company's events**: the engine's answer to each revision the operator
   writes, as an `EngineWarnings` event (`The engine runs revision … with
