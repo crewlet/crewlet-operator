@@ -3,6 +3,7 @@ package secretsync
 import (
 	"context"
 	"crypto/hmac"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -39,6 +40,11 @@ type Result struct {
 	// a credential other than the operator's: somebody replaced a value the
 	// operator owns, and Sync wrote the operator's back.
 	Overwritten []Overwrite
+	// Retained are the absent names (Desired.Missing) the engine lists that
+	// were left in the store, holding the value their Secret had, because
+	// the revision the engine runs reads them as required, or is one whose
+	// reading the State does not record (Desired.Keep).
+	Retained []string
 }
 
 // Overwrite is one owned entry somebody other than the operator wrote.
@@ -66,11 +72,17 @@ type Overwrite struct {
 // record of the authenticated credential, never a word the writer chose:
 // any caller can say anything about itself, and the operator would then take
 // a value somebody else put there for its own and never notice. Then it
-// deletes every name the engine lists that
-// Owns accepts and desired neither pushes nor keeps. Writes come first, in
-// name order, and deletes after them, so an engine never misses a name the
-// next document references because a delete failed first; a failed write
-// stops the sync before any delete.
+// deletes every name the engine lists that Owns accepts and desired neither
+// pushes nor keeps, every absent name (Desired.Missing) but one the running
+// revision reads as required (Desired.Keep), which it leaves
+// (Result.Retained, State.Retained), and every name the running revision
+// lets go whose Secret or key is gone (Desired.Release); it records each
+// absent or released name it deleted as withdrawn (State.Withdrawn). Writes
+// come first, in name order, and
+// deletes after them, so an engine never misses a name the next document
+// references because a delete failed first; a failed write stops the sync
+// before any delete. A Desired that Resolve returned with an error pushes
+// nothing, and Sync refuses it rather than delete every entry.
 //
 // Every step is checked against the engine's listing rather than prev alone,
 // so Sync is idempotent: a second Sync with the same arguments writes and
@@ -81,6 +93,10 @@ type Overwrite struct {
 // or may not have stored the value.
 func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, self string) (State, Result, error) {
 	var res Result
+	if desired.partial {
+		return prev, res, errors.New("syncing the engine's secret store: the values were not all read, " +
+			"and a sync of the rest would delete every entry it does not push")
+	}
 	listing, err := eng.ListSecrets(ctx)
 	if err != nil {
 		return prev, res, fmt.Errorf("listing the engine's secret store: %w", err)
@@ -90,9 +106,21 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 		listed[info.Name] = info
 	}
 
-	next := State{key: prev.key, fingerprints: make(map[string][]byte, len(desired.values))}
+	// Withdrawn until a revision activates, whatever this sync pushes: the
+	// engine runs what it read before the withdrawal, a value pushed again
+	// under the name included.
+	next := prev.carried(make(map[string][]byte, len(desired.values)))
 	if len(next.key) == 0 {
 		next.key = newFingerprintKey()
+	}
+	// An absent name the operator pushed and the engine no longer lists was
+	// removed by a run that stopped before it could save that it had.
+	for _, name := range desired.goneNames() {
+		_, pushed := prev.fingerprints[name]
+		_, ok := listed[name]
+		if _, removed := desired.gone(name, prev); pushed && removed && !ok {
+			next.withdraw(name)
+		}
 	}
 	// A fingerprint is a record of what the engine holds, so one for a name
 	// the engine no longer lists records nothing.
@@ -120,6 +148,7 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 		}
 	}
 
+	var retained []string
 	for _, name := range slices.Sorted(maps.Keys(listed)) {
 		if !Owns(name) {
 			continue
@@ -127,15 +156,94 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 		if _, ok := desired.values[name]; ok {
 			continue
 		}
-		if _, ok := desired.kept[name]; ok {
+		absent, removed := desired.gone(name, prev)
+		if absent && !removed {
+			retained = append(retained, name)
+			continue
+		}
+		if _, ok := desired.kept[name]; ok && !absent {
 			continue
 		}
 		// Whether the entry still existed does not matter: either way it is
 		// gone now, which is all the sync needs.
 		if _, err := eng.DeleteSecret(ctx, name); err != nil {
-			return next, res, fmt.Errorf("deleting %s, which nothing references, from the engine's secret store: %w", name, err)
+			what := "which nothing references"
+			if absent {
+				what = "whose Secret or key does not exist"
+			}
+			return next, res, fmt.Errorf("deleting %s, %s, from the engine's secret store: %w", name, what, err)
 		}
 		delete(next.fingerprints, name)
+		res.Deleted = append(res.Deleted, name)
+		if absent {
+			next.withdraw(name)
+		}
+	}
+	res.Retained, next.retained = retained, nameSet(retained)
+	return next, res, nil
+}
+
+// Withdraw removes from the engine's store the entry of every absent name of
+// desired (Desired.Missing) that it lists, but one the revision the engine
+// runs reads as required (Desired.Keep), and of every name that revision lets
+// go whose Secret or key is gone (Desired.Release), and records each it
+// removed as withdrawn (State.Withdrawn) in the State it returns, with what
+// it did: Result.Deleted, the names it removed, and Result.Retained, the
+// absent names it left, each sorted. It is the part of Sync that holds while
+// nothing else may be pushed or deleted: a document that cannot be applied
+// leaves the store as the running revision needs it, every name it requires
+// included, but the value of a reference whose Secret is gone that the
+// running revision lets go is one it goes without, and one no engine may
+// start anything with. desired may be one Resolve returned with an error.
+//
+// A step that fails returns the State known up to it, with the error, for
+// the caller to save, as Sync does.
+func Withdraw(ctx context.Context, eng EngineSecrets, desired Desired, prev State) (State, Result, error) {
+	var res Result
+	gone := desired.goneNames()
+	if len(gone) == 0 {
+		// Nothing absent, so nothing to retain either.
+		next := prev.carried(prev.fingerprints)
+		next.retained = nil
+		return next, res, nil
+	}
+	listing, err := eng.ListSecrets(ctx)
+	if err != nil {
+		return prev, res, fmt.Errorf("listing the engine's secret store: %w", err)
+	}
+	next := prev.carried(maps.Clone(prev.fingerprints))
+	listed := make(map[string]bool, len(listing))
+	var removing []string
+	for _, info := range listing {
+		listed[info.Name] = true
+		absent, removed := desired.gone(info.Name, prev)
+		switch {
+		case !absent || !Owns(info.Name):
+		case removed:
+			removing = append(removing, info.Name)
+		default:
+			res.Retained = append(res.Retained, info.Name)
+		}
+	}
+	slices.Sort(res.Retained)
+	slices.Sort(removing)
+	next.retained = nameSet(res.Retained)
+	// As in Sync: an absent name the operator pushed and the engine no
+	// longer lists was removed by a run that stopped before saving it.
+	for _, name := range gone {
+		_, pushed := prev.fingerprints[name]
+		if _, removed := desired.gone(name, prev); pushed && removed && !listed[name] {
+			delete(next.fingerprints, name)
+			next.withdraw(name)
+		}
+	}
+	for _, name := range removing {
+		if _, err := eng.DeleteSecret(ctx, name); err != nil {
+			return next, res, fmt.Errorf("deleting %s, whose Secret or key does not exist, from the engine's secret store: %w",
+				name, err)
+		}
+		delete(next.fingerprints, name)
+		next.withdraw(name)
 		res.Deleted = append(res.Deleted, name)
 	}
 	return next, res, nil

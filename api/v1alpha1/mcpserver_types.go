@@ -132,6 +132,7 @@ type MCPHeader struct {
 // +kubebuilder:validation:XValidation:rule="self.transport == 'Stdio' || (!has(self.args) && !has(self.env))",message="args and env apply to transport Stdio only"
 // +kubebuilder:validation:XValidation:rule="self.transport == 'HTTP' ? has(self.url) : !has(self.url)",message="url is required with transport HTTP and not allowed with Stdio"
 // +kubebuilder:validation:XValidation:rule="self.transport == 'HTTP' || !has(self.headers)",message="headers apply to transport HTTP only"
+// +kubebuilder:validation:XValidation:rule="self.transport != 'HTTP' || !has(self.optionalKeys) || self.optionalKeys.all(a, self.optionalKeys.exists_one(b, b.lowerAscii() == a.lowerAscii()))",message="optionalKeys names each header once: HTTP header names are case-insensitive, so its names must differ in more than case",fieldPath=".optionalKeys"
 type MCPServerSpec struct {
 	// companyRef names the Company this server belongs to. Immutable.
 	// +required
@@ -208,6 +209,45 @@ type MCPServerSpec struct {
 	// +kubebuilder:validation:MaxItems=32
 	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.name.lowerAscii() == a.name.lowerAscii()))",message="names must differ in more than case: HTTP header names are case-insensitive"
 	Headers []MCPHeader `json:"headers,omitempty"`
+
+	// optionalKeys names the keys whose value may go missing: variables of env
+	// (Stdio) or headers (HTTP), and the values every Seat and Unit gives the
+	// server in spec.mcp, which land in the same environment or the same headers.
+	// Crewlet starts a server only once every value it is started with has one, so
+	// a value read from a Secret that does not exist, holds no such key or holds
+	// an empty value keeps the server from starting. Under a key listed here, such
+	// a value is left out instead, whole: the server starts without the variable,
+	// or its requests go without the header, as Kubernetes starts a container
+	// without an optional secretKeyRef. A missing Secret or key under one is then
+	// no failure of the references of the object that gives the value, and holds
+	// nothing back. Under the Enforce policy the operator also takes the value it
+	// pushed for it out of the engine's secret store, and has the engine read the
+	// store again whether or not the document can be applied, so the server is not
+	// started again with a deleted Secret's value, but by a revision the engine
+	// runs that reads the key as required (one from before the key was listed) or
+	// whose reading the operator does not know (another document somebody else
+	// activated), which keeps the value until the next document runs, and that one
+	// is activated once with it and at once again without it; a Secret key that is
+	// also read where it is required holds the document while it is missing, and
+	// keeps the value it had in a revision the engine runs that requires it too
+	// until the document applies. A Seat's or a Unit's value for a key replaces
+	// the server's whole, so one that goes missing leaves the key out rather than
+	// handing the server's own value back; and a provisioned value an Integration
+	// mints for a seat is waited for whatever this says. Every entry must name a
+	// key at least one value read from a Secret, or provisioned, is written under,
+	// here or in a Seat's or a Unit's spec.mcp for this server: one under which
+	// every value is a literal, which is never missing, or no value at all, leaves
+	// nothing out and holds the document (ResolvedRefs=False with
+	// OptionalKeyUnused), as Crewlet refuses it. A Stdio server's keys are
+	// compared as written, an HTTP server's without case, as headers are.
+	// Crewlet's `optional_keys`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=32
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=128
+	// +kubebuilder:validation:items:Pattern=`^[A-Za-z0-9!#$%&'*+.^_|~-]+$`
+	OptionalKeys []string `json:"optionalKeys,omitempty"`
 
 	// toolPrefix is put in front of the server's tool names, to keep them
 	// apart from another server's. Crewlet's `tool_prefix`.

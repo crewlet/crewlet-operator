@@ -389,7 +389,7 @@ func reportedCases() []reportedCase {
 				integration(in, sampleGitLab).Spec.GitLab.EngineProvisioning = v1alpha1.GitLabEngineProvisioning{}
 			},
 			want: []reportedFinding{
-				{KindSeat, seatAna, "spec.mcp[1].env[0].valueFrom", v1alpha1.ReasonNoProvisioner},
+				{KindSeat, seatAna, fieldSecondServerValue, v1alpha1.ReasonNoProvisioner},
 				{KindSeat, seatAna, "spec.sandbox.env[1].valueFrom", v1alpha1.ReasonNoProvisioner},
 			},
 			writes: "${PROVISIONED_ANA_",
@@ -492,6 +492,15 @@ func unit(in *Input, name string) *v1alpha1.Unit {
 		}
 	}
 	panic("no Unit " + name)
+}
+
+func toolServer(in *Input, name string) *v1alpha1.MCPServer {
+	for i := range in.MCPServers {
+		if in.MCPServers[i].Name == name {
+			return &in.MCPServers[i]
+		}
+	}
+	panic("no MCPServer " + name)
 }
 
 func schedule(in *Input, name string) *v1alpha1.Schedule {

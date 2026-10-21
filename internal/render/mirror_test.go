@@ -74,21 +74,51 @@ const (
 
 	credentialNameRead = "v0.1.1-0.20261012231821-14c93cab2ee6"
 
-	// seatCredentialRead is crewlet#291's engine, which every mirror it
-	// changed was read again at: the run_sandbox launch and the agent-mode
-	// launch give the box only those of the seat's scoped tool servers whose
-	// credentials in the seat's own block all resolve (boxServers), and
-	// boxSetup and sandboxEnv take the company, to say whether a provisioning
-	// pass is minting a variable that resolved to nothing. Since crewlet#195
-	// the launches have found the seat's sandbox by handle and taken their
-	// setup through boxSetup, which writes a file whose body is one whole
-	// ${VAR} as that value, byte for byte (every setup file the render writes
-	// is one), and the agent-mode launch has refused a surface bound to no
-	// seat, a fault of its own assembly no configuration reaches. The coding
-	// agent a launch runs, the head it runs on, the run's environment and
-	// every refusal before a box exists are as they were, so no verdict the
-	// operator copies moved.
-	seatCredentialRead = "v0.1.1-0.20261020205524-cecc88425294"
+	// optionalKeysRead is crewlet#293's engine, which every mirror it changed
+	// was read again at, as crewlet#291's had been before it. A run's
+	// environment is laid by runEnvironment, which replaced sandboxEnv and
+	// boxSetup: the setup steps, then the seat's role.sandbox.env, each later
+	// layer winning a name, and a setup file whose body is one whole ${VAR}
+	// (every one the render writes) written as that value, as before; what is
+	// new is that a value that resolves to nothing is left out where the
+	// layer that wins lists its key in optional_keys, and is otherwise a gap
+	// that refuses a run_sandbox launch before a box exists (Launch) and is
+	// said, the run starting without it, in an agent-mode executor's run
+	// (LaunchExecutor). A value a provisioning pass mints for the seat is
+	// waited for whatever the declaration says (refGap.hold). The render
+	// follows it: the code-work verdict reads the winning layer and counts an
+	// optional sign-in that is missing for nothing, and the NoProvisioner
+	// report says which gestures go without the value. The coding agent a
+	// launch runs, the head it runs on and every other refusal before a box
+	// exists are as they were.
+	optionalKeysRead = "v0.1.1-0.20261021054645-37bd6f2e0c50"
+	// toolCredentialsGo is where the engine decides what a value that
+	// resolves to nothing does to a tool server or a coding run.
+	toolCredentialsGo = "internal/engine/toolcredentials.go"
+	// renderCompanyGo is the render's NoProvisioner report.
+	renderCompanyGo = "internal/render/company.go"
+	// renderOptionalGo is the render's start values and its check of an
+	// MCPServer's optionalKeys against the company.
+	renderOptionalGo = "internal/render/optional.go"
+	// configOptionalGo is the config reconciler's report of a start value
+	// whose Secret holds nothing: left out under an optional key, and
+	// otherwise an empty value that keeps a server or a run from starting.
+	configOptionalGo = "internal/controller/config_optional.go"
+	// seatTypesGo is the Seat API.
+	seatTypesGo = "api/v1alpha1/seat_types.go"
+	// mcpServerTypesGo is the MCPServer API.
+	mcpServerTypesGo = "api/v1alpha1/mcpserver_types.go"
+	// toolServersMd and cliAgentsMd are the guides that state what a tool
+	// server and a coding run are started with.
+	toolServersMd = "docs/guides/tool-servers.md"
+	cliAgentsMd   = "docs/guides/cli-agents.md"
+	// engineMCPGo, mcpConfigGo, orgGo and fileRulesGo are where the engine
+	// decides which instances of a tool server it starts and with which
+	// values, and which spellings of a header it refuses.
+	engineMCPGo = "internal/engine/mcp.go"
+	mcpConfigGo = "internal/config/mcp.go"
+	orgGo       = "internal/org/organization.go"
+	fileRulesGo = "internal/config/filerules.go"
 
 	// bootBindRead is crewlet#257's engine, which binds api.port, and
 	// api.public where the node serves one, before its boot: whether a node
@@ -186,7 +216,7 @@ var signInPosture = []string{bootstrapGo, engineClassGo, "docs/guides/people.md"
 // company's Jira and Confluence are on, and what names a person there: the
 // render's report on a Seat's atlassianAccount, and the guide that tells a
 // person which value to give.
-var atlassianAccount = []string{contactGo, "api/v1alpha1/seat_types.go", integrationsMd}
+var atlassianAccount = []string{contactGo, seatTypesGo, integrationsMd}
 
 // cloudIDGateway is every operator file that copies which gateway a cloud_id
 // is read through: those of atlassianAccount, to which a product named by
@@ -199,7 +229,7 @@ var cloudIDGateway = append([]string{"api/v1alpha1/integration_types.go"}, atlas
 // render's copy of their pattern, and the guide and the page that state the
 // rule of a literal value.
 var credentialNames = []string{
-	"api/v1alpha1/llmprovider_types.go", "api/v1alpha1/mcpserver_types.go", "api/v1alpha1/unit_types.go",
+	"api/v1alpha1/llmprovider_types.go", mcpServerTypesGo, "api/v1alpha1/unit_types.go",
 	codeWorkGo, "docs/guides/tool-servers.md", "docs/concepts/credentials.md",
 }
 
@@ -229,7 +259,7 @@ var codingBox = []string{"docs/guides/credentials.md", "docs/concepts/credential
 // the guide that states the rule (Code work) and the troubleshooting row that
 // gives CodingAgentMismatch's remedy for either kind of seat.
 var agentModeCodeWork = []string{
-	codeWorkGo, executorGo, "api/v1alpha1/seat_types.go", "api/v1alpha1/common_types.go",
+	codeWorkGo, executorGo, seatTypesGo, "api/v1alpha1/common_types.go",
 	"docs/guides/cli-agents.md", troubleshootingMd,
 }
 
@@ -256,6 +286,21 @@ var bootWindows = []string{
 // and the lists TestCodeWorkFollowsTheEngineSource,
 // TestAtlassianDeploymentFollowsTheEngineSource and
 // TestCredentialNameFollowsTheEngineSource read.
+//
+// Two decide what a value that resolves to nothing costs a seat:
+// runEnvironment, which lays a run's environment and leaves out a key the
+// layer that wins declares optional, and refGap.hold, which waits for a value
+// a provisioning pass mints for the seat whatever the declaration says. The
+// code-work verdict and the render's NoProvisioner report copy them; what a
+// tool server is started with is shown by a running engine instead
+// (TestContractAnOptionalKeyIsLeftOut). Which values each instance of a tool
+// server is started with, which the render's StartValue.Started copies and the
+// config reconciler reports an empty value by, is decided by five more:
+// startSharedServers, seatSpecs and Grants (which instances run, the company's
+// and the seats'), inheritMCPEnv (a unit's block under its members') and
+// sandboxMCP (a coding run's box). And validateHeaderSpellings, with
+// spelledUnlike, refuses a header a seat spells unlike its unit, which the
+// render refuses too (headerSpellings).
 //
 // Most of them are the launch's own code; one is the runner's, which seats it
 // offers run_sandbox at all ((*Runner).offersSandbox). One is a sandbox
@@ -407,11 +452,13 @@ var mirrored = []mirror{
 	},
 	{
 		file: sandboxGo, name: "(*launcher).Launch",
-		against: []string{codeWorkGo},
+		against: []string{codeWorkGo, renderCompanyGo, configOptionalGo},
 		decides: "a run_sandbox launch runs the head of the seat's sandbox phase with role.sandbox.coding_agent or " +
-			"the catalogue's default, and refuses before a box exists what newCodingRun and sandboxCredentials refuse",
-		digest: "03c28ecab42612b9eedff1b46f7a2eb67e189797d901bdc29e2d2e0f5f2ab869",
-		read:   seatCredentialRead,
+			"the catalogue's default, and refuses before a box exists what newCodingRun and sandboxCredentials " +
+			"refuse, and a run whose environment holds a value that resolves to nothing under a key nothing " +
+			"declares optional (runEnvironment's gap)",
+		digest: "49e91c7b36f98c9977127c3b479dd44e14b01411cb619f520696d384382e211c",
+		read:   optionalKeysRead,
 	},
 	{
 		file: sandboxGo, name: "buildSandbox",
@@ -478,12 +525,88 @@ var mirrored = []mirror{
 		read:   openCode2Read,
 	},
 	{
-		file: sandboxGo, name: "(*Engine).sandboxEnv",
-		against: []string{codeWorkGo},
+		file: sandboxGo, name: "(*Engine).runEnvironment",
+		against: append([]string{
+			codeWorkGo, renderCompanyGo, renderOptionalGo, configOptionalGo, seatTypesGo, companyTypesGo, cliAgentsMd,
+		}, codingBox...),
 		decides: "a run's environment is the env of the catalogue's and the seat's setup steps, then the seat's " +
-			"role.sandbox.env",
-		digest: "d5caf22beb5b4f226137fe981123c6c2fc2636788caf7e157fa877fbefc17fe5",
-		read:   seatCredentialRead,
+			"role.sandbox.env, each later layer winning a name, and a value that resolves to nothing is left out " +
+			"where the optional_keys beside the value that wins lists its key (a setup file's path likewise), " +
+			"and is the run's gap otherwise",
+		digest: "413112e3769c5d2a4a1a84d84bf6bb3e7f7439acabbe210cb3c9c818b9452189",
+		read:   optionalKeysRead,
+	},
+	{
+		file: toolCredentialsGo, name: "resolveServer",
+		against: []string{renderOptionalGo, configOptionalGo, mcpServerTypesGo, toolServersMd},
+		decides: "a tool server starts with its env (stdio) or headers (http), a seat's mcp_env for it over them key " +
+			"by key, merged by the key the server reads (a header in any case) before anything resolves, so a seat's " +
+			"key replaces the server's whole; a value that resolves to nothing, or to an empty value, is left out " +
+			"where the server's optional_keys lists its key, whichever layer wrote it, and holds the server back " +
+			"otherwise; and a url that resolves to nothing holds it back whatever optional_keys says",
+		digest: "2883d7f46a0787adfe1194f21693365ab5729bb46466bbdaeeef8522faff7041",
+		read:   optionalKeysRead,
+	},
+	{
+		file: toolCredentialsGo, name: "(*refGap).hold",
+		against: []string{renderCompanyGo, codeWorkGo, mcpServerTypesGo, seatTypesGo},
+		decides: "a value a provisioning pass mints for the seat holds a tool server or a run back whatever " +
+			"optional_keys says, and a declared key's value that nothing mints is left out",
+		digest: "0b885181d18a78a921a37fae2c37e6f1e40a508f1a55c59a89cfb9de528dd14c",
+		read:   optionalKeysRead,
+	},
+	{
+		file: engineMCPGo, name: "(*Engine).startSharedServers",
+		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
+		decides: "a shared server is started once for the company, with its own values alone (no seat's block)",
+		digest:  "f88ef4e48075a9adde25d5a5296cd9c82919d2792fff3e65f5d0404a5525f7d5",
+		read:    optionalKeysRead,
+	},
+	{
+		file: engineMCPGo, name: "seatSpecs",
+		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
+		decides: "a seat's instance is started of every per-seat server it is granted, with the seat's block for it",
+		digest:  "f173aa5f383a5c87f0897455a9545d3ef6e70c05d42b4a7a1f7b3b710e37f3a5",
+		read:    optionalKeysRead,
+	},
+	{
+		file: mcpConfigGo, name: "(*MCPServer).Grants",
+		against: []string{renderOptionalGo, configOptionalGo},
+		decides: "a per-seat server is granted to every agent seat with a block of values for it, its own or its " +
+			"unit's, and a shared one to every agent seat",
+		digest: "68e24eca130819612cd092985ec133b3f1a494fd4a5ee4d5c73801daf2cc5a99",
+		read:   optionalKeysRead,
+	},
+	{
+		file: orgGo, name: "(*Organization).inheritMCPEnv",
+		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
+		decides: "a unit's block for a server is laid under each of its direct agent members' own, which wins a key " +
+			"as written",
+		digest: "dacbba6d65ca753f5b914c2804aa7ca95f2a17a405fcce1e829b93957eba440c",
+		read:   optionalKeysRead,
+	},
+	{
+		file: sandboxGo, name: "sandboxMCP",
+		against: []string{renderOptionalGo, configOptionalGo},
+		decides: "a coding run's box is given every server its seat's sandbox scopes, shared or not, with the seat's " +
+			"block for it",
+		digest: "7cd2c2e82ba70b3327284d26e450b09b34549baacc50b22e8927405c3e9fc0a6",
+		read:   optionalKeysRead,
+	},
+	{
+		file: fileRulesGo, name: "(*Company).validateHeaderSpellings",
+		against: []string{renderOptionalGo, toolServersMd},
+		decides: "a seat's value for an http server under a header its unit's block writes in another case is " +
+			"refused on every write, and a stdio server's keys are compared as written",
+		digest: "5ee6ced04f6db8e78a19c3a5b0f983ad4588acfa061181f24ef401436e0e782f",
+		read:   optionalKeysRead,
+	},
+	{
+		file: fileRulesGo, name: "spelledUnlike",
+		against: []string{renderOptionalGo},
+		decides: "a seat's key is refused where its unit's block writes the same header under another spelling",
+		digest:  "5727b98d86c5bf29f1799e6bfbbd9fdae77f5c7c78d6ffebfc9aeeb7604dc064",
+		read:    optionalKeysRead,
 	},
 	{
 		file: doctorGo, name: "(*Provider).CredentialEnvNames",
@@ -536,12 +659,13 @@ var mirrored = []mirror{
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).LaunchExecutor",
-		against: append([]string{executorGo}, agentLogin...),
+		against: append([]string{executorGo, renderCompanyGo, configOptionalGo}, agentLogin...),
 		decides: "an agent-mode turn on a node that serves no tool bridge is refused, never run on the engine's own " +
 			"tool loop (AgentModeBridgeUnsupported, NotExposed), and so is one whose CLI login cannot follow it " +
-			"into the remote sandbox (sandboxCredentials at phase Execute)",
-		digest: "531189d0f30f42f220ff4c9b33d6fa66a2d9b0ee1eabeec7fb6b7c330a294097",
-		read:   seatCredentialRead,
+			"into the remote sandbox (sandboxCredentials at phase Execute); a run whose environment holds a " +
+			"value that resolves to nothing starts without it",
+		digest: "ffd234283e02dc655afff94da97b47f30089ad6819221ad5c258c57b4effae39",
+		read:   optionalKeysRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).executorRun",

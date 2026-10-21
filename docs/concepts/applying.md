@@ -61,14 +61,22 @@ flowchart TD
     rendered -- "a finding that holds nothing" --> reported["reported on the part<br/>(ResolvedRefs=False, Ready=False<br/>or a condition of its own)"]
     reported --> secrets
     rendered --> secrets{"read the referenced Secret keys"}
-    secrets -- "missing or too large" --> missing["SecretsSynced=False on the Company<br/>ResolvedRefs=False on the part"]
-    secrets --> push["push changed values into the<br/>engine's secret store"]
+    secrets -- "missing or too large,<br/>where a part requires it" --> missing["SecretsSynced=False on the Company<br/>ResolvedRefs=False on the part"]
+    secrets -- "missing, where every part<br/>may go without it" --> absent["ResolvedRefs=True naming it<br/>on the part that gives it"]
+    secrets -- "empty, where a part<br/>may not go without it" --> empty["ResolvedRefs=False SecretValueEmpty<br/>on the part (holds nothing)"]
+    absent --> push
+    empty --> push
+    secrets --> push["push changed values into the<br/>engine's secret store, and delete<br/>the value of a deleted Secret<br/>the running revision goes without"]
+    refs --> withdraw["delete the value of a deleted Secret<br/>the running revision goes without,<br/>and activate the running<br/>revision again"]
+    missing --> withdraw
     push --> same{"engine runs this document<br/>with these values?"}
     same -- yes --> done["nothing to write"]
     same -- no --> dry{"engine dry run"}
     dry -- refused --> invalid["ConfigApplied=False Invalid on the Company<br/>Applied=False Invalid on the part at fault,<br/>where a part rendered it"]
+    invalid --> withdraw
     dry --> apply["apply the whole document<br/>as one revision"]
-    apply --> gc["delete the store entries<br/>nothing references any more"]
+    apply --> gc["record the new revision, then delete<br/>the store entries nothing references<br/>any more, and a deleted Secret's value<br/>only the replaced revision kept"]
+    gc -- "if it deleted such a value" --> again["activate the new revision again"]
 ```
 
 1. **Render.** Every part is rendered into one document. A finding that
@@ -81,7 +89,12 @@ flowchart TD
    declare, is reported on its object, and the document goes on.
 2. **Read the Secret values** the document references, from the API server
    directly. A missing Secret or key, or a value over the 64 KiB the engine's
-   store accepts, stops here.
+   store accepts, stops here, except a missing one every reference to which
+   is a value a tool server or a coding run may go without (its key listed
+   in the `optionalKeys` that governs it): the engine is to leave that value
+   out, so the store is to hold none for it. The parts are told what was
+   read either way: a value a part goes without, and an empty value under a
+   key nothing lists (`SecretValueEmpty`), which holds nothing.
 3. **Push the values.** The operator reads the document the engine runs
    (`GET /health`, then `GET /config`) and lists the engine's encrypted
    secret store. Each referenced key is one entry in the store, named as the
@@ -93,7 +106,44 @@ flowchart TD
    from the write's authentication, so no writer can pass for the operator.
    The entries the running document still references are kept until the next
    document replaces it; an entry of the operator's shape that neither
-   document references is deleted now.
+   document references is deleted now. So is the entry of a value whose
+   Secret or key no longer exists where the revision the engine runs goes
+   without it, so that the revision step 6 writes, or the one activated
+   again below, activates without the deleted value: where that revision
+   does not reference the value, or every reference to it there is under a
+   listed key. The operator knows how a revision reads a value from its
+   record of the store, which names the revision it last activated with the
+   Secret keys that revision's document lets go without, and from the
+   document itself where the engine runs the very document the operator
+   renders, whoever activated it (a `crewlet config reload` of it, say). A
+   value such a revision lets go is deleted whatever the next document reads
+   of it: a next document that requires it is held for it anyway, and is
+   applied once the Secret exists again, when its value is pushed. Any other
+   revision, one that reads the value where it is required, or another
+   document somebody else activated, whose reading the operator does not
+   know, keeps the value it holds for as long as it runs, as the last good
+   revision keeps every value it requires while the next document is held.
+   The Company's `SecretsSynced` and the part's `ResolvedRefs` message say so
+   wherever the reconcile read the Secrets the document references, and a
+   `SecretKept` event, told once, when the reconcile ends with the value
+   kept; a document the render holds reads only the values it may go
+   without, and is told by the event alone. Step 7 deletes the value once
+   the next document runs. Whenever the reconcile ends without activating a
+   revision after it deleted a value, because the document is held at any
+   step, the operator activates the revision the engine runs again,
+   unchanged (`POST /config/reload`, with a `Reactivated` event), so the
+   engine reads its store without the deleted value rather than starting a
+   tool server or a coding run with it; it keeps what it owes in its record
+   of the store until a revision has activated. It activates again only a
+   revision that goes without the value, never one that keeps it, and
+   records the revision that activates it again as its own only once it has
+   read back that it is that document: the engine activates again whichever
+   revision is active when the request lands, so one somebody else activated
+   in between is reported with a Warning `Reactivated`, and read as a
+   revision whose reading the operator does not know. Nothing makes the
+   engine's reload or its deletion conditional on the revision the operator
+   read, so a revision somebody activates in that moment goes without a
+   value it may require until the Secret exists again.
 4. **Compare.** The operator compares the engine's active document with the
    rendered one, and compares a hash of the rendered document and
    of the values it references with the one it recorded when it last applied
@@ -113,10 +163,24 @@ flowchart TD
    The revision's summary is `crewlet-operator:` followed by the objects
    whose part of the document changed. A write that loses a race with
    another writer is started over once from a fresh read.
-7. **Clean up** the store: the operator lists it again, and every entry of
+7. **Clean up** the store. The operator records the new revision in its
+   record of the store, with the Secret keys its document lets go without,
+   before it deletes anything, so that a deletion whose own record a failed
+   write loses is withdrawn by the next reconcile. Then it reads the
+   document the engine runs again and lists the store, and every entry of
    the operator's shape that the new document does not reference, the ones
-   only the replaced document used, is deleted. Entries of any other name —
-   one a person wrote with `crewlet secrets set`, say — are never touched.
+   only the replaced document used, is deleted, and so is the value of a
+   deleted Secret the replaced revision kept, which the new one goes
+   without; a revision somebody activated since the apply keeps every value
+   it references instead. The new revision activated with that value still
+   in the store, so the operator activates it again at once, unchanged
+   (`Reactivated`), and the engine reads its store without it. Until then the
+   new revision may start a tool server or a coding run with the deleted
+   Secret's value: that moment is the price of keeping the last good revision
+   whole, paid where the revision the engine ran read the key as required,
+   or was one whose reading the operator did not know, when the key's Secret
+   was deleted. Entries of any other name — one a person wrote with
+   `crewlet secrets set`, say — are never touched.
 8. **Wait for the engine to apply it.** The write activates the revision and
    returns its activation epoch; the engine applies it afterwards, on its own
    loop, and runs the previous revision until it has. So the Company reports
@@ -130,12 +194,18 @@ sequenceDiagram
     participant E as Engine API
     O->>E: GET /health, then GET /config, the document the engine runs
     O->>E: GET /secrets, then PUT /secrets/NAME for each value that changed
-    O->>E: DELETE /secrets/NAME that neither document references
+    O->>E: DELETE /secrets/NAME that neither document references, or of a deleted Secret the running revision goes without
     O->>E: PUT /config?dry_run=true with the rendered document
     E-->>O: the revision it checked against, or each problem at its place
     O->>E: PUT /config, If-Match the revision it checked
     E-->>O: the new revision and its activation epoch
+    Note over O: records the new revision and the keys it lets go without
+    O->>E: GET /health, then GET /config, the document the engine runs now
     O->>E: GET /secrets, then DELETE /secrets/NAME only the replaced document used
+    opt a deleted Secret's value only the replaced revision kept
+        O->>E: POST /config/reload, the new revision again without it
+        O->>E: GET /health, then GET /config, that it is the document
+    end
     loop every two seconds, until the epoch is applied
         O->>E: GET /health
         E-->>O: applied epoch and posture
@@ -164,7 +234,11 @@ The operator remembers what it pushed as keyed fingerprints of the values, in
 a Secret of its own, `<company>-secret-sync`, owned by the Company: the
 engine never returns a value, so this is how the operator knows which ones
 changed. A fingerprint without the key that Secret also holds says nothing
-about a value.
+about a value. The same Secret holds the operator's record of the store's
+other facts: the revision whose reading of the values it knows, with the
+Secret keys that revision lets go without (`optional-keys`), the values it
+deleted that a revision has yet to activate without, and the ones it said it
+keeps.
 
 The engine is reached at its first data pod,
 `http://<company>-data-0.<company>-data.<namespace>.svc:8080`, with the
@@ -331,16 +405,16 @@ takes no work for a person that a pause could hold.
 
 | Object | Condition | When |
 |---|---|---|
-| Company | `SecretsSynced` | `True`, `Synced`, once the store holds every referenced value. `False`, `SecretNotFound` or `SecretTooLarge`, naming each Secret and key; `False`, `EngineUnavailable` when a write to the store failed; `Unknown`, `NotManaged` under Observe, and under Seed once seeded. |
-| Company | `ConfigApplied` | `True` with `Applied`, `DriftCorrected`, `InSync` or `Seeded`, once the engine reports the revision's epoch applied. `False` with `Applying` while it applies it, `ApplyFailed` when it did not; otherwise with the reason of whatever blocks the document ([What blocks a document](company-document.md#what-blocks-a-document)): `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `HumanSeat`, `PerSeatNotAllowed`, `PoolCapacityExceeded`, `SeatPoolsNotAllowed`, `CLIAuthNotPortable`, `CodingAgentMismatch`, `SecretNotFound`, `SecretTooLarge`, `NameConflict` (the Secret `<company>-secret-sync` is someone else's), `Invalid` (the engine's own words), `Drifted` (Observe), `WriteRefused` (the engine refuses the operator's own token a change to the document), `NotGranted` (the engine does not let the operator's token make a request it needs), `SeatHeld` (the document takes away a human seat a person, a service account or an open invitation holds in the engine) or `EngineUnavailable`. |
+| Company | `SecretsSynced` | `True`, `Synced`, once the store holds every referenced value, counting the values a tool server or a coding run may go without whose Secret or key does not exist, which it does not hold, or holds as it was for the revision the engine runs where that revision requires one, or is one whose reading the operator does not know (it names those, and which of the two it is), and, the Company having no `ResolvedRefs`, naming the values of its own setup steps a run goes without and a value of theirs that holds nothing under a key their `optionalKeys` does not list ([What blocks a document](company-document.md#what-blocks-a-document)). `False`, `SecretNotFound` or `SecretTooLarge`, naming each Secret and key; `False`, `EngineUnavailable` when a write to the store failed; `Unknown`, `NotManaged` under Observe, and under Seed once seeded. |
+| Company | `ConfigApplied` | `True` with `Applied`, `DriftCorrected`, `InSync` or `Seeded`, once the engine reports the revision's epoch applied. `False` with `Applying` while it applies it, `ApplyFailed` when it did not; otherwise with the reason of whatever blocks the document ([What blocks a document](company-document.md#what-blocks-a-document)): `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `HumanSeat`, `PerSeatNotAllowed`, `PoolCapacityExceeded`, `SeatPoolsNotAllowed`, `CLIAuthNotPortable`, `CodingAgentMismatch`, `OptionalKeyUnused`, `SecretNotFound`, `SecretTooLarge`, `NameConflict` (the Secret `<company>-secret-sync` is someone else's), `Invalid` (the engine's own words), `Drifted` (Observe), `WriteRefused` (the engine refuses the operator's own token a change to the document), `NotGranted` (the engine does not let the operator's token make a request it needs), `SeatHeld` (the document takes away a human seat a person, a service account or an open invitation holds in the engine) or `EngineUnavailable`. |
 | Company | `EngineHealthy` | The engine's alarm table, read each time the engine is reached: `True`, `NoAlarms`; `False`, `Alarms`, naming the one standing longest; `Unknown`, `AlarmsNotReported`, before the engine has evaluated them. Not part of `Ready`. |
 | Company | `IdentityClaimed` | Whether anybody has joined the company, read from the engine's `/health` each time the engine is reached, and every 30 seconds while nobody has, since a person joins where no watch sees it: `True`, `PersonEnrolled`, once its identity directory holds a person; `False`, `Unclaimed`, while nobody has joined, naming up to five of the company's Human seats and the access token to bring the first person in with; `False`, `NoHumanSeat`, when nobody can, for want of a Human seat; `Unknown`, `IdentityNotReported`, when the engine could not read its directory, did not say, or could not be asked. Not part of `Ready`: a company nobody has joined runs its agent seats. |
 | every part | `Accepted` | `True` once its Company exists; `False` with `CompanyNotFound`, or `Conflict` when it collides with another object of its company. |
-| every part | `ResolvedRefs` | `False` with `RefNotFound`, `Cycle`, `HumanSeat`, `ReferenceNotAllowed`, `SecretNotFound`, `SecretTooLarge`, `PoolNotFound`, `NoProvisioner` or `NotAnAccountID`, saying what it references that is missing or cannot be there. Most hold the document, and the part reports the same reason on `Applied`; `PoolNotFound`, `NoProvisioner`, `NotAnAccountID`, and `HumanSeat` on a GitLab `accessLevels` entry hold nothing, because only the part at fault suffers them: it is applied (`Applied=True`) and reported, with a Warning event when the condition turns so. |
+| every part | `ResolvedRefs` | `True`, `Resolved`, its message naming any value it gives a tool server or a coding run that the engine starts with and goes without, under a key an `optionalKeys` list lets go (the message names it: the MCPServer's for a tool server's value, a Seat's or Unit's included), whose Secret or key does not exist or holds an empty value, also while a Secret another part requires holds the document, and saying where the engine keeps the value it held for the revision it runs, which requires it, or whose reading the operator does not know. `False` with `RefNotFound`, `Cycle`, `HumanSeat`, `ReferenceNotAllowed`, `SecretNotFound`, `SecretTooLarge`, `OptionalKeyUnused`, `PoolNotFound`, `NoProvisioner`, `SecretValueEmpty` or `NotAnAccountID`, saying what it references that is missing or cannot be there. Most hold the document, and the part reports the same reason on `Applied`; `PoolNotFound`, `NoProvisioner`, `SecretValueEmpty`, `NotAnAccountID`, and `HumanSeat` on a GitLab `accessLevels` entry hold nothing, because only the part at fault suffers them: it is applied (`Applied=True`) and reported, with a Warning event when the condition turns so. |
 | every part | `Applied` | `True`, `InRevision`, naming the revision, with the generation that revision was rendered from as its `observedGeneration`, once the engine has applied it. `False` with the part's own problem (`Invalid`, `RefNotFound`, a Seat's `PerSeatNotAllowed`, `PoolCapacityExceeded`, `CLIAuthNotPortable`, `CodingAgentMismatch`, or `SeatHeld` when it turns a held human seat into an agent's, ...), a Seat's `PlacementPending` while it stays where it runs until a pod of the pool it moves to is ready (or for good, while the Company does not declare that pool), `Blocked` when another object keeps the document from being applied, `Applying` while the engine applies the revision, or `ApplyFailed` when it did not. A part whose current generation already runs keeps `True` meanwhile: only what changed is held back. |
 | Seat (agent) | `Ready` | Whether the seat runs: see [A Seat's `Ready` condition](#a-seats-ready-condition). A Human seat has none. |
 | Seat (Agent) | `Paused` | Whether the engine holds the seat paused, once it runs the seat: `True`, `SeatPaused`, naming who paused it, when and why; `False`, `SeatRunning`; with `PauseNotManaged` instead when the pause differs from `spec.paused` under `Observe` or `Seed`. `Unknown`, `PauseUnknown`, while a pause or resume the engine may or may not have recorded is retried; `Unknown`, `PauseRefused`, with the engine's words when it refused one, which is asked for again ten seconds later. None while the engine runs no seat of the Seat's (not in its revision, or a handle another Seat derives too). |
-| Seat (Agent) | `CodeWorkRunnable` | On an Agent seat with `spec.sandbox` whose executor does not run in agent mode, in a Company with `spec.sandbox`: whether its coding agent can run on the provider at the head of its sandbox chain, or on the sign-in the seat's sandbox environment gives it, decided from the spec each time the document is rendered, whatever became of the document. Under `Observe` or `Seed` it judges the Seat's objects, which may not be the document the engine runs; `Applied` says whether they are. `True`, `CodeWorkSupported`, naming the coding agent and what it runs on; `False` with `CodingAgentMismatch`, which also holds the document (`Applied`), or with `SandboxModelUnsupported` or `SandboxLoginNotPortable`, which do not: the seat is applied and runs its turns, and Crewlet refuses each of its coding runs. The operator records a Warning event on the Seat each time the condition becomes `False` or its reason changes. Not part of `Ready`, which says whether a pod runs the seat. None on any other Seat (a seat whose executor runs in agent mode codes in that run, and Crewlet never offers it `run_sandbox`), or while none of the seat's sandbox chain resolves; unchanged while the Company is not accepted. |
+| Seat (Agent) | `CodeWorkRunnable` | On an Agent seat with `spec.sandbox` whose executor does not run in agent mode, in a Company with `spec.sandbox`: whether its coding agent can run on the provider at the head of its sandbox chain, or on the sign-in the seat's sandbox environment gives it, decided from the spec, and the Secrets once they are read, each time the document is rendered, whatever became of the document: a sign-in variable the run goes without, under a key listed in the `optionalKeys` that governs the value that wins (the seat's `spec.sandbox.optionalKeys`, or its step's), counts for nothing once the reconcile has found its Secret or key missing, or its value empty. Under `Observe` or `Seed` it judges the Seat's objects, which may not be the document the engine runs; `Applied` says whether they are. `True`, `CodeWorkSupported`, naming the coding agent and what it runs on; `False` with `CodingAgentMismatch`, which also holds the document (`Applied`), or with `SandboxModelUnsupported`, `SandboxLoginNotPortable`, `SecretValueEmpty` (a value the runs are given holds an empty value, under a key nothing lists) or `NoProvisioner` (one is a provisioned credential nothing creates), which do not: the seat is applied and runs its turns, and Crewlet refuses each of its coding runs. The operator records a Warning event on the Seat each time the condition becomes `False` or its reason changes. Not part of `Ready`, which says whether a pod runs the seat. None on any other Seat (a seat whose executor runs in agent mode codes in that run, and Crewlet never offers it `run_sandbox`), or while none of the seat's sandbox chain resolves; unchanged while the Company is not accepted. |
 | LLMProvider (`CLIAgent` in `mode: Agent`) | `AgentModeRunnable` | Whether its runs can call a seat's tools back through the tool bridge, decided from the spec each time the document is rendered: `True`, `ToolBridgeServed`, naming the bridge at the Company's public address; `False`, `NotExposed`, while the Company has none. The provider is applied either way (it still serves a text call behind a chain's head or in another phase); the operator records a Warning event when the condition becomes `False`. None on any other provider; unchanged while the Company is not accepted. |
 | Integration | `Healthy` | The engine's own verdict on the vendor: `True`, `CheckPassed`, when it reports the tool connected; `False`, `CheckFailed`, with the engine's reason otherwise; `False`, `NotExposed` while the Company has no public address, since no webhook can reach the engine. |
 
@@ -387,8 +461,14 @@ pause, which is recorded on the Seat (`SeatPaused`, `SeatResumed`, and
 with the revision, its epoch and its summary, `Applied` once the engine has
 applied it, `ApplyFailed` when it did not, `SecretsSynced` with the store
 entries it wrote and deleted, a Warning `SecretOverwritten` naming each entry
-it wrote back and who had replaced it, `Drifted`, `Invalid` with the engine's
-problems, and
+it wrote back and who had replaced it, `SecretKept` naming each value of a
+deleted Secret it keeps in the store for the revision the engine runs, which
+requires it or whose reading the operator does not know, `Reactivated` when
+it activated the running revision again so the engine reads its store
+without the value of a deleted Secret, a Warning `Reactivated` when the
+revision activated again is not the document it read, a Warning
+`SecretWithdrawalFailed` when it could not,
+`Drifted`, `Invalid` with the engine's problems, and
 `EngineWarnings` when the engine applied a revision it has something to say
 about. Events, conditions and logs name Secrets, keys and store entries,
 never a value.

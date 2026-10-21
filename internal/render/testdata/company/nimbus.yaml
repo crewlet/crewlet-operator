@@ -72,6 +72,12 @@ providers:
     default_run_in: e2b
     e2b:
       api_key: ${K8S_NIMBUS_E2B_API_KEY_HH5CATIPGVOD}
+    setup:
+    - files:
+        .npmrc: ${K8S_NIMBUS_NPM_NPMRC_XCZVL2EE43WN}
+      name: npm-registry
+      optional_keys:
+      - .npmrc
 roles:
 - availability: CET business hours
   contact:

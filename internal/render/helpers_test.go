@@ -41,6 +41,9 @@ const (
 	// sampleGitHub names both the GitHub MCPServer and the GitHub
 	// Integration.
 	sampleGitHub = "github"
+	// sampleToolsets is a setting of the GitHub MCPServer's, a header
+	// naming the toolsets it offers.
+	sampleToolsets = "X-MCP-Toolsets"
 	// sampleGitLab names both the GitLab MCPServer and the GitLab
 	// Integration.
 	sampleGitLab = "gitlab"
@@ -54,6 +57,10 @@ const (
 
 // caseSeatPools is the company case that places seats in every kind of pool.
 const caseSeatPools = "seat-pools"
+
+// caseOptionalKeys is the company case whose blocks list keys that may go
+// without their value.
+const caseOptionalKeys = "optional-keys"
 
 // caseAtlassian is the company case on Atlassian Cloud, whose Jira and
 // Confluence Integrations are named jira and confluence, and seatLena its

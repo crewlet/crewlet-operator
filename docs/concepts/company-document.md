@@ -350,6 +350,8 @@ that holds the reference:
 | `Unit` | `leadRef` names a Seat that does not exist: Crewlet would run the unit, and every unit below that inherits its lead, with no lead | `RefNotFound` | Harm |
 | `Unit` | a `spec.mcp` entry names an MCPServer that does not exist | `RefNotFound` | Harm |
 | `LLMProvider` | its name is also the name of a platform provider the company uses: one would replace the other | `Conflict` | Harm |
+| `MCPServer` | an `optionalKeys` entry names a key no value read from a Secret, or provisioned, is written under, not by its own `env` or `headers` nor by any Seat's or Unit's `spec.mcp` for it (none at all, or literal `value`s only, which are never missing): nothing is left out for it, and the key it was meant for stays one the server is not started without | `OptionalKeyUnused` | Engine |
+| `Seat` | a `spec.mcp` entry spells a header unlike the Seat's Unit spells it for the same HTTP server (`authorization` beside `Authorization`): Crewlet lays the unit's values under the member's by the name as written, and the server would be sent either | `Conflict` (on `Accepted`) | Engine |
 | `Integration` | another Integration of the company, earlier by name, connects the same vendor: a new one would displace the running one | `Conflict` | Harm |
 | `Integration` | Datadog's `routeTo.seatRef` names a Seat that does not exist, or a Human seat | `RefNotFound`, `HumanSeat` | Engine |
 | `Integration` | a GitLab `accessLevels` entry names a Seat that does not exist: written by its handle, the level would go to whichever seat takes it later | `RefNotFound` | Harm |
@@ -389,8 +391,11 @@ document too, before the engine is asked: for a referenced value over the
 referenced Secret or key that does not exist (`SecretNotFound`, Harm: one
 store entry serves every object that references the key, and a deleted
 Secret is often a revoked credential, which applying would either leave
-working or take from every object that uses it). [How the document is
-applied](applying.md) covers the rest of what is reported where.
+working or take from every object that uses it), unless every value that
+reads it is one a tool server or a coding run is started with under a key
+the `optionalKeys` that governs it lists: such a value is left out, below.
+[How the document is applied](applying.md) covers the rest of what is
+reported where.
 
 What the operator applies and reports instead holds nothing back, so that
 one object that cannot do its job does not hold the company's next
@@ -406,8 +411,11 @@ revision:
   `Ready=False`, `PoolNotFound` too while no pod holds it;
   a Seat that names a provisioned credential while no Integration of the
   company has `provisioning: Engine` (`NoProvisioner`), which goes without
-  the value until one does, its tool servers that take it not started and
-  its chat app or code work running without it; a GitLab `accessLevels`
+  the value until one does: its tool server that takes it is not started,
+  and Crewlet refuses each of its `run_sandbox` coding runs, unless the
+  `optionalKeys` that governs the value lets them go without it (the
+  MCPServer's, or the seat's `spec.sandbox.optionalKeys`), and its chat app
+  runs without it; a GitLab `accessLevels`
   entry naming a Human seat (`HumanSeat`), which grants nothing, as the
   engine creates no GitLab account for a person; and a person's
   `contact.atlassianAccount` that is no Atlassian account id, such as an
@@ -416,6 +424,41 @@ revision:
   the person does there reaches nobody's seat, and an agent's mention of
   them names nobody
   ([A person's accounts](../guides/integrations.md#a-persons-accounts)).
+- A value a tool server or a coding run is started with, read from a Secret
+  under a key the `optionalKeys` that governs it lists (the MCPServer's for
+  a tool server's value, whichever object gives it; the Seat's
+  `spec.sandbox` or a setup step's for a coding run's), whose Secret or key
+  does not exist, or whose value is empty: nothing is missing, as with an
+  `optional` `secretKeyRef` in a pod. The engine's secret store holds no
+  value for a missing one, and, under `Enforce`, the operator deletes a value
+  it held for a Secret deleted since and has the engine read the store again
+  without it, even while the document is held for another object; so the
+  engine leaves the key out and starts the server or the run without it. The
+  one exception is a revision the engine runs that reads the key as
+  required, as one from before the key was listed does, or whose reading the
+  operator does not know, another document somebody else activated: that
+  revision keeps the value it holds until the next document runs, as the last
+  good revision keeps every value it requires, and the value goes then, the
+  next revision activating once with it and then again without it
+  ([How the document is applied](applying.md#what-one-reconcile-does)).
+  The object that gives the value reports `ResolvedRefs=True`, its message
+  naming each value it goes without and the list that lets it, and the
+  Company's `SecretsSynced` message counts the missing ones, and names those
+  of its own setup steps. Once the Secret holds
+  the key, the operator pushes it and applies the document again, as for a
+  rotated value
+  ([A key that may go without its value](../guides/tool-servers.md#a-key-that-may-go-without-its-value)).
+- A value a tool server or a coding run is started with, read from a Secret
+  key that holds an empty value, under a key no `optionalKeys` lists
+  (`SecretValueEmpty`): Crewlet starts no tool server, and no `run_sandbox`
+  coding run, with a value that resolves to nothing, so the engine applies
+  the document and the server, the company's or the seat's, is not
+  started, and each of the seat's coding runs is refused before a box
+  exists; an agent-mode executor's run starts without it. The engine says
+  so on its own dashboard and in its log alone, so the object that gives
+  the value reports it, as `ResolvedRefs=False` while `Applied` is `True`,
+  with a Warning event; the Company's own setup steps have no
+  `ResolvedRefs`, and its `SecretsSynced` message says it for them.
 - Two pairings of a seat's code work that no coding run can use:
   `ClaudeCode` on a provider of type `OpenAI` or `OpenAICompatible` while
   the seat's sandbox environment names no variable that signs Claude Code in

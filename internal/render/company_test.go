@@ -48,6 +48,7 @@ func companyCases() []companyCase {
 		{name: "opencode-agent", exposed: true, advisories: agentsAlone},
 		{name: caseAtlassian, exposed: true},
 		{name: caseSeatPools},
+		{name: caseOptionalKeys},
 	}
 }
 

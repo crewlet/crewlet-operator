@@ -953,9 +953,11 @@ spec:
                       the seat, named as its tool server's is so both are one token. A
                       ClaudeCode sign-in here (CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY,
                       ANTHROPIC_AUTH_TOKEN or a CLAUDE_CODE_USE_* toggle) keeps the key and
-                      endpoint of the provider the code work runs on out of the box, and a
-                      variable named as one the provider would set wins over it. Crewlet's
-                      `env`, a credential position.
+                      endpoint of the provider the code work runs on out of the box, unless
+                      a run goes without its value (optionalKeys), when the box is given
+                      them as it is with no sign-in; and a variable named as one the
+                      provider would set wins over it. Crewlet's `env`, a credential
+                      position.
                     items:
                       description: |-
                         SeatEnvVar is a named credential of a seat delivered as an environment
@@ -1054,6 +1056,36 @@ spec:
                     x-kubernetes-list-map-keys:
                     - name
                     x-kubernetes-list-type: map
+                  optionalKeys:
+                    description: |-
+                      optionalKeys names variables of env whose value may go missing. Crewlet
+                      refuses to start a run_sandbox coding run whose environment holds a value
+                      that does not resolve: a Secret that does not exist, holds no such key or
+                      holds an empty value, or a provisioned value nothing mints. Under a variable
+                      listed here, such a value is left out of the run instead, which starts
+                      without it. A missing Secret or key under one is then no failure of the
+                      Seat's references and holds nothing back. Under the Enforce policy the
+                      operator also takes the value it pushed for it out of the engine's secret
+                      store, and has the engine read the store again whether or not the document
+                      can be applied, so no run starts with a deleted Secret's value, but in a
+                      revision the engine runs that reads the key as required (one from before the
+                      key was listed) or whose reading the operator does not know (another
+                      document somebody else activated), which keeps the value until the next
+                      document runs, and that one is activated once with it and at once again
+                      without it; a Secret key that is also read where it is required holds the
+                      document while it is missing, and keeps the value it had in a revision the
+                      engine runs that requires it too until the document applies. A provisioned
+                      value an Integration mints for the seat is waited for whatever this says.
+                      env wins over a setup step's variable of the same name, and so does this
+                      list over the step's optionalKeys for it. Crewlet's `optional_keys`.
+                    items:
+                      maxLength: 128
+                      minLength: 1
+                      pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+                      type: string
+                    maxItems: 32
+                    type: array
+                    x-kubernetes-list-type: set
                   pauseTTLSeconds:
                     description: |-
                       pauseTTLSeconds is how long the seat's sandbox stays paused while it
@@ -1265,6 +1297,36 @@ spec:
                               a setup step with no name, since it is what a failure
                               message points at'
                             rule: self.trim().size() > 0
+                        optionalKeys:
+                          description: |-
+                            optionalKeys names variables of env, and paths of files, whose value may go
+                            missing. Crewlet refuses to start a run_sandbox coding run whose environment
+                            or files hold a value that does not resolve: a Secret that does not exist,
+                            holds no such key or holds an empty value. Under an entry listed here, such
+                            a variable is left out of the run and such a file is not written, and the
+                            run starts without it. A missing Secret or key under one is then no failure
+                            of the object's references and holds nothing back. Under the Enforce policy
+                            the operator also takes the value it pushed for it out of the engine's
+                            secret store, and has the engine read the store again whether or not the
+                            document can be applied, so no run starts with a deleted Secret's value, but
+                            in a revision the engine runs that reads the key as required (one from
+                            before the key was listed) or whose reading the operator does not know
+                            (another document somebody else activated), which keeps the value until the
+                            next document runs, and that one is activated once with it and at once again
+                            without it; a Secret key that is also read where it is required holds the
+                            document while it is missing, and keeps the value it had in a revision the
+                            engine runs that requires it too until the document applies. A later step's
+                            variable of the same name wins over this one's, and the Seat's
+                            spec.sandbox.env over every step's, and the list beside the value that wins
+                            is the one that counts for it; a file is the step's own. Crewlet's
+                            `optional_keys`.
+                          items:
+                            maxLength: 1024
+                            minLength: 1
+                            type: string
+                          maxItems: 48
+                          type: array
+                          x-kubernetes-list-type: set
                         timeoutSeconds:
                           description: timeoutSeconds caps each command of the step.
                           format: int32
@@ -1279,12 +1341,25 @@ spec:
                         rule: (has(self.files) && size(self.files) > 0) || (has(self.commands)
                           && size(self.commands) > 0) || (has(self.env) && size(self.env)
                           > 0) || has(self.brief)
+                      - fieldPath: .optionalKeys
+                        message: 'optionalKeys may name only a variable of this step''s
+                          env or a path of its files: an entry naming anything else
+                          leaves nothing out'
+                        rule: '!has(self.optionalKeys) || self.optionalKeys.all(k,
+                          (has(self.env) && self.env.exists(e, e.name == k)) || (has(self.files)
+                          && self.files.exists(f, f.path == k)))'
                     maxItems: 16
                     type: array
                     x-kubernetes-list-map-keys:
                     - name
                     x-kubernetes-list-type: map
                 type: object
+                x-kubernetes-validations:
+                - fieldPath: .optionalKeys
+                  message: 'optionalKeys may name only a variable of env: an entry
+                    naming anything else leaves nothing out'
+                  rule: '!has(self.optionalKeys) || self.optionalKeys.all(k, has(self.env)
+                    && self.env.exists(e, e.name == k))'
               space:
                 description: |-
                   space is the knowledge container a seat outside every unit owns, by

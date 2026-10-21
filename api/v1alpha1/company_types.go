@@ -300,12 +300,22 @@ type SandboxFile struct {
 	ValueFrom SecretValueSource `json:"valueFrom,omitzero"`
 }
 
+// The optionalKeys rule of SandboxSetupStep compares every entry with every
+// variable of env and every path of files, and the API server sums its
+// estimated cost over every step a Company's or a Seat's spec.sandbox.setup
+// may hold: 411,413 per step, 6,582,608 for the sixteen, two thirds of the
+// 10,000,000 a rule may cost before the API server refuses the CRD. Raising
+// setup's, env's, files' or optionalKeys' MaxItems, or a path's or an
+// entry's MaxLength, can take it over, and the CRDs no longer install, which
+// every test/crd case is the first to say.
+
 // SandboxSetupStep is one provisioning step applied to a sandbox before the
 // coding agent starts. It maps onto a Crewlet sandbox setup step, which
 // Crewlet refuses when it does nothing (no files, commands, env or brief):
 // that is almost always an unfinished edit, which would otherwise apply
 // cleanly for ever and look like it was working.
 // +kubebuilder:validation:XValidation:rule="(has(self.files) && size(self.files) > 0) || (has(self.commands) && size(self.commands) > 0) || (has(self.env) && size(self.env) > 0) || has(self.brief)",message="a setup step must give files, commands, env or a brief: Crewlet refuses a step that does nothing"
+// +kubebuilder:validation:XValidation:rule="!has(self.optionalKeys) || self.optionalKeys.all(k, (has(self.env) && self.env.exists(e, e.name == k)) || (has(self.files) && self.files.exists(f, f.path == k)))",message="optionalKeys may name only a variable of this step's env or a path of its files: an entry naming anything else leaves nothing out",fieldPath=".optionalKeys"
 type SandboxSetupStep struct {
 	// name identifies the step in logs and failure messages, so Crewlet
 	// refuses one of white space alone, and so does the API.
@@ -352,6 +362,34 @@ type SandboxSetupStep struct {
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=32
 	Env []SecretEnvVar `json:"env,omitempty"`
+
+	// optionalKeys names variables of env, and paths of files, whose value may go
+	// missing. Crewlet refuses to start a run_sandbox coding run whose environment
+	// or files hold a value that does not resolve: a Secret that does not exist,
+	// holds no such key or holds an empty value. Under an entry listed here, such
+	// a variable is left out of the run and such a file is not written, and the
+	// run starts without it. A missing Secret or key under one is then no failure
+	// of the object's references and holds nothing back. Under the Enforce policy
+	// the operator also takes the value it pushed for it out of the engine's
+	// secret store, and has the engine read the store again whether or not the
+	// document can be applied, so no run starts with a deleted Secret's value, but
+	// in a revision the engine runs that reads the key as required (one from
+	// before the key was listed) or whose reading the operator does not know
+	// (another document somebody else activated), which keeps the value until the
+	// next document runs, and that one is activated once with it and at once again
+	// without it; a Secret key that is also read where it is required holds the
+	// document while it is missing, and keeps the value it had in a revision the
+	// engine runs that requires it too until the document applies. A later step's
+	// variable of the same name wins over this one's, and the Seat's
+	// spec.sandbox.env over every step's, and the list beside the value that wins
+	// is the one that counts for it; a file is the step's own. Crewlet's
+	// `optional_keys`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=48
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=1024
+	OptionalKeys []string `json:"optionalKeys,omitempty"`
 
 	// brief tells the coding agent what this step made true about the
 	// sandbox.

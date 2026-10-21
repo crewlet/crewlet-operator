@@ -1,6 +1,7 @@
 package secretsync
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -76,6 +77,12 @@ func (e *fakeEngine) DeleteSecret(_ context.Context, name string) (bool, error) 
 	return ok, nil
 }
 
+// holds reports whether the store holds name.
+func (e *fakeEngine) holds(name string) bool {
+	_, ok := e.entries[name]
+	return ok
+}
+
 // takeCalls returns the calls since the last takeCalls.
 func (e *fakeEngine) takeCalls() []string {
 	calls := e.calls
@@ -92,8 +99,10 @@ const (
 	signingSecretKey = "signingSecret"
 	apiKeyKey        = "apiKey"
 	tokenKey         = "token"
-	// foreignName is an entry somebody other than the operator wrote.
-	foreignName = "GITLAB_TOKEN_SWE"
+	// foreignName is an entry somebody other than the operator wrote, and
+	// foreignValue its value.
+	foreignName  = "GITLAB_TOKEN_SWE"
+	foreignValue = "theirs"
 	// access is the credential of somebody else with the same grant as the
 	// operator: the company's published access token.
 	access = "token:access"
@@ -104,9 +113,18 @@ const (
 var self = engine.TokenLogin("operator")
 
 var (
-	nameA = StoreName(secretref.Key{Namespace: "ns", Name: "a", Key: tokenKey})
-	nameB = StoreName(secretref.Key{Namespace: "ns", Name: "b", Key: tokenKey})
-	nameC = StoreName(secretref.Key{Namespace: "ns", Name: "c", Key: tokenKey})
+	keyA  = secretref.Key{Namespace: "ns", Name: "a", Key: tokenKey}
+	keyB  = secretref.Key{Namespace: "ns", Name: "b", Key: tokenKey}
+	keyC  = secretref.Key{Namespace: "ns", Name: "c", Key: tokenKey}
+	nameA = StoreName(keyA)
+	nameB = StoreName(keyB)
+	nameC = StoreName(keyC)
+)
+
+// revision1 and revision2 are two revisions of the engine's document.
+const (
+	revision1 = "0191d4a6-5c1e-7000-8000-000000000001"
+	revision2 = "0191d4a6-5c1e-7000-8000-000000000002"
 )
 
 func desiredOf(values map[string]string) Desired {
@@ -257,7 +275,7 @@ func TestSyncKeepsWhatTheRunningDocumentReferences(t *testing.T) {
 	eng.takeCalls()
 
 	next := desiredOf(map[string]string{nameA: "a1", nameC: "c1"})
-	next.Keep(nameB)
+	next.Keep(revision1, nameB)
 	state, res := mustSync(t, eng, next, state)
 	assertCalls(t, eng, "list", "put "+nameC)
 	if len(res.Deleted) != 0 {
@@ -355,4 +373,368 @@ func TestSyncChangesNothingWhenTheListingFails(t *testing.T) {
 	if !maps.EqualFunc(got.fingerprints, state.fingerprints, slices.Equal) {
 		t.Fatal("the state changed")
 	}
+}
+
+// TestSyncRemovesAnAbsentValueOnlyWhereTheRunningRevisionLetsItGo: a name
+// whose optional reference has no Secret or key any more is removed from the
+// store, so the engine resolves it to nothing and leaves its key out rather
+// than starting with the deleted Secret's value, where the running revision
+// does not reference it or lets it go too, as the state recorded when the
+// operator activated it; where that revision reads it as required, or is one
+// the state records nothing of, the value stays for it (Retained), and is
+// not withdrawn. A kept name with no such reference is left as Keep
+// promises, and a name somebody else wrote is never touched.
+func TestSyncRemovesAnAbsentValueOnlyWhereTheRunningRevisionLetsItGo(t *testing.T) {
+	letsGoB := State{}.Activated(revision1, []secretref.Key{keyB})
+	for _, tc := range []struct {
+		name string
+		// recorded is what the state records of the operator's last
+		// activation, running the revision the engine runs, and kept
+		// whether its document references nameB.
+		recorded State
+		running  string
+		kept     bool
+		removed  bool
+	}{
+		{name: "the running revision lets it go", recorded: letsGoB, running: revision1, kept: true, removed: true},
+		{name: "the running revision does not reference it", recorded: State{}, running: revision1, removed: true},
+		{name: "the running revision requires it", recorded: State{}.Activated(revision1, []secretref.Key{keyC}), running: revision1, kept: true},
+		{name: "somebody else activated the running revision", recorded: letsGoB, running: revision2, kept: true},
+		{name: "the state records no activation", recorded: State{}, running: revision1, kept: true},
+		{name: "no revision runs", recorded: letsGoB, removed: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			eng := newFakeEngine()
+			eng.entries[foreignName] = fakeEntry{value: foreignValue, by: access}
+			state, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a", nameB: "b", nameC: "c"}), tc.recorded)
+			eng.takeCalls()
+
+			next := desiredOf(map[string]string{nameA: "a"})
+			next.absent = map[string]*MissingError{nameB: {Key: keyB, Reason: SecretNotFound}}
+			if tc.running != "" {
+				names := []string{nameC}
+				if tc.kept {
+					names = append(names, nameB)
+				}
+				next.Keep(tc.running, names...)
+			}
+			after, res := mustSync(t, eng, next, state)
+			want := map[string]fakeEntry{
+				nameA: {value: "a", by: self}, nameC: {value: "c", by: self}, foreignName: {value: foreignValue, by: access},
+			}
+			if !tc.removed {
+				want[nameB] = fakeEntry{value: "b", by: self}
+			}
+			if tc.running == "" {
+				// Nothing keeps nameC either.
+				delete(want, nameC)
+			}
+			assertStore(t, eng, want)
+			removed, retained, withdrawn := []string(nil), []string{nameB}, []string(nil)
+			if tc.removed {
+				removed, retained, withdrawn = []string{nameB}, nil, []string{nameB}
+			}
+			if tc.running == "" {
+				removed = []string{nameB, nameC}
+			}
+			if !slices.Equal(res.Deleted, removed) || !slices.Equal(res.Retained, retained) {
+				t.Errorf("Deleted = %v and Retained = %v, want %v and %v", res.Deleted, res.Retained, removed, retained)
+			}
+			if !slices.Equal(after.Withdrawn(), withdrawn) {
+				t.Errorf("Withdrawn() = %v, want %v: the engine runs the value it read until a revision activates",
+					after.Withdrawn(), withdrawn)
+			}
+			if !slices.Equal(after.Retained(), retained) {
+				t.Errorf("State.Retained() = %v, want %v", after.Retained(), retained)
+			}
+			if !slices.Equal(after.LetGo(revision1), tc.recorded.LetGo(revision1)) {
+				t.Errorf("the sync changed the recorded activation: LetGo = %v, want %v",
+					after.LetGo(revision1), tc.recorded.LetGo(revision1))
+			}
+		})
+	}
+
+	t.Run("withdrawn until a revision activates", func(t *testing.T) {
+		// Whatever the syncs in between: pushed again, the engine still
+		// runs what it read before.
+		eng := newFakeEngine()
+		state, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a", nameB: "b"}), letsGoB)
+		gone := desiredOf(map[string]string{nameA: "a"})
+		gone.absent = map[string]*MissingError{nameB: {Key: keyB, Reason: SecretNotFound}}
+		gone.Keep(revision1, nameA, nameB)
+		after, _ := mustSync(t, eng, gone, state)
+		again := desiredOf(map[string]string{nameA: "a", nameB: "b2"})
+		again.Keep(revision1, nameA, nameB)
+		after, _ = mustSync(t, eng, again, after)
+		if !slices.Equal(after.Withdrawn(), []string{nameB}) || len(after.Retained()) != 0 {
+			t.Errorf("Withdrawn() = %v and Retained() = %v after the value came back, want [%s] and none",
+				after.Withdrawn(), after.Retained(), nameB)
+		}
+		if got := after.Reactivated().Withdrawn(); len(got) != 0 {
+			t.Errorf("Reactivated().Withdrawn() = %v, want none", got)
+		}
+	})
+
+	t.Run("lost by the engine while the running revision requires it", func(t *testing.T) {
+		// A value the store lost owes no activation where the running
+		// revision requires it: activated again, it would start without
+		// it what it has been starting with it.
+		eng := newFakeEngine()
+		state, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a", nameB: "b"}), State{}.Activated(revision1, nil))
+		delete(eng.entries, nameB)
+		gone := desiredOf(map[string]string{nameA: "a"})
+		gone.absent = map[string]*MissingError{nameB: {Key: keyB, Reason: SecretNotFound}}
+		gone.Keep(revision1, nameA, nameB)
+		after, res := mustSync(t, eng, gone, state)
+		if len(after.Withdrawn()) != 0 || len(res.Retained) != 0 {
+			t.Errorf("Withdrawn() = %v and Retained = %v, want none: nothing was removed, and nothing is held", after.Withdrawn(), res.Retained)
+		}
+		held := Desired{partial: true, absent: gone.absent}
+		held.Keep(revision1, nameA, nameB)
+		after, res, err := Withdraw(context.Background(), eng, held, state)
+		if err != nil || len(after.Withdrawn()) != 0 || len(res.Deleted)+len(res.Retained) != 0 {
+			t.Errorf("Withdraw: Withdrawn() = %v and %+v (%v), want nothing", after.Withdrawn(), res, err)
+		}
+	})
+
+	t.Run("retained, then let go", func(t *testing.T) {
+		// A name kept for a revision that requires it goes once the
+		// operator has activated one that lets it go.
+		eng := newFakeEngine()
+		state, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a", nameB: "b"}), State{}.Activated(revision1, nil))
+		gone := desiredOf(map[string]string{nameA: "a"})
+		gone.absent = map[string]*MissingError{nameB: {Key: keyB, Reason: SecretNotFound}}
+		kept := gone
+		kept.Keep(revision1, nameA, nameB)
+		state, res := mustSync(t, eng, kept, state)
+		if !slices.Equal(res.Retained, []string{nameB}) || len(state.Withdrawn()) != 0 {
+			t.Fatalf("Retained = %v and Withdrawn() = %v, want [%s] and none", res.Retained, state.Withdrawn(), nameB)
+		}
+		eng.takeCalls()
+		state, res = mustSync(t, eng, gone, state.Activated(revision2, []secretref.Key{keyB}))
+		assertCalls(t, eng, "list", "delete "+nameB)
+		if !slices.Equal(res.Deleted, []string{nameB}) || !slices.Equal(state.Withdrawn(), []string{nameB}) ||
+			len(state.Retained()) != 0 {
+			t.Errorf("Deleted = %v, Withdrawn() = %v and Retained() = %v, want [%s], [%s] and none",
+				res.Deleted, state.Withdrawn(), state.Retained(), nameB, nameB)
+		}
+	})
+}
+
+// TestSyncRefusesAPartialDesired: a Desired Resolve returned with an error
+// pushes nothing, and synced it would delete every entry the operator owns.
+func TestSyncRefusesAPartialDesired(t *testing.T) {
+	eng := newFakeEngine()
+	state, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a"}), State{})
+	eng.takeCalls()
+	next, _, err := Sync(context.Background(), eng, Desired{partial: true}, state, self)
+	if err == nil {
+		t.Fatal("Sync took a partial Desired")
+	}
+	assertCalls(t, eng)
+	assertStore(t, eng, map[string]fakeEntry{nameA: {value: "a", by: self}})
+	if !maps.EqualFunc(next.fingerprints, state.fingerprints, bytes.Equal) {
+		t.Errorf("the state changed: %v, want %v", next, state)
+	}
+}
+
+// TestWithdrawRemovesOnlyAbsentValues: while a document cannot be applied,
+// Withdraw removes the entry of every optional reference whose Secret or key
+// is gone and records it as withdrawn, and leaves every other entry as the
+// running revision needs it: what it requires, what a partial Desired does
+// not push, what somebody else wrote. An absent name the operator pushed and
+// the engine no longer lists was removed by a run that stopped before saving
+// it, and is withdrawn too.
+func TestWithdrawRemovesOnlyAbsentValues(t *testing.T) {
+	eng := newFakeEngine()
+	eng.entries[foreignName] = fakeEntry{value: foreignValue, by: access}
+	state, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a", nameB: "b", nameC: "c"}), State{})
+	delete(eng.entries, nameC)
+	eng.takeCalls()
+
+	held := Desired{partial: true, absent: map[string]*MissingError{
+		nameB: {Key: keyB, Reason: SecretNotFound}, nameC: {Key: keyC, Reason: KeyNotFound},
+	}}
+	next, res, err := Withdraw(context.Background(), eng, held, state)
+	if err != nil {
+		t.Fatalf("Withdraw: %v", err)
+	}
+	assertCalls(t, eng, "list", "delete "+nameB)
+	if !slices.Equal(res.Deleted, []string{nameB}) || len(res.Retained) != 0 {
+		t.Errorf("Deleted = %v and Retained = %v, want [%s] and none", res.Deleted, res.Retained, nameB)
+	}
+	assertStore(t, eng, map[string]fakeEntry{nameA: {value: "a", by: self}, foreignName: {value: foreignValue, by: access}})
+	if want := []string{nameB, nameC}; !slices.Equal(next.Withdrawn(), slices.Sorted(slices.Values(want))) {
+		t.Errorf("Withdrawn() = %v, want %v", next.Withdrawn(), want)
+	}
+	if _, ok := next.fingerprints[nameA]; !ok || len(next.fingerprints) != 1 {
+		t.Errorf("fingerprints = %v, want %s's alone", next, nameA)
+	}
+
+	// A second Withdraw has nothing to remove and keeps the record.
+	eng.takeCalls()
+	again, res, err := Withdraw(context.Background(), eng, held, next)
+	if err != nil || len(res.Deleted) != 0 || !slices.Equal(again.Withdrawn(), next.Withdrawn()) {
+		t.Fatalf("Withdraw again = %v, %v, %v", again.Withdrawn(), res.Deleted, err)
+	}
+	assertCalls(t, eng, "list")
+
+	// Nothing absent: nothing is read or removed.
+	if _, res, err := Withdraw(context.Background(), eng, Desired{partial: true}, next); err != nil || res.Deleted != nil {
+		t.Fatalf("Withdraw of nothing = %v, %v", res.Deleted, err)
+	}
+	assertCalls(t, eng)
+}
+
+// TestWithdrawKeepsWhatTheRunningRevisionRequires: while the next document
+// is held, the running revision keeps every value it reads as required,
+// that of a Secret deleted since included, and only a name it lets go, as
+// the state recorded when the operator activated it, or does not reference
+// at all, is removed. What it keeps is Retained, in the Result and in the
+// State, until nothing is absent.
+func TestWithdrawKeepsWhatTheRunningRevisionRequires(t *testing.T) {
+	eng := newFakeEngine()
+	state, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a", nameB: "b", nameC: "c"}),
+		State{}.Activated(revision1, []secretref.Key{keyC}))
+	eng.takeCalls()
+
+	held := Desired{partial: true, absent: map[string]*MissingError{
+		nameA: {Key: keyA, Reason: SecretNotFound},
+		nameB: {Key: keyB, Reason: SecretNotFound},
+		nameC: {Key: keyC, Reason: KeyNotFound},
+	}}
+	// The running revision references nameB, which it requires, and
+	// nameC, which it lets go; nameA it does not reference.
+	held.Keep(revision1, nameB, nameC)
+	next, res, err := Withdraw(context.Background(), eng, held, state)
+	if err != nil {
+		t.Fatalf("Withdraw: %v", err)
+	}
+	assertCalls(t, eng, "list", "delete "+nameA, "delete "+nameC)
+	assertStore(t, eng, map[string]fakeEntry{nameB: {value: "b", by: self}})
+	if !slices.Equal(res.Deleted, []string{nameA, nameC}) || !slices.Equal(res.Retained, []string{nameB}) {
+		t.Errorf("Deleted = %v and Retained = %v, want [%s %s] and [%s]", res.Deleted, res.Retained, nameA, nameC, nameB)
+	}
+	if !slices.Equal(next.Withdrawn(), []string{nameA, nameC}) || !slices.Equal(next.Retained(), []string{nameB}) {
+		t.Errorf("Withdrawn() = %v and Retained() = %v", next.Withdrawn(), next.Retained())
+	}
+	if _, ok := next.fingerprints[nameB]; !ok {
+		t.Error("the state forgot the value it keeps")
+	}
+
+	// Run by somebody else, the same document lets nothing go.
+	eng = newFakeEngine()
+	state, _ = mustSync(t, eng, desiredOf(map[string]string{nameB: "b", nameC: "c"}), State{}.Activated(revision1, []secretref.Key{keyC}))
+	eng.takeCalls()
+	other := held
+	other.Keep(revision2, nameB, nameC)
+	_, res, err = Withdraw(context.Background(), eng, other, state)
+	if err != nil {
+		t.Fatalf("Withdraw: %v", err)
+	}
+	assertCalls(t, eng, "list")
+	if len(res.Deleted) != 0 || !slices.Equal(res.Retained, []string{nameB, nameC}) {
+		t.Errorf("Deleted = %v and Retained = %v under a revision the operator did not activate, want none and both",
+			res.Deleted, res.Retained)
+	}
+
+	// Nothing absent any more: nothing is retained either.
+	cleared, res, err := Withdraw(context.Background(), eng, Desired{partial: true}, next)
+	if err != nil || len(res.Retained) != 0 || len(cleared.Retained()) != 0 {
+		t.Fatalf("Withdraw of nothing = %v, %v, %v", res.Retained, cleared.Retained(), err)
+	}
+}
+
+// TestARevisionThatLetsANameGoGoesWithoutItWhateverTheNextDocumentReads:
+// the store serves every revision by its own reading, so a name the running
+// revision lets go whose Secret is gone (Desired.Release) leaves the store
+// and is withdrawn, by Sync and by Withdraw alike, whether the next document
+// reads it where it is required (and is held for it) or does not reference it
+// at all; while a revision the State does not record as letting it go keeps
+// it, and a value the next document pushes is pushed. A pushed name the
+// engine no longer lists was removed by a run that did not save it, and is
+// withdrawn too.
+func TestARevisionThatLetsANameGoGoesWithoutItWhateverTheNextDocumentReads(t *testing.T) {
+	ctx := context.Background()
+	letsGoB := State{}.Activated(revision1, []secretref.Key{keyB})
+	goneB := []*MissingError{{Key: keyB, Reason: SecretNotFound}}
+	for _, tc := range []struct {
+		name     string
+		recorded State
+		running  string
+		removed  bool
+	}{
+		{name: "the running revision lets it go", recorded: letsGoB, running: revision1, removed: true},
+		{name: "the running revision requires it", recorded: State{}.Activated(revision1, []secretref.Key{keyC}), running: revision1},
+		{name: "somebody else activated the running revision", recorded: letsGoB, running: revision2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// The next document requires nameB, whose Secret is gone, and
+			// is held for it: Withdraw.
+			eng := newFakeEngine()
+			state, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a", nameB: "b", nameC: "c"}), tc.recorded)
+			eng.takeCalls()
+			held := Desired{partial: true}
+			held.Keep(tc.running, nameA, nameB, nameC)
+			held.Release(goneB...)
+			next, res, err := Withdraw(ctx, eng, held, state)
+			if err != nil {
+				t.Fatalf("Withdraw: %v", err)
+			}
+			if tc.removed {
+				assertCalls(t, eng, "list", "delete "+nameB)
+			} else {
+				assertCalls(t, eng, "list")
+			}
+			if eng.holds(nameB) == tc.removed || len(res.Retained) != 0 || slices.Contains(next.Withdrawn(), nameB) != tc.removed {
+				t.Errorf("Withdraw: the store holds %s: %t, Retained = %v, Withdrawn() = %v; want it removed: %t, "+
+					"nothing retained", nameB, eng.holds(nameB), res.Retained, next.Withdrawn(), tc.removed)
+			}
+
+			// The next document does not reference nameB: Sync before the
+			// apply.
+			eng = newFakeEngine()
+			state, _ = mustSync(t, eng, desiredOf(map[string]string{nameA: "a", nameB: "b", nameC: "c"}), tc.recorded)
+			eng.takeCalls()
+			unreferenced := desiredOf(map[string]string{nameA: "a", nameC: "c"})
+			unreferenced.Keep(tc.running, nameA, nameB, nameC)
+			unreferenced.Release(goneB...)
+			next, res = mustSync(t, eng, unreferenced, state)
+			if eng.holds(nameB) == tc.removed || len(res.Retained) != 0 || slices.Contains(next.Withdrawn(), nameB) != tc.removed {
+				t.Errorf("Sync: the store holds %s: %t, Retained = %v, Withdrawn() = %v; want it removed: %t, "+
+					"nothing retained", nameB, eng.holds(nameB), res.Retained, next.Withdrawn(), tc.removed)
+			}
+
+			// Removed by a run that did not save it.
+			eng = newFakeEngine()
+			state, _ = mustSync(t, eng, desiredOf(map[string]string{nameA: "a", nameB: "b", nameC: "c"}), tc.recorded)
+			delete(eng.entries, nameB)
+			next, _, err = Withdraw(ctx, eng, held, state)
+			if err != nil || slices.Contains(next.Withdrawn(), nameB) != tc.removed {
+				t.Errorf("Withdraw of a name the engine no longer lists: Withdrawn() = %v (%v), want it withdrawn: %t",
+					next.Withdrawn(), err, tc.removed)
+			}
+			next, _ = mustSync(t, eng, unreferenced, state)
+			if slices.Contains(next.Withdrawn(), nameB) != tc.removed {
+				t.Errorf("Sync of a name the engine no longer lists: Withdrawn() = %v, want it withdrawn: %t", next.Withdrawn(), tc.removed)
+			}
+		})
+	}
+
+	t.Run("read again since", func(t *testing.T) {
+		// The Secret came back between the two reads: its value is pushed,
+		// never removed, and nothing is withdrawn, the store having lost
+		// it in between or not.
+		eng := newFakeEngine()
+		state, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a", nameB: "b"}), letsGoB)
+		delete(eng.entries, nameB)
+		back := desiredOf(map[string]string{nameA: "a", nameB: "b2"})
+		back.Keep(revision1, nameA, nameB)
+		back.Release(goneB...)
+		next, res := mustSync(t, eng, back, state)
+		if !eng.holds(nameB) || len(res.Deleted) != 0 || len(next.Withdrawn()) != 0 {
+			t.Errorf("the store holds %s: %t, Deleted = %v, Withdrawn() = %v; want it pushed and nothing removed",
+				nameB, eng.holds(nameB), res.Deleted, next.Withdrawn())
+		}
+	})
 }

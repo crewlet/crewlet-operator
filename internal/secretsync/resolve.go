@@ -63,13 +63,34 @@ func (e *TooLargeError) Error() string {
 }
 
 // Desired is the set of store entries a company's references call for: a
-// value per store name, and the names to keep without pushing (see Keep).
+// value per store name, the names to keep without pushing (see Keep), and the
+// names that are to hold no value: those of optional references whose Secret
+// or key does not exist (see Resolve), each removed from the store unless the
+// revision the engine runs reads it as required, and those the revision the
+// engine runs lets go without whose Secret or key does not exist (see
+// Release).
 //
 // It formats as its names only, under every verb and through logr, so a
 // Desired that ends up in a log line or an error by mistake leaks nothing.
 type Desired struct {
 	values map[string][]byte
-	kept   map[string]struct{}
+	// kept are the names the running revision, running, references (Keep).
+	kept    map[string]struct{}
+	running string
+	// absent are the optional references whose Secret or key does not
+	// exist, by store name, each as the *MissingError it would be were it
+	// required; empty are the references whose Secret key holds an empty
+	// value, which is pushed as it is, as a set.
+	absent map[string]*MissingError
+	empty  map[secretref.Key]struct{}
+	// released are the references the running revision lets go without
+	// whose Secret or key does not exist, by store name (Release).
+	released map[string]*MissingError
+	// partial is a Desired Resolve returned beside the references it could
+	// not read: it holds what they say about the others (Missing, Empty),
+	// and no value, so Sync refuses it rather than delete every entry it
+	// does not push.
+	partial bool
 }
 
 // Names returns the names Desired pushes, sorted.
@@ -77,8 +98,9 @@ func (d Desired) Names() []string {
 	return slices.Sorted(maps.Keys(d.values))
 }
 
-// Keep adds names that Sync must not delete although Desired pushes no value
-// for them.
+// Keep says what of the store the revision the engine runs needs: revision is
+// its id, and names the store names its document references, which Sync and
+// Withdraw do not delete although Desired pushes no value for them.
 //
 // It is for the window between two documents. Sync runs before the next
 // document is applied, so that every name the next document references
@@ -86,15 +108,110 @@ func (d Desired) Names() []string {
 // document still references the previous names, and deleting one would make
 // the engine resolve it to an empty credential at its next activation, or
 // for as long as the next document fails to apply. Pass the running
-// document's names here, and drop them once the next document is running.
-// Names Owns does not accept are never deleted anyway, and are ignored.
-func (d *Desired) Keep(names ...string) {
+// revision's id and names here. Names Owns does not accept are never deleted
+// anyway, and are ignored.
+//
+// An absent name (Missing) among names is kept too, unless the State Sync or
+// Withdraw is given records revision as letting the name go without
+// (State.LetGo): the store serves every revision by that revision's own
+// reading of a name, and the running one, which the operator has to keep
+// whole until the next document is applied, may read as required a name the
+// next document lets go without. Kept, its entry holds the value the Secret
+// had, until a revision that lets it go runs (Result.Retained); removed, the
+// engine resolves the name to nothing at its next activation, and leaves the
+// key out.
+func (d *Desired) Keep(revision string, names ...string) {
+	d.running = revision
 	if d.kept == nil {
 		d.kept = make(map[string]struct{}, len(names))
 	}
 	for _, name := range names {
 		d.kept[name] = struct{}{}
 	}
+}
+
+// Running is the revision Keep named, empty for none.
+func (d Desired) Running() string {
+	return d.running
+}
+
+// Release names the references the revision the engine runs lets go without
+// whose Secret or key does not exist, as Absent reports them of
+// State.LetGoKeys of that revision: Sync and Withdraw remove the entry of
+// each that the State they are given records the revision Keep names as
+// letting go, whatever the next document reads of it, and record it as
+// withdrawn.
+//
+// That is the other half of serving every revision by its own reading. The
+// next document may reference such a key where it is required, or not at
+// all, so its absent names (Missing) never name it; but the revision the
+// engine runs lets it go, and would go on starting what it starts with the
+// deleted Secret's value for as long as the next document is held, or the
+// engine refuses it. Removing it costs the next document nothing: one that
+// requires it cannot be applied until the Secret exists again, and Sync
+// pushes the value then.
+func (d *Desired) Release(absent ...*MissingError) {
+	if d.released == nil {
+		d.released = make(map[string]*MissingError, len(absent))
+	}
+	for _, m := range absent {
+		d.released[StoreName(m.Key)] = m
+	}
+}
+
+// retains reports whether name, absent, stays in the store: the running
+// revision references it (Keep) and reads it as required, which it does
+// unless prev records it as letting the name go without (State.LetGo).
+func (d Desired) retains(name string, prev State) bool {
+	_, kept := d.kept[name]
+	return kept && !prev.letsGo(d.running, name)
+}
+
+// gone reports whether name stands for a reference whose Secret or key does
+// not exist, absent from the next document (Missing) or released by the
+// running revision (Release), and whether its entry is to leave the store:
+// it is unless the running revision reads it as required (retains). A name
+// Desired pushes a value for is neither, whatever else says it is gone: its
+// Secret was read after.
+func (d Desired) gone(name string, prev State) (absent, removed bool) {
+	if _, ok := d.values[name]; ok {
+		return false, false
+	}
+	if _, ok := d.absent[name]; ok {
+		return true, !d.retains(name, prev)
+	}
+	if _, ok := d.released[name]; ok && prev.letsGo(d.running, name) {
+		return true, true
+	}
+	return false, false
+}
+
+// goneNames are the store names of absent and released, sorted.
+func (d Desired) goneNames() []string {
+	names := slices.Collect(maps.Keys(d.absent))
+	for name := range d.released {
+		if _, ok := d.absent[name]; !ok {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
+// Missing are the optional references whose Secret or key does not exist,
+// which hold no value in the store but where the revision the engine runs
+// reads them as required (see Keep), sorted as Resolve sorts its errors.
+func (d Desired) Missing() []*MissingError {
+	return slices.SortedFunc(maps.Values(d.absent), func(a, b *MissingError) int { return secretref.Compare(a.Key, b.Key) })
+}
+
+// Empty are the references whose Secret key holds an empty value, sorted. The
+// value is pushed as it is: the engine starts no tool server or coding run
+// with a value that resolves to nothing, unless the key it is written under
+// is optional, when it leaves the key out, and reads it as written anywhere
+// else.
+func (d Desired) Empty() []secretref.Key {
+	return slices.SortedFunc(maps.Keys(d.empty), secretref.Compare)
 }
 
 // String returns the names Desired pushes, never a value.
@@ -124,10 +241,21 @@ func (d Desired) MarshalLog() any {
 // Every reference whose Secret or key does not exist is reported, as a
 // *MissingError, and every value over MaxValueBytes as a *TooLargeError,
 // joined into one error so the caller can report each on the object that made
-// it; Desired is then empty, because a company document is applied whole or
-// not at all. Any other error is the API server's, returned as soon as it
-// happens.
-func Resolve(ctx context.Context, r client.Reader, keys []secretref.Key) (Desired, error) {
+// it; Desired then pushes nothing, because a company document is applied
+// whole or not at all, and Sync refuses it. What it still says is what was
+// read of the other references, Missing and Empty, which hold whatever became
+// of the rest: Withdraw takes it. Any other error is the API server's,
+// returned as soon as it happens.
+//
+// A reference of optional, the keys every reference to which the document
+// lets go without its value (render.Document.Optional), is the exception, as
+// a missing optional secretKeyRef is to Kubernetes: a Secret or key that does
+// not exist there is no error but an absent value (Missing), whose store
+// entry Sync and Withdraw remove wherever the revision the engine runs lets
+// it go too (see Keep), so the engine resolves the reference to nothing and
+// leaves its key out rather than start with a value the Secret no longer
+// holds. A value over MaxValueBytes is refused there too: it is there.
+func Resolve(ctx context.Context, r client.Reader, keys, optional []secretref.Key) (Desired, error) {
 	bySecret := map[types.NamespacedName][]secretref.Key{}
 	for _, k := range keys {
 		ref := types.NamespacedName{Namespace: k.Namespace, Name: k.Name}
@@ -137,7 +265,16 @@ func Resolve(ctx context.Context, r client.Reader, keys []secretref.Key) (Desire
 	}
 
 	values := make(map[string][]byte, len(keys))
+	absent := map[string]*MissingError{}
+	empty := map[secretref.Key]struct{}{}
 	var problems []error
+	missing := func(k secretref.Key, reason MissingReason) {
+		if slices.Contains(optional, k) {
+			absent[StoreName(k)] = &MissingError{Key: k, Reason: reason}
+			return
+		}
+		problems = append(problems, &MissingError{Key: k, Reason: reason})
+	}
 	// Sorted, so the joined error reads the same on every reconcile and a
 	// condition built from it does not flap.
 	for _, ref := range slices.SortedFunc(maps.Keys(bySecret), compareRefs) {
@@ -150,7 +287,7 @@ func Resolve(ctx context.Context, r client.Reader, keys []secretref.Key) (Desire
 				return Desired{}, fmt.Errorf("reading Secret %s: %w", ref, err)
 			}
 			for _, k := range refKeys {
-				problems = append(problems, &MissingError{Key: k, Reason: SecretNotFound})
+				missing(k, SecretNotFound)
 			}
 			continue
 		}
@@ -158,18 +295,40 @@ func Resolve(ctx context.Context, r client.Reader, keys []secretref.Key) (Desire
 			value, ok := secret.Data[k.Key]
 			switch {
 			case !ok:
-				problems = append(problems, &MissingError{Key: k, Reason: KeyNotFound})
+				missing(k, KeyNotFound)
 			case len(value) > MaxValueBytes:
 				problems = append(problems, &TooLargeError{Key: k, Size: len(value)})
 			default:
 				values[StoreName(k)] = value
+				if len(value) == 0 {
+					empty[k] = struct{}{}
+				}
 			}
 		}
 	}
 	if len(problems) > 0 {
-		return Desired{}, errors.Join(problems...)
+		return Desired{absent: absent, empty: empty, partial: true}, errors.Join(problems...)
 	}
-	return Desired{values: values}, nil
+	return Desired{values: values, absent: absent, empty: empty}, nil
+}
+
+// Absent reads keys, with r, an uncached reader as Resolve takes, and returns
+// those whose Secret or key does not exist, sorted as Resolve sorts its
+// errors: for Desired.Release, of the keys the running revision lets go
+// without (State.LetGoKeys). A value over MaxValueBytes is there, so it is no
+// concern here. Any other error is the API server's.
+func Absent(ctx context.Context, r client.Reader, keys []secretref.Key) ([]*MissingError, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	read, err := Resolve(ctx, r, keys, keys)
+	if err != nil && !read.partial {
+		// The API server's. One beside a partial read is about the
+		// references, and with every one of them optional it can only be a
+		// value too large, which is there.
+		return nil, err
+	}
+	return read.Missing(), nil
 }
 
 func compareRefs(a, b types.NamespacedName) int {

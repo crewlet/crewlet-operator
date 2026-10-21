@@ -124,6 +124,7 @@ type SeatLLM struct {
 // SeatSandbox gives a seat a sandbox to run code in, on the Company's
 // spec.sandbox. It maps onto Crewlet's role `sandbox`; its presence is
 // Crewlet's `enabled: true`.
+// +kubebuilder:validation:XValidation:rule="!has(self.optionalKeys) || self.optionalKeys.all(k, has(self.env) && self.env.exists(e, e.name == k))",message="optionalKeys may name only a variable of env: an entry naming anything else leaves nothing out",fieldPath=".optionalKeys"
 type SeatSandbox struct {
 	// codingAgent is the coding agent the seat's sandbox runs. Unset takes
 	// the Company's spec.sandbox.defaultCodingAgent. ClaudeCode runs on an
@@ -165,14 +166,44 @@ type SeatSandbox struct {
 	// the seat, named as its tool server's is so both are one token. A
 	// ClaudeCode sign-in here (CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY,
 	// ANTHROPIC_AUTH_TOKEN or a CLAUDE_CODE_USE_* toggle) keeps the key and
-	// endpoint of the provider the code work runs on out of the box, and a
-	// variable named as one the provider would set wins over it. Crewlet's
-	// `env`, a credential position.
+	// endpoint of the provider the code work runs on out of the box, unless
+	// a run goes without its value (optionalKeys), when the box is given
+	// them as it is with no sign-in; and a variable named as one the
+	// provider would set wins over it. Crewlet's `env`, a credential
+	// position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=32
 	Env []SeatEnvVar `json:"env,omitempty"`
+
+	// optionalKeys names variables of env whose value may go missing. Crewlet
+	// refuses to start a run_sandbox coding run whose environment holds a value
+	// that does not resolve: a Secret that does not exist, holds no such key or
+	// holds an empty value, or a provisioned value nothing mints. Under a variable
+	// listed here, such a value is left out of the run instead, which starts
+	// without it. A missing Secret or key under one is then no failure of the
+	// Seat's references and holds nothing back. Under the Enforce policy the
+	// operator also takes the value it pushed for it out of the engine's secret
+	// store, and has the engine read the store again whether or not the document
+	// can be applied, so no run starts with a deleted Secret's value, but in a
+	// revision the engine runs that reads the key as required (one from before the
+	// key was listed) or whose reading the operator does not know (another
+	// document somebody else activated), which keeps the value until the next
+	// document runs, and that one is activated once with it and at once again
+	// without it; a Secret key that is also read where it is required holds the
+	// document while it is missing, and keeps the value it had in a revision the
+	// engine runs that requires it too until the document applies. A provisioned
+	// value an Integration mints for the seat is waited for whatever this says.
+	// env wins over a setup step's variable of the same name, and so does this
+	// list over the step's optionalKeys for it. Crewlet's `optional_keys`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=32
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=128
+	// +kubebuilder:validation:items:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
+	OptionalKeys []string `json:"optionalKeys,omitempty"`
 
 	// setup is the seat's own provisioning, applied after the Company's.
 	// Crewlet's `setup`.

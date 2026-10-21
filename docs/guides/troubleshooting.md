@@ -85,7 +85,7 @@ with your last change yet.
 | | False | `GatewayAPINotInstalled` | The class routes through Gateways and the cluster had no Gateway API when the operator started. Install it and restart the operator. |
 | | False | `PublicBaseURLMissing` | The class's webhooks mode is `External` and the Company has no `spec.exposure.publicBaseURL`. |
 | | False | `RouteNotHTTPS` | No Gateway listener the artifacts route attaches to is HTTPS, so the data pod opens no artifact origin; add one with a certificate for the route's host. |
-| `SecretsSynced` | True | `Synced` | The engine's secret store holds every referenced value. |
+| `SecretsSynced` | True | `Synced` | The engine's secret store holds every referenced value. The message counts the values a tool server or a coding run may go without whose Secret or key does not exist, which the store does not hold, so the engine leaves each out ([A key that may go without its value](tool-servers.md#a-key-that-may-go-without-its-value)); names, in a sentence of its own, those the store keeps as they were for the revision the engine runs, because that revision reads them as required or is one whose reading the operator does not know (another document somebody else activated), each to go once a revision that lets it go runs; and, the Company having no `ResolvedRefs`, names the values of its own setup steps a run goes without, under a key a step's `optionalKeys` lists, and a value of theirs that holds nothing under a key none lists, which has every `run_sandbox` coding run refused. |
 | | False | `SecretNotFound` | A referenced Secret or key is missing; the message names each. |
 | | False | `SecretTooLarge` | A value is over the 64 KiB the store accepts. |
 | | False | `EngineUnavailable` | Writing to the store failed; the message says why. Retried. |
@@ -109,7 +109,7 @@ with your last change yet.
 | | True | `DriftCorrected` | Under `Enforce`, someone changed the document in the engine and the operator applied the rendered one over it. A `Drifted` event names what differed. |
 | | True | `InSync` | Under `Observe`, the engine runs exactly the rendered document. |
 | | True | `Seeded` | Under `Seed`, the engine has a document and owns it from now on. |
-| | False | `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `HumanSeat`, `SecretNotFound`, `SecretTooLarge`, `PerSeatNotAllowed`, `CLIAuthNotPortable`, `CodingAgentMismatch` | An object of the company keeps the document from rendering. The object at fault reports the same reason on `Applied`; fix it there ([What blocks a document](../concepts/company-document.md#what-blocks-a-document)). |
+| | False | `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `HumanSeat`, `SecretNotFound`, `SecretTooLarge`, `PerSeatNotAllowed`, `CLIAuthNotPortable`, `CodingAgentMismatch`, `OptionalKeyUnused` | An object of the company keeps the document from rendering. The object at fault reports the same reason on `Applied`; fix it there ([What blocks a document](../concepts/company-document.md#what-blocks-a-document)). Meanwhile, under `Enforce`, the operator still takes out of the engine's secret store the value of a deleted Secret the document lets go without, and activates the running revision again so the engine reads the store without it, with a `Reactivated` event, where the running revision lets the value go too, or a Warning `Reactivated` when the revision activated again is not the document it read; one that reads it as required, or another document somebody else activated, keeps it until the next document runs, with a `SecretKept` event, the only report of it here, since the Secrets are not read ([A key that may go without its value](tool-servers.md#a-key-that-may-go-without-its-value)). |
 | | False | `NameConflict` | The Secret `<company>-secret-sync`, where the operator keeps what it pushed to the engine's store, exists and is someone else's; `SecretsSynced` says the same. Rename or delete it; nothing is applied meanwhile. |
 | | False | `SeatPoolsNotAllowed` | The Company declares `spec.topology.seatPools`, and its class's `seatPools.policy` is not `Allowed`. Remove the pools, or run the company with a class that allows them. |
 | | False | `PoolCapacityExceeded` | The company's seat pods would number more than its class's `seatPools.maxPods`: its Shared pools' replicas alone (the message says so; lower them), or with the pods of its PerSeat seats, each of which reports it too. |
@@ -143,16 +143,18 @@ conditions. `kubectl get engineclasses` shows it.
 | `Accepted` | True | `Valid` | Its Company exists and nothing collides with it. |
 | | False | `CompanyNotFound` | `spec.companyRef` names no Company in the namespace. |
 | | False | `CompanyNotAccepted` | Its Company is not `Accepted` (its class is gone, or it is over its class's limits); the message carries why. Nothing of the company is applied until it is. |
-| | False | `Conflict` | Crewlet would read it and another object as one: two Seats with one handle, email address or contact account; two Integrations for one vendor; an LLMProvider named like a platform provider of the class. The message names the other object. |
-| `ResolvedRefs` | True | `Resolved` | Every object and Secret key it references exists. |
+| | False | `Conflict` | Crewlet would read it and another object as one: two Seats with one handle, email address or contact account; two Integrations for one vendor; an LLMProvider named like a platform provider of the class; a Seat's header for an HTTP tool server spelled unlike its Unit spells it (`authorization` beside `Authorization`), which Crewlet would send either of. The message names the other object. |
+| `ResolvedRefs` | True | `Resolved` | Every object and Secret key it references exists; or the message names the values it gives a tool server or a coding run that it goes without, whose Secret or key does not exist or holds an empty value, under a key an `optionalKeys` list lets the engine leave out, and that list: the MCPServer's for a value of a tool server's, a Seat's or Unit's included ([A key that may go without its value](tool-servers.md#a-key-that-may-go-without-its-value)). A line that adds that the engine keeps the value it held for the revision it runs names a deleted Secret's value that revision reads as required, or whose reading the operator does not know; it goes once a revision that lets it go runs. It says so while a Secret another object requires holds the document too; while another object keeps the document from rendering, the Secrets are not read, and the message says only that every object it references exists. |
 | | False | `RefNotFound` | It references an object that does not exist (a Unit, a Seat, an LLMProvider, an MCPServer); the message names it. |
 | | False | `Cycle` | A Unit's `parentRef` chain leads back to itself. |
 | | False | `PoolNotFound` | A Seat's `spec.placement.pool` is neither `data` nor one of its Company's `spec.topology.seatPools`. The seat is applied all the same, pinned to the label `crewlet.ai/undeclared-pool`, which no pod carries: it runs nowhere (`Ready=False`, `PoolNotFound`), or keeps running where it ran (`Applied=False`, `PlacementPending`), until the Company declares the pool or the Seat names another. Nothing else is held. |
 | | False | `HumanSeat` | A Schedule's `target.seatRef` or a Datadog Integration's `routeTo.seatRef` names a Human seat, for whom the engine runs no turn, which holds the document. Name an Agent seat (a Schedule may target the person's unit with `fanOut: Each`). On a GitLab Integration's `accessLevels` entry it holds nothing: the engine creates no GitLab account for a person, so the entry grants nothing, and the Integration is applied. |
-| | False | `NoProvisioner` | A Seat names a provisioned credential, and no Integration of its company has `provisioning: Engine`, so nothing creates the value: the engine starts none of the seat's tool servers that take it ([A tool server does not start](#a-tool-server-does-not-start)), and the seat's chat app or code work runs without it. The seat is applied all the same, and gets the value once an Integration provisions. Give the value from a Secret, or provision the vendor with the engine ([Connecting integrations](integrations.md#who-creates-the-seats-accounts)). |
+| | False | `NoProvisioner` | A Seat names a provisioned credential, and no Integration of its company has `provisioning: Engine`, so nothing creates the value: the engine starts none of the seat's tool servers that take it ([A tool server does not start](#a-tool-server-does-not-start)) and refuses each of the seat's coding runs, unless the `optionalKeys` that governs the value lets them go without it (the MCPServer's, or the seat's `spec.sandbox.optionalKeys`), and the seat's chat app runs without it; `CodeWorkRunnable=False NoProvisioner` says the coding runs are refused. The seat is applied all the same, and gets the value once an Integration provisions. Give the value from a Secret, or provision the vendor with the engine ([Connecting integrations](integrations.md#who-creates-the-seats-accounts)). |
 | | False | `NotAnAccountID` | A person's Seat sets `contact.atlassianAccount` to something that is no Atlassian account id, such as an email address, while its company reaches Jira or Confluence on Atlassian Cloud, which names a person by account id alone: what the person does there reaches no seat, and an agent's mention of them names nobody. The message names each product on Cloud. The seat is applied all the same. Give the person's account id ([A person's accounts](integrations.md#a-persons-accounts)). |
 | | False | `ReferenceNotAllowed` | A string it renders into the document holds a `${NAME}` reference. The operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment ([What blocks a document](../concepts/company-document.md#what-blocks-a-document)). The message names the place in the document. Give a credential with a Secret reference; in a sandbox command, write a variable as `$NAME`, which the sandbox's shell expands. |
-| | False | `SecretNotFound` | A Secret or key it references is missing. |
+| | False | `SecretNotFound` | A Secret or key it references is missing, where it does not let a tool server or a coding run go without the value. |
+| | False | `SecretValueEmpty` | A value it gives a tool server or a coding run is read from a Secret key that holds an empty value, under a key no `optionalKeys` lists, and it is the value the engine starts with (not one every seat replaces with its own). Crewlet starts no tool server, and no `run_sandbox` coding run, with a value that resolves to nothing, so the server it is given to is not started, for the company or the seat ([A tool server does not start](#a-tool-server-does-not-start)), and each of the seat's coding runs is refused before a box exists, which the Seat's `CodeWorkRunnable` says too; an agent-mode executor's run starts without it. The object is applied all the same, with a Warning event. Give the key a value, or list it in the `optionalKeys` the message names: the MCPServer's `spec.optionalKeys` for a server's own value, the Seat's `spec.sandbox.optionalKeys` or the step's for a coding run's. A Seat's or a Unit's value for a tool server is the identity the seat's instance acts as, and the message offers no list for it. |
+| | False | `OptionalKeyUnused` | An MCPServer's `optionalKeys` names a key no value read from a Secret, or provisioned, is written under, not by its own `env` or `headers` nor by any Seat's or Unit's `spec.mcp` for it: none at all, or literal `value`s only, which the message names. It leaves nothing out, and Crewlet refuses it, which holds the document. Remove the entry, name the key it was meant for (a Stdio server's keys are compared as written, and the message names the spelling a key is written in), or read one of the literals from a Secret. Removing a Seat's value, or the Seat, can cause it. |
 | | False | `SecretTooLarge` | A value it references is over 64 KiB. |
 | `Applied` | True | `InRevision` | It is in the revision the engine runs, which the message names; the condition's `observedGeneration` is the generation that revision holds. |
 | | False | `Invalid` | The engine refused its part of the document; the message is the engine's. |
@@ -175,6 +177,8 @@ conditions. `kubectl get engineclasses` shows it.
 | `CodeWorkRunnable` (Agent Seat with `spec.sandbox`, in a Company with `spec.sandbox`, whose executor does not run in agent mode) | True | `CodeWorkSupported` | The seat's coding agent can run on the provider at the head of its sandbox chain, or on the sign-in the seat's sandbox environment gives it; the message says which. It does not count towards `Ready`. |
 | | False | `CodingAgentMismatch` | As under `Applied`, for a seat's code work: Crewlet refuses the pairing on every write, so the seat holds the document too. |
 | | False | `SandboxModelUnsupported` | A Seat's code work runs the `ClaudeCode` coding agent on a provider of type `OpenAI` or `OpenAICompatible`, which Claude Code cannot read, and nothing in its sandbox environment signs Claude Code in, so Crewlet refuses each of the seat's coding runs. The seat is applied and runs its turns. Put an `Anthropic` provider first in `spec.llm.sandbox`, set `spec.sandbox.codingAgent: OpenCode`, or give the seat a Claude Code sign-in in `spec.sandbox.env` (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY`), on which it runs under its own model choice ([Code work](cli-agents.md#code-work)). |
+| | False | `SecretValueEmpty` | A value the seat's coding runs are given (its `spec.sandbox.env`, a setup step's variable or file, the Company's or its own) is read from a Secret key that holds an empty value, under a key no `optionalKeys` lists, so Crewlet refuses each run before a box exists; the message names the value and the list to put it in. The object that gives the value reports it on `ResolvedRefs`, or the Company on `SecretsSynced`. Give the key a value, or list it ([A value a run may go without](cli-agents.md#a-value-a-run-may-go-without)). |
+| | False | `NoProvisioner` | A variable of the seat's `spec.sandbox.env` is a provisioned credential no Integration of the company creates, under a key `spec.sandbox.optionalKeys` does not list, so Crewlet refuses each coding run; see `ResolvedRefs`. |
 | | False | `SandboxLoginNotPortable` | A Seat's code work runs on a `CLIAgent` provider whose login cannot reach the Company's remote sandbox: a `ClaudeCode` signed in by a credential bundle with neither `CLAUDE_CODE_OAUTH_TOKEN` nor `ANTHROPIC_API_KEY` in the seat's sandbox environment, or an `OpenCode` with no credential-named variable in `cli.env` or the seat's sandbox environment. A bundle stays on the data volume, so Crewlet refuses each of the seat's coding runs. The seat is applied and runs its turns. Sign `ClaudeCode` in with `tokenSecretRef` or `auth.mode: APIKey`, or give the seat `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` in `spec.sandbox.env`; sign `OpenCode` in with its model provider's key in `cli.env`, or give the seat that key in `spec.sandbox.env` ([Code work](cli-agents.md#code-work)). |
 | `AgentModeRunnable` (LLMProvider of type `CLIAgent` in `mode: Agent`) | True | `ToolBridgeServed` | Its runs reach the tool bridge at the Company's public address, which the message names. A seat in a seat pool still cannot run on it (see the Seat's `Ready`). |
 | | False | `NotExposed` | The Company has no public address, so every turn of a seat whose executor's chain it heads fails. The provider is applied, and still serves a text call behind a chain's head or in another phase. Give the class a webhooks route or the Company `spec.exposure.publicBaseURL`, or use `mode: Text`. |
@@ -519,7 +523,7 @@ engine pod:
 ```bash
 pod=$(kubectl get seat triage -n acme -o jsonpath='{.status.placement.node}')
 kubectl logs "$pod" -n acme | grep -E 'mcp_server_(failed|credential_missing|awaiting_credential)|server_stderr_tail|empty_env_vars'
-kubectl logs acme-data-0 -n acme | grep -E 'mcp_server_failed|server_stderr_tail|empty_env_vars'   # a shared server
+kubectl logs acme-data-0 -n acme | grep -E 'mcp_server_(failed|credential_missing)|server_stderr_tail|empty_env_vars'   # a shared server
 ```
 
 The engine's dashboard shows every server's state on every pod, as does its
@@ -536,9 +540,10 @@ API's [`GET /mcp-servers`](https://github.com/crewlet/crewlet/blob/main/docs/ref
   reach it otherwise, and the server fails or behaves as though it were
   unset, often naming the variable in `server_stderr_tail`. Give it in the
   server's `env`.
-- **A seat's server waits for its credential, or is not started without
-  it.** The engine starts a seat's server only once every credential the
-  Seat, or its Unit, gives it in `spec.mcp` with `valueFrom` has a value:
+- **The server waits for a value, or is not started without it.** The
+  engine starts a server, shared or a seat's, only once every value it is
+  started with from a Secret or a provisioning pass has one, its own `env`
+  or `headers` and what the Seat, or its Unit, gives it in `spec.mcp`:
   handed an empty token, a vendor's server refuses to start, or starts and
   acts as nobody. One the engine's own provisioning has yet to mint is
   waited for (`mcp_server_awaiting_credential`, at info, and *Waiting for
@@ -547,29 +552,29 @@ API's [`GET /mcp-servers`](https://github.com/crewlet/crewlet/blob/main/docs/ref
   naming the variable, `K8S_…` for a Secret's key and `PROVISIONED_…` for a
   provisioned value
   ([Names in the engine's secret store](../concepts/credentials.md#names-in-the-engines-secret-store)):
-  a Secret key that holds nothing; a provisioned value nothing creates, of
-  which the Seat reports `ResolvedRefs=False NoProvisioner`; or one its
-  Integration cannot mint until somebody acts, such as by giving it a
-  working administrator credential, which the line says in the
-  integration's own words. Once the value is there the server starts: at
-  the next revision for a Secret's, which the operator applies once it has
-  pushed the new value
+  a Secret key that holds an empty value, which the object that gives it
+  reports as `ResolvedRefs=False SecretValueEmpty`; a provisioned value
+  nothing creates, of which the Seat reports `ResolvedRefs=False
+  NoProvisioner`; or one its Integration cannot mint until somebody acts,
+  such as by giving it a working administrator credential, which the line
+  says in the integration's own words. A setting the server can run
+  without, rather than a seat's own credential, is listed in the MCPServer's
+  `optionalKeys`, whichever object gives it, and left out instead
+  ([A key that may go without its value](tool-servers.md#a-key-that-may-go-without-its-value)).
+  Once the value is there the server starts: at the next revision for a
+  Secret's, which the operator applies once it has pushed the new value
   ([Rotating a credential](credentials.md#rotating-a-credential)), and as
   soon as the engine has sealed a provisioned one. A running server whose
   credential stops resolving is stopped, its `mcp_server_retired` line
   naming the variable (Crewlet's
   [Shared vs per-role servers](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#shared-vs-per-role-servers)).
-- **`empty_env_vars` names a variable.** A value the server is handed is
-  empty, and the engine starts it with that value: a `value` written empty
-  on purpose, which needs nothing, such as the Atlassian server's
-  per-product proxy variables beside a proxy auto-config
-  ([Jira and Confluence](tool-servers.md#jira-and-confluence)), or a Secret
-  key that holds nothing in the server's own `env`. A credential a Seat
-  gives never arrives empty (above), but one in a server's own `env` does:
-  a shared server whose key is empty starts, fails to sign in, and is
-  retried. A value that arrives later reaches the server at the next
-  revision, which the operator applies once it has pushed the Secret's new
-  value.
+- **`empty_env_vars` names a variable.** A `value` written empty, which
+  the engine starts the server with: one written so on purpose needs
+  nothing, such as the Atlassian server's per-product proxy variables
+  beside a proxy auto-config
+  ([Jira and Confluence](tool-servers.md#jira-and-confluence)). A value
+  read from a Secret never arrives empty: it holds the server back, or is
+  left out (above).
 - **The server started without a tool you expected.** Some servers offer a
   tool only when a setting asks for it, such as Slack's posting tool
   ([Slack](tool-servers.md#slack)).

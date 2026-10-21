@@ -195,6 +195,25 @@ func engineRefusesSetupSteps(
 	t *testing.T, steps []v1.SandboxSetupStep, at func(i int, rest []engine.Segment) bool,
 ) map[int]bool {
 	t.Helper()
+	in := sandboxCompany(steps, &v1.SeatSandbox{})
+	refused := map[int]bool{}
+	for _, p := range validateProblems(t, in) {
+		s := p.Segments
+		// providers.sandbox.setup[i], and what is under it.
+		step := len(s) >= 4 && s[0].Key == "providers" && s[1].Key == "sandbox" && s[2].Key == "setup" &&
+			s[3].IsIndex && s[3].Index < len(steps)
+		if !step || !at(s[3].Index, s[4:]) {
+			t.Fatalf("crewlet validate refused the document elsewhere than this test expects (%s): %s",
+				render.PathOf(s), p.Message)
+		}
+		refused[s[3].Index] = true
+	}
+	return refused
+}
+
+// sandboxCompany is the render input of a company whose sandbox runs steps,
+// with an agent seat, coder, whose sandbox is sandbox.
+func sandboxCompany(steps []v1.SandboxSetupStep, sandbox *v1.SeatSandbox) *render.Input {
 	in := &render.Input{
 		Company:         company("probe", companyName),
 		Class:           engineClass("", "basic"),
@@ -211,20 +230,42 @@ func engineRefusesSetupSteps(
 	coder := seat("probe", "coder")
 	coder.Spec.Goal = "Write the code."
 	coder.Spec.LLM.Default = providers(providerName)
-	coder.Spec.Sandbox = &v1.SeatSandbox{}
+	coder.Spec.Sandbox = sandbox
 	// A person on a seat of their own, as askEngine's, so that the engine
 	// has nothing to say about the chart.
 	founder := seat("probe", "founder")
 	founder.Spec.Kind = v1.SeatKindHuman
 	founder.Spec.Contact = v1.SeatContact{GitHubLogin: "probe-founder"}
 	in.Seats = []v1.Seat{*coder, *founder}
+	return in
+}
+
+// validateProblem is one problem `crewlet validate` finds in a document.
+type validateProblem struct {
+	Segments []engine.Segment `json:"segments"`
+	Message  string           `json:"message"`
+}
+
+// validateProblems renders in and hands the document to `crewlet validate`,
+// with every Secret key it references set to a value, as the secret sync sets
+// it, and every provisioned credential minted, and returns what it refuses.
+func validateProblems(t *testing.T, in *render.Input) []validateProblem {
+	t.Helper()
 	doc, err := render.Company(in)
 	if err != nil {
-		t.Fatalf("rendering the setup steps: %v", err)
+		t.Fatalf("rendering the document: %v", err)
 	}
+	return validateDocument(t, doc, doc.YAML)
+}
+
+// validateDocument hands document, doc's YAML or an edit of it, to `crewlet
+// validate`, with every Secret key doc references set to a value and every
+// provisioned credential minted, and returns what it refuses.
+func validateDocument(t *testing.T, doc *render.Document, document []byte) []validateProblem {
+	t.Helper()
 	dir := t.TempDir()
 	file := filepath.Join(dir, "company.yaml")
-	if err := os.WriteFile(file, doc.YAML, 0o600); err != nil {
+	if err := os.WriteFile(file, document, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.CommandContext(t.Context(), enginetest.Binary(t), "validate", "-json", "-tier", "company", file)
@@ -232,6 +273,9 @@ func engineRefusesSetupSteps(
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + dir}
 	for _, k := range doc.Refs {
 		cmd.Env = append(cmd.Env, secretsync.StoreName(k)+"=probe-"+k.Name+"-"+k.Key)
+	}
+	for _, name := range doc.Provisioned {
+		cmd.Env = append(cmd.Env, name+"=minted-"+name)
 	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -241,25 +285,10 @@ func engineRefusesSetupSteps(
 		}
 	}
 	var verdict struct {
-		Problems []struct {
-			Segments []engine.Segment `json:"segments"`
-			Message  string           `json:"message"`
-		} `json:"problems"`
+		Problems []validateProblem `json:"problems"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &verdict); err != nil {
 		t.Fatalf("crewlet validate printed no verdict (%v):\n%s\n%s", err, stdout.String(), stderr.String())
 	}
-	refused := map[int]bool{}
-	for _, p := range verdict.Problems {
-		s := p.Segments
-		// providers.sandbox.setup[i], and what is under it.
-		step := len(s) >= 4 && s[0].Key == "providers" && s[1].Key == "sandbox" && s[2].Key == "setup" &&
-			s[3].IsIndex && s[3].Index < len(steps)
-		if !step || !at(s[3].Index, s[4:]) {
-			t.Fatalf("crewlet validate refused the document elsewhere than this test expects (%s): %s",
-				render.PathOf(s), p.Message)
-		}
-		refused[s[3].Index] = true
-	}
-	return refused
+	return verdict.Problems
 }

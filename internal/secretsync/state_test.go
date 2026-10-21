@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
+	"github.com/crewlet/crewlet-operator/internal/secretref"
 )
 
 var stateRef = types.NamespacedName{Namespace: nimbusNS, Name: "nimbus-secret-sync"}
@@ -114,6 +115,144 @@ func TestSaveStateRoundTrips(t *testing.T) {
 	}
 }
 
+// TestSaveStateKeepsTheWithdrawnNames: a withdrawal survives a save and a
+// load, so a revision that failed to activate after it is activated by a
+// later reconcile, of this operator or one restarted; a line that names no
+// entry the operator owns, which only a hand edit writes, is dropped.
+func TestSaveStateKeepsTheWithdrawnNames(t *testing.T) {
+	ctx := context.Background()
+	c := newStateClient(t)
+	eng := newFakeEngine()
+	state, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a1", nameB: "b1"}), State{})
+	held := Desired{absent: map[string]*MissingError{nameB: {Key: keyB}}}
+	state, _, err := Withdraw(ctx, eng, held, state)
+	if err != nil {
+		t.Fatalf("Withdraw: %v", err)
+	}
+	if err := SaveState(ctx, c, stateRef, company(), state); err != nil {
+		t.Fatalf("SaveState: %v", err)
+	}
+	secret := stateSecret(t, c)
+	secret.Data[withdrawnField] = append(secret.Data[withdrawnField], []byte("not-a-store-name\n")...)
+	if err := c.Update(ctx, secret); err != nil {
+		t.Fatalf("editing the state: %v", err)
+	}
+	loaded, err := LoadState(ctx, c, stateRef, company())
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if !slices.Equal(loaded.Withdrawn(), []string{nameB}) {
+		t.Fatalf("Withdrawn() = %v after a load, want [%s]", loaded.Withdrawn(), nameB)
+	}
+
+	if err := SaveState(ctx, c, stateRef, company(), loaded.Reactivated()); err != nil {
+		t.Fatalf("SaveState: %v", err)
+	}
+	if got := stateSecret(t, c).Data[withdrawnField]; len(got) != 0 {
+		t.Errorf("the state Secret keeps the withdrawn names %q after the revision activated", got)
+	}
+}
+
+// TestActivationIsRecordedForItsRevisionAlone: what Activated records of the
+// operator's last activation answers for that revision and for no other, an
+// empty one included, the Secret keys it lets go as well as their names,
+// survives a save and a load and an activation of nothing new
+// (Reactivated), and is replaced by the next activation; a line that names
+// no entry the operator owns, or no Secret key, which only a hand edit
+// writes, is dropped, and so are the record and the retained names once the
+// State no longer holds them.
+func TestActivationIsRecordedForItsRevisionAlone(t *testing.T) {
+	ctx := context.Background()
+	c := newStateClient(t)
+	state := State{key: newFingerprintKey()}.Activated(revision1, []secretref.Key{keyB, keyA})
+	state.retained = nameSet([]string{nameC})
+	state.withdraw(nameC)
+	for _, revision := range []string{revision2, ""} {
+		if got := state.LetGo(revision); got != nil {
+			t.Errorf("LetGo(%q) = %v, want none: only the recorded revision lets a name go", revision, got)
+		}
+		if got := state.LetGoKeys(revision); got != nil || state.Records(revision) {
+			t.Errorf("LetGoKeys(%q) = %v and Records = %t, want none and false", revision, got, state.Records(revision))
+		}
+	}
+	if got := (State{}).LetGo(""); got != nil || (State{}).Records("") {
+		t.Errorf("the zero State lets %v go", got)
+	}
+
+	if err := SaveState(ctx, c, stateRef, company(), state); err != nil {
+		t.Fatalf("SaveState: %v", err)
+	}
+	secret := stateSecret(t, c)
+	if got, want := string(secret.Data[letGoField]), "ns/a[token]\nns/b[token]\n"; got != want {
+		t.Errorf("the state Secret holds %s = %q, want %q", letGoField, got, want)
+	}
+	for _, line := range []string{"not-a-key", "ns/b", "ns/b[]", "/b[token]", "ns/[token]", "ns/b[to]ken]", "ns/x/b[token]", "ns/b[token"} {
+		secret.Data[letGoField] = append(secret.Data[letGoField], []byte(line+"\n")...)
+	}
+	secret.Data[retainedField] = append(secret.Data[retainedField], []byte("not-a-store-name\n")...)
+	if err := c.Update(ctx, secret); err != nil {
+		t.Fatalf("editing the state: %v", err)
+	}
+	loaded, err := LoadState(ctx, c, stateRef, company())
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if want := slices.Sorted(slices.Values([]string{nameA, nameB})); !slices.Equal(loaded.LetGo(revision1), want) {
+		t.Fatalf("LetGo(%s) = %v after a load, want %v", revision1, loaded.LetGo(revision1), want)
+	}
+	if want := []secretref.Key{keyA, keyB}; !slices.Equal(loaded.LetGoKeys(revision1), want) {
+		t.Fatalf("LetGoKeys(%s) = %v after a load, want %v", revision1, loaded.LetGoKeys(revision1), want)
+	}
+	if !slices.Equal(loaded.Retained(), []string{nameC}) {
+		t.Fatalf("Retained() = %v after a load, want [%s]", loaded.Retained(), nameC)
+	}
+
+	settled := loaded.Reactivated()
+	if len(settled.Withdrawn()) != 0 || !slices.Equal(settled.LetGo(revision1), loaded.LetGo(revision1)) {
+		t.Errorf("Reactivated() = withdrawn %v and LetGo %v, want none and the record kept",
+			settled.Withdrawn(), settled.LetGo(revision1))
+	}
+	next := settled.Activated(revision2, []secretref.Key{keyC})
+	if next.LetGo(revision1) != nil || !slices.Equal(next.LetGo(revision2), []string{nameC}) {
+		t.Errorf("after the next activation LetGo(%s) = %v and LetGo(%s) = %v, want none and [%s]",
+			revision1, next.LetGo(revision1), revision2, next.LetGo(revision2), nameC)
+	}
+
+	if err := SaveState(ctx, c, stateRef, company(), State{key: next.key}); err != nil {
+		t.Fatalf("SaveState: %v", err)
+	}
+	for _, field := range []string{revisionField, letGoField, retainedField} {
+		if got, ok := stateSecret(t, c).Data[field]; !ok || len(got) != 0 {
+			t.Errorf("the state Secret holds %s = %q (present: %t), want it empty, and owned", field, got, ok)
+		}
+	}
+}
+
+// TestAdoptionRecordsARevisionWithoutSettlingAWithdrawal: a revision the
+// operator found running the document it renders is recorded as Activated
+// records one, so LetGo answers for it alone, but a withdrawal stays owed:
+// the operator did not activate that revision after it, so the engine may
+// have read the store with the value.
+func TestAdoptionRecordsARevisionWithoutSettlingAWithdrawal(t *testing.T) {
+	state := State{}.Activated(revision1, []secretref.Key{keyA})
+	state.withdraw(nameB)
+	adopted := state.Adopted(revision2, []secretref.Key{keyB})
+	if !slices.Equal(adopted.Withdrawn(), []string{nameB}) {
+		t.Errorf("Withdrawn() = %v after an adoption, want [%s]", adopted.Withdrawn(), nameB)
+	}
+	if adopted.LetGo(revision1) != nil || !slices.Equal(adopted.LetGo(revision2), []string{nameB}) || !adopted.Records(revision2) {
+		t.Errorf("after the adoption LetGo(%s) = %v and LetGo(%s) = %v, want none and [%s]",
+			revision1, adopted.LetGo(revision1), revision2, adopted.LetGo(revision2), nameB)
+	}
+	if !slices.Equal(state.LetGo(revision1), []string{nameA}) {
+		t.Errorf("the adoption changed the State it was made from: LetGo(%s) = %v", revision1, state.LetGo(revision1))
+	}
+	if adopted.Recorded() != revision2 || state.Recorded() != revision1 || (State{}).Recorded() != "" {
+		t.Errorf("Recorded() = %q, %q and %q, want %s, %s and none", adopted.Recorded(), state.Recorded(), (State{}).Recorded(),
+			revision2, revision1)
+	}
+}
+
 // TestSaveStateForgetsWhatTheStateDropped: an entry the state no longer has
 // must leave the Secret too, or a later load would vouch for a name the
 // store no longer holds.
@@ -130,7 +269,8 @@ func TestSaveStateForgetsWhatTheStateDropped(t *testing.T) {
 		t.Fatalf("SaveState: %v", err)
 	}
 	got := slices.Sorted(maps.Keys(stateSecret(t, c).Data))
-	if want := []string{nameA, fingerprintKeyField}; !slices.Equal(got, want) {
+	want := slices.Sorted(slices.Values([]string{nameA, fingerprintKeyField, withdrawnField, revisionField, letGoField, retainedField}))
+	if !slices.Equal(got, want) {
 		t.Fatalf("state Secret keys = %v, want %v", got, want)
 	}
 }

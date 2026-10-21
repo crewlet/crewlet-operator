@@ -3,10 +3,13 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -189,6 +192,32 @@ func storeListing(e *enginetest.Engine) map[string]engine.SecretInfo {
 		out[s.Name] = s
 	}
 	return out
+}
+
+// envDumpArgs are the arguments of a stdio tool server, run by /bin/sh, that
+// writes the environment it is started with to path, by a rename, and never
+// answers, so the engine gives it up after its one-second startup timeout and
+// starts it again later: each start is handed what the engine resolved when
+// the revision it runs activated, which envDump reads back.
+func envDumpArgs(path string) []string {
+	return []string{"-c", `env > "$0.part" && mv "$0.part" "$0"; exec cat >/dev/null`, path}
+}
+
+// envDump is the environment the server of envDumpArgs was last started with,
+// nil before its first start.
+func envDump(path string) map[string]string {
+	GinkgoHelper()
+	data, err := os.ReadFile(path) //nolint:gosec // G304: the file the test's own server writes in its temporary directory.
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	Expect(err).NotTo(HaveOccurred())
+	vars := map[string]string{}
+	for line := range strings.Lines(string(data)) {
+		k, v, _ := strings.Cut(strings.TrimSuffix(line, "\n"), "=")
+		vars[k] = v
+	}
+	return vars
 }
 
 // The specs run the config reconciler in a manager, as cmd/main.go does, so
@@ -652,6 +681,408 @@ var _ = Describe("Company config", Ordered, func() {
 		updateLive(&corev1.Secret{Namespace: namespace, Name: name + "-llm"}, func(s *corev1.Secret) {
 			s.Data = map[string][]byte{llmKey: []byte("k")}
 		})
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		runsRendered(e, c)
+	})
+
+	It("starts without an optional tool-server key while its Secret is missing, never serves a deleted one, and pushes it again", func() {
+		const name, tavilyVar, registryVar = "optional", "TAVILY_API_KEY", "NPM_CONFIG_REGISTRY"
+		e := startEngine(name)
+		secret(name+"-llm", map[string]string{llmKey: "k"})
+		secret(name+"-tavily", map[string]string{requiredKey: tavilyValue})
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
+		env := filepath.Join(GinkgoT().TempDir(), "env")
+		startedWith := func() map[string]string { return envDump(env) }
+		server := &crewletaiv1alpha1.MCPServer{
+			Namespace: namespace, Name: name + "-tavily",
+			Spec: crewletaiv1alpha1.MCPServerSpec{
+				CompanyRef:            crewletaiv1alpha1.CompanyReference{Name: name},
+				Command:               serverShell,
+				Args:                  envDumpArgs(env),
+				StartupTimeoutSeconds: 1,
+				Env: []crewletaiv1alpha1.MCPEnvVar{
+					{Name: tavilyVar, ValueFrom: crewletaiv1alpha1.SecretValueSource{
+						SecretKeyRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-tavily", Key: requiredKey},
+					}},
+					{Name: registryVar, ValueFrom: crewletaiv1alpha1.SecretValueSource{
+						SecretKeyRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-npm", Key: optionalKey},
+					}},
+				},
+				OptionalKeys: []string{registryVar},
+			},
+		}
+		Expect(k8sClient.Create(ctx, server)).To(Succeed())
+		standIn(c)
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		registry := secretsync.StoreName(secretref.Key{Namespace: namespace, Name: name + "-npm", Key: optionalKey})
+		gone := func() map[string]engine.SecretInfo { return storeListing(e) }
+		Expect(gone()).NotTo(HaveKey(registry), "nothing is pushed for a Secret that does not exist")
+		resolved := conditionOf(server, crewletaiv1alpha1.ConditionResolvedRefs)(Default)
+		Expect(resolved.Status).To(Equal(metav1.ConditionTrue))
+		Expect(resolved.Message).To(ContainSubstring("spec.env[1].valueFrom (NPM_CONFIG_REGISTRY): Secret " + namespace + "/" + name + "-npm does not exist"))
+		Expect(conditionOf(c, crewletaiv1alpha1.ConditionSecretsSynced)(Default).Message).To(ContainSubstring("It holds none for the 1 it lets go without"))
+		Expect(reasonOf(server, crewletaiv1alpha1.ConditionApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonInRevision))
+		runsRendered(e, c)
+		Expect(revisions(e)).To(HaveLen(1))
+		Eventually(startedWith).WithTimeout(settle).Should(HaveKeyWithValue(tavilyVar, tavilyValue))
+		Expect(startedWith()).NotTo(HaveKey(registryVar), "the engine started the server with a value nothing holds")
+
+		By("creating the Secret")
+		npm := secret(name+"-npm", map[string]string{optionalKey: npmRegistry})
+		Eventually(func() string { return storedValue(e, registry) }).WithTimeout(settle).Should(Equal(npmRegistry))
+		Eventually(func() []revision { return revisions(e) }).WithTimeout(settle).Should(HaveLen(2),
+			"the engine reads the value only when a revision activates")
+		Eventually(func(g Gomega) string {
+			return conditionOf(server, crewletaiv1alpha1.ConditionResolvedRefs)(g).Message
+		}).WithTimeout(settle).Should(Equal("Every object and Secret key it references exists."))
+		runsRendered(e, c)
+		Eventually(startedWith).WithTimeout(settle).Should(HaveKeyWithValue(registryVar, npmRegistry))
+
+		By("deleting it")
+		Expect(k8sClient.Delete(ctx, npm)).To(Succeed())
+		Eventually(gone).WithTimeout(settle).ShouldNot(HaveKey(registry),
+			"the engine would start the server with the value of a Secret that is gone")
+		Eventually(func() []revision { return revisions(e) }).WithTimeout(settle).Should(HaveLen(3),
+			"the engine resolves the reference to nothing only when a revision activates")
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		Eventually(func(g Gomega) string {
+			return conditionOf(server, crewletaiv1alpha1.ConditionResolvedRefs)(g).Message
+		}).WithTimeout(settle).Should(ContainSubstring("Secret " + namespace + "/" + name + "-npm does not exist"))
+		Eventually(startedWith).WithTimeout(settle).ShouldNot(HaveKey(registryVar),
+			"the engine starts the server with the value of a Secret that is gone")
+
+		By("creating it again, with another value")
+		secret(name+"-npm", map[string]string{optionalKey: "https://mirror.example.com"})
+		Eventually(func() string { return storedValue(e, registry) }).WithTimeout(settle).Should(Equal("https://mirror.example.com"))
+		Eventually(func() []revision { return revisions(e) }).WithTimeout(settle).Should(HaveLen(4))
+		runsRendered(e, c)
+		Eventually(startedWith).WithTimeout(settle).Should(HaveKeyWithValue(registryVar, "https://mirror.example.com"))
+
+		By("emptying the required key")
+		updateLive(&corev1.Secret{Namespace: namespace, Name: name + "-tavily"}, func(s *corev1.Secret) {
+			s.Data = map[string][]byte{requiredKey: {}}
+		})
+		Eventually(reasonOf(server, crewletaiv1alpha1.ConditionResolvedRefs)).WithTimeout(settle).
+			Should(Equal(crewletaiv1alpha1.ReasonSecretValueEmpty))
+		Expect(conditionOf(server, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Message).
+			To(ContainSubstring(`holds an empty value under "` + requiredKey + `", given as ` + tavilyVar))
+		Eventually(reasonOf(server, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision),
+			"an empty value holds nothing back: the engine applies the document and leaves the server unstarted")
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		Eventually(func() []string { return log.of(server.Name) }).WithTimeout(settle).
+			Should(ContainElement(HavePrefix("Warning " + crewletaiv1alpha1.ReasonSecretValueEmpty)))
+	})
+
+	It("starts nothing with a deleted optional Secret's value while the document is held", func() {
+		const name, tavilyVar, registryVar = "optheld", "TAVILY_API_KEY", "NPM_CONFIG_REGISTRY"
+		e := startEngine(name)
+		secret(name+"-llm", map[string]string{llmKey: "k"})
+		// One Secret for the vendor, holding the server's key, which it is
+		// not started without, and the registry, which it may go without.
+		both := name + "-npm"
+		secret(both, map[string]string{requiredKey: tavilyValue, optionalKey: npmRegistry})
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
+		env := filepath.Join(GinkgoT().TempDir(), "env")
+		startedWith := func() map[string]string { return envDump(env) }
+		from := func(key string) crewletaiv1alpha1.SecretValueSource {
+			return crewletaiv1alpha1.SecretValueSource{SecretKeyRef: crewletaiv1alpha1.SecretKeyReference{Name: both, Key: key}}
+		}
+		server := &crewletaiv1alpha1.MCPServer{
+			Namespace: namespace, Name: name + "-tavily",
+			Spec: crewletaiv1alpha1.MCPServerSpec{
+				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
+				Command:    serverShell, Args: envDumpArgs(env), StartupTimeoutSeconds: 1,
+				Env: []crewletaiv1alpha1.MCPEnvVar{
+					{Name: tavilyVar, ValueFrom: from(requiredKey)},
+					{Name: registryVar, ValueFrom: from(optionalKey)},
+				},
+				OptionalKeys: []string{registryVar},
+			},
+		}
+		Expect(k8sClient.Create(ctx, server)).To(Succeed())
+		// A second server reading the registry alone, and letting it go.
+		mirror := &crewletaiv1alpha1.MCPServer{
+			Namespace: namespace, Name: name + "-mirror",
+			Spec: crewletaiv1alpha1.MCPServerSpec{
+				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
+				Command:    serverShell, Args: []string{"-c", "exec cat >/dev/null"}, StartupTimeoutSeconds: 1,
+				Env:          []crewletaiv1alpha1.MCPEnvVar{{Name: registryVar, ValueFrom: from(optionalKey)}},
+				OptionalKeys: []string{registryVar},
+			},
+		}
+		Expect(k8sClient.Create(ctx, mirror)).To(Succeed())
+		standIn(c)
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		registry := secretsync.StoreName(secretref.Key{Namespace: namespace, Name: both, Key: optionalKey})
+		Eventually(startedWith).WithTimeout(settle).Should(HaveKeyWithValue(registryVar, npmRegistry))
+		Expect(startedWith()).To(HaveKeyWithValue(tavilyVar, tavilyValue))
+		count := func() int { return len(revisions(e)) }
+		reactivated := func(before int) {
+			GinkgoHelper()
+			Eventually(func() map[string]engine.SecretInfo { return storeListing(e) }).WithTimeout(settle).ShouldNot(HaveKey(registry),
+				"the engine's store keeps the value of a Secret that is gone")
+			Eventually(count).WithTimeout(settle).Should(Equal(before+1),
+				"the engine resolves the reference to nothing only when a revision activates")
+			Expect(revisions(e)[0].Summary).To(ContainSubstring(registry))
+			Eventually(startedWith).WithTimeout(settle).ShouldNot(HaveKey(registryVar),
+				"the engine starts the server with the value of a Secret that is gone")
+			Expect(startedWith()).To(HaveKeyWithValue(tavilyVar, tavilyValue),
+				"the running revision keeps the value it requires until the next one is applied")
+			Consistently(count).WithTimeout(6*time.Second).Should(Equal(before+1),
+				"a revision that went without the value is activated again")
+			Expect(log.of(name)).To(ContainElement(HavePrefix("Normal Reactivated ")))
+			Expect(log.of(name)).NotTo(ContainElement(HavePrefix("Normal SecretKept ")),
+				"the running revision, which the operator activated, lets the value go")
+		}
+
+		By("deleting the Secret, which the server's required key holds the document for")
+		before := count()
+		Expect(k8sClient.Delete(ctx, &corev1.Secret{Namespace: namespace, Name: both})).To(Succeed())
+		applied(c, crewletaiv1alpha1.ReasonSecretNotFound)
+		reactivated(before)
+		Expect(reasonOf(server, crewletaiv1alpha1.ConditionResolvedRefs)(Default)).To(Equal(crewletaiv1alpha1.ReasonSecretNotFound))
+		resolved := conditionOf(mirror, crewletaiv1alpha1.ConditionResolvedRefs)(Default)
+		Expect(resolved.Status).To(Equal(metav1.ConditionTrue))
+		Expect(resolved.Message).To(ContainSubstring("spec.env[0].valueFrom (NPM_CONFIG_REGISTRY): Secret "+namespace+"/"+both+
+			" does not exist"), "a part that goes without the value is told it is there")
+
+		By("creating it again")
+		secret(both, map[string]string{requiredKey: tavilyValue, optionalKey: "https://mirror.example.com"})
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		Eventually(startedWith).WithTimeout(settle).Should(HaveKeyWithValue(registryVar, "https://mirror.example.com"))
+
+		By("removing the optional key while another object holds the document")
+		// A server whose optionalKeys names a key no value is written under,
+		// which Crewlet refuses: the render holds the document for it.
+		const seatToken = "SEAT_TOKEN"
+		bad := &crewletaiv1alpha1.MCPServer{
+			Namespace: namespace, Name: name + "-bad",
+			Spec: crewletaiv1alpha1.MCPServerSpec{
+				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
+				Command:    serverShell, Args: []string{"-c", "exec cat >/dev/null"},
+				OptionalKeys: []string{seatToken},
+			},
+		}
+		Expect(k8sClient.Create(ctx, bad)).To(Succeed())
+		applied(c, crewletaiv1alpha1.ReasonOptionalKeyUnused)
+		Expect(reasonOf(bad, crewletaiv1alpha1.ConditionResolvedRefs)(Default)).To(Equal(crewletaiv1alpha1.ReasonOptionalKeyUnused))
+		Expect(conditionOf(bad, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Message).
+			To(ContainSubstring("optionalKeys[0]: names " + seatToken + ", which no value is written under"))
+		Eventually(reasonOf(bad, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
+			Should(Equal(crewletaiv1alpha1.ReasonOptionalKeyUnused))
+		before = count()
+		updateLive(&corev1.Secret{Namespace: namespace, Name: both}, func(s *corev1.Secret) {
+			s.Data = map[string][]byte{requiredKey: []byte(tavilyValue)}
+		})
+		reactivated(before)
+
+		By("giving the server a Seat's value under its optional key")
+		// The entry leaves something out once a value read from a Secret is
+		// written under it, whether or not the Secret exists: one that does
+		// not is left out. Applied, not DriftCorrected: the revision that
+		// activated the running document again is the operator's own.
+		updateLive(seat(name+"-ana"), func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.MCP = []crewletaiv1alpha1.MCPCredentials{{Name: bad.Name, Env: []crewletaiv1alpha1.MCPCredentialValue{{
+				Name:      seatToken,
+				ValueFrom: crewletaiv1alpha1.SeatCredentialSource{SecretKeyRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-ana", Key: seatTokenKey}},
+			}}}}
+		})
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		Eventually(reasonOf(bad, crewletaiv1alpha1.ConditionResolvedRefs)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonResolved))
+		runsRendered(e, c)
+		Expect(startedWith()).NotTo(HaveKey(registryVar))
+	})
+
+	// requiringServer starts the engine of a company whose one tool server
+	// reads the registry from the Secret <name>-npm and requires it, applies
+	// its document, and returns the server, the store name of the registry,
+	// what the server was last started with, and the count of the engine's
+	// revisions.
+	requiringServer := func(name string) (*enginetest.Engine, *crewletaiv1alpha1.MCPServer, string, func() map[string]string, func() int) {
+		GinkgoHelper()
+		e := startEngine(name)
+		secret(name+"-llm", map[string]string{llmKey: "k"})
+		secret(name+"-npm", map[string]string{optionalKey: npmRegistry})
+		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
+		env := filepath.Join(GinkgoT().TempDir(), "env")
+		server := &crewletaiv1alpha1.MCPServer{
+			Namespace: namespace, Name: name + "-registry",
+			Spec: crewletaiv1alpha1.MCPServerSpec{
+				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
+				Command:    serverShell, Args: envDumpArgs(env), StartupTimeoutSeconds: 1,
+				Env: []crewletaiv1alpha1.MCPEnvVar{{Name: optionalRegistry, ValueFrom: crewletaiv1alpha1.SecretValueSource{
+					SecretKeyRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-npm", Key: optionalKey},
+				}}},
+			},
+		}
+		Expect(k8sClient.Create(ctx, server)).To(Succeed())
+		standIn(c)
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		startedWith := func() map[string]string { return envDump(env) }
+		Eventually(startedWith).WithTimeout(settle).Should(HaveKeyWithValue(optionalRegistry, npmRegistry))
+		registry := secretsync.StoreName(secretref.Key{Namespace: namespace, Name: name + "-npm", Key: optionalKey})
+		return e, server, registry, startedWith, func() int { return len(revisions(e)) }
+	}
+	// lettingGo lists the registry in the server's optionalKeys, and waits
+	// until the reconcile has read it.
+	lettingGo := func(server *crewletaiv1alpha1.MCPServer) {
+		GinkgoHelper()
+		updateLive(server, func(s *crewletaiv1alpha1.MCPServer) { s.Spec.OptionalKeys = []string{optionalRegistry} })
+		Eventually(func(g Gomega) int64 {
+			return conditionOf(server, crewletaiv1alpha1.ConditionResolvedRefs)(g).ObservedGeneration
+		}).WithTimeout(settle).Should(Equal(server.Generation))
+	}
+	// keptFor asserts that the engine's store keeps the registry, whose
+	// Secret is gone, for the running revision, which requires it, and
+	// starts the server with it, activating nothing for it, and that the
+	// Company and the server say so.
+	keptFor := func(e *enginetest.Engine, name string, server *crewletaiv1alpha1.MCPServer, registry string,
+		startedWith func() map[string]string, count func() int, before int,
+	) {
+		GinkgoHelper()
+		c := &crewletaiv1alpha1.Company{Namespace: namespace, Name: name}
+		Eventually(func() []string { return log.of(name) }).WithTimeout(settle).
+			Should(ContainElement(HavePrefix("Normal SecretKept ")))
+		Expect(log.of(name)).To(ContainElement(ContainSubstring(registry)))
+		Eventually(func(g Gomega) string {
+			return conditionOf(c, crewletaiv1alpha1.ConditionSecretsSynced)(g).Message
+		}).WithTimeout(settle).Should(ContainSubstring("The engine's secret store keeps the value it held for the 1 the document " +
+			"lets go without whose Secret or key no longer exists (" + namespace + "/" + name + "-npm[" + optionalKey + "]): " +
+			"the revision the engine runs reads each as required"))
+		Expect(conditionOf(c, crewletaiv1alpha1.ConditionSecretsSynced)(Default).Message).NotTo(ContainSubstring("holds none for"),
+			"the store holds none of a value it keeps")
+		Eventually(func(g Gomega) string {
+			return conditionOf(server, crewletaiv1alpha1.ConditionResolvedRefs)(g).Message
+		}).WithTimeout(settle).Should(ContainSubstring("Secret " + namespace + "/" + name + "-npm does not exist, " +
+			"and its spec.optionalKeys lists " + optionalRegistry + "; the engine keeps the value it held for the revision it runs"))
+		Consistently(func() string { return storedValue(e, registry) }).WithTimeout(6*time.Second).Should(Equal(npmRegistry),
+			"the store took a value from the revision the engine runs, which requires it")
+		Expect(count()).To(Equal(before), "a revision was activated without a value the running revision requires")
+		Expect(startedWith()).To(HaveKeyWithValue(optionalRegistry, npmRegistry))
+		Expect(log.of(name)).NotTo(ContainElement(HavePrefix("Normal Reactivated ")))
+	}
+	// letGoOnceItRuns asserts that once the next document runs, the registry
+	// is gone from the store and the revision activated again without it,
+	// once, and the server starts without it.
+	letGoOnceItRuns := func(e *enginetest.Engine, name, registry string, startedWith func() map[string]string,
+		count func() int, before int,
+	) {
+		GinkgoHelper()
+		c := &crewletaiv1alpha1.Company{Namespace: namespace, Name: name}
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		Eventually(func() map[string]engine.SecretInfo { return storeListing(e) }).WithTimeout(settle).ShouldNot(HaveKey(registry),
+			"the engine's store keeps the value of a Secret that is gone, which the revision it runs lets go")
+		Eventually(count).WithTimeout(settle).Should(Equal(before+2),
+			"the next document, and the same activated again without the value it started with")
+		Expect(revisions(e)[0].Summary).To(ContainSubstring(registry))
+		Expect(log.of(name)).To(ContainElement(HavePrefix("Normal Reactivated ")))
+		Eventually(startedWith).WithTimeout(settle).ShouldNot(HaveKey(optionalRegistry),
+			"the engine starts the server with the value of a Secret that is gone")
+		Consistently(count).WithTimeout(6 * time.Second).Should(Equal(before + 2))
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+		runsRendered(e, c)
+		Expect(conditionOf(c, crewletaiv1alpha1.ConditionSecretsSynced)(Default).Message).To(ContainSubstring("It holds none for the 1"))
+	}
+
+	It("keeps a value the running revision requires while a document that lets it go is held, and lets it go once that one runs", func() {
+		const name = "optkept"
+		e, server, registry, startedWith, count := requiringServer(name)
+
+		By("holding the next document for another object's Secret, and letting the key go in it")
+		Expect(k8sClient.Delete(ctx, &corev1.Secret{Namespace: namespace, Name: name + "-llm"})).To(Succeed())
+		applied(&crewletaiv1alpha1.Company{Namespace: namespace, Name: name}, crewletaiv1alpha1.ReasonSecretNotFound)
+		lettingGo(server)
+		before := count()
+
+		By("deleting the key's Secret")
+		Expect(k8sClient.Delete(ctx, &corev1.Secret{Namespace: namespace, Name: name + "-npm"})).To(Succeed())
+		keptFor(e, name, server, registry, startedWith, count, before)
+
+		By("clearing the hold")
+		secret(name+"-llm", map[string]string{llmKey: "k"})
+		letGoOnceItRuns(e, name, registry, startedWith, count, before)
+	})
+
+	It("keeps a value the running revision requires while the engine refuses a document that lets it go, and lets it go once one runs", func() {
+		const name = "optrefused"
+		e, server, registry, startedWith, count := requiringServer(name)
+
+		By("adding a Seat the engine refuses, and letting the key go")
+		coder := newSeat(namespace, name, "coder", func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.Sandbox = &crewletaiv1alpha1.SeatSandbox{CodingAgent: crewletaiv1alpha1.CodingAgentClaudeCode}
+		})
+		c := &crewletaiv1alpha1.Company{Namespace: namespace, Name: name}
+		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInvalid))
+		lettingGo(server)
+		before := count()
+
+		By("deleting the key's Secret")
+		Expect(k8sClient.Delete(ctx, &corev1.Secret{Namespace: namespace, Name: name + "-npm"})).To(Succeed())
+		keptFor(e, name, server, registry, startedWith, count, before)
+		Expect(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonInvalid))
+
+		By("taking the sandbox away again")
+		updateLive(coder, func(s *crewletaiv1alpha1.Seat) { s.Spec.Sandbox = nil })
+		letGoOnceItRuns(e, name, registry, startedWith, count, before)
+	})
+
+	It("takes a deleted value out for a running revision that lets it go, while a document that requires it is held", func() {
+		const name = "optreq"
+		e, server, registry, startedWith, count := requiringServer(name)
+		c := &crewletaiv1alpha1.Company{Namespace: namespace, Name: name}
+		lettingGo(server)
+		Eventually(count).WithTimeout(settle).Should(Equal(2))
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+
+		By("holding the next document for another object's Secret, and requiring the key in it again")
+		Expect(k8sClient.Delete(ctx, &corev1.Secret{Namespace: namespace, Name: name + "-llm"})).To(Succeed())
+		applied(c, crewletaiv1alpha1.ReasonSecretNotFound)
+		updateLive(server, func(s *crewletaiv1alpha1.MCPServer) { s.Spec.OptionalKeys = nil })
+		Eventually(func(g Gomega) int64 {
+			return conditionOf(server, crewletaiv1alpha1.ConditionResolvedRefs)(g).ObservedGeneration
+		}).WithTimeout(settle).Should(Equal(server.Generation))
+		Expect(count()).To(Equal(2))
+		Eventually(startedWith).WithTimeout(settle).Should(HaveKeyWithValue(optionalRegistry, npmRegistry))
+
+		By("deleting the key's Secret")
+		Expect(k8sClient.Delete(ctx, &corev1.Secret{Namespace: namespace, Name: name + "-npm"})).To(Succeed())
+		Eventually(reasonOf(server, crewletaiv1alpha1.ConditionResolvedRefs)).WithTimeout(settle).
+			Should(Equal(crewletaiv1alpha1.ReasonSecretNotFound), "the next document requires the key, and is held for it")
+		Eventually(func() map[string]engine.SecretInfo { return storeListing(e) }).WithTimeout(settle).ShouldNot(HaveKey(registry),
+			"the store keeps the deleted Secret's value for the running revision, which lets it go")
+		Eventually(count).WithTimeout(settle).Should(Equal(3), "the running revision was not activated again without the value")
+		Expect(revisions(e)[0].Summary).To(ContainSubstring(registry))
+		Eventually(startedWith).WithTimeout(settle).ShouldNot(HaveKey(optionalRegistry),
+			"the engine starts the server with the value of a Secret that is gone")
+		Consistently(count).WithTimeout(6 * time.Second).Should(Equal(3))
+		Expect(log.of(name)).To(ContainElement(HavePrefix("Normal Reactivated ")))
+		Expect(log.of(name)).NotTo(ContainElement(HavePrefix("Normal SecretKept ")))
+		Expect(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonSecretNotFound))
+	})
+
+	It("lets a deleted value go in one activation when the engine runs the document it renders, whoever activated it", func() {
+		const name = "optreload"
+		e, server, registry, startedWith, count := requiringServer(name)
+		c := &crewletaiv1alpha1.Company{Namespace: namespace, Name: name}
+		lettingGo(server)
+		Eventually(count).WithTimeout(settle).Should(Equal(2))
+		applied(c, crewletaiv1alpha1.ReasonApplied)
+
+		By("a person activating the running document again")
+		_, err := engine.New(e.URL, e.AccessToken).ReloadConfig(ctx, "reloaded by a person")
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(count).WithTimeout(settle).Should(Equal(3))
+		Consistently(count).WithTimeout(3 * quietPeriod).Should(Equal(3))
+
+		By("deleting the key's Secret")
+		Expect(k8sClient.Delete(ctx, &corev1.Secret{Namespace: namespace, Name: name + "-npm"})).To(Succeed())
+		Eventually(func() map[string]engine.SecretInfo { return storeListing(e) }).WithTimeout(settle).ShouldNot(HaveKey(registry))
+		Eventually(count).WithTimeout(settle).Should(Equal(4))
+		Consistently(count).WithTimeout(6*time.Second).Should(Equal(4),
+			"a revision was activated with the deleted Secret's value in the store, and activated again")
+		Eventually(startedWith).WithTimeout(settle).ShouldNot(HaveKey(optionalRegistry))
+		Expect(log.of(name)).NotTo(ContainElement(HavePrefix("Normal Reactivated ")))
+		Expect(log.of(name)).NotTo(ContainElement(HavePrefix("Normal SecretKept ")))
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)
 	})

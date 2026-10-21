@@ -58,6 +58,7 @@ func (r *renderer) org() ([]roleDoc, []unitDoc) {
 	}
 
 	r.duplicateSeats()
+	r.headerSpellings()
 	r.atlassianAccounts()
 	r.scheduleTargets()
 	t := tree{children: children, members: members}
@@ -207,8 +208,8 @@ func (r *renderer) unit(at Path, u *v1alpha1.Unit, t tree) unitDoc {
 		Knowledge: spec.Knowledge,
 		// A unit's credentials come from Secrets: the API refuses a
 		// provisioned one, which belongs to one seat.
-		MCPEnv: r.mcpEnv(KindUnit, u.Name, spec.MCP, func(_ string, src v1alpha1.SeatCredentialSource) string {
-			return r.secret(src.SecretKeyRef.Name, src.SecretKeyRef.Key)
+		MCPEnv: r.mcpEnv(KindUnit, u.Name, spec.MCP, func(_ string, src v1alpha1.SeatCredentialSource, use *startUse) string {
+			return r.startSecret(use, src.SecretKeyRef)
 		}),
 		Project: spec.Project,
 		Space:   spec.Space,
@@ -259,8 +260,8 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 		Workers:              spec.Workers,
 		TokenBudget:          tokenBudget(spec.TokenBudget),
 		LearningEnabled:      spec.LearningEnabled,
-		MCPEnv: r.mcpEnv(KindSeat, s.Name, spec.MCP, func(field string, src v1alpha1.SeatCredentialSource) string {
-			return r.seatCredential(s, field, src)
+		MCPEnv: r.mcpEnv(KindSeat, s.Name, spec.MCP, func(field string, src v1alpha1.SeatCredentialSource, use *startUse) string {
+			return r.seatCredential(s, field, src, use)
 		}),
 		Project: spec.Project,
 		Space:   spec.Space,
@@ -297,8 +298,9 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 			CodingAgent:     codingAgent(sb.CodingAgent),
 			PauseTTLSeconds: sb.PauseTTLSeconds,
 			MaxTurns:        sb.MaxTurns,
-			Env:             r.seatEnv(s, sb.Env),
-			Setup:           r.setup(sb.Setup),
+			Env:             r.seatEnv(s, sb),
+			OptionalKeys:    sortedSet(sb.OptionalKeys),
+			Setup:           r.setup(ObjectRef{Kind: KindSeat, Name: s.Name}, sb.Setup),
 		}
 		for i, ref := range sb.MCPServerRefs {
 			if r.mcp[ref.Name] == nil {
@@ -394,15 +396,20 @@ func (r *renderer) schedules(owner Path, schedules []*v1alpha1.Schedule) []sched
 	return out
 }
 
-// seatEnv renders a seat's own environment variables, each from a Secret or
-// provisioned.
-func (r *renderer) seatEnv(s *v1alpha1.Seat, env []v1alpha1.SeatEnvVar) map[string]string {
-	if len(env) == 0 {
+// seatEnv renders the environment of a seat's sandbox runs, sb's env, each
+// variable from a Secret or provisioned.
+func (r *renderer) seatEnv(s *v1alpha1.Seat, sb *v1alpha1.SeatSandbox) map[string]string {
+	if len(sb.Env) == 0 {
 		return nil
 	}
-	out := make(map[string]string, len(env))
-	for i, e := range env {
-		out[e.Name] = r.seatCredential(s, fmt.Sprintf("spec.sandbox.env[%d].valueFrom", i), e.ValueFrom)
+	out := make(map[string]string, len(sb.Env))
+	for i, e := range sb.Env {
+		field := fmt.Sprintf("spec.sandbox.env[%d].valueFrom", i)
+		out[e.Name] = r.seatCredential(s, field, e.ValueFrom, &startUse{
+			object: ObjectRef{Kind: KindSeat, Name: s.Name}, field: field, name: e.Name,
+			optional: slices.Contains(sb.OptionalKeys, e.Name),
+			list:     ObjectRef{Kind: KindSeat, Name: s.Name}, listField: "spec.sandbox.optionalKeys",
+		})
 	}
 	return out
 }
@@ -431,7 +438,7 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 	}
 	if m := in.Mattermost; m != (v1alpha1.MattermostSeatIntegration{}) {
 		doc.Mattermost = &roleMattermostDoc{
-			BotToken: r.seatCredential(s, "spec.integrations.mattermost.botToken", m.BotToken),
+			BotToken: r.seatCredential(s, "spec.integrations.mattermost.botToken", m.BotToken, nil),
 			Username: m.Username,
 			Channel:  m.Channel,
 		}

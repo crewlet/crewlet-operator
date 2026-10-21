@@ -1,0 +1,163 @@
+# A key of every block Crewlet reads optional_keys on, listed beside one that
+# is not: a shared Stdio server's env, a per-seat HTTP server's header that a
+# Unit and a Seat give it, a Seat's sandbox env, and a setup step's env and
+# files, the Company's and the Seat's.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: optional
+spec:
+  engineClassName: basic
+  companyName: Optional
+  sandbox:
+    e2b:
+      apiKeySecretRef:
+        name: e2b
+        key: apiKey
+    setup:
+      - name: npm
+        env:
+          - name: NPM_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: npm
+                key: token
+        files:
+          - path: .npmrc
+            valueFrom:
+              secretKeyRef:
+                name: npm
+                key: npmrc
+        optionalKeys:
+          - .npmrc
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude
+spec:
+  companyRef:
+    name: optional
+  type: Anthropic
+  model: claude-sonnet-5
+  apiKeySecretRefs:
+    - name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: tavily
+spec:
+  companyRef:
+    name: optional
+  transport: Stdio
+  command: npx
+  args:
+    - -y
+    - tavily-mcp@0.2.22
+  env:
+    - name: TAVILY_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: tavily
+          key: apiKey
+    - name: NPM_CONFIG_REGISTRY
+      valueFrom:
+        secretKeyRef:
+          name: npm
+          key: registry
+  optionalKeys:
+    - NPM_CONFIG_REGISTRY
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: github
+spec:
+  companyRef:
+    name: optional
+  transport: HTTP
+  shared: false
+  url: https://api.githubcopilot.com/mcp/
+  headers:
+    - name: X-MCP-Toolsets
+      value: repos,issues
+  optionalKeys:
+    - authorization
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Unit
+metadata:
+  name: eng
+spec:
+  companyRef:
+    name: optional
+  mcp:
+    - name: github
+      env:
+        - name: Authorization
+          valueFrom:
+            secretKeyRef:
+              name: eng-github
+              key: authorization
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: coder
+spec:
+  companyRef:
+    name: optional
+  unitRef:
+    name: eng
+  goal: Keep the build green.
+  mcp:
+    - name: github
+      env:
+        - name: Authorization
+          valueFrom:
+            secretKeyRef:
+              name: coder-github
+              key: authorization
+  sandbox:
+    env:
+      - name: GITHUB_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: coder-github
+            key: token
+      - name: DATABASE_URL
+        valueFrom:
+          secretKeyRef:
+            name: coder-db
+            key: url
+    optionalKeys:
+      - DATABASE_URL
+    setup:
+      - name: postgres
+        env:
+          - name: PGUSER
+            valueFrom:
+              secretKeyRef:
+                name: coder-db
+                key: user
+        files:
+          - path: .pgpass
+            valueFrom:
+              secretKeyRef:
+                name: coder-db
+                key: pgpass
+        optionalKeys:
+          - .pgpass
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: founder
+spec:
+  companyRef:
+    name: optional
+  kind: Human
+  contact:
+    githubLogin: optional-founder

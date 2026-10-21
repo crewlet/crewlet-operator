@@ -195,9 +195,13 @@ server that takes the value starts once it is minted, not before. Every place
 a seat names one provisioned `name` is one value. Only an Integration of its
 company with `provisioning: Engine` creates the value: while none does, the
 seat is applied with the reference all the same, the engine starts none of
-its tool servers that take the value and its chat app or code work runs
-without it, and the Seat reports `ResolvedRefs=False` with reason
-`NoProvisioner` (which holds nothing else back). A Unit's credentials are
+its tool servers that take the value and refuses each of its `run_sandbox`
+coding runs, unless the `optionalKeys` that governs the value lets them go
+without it (the MCPServer's for a tool server's value, the seat's
+`spec.sandbox.optionalKeys` for its coding runs'), and its chat app runs
+without it, and the Seat reports
+`ResolvedRefs=False` with reason `NoProvisioner` (which holds nothing else
+back). A Unit's credentials are
 every member's, so they always come from Secrets.
 
 Under `provisioning: External`, the default, the Integration holds no
@@ -318,7 +322,20 @@ rotating a Secret rewrites an entry rather than replacing it.
 > the operator's. It never touches a name of any other shape, so credentials
 > written into the store by hand or by Crewlet's own provisioning are left
 > alone. A name the running configuration still references is kept until the
-> next configuration is applied.
+> next configuration is applied, except the name of a value a tool server or a
+> coding run may go without (its key listed in the `optionalKeys` that governs
+> it), read nowhere it is required, whose Secret or key no longer exists:
+> under the `Enforce` policy, that one is deleted, and the engine reads its
+> store again without it, when the next configuration is applied or, while
+> that one is held, when the running one is activated again, so that the
+> engine leaves the value out rather than starting a tool server or a coding
+> run with a deleted Secret's value. Where the running configuration reads
+> the key as required, as one from before the key was listed does, or is
+> another configuration somebody else activated, whose reading the operator
+> does not know, it keeps the value until the next configuration is applied,
+> and the value is deleted then; where the running configuration lets the
+> key go, its value is deleted whatever the next configuration reads of it
+> ([Applying a document](applying.md#what-one-reconcile-does)).
 
 A seat's provisioned credential has an entry of another shape, which the
 engine fills and the operator never writes or deletes:

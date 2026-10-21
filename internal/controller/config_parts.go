@@ -35,6 +35,10 @@ type part struct {
 	// of the first.
 	unresolved       []string
 	unresolvedReason string
+	// leftOut are the values it gives a tool server or a coding run under
+	// a key it declares optional whose Secret or key does not exist, which
+	// the engine leaves out (checkSecretValues).
+	leftOut []leftOutValue
 	// reported are what the render found wrong with its references that
 	// holds nothing (render.ReportedOf), with the reason of the first: the
 	// part is rendered as its spec says, and only it suffers. Read only once

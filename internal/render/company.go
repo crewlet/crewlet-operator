@@ -51,6 +51,18 @@ type Input struct {
 	// tools back through it, and the webhook addresses a Seat publishes.
 	PublicBaseURL string
 
+	// Unset are the Secret keys the reconcile read and found holding no
+	// value: a Secret or a key that does not exist, or an empty value. A
+	// value read from one under a key its block declares optional is left
+	// out of what the engine starts, which CodeWorkOf follows. Before the
+	// Secrets are read it is empty, and every key reads as holding a value.
+	Unset []secretref.Key
+	// Empty are the keys of Unset that exist and hold an empty value, which
+	// the engine reads as nothing too: under a key not declared optional,
+	// what it is given to does not start, where a missing one holds the
+	// document instead, and CodeWorkOf says so of a seat's coding runs.
+	Empty []secretref.Key
+
 	// HeldPlacements are the role.placement labels to render for the agent
 	// seats, by handle, that keep running where the revision the engine runs
 	// pins them while the pods of the pool they move to start: the pin
@@ -69,6 +81,15 @@ type Document struct {
 	// Refs is every Secret key the document refers to, sorted with
 	// secretref.Compare and without duplicates.
 	Refs []secretref.Key
+	// Optional are the keys of Refs every reference to which is a
+	// StartValue under a key its block declares optional, sorted: the engine
+	// leaves such a key out when its value resolves to nothing, so a Secret
+	// or key that does not exist holds nothing back, and the secret sync
+	// keeps its entry out of the engine's store.
+	Optional []secretref.Key
+	// StartValues are the references to Secret keys the document gives a
+	// tool server or a coding run under a key, in the order rendered.
+	StartValues []StartValue
 	// Provisioned is every store entry the document refers to that the
 	// engine's provisioning fills rather than the operator, sorted and
 	// without duplicates: the names of the seats' provisioned credentials.
@@ -103,6 +124,8 @@ func Company(in *Input) (*Document, error) {
 		YAML:        out,
 		Hash:        hex.EncodeToString(sum[:]),
 		Refs:        sortedKeys(r.refs),
+		Optional:    r.optional(),
+		StartValues: r.markStarted(),
 		Provisioned: slices.Sorted(maps.Keys(r.provisioned)),
 		Sources:     r.sources,
 	}
@@ -288,7 +311,15 @@ type renderer struct {
 	// pins it to.
 	topology *Topology
 
-	refs        map[secretref.Key]struct{}
+	// unset and empty are Input.Unset's and Input.Empty's keys.
+	unset, empty map[secretref.Key]bool
+
+	refs map[secretref.Key]struct{}
+	// required are the keys of refs read somewhere the engine does not
+	// leave out when the value is missing: everywhere but a StartValue
+	// under an optional key.
+	required    map[secretref.Key]struct{}
+	starts      []StartValue
 	provisioned map[string]struct{}
 	sources     []Source
 	errs        refErrors
@@ -305,7 +336,16 @@ func newRenderer(in *Input) *renderer {
 		platform:     map[string]bool{},
 		cliProviders: map[string]*v1alpha1.CLIAgentSettings{},
 		refs:         map[secretref.Key]struct{}{},
+		required:     map[secretref.Key]struct{}{},
 		provisioned:  map[string]struct{}{},
+		unset:        map[secretref.Key]bool{},
+		empty:        map[secretref.Key]bool{},
+	}
+	for _, k := range in.Unset {
+		r.unset[k] = true
+	}
+	for _, k := range in.Empty {
+		r.unset[k], r.empty[k] = true, true
 	}
 	for i := range in.Units {
 		r.units[in.Units[i].Name] = &in.Units[i]
@@ -347,32 +387,69 @@ func (r *renderer) secret(name, key string) string {
 
 func (r *renderer) secretKey(k secretref.Key) string {
 	r.refs[k] = struct{}{}
+	r.required[k] = struct{}{}
 	return "${" + r.in.StoreName(k) + "}"
+}
+
+// optional is the keys of refs no reference requires, sorted.
+func (r *renderer) optional() []secretref.Key {
+	var out []secretref.Key
+	for k := range r.refs {
+		if _, ok := r.required[k]; !ok {
+			out = append(out, k)
+		}
+	}
+	slices.SortFunc(out, secretref.Compare)
+	return out
 }
 
 // seatCredential returns the pointer the document holds for one of a seat's
 // own credentials: a Secret key's store entry, which the secret sync fills,
-// or a provisioned credential's, which the engine's provisioning fills. A
-// provisioned credential in a company where no Integration provisions is
-// reported at field, as nothing fills it until one does; it is rendered all
-// the same, since Crewlet applies the reference and only the seat goes
-// without its value: no tool server of the seat's that takes it is started,
-// and its chat app or code work runs without it.
-func (r *renderer) seatCredential(s *v1alpha1.Seat, field string, src v1alpha1.SeatCredentialSource) string {
+// or a provisioned credential's, which the engine's provisioning fills. use
+// is the tool server or coding run the value is started with, nil for a
+// value of any other position. A provisioned credential in a company where no
+// Integration provisions is reported at field, as nothing fills it until one
+// does; it is rendered all the same, since Crewlet applies the reference and
+// only the seat goes without its value (withoutProvisioner).
+func (r *renderer) seatCredential(s *v1alpha1.Seat, field string, src v1alpha1.SeatCredentialSource, use *startUse) string {
 	if ref := src.SecretKeyRef; ref.Name != "" {
+		if use != nil {
+			return r.startSecret(use, ref)
+		}
 		return r.secret(ref.Name, ref.Key)
 	}
 	if !r.engineProvisions() {
 		r.errs.add(Reported, KindSeat, s.Name, field, v1alpha1.ReasonNoProvisioner, fmt.Sprintf(
 			"names the provisioned credential %s, and no Integration of Company %s has provisioning Engine, "+
-				"so nothing creates it: the engine starts none of the seat's tool servers that take it, and its "+
-				"chat app or code work runs without it. Give the value from a Secret, or provision the vendor with "+
-				"the engine",
-			src.Provisioned.Name, r.in.Company.Name))
+				"so nothing creates it: %s. Give the value from a Secret, or provision the vendor with the engine",
+			src.Provisioned.Name, r.in.Company.Name, withoutProvisioner(use)))
 	}
 	name := r.in.ProvisionedName(SeatHandle(s), src.Provisioned.Name)
 	r.provisioned[name] = struct{}{}
 	return "${" + name + "}"
+}
+
+// withoutProvisioner is what becomes of a seat whose provisioned credential,
+// written at use, nothing creates. Crewlet holds a value that does not
+// resolve to the rule it holds a missing Secret's to: a tool server is not
+// started without one, nor a run_sandbox coding run, unless the value's key
+// is optional, when it is left out; an agent-mode executor's run starts
+// without it, since refusing it would fail the turn.
+func withoutProvisioner(use *startUse) string {
+	switch {
+	case use == nil:
+		return "the seat's chat app runs without it"
+	case use.server != "" && use.optional:
+		return fmt.Sprintf("the engine starts the seat's instance of MCPServer %s without it, as the server's "+
+			"optionalKeys lets it", use.server)
+	case use.server != "":
+		return fmt.Sprintf("the engine does not start the seat's instance of MCPServer %s, which takes it", use.server)
+	case use.optional:
+		return "the seat's coding runs start without it, as the optionalKeys beside it let them"
+	default:
+		return "Crewlet refuses each of the seat's run_sandbox coding runs, whose environment holds it, and an " +
+			"agent-mode run of its executor starts without it"
+	}
 }
 
 // engineProvisions reports whether an Integration of the company has the
@@ -533,7 +610,7 @@ func (r *renderer) providersDoc() providersDoc {
 			DefaultTimeoutSeconds:  s.DefaultTimeoutSeconds,
 			DefaultPauseTTLSeconds: s.DefaultPauseTTLSeconds,
 			DefaultMaxTurns:        s.DefaultMaxTurns,
-			Setup:                  r.setup(s.Setup),
+			Setup:                  r.setup(r.owner, s.Setup),
 		}
 		r.source(Path{keyProviders, "sandbox"}, r.owner)
 	}
@@ -633,23 +710,39 @@ func (r *renderer) provider(kind, name, field string, ref v1alpha1.LLMProviderRe
 	return "", false
 }
 
-func (r *renderer) setup(steps []v1alpha1.SandboxSetupStep) []setupStepDoc {
+// setup renders owner's sandbox setup steps, the Company's or a Seat's, each
+// at spec.sandbox.setup of owner.
+func (r *renderer) setup(owner ObjectRef, steps []v1alpha1.SandboxSetupStep) []setupStepDoc {
 	if len(steps) == 0 {
 		return nil
 	}
 	out := make([]setupStepDoc, len(steps))
-	for i, s := range steps {
+	for i := range steps {
+		s := &steps[i]
+		at := fmt.Sprintf("spec.sandbox.setup[%d]", i)
+		use := func(field, name string) *startUse {
+			return &startUse{
+				object: owner, field: at + field, name: name, optional: slices.Contains(s.OptionalKeys, name),
+				list: owner, listField: at + ".optionalKeys",
+			}
+		}
 		out[i] = setupStepDoc{
 			Name:           s.Name,
 			Commands:       s.Commands,
-			Env:            r.secretEnv(s.Env),
+			OptionalKeys:   sortedSet(s.OptionalKeys),
 			Brief:          s.Brief,
 			TimeoutSeconds: s.TimeoutSeconds,
 		}
+		if len(s.Env) > 0 {
+			out[i].Env = make(map[string]string, len(s.Env))
+			for j, e := range s.Env {
+				out[i].Env[e.Name] = r.startSecret(use(fmt.Sprintf(".env[%d].valueFrom", j), e.Name), e.ValueFrom.SecretKeyRef)
+			}
+		}
 		if len(s.Files) > 0 {
-			out[i].Files = map[string]string{}
-			for _, f := range s.Files {
-				out[i].Files[f.Path] = r.secret(f.ValueFrom.SecretKeyRef.Name, f.ValueFrom.SecretKeyRef.Key)
+			out[i].Files = make(map[string]string, len(s.Files))
+			for j, f := range s.Files {
+				out[i].Files[f.Path] = r.startSecret(use(fmt.Sprintf(".files[%d].valueFrom", j), f.Path), f.ValueFrom.SecretKeyRef)
 			}
 		}
 	}
@@ -918,16 +1011,22 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 			Shared:                spec.Shared,
 			Command:               spec.Command,
 			Args:                  spec.Args,
-			Env:                   r.mcpServerEnv(spec.Env),
 			URL:                   spec.URL,
+			OptionalKeys:          r.mcpOptionalKeys(s),
 			ToolPrefix:            spec.ToolPrefix,
 			StartupTimeoutSeconds: spec.StartupTimeoutSeconds,
 			RequestTimeoutSeconds: spec.RequestTimeoutSeconds,
 		}
+		if len(spec.Env) > 0 {
+			doc.Env = make(map[string]string, len(spec.Env))
+			for j, e := range spec.Env {
+				doc.Env[e.Name] = r.serverValue(s, fmt.Sprintf("spec.env[%d].valueFrom", j), e.Name, e.Value, e.ValueFrom)
+			}
+		}
 		if len(spec.Headers) > 0 {
 			doc.Headers = make(map[string]string, len(spec.Headers))
-			for _, h := range spec.Headers {
-				doc.Headers[h.Name] = r.literalOrSecret(h.Value, h.ValueFrom.SecretKeyRef)
+			for j, h := range spec.Headers {
+				doc.Headers[h.Name] = r.serverValue(s, fmt.Sprintf("spec.headers[%d].valueFrom", j), h.Name, h.Value, h.ValueFrom)
 			}
 		}
 		if len(spec.ToolAnnotations) > 0 {
@@ -947,34 +1046,28 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 	return out
 }
 
-// mcpServerEnv renders a tool server's environment as Crewlet's env.
-func (r *renderer) mcpServerEnv(env []v1alpha1.MCPEnvVar) map[string]string {
-	if len(env) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(env))
-	for _, e := range env {
-		out[e.Name] = r.literalOrSecret(e.Value, e.ValueFrom.SecretKeyRef)
-	}
-	return out
-}
-
-// literalOrSecret renders a tool server's value: a literal as it is written,
-// which the API admits only under a name that holds no credential, and
-// otherwise the Secret key it is read from.
-func (r *renderer) literalOrSecret(literal *string, from v1alpha1.SecretKeyReference) string {
+// serverValue renders one of s's own values, of its env or its headers, under
+// name: a literal as it is written, which the API admits only under a name
+// that holds no credential, and otherwise the Secret key it is read from,
+// written at field.
+func (r *renderer) serverValue(s *v1alpha1.MCPServer, field, name string, literal *string, from v1alpha1.SecretValueSource) string {
 	if literal != nil {
 		return *literal
 	}
-	return r.secret(from.Name, from.Key)
+	return r.startSecret(&startUse{
+		object: ObjectRef{Kind: KindMCPServer, Name: s.Name}, field: field, name: name, server: s.Name,
+		optional: optionalKey(s, name), list: ObjectRef{Kind: KindMCPServer, Name: s.Name}, listField: fieldOptionalKeys,
+	}, from.SecretKeyRef)
 }
 
 // mcpEnv renders a Unit's or a Seat's per-server values as Crewlet's
 // mcp_env, a mapping from server name to variable (or header) name to value:
 // a setting as it is written, and a credential by the function value, which
-// renders one at its field of the object.
+// renders one at its field of the object, started with the server as use
+// says.
 func (r *renderer) mcpEnv(
-	kind, name string, creds []v1alpha1.MCPCredentials, value func(field string, src v1alpha1.SeatCredentialSource) string,
+	kind, name string, creds []v1alpha1.MCPCredentials,
+	value func(field string, src v1alpha1.SeatCredentialSource, use *startUse) string,
 ) map[string]map[string]string {
 	if len(creds) == 0 {
 		return nil
@@ -986,13 +1079,19 @@ func (r *renderer) mcpEnv(
 				"names MCPServer %s, which does not exist in namespace %s", c.Name, r.namespace()))
 			continue
 		}
+		server := r.mcp[c.Name]
 		values := make(map[string]string, len(c.Env))
 		for j, v := range c.Env {
 			if v.Value != nil {
 				values[v.Name] = *v.Value
 				continue
 			}
-			values[v.Name] = value(fmt.Sprintf("spec.mcp[%d].env[%d].valueFrom", i, j), v.ValueFrom)
+			field := fmt.Sprintf("spec.mcp[%d].env[%d].valueFrom", i, j)
+			values[v.Name] = value(field, v.ValueFrom, &startUse{
+				object: ObjectRef{Kind: kind, Name: name}, field: field, name: v.Name, server: c.Name,
+				optional: optionalKey(server, v.Name), list: ObjectRef{Kind: KindMCPServer, Name: c.Name},
+				listField: fieldOptionalKeys,
+			})
 		}
 		out[c.Name] = values
 	}
