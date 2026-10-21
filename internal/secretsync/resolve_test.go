@@ -53,7 +53,7 @@ func TestResolveReadsEachSecretOnce(t *testing.T) {
 		{Namespace: nimbusNS, Name: slackSecret, Key: botTokenKey},
 		{Namespace: "platform", Name: "anthropic", Key: apiKeyKey},
 	}
-	desired, err := Resolve(context.Background(), r, keys)
+	desired, err := Resolve(context.Background(), r, keys, nil)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestResolveReportsEveryMissingReference(t *testing.T) {
 	noKey := secretref.Key{Namespace: nimbusNS, Name: slackSecret, Key: signingSecretKey}
 	present := secretref.Key{Namespace: nimbusNS, Name: slackSecret, Key: botTokenKey}
 
-	desired, err := Resolve(context.Background(), r, []secretref.Key{present, noSecret2, noKey, noSecret1, noKey})
+	desired, err := Resolve(context.Background(), r, []secretref.Key{present, noSecret2, noKey, noSecret1, noKey}, nil)
 	if err == nil {
 		t.Fatal("Resolve succeeded with missing references")
 	}
@@ -138,10 +138,10 @@ func TestResolveRefusesAValueTheStoreWouldRefuse(t *testing.T) {
 		"over":    strings.Repeat("b", MaxValueBytes+1),
 	}))
 
-	if _, err := Resolve(context.Background(), r, []secretref.Key{atLimit}); err != nil {
+	if _, err := Resolve(context.Background(), r, []secretref.Key{atLimit}, nil); err != nil {
 		t.Fatalf("a value of exactly MaxValueBytes was refused: %v", err)
 	}
-	_, err := Resolve(context.Background(), r, []secretref.Key{atLimit, over})
+	_, err := Resolve(context.Background(), r, []secretref.Key{atLimit, over}, nil)
 	var tooLarge *TooLargeError
 	if !errors.As(err, &tooLarge) || tooLarge.Key != over || tooLarge.Size != MaxValueBytes+1 {
 		t.Fatalf("Resolve() error = %v, want a TooLargeError for %v", err, over)
@@ -161,7 +161,7 @@ func TestResolveReturnsAPIErrors(t *testing.T) {
 			return forbidden
 		},
 	}).Build()
-	_, err := Resolve(context.Background(), r, []secretref.Key{{Namespace: "ns", Name: slackSecret, Key: botTokenKey}})
+	_, err := Resolve(context.Background(), r, []secretref.Key{{Namespace: "ns", Name: slackSecret, Key: botTokenKey}}, nil)
 	var missing *MissingError
 	if !apierrors.IsForbidden(err) || errors.As(err, &missing) {
 		t.Fatalf("Resolve() error = %v, want the API server's Forbidden", err)
@@ -174,7 +174,7 @@ func TestDesiredNeverPrintsAValue(t *testing.T) {
 	const value = "xoxb-very-secret"
 	k := secretref.Key{Namespace: "ns", Name: slackName, Key: botTokenKey}
 	r, _ := countingReader(secret("ns", slackName, map[string]string{botTokenKey: value}))
-	desired, err := Resolve(context.Background(), r, []secretref.Key{k})
+	desired, err := Resolve(context.Background(), r, []secretref.Key{k}, nil)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -188,5 +188,101 @@ func TestDesiredNeverPrintsAValue(t *testing.T) {
 	}
 	if got := fmt.Sprint(desired.MarshalLog()); strings.Contains(got, value) {
 		t.Errorf("MarshalLog() = %q carries the value", got)
+	}
+}
+
+// TestResolveTakesAMissingOptionalReferenceForNoValue: a Secret or key that
+// does not exist under an optional reference is no error but an absent value,
+// as a missing optional secretKeyRef is to Kubernetes, reported by Missing and
+// pushed by nothing; the same one required is the error it always was. A
+// value over the store's limit is refused either way, since it is there, and
+// an empty one is pushed as it is and reported by Empty, optional or not.
+func TestResolveTakesAMissingOptionalReferenceForNoValue(t *testing.T) {
+	r, _ := countingReader(secret(nimbusNS, slackSecret, map[string]string{botTokenKey: "xoxb-3", tokenKey: ""}))
+	present := secretref.Key{Namespace: nimbusNS, Name: slackSecret, Key: botTokenKey}
+	empty := secretref.Key{Namespace: nimbusNS, Name: slackSecret, Key: tokenKey}
+	noKey := secretref.Key{Namespace: nimbusNS, Name: slackSecret, Key: signingSecretKey}
+	noSecret := secretref.Key{Namespace: nimbusNS, Name: "deleted", Key: "a"}
+	keys := []secretref.Key{present, empty, noKey, noSecret}
+
+	desired, err := Resolve(context.Background(), r, keys, []secretref.Key{empty, noKey, noSecret})
+	if err != nil {
+		t.Fatalf("Resolve refused missing optional references: %v", err)
+	}
+	if want := []string{StoreName(present), StoreName(empty)}; !slices.Equal(desired.Names(), slices.Sorted(slices.Values(want))) {
+		t.Errorf("Resolve pushes %v, want %v", desired.Names(), want)
+	}
+	want := []*MissingError{{Key: noSecret, Reason: SecretNotFound}, {Key: noKey, Reason: KeyNotFound}}
+	slices.SortFunc(want, func(a, b *MissingError) int { return secretref.Compare(a.Key, b.Key) })
+	got := desired.Missing()
+	if len(got) != len(want) {
+		t.Fatalf("Missing() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if *got[i] != *want[i] {
+			t.Errorf("Missing()[%d] = %v, want %v", i, got[i], want[i])
+		}
+	}
+	if !slices.Equal(desired.Empty(), []secretref.Key{empty}) {
+		t.Errorf("Empty() = %v, want [%v]", desired.Empty(), empty)
+	}
+
+	// Required, the same references are the errors they always were, and
+	// the Desired beside them pushes nothing but still says what was read
+	// of the others: which optional one is absent, which value is empty.
+	partial, err := Resolve(context.Background(), r, keys, []secretref.Key{noKey})
+	if err == nil || !strings.Contains(err.Error(), "Secret nimbus/deleted does not exist") || strings.Contains(err.Error(), "signingSecret") {
+		t.Errorf("Resolve with only noKey optional answered %v, want the missing Secret alone", err)
+	}
+	if !partial.partial || len(partial.Names()) != 0 {
+		t.Errorf("the Desired beside the error pushes %v, partial %t", partial.Names(), partial.partial)
+	}
+	if got := partial.Missing(); len(got) != 1 || *got[0] != (MissingError{Key: noKey, Reason: KeyNotFound}) {
+		t.Errorf("Missing() beside the error = %v, want %v alone", got, noKey)
+	}
+	if !slices.Equal(partial.Empty(), []secretref.Key{empty}) {
+		t.Errorf("Empty() beside the error = %v, want [%v]", partial.Empty(), empty)
+	}
+}
+
+// TestAbsentNamesTheKeysWhoseSecretOrKeyIsGone: Absent is what the running
+// revision goes without of the keys it lets go: a Secret or a key that does
+// not exist, never one that holds a value, an empty or too large one
+// included, and an API server's error is returned rather than read as a
+// Secret that is gone.
+func TestAbsentNamesTheKeysWhoseSecretOrKeyIsGone(t *testing.T) {
+	const held, value = "held", "value"
+	big := strings.Repeat("x", MaxValueBytes+1)
+	r, _ := countingReader(secret("ns", held, map[string]string{value: "v", "empty": "", "big": big}))
+	keys := []secretref.Key{
+		{Namespace: "ns", Name: held, Key: value},
+		{Namespace: "ns", Name: held, Key: "empty"},
+		{Namespace: "ns", Name: held, Key: "big"},
+		{Namespace: "ns", Name: held, Key: "missing"},
+		{Namespace: "ns", Name: "deleted", Key: value},
+	}
+	absent, err := Absent(context.Background(), r, keys)
+	if err != nil {
+		t.Fatalf("Absent: %v", err)
+	}
+	got := make([]string, len(absent))
+	for i, m := range absent {
+		got[i] = m.Key.String() + " " + string(m.Reason)
+	}
+	if want := []string{"ns/deleted[value] SecretNotFound", "ns/held[missing] KeyNotFound"}; !slices.Equal(got, want) {
+		t.Errorf("Absent = %v, want %v", got, want)
+	}
+	if absent, err := Absent(context.Background(), r, nil); absent != nil || err != nil {
+		t.Errorf("Absent of no key = %v, %v", absent, err)
+	}
+
+	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, held, errors.New("no"))
+	failing := fake.NewClientBuilder().WithInterceptorFuncs(interceptor.Funcs{
+		Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
+			return forbidden
+		},
+	}).Build()
+	if _, err := Absent(context.Background(), failing, keys); !apierrors.IsForbidden(err) {
+		t.Errorf("Absent() error = %v, want the API server's Forbidden", err)
 	}
 }

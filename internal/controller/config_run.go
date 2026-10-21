@@ -258,7 +258,7 @@ func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error
 // references into run.desired. blocked reports keys that are missing or too
 // large, which it records on the parts that reference them.
 func (run *configRun) resolveSecrets(ctx context.Context) (blocked bool, err error) {
-	desired, err := secretsync.Resolve(ctx, run.APIReader, run.doc.Refs)
+	desired, err := secretsync.Resolve(ctx, run.APIReader, run.doc.Refs, nil)
 	if err != nil {
 		if !run.secretsMissing(err) {
 			return false, err
@@ -398,7 +398,7 @@ func (run *configRun) enforce(
 	// for as long as the new document fails to apply.
 	pushing := desired
 	if active != nil {
-		pushing.Keep(storeNamesIn(active.Document)...)
+		pushing.Keep(active.RevisionID, storeNamesIn(active.Document)...)
 	}
 	state, pushed, err := run.sync(ctx, eng, pushing, state, stateRef)
 	if err != nil {

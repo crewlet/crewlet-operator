@@ -1,6 +1,7 @@
 // Package secretsync copies the values of referenced Kubernetes Secret keys
 // into a Crewlet engine's encrypted secret store, and removes the entries
-// nothing references any more.
+// nothing references any more, and those of a Secret that is gone where the
+// document the engine runs goes without its value.
 //
 // The company document never holds a credential. Every credential position
 // in it is a ${NAME} reference, NAME being StoreName of the referenced
@@ -9,16 +10,42 @@
 // name is this package's job, and is what makes rewriting a Secret rotate the
 // credential in a running engine without a restart.
 //
-// A reconcile uses it in three steps:
+// A reconcile uses it in these steps:
 //
 //   - Resolve reads the referenced keys, with an uncached reader, into a
 //     Desired set of store entries. A Secret or key that does not exist is a
-//     *MissingError naming the reference, never a partial set.
+//     *MissingError naming the reference, and the set it returns with one is
+//     partial, which Sync refuses, unless every reference to it is one the
+//     document lets go without its value (a tool server's or a coding run's
+//     key listed in optionalKeys): there it is a value that is not there
+//     (Desired.Missing), as a missing optional secretKeyRef is to
+//     Kubernetes.
 //   - LoadState reads what the operator last pushed, Sync makes the store
 //     match the Desired set, and SaveState records what Sync achieved.
 //   - A name the running document still references but the next one does
 //     not is passed to Desired.Keep until the next document is applied, so
 //     the engine never resolves a reference to a deleted entry.
+//   - A reference whose Secret or key is gone has its entry removed where
+//     the revision the engine runs goes without it, so that no engine starts
+//     anything with the value of a Secret Kubernetes no longer holds: by
+//     Sync before the next document is applied, and by Withdraw while no
+//     next document can be. The store serves every revision by that
+//     revision's own reading of a name, though, and the revision the engine
+//     runs is the last good one, which keeps every value it requires until
+//     the next document is applied. So an absent name of the next document
+//     that the running revision references is removed only where that
+//     revision lets it go too, and a name the running revision lets go is
+//     removed whatever the next document reads of it (Desired.Release). The
+//     State records the reading of one revision (State.Activated,
+//     State.Adopted): one the operator activated, with the Secret keys its
+//     document lets go without, or one it found running the document it
+//     renders; any other revision reads every name as required. A name the
+//     running revision requires is left as it is (Result.Retained) until a
+//     document that lets it go is running, and removed then. The engine
+//     reads its store only when a revision activates, so each name removed
+//     is recorded (State.Withdrawn) until one has, for the caller to make
+//     one where none is applied, or the one it applied started with the
+//     value still there.
 //
 // # What the operator owns in the store
 //
