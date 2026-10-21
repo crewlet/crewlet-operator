@@ -190,11 +190,13 @@ engine's secret store, named for the seat's handle and the provisioned
 the reference where its provisioning looks for a seat's credential (the
 GitLab, Datadog and Atlassian tool servers' variables, a seat's Mattermost
 bot token), mints the account's credential into that entry, and heals it on
-every reconcile pass; the operator never writes or deletes it. Every place a
-seat names one provisioned `name` is one value. Only an Integration of its
+every reconcile pass; the operator never writes or deletes it. A seat's tool
+server that takes the value starts once it is minted, not before. Every place
+a seat names one provisioned `name` is one value. Only an Integration of its
 company with `provisioning: Engine` creates the value: while none does, the
-seat is applied with the reference all the same, its tool or chat app starts
-without the value, and the Seat reports `ResolvedRefs=False` with reason
+seat is applied with the reference all the same, the engine starts none of
+its tool servers that take the value and its chat app or code work runs
+without it, and the Seat reports `ResolvedRefs=False` with reason
 `NoProvisioner` (which holds nothing else back). A Unit's credentials are
 every member's, so they always come from Secrets.
 

@@ -405,8 +405,9 @@ revision:
   declares the pool and a revision placing it there is applied; it reports
   `Ready=False`, `PoolNotFound` too while no pod holds it;
   a Seat that names a provisioned credential while no Integration of the
-  company has `provisioning: Engine` (`NoProvisioner`), whose tool or chat
-  app starts without the value until one does; a GitLab `accessLevels`
+  company has `provisioning: Engine` (`NoProvisioner`), which goes without
+  the value until one does, its tool servers that take it not started and
+  its chat app or code work running without it; a GitLab `accessLevels`
   entry naming a Human seat (`HumanSeat`), which grants nothing, as the
   engine creates no GitLab account for a person; and a person's
   `contact.atlassianAccount` that is no Atlassian account id, such as an

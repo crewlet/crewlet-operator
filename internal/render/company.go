@@ -355,8 +355,9 @@ func (r *renderer) secretKey(k secretref.Key) string {
 // or a provisioned credential's, which the engine's provisioning fills. A
 // provisioned credential in a company where no Integration provisions is
 // reported at field, as nothing fills it until one does; it is rendered all
-// the same, since Crewlet applies the reference and only the seat's own tool
-// or chat app starts without its value.
+// the same, since Crewlet applies the reference and only the seat goes
+// without its value: no tool server of the seat's that takes it is started,
+// and its chat app or code work runs without it.
 func (r *renderer) seatCredential(s *v1alpha1.Seat, field string, src v1alpha1.SeatCredentialSource) string {
 	if ref := src.SecretKeyRef; ref.Name != "" {
 		return r.secret(ref.Name, ref.Key)
@@ -364,8 +365,9 @@ func (r *renderer) seatCredential(s *v1alpha1.Seat, field string, src v1alpha1.S
 	if !r.engineProvisions() {
 		r.errs.add(Reported, KindSeat, s.Name, field, v1alpha1.ReasonNoProvisioner, fmt.Sprintf(
 			"names the provisioned credential %s, and no Integration of Company %s has provisioning Engine, "+
-				"so nothing creates it and the seat's tool or chat app starts without it: give the value from a Secret, "+
-				"or provision the vendor with the engine",
+				"so nothing creates it: the engine starts none of the seat's tool servers that take it, and its "+
+				"chat app or code work runs without it. Give the value from a Secret, or provision the vendor with "+
+				"the engine",
 			src.Provisioned.Name, r.in.Company.Name))
 	}
 	name := r.in.ProvisionedName(SeatHandle(s), src.Provisioned.Name)

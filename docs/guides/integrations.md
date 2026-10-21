@@ -62,11 +62,14 @@ valueFrom:
 ```
 
 The engine finds the value where its provisioning looks for a seat's
-credential, which differs by vendor (below). A provisioned value anywhere
-else is never filled, and so is one no Integration of the seat's company
-creates: while none has `provisioning: Engine`, the seat is applied and
-reports `ResolvedRefs=False NoProvisioner`, and its tool starts without the
-value. A Unit's credentials always come from Secrets.
+credential, which differs by vendor (below), and starts a seat's tool server
+that takes it once it has minted it. A provisioned value anywhere else is
+never filled, and so is one no Integration of the seat's company creates:
+while none has `provisioning: Engine`, the seat is applied and reports
+`ResolvedRefs=False NoProvisioner`. A tool server that takes a value nothing
+fills is not started, and a chat app or code work runs without it
+([A tool server does not start](troubleshooting.md#a-tool-server-does-not-start)).
+A Unit's credentials always come from Secrets.
 
 ## Where webhooks arrive
 
