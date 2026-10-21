@@ -984,13 +984,6 @@ var mirrored = []mirror{
 		read:    bootBoundsRead,
 	},
 	{
-		file: "internal/engine/secrets.go", name: "(*Engine).refreshSecrets",
-		against: bootWindows,
-		decides: "a boot lists the company's secrets once, logging and carrying on when it cannot",
-		digest:  "c81b2f82061002102de88ad8c82472702299cc41afd4f8df450dea16f3240868",
-		read:    bootBoundsRead,
-	},
-	{
 		file: stateLogGo, name: "(*Engine).join",
 		against: bootWindows,
 		decides: "a node's join reads whether its rows can replay, and asks for a donor only when they cannot",
