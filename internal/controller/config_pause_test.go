@@ -27,7 +27,8 @@ import (
 type pauseEngine struct {
 	mu sync.Mutex
 	// roster is what GET /agents answers, by handle; rosterDown makes it
-	// fail.
+	// fail as a serving engine's does, which answers 503 only when it
+	// cannot decide who is asking (its auth.Caller).
 	roster     map[string]bool
 	rosterDown bool
 	// record is whether the coordination store holds each seat paused, which
@@ -96,7 +97,11 @@ func (f *pauseEngine) client(t *testing.T) *engine.Client {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		if f.rosterDown {
-			http.Error(w, `{"error":"unavailable"}`, http.StatusServiceUnavailable)
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Retry-After", "2")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"error":"identity_unavailable",` +
+				`"message":"Can't check who you are right now. Try again in a moment."}`))
 			return
 		}
 		rows := []map[string]any{}
