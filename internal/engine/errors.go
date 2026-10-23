@@ -235,10 +235,11 @@ func (e *APIError) Is(target error) bool {
 	case ErrUnavailable:
 		// By status alone: a 503 is "not now" whoever wrote it, and the
 		// engine writes it under several codes (unavailable,
-		// identity_unavailable and the stores' own), each retried the
-		// same way, whether it said when or that no wait clears it:
-		// nothing else tells the caller that somebody has cleared it. A
-		// draining engine's 503 is a *NotReadyError instead.
+		// identity_unavailable, seat_holders_unavailable and the stores'
+		// own), each retried the same way, whether it said when or that
+		// no wait clears it: nothing else tells the caller that somebody
+		// has cleared it. A draining engine's 503 is a *NotReadyError
+		// instead.
 		return e.StatusCode == http.StatusServiceUnavailable
 	case ErrRevisionAdvanced:
 		// By code alone: the engine writes it 412 for a write that named

@@ -511,13 +511,13 @@ func TestErrorMapping(t *testing.T) {
 			sentinel: engine.ErrUnavailable, wantCode: "unavailable", wantStatus: http.StatusServiceUnavailable,
 		},
 		{
-			// A condition no wait clears: the identity directory a write
-			// that removes a human seat reads, refused on this node until
-			// somebody acts. No Retry-After, and a message that says
-			// waiting won't change it.
+			// A condition no wait clears: who holds the human seats a
+			// write removes, read from the identity directory, refused on
+			// this node until somebody acts. No Retry-After, and a
+			// message that says waiting won't change it.
 			name:     "a condition no wait clears",
-			handler:  answer(http.StatusServiceUnavailable, identityUnavailableNoWait),
-			sentinel: engine.ErrUnavailable, wantCode: "identity_unavailable", wantStatus: http.StatusServiceUnavailable,
+			handler:  answer(http.StatusServiceUnavailable, seatHoldersUnavailableNoWait),
+			sentinel: engine.ErrUnavailable, wantCode: "seat_holders_unavailable", wantStatus: http.StatusServiceUnavailable,
 		},
 		{
 			// A 503 is retried whoever wrote it.
@@ -685,19 +685,20 @@ func TestAuthorityRefusalNamesItsGrants(t *testing.T) {
 }
 
 // The engine's refusal of a write that removes a human seat when the node
-// could not read the identity directory to see whether anybody holds it, as
-// it words it under a wait (identityUnavailableSoon, beside a two-second
-// Retry-After) and where no wait clears it (identityUnavailableNoWait, with
-// none).
+// could not read the identity directory to see who holds it, under a code of
+// its own (seat_holders_unavailable), as it words it under a wait
+// (seatHoldersUnavailableSoon, beside a two-second Retry-After) and where no
+// wait clears it (seatHoldersUnavailableNoWait, with none: the node answering
+// was evicted, and its detail says who acts).
 const (
-	identityUnavailableSoon = `{"error":"identity_unavailable",` +
-		`"hint":"This write removes a human seat, and this node could not read the identity directory to see ` +
-		`whether anybody holds it; nothing was written.",` +
-		`"message":"Can't check who you are right now. Try again in a moment.","seats":["founder"]}`
-	identityUnavailableNoWait = `{"error":"identity_unavailable",` +
-		`"hint":"This write removes a human seat, and this node could not read the identity directory to see ` +
-		`whether anybody holds it; nothing was written.",` +
-		`"message":"Can't check who you are here, and waiting won't change that.","seats":["founder"]}`
+	seatHoldersUnavailableSoon = `{"detail":"This node couldn't read who holds the human seats this change ` +
+		`removes, so nothing was written. Try again in a moment.","error":"seat_holders_unavailable",` +
+		`"message":"Can't check who holds the seats this change removes right now, so nothing was written. ` +
+		`Try again in a moment.","seats":["founder"]}`
+	seatHoldersUnavailableNoWait = `{"detail":"The node answering this has been evicted from the fleet, so it ` +
+		`can't answer. Try another node, or have an administrator readmit the one that refused.",` +
+		`"error":"seat_holders_unavailable","message":"Can't check here who holds the seats this change removes, ` +
+		`so nothing was written. Waiting won't change that.","seats":["founder"]}`
 )
 
 // TestUnavailableCarriesTheEnginesRetryAfter reads when the engine asked to
@@ -713,12 +714,12 @@ func TestUnavailableCarriesTheEnginesRetryAfter(t *testing.T) {
 		body   string
 		want   time.Duration
 	}{
-		{name: "seconds", status: http.StatusServiceUnavailable, header: "2", body: identityUnavailableSoon,
+		{name: "seconds", status: http.StatusServiceUnavailable, header: "2", body: seatHoldersUnavailableSoon,
 			want: 2 * time.Second},
-		{name: "none", status: http.StatusServiceUnavailable, body: identityUnavailableNoWait},
+		{name: "none", status: http.StatusServiceUnavailable, body: seatHoldersUnavailableNoWait},
 		{name: "a date", status: http.StatusServiceUnavailable, header: "Fri, 16 Oct 2026 23:59:00 GMT",
-			body: identityUnavailableSoon},
-		{name: "not a 503", status: http.StatusConflict, header: "2", body: identityUnavailableSoon},
+			body: seatHoldersUnavailableSoon},
+		{name: "not a 503", status: http.StatusConflict, header: "2", body: seatHoldersUnavailableSoon},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			f := newFakeEngine(t)
@@ -763,7 +764,7 @@ func TestSeatHeldNamesEachHolderButNotTheirLogin(t *testing.T) {
 		`"release":{"person":"p-2","kind":"machine","login":"svc:release","stage":"active"}},`+
 		`"hint":"Move each person to another human seat (PATCH /iam/people/{person} with seat) or remove them, `+
 		`unbind a service account (PATCH /iam/people/{person} with no seat), cancel an open invitation `+
-		`(DELETE /iam/invitations/{id}) — each an admin's gesture — then send the write again.",`+
+		`(DELETE /iam/invitations/{id}), each an admin's gesture, then send the write again.",`+
 		`"message":"This change removes a seat someone holds or is invited to. Move or remove them, or cancel `+
 		`the invitation, first. The detail says who."}`))
 	_, err := apply(f, write)
