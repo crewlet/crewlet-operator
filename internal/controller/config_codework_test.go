@@ -28,7 +28,7 @@ func codeWorkRun() (*configRun, *part, *events.FakeRecorder) {
 	}}
 	seat.Status.Conditions = []metav1.Condition{{
 		Type: crewletaiv1alpha1.ConditionCodeWorkRunnable, Status: metav1.ConditionFalse,
-		Reason: crewletaiv1alpha1.ReasonSandboxModelUnsupported, ObservedGeneration: 1,
+		Reason: crewletaiv1alpha1.ReasonSecretValueEmpty, ObservedGeneration: 1,
 	}}
 	p := newPart(seat)
 	recorder := events.NewFakeRecorder(10)
@@ -50,7 +50,7 @@ func TestCodeWorkRunnableFollowsTheRender(t *testing.T) {
 	t.Run("no render", func(t *testing.T) {
 		run, p, _ := codeWorkRun()
 		run.decide(p, nil, nil)
-		if c := codeWork(p); c == nil || c.Reason != crewletaiv1alpha1.ReasonSandboxModelUnsupported || c.ObservedGeneration != 1 {
+		if c := codeWork(p); c == nil || c.Reason != crewletaiv1alpha1.ReasonSecretValueEmpty || c.ObservedGeneration != 1 {
 			t.Errorf("CodeWorkRunnable is %+v, want the last report left as it was", c)
 		}
 	})
@@ -93,7 +93,7 @@ func TestUnrunnableCodeWorkIsAnnouncedOnce(t *testing.T) {
 		t.Error("no event announces the code work that turned unrunnable")
 	}
 
-	unchanged := render.CodeWork{Field: sandboxHead, Reason: crewletaiv1alpha1.ReasonSandboxModelUnsupported, Message: "cannot read it"}
+	unchanged := render.CodeWork{Field: sandboxHead, Reason: crewletaiv1alpha1.ReasonSecretValueEmpty, Message: "holds nothing"}
 	run, _, recorder = codeWorkRun()
 	run.checkCodeWork(map[string]render.CodeWork{seatAna: unchanged})
 	select {

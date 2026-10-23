@@ -69,19 +69,18 @@ const (
 
 // MinimalCompany is the smallest company document the engine accepts and runs
 // in full: a name, one agent seat, and one LLM provider. The provider is
-// OpenAI-compatible and points at port 9 (discard) on the loopback interface,
-// which nothing serves, so a seat that ever tried to take a turn would fail
-// at once rather than reach a real model; its key is a ${VAR} reference that
-// nothing sets, which the engine accepts and resolves only when a turn runs.
+// Claude Code, the engine's default CLI, on a metered key that is a ${VAR}
+// reference nothing sets, which the engine accepts and resolves when it
+// builds the provider: a seat that ever tried to take a turn would hand the
+// CLI no key, and fail at once rather than reach a real model.
 const MinimalCompany = `name: Acme
 providers:
   llm:
     default:
-      type: openai-compatible
-      model: enginetest-model
-      base_url: http://127.0.0.1:9/v1
-      api_keys:
-        - "${ENGINETEST_LLM_API_KEY}"
+      model: sonnet
+      auth:
+        mode: api-key
+        api_key: "${ENGINETEST_LLM_API_KEY}"
 roles:
   - name: Ana
     goal: "Answer every question the company is asked"

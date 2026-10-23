@@ -1272,7 +1272,7 @@ func TestContractScheduleRefusalsReachTheSchedule(t *testing.T) {
 }
 
 // TestContractCLIAgentRefusalsReachTheProvider has the engine's dry run refuse
-// the mistakes of a CLIAgent provider no API rule can see, because each turns
+// the mistakes of a provider's CLI no API rule can see, because each turns
 // on another object, and checks that the document attributes every problem to
 // the LLMProvider, which is where the controller reports it.
 func TestContractCLIAgentRefusalsReachTheProvider(t *testing.T) {
@@ -1300,12 +1300,12 @@ func TestContractCLIAgentRefusalsReachTheProvider(t *testing.T) {
 				var login string
 				for _, p := range in.LLMProviders {
 					if p.Name == providerAgent {
-						login = p.Spec.CLI.LoginName
+						login = p.Spec.LoginName
 					}
 				}
 				for i := range in.LLMProviders {
 					if in.LLMProviders[i].Name == providerCodex {
-						in.LLMProviders[i].Spec.CLI.LoginName = login
+						in.LLMProviders[i].Spec.LoginName = login
 					}
 				}
 			},

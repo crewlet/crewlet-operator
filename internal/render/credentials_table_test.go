@@ -74,7 +74,6 @@ const (
 
 // The references a covered position's sources take.
 const (
-	perKey       = "one `SecretKeyReference` per key"
 	perFile      = "one `SecretKeyReference` per file"
 	perVariable  = "one `SecretKeyReference` per variable"
 	perHeader    = "one `SecretKeyReference` per header"
@@ -85,6 +84,10 @@ const (
 	provisioned = "`ProvisionedCredential`: no Secret; the engine mints the value into its own store"
 )
 
+// forPlatformModel qualifies the sources of a model's positions that an
+// EngineClass's platform provider fills.
+const forPlatformModel = "for a model the platform provides"
+
 // githubWebhookSecret is the position of the GitHub organization
 // integration's webhook secret, which the refs and render tests also name as
 // the place in the document it is rendered at; it has no index to differ by.
@@ -93,11 +96,24 @@ const githubWebhookSecret = "integrations.github.webhook_secret"
 // credentialPositions are every credential position of both documents, in
 // the order docs/concepts/credentials.md lists them.
 var credentialPositions = []credentialPosition{
-	{Tier: tierCompany, Path: "providers.llm.*.api_keys[]", Sources: []credentialSource{
-		{Field: "LLMProvider.spec.apiKeySecretRefs", Reference: perKey},
+	{Tier: tierCompany, Path: "providers.llm.*.auth.api_key", Sources: []credentialSource{
+		{Field: "LLMProvider.spec.auth.apiKeySecretRef", Reference: oneKey},
 		{
-			Field: "EngineClass.spec.platformLLMProviders[].apiKeySecretRefs", Reference: "one `NamespacedSecretKeyReference` per key",
-			When: "for a model the platform provides",
+			Field: "EngineClass.spec.platformLLMProviders[].auth.apiKeySecretRef", Reference: "`NamespacedSecretKeyReference`",
+			When: forPlatformModel,
+		},
+	}},
+	{Tier: tierCompany, Path: "providers.llm.*.auth.token", Sources: []credentialSource{
+		{Field: "LLMProvider.spec.auth.tokenSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "providers.llm.*.auth.credential_bundle", Sources: []credentialSource{
+		{Field: "LLMProvider.spec.auth.credentialBundleSecretRef", Reference: oneKey},
+	}},
+	{Tier: tierCompany, Path: "providers.llm.*.env.*", Sources: []credentialSource{
+		{Field: "LLMProvider.spec.env[].valueFrom.secretKeyRef", Reference: perVariable},
+		{
+			Field:     "EngineClass.spec.platformLLMProviders[].env[].valueFrom.secretKeyRef",
+			Reference: "one `NamespacedSecretKeyReference` per variable", When: forPlatformModel,
 		},
 	}},
 	{Tier: tierCompany, Path: "providers.embeddings.api_key", Sources: []credentialSource{
@@ -215,15 +231,6 @@ var credentialPositions = []credentialPosition{
 	}},
 	{Tier: tierCompany, Path: "integrations.atlassian.api_key", Sources: []credentialSource{
 		{Field: "Integration.spec.atlassian.apiKeySecretRef", Reference: oneKey},
-	}},
-	{Tier: tierCompany, Path: "providers.llm.*.cli.auth.token", Sources: []credentialSource{
-		{Field: "LLMProvider.spec.cli.auth.tokenSecretRef", Reference: oneKey},
-	}},
-	{Tier: tierCompany, Path: "providers.llm.*.cli.auth.credential_bundle", Sources: []credentialSource{
-		{Field: "LLMProvider.spec.cli.auth.credentialBundleSecretRef", Reference: oneKey},
-	}},
-	{Tier: tierCompany, Path: "providers.llm.*.cli.env.*", Sources: []credentialSource{
-		{Field: "LLMProvider.spec.cli.env[].valueFrom.secretKeyRef", Reference: perVariable},
 	}},
 
 	{Tier: tierBootstrap, Path: "api.auth.tokens[].token", Sources: []credentialSource{

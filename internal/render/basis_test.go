@@ -155,8 +155,7 @@ var findings = []struct {
 // reports beside the render (CodeWorkOf, ExecutorOf, AgentModeOf), always
 // holding nothing: no place may record one as a finding.
 var reportedElsewhere = []string{
-	v1alpha1.ReasonSandboxModelUnsupported, v1alpha1.ReasonSandboxLoginNotPortable,
-	v1alpha1.ReasonAgentModeBridgeUnsupported, v1alpha1.ReasonNotExposed,
+	v1alpha1.ReasonSandboxLoginNotPortable, v1alpha1.ReasonAgentModeBridgeUnsupported, v1alpha1.ReasonNotExposed,
 }
 
 // findingSites reads every place the package's source records a finding: a

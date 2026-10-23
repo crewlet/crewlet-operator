@@ -139,7 +139,8 @@ A stdio MCP server it starts is handed the engine's `HOME` and writes to the
 latter two, which are `emptyDir` volumes, and `HOME` is set explicitly so an
 image built on another base still has a writable one. A coding CLI is handed
 a home, a `TMPDIR` and XDG directories of its seat's own instead, under
-`/var/lib/crewlet/llm-cli` on the data volume, and a seat's code work runs in
+`/var/lib/crewlet/llm-cli` on the data volume (`llm-cli-platform` for a
+model the class provides), and a seat's code work runs in
 the Company's E2B sandbox, outside the pod.
 
 The pod template carries the annotation `crewlet.ai/bootstrap-hash`, the hash

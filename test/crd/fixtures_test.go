@@ -35,12 +35,14 @@ const (
 	modelViaOpenRouter = "openrouter/anthropic/claude-sonnet-5"
 )
 
-// Environment variables the CLIAgent cases name: a model provider's key
-// some CLI's profile reads, and a proxy, which is no credential.
+// Environment variables the provider cases name: a model provider's key
+// some CLI's profile reads, a proxy, which is no credential, and the address
+// of a gateway Claude Code reads from its environment, which is none either.
 const (
 	envAnthropicKey = "ANTHROPIC_API_KEY"
 	envOpenAIKey    = "OPENAI_API_KEY"
 	envProxy        = "HTTPS_PROXY"
+	envBaseURL      = "ANTHROPIC_BASE_URL"
 )
 
 // cliVariable is the variable of the headless token and of the key Crewlet's
@@ -108,12 +110,7 @@ const (
 	msgPrefixSlash                 = "prefix must end with '/'"
 	msgS3Backend                   = "s3 is required with backend S3 and not allowed otherwise"
 	msgReservedLabels              = "labels under crewlet.ai/ and app.kubernetes.io/ are the operator's own"
-	msgKeysRequired                = "apiKeySecretRefs needs at least one key for types Anthropic and OpenAI"
 	msgBaseURLRequired             = "baseURL is required for type OpenAICompatible"
-	msgClaudeModel                 = "claudeModel applies to type Anthropic only"
-	msgClaudeModelUnlisted         = `spec.claudeModel: Unsupported value`
-	msgReasoning                   = "reasoning applies to type OpenAI only"
-	msgBudgetTokens                = "reasoningBudgetTokens applies to type Anthropic only"
 	msgBaseURLShape                = "baseURL must be an absolute http or https URL"
 	msgCompanyName                 = "a Company's name must be a DNS label of at most 47 characters"
 	msgEnvExactlyOne               = "exactly one of value and valueFrom must be set"
@@ -155,7 +152,6 @@ const (
 	msgHeaderCase                  = "names must differ in more than case: HTTP header names are case-insensitive"
 	msgContainerKey                = `should match '^[A-Z][A-Z0-9]{1,9}$'`
 	msgProviderKeyEnv              = "ANTHROPIC_API_KEY and OPENAI_API_KEY are model provider keys"
-	msgReasoningEffort             = "reasoningEffort is sent to an OpenAI model only while reasoning is true"
 	msgBlankModel                  = "model may not be white space alone"
 	msgBlankEmbeddingModel         = "refuses an embeddings provider that names no model"
 	msgSeatName                    = "without spec.handle the Seat's name is its handle"
@@ -223,15 +219,18 @@ func company(namespace, name string) *v1.Company {
 	}
 }
 
-// llmProvider is the smallest valid LLMProvider.
+// llmProvider is the smallest valid LLMProvider: Claude Code on a metered
+// key.
 func llmProvider(namespace, name string) *v1.LLMProvider {
 	return &v1.LLMProvider{
 		Namespace: namespace,
 		Name:      name,
 		Spec: v1.LLMProviderSpec{
 			CompanyRef:          companyRef(),
-			LLMProviderSettings: v1.LLMProviderSettings{Type: v1.LLMProviderAnthropic, Model: claudeModel},
-			APIKeySecretRefs:    []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)},
+			LLMProviderSettings: v1.LLMProviderSettings{Agent: v1.CLIAgentClaudeCode, Model: claudeModel},
+			Auth: v1.CLIAgentAuth{
+				Mode: v1.CLIAgentAuthAPIKey, APIKeySecretRef: secretKey(providerName, apiKeyKey),
+			},
 		},
 	}
 }

@@ -152,8 +152,8 @@ as a data pod, with variables in its environment, and holds what the
 [tool-servers guide](docs/guides/tool-servers.md#stdio-and-http) and the
 `MCPServer` API say a stdio tool server is handed of it to what the engine
 starts one with. The CRD suite in
-[`test/crd`](test/crd) holds the `LLMProvider` rules over a `CLIAgent`
-provider's sign-in, and the sign-in table of
+[`test/crd`](test/crd) holds the `LLMProvider` rules over a provider's
+sign-in, and the sign-in table of
 [`docs/guides/cli-agents.md`](docs/guides/cli-agents.md), to the same binary:
 it reads each CLI's token and key variable from the engine's own refusals,
 tries every CLI the API offers in every sign-in shape, each driving a seat,
@@ -166,13 +166,11 @@ engine that marks another profile as reading `<provider>/<model>` fails it
 too, as does one whose refusal of such a model quotes another error of
 OpenCode's, or another command listing its providers, than the rule's
 message and the guide quote. It reads the variables the engine sets to keep
-each CLI inside a seat's own home from its refusal of `HOME` in `cli.env`,
-which names every one for that CLI, and tries each on every CLI, so an
+each CLI inside a seat's own home from its refusal of `HOME` in a provider's
+`env`, which names every one for that CLI, and tries each on every CLI, so an
 engine that gives a profile another such variable, or drops one, fails the
 rule over `env`, the list its message states and the guide's table of them.
-And it holds the `claudeModel` enum to the engine's table of Claude models,
-read from its refusal of an id the table does not list, so an engine that
-adds or drops a row fails it. A mock would agree with the code by
+A mock would agree with the code by
 construction; the real engine is what tells the two apart when Crewlet's API
 or schema moves.
 
@@ -181,12 +179,12 @@ with, which the renderer's verdict on a seat's code work turns on. The renderer'
 `TestCodeWorkFollowsTheEngineSource` reads it from the engine's own source
 (`enginetest.Source`, the module `make crewlet` installed from): the
 coding agent of a seat and a catalogue that name none, the
-variables that sign Claude Code in from a seat's environment, and Claude
-Code's token and key variables. The rules around those lists decide only at
+variables that sign Claude Code in from a run's environment, and Claude
+Code's token and key variables among them. The rules around those lists decide only at
 a launch, which no engine test reaches, so `TestMirroredEngineDeclarationsAreUnchanged`
 holds their code: [`internal/render/mirror_test.go`](internal/render/mirror_test.go)
 names every engine function whose decision the operator copies at a launch —
-`newCodingRun`, `claudeCodeOnForeignEntry`, `sandboxCredentials` and the
+`newCodingRun`, `entrySignIn`, `sandboxCredentials` and the
 launch, catalogue and helpers around them in Crewlet's
 `internal/engine/sandbox.go`, `internal/sandbox/manager.go` and the CLI
 provider, what the E2B backend creates a box from (`internal/sandbox/e2b.go`),
@@ -244,16 +242,15 @@ to read it against and the `git log` that shows the change; read it, make
 the operator follow it, and record the digest and version the failure
 prints. When the engine removes or renames one, the test says so: name the
 declaration that decides it now in its place, with any digest at first, and
-the next run prints the digest to record. Of the renderer's three code-work verdicts,
-`SandboxModelUnsupported` and `SandboxLoginNotPortable` mirror what the
-engine refuses only when a seat launches a coding run, never on a write, so
-the operator reports them on the Seat's `CodeWorkRunnable` and applies the
-seat, as the engine does: drift there leaves a stale condition, not a held
-company. `CodingAgentMismatch` mirrors a refusal on every write and blocks
+the next run prints the digest to record. Of the renderer's two code-work verdicts,
+`SandboxLoginNotPortable` mirrors what the engine refuses only when a seat
+launches a coding run, never on a write, so the operator reports it on the
+Seat's `CodeWorkRunnable` and applies the seat, as the engine does: drift
+there leaves a stale condition, not a held company. `CodingAgentMismatch` mirrors a refusal on every write and blocks
 the document. `TestContractCodeWorkOnWrite` holds the split to the engine:
 it refuses at the seat's `llm_sandbox` exactly the pairings the
 renderer refuses, and accepts the ones it only reports, so an engine that
-starts refusing either on a write fails it.
+starts refusing one of those on a write fails it.
 
 ### When a finding holds the document
 

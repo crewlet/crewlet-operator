@@ -26,7 +26,7 @@ func TestDiff(t *testing.T) {
 	const rendered = `name: Acme
 providers:
   llm:
-    main: {type: anthropic, model: m, api_keys: ["${K8S_MAIN_KEY_AAAAAAAAAAAA}"]}
+    main: {model: m, auth: {mode: api-key, api_key: "${K8S_MAIN_KEY_AAAAAAAAAAAA}"}}
   llm_order: [main]
 turn_engine:
   extension_enabled: true
@@ -56,7 +56,7 @@ units:
 			active: `name: Acme
 providers:
   llm:
-    main: {type: anthropic, model: m, api_keys: ["${K8S_MAIN_KEY_AAAAAAAAAAAA}"]}
+    main: {model: m, auth: {mode: api-key, api_key: "${K8S_MAIN_KEY_AAAAAAAAAAAA}"}}
   llm_order: [main]
 turn_engine:
   extension_enabled: true
@@ -77,7 +77,7 @@ units:
 			active: `name: Acme
 providers:
   llm:
-    main: {type: anthropic, model: m, api_keys: ["${K8S_MAIN_KEY_AAAAAAAAAAAA}"]}
+    main: {model: m, auth: {mode: api-key, api_key: "${K8S_MAIN_KEY_AAAAAAAAAAAA}"}}
   llm_order: [main]
 turn_engine: {extension_enabled: true}
 roles:
@@ -94,7 +94,7 @@ units:
 mission: Added in the dashboard.
 providers:
   llm:
-    main: {type: anthropic, model: m, api_keys: ["${K8S_MAIN_KEY_AAAAAAAAAAAA}"]}
+    main: {model: m, auth: {mode: api-key, api_key: "${K8S_MAIN_KEY_AAAAAAAAAAAA}"}}
   llm_order: [main]
 turn_engine: {extension_enabled: true}
 roles:
@@ -110,7 +110,7 @@ units:
 			active: `name: Acme
 providers:
   llm:
-    main: {type: anthropic, model: m, api_keys: ["__redacted__"]}
+    main: {model: m, auth: {mode: api-key, api_key: "__redacted__"}}
   llm_order: [main]
 turn_engine: {extension_enabled: true}
 roles:
@@ -119,14 +119,14 @@ roles:
 units:
 - {id: eng, name: Engineering, roles: [{name: Cy, handle: cy, kind: agent, llm: [main, backup]}]}
 `,
-			want: []string{"providers.llm.main.api_keys[0]"},
+			want: []string{"providers.llm.main.auth.api_key"},
 		},
 		{
 			name: "an engineConfig setting the Company sets, changed, and its block otherwise defaulted",
 			active: `name: Acme
 providers:
   llm:
-    main: {type: anthropic, model: m, api_keys: ["${K8S_MAIN_KEY_AAAAAAAAAAAA}"]}
+    main: {model: m, auth: {mode: api-key, api_key: "${K8S_MAIN_KEY_AAAAAAAAAAAA}"}}
   llm_order: [main]
 turn_engine: {extension_enabled: false, max_iterations: 7}
 roles:
@@ -142,7 +142,7 @@ units:
 			active: `name: Acme
 providers:
   llm:
-    main: {type: anthropic, model: m, api_keys: ["${K8S_MAIN_KEY_AAAAAAAAAAAA}"]}
+    main: {model: m, auth: {mode: api-key, api_key: "${K8S_MAIN_KEY_AAAAAAAAAAAA}"}}
   llm_order: [main]
 turn_engine: {extension_enabled: true}
 tracker: {backend: none}

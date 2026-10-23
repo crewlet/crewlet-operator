@@ -2,66 +2,53 @@ name: Forge
 providers:
   llm:
     claude-agent:
-      cli:
-        agent: claude-code
-        auth:
-          mode: subscription
-          token: ${K8S_CLAUDE_SUBSCRIPTION_OAUTH_TOKEN_5F3I3N4HVTAV}
-        max_concurrent: 2
-        mode: agent
-        run_in: e2b
-        state_dir: /var/lib/crewlet/llm-cli/claude
-        timeout_seconds: 900
+      agent: claude-code
+      auth:
+        mode: subscription
+        token: ${K8S_CLAUDE_SUBSCRIPTION_OAUTH_TOKEN_5F3I3N4HVTAV}
+      max_concurrent: 2
+      mode: agent
       model: sonnet
-      type: cli-agent
+      run_in: e2b
+      state_dir: /var/lib/crewlet/llm-cli/claude
+      timeout_seconds: 900
     codex:
-      cli:
-        agent: codex
-        auth:
-          credential_bundle: ${K8S_CODEX_LOGIN_BUNDLE_C7GT3IPZJRP3}
-        state_dir: /var/lib/crewlet/llm-cli/codex
+      agent: codex
+      auth:
+        credential_bundle: ${K8S_CODEX_LOGIN_BUNDLE_C7GT3IPZJRP3}
       model: gpt-5-codex
-      type: cli-agent
+      state_dir: /var/lib/crewlet/llm-cli/codex
     cursor:
-      api_keys:
-      - ${K8S_CURSOR_API_KEY_UAPO7C3S3GGL}
-      cli:
-        agent: cursor-agent
-        auth:
-          mode: api-key
-        state_dir: /var/lib/crewlet/llm-cli/cursor
+      agent: cursor-agent
+      auth:
+        api_key: ${K8S_CURSOR_API_KEY_UAPO7C3S3GGL}
+        mode: api-key
       model: auto
-      type: cli-agent
+      state_dir: /var/lib/crewlet/llm-cli/cursor
     hermes:
-      cli:
-        agent: hermes
-        auth:
-          mode: subscription
-        env:
-          OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
-        state_dir: /var/lib/crewlet/llm-cli/hermes
+      agent: hermes
+      auth:
+        mode: subscription
+      env:
+        OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
       model: anthropic/claude-sonnet-5
-      type: cli-agent
+      state_dir: /var/lib/crewlet/llm-cli/hermes
     opencode:
-      cli:
-        agent: opencode
-        auth:
-          mode: subscription
-        env:
-          ANTHROPIC_API_KEY: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
-        state_dir: /var/lib/crewlet/llm-cli/opencode
+      agent: opencode
+      auth:
+        mode: subscription
+      env:
+        ANTHROPIC_API_KEY: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
       model: anthropic/claude-sonnet-5
-      type: cli-agent
+      state_dir: /var/lib/crewlet/llm-cli/opencode
     pi:
-      cli:
-        agent: pi
-        auth:
-          mode: subscription
-        env:
-          OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
-        state_dir: /var/lib/crewlet/llm-cli/pi
+      agent: pi
+      auth:
+        mode: subscription
+      env:
+        OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
       model: openrouter/anthropic/claude-sonnet-5
-      type: cli-agent
+      state_dir: /var/lib/crewlet/llm-cli/pi
   llm_order:
   - claude-agent
   - codex

@@ -53,8 +53,8 @@ type part struct {
 	unplaceableReason string
 	// unrunnable are why a Seat cannot run on the pods of the pool it is
 	// placed in, which its class admits, because the pods cannot keep the
-	// login of a CLI it runs on, or why its code work runs on a CLIAgent
-	// provider of another CLI. Its references resolve; the document is
+	// login of a CLI it runs on, or why its code work runs on a provider of
+	// another CLI. Its references resolve; the document is
 	// refused all the same.
 	unrunnable       []string
 	unrunnableReason string

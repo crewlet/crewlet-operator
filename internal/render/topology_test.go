@@ -580,7 +580,7 @@ func TestAnUndeclaredPoolPinsNoPod(t *testing.T) {
 	const later = "later"
 	in := companyCaseNamed(t, caseSeatPools).input(t)
 	bundled := cliProvider(v1alpha1.CLIAgentModeText)
-	bundled.Spec.CLI.Auth = v1alpha1.CLIAgentAuth{
+	bundled.Spec.Auth = v1alpha1.CLIAgentAuth{
 		CredentialBundleSecretRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "bundle"},
 	}
 	in.LLMProviders = append(in.LLMProviders, bundled)

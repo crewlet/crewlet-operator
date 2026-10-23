@@ -238,7 +238,7 @@ func TestOrgPositionsAreWrittenFromTheirEntry(t *testing.T) {
 		{at(Path{keyUnits, 0}, unitEnv), unitPosition},
 		{at(Path{keyUnits, 0, keyChildren, 0}, unitEnv), unitPosition},
 		{at(Path{keyUnits, 1, keyChildren, 0, keyChildren, 3}, unitEnv), unitPosition},
-		{Path{keyProviders, "llm", "a", "api_keys", 0}, "providers.llm.a.api_keys[]"},
+		{Path{keyProviders, "llm", "a", keyEnv, "OPENROUTER_API_KEY"}, "providers.llm.a.env.OPENROUTER_API_KEY"},
 		// children only nests units: elsewhere it is an ordinary key.
 		{Path{keyMCPServers, 0, keyChildren, 0, "env", "X"}, "mcp_servers[].children[].env.X"},
 	} {

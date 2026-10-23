@@ -35,63 +35,90 @@ const (
 	platformGPT   = "shared-gpt"
 )
 
-// codeWorkProvider is a provider of kind for the opencode-agent case, named
-// head- and its kind or CLI, signed in as the API admits: an API provider on a key (an
-// OpenAICompatible one on its endpoint alone), a CLIAgent provider in mode
-// Text on its headless token, its key, its model provider's key in env, or a
-// bundle, the first its CLI takes.
-func codeWorkProvider(kind v1alpha1.LLMProviderType, agent v1alpha1.CLIAgentName) v1alpha1.LLMProvider {
+// codeWorkProvider is a provider of agent for the opencode-agent case, named
+// head- and its CLI, in mode Text, signed in as the API admits: on its
+// headless token, its key, its model provider's key in env, or a bundle, the
+// first its CLI takes.
+func codeWorkProvider(agent v1alpha1.CLIAgentName) v1alpha1.LLMProvider {
 	key := func(name string) v1alpha1.SecretKeyReference {
 		return v1alpha1.SecretKeyReference{Name: name, Key: keyAPIKey}
 	}
 	p := v1alpha1.LLMProvider{
 		Namespace: testNamespace,
-		Name:      "head-" + strings.ToLower(string(kind)),
+		Name:      "head-" + strings.ToLower(string(agent)),
 		Spec: v1alpha1.LLMProviderSpec{
 			CompanyRef:          v1alpha1.CompanyReference{Name: "harbor"},
-			LLMProviderSettings: v1alpha1.LLMProviderSettings{Type: kind, Model: codeWorkModel},
+			LLMProviderSettings: v1alpha1.LLMProviderSettings{Agent: agent, Model: codeWorkModel},
 		},
 	}
-	switch kind {
-	case v1alpha1.LLMProviderAnthropic, v1alpha1.LLMProviderOpenAI:
-		p.Spec.APIKeySecretRefs = []v1alpha1.SecretKeyReference{key(p.Name)}
-	case v1alpha1.LLMProviderOpenAICompatible:
-		p.Spec.BaseURL = "https://gateway.example.com/v1"
-	case v1alpha1.LLMProviderCLIAgent:
-		p.Name = "head-" + strings.ToLower(string(agent))
-		p.Spec.CLI = v1alpha1.CLIAgentSettings{Agent: agent}
-		switch agent {
-		case v1alpha1.CLIAgentClaudeCode:
-			p.Spec.CLI.Auth.TokenSecretRef = key(p.Name)
-		case v1alpha1.CLIAgentCodex, v1alpha1.CLIAgentGeminiCLI, v1alpha1.CLIAgentQwenCode,
-			v1alpha1.CLIAgentCursorAgent, v1alpha1.CLIAgentCopilot, v1alpha1.CLIAgentGrok, v1alpha1.CLIAgentMuseCode:
-			p.Spec.CLI.Auth.Mode = v1alpha1.CLIAgentAuthAPIKey
-			p.Spec.APIKeySecretRefs = []v1alpha1.SecretKeyReference{key(p.Name)}
-		case v1alpha1.CLIAgentOpenCode, v1alpha1.CLIAgentHermes, v1alpha1.CLIAgentPi:
-			p.Spec.CLI.Auth.Mode = v1alpha1.CLIAgentAuthSubscription
-			p.Spec.CLI.Env = []v1alpha1.SecretEnvVar{{
-				Name:      envGatewayKey,
-				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: key("openrouter")},
-			}}
-		case v1alpha1.CLIAgentKimiCode:
-			p.Spec.CLI.Auth.CredentialBundleSecretRef = v1alpha1.SecretKeyReference{Name: p.Name, Key: keyBundle}
-		}
+	switch agent {
+	case v1alpha1.CLIAgentClaudeCode:
+		p.Spec.Auth.TokenSecretRef = key(p.Name)
+	case v1alpha1.CLIAgentCodex, v1alpha1.CLIAgentGeminiCLI, v1alpha1.CLIAgentQwenCode,
+		v1alpha1.CLIAgentCursorAgent, v1alpha1.CLIAgentCopilot, v1alpha1.CLIAgentGrok, v1alpha1.CLIAgentMuseCode:
+		p.Spec.Auth = v1alpha1.CLIAgentAuth{Mode: v1alpha1.CLIAgentAuthAPIKey, APIKeySecretRef: key(p.Name)}
+	case v1alpha1.CLIAgentOpenCode, v1alpha1.CLIAgentHermes, v1alpha1.CLIAgentPi:
+		p.Spec.Auth.Mode = v1alpha1.CLIAgentAuthSubscription
+		p.Spec.Env = []v1alpha1.SecretEnvVar{{
+			Name:      envGatewayKey,
+			ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: key("openrouter")},
+		}}
+	case v1alpha1.CLIAgentKimiCode:
+		p.Spec.Auth.CredentialBundleSecretRef = v1alpha1.SecretKeyReference{Name: p.Name, Key: keyBundle}
 	}
 	return p
 }
 
-// codeWorkBundled is a CLIAgent provider of agent for the opencode-agent case,
-// named bundle- and its CLI, signed in by a credential bundle alone, whose
-// login cannot follow a run into a remote sandbox.
+// codeWorkKeyed is a provider of agent for the opencode-agent case, named
+// key- and its CLI, signed in with auth mode APIKey, whose key every box of
+// the seat's code work carries.
+func codeWorkKeyed(agent v1alpha1.CLIAgentName) v1alpha1.LLMProvider {
+	p := codeWorkProvider(agent)
+	p.Name = "key-" + strings.ToLower(string(agent))
+	p.Spec.Env = nil
+	p.Spec.Auth = v1alpha1.CLIAgentAuth{
+		Mode:            v1alpha1.CLIAgentAuthAPIKey,
+		APIKeySecretRef: v1alpha1.SecretKeyReference{Name: p.Name, Key: keyAPIKey},
+	}
+	return p
+}
+
+// codeWorkBundled is a provider of agent for the opencode-agent case, named
+// bundle- and its CLI, signed in by a credential bundle alone, whose login
+// cannot follow a run into a remote sandbox.
 func codeWorkBundled(agent v1alpha1.CLIAgentName) v1alpha1.LLMProvider {
-	p := codeWorkProvider(v1alpha1.LLMProviderCLIAgent, agent)
+	p := codeWorkProvider(agent)
 	p.Name = "bundle-" + strings.ToLower(string(agent))
-	p.Spec.APIKeySecretRefs = nil
-	p.Spec.CLI.Env = nil
-	p.Spec.CLI.Auth = v1alpha1.CLIAgentAuth{
+	p.Spec.Env = nil
+	p.Spec.Auth = v1alpha1.CLIAgentAuth{
 		CredentialBundleSecretRef: v1alpha1.SecretKeyReference{Name: p.Name, Key: keyBundle},
 	}
 	return p
+}
+
+// codeWorkPlatform gives the opencode-agent case's class the platform
+// provider platformGPT, driving agent on a key the way codeWorkProvider signs
+// such a CLI in, at the head of the order of its Company, which uses it, and
+// makes fixer a seat with no chain of its own, which runs on it.
+func codeWorkPlatform(agent v1alpha1.CLIAgentName) func(*Input) {
+	return func(in *Input) {
+		p := v1alpha1.PlatformLLMProvider{Name: platformGPT, Agent: agent, Model: codeWorkModel}
+		key := v1alpha1.NamespacedSecretKeyReference{Namespace: "crewlet-system", Name: platformGPT, Key: keyAPIKey}
+		if agent == v1alpha1.CLIAgentOpenCode {
+			p.Auth.Mode = v1alpha1.CLIAgentAuthSubscription
+			p.Env = []v1alpha1.NamespacedSecretEnvVar{{
+				Name: envGatewayKey, ValueFrom: v1alpha1.NamespacedSecretValueSource{SecretKeyRef: key},
+			}}
+		} else {
+			p.Auth = v1alpha1.PlatformLLMProviderAuth{Mode: v1alpha1.CLIAgentAuthAPIKey, APIKeySecretRef: key}
+		}
+		in.Company.Spec.LLM.UsePlatformProviders = new(true)
+		in.Class.Spec.PlatformLLMProviders = []v1alpha1.PlatformLLMProvider{p}
+		in.Company.Spec.LLM.Order = []v1alpha1.LLMProviderReference{
+			{Kind: v1alpha1.LLMProviderKindPlatform, Name: platformGPT},
+		}
+		seat(in, codeWorkSeat).Spec.LLM = v1alpha1.SeatLLM{}
+	}
 }
 
 // codeWorkInput is the opencode-agent case with seat fixer's code work on
@@ -107,19 +134,15 @@ func codeWorkInput(t *testing.T, head *v1alpha1.LLMProvider, runner v1alpha1.Cod
 }
 
 // TestCodeWork covers every seat whose code work no run_sandbox launch could
-// run: a CLIAgent provider driving another CLI than its coding agent, which
-// the render refuses as Crewlet does on every write, and ClaudeCode on a
-// provider that does not speak Anthropic's wire or a CLIAgent login a remote
-// sandbox cannot carry, which Crewlet applies and the render reports without
-// refusing the document. Each is reported at the field that names the
-// provider, every way out of each the engine takes is reported runnable, and
-// a seat Crewlet offers no code work is reported nothing.
+// run: a provider driving another CLI than its coding agent, which the render
+// refuses as Crewlet does on every write, and a login a remote sandbox cannot
+// carry, which Crewlet applies and the render reports without refusing the
+// document. Each is reported at the field that names the provider, every way
+// out of each the engine takes is reported runnable, and a seat Crewlet
+// offers no code work is reported nothing.
 func TestCodeWork(t *testing.T) {
-	cli := func(agent v1alpha1.CLIAgentName) v1alpha1.LLMProvider {
-		return codeWorkProvider(v1alpha1.LLMProviderCLIAgent, agent)
-	}
+	cli := codeWorkProvider
 	bundled := codeWorkBundled
-	api := func(kind v1alpha1.LLMProviderType) v1alpha1.LLMProvider { return codeWorkProvider(kind, "") }
 	seatEnv := func(name string) func(*Input) {
 		return func(in *Input) {
 			seat(in, codeWorkSeat).Spec.Sandbox.Env = []v1alpha1.SeatEnvVar{{
@@ -146,7 +169,6 @@ func TestCodeWork(t *testing.T) {
 		atSandbox = "spec.llm.sandbox[0].name "
 		runnable  = atSandbox + "runnable"
 		mismatch  = atSandbox + v1alpha1.ReasonCodingAgentMismatch
-		foreign   = atSandbox + v1alpha1.ReasonSandboxModelUnsupported
 		stranded  = atSandbox + v1alpha1.ReasonSandboxLoginNotPortable
 		// refusal is the render's refusal of a mismatch.
 		refusal = "Seat/fixer " + mismatch
@@ -165,67 +187,31 @@ func TestCodeWork(t *testing.T) {
 		says []string
 	}{
 		{
-			name: "ClaudeCode on an Anthropic provider", head: api(v1alpha1.LLMProviderAnthropic), runner: v1alpha1.CodingAgentClaudeCode,
-			reported: runnable, says: []string{"with the ClaudeCode coding agent on LLMProvider head-anthropic"},
-		},
-		{
-			name: "OpenCode on an OpenAI provider", head: api(v1alpha1.LLMProviderOpenAI), runner: v1alpha1.CodingAgentOpenCode,
-			reported: runnable, says: []string{"with the OpenCode coding agent on LLMProvider head-openai"},
-		},
-		{
-			name: "ClaudeCode on an OpenAI provider", head: api(v1alpha1.LLMProviderOpenAI), runner: v1alpha1.CodingAgentClaudeCode,
-			reported: foreign,
-			says: []string{
-				"on LLMProvider head-openai, of type OpenAI", "spec.sandbox.codingAgent: OpenCode", "CLAUDE_CODE_USE_FOUNDRY",
-				"Crewlet refuses each run_sandbox launch of the seat.",
-			},
-		},
-		{
-			name: "ClaudeCode on an OpenAICompatible provider", head: api(v1alpha1.LLMProviderOpenAICompatible),
-			runner: v1alpha1.CodingAgentClaudeCode, reported: foreign,
+			name: "ClaudeCode on its key", head: codeWorkKeyed(v1alpha1.CLIAgentClaudeCode), runner: v1alpha1.CodingAgentClaudeCode,
+			reported: runnable,
+			says:     []string{"with the ClaudeCode coding agent on LLMProvider key-claudecode, whose model and sign-in"},
 		},
 		{
 			// The Company's default coding agent is OpenCode; unset,
 			// ClaudeCode.
-			name: "the default coding agent on an OpenAI provider", head: api(v1alpha1.LLMProviderOpenAI),
-			mutate:   func(in *Input) { in.Company.Spec.Sandbox.DefaultCodingAgent = "" },
-			reported: foreign,
+			name: "the default coding agent on an OpenCode provider", head: cli(v1alpha1.CLIAgentOpenCode),
+			mutate:  func(in *Input) { in.Company.Spec.Sandbox.DefaultCodingAgent = "" },
+			refused: []string{refusal}, reported: mismatch,
+			says: []string{"with the ClaudeCode coding agent on LLMProvider head-opencode, a provider driving OpenCode"},
 		},
 		{
-			name: "the Company's default coding agent, OpenCode, on an OpenAI provider", head: api(v1alpha1.LLMProviderOpenAI),
+			name: "the Company's default coding agent, OpenCode, on an OpenCode provider", head: cli(v1alpha1.CLIAgentOpenCode),
 			reported: runnable,
-		},
-		{
-			name: "ClaudeCode on an OpenAI provider, signed in by the seat", head: api(v1alpha1.LLMProviderOpenAI),
-			runner: v1alpha1.CodingAgentClaudeCode, mutate: seatEnv("CLAUDE_CODE_OAUTH_TOKEN"), reported: runnable,
-			says: []string{
-				"on the sign-in the seat's sandbox environment gives it (CLAUDE_CODE_OAUTH_TOKEN), under its own model choice",
-				"neither the model nor the key of LLMProvider head-openai",
-			},
-		},
-		{
-			name: "ClaudeCode on an OpenAI provider, moved onto Bedrock by the seat's setup", head: api(v1alpha1.LLMProviderOpenAI),
-			runner: v1alpha1.CodingAgentClaudeCode, mutate: setupEnv(false, "CLAUDE_CODE_USE_BEDROCK"), reported: runnable,
-			says: []string{"gives it (CLAUDE_CODE_USE_BEDROCK), under its own model choice"},
-		},
-		{
-			name: "ClaudeCode on an OpenAI provider, signed in by the Company's setup", head: api(v1alpha1.LLMProviderOpenAI),
-			runner: v1alpha1.CodingAgentClaudeCode, mutate: setupEnv(true, "ANTHROPIC_AUTH_TOKEN"), reported: runnable,
-			says: []string{"gives it (ANTHROPIC_AUTH_TOKEN)"},
-		},
-		{
-			name: "ClaudeCode on an OpenAI provider beside a key no Claude Code reads", head: api(v1alpha1.LLMProviderOpenAI),
-			runner: v1alpha1.CodingAgentClaudeCode, mutate: seatEnv("OPENAI_API_KEY"), reported: foreign,
 		},
 		{
 			name: "ClaudeCode on a Codex provider", head: cli(v1alpha1.CLIAgentCodex), runner: v1alpha1.CodingAgentClaudeCode,
 			refused: []string{refusal}, reported: mismatch,
-			says: []string{"on LLMProvider head-codex, a CLIAgent provider driving Codex", "Name a provider of type Anthropic, or"},
+			says: []string{"on LLMProvider head-codex, a provider driving Codex", "Name a provider driving ClaudeCode first"},
 		},
 		{
 			name: "OpenCode on a ClaudeCode provider", head: cli(v1alpha1.CLIAgentClaudeCode), runner: v1alpha1.CodingAgentOpenCode,
 			refused: []string{refusal}, reported: mismatch,
-			says: []string{"Anthropic, OpenAI or OpenAICompatible", "or set spec.sandbox.codingAgent: ClaudeCode"},
+			says: []string{"Name a provider driving OpenCode first", "or set spec.sandbox.codingAgent: ClaudeCode"},
 		},
 		{
 			name: "ClaudeCode on an OpenCode provider", head: cli(v1alpha1.CLIAgentOpenCode), runner: v1alpha1.CodingAgentClaudeCode,
@@ -236,11 +222,12 @@ func TestCodeWork(t *testing.T) {
 			reported: runnable, says: []string{"on LLMProvider head-claudecode, whose model and sign-in it can use"},
 		},
 		{
-			// The provider's own sign-in reaches the box, whatever the
-			// seat adds beside it.
+			// The seat's own sign-in replaces the provider's, which Crewlet
+			// hands the run none of.
 			name: "ClaudeCode on its headless token beside the seat's key", head: cli(v1alpha1.CLIAgentClaudeCode),
 			runner: v1alpha1.CodingAgentClaudeCode, mutate: seatEnv("ANTHROPIC_API_KEY"), reported: runnable,
-			says: []string{"whose model and sign-in it can use"},
+			says: []string{"signed in by ANTHROPIC_API_KEY from the seat's sandbox environment, which Crewlet hands " +
+				"the run in place of the provider's own sign-in"},
 		},
 		{
 			name: "OpenCode on its key in env", head: cli(v1alpha1.CLIAgentOpenCode), runner: v1alpha1.CodingAgentOpenCode,
@@ -250,7 +237,7 @@ func TestCodeWork(t *testing.T) {
 			name: "ClaudeCode on a bundle", head: bundled(v1alpha1.CLIAgentClaudeCode), runner: v1alpha1.CodingAgentClaudeCode,
 			reported: stranded,
 			says: []string{
-				"cli.auth.tokenSecretRef", "CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY",
+				"auth.tokenSecretRef", "CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN",
 				"Crewlet refuses each run_sandbox launch of the seat.",
 			},
 		},
@@ -262,10 +249,24 @@ func TestCodeWork(t *testing.T) {
 			},
 		},
 		{
-			// A bearer token is no variable ClaudeCode's profile reads
-			// as its login.
+			// A bearer token signs ClaudeCode in as its token or key does.
 			name: "ClaudeCode on a bundle beside a bearer token", head: bundled(v1alpha1.CLIAgentClaudeCode),
-			runner: v1alpha1.CodingAgentClaudeCode, mutate: seatEnv("ANTHROPIC_AUTH_TOKEN"), reported: stranded,
+			runner: v1alpha1.CodingAgentClaudeCode, mutate: seatEnv("ANTHROPIC_AUTH_TOKEN"), reported: runnable,
+			says: []string{"signed in by ANTHROPIC_AUTH_TOKEN from the seat's sandbox environment"},
+		},
+		{
+			name: "ClaudeCode on a bundle, moved onto Bedrock by the seat's setup", head: bundled(v1alpha1.CLIAgentClaudeCode),
+			runner: v1alpha1.CodingAgentClaudeCode, mutate: setupEnv(false, "CLAUDE_CODE_USE_BEDROCK"), reported: runnable,
+			says: []string{"signed in by CLAUDE_CODE_USE_BEDROCK"},
+		},
+		{
+			name: "ClaudeCode on a bundle, signed in by the Company's setup", head: bundled(v1alpha1.CLIAgentClaudeCode),
+			runner: v1alpha1.CodingAgentClaudeCode, mutate: setupEnv(true, "CLAUDE_CODE_OAUTH_TOKEN"), reported: runnable,
+		},
+		{
+			// A key no Claude Code reads signs it in to nothing.
+			name: "ClaudeCode on a bundle beside an OpenAI key", head: bundled(v1alpha1.CLIAgentClaudeCode),
+			runner: v1alpha1.CodingAgentClaudeCode, mutate: seatEnv("OPENAI_API_KEY"), reported: stranded,
 		},
 		{
 			name: "OpenCode on a bundle", head: bundled(v1alpha1.CLIAgentOpenCode), runner: v1alpha1.CodingAgentOpenCode,
@@ -285,7 +286,7 @@ func TestCodeWork(t *testing.T) {
 		{
 			// The sandbox chain is the code work's, ahead of the seat's
 			// own chain.
-			name: "a Codex executor whose code work runs on Anthropic", head: api(v1alpha1.LLMProviderAnthropic),
+			name: "a Codex executor whose code work runs on ClaudeCode", head: cli(v1alpha1.CLIAgentClaudeCode),
 			runner: v1alpha1.CodingAgentClaudeCode,
 			mutate: func(in *Input) {
 				in.LLMProviders = append(in.LLMProviders, cli(v1alpha1.CLIAgentCodex))
@@ -294,7 +295,7 @@ func TestCodeWork(t *testing.T) {
 			reported: runnable,
 		},
 		{
-			name: "a Codex executor that runs the code work too", head: api(v1alpha1.LLMProviderAnthropic),
+			name: "a Codex executor that runs the code work too", head: cli(v1alpha1.CLIAgentClaudeCode),
 			runner: v1alpha1.CodingAgentClaudeCode,
 			mutate: func(in *Input) {
 				in.LLMProviders = append(in.LLMProviders, cli(v1alpha1.CLIAgentCodex))
@@ -307,40 +308,39 @@ func TestCodeWork(t *testing.T) {
 		},
 		{
 			// A seat with no chain runs on the head of the document's
-			// order, a platform provider among them.
-			name: "a chainless seat on a platform OpenAI provider", head: api(v1alpha1.LLMProviderAnthropic),
-			runner: v1alpha1.CodingAgentClaudeCode,
-			mutate: func(in *Input) {
-				in.Company.Spec.LLM.UsePlatformProviders = new(true)
-				in.Class.Spec.PlatformLLMProviders = []v1alpha1.PlatformLLMProvider{{
-					Name: platformGPT, Type: v1alpha1.LLMProviderOpenAI, Model: "gpt-5",
-					APIKeySecretRefs: []v1alpha1.NamespacedSecretKeyReference{
-						{Namespace: "crewlet-system", Name: platformGPT, Key: keyAPIKey},
-					},
-				}}
-				in.Company.Spec.LLM.Order = []v1alpha1.LLMProviderReference{
-					{Kind: v1alpha1.LLMProviderKindPlatform, Name: platformGPT},
-				}
-				s := seat(in, codeWorkSeat)
-				s.Spec.LLM = v1alpha1.SeatLLM{}
-			},
-			reported: "spec.llm " + v1alpha1.ReasonSandboxModelUnsupported,
-			says:     []string{"on the platform model provider shared-gpt, of type OpenAI"},
+			// order, a platform provider among them, which signs in with a
+			// key that follows the run.
+			name: "a chainless seat on a platform ClaudeCode provider", head: cli(v1alpha1.CLIAgentClaudeCode),
+			runner: v1alpha1.CodingAgentClaudeCode, mutate: codeWorkPlatform(v1alpha1.CLIAgentClaudeCode),
+			reported: "spec.llm runnable",
+			says:     []string{"on the platform model provider shared-gpt, whose model and sign-in it can use"},
+		},
+		{
+			name: "a chainless seat on a platform OpenCode provider", head: cli(v1alpha1.CLIAgentClaudeCode),
+			runner: v1alpha1.CodingAgentOpenCode, mutate: codeWorkPlatform(v1alpha1.CLIAgentOpenCode),
+			reported: "spec.llm runnable",
+		},
+		{
+			name: "a chainless seat on a platform Codex provider", head: cli(v1alpha1.CLIAgentClaudeCode),
+			runner: v1alpha1.CodingAgentClaudeCode, mutate: codeWorkPlatform(v1alpha1.CLIAgentCodex),
+			refused:  []string{"Seat/fixer spec.llm " + v1alpha1.ReasonCodingAgentMismatch},
+			reported: "spec.llm " + v1alpha1.ReasonCodingAgentMismatch,
+			says:     []string{"on the platform model provider shared-gpt, a provider driving Codex"},
 		},
 		{
 			// Crewlet offers no run_sandbox without the Company's
 			// sandbox, and refuses the seat's gate itself.
-			name: "a company with no sandbox", head: api(v1alpha1.LLMProviderOpenAI), runner: v1alpha1.CodingAgentClaudeCode,
+			name: "a company with no sandbox", head: cli(v1alpha1.CLIAgentCodex), runner: v1alpha1.CodingAgentClaudeCode,
 			mutate: func(in *Input) {
 				in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{}
 				in.LLMProviders = slices.DeleteFunc(in.LLMProviders, func(p v1alpha1.LLMProvider) bool {
-					return p.Spec.CLI.Mode == v1alpha1.CLIAgentModeAgent
+					return p.Spec.Mode == v1alpha1.CLIAgentModeAgent
 				})
 				seat(in, "porter").Spec.LLM.Default = nil
 			},
 		},
 		{
-			name: "a seat with no sandbox", head: api(v1alpha1.LLMProviderOpenAI), runner: v1alpha1.CodingAgentClaudeCode,
+			name: "a seat with no sandbox", head: cli(v1alpha1.CLIAgentCodex), runner: v1alpha1.CodingAgentClaudeCode,
 			mutate: func(in *Input) { seat(in, codeWorkSeat).Spec.Sandbox = nil },
 		},
 	} {
@@ -421,13 +421,13 @@ func TestAgentModeSeatHasNoCodeWork(t *testing.T) {
 		},
 		{
 			// No run_sandbox launch ever pairs the coding agent with a
-			// CLIAgent provider of another CLI.
+			// provider of another CLI.
 			name:   "a seat whose sandbox chain is a Codex provider",
-			mutate: sandboxOn(codeWorkProvider(v1alpha1.LLMProviderCLIAgent, v1alpha1.CLIAgentCodex), v1alpha1.CodingAgentOpenCode),
+			mutate: sandboxOn(codeWorkProvider(v1alpha1.CLIAgentCodex), v1alpha1.CodingAgentOpenCode),
 		},
 		{
-			name:    "a seat naming Claude Code beside an Anthropic sandbox chain",
-			mutate:  sandboxOn(codeWorkProvider(v1alpha1.LLMProviderAnthropic, ""), v1alpha1.CodingAgentClaudeCode),
+			name:    "a seat naming Claude Code beside a ClaudeCode sandbox chain",
+			mutate:  sandboxOn(codeWorkProvider(v1alpha1.CLIAgentClaudeCode), v1alpha1.CodingAgentClaudeCode),
 			refused: []string{refusal},
 			says: []string{
 				"names the ClaudeCode coding agent, but the seat's executor runs in agent mode on LLMProvider " +
@@ -437,10 +437,12 @@ func TestAgentModeSeatHasNoCodeWork(t *testing.T) {
 		},
 		{
 			// The Company's default is the catalogue's, which an agent-mode
-			// seat's run never reads.
+			// seat's run never reads. The other seat's code work keeps to
+			// OpenCode, the CLI of its sandbox chain.
 			name: "the Company's default coding agent, Claude Code",
 			mutate: func(in *Input) {
 				in.Company.Spec.Sandbox.DefaultCodingAgent = v1alpha1.CodingAgentClaudeCode
+				seat(in, codeWorkSeat).Spec.Sandbox.CodingAgent = v1alpha1.CodingAgentOpenCode
 			},
 		},
 		{
@@ -461,7 +463,7 @@ func TestAgentModeSeatHasNoCodeWork(t *testing.T) {
 			mutate: func(in *Input) {
 				for i := range in.LLMProviders {
 					if in.LLMProviders[i].Name == agentModeProvider {
-						in.LLMProviders[i].Spec.CLI.Mode = v1alpha1.CLIAgentModeText
+						in.LLMProviders[i].Spec.Mode = v1alpha1.CLIAgentModeText
 					}
 				}
 				seat(in, agentModeSeat).Spec.Sandbox.CodingAgent = v1alpha1.CodingAgentClaudeCode
@@ -492,36 +494,32 @@ func TestAgentModeSeatHasNoCodeWork(t *testing.T) {
 }
 
 // TestContractCodeWorkOnWrite holds the render's verdict on a seat's code work
-// to the engine's on a write. Every coding agent the API offers is
-// paired with every kind of provider at the head of the seat's sandbox chain,
-// every CLI the API offers among them, signed in as codeWorkProvider signs it
-// and, for each coding agent's own CLI, by a credential bundle alone: where
-// the render refuses the seat (CodingAgentMismatch), `crewlet validate`
+// to the engine's on a write. Every coding agent the API offers is paired
+// with a provider of every CLI the API offers at the head of the seat's
+// sandbox chain, signed in as codeWorkProvider signs it and, for each coding
+// agent's own CLI, by a credential bundle alone, and ClaudeCode on its key:
+// where the render refuses the seat (CodingAgentMismatch), `crewlet validate`
 // refuses the document at the seat's llm_sandbox, and where it only reports
-// the seat (SandboxModelUnsupported, SandboxLoginNotPortable) the engine
-// accepts the document the render writes, which is what makes reporting
-// rather than refusing them right: an engine that refused them on a write
-// would hold the company on its last revision over them anyway. A seat whose
-// executor runs in agent mode is paired with each coding agent, and none, and
-// with a sandbox chain of a CLIAgent provider of another CLI and of an API
-// provider: the render reports no code work for it and refuses a coding agent
-// other than its executor's CLI alone, and `crewlet validate` refuses that
-// alone, at the seat's sandbox coding_agent, and never its sandbox chain. A
-// refused seat is handed to the engine in the document the render writes
-// without its sandbox, with the block put back as the render writes it.
+// the seat (SandboxLoginNotPortable) the engine accepts the document the
+// render writes, which is what makes reporting rather than refusing it right:
+// an engine that refused it on a write would hold the company on its last
+// revision over it anyway. A seat whose executor runs in agent mode is paired
+// with each coding agent, and none, and with a sandbox chain of a provider of
+// another CLI and of ClaudeCode: the render reports no code work for it and
+// refuses a coding agent other than its executor's CLI alone, and `crewlet
+// validate` refuses that alone, at the seat's sandbox coding_agent, and never
+// its sandbox chain. A refused seat is handed to the engine in the document
+// the render writes without its sandbox, with the block put back as the
+// render writes it.
 func TestContractCodeWorkOnWrite(t *testing.T) {
 	runners := []v1alpha1.CodingAgent{v1alpha1.CodingAgentClaudeCode, v1alpha1.CodingAgentOpenCode}
 	agents := cliAgentNames(t)
-	heads := make([]v1alpha1.LLMProvider, 0, 5+len(agents))
-	for _, kind := range []v1alpha1.LLMProviderType{
-		v1alpha1.LLMProviderAnthropic, v1alpha1.LLMProviderOpenAI, v1alpha1.LLMProviderOpenAICompatible,
-	} {
-		heads = append(heads, codeWorkProvider(kind, ""))
-	}
+	heads := make([]v1alpha1.LLMProvider, 0, 3+len(agents))
 	for _, agent := range agents {
-		heads = append(heads, codeWorkProvider(v1alpha1.LLMProviderCLIAgent, agent))
+		heads = append(heads, codeWorkProvider(agent))
 	}
-	heads = append(heads, codeWorkBundled(v1alpha1.CLIAgentClaudeCode), codeWorkBundled(v1alpha1.CLIAgentOpenCode))
+	heads = append(heads, codeWorkKeyed(v1alpha1.CLIAgentClaudeCode),
+		codeWorkBundled(v1alpha1.CLIAgentClaudeCode), codeWorkBundled(v1alpha1.CLIAgentOpenCode))
 	reasons := map[string]bool{}
 	for _, runner := range runners {
 		for _, head := range heads {
@@ -560,8 +558,8 @@ func TestContractCodeWorkOnWrite(t *testing.T) {
 	}
 	for _, runner := range []v1alpha1.CodingAgent{"", v1alpha1.CodingAgentOpenCode, v1alpha1.CodingAgentClaudeCode} {
 		for _, head := range []v1alpha1.LLMProvider{
-			codeWorkProvider(v1alpha1.LLMProviderCLIAgent, v1alpha1.CLIAgentCodex),
-			codeWorkProvider(v1alpha1.LLMProviderAnthropic, ""),
+			codeWorkProvider(v1alpha1.CLIAgentCodex),
+			codeWorkProvider(v1alpha1.CLIAgentClaudeCode),
 		} {
 			t.Run(fmt.Sprintf("an agent-mode OpenCode seat naming %q on %s", runner, head.Name), func(t *testing.T) {
 				in := agentModeInput(head, runner)
@@ -590,7 +588,7 @@ func TestContractCodeWorkOnWrite(t *testing.T) {
 	// The matrix sends the engine every verdict the render reaches, so that
 	// a change to the heads cannot quietly stop asking about one.
 	for _, reason := range []string{
-		"", v1alpha1.ReasonCodingAgentMismatch, v1alpha1.ReasonSandboxModelUnsupported, v1alpha1.ReasonSandboxLoginNotPortable,
+		"", v1alpha1.ReasonCodingAgentMismatch, v1alpha1.ReasonSandboxLoginNotPortable,
 	} {
 		if !reasons[reason] {
 			t.Errorf("no pairing reaches %q", reason)
@@ -671,7 +669,7 @@ func withRoleSandbox(t *testing.T, document []byte, handle string, gate []byte) 
 }
 
 // cliAgentNames is every CLI the API offers: the enum of the installed
-// LLMProvider CRD's spec.cli.agent, so a CLI added later is paired too.
+// LLMProvider CRD's spec.agent, so a CLI added later is paired too.
 func cliAgentNames(t *testing.T) []v1alpha1.CLIAgentName {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("..", "..", "config", "crd", "bases", "crewlet.ai_llmproviders.yaml"))
@@ -686,13 +684,9 @@ func cliAgentNames(t *testing.T) []v1alpha1.CLIAgentName {
 						Properties struct {
 							Spec struct {
 								Properties struct {
-									CLI struct {
-										Properties struct {
-											Agent struct {
-												Enum []v1alpha1.CLIAgentName `json:"enum"`
-											} `json:"agent"`
-										} `json:"properties"`
-									} `json:"cli"`
+									Agent struct {
+										Enum []v1alpha1.CLIAgentName `json:"enum"`
+									} `json:"agent"`
 								} `json:"properties"`
 							} `json:"spec"`
 						} `json:"properties"`
@@ -704,9 +698,9 @@ func cliAgentNames(t *testing.T) []v1alpha1.CLIAgentName {
 	if err := yaml.Unmarshal(raw, &crd); err != nil || len(crd.Spec.Versions) != 1 {
 		t.Fatalf("reading the LLMProvider CRD's versions (%v)", err)
 	}
-	agents := crd.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties.Spec.Properties.CLI.Properties.Agent.Enum
+	agents := crd.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties.Spec.Properties.Agent.Enum
 	if len(agents) == 0 {
-		t.Fatal("the LLMProvider CRD offers no spec.cli.agent")
+		t.Fatal("the LLMProvider CRD offers no spec.agent")
 	}
 	return agents
 }
@@ -715,10 +709,10 @@ func cliAgentNames(t *testing.T) []v1alpha1.CLIAgentName {
 // launch runs and signs in, which no validation shows, to the engine's
 // source: the coding agent of a seat and a catalogue that name none
 // (sandbox.DefaultCodingAgent), the variables that sign ClaudeCode in from a
-// seat's own environment (codingagent.ClaudeCodeCredentialEnv), and
+// run's environment (codingagent.ClaudeCodeCredentialEnv), and among them
 // ClaudeCode's token and key variables (its profile's token_env and
-// api_key_env). The pattern of a credential's name is held by
-// TestCredentialNameFollowsTheEngineSource.
+// api_key_env), which carry a provider's own sign-in into the run. The pattern
+// of a credential's name is held by TestCredentialNameFollowsTheEngineSource.
 func TestCodeWorkFollowsTheEngineSource(t *testing.T) {
 	source, err := os.OpenRoot(enginetest.Source(t))
 	if err != nil {
@@ -740,7 +734,7 @@ func TestCodeWorkFollowsTheEngineSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := stringSliceVar(t, file, src, "ClaudeCodeCredentialEnv"); !slices.Equal(got, claudeCodeSignIn) {
-		t.Errorf("the engine signs ClaudeCode in from a seat's %v, the render from %v", got, claudeCodeSignIn)
+		t.Errorf("the engine signs ClaudeCode in from a run's %v, the render from %v", got, claudeCodeSignIn)
 	}
 
 	raw, err := source.ReadFile("internal/providers/llm/cliagent/cliprofile/profiles.yaml")
@@ -755,8 +749,12 @@ func TestCodeWorkFollowsTheEngineSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	claude, ok := profiles[cliAgentName(v1alpha1.CLIAgentClaudeCode)]
-	if want := []string{claude.TokenEnv, claude.APIKeyEnv}; !ok || !slices.Equal(claudeCodeLogin, want) {
-		t.Errorf("the engine's claude-code profile reads its login from %v, the render from %v", want, claudeCodeLogin)
+	for _, name := range []string{claude.TokenEnv, claude.APIKeyEnv} {
+		if !ok || name == "" || !slices.Contains(claudeCodeSignIn, name) {
+			t.Errorf("the engine's claude-code profile hands its own sign-in to a run in %q (token_env %q, "+
+				"api_key_env %q), which the render does not read as signing ClaudeCode in: %v",
+				name, claude.TokenEnv, claude.APIKeyEnv, claudeCodeSignIn)
+		}
 	}
 }
 
@@ -766,15 +764,16 @@ const profileFile = "internal/providers/llm/cliagent/cliprofile/profile.go"
 
 // credentialNameRules are the kinds whose CRDs read a credential's name, and
 // how many of their rules do (every other kind's, none): the LLMProvider
-// API's two over a CLI's sign-in
-// in cli.env, and the tool-server API's refusal of a literal value under such
-// a name, on each type that takes one (an MCPServer's env and headers, and the
-// values of a Seat's or a Unit's spec.mcp).
+// API's two over a CLI's sign-in in env and the platform provider's one, and
+// the tool-server API's refusal of a literal value under such a name, on each
+// type that takes one (an MCPServer's env and headers, and the values of a
+// Seat's or a Unit's spec.mcp).
 var credentialNameRules = map[string]int{
-	"llmproviders": 2,
-	"mcpservers":   2,
-	"seats":        1,
-	"units":        1,
+	"engineclasses": 1,
+	"llmproviders":  2,
+	"mcpservers":    2,
+	"seats":         1,
+	"units":         1,
 }
 
 // TestCredentialNameFollowsTheEngineSource holds the one pattern the operator

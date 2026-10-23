@@ -78,15 +78,30 @@ spec:
     # Every opted-in tenant can read this key: give the class a gateway's
     # per-tenant virtual key, never the platform's own.
     - name: platform-claude
-      type: Anthropic
+      agent: ClaudeCode
       model: claude-sonnet-5
-      apiKeySecretRefs:
-        - {namespace: platform, name: llm-gateway-team, key: apiKey}
+      auth:
+        mode: APIKey
+        apiKeySecretRef: {namespace: platform, name: llm-gateway-team, key: apiKey}
+      env:
+        # The gateway Claude Code calls in place of Anthropic's API.
+        - name: ANTHROPIC_BASE_URL
+          valueFrom:
+            secretKeyRef: {namespace: platform, name: llm-gateway-team, key: baseURL}
 ```
 
 A Company opts in to the class's model providers with
 `spec.llm.usePlatformProviders: true`; its seats and its model order then
-name them with kind `PlatformLLMProvider`.
+name them with kind `PlatformLLMProvider`. A platform provider is a coding
+CLI, as a tenant's own `LLMProvider` is, so the class's engine image carries
+it ([The image needs the CLI](cli-agents.md#the-image-needs-the-cli)). It
+signs in with a key alone: `auth.mode: APIKey` with `auth.apiKeySecretRef`,
+or, for Hermes, Pi and OpenCode, their model provider's key in `env`. A
+subscription's headless token or login is one account's, which every tenant
+of the class would share, so the API refuses one there: it belongs on a
+tenant's own `LLMProvider`. A platform provider runs in `mode: Text`, and
+keeps its seats' homes on each company's data volume under
+`/var/lib/crewlet/llm-cli-platform/<name>`.
 
 The control plane runs with the chart's tenant provisioner role
 (`tenantProvisioner` in the chart's values). It creates each tenant's
@@ -252,9 +267,9 @@ kubectl wait company/acme -n tenant-7f3a9c --for=condition=Ready --timeout=10m
 | `Company.status.config.revisionID` | The revision the engine runs. Every part reports the revision it is in. |
 | `Company.status.topology` | The pods that run the company: the data pod's, and each seat pool's. `SeatsPlaced` says whether every pool with a seat has a ready pod. |
 | `Seat.status.seatID` | The seat's identity in the engine, derived from the company's name and the seat's handle: stable for the seat's life, and the same if a deleted Seat is created again with the handle. Key your own records about a seat by it. |
-| `Seat.status.placement`, a Seat's `Ready` | The pool and StatefulSet that run the seat, and the pod whose engine holds it as the engine reports it: `Ready=False Unplaced` while none does and the seat's messages wait; `Ready=False PoolNotFound` while its pool is not one the Company declares, which no wait fixes; `Ready=False` with `AgentModeBridgeUnsupported` or `NotExposed` while its executor is a `CLIAgent` provider in `mode: Agent` that cannot call its tools back where it runs, so the engine refuses every one of its turns, whichever pod holds it. Show the message, which names the field to change. |
-| a Seat's `CodeWorkRunnable` | On an Agent seat with `spec.sandbox`, in a Company with one, whose executor does not run in agent mode, whether its coding runs can start. `False` with `SandboxModelUnsupported`, `SandboxLoginNotPortable`, `SecretValueEmpty` or `NoProvisioner` leaves the seat applied and working, every coding run refused: show the message, which names the field to change. |
-| an LLMProvider's `AgentModeRunnable` | On a `CLIAgent` provider in `mode: Agent`, whether its runs can call a seat's tools back. `False`, `NotExposed`, while the Company has no public address: the provider is applied, and every seat whose executor's chain it heads fails each turn (each such Seat's `Ready` says so). |
+| `Seat.status.placement`, a Seat's `Ready` | The pool and StatefulSet that run the seat, and the pod whose engine holds it as the engine reports it: `Ready=False Unplaced` while none does and the seat's messages wait; `Ready=False PoolNotFound` while its pool is not one the Company declares, which no wait fixes; `Ready=False` with `AgentModeBridgeUnsupported` or `NotExposed` while its executor is an `LLMProvider` in `mode: Agent` that cannot call its tools back where it runs, so the engine refuses every one of its turns, whichever pod holds it. Show the message, which names the field to change. |
+| a Seat's `CodeWorkRunnable` | On an Agent seat with `spec.sandbox`, in a Company with one, whose executor does not run in agent mode, whether its coding runs can start. `False` with `SandboxLoginNotPortable`, `SecretValueEmpty` or `NoProvisioner` leaves the seat applied and working, every coding run refused: show the message, which names the field to change. |
+| an LLMProvider's `AgentModeRunnable` | On a provider in `mode: Agent`, whether its runs can call a seat's tools back. `False`, `NotExposed`, while the Company has no public address: the provider is applied, and every seat whose executor's chain it heads fails each turn (each such Seat's `Ready` says so). |
 | `Seat.status.integrations.slack.requestURL` | The request URL of the seat's own Slack app, for the app's manifest. |
 | `Seat.status.integrations.github.webhookURL` | The webhook URL of the seat's own GitHub App. |
 | `Integration.status.webhookURL` | The company-wide address a vendor delivers to (GitHub's organization webhook). |
@@ -372,8 +387,8 @@ class:
 
 - **Platform model providers** (`platformLLMProviders`): their keys are in
   each opted-in engine's secret store, and a platform provider at the head
-  of a seat's code work puts its first key into every box of that seat, in
-  the tenant's own E2B account, where the tenant's coding agent reads it
+  of a seat's code work puts its key into every box of that seat, in the
+  tenant's own E2B account, where the tenant's coding agent reads it
   ([What a coding box
   carries](credentials.md#what-a-coding-box-carries)). Give the class keys
   you would hand each tenant: one per tenant, or the per-tenant virtual

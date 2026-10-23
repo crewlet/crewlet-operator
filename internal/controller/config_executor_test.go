@@ -35,8 +35,8 @@ const (
 	noBridge = "no bridge"
 )
 
-// cliModel is the model of the specs' CLIAgent providers, which no CLI is
-// ever asked for.
+// cliModel is the model of the specs' providers, which no CLI is ever asked
+// for.
 const cliModel = "sonnet"
 
 // TestExecutorVerdictFollowsTheRender holds an agent Seat's Ready to what the
