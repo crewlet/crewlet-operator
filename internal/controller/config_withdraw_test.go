@@ -62,7 +62,9 @@ import (
 // said); runsNone names nodes beside those that refused the fleet's revision
 // and run no company, as a seat pod that started on nothing and refused it
 // does; fleetDown makes GET /fleet unanswerable, and missing names the
-// revisions GET /config/revisions does not find.
+// revisions GET /config/revisions does not find. configDown and secretsDown
+// make it answer a read of the fleet's document, and a write to the store, as
+// an engine that cannot decide who is asking does.
 //
 // Each node's row says what it starts on as the engine's does: a data node
 // (dataNode) the revision it runs, and a seat node, whose store is scratch,
@@ -74,6 +76,7 @@ type storeEngine struct {
 	revisions                 []storeRevision
 	store                     map[string]string
 	refuse                    bool
+	configDown, secretsDown   bool
 	beforeReload, afterReload func(e *storeEngine)
 	afterApply                func(e *storeEngine)
 	reloadAnswer              *map[string]any
@@ -94,6 +97,29 @@ func dataNode(node string) bool {
 // storeNode is the node of a storeEngine's fleet unless serving says
 // otherwise.
 const storeNode = "acme-data-0"
+
+// down reports whether r is a request configDown or secretsDown makes the
+// engine refuse: a read of the fleet's document, or a write to the store, one
+// name's or a batch's.
+func (e *storeEngine) down(r *http.Request) bool {
+	if r.Method == http.MethodGet {
+		return r.URL.Path == configRoute && e.configDown
+	}
+	return (r.URL.Path == secretsRoute || strings.HasPrefix(r.URL.Path, secretsRoute+"/")) && e.secretsDown
+}
+
+// cannotDecide is the engine's answer to a request it cannot decide who is
+// asking: its request guard's, which cannot read who presented the credential
+// (crewlet's internal/api/auth, Caller). The authority table's own unknown
+// never meets the operator's tokens on /config or /secrets, since they hold
+// admin and admin is decided before the chart.
+func cannotDecide(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Retry-After", "2")
+	w.WriteHeader(http.StatusServiceUnavailable)
+	_, _ = w.Write([]byte(`{"error":"identity_unavailable",` +
+		`"message":"Can't check who you are right now. Try again in a moment."}`))
+}
 
 type storeRevision struct {
 	id, summary string
@@ -128,6 +154,10 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 	activated := func(revision storeRevision) {
 		answer(http.StatusCreated, map[string]any{revisionIDField: revision.id, "epoch": len(e.revisions)})
 	}
+	if e.down(r) {
+		cannotDecide(w)
+		return
+	}
 	if r.Method == http.MethodGet && e.serveServing(w, r.URL.Path, active) {
 		return
 	}
@@ -161,7 +191,7 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 			hook(e)
 		}
 		activated(reloaded)
-	case r.Method == http.MethodGet && r.URL.Path == "/secrets":
+	case r.Method == http.MethodGet && r.URL.Path == secretsRoute:
 		listing := make([]map[string]string, 0, len(e.store))
 		for _, name := range slices.Sorted(maps.Keys(e.store)) {
 			listing = append(listing, map[string]string{"name": name, "updated_by": operatorLogin, "operator_id": operatorLogin})
@@ -182,7 +212,7 @@ func (e *storeEngine) serveSecretWrite(
 	reads := func(name string) bool { return strings.Contains(string(active.document), "${"+name+"}") }
 	name, isSecret := strings.CutPrefix(r.URL.Path, "/secrets/")
 	switch {
-	case r.Method == http.MethodPut && r.URL.Path == "/secrets":
+	case r.Method == http.MethodPut && r.URL.Path == secretsRoute:
 		var batch struct {
 			Values map[string]string `json:"values"`
 		}
@@ -377,13 +407,14 @@ func (e *storeEngine) activateOther(document []byte) {
 }
 
 // configRoute is the engine's route of the company document, fleetRoute that
-// of its fleet, and dataRole and seatsRole the roles of a data pod's node and
-// a seat pod's there.
+// of its fleet, secretsRoute that of its secret store, and dataRole and
+// seatsRole the roles of a data pod's node and a seat pod's there.
 const (
-	configRoute = "/config"
-	fleetRoute  = "/fleet"
-	dataRole    = "data"
-	seatsRole   = "seats"
+	configRoute  = "/config"
+	fleetRoute   = "/fleet"
+	secretsRoute = "/secrets"
+	dataRole     = "data"
+	seatsRole    = "seats"
 )
 
 // running is the revision the engine runs when a withdrawal's reconcile

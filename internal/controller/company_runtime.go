@@ -177,7 +177,7 @@ func (r *CompanyReconciler) reconcileWorkload(
 	}
 	if len(in.missing) > 0 {
 		return holdBack(crewletaiv1alpha1.ReasonSecretNotFound,
-			"The engine's pods cannot be given the values they read from Secrets: "+strings.Join(in.missing, "; ")+".")
+			ended("The engine's pods cannot be given the values they read from Secrets: "+strings.Join(in.missing, "; ")))
 	}
 	return r.runWorkload(ctx, c, class, in, existing, pools)
 }
@@ -318,7 +318,8 @@ func (r *CompanyReconciler) runWorkload(
 		}
 		return suspendedCondition(""), nil
 	case refusal != nil:
-		return runtimeCondition(metav1.ConditionFalse, refusal.reason, refusal.message+" The data pods keep running "+image+"."), nil
+		return runtimeCondition(metav1.ConditionFalse, refusal.reason,
+			refusal.message+" "+ended("The data pods keep running "+image)), nil
 	case progress.ready:
 		return runtimeCondition(metav1.ConditionTrue, crewletaiv1alpha1.ReasonPodsReady, progress.message), nil
 	default:

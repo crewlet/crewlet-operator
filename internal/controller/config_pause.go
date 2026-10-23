@@ -159,8 +159,8 @@ func (run *configRun) syncPause(
 	case errors.Is(err, engine.ErrOutcomeUnknown):
 		return pauseVerdict{
 			status: metav1.ConditionUnknown, reason: crewletaiv1alpha1.ReasonPauseUnknown,
-			message: fmt.Sprintf("The engine may or may not have recorded the operator's %s of the seat; the operator asks again in %s: %s.",
-				changeWord(*want), engineRetryInterval, err),
+			message: ended(fmt.Sprintf("The engine may or may not have recorded the operator's %s of the seat; the operator asks again in %s: %s",
+				changeWord(*want), engineRetryInterval, err)),
 		}, engineRetryInterval
 	case errors.As(err, &refused):
 		// A refusal is often contention (the record lost to other writers
@@ -168,15 +168,15 @@ func (run *configRun) syncPause(
 		// for is asked for again soon rather than at the next resync.
 		return pauseVerdict{
 			status: metav1.ConditionUnknown, reason: crewletaiv1alpha1.ReasonPauseRefused,
-			message: fmt.Sprintf("The engine refused the operator's %s of the seat, which it asks for again in %s: %s",
-				changeWord(*want), engineRetryInterval, refused.Message),
+			message: ended(fmt.Sprintf("The engine refused the operator's %s of the seat, which it asks for again in %s: %s",
+				changeWord(*want), engineRetryInterval, refused.Message)),
 		}, engineRetryInterval
 	case err != nil:
 		logf.FromContext(ctx).V(1).Info("Failed to change a seat's pause", "seat", seat.Name, "error", err.Error())
 		return pauseVerdict{
 			status: metav1.ConditionUnknown, reason: crewletaiv1alpha1.ReasonPauseUnknown,
-			message: fmt.Sprintf("The operator's %s of the seat may not have reached the engine; it tries again in %s: %s.",
-				changeWord(*want), engineRetryInterval, err),
+			message: ended(fmt.Sprintf("The operator's %s of the seat may not have reached the engine; it tries again in %s: %s",
+				changeWord(*want), engineRetryInterval, err)),
 		}, engineRetryInterval
 	}
 	if answer.Changed {
@@ -221,16 +221,19 @@ func reported(state engine.SeatPause) pauseVerdict {
 			message: "The engine runs the seat: nobody has it paused.",
 		}
 	}
-	message := fmt.Sprintf("The engine holds the seat paused since %s, paused by %s", state.At.Format(time.RFC3339), state.By)
+	held := fmt.Sprintf("The engine holds the seat paused since %s, paused by %s", state.At.Format(time.RFC3339), state.By)
 	if state.Reason != "" {
-		message += ": " + state.Reason
+		// The reason is whoever paused the seat's own words, which may end
+		// a sentence of their own.
+		held += ": " + state.Reason
 	}
-	message += ". It starts no new turn and its mail waits on its inbox"
+	waits := "It starts no new turn and its mail waits on its inbox"
 	if state.StopRunning {
-		message += "; its running work was stopped: the turn it was on, and its executor run at once"
+		waits += "; its running work was stopped: the turn it was on, and its executor run at once"
 	}
 	return pauseVerdict{
-		status: metav1.ConditionTrue, reason: crewletaiv1alpha1.ReasonSeatPaused, message: message + ".", pause: state,
+		status: metav1.ConditionTrue, reason: crewletaiv1alpha1.ReasonSeatPaused,
+		message: ended(held) + " " + ended(waits), pause: state,
 	}
 }
 

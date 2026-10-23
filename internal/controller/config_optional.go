@@ -214,6 +214,6 @@ func (run *configRun) leftOutLines(values []leftOutValue) []string {
 // leftOutMessage is a part's ResolvedRefs=True message when it gives values
 // it lets go without whose Secret or key does not exist or holds nothing.
 func leftOutMessage(leftOut []string) string {
-	return "Every object it references exists, and every Secret key but these, each a value it gives under a key " +
-		"an optionalKeys list lets go without it: " + strings.Join(leftOut, "; ") + "."
+	return ended("Every object it references exists, and every Secret key but these, each a value it gives under a key " +
+		"an optionalKeys list lets go without it: " + strings.Join(leftOut, "; "))
 }

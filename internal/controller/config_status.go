@@ -169,7 +169,7 @@ func (run *configRun) decideApplied(p *part) {
 		switch {
 		case len(p.drifted) > 0:
 			setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, false, crewletaiv1alpha1.ReasonDrifted,
-				"The engine's document differs from this object's part of the rendered one at: "+strings.Join(p.drifted, ", ")+".")
+				ended("The engine's document differs from this object's part of the rendered one at: "+strings.Join(p.drifted, ", ")))
 		default:
 			setCondition(conditions, gen, crewletaiv1alpha1.ConditionApplied, true, crewletaiv1alpha1.ReasonInRevision,
 				fmt.Sprintf("In revision %s, which the engine runs.", verdict.revision))

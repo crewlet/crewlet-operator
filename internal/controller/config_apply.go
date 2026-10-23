@@ -184,8 +184,8 @@ func (run *configRun) failureAccount(ctx context.Context, eng *engine.Client, he
 		health.Status, health.Posture, health.AppliedEpoch)
 	fleet, err := run.fleetOf(ctx, eng)
 	if err != nil {
-		return fmt.Sprintf("The engine reports that it did not apply the activated epoch, and its record of the attempt "+
-			"could not be read: %v.", err) + runs
+		return ended(fmt.Sprintf("The engine reports that it did not apply the activated epoch, and its record of the attempt "+
+			"could not be read: %v", err)) + runs
 	}
 	record := fleet.LastApply()
 	if record.Serving != "" {
@@ -197,7 +197,7 @@ func (run *configRun) failureAccount(ctx context.Context, eng *engine.Client, he
 		if account == "" {
 			account = "the engine gave no account of the failure"
 		}
-		return fmt.Sprintf("The engine failed to apply epoch %d (revision %s): %s.", record.Epoch, record.RevisionID, account) + runs
+		return ended(fmt.Sprintf("The engine failed to apply epoch %d (revision %s): %s", record.Epoch, record.RevisionID, account)) + runs
 	}
 	epoch := max(fleet.TargetEpoch, target)
 	return fmt.Sprintf("The engine reports that it did not apply epoch %d and records no failed attempt at it: its apply "+

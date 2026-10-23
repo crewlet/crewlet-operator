@@ -450,9 +450,9 @@ func (run *configRun) enforce(
 		if notOwned.Controller == nil || !isPreviousCompany(notOwned.Controller, c) {
 			run.secretsSynced = &metav1.Condition{
 				Type: crewletaiv1alpha1.ConditionSecretsSynced, Status: metav1.ConditionFalse,
-				Reason: crewletaiv1alpha1.ReasonNameConflict, Message: capitalize(notOwned.Error()) + ".",
+				Reason: crewletaiv1alpha1.ReasonNameConflict, Message: capitalize(ended(notOwned.Error())),
 			}
-			run.block(crewletaiv1alpha1.ReasonNameConflict, capitalize(notOwned.Error())+".")
+			run.block(crewletaiv1alpha1.ReasonNameConflict, capitalize(ended(notOwned.Error())))
 			return ctrl.Result{}, nil
 		}
 		state, err = secretsync.State{}, nil
@@ -710,7 +710,7 @@ func (run *configRun) sync(
 	if syncErr != nil {
 		run.secretsSynced = &metav1.Condition{
 			Type: crewletaiv1alpha1.ConditionSecretsSynced, Status: metav1.ConditionFalse,
-			Reason: crewletaiv1alpha1.ReasonEngineUnavailable, Message: capitalize(syncErr.Error()) + ".",
+			Reason: crewletaiv1alpha1.ReasonEngineUnavailable, Message: capitalize(ended(syncErr.Error())),
 		}
 		return next, result, syncErr
 	}
@@ -750,8 +750,8 @@ func (run *configRun) sync(
 	message += run.retainedSentence()
 	message += run.heldSentence()
 	if len(run.companyLeftOut) > 0 {
-		message += " The Company's own setup steps give values they let go without: " +
-			strings.Join(run.leftOutLines(run.companyLeftOut), "; ") + "."
+		message += " " + ended("The Company's own setup steps give values they let go without: "+
+			strings.Join(run.leftOutLines(run.companyLeftOut), "; "))
 	}
 	if len(run.companyEmpty) > 0 {
 		message += " " + sentences(run.companyEmpty)
@@ -1082,8 +1082,8 @@ func (run *configRun) announce(p *part) {
 	}
 	if p.executor != nil {
 		if c := turned(crewletaiv1alpha1.ConditionReady, p.executor.Reason); c != nil {
-			run.Recorder.Eventf(p.obj, nil, corev1.EventTypeWarning, c.Reason, "CheckExecutor", "%s: %s.",
-				p.executor.Field, p.executor.Message)
+			run.Recorder.Eventf(p.obj, nil, corev1.EventTypeWarning, c.Reason, "CheckExecutor", "%s",
+				ended(p.executor.Field+": "+p.executor.Message))
 		}
 	}
 	if len(p.unresolved) == 0 {
@@ -1238,8 +1238,9 @@ func (run *configRun) block(reason, message string) {
 func (run *configRun) unavailable(err error) {
 	run.configApplied = &metav1.Condition{
 		Type: crewletaiv1alpha1.ConditionConfigApplied, Status: metav1.ConditionFalse,
-		Reason:  crewletaiv1alpha1.ReasonEngineUnavailable,
-		Message: fmt.Sprintf("The operator's request to the company's engine failed, and it tries again in %s: %s.", retryAfter(err), err),
+		Reason: crewletaiv1alpha1.ReasonEngineUnavailable,
+		Message: ended(fmt.Sprintf("The operator's request to the company's engine failed, and it tries again in %s: %s",
+			retryAfter(err), err)),
 	}
 }
 
@@ -1538,7 +1539,7 @@ func engineHealthy(alarms *engine.Alarms, err error) *metav1.Condition {
 	switch {
 	case err != nil:
 		c.Status, c.Reason = metav1.ConditionUnknown, crewletaiv1alpha1.ReasonAlarmsNotReported
-		c.Message = "The engine's health could not be read: " + err.Error()
+		c.Message = ended("The engine's health could not be read: " + err.Error())
 	case alarms == nil:
 		c.Status, c.Reason = metav1.ConditionUnknown, crewletaiv1alpha1.ReasonAlarmsNotReported
 		c.Message = "The engine has not evaluated its alarms yet."
@@ -1620,7 +1621,7 @@ func identityClaimed(health engine.Health, err error, humanSeats []string, acces
 	switch {
 	case err != nil:
 		c.Status, c.Reason = metav1.ConditionUnknown, crewletaiv1alpha1.ReasonIdentityNotReported
-		c.Message = "The engine's health could not be read: " + err.Error()
+		c.Message = ended("The engine's health could not be read: " + err.Error())
 	case health.Identity == engine.IdentityReady:
 		c.Status, c.Reason = metav1.ConditionTrue, crewletaiv1alpha1.ReasonPersonEnrolled
 		c.Message = "A person has joined the company: the engine's identity directory holds someone on a Human seat, " +

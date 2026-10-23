@@ -153,7 +153,7 @@ func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 		setCondition(conditions, gen, crewletaiv1alpha1.ConditionReady, false, crewletaiv1alpha1.ReasonSuspended,
 			fmt.Sprintf("Company %s is suspended: no engine node runs its seats, and their messages wait.", run.company.Name))
 	case p.executor != nil && p.executor.Reason != "":
-		message := p.executor.Field + ": " + p.executor.Message + "."
+		message := ended(p.executor.Field + ": " + p.executor.Message)
 		lease, held := engine.SeatLease{}, false
 		if run.fleet != nil {
 			lease, held = run.leaseOf(handle)
@@ -174,7 +174,7 @@ func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 			s.Status.Placement.Node = lease.Node
 			message := heldMessage(lease, workload)
 			if p.executor != nil {
-				message += " It " + p.executor.Message + "."
+				message += " " + ended("It "+p.executor.Message)
 			}
 			setCondition(conditions, gen, crewletaiv1alpha1.ConditionReady, true, crewletaiv1alpha1.ReasonLeaseHeld, message)
 			return
@@ -192,7 +192,7 @@ func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 		s.Status.Placement.Node = p.base.(*crewletaiv1alpha1.Seat).Status.Placement.Node
 		meta.SetStatusCondition(conditions, metav1.Condition{
 			Type: crewletaiv1alpha1.ConditionReady, Status: metav1.ConditionUnknown, Reason: crewletaiv1alpha1.ReasonEngineUnavailable,
-			Message:            bounded("The engine's fleet, which says which node holds the seat, could not be read: " + run.fleetErr.Error()),
+			Message:            bounded(ended("The engine's fleet, which says which node holds the seat, could not be read: " + run.fleetErr.Error())),
 			ObservedGeneration: gen,
 		})
 	default:

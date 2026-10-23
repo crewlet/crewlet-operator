@@ -534,13 +534,16 @@ func (run *configRun) reactivatedUnconfirmed(
 	active *engine.ActiveConfig, reloaded engine.ApplyResult, by string, held []string, why string,
 ) {
 	who, action := reactivatedBy(by)
-	run.event(corev1.EventTypeWarning, "Reactivated", action,
-		"%s the engine's document again as revision %s (epoch %d), so that the engine reads its secret store without "+
-			"%s, whose Secret or key no longer exists and which revision %s lets go without; but the operator cannot confirm "+
-			"that revision %s is revision %s's document, as %s. It takes revision %s to read every value as required, and "+
-			"one that reads a value it removed so goes without what it starts with it until the Secret exists again.",
+	// why ends with what the read back met, which may be the engine's own
+	// sentence: the sentence that quotes it is ended by ended.
+	activated := ended(fmt.Sprintf("%s the engine's document again as revision %s (epoch %d), so that the engine "+
+		"reads its secret store without %s, whose Secret or key no longer exists and which revision %s lets go without; "+
+		"but the operator cannot confirm that revision %s is revision %s's document, as %s",
 		who, reloaded.RevisionID, reloaded.Epoch, strings.Join(held, ", "), active.RevisionID, reloaded.RevisionID,
-		active.RevisionID, why, reloaded.RevisionID)
+		active.RevisionID, why))
+	run.event(corev1.EventTypeWarning, "Reactivated", action,
+		"%s It takes revision %s to read every value as required, and one that reads a value it removed so goes without "+
+			"what it starts with it until the Secret exists again.", activated, reloaded.RevisionID)
 }
 
 // reactivatedBy is who an activation again is said to be by, and the action
