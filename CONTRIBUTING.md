@@ -325,8 +325,12 @@ tests outside make — from an IDE, or with a plain `go test ./internal/render`
 or `go test ./test/crd` — install it once with `make crewlet`, or point
 `CREWLET_BIN` at a `crewlet` binary of your own. A test that finds no binary
 **fails** and says which of the two to do; it never skips, because a skipped
-contract test reads as a passing one. When a test fails, the engine's log is
-printed with it.
+contract test reads as a passing one. A test that reads the engine's source
+(`enginetest.Source`) fails too on a binary built from a Crewlet checkout
+with uncommitted changes: the go command stamps it with the commit's version
+and `+dirty`, and the module proxy serves that version without the changes,
+so the test would read code the binary does not run. When a test fails, the
+engine's log is printed with it.
 
 So the operator's CI can fail with no change to the operator: a Crewlet
 change broke it, or exposed something the operator had wrong. That shows on
