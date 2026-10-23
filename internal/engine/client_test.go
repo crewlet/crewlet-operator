@@ -731,13 +731,15 @@ func TestPutSecretSendsTheRawValue(t *testing.T) {
 
 // TestPutSecretErrorsNeverContainTheValue holds the package's promise on every
 // way a write can fail: a refusal, an error answer, a proxy's page and a
-// transport failure.
+// transport failure. The engine's answers are as it words them: a value past
+// what the route takes, and a store it could not write.
 func TestPutSecretErrorsNeverContainTheValue(t *testing.T) {
 	const value = "sk-live-do-not-leak"
 	cases := map[string]http.HandlerFunc{
-		"refused": answer(http.StatusServiceUnavailable,
-			`{"error":"no_keyring","detail":"this node has no secrets.keys"}`),
-		"internal error": answer(http.StatusInternalServerError, `{"error":"internal_error"}`),
+		"refused": answer(http.StatusRequestEntityTooLarge, `{"error":"body_too_large","message":"The request body is `+
+			`larger than this endpoint accepts. Send a smaller document, or split the change across more than one request."}`),
+		"internal error": answer(http.StatusInternalServerError, `{"error":"internal_error",`+
+			`"message":"Something went wrong inside the engine. The reason is in this node's log."}`),
 		"a proxy's page": page(http.StatusBadGateway),
 	}
 	for name, h := range cases {
