@@ -51,6 +51,46 @@ addresses from the data pod's `crewlet.yaml`
 ([below](#the-data-pods-crewletyaml)), since its sign-in and the origin it
 accepts a person's write from are decided before any document is loaded.
 
+### The charter
+
+`spec.mission`, `spec.vision` and `spec.policies` are the company's charter,
+which every seat reads word for word on every turn. The API holds them to
+[Crewlet's bounds](https://github.com/crewlet/crewlet/blob/main/docs/concepts/configuration.md#mission-vision-and-policies),
+counted in characters on the value with the space around it trimmed, as the
+engine counts them:
+
+| Field | Bound |
+|---|---|
+| `mission` | at most 1024 characters, on one line |
+| `vision` | at most 2048 characters; paragraphs allowed |
+| `policies` | at most 25 |
+| each policy | at most 1024 characters, on one line, not blank, and not a repeat of another |
+
+A line break is a line feed, a carriage return, a vertical tab, a form feed,
+U+0085, U+2028 or U+2029, judged on the trimmed value, so a trailing newline
+is not one.
+
+**Only a change is judged**, as Crewlet judges a charter, so a Company written
+before these bounds is never locked out of its settings:
+
+- the mission and the vision when an update changes them (the space around
+  them aside), and every field on create;
+- a policy only when the Company did not already hold it, so reordering and
+  removing policies are never refused; the count only when it passes 25 and
+  grows; a repeat only when the update adds a copy.
+
+An update that leaves a faulty field as it was, or changes any other field,
+is admitted; one that edits a faulty part and leaves it at fault is refused
+naming the rule. The fields keep the `maxLength` and `maxItems` they had
+before (2048 for `mission`, 8192 for `vision`, 64 policies of 2048), so a
+Company written under them stays valid; those also bound the rules' cost.
+
+One difference is forced by the API server's budget for a rule's cost: the
+API recognises a policy it already held, and a repeat, by its **exact** text,
+where Crewlet compares them trimmed. Two policies that differ only in the
+space around them are admitted here and refused by Crewlet's write, which the
+Company reports as `Applied=False` with Crewlet's message.
+
 ### Names and identities
 
 - A Unit's `metadata.name` is its Crewlet `id`, and its `displayName` (or,
