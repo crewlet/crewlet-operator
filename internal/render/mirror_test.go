@@ -104,6 +104,15 @@ const (
 	// in. Launch and LaunchExecutor hand the box the run's model in place of
 	// an API entry's endpoint, which moved no verdict.
 	cliOnlyRead = "v0.1.1-0.20261023214803-bbedf7ecebd7"
+	// refusalByModeRead is the engine whose remote-run refusal is worded by
+	// the entry's auth mode (credentialRefusal): an api-key entry whose key
+	// resolved to nothing is told to give the seat its own key, and an
+	// inherit-env one the variables it forwards. sandboxCredentials refuses
+	// the same runs as at cliOnlyRead. The operator renders no inherit-env,
+	// and an APIKey provider always carries auth.apiKeySecretRef, so its
+	// SandboxLoginNotPortable report still names the remedies a
+	// Subscription or OpenCode head's refusal does.
+	refusalByModeRead = "v0.1.1-0.20261024161738-9df7126ea389"
 	// toolCredentialsGo is where the engine decides what a value that
 	// resolves to nothing does to a tool server or a coding run.
 	toolCredentialsGo = "internal/engine/toolcredentials.go"
@@ -524,8 +533,8 @@ var mirrored = []mirror{
 			"in, and for an env sign-in CLI any credential-named one): a run_sandbox launch " +
 			"(SandboxLoginNotPortable), and at phase Execute an agent-mode run, which the LLMProvider API refuses " +
 			"on a Subscription login no variable carries",
-		digest: "0083e773306d13e5e327796466035335ce16dbf259a689308b291a8004d7eaf8",
-		read:   cliOnlyRead,
+		digest: "130c50af56ebe42106c847fb1e06cbe9886d5e8a2ddbb19586e93d3ca63beebc",
+		read:   refusalByModeRead,
 	},
 	{
 		file: sandboxGo, name: "(*Engine).runEnvironment",
