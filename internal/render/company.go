@@ -616,10 +616,12 @@ const CLIStateRoot = DataDir + "/llm-cli"
 //
 // A root of its own rather than CLIStateRoot, because a tenant chooses its
 // providers' loginName freely: under one root, a loginName equal to a
-// platform provider's name would point the two entries at one directory,
-// which Crewlet refuses, holding the whole document, when they drive
-// different CLIs, and which otherwise mixes a tenant's login into the
-// directory of a provider every tenant of the class is given.
+// platform provider's name would point the two entries at one directory.
+// Crewlet keeps each CLI's files in a directory of its own under it
+// (<state_dir>/<agent>), so entries of different CLIs would share the
+// directory and nothing in it; entries of the same CLI would share its login
+// and seat homes, mixing the tenant's login into the directory of a provider
+// every tenant of the class is given.
 const CLIPlatformStateRoot = DataDir + "/llm-cli-platform"
 
 // llmEntry renders what an LLMProvider and a platform provider share, with

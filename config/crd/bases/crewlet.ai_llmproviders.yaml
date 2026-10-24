@@ -278,8 +278,10 @@ spec:
                 description: |-
                   loginName names the login, and the per-seat homes, the provider
                   keeps on the data volume. Providers of the company with the same
-                  loginName share one login, which is how several models run off one
-                  subscription; they must drive the same CLI. Unset is the provider's
+                  loginName that drive the same CLI share one login, which is how
+                  several models run off one subscription; each CLI keeps its own
+                  beside the others' (Crewlet's <state_dir>/<agent>), so one of another
+                  CLI shares the directory and nothing in it. Unset is the provider's
                   own metadata.name. Crewlet's `state_dir`, as
                   /var/lib/crewlet/llm-cli/<loginName>.
                 maxLength: 63
