@@ -424,7 +424,7 @@ type E2BSandbox struct {
 	// memory and disk. Unset, each run gets the vendor's prebuilt template
 	// for its coding agent's CLI (claude or opencode); a template set here is
 	// used for every run, so it must carry the CLI of every coding agent and
-	// Agent-mode CLIAgent provider the company runs. For OpenCode that is
+	// Agent-mode LLMProvider the company runs. For OpenCode that is
 	// OpenCode 2, the @opencode/cli package (opencode --version prints
 	// opencode v2.…): Crewlet's OpenCode runner ends a run at once in a box
 	// with OpenCode 1.x (npm's opencode-ai), and E2B does not say which
@@ -779,13 +779,14 @@ type CompanyRuntime struct {
 	// passes through, such as GeminiCLI's GOOGLE_CLOUD_PROJECT and
 	// GOOGLE_CLOUD_LOCATION, and a sandbox run none of it. So a variable a tool
 	// server reads goes in its MCPServer's env (docs/guides/tool-servers.md),
-	// and any other a coding CLI reads in its LLMProvider's spec.cli.env.
+	// and any other a coding CLI reads in its LLMProvider's spec.env.
 	//
 	// Names starting with CREWLET_ or OTEL_ are the operator's own.
 	// ANTHROPIC_API_KEY and OPENAI_API_KEY are refused too: Crewlet reads them
-	// as the key of a model or embeddings provider that names none, so a
-	// value here would be a credential outside the engine's secret store;
-	// give the provider its key with apiKeySecretRefs or apiKeySecretRef.
+	// as the key of a model provider in auth mode api-key, or an embeddings
+	// provider, that names none, so a value here would be a credential outside
+	// the engine's secret store; give the provider its key with
+	// auth.apiKeySecretRef or apiKeySecretRef.
 	// +optional
 	// +listType=map
 	// +listMapKey=name

@@ -658,7 +658,7 @@ func (r *CompanyReconciler) toolBridge(ctx context.Context, c *crewletaiv1alpha1
 	}
 	for i := range providers.Items {
 		p := &providers.Items[i]
-		if p.Spec.CompanyRef.Name == c.Name && p.Spec.CLI.Mode == crewletaiv1alpha1.CLIAgentModeAgent {
+		if p.Spec.CompanyRef.Name == c.Name && p.Spec.Mode == crewletaiv1alpha1.CLIAgentModeAgent {
 			return true, nil
 		}
 	}

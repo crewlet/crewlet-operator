@@ -46,9 +46,8 @@ docs/                 user docs; docs/reference/api.md is generated
 adr/                  decisions that bind more than one package
 test/crd/             envtest suite for the CRDs: every CEL rule, defaults, samples,
                       and the objects docs/getting-started.md applies; the
-                      CLIAgent sign-in, model and env isolation rules, the
-                      guide's tables of them and the claudeModel enum,
-                      against the engine
+                      LLMProvider sign-in, model and env isolation rules,
+                      and the guide's tables of them, against the engine
 test/docs/            reads the manifests a doc hands to kubectl, and the
                       tables it states, for the suites; and holds docs/ to
                       its index, its links and anchors, and the engine's

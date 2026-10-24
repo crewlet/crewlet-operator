@@ -102,17 +102,17 @@ type SeatLLM struct {
 	// sandbox is the chain the coding agent in the seat's sandbox runs on.
 	// Unset takes default, then the Company's model order. A coding run uses
 	// the chain's head alone, as its model and its sign-in, so the head must
-	// be a provider the coding agent can read: an Anthropic provider, or for
-	// OpenCode an OpenAI or OpenAICompatible one too, or a CLIAgent provider
-	// of the coding agent's own CLI. The operator refuses a CLIAgent provider
-	// of another CLI (CodingAgentMismatch), and reports any other head the
-	// coding agent cannot run on in the CodeWorkRunnable condition. Every box
-	// of the seat carries the head's first API key, and under ClaudeCode its
-	// baseURL, unless spec.sandbox.env signs ClaudeCode in itself: give code
-	// work a provider whose key is scoped for it. A seat whose executor runs
-	// in agent mode (a CLIAgent provider in mode Agent heads its executor's
-	// chain: default, else the Company's spec.llm.order) has no code work of
-	// its own, so nothing reads this chain for one. Crewlet's `sandbox`.
+	// be a provider of the coding agent's own CLI: a ClaudeCode provider for
+	// ClaudeCode, an OpenCode one for OpenCode. The operator refuses a
+	// provider of another CLI (CodingAgentMismatch), and reports a head whose
+	// login cannot follow a run into the sandbox in the CodeWorkRunnable
+	// condition. Every box of the seat carries the head's headless token, its
+	// key, or its credential-named env, under the variable its CLI reads,
+	// unless spec.sandbox.env names that variable itself: give code work a
+	// provider whose sign-in is scoped for it. A seat whose executor runs in
+	// agent mode (an LLMProvider in mode Agent heads its executor's chain:
+	// default, else the Company's spec.llm.order) has no code work of its
+	// own, so nothing reads this chain for one. Crewlet's `sandbox`.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MinItems=1
@@ -127,15 +127,14 @@ type SeatLLM struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.optionalKeys) || self.optionalKeys.all(k, has(self.env) && self.env.exists(e, e.name == k))",message="optionalKeys may name only a variable of env: an entry naming anything else leaves nothing out",fieldPath=".optionalKeys"
 type SeatSandbox struct {
 	// codingAgent is the coding agent the seat's sandbox runs. Unset takes
-	// the Company's spec.sandbox.defaultCodingAgent. ClaudeCode runs on an
-	// Anthropic provider or a ClaudeCode CLIAgent one, unless the seat's
-	// sandbox environment signs it in itself; OpenCode runs on an Anthropic,
-	// OpenAI or OpenAICompatible provider or an OpenCode CLIAgent one. A seat
-	// whose executor runs in agent mode (a CLIAgent provider in mode Agent
-	// heads its executor's chain) is never offered run_sandbox: it codes in
-	// its executor's run, on that provider's CLI, so this drives nothing, and
-	// the operator refuses one other than that CLI (CodingAgentMismatch), as
-	// Crewlet does. Crewlet's `coding_agent`.
+	// the Company's spec.sandbox.defaultCodingAgent. Each runs on a provider
+	// of its own CLI at the head of spec.llm.sandbox: ClaudeCode on a
+	// ClaudeCode provider, OpenCode on an OpenCode one. A seat whose executor
+	// runs in agent mode (an LLMProvider in mode Agent heads its executor's
+	// chain) is never offered run_sandbox: it codes in its executor's run, on
+	// that provider's CLI, so this drives nothing, and the operator refuses
+	// one other than that CLI (CodingAgentMismatch), as Crewlet does.
+	// Crewlet's `coding_agent`.
 	// +optional
 	CodingAgent CodingAgent `json:"codingAgent,omitempty"`
 

@@ -66,29 +66,22 @@ func TestReferencesInModelProviders(t *testing.T) {
 			mutate: func(p *v1.LLMProvider) { p.Spec.Model = leak },
 			want:   "model" + msgReference,
 		},
-		{
-			// claudeModel takes the ids of Crewlet's model table alone,
-			// which no reference is.
-			name:   "a reference in claudeModel is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.ClaudeModel = leak },
-			want:   msgClaudeModelUnlisted,
-		},
-		{
-			name:   "a reference in the base URL is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.BaseURL = "https://attacker.example/" + leak },
-			want:   "baseURL" + msgReference,
-		},
 	})
 	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
 		{
-			name: "a reference in a platform provider's base URL is refused",
+			name: "a reference in a platform provider's model is refused",
 			mutate: func(c *v1.EngineClass) {
 				c.Spec.PlatformLLMProviders = []v1.PlatformLLMProvider{{
-					Name: "gateway",
-					Type: v1.LLMProviderOpenAICompatible, Model: "gemma", BaseURL: "https://gateway.example/" + leak,
+					Name: "gateway", Agent: v1.CLIAgentClaudeCode, Model: leak,
+					Auth: v1.PlatformLLMProviderAuth{
+						Mode: v1.CLIAgentAuthAPIKey,
+						APIKeySecretRef: v1.NamespacedSecretKeyReference{
+							Namespace: platformKeyNS, Name: "gateway", Key: apiKeyKey,
+						},
+					},
 				}}
 			},
-			want: "baseURL" + msgReference,
+			want: "model" + msgReference,
 		},
 	})
 }

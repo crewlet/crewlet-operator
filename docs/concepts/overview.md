@@ -34,7 +34,7 @@ the [API reference](../reference/api.md).
 | `Company` | Namespace | The company itself, and the engine that runs it | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `token_budget`, `providers.embeddings`, `providers.sandbox`, and the engine tuning blocks in `engineConfig` |
 | `Unit` | Namespace | One node of the org chart: a division, a team, a squad | One entry of `units`, nested under its parent |
 | `Seat` | Namespace | One seat: an AI agent, or a person agents work with, tied to their own accounts ([A person's accounts](../guides/integrations.md#a-persons-accounts)) | One entry of `roles`, inside its unit |
-| `LLMProvider` | Namespace | A model a company's seats can run on | One entry of `providers.llm` |
+| `LLMProvider` | Namespace | A model a company's seats can run on: a coding CLI the engine drives ([Running seats on a coding CLI](../guides/cli-agents.md)) | One entry of `providers.llm` |
 | `MCPServer` | Namespace | A tool server agents call: a program the engine starts, which the engine image must carry ([Running tool servers](../guides/tool-servers.md)), or a remote one | One entry of `mcp_servers` |
 | `Integration` | Namespace | A vendor the company is connected to (Slack, GitHub, GitLab, Mattermost, Jira, Confluence, Datadog, an Atlassian organization), and who creates the seats' accounts there | One block of `integrations` |
 | `Schedule` | Namespace | Recurring work of a seat or a unit, fired on a cron schedule: the company's CronJob | One entry of its seat's or unit's `schedules` |
@@ -236,7 +236,7 @@ part is in the running revision, and only it suffers what is reported
 | `Company` | `Ready` (the summary), `Accepted`, `RuntimeReady`, `SecretsSynced`, `ConfigApplied`, `Exposed`, `EngineHealthy`, `IdentityClaimed` (whether anybody has joined the company; not part of `Ready`), `SeatsPlaced` |
 | `EngineClass` | `Accepted` |
 | `Unit`, `MCPServer`, `Schedule` | `Accepted`, `ResolvedRefs`, `Applied` |
-| `LLMProvider` | `Accepted`, `ResolvedRefs`, `Applied`, and on a `CLIAgent` provider in `mode: Agent` `AgentModeRunnable` (whether its runs can call a seat's tools back: `False`, `NotExposed`, while the Company has no public address) |
+| `LLMProvider` | `Accepted`, `ResolvedRefs`, `Applied`, and on a provider in `mode: Agent` `AgentModeRunnable` (whether its runs can call a seat's tools back: `False`, `NotExposed`, while the Company has no public address) |
 | `Seat` | `Accepted`, `ResolvedRefs`, `Applied`, and on an Agent seat `Ready` (whether it runs: `True`, `LeaseHeld`, while an engine pod holds it; `False` with `Unplaced` while none does, `PoolNotFound` when its pool is not one the Company declares, or `AgentModeBridgeUnsupported` or `NotExposed` when the engine refuses every one of its turns), once the engine runs it `Paused`, and with `spec.sandbox` and an executor that does not run in agent mode, in a Company with `spec.sandbox`, `CodeWorkRunnable` (whether its coding agent can run on its sandbox provider; not part of `Ready`) |
 | `Integration` | `Accepted`, `ResolvedRefs`, `Applied`, `Healthy` |
 

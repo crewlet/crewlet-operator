@@ -12,21 +12,47 @@ spec:
       size: 16Gi
   platformLLMProviders:
     - name: platform-claude
-      type: Anthropic
+      agent: ClaudeCode
       model: claude-sonnet-5
-      reasoningEffort: Medium
-      apiKeySecretRefs:
-        - namespace: crewlet-system
+      auth:
+        mode: APIKey
+        apiKeySecretRef:
+          namespace: crewlet-system
           name: platform-anthropic
           key: primary
-        - namespace: crewlet-system
-          name: platform-anthropic
-          key: secondary
+    # Claude Code through the platform's gateway, which it reads from its
+    # environment, on the tenant's virtual key.
     - name: platform-gateway
-      type: OpenAICompatible
-      model: llama-4
-      baseURL: https://llm.platform.example/v1
+      agent: ClaudeCode
+      model: sonnet
       timeoutSeconds: 120
+      auth:
+        mode: APIKey
+        apiKeySecretRef:
+          namespace: crewlet-system
+          name: llm-gateway
+          key: managed
+      env:
+        - name: ANTHROPIC_BASE_URL
+          valueFrom:
+            secretKeyRef:
+              namespace: crewlet-system
+              name: llm-gateway
+              key: baseURL
+    # OpenCode on an open model, signed in by its model provider's key.
+    - name: platform-open
+      agent: OpenCode
+      model: openrouter/meta-llama/llama-4-maverick
+      maxConcurrent: 2
+      auth:
+        mode: Subscription
+      env:
+        - name: OPENROUTER_API_KEY
+          valueFrom:
+            secretKeyRef:
+              namespace: crewlet-system
+              name: platform-openrouter
+              key: apiKey
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
@@ -48,15 +74,13 @@ metadata:
 spec:
   companyRef:
     name: managed
-  type: OpenAI
+  agent: Codex
   model: gpt-5
-  reasoning: true
-  reasoningEffort: High
-  cooldowns:
-    rateLimitSeconds: 600
-    authSeconds: 120
-  apiKeySecretRefs:
-    - name: openai
+  timeoutSeconds: 900
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: openai
       key: apiKey
 ---
 apiVersion: crewlet.ai/v1alpha1
@@ -74,3 +98,6 @@ spec:
     judge:
       - kind: PlatformLLMProvider
         name: platform-gateway
+    auxiliary:
+      - kind: PlatformLLMProvider
+        name: platform-open

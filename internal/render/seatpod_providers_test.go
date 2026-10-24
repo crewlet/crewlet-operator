@@ -17,7 +17,7 @@ import (
 func TestSeatPodProviders(t *testing.T) {
 	bundled := func(in *Input) {
 		p := cliProvider(v1alpha1.CLIAgentModeText)
-		p.Spec.CLI.Auth = v1alpha1.CLIAgentAuth{
+		p.Spec.Auth = v1alpha1.CLIAgentAuth{
 			CredentialBundleSecretRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "bundle"},
 		}
 		in.LLMProviders = append(in.LLMProviders, p)
@@ -27,9 +27,9 @@ func TestSeatPodProviders(t *testing.T) {
 		return func(in *Input) {
 			p := cliProvider(v1alpha1.CLIAgentModeText)
 			p.Spec.Model = "openrouter/anthropic/claude-sonnet-5"
-			p.Spec.CLI.Agent = agent
-			p.Spec.CLI.Auth = v1alpha1.CLIAgentAuth{Mode: v1alpha1.CLIAgentAuthSubscription}
-			p.Spec.CLI.Env = []v1alpha1.SecretEnvVar{{
+			p.Spec.Agent = agent
+			p.Spec.Auth = v1alpha1.CLIAgentAuth{Mode: v1alpha1.CLIAgentAuthSubscription}
+			p.Spec.Env = []v1alpha1.SecretEnvVar{{
 				Name:      "OPENROUTER_API_KEY",
 				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "openrouter"}},
 			}}

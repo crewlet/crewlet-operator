@@ -158,7 +158,7 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			mutate: func(in *Input) {
 				platformKey := v1alpha1.NamespacedSecretKeyReference{}
 				for _, p := range in.Class.Spec.PlatformLLMProviders {
-					platformKey = p.APIKeySecretRefs[0]
+					platformKey = p.Auth.APIKeySecretRef
 				}
 				stored := in.StoreName(secretref.Key{Namespace: platformKey.Namespace, Name: platformKey.Name, Key: platformKey.Key})
 				in.Company.Spec.EngineConfig = append(in.Company.Spec.EngineConfig, v1alpha1.EngineConfigEntry{
@@ -503,6 +503,15 @@ func toolServer(in *Input, name string) *v1alpha1.MCPServer {
 	panic("no MCPServer " + name)
 }
 
+func modelProvider(in *Input, name string) *v1alpha1.LLMProvider {
+	for i := range in.LLMProviders {
+		if in.LLMProviders[i].Name == name {
+			return &in.LLMProviders[i]
+		}
+	}
+	panic("no LLMProvider " + name)
+}
+
 func schedule(in *Input, name string) *v1alpha1.Schedule {
 	for i := range in.Schedules {
 		if in.Schedules[i].Name == name {
@@ -541,7 +550,7 @@ func TestAttributeFindsTheInnermostObject(t *testing.T) {
 		{"providers.embeddings.model", company},
 		{"providers.llm_order[1]", company},
 		{"knowledge.backend", company},
-		{"providers.llm.anthropic.api_keys[0]", ObjectRef{KindLLMProvider, "anthropic"}},
+		{"providers.llm.anthropic.auth.api_key", ObjectRef{KindLLMProvider, "anthropic"}},
 		{"providers.llm.platform-claude.model", ObjectRef{KindEngineClass, "standard"}},
 		{"mcp_servers[0].url", ObjectRef{KindMCPServer, sampleGitHub}},
 		{githubWebhookSecret, ObjectRef{KindIntegration, sampleGitHub}},
@@ -663,7 +672,7 @@ func TestEveryReferenceInADocumentIsTheOperators(t *testing.T) {
 // providerCLI names the LLMProvider cliProvider makes.
 const providerCLI = "claude-cli"
 
-// cliProvider is a CLIAgent provider of Claude Code on a headless token, in
+// cliProvider is a provider of Claude Code on a headless token, in
 // the mode given.
 func cliProvider(mode v1alpha1.CLIAgentMode) v1alpha1.LLMProvider {
 	return v1alpha1.LLMProvider{
@@ -671,13 +680,10 @@ func cliProvider(mode v1alpha1.CLIAgentMode) v1alpha1.LLMProvider {
 		Name:      providerCLI,
 		Spec: v1alpha1.LLMProviderSpec{
 			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
-			LLMProviderSettings: v1alpha1.LLMProviderSettings{Type: v1alpha1.LLMProviderCLIAgent, Model: "sonnet"},
-			CLI: v1alpha1.CLIAgentSettings{
-				Agent: v1alpha1.CLIAgentClaudeCode,
-				Mode:  mode,
-				Auth: v1alpha1.CLIAgentAuth{
-					TokenSecretRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "oauthToken"},
-				},
+			LLMProviderSettings: v1alpha1.LLMProviderSettings{Agent: v1alpha1.CLIAgentClaudeCode, Model: "sonnet"},
+			Mode:                mode,
+			Auth: v1alpha1.CLIAgentAuth{
+				TokenSecretRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "oauthToken"},
 			},
 		},
 	}

@@ -1,19 +1,22 @@
 # Running Seats on a Coding CLI
 
-An `LLMProvider` of type `CLIAgent` runs a seat on a coding CLI you already
-subscribe to, such as Claude Code or Codex, rather than on a metered API key.
+Every model a seat runs on is a coding CLI the engine drives: Claude Code for
+Anthropic's models, Codex for OpenAI's, OpenCode for open models on any
+provider, and the other CLIs of the table below. An `LLMProvider` names the
+CLI (`agent`), the model in that CLI's own grammar, and how it signs in: on a
+subscription you already have, or on a metered API key.
 
-It renders Crewlet's `cli-agent` provider, which drives the CLI on a
-subscription login; Crewlet's
-[Subscription LLM backends](https://github.com/crewlet/crewlet/blob/main/docs/concepts/subscription-llm-backends.md)
+It renders one entry of Crewlet's `providers.llm`; Crewlet's
+[LLM backends](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md)
 describes what the engine does with it. This guide covers what changes when
 the engine runs in a pod: the image, the login, and agent mode.
 
 ## The image needs the CLI
 
 The CLI is a program the engine starts, in the engine's own container, and
-Crewlet's image ships none: a derived image adds it, with whatever runtime it
-needs (Node.js for most of them; Claude Code and OpenCode need none, each
+Crewlet's image ships none, so a company whose seats should do any work runs
+on a class that names a derived image. It adds the CLI, with whatever runtime
+it needs (Node.js for most of them; Claude Code and OpenCode need none, each
 being one native binary). Build one from the engine image you run, named by
 digest: the engine of the operator's release, or the copy of Crewlet's `main`
 image that [Installing](installing.md#engine-image) makes in your registry.
@@ -30,7 +33,7 @@ pasting one Dockerfile into another
 The engine's root filesystem is read-only: a CLI writes under the home the
 engine gives each seat and under `/tmp`, both writable. Each running CLI
 takes 200 to 450 MB, so size the class's `data.resources` for
-`cli.maxConcurrent` of them per provider. An OpenCode call is at the top of
+`maxConcurrent` of them per provider. An OpenCode call is at the top of
 that range: measured on OpenCode 2.0.32, one call held about 440 MB at its
 peak, some 365 MB of it the private server every call starts, and each call
 running beside it about 250 to 350 MB more, the binary's pages being shared
@@ -158,13 +161,13 @@ wrong:
 - **Never add an `/etc/opencode` configuration** to the image: OpenCode reads
   it as machine-wide managed configuration over every seat's call, and
   nothing the engine sets overrides it
-  ([Tool calls in text mode](https://github.com/crewlet/crewlet/blob/main/docs/concepts/subscription-llm-backends.md#tool-calls-in-text-mode)).
+  ([Tool calls in text mode](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#tool-calls-in-text-mode)).
 - **The binary links glibc**, which the engine image's Debian has; the
   `musl` packages are for Alpine. Of the native libraries it unpacks, only
   its file watcher's needs more, libstdc++ and libgcc_s, which Debian has
   too. The engine switches the watcher off on every command it runs
   (`OPENCODE_FILEWATCHER_DISABLE`), and the check below loads it anyway,
-  since `cli.env` can switch it back on.
+  since a provider's `env` can switch it back on.
 
 Build it from the engine image, or from another image of
 [One image with a coding CLI](tool-servers.md#one-image-with-a-coding-cli),
@@ -212,16 +215,16 @@ spec:
 ## Signing in
 
 A subscription login is made at a terminal, by `crewlet llm login` or the
-CLI's own command, and a pod has none. `cli.auth` therefore takes the login
+CLI's own command, and a pod has none. `auth` therefore takes the login
 from a Secret, in one of two forms; takes a metered key instead; or, for the
 three CLIs that read their model provider's key from their environment,
-takes none and signs in with that key in `cli.env`:
+takes none and signs in with that key in `env`:
 
 | Sign-in | What the Secret holds | Use it when |
 |---|---|---|
 | `auth.tokenSecretRef` | a long-lived headless token the CLI mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the CLI is Claude Code, the one CLI whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins an agent-mode run can carry (an agent-mode OpenCode carries its model provider's key in `env` instead) |
 | `auth.credentialBundleSecretRef` | a bundle of the CLI's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any CLI: the others mint no token Crewlet hands on |
-| `auth.mode: APIKey` with one `apiKeySecretRefs` key | the CLI's metered API key | the CLI's Crewlet profile names a key variable ([below](#a-metered-key)) |
+| `auth.mode: APIKey` with `auth.apiKeySecretRef` | the CLI's metered API key | the CLI's Crewlet profile names a key variable ([below](#a-metered-key)) |
 | `env`, with `auth.mode: Subscription` | the key of the model provider the CLI runs on, in the variable the CLI reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the CLI is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
 
 What each CLI takes, in the engine the operator is tested against, Crewlet's
@@ -229,7 +232,7 @@ What each CLI takes, in the engine the operator is tested against, Crewlet's
 table to that engine's own verdict on every CLI and every sign-in, so neither
 can fall behind it):
 
-| `cli.agent` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `credentialBundleSecretRef` | `mode: Agent` |
+| `agent` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `credentialBundleSecretRef` | `mode: Agent` |
 |---|---|---|---|---|---|
 | `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | yes | on the token or the key |
 | `Codex` | no | `OPENAI_API_KEY` | no | yes | no |
@@ -255,14 +258,14 @@ Subscription provider that names neither is refused, with one exception:
 - **Hermes, Pi and OpenCode on a key in `env`.** Each fronts many model
   providers and reads each provider's key from that provider's own
   variable, so Crewlet's profile for it names no key variable and marks it
-  as signing in through its environment: Crewlet passes the CLI's `env` to
-  it untouched, which is the route its profile documents for a metered key.
-  Crewlet counts an entry as a sign-in only by its name
+  as signing in through its environment: Crewlet passes the provider's `env`
+  to it untouched, which is the route its profile documents for a metered
+  key. Crewlet counts an entry as a sign-in only by its name
   ([below](#which-env-entries-sign-a-cli-in)).
-- **Every other CLI** keeps to a token or a bundle. A CLI whose profile names
-  a key variable takes its key with `auth.mode: APIKey`; the engine refuses
-  that variable in `env` (below), and a key in `env` under any other name is
-  one the CLI does not read.
+- **Every other CLI** keeps to a token, a bundle or a key. A CLI whose
+  profile names a key variable takes its key with `auth.mode: APIKey`; the
+  engine refuses that variable in `env` (below), and a key in `env` under any
+  other name is one the CLI does not read.
 
 `env` may never set the CLI's own token or key variable, the ones the table
 names (`ANTHROPIC_API_KEY` for `ClaudeCode`, `CURSOR_API_KEY` for
@@ -302,16 +305,14 @@ metadata:
   name: hermes
 spec:
   companyRef: {name: acme}
-  type: CLIAgent
+  agent: Hermes
   model: anthropic/claude-sonnet-5   # an OpenRouter model id: OPENROUTER_API_KEY selects OpenRouter
-  cli:
-    agent: Hermes
-    auth:
-      mode: Subscription
-    env:
-      - name: OPENROUTER_API_KEY
-        valueFrom:
-          secretKeyRef: {name: openrouter, key: apiKey}
+  auth:
+    mode: Subscription
+  env:
+    - name: OPENROUTER_API_KEY
+      valueFrom:
+        secretKeyRef: {name: openrouter, key: apiKey}
 ```
 
 OpenCode reads its model as `<provider>/<model>`, splitting it at the first
@@ -338,12 +339,10 @@ metadata:
   name: claude-code
 spec:
   companyRef: {name: acme}
-  type: CLIAgent
+  agent: ClaudeCode
   model: sonnet
-  cli:
-    agent: ClaudeCode
-    auth:
-      tokenSecretRef: {name: claude-subscription, key: oauthToken}
+  auth:
+    tokenSecretRef: {name: claude-subscription, key: oauthToken}
 ```
 
 The login, and the homes the CLI keeps for each seat, live on the data
@@ -361,27 +360,41 @@ A bundle restored over a newer login is how a vendor that rotates refresh
 tokens logs a deployment out, which is why a token is the better of the two
 wherever the CLI mints one.
 
-Providers that set the same `loginName` share one login and its seats'
-homes, which is how several models run off one subscription; they must
-drive the same CLI, or the engine refuses the document.
+Providers that set the same `loginName` and drive the same CLI share one
+login and its seats' homes, which is how several models run off one
+subscription. Each CLI keeps its files in a directory of its own under the
+login (`/var/lib/crewlet/llm-cli/<loginName>/<cli>`, such as `claude-code` or
+`codex`), so a provider of another CLI with that `loginName` shares the
+directory and nothing in it
+([Per-phase models](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#per-phase-models)).
+
+**Moving a provider to another `agent`** is an ordinary change, applied
+with no restart: the new CLI starts signed out in a login of its own beside
+the old one's, which stays there for a move back. Sign the new CLI in. A
+bundle belongs to the CLI it was exported from, so a provider's
+`auth.credentialBundleSecretRef` still holds the old CLI's files after the
+move, and the engine refuses to restore it into the new CLI's empty login,
+logging `cli_agent_bundle_restore_failed`, until the Secret holds a bundle
+exported from the new CLI
+([An entry moved to another CLI](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#an-entry-moved-to-another-cli)).
 
 ### An OpenCode login in a bundle
 
 OpenCode 2 keeps its logins in a database of its own rather than in files,
 so an OpenCode bundle holds one file: the document `opencode auth export
 --standalone` printed. The engine keeps it as the login of record
-(`credentials/exported-credentials` under
+(`opencode/credentials/exported-credentials` under
 `/var/lib/crewlet/llm-cli/<loginName>`), imports it into an empty database in
 a seat's home before the seat's calls, and exports it back when OpenCode
 refreshed it
-([Token refresh across seats](https://github.com/crewlet/crewlet/blob/main/docs/concepts/subscription-llm-backends.md#token-refresh-across-seats)).
+([Token refresh across seats](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#token-refresh-across-seats)).
 
 Make it on a machine with OpenCode 2, npm's `@opencode/cli`:
 `crewlet llm login <key>` runs OpenCode's own `opencode auth login
 --standalone` in a login home of the entry's own, or sign in with OpenCode
 yourself and adopt that login with `crewlet llm login <key> -from-host`,
 which reads it through your OpenCode's export
-([Broker the vendor's own login](https://github.com/crewlet/crewlet/blob/main/docs/concepts/subscription-llm-backends.md#1-broker-the-vendors-own-login-any-cli));
+([Broker the vendor's own login](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#1-broker-the-vendors-own-login-any-cli));
 then `crewlet llm export <key>`. The export prints every login the OpenCode
 it runs in holds, keys stored with `opencode auth login` included, so a
 bundle adopted from your own home carries every provider you signed in to
@@ -421,36 +434,44 @@ seat pod too.
 
 ### A metered key
 
-`auth.mode: APIKey` gives the CLI the provider's one `apiKeySecretRefs` key
-instead, billing the metered account. Crewlet hands the key over in the
-variable the CLI's profile names, and in Crewlet's `main` eight name one
-(the table above); for the others the key would reach nothing, so the engine
-refuses the mode for them and the API server refuses it first. Hermes,
-Pi and OpenCode take their model provider's key in `env` instead, and
-KimiCode its key in the bundle. `CursorAgent`'s key is a Cursor account's
-API key, from the Cursor dashboard, not a model provider's.
+`auth.mode: APIKey` gives the CLI the key of `auth.apiKeySecretRef` instead,
+billing the metered account: Claude Code on an Anthropic API key, Codex on an
+OpenAI one. Crewlet hands the key over in the variable the CLI's profile
+names, and in Crewlet's `main` eight name one (the table above); for the
+others the key would reach nothing, so the engine refuses the mode for them
+and the API server refuses it first. Hermes, Pi and OpenCode take their
+model provider's key in `env` instead, and KimiCode its key in the bundle.
+`CursorAgent`'s key is a Cursor account's API key, from the Cursor
+dashboard, not a model provider's.
 
 ```yaml
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
 metadata:
-  name: cursor
+  name: claude-metered
 spec:
   companyRef: {name: acme}
-  type: CLIAgent
-  model: auto
-  apiKeySecretRefs:
-    - {name: cursor, key: apiKey}
-  cli:
-    agent: CursorAgent
-    auth:
-      mode: APIKey
+  agent: ClaudeCode
+  model: claude-sonnet-5
+  auth:
+    mode: APIKey
+    apiKeySecretRef: {name: anthropic, key: apiKey}
 ```
+
+The key is one key: a CLI holds one sign-in and rotates nothing, so a second
+key is a second provider, later in a seat's chain, which a seat falls back to
+when the first is out of its limits. The API server refuses
+`apiKeySecretRef` without `auth.mode: APIKey`, and the mode without it:
+Crewlet would read the CLI's key variable from its own secret store and the
+engine's environment then, which hold no key this provider names. A gateway
+or proxy in front of the vendor is a variable the CLI reads from its
+environment, which goes in `env` from a Secret, such as Claude Code's
+`ANTHROPIC_BASE_URL`.
 
 ## Text mode and agent mode
 
-`cli.mode: Text` (the default) runs the CLI as a model behind the engine's
-own tool loop, as a process in the engine's pod. `cli.mode: Agent` runs a
+`mode: Text` (the default) runs the CLI as a model behind the engine's
+own tool loop, as a process in the engine's pod. `mode: Agent` runs a
 seat's executor as the CLI's own agentic run, with its own shell and editor,
 in the company's sandbox. Every other phase on the same provider (the
 reviewer, a delegated worker, the summariser) is still a text call, so the
@@ -488,7 +509,7 @@ In agent mode:
   built with `@opencode/cli`, which, used for every run, must also carry
   Claude Code if any seat's code work runs it
   ([Crewlet's OpenCode runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#opencode)).
-  `cli.runIn` is `E2B`, the only cell v1alpha1 offers: Crewlet's local cells
+  `runIn` is `E2B`, the only cell v1alpha1 offers: Crewlet's local cells
   would run every seat's code in the engine's pod, with its credentials.
 - Claude Code and OpenCode run in agent mode: they are the CLIs the engine
   has a sandbox runner for, the coding agents `spec.sandbox` offers, and the
@@ -519,31 +540,27 @@ In agent mode:
 
 ```yaml
 spec:                       # LLMProvider claude-agent
-  type: CLIAgent
+  agent: ClaudeCode
   model: sonnet
-  cli:
-    agent: ClaudeCode
-    mode: Agent
-    loginName: claude-code        # the same login as the text-mode provider
-    auth:
-      tokenSecretRef: {name: claude-subscription, key: oauthToken}
+  mode: Agent
+  loginName: claude-code        # the same login as the text-mode provider
+  auth:
+    tokenSecretRef: {name: claude-subscription, key: oauthToken}
 ```
 
 or OpenCode, on its model provider's key:
 
 ```yaml
 spec:                       # LLMProvider opencode-agent
-  type: CLIAgent
+  agent: OpenCode
   model: openrouter/anthropic/claude-sonnet-5
-  cli:
-    agent: OpenCode
-    mode: Agent
-    auth:
-      mode: Subscription
-    env:
-      - name: OPENROUTER_API_KEY
-        valueFrom:
-          secretKeyRef: {name: openrouter, key: apiKey}
+  mode: Agent
+  auth:
+    mode: Subscription
+  env:
+    - name: OPENROUTER_API_KEY
+      valueFrom:
+        secretKeyRef: {name: openrouter, key: apiKey}
 ```
 
 A seat runs on it by naming it in `spec.llm.default`; see the Seat's
@@ -555,46 +572,46 @@ A seat with `spec.sandbox` runs code in the company's sandbox with a coding
 agent, `ClaudeCode` or `OpenCode` (`spec.sandbox.codingAgent`, else the
 Company's `spec.sandbox.defaultCodingAgent`, else `ClaudeCode`), on the
 provider at the head of `spec.llm.sandbox`, else of `spec.llm.default`, else
-of the Company's order. That provider is the run's model and sign-in, unless
-the seat's sandbox environment signs the coding agent in (below), so the
-pairing has to be one the coding agent can read. The Seat reports whether it
-is on its `CodeWorkRunnable` condition, saying what the run uses, and naming
-the field to change when it cannot run. Only the first pairing below also holds the company's document
-(`Applied=False`), because Crewlet refuses it on every write; Crewlet applies
-a seat in either of the other two, which runs its turns while Crewlet refuses
-each of its coding runs, so the operator applies it too and the company is
-not held over one seat's code work. `CodeWorkRunnable` does not count towards
+of the Company's order. That provider is the run's model and sign-in, so it
+has to drive the coding agent's own CLI. The Seat reports whether its code
+work can run on its `CodeWorkRunnable` condition, saying what the run uses,
+and naming the field to change when it cannot. Only the first case below
+also holds the company's document (`Applied=False`), because Crewlet refuses
+it on every write; Crewlet applies a seat in the second, which runs its
+turns while Crewlet refuses each of its coding runs, so the operator applies
+it too and the company is not held over one seat's code work. `CodeWorkRunnable` does not count towards
 the Seat's `Ready`, and the operator records a Warning event on the Seat each
 time the condition becomes `False` or its reason changes.
 
-- **A `CLIAgent` provider must drive the coding agent's own CLI.** Its model
-  is written for its CLI and its sign-in is that CLI's, so Crewlet refuses
-  the pairing on every write (`CodingAgentMismatch`). Codex, Gemini CLI,
-  Kimi Code, Hermes, Pi and the other CLIs have no coding agent, so they
-  cannot back code work: put an API provider first in `spec.llm.sandbox`.
-- **`ClaudeCode` reads Anthropic's API alone.** On a provider of type
-  `OpenAI` or `OpenAICompatible` it can read neither the model nor the key,
-  and Crewlet refuses each coding run (`SandboxModelUnsupported`), unless
-  the seat's sandbox environment (`spec.sandbox.env`, its setup steps' `env`,
-  or the Company's `spec.sandbox.setup` steps') signs Claude Code in itself,
-  with `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`,
-  `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`,
-  `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY`; it then runs on
-  that sign-in and its own model choice (`ANTHROPIC_MODEL` in
-  `spec.sandbox.env` picks one; like every variable there, it is read from
-  a Secret key). `OpenCode` reads either wire. An `OpenCode` coding run
-  needs OpenCode 2 in the box, as an agent-mode run does
-  ([Text mode and agent mode](#text-mode-and-agent-mode)).
+- **The provider must drive the coding agent's own CLI**: `ClaudeCode`
+  code work runs on a `ClaudeCode` provider, `OpenCode` code work on an
+  `OpenCode` one. A provider's model is written for its CLI and its sign-in
+  is that CLI's, so Crewlet refuses any other pairing on every write
+  (`CodingAgentMismatch`). Codex, Gemini CLI, Kimi Code, Hermes, Pi and the
+  other CLIs have no coding agent, so they cannot back code work: put a
+  provider of the seat's coding agent first in `spec.llm.sandbox`. An
+  `OpenCode` coding run needs OpenCode 2 in the box, as an agent-mode run
+  does ([Text mode and agent mode](#text-mode-and-agent-mode)).
 - **The login must reach the remote sandbox.** A credential bundle never
-  does, so a `ClaudeCode` provider signed in by a bundle, with neither
-  `CLAUDE_CODE_OAUTH_TOKEN` nor `ANTHROPIC_API_KEY` in the seat's sandbox
-  environment, or an `OpenCode` one with no credential-named variable in
-  `cli.env` or the seat's sandbox environment, has each coding run refused
-  (`SandboxLoginNotPortable`).
+  does, so a `ClaudeCode` provider signed in by a bundle, with nothing in
+  the seat's sandbox environment (`spec.sandbox.env`, its setup steps'
+  `env`, or the Company's `spec.sandbox.setup` steps') that signs Claude Code
+  in, or an `OpenCode` one with no credential-named variable in its `env` or
+  the seat's sandbox environment, has each coding run refused
+  (`SandboxLoginNotPortable`). A headless token, an `auth.apiKeySecretRef`
+  key and an `OpenCode` provider's key in `env` all follow the run.
+
+A seat whose sandbox environment signs Claude Code in itself, with
+`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
+`CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or
+`CLAUDE_CODE_USE_FOUNDRY`, runs its `ClaudeCode` code work on that sign-in
+alone, with the provider's model: Crewlet hands the run none of the
+provider's sign-in then, since Claude Code ranks its sign-ins by name, and a
+provider's key beside the seat's plan token would win.
 
 A seat whose executor runs in agent mode has no code work of its own:
 Crewlet never offers it `run_sandbox`, since it codes in its executor's run,
-on that provider's CLI, so none of the pairings above applies, its
+on that provider's CLI, so neither case above applies, its
 `spec.llm.sandbox` is not read for one, and it has no `CodeWorkRunnable`.
 Its `spec.sandbox.codingAgent` drives nothing: leave it out. Crewlet refuses
 one that names another CLI than the executor's on every write, and the
@@ -664,8 +681,8 @@ none.
 
 The verdict above reads the variables that sign the coding agent in once the
 reconcile has read their Secrets: one a run goes without, listed and missing
-or empty, signs nothing in, and the box is given the provider's key and
-endpoint as it is with no sign-in. What the box receives from the provider
+or empty, signs nothing in, and the box is given the provider's sign-in as it
+is with no variable of the seat's. What the box receives from the provider
 is in
 [What a coding box carries](credentials.md#what-a-coding-box-carries).
 
@@ -725,6 +742,6 @@ Hermes, Pi or OpenCode take the login from a Secret instead.
 
 ## See also
 
-- [Crewlet's subscription LLM backends](https://github.com/crewlet/crewlet/blob/main/docs/concepts/subscription-llm-backends.md) — what the engine does with a CLI
+- [Crewlet's LLM backends](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md) — what the engine does with a CLI
 - [Choosing Where Seats Run](topology.md) — seat pools, and what a CLI cannot do there
 - [Exposure and Network Policy](exposure.md) — the public listener the tool bridge is served on

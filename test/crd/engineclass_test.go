@@ -942,90 +942,165 @@ func classEnv(env ...v1.ClassEnvVar) func(*v1.EngineClass) {
 	return func(c *v1.EngineClass) { c.Spec.PodTemplate.Spec.Env = env }
 }
 
+// msgPlatformSignIn is the start of the platform provider's rule over how its
+// CLI signs in, which takes a key alone.
+const msgPlatformSignIn = "a platform provider signs its CLI in with a key the class gives each tenant"
+
 // TestPlatformLLMProviders checks the copy of the LLMProvider rules that
-// PlatformLLMProvider declares for itself.
+// PlatformLLMProvider declares for itself, and its own rule that a platform
+// provider signs in with a key and never with a subscription's login.
 func TestPlatformLLMProviders(t *testing.T) {
-	keys := []v1.NamespacedSecretKeyReference{{Namespace: platformKeyNS, Name: "platform-llm", Key: apiKeyKey}}
-	platform := func(settings v1.LLMProviderSettings, withKeys bool) func(*v1.EngineClass) {
+	key := v1.NamespacedSecretKeyReference{Namespace: platformKeyNS, Name: "platform-llm", Key: apiKeyKey}
+	envFrom := func(name string) v1.NamespacedSecretEnvVar {
+		return v1.NamespacedSecretEnvVar{Name: name, ValueFrom: v1.NamespacedSecretValueSource{SecretKeyRef: key}}
+	}
+	// platform gives the class one platform provider: Claude Code on a key,
+	// changed by change.
+	platform := func(change func(*v1.PlatformLLMProvider)) func(*v1.EngineClass) {
 		return func(c *v1.EngineClass) {
-			p := v1.PlatformLLMProvider{Name: "platform", LLMProviderSettings: settings}
-			if withKeys {
-				p.APIKeySecretRefs = keys
+			p := v1.PlatformLLMProvider{
+				Name: "platform", Agent: v1.CLIAgentClaudeCode, Model: claudeModel,
+				Auth: v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthAPIKey, APIKeySecretRef: key},
+			}
+			if change != nil {
+				change(&p)
 			}
 			c.Spec.PlatformLLMProviders = []v1.PlatformLLMProvider{p}
 		}
 	}
-	anthropic := v1.LLMProviderSettings{Type: v1.LLMProviderAnthropic, Model: claudeModel}
-	openAI := v1.LLMProviderSettings{Type: v1.LLMProviderOpenAI, Model: "gpt-5"}
-	with := func(s v1.LLMProviderSettings, change func(*v1.LLMProviderSettings)) v1.LLMProviderSettings {
-		change(&s)
-		return s
+	// keyInEnv signs agent in with its model provider's key in env, as
+	// Hermes, Pi and OpenCode sign in.
+	keyInEnv := func(agent v1.CLIAgentName, name string) func(*v1.PlatformLLMProvider) {
+		return func(p *v1.PlatformLLMProvider) {
+			p.Agent = agent
+			p.Model = modelViaOpenRouter
+			p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthSubscription}
+			p.Env = []v1.NamespacedSecretEnvVar{envFrom(name)}
+		}
 	}
 
 	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
-		{name: "a platform provider is accepted", mutate: platform(anthropic, true)},
+		{name: "a platform provider is accepted", mutate: platform(nil)},
 		{
-			name: "a platform provider named default is refused",
-			mutate: func(c *v1.EngineClass) {
-				platform(anthropic, true)(c)
-				c.Spec.PlatformLLMProviders[0].Name = "default"
-			},
-			want: "a platform provider may not be named default",
+			// A gateway Claude Code reads from its environment, on the
+			// tenant's virtual key.
+			name: "a platform provider through a gateway is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envBaseURL)}
+				p.TimeoutSeconds = 120
+				p.MaxConcurrent = 8
+			}),
 		},
 		{
-			name:   "a platform Anthropic provider without keys is refused",
-			mutate: platform(anthropic, false),
-			want:   msgKeysRequired,
+			name:   "a platform OpenCode provider on its model provider's key in env is accepted",
+			mutate: platform(keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")),
 		},
 		{
-			name:   "a platform OpenAICompatible provider without baseURL is refused",
-			mutate: platform(v1.LLMProviderSettings{Type: v1.LLMProviderOpenAICompatible, Model: "llama"}, false),
-			want:   msgBaseURLRequired,
+			name:   "a platform Codex provider on a key is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) { p.Agent = v1.CLIAgentCodex; p.Model = "gpt-5" }),
 		},
 		{
-			name:   "claudeModel on a platform OpenAI provider is refused",
-			mutate: platform(with(openAI, func(s *v1.LLMProviderSettings) { s.ClaudeModel = claudeModel }), true),
-			want:   msgClaudeModel,
-		},
-		{
-			name:   "reasoning on a platform Anthropic provider is refused",
-			mutate: platform(with(anthropic, func(s *v1.LLMProviderSettings) { s.Reasoning = new(true) }), true),
-			want:   msgReasoning,
-		},
-		{
-			name:   "a thinking budget on a platform OpenAI provider is refused",
-			mutate: platform(with(openAI, func(s *v1.LLMProviderSettings) { s.ReasoningBudgetTokens = 2048 }), true),
-			want:   msgBudgetTokens,
+			name:   "a platform provider named default is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) { p.Name = "default" }),
+			want:   "a platform provider may not be named default",
 		},
 		{
 			name:   "a platform provider with a model of white space alone is refused",
-			mutate: platform(with(anthropic, func(s *v1.LLMProviderSettings) { s.Model = "\u2028 " }), true),
+			mutate: platform(func(p *v1.PlatformLLMProvider) { p.Model = "\u2028 " }),
 			want:   msgBlankModel,
 		},
 		{
-			name:   "a platform CLIAgent provider is refused",
-			mutate: platform(v1.LLMProviderSettings{Type: v1.LLMProviderCLIAgent, Model: "sonnet"}, true),
-			want:   "a platform model provider speaks a model API",
+			name:   "a platform provider with no auth is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) { p.Auth = v1.PlatformLLMProviderAuth{} }),
+			want:   "spec.platformLLMProviders[0].auth: Required value",
 		},
 		{
-			name: "reasoningEffort on a platform OpenAI provider with reasoning is accepted",
-			mutate: platform(with(openAI, func(s *v1.LLMProviderSettings) {
-				s.Reasoning = new(true)
-				s.ReasoningEffort = v1.ReasoningEffortHigh
-			}), true),
+			// A subscription is one account's, which every tenant of the
+			// class would share.
+			name: "a platform provider on a subscription is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthSubscription}
+			}),
+			want: msgPlatformSignIn,
 		},
 		{
-			name:   "reasoningEffort on a platform OpenAI provider without reasoning is refused",
-			mutate: platform(with(openAI, func(s *v1.LLMProviderSettings) { s.ReasoningEffort = v1.ReasoningEffortHigh }), true),
-			want:   msgReasoningEffort,
+			name: "a platform provider on a subscription is reported at auth",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthSubscription}
+			}),
+			want: "spec.platformLLMProviders[0].auth: Invalid value",
 		},
 		{
-			name: "reasoningEffort on a platform OpenAICompatible provider is refused",
-			mutate: platform(v1.LLMProviderSettings{
-				Type: v1.LLMProviderOpenAICompatible, Model: "llama", BaseURL: "http://vllm:8000/v1",
-				ReasoningEffort: v1.ReasoningEffortHigh,
-			}, false),
-			want: msgReasoningEffort,
+			// A proxy is configuration, and signs the CLI in to nothing.
+			name:   "a platform Hermes provider on a proxy alone in env is refused",
+			mutate: platform(keyInEnv(v1.CLIAgentHermes, envProxy)),
+			want:   msgPlatformSignIn,
+		},
+		{
+			// Codex reads its key from its own variable, which auth owns.
+			name:   "a platform Codex provider on a key in env is refused",
+			mutate: platform(keyInEnv(v1.CLIAgentCodex, "OPENROUTER_API_KEY")),
+			want:   msgPlatformSignIn,
+		},
+		{
+			name: "auth mode APIKey for a platform Hermes provider is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				keyInEnv(v1.CLIAgentHermes, "OPENROUTER_API_KEY")(p)
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthAPIKey, APIKeySecretRef: key}
+			}),
+			want: msgCLIKeyAgent,
+		},
+		{
+			name: "auth mode APIKey without a key is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthAPIKey}
+			}),
+			want: msgCLIKey,
+		},
+		{
+			name: "a key outside auth mode APIKey is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
+				p.Auth.APIKeySecretRef = key
+			}),
+			want: msgCLIKey,
+		},
+		{
+			name: "a platform provider with its CLI's own key variable in env is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envAnthropicKey)}
+			}),
+			want: msgCLIOwnVariable,
+		},
+		{
+			name: "a platform provider's own variable in env is reported at env",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envAnthropicKey)}
+			}),
+			want: "spec.platformLLMProviders[0].env: Invalid value",
+		},
+		{
+			name: "a platform provider with an isolation variable in env is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom("CLAUDE_CONFIG_DIR")}
+			}),
+			want: msgCLIIsolation,
+		},
+		{
+			name: "a platform OpenCode model with no provider is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
+				p.Model = claudeModel
+			}),
+			want: msgOpenCodeModel,
+		},
+		{
+			name: "a platform OpenCode model with no provider is reported at model",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
+				p.Model = "anthropic/ "
+			}),
+			want: "spec.platformLLMProviders[0].model: Invalid value",
 		},
 	})
 }

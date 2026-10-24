@@ -1,5 +1,6 @@
-# The model Nimbus's seats run on. The Secret nimbus-anthropic holds the API
-# key under apiKey.
+# The model Nimbus's seats run on: Claude Code, signed in with the Anthropic
+# API key the Secret nimbus-anthropic holds under apiKey. The class's engine
+# image carries the claude CLI (docs/guides/cli-agents.md).
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
 metadata:
@@ -7,10 +8,11 @@ metadata:
 spec:
   companyRef:
     name: nimbus
-  type: Anthropic
+  agent: ClaudeCode
   model: claude-sonnet-5
-  apiKeySecretRefs:
-    - name: nimbus-anthropic
-      key: apiKey
-  reasoningEffort: High
   timeoutSeconds: 600
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: nimbus-anthropic
+      key: apiKey

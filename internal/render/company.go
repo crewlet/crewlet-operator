@@ -212,10 +212,11 @@ var reference = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 //
 // Crewlet resolves a ${NAME} in the company document from its secret store
 // and then from its process environment, and not only where a credential
-// goes: an MCP server's url, a provider's base_url, a skill variable. A
-// reference anywhere else would let whoever writes the object name any value
-// the engine can resolve (the class's platform model keys in its store, its
-// environment) and have the engine send it where they chose. Crewlet passes
+// goes: an MCP server's url, an embeddings provider's base_url, a model's
+// name, a skill variable. A reference anywhere else would let whoever writes
+// the object name any value the engine can resolve (the class's platform
+// model keys in its store, its environment) and have the engine send it where
+// they chose. Crewlet passes
 // other strings on as written, such as a sandbox setup command, which the
 // sandbox's shell expands from the run's own environment; a reference is
 // refused there too, so that a field Crewlet starts expanding names nothing
@@ -298,9 +299,10 @@ type renderer struct {
 	seats     map[string]*v1alpha1.Seat
 	mcp       map[string]*v1alpha1.MCPServer
 	providers map[string]bool
-	platform  map[string]bool
-	// cli are the CLIAgent providers' cli blocks, by name.
-	cliProviders map[string]*v1alpha1.CLIAgentSettings
+	// own are the Company's LLMProviders' specs, and platform the
+	// EngineClass's platform providers when the Company uses them, by name.
+	own      map[string]*v1alpha1.LLMProviderSpec
+	platform map[string]*v1alpha1.PlatformLLMProvider
 
 	// seatSchedules and unitSchedules are the Schedules whose target
 	// resolves, by the metadata.name of the Seat or Unit they target.
@@ -327,19 +329,19 @@ type renderer struct {
 
 func newRenderer(in *Input) *renderer {
 	r := &renderer{
-		in:           in,
-		owner:        ObjectRef{Kind: KindCompany, Name: in.Company.Name},
-		units:        map[string]*v1alpha1.Unit{},
-		seats:        map[string]*v1alpha1.Seat{},
-		mcp:          map[string]*v1alpha1.MCPServer{},
-		providers:    map[string]bool{},
-		platform:     map[string]bool{},
-		cliProviders: map[string]*v1alpha1.CLIAgentSettings{},
-		refs:         map[secretref.Key]struct{}{},
-		required:     map[secretref.Key]struct{}{},
-		provisioned:  map[string]struct{}{},
-		unset:        map[secretref.Key]bool{},
-		empty:        map[secretref.Key]bool{},
+		in:          in,
+		owner:       ObjectRef{Kind: KindCompany, Name: in.Company.Name},
+		units:       map[string]*v1alpha1.Unit{},
+		seats:       map[string]*v1alpha1.Seat{},
+		mcp:         map[string]*v1alpha1.MCPServer{},
+		providers:   map[string]bool{},
+		own:         map[string]*v1alpha1.LLMProviderSpec{},
+		platform:    map[string]*v1alpha1.PlatformLLMProvider{},
+		refs:        map[secretref.Key]struct{}{},
+		required:    map[secretref.Key]struct{}{},
+		provisioned: map[string]struct{}{},
+		unset:       map[secretref.Key]bool{},
+		empty:       map[secretref.Key]bool{},
 	}
 	for _, k := range in.Unset {
 		r.unset[k] = true
@@ -359,13 +361,12 @@ func newRenderer(in *Input) *renderer {
 	for i := range in.LLMProviders {
 		p := &in.LLMProviders[i]
 		r.providers[p.Name] = true
-		if p.Spec.Type == v1alpha1.LLMProviderCLIAgent {
-			r.cliProviders[p.Name] = &p.Spec.CLI
-		}
+		r.own[p.Name] = &p.Spec
 	}
 	if r.usesPlatformProviders() {
 		for i := range in.Class.Spec.PlatformLLMProviders {
-			r.platform[in.Class.Spec.PlatformLLMProviders[i].Name] = true
+			p := &in.Class.Spec.PlatformLLMProviders[i]
+			r.platform[p.Name] = p
 		}
 	}
 	r.topology = planTopology(in.Company, in.Class, in.Seats, &r.errs)
@@ -509,15 +510,7 @@ func (r *renderer) providersDoc() providersDoc {
 
 	own := sortedByName(r.in.LLMProviders)
 	for _, p := range own {
-		keys := make([]string, len(p.Spec.APIKeySecretRefs))
-		for i, ref := range p.Spec.APIKeySecretRefs {
-			keys[i] = r.secret(ref.Name, ref.Key)
-		}
-		entry := llmProvider(&p.Spec.LLMProviderSettings, keys)
-		if p.Spec.Type == v1alpha1.LLMProviderCLIAgent {
-			entry.CLI = r.cli(p)
-		}
-		doc.LLM[p.Name] = entry
+		doc.LLM[p.Name] = r.llmProvider(p)
 		r.source(Path{keyProviders, "llm", p.Name}, ObjectRef{Kind: KindLLMProvider, Name: p.Name})
 	}
 
@@ -535,11 +528,7 @@ func (r *renderer) providersDoc() providersDoc {
 					fmt.Sprintf("EngineClass %s offers a platform model provider named %s, and both are keys of the company's one providers.llm mapping: rename this LLMProvider", r.in.Class.Name, p.Name))
 				continue
 			}
-			keys := make([]string, len(p.APIKeySecretRefs))
-			for i, ref := range p.APIKeySecretRefs {
-				keys[i] = r.secretKey(secretref.Key{Namespace: ref.Namespace, Name: ref.Name, Key: ref.Key})
-			}
-			doc.LLM[p.Name] = llmProvider(&p.LLMProviderSettings, keys)
+			doc.LLM[p.Name] = r.platformProvider(p)
 			r.source(Path{keyProviders, "llm", p.Name}, class)
 			platform = append(platform, p.Name)
 		}
@@ -617,52 +606,74 @@ func (r *renderer) providersDoc() providersDoc {
 	return doc
 }
 
-func llmProvider(s *v1alpha1.LLMProviderSettings, keys []string) llmProviderDoc {
-	doc := llmProviderDoc{
-		Type:                  llmProviderType(s.Type),
-		Model:                 s.Model,
-		ClaudeModel:           string(s.ClaudeModel),
-		APIKeys:               keys,
-		BaseURL:               s.BaseURL,
-		Reasoning:             s.Reasoning,
-		ReasoningEffort:       reasoningEffort(s.ReasoningEffort),
-		ReasoningBudgetTokens: s.ReasoningBudgetTokens,
-		TimeoutSeconds:        s.TimeoutSeconds,
+// CLIStateRoot is the directory on a data pod's volume under which each
+// LLMProvider keeps its login and its per-seat homes, one directory per
+// loginName: on the volume, so they outlive the pod.
+const CLIStateRoot = DataDir + "/llm-cli"
+
+// CLIPlatformStateRoot is the directory on a data pod's volume under which
+// each platform provider keeps its per-seat homes, one directory per name.
+//
+// A root of its own rather than CLIStateRoot, because a tenant chooses its
+// providers' loginName freely: under one root, a loginName equal to a
+// platform provider's name would point the two entries at one directory.
+// Crewlet keeps each CLI's files in a directory of its own under it
+// (<state_dir>/<agent>), so entries of different CLIs would share the
+// directory and nothing in it; entries of the same CLI would share its login
+// and seat homes, mixing the tenant's login into the directory of a provider
+// every tenant of the class is given.
+const CLIPlatformStateRoot = DataDir + "/llm-cli-platform"
+
+// llmEntry renders what an LLMProvider and a platform provider share, with
+// the entry's state directory.
+func llmEntry(s *v1alpha1.LLMProviderSettings, stateDir string) llmProviderDoc {
+	return llmProviderDoc{
+		Agent:          cliAgentName(s.Agent),
+		Model:          s.Model,
+		StateDir:       stateDir,
+		TimeoutSeconds: s.TimeoutSeconds,
+		MaxConcurrent:  s.MaxConcurrent,
 	}
-	if c := s.Cooldowns; c != (v1alpha1.LLMCredentialCooldowns{}) {
-		doc.Cooldowns = &cooldownsDoc{RateLimitSeconds: c.RateLimitSeconds, AuthSeconds: c.AuthSeconds}
+}
+
+// llmProvider renders one of the Company's LLMProviders. In mode Agent its
+// runs happen in a remote sandbox and call the seat's tools back through the
+// engine's public address; a company with none is applied all the same, and
+// AgentModeOf reports it, since Crewlet refuses only the turns that need the
+// address.
+func (r *renderer) llmProvider(p *v1alpha1.LLMProvider) llmProviderDoc {
+	s := &p.Spec
+	doc := llmEntry(&s.LLMProviderSettings, CLIStateRoot+"/"+cmp.Or(s.LoginName, p.Name))
+	doc.Mode = cliAgentMode(s.Mode)
+	doc.RunIn = cliAgentRunIn(s.RunIn)
+	doc.Env = r.secretEnv(s.Env)
+	doc.Auth = llmAuthDoc{Mode: cliAgentAuthMode(s.Auth.Mode)}
+	if k := s.Auth.TokenSecretRef; k.Name != "" {
+		doc.Auth.Token = r.secret(k.Name, k.Key)
+	}
+	if k := s.Auth.APIKeySecretRef; k.Name != "" {
+		doc.Auth.APIKey = r.secret(k.Name, k.Key)
+	}
+	if k := s.Auth.CredentialBundleSecretRef; k.Name != "" {
+		doc.Auth.CredentialBundle = r.secret(k.Name, k.Key)
 	}
 	return doc
 }
 
-// CLIStateRoot is the directory on a data pod's volume under which each
-// CLIAgent provider keeps its login and its per-seat homes, one directory per
-// loginName: on the volume, so they outlive the pod.
-const CLIStateRoot = DataDir + "/llm-cli"
-
-// cli renders the cli block of a CLIAgent provider. In mode Agent its runs
-// happen in a remote sandbox and call the seat's tools back through the
-// engine's public address; a company with none is applied all the same, and
-// AgentModeOf reports it, since Crewlet refuses only the turns that need the
-// address.
-func (r *renderer) cli(p *v1alpha1.LLMProvider) *cliDoc {
-	c := &p.Spec.CLI
-	login := cmp.Or(c.LoginName, p.Name)
-	doc := &cliDoc{
-		Agent:          cliAgentName(c.Agent),
-		Mode:           cliAgentMode(c.Mode),
-		RunIn:          cliAgentRunIn(c.RunIn),
-		StateDir:       CLIStateRoot + "/" + login,
-		TimeoutSeconds: c.TimeoutSeconds,
-		MaxConcurrent:  c.MaxConcurrent,
-		Env:            r.secretEnv(c.Env),
-		Auth:           cliAuthDoc{Mode: cliAgentAuthMode(c.Auth.Mode)},
+// platformProvider renders one of the EngineClass's platform providers, whose
+// key and env are read from Secrets in the namespaces the class names.
+func (r *renderer) platformProvider(p *v1alpha1.PlatformLLMProvider) llmProviderDoc {
+	doc := llmEntry(&p.LLMProviderSettings, CLIPlatformStateRoot+"/"+p.Name)
+	if len(p.Env) > 0 {
+		doc.Env = make(map[string]string, len(p.Env))
+		for _, e := range p.Env {
+			ref := e.ValueFrom.SecretKeyRef
+			doc.Env[e.Name] = r.secretKey(secretref.Key{Namespace: ref.Namespace, Name: ref.Name, Key: ref.Key})
+		}
 	}
-	if k := c.Auth.TokenSecretRef; k.Name != "" {
-		doc.Auth.Token = r.secret(k.Name, k.Key)
-	}
-	if k := c.Auth.CredentialBundleSecretRef; k.Name != "" {
-		doc.Auth.CredentialBundle = r.secret(k.Name, k.Key)
+	doc.Auth = llmAuthDoc{Mode: cliAgentAuthMode(p.Auth.Mode)}
+	if k := p.Auth.APIKeySecretRef; k.Name != "" {
+		doc.Auth.APIKey = r.secretKey(secretref.Key{Namespace: k.Namespace, Name: k.Name, Key: k.Key})
 	}
 	return doc
 }
@@ -682,7 +693,7 @@ func (r *renderer) provider(kind, name, field string, ref v1alpha1.LLMProviderRe
 			// missing LLMProvider's is.
 			absent = fmt.Sprintf("names the platform model provider %s, but Company %s does not set spec.llm.usePlatformProviders",
 				ref.Name, r.in.Company.Name)
-		case !r.platform[ref.Name]:
+		case r.platform[ref.Name] == nil:
 			r.errs.notFound(ClassPolicy, kind, name, field, fmt.Sprintf(
 				"EngineClass %s offers no platform model provider named %s", r.in.Class.Name, ref.Name))
 			return "", false

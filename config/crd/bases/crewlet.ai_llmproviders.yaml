@@ -22,8 +22,8 @@ spec:
     - jsonPath: .spec.companyRef.name
       name: Company
       type: string
-    - jsonPath: .spec.type
-      name: Type
+    - jsonPath: .spec.agent
+      name: Agent
       type: string
     - jsonPath: .spec.model
       name: Model
@@ -42,10 +42,11 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          LLMProvider is a model provider a company's seats can run on: one entry of
-          Crewlet's providers.llm, keyed by its name. The name default is refused:
-          Crewlet runs a seat that names no chain on the provider keyed default when
-          there is one, whatever the Company's spec.llm.order says.
+          LLMProvider is a model a company's seats can run on: a coding CLI the
+          engine drives, one entry of Crewlet's providers.llm, keyed by its name. The
+          name default is refused: Crewlet runs a seat that names no chain on the
+          provider keyed default when there is one, whatever the Company's
+          spec.llm.order says.
         properties:
           apiVersion:
             description: |-
@@ -67,393 +68,122 @@ spec:
           spec:
             description: spec is the provider's desired state.
             properties:
-              apiKeySecretRefs:
+              agent:
                 description: |-
-                  apiKeySecretRefs are the provider's API keys, each a key of a Secret in
-                  this namespace. With more than one, Crewlet rotates through them,
-                  setting aside a key that hits a rate limit or is refused, in the order
-                  listed when several are equally free. Crewlet's `api_keys`, a
-                  credential position: the values are pushed into the engine's secret
-                  store and the document refers to them by name only. Required for types
-                  Anthropic and OpenAI; an OpenAICompatible endpoint that needs no key
-                  may omit it. A CLIAgent provider takes exactly one, with
-                  cli.auth.mode APIKey, which it gives the CLI.
-                items:
-                  description: |-
-                    SecretKeyReference selects one key of a Secret in the referring object's
-                    namespace. The operator reads the value when it renders the company and
-                    pushes it into the engine's encrypted secret store; the value itself never
-                    appears in the company document, in a pod template or in any status.
-                  properties:
-                    key:
-                      description: key is the key within the Secret's data.
-                      maxLength: 253
-                      minLength: 1
-                      pattern: ^[-._a-zA-Z0-9]+$
-                      type: string
-                    name:
-                      description: name is the metadata.name of the Secret.
-                      maxLength: 253
-                      minLength: 1
-                      type: string
-                  required:
-                  - key
-                  - name
-                  type: object
-                maxItems: 16
-                minItems: 1
-                type: array
-                x-kubernetes-list-type: atomic
-              baseURL:
-                description: |-
-                  baseURL sends requests to this endpoint instead of the vendor's own,
-                  for a gateway or a proxy. Required for type OpenAICompatible. For type
-                  Anthropic it is the gateway's root, without /v1: Crewlet's own calls,
-                  Claude Code (as ANTHROPIC_BASE_URL) and OpenCode each add the version
-                  themselves. A seat's code work running on the provider hands it to the
-                  coding agent in each box. Crewlet's `base_url`.
-                maxLength: 2048
-                minLength: 1
-                type: string
-                x-kubernetes-validations:
-                - message: baseURL must be an absolute http or https URL
-                  rule: isURL(self) && url(self).getScheme() in ['http', 'https']
-                - message: 'baseURL may not hold a user name or password: a credential
-                    is named through a Secret, never written into an address'
-                  rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
-                - message: 'baseURL may not hold a ${NAME} reference: the operator
-                    refuses every one it did not write, since in many fields the engine
-                    resolves one from its own secret store and environment, which
-                    hold credentials that are not this object''s to name'
-                  rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
-              claudeModel:
-                description: |-
-                  claudeModel names the Claude model whose request shape an Anthropic
-                  provider uses when model is a gateway alias Crewlet cannot recognise.
-                  Crewlet's `claude_model`; type Anthropic only.
+                  agent is which CLI to drive. The model is written as this CLI reads
+                  it, and an Agent-mode run or a seat's code work is handed it
+                  unchanged: OpenCode reads `<provider>/<model>`, such as
+                  `anthropic/claude-sonnet-5`. Crewlet's `agent`.
                 enum:
-                - claude-fable-5-1
-                - claude-mythos-5-1
-                - claude-fable-5
-                - claude-mythos-5
-                - claude-opus-5-5
-                - claude-opus-5
-                - claude-opus-4-8
-                - claude-opus-4-7
-                - claude-sonnet-5-5
-                - claude-sonnet-5
-                - claude-opus-4-6
-                - claude-sonnet-4-6
-                - claude-opus-4-5
-                - claude-sonnet-4-5
-                - claude-haiku-4-5
-                - claude-opus-4-1
-                - claude-opus-4-0
-                - claude-opus-4
-                - claude-sonnet-4-0
-                - claude-sonnet-4
-                - claude-3-7-sonnet
+                - ClaudeCode
+                - Codex
+                - GeminiCLI
+                - QwenCode
+                - OpenCode
+                - CursorAgent
+                - Copilot
+                - Grok
+                - MuseCode
+                - KimiCode
+                - Hermes
+                - Pi
                 type: string
-              cli:
-                description: |-
-                  cli is the coding CLI a provider of type CLIAgent drives. Required
-                  for, and only for, type CLIAgent. Crewlet's `cli`.
+              auth:
+                description: auth is how the CLI signs in. Crewlet's `auth`.
+                minProperties: 1
                 properties:
-                  agent:
+                  apiKeySecretRef:
                     description: |-
-                      agent is which CLI to drive. The provider's model is written as this
-                      CLI reads it, and an Agent-mode run is handed it unchanged: OpenCode
-                      reads `<provider>/<model>`, such as `anthropic/claude-sonnet-5`.
-                      Crewlet's `agent`.
-                    enum:
-                    - ClaudeCode
-                    - Codex
-                    - GeminiCLI
-                    - QwenCode
-                    - OpenCode
-                    - CursorAgent
-                    - Copilot
-                    - Grok
-                    - MuseCode
-                    - KimiCode
-                    - Hermes
-                    - Pi
-                    type: string
-                  auth:
-                    description: auth is how the CLI signs in.
-                    minProperties: 1
+                      apiKeySecretRef is the Secret key holding the metered API key auth
+                      mode APIKey hands the CLI, in the key variable Crewlet's profile for
+                      it names (ClaudeCode's ANTHROPIC_API_KEY, Codex's OPENAI_API_KEY).
+                      One key: a CLI holds one sign-in and rotates nothing, so a second key
+                      is a provider of its own, later in a seat's chain. Crewlet's
+                      `api_key`, a credential position: the value is pushed into the
+                      engine's secret store and the document refers to it by name only.
                     properties:
-                      credentialBundleSecretRef:
-                        description: |-
-                          credentialBundleSecretRef is the Secret key holding a credential
-                          bundle `crewlet llm export` wrote. A bundle holding a login OpenCode
-                          1.x made (its auth.json) is refused when the engine restores it, and
-                          the provider runs signed out: export it again from OpenCode 2.
-                          Crewlet's `credential_bundle`, a credential position.
-                        properties:
-                          key:
-                            description: key is the key within the Secret's data.
-                            maxLength: 253
-                            minLength: 1
-                            pattern: ^[-._a-zA-Z0-9]+$
-                            type: string
-                          name:
-                            description: name is the metadata.name of the Secret.
-                            maxLength: 253
-                            minLength: 1
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                      mode:
-                        description: |-
-                          mode is how the CLI signs in. Unset is Subscription. Crewlet's
-                          `mode`.
-                        enum:
-                        - Subscription
-                        - APIKey
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
                         type: string
-                      tokenSecretRef:
-                        description: |-
-                          tokenSecretRef is the Secret key holding a long-lived subscription
-                          token the CLI mints for headless use. Crewlet's `token`, a credential
-                          position.
-                        properties:
-                          key:
-                            description: key is the key within the Secret's data.
-                            maxLength: 253
-                            minLength: 1
-                            pattern: ^[-._a-zA-Z0-9]+$
-                            type: string
-                          name:
-                            description: name is the metadata.name of the Secret.
-                            maxLength: 253
-                            minLength: 1
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                    type: object
-                    x-kubernetes-validations:
-                    - message: 'tokenSecretRef and credentialBundleSecretRef sign
-                        in to a subscription: they apply to mode Subscription only'
-                      rule: '!(has(self.mode) && self.mode != ''Subscription'') ||
-                        (!has(self.tokenSecretRef) && !has(self.credentialBundleSecretRef))'
-                    - message: 'tokenSecretRef and credentialBundleSecretRef are two
-                        logins, and the CLI is given one: keep the headless token,
-                        which never needs refreshing, or the bundle where the CLI
-                        mints no token'
-                      rule: '!has(self.tokenSecretRef) || !has(self.credentialBundleSecretRef)'
-                  env:
-                    description: |-
-                      env is extra environment of the CLI where it runs in the engine's pod,
-                      as a model behind the engine's own tool loop: in every phase a
-                      Text-mode provider runs, and in every phase but the executor's of an
-                      Agent-mode one. There the CLI does not get the engine's environment: it
-                      gets the part Crewlet's allowlist names, such as PATH and the TLS and
-                      proxy variables, and the variables the CLI's Crewlet profile passes
-                      through, such as GeminiCLI's GOOGLE_CLOUD_PROJECT, with a HOME, a
-                      TMPDIR and XDG directories of its seat's own rather than the engine's.
-                      So a variable the CLI needs beyond that is given here. It is how
-                      Hermes, Pi and OpenCode sign in under auth mode Subscription with no
-                      login of their own: their model provider's key, under a name Crewlet
-                      reads as a credential, such as OPENROUTER_API_KEY. It may not set the
-                      CLI's own token or key variable, which auth owns, nor a variable
-                      Crewlet sets to keep the CLI inside its seat's home and its call's
-                      working directory: HOME, the XDG directories, TMPDIR, and the CLI's own
-                      configuration directory or switch (docs/guides/cli-agents.md).
-
-                      An Agent-mode run, and a seat's code work on the provider, run the CLI
-                      in the Company's E2B sandbox. There it gets none of that environment,
-                      and of env only an OpenCode provider's credential-named variables,
-                      where the coding agent can read them; a variable of no credential that
-                      such a run needs goes in the Seat's spec.sandbox.env. Crewlet's `env`,
-                      a credential position.
-                    items:
-                      description: |-
-                        SecretEnvVar is a named credential delivered as an environment variable,
-                        such as a sandbox setup step's token or a coding CLI's model key. Crewlet
-                        treats every value in the positions that use this type as a credential, so
-                        a literal value is not accepted: the value always comes from a Secret.
-                      properties:
-                        name:
-                          description: name is the variable's name.
-                          maxLength: 128
-                          minLength: 1
-                          pattern: ^[A-Za-z_][A-Za-z0-9_]*$
-                          type: string
-                        valueFrom:
-                          description: valueFrom is the Secret key the value is read
-                            from.
-                          properties:
-                            secretKeyRef:
-                              description: secretKeyRef selects the Secret key that
-                                holds the value.
-                              properties:
-                                key:
-                                  description: key is the key within the Secret's
-                                    data.
-                                  maxLength: 253
-                                  minLength: 1
-                                  pattern: ^[-._a-zA-Z0-9]+$
-                                  type: string
-                                name:
-                                  description: name is the metadata.name of the Secret.
-                                  maxLength: 253
-                                  minLength: 1
-                                  type: string
-                              required:
-                              - key
-                              - name
-                              type: object
-                          required:
-                          - secretKeyRef
-                          type: object
-                      required:
-                      - name
-                      - valueFrom
-                      type: object
-                    maxItems: 32
-                    type: array
-                    x-kubernetes-list-map-keys:
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
                     - name
-                    x-kubernetes-list-type: map
-                  loginName:
+                    type: object
+                  credentialBundleSecretRef:
                     description: |-
-                      loginName names the login, and the per-seat homes, the provider
-                      keeps on the data volume. Providers of the company with the same
-                      loginName share one login, which is how several models run off one
-                      subscription; they must drive the same CLI. Unset is the provider's
-                      own metadata.name. Crewlet's `state_dir`, as
-                      /var/lib/crewlet/llm-cli/<loginName>.
-                    maxLength: 63
-                    minLength: 1
-                    pattern: ^[a-z0-9][a-z0-9-]*$
-                    type: string
-                  maxConcurrent:
-                    description: |-
-                      maxConcurrent is how many CLI processes the provider runs at once;
-                      each takes 200 to 450 MB of the engine pod's memory, OpenCode's at the
-                      top of that range (docs/guides/cli-agents.md). Unset takes
-                      Crewlet's default of 4. Crewlet's `max_concurrent`.
-                    format: int32
-                    maximum: 64
-                    minimum: 1
-                    type: integer
+                      credentialBundleSecretRef is the Secret key holding a credential
+                      bundle `crewlet llm export` wrote. A bundle holding a login OpenCode
+                      1.x made (its auth.json) is refused when the engine restores it, and
+                      the provider runs signed out: export it again from OpenCode 2.
+                      Crewlet's `credential_bundle`, a credential position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
                   mode:
-                    description: mode is how the engine uses the CLI. Unset is Text.
-                      Crewlet's `mode`.
-                    enum:
-                    - Text
-                    - Agent
-                    type: string
-                  runIn:
                     description: |-
-                      runIn is where an Agent-mode run happens. Unset is the Company's
-                      sandbox, which is E2B. Crewlet's `run_in`.
+                      mode is how the CLI signs in. Unset is Subscription. Crewlet's
+                      `mode`.
                     enum:
-                    - E2B
+                    - Subscription
+                    - APIKey
                     type: string
-                  timeoutSeconds:
+                  tokenSecretRef:
                     description: |-
-                      timeoutSeconds caps one invocation of the CLI, launch included. Unset
-                      takes Crewlet's default of 300. Crewlet's `timeout_seconds`.
-                    format: int32
-                    minimum: 1
-                    type: integer
-                required:
-                - agent
-                - auth
+                      tokenSecretRef is the Secret key holding a long-lived subscription
+                      token the CLI mints for headless use. Crewlet's `token`, a credential
+                      position.
+                    properties:
+                      key:
+                        description: key is the key within the Secret's data.
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^[-._a-zA-Z0-9]+$
+                        type: string
+                      name:
+                        description: name is the metadata.name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
                 type: object
                 x-kubernetes-validations:
-                - message: 'runIn applies to mode Agent only: in mode Text the CLI
-                    is a process in the engine''s pod'
-                  rule: '!has(self.runIn) || (has(self.mode) && self.mode == ''Agent'')'
-                - message: 'mode Agent runs a CLI Crewlet has a sandbox runner for:
-                    ClaudeCode or OpenCode'
-                  rule: '!has(self.mode) || self.mode != ''Agent'' || self.agent in
-                    [''ClaudeCode'', ''OpenCode'']'
-                - fieldPath: .auth
-                  message: 'a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef:
-                    a pod has no terminal to log in at. Hermes, Pi and OpenCode alone
-                    may sign in with their model provider''s key in env instead, under
-                    a name Crewlet reads as a credential, one of whose parts between
-                    underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY,
-                    TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH,
-                    OAUTH or PAT (such as OPENROUTER_API_KEY), which Crewlet hands
-                    them untouched. A CLI with a key variable takes its key through
-                    auth mode APIKey, as Crewlet refuses that variable in env'
-                  rule: '!has(self.auth) || (has(self.auth.mode) && self.auth.mode
-                    != ''Subscription'') || has(self.auth.tokenSecretRef) || has(self.auth.credentialBundleSecretRef)
-                    || (self.agent in [''Hermes'', ''Pi'', ''OpenCode''] && has(self.env)
-                    && self.env.exists(e, e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')))'
-                - message: 'auth.tokenSecretRef is a headless token, which Crewlet
-                    hands only to ClaudeCode (CLAUDE_CODE_OAUTH_TOKEN): its profile
-                    for every other CLI names no token variable. Sign that CLI in
-                    with auth.credentialBundleSecretRef, with auth mode APIKey where
-                    it has a key variable, or, for Hermes, Pi and OpenCode, with its
-                    model provider''s key in env'
-                  rule: '!has(self.auth) || !has(self.auth.tokenSecretRef) || self.agent
-                    == ''ClaudeCode'''
-                - message: 'auth mode APIKey takes a CLI Crewlet hands a key to: ClaudeCode,
-                    Codex, GeminiCLI, QwenCode, CursorAgent, Copilot, Grok or MuseCode.
-                    Crewlet''s profiles for OpenCode, KimiCode, Hermes and Pi name
-                    no key variable: sign Hermes, Pi or OpenCode in with its model
-                    provider''s key in env under mode Subscription, and KimiCode,
-                    which reads a key only from its own files, with auth.credentialBundleSecretRef'
-                  rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode
-                    != ''APIKey'' || self.agent in [''ClaudeCode'', ''Codex'', ''GeminiCLI'',
-                    ''QwenCode'', ''CursorAgent'', ''Copilot'', ''Grok'', ''MuseCode'']'
-                - fieldPath: .env
-                  message: 'env may not set the CLI''s own token or key variable (ClaudeCode''s
-                    CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY, Codex''s OPENAI_API_KEY,
-                    GeminiCLI''s GEMINI_API_KEY, QwenCode''s DASHSCOPE_API_KEY, CursorAgent''s
-                    CURSOR_API_KEY, Copilot''s GITHUB_TOKEN, Grok''s XAI_API_KEY,
-                    MuseCode''s META_API_KEY): Crewlet''s auth owns it, and whether
-                    a value in env reaches the CLI would turn on the auth mode. Give
-                    a token as auth.tokenSecretRef, and a key as apiKeySecretRefs
-                    with auth mode APIKey'
-                  rule: '!has(self.env) || !self.env.exists(e, (self.agent == ''ClaudeCode''
-                    && e.name in [''CLAUDE_CODE_OAUTH_TOKEN'', ''ANTHROPIC_API_KEY''])
-                    || (self.agent == ''Codex'' && e.name == ''OPENAI_API_KEY'') ||
-                    (self.agent == ''GeminiCLI'' && e.name == ''GEMINI_API_KEY'')
-                    || (self.agent == ''QwenCode'' && e.name == ''DASHSCOPE_API_KEY'')
-                    || (self.agent == ''CursorAgent'' && e.name == ''CURSOR_API_KEY'')
-                    || (self.agent == ''Copilot'' && e.name == ''GITHUB_TOKEN'') ||
-                    (self.agent == ''Grok'' && e.name == ''XAI_API_KEY'') || (self.agent
-                    == ''MuseCode'' && e.name == ''META_API_KEY''))'
-                - fieldPath: .env
-                  message: 'env may not set a variable Crewlet sets on every call
-                    of the CLI to keep it inside its seat''s own home and its call''s
-                    working directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME,
-                    XDG_CACHE_HOME or TMPDIR for any CLI, and ClaudeCode''s CLAUDE_CONFIG_DIR,
-                    Codex''s CODEX_HOME, OpenCode''s OPENCODE_CONFIG_DIR and OPENCODE_CONFIG_PROJECT_DISABLE,
-                    CursorAgent''s CURSOR_CONFIG_DIR, KimiCode''s KIMI_CODE_HOME,
-                    Hermes''s HERMES_HOME or Pi''s PI_CODING_AGENT_DIR. A value there
-                    would replace that isolation for every seat on the provider, so
-                    Crewlet refuses the document: drop it'
-                  rule: '!has(self.env) || !self.env.exists(e, e.name in [''HOME'',
-                    ''XDG_CONFIG_HOME'', ''XDG_DATA_HOME'', ''XDG_STATE_HOME'', ''XDG_CACHE_HOME'',
-                    ''TMPDIR''] || (self.agent == ''ClaudeCode'' && e.name == ''CLAUDE_CONFIG_DIR'')
-                    || (self.agent == ''Codex'' && e.name == ''CODEX_HOME'') || (self.agent
-                    == ''OpenCode'' && e.name in [''OPENCODE_CONFIG_DIR'', ''OPENCODE_CONFIG_PROJECT_DISABLE''])
-                    || (self.agent == ''CursorAgent'' && e.name == ''CURSOR_CONFIG_DIR'')
-                    || (self.agent == ''KimiCode'' && e.name == ''KIMI_CODE_HOME'')
-                    || (self.agent == ''Hermes'' && e.name == ''HERMES_HOME'') ||
-                    (self.agent == ''Pi'' && e.name == ''PI_CODING_AGENT_DIR''))'
-                - message: 'a Subscription login reaches an Agent-mode run in a remote
-                    sandbox only as a variable of its environment: give ClaudeCode
-                    auth.tokenSecretRef, or use auth mode APIKey, and give OpenCode
-                    its model provider''s key in env under a name Crewlet reads as
-                    a credential, such as ANTHROPIC_API_KEY or OPENROUTER_API_KEY.
-                    A credential bundle stays on the engine''s data volume'
-                  rule: '!has(self.mode) || self.mode != ''Agent'' || (has(self.auth)
-                    && has(self.auth.mode) && self.auth.mode != ''Subscription'')
-                    || (self.agent == ''ClaudeCode'' && has(self.auth) && has(self.auth.tokenSecretRef))
-                    || (self.agent == ''OpenCode'' && has(self.env) && self.env.exists(e,
-                    e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')))'
+                - message: 'tokenSecretRef and credentialBundleSecretRef sign in to
+                    a subscription: they apply to mode Subscription only'
+                  rule: '!(has(self.mode) && self.mode != ''Subscription'') || (!has(self.tokenSecretRef)
+                    && !has(self.credentialBundleSecretRef))'
+                - message: 'tokenSecretRef and credentialBundleSecretRef are two logins,
+                    and the CLI is given one: keep the headless token, which never
+                    needs refreshing, or the bundle where the CLI mints no token'
+                  rule: '!has(self.tokenSecretRef) || !has(self.credentialBundleSecretRef)'
+                - message: 'apiKeySecretRef is the key auth mode APIKey hands the
+                    CLI: it is required with mode APIKey and not allowed otherwise,
+                    as Crewlet reads a key under no other mode'
+                  rule: has(self.apiKeySecretRef) == (has(self.mode) && self.mode
+                    == 'APIKey')
               companyRef:
                 description: companyRef names the Company this provider belongs to.
                   Immutable.
@@ -470,34 +200,118 @@ spec:
                 x-kubernetes-validations:
                 - message: companyRef is immutable
                   rule: self == oldSelf
-              cooldowns:
+              env:
                 description: |-
-                  cooldowns is how long a failing key is set aside. Crewlet's
-                  `cooldowns`.
-                minProperties: 1
-                properties:
-                  authSeconds:
-                    description: |-
-                      authSeconds is how long a key the provider refused is set aside. Unset
-                      takes Crewlet's default of 300.
-                    format: int32
-                    maximum: 86400
-                    minimum: 60
-                    type: integer
-                  rateLimitSeconds:
-                    description: |-
-                      rateLimitSeconds is how long a key that hit a rate limit is set aside.
-                      Unset takes Crewlet's default of 3600.
-                    format: int32
-                    maximum: 86400
-                    minimum: 60
-                    type: integer
-                type: object
+                  env is extra environment of the CLI where it runs in the engine's pod,
+                  as a model behind the engine's own tool loop: in every phase a
+                  Text-mode provider runs, and in every phase but the executor's of an
+                  Agent-mode one. There the CLI does not get the engine's environment: it
+                  gets the part Crewlet's allowlist names, such as PATH and the TLS and
+                  proxy variables, and the variables the CLI's Crewlet profile passes
+                  through, such as GeminiCLI's GOOGLE_CLOUD_PROJECT, with a HOME, a
+                  TMPDIR and XDG directories of its seat's own rather than the engine's.
+                  So a variable the CLI needs beyond that is given here, such as the
+                  address of a gateway a CLI reads from its environment (ClaudeCode's
+                  ANTHROPIC_BASE_URL). It is how Hermes, Pi and OpenCode sign in under
+                  auth mode Subscription with no login of their own: their model
+                  provider's key, under a name Crewlet reads as a credential, such as
+                  OPENROUTER_API_KEY. It may not set the CLI's own token or key
+                  variable, which auth owns, nor a variable Crewlet sets to keep the CLI
+                  inside its seat's home and its call's working directory: HOME, the XDG
+                  directories, TMPDIR, and the CLI's own configuration directory or
+                  switch (docs/guides/cli-agents.md).
+
+                  An Agent-mode run, and a seat's code work on the provider, run the CLI
+                  in the Company's E2B sandbox. There it gets none of that environment,
+                  and of env only an OpenCode provider's credential-named variables,
+                  where the coding agent can read them; a variable of no credential that
+                  such a run needs goes in the Seat's spec.sandbox.env. Crewlet's `env`,
+                  a credential position.
+                items:
+                  description: |-
+                    SecretEnvVar is a named credential delivered as an environment variable,
+                    such as a sandbox setup step's token or a coding CLI's model key. Crewlet
+                    treats every value in the positions that use this type as a credential, so
+                    a literal value is not accepted: the value always comes from a Secret.
+                  properties:
+                    name:
+                      description: name is the variable's name.
+                      maxLength: 128
+                      minLength: 1
+                      pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+                      type: string
+                    valueFrom:
+                      description: valueFrom is the Secret key the value is read from.
+                      properties:
+                        secretKeyRef:
+                          description: secretKeyRef selects the Secret key that holds
+                            the value.
+                          properties:
+                            key:
+                              description: key is the key within the Secret's data.
+                              maxLength: 253
+                              minLength: 1
+                              pattern: ^[-._a-zA-Z0-9]+$
+                              type: string
+                            name:
+                              description: name is the metadata.name of the Secret.
+                              maxLength: 253
+                              minLength: 1
+                              type: string
+                          required:
+                          - key
+                          - name
+                          type: object
+                      required:
+                      - secretKeyRef
+                      type: object
+                  required:
+                  - name
+                  - valueFrom
+                  type: object
+                maxItems: 32
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              loginName:
+                description: |-
+                  loginName names the login, and the per-seat homes, the provider
+                  keeps on the data volume. Providers of the company with the same
+                  loginName that drive the same CLI share one login, which is how
+                  several models run off one subscription; each CLI keeps its own
+                  beside the others' (Crewlet's <state_dir>/<agent>), so one of another
+                  CLI shares the directory and nothing in it. Unset is the provider's
+                  own metadata.name. Crewlet's `state_dir`, as
+                  /var/lib/crewlet/llm-cli/<loginName>.
+                maxLength: 63
+                minLength: 1
+                pattern: ^[a-z0-9][a-z0-9-]*$
+                type: string
+              maxConcurrent:
+                description: |-
+                  maxConcurrent is how many CLI processes the provider runs at once;
+                  each takes 200 to 450 MB of the engine pod's memory, OpenCode's at the
+                  top of that range (docs/guides/cli-agents.md). Unset takes
+                  Crewlet's default of 4. Crewlet's `max_concurrent`.
+                format: int32
+                maximum: 64
+                minimum: 1
+                type: integer
+              mode:
+                description: mode is how the engine uses the CLI. Unset is Text. Crewlet's
+                  `mode`.
+                enum:
+                - Text
+                - Agent
+                type: string
               model:
                 description: |-
-                  model is the model id requests are sent for, as the provider names it.
-                  Crewlet's `model`. Crewlet trims it of white space and refuses a
-                  provider with nothing left, as naming no model.
+                  model is the model the CLI runs, in the CLI's own grammar: an alias
+                  or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id
+                  for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.
+                  Crewlet trims it of white space and refuses a provider with nothing
+                  left, as naming no model.
                 maxLength: 256
                 minLength: 1
                 type: string
@@ -510,87 +324,115 @@ spec:
                     one from its own secret store and environment, which hold credentials
                     that are not this object''s to name'
                   rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
-              reasoning:
+              runIn:
                 description: |-
-                  reasoning turns on an OpenAI reasoning model's effort, so that
-                  reasoningEffort is sent. Crewlet's `reasoning`; type OpenAI only.
-                type: boolean
-              reasoningBudgetTokens:
-                description: |-
-                  reasoningBudgetTokens is the thinking budget of an older, budget-based
-                  Claude model. Unset means such a model does not think. Crewlet's
-                  `reasoning_budget_tokens`; type Anthropic only.
-                format: int32
-                minimum: 1024
-                type: integer
-              reasoningEffort:
-                description: |-
-                  reasoningEffort is how hard the model thinks. For Anthropic it is sent
-                  on every call, and unset means High. For OpenAI it is sent only while
-                  reasoning is true, so it requires reasoning; an OpenAICompatible
-                  provider cannot turn reasoning on and takes no reasoningEffort.
-                  Crewlet's `reasoning_effort`.
+                  runIn is where an Agent-mode run happens. Unset is the Company's
+                  sandbox, which is E2B. Crewlet's `run_in`.
                 enum:
-                - Low
-                - Medium
-                - High
-                - XHigh
-                - Max
+                - E2B
                 type: string
               timeoutSeconds:
                 description: |-
-                  timeoutSeconds bounds one HTTP attempt: the whole of a unary call, the
-                  longest silence in a streamed one. Unset takes Crewlet's default of
-                  600. Crewlet's `timeout_seconds`.
+                  timeoutSeconds caps one invocation of the CLI, wall clock: its
+                  launch, the model's answer and the CLI's own retries. Unset takes
+                  Crewlet's default of 600, the ceiling Anthropic documents for one
+                  answer of a current Claude model at its full output. A timeout is
+                  retryable, so a seat's chain moves on to its next provider. Crewlet's
+                  `timeout_seconds`.
                 format: int32
                 minimum: 1
                 type: integer
-              type:
-                description: type is which model API the provider speaks. Crewlet's
-                  `type`.
-                enum:
-                - Anthropic
-                - OpenAI
-                - OpenAICompatible
-                - CLIAgent
-                type: string
             required:
+            - agent
+            - auth
             - companyRef
             - model
-            - type
             type: object
             x-kubernetes-validations:
-            - message: claudeModel applies to type Anthropic only
-              rule: '!has(self.claudeModel) || self.type == ''Anthropic'''
-            - message: reasoning applies to type OpenAI only; an Anthropic model's
-                thinking depth is reasoningEffort
-              rule: '!has(self.reasoning) || self.type == ''OpenAI'''
-            - message: reasoningEffort is sent to an OpenAI model only while reasoning
-                is true, and never to an OpenAICompatible one
-              rule: '!has(self.reasoningEffort) || self.type == ''Anthropic'' || (self.type
-                == ''OpenAI'' && has(self.reasoning) && self.reasoning)'
-            - message: reasoningBudgetTokens applies to type Anthropic only
-              rule: '!has(self.reasoningBudgetTokens) || self.type == ''Anthropic'''
-            - message: baseURL is required for type OpenAICompatible, which has no
-                default endpoint
-              rule: self.type != 'OpenAICompatible' || has(self.baseURL)
-            - message: apiKeySecretRefs needs at least one key for types Anthropic
-                and OpenAI
-              rule: self.type in ['OpenAICompatible', 'CLIAgent'] || has(self.apiKeySecretRefs)
-            - message: cli is required with type CLIAgent and not allowed otherwise
-              rule: (self.type == 'CLIAgent') == has(self.cli)
-            - message: 'baseURL, timeoutSeconds and cooldowns configure an HTTP client,
-                and a CLIAgent provider runs a process: its timeout is cli.timeoutSeconds'
-              rule: self.type != 'CLIAgent' || !(has(self.baseURL) || has(self.timeoutSeconds)
-                || has(self.cooldowns))
-            - message: a CLIAgent provider takes apiKeySecretRefs with cli.auth.mode
-                APIKey, and only then
-              rule: self.type != 'CLIAgent' || !has(self.cli) || has(self.apiKeySecretRefs)
-                == (has(self.cli.auth) && has(self.cli.auth.mode) && self.cli.auth.mode
-                == 'APIKey')
-            - message: 'a CLIAgent provider gives its CLI one key: it rotates none'
-              rule: self.type != 'CLIAgent' || !has(self.apiKeySecretRefs) || self.apiKeySecretRefs.size()
-                == 1
+            - message: 'runIn applies to mode Agent only: in mode Text the CLI is
+                a process in the engine''s pod'
+              rule: '!has(self.runIn) || (has(self.mode) && self.mode == ''Agent'')'
+            - message: 'mode Agent runs a CLI Crewlet has a sandbox runner for: ClaudeCode
+                or OpenCode'
+              rule: '!has(self.mode) || self.mode != ''Agent'' || self.agent in [''ClaudeCode'',
+                ''OpenCode'']'
+            - fieldPath: .auth
+              message: 'a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef:
+                a pod has no terminal to log in at. Hermes, Pi and OpenCode alone
+                may sign in with their model provider''s key in env instead, under
+                a name Crewlet reads as a credential, one of whose parts between underscores
+                is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET,
+                PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such
+                as OPENROUTER_API_KEY), which Crewlet hands them untouched. A CLI
+                with a key variable takes its key through auth mode APIKey, as Crewlet
+                refuses that variable in env'
+              rule: '!has(self.auth) || (has(self.auth.mode) && self.auth.mode !=
+                ''Subscription'') || has(self.auth.tokenSecretRef) || has(self.auth.credentialBundleSecretRef)
+                || (self.agent in [''Hermes'', ''Pi'', ''OpenCode''] && has(self.env)
+                && self.env.exists(e, e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')))'
+            - message: 'auth.tokenSecretRef is a headless token, which Crewlet hands
+                only to ClaudeCode (CLAUDE_CODE_OAUTH_TOKEN): its profile for every
+                other CLI names no token variable. Sign that CLI in with auth.credentialBundleSecretRef,
+                with auth mode APIKey where it has a key variable, or, for Hermes,
+                Pi and OpenCode, with its model provider''s key in env'
+              rule: '!has(self.auth) || !has(self.auth.tokenSecretRef) || self.agent
+                == ''ClaudeCode'''
+            - message: 'auth mode APIKey takes a CLI Crewlet hands a key to: ClaudeCode,
+                Codex, GeminiCLI, QwenCode, CursorAgent, Copilot, Grok or MuseCode.
+                Crewlet''s profiles for OpenCode, KimiCode, Hermes and Pi name no
+                key variable: sign Hermes, Pi or OpenCode in with its model provider''s
+                key in env under mode Subscription, and KimiCode, which reads a key
+                only from its own files, with auth.credentialBundleSecretRef'
+              rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode !=
+                ''APIKey'' || self.agent in [''ClaudeCode'', ''Codex'', ''GeminiCLI'',
+                ''QwenCode'', ''CursorAgent'', ''Copilot'', ''Grok'', ''MuseCode'']'
+            - fieldPath: .env
+              message: 'env may not set the CLI''s own token or key variable (ClaudeCode''s
+                CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY, Codex''s OPENAI_API_KEY,
+                GeminiCLI''s GEMINI_API_KEY, QwenCode''s DASHSCOPE_API_KEY, CursorAgent''s
+                CURSOR_API_KEY, Copilot''s GITHUB_TOKEN, Grok''s XAI_API_KEY, MuseCode''s
+                META_API_KEY): Crewlet''s auth owns it, and whether a value in env
+                reaches the CLI would turn on the auth mode. Give a token as auth.tokenSecretRef,
+                and a key as auth.apiKeySecretRef with auth mode APIKey'
+              rule: '!has(self.env) || !self.env.exists(e, (self.agent == ''ClaudeCode''
+                && e.name in [''CLAUDE_CODE_OAUTH_TOKEN'', ''ANTHROPIC_API_KEY''])
+                || (self.agent == ''Codex'' && e.name == ''OPENAI_API_KEY'') || (self.agent
+                == ''GeminiCLI'' && e.name == ''GEMINI_API_KEY'') || (self.agent ==
+                ''QwenCode'' && e.name == ''DASHSCOPE_API_KEY'') || (self.agent ==
+                ''CursorAgent'' && e.name == ''CURSOR_API_KEY'') || (self.agent ==
+                ''Copilot'' && e.name == ''GITHUB_TOKEN'') || (self.agent == ''Grok''
+                && e.name == ''XAI_API_KEY'') || (self.agent == ''MuseCode'' && e.name
+                == ''META_API_KEY''))'
+            - fieldPath: .env
+              message: 'env may not set a variable Crewlet sets on every call of the
+                CLI to keep it inside its seat''s own home and its call''s working
+                directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME
+                or TMPDIR for any CLI, and ClaudeCode''s CLAUDE_CONFIG_DIR, Codex''s
+                CODEX_HOME, OpenCode''s OPENCODE_CONFIG_DIR and OPENCODE_CONFIG_PROJECT_DISABLE,
+                CursorAgent''s CURSOR_CONFIG_DIR, KimiCode''s KIMI_CODE_HOME, Hermes''s
+                HERMES_HOME or Pi''s PI_CODING_AGENT_DIR. A value there would replace
+                that isolation for every seat on the provider, so Crewlet refuses
+                the document: drop it'
+              rule: '!has(self.env) || !self.env.exists(e, e.name in [''HOME'', ''XDG_CONFIG_HOME'',
+                ''XDG_DATA_HOME'', ''XDG_STATE_HOME'', ''XDG_CACHE_HOME'', ''TMPDIR'']
+                || (self.agent == ''ClaudeCode'' && e.name == ''CLAUDE_CONFIG_DIR'')
+                || (self.agent == ''Codex'' && e.name == ''CODEX_HOME'') || (self.agent
+                == ''OpenCode'' && e.name in [''OPENCODE_CONFIG_DIR'', ''OPENCODE_CONFIG_PROJECT_DISABLE''])
+                || (self.agent == ''CursorAgent'' && e.name == ''CURSOR_CONFIG_DIR'')
+                || (self.agent == ''KimiCode'' && e.name == ''KIMI_CODE_HOME'') ||
+                (self.agent == ''Hermes'' && e.name == ''HERMES_HOME'') || (self.agent
+                == ''Pi'' && e.name == ''PI_CODING_AGENT_DIR''))'
+            - message: 'a Subscription login reaches an Agent-mode run in a remote
+                sandbox only as a variable of its environment: give ClaudeCode auth.tokenSecretRef,
+                or use auth mode APIKey, and give OpenCode its model provider''s key
+                in env under a name Crewlet reads as a credential, such as ANTHROPIC_API_KEY
+                or OPENROUTER_API_KEY. A credential bundle stays on the engine''s
+                data volume'
+              rule: '!has(self.mode) || self.mode != ''Agent'' || (has(self.auth)
+                && has(self.auth.mode) && self.auth.mode != ''Subscription'') || (self.agent
+                == ''ClaudeCode'' && has(self.auth) && has(self.auth.tokenSecretRef))
+                || (self.agent == ''OpenCode'' && has(self.env) && self.env.exists(e,
+                e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')))'
             - fieldPath: .model
               message: 'an OpenCode model is <provider>/<model>, which OpenCode splits
                 at its first slash: a model with no slash, or with nothing but white
@@ -599,12 +441,11 @@ spec:
                 inside OpenCode, which OpenCode 2 refuses as Invalid model reference.
                 Name the provider as OpenCode spells it (opencode models --standalone
                 lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5,
-                with that provider''s key in cli.env or, in mode Text, a login of
-                OpenCode''s own in auth.credentialBundleSecretRef'
-              rule: self.type != 'CLIAgent' || !has(self.cli) || self.cli.agent !=
-                'OpenCode' || !has(self.model) || (self.model.indexOf('/') >= 0 &&
-                self.model.substring(0, self.model.indexOf('/')).trim().size() > 0
-                && self.model.substring(self.model.indexOf('/') + 1).trim().size()
+                with that provider''s key in env or, in mode Text, a login of OpenCode''s
+                own in auth.credentialBundleSecretRef'
+              rule: self.agent != 'OpenCode' || !has(self.model) || (self.model.indexOf('/')
+                >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size()
+                > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size()
                 > 0)
           status:
             description: status is the provider's observed state.
@@ -614,9 +455,9 @@ spec:
                 description: |-
                   conditions are Accepted (the Company exists), ResolvedRefs (every
                   Secret key exists), Applied (the provider is in the revision the
-                  engine runs) and, on a provider of type CLIAgent in mode Agent,
-                  AgentModeRunnable (whether its runs can call a seat's tools back
-                  through the Company's public address).
+                  engine runs) and, on a provider in mode Agent, AgentModeRunnable
+                  (whether its runs can call a seat's tools back through the Company's
+                  public address).
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.

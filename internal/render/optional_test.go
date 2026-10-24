@@ -480,14 +480,15 @@ func TestNoProvisionerSaysWhatGoesWithoutIt(t *testing.T) {
 }
 
 // TestCodeWorkGoesWithoutAMissingOptionalSignIn holds the code-work verdict
-// to the run's environment as Crewlet lays it: a variable that would sign
+// to the run's environment as Crewlet lays it, on a ClaudeCode provider whose
+// credential bundle cannot follow the run: a variable that would sign
 // ClaudeCode in counts for nothing where the value that wins is optional and
 // missing or empty, since the run goes without it; a required one that is
 // missing counts, since the document is held and the running revision keeps
 // the value it had; and a required one that is empty, which the engine reads
 // as nothing, has every run refused, whatever signs in.
 func TestCodeWorkGoesWithoutAMissingOptionalSignIn(t *testing.T) {
-	head := codeWorkProvider(v1alpha1.LLMProviderOpenAI, "")
+	head := codeWorkBundled(v1alpha1.CLIAgentClaudeCode)
 	signIn := v1alpha1.SecretKeyReference{Name: "fixer-claude", Key: optionalToken}
 	stepSignIn := v1alpha1.SecretKeyReference{Name: "fixer-claude", Key: "step-token"}
 	cases := []struct {
@@ -504,11 +505,11 @@ func TestCodeWorkGoesWithoutAMissingOptionalSignIn(t *testing.T) {
 		{name: "an optional sign-in whose value is there", optional: true},
 		{
 			name: "an optional sign-in whose value is missing", optional: true, unset: []secretref.Key{optionalSecretOf(signIn)},
-			reason: v1alpha1.ReasonSandboxModelUnsupported, says: "leaves it out of every run",
+			reason: v1alpha1.ReasonSandboxLoginNotPortable, says: "leaves it out of every run",
 		},
 		{
 			name: "an optional sign-in whose value is empty", optional: true, empty: []secretref.Key{optionalSecretOf(signIn)},
-			reason: v1alpha1.ReasonSandboxModelUnsupported, says: "leaves it out of every run",
+			reason: v1alpha1.ReasonSandboxLoginNotPortable, says: "leaves it out of every run",
 		},
 		{name: "a required sign-in whose value is missing", unset: []secretref.Key{optionalSecretOf(signIn)}},
 		{
@@ -567,7 +568,7 @@ func TestCodeWorkGoesWithoutAMissingOptionalSignIn(t *testing.T) {
 // Integration mints, and an empty file of a step, the Company's or the
 // seat's; and to none where the step lets the file go.
 func TestCodeWorkIsRefusedForAValueThatHoldsNothing(t *testing.T) {
-	head := codeWorkProvider(v1alpha1.LLMProviderAnthropic, "")
+	head := codeWorkProvider(v1alpha1.CLIAgentClaudeCode)
 	company := codeWorkInput(t, &head, v1alpha1.CodingAgentClaudeCode).Company.Name
 	npmrc := v1alpha1.SecretKeyReference{Name: "npm", Key: "npmrc"}
 	step := v1alpha1.SandboxSetupStep{Name: "npm", Files: []v1alpha1.SandboxFile{{

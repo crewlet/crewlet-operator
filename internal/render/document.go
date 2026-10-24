@@ -53,39 +53,22 @@ type providersDoc struct {
 }
 
 type llmProviderDoc struct {
-	Type                  string        `json:"type"`
-	Model                 string        `json:"model"`
-	ClaudeModel           string        `json:"claude_model,omitempty"`
-	APIKeys               []string      `json:"api_keys,omitempty"`
-	BaseURL               string        `json:"base_url,omitempty"`
-	Reasoning             *bool         `json:"reasoning,omitempty"`
-	ReasoningEffort       string        `json:"reasoning_effort,omitempty"`
-	ReasoningBudgetTokens int32         `json:"reasoning_budget_tokens,omitempty"`
-	TimeoutSeconds        int32         `json:"timeout_seconds,omitempty"`
-	Cooldowns             *cooldownsDoc `json:"cooldowns,omitempty"`
-	CLI                   *cliDoc       `json:"cli,omitempty"`
-}
-
-type cliDoc struct {
 	Agent          string            `json:"agent"`
+	Model          string            `json:"model"`
 	Mode           string            `json:"mode,omitempty"`
 	RunIn          string            `json:"run_in,omitempty"`
 	StateDir       string            `json:"state_dir"`
 	TimeoutSeconds int32             `json:"timeout_seconds,omitempty"`
 	MaxConcurrent  int32             `json:"max_concurrent,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
-	Auth           cliAuthDoc        `json:"auth,omitzero"`
+	Auth           llmAuthDoc        `json:"auth,omitzero"`
 }
 
-type cliAuthDoc struct {
+type llmAuthDoc struct {
 	Mode             string `json:"mode,omitempty"`
 	Token            string `json:"token,omitempty"`
+	APIKey           string `json:"api_key,omitempty"`
 	CredentialBundle string `json:"credential_bundle,omitempty"`
-}
-
-type cooldownsDoc struct {
-	RateLimitSeconds int32 `json:"rate_limit_seconds,omitempty"`
-	AuthSeconds      int32 `json:"auth_seconds,omitempty"`
 }
 
 type embeddingsDoc struct {

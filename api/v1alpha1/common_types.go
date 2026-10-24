@@ -183,6 +183,24 @@ type SecretEnvVar struct {
 	ValueFrom SecretValueSource `json:"valueFrom,omitzero"`
 }
 
+// NamespacedSecretEnvVar is a named credential an EngineClass gives, delivered
+// as an environment variable whose value is read from a Secret in a namespace
+// the platform controls, such as a platform model provider's key. Like
+// SecretEnvVar it takes no literal value, and like NamespacedSecretKeyReference
+// it is used only by the cluster-scoped EngineClass.
+type NamespacedSecretEnvVar struct {
+	// name is the variable's name.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
+	Name string `json:"name,omitempty"`
+
+	// valueFrom is the Secret key the value is read from.
+	// +required
+	ValueFrom NamespacedSecretValueSource `json:"valueFrom,omitzero"`
+}
+
 // EnvVar is an environment variable set on the engine's pods. Unlike
 // SecretEnvVar it may carry a literal value, because it is not a Crewlet
 // credential position but platform wiring (a feature flag, an endpoint); a
@@ -360,13 +378,13 @@ const (
 	// judges the Seat's objects, which may not be the document the engine
 	// runs (Applied says whether they are). Only CodingAgentMismatch also
 	// holds the document (Applied=False), as Crewlet refuses it on every
-	// write; with SandboxModelUnsupported, SandboxLoginNotPortable,
-	// SecretValueEmpty or NoProvisioner the seat is applied and runs its
-	// turns, and Crewlet refuses each of its coding runs.
+	// write; with SandboxLoginNotPortable, SecretValueEmpty or NoProvisioner
+	// the seat is applied and runs its turns, and Crewlet refuses each of its
+	// coding runs.
 	ConditionCodeWorkRunnable = "CodeWorkRunnable"
 
-	// ConditionAgentModeRunnable reports whether an LLMProvider of type
-	// CLIAgent in mode Agent can run as an agentic run at all: its runs
+	// ConditionAgentModeRunnable reports whether an LLMProvider in mode
+	// Agent can run as an agentic run at all: its runs
 	// happen in the Company's remote sandbox and call the seat's tools back
 	// through the engine's public address (status.endpoints.publicBaseURL),
 	// so it is False (NotExposed) while the Company has none. It is set on
@@ -674,7 +692,7 @@ const (
 	// ReasonNotExposed is Healthy=False on an integration that needs inbound
 	// delivery when the company has no public address
 	// (status.endpoints.publicBaseURL), and AgentModeRunnable=False on an
-	// LLMProvider of type CLIAgent in mode Agent then: its runs happen in a
+	// LLMProvider in mode Agent then: its runs happen in a
 	// remote sandbox, which calls the seat's tools back through the engine's
 	// public address. It is Ready=False on an agent Seat placed in data
 	// whose executor's chain such a provider heads: the engine applies the
@@ -902,7 +920,7 @@ const (
 	ReasonPoolCapacityExceeded = "PoolCapacityExceeded"
 
 	// ReasonAgentModeBridgeUnsupported is Ready=False on a Seat placed in a
-	// seat pool whose executor runs on a CLIAgent provider in mode Agent:
+	// seat pool whose executor runs on an LLMProvider in mode Agent:
 	// one at the head of its executor's chain, the only entry Crewlet runs
 	// as an agentic run (a fallback behind it is a text call).
 	// An agent-mode run calls the seat's tools back through the tool bridge
@@ -917,7 +935,7 @@ const (
 	ReasonAgentModeBridgeUnsupported = "AgentModeBridgeUnsupported"
 
 	// ReasonCLIAuthNotPortable is Applied=False on a Seat placed in a seat
-	// pool that runs on a CLIAgent provider signed in with a credential
+	// pool that runs on an LLMProvider signed in with a credential
 	// bundle. A seat pod keeps the CLI's login on its scratch volume, so the
 	// bundle is restored at every start, and every pod refreshes the one
 	// login on its own: a vendor that rotates refresh tokens then logs the
@@ -936,38 +954,28 @@ const (
 	ReasonToolBridgeServed = "ToolBridgeServed"
 
 	// ReasonCodingAgentMismatch is Applied=False and CodeWorkRunnable=False
-	// on a Seat whose code work (spec.sandbox) runs on a CLIAgent provider
-	// driving another CLI than the seat's coding agent
-	// (spec.sandbox.codingAgent, else the Company's
+	// on a Seat whose code work (spec.sandbox) runs on a model provider, an
+	// LLMProvider or a platform provider, driving another CLI than the seat's
+	// coding agent (spec.sandbox.codingAgent, else the Company's
 	// spec.sandbox.defaultCodingAgent, else ClaudeCode): the head of
 	// spec.llm.sandbox, else of spec.llm.default, else of the Company's model
 	// order. The provider's model is written in its own CLI's grammar and its
 	// sign-in is that CLI's, so the coding agent can read neither, and
 	// Crewlet refuses the pairing on every write. It is also Applied=False
-	// alone on a Seat whose executor runs in agent mode (a CLIAgent provider in
+	// alone on a Seat whose executor runs in agent mode (an LLMProvider in
 	// mode Agent heads its executor's chain) and whose spec.sandbox.codingAgent
 	// names another CLI than that provider's: Crewlet never offers such a seat
 	// run_sandbox, as it codes in its executor's run, and refuses on every
 	// write a coding agent that would drive nothing.
 	ReasonCodingAgentMismatch = "CodingAgentMismatch"
 
-	// ReasonSandboxModelUnsupported is CodeWorkRunnable=False on a Seat
-	// whose code work runs the ClaudeCode coding agent on a provider of type
-	// OpenAI or OpenAICompatible, an LLMProvider or a platform provider,
-	// while the seat's sandbox environment (spec.sandbox.env, its setup
-	// steps' and the Company's spec.sandbox.setup steps') names no variable
-	// that signs ClaudeCode in. ClaudeCode speaks the Anthropic API only:
-	// Crewlet applies the seat, which runs its turns, and refuses each
-	// run_sandbox launch of it.
-	ReasonSandboxModelUnsupported = "SandboxModelUnsupported"
-
 	// ReasonSandboxLoginNotPortable is CodeWorkRunnable=False on a Seat
-	// whose code work runs on a CLIAgent provider of its coding agent's CLI
-	// whose login cannot follow a run into the Company's remote sandbox: a
+	// whose code work runs on an LLMProvider of its coding agent's CLI whose
+	// login cannot follow a run into the Company's remote sandbox: a
 	// ClaudeCode signed in by a credential bundle with neither
 	// CLAUDE_CODE_OAUTH_TOKEN nor ANTHROPIC_API_KEY in the seat's sandbox
 	// environment, or an OpenCode with no credential-named variable in its
-	// cli.env or the seat's sandbox environment. A bundle stays on the
+	// env or the seat's sandbox environment. A bundle stays on the
 	// engine's data volume: Crewlet applies the seat, which runs its turns,
 	// and refuses each run_sandbox launch of it.
 	ReasonSandboxLoginNotPortable = "SandboxLoginNotPortable"

@@ -18,7 +18,7 @@ import (
 // data pod: a vendor that rotates refresh tokens retires the token the
 // others hold at each refresh, and logs the company out. A headless token
 // (tokenSecretRef), an API key, or the model provider's key a Hermes, Pi or
-// OpenCode reads from cli.env never refreshes, and is portable: a ${NAME}
+// OpenCode reads from its env never refreshes, and is portable: a ${NAME}
 // every pod resolves from the fleet's encrypted store. Crewlet applies a
 // document that places such a seat in a seat pool, so the refusal is the
 // operator's own: applied, it would log out every seat on that CLI login, the
@@ -59,8 +59,8 @@ func (r *renderer) seatPodProviders(s *v1alpha1.Seat, pool string) {
 			refs, field = llm.Default, fieldLLMDefault
 		}
 		for _, link := range r.chainOf(refs, field) {
-			cli := r.cliProviders[link.provider]
-			if cli == nil || cli.Auth.CredentialBundleSecretRef.Name == "" || slices.Contains(refused, link.provider) {
+			spec := r.own[link.provider]
+			if spec == nil || spec.Auth.CredentialBundleSecretRef.Name == "" || slices.Contains(refused, link.provider) {
 				continue
 			}
 			refused = append(refused, link.provider)
@@ -68,8 +68,8 @@ func (r *renderer) seatPodProviders(s *v1alpha1.Seat, pool string) {
 				"runs on LLMProvider %s, whose CLI signs in with a credential bundle, and places the seat in seat pool %s: "+
 					"a seat pod keeps the login on a volume it loses at every start, restores the bundle each time and "+
 					"refreshes it on its own, which logs every pod out once the vendor rotates the refresh token. Sign "+
-					"the CLI in with cli.auth.tokenSecretRef (ClaudeCode), auth mode APIKey, or for Hermes, Pi or OpenCode "+
-					"its model provider's key in cli.env, in place of the bundle, or place the seat in data",
+					"the CLI in with auth.tokenSecretRef (ClaudeCode), auth mode APIKey, or for Hermes, Pi or OpenCode "+
+					"its model provider's key in env, in place of the bundle, or place the seat in data",
 				link.provider, pool))
 		}
 	}
@@ -83,7 +83,8 @@ type chainLink struct {
 
 // chainOf is the LLMProviders a chain names, with the field of each; an empty
 // chain is the one provider a seat with no chain runs on, the head of the
-// document's llm_order. Platform providers are left out: none drives a CLI.
+// document's llm_order. Platform providers are left out: each signs in with a
+// key, which every pod resolves alike.
 func (r *renderer) chainOf(refs []v1alpha1.LLMProviderReference, field string) []chainLink {
 	if len(refs) == 0 {
 		head, ok := r.orderHead()
@@ -105,8 +106,8 @@ func (r *renderer) chainOf(refs []v1alpha1.LLMProviderReference, field string) [
 // one Crewlet may run as an agentic run, with the field that names it: the
 // first entry of refs that resolves, or with no refs the head of the
 // document's llm_order. ok is false when the head is a platform provider,
-// which drives no CLI, or when nothing resolves (each such entry is refused
-// on its own).
+// which runs in mode Text alone, or when nothing resolves (each such entry is
+// refused on its own).
 func (r *renderer) executorHead(refs []v1alpha1.LLMProviderReference, field string) (chainLink, bool) {
 	if len(refs) == 0 {
 		head, ok := r.orderHead()
@@ -119,7 +120,7 @@ func (r *renderer) executorHead(refs []v1alpha1.LLMProviderReference, field stri
 				return chainLink{provider: ref.Name, field: fmt.Sprintf("%s[%d].name", field, i)}, true
 			}
 		case v1alpha1.LLMProviderKindPlatform:
-			if r.usesPlatformProviders() && r.platform[ref.Name] {
+			if r.usesPlatformProviders() && r.platform[ref.Name] != nil {
 				return chainLink{}, false
 			}
 		}
@@ -140,7 +141,7 @@ func (r *renderer) orderHead() (string, bool) {
 				return ref.Name, true
 			}
 		case v1alpha1.LLMProviderKindPlatform:
-			if r.usesPlatformProviders() && r.platform[ref.Name] {
+			if r.usesPlatformProviders() && r.platform[ref.Name] != nil {
 				return "", false
 			}
 		}

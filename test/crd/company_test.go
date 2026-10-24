@@ -657,7 +657,7 @@ func TestCompanyEngineConfigReservedKeys(t *testing.T) {
 	for _, key := range reserved {
 		cases = append(cases, createCase[*v1.Company]{
 			name:   "the key " + key + " is refused",
-			mutate: engineConfig(key, `{"llm":{"a":{"api_keys":["sk-literal"]}}}`),
+			mutate: engineConfig(key, `{"llm":{"a":{"auth":{"api_key":"sk-literal"}}}}`),
 			want:   msgReservedKey,
 		})
 	}

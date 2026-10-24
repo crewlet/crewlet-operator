@@ -38,8 +38,8 @@ handle, and model providers and tool servers by name.
 | Object | Becomes |
 |---|---|
 | `Company` | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `token_budget`, `providers.embeddings`, `providers.sandbox`, `providers.llm_order`, `integrations.check_interval_seconds`, and one top-level key per `spec.engineConfig` entry |
-| `EngineClass` | `providers.llm.<name>` for each of its `platformLLMProviders`, when the Company sets `spec.llm.usePlatformProviders` |
-| `LLMProvider` | `providers.llm.<metadata.name>`; a `CLIAgent` provider's `cli.state_dir` is `/var/lib/crewlet/llm-cli/<loginName>`, on the data volume |
+| `EngineClass` | `providers.llm.<name>` for each of its `platformLLMProviders`, when the Company sets `spec.llm.usePlatformProviders`; its `state_dir` is `/var/lib/crewlet/llm-cli-platform/<name>`, on the data volume |
+| `LLMProvider` | `providers.llm.<metadata.name>`; its `state_dir` is `/var/lib/crewlet/llm-cli/<loginName>`, on the data volume |
 | `MCPServer` | one entry of `mcp_servers`, named by its `metadata.name` |
 | `Integration` | one of `integrations.slack`, `github`, `gitlab`, `mattermost`, `jira`, `confluence`, `datadog` and `atlassian`; a Seat it names (Datadog's `routeTo`, GitLab's `accessLevels`) by the seat's handle |
 | `Unit` | one entry of `units`, or of its parent's `children` |
@@ -73,8 +73,8 @@ accepts a person's write from are decided before any document is loaded.
 `providers.llm_order` is written out in full: the Company's `spec.llm.order`,
 then its own `LLMProvider`s by name, then the class's platform providers by
 name. A seat with no `default` chain runs on the first one alone: Crewlet
-tries no other provider of the order when that one's keys are all cooling
-down, so a seat that needs a fallback names a chain. No provider may be named
+tries no other provider of the order when that one fails or sits out a spent
+plan, so a seat that needs a fallback names a chain. No provider may be named
 `default`, since Crewlet would run every such seat on the provider keyed
 `default` instead, whatever the order says.
 
@@ -242,8 +242,8 @@ carries.
 > **None of these credentials is an environment variable, on purpose.** Crewlet
 > resolves a `${NAME}` in the company document from its secret store and then
 > from its process environment, and it does so in fields that hold no
-> credential as well, such as an MCP server's `url` or a model provider's
-> `base_url`. A credential in the engine's environment would be one anyone who
+> credential as well, such as an MCP server's `url` or an embeddings
+> provider's `base_url`. A credential in the engine's environment would be one anyone who
 > can write such a field, or hold the API's access token, could have the
 > engine send to a server of their choosing.
 
@@ -339,9 +339,9 @@ that holds the reference:
 | `Seat` | another Seat has its handle, its email address (compared lower-cased, with any plus tag dropped), or one of its contact accounts | `Conflict` (on `Accepted`) | Engine |
 | `Seat` | it is placed in a PerSeat pool, and the class does not set `seatPools.allowPerSeat` (reported on `Applied`) | `PerSeatNotAllowed` | Class |
 | `Seat` | it is placed in a PerSeat pool, and the company's seat pods, its own included, would number more than the class's `seatPools.maxPods` with the PerSeat seats admitted before it: those the running revision already runs in pods of their own, then the older ones; every seat after the first refused is refused too (reported on `Applied`) | `PoolCapacityExceeded` | Class |
-| `Seat` | it is placed in a seat pool, and a chain of it names a `CLIAgent` provider signed in with a credential bundle, which every seat pod would restore and refresh on its own, logging out every seat on that login, the data pod's included (reported on `Applied`) | `CLIAuthNotPortable` | Harm |
-| `Seat` | it has `spec.sandbox`, its Company has one, its executor does not run in agent mode, and the provider its code work runs on (the head of `spec.llm.sandbox`, else of `spec.llm.default`, else of the Company's order) is a `CLIAgent` provider driving another CLI than its coding agent (reported on `Applied`) | `CodingAgentMismatch` | Engine |
-| `Seat` | its executor runs in agent mode (a `CLIAgent` provider in `mode: Agent` heads its executor's chain), and its `spec.sandbox.codingAgent` names another CLI than that provider's: Crewlet never offers such a seat `run_sandbox`, as it codes in its executor's run, so the field drives nothing (reported on `Applied`) | `CodingAgentMismatch` | Engine |
+| `Seat` | it is placed in a seat pool, and a chain of it names an `LLMProvider` signed in with a credential bundle, which every seat pod would restore and refresh on its own, logging out every seat on that login, the data pod's included (reported on `Applied`) | `CLIAuthNotPortable` | Harm |
+| `Seat` | it has `spec.sandbox`, its Company has one, its executor does not run in agent mode, and the provider its code work runs on (the head of `spec.llm.sandbox`, else of `spec.llm.default`, else of the Company's order) drives another CLI than its coding agent (reported on `Applied`) | `CodingAgentMismatch` | Engine |
+| `Seat` | its executor runs in agent mode (an `LLMProvider` in `mode: Agent` heads its executor's chain), and its `spec.sandbox.codingAgent` names another CLI than that provider's: Crewlet never offers such a seat `run_sandbox`, as it codes in its executor's run, so the field drives nothing (reported on `Applied`) | `CodingAgentMismatch` | Engine |
 | `Company` | it declares `spec.topology.seatPools`, and its class's `seatPools.policy` is not `Allowed` | `SeatPoolsNotAllowed` | Class |
 | `Company` | its Shared pools' replicas alone number more than the class's `seatPools.maxPods` | `PoolCapacityExceeded` | Class |
 | `Company` | `spec.llm.order` names an `LLMProvider` that does not exist, or a platform provider while it does not set `spec.llm.usePlatformProviders`: Crewlet drops the key, so every seat with no chain of its own would run on whichever provider comes first instead | `RefNotFound` | Harm |
@@ -361,8 +361,8 @@ that holds the reference:
 
 The last row is the operator's, not Crewlet's. Crewlet resolves a `${NAME}`
 from the engine's secret store and then its environment in many fields that
-hold no credential (an MCP server's `url`, a provider's `base_url`, a skill
-variable), so a reference an object holds itself would name values that are
+hold no credential (an MCP server's `url`, an embeddings provider's
+`base_url`, a model's name, a skill variable), so a reference an object holds itself would name values that are
 not its own: the class's platform model keys in the store, or the engine's
 environment. The only references in a rendered document are the ones the
 operator writes for a Secret key the object references, and for a seat's
@@ -459,14 +459,12 @@ revision:
   the value reports it, as `ResolvedRefs=False` while `Applied` is `True`,
   with a Warning event; the Company's own setup steps have no
   `ResolvedRefs`, and its `SecretsSynced` message says it for them.
-- Two pairings of a seat's code work that no coding run can use:
-  `ClaudeCode` on a provider of type `OpenAI` or `OpenAICompatible` while
-  the seat's sandbox environment names no variable that signs Claude Code in
-  (`SandboxModelUnsupported`), and a `CLIAgent` provider of the coding
-  agent's own CLI whose login cannot reach the remote sandbox
-  (`SandboxLoginNotPortable`). The Seat reports them on its
-  `CodeWorkRunnable` condition ([Code work](../guides/cli-agents.md#code-work)).
-- A seat whose executor's chain starts with a `CLIAgent` provider in
+- A seat's code work on a provider of the coding agent's own CLI whose login
+  cannot reach the remote sandbox, while nothing in the seat's sandbox
+  environment signs the coding agent in (`SandboxLoginNotPortable`). The
+  Seat reports it on its `CodeWorkRunnable` condition
+  ([Code work](../guides/cli-agents.md#code-work)).
+- A seat whose executor's chain starts with an `LLMProvider` in
   `mode: Agent` (the one entry Crewlet runs as an agentic run), where the
   node that holds it serves no tool bridge for the run to call the seat's
   tools back through: the seat is placed in a seat pool, for whose pods the

@@ -2,9 +2,11 @@ name: Bring Your Own Key
 providers:
   llm:
     own-openai:
-      api_keys:
-      - ${K8S_OPENAI_API_KEY_LEK6X7NDATC5}
+      agent: codex
+      auth:
+        api_key: ${K8S_OPENAI_API_KEY_LEK6X7NDATC5}
+        mode: api-key
       model: gpt-5
-      type: openai
+      state_dir: /var/lib/crewlet/llm-cli/own-openai
   llm_order:
   - own-openai

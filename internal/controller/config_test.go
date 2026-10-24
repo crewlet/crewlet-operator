@@ -346,13 +346,16 @@ var _ = Describe("Company config", Ordered, func() {
 			Namespace: namespace, Name: name + "-llm",
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
 				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
+				// Claude Code on a key that signs nothing in, which the
+				// test's engine is not given a binary of: no seat ever
+				// reaches a model.
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-					Type: crewletaiv1alpha1.LLMProviderOpenAICompatible, Model: "test-model",
-					// Port 9 on the loopback interface: nothing answers, so
-					// no seat ever reaches a model.
-					BaseURL: "http://127.0.0.1:9/v1",
+					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
 				},
-				APIKeySecretRefs: []crewletaiv1alpha1.SecretKeyReference{{Name: name + "-llm", Key: llmKey}},
+				Auth: crewletaiv1alpha1.CLIAgentAuth{
+					Mode:            crewletaiv1alpha1.CLIAgentAuthAPIKey,
+					APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey},
+				},
 			},
 		})).To(Succeed())
 		for _, s := range seats {
@@ -1154,17 +1157,31 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(ana.Status.Conditions).NotTo(ContainElement(HaveField("Type", crewletaiv1alpha1.ConditionCodeWorkRunnable)),
 			"a seat with no sandbox runs no code work")
 
-		By("adding a Seat whose code work runs ClaudeCode, the default coding agent, on the OpenAICompatible provider")
+		By("adding a Seat whose code work runs ClaudeCode, the default coding agent, on a login a sandbox cannot carry")
+		secret(name+"-bundle", map[string]string{llmKey: "bundle"})
+		Expect(k8sClient.Create(ctx, &crewletaiv1alpha1.LLMProvider{
+			Namespace: namespace, Name: name + "-bundle",
+			Spec: crewletaiv1alpha1.LLMProviderSpec{
+				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
+				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
+					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
+				},
+				Auth: crewletaiv1alpha1.CLIAgentAuth{
+					CredentialBundleSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-bundle", Key: llmKey},
+				},
+			},
+		})).To(Succeed())
 		coder := newSeat(namespace, name, "coder", func(s *crewletaiv1alpha1.Seat) {
 			s.Spec.Sandbox = &crewletaiv1alpha1.SeatSandbox{}
+			s.Spec.LLM.Sandbox = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-bundle"}}
 		})
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionCodeWorkRunnable)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonSandboxModelUnsupported))
+			Should(Equal(crewletaiv1alpha1.ReasonSandboxLoginNotPortable))
 		codeWork := conditionOf(coder, crewletaiv1alpha1.ConditionCodeWorkRunnable)(Default)
 		Expect(codeWork.Status).To(Equal(metav1.ConditionFalse))
 		Expect(codeWork.ObservedGeneration).To(Equal(coder.Generation))
-		Expect(codeWork.Message).To(ContainSubstring("ClaudeCode speaks the Anthropic API only"))
-		Expect(codeWork.Message).To(ContainSubstring("spec.sandbox.codingAgent: OpenCode"))
+		Expect(codeWork.Message).To(ContainSubstring("a credential bundle stays on the engine's data volume"))
+		Expect(codeWork.Message).To(ContainSubstring("auth.tokenSecretRef or auth mode APIKey"))
 		By("applying the company with the seat all the same, as Crewlet applies it")
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
 		applied(c, crewletaiv1alpha1.ReasonApplied)
@@ -1172,10 +1189,12 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(string(active.Document)).To(ContainSubstring("handle: " + coder.Name))
 		Expect(reasonOf(coder, crewletaiv1alpha1.ConditionReady)(Default)).
 			To(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced), "code work does not count towards Ready")
-		Expect(log.of(coder.Name)).To(ContainElement(HavePrefix("Warning " + crewletaiv1alpha1.ReasonSandboxModelUnsupported)))
+		Expect(log.of(coder.Name)).To(ContainElement(HavePrefix("Warning " + crewletaiv1alpha1.ReasonSandboxLoginNotPortable)))
 
-		By("giving the seat a coding agent that speaks the provider's wire")
-		updateLive(coder, func(s *crewletaiv1alpha1.Seat) { s.Spec.Sandbox.CodingAgent = crewletaiv1alpha1.CodingAgentOpenCode })
+		By("running its code work on the provider whose key follows the run")
+		updateLive(coder, func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.LLM.Sandbox = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-llm"}}
+		})
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionCodeWorkRunnable)).WithTimeout(settle).
 			Should(Equal(crewletaiv1alpha1.ReasonCodeWorkSupported))
 		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionCodeWorkRunnable)(Default).Status).To(Equal(metav1.ConditionTrue))
@@ -1185,16 +1204,18 @@ var _ = Describe("Company config", Ordered, func() {
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		good := runsRendered(e, c)
 
-		By("running its code work on a CLIAgent provider of another CLI, which Crewlet refuses on every write")
+		By("running its code work on a provider of another CLI, which Crewlet refuses on every write")
 		Expect(k8sClient.Create(ctx, &crewletaiv1alpha1.LLMProvider{
 			Namespace: namespace, Name: name + "-codex",
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
-				CompanyRef:          crewletaiv1alpha1.CompanyReference{Name: name},
-				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{Type: crewletaiv1alpha1.LLMProviderCLIAgent, Model: "gpt-5"},
-				CLI: crewletaiv1alpha1.CLIAgentSettings{
-					Agent: crewletaiv1alpha1.CLIAgentCodex, Auth: crewletaiv1alpha1.CLIAgentAuth{Mode: crewletaiv1alpha1.CLIAgentAuthAPIKey},
+				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
+				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
+					Agent: crewletaiv1alpha1.CLIAgentCodex, Model: "gpt-5",
 				},
-				APIKeySecretRefs: []crewletaiv1alpha1.SecretKeyReference{{Name: name + "-llm", Key: llmKey}},
+				Auth: crewletaiv1alpha1.CLIAgentAuth{
+					Mode:            crewletaiv1alpha1.CLIAgentAuthAPIKey,
+					APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey},
+				},
 			},
 		})).To(Succeed())
 		updateLive(coder, func(s *crewletaiv1alpha1.Seat) {
@@ -1493,12 +1514,12 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(k8sClient.Create(ctx, &crewletaiv1alpha1.LLMProvider{
 			Namespace: namespace, Name: name + "-agent",
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
-				CompanyRef:          crewletaiv1alpha1.CompanyReference{Name: name},
-				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{Type: crewletaiv1alpha1.LLMProviderCLIAgent, Model: cliModel},
-				CLI: crewletaiv1alpha1.CLIAgentSettings{
-					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Mode: crewletaiv1alpha1.CLIAgentModeAgent,
-					Auth: crewletaiv1alpha1.CLIAgentAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
+				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
+				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
+					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
 				},
+				Mode: crewletaiv1alpha1.CLIAgentModeAgent,
+				Auth: crewletaiv1alpha1.CLIAgentAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
 			},
 		})).To(Succeed())
 		bridged := newSeat(namespace, name, "bridged", placed(poolGeneral), func(s *crewletaiv1alpha1.Seat) {
@@ -1591,12 +1612,12 @@ var _ = Describe("Company config", Ordered, func() {
 		agent := &crewletaiv1alpha1.LLMProvider{
 			Namespace: namespace, Name: name + "-agent",
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
-				CompanyRef:          crewletaiv1alpha1.CompanyReference{Name: name},
-				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{Type: crewletaiv1alpha1.LLMProviderCLIAgent, Model: cliModel},
-				CLI: crewletaiv1alpha1.CLIAgentSettings{
-					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Mode: crewletaiv1alpha1.CLIAgentModeAgent,
-					Auth: crewletaiv1alpha1.CLIAgentAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
+				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
+				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
+					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
 				},
+				Mode: crewletaiv1alpha1.CLIAgentModeAgent,
+				Auth: crewletaiv1alpha1.CLIAgentAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
 			},
 		}
 		Expect(k8sClient.Create(ctx, agent)).To(Succeed())

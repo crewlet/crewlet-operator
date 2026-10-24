@@ -2,7 +2,7 @@
 # token running a seat's executor as its own agentic run in the company's
 # E2B sandbox, beside Codex on an exported login as a text model behind the
 # engine's tool loop, the reviewer's, and Hermes, the delegated workers',
-# signed in with no login of its own: its model provider's key in cli.env,
+# signed in with no login of its own: its model provider's key in env,
 # a ${NAME} Crewlet passes to the Hermes process untouched. Pi and OpenCode
 # sign in the same way, and Cursor on a Cursor account's metered key in
 # CURSOR_API_KEY. Agent mode calls the seat's tools back through the
@@ -27,20 +27,18 @@ metadata:
 spec:
   companyRef:
     name: forge
-  type: CLIAgent
+  agent: ClaudeCode
   model: sonnet
-  cli:
-    agent: ClaudeCode
-    mode: Agent
-    runIn: E2B
-    loginName: claude
-    timeoutSeconds: 900
-    maxConcurrent: 2
-    auth:
-      mode: Subscription
-      tokenSecretRef:
-        name: claude-subscription
-        key: oauthToken
+  mode: Agent
+  runIn: E2B
+  loginName: claude
+  timeoutSeconds: 900
+  maxConcurrent: 2
+  auth:
+    mode: Subscription
+    tokenSecretRef:
+      name: claude-subscription
+      key: oauthToken
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
@@ -49,14 +47,12 @@ metadata:
 spec:
   companyRef:
     name: forge
-  type: CLIAgent
+  agent: Codex
   model: gpt-5-codex
-  cli:
-    agent: Codex
-    auth:
-      credentialBundleSecretRef:
-        name: codex-login
-        key: bundle
+  auth:
+    credentialBundleSecretRef:
+      name: codex-login
+      key: bundle
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
@@ -65,18 +61,16 @@ metadata:
 spec:
   companyRef:
     name: forge
-  type: CLIAgent
+  agent: Hermes
   model: anthropic/claude-sonnet-5
-  cli:
-    agent: Hermes
-    auth:
-      mode: Subscription
-    env:
-      - name: OPENROUTER_API_KEY
-        valueFrom:
-          secretKeyRef:
-            name: openrouter
-            key: apiKey
+  auth:
+    mode: Subscription
+  env:
+    - name: OPENROUTER_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: openrouter
+          key: apiKey
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
@@ -85,18 +79,16 @@ metadata:
 spec:
   companyRef:
     name: forge
-  type: CLIAgent
+  agent: Pi
   model: openrouter/anthropic/claude-sonnet-5
-  cli:
-    agent: Pi
-    auth:
-      mode: Subscription
-    env:
-      - name: OPENROUTER_API_KEY
-        valueFrom:
-          secretKeyRef:
-            name: openrouter
-            key: apiKey
+  auth:
+    mode: Subscription
+  env:
+    - name: OPENROUTER_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: openrouter
+          key: apiKey
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
@@ -105,15 +97,13 @@ metadata:
 spec:
   companyRef:
     name: forge
-  type: CLIAgent
+  agent: CursorAgent
   model: auto
-  apiKeySecretRefs:
-    - name: cursor
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: cursor
       key: apiKey
-  cli:
-    agent: CursorAgent
-    auth:
-      mode: APIKey
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
@@ -122,18 +112,16 @@ metadata:
 spec:
   companyRef:
     name: forge
-  type: CLIAgent
+  agent: OpenCode
   model: anthropic/claude-sonnet-5
-  cli:
-    agent: OpenCode
-    auth:
-      mode: Subscription
-    env:
-      - name: ANTHROPIC_API_KEY
-        valueFrom:
-          secretKeyRef:
-            name: anthropic
-            key: apiKey
+  auth:
+    mode: Subscription
+  env:
+    - name: ANTHROPIC_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: anthropic
+          key: apiKey
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat

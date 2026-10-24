@@ -236,7 +236,8 @@ func TestStoreNamesInFindsTheOperatorsReferences(t *testing.T) {
 	document := []byte(`providers:
   llm:
     main:
-      api_keys: ["${` + owned + `}", "${` + owned + `}", "${MANUAL_TOKEN}", "__redacted__"]
+      auth: {api_key: "${` + owned + `}", token: "${` + owned + `}"}
+      env: {MANUAL: "${MANUAL_TOKEN}", REDACTED: "__redacted__"}
 `)
 	if got := storeNamesIn(document); !slices.Equal(got, []string{owned}) {
 		t.Errorf("storeNamesIn() = %v, want [%s]", got, owned)

@@ -1609,10 +1609,11 @@ spec:
                   companies that opt in.
                 items:
                   description: |-
-                    PlatformLLMProvider is a model provider the platform offers to every
-                    Company of a class that sets spec.llm.usePlatformProviders. Its keys live in
-                    a namespace the platform controls and are pushed into the secret store of
-                    each opted-in company's engine.
+                    PlatformLLMProvider is a model the platform offers to every Company of a
+                    class that sets spec.llm.usePlatformProviders: a coding CLI, as a tenant's
+                    own LLMProvider is, signed in with a key whose Secret lives in a namespace
+                    the platform controls and is pushed into the secret store of each opted-in
+                    company's engine.
 
                     That store is the tenant's to read: the engine's API reveals any value in
                     it to whoever holds the company's access token (status.apiAccessSecretRef
@@ -1620,126 +1621,171 @@ spec:
                     with the keyring the pod holds. So every opted-in tenant can read these
                     keys. Offer keys you would give each of them: one per tenant, or the
                     per-tenant virtual keys of an LLM gateway, never the platform's own.
+
+                    It signs its CLI in with a key and nothing else: auth mode APIKey for a CLI
+                    Crewlet hands a key to, or, for Hermes, Pi and OpenCode, which read their
+                    model provider's key from that provider's own variable, the key in env. A
+                    subscription's headless token or login is one account's, which every tenant
+                    of the class would share: it belongs on a tenant's own LLMProvider. It runs
+                    in mode Text, as a model behind the engine's own tool loop, and keeps its
+                    per-seat homes on the data volume under
+                    /var/lib/crewlet/llm-cli-platform/<name>, apart from every tenant's
+                    loginName. Its rules are an LLMProvider's that apply to such a provider,
+                    each with the same message's start, and hold to the same engine.
                   properties:
-                    apiKeySecretRefs:
+                    agent:
                       description: |-
-                        apiKeySecretRefs are the provider's API keys, rotated as an
-                        LLMProvider's are.
-                      items:
-                        description: |-
-                          NamespacedSecretKeyReference selects one key of a Secret in a named
-                          namespace. Only the cluster-scoped EngineClass uses it: a platform-owned
-                          value (a managed LLM key, telemetry headers) lives in a namespace the
-                          platform controls rather than in each tenant's. The value itself still
-                          reaches every tenant that runs with it (see the field that references
-                          it); the namespace keeps tenants from the platform's Secret, not from the
-                          value.
-                        properties:
-                          key:
-                            description: key is the key within the Secret's data.
-                            maxLength: 253
-                            minLength: 1
-                            pattern: ^[-._a-zA-Z0-9]+$
-                            type: string
-                          name:
-                            description: name is the metadata.name of the Secret.
-                            maxLength: 253
-                            minLength: 1
-                            type: string
-                          namespace:
-                            description: namespace is the namespace the Secret is
-                              in.
-                            maxLength: 63
-                            minLength: 1
-                            type: string
-                        required:
-                        - key
-                        - name
-                        - namespace
-                        type: object
-                      maxItems: 16
-                      minItems: 1
-                      type: array
-                      x-kubernetes-list-type: atomic
-                    baseURL:
-                      description: |-
-                        baseURL sends requests to this endpoint instead of the vendor's own,
-                        for a gateway or a proxy. Required for type OpenAICompatible. For type
-                        Anthropic it is the gateway's root, without /v1: Crewlet's own calls,
-                        Claude Code (as ANTHROPIC_BASE_URL) and OpenCode each add the version
-                        themselves. A seat's code work running on the provider hands it to the
-                        coding agent in each box. Crewlet's `base_url`.
-                      maxLength: 2048
-                      minLength: 1
-                      type: string
-                      x-kubernetes-validations:
-                      - message: baseURL must be an absolute http or https URL
-                        rule: isURL(self) && url(self).getScheme() in ['http', 'https']
-                      - message: 'baseURL may not hold a user name or password: a
-                          credential is named through a Secret, never written into
-                          an address'
-                        rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
-                      - message: 'baseURL may not hold a ${NAME} reference: the operator
-                          refuses every one it did not write, since in many fields
-                          the engine resolves one from its own secret store and environment,
-                          which hold credentials that are not this object''s to name'
-                        rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
-                    claudeModel:
-                      description: |-
-                        claudeModel names the Claude model whose request shape an Anthropic
-                        provider uses when model is a gateway alias Crewlet cannot recognise.
-                        Crewlet's `claude_model`; type Anthropic only.
+                        agent is which CLI to drive. The model is written as this CLI reads
+                        it, and an Agent-mode run or a seat's code work is handed it
+                        unchanged: OpenCode reads `<provider>/<model>`, such as
+                        `anthropic/claude-sonnet-5`. Crewlet's `agent`.
                       enum:
-                      - claude-fable-5-1
-                      - claude-mythos-5-1
-                      - claude-fable-5
-                      - claude-mythos-5
-                      - claude-opus-5-5
-                      - claude-opus-5
-                      - claude-opus-4-8
-                      - claude-opus-4-7
-                      - claude-sonnet-5-5
-                      - claude-sonnet-5
-                      - claude-opus-4-6
-                      - claude-sonnet-4-6
-                      - claude-opus-4-5
-                      - claude-sonnet-4-5
-                      - claude-haiku-4-5
-                      - claude-opus-4-1
-                      - claude-opus-4-0
-                      - claude-opus-4
-                      - claude-sonnet-4-0
-                      - claude-sonnet-4
-                      - claude-3-7-sonnet
+                      - ClaudeCode
+                      - Codex
+                      - GeminiCLI
+                      - QwenCode
+                      - OpenCode
+                      - CursorAgent
+                      - Copilot
+                      - Grok
+                      - MuseCode
+                      - KimiCode
+                      - Hermes
+                      - Pi
                       type: string
-                    cooldowns:
-                      description: |-
-                        cooldowns is how long a failing key is set aside. Crewlet's
-                        `cooldowns`.
+                    auth:
+                      description: auth is how the CLI signs in. Crewlet's `auth`.
                       minProperties: 1
                       properties:
-                        authSeconds:
+                        apiKeySecretRef:
                           description: |-
-                            authSeconds is how long a key the provider refused is set aside. Unset
-                            takes Crewlet's default of 300.
-                          format: int32
-                          maximum: 86400
-                          minimum: 60
-                          type: integer
-                        rateLimitSeconds:
+                            apiKeySecretRef is the Secret key holding the API key auth mode
+                            APIKey hands the CLI, in the key variable Crewlet's profile for it
+                            names. Crewlet's `api_key`, a credential position.
+                          properties:
+                            key:
+                              description: key is the key within the Secret's data.
+                              maxLength: 253
+                              minLength: 1
+                              pattern: ^[-._a-zA-Z0-9]+$
+                              type: string
+                            name:
+                              description: name is the metadata.name of the Secret.
+                              maxLength: 253
+                              minLength: 1
+                              type: string
+                            namespace:
+                              description: namespace is the namespace the Secret is
+                                in.
+                              maxLength: 63
+                              minLength: 1
+                              type: string
+                          required:
+                          - key
+                          - name
+                          - namespace
+                          type: object
+                        mode:
                           description: |-
-                            rateLimitSeconds is how long a key that hit a rate limit is set aside.
-                            Unset takes Crewlet's default of 3600.
-                          format: int32
-                          maximum: 86400
-                          minimum: 60
-                          type: integer
+                            mode is how the CLI signs in: APIKey, with apiKeySecretRef, or
+                            Subscription, which signs Hermes, Pi or OpenCode in with its model
+                            provider's key in env. Unset is Subscription. Crewlet's `mode`.
+                          enum:
+                          - Subscription
+                          - APIKey
+                          type: string
                       type: object
+                      x-kubernetes-validations:
+                      - message: 'apiKeySecretRef is the key auth mode APIKey hands
+                          the CLI: it is required with mode APIKey and not allowed
+                          otherwise, as Crewlet reads a key under no other mode'
+                        rule: has(self.apiKeySecretRef) == (has(self.mode) && self.mode
+                          == 'APIKey')
+                    env:
+                      description: |-
+                        env is extra environment of the CLI, as an LLMProvider's spec.env is,
+                        each value read from a Secret in a namespace the platform controls:
+                        the model provider's key Hermes, Pi or OpenCode signs in with, or the
+                        address of the platform's gateway a CLI reads from its environment
+                        (ClaudeCode's ANTHROPIC_BASE_URL). A credential-named value of an
+                        OpenCode provider travels into each box of a seat's code work on it,
+                        in the tenant's own E2B account. Crewlet's `env`, a credential
+                        position.
+                      items:
+                        description: |-
+                          NamespacedSecretEnvVar is a named credential an EngineClass gives, delivered
+                          as an environment variable whose value is read from a Secret in a namespace
+                          the platform controls, such as a platform model provider's key. Like
+                          SecretEnvVar it takes no literal value, and like NamespacedSecretKeyReference
+                          it is used only by the cluster-scoped EngineClass.
+                        properties:
+                          name:
+                            description: name is the variable's name.
+                            maxLength: 128
+                            minLength: 1
+                            pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+                            type: string
+                          valueFrom:
+                            description: valueFrom is the Secret key the value is
+                              read from.
+                            properties:
+                              secretKeyRef:
+                                description: secretKeyRef selects the Secret key that
+                                  holds the value.
+                                properties:
+                                  key:
+                                    description: key is the key within the Secret's
+                                      data.
+                                    maxLength: 253
+                                    minLength: 1
+                                    pattern: ^[-._a-zA-Z0-9]+$
+                                    type: string
+                                  name:
+                                    description: name is the metadata.name of the
+                                      Secret.
+                                    maxLength: 253
+                                    minLength: 1
+                                    type: string
+                                  namespace:
+                                    description: namespace is the namespace the Secret
+                                      is in.
+                                    maxLength: 63
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - key
+                                - name
+                                - namespace
+                                type: object
+                            required:
+                            - secretKeyRef
+                            type: object
+                        required:
+                        - name
+                        - valueFrom
+                        type: object
+                      maxItems: 16
+                      type: array
+                      x-kubernetes-list-map-keys:
+                      - name
+                      x-kubernetes-list-type: map
+                    maxConcurrent:
+                      description: |-
+                        maxConcurrent is how many CLI processes the provider runs at once;
+                        each takes 200 to 450 MB of the engine pod's memory, OpenCode's at the
+                        top of that range (docs/guides/cli-agents.md). Unset takes
+                        Crewlet's default of 4. Crewlet's `max_concurrent`.
+                      format: int32
+                      maximum: 64
+                      minimum: 1
+                      type: integer
                     model:
                       description: |-
-                        model is the model id requests are sent for, as the provider names it.
-                        Crewlet's `model`. Crewlet trims it of white space and refuses a
-                        provider with nothing left, as naming no model.
+                        model is the model the CLI runs, in the CLI's own grammar: an alias
+                        or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id
+                        for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.
+                        Crewlet trims it of white space and refuses a provider with nothing
+                        left, as naming no model.
                       maxLength: 256
                       minLength: 1
                       type: string
@@ -1767,77 +1813,99 @@ spec:
                           runs every seat that names no chain on the provider keyed
                           default, ahead of spec.llm.order'
                         rule: self != 'default'
-                    reasoning:
-                      description: |-
-                        reasoning turns on an OpenAI reasoning model's effort, so that
-                        reasoningEffort is sent. Crewlet's `reasoning`; type OpenAI only.
-                      type: boolean
-                    reasoningBudgetTokens:
-                      description: |-
-                        reasoningBudgetTokens is the thinking budget of an older, budget-based
-                        Claude model. Unset means such a model does not think. Crewlet's
-                        `reasoning_budget_tokens`; type Anthropic only.
-                      format: int32
-                      minimum: 1024
-                      type: integer
-                    reasoningEffort:
-                      description: |-
-                        reasoningEffort is how hard the model thinks. For Anthropic it is sent
-                        on every call, and unset means High. For OpenAI it is sent only while
-                        reasoning is true, so it requires reasoning; an OpenAICompatible
-                        provider cannot turn reasoning on and takes no reasoningEffort.
-                        Crewlet's `reasoning_effort`.
-                      enum:
-                      - Low
-                      - Medium
-                      - High
-                      - XHigh
-                      - Max
-                      type: string
                     timeoutSeconds:
                       description: |-
-                        timeoutSeconds bounds one HTTP attempt: the whole of a unary call, the
-                        longest silence in a streamed one. Unset takes Crewlet's default of
-                        600. Crewlet's `timeout_seconds`.
+                        timeoutSeconds caps one invocation of the CLI, wall clock: its
+                        launch, the model's answer and the CLI's own retries. Unset takes
+                        Crewlet's default of 600, the ceiling Anthropic documents for one
+                        answer of a current Claude model at its full output. A timeout is
+                        retryable, so a seat's chain moves on to its next provider. Crewlet's
+                        `timeout_seconds`.
                       format: int32
                       minimum: 1
                       type: integer
-                    type:
-                      description: type is which model API the provider speaks. Crewlet's
-                        `type`.
-                      enum:
-                      - Anthropic
-                      - OpenAI
-                      - OpenAICompatible
-                      - CLIAgent
-                      type: string
                   required:
+                  - agent
+                  - auth
                   - model
                   - name
-                  - type
                   type: object
                   x-kubernetes-validations:
-                  - message: claudeModel applies to type Anthropic only
-                    rule: '!has(self.claudeModel) || self.type == ''Anthropic'''
-                  - message: reasoning applies to type OpenAI only; an Anthropic model's
-                      thinking depth is reasoningEffort
-                    rule: '!has(self.reasoning) || self.type == ''OpenAI'''
-                  - message: reasoningEffort is sent to an OpenAI model only while
-                      reasoning is true, and never to an OpenAICompatible one
-                    rule: '!has(self.reasoningEffort) || self.type == ''Anthropic''
-                      || (self.type == ''OpenAI'' && has(self.reasoning) && self.reasoning)'
-                  - message: reasoningBudgetTokens applies to type Anthropic only
-                    rule: '!has(self.reasoningBudgetTokens) || self.type == ''Anthropic'''
-                  - message: baseURL is required for type OpenAICompatible, which
-                      has no default endpoint
-                    rule: self.type != 'OpenAICompatible' || has(self.baseURL)
-                  - message: apiKeySecretRefs needs at least one key for types Anthropic
-                      and OpenAI
-                    rule: self.type == 'OpenAICompatible' || has(self.apiKeySecretRefs)
-                  - message: 'a platform model provider speaks a model API: type CLIAgent
-                      drives a CLI on one subscription login, which is a tenant''s
-                      own LLMProvider or nobody''s'
-                    rule: self.type != 'CLIAgent'
+                  - fieldPath: .auth
+                    message: 'a platform provider signs its CLI in with a key the
+                      class gives each tenant: auth mode APIKey with auth.apiKeySecretRef,
+                      for a CLI Crewlet hands a key to, or for Hermes, Pi and OpenCode
+                      their model provider''s key in env, under a name Crewlet reads
+                      as a credential, one of whose parts between underscores is,
+                      in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN,
+                      SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH
+                      or PAT (such as OPENROUTER_API_KEY). A subscription''s token
+                      or login is one account''s, which every tenant of the class
+                      would share: it belongs on a tenant''s own LLMProvider'
+                    rule: '!has(self.auth) || (has(self.auth.mode) && self.auth.mode
+                      == ''APIKey'') || (self.agent in [''Hermes'', ''Pi'', ''OpenCode'']
+                      && has(self.env) && self.env.exists(e, e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')))'
+                  - message: 'auth mode APIKey takes a CLI Crewlet hands a key to:
+                      ClaudeCode, Codex, GeminiCLI, QwenCode, CursorAgent, Copilot,
+                      Grok or MuseCode. Crewlet''s profiles for OpenCode, KimiCode,
+                      Hermes and Pi name no key variable: give Hermes, Pi or OpenCode
+                      its model provider''s key in env under mode Subscription; KimiCode
+                      reads a key only from its own files, which a platform provider
+                      does not give it'
+                    rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode
+                      != ''APIKey'' || self.agent in [''ClaudeCode'', ''Codex'', ''GeminiCLI'',
+                      ''QwenCode'', ''CursorAgent'', ''Copilot'', ''Grok'', ''MuseCode'']'
+                  - fieldPath: .env
+                    message: 'env may not set the CLI''s own token or key variable
+                      (ClaudeCode''s CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY,
+                      Codex''s OPENAI_API_KEY, GeminiCLI''s GEMINI_API_KEY, QwenCode''s
+                      DASHSCOPE_API_KEY, CursorAgent''s CURSOR_API_KEY, Copilot''s
+                      GITHUB_TOKEN, Grok''s XAI_API_KEY, MuseCode''s META_API_KEY):
+                      Crewlet''s auth owns it, and whether a value in env reaches
+                      the CLI would turn on the auth mode. Give the key as auth.apiKeySecretRef
+                      with auth mode APIKey'
+                    rule: '!has(self.env) || !self.env.exists(e, (self.agent == ''ClaudeCode''
+                      && e.name in [''CLAUDE_CODE_OAUTH_TOKEN'', ''ANTHROPIC_API_KEY''])
+                      || (self.agent == ''Codex'' && e.name == ''OPENAI_API_KEY'')
+                      || (self.agent == ''GeminiCLI'' && e.name == ''GEMINI_API_KEY'')
+                      || (self.agent == ''QwenCode'' && e.name == ''DASHSCOPE_API_KEY'')
+                      || (self.agent == ''CursorAgent'' && e.name == ''CURSOR_API_KEY'')
+                      || (self.agent == ''Copilot'' && e.name == ''GITHUB_TOKEN'')
+                      || (self.agent == ''Grok'' && e.name == ''XAI_API_KEY'') ||
+                      (self.agent == ''MuseCode'' && e.name == ''META_API_KEY''))'
+                  - fieldPath: .env
+                    message: 'env may not set a variable Crewlet sets on every call
+                      of the CLI to keep it inside its seat''s own home and its call''s
+                      working directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME,
+                      XDG_CACHE_HOME or TMPDIR for any CLI, and ClaudeCode''s CLAUDE_CONFIG_DIR,
+                      Codex''s CODEX_HOME, OpenCode''s OPENCODE_CONFIG_DIR and OPENCODE_CONFIG_PROJECT_DISABLE,
+                      CursorAgent''s CURSOR_CONFIG_DIR, KimiCode''s KIMI_CODE_HOME,
+                      Hermes''s HERMES_HOME or Pi''s PI_CODING_AGENT_DIR. A value
+                      there would replace that isolation for every seat on the provider,
+                      so Crewlet refuses the document: drop it'
+                    rule: '!has(self.env) || !self.env.exists(e, e.name in [''HOME'',
+                      ''XDG_CONFIG_HOME'', ''XDG_DATA_HOME'', ''XDG_STATE_HOME'',
+                      ''XDG_CACHE_HOME'', ''TMPDIR''] || (self.agent == ''ClaudeCode''
+                      && e.name == ''CLAUDE_CONFIG_DIR'') || (self.agent == ''Codex''
+                      && e.name == ''CODEX_HOME'') || (self.agent == ''OpenCode''
+                      && e.name in [''OPENCODE_CONFIG_DIR'', ''OPENCODE_CONFIG_PROJECT_DISABLE''])
+                      || (self.agent == ''CursorAgent'' && e.name == ''CURSOR_CONFIG_DIR'')
+                      || (self.agent == ''KimiCode'' && e.name == ''KIMI_CODE_HOME'')
+                      || (self.agent == ''Hermes'' && e.name == ''HERMES_HOME'') ||
+                      (self.agent == ''Pi'' && e.name == ''PI_CODING_AGENT_DIR''))'
+                  - fieldPath: .model
+                    message: 'an OpenCode model is <provider>/<model>, which OpenCode
+                      splits at its first slash: a model with no slash, or with nothing
+                      but white space before or after it, names no provider or no
+                      model, and every call the provider makes would fail inside OpenCode,
+                      which OpenCode 2 refuses as Invalid model reference. Name the
+                      provider as OpenCode spells it (opencode models --standalone
+                      lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5,
+                      with that provider''s key in env'
+                    rule: self.agent != 'OpenCode' || !has(self.model) || (self.model.indexOf('/')
+                      >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size()
+                      > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size()
+                      > 0)
                 maxItems: 16
                 type: array
                 x-kubernetes-list-map-keys:
@@ -2811,7 +2879,7 @@ spec:
                           GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION, and a sandbox run none
                           of it. So a variable a tool server reads goes in its MCPServer's env
                           (docs/guides/tool-servers.md), and any other a coding CLI reads in its
-                          LLMProvider's spec.cli.env. A Company's spec.runtime.env is merged over
+                          LLMProvider's spec.env. A Company's spec.runtime.env is merged over
                           this env by name. The same names are refused as there: those
                           starting with CREWLET_ or OTEL_, and ANTHROPIC_API_KEY and
                           OPENAI_API_KEY.

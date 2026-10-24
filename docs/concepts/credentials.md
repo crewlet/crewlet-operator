@@ -61,16 +61,15 @@ uses is readable by the company's tenant:
   commands included, run in the Company's E2B sandbox, in the Company's own
   E2B account, where the coding agent, or the executor's CLI, runs with
   every permission.
-  Crewlet exports into each box of code work the first `apiKeySecretRefs`
-  key of the provider the code work runs on, an `Anthropic`, `OpenAI` or
-  `OpenAICompatible` `LLMProvider` or platform provider (as
-  `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`), and under Claude Code its
-  `baseURL` (`ANTHROPIC_BASE_URL`), unless the seat's own sandbox
-  environment signs Claude Code in; a `CLIAgent` provider's token, key or
-  credential-named variable in `cli.env` travels the same way, and so does
-  an agent-mode provider's into each of its executor's runs. The coding
-  agent or the CLI can read it, and the run's report is redacted by the
-  shape of a credential, not by its value ([What a coding box
+  Crewlet exports into each box of code work the sign-in of the provider
+  the code work runs on, an `LLMProvider` or a platform provider: its
+  headless token or its `auth.apiKeySecretRef` key, under the variable its
+  CLI reads (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`), or for
+  OpenCode the credential-named variables of its `env`, unless the seat's
+  own sandbox environment sets that variable itself; an agent-mode
+  provider's travels the same way into each of its executor's runs. The
+  coding agent or the CLI can read it, and the run's report is redacted by
+  the shape of a credential, not by its value ([What a coding box
   carries](../guides/credentials.md#what-a-coding-box-carries)).
 
 > **Caution: what a class gives its companies is every tenant's.** A
@@ -93,8 +92,12 @@ has a field that fills it with a reference.
 
 | Crewlet position | Field | Reference |
 |---|---|---|
-| `providers.llm.*.api_keys[]` | `LLMProvider.spec.apiKeySecretRefs` | one `SecretKeyReference` per key |
-| `providers.llm.*.api_keys[]`, for a model the platform provides | `EngineClass.spec.platformLLMProviders[].apiKeySecretRefs` | one `NamespacedSecretKeyReference` per key |
+| `providers.llm.*.auth.api_key` | `LLMProvider.spec.auth.apiKeySecretRef` | `SecretKeyReference` |
+| `providers.llm.*.auth.api_key`, for a model the platform provides | `EngineClass.spec.platformLLMProviders[].auth.apiKeySecretRef` | `NamespacedSecretKeyReference` |
+| `providers.llm.*.auth.token` | `LLMProvider.spec.auth.tokenSecretRef` | `SecretKeyReference` |
+| `providers.llm.*.auth.credential_bundle` | `LLMProvider.spec.auth.credentialBundleSecretRef` | `SecretKeyReference` |
+| `providers.llm.*.env.*` | `LLMProvider.spec.env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
+| `providers.llm.*.env.*`, for a model the platform provides | `EngineClass.spec.platformLLMProviders[].env[].valueFrom.secretKeyRef` | one `NamespacedSecretKeyReference` per variable |
 | `providers.embeddings.api_key` | `Company.spec.embeddings.apiKeySecretRef` | `SecretKeyReference` |
 | `providers.sandbox.e2b.api_key` | `Company.spec.sandbox.e2b.apiKeySecretRef` | `SecretKeyReference` |
 | `providers.sandbox.setup[].files.*` | `Company.spec.sandbox.setup[].files[].valueFrom.secretKeyRef` | one `SecretKeyReference` per file |
@@ -129,9 +132,6 @@ has a field that fills it with a reference.
 | `integrations.datadog.provisioning.api_key` | `Integration.spec.datadog.apiKeySecretRef` | `SecretKeyReference` |
 | `integrations.datadog.provisioning.app_key` | `Integration.spec.datadog.appKeySecretRef` | `SecretKeyReference` |
 | `integrations.atlassian.api_key` | `Integration.spec.atlassian.apiKeySecretRef` | `SecretKeyReference` |
-| `providers.llm.*.cli.auth.token` | `LLMProvider.spec.cli.auth.tokenSecretRef` | `SecretKeyReference` |
-| `providers.llm.*.cli.auth.credential_bundle` | `LLMProvider.spec.cli.auth.credentialBundleSecretRef` | `SecretKeyReference` |
-| `providers.llm.*.cli.env.*` | `LLMProvider.spec.cli.env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
 
 A tool server's `env` and `headers` and the values of a Unit's or a Seat's
 `spec.mcp` also take a setting that is no credential (a feature flag a tool
@@ -289,7 +289,7 @@ document. The operator handles them without a field:
   ([Stdio and HTTP](../guides/tool-servers.md#stdio-and-http)), and a
   coding CLI that part and the variables its Crewlet profile passes
   through, so a setting a tool server reads goes in its `MCPServer`'s
-  `env`, and one a coding CLI reads in its `LLMProvider`'s `cli.env`.
+  `env`, and one a coding CLI reads in its `LLMProvider`'s `env`.
 
 ---
 

@@ -2,22 +2,23 @@ name: Harbor
 providers:
   llm:
     anthropic:
-      api_keys:
-      - ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
-      model: claude-sonnet-5
-      type: anthropic
+      agent: opencode
+      auth:
+        mode: subscription
+      env:
+        ANTHROPIC_API_KEY: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+      model: anthropic/claude-sonnet-5
+      state_dir: /var/lib/crewlet/llm-cli/anthropic
     opencode:
-      cli:
-        agent: opencode
-        auth:
-          mode: subscription
-        env:
-          OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
-        mode: agent
-        run_in: e2b
-        state_dir: /var/lib/crewlet/llm-cli/opencode
+      agent: opencode
+      auth:
+        mode: subscription
+      env:
+        OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
+      mode: agent
       model: openrouter/anthropic/claude-sonnet-5
-      type: cli-agent
+      run_in: e2b
+      state_dir: /var/lib/crewlet/llm-cli/opencode
   llm_order:
   - anthropic
   - opencode
