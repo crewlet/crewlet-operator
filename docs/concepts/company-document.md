@@ -165,7 +165,7 @@ The engine does not report when a schedule last fired in a form a status
 field could carry: its record of the fires it dispatched is each node's own
 table, which the answering node serves, while the fleet's claim on each fire
 is internal to its coordination store. A Schedule therefore has no
-`lastScheduleTime`; the engine's dashboard (**Agents › Schedules**) shows
+`lastScheduleTime`; the engine's dashboard (**Company › Schedules**) shows
 each schedule's next fire and its history.
 
 ### Placement
