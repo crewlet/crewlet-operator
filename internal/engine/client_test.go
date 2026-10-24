@@ -118,6 +118,17 @@ func answer(status int, body string) http.HandlerFunc {
 	}
 }
 
+// answerAfter writes body, JSON, with status and a Retry-After of seconds:
+// a 503 the engine writes where a wait clears what it met. The engine words a
+// 503 by that header (httpjson.UnavailableWith), so a double that leaves it
+// off answers with a message the engine never writes beside that body.
+func answerAfter(status int, seconds, body string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", seconds)
+		answer(status, body)(w, r)
+	}
+}
+
 // page writes body as a proxy in front of the engine would: not JSON.
 func page(status int) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
@@ -492,13 +503,24 @@ func TestErrorMapping(t *testing.T) {
 			wantStatus: http.StatusConflict,
 		},
 		{
+			// The authority table's unknown: two seconds, and the code's
+			// own sentence, which invites the wait.
 			name: "an engine that could not decide",
-			handler: answer(http.StatusServiceUnavailable, `{"error":"unavailable",`+
+			handler: answerAfter(http.StatusServiceUnavailable, "2", `{"error":"unavailable",`+
 				`"message":"Can't answer right now. Try again in a moment, or ask another node."}`),
 			sentinel: engine.ErrUnavailable, wantCode: "unavailable", wantStatus: http.StatusServiceUnavailable,
 		},
 		{
-			// A 503 asks for the request again whoever wrote it.
+			// A condition no wait clears: the identity directory a write
+			// that removes a human seat reads, refused on this node until
+			// somebody acts. No Retry-After, and a message that says
+			// waiting won't change it.
+			name:     "a condition no wait clears",
+			handler:  answer(http.StatusServiceUnavailable, identityUnavailableNoWait),
+			sentinel: engine.ErrUnavailable, wantCode: "identity_unavailable", wantStatus: http.StatusServiceUnavailable,
+		},
+		{
+			// A 503 is retried whoever wrote it.
 			name: "a proxy's 503", handler: page(http.StatusServiceUnavailable),
 			sentinel: engine.ErrUnavailable, wantStatus: http.StatusServiceUnavailable,
 		},
@@ -662,25 +684,41 @@ func TestAuthorityRefusalNamesItsGrants(t *testing.T) {
 	}
 }
 
-// TestUnavailableCarriesTheEnginesRetryAfter reads when the engine asked to
-// be sent a request again: a 503's Retry-After in whole seconds, which is
-// what the engine writes. A date is not read, nor is the header on anything
-// but a 503.
-func TestUnavailableCarriesTheEnginesRetryAfter(t *testing.T) {
-	const identityUnavailable = `{"error":"identity_unavailable",` +
+// The engine's refusal of a write that removes a human seat when the node
+// could not read the identity directory to see whether anybody holds it, as
+// it words it under a wait (identityUnavailableSoon, beside a two-second
+// Retry-After) and where no wait clears it (identityUnavailableNoWait, with
+// none).
+const (
+	identityUnavailableSoon = `{"error":"identity_unavailable",` +
 		`"hint":"This write removes a human seat, and this node could not read the identity directory to see ` +
 		`whether anybody holds it; nothing was written.",` +
 		`"message":"Can't check who you are right now. Try again in a moment.","seats":["founder"]}`
+	identityUnavailableNoWait = `{"error":"identity_unavailable",` +
+		`"hint":"This write removes a human seat, and this node could not read the identity directory to see ` +
+		`whether anybody holds it; nothing was written.",` +
+		`"message":"Can't check who you are here, and waiting won't change that.","seats":["founder"]}`
+)
+
+// TestUnavailableCarriesTheEnginesRetryAfter reads when the engine asked to
+// be sent a request again: a 503's Retry-After in whole seconds, which is
+// what the engine writes, and none where it wrote none, which it words as a
+// wait that changes nothing. A date is not read, nor is the header on
+// anything but a 503.
+func TestUnavailableCarriesTheEnginesRetryAfter(t *testing.T) {
 	for _, c := range []struct {
 		name   string
 		status int
 		header string
+		body   string
 		want   time.Duration
 	}{
-		{name: "seconds", status: http.StatusServiceUnavailable, header: "2", want: 2 * time.Second},
-		{name: "none", status: http.StatusServiceUnavailable},
-		{name: "a date", status: http.StatusServiceUnavailable, header: "Fri, 16 Oct 2026 23:59:00 GMT"},
-		{name: "not a 503", status: http.StatusConflict, header: "2"},
+		{name: "seconds", status: http.StatusServiceUnavailable, header: "2", body: identityUnavailableSoon,
+			want: 2 * time.Second},
+		{name: "none", status: http.StatusServiceUnavailable, body: identityUnavailableNoWait},
+		{name: "a date", status: http.StatusServiceUnavailable, header: "Fri, 16 Oct 2026 23:59:00 GMT",
+			body: identityUnavailableSoon},
+		{name: "not a 503", status: http.StatusConflict, header: "2", body: identityUnavailableSoon},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			f := newFakeEngine(t)
@@ -688,7 +726,7 @@ func TestUnavailableCarriesTheEnginesRetryAfter(t *testing.T) {
 				if c.header != "" {
 					w.Header().Set("Retry-After", c.header)
 				}
-				answer(c.status, identityUnavailable)(w, r)
+				answer(c.status, c.body)(w, r)
 			})
 			_, err := apply(f, write)
 			var apiErr *engine.APIError
@@ -778,7 +816,7 @@ func TestStartingWriteIsAskedAgainWhenTheEngineSays(t *testing.T) {
 		w.Header().Set("Retry-After", "10")
 		answer(http.StatusServiceUnavailable, `{"error":"starting",`+
 			`"message":"This node is still starting and is not serving yet. Try again in a moment.",`+
-			`"detail":"This node is recovering what it holds — its store, its broker and its copy of the estate — `+
+			`"detail":"This node is recovering what it holds (its store, its broker and its copy of the estate) `+
 			`and serves nothing until it has started.",`+
 			`"hint":"Retry after the Retry-After: once the node serves, /health stops answering status \"starting\" `+
 			`and /ready stops naming reason \"starting\"."}`)(w, r)
@@ -833,12 +871,17 @@ func TestPutSecretSendsTheRawValue(t *testing.T) {
 // TestPutSecretErrorsNeverContainTheValue holds the package's promise on every
 // way a write can fail: a refusal, an error answer, a proxy's page and a
 // transport failure. The engine's answers are as it words them: a value past
-// what the route takes, and a store it could not write.
+// what the route takes; a store too busy to take it, a condition of the node
+// crewlet#142 answers 503 with, in words, where crewlet's main answered 500;
+// and a fault of its own.
 func TestPutSecretErrorsNeverContainTheValue(t *testing.T) {
 	const value = "sk-live-do-not-leak"
 	cases := map[string]http.HandlerFunc{
 		"refused": answer(http.StatusRequestEntityTooLarge, `{"error":"body_too_large","message":"The request body is `+
 			`larger than this endpoint accepts. Send a smaller document, or split the change across more than one request."}`),
+		"a store too busy to take it": answerAfter(http.StatusServiceUnavailable, "2", `{"error":"unavailable",`+
+			`"message":"Can't answer right now. Try again in a moment, or ask another node.",`+
+			`"detail":"This node was too busy to take this in time. Try again in a moment."}`),
 		"internal error": answer(http.StatusInternalServerError, `{"error":"internal_error",`+
 			`"message":"Something went wrong inside the engine. The reason is in this node's log."}`),
 		"a proxy's page": page(http.StatusBadGateway),
@@ -1396,22 +1439,22 @@ func TestRevisionReadsTheStoredDocument(t *testing.T) {
 }
 
 // TestActiveConfigWhileTheFleetCannotBeRead pins what an engine that cannot
-// read its activation pointer answers GET /config with: 503 with a
-// Retry-After, never a guess, and the client's error is ErrUnavailable with
-// that delay, which the config reconciler retries at rather than reporting a
-// fault.
+// read its activation pointer answers GET /config with, as crewlet#142
+// answers a condition of the node on a read: 503 unavailable with a
+// Retry-After, the five seconds of its health tick, and the condition in words
+// as the detail, never a guess. The client's error is ErrUnavailable with that
+// delay and those words, which the config reconciler retries at, and quotes,
+// rather than reporting a fault.
 func TestActiveConfigWhileTheFleetCannotBeRead(t *testing.T) {
+	const said = "This node couldn't reach the rest of the fleet. Try again in a moment."
 	f := newFakeEngine(t)
 	f.handle("GET /health", answer(http.StatusOK, `{"status":"ok","applied_epoch":3}`))
-	f.handle("GET /config", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Retry-After", "2")
-		answer(http.StatusServiceUnavailable, `{"error":"unavailable","message":"try again shortly",
-"reason":"the fleet's activation could not be read from the coordination store"}`)(w, r)
-	})
+	f.handle("GET /config", answerAfter(http.StatusServiceUnavailable, "5", `{"error":"unavailable",`+
+		`"message":"Can't answer right now. Try again in a moment, or ask another node.","detail":"`+said+`"}`))
 	_, err := f.client().ActiveConfig(context.Background())
 	apiErr, ok := errors.AsType[*engine.APIError](err)
-	if !errors.Is(err, engine.ErrUnavailable) || !ok || apiErr.RetryAfter != 2*time.Second {
-		t.Fatalf("ActiveConfig() = %v, want ErrUnavailable asking again in 2s", err)
+	if !errors.Is(err, engine.ErrUnavailable) || !ok || apiErr.RetryAfter != 5*time.Second || apiErr.Message != said {
+		t.Fatalf("ActiveConfig() = %v, want ErrUnavailable asking again in 5s, in the engine's words", err)
 	}
 }
 
@@ -1452,25 +1495,26 @@ func TestUnconfirmedActivationIsTheEnginesUnknownOutcome(t *testing.T) {
 	for _, c := range []struct {
 		name, body string
 		status     int
+		retryAfter string
 		stored     string
 	}{
-		{name: "an activation whose answer was lost", status: http.StatusServiceUnavailable, stored: "rev-10",
-			body: unknownOutcome("rev-10", "node-0", "rev-9")},
+		{name: "an activation whose answer was lost", status: http.StatusServiceUnavailable, retryAfter: "2",
+			stored: "rev-10", body: unknownOutcome("rev-10", "node-0", "rev-9")},
 		{name: "a write that lost the race", status: http.StatusConflict,
 			body: `{"error":"revision_advanced","current_revision_id":"rev-9","stored_revision_id":"rev-10"}`},
 		{name: "a seed another write beat", status: http.StatusPreconditionFailed,
 			body: `{"error":"already_configured","current_revision_id":"rev-9","stored_revision_id":"rev-10"}`},
-		{name: "an engine that could not store it", status: http.StatusServiceUnavailable,
-			body: `{"error":"unavailable","message":"Can't answer right now. Try again in a moment, or ask another node."}`},
+		{name: "an engine that could not store it", status: http.StatusServiceUnavailable, retryAfter: "2",
+			body: `{"error":"unavailable","message":"Can't answer right now. Try again in a moment, or ask another node.",` +
+				`"detail":"This node couldn't reach the rest of the fleet. Try again in a moment."}`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			f := newFakeEngine(t)
-			f.handle("PUT /config", func(w http.ResponseWriter, r *http.Request) {
-				if c.stored != "" {
-					w.Header().Set("Retry-After", "2")
-				}
-				answer(c.status, c.body)(w, r)
-			})
+			if c.retryAfter != "" {
+				f.handle("PUT /config", answerAfter(c.status, c.retryAfter, c.body))
+			} else {
+				f.handle("PUT /config", answer(c.status, c.body))
+			}
 			_, err := apply(f, write)
 			stored, ok := engine.UnconfirmedActivation(err)
 			if ok != (c.stored != "") || stored != c.stored {
@@ -1533,11 +1577,9 @@ func TestFleetRefusals(t *testing.T) {
 	unavailable := newFakeEngine(t)
 	// The lease table is the coordination store's, and one that did not
 	// answer clears by the health tick's five seconds.
-	unavailable.handle("GET /fleet", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Retry-After", "5")
-		answer(http.StatusServiceUnavailable,
-			`{"error":"unavailable","message":"Can't answer right now. Try again in a moment, or ask another node."}`)(w, r)
-	})
+	unavailable.handle("GET /fleet", answerAfter(http.StatusServiceUnavailable, "5",
+		`{"detail":"This node couldn't reach the rest of the fleet. Try again in a moment.","error":"unavailable",`+
+			`"message":"Can't answer right now. Try again in a moment, or ask another node."}`))
 	if got, err := unavailable.client().Fleet(context.Background()); err == nil {
 		t.Errorf("Fleet() of an engine answering 503 = %+v, want an error", got)
 	} else if apiErr, ok := errors.AsType[*engine.APIError](err); !ok || apiErr.StatusCode != http.StatusServiceUnavailable {

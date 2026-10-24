@@ -120,7 +120,7 @@ with your last change yet.
 | | False | `Drifted` | Under `Observe`, the engine runs another document; the message names the places that differ. |
 | | False | `Applying` | The operator activated the revision and the engine has not applied it yet; it runs the previous one meanwhile. Usually gone within seconds; it turns into `ApplyFailed` when the engine fails the revision or has not applied it 72 seconds after the write, or after the operator found it running where it adopts a revision it did not write. |
 | | False | `ApplyFailed` | The engine's first data pod, the one the operator reaches, did not apply the revision: it keeps running the one it ran before, and starts on the one its volume names if it restarts, the same one unless the engine is still moving it (the message says which), and the engine's secret store keeps every value of either meanwhile. The message carries the engine's status, its posture (`isolated` on a single node, `shed` or `stuck` beside peers that applied it) and its own account of the failure; see [The engine did not apply a revision](#the-engine-did-not-apply-a-revision). |
-| | False | `EngineUnavailable` | The operator cannot reach the engine, the engine does not know its token, or the engine answered `503`: it asked to be asked again later (it is starting, or cannot read the coordination store that holds the fleet's revision), or it stored the operator's write and couldn't confirm activating it. Looked at again every ten seconds, or sooner when the engine says when, and a write it couldn't confirm is not sent again until a read shows it did not land; see [The operator cannot reach the engine](#the-operator-cannot-reach-the-engine). |
+| | False | `EngineUnavailable` | The operator cannot reach the engine, the engine does not know its token, or the engine answered `503`: it asked to be asked again later (it is starting, cannot read the coordination store that holds the fleet's revision, or met a condition of its own that clears, such as a store busy with other writes), met something on its side that waiting doesn't clear, or stored the operator's write and couldn't confirm activating it. Looked at again every ten seconds, or sooner when the engine says when, and a write it couldn't confirm is not sent again until a read shows it did not land; see [The operator cannot reach the engine](#the-operator-cannot-reach-the-engine). |
 | | False | `WriteRefused` | The engine refuses the operator's own token a change to the document (`403 config_managed`): its `api.auth.company_writers` names other tokens. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
 | | False | `NotGranted` | The engine knows the operator's token and will not let it make a request the operator needs (`403`): the token lacks the grant the message names, or the engine's identity directory binds it to a seat the company no longer has. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
 | | False | `SeatHeld` | The document takes a human seat out of the company, or makes it an agent's, while a person, a service account or an open invitation holds it in the engine (`409 seat_held`). The message names each seat and what holds it; the engine keeps running the revision it runs. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
@@ -372,6 +372,16 @@ requests to `http://<company>-data-0.<company>-data.<namespace>.svc:8080` fail:
   document it cannot vouch for, and the engine logs
   `config_request_unavailable`. It clears once the engine's broker is back;
   the data pod's log says why it is not.
+- The engine met a condition of its own that clears: its store busy with
+  other writes, closed while the node adopts a peer's snapshot or shuts
+  down, or a request out of time. `/config` and `/secrets` answer
+  `503 unavailable` with a `Retry-After` the operator follows, and the
+  condition in the engine's words, which the message quotes.
+- The engine met something on its side that waiting doesn't clear. It
+  answers `503` with no `Retry-After`, and the message says waiting won't
+  change that and, where the engine can tell, who has to act. The engine's
+  log names what it met. The operator keeps asking every ten seconds, so
+  `ConfigApplied` turns once that is cleared in the engine.
 - The engine stored the operator's write and couldn't confirm that it
   activated it: the message names the revision. The engine may run it or may
   not. Nothing needs doing: the operator keeps the write in

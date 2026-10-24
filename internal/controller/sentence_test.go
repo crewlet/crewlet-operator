@@ -35,7 +35,7 @@ var (
 	quotedSentence = &engine.APIError{StatusCode: http.StatusServiceUnavailable, Code: "unavailable",
 		Message: "Can't answer right now. Try again in a moment, or ask another node.", RetryAfter: 2 * time.Second}
 	quotedHint = &engine.APIError{StatusCode: http.StatusServiceUnavailable, Code: "starting",
-		Message: "This node is recovering what it holds — its store, its broker and its copy of the estate — " +
+		Message: "This node is recovering what it holds (its store, its broker and its copy of the estate) " +
 			"and serves nothing until it has started.",
 		Hint: `Retry after the Retry-After: once the node serves, /health stops answering status "starting" ` +
 			`and /ready stops naming reason "starting".`,

@@ -65,7 +65,10 @@ var (
 	// could not decide who is asking, or could not read what the request
 	// needs, such as who holds a seat a write takes away or a store of its
 	// fleet's that did not answer. The *APIError behind it carries
-	// RetryAfter where the engine said when to ask again.
+	// RetryAfter where the engine said when to ask again. Where it said
+	// nothing, no wait clears what it met, and its message says so: a
+	// condition of the node, such as a record it can't read yet, that
+	// somebody clears in the engine, whom the detail names where it can.
 	//
 	// A config write can be one too after the engine has stored its
 	// revision: the activation was sent to the fleet's coordination store,
@@ -230,10 +233,12 @@ func (e *APIError) Is(target error) bool {
 		// says nothing about what the engine lets the token do.
 		return e.StatusCode == http.StatusForbidden && slices.Contains(codesForbidden, e.Code)
 	case ErrUnavailable:
-		// By status alone: a 503 is "ask again later" whoever wrote it,
-		// and the engine writes it under several codes (unavailable,
+		// By status alone: a 503 is "not now" whoever wrote it, and the
+		// engine writes it under several codes (unavailable,
 		// identity_unavailable and the stores' own), each retried the
-		// same way. A draining engine's 503 is a *NotReadyError instead.
+		// same way, whether it said when or that no wait clears it:
+		// nothing else tells the caller that somebody has cleared it. A
+		// draining engine's 503 is a *NotReadyError instead.
 		return e.StatusCode == http.StatusServiceUnavailable
 	case ErrRevisionAdvanced:
 		// By code alone: the engine writes it 412 for a write that named
