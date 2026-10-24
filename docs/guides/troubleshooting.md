@@ -33,6 +33,7 @@ flowchart TD
     EX -->|True| CA{"<b>ConfigApplied</b>"}
     CA -->|EngineUnavailable| UN["The operator cannot reach the engine"]
     CA -->|"WriteRefused, NotGranted, SeatHeld"| WR["The engine refuses a change<br/>to the document"]
+    CA -->|RevisionUnreadable| RU["The engine cannot open<br/>its company document"]
     CA -->|"Applying, ApplyFailed"| AF["The engine did not apply a revision"]
     SYM -->|"IdentityClaimed=False"| NS["Nobody can sign in"]
     CA -->|"any other reason"| NA["Changes are not applied"]
@@ -122,6 +123,7 @@ with your last change yet.
 | | False | `WriteRefused` | The engine refuses the operator's own token a change to the document (`403 config_managed`): its `api.auth.company_writers` names other tokens. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
 | | False | `NotGranted` | The engine knows the operator's token and will not let it make a request the operator needs (`403`): the token lacks the grant the message names, or the engine's identity directory binds it to a seat the company no longer has. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
 | | False | `SeatHeld` | The document takes a human seat out of the company, or makes it an agent's, while a person, a service account or an open invitation holds it in the engine (`409 seat_held`). The message names each seat and what holds it; the engine keeps running the revision it runs. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
+| | False | `RevisionUnreadable` | The engine's keyring does not open the fleet's revision of the company document (`409 unreadable_revision` or `unsealed_revision`), so the engine neither shows the document nor takes another. No wait changes that: the operator writes nothing, and looks again when the data pods restart and every five minutes besides. The message names the revision and quotes the engine's account and remedy; see [The engine cannot open its company document](#the-engine-cannot-open-its-company-document). |
 
 ### EngineClass
 
@@ -438,6 +440,37 @@ moves the person to another human seat or removes them, unbinds the service
 account, or cancels the invitation. `crewlet iam seats` lists what holds each
 seat. The operator does neither for you: whoever holds a seat is a person, or
 something a person set up. Or keep the seat: restore its Seat as a Human seat.
+
+## The engine cannot open its company document
+
+`ConfigApplied=False RevisionUnreadable` means the engine's keyring does not
+open the fleet's revision of the company document. The engine refuses every
+read of the document with `409`, and every write too, since a write reads the
+revision it replaces; it keeps running what it applied, and shows and takes
+no document until it can open that revision. No wait changes that, and
+nothing the operator sends does, so the operator writes nothing and does not
+ask again every ten seconds: it looks again when the data pods restart, and
+every five minutes besides. The message names the revision, quotes the
+engine's account and its remedy, and says which of two it is:
+
+- `unreadable_revision`: the revision is sealed under a key the data pod's
+  keyring does not hold. The keyring is the Secret `<company>-keyring`, which
+  the operator generates once and never rewrites, so a key gone from it was
+  taken out by somebody else, or the Secret was restored from an older backup
+  than the volumes. Put the key back in that Secret from the backup kept
+  with the volumes, with its `crewlet.ai/active-key-id` annotation as it was:
+  the data pods restart with it, and their restart runs the reconcile again.
+- `unsealed_revision`: the revision is stored without a seal, which no keyring
+  opens and no engine reads; only an engine older than the keyring every
+  engine now requires stored one. The engine's hint says what brings its
+  document back.
+
+To see which keys the keyring holds without printing them:
+
+```bash
+kubectl get secret acme-keyring -n acme -o go-template='{{range $k, $v := .data}}{{$k}}{{"\n"}}{{end}}'
+kubectl get events -n acme --field-selector involvedObject.name=acme,reason=RevisionUnreadable
+```
 
 ## The engine did not apply a revision
 

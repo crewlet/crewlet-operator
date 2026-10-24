@@ -457,6 +457,21 @@ func TestErrorMapping(t *testing.T) {
 			wantStatus: http.StatusForbidden,
 		},
 		{
+			name:     "a revision sealed under a key the keyring lost",
+			handler:  answer(http.StatusConflict, unreadableRevision),
+			sentinel: engine.ErrRevisionUnreadable, wantCode: "unreadable_revision", wantStatus: http.StatusConflict,
+		},
+		{
+			name:     "a revision stored without a seal",
+			handler:  answer(http.StatusConflict, unsealedRevision),
+			sentinel: engine.ErrRevisionUnreadable, wantCode: "unsealed_revision", wantStatus: http.StatusConflict,
+		},
+		{
+			name:       "a proxy's 409",
+			handler:    page(http.StatusConflict),
+			wantStatus: http.StatusConflict,
+		},
+		{
 			name: "an engine that could not decide",
 			handler: answer(http.StatusServiceUnavailable, `{"error":"unavailable",`+
 				`"message":"Can't answer right now. Try again in a moment, or ask another node."}`),
@@ -477,7 +492,7 @@ func TestErrorMapping(t *testing.T) {
 	sentinels := []error{
 		engine.ErrRevisionAdvanced, engine.ErrAlreadyConfigured, engine.ErrNoActiveRevision,
 		engine.ErrUnauthorized, engine.ErrNotReady, engine.ErrConfigManaged, engine.ErrForbidden,
-		engine.ErrUnavailable,
+		engine.ErrUnavailable, engine.ErrRevisionUnreadable,
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -499,6 +514,57 @@ func TestErrorMapping(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// unreadableRevision and unsealedRevision are the engine's answers to a read of
+// a revision its keyring does not open, as crewlet's configapi words them
+// (refuseUnreadable) and its httpjson.Envelope sends them, the detail and the
+// hint each ended as a sentence (httpjson.Sentence): the code's own sentence,
+// the revision, the keyring's account of the failure as the detail, and the
+// remedy as the hint.
+const (
+	unreadableRevision = `{"error":"unreadable_revision","message":"That revision is sealed under a key this ` +
+		`deployment no longer holds, so it cannot be read. Put the key back in the node's keyring first.",` +
+		`"revision_id":"rev-4","detail":"secrets: open document: secret could not be decrypted.",` +
+		`"hint":"It is sealed under a key that is no longer in the keyring; restore that key to the node's ` +
+		`secrets.keys first."}`
+	unsealedRevision = `{"error":"unsealed_revision","message":"That revision is stored without a seal, which ` +
+		`a build older than the mandatory keyring wrote, and a node reads only sealed revisions because the seal ` +
+		`is what authenticates one. The hint says what brings its document back.","revision_id":"rev-4",` +
+		`"detail":"secrets: this document is stored unsealed, and a node holding a keyring reads only sealed ones ` +
+		`— a plaintext payload is one anything that can write the store or the coordination bucket could have ` +
+		`authored.",` +
+		`"hint":"It is stored without a seal, so nothing vouches for who wrote it and it is neither shown nor ` +
+		`reverted to; to have its document again, import it from your own copy with PUT /config or ` +
+		"`crewlet config import`" + `, which stores it sealed."}`
+)
+
+// TestAnUnreadableRevisionNamesItAndItsRemedy reads the engine's answer to a
+// read of the fleet's document its keyring does not open: ErrRevisionUnreadable
+// and no other refusal, naming the revision, with the engine's account as the
+// message and its remedy as the hint, which is everything a person has to act
+// on, since no wait and no request clears it.
+func TestAnUnreadableRevisionNamesItAndItsRemedy(t *testing.T) {
+	for _, body := range []string{unreadableRevision, unsealedRevision} {
+		f := newFakeEngine(t)
+		f.handle("GET /health", answer(http.StatusOK, `{"status":"ok","applied_epoch":4}`))
+		f.handle("GET /config", answer(http.StatusConflict, body))
+		_, err := f.client().ActiveConfig(context.Background())
+		var apiErr *engine.APIError
+		if !errors.Is(err, engine.ErrRevisionUnreadable) || !errors.As(err, &apiErr) ||
+			errors.Is(err, engine.ErrUnavailable) || errors.Is(err, engine.ErrRevisionAdvanced) {
+			t.Fatalf("ActiveConfig() = %v, want ErrRevisionUnreadable and no other refusal", err)
+		}
+		var want struct{ Detail, Hint string }
+		if err := json.Unmarshal([]byte(body), &want); err != nil {
+			t.Fatal(err)
+		}
+		if apiErr.RevisionID != "rev-4" || apiErr.Message != want.Detail || apiErr.Hint != want.Hint ||
+			apiErr.RetryAfter != 0 {
+			t.Errorf("APIError = {revision %q, message %q, hint %q, retry after %s}, want {rev-4, the detail, "+
+				"the hint, 0}", apiErr.RevisionID, apiErr.Message, apiErr.Hint, apiErr.RetryAfter)
+		}
 	}
 }
 

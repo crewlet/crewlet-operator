@@ -13,9 +13,10 @@
 // that takes a held human seat away a *SeatHeldError, a lost compare-and-set
 // matches ErrRevisionAdvanced, a refused token ErrUnauthorized, a token the
 // engine will not let do this ErrForbidden, a write a managed document
-// refuses this token ErrConfigManaged, a request the engine asks to be sent
-// again ErrUnavailable, a draining or unconfigured engine ErrNotReady, and
-// anything else an *APIError with the engine's code and message.
+// refuses this token ErrConfigManaged, a revision the engine's keyring does
+// not open ErrRevisionUnreadable, a request the engine asks to be sent again
+// ErrUnavailable, a draining or unconfigured engine ErrNotReady, and anything
+// else an *APIError with the engine's code and message.
 //
 // No error this package returns carries a secret value: the engine never
 // echoes one, and a secret written with WriteSecret or PutSecrets travels
@@ -270,7 +271,9 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 // goes on running the revision it ran before, and starts on the revision its
 // own store names where that store outlives a restart, as a data pod's does
 // (a seat pod's does not: it starts on nothing and applies the fleet's
-// revision). Before the first apply it fails with ErrNoActiveRevision.
+// revision). Before the first apply it fails with ErrNoActiveRevision, and
+// on an engine whose keyring does not open the fleet's revision with
+// ErrRevisionUnreadable.
 //
 // An engine that cannot read the activation pointer from its coordination
 // store answers 503 with a Retry-After, which is ErrUnavailable: "the fleet
@@ -353,7 +356,9 @@ func (c *Client) Revision(ctx context.Context, id string) (Revision, error) {
 // A document the engine refuses fails with a *ValidationError locating each
 // problem; a stale req.IfMatch, or a write that lost a race with another
 // writer, with ErrRevisionAdvanced; req.CreateOnly on a configured engine with
-// ErrAlreadyConfigured.
+// ErrAlreadyConfigured; and a write while the engine's keyring does not open
+// the fleet's revision, which the write reads first, with
+// ErrRevisionUnreadable.
 func (c *Client) ApplyConfig(ctx context.Context, req ApplyRequest) (ApplyResult, error) {
 	if req.IfMatch != "" && req.CreateOnly {
 		return ApplyResult{}, errors.New("apply the company document: IfMatch and CreateOnly are mutually exclusive: " +

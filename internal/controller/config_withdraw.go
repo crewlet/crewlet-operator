@@ -126,8 +126,8 @@ import (
 //
 // An error is the API server's, for the reconcile to retry. One of the
 // engine's, or one reaching it, is reported (withdrawalFailed) and tried
-// again engineRetryInterval later: the document's conditions already say why
-// it is held.
+// again when engineRetry says: the document's conditions already say why it
+// is held.
 func (run *configRun) withdrawHeld(ctx context.Context, read secretsync.Desired) (ctrl.Result, error) {
 	c := run.company
 	if run.policy() != crewletaiv1alpha1.ManagementPolicyEnforce || suspended(c) ||
@@ -159,13 +159,11 @@ func (run *configRun) withdrawHeld(ctx context.Context, read secretsync.Desired)
 	}
 	eng, err := run.Engines.Engine(ctx, c)
 	if err != nil {
-		run.withdrawalFailed(ctx, err)
-		return ctrl.Result{RequeueAfter: engineRetryInterval}, nil
+		return run.withdrawalFailed(ctx, err), nil
 	}
 	active, err := activeConfig(ctx, eng)
 	if err != nil {
-		run.withdrawalFailed(ctx, err)
-		return ctrl.Result{RequeueAfter: engineRetryInterval}, nil
+		return run.withdrawalFailed(ctx, err), nil
 	}
 	if active != nil {
 		if run.doc != nil {
@@ -208,8 +206,7 @@ func (run *configRun) withdrawHeld(ctx context.Context, read secretsync.Desired)
 		return ctrl.Result{}, err
 	}
 	if err := errors.Join(withdrawErr, reactivateErr); err != nil {
-		run.withdrawalFailed(ctx, err)
-		return ctrl.Result{RequeueAfter: engineRetryInterval}, nil
+		return run.withdrawalFailed(ctx, err), nil
 	}
 	return run.heldResync(ctrl.Result{}), nil
 }
@@ -398,11 +395,14 @@ func (run *configRun) settleRefused(
 // withdrawalFailed reports err, which kept the engine from reading its store
 // without a value whose Secret no longer exists: until the operator gets
 // through, the engine may still start a tool server or an executor run with it.
-func (run *configRun) withdrawalFailed(ctx context.Context, err error) {
+// It returns when to try again, as engineRetry says for err.
+func (run *configRun) withdrawalFailed(ctx context.Context, err error) ctrl.Result {
+	retry := run.engineRetry(err)
 	logf.FromContext(ctx).Error(err, "Failed to keep the value of a deleted Secret from the engine")
-	run.event(corev1.EventTypeWarning, "SecretWithdrawalFailed", "ReloadConfig",
+	run.event(corev1.EventTypeWarning, "SecretWithdrawalFailed", "ReloadConfig", "%s", ended(fmt.Sprintf(
 		"The engine may still start a tool server or an executor run with the value of a Secret that no longer exists, "+
-			"which the revision it runs lets go without; the operator tries again in %s: %s", engineRetryInterval, err)
+			"which the revision it runs lets go without; the operator tries again in %s: %s", retry, err)))
+	return ctrl.Result{RequeueAfter: retry}
 }
 
 // reactivate activates the engine's running revision again when state records

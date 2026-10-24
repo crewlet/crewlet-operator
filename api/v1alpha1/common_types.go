@@ -635,6 +635,17 @@ const (
 	// still exists and is held: one whose kind turned from Human to Agent.
 	ReasonSeatHeld = "SeatHeld"
 
+	// ReasonRevisionUnreadable is ConfigApplied=False when the engine's
+	// keyring does not open the fleet's revision of the company document
+	// (409 unreadable_revision or unsealed_revision): it is sealed under a
+	// key the keyring no longer holds, or stored without a seal. The engine
+	// then refuses to show the document and to take another, so the
+	// operator writes nothing; no wait changes that, and somebody has to
+	// give the engine what opens the revision, such as the key put back in
+	// the Secret <company>-keyring. The message names the revision and
+	// carries the engine's account and remedy.
+	ReasonRevisionUnreadable = "RevisionUnreadable"
+
 	// ReasonInvalid is Applied=False (or ConfigApplied=False) when the
 	// engine's dry run refuses the rendered document; the message carries
 	// the engine's own words.

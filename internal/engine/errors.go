@@ -64,6 +64,18 @@ var (
 	// engine said when.
 	ErrUnavailable = errors.New("the engine could not answer now")
 
+	// ErrRevisionUnreadable is a revision of the company document that the
+	// engine's keyring does not open (409 unreadable_revision or
+	// unsealed_revision): sealed under a key the keyring no longer holds, or
+	// stored without a seal, which no node reads. The engine answers it to a
+	// read of the document and to a write, which reads the revision it
+	// replaces, and sends no Retry-After: no wait opens the revision, and
+	// nothing the caller sends does, since what does is given to the engine
+	// (a key put back in its keyring, which it reads when it starts). The
+	// *APIError behind it carries the revision in RevisionID, the engine's
+	// account as its Message and the remedy as its Hint.
+	ErrRevisionUnreadable = errors.New("the engine's keyring does not open a revision of its company document")
+
 	// ErrNotReady is an engine that is up but should not be sent work: it
 	// is draining for a shutdown, has no company yet, or its posture is shed
 	// or stuck. The *NotReadyError behind it names which.
@@ -92,6 +104,12 @@ const (
 // has its own sentinel.
 var codesForbidden = []string{"unauthorized", "token_refused", "seat_unavailable"}
 
+// codesRevisionUnreadable are the refusals of a revision the engine's keyring
+// does not open, one per cause because the remedies share nothing: a key put
+// back in the keyring (unreadable_revision), or the document brought back
+// sealed (unsealed_revision).
+var codesRevisionUnreadable = []string{"unreadable_revision", "unsealed_revision"}
+
 // codesWithProblems are the refusals of a document: the engine located each
 // failure in it, so they become a *ValidationError.
 var codesWithProblems = map[string]struct{}{
@@ -105,9 +123,10 @@ var codesWithProblems = map[string]struct{}{
 // engine's (*NotReadyError).
 //
 // It matches ErrUnauthorized, ErrForbidden, ErrRevisionAdvanced,
-// ErrAlreadyConfigured, ErrNoActiveRevision, ErrConfigManaged and
-// ErrUnavailable with errors.Is where its status and code say so, so a caller
-// can branch on the sentinel and still read the engine's message.
+// ErrAlreadyConfigured, ErrNoActiveRevision, ErrConfigManaged,
+// ErrRevisionUnreadable and ErrUnavailable with errors.Is where its status
+// and code say so, so a caller can branch on the sentinel and still read the
+// engine's message.
 type APIError struct {
 	// StatusCode is the HTTP status.
 	StatusCode int
@@ -134,6 +153,10 @@ type APIError struct {
 	// StoredRevisionID is the revision a write that lost the race stored and
 	// left inert, when the engine kept one.
 	StoredRevisionID string
+
+	// RevisionID is the revision a refusal is about, when the engine named
+	// one: the revision its keyring does not open (ErrRevisionUnreadable).
+	RevisionID string
 
 	// ManagedBy are the token ids that may change the company document,
 	// when the engine refused this write as config_managed.
@@ -205,6 +228,10 @@ func (e *APIError) Is(target error) bool {
 		// Matched by code and status together: a 403 without the code is
 		// a proxy's, and says nothing about the document.
 		return e.StatusCode == http.StatusForbidden && e.Code == codeConfigManaged
+	case ErrRevisionUnreadable:
+		// By code alone: only the engine writes these codes, so a 409
+		// without one (a proxy's) says nothing about its keyring.
+		return slices.Contains(codesRevisionUnreadable, e.Code)
 	}
 	return false
 }
@@ -422,6 +449,7 @@ type refusal struct {
 	Problems          []Problem             `json:"problems"`
 	CurrentRevisionID string                `json:"current_revision_id"`
 	StoredRevisionID  string                `json:"stored_revision_id"`
+	RevisionID        string                `json:"revision_id"`
 	ManagedBy         []string              `json:"managed_by"`
 	Held              map[string]heldAnswer `json:"held"`
 }
@@ -483,6 +511,7 @@ func errorFromResponse(status int, header http.Header, body []byte) error {
 		Hint:              r.Hint,
 		CurrentRevisionID: r.CurrentRevisionID,
 		StoredRevisionID:  r.StoredRevisionID,
+		RevisionID:        r.RevisionID,
 		ManagedBy:         r.ManagedBy,
 		Reason:            r.Reason,
 		Grants:            r.Grants,

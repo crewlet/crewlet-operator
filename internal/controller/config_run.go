@@ -281,11 +281,7 @@ func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error
 		if isAPIServerError(err) {
 			return ctrl.Result{}, err
 		}
-		if !run.writeRefused(err) && !run.notGranted(err) && !run.seatHeld(err) {
-			run.unavailable(err)
-		}
-		_, _ = run.fleetOf(ctx, eng)
-		return ctrl.Result{RequeueAfter: retryAfter(err)}, nil
+		return run.engineFailed(ctx, eng, err), nil
 	}
 	health, healthErr := run.readHealth(ctx, eng)
 	result = run.verifyApplied(ctx, eng, health, healthErr, result)
@@ -1231,6 +1227,67 @@ func (run *configRun) block(reason, message string) {
 	run.applied = appliedVerdict{kind: appliedBlocked, message: fmt.Sprintf(
 		"Not applied: the document is applied whole, and %s keeps it from being applied (see ConfigApplied on Company %s).",
 		why, run.company.Name)}
+}
+
+// engineFailed records err, the engine's, or a request's to it, which ended a
+// reconcile before it could decide anything, as what it is: a refusal of the
+// operator's token, a seat the document takes away while somebody holds it, a
+// revision the engine cannot read, or an engine that could not be reached or
+// answer now. It reads the fleet for the Seats' placement, and returns when to
+// look at the engine again (engineRetry).
+func (run *configRun) engineFailed(ctx context.Context, eng *engine.Client, err error) ctrl.Result {
+	if !run.writeRefused(err) && !run.notGranted(err) && !run.seatHeld(err) && !run.revisionUnreadable(err) {
+		run.unavailable(err)
+	}
+	_, _ = run.fleetOf(ctx, eng)
+	return ctrl.Result{RequeueAfter: run.engineRetry(err)}
+}
+
+// engineRetry is how soon the reconcile looks at a Company's engine again
+// after err. A revision the engine's keyring does not open is looked at again
+// at the resync interval, as an engine with nothing to do is: the engine sends
+// no Retry-After for it, no wait opens it, and nothing the operator sends
+// does. What does is given to the data pods, a key put back in the keyring
+// Secret, which they read only when they start, and the data pods restarting
+// changes RuntimeReady, which runs the reconcile at once. Anything else is
+// asked again as retryAfter says.
+func (run *configRun) engineRetry(err error) time.Duration {
+	if errors.Is(err, engine.ErrRevisionUnreadable) {
+		return run.resyncInterval()
+	}
+	return retryAfter(err)
+}
+
+// revisionUnreadable records an engine whose keyring does not open the
+// fleet's revision of the company document (engine.ErrRevisionUnreadable), and
+// reports false for any other error. The engine refuses then to show the
+// document and to take another, since a write reads the revision it replaces,
+// so the operator can neither see the document nor change it. It is
+// reported as what blocks the document, in the engine's words, with what
+// restores the revision: a key the revision is sealed under is one of the
+// keyring Secret's, which the operator renders into every pod and never
+// rewrites, so a key gone from it is put back there, from the backup kept with
+// the data volumes.
+func (run *configRun) revisionUnreadable(err error) bool {
+	var apiErr *engine.APIError
+	if !errors.Is(err, engine.ErrRevisionUnreadable) || !errors.As(err, &apiErr) {
+		return false
+	}
+	revision := "the revision"
+	if apiErr.RevisionID != "" {
+		revision = "revision " + apiErr.RevisionID
+	}
+	remedy := fmt.Sprintf("The keyring is Secret %s, which the operator never rewrites: put the key %s is sealed under "+
+		"back in it from the backup kept with the data volumes, and the data pods restart with it.",
+		keyringSecretName(run.company), revision)
+	if apiErr.Code == "unsealed_revision" {
+		remedy = "A revision without a seal was stored by an engine older than the keyring every engine now " +
+			"requires, and no keyring opens it; the engine's hint says what brings its document back."
+	}
+	run.blockAndTell(crewletaiv1alpha1.ReasonRevisionUnreadable, "ReadConfig", ended(fmt.Sprintf(
+		"The engine's keyring does not open %s of the company document, so the engine neither shows the document "+
+			"nor takes another, and no wait changes that: %s", revision, err))+" "+remedy)
+	return true
 }
 
 // unavailable records an engine that could not be reached, or that failed a

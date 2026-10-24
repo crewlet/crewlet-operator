@@ -64,7 +64,9 @@ import (
 // does; fleetDown makes GET /fleet unanswerable, and missing names the
 // revisions GET /config/revisions does not find. configDown and secretsDown
 // make it answer a read of the fleet's document, and a write to the store, as
-// an engine that cannot decide who is asking does.
+// an engine that cannot decide who is asking does; unreadable, when set, gives
+// the body it answers a read of the fleet's document with, as an engine whose
+// keyring does not open that revision does (config_unreadable_test.go).
 //
 // Each node's row says what it starts on as the engine's does: a data node
 // (dataNode) the revision it runs, and a seat node, whose store is scratch,
@@ -86,6 +88,7 @@ type storeEngine struct {
 	runsNone                  map[string]bool
 	fleetDown                 bool
 	missing                   map[string]bool
+	unreadable                func(revision string) string
 }
 
 // dataNode reports whether node is a pod of the Company's data StatefulSet,
@@ -168,8 +171,7 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && r.URL.Path == "/health":
 		answer(http.StatusOK, map[string]any{"status": "ok", "configured": true, "posture": "serving", "applied_epoch": len(e.revisions)})
 	case r.Method == http.MethodGet && r.URL.Path == configRoute:
-		w.Header().Set("ETag", `"`+active.id+`"`)
-		_, _ = w.Write(active.document)
+		e.readActive(w, active)
 	case r.Method == http.MethodPut && r.URL.Path == configRoute && e.refuse:
 		answer(http.StatusUnprocessableEntity, map[string]any{"error": "validation_error", "detail": "refused",
 			"problems": []map[string]string{{"path": "roles", "kind": "invalid", "message": "refused"}}})
@@ -371,6 +373,20 @@ func answerJSON(w http.ResponseWriter, status int, v any) {
 // refusal is the engine's error envelope: its code and its detail.
 func refusal(code, detail string) map[string]any {
 	return map[string]any{"error": code, "detail": detail}
+}
+
+// readActive answers a read of the fleet's document, active: the document and
+// its ETag, or, where unreadable is set, the engine's refusal of a revision
+// its keyring does not open.
+func (e *storeEngine) readActive(w http.ResponseWriter, active storeRevision) {
+	if e.unreadable != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(e.unreadable(active.id)))
+		return
+	}
+	w.Header().Set("ETag", `"`+active.id+`"`)
+	_, _ = w.Write(active.document)
 }
 
 // ids are the engine's revisions, oldest first.
