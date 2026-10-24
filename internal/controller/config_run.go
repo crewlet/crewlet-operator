@@ -1630,11 +1630,19 @@ func (run *configRun) revisionUnreadable(err error) bool {
 // unavailable records an engine that could not be reached, or that failed a
 // request for a reason of its own.
 func (run *configRun) unavailable(err error) {
+	message := fmt.Sprintf("The operator's request to the company's engine failed, and it tries again in %s: %s",
+		retryAfter(err), err)
+	if engine.Waitless(err) {
+		// The engine says waiting won't change what it met, so a promise
+		// of a retry in ten seconds would contradict the words it quotes:
+		// the operator asks again only because nothing else tells it that
+		// somebody has cleared it.
+		message = fmt.Sprintf("The engine answered that waiting won't clear what it met, so somebody has to clear it "+
+			"in the engine; the operator asks again every %s until then: %s", engineRetryInterval, err)
+	}
 	run.configApplied = &metav1.Condition{
 		Type: crewletaiv1alpha1.ConditionConfigApplied, Status: metav1.ConditionFalse,
-		Reason: crewletaiv1alpha1.ReasonEngineUnavailable,
-		Message: ended(fmt.Sprintf("The operator's request to the company's engine failed, and it tries again in %s: %s",
-			retryAfter(err), err)),
+		Reason: crewletaiv1alpha1.ReasonEngineUnavailable, Message: ended(message),
 	}
 }
 

@@ -182,7 +182,8 @@ type pauseAnswer struct {
 	Detail      string `json:"detail"`
 }
 
-// The outcomes a pause tool answers with (Crewlet's statelog outcomes).
+// The outcomes a pause tool answers with, the second also a 503's of a write
+// the engine may or may not have landed (Crewlet's statelog outcomes).
 const (
 	outcomeApplied = "applied"
 	outcomeUnknown = "unknown"

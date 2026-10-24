@@ -430,9 +430,14 @@ func (run *configRun) settleRefused(
 func (run *configRun) withdrawalFailed(ctx context.Context, err error) ctrl.Result {
 	retry := run.engineRetry(err)
 	logf.FromContext(ctx).Error(err, "Failed to keep the value of a deleted Secret from the engine")
+	again := fmt.Sprintf("the operator tries again in %s", retry)
+	if engine.Waitless(err) {
+		again = fmt.Sprintf("the engine answered that waiting won't clear what it met, so somebody has to clear it in "+
+			"the engine, and the operator asks again every %s until then", retry)
+	}
 	run.event(corev1.EventTypeWarning, "SecretWithdrawalFailed", "ReloadConfig", "%s", ended(fmt.Sprintf(
 		"The engine may still start a tool server or an executor run with the value of a Secret that no longer exists, "+
-			"which the revision it runs lets go without; the operator tries again in %s: %s", retry, err)))
+			"which the revision it runs lets go without; %s: %s", again, err)))
 	return ctrl.Result{RequeueAfter: retry}
 }
 

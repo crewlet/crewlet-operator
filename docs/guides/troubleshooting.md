@@ -378,10 +378,11 @@ requests to `http://<company>-data-0.<company>-data.<namespace>.svc:8080` fail:
   `503 unavailable` with a `Retry-After` the operator follows, and the
   condition in the engine's words, which the message quotes.
 - The engine met something on its side that waiting doesn't clear. It
-  answers `503` with no `Retry-After`, and the message says waiting won't
-  change that and, where the engine can tell, who has to act. The engine's
-  log names what it met. The operator keeps asking every ten seconds, so
-  `ConfigApplied` turns once that is cleared in the engine.
+  answers `503` with no `Retry-After`, saying waiting won't change that and,
+  where it can tell, who has to act, and the condition says so before it
+  quotes the engine, rather than promise a retry that changes nothing. The
+  engine's log names what it met. The operator keeps asking every ten
+  seconds, so `ConfigApplied` turns once that is cleared in the engine.
 - The engine stored the operator's write and couldn't confirm that it
   activated it: the message names the revision. The engine may run it or may
   not. Nothing needs doing: the operator keeps the write in

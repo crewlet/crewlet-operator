@@ -41,6 +41,11 @@ var (
 			`and /ready stops naming reason "starting".`,
 		RetryAfter: 10 * time.Second}
 	errQuotedClause = errors.New("dial tcp 10.0.0.7:8080: connect: connection refused")
+	// quotedNoWait is the engine's 503 for a condition no wait clears, as
+	// crewlet#142 words it: quotedSentence's code, with no Retry-After and a
+	// sentence saying so.
+	quotedNoWait = &engine.APIError{StatusCode: http.StatusServiceUnavailable, Code: quotedSentence.Code,
+		Message: "This node has been evicted from the fleet. Have an administrator readmit it."}
 )
 
 // endsOnce reports whether message ends with exactly one full stop: one not
@@ -77,7 +82,7 @@ func TestEndedEndsASentenceOnce(t *testing.T) {
 // with an error the operator met to one full stop, whether the error ends in
 // the engine's sentence or in Go's words.
 func TestAConditionThatQuotesAnErrorEndsItOnce(t *testing.T) {
-	for _, err := range []error{quotedSentence, quotedHint, errQuotedClause} {
+	for _, err := range []error{quotedSentence, quotedHint, quotedNoWait, errQuotedClause} {
 		t.Run(err.Error(), func(t *testing.T) {
 			run := &configRun{CompanyConfigReconciler: &CompanyConfigReconciler{}, company: &crewletaiv1alpha1.Company{}}
 			run.unavailable(err)
@@ -94,6 +99,41 @@ func TestAConditionThatQuotesAnErrorEndsItOnce(t *testing.T) {
 			} {
 				if !endsOnce(message) {
 					t.Errorf("%s does not end with one full stop: %q", name, message)
+				}
+			}
+		})
+	}
+}
+
+// TestANoWait503PromisesNoRetry holds the condition and the event that quote
+// the engine's 503 for a condition no wait clears to saying so: no retry in so
+// many seconds, which the engine's own words beside it contradict, but that
+// somebody clears it in the engine while the operator goes on asking. A 503
+// under a Retry-After keeps its promise of a retry when the engine said.
+func TestANoWait503PromisesNoRetry(t *testing.T) {
+	ctx := context.Background()
+	for _, c := range []struct {
+		name   string
+		err    error
+		noWait bool
+	}{
+		{"no wait clears it", quotedNoWait, true},
+		{"a wait clears it", quotedSentence, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			run := &configRun{CompanyConfigReconciler: &CompanyConfigReconciler{}, company: &crewletaiv1alpha1.Company{}}
+			run.unavailable(c.err)
+			w := newWithdrawal(t, runningLetsGo)
+			w.run.withdrawalFailed(ctx, c.err)
+			event := strings.Join(drained(w.events), "\n")
+			for name, message := range map[string]string{
+				"ConfigApplied": run.configApplied.Message, "SecretWithdrawalFailed": event,
+			} {
+				promised, cleared := strings.Contains(message, "tries again in"),
+					strings.Contains(message, "somebody has to clear it in the engine")
+				if promised == c.noWait || cleared != c.noWait {
+					t.Errorf("%s promises a retry: %t, and says somebody clears it: %t; want %t and %t: %s",
+						name, promised, cleared, !c.noWait, c.noWait, message)
 				}
 			}
 		})

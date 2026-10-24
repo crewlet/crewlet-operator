@@ -741,6 +741,44 @@ func TestUnavailableCarriesTheEnginesRetryAfter(t *testing.T) {
 	}
 }
 
+// TestWaitlessIsTheEnginesNoWait503 pins which answers Waitless reads as the
+// engine's 503 for a condition no wait clears: one under a code of its own and
+// no Retry-After, as crewlet#142 words it ("waiting won't change that"), and
+// no other. A 503 with a Retry-After is one a wait clears; one whose write
+// may have landed carries none and says to retry it; and one naming no code
+// is a proxy's.
+func TestWaitlessIsTheEnginesNoWait503(t *testing.T) {
+	const noWait = `{"error":"unavailable","message":"This can't be done here, and waiting won't change that.",` +
+		`"detail":"This node has been evicted from the fleet. Have an administrator readmit it."}`
+	for _, c := range []struct {
+		name    string
+		handler http.HandlerFunc
+		want    bool
+	}{
+		{"a condition no wait clears", answer(http.StatusServiceUnavailable, noWait), true},
+		{"a seat-holder read no wait clears", answer(http.StatusServiceUnavailable, seatHoldersUnavailableNoWait), true},
+		{"a condition a wait clears", answerAfter(http.StatusServiceUnavailable, "2",
+			`{"error":"unavailable","message":"Can't answer right now. Try again in a moment, or ask another node."}`), false},
+		{"a write that may have landed", answer(http.StatusServiceUnavailable,
+			`{"error":"unavailable","message":"Can't answer right now. Try again in a moment, or ask another node.",`+
+				`"outcome":"unknown","op_id":"op-1"}`), false},
+		{"a proxy's 503", page(http.StatusServiceUnavailable), false},
+		{"a refusal that is no 503", answer(http.StatusConflict, `{"error":"revision_advanced"}`), false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			f.handle("PUT /config", c.handler)
+			_, err := apply(f, write)
+			if got := engine.Waitless(err); got != c.want {
+				t.Errorf("Waitless(%v) = %t, want %t", err, got, c.want)
+			}
+		})
+	}
+	if engine.Waitless(nil) {
+		t.Error("Waitless(nil) = true, want false")
+	}
+}
+
 // seatFounder is the human seat the seat_held tests find a person on, and
 // stageActive the stage of a person or a service account who has finished
 // enrolling, both as the engine names them.

@@ -199,6 +199,10 @@ type APIError struct {
 	// request is sent again, from a 503's Retry-After; zero when it did
 	// not say.
 	RetryAfter time.Duration
+
+	// Outcome is what the engine knows of a write a 503 answers: "unknown"
+	// for one it may or may not have landed, empty for every other answer.
+	Outcome string
 }
 
 func (e *APIError) Error() string {
@@ -281,6 +285,22 @@ func UnconfirmedActivation(err error) (string, bool) {
 		return "", false
 	}
 	return apiErr.StoredRevisionID, true
+}
+
+// Waitless reports whether err is the engine's 503 for a condition no wait
+// clears: one under a code of its own with no Retry-After, which the engine
+// sends only when it knows waiting changes nothing (a record a node can't
+// read yet, a node the fleet evicted), and words so ("This can't be done
+// here, and waiting won't change that."). Somebody clears it in the engine,
+// whom its detail names where it can tell. A write whose outcome the engine
+// does not know is not one, though it carries no Retry-After either: it may
+// have landed, and the engine's answer says to try it again or ask another
+// node (UnconfirmedActivation reads the one a config write gets). Nor is a
+// 503 that names no code, which something in front of the engine wrote.
+func Waitless(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusServiceUnavailable && apiErr.Code != "" &&
+		apiErr.RetryAfter == 0 && apiErr.Outcome != outcomeUnknown
 }
 
 // NotReadyError is an engine that answered but will not take work now.
@@ -499,6 +519,7 @@ type refusal struct {
 	RevisionID        string                `json:"revision_id"`
 	ManagedBy         []string              `json:"managed_by"`
 	Held              map[string]heldAnswer `json:"held"`
+	Outcome           string                `json:"outcome"`
 }
 
 // heldAnswer is one holder of a seat as the engine's seat_held refusal sends
@@ -563,6 +584,7 @@ func errorFromResponse(status int, header http.Header, body []byte) error {
 		Reason:            r.Reason,
 		Grants:            r.Grants,
 		RetryAfter:        retryAfter(status, header),
+		Outcome:           r.Outcome,
 	}
 }
 
