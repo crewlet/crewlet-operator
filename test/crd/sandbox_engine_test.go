@@ -214,6 +214,19 @@ func engineRefusesSetupSteps(
 // sandboxCompany is the render input of a company whose sandbox runs steps,
 // with an agent seat, coder, whose sandbox is sandbox.
 func sandboxCompany(steps []v1.SandboxSetupStep, sandbox *v1.SeatSandbox) *render.Input {
+	in := probeCompany()
+	in.Company.Spec.Sandbox = v1.SandboxSettings{
+		E2B:   v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
+		Setup: steps,
+	}
+	in.Seats[0].Spec.Sandbox = sandbox
+	return in
+}
+
+// probeCompany is the render input of a company the engine has nothing to
+// say about: an agent seat, coder, on one provider, and a person on a seat of
+// their own.
+func probeCompany() *render.Input {
 	in := &render.Input{
 		Company:         company("probe", companyName),
 		Class:           engineClass("", "basic"),
@@ -223,14 +236,9 @@ func sandboxCompany(steps []v1.SandboxSetupStep, sandbox *v1.SeatSandbox) *rende
 	}
 	in.Company.UID = types.UID("00000000-0000-4000-8000-000000000002")
 	in.Company.Spec.EngineClassName = "basic"
-	in.Company.Spec.Sandbox = v1.SandboxSettings{
-		E2B:   v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
-		Setup: steps,
-	}
 	coder := seat("probe", "coder")
 	coder.Spec.Goal = "Write the code."
 	coder.Spec.LLM.Default = providers(providerName)
-	coder.Spec.Sandbox = sandbox
 	// A person on a seat of their own, as askEngine's, so that the engine
 	// has nothing to say about the chart.
 	founder := seat("probe", "founder")
@@ -263,6 +271,14 @@ func validateProblems(t *testing.T, in *render.Input) []validateProblem {
 // provisioned credential minted, and returns what it refuses.
 func validateDocument(t *testing.T, doc *render.Document, document []byte) []validateProblem {
 	t.Helper()
+	problems, _ := validateVerdict(t, doc, document)
+	return problems
+}
+
+// validateVerdict is [validateDocument]'s whole verdict: what `crewlet
+// validate` refuses, and what it warns about.
+func validateVerdict(t *testing.T, doc *render.Document, document []byte) (problems, warnings []validateProblem) {
+	t.Helper()
 	dir := t.TempDir()
 	file := filepath.Join(dir, "company.yaml")
 	if err := os.WriteFile(file, document, 0o600); err != nil {
@@ -286,9 +302,10 @@ func validateDocument(t *testing.T, doc *render.Document, document []byte) []val
 	}
 	var verdict struct {
 		Problems []validateProblem `json:"problems"`
+		Warnings []validateProblem `json:"warnings"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &verdict); err != nil {
 		t.Fatalf("crewlet validate printed no verdict (%v):\n%s\n%s", err, stdout.String(), stderr.String())
 	}
-	return verdict.Problems
+	return verdict.Problems, verdict.Warnings
 }

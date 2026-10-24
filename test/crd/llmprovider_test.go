@@ -116,7 +116,7 @@ func TestLLMProviderValidation(t *testing.T) {
 			// Crewlet trims a model and refuses an empty one, white space
 			// as Go's strings.TrimSpace reads it.
 			name:   "a model of white space alone is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.Model = " \t " },
+			mutate: func(p *v1.LLMProvider) { p.Spec.Model = whiteSpace },
 			want:   msgBlankModel,
 		},
 		{
