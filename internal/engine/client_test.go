@@ -508,6 +508,16 @@ func TestErrorMapping(t *testing.T) {
 			sentinel: engine.ErrRevisionUnreadable, wantCode: "unsealed_fleet_revision", wantStatus: http.StatusConflict,
 		},
 		{
+			name:     "a revision sealed in a form this build does not read",
+			handler:  answer(http.StatusConflict, unknownSealRevision),
+			sentinel: engine.ErrRevisionUnreadable, wantCode: "unknown_seal_revision", wantStatus: http.StatusConflict,
+		},
+		{
+			name:     "the fleet's revision sealed in a form this build does not read",
+			handler:  answer(http.StatusConflict, unknownSealFleetRevision),
+			sentinel: engine.ErrRevisionUnreadable, wantCode: "unknown_seal_revision", wantStatus: http.StatusConflict,
+		},
+		{
 			name:       "a proxy's 409",
 			handler:    page(http.StatusConflict),
 			wantStatus: http.StatusConflict,
@@ -573,13 +583,16 @@ func TestErrorMapping(t *testing.T) {
 	}
 }
 
-// unreadableRevision, unsealedRevision, unreadableFleetRevision and
-// unsealedFleetRevision are the engine's answers to a read of a revision its
-// keyring does not open, this node's copy or one the fleet's activation
-// pointer carries, as crewlet's configapi words them (RefuseUnreadable) and
-// its httpjson.Envelope sends them, the detail and the hint each ended as a
+// unreadableRevision, unsealedRevision, unreadableFleetRevision,
+// unsealedFleetRevision, unknownSealRevision and unknownSealFleetRevision are
+// the engine's answers to a read of a revision it cannot open, this node's
+// copy or one the fleet's activation pointer carries, as crewlet's configapi
+// words them (RefuseUnreadable, UnreadableRevisionError) and its
+// httpjson.Envelope sends them, the detail and the hint each ended as a
 // sentence (httpjson.Sentence): the code's own sentence, the revision, what
-// happened as the detail, and the remedy as the hint.
+// happened as the detail, and the remedy as the hint. A seal the engine's
+// build does not read is one code for either origin, told apart by its detail
+// and its hint.
 const (
 	unreadableRevision = `{"error":"unreadable_revision","message":"That revision is sealed under a key this ` +
 		`deployment no longer holds, so it cannot be read. Put the key back in the node's keyring first.",` +
@@ -603,6 +616,18 @@ const (
 		`"hint":"Every node seals what it activates, so this body came from outside the fleet and is neither shown ` +
 		`nor edited; to replace it, an admin sends the whole document with PUT /config, or imports it with ` +
 		"`crewlet config import`" + `, either of which stores it sealed and activates it."}`
+	unknownSealRevision = `{"error":"unknown_seal_revision","message":"That revision is sealed in a form this ` +
+		`build of Crewlet doesn't read, most likely by a newer build, so this node can't read or replace it. The ` +
+		`hint says what fixes it.","revision_id":"rev-4",` +
+		`"detail":"This node's copy of that revision is sealed in a form this build of Crewlet doesn't read.",` +
+		`"hint":"A newer build of Crewlet most likely sealed it here, and no write here replaces it, since that ` +
+		`would discard it unread; run that build on this node again."}`
+	unknownSealFleetRevision = `{"error":"unknown_seal_revision","message":"That revision is sealed in a form ` +
+		`this build of Crewlet doesn't read, most likely by a newer build, so this node can't read or replace it. ` +
+		`The hint says what fixes it.","revision_id":"rev-4",` +
+		`"detail":"The fleet's revision is sealed in a form this build of Crewlet doesn't read.",` +
+		`"hint":"A newer build of Crewlet most likely sealed it, and no write here replaces it, since that would ` +
+		`discard it unread; upgrade this node to the build the rest of the fleet runs."}`
 )
 
 // TestAnUnreadableRevisionNamesItAndItsRemedy reads the engine's answer to a
@@ -611,7 +636,8 @@ const (
 // message and its remedy as the hint, which is everything a person has to act
 // on, since no wait and no request clears it.
 func TestAnUnreadableRevisionNamesItAndItsRemedy(t *testing.T) {
-	for _, body := range []string{unreadableRevision, unsealedRevision, unreadableFleetRevision, unsealedFleetRevision} {
+	for _, body := range []string{unreadableRevision, unsealedRevision, unreadableFleetRevision, unsealedFleetRevision,
+		unknownSealRevision, unknownSealFleetRevision} {
 		f := newFakeEngine(t)
 		f.handle("GET /health", answer(http.StatusOK, `{"status":"ok","applied_epoch":4}`))
 		f.handle("GET /config", answer(http.StatusConflict, body))

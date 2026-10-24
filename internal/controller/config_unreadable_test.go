@@ -11,18 +11,19 @@ import (
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 )
 
-// These tests hold what the operator does with an engine whose keyring does
-// not open the fleet's revision of the company document: the engine answers
-// every read of the document, and every write, which reads the revision it
-// replaces, 409 with no Retry-After, and nothing clears it but somebody giving
-// the engine what opens the revision. So it is reported as what blocks the
+// These tests hold what the operator does with an engine that cannot open the
+// fleet's revision of the company document: the engine answers every read of
+// the document, and every write, which reads the revision it replaces, 409
+// with no Retry-After, and nothing clears it but somebody giving the engine
+// what opens the revision. So it is reported as what blocks the
 // document, in the engine's words and with the remedy, and looked at again at
 // the resync interval, not ten seconds on with a promise of a retry that
 // changes nothing.
 
-// keyringLost and sealMissing are the engine's answers to a read of
-// revision, sealed under a key its keyring no longer holds or stored without
-// a seal, as crewlet's configapi words them (RefuseUnreadable) and its
+// keyringLost, sealMissing and unknownSeal are the engine's answers to a read
+// of revision, sealed under a key its keyring no longer holds, stored without a
+// seal, or sealed in a form its build does not read, as crewlet's configapi
+// words them (RefuseUnreadable, UnreadableRevisionError) and its
 // httpjson.Envelope sends them, the detail and the hint each ended as a
 // sentence.
 func keyringLost(revision string) string {
@@ -45,10 +46,20 @@ func sealMissing(revision string) string {
 		`imports it with `+"`crewlet config import`"+`, either of which stores it sealed."}`, revision)
 }
 
-// fleetKeyMissing and fleetSealMissing are the engine's answers to a read of
-// revision met through the fleet's activation pointer, sealed under a key this
-// node's keyring was never given or carrying no seal, worded and ended as the
-// two above.
+func unknownSeal(revision string) string {
+	return fmt.Sprintf(`{"error":"unknown_seal_revision","revision_id":%q,`+
+		`"message":"That revision is sealed in a form this build of Crewlet doesn't read, most likely by a newer `+
+		`build, so this node can't read or replace it. The hint says what fixes it.",`+
+		`"detail":"This node's copy of that revision is sealed in a form this build of Crewlet doesn't read.",`+
+		`"hint":"A newer build of Crewlet most likely sealed it here, and no write here replaces it, since that `+
+		`would discard it unread; run that build on this node again."}`, revision)
+}
+
+// fleetKeyMissing, fleetSealMissing and fleetUnknownSeal are the engine's
+// answers to a read of revision met through the fleet's activation pointer,
+// sealed under a key this node's keyring was never given, carrying no seal, or
+// sealed in a form this node's build does not read, worded and ended as the
+// three above. A seal the build does not read is one code for either origin.
 func fleetKeyMissing(revision string) string {
 	return fmt.Sprintf(`{"error":"unreadable_fleet_revision","revision_id":%q,`+
 		`"message":"This node doesn't hold the key the fleet sealed its revision under, so it can't read it. `+
@@ -67,8 +78,17 @@ func fleetSealMissing(revision string) string {
 		"`crewlet config import`"+`, either of which stores it sealed and activates it."}`, revision)
 }
 
-// TestARevisionTheEngineCannotOpenBlocksTheDocument holds an engine whose
-// keyring does not open the fleet's revision to ConfigApplied=False
+func fleetUnknownSeal(revision string) string {
+	return fmt.Sprintf(`{"error":"unknown_seal_revision","revision_id":%q,`+
+		`"message":"That revision is sealed in a form this build of Crewlet doesn't read, most likely by a newer `+
+		`build, so this node can't read or replace it. The hint says what fixes it.",`+
+		`"detail":"The fleet's revision is sealed in a form this build of Crewlet doesn't read.",`+
+		`"hint":"A newer build of Crewlet most likely sealed it, and no write here replaces it, since that would `+
+		`discard it unread; upgrade this node to the build the rest of the fleet runs."}`, revision)
+}
+
+// TestARevisionTheEngineCannotOpenBlocksTheDocument holds an engine that
+// cannot open the fleet's revision to ConfigApplied=False
 // RevisionUnreadable: the message names the revision, quotes the engine's
 // account and its remedy, and says what restores it in the Company's terms;
 // the operator writes nothing; and the next look is at the resync interval.
@@ -84,6 +104,19 @@ func TestARevisionTheEngineCannotOpenBlocksTheDocument(t *testing.T) {
 			name: "a key the keyring lost", answer: keyringLost,
 			says: []string{"doesn't hold the key that revision is sealed under",
 				"restore that key to the node's secrets.keys first", "Secret acme-keyring"},
+		},
+		{
+			name: "a seal this node's build does not read", answer: unknownSeal,
+			says: []string{"does not read the seal of revision r1", "sealed in a form this build of Crewlet doesn't read",
+				"run that build on this node again", "newer than the one the data pod runs",
+				"keyring Secret acme-keyring is not at fault", "no write replaces it",
+				"the engine image of EngineClass standard", "takes it when it restarts"},
+		},
+		{
+			name: "the fleet's revision under a seal this node's build does not read", answer: fleetUnknownSeal,
+			says: []string{"does not read the seal of revision r1", "The fleet's revision is sealed in a form",
+				"upgrade this node to the build the rest of the fleet runs", "keyring Secret acme-keyring is not at fault",
+				"the engine image of EngineClass standard"},
 		},
 		{
 			name: "a revision stored without a seal", answer: sealMissing,

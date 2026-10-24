@@ -84,18 +84,21 @@ var (
 	ErrUnavailable = errors.New("the engine could not answer now")
 
 	// ErrRevisionUnreadable is a revision of the company document that the
-	// engine's keyring does not open (409): sealed under a key the keyring
-	// no longer holds (unreadable_revision), or, met through the fleet's
-	// activation pointer, under a key this node was never given
-	// (unreadable_fleet_revision); or stored without a seal, which no node
-	// reads (unsealed_revision, unsealed_fleet_revision). The engine answers
-	// it to a read of the document and to a write, which reads the revision
-	// it replaces, and sends no Retry-After: no wait opens the revision, and
-	// nothing the caller sends does, since what does is given to the engine
-	// (a key put in its keyring, which it reads when it starts). The
-	// *APIError behind it carries the revision in RevisionID, the engine's
-	// account as its Message and the remedy as its Hint.
-	ErrRevisionUnreadable = errors.New("the engine's keyring does not open a revision of its company document")
+	// engine cannot open (409): sealed under a key the keyring no longer
+	// holds (unreadable_revision), or, met through the fleet's activation
+	// pointer, under a key this node was never given
+	// (unreadable_fleet_revision); sealed in a form this build of the engine
+	// does not read, most likely by a newer build, in either place
+	// (unknown_seal_revision); or stored without a seal, which no node reads
+	// (unsealed_revision, unsealed_fleet_revision). The engine answers it to
+	// a read of the document and to every write built from it, and sends no
+	// Retry-After: no wait opens the revision. A sealed one is somebody's
+	// document, which no write replaces, since that would discard it unread:
+	// what opens it is given to the engine, a key put in its keyring, which
+	// it reads when it starts, or the build that sealed it. The *APIError
+	// behind it carries the revision in RevisionID, the engine's account as
+	// its Message and the remedy as its Hint.
+	ErrRevisionUnreadable = errors.New("the engine cannot open a revision of its company document")
 
 	// ErrNotReady is an engine that is up but should not be sent work: it
 	// is draining for a shutdown, has no company yet, or its posture is shed
@@ -125,13 +128,16 @@ const (
 // has its own sentinel.
 var codesForbidden = []string{"unauthorized", "token_refused", "seat_unavailable"}
 
-// codesRevisionUnreadable are the refusals of a revision the engine's keyring
-// does not open, one per cause and origin because the remedies share nothing:
-// a key put back in the keyring (unreadable_revision), a key the fleet seals
-// under given to this node (unreadable_fleet_revision), or the document
-// brought back sealed (unsealed_revision, unsealed_fleet_revision).
+// codesRevisionUnreadable are the refusals of a revision the engine cannot
+// open, one per cause and origin because the remedies share nothing: a key
+// put back in the keyring (unreadable_revision), a key the fleet seals under
+// given to this node (unreadable_fleet_revision), the build that sealed it
+// (unknown_seal_revision, one code for either origin, since that remedy is
+// the same for both), or the document brought back sealed
+// (unsealed_revision, unsealed_fleet_revision).
 var codesRevisionUnreadable = []string{
-	"unreadable_revision", "unsealed_revision", "unreadable_fleet_revision", "unsealed_fleet_revision",
+	"unreadable_revision", "unreadable_fleet_revision", "unknown_seal_revision",
+	"unsealed_revision", "unsealed_fleet_revision",
 }
 
 // codesWithProblems are the refusals of a document: the engine located each
@@ -183,7 +189,7 @@ type APIError struct {
 	StoredRevisionID string
 
 	// RevisionID is the revision a refusal is about, when the engine named
-	// one: the revision its keyring does not open (ErrRevisionUnreadable).
+	// one: the revision it cannot open (ErrRevisionUnreadable).
 	RevisionID string
 
 	// ManagedBy are the token ids that may change the company document,

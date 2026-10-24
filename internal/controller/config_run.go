@@ -1581,13 +1581,13 @@ func (run *configRun) engineFailed(ctx context.Context, eng *engine.Client, err 
 }
 
 // engineRetry is how soon the reconcile looks at a Company's engine again
-// after err. A revision the engine's keyring does not open is looked at again
-// at the resync interval, as an engine with nothing to do is: the engine sends
-// no Retry-After for it, no wait opens it, and nothing the operator sends
-// does. What does is given to the data pods, a key put back in the keyring
-// Secret, which they read only when they start, and the data pods restarting
-// changes RuntimeReady, which runs the reconcile at once. Anything else is
-// asked again as retryAfter says.
+// after err. A revision the engine cannot open is looked at again at the
+// resync interval, as an engine with nothing to do is: the engine sends no
+// Retry-After for it, no wait opens it, and nothing the operator sends does.
+// What does is given to the data pods (a key put back in the keyring Secret,
+// which they read only when they start, or the build that sealed the
+// revision), and the data pods restarting changes RuntimeReady, which runs
+// the reconcile at once. Anything else is asked again as retryAfter says.
 func (run *configRun) engineRetry(err error) time.Duration {
 	if errors.Is(err, engine.ErrRevisionUnreadable) {
 		return run.resyncInterval()
@@ -1595,18 +1595,20 @@ func (run *configRun) engineRetry(err error) time.Duration {
 	return retryAfter(err)
 }
 
-// revisionUnreadable records an engine whose keyring does not open the
-// fleet's revision of the company document (engine.ErrRevisionUnreadable), and
-// reports false for any other error. The engine refuses then to show the
-// document and to take another, since a write reads the revision it replaces,
-// so the operator can neither see the document nor change it. It is
-// reported as what blocks the document, in the engine's words, with what
-// restores the revision: a key the revision is sealed under is one of the
-// keyring Secret's, which the operator renders into every pod and never
-// rewrites, so a key gone from it is put back there, from the backup kept with
-// the data volumes, and a key the fleet sealed under that the data pod lacks
-// is one it takes when it restarts with the Secret. A revision without a seal
-// no key opens, and the engine's hint says what does.
+// revisionUnreadable records an engine that cannot open the fleet's revision
+// of the company document (engine.ErrRevisionUnreadable), and reports false
+// for any other error. The engine refuses then to show the document and to
+// take another, since a write reads the revision it replaces, so the operator
+// can neither see the document nor change it. It is reported as what blocks
+// the document, in the engine's words, with what restores the revision: a key
+// the revision is sealed under is one of the keyring Secret's, which the
+// operator renders into every pod and never rewrites, so a key gone from it is
+// put back there, from the backup kept with the data volumes, and a key the
+// fleet sealed under that the data pod lacks is one it takes when it restarts
+// with the Secret; a seal the engine's build does not read is most likely a
+// newer build's, which the data pods run again, since no write replaces a
+// document somebody sealed. A revision without a seal no key opens, and the
+// engine's hint says what does.
 func (run *configRun) revisionUnreadable(err error) bool {
 	var apiErr *engine.APIError
 	if !errors.Is(err, engine.ErrRevisionUnreadable) || !errors.As(err, &apiErr) {
@@ -1616,8 +1618,22 @@ func (run *configRun) revisionUnreadable(err error) bool {
 	if apiErr.RevisionID != "" {
 		revision = "revision " + apiErr.RevisionID
 	}
+	said := fmt.Sprintf("The engine's keyring does not open %s of the company document, so the engine neither shows "+
+		"the document nor takes another, and no wait changes that", revision)
 	var remedy string
 	switch apiErr.Code {
+	case "unknown_seal_revision":
+		said = fmt.Sprintf("The engine does not read the seal of %s of the company document, so the engine neither "+
+			"shows the document nor takes another, and no wait changes that", revision)
+		class := "the Company's EngineClass"
+		if run.class != nil {
+			class = "EngineClass " + run.class.Name
+		}
+		remedy = fmt.Sprintf("A build of Crewlet newer than the one the data pod runs most likely sealed it, so the "+
+			"keyring Secret %s is not at fault, and no write replaces it, since that would discard it unread. Run the "+
+			"data pods on the build that sealed it: the engine image of %s, with the Company's spec.runtime.version as "+
+			"its tag where the class allows that. A data pod still rolling to it takes it when it restarts.",
+			keyringSecretName(run.company), class)
 	case "unsealed_revision":
 		remedy = "A revision without a seal was stored by an engine older than the keyring every engine now " +
 			"requires, and no keyring opens it; the engine's hint says what brings its document back."
@@ -1634,9 +1650,8 @@ func (run *configRun) revisionUnreadable(err error) bool {
 			"under back in it from the backup kept with the data volumes, and the data pods restart with it.",
 			keyringSecretName(run.company), revision)
 	}
-	run.blockAndTell(crewletaiv1alpha1.ReasonRevisionUnreadable, "ReadConfig", ended(fmt.Sprintf(
-		"The engine's keyring does not open %s of the company document, so the engine neither shows the document "+
-			"nor takes another, and no wait changes that: %s", revision, err))+" "+remedy)
+	run.blockAndTell(crewletaiv1alpha1.ReasonRevisionUnreadable, "ReadConfig",
+		ended(fmt.Sprintf("%s: %s", said, err))+" "+remedy)
 	return true
 }
 

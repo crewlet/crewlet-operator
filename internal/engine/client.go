@@ -13,8 +13,8 @@
 // that takes a held human seat away a *SeatHeldError, a lost compare-and-set
 // matches ErrRevisionAdvanced, a refused token ErrUnauthorized, a token the
 // engine will not let do this ErrForbidden, a write a managed document
-// refuses this token ErrConfigManaged, a revision the engine's keyring does
-// not open ErrRevisionUnreadable, a request the engine could not answer now
+// refuses this token ErrConfigManaged, a revision the engine cannot open
+// ErrRevisionUnreadable, a request the engine could not answer now
 // ErrUnavailable, a draining or unconfigured engine ErrNotReady, and anything
 // else an *APIError with the engine's code and message.
 //
@@ -279,8 +279,8 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 // own store names where that store outlives a restart, as a data pod's does
 // (a seat pod's does not: it starts on nothing and applies the fleet's
 // revision). Before the first apply it fails with ErrNoActiveRevision, and
-// on an engine whose keyring does not open the fleet's revision with
-// ErrRevisionUnreadable.
+// on an engine that cannot open the fleet's revision with
+// ErrRevisionUnreadable, which names it.
 //
 // An engine that cannot read the activation pointer from its coordination
 // store answers 503 with a Retry-After, which is ErrUnavailable: "the fleet
@@ -364,8 +364,8 @@ func (c *Client) Revision(ctx context.Context, id string) (Revision, error) {
 // problem; a stale req.IfMatch, or a write that lost a race with another
 // writer, with ErrRevisionAdvanced (a 412 when req.IfMatch is set, a 409 when
 // it is not); req.CreateOnly on a configured engine with ErrAlreadyConfigured;
-// a write while the engine's keyring does not open the fleet's revision, which
-// the write reads first, with ErrRevisionUnreadable; and a write whose
+// a write while the engine cannot open the fleet's revision, which the write
+// reads first, with ErrRevisionUnreadable; and a write whose
 // activation the engine sent and could not confirm with ErrUnavailable naming
 // the revision it stored, which UnconfirmedActivation reads. The fleet may run
 // that revision or may not: the caller keeps it until a read of the fleet's
