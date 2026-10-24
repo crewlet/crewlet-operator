@@ -975,6 +975,14 @@ func (r *CompanyReconciler) statefulSetNamed(ctx context.Context, namespace, nam
 // what its engine reserves (made under an older floor, or before an engine
 // that keeps more on its stream) had no way out: the template cannot change,
 // and an expanded claim left the stream as small as it was.
+//
+// A claim that asks for less than the template is the exception, since the
+// template did not make it: a StatefulSet makes each claim at its template's
+// size, and a claim's request only ever grows. It is one a Company deleted
+// under spec.deletionPolicy Retain kept, which a Company created again under
+// its name runs on as it is, whatever its class gives a new volume now, so
+// it counts at what it asks for, or at what it was given if less. Counted at
+// the template, the stream was sized for a volume the pod does not have.
 func dataVolumeSize(
 	existing *appsv1.StatefulSet, class *crewletaiv1alpha1.EngineClass, claims []corev1.PersistentVolumeClaim,
 ) resource.Quantity {
@@ -997,7 +1005,14 @@ func dataVolumeSize(
 		size := template
 		requested, asked := claim.Spec.Resources.Requests[corev1.ResourceStorage]
 		granted, bound := claim.Status.Capacity[corev1.ResourceStorage]
-		if asked && bound {
+		switch {
+		case asked && requested.Cmp(template) < 0:
+			// A kept claim, which the template did not make.
+			size = requested
+			if bound && granted.Cmp(size) < 0 {
+				size = granted
+			}
+		case asked && bound:
 			grown := requested
 			if granted.Cmp(grown) < 0 {
 				grown = granted

@@ -542,11 +542,14 @@ claim, not the class:
 The operator reads the size the claim has, the smaller of what it asks for
 and what it was given, and never less than the size it was made with, so an
 expansion counts once it has landed and a provisioner that rounded a claim up
-moves nothing. The class's `data.storage.size` is not involved, and the
-StatefulSet keeps the template it was created with. A StorageClass that
-cannot expand leaves only a new volume: take a backup and keep the keyring
-Secret with it ([Backups](#backups)), then restore it onto a large enough
-volume as Crewlet's backup guide describes.
+moves nothing. A claim that asks for less than the StatefulSet's template was
+not made from it: it is one a `Retain` deletion kept, which a Company created
+again under the same name runs on as it is, so it counts at what it asks for,
+or what it was given if less. The class's `data.storage.size` is not
+involved, and the StatefulSet keeps the template it was created with. A
+StorageClass that cannot expand leaves only a new volume: take a backup and
+keep the keyring Secret with it ([Backups](#backups)), then restore it onto a
+large enough volume as Crewlet's backup guide describes.
 
 The engine migrates its data forward only. The operator records the image the
 data pod last ran *and was ready on* in `status.engine.image`, and its tag in
@@ -824,6 +827,8 @@ operator:
 
 A Company created again with the same name and namespace after a `Retain`
 deletion adopts the kept keyring and finds its volume, and with it its estate.
+Its event stream is sized from that volume as the claim has it, whatever its
+class gives a new volume now.
 To discard a retained company for good, delete the claims first and the
 keyring Secret after them: a Company that finds its claims without its
 keyring holds its pod back rather than generate a keyring that cannot open

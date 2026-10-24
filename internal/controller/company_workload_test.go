@@ -134,11 +134,15 @@ func TestSeatPodStartupSeconds(t *testing.T) {
 // to the volumes the data pods actually have: the claim template's size (the
 // existing StatefulSet's, or the class's before there is one), grown by an
 // expansion of every claim once the expansion has landed, never shrunk by a
-// claim given less than it asked for, and the smallest across the pods.
+// claim given less than it asked for, and the smallest across the pods; and a
+// claim the template did not make, which asks for less than it, at the size
+// that claim has.
 func TestDataVolumeSize(t *testing.T) {
 	t.Parallel()
-	// kept is the size the existing StatefulSet's claim template asks for.
-	const kept = "16Gi"
+	// kept is the size the existing StatefulSet's claim template asks for,
+	// and older the size of a claim a deleted Company's StatefulSet made from
+	// a smaller template, which a Company created again under its name runs on.
+	const kept, older = "16Gi", "12Gi"
 	class := &crewletaiv1alpha1.EngineClass{}
 	class.Spec.Data.Storage.Size = new(resource.MustParse("32Gi"))
 	existing := &appsv1.StatefulSet{}
@@ -174,6 +178,12 @@ func TestDataVolumeSize(t *testing.T) {
 			[]corev1.PersistentVolumeClaim{bound("64Gi", "64Gi"), bound(kept, kept)}, kept,
 		},
 		{"a claim being deleted", existing, []corev1.PersistentVolumeClaim{deleting}, kept},
+		{"a kept claim under the template", existing, []corev1.PersistentVolumeClaim{bound(older, older)}, older},
+		{"a kept claim before there is a StatefulSet", nil, []corev1.PersistentVolumeClaim{bound(older, older)}, older},
+		{"a kept claim rounded up", existing, []corev1.PersistentVolumeClaim{bound(older, "14Gi")}, older},
+		{"a kept claim given less than it asks", existing, []corev1.PersistentVolumeClaim{bound(older, "10Gi")}, "10Gi"},
+		{"a kept claim not bound yet", existing, []corev1.PersistentVolumeClaim{claimRequesting(older)}, older},
+		{"a kept claim expanded past the template", existing, []corev1.PersistentVolumeClaim{bound("20Gi", "20Gi")}, "20Gi"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
