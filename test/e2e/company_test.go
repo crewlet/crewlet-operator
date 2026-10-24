@@ -41,7 +41,7 @@ const (
 	outsiderNamespace = "e2e-outsider"
 	className         = "e2e"
 	companyName       = "acme"
-	providerSecret    = "model-gateway"
+	providerSecret    = "model-key"
 
 	// engineeringUnit is the company's one Unit, which its agent seats sit
 	// in and its founder manages.
@@ -479,9 +479,10 @@ func seat(name, displayName, goal string) *v1.Seat {
 // providerName is the model provider of the suite's companies.
 const providerName = "gateway"
 
-// applyProvider writes a company's OpenAI-compatible model provider and the
-// Secret holding its key. The provider's address is never called: the engine
-// validates and applies a document without reaching its model providers.
+// applyProvider writes a company's model provider, Claude Code on a metered
+// key, and the Secret holding the key. The provider is never called: the
+// engine validates and applies a document without running its model's CLI,
+// which the engine image the suite runs does not carry.
 func applyProvider(namespace, company string) {
 	GinkgoHelper()
 	const keyField = "apiKey"
@@ -496,11 +497,13 @@ func applyProvider(namespace, company string) {
 		Spec: v1.LLMProviderSpec{
 			CompanyRef: v1.CompanyReference{Name: company},
 			LLMProviderSettings: v1.LLMProviderSettings{
-				Type:    v1.LLMProviderOpenAICompatible,
-				Model:   "e2e-model",
-				BaseURL: fmt.Sprintf("http://model-gateway.%s.svc:8080/v1", namespace),
+				Agent: v1.CLIAgentClaudeCode,
+				Model: "sonnet",
 			},
-			APIKeySecretRefs: []v1.SecretKeyReference{{Name: providerSecret, Key: keyField}},
+			Auth: v1.CLIAgentAuth{
+				Mode:            v1.CLIAgentAuthAPIKey,
+				APIKeySecretRef: v1.SecretKeyReference{Name: providerSecret, Key: keyField},
+			},
 		},
 	})
 }

@@ -138,15 +138,18 @@ func TestExecutor(t *testing.T) {
 			says: []string{"Company nimbus's first LLMProvider by name"},
 		},
 		{
-			// A platform provider drives no CLI.
+			// A platform provider runs in mode Text alone.
 			name: "a platform provider at the head of the company's order", public: public,
 			mutate: func(in *Input) {
 				agent(in)
 				in.Company.Spec.LLM.UsePlatformProviders = new(true)
 				in.Class.Spec.PlatformLLMProviders = []v1alpha1.PlatformLLMProvider{{
-					Name: platformHeadName, Type: v1alpha1.LLMProviderAnthropic, Model: "claude-sonnet-5",
-					APIKeySecretRefs: []v1alpha1.NamespacedSecretKeyReference{
-						{Namespace: "crewlet-system", Name: platformHeadName, Key: keyAPIKey},
+					Name: platformHeadName, Agent: v1alpha1.CLIAgentClaudeCode, Model: "claude-sonnet-5",
+					Auth: v1alpha1.PlatformLLMProviderAuth{
+						Mode: v1alpha1.CLIAgentAuthAPIKey,
+						APIKeySecretRef: v1alpha1.NamespacedSecretKeyReference{
+							Namespace: "crewlet-system", Name: platformHeadName, Key: keyAPIKey,
+						},
 					},
 				}}
 				in.Company.Spec.LLM.Order = []v1alpha1.LLMProviderReference{

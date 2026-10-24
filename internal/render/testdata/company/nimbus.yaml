@@ -52,17 +52,20 @@ providers:
     type: openai
   llm:
     anthropic:
-      api_keys:
-      - ${K8S_NIMBUS_ANTHROPIC_API_KEY_A4IZBDSXZ6HX}
+      agent: claude-code
+      auth:
+        api_key: ${K8S_NIMBUS_ANTHROPIC_API_KEY_A4IZBDSXZ6HX}
+        mode: api-key
       model: claude-sonnet-5
-      reasoning_effort: high
+      state_dir: /var/lib/crewlet/llm-cli/anthropic
       timeout_seconds: 600
-      type: anthropic
     platform-claude:
-      api_keys:
-      - ${K8S_PLATFORM_ANTHROPIC_API_KEY_KBCSEOJXFCWQ}
+      agent: claude-code
+      auth:
+        api_key: ${K8S_PLATFORM_ANTHROPIC_API_KEY_KBCSEOJXFCWQ}
+        mode: api-key
       model: claude-sonnet-5
-      type: anthropic
+      state_dir: /var/lib/crewlet/llm-cli-platform/platform-claude
   llm_order:
   - anthropic
   - platform-claude

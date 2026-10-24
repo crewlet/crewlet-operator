@@ -1506,14 +1506,11 @@ var _ = Describe("Company runtime", func() {
 					Spec: crewletaiv1alpha1.LLMProviderSpec{
 						CompanyRef: crewletaiv1alpha1.CompanyReference{Name: company},
 						LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-							Type: crewletaiv1alpha1.LLMProviderCLIAgent, Model: cliModel,
+							Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
 						},
-						CLI: crewletaiv1alpha1.CLIAgentSettings{
-							Agent: crewletaiv1alpha1.CLIAgentClaudeCode,
-							Mode:  mode,
-							Auth: crewletaiv1alpha1.CLIAgentAuth{
-								TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: "claude", Key: "oauthToken"},
-							},
+						Mode: mode,
+						Auth: crewletaiv1alpha1.CLIAgentAuth{
+							TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: "claude", Key: "oauthToken"},
 						},
 					},
 				}
@@ -1529,7 +1526,7 @@ var _ = Describe("Company runtime", func() {
 
 			By("switching this company's provider to mode Agent")
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(text), text)).To(Succeed())
-			text.Spec.CLI.Mode = crewletaiv1alpha1.CLIAgentModeAgent
+			text.Spec.Mode = crewletaiv1alpha1.CLIAgentModeAgent
 			Expect(k8sClient.Update(ctx, text)).To(Succeed())
 			company = reconciled(company)
 			Expect(paths()).To(Equal([]string{"/"}))

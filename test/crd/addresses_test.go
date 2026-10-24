@@ -76,26 +76,6 @@ func TestAddressesInEngineClasses(t *testing.T) {
 			},
 			want: "otlpEndpoint" + msgUserInfo,
 		},
-		{
-			name: "a user in a platform provider's base URL is refused",
-			mutate: func(c *v1.EngineClass) {
-				c.Spec.PlatformLLMProviders = []v1.PlatformLLMProvider{{
-					Name: "gateway",
-					Type: v1.LLMProviderOpenAICompatible, Model: "gemma", BaseURL: withUser + "gateway.example",
-				}}
-			},
-			want: "baseURL" + msgUserInfo,
-		},
-	})
-}
-
-func TestAddressesInModelProviders(t *testing.T) {
-	runCreateCases(t, llmProvider, []createCase[*v1.LLMProvider]{
-		{
-			name:   "a user in the base URL is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.BaseURL = withUser + "gateway.example" },
-			want:   "baseURL" + msgUserInfo,
-		},
 	})
 }
 

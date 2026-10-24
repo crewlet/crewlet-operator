@@ -1,11 +1,11 @@
 # OpenCode as a seat's executor in agent mode, signed in by its model
-# provider's key in cli.env, which an agent-mode run carries into the
+# provider's key in env, which an agent-mode run carries into the
 # company's E2B sandbox, and its model written <provider>/<model>, as
 # OpenCode reads it. The seat codes in that run, so Crewlet offers it no
 # run_sandbox; a second seat's code work runs OpenCode, the company's
-# default coding agent, on an Anthropic provider. Agent mode calls the
-# seat's tools back through the company's public address, so the case is
-# exposed.
+# default coding agent, on an OpenCode provider in mode Text on Anthropic's
+# key. Agent mode calls the seat's tools back through the company's public
+# address, so the case is exposed.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -27,20 +27,18 @@ metadata:
 spec:
   companyRef:
     name: harbor
-  type: CLIAgent
+  agent: OpenCode
   model: openrouter/anthropic/claude-sonnet-5
-  cli:
-    agent: OpenCode
-    mode: Agent
-    runIn: E2B
-    auth:
-      mode: Subscription
-    env:
-      - name: OPENROUTER_API_KEY
-        valueFrom:
-          secretKeyRef:
-            name: openrouter
-            key: apiKey
+  mode: Agent
+  runIn: E2B
+  auth:
+    mode: Subscription
+  env:
+    - name: OPENROUTER_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: openrouter
+          key: apiKey
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
@@ -49,11 +47,16 @@ metadata:
 spec:
   companyRef:
     name: harbor
-  type: Anthropic
-  model: claude-sonnet-5
-  apiKeySecretRefs:
-    - name: anthropic
-      key: apiKey
+  agent: OpenCode
+  model: anthropic/claude-sonnet-5
+  auth:
+    mode: Subscription
+  env:
+    - name: ANTHROPIC_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: anthropic
+          key: apiKey
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat

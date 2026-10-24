@@ -2,35 +2,50 @@ name: Managed
 providers:
   llm:
     own-openai:
-      api_keys:
-      - ${K8S_OPENAI_API_KEY_LEK6X7NDATC5}
-      cooldowns:
-        auth_seconds: 120
-        rate_limit_seconds: 600
+      agent: codex
+      auth:
+        api_key: ${K8S_OPENAI_API_KEY_LEK6X7NDATC5}
+        mode: api-key
       model: gpt-5
-      reasoning: true
-      reasoning_effort: high
-      type: openai
+      state_dir: /var/lib/crewlet/llm-cli/own-openai
+      timeout_seconds: 900
     platform-claude:
-      api_keys:
-      - ${K8S_PLATFORM_ANTHROPIC_PRIMARY_HCBRZ7ARUTYC}
-      - ${K8S_PLATFORM_ANTHROPIC_SECONDARY_HJM23COSZAIE}
+      agent: claude-code
+      auth:
+        api_key: ${K8S_PLATFORM_ANTHROPIC_PRIMARY_HCBRZ7ARUTYC}
+        mode: api-key
       model: claude-sonnet-5
-      reasoning_effort: medium
-      type: anthropic
+      state_dir: /var/lib/crewlet/llm-cli-platform/platform-claude
     platform-gateway:
-      base_url: https://llm.platform.example/v1
-      model: llama-4
+      agent: claude-code
+      auth:
+        api_key: ${K8S_LLM_GATEWAY_MANAGED_45Y2DKZI6CGV}
+        mode: api-key
+      env:
+        ANTHROPIC_BASE_URL: ${K8S_LLM_GATEWAY_BASE_URL_PXXCUBURYS7S}
+      model: sonnet
+      state_dir: /var/lib/crewlet/llm-cli-platform/platform-gateway
       timeout_seconds: 120
-      type: openai-compatible
+    platform-open:
+      agent: opencode
+      auth:
+        mode: subscription
+      env:
+        OPENROUTER_API_KEY: ${K8S_PLATFORM_OPENROUTER_API_KEY_J33ZA5F6K5WB}
+      max_concurrent: 2
+      model: openrouter/meta-llama/llama-4-maverick
+      state_dir: /var/lib/crewlet/llm-cli-platform/platform-open
   llm_order:
   - platform-claude
   - own-openai
   - platform-gateway
+  - platform-open
 roles:
 - handle: analyst
   kind: agent
   llm:
+    auxiliary:
+    - platform-open
     default:
     - own-openai
     - platform-claude

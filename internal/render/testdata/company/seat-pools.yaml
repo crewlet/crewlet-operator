@@ -2,10 +2,12 @@ name: Nimbus
 providers:
   llm:
     claude:
-      api_keys:
-      - ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+      agent: claude-code
+      auth:
+        api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        mode: api-key
       model: claude-sonnet-5
-      type: anthropic
+      state_dir: /var/lib/crewlet/llm-cli/claude
   llm_order:
   - claude
 roles:

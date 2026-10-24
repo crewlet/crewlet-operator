@@ -2,8 +2,10 @@ package enginetest_test
 
 import (
 	"context"
+	"debug/buildinfo"
 	"fmt"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -124,4 +126,38 @@ func TestNodeRefusesACallersTierA(t *testing.T) {
 	enginetest.Start(fatalT{t}, enginetest.WithNode("n", nil), enginetest.WithTierA("operator-token", "access-token", func(int, string) []byte {
 		panic(fatal("Start rendered the caller's Tier A, which ignores the node"))
 	}))
+}
+
+// TestModuleVersionRefusesASourceNoVersionIs holds Source to the code the
+// engine binary runs: a binary that is not a module version of crewlet, and
+// one built from a checkout with uncommitted changes, whose stamped version
+// the module proxy serves as the commit without them, name no source, and a
+// version that names one is returned as it is.
+func TestModuleVersionRefusesASourceNoVersionIs(t *testing.T) {
+	const commit = "v0.0.0-20261023214803-bbedf7ecebd7"
+	for _, c := range []struct {
+		name, path, version string
+		// says is what the refusal must say, empty for none.
+		says string
+	}{
+		{name: "a commit of crewlet", path: enginetest.Module, version: commit},
+		{name: "a release of crewlet", path: enginetest.Module, version: "v0.2.0"},
+		{
+			name: "a checkout with uncommitted changes", path: enginetest.Module, version: commit + "+dirty",
+			says: "built from a checkout with uncommitted changes",
+		},
+		{name: "a build with no version", path: enginetest.Module, version: "(devel)", says: "install it with `make crewlet`"},
+		{name: "another module", path: "example.com/crewlet", version: commit, says: "not a module version of"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			info := &buildinfo.BuildInfo{Main: debug.Module{Path: c.path, Version: c.version}}
+			got, err := enginetest.ModuleVersion(info)
+			switch {
+			case c.says == "" && (err != nil || got != c.version):
+				t.Errorf("ModuleVersion = %q, %v; want %q", got, err, c.version)
+			case c.says != "" && (err == nil || !strings.Contains(err.Error(), c.says)):
+				t.Errorf("ModuleVersion = %q, %v; want a refusal saying %q", got, err, c.says)
+			}
+		})
+	}
 }

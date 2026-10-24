@@ -92,6 +92,18 @@ const (
 	// launch runs, the head it runs on and every other refusal before a box
 	// exists are as they were.
 	optionalKeysRead = "v0.1.1-0.20261021054645-37bd6f2e0c50"
+	// cliOnlyRead is the engine every model of which is a coding CLI, read
+	// on top of crewlet's main at this version, before that change merged:
+	// a providers.llm entry has no type, the cli block's fields are its own,
+	// and API entries are gone. newCodingRun hands every head's run the
+	// model as its text calls pass it, and its sign-in under what the seat's
+	// environment sets, but a ClaudeCode run none of it once the seat's
+	// environment signs ClaudeCode in (entrySignIn); claudeCodeOnForeignEntry
+	// and SandboxModelUnsupported went with the API entries; and
+	// sandboxCredentials passes a ClaudeCode run any variable that signs it
+	// in. Launch and LaunchExecutor hand the box the run's model in place of
+	// an API entry's endpoint, which moved no verdict.
+	cliOnlyRead = "v0.1.1-0.20261023214803-bbedf7ecebd7"
 	// toolCredentialsGo is where the engine decides what a value that
 	// resolves to nothing does to a tool server or a coding run.
 	toolCredentialsGo = "internal/engine/toolcredentials.go"
@@ -144,17 +156,6 @@ const (
 	// from the engine are written into.
 	engineClassGo = "api/v1alpha1/engineclass_types.go"
 	normalizeGo   = "internal/config/normalize.go"
-
-	// openCode2Read is crewlet#262's engine, which drives OpenCode 2 alone
-	// and keeps the login of a CLI that holds it in a database of its own as
-	// the document its export printed: newCodingRun maps that document into
-	// the run's credential files beside the CLI's own, whatever box the run
-	// is placed in, and sandboxCredentials words its refusal as the login
-	// rather than credential files. What a box does with those files is its
-	// backend's to decide, and the E2B backend's Create gives its box none,
-	// so for v1alpha1, which offers E2B alone, no verdict the operator copies
-	// moved.
-	openCode2Read = "v0.1.1-0.20261019055339-d826c86f2b7e"
 
 	// e2bGo is the engine's E2B backend, and e2bCreateRead the engine its
 	// Create was first read at.
@@ -224,18 +225,18 @@ var atlassianAccount = []string{contactGo, seatTypesGo, integrationsMd}
 var cloudIDGateway = append([]string{"api/v1alpha1/integration_types.go"}, atlassianAccount...)
 
 // credentialNames is every operator file that copies how the engine reads a
-// credential's name: the API's rules that read one (the LLMProvider API's over
-// a CLI's sign-in, and the tool-server API's refusal of a literal value), the
-// render's copy of their pattern, and the guide and the page that state the
-// rule of a literal value.
+// credential's name: the API's rules that read one (the LLMProvider and
+// platform provider APIs' over a CLI's sign-in, and the tool-server API's
+// refusal of a literal value), the render's copy of their pattern, and the
+// guide and the page that state the rule of a literal value.
 var credentialNames = []string{
-	"api/v1alpha1/llmprovider_types.go", mcpServerTypesGo, "api/v1alpha1/unit_types.go",
+	"api/v1alpha1/llmprovider_types.go", engineClassGo, mcpServerTypesGo, "api/v1alpha1/unit_types.go",
 	codeWorkGo, "docs/guides/tool-servers.md", "docs/concepts/credentials.md",
 }
 
 // agentLogin is every operator file that copies how an Agent-mode run's CLI
 // signs in inside the remote sandbox, and is refused when nothing does: the
-// LLMProvider API's rule on spec.cli of mode Agent, the guide that states
+// LLMProvider API's rule on a provider of mode Agent, the guide that states
 // it, and the CRD suite's reading of the engine's verdicts on it (its
 // holdVerdicts). The renderer's code-work verdict copies the same functions
 // for a run_sandbox launch.
@@ -244,8 +245,8 @@ var agentLogin = []string{
 }
 
 // codingBox is every operator page that states what a coding box carries of
-// the provider its run is on, a CLIAgent provider's token, key or
-// credential-named variables of its cli.env and never its credential bundle:
+// the provider its run is on, its token, key or credential-named variables of
+// its env and never its credential bundle:
 // the credentials guide's "What a coding box carries" and the credentials
 // concept page.
 var codingBox = []string{"docs/guides/credentials.md", "docs/concepts/credentials.md"}
@@ -280,7 +281,7 @@ var bootWindows = []string{
 // head of a seat's chain (TestContractChainlessSeatRunsOnTheFirstProviderAlone),
 // the CodingAgentMismatch it refuses on a write, over a seat's sandbox chain
 // or an agent-mode seat's coding agent (TestContractCodeWorkOnWrite),
-// the sign-in a CLIAgent provider's settings give it (test/crd's
+// the sign-in a provider's settings give it (test/crd's
 // TestCLIAgentSignInFollowsTheEngine), the deployment its validation reads a
 // Jira or Confluence address on (TestContractAtlassianDeploymentIsTheEngines),
 // and the lists TestCodeWorkFollowsTheEngineSource,
@@ -457,8 +458,8 @@ var mirrored = []mirror{
 			"the catalogue's default, and refuses before a box exists what newCodingRun and sandboxCredentials " +
 			"refuse, and a run whose environment holds a value that resolves to nothing under a key nothing " +
 			"declares optional (runEnvironment's gap)",
-		digest: "49e91c7b36f98c9977127c3b479dd44e14b01411cb619f520696d384382e211c",
-		read:   optionalKeysRead,
+		digest: "16a15415b97676b6cb4c9f2e9d05ff3595dddb2ab25fd23074fccb5a911fbe98",
+		read:   cliOnlyRead,
 	},
 	{
 		file: sandboxGo, name: "buildSandbox",
@@ -480,33 +481,33 @@ var mirrored = []mirror{
 	{
 		file: sandboxGo, name: "newCodingRun",
 		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
-		decides: "a CLIAgent head another CLI's coding agent cannot run (CodingAgentMismatch), ClaudeCode on a " +
-			"head that is no Anthropic provider (SandboxModelUnsupported), and a CLIAgent head's run, a " +
-			"run_sandbox launch or an agent-mode run alike, carrying its provider's own sign-in (SandboxEnv) " +
-			"under what the seat's environment sets, and its login, the CLI's credential files or the document " +
-			"a CLI that keeps its login in a database of its own exported (OpenCode 2's), as the run's " +
-			"credential files, whatever box the run is placed in: what the box does with them is its backend's " +
-			"to decide ((*E2BProvider).Create)",
-		digest: "897358b8ffbd0228fc359e6f20f02e0440a40a63be4935b9eac6475145f48edb",
-		read:   openCode2Read,
+		decides: "a head another CLI's coding agent cannot run (CodingAgentMismatch), and a head's run, a " +
+			"run_sandbox launch or an agent-mode run alike, carrying its model as the head's text calls pass it " +
+			"and its provider's own sign-in (entrySignIn) under what the seat's environment sets, and its login, " +
+			"the CLI's credential files or the document a CLI that keeps its login in a database of its own " +
+			"exported (OpenCode 2's), as the run's credential files, whatever box the run is placed in: what the " +
+			"box does with them is its backend's to decide ((*E2BProvider).Create)",
+		digest: "7b0a60f2c5cfd8f40aee57595c11ac54033f68faabe9b35af836ad6a76b02b48",
+		read:   cliOnlyRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
 		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
 		decides: "a box in the Company's E2B sandbox is created from its template, the run's timeout and the run's " +
-			"environment alone, never from the run's credential files, so a CLIAgent head's login (its credential " +
+			"environment alone, never from the run's credential files, so a head's login (its credential " +
 			"files, or the document OpenCode 2's export printed) never reaches it, and only a variable of the " +
 			"run's environment signs its CLI in there",
 		digest: "65305f3ecc87afac5544b7bddb91062389e5a0e0b76a63481f6f191e778e2a03",
 		read:   e2bCreateRead,
 	},
 	{
-		file: sandboxGo, name: "claudeCodeOnForeignEntry",
-		against: []string{codeWorkGo},
-		decides: "ClaudeCode on a head that is no Anthropic provider runs on the seat's own sign-in when it has one, " +
-			"and is refused otherwise (SandboxModelUnsupported)",
-		digest: "9240ccaa5ccdff89f42c0beb0b40e847f5035bd4a7cd8315f4e9fe8c67358670",
-		read:   firstRead,
+		file: sandboxGo, name: "entrySignIn",
+		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
+		decides: "a ClaudeCode run whose seat's environment signs ClaudeCode in (codingagent.ClaudeCodeCredentialEnv, " +
+			"which TestCodeWorkFollowsTheEngineSource holds) is handed none of its provider's sign-in, and every " +
+			"other run its provider's own (SandboxEnv), beneath the seat's environment",
+		digest: "d6ee05cb147a156a49123b6108de6bc49f9cb42d98e8f0eeca52749fd3797b2f",
+		read:   cliOnlyRead,
 	},
 	{
 		file: sandboxGo, name: "signsIn",
@@ -518,11 +519,13 @@ var mirrored = []mirror{
 	{
 		file: sandboxGo, name: "sandboxCredentials",
 		against: append([]string{codeWorkGo}, agentLogin...),
-		decides: "a CLIAgent head whose login cannot follow the run into a remote sandbox is refused unless the run's " +
-			"environment signs its CLI in: a run_sandbox launch (SandboxLoginNotPortable), and at phase Execute an " +
-			"agent-mode run, which the LLMProvider API refuses on a Subscription login no variable carries",
-		digest: "073072efcd21f1199160c73d79fdfc606c52787f2cf65a94eac847fc2f2e5ec6",
-		read:   openCode2Read,
+		decides: "a head whose login cannot follow the run into a remote sandbox is refused unless the run's " +
+			"environment signs its CLI in (its token or key variable, for ClaudeCode any variable that signs it " +
+			"in, and for an env sign-in CLI any credential-named one): a run_sandbox launch " +
+			"(SandboxLoginNotPortable), and at phase Execute an agent-mode run, which the LLMProvider API refuses " +
+			"on a Subscription login no variable carries",
+		digest: "0083e773306d13e5e327796466035335ce16dbf259a689308b291a8004d7eaf8",
+		read:   cliOnlyRead,
 	},
 	{
 		file: sandboxGo, name: "(*Engine).runEnvironment",
@@ -612,14 +615,14 @@ var mirrored = []mirror{
 		file: doctorGo, name: "(*Provider).CredentialEnvNames",
 		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
 		decides: "the variables that sign a CLI in inside a box: its token and key variables, and for an env " +
-			"sign-in CLI the credential-named variables of its cli.env",
+			"sign-in CLI the credential-named variables of its env",
 		digest: "091501e8498192be36fc8619232c358a2276c32bae8f412e7197fcc0a8b89667",
 		read:   firstRead,
 	},
 	{
 		file: doctorGo, name: "(*Provider).SandboxEnv",
 		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
-		decides: "a CLIAgent provider's own sign-in follows the run into the box when it is one of those variables",
+		decides: "a provider's own sign-in follows the run into the box when it is one of those variables",
 		digest:  "f81f2bc4b7fca996eaac300c1ab530d2e357500bd4b76145551412788cc9ddb9",
 		read:    firstRead,
 	},
@@ -653,7 +656,7 @@ var mirrored = []mirror{
 		file: agentRunGo, name: "(*Company).executorRuntime",
 		against: []string{executorGo, headsGo},
 		decides: "a seat's executor runs as an agentic run of a CLI when the head of its executor's chain alone is a " +
-			"CLIAgent provider in agent mode",
+			"provider in agent mode",
 		digest: "b03aa59b6706b0dcad0a4c2fb167e5cf22243dffa6a2034ddb6b10a3a640a8dd",
 		read:   firstRead,
 	},
@@ -664,8 +667,8 @@ var mirrored = []mirror{
 			"tool loop (AgentModeBridgeUnsupported, NotExposed), and so is one whose CLI login cannot follow it " +
 			"into the remote sandbox (sandboxCredentials at phase Execute); a run whose environment holds a " +
 			"value that resolves to nothing starts without it",
-		digest: "ffd234283e02dc655afff94da97b47f30089ad6819221ad5c258c57b4effae39",
-		read:   optionalKeysRead,
+		digest: "16bcaa9a0ff723f20fabf196c3fe44a067e2a780bd085c1d9666d4eec01b2360",
+		read:   cliOnlyRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).executorRun",

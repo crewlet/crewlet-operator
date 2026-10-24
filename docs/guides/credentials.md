@@ -17,7 +17,7 @@ sequenceDiagram
     participant O as Crewlet Operator
     participant E as Engine
     Y->>K: Secret anthropic, key apiKey
-    Y->>K: LLMProvider anthropic, apiKeySecretRefs
+    Y->>K: LLMProvider anthropic, auth.apiKeySecretRef
     K-->>O: a change, seen as metadata only
     O->>K: read the key's value
     O->>E: PUT /secrets/K8S_ANTHROPIC_API_KEY_…
@@ -63,7 +63,10 @@ Crewlet starts neither with an empty one.
 
 ## Each credential
 
-### A model provider's API keys
+### A model provider's API key
+
+Every model provider is a coding CLI, and its metered key is one key, which
+`auth.mode: APIKey` hands the CLI in the variable it reads:
 
 ```bash
 kubectl create secret generic anthropic -n acme --from-literal=apiKey=sk-ant-...
@@ -76,22 +79,26 @@ metadata:
   name: anthropic
 spec:
   companyRef: {name: acme}
-  type: Anthropic
+  agent: ClaudeCode
   model: claude-sonnet-5
-  apiKeySecretRefs:
-    - {name: anthropic, key: apiKey}
-    - {name: anthropic, key: apiKeyBackup}   # optional: more keys, rotated through
+  auth:
+    mode: APIKey
+    apiKeySecretRef: {name: anthropic, key: apiKey}
 ```
 
-With several keys Crewlet spreads requests over them and sets aside a key that
-hits a rate limit or is refused, for `cooldowns.rateLimitSeconds` or
-`cooldowns.authSeconds`. An `OpenAICompatible` provider that needs no key may
-leave `apiKeySecretRefs` out.
+A CLI holds one sign-in and rotates nothing: a second key is a second
+provider, later in a seat's chain, which the seat falls back to while the
+first is out of its limits. Hermes, Pi and OpenCode take their model
+provider's key in `env` instead, and a subscription's login is a headless
+token or a credential bundle ([A coding CLI's login](#a-coding-clis-login)).
 
 A model the platform provides is declared once on the `EngineClass`, in
 `spec.platformLLMProviders`, with references that name their namespace:
 the Secret stays in the platform's namespace, which tenants cannot read, and
-a Company opts in with `spec.llm.usePlatformProviders: true`.
+a Company opts in with `spec.llm.usePlatformProviders: true`. A platform
+provider signs in with a key alone, `auth.apiKeySecretRef` or a model
+provider's key in `env`, never a subscription's login, which is one
+account's.
 
 ### Embeddings and the code sandbox
 
@@ -125,47 +132,39 @@ Crewlet refuses one that names the home itself or a directory above it (`~`,
 
 A seat's code work signs its coding agent in with the provider it runs on:
 the head of `spec.llm.sandbox`, else of `spec.llm.default`, else of the
-Company's order. The engine exports into every box of such a seat:
-
-- for an `Anthropic`, `OpenAI` or `OpenAICompatible` provider, an
-  `LLMProvider` or a platform provider, the **first** key of its
-  `apiKeySecretRefs`, as `ANTHROPIC_API_KEY` (`Anthropic`) or
-  `OPENAI_API_KEY` (the others), and its `baseURL`: under Claude Code as
-  `ANTHROPIC_BASE_URL`, and under OpenCode in the box's `opencode.json`,
-  as the endpoint of the provider the run is pointed at;
-- for a `CLIAgent` provider, its headless token, its key, or the
-  credential-named variables of its `cli.env`, never its credential bundle.
+Company's order, an `LLMProvider` or a platform provider, which drives the
+coding agent's own CLI. The engine exports into every box of such a seat the
+provider's headless token or its `auth.apiKeySecretRef` key, under the
+variable its CLI reads (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`), or
+for OpenCode the credential-named variables of its `env`, and never its
+credential bundle. A gateway address in its `env` (`ANTHROPIC_BASE_URL`)
+is no credential, and stays in the engine's pod: a run that needs it is
+given it in `spec.sandbox.env`.
 
 The box runs in the Company's own E2B account, and the coding agent in it
 runs with every permission, so it can read the key; the report the run
 sends back is redacted by the shape of a credential, not by its value. A
-box holds the key it started with and never rotates it, and only the first
-key travels, so rotating the provider's keys reaches a running box only
-when its next run starts. Give code work a key of its own: a provider whose
-key is scoped and limited for code work, first in `spec.llm.sandbox`.
-
-An `Anthropic` provider's `baseURL` is the gateway's root, without `/v1`
-(`https://gateway.example.com`, not `https://gateway.example.com/v1`):
-Crewlet's own calls, Claude Code and OpenCode each add the version
-themselves, so a `baseURL` ending in `/v1` is called at `/v1/v1` by all
-three. An `OpenAI` or `OpenAICompatible` provider's `baseURL` ends where
-the OpenAI wire expects it, usually in `/v1`, and reaches the box as
-written.
+box holds the key it started with and never rotates it, so rotating the
+provider's key reaches a running box only when its next run starts. Give
+code work a key of its own: a provider whose key is scoped and limited for
+code work, first in `spec.llm.sandbox`.
 
 A seat that signs Claude Code in itself, with `CLAUDE_CODE_OAUTH_TOKEN`,
 `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or a `CLAUDE_CODE_USE_*` toggle
-in `spec.sandbox.env` or a setup step's `env`, gets neither the provider's
-key nor its endpoint: its own sign-in is what the run uses. A sign-in the run
-goes without, its key listed in `optionalKeys` and its Secret or key missing
-or empty, signs nothing in: the run is given the provider's key and endpoint,
-as one with no sign-in is. Under OpenCode the provider's key is added beneath
-the seat's variables, so a seat variable of the same name wins.
+in `spec.sandbox.env` or a setup step's `env`, gets none of the provider's
+sign-in: its own is what the run uses, as Claude Code ranks its sign-ins by
+name and a provider's key beside a seat's plan token would win. A sign-in
+the run goes without, its key listed in `optionalKeys` and its Secret or key
+missing or empty, signs nothing in: the run is given the provider's sign-in,
+as one with no sign-in of its own is. Under OpenCode the provider's key is
+added beneath the seat's variables, so a seat variable of the same name
+wins.
 
 A seat whose executor runs in agent mode has no code work of its own, but
 its executor's every run is a box of the same sandbox, with the same
 setup and the seat's sandbox environment, and the engine exports into it
-the executor's own `CLIAgent` provider's headless token, its key, or the
-credential-named variables of its `cli.env`, beneath the seat's variables,
+the executor's own provider's headless token, its key, or the
+credential-named variables of its `env`, beneath the seat's variables,
 never its credential bundle
 ([Text mode and agent mode](cli-agents.md#text-mode-and-agent-mode)). The
 CLI runs there with every permission and can read them, as a coding agent
@@ -273,27 +272,25 @@ says how it is named.
 
 ### A coding CLI's login
 
-A `CLIAgent` provider signs its CLI in with a headless subscription token or
-with a credential bundle `crewlet llm export` wrote (for OpenCode, its
-exported login: [An OpenCode login in a bundle](cli-agents.md#an-opencode-login-in-a-bundle)),
-each a Secret key; with `auth.mode: APIKey`, with the provider's
-`apiKeySecretRefs` key; or, for Hermes, Pi and OpenCode, with its model
-provider's key in `cli.env`, which may never set the CLI's own token or key
+A provider signs its CLI in with a headless subscription token or with a
+credential bundle `crewlet llm export` wrote (for OpenCode, its exported
+login: [An OpenCode login in a bundle](cli-agents.md#an-opencode-login-in-a-bundle)),
+each a Secret key; with `auth.mode: APIKey`, with the key of
+`auth.apiKeySecretRef`; or, for Hermes, Pi and OpenCode, with its model
+provider's key in `env`, which may never set the CLI's own token or key
 variable, since `auth` owns it, nor a variable the engine sets to keep the
 CLI inside its seat's home ([Signing in](cli-agents.md#signing-in)):
 
 ```yaml
 spec:                       # LLMProvider claude-code
-  type: CLIAgent
+  agent: ClaudeCode
   model: sonnet
-  cli:
-    agent: ClaudeCode
-    auth:
-      tokenSecretRef: {name: claude-subscription, key: oauthToken}
-    env:
-      - name: HTTPS_PROXY       # every variable comes from a Secret
-        valueFrom:
-          secretKeyRef: {name: claude-subscription, key: proxy}
+  auth:
+    tokenSecretRef: {name: claude-subscription, key: oauthToken}
+  env:
+    - name: HTTPS_PROXY       # every variable comes from a Secret
+      valueFrom:
+        secretKeyRef: {name: claude-subscription, key: proxy}
 ```
 
 [Running seats on a coding CLI](cli-agents.md) says which to use.
@@ -386,25 +383,22 @@ kubectl get company acme -n acme -o jsonpath='{.status.config.revisionID}{"\n"}'
 A change that leaves every referenced value as it was (a label, an
 annotation, another key nothing references) writes nothing.
 
-To rotate without a moment where the provider refuses the old key, use two
-keys. For a provider no seat's code work runs on: add the new one as a
-second entry of `apiKeySecretRefs`, wait for the revision, revoke the old
-one at the provider, then remove its entry; the engine benches a refused
-key and calls with the other meanwhile. A coding box cannot: it carries the
-provider's first key alone and never rotates it
-([What a coding box carries](#what-a-coding-box-carries)). So for a
-provider that backs code work, add the new key first in
-`apiKeySecretRefs`, or remove the old entry once the new one is there, wait
-for that revision and for the coding runs already going to end, and only
-then revoke the old key.
+To rotate a provider's key without a moment where the vendor refuses the
+one in use, mind the order: write the new key into the Secret, wait for the
+revision that carries it, and only then revoke the old key at the vendor.
+Every CLI call after that revision is handed the new key. A coding box holds
+the key it started with and never rotates it
+([What a coding box carries](#what-a-coding-box-carries)), so for a
+provider that backs code work wait too for the coding runs already going to
+end before you revoke.
 
-A `CLIAgent` provider's `credentialBundleSecretRef` is an exception. The
+A provider's `auth.credentialBundleSecretRef` is an exception. The
 engine restores a bundle only into an empty login, when it starts and at
 every revision it applies, so a new bundle in the Secret reaches nothing
 while the provider's login on the data volume exists, and that refreshed
 login is the one to keep ([Signing in](cli-agents.md#signing-in)). To move a
 provider onto a new bundle, give it, and every provider sharing its login, a
-new `cli.loginName`: its login directory is then empty, and the revision that
+new `loginName`: its login directory is then empty, and the revision that
 moves it restores the bundle there, with no restart. The old directory's
 login and seat homes stay on the data volume.
 

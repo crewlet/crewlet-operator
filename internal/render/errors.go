@@ -16,8 +16,8 @@ import (
 // person where the engine runs a turn, a provisioned credential nothing
 // provisions), or it places a seat in a pool the company does not declare or
 // its EngineClass does not let it run, or whose pods cannot keep the login of
-// a provider it runs on, or runs a seat's code work on a CLIAgent provider of
-// another CLI than its coding agent, or names a person's Atlassian account in
+// a provider it runs on, or runs a seat's code work on a provider of another
+// CLI than its coding agent, or names a person's Atlassian account in
 // a form the company's Jira or Confluence on Atlassian Cloud names nobody by.
 //
 // Its Basis says whether it holds the company's document, and why
@@ -27,8 +27,8 @@ import (
 // Name), as ResolvedRefs=False with Reason, as Accepted=False for a
 // Conflict, or as Applied=False for a pool the class does not admit
 // (PerSeatNotAllowed, PoolCapacityExceeded) or whose pods cannot keep the
-// seat's CLI login (CLIAuthNotPortable), and for code work on a CLIAgent
-// provider of another CLI (CodingAgentMismatch); a refusal of the Company
+// seat's CLI login (CLIAuthNotPortable), and for code work on a provider of
+// another CLI (CodingAgentMismatch); a refusal of the Company
 // itself is reported on its ConfigApplied. A Reported finding holds nothing:
 // the object is rendered as its spec says, ReportedOf lists the finding, and
 // the controller reports it as ResolvedRefs=False with Reason while the

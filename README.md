@@ -167,10 +167,12 @@ metadata:
 spec:
   companyRef:
     name: acme
-  type: Anthropic
+  agent: ClaudeCode
   model: claude-sonnet-5
-  apiKeySecretRefs:
-    - name: anthropic
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
       key: apiKey
 ---
 apiVersion: crewlet.ai/v1alpha1

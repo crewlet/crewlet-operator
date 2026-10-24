@@ -12,10 +12,12 @@ spec:
       size: 16Gi
   platformLLMProviders:
     - name: platform-claude
-      type: Anthropic
+      agent: ClaudeCode
       model: claude-sonnet-5
-      apiKeySecretRefs:
-        - namespace: crewlet-system
+      auth:
+        mode: APIKey
+        apiKeySecretRef:
+          namespace: crewlet-system
           name: platform-anthropic
           key: primary
 ---
@@ -34,8 +36,10 @@ metadata:
 spec:
   companyRef:
     name: byok
-  type: OpenAI
+  agent: Codex
   model: gpt-5
-  apiKeySecretRefs:
-    - name: openai
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: openai
       key: apiKey

@@ -927,9 +927,9 @@ func unrunnable(reason string) bool {
 
 // checkCodeWork records each Seat's code work on its part, and emits a
 // Warning event on a Seat whose code work turns unrunnable or changes its
-// reason, a new problem to announce: with SandboxModelUnsupported or
-// SandboxLoginNotPortable the document applies and nothing on the Company
-// says so.
+// reason, a new problem to announce: with SandboxLoginNotPortable,
+// SecretValueEmpty or NoProvisioner the document applies and nothing on the
+// Company says so.
 func (run *configRun) checkCodeWork(codeWork map[string]render.CodeWork) {
 	for _, p := range run.parts {
 		seat, ok := p.obj.(*crewletaiv1alpha1.Seat)

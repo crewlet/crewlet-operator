@@ -53,7 +53,7 @@ type Executor struct {
 }
 
 // ExecutorOf is the executor of every Agent seat whose executor's chain is
-// headed by an LLMProvider of type CLIAgent in mode Agent, keyed by the
+// headed by an LLMProvider in mode Agent, keyed by the
 // Seat's name. Crewlet decides a turn's runtime from the head of that chain
 // alone (its Registry.Head): an agent-mode CLI anywhere else, behind the head
 // or in another phase, is reached as a text model, which every node serves.
@@ -71,24 +71,24 @@ func ExecutorOf(in *Input) map[string]Executor {
 	return out
 }
 
-// agentModeExecutor is the head of an Agent seat's executor chain, with its
-// cli block, when it is an LLMProvider of type CLIAgent in mode Agent: the
+// agentModeExecutor is the head of an Agent seat's executor chain, with what
+// the verdicts read of its CLI, when it is an LLMProvider in mode Agent: the
 // seat's every turn is that CLI's own agentic run. Crewlet never offers such
 // a seat run_sandbox (its Runner.offersSandbox), so the seat has no code work
 // of its own: what it codes, it codes in that run, on that CLI.
-func (r *renderer) agentModeExecutor(s *v1alpha1.Seat) (chainLink, *v1alpha1.CLIAgentSettings, bool) {
+func (r *renderer) agentModeExecutor(s *v1alpha1.Seat) (chainLink, cliEntry, bool) {
 	if s.Spec.Kind == v1alpha1.SeatKindHuman {
-		return chainLink{}, nil, false
+		return chainLink{}, cliEntry{}, false
 	}
 	head, ok := r.executorHead(s.Spec.LLM.Default, fieldLLMDefault)
 	if !ok {
-		return chainLink{}, nil, false
+		return chainLink{}, cliEntry{}, false
 	}
-	cli := r.cliProviders[head.provider]
-	if cli == nil || cli.Mode != v1alpha1.CLIAgentModeAgent {
-		return chainLink{}, nil, false
+	spec := r.own[head.provider]
+	if spec == nil || spec.Mode != v1alpha1.CLIAgentModeAgent {
+		return chainLink{}, cliEntry{}, false
 	}
-	return head, cli, true
+	return head, ownEntry(spec), true
 }
 
 // executor is the verdict on a seat whose executor's head is the agent-mode
@@ -135,8 +135,7 @@ func (r *renderer) executor(s *v1alpha1.Seat, head chainLink) Executor {
 }
 
 // AgentMode is what the operator can tell from the objects of an LLMProvider
-// of type CLIAgent in mode Agent: whether a run of it can call a seat's tools
-// back at all.
+// in mode Agent: whether a run of it can call a seat's tools back at all.
 type AgentMode struct {
 	// Reason is empty when its runs can reach the tool bridge, and
 	// otherwise v1alpha1.ReasonNotExposed.
@@ -146,15 +145,15 @@ type AgentMode struct {
 	Message string
 }
 
-// AgentModeOf is the agent mode of every LLMProvider of type CLIAgent in
-// mode Agent, keyed by the provider's name. Whether a given seat's turns can
+// AgentModeOf is the agent mode of every LLMProvider in mode Agent, keyed by
+// the provider's name. Whether a given seat's turns can
 // run on it is ExecutorOf's: a seat pod serves no bridge even when the
 // Company has a public address.
 func AgentModeOf(in *Input) map[string]AgentMode {
 	out := map[string]AgentMode{}
 	for i := range in.LLMProviders {
 		p := &in.LLMProviders[i]
-		if p.Spec.Type != v1alpha1.LLMProviderCLIAgent || p.Spec.CLI.Mode != v1alpha1.CLIAgentModeAgent {
+		if p.Spec.Mode != v1alpha1.CLIAgentModeAgent {
 			continue
 		}
 		if in.PublicBaseURL == "" {
@@ -162,7 +161,7 @@ func AgentModeOf(in *Input) map[string]AgentMode {
 				"Its runs happen in the Company's sandbox and call the seat's tools back through the engine's public "+
 					"address, and Company %s has none (status.endpoints.publicBaseURL), so Crewlet refuses every turn of "+
 					"a seat whose executor's chain it heads. Give the Company's EngineClass a webhooks route, or the "+
-					"Company spec.exposure.publicBaseURL, or set spec.cli.mode to Text", in.Company.Name)}
+					"Company spec.exposure.publicBaseURL, or set spec.mode to Text", in.Company.Name)}
 			continue
 		}
 		out[p.Name] = AgentMode{Message: fmt.Sprintf(

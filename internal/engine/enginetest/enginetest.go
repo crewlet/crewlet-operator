@@ -69,19 +69,18 @@ const (
 
 // MinimalCompany is the smallest company document the engine accepts and runs
 // in full: a name, one agent seat, and one LLM provider. The provider is
-// OpenAI-compatible and points at port 9 (discard) on the loopback interface,
-// which nothing serves, so a seat that ever tried to take a turn would fail
-// at once rather than reach a real model; its key is a ${VAR} reference that
-// nothing sets, which the engine accepts and resolves only when a turn runs.
+// Claude Code, the engine's default CLI, on a metered key that is a ${VAR}
+// reference nothing sets, which the engine accepts and resolves when it
+// builds the provider: a seat that ever tried to take a turn would hand the
+// CLI no key, and fail at once rather than reach a real model.
 const MinimalCompany = `name: Acme
 providers:
   llm:
     default:
-      type: openai-compatible
-      model: enginetest-model
-      base_url: http://127.0.0.1:9/v1
-      api_keys:
-        - "${ENGINETEST_LLM_API_KEY}"
+      model: sonnet
+      auth:
+        mode: api-key
+        api_key: "${ENGINETEST_LLM_API_KEY}"
 roles:
   - name: Ana
     goal: "Answer every question the company is asked"
@@ -593,8 +592,8 @@ func Source(t T) string {
 // Version returns the version of the crewlet module the binary Binary returns
 // was built from, as its build info names it: for the binary `make crewlet`
 // installs, the pseudo-version of the crewlet commit it installed, which `go
-// install` stamps. A binary built from a checkout names no version, and fails
-// the test.
+// install` stamps. A binary whose source no module version is fails the test
+// (ModuleVersion).
 func Version(t T) string {
 	t.Helper()
 	bin := Binary(t)
@@ -602,12 +601,35 @@ func Version(t T) string {
 	if err != nil {
 		t.Fatalf("reading the build info of %s: %v", bin, err)
 	}
-	version := info.Main.Version
-	if info.Main.Path != Module || version == "" || version == "(devel)" {
-		t.Fatalf("%s is %s %s, not a module version of %s: install it with `make crewlet`",
-			bin, info.Main.Path, version, Module)
+	version, err := ModuleVersion(info)
+	if err != nil {
+		t.Fatalf("%s: %v", bin, err)
 	}
 	return version
+}
+
+// ModuleVersion is the version of the crewlet module whose source a binary of
+// build info info was built from, or why no version is.
+//
+// A binary built in a crewlet checkout names a version too, since the go
+// command stamps one from the checkout's commit, and one with uncommitted
+// changes carries "+dirty" after it. The module proxy serves that version as
+// the commit alone, without the changes: Source would hand a test the code
+// the binary does not run, and a test holding the operator's copies to the
+// engine's source would pass, or fail, against the wrong engine. So such a
+// version is refused, as a build with no version at all is.
+func ModuleVersion(info *buildinfo.BuildInfo) (string, error) {
+	version := info.Main.Version
+	switch {
+	case info.Main.Path != Module || version == "" || version == "(devel)":
+		return "", fmt.Errorf("it is %s %s, not a module version of %s: install it with `make crewlet`",
+			info.Main.Path, version, Module)
+	case strings.HasSuffix(version, "+dirty"):
+		return "", fmt.Errorf("it is %s %s, built from a checkout with uncommitted changes, whose source is "+
+			"no module version: commit them and push the commit, then run `make crewlet CREWLET_VERSION=<commit>`",
+			Module, version)
+	}
+	return version, nil
 }
 
 // Image is the engine image every suite runs unless CREWLET_IMG names

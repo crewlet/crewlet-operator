@@ -13,7 +13,10 @@ spec:
     # The engine image your platform runs: Crewlet's main, which the operator
     # is tested against. GHCR keeps a main image only while it is main, so
     # past a trial copy it into your own registry and name the copy by
-    # digest (docs/guides/installing.md, "Engine image").
+    # digest (docs/guides/installing.md, "Engine image"). Every model a
+    # seat runs on is a coding CLI the engine drives, which this image does
+    # not ship: name an image built from it with the CLI your companies'
+    # LLMProviders drive (docs/guides/cli-agents.md) to have the seats work.
     image: ghcr.io/crewlet/crewlet:main
     allowVersionOverride: false
   data:
@@ -59,10 +62,12 @@ spec:
           effect: NoSchedule
   platformLLMProviders:
     - name: platform-claude
-      type: Anthropic
+      agent: ClaudeCode
       model: claude-sonnet-5
-      apiKeySecretRefs:
-        - namespace: crewlet-system
+      auth:
+        mode: APIKey
+        apiKeySecretRef:
+          namespace: crewlet-system
           name: platform-anthropic
           key: apiKey
   limits:

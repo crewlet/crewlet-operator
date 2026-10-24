@@ -31,7 +31,7 @@ flowchart LR
     F -.->|manages| U
     L -.->|llm| P
     D -.->|llm| P
-    P -.->|apiKeySecretRefs| S
+    P -.->|auth.apiKeySecretRef| S
     OP -->|"runs and configures"| POD
 ```
 
@@ -128,9 +128,12 @@ EOF
 A namespace for the company, the Secret holding its model provider's API key,
 and the objects: the `Company`, a `Unit`, two agent `Seat`s in it, the
 `LLMProvider` they run on, and a Human `Seat` for you, which manages the unit.
-The key is only read when an agent works, so any value brings the company up;
-put a real Anthropic key in `ANTHROPIC_API_KEY` for agents that can do
-something.
+The provider is Claude Code on an Anthropic API key: every model Crewlet runs
+is a coding CLI it drives. The key is only read when an agent works, so any
+value brings the company up. For agents that can do something, put a real
+Anthropic key in `ANTHROPIC_API_KEY` and give the class an engine image with
+Claude Code installed, which Crewlet's own image is not
+([The image needs the CLI](guides/cli-agents.md#the-image-needs-the-cli)).
 
 ```bash
 bin/kubectl create namespace acme
@@ -155,10 +158,12 @@ metadata:
 spec:
   companyRef:
     name: acme
-  type: Anthropic
+  agent: ClaudeCode
   model: claude-sonnet-5
-  apiKeySecretRefs:
-    - name: anthropic
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
       key: apiKey
 ---
 apiVersion: crewlet.ai/v1alpha1
@@ -281,12 +286,12 @@ the engine keeps running the last good one; the object at fault says why:
 
 ```bash
 bin/kubectl patch llmprovider anthropic -n acme --type merge \
-  -p '{"spec":{"apiKeySecretRefs":[{"name":"missing","key":"apiKey"}]}}'
+  -p '{"spec":{"auth":{"apiKeySecretRef":{"name":"missing","key":"apiKey"}}}}'
 bin/kubectl wait llmprovider anthropic -n acme --for=condition=ResolvedRefs=false --timeout=1m
 bin/kubectl get llmprovider anthropic -n acme \
   -o jsonpath='{.status.conditions[?(@.type=="ResolvedRefs")].message}{"\n"}'
 bin/kubectl patch llmprovider anthropic -n acme --type merge \
-  -p '{"spec":{"apiKeySecretRefs":[{"name":"anthropic","key":"apiKey"}]}}'
+  -p '{"spec":{"auth":{"apiKeySecretRef":{"name":"anthropic","key":"apiKey"}}}}'
 ```
 
 [Troubleshooting](guides/troubleshooting.md) lists every condition and
@@ -364,6 +369,7 @@ bin/kind delete cluster --name crewlet
 
 - [Installing the Operator](guides/installing.md) — a production install with the Helm chart
 - [How the Operator Models a Company](concepts/overview.md) — the kinds, and how they become one document
+- [Running Seats on a Coding CLI](guides/cli-agents.md) — the image with the CLI, and how each CLI signs in
 - [Supplying Credentials](guides/credentials.md) — the Secret behind each credential
 - [Connecting Integrations](guides/integrations.md) — Slack, GitHub, GitLab and the other vendors
 - [Troubleshooting](guides/troubleshooting.md) — every condition and reason an object reports

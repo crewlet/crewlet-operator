@@ -72,36 +72,6 @@ func knowledgeBackend(b v1alpha1.KnowledgeBackend) string {
 	return ""
 }
 
-func llmProviderType(t v1alpha1.LLMProviderType) string {
-	switch t {
-	case v1alpha1.LLMProviderAnthropic:
-		return "anthropic"
-	case v1alpha1.LLMProviderOpenAI:
-		return "openai"
-	case v1alpha1.LLMProviderOpenAICompatible:
-		return "openai-compatible"
-	case v1alpha1.LLMProviderCLIAgent:
-		return "cli-agent"
-	}
-	return ""
-}
-
-func reasoningEffort(e v1alpha1.ReasoningEffort) string {
-	switch e {
-	case v1alpha1.ReasoningEffortLow:
-		return "low"
-	case v1alpha1.ReasoningEffortMedium:
-		return "medium"
-	case v1alpha1.ReasoningEffortHigh:
-		return "high"
-	case v1alpha1.ReasoningEffortXHigh:
-		return "xhigh"
-	case v1alpha1.ReasoningEffortMax:
-		return "max"
-	}
-	return ""
-}
-
 func embeddingProviderType(t v1alpha1.EmbeddingProviderType) string {
 	switch t {
 	case v1alpha1.EmbeddingProviderOpenAI, "":

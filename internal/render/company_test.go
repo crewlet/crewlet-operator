@@ -150,9 +150,12 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		t.Fatal(err)
 	}
 	positions := []struct{ path, key string }{
-		{"providers.llm.anthropic.api_keys[0]", "tenant-nimbus/anthropic[first]"},
-		{"providers.llm.anthropic.api_keys[1]", "tenant-nimbus/anthropic[second]"},
-		{"providers.llm.platform-claude.api_keys[0]", "crewlet-system/platform-llm[anthropic]"},
+		{"providers.llm.anthropic.auth.api_key", "tenant-nimbus/anthropic[apiKey]"},
+		{"providers.llm.platform-claude.auth.api_key", "crewlet-system/platform-llm[anthropic]"},
+		{"providers.llm.platform-claude.env.ANTHROPIC_BASE_URL", "crewlet-system/platform-llm[gateway]"},
+		{"providers.llm.claude-subscription.auth.token", "tenant-nimbus/claude-cli[oauthToken]"},
+		{"providers.llm.codex-subscription.auth.credential_bundle", "tenant-nimbus/codex-cli[bundle]"},
+		{"providers.llm.claude-subscription.env.CLAUDE_CODE_USE_PROXY", "tenant-nimbus/claude-cli[proxy]"},
 		{"providers.embeddings.api_key", "tenant-nimbus/embeddings[apiKey]"},
 		{"providers.sandbox.e2b.api_key", "tenant-nimbus/e2b[apiKey]"},
 		{"providers.sandbox.setup[0].files..git-credentials", "tenant-nimbus/company-sandbox[gitCredentials]"},
@@ -185,9 +188,6 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"integrations.datadog.provisioning.api_key", "tenant-nimbus/datadog[apiKey]"},
 		{"integrations.datadog.provisioning.app_key", "tenant-nimbus/datadog[appKey]"},
 		{"integrations.atlassian.api_key", "tenant-nimbus/atlassian[apiKey]"},
-		{"providers.llm.claude-subscription.cli.auth.token", "tenant-nimbus/claude-cli[oauthToken]"},
-		{"providers.llm.codex-subscription.cli.auth.credential_bundle", "tenant-nimbus/codex-cli[bundle]"},
-		{"providers.llm.claude-subscription.cli.env.CLAUDE_CODE_USE_PROXY", "tenant-nimbus/claude-cli[proxy]"},
 	}
 	// The seats' provisioned credentials, named as the engine's
 	// provisioning finds them: one value wherever a seat names it.

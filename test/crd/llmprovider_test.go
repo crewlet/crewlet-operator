@@ -14,103 +14,17 @@ import (
 )
 
 func TestLLMProviderValidation(t *testing.T) {
-	openAICompatible := func(p *v1.LLMProvider) {
-		p.Spec.Type = v1.LLMProviderOpenAICompatible
-		p.Spec.Model = "llama-3.3-70b"
-		p.Spec.BaseURL = "http://vllm.inference:8000/v1"
-		p.Spec.APIKeySecretRefs = nil
-	}
-	openAI := func(p *v1.LLMProvider) {
-		p.Spec.Type = v1.LLMProviderOpenAI
-		p.Spec.Model = "gpt-5"
-	}
-	and := func(first, then func(*v1.LLMProvider)) func(*v1.LLMProvider) {
-		return func(p *v1.LLMProvider) {
-			first(p)
-			then(p)
-		}
-	}
-
 	runCreateCases(t, llmProvider, []createCase[*v1.LLMProvider]{
 		{name: "minimal provider is accepted"},
 		{
-			name: "an Anthropic provider with every setting is accepted",
+			name: "every setting is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				// Crewlet takes claudeModel only beside a model its table
-				// cannot read, such as a gateway's alias.
-				p.Spec.Model = "house-sonnet"
-				p.Spec.ClaudeModel = "claude-sonnet-4-5"
-				p.Spec.BaseURL = "https://gateway.example/anthropic"
-				p.Spec.ReasoningEffort = v1.ReasoningEffortHigh
-				p.Spec.ReasoningBudgetTokens = 4096
-				p.Spec.TimeoutSeconds = 600
-				p.Spec.Cooldowns = v1.LLMCredentialCooldowns{RateLimitSeconds: 3600, AuthSeconds: 300}
-				p.Spec.APIKeySecretRefs = append(p.Spec.APIKeySecretRefs, secretKey(providerName, "apiKey2"))
+				p.Spec.Model = "claude-opus-5-5"
+				p.Spec.TimeoutSeconds = 900
+				p.Spec.MaxConcurrent = 2
+				p.Spec.LoginName = "claude"
+				p.Spec.Env = []v1.SecretEnvVar{{Name: envBaseURL, ValueFrom: fromSecret("gateway", "url")}}
 			},
-		},
-		{
-			name: "an OpenAI reasoning provider is accepted",
-			mutate: and(openAI, func(p *v1.LLMProvider) {
-				p.Spec.Reasoning = new(true)
-				p.Spec.ReasoningEffort = v1.ReasoningEffortXHigh
-			}),
-		},
-		{name: "an OpenAICompatible provider needs no key", mutate: openAICompatible},
-		{
-			name:   "an Anthropic provider without keys is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.APIKeySecretRefs = nil },
-			want:   msgKeysRequired,
-		},
-		{
-			name:   "an OpenAI provider without keys is refused",
-			mutate: and(openAI, func(p *v1.LLMProvider) { p.Spec.APIKeySecretRefs = nil }),
-			want:   msgKeysRequired,
-		},
-		{
-			name:   "an OpenAICompatible provider without baseURL is refused",
-			mutate: and(openAICompatible, func(p *v1.LLMProvider) { p.Spec.BaseURL = "" }),
-			want:   msgBaseURLRequired,
-		},
-		{
-			name: "a claudeModel Crewlet's model table does not list is refused",
-			mutate: func(p *v1.LLMProvider) {
-				p.Spec.Model = "house-sonnet"
-				p.Spec.ClaudeModel = "claude-sonnet-4-5-20250929"
-			},
-			want: msgClaudeModelUnlisted,
-		},
-		{
-			name:   "claudeModel on an OpenAI provider is refused",
-			mutate: and(openAI, func(p *v1.LLMProvider) { p.Spec.ClaudeModel = claudeModel }),
-			want:   msgClaudeModel,
-		},
-		{
-			name:   "reasoning on an Anthropic provider is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.Reasoning = new(true) },
-			want:   msgReasoning,
-		},
-		{
-			name:   "a thinking budget on an OpenAI provider is refused",
-			mutate: and(openAI, func(p *v1.LLMProvider) { p.Spec.ReasoningBudgetTokens = 2048 }),
-			want:   msgBudgetTokens,
-		},
-		{
-			name:   "reasoningEffort on an OpenAI provider without reasoning is refused",
-			mutate: and(openAI, func(p *v1.LLMProvider) { p.Spec.ReasoningEffort = v1.ReasoningEffortHigh }),
-			want:   msgReasoningEffort,
-		},
-		{
-			name: "reasoningEffort on an OpenAI provider with reasoning off is refused",
-			mutate: and(openAI, func(p *v1.LLMProvider) {
-				p.Spec.Reasoning = new(false)
-				p.Spec.ReasoningEffort = v1.ReasoningEffortLow
-			}),
-			want: msgReasoningEffort,
-		},
-		{
-			name:   "reasoningEffort on an OpenAICompatible provider is refused",
-			mutate: and(openAICompatible, func(p *v1.LLMProvider) { p.Spec.ReasoningEffort = v1.ReasoningEffortHigh }),
-			want:   msgReasoningEffort,
 		},
 		{
 			// Crewlet trims a model and refuses an empty one, white space
@@ -121,13 +35,23 @@ func TestLLMProviderValidation(t *testing.T) {
 		},
 		{
 			name:   "a model of Unicode white space alone is refused",
-			mutate: and(openAI, func(p *v1.LLMProvider) { p.Spec.Model = "\u3000\u00a0" }),
+			mutate: func(p *v1.LLMProvider) { p.Spec.Model = "\u3000\u00a0" },
 			want:   msgBlankModel,
 		},
 		{
-			name:   "a baseURL that is not a URL is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.BaseURL = "gateway.example" },
-			want:   msgBaseURLShape,
+			name:   "a provider with no agent is refused",
+			mutate: func(p *v1.LLMProvider) { p.Spec.Agent = "" },
+			want:   "spec.agent: Required value",
+		},
+		{
+			name:   "a provider with no auth is refused",
+			mutate: func(p *v1.LLMProvider) { p.Spec.Auth = v1.CLIAgentAuth{} },
+			want:   "spec.auth: Required value",
+		},
+		{
+			name:   "a timeout below a second is refused",
+			mutate: func(p *v1.LLMProvider) { p.Spec.TimeoutSeconds = -1 },
+			want:   "spec.timeoutSeconds: Invalid value",
 		},
 		// Crewlet runs every chainless seat on the provider keyed default,
 		// ahead of the Company's order.
@@ -149,12 +73,9 @@ const (
 	openCodeModelListing = "opencode models --standalone"
 )
 
-// The messages of the rules over a CLIAgent provider.
+// The messages of the rules over a provider's CLI and its sign-in.
 const (
-	msgCLIBlock       = "cli is required with type CLIAgent and not allowed otherwise"
-	msgCLIHTTP        = "baseURL, timeoutSeconds and cooldowns configure an HTTP client"
-	msgCLIKey         = "a CLIAgent provider takes apiKeySecretRefs with cli.auth.mode APIKey, and only then"
-	msgCLIOneKey      = "a CLIAgent provider gives its CLI one key"
+	msgCLIKey         = "apiKeySecretRef is the key auth mode APIKey hands the CLI"
 	msgCLIRunIn       = "runIn applies to mode Agent only"
 	msgCLIAgentRunner = "mode Agent runs a CLI Crewlet has a sandbox runner for: ClaudeCode or OpenCode"
 	msgCLIToken       = "auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode"
@@ -171,20 +92,20 @@ const (
 		"seat's own home"
 )
 
-func TestCLIAgentProviderValidation(t *testing.T) {
-	// cliProvider is Claude Code as a text model on a headless token.
-	cliProvider := func(namespace, name string) *v1.LLMProvider {
+// TestLLMProviderSignInValidation covers the rules over a provider's CLI and
+// how it signs in, each of which Crewlet's admission holds too (the CRD
+// suite's engine tests hold the lists they name to it).
+func TestLLMProviderSignInValidation(t *testing.T) {
+	// tokenProvider is Claude Code as a text model on a headless token.
+	tokenProvider := func(namespace, name string) *v1.LLMProvider {
 		p := llmProvider(namespace, name)
-		p.Spec.Type = v1.LLMProviderCLIAgent
 		p.Spec.Model = "sonnet"
-		p.Spec.APIKeySecretRefs = nil
-		p.Spec.CLI = v1.CLIAgentSettings{
-			Agent: v1.CLIAgentClaudeCode,
-			Auth:  v1.CLIAgentAuth{TokenSecretRef: secretKey("claude", "oauthToken")},
-		}
+		p.Spec.Auth = v1.CLIAgentAuth{TokenSecretRef: secretKey("claude", "oauthToken")}
 		return p
 	}
-	agentMode := func(p *v1.LLMProvider) { p.Spec.CLI.Mode = v1.CLIAgentModeAgent }
+	agentMode := func(p *v1.LLMProvider) { p.Spec.Mode = v1.CLIAgentModeAgent }
+	// metered signs the provider in with auth mode APIKey on one key.
+	metered := v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey, APIKeySecretRef: secretKey(providerName, apiKeyKey)}
 	// keyInEnv signs agent in to a subscription with no login of its own,
 	// its model provider's key in env: the route Crewlet's Hermes, Pi and
 	// OpenCode profiles document, as they name no key variable for the
@@ -192,9 +113,9 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 	keyInEnv := func(agent v1.CLIAgentName, key string) func(*v1.LLMProvider) {
 		return func(p *v1.LLMProvider) {
 			p.Spec.Model = modelViaAnthropic
-			p.Spec.CLI.Agent = agent
-			p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription}
-			p.Spec.CLI.Env = []v1.SecretEnvVar{{Name: key, ValueFrom: fromSecret("model-keys", "key")}}
+			p.Spec.Agent = agent
+			p.Spec.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription}
+			p.Spec.Env = []v1.SecretEnvVar{{Name: key, ValueFrom: fromSecret("model-keys", "key")}}
 		}
 	}
 
@@ -203,37 +124,34 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 		{
 			name: "every setting is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				c := &p.Spec.CLI
-				c.Mode = v1.CLIAgentModeAgent
-				c.RunIn = v1.CLIAgentRunInE2B
-				c.Auth.Mode = v1.CLIAgentAuthSubscription
-				c.Env = []v1.SecretEnvVar{{Name: envProxy, ValueFrom: fromSecret("claude", "proxy")}}
-				c.TimeoutSeconds = 900
-				c.MaxConcurrent = 2
-				c.LoginName = "claude"
+				p.Spec.Mode = v1.CLIAgentModeAgent
+				p.Spec.RunIn = v1.CLIAgentRunInE2B
+				p.Spec.Auth.Mode = v1.CLIAgentAuthSubscription
+				p.Spec.Env = []v1.SecretEnvVar{{Name: envProxy, ValueFrom: fromSecret("claude", "proxy")}}
+				p.Spec.TimeoutSeconds = 900
+				p.Spec.MaxConcurrent = 2
+				p.Spec.LoginName = "claude"
 			},
 		},
 		{
 			name: "Codex on an exported login is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				p.Spec.CLI.Agent = v1.CLIAgentCodex
-				p.Spec.CLI.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("codex", "bundle")}
+				p.Spec.Agent = v1.CLIAgentCodex
+				p.Spec.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("codex", "bundle")}
 			},
 		},
 		{
 			name: "Claude Code in mode Agent on a metered key is accepted",
 			mutate: func(p *v1.LLMProvider) {
 				agentMode(p)
-				p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}
-				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
+				p.Spec.Auth = metered
 			},
 		},
 		{
 			name: "Codex on a metered key is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				p.Spec.CLI.Agent = v1.CLIAgentCodex
-				p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}
-				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
+				p.Spec.Agent = v1.CLIAgentCodex
+				p.Spec.Auth = metered
 			},
 		},
 		{
@@ -244,7 +162,7 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey)(p)
 				agentMode(p)
-				p.Spec.CLI.RunIn = v1.CLIAgentRunInE2B
+				p.Spec.RunIn = v1.CLIAgentRunInE2B
 			},
 		},
 		{
@@ -263,7 +181,7 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey)(p)
 				agentMode(p)
-				p.Spec.CLI.Auth.CredentialBundleSecretRef = secretKey("opencode", "bundle")
+				p.Spec.Auth.CredentialBundleSecretRef = secretKey("opencode", "bundle")
 			},
 		},
 		{
@@ -271,8 +189,8 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			mutate: func(p *v1.LLMProvider) {
 				agentMode(p)
 				p.Spec.Model = modelViaAnthropic
-				p.Spec.CLI.Agent = v1.CLIAgentOpenCode
-				p.Spec.CLI.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("opencode", "bundle")}
+				p.Spec.Agent = v1.CLIAgentOpenCode
+				p.Spec.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("opencode", "bundle")}
 			},
 			want: msgCLIRemoteLogin,
 		},
@@ -283,7 +201,7 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentOpenCode, envProxy)(p)
 				agentMode(p)
-				p.Spec.CLI.Auth.CredentialBundleSecretRef = secretKey("opencode", "bundle")
+				p.Spec.Auth.CredentialBundleSecretRef = secretKey("opencode", "bundle")
 			},
 			want: msgCLIRemoteLogin,
 		},
@@ -300,9 +218,8 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey)(p)
 				agentMode(p)
-				p.Spec.CLI.Env = nil
-				p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}
-				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
+				p.Spec.Env = nil
+				p.Spec.Auth = metered
 			},
 			want: msgCLIKeyAgent,
 		},
@@ -319,7 +236,7 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 		{
 			name: "a headless token for a CLI other than Claude Code is refused",
 			mutate: func(p *v1.LLMProvider) {
-				p.Spec.CLI.Agent = v1.CLIAgentCodex
+				p.Spec.Agent = v1.CLIAgentCodex
 			},
 			want: msgCLIToken,
 		},
@@ -329,82 +246,50 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			name: "CursorAgent on a metered key is accepted",
 			mutate: func(p *v1.LLMProvider) {
 				p.Spec.Model = "auto"
-				p.Spec.CLI.Agent = v1.CLIAgentCursorAgent
-				p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}
-				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
+				p.Spec.Agent = v1.CLIAgentCursorAgent
+				p.Spec.Auth = metered
 			},
 		},
 		{
 			name: "auth mode APIKey for a CLI with no key variable is refused",
 			mutate: func(p *v1.LLMProvider) {
-				p.Spec.CLI.Agent = v1.CLIAgentHermes
-				p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}
-				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
+				p.Spec.Agent = v1.CLIAgentHermes
+				p.Spec.Auth = metered
 			},
 			want: msgCLIKeyAgent,
 		},
 		{
 			name: "a headless token beside an exported login is refused",
 			mutate: func(p *v1.LLMProvider) {
-				p.Spec.CLI.Auth.CredentialBundleSecretRef = secretKey("claude", "bundle")
+				p.Spec.Auth.CredentialBundleSecretRef = secretKey("claude", "bundle")
 			},
 			want: msgCLITwoLogins,
 		},
 		{
-			name:   "type CLIAgent without cli is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.CLI = v1.CLIAgentSettings{} },
-			want:   msgCLIBlock,
-		},
-		{
-			name: "cli on an Anthropic provider is refused",
-			mutate: func(p *v1.LLMProvider) {
-				p.Spec.Type = v1.LLMProviderAnthropic
-				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
-			},
-			want: msgCLIBlock,
-		},
-		{
-			name:   "an HTTP timeout is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.TimeoutSeconds = 600 },
-			want:   msgCLIHTTP,
-		},
-		{
-			name:   "a baseURL is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.BaseURL = "https://gateway.example" },
-			want:   msgCLIHTTP,
-		},
-		{
 			name: "a key outside auth mode APIKey is refused",
 			mutate: func(p *v1.LLMProvider) {
-				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
+				p.Spec.Auth.APIKeySecretRef = secretKey(providerName, apiKeyKey)
 			},
 			want: msgCLIKey,
 		},
 		{
+			// Crewlet would read the CLI's key variable from its secret
+			// store and the engine's environment, which are not this
+			// object's to name.
 			name:   "auth mode APIKey without a key is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey} },
+			mutate: func(p *v1.LLMProvider) { p.Spec.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey} },
 			want:   msgCLIKey,
 		},
 		{
-			name: "two keys are refused",
-			mutate: func(p *v1.LLMProvider) {
-				p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}
-				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{
-					secretKey(providerName, "first"), secretKey(providerName, "second"),
-				}
-			},
-			want: msgCLIOneKey,
-		},
-		{
 			name:   "runIn in mode Text is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.CLI.RunIn = v1.CLIAgentRunInE2B },
+			mutate: func(p *v1.LLMProvider) { p.Spec.RunIn = v1.CLIAgentRunInE2B },
 			want:   msgCLIRunIn,
 		},
 		{
 			name: "a CLI with no sandbox runner in mode Agent is refused",
 			mutate: func(p *v1.LLMProvider) {
 				agentMode(p)
-				p.Spec.CLI.Agent = v1.CLIAgentCodex
+				p.Spec.Agent = v1.CLIAgentCodex
 			},
 			want: msgCLIAgentRunner,
 		},
@@ -412,21 +297,21 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			name: "an exported login in mode Agent is refused",
 			mutate: func(p *v1.LLMProvider) {
 				agentMode(p)
-				p.Spec.CLI.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("claude", "bundle")}
+				p.Spec.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("claude", "bundle")}
 			},
 			want: msgCLIRemoteLogin,
 		},
 		{
 			name:   "a subscription with no login is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription} },
+			mutate: func(p *v1.LLMProvider) { p.Spec.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription} },
 			want:   msgCLINoLogin,
 		},
 		{
-			// The rule sits on cli, which sees the agent and env, and
+			// The rule sits on spec, which sees the agent and env, and
 			// reports the field a person has to change.
 			name:   "a subscription with no login is reported at auth",
-			mutate: func(p *v1.LLMProvider) { p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription} },
-			want:   "spec.cli.auth: Invalid value",
+			mutate: func(p *v1.LLMProvider) { p.Spec.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription} },
+			want:   "spec.auth: Invalid value",
 		},
 		{
 			// Crewlet compares a name's parts ignoring case.
@@ -449,22 +334,22 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			name: "Hermes on an exported login beside a key in env is accepted",
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentHermes, "OPENROUTER_API_KEY")(p)
-				p.Spec.CLI.Auth.CredentialBundleSecretRef = secretKey("hermes", "bundle")
+				p.Spec.Auth.CredentialBundleSecretRef = secretKey("hermes", "bundle")
 			},
 		},
 		{
 			name: "Hermes on a subscription with neither a login nor env is refused",
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentHermes, "OPENROUTER_API_KEY")(p)
-				p.Spec.CLI.Env = nil
+				p.Spec.Env = nil
 			},
 			want: msgCLINoLogin,
 		},
 		{
 			name: "a subscription token beside auth mode APIKey is refused",
 			mutate: func(p *v1.LLMProvider) {
-				p.Spec.CLI.Auth.Mode = v1.CLIAgentAuthAPIKey
-				p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
+				p.Spec.Auth.Mode = v1.CLIAgentAuthAPIKey
+				p.Spec.Auth.APIKeySecretRef = secretKey(providerName, apiKeyKey)
 			},
 			want: msgCLILoginFields,
 		},
@@ -473,17 +358,17 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			// in many fields of the company document can have the engine
 			// send anywhere, and the CLI's own children can read.
 			name:   "a login inherited from the engine's environment is not offered",
-			mutate: func(p *v1.LLMProvider) { p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: "InheritEnv"} },
+			mutate: func(p *v1.LLMProvider) { p.Spec.Auth = v1.CLIAgentAuth{Mode: "InheritEnv"} },
 			want:   `Unsupported value: "InheritEnv"`,
 		},
 		{
 			name:   "Crewlet's custom profile is not offered",
-			mutate: func(p *v1.LLMProvider) { p.Spec.CLI.Agent = "Custom" },
+			mutate: func(p *v1.LLMProvider) { p.Spec.Agent = "Custom" },
 			want:   `Unsupported value: "Custom"`,
 		},
 		{
 			name:   "a local run is not offered",
-			mutate: func(p *v1.LLMProvider) { agentMode(p); p.Spec.CLI.RunIn = "Direct" },
+			mutate: func(p *v1.LLMProvider) { agentMode(p); p.Spec.RunIn = "Direct" },
 			want:   `Unsupported value: "Direct"`,
 		},
 	}
@@ -493,7 +378,7 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 	// CLI whose profile names a key variable (Codex's OPENAI_API_KEY) has it
 	// dropped under Subscription, so the key would never reach it; one whose
 	// profile names none (KimiCode) reads a key only from its own files.
-	for _, agent := range enumOf(t, "llmproviders.crewlet.ai", "spec", "cli", "agent") {
+	for _, agent := range enumOf(t, "llmproviders.crewlet.ai", "spec", "agent") {
 		if slices.Contains(envSignIn, v1.CLIAgentName(agent)) {
 			cases = append(cases,
 				createCase[*v1.LLMProvider]{
@@ -531,13 +416,12 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			cases = append(cases, createCase[*v1.LLMProvider]{
 				name: fmt.Sprintf("%s with its own %s in env is refused", agent, variable),
 				mutate: func(p *v1.LLMProvider) {
-					p.Spec.CLI.Agent = agent
-					p.Spec.CLI.Auth = bundle
+					p.Spec.Agent = agent
+					p.Spec.Auth = bundle
 					if variable == own.key {
-						p.Spec.CLI.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}
-						p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey(providerName, apiKeyKey)}
+						p.Spec.Auth = metered
 					}
-					p.Spec.CLI.Env = []v1.SecretEnvVar{{Name: variable, ValueFrom: fromSecret("cli", "value")}}
+					p.Spec.Env = []v1.SecretEnvVar{{Name: variable, ValueFrom: fromSecret("cli", "value")}}
 				},
 				want: msgCLIOwnVariable,
 			})
@@ -545,12 +429,12 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 	}
 	cases = append(cases,
 		createCase[*v1.LLMProvider]{
-			// The rule sits on cli, and reports the field to change.
+			// The rule sits on spec, and reports the field to change.
 			name: "a CLI's own variable in env is reported at env",
 			mutate: func(p *v1.LLMProvider) {
-				p.Spec.CLI.Env = []v1.SecretEnvVar{{Name: envAnthropicKey, ValueFrom: fromSecret("cli", "value")}}
+				p.Spec.Env = []v1.SecretEnvVar{{Name: envAnthropicKey, ValueFrom: fromSecret("cli", "value")}}
 			},
-			want: "spec.cli.env: Invalid value",
+			want: "spec.env: Invalid value",
 		},
 		createCase[*v1.LLMProvider]{
 			// Another CLI's variable is that CLI's business: OpenCode
@@ -568,12 +452,12 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 	inEnvBesideBundle := func(agent v1.CLIAgentName, variable string) func(*v1.LLMProvider) {
 		return func(p *v1.LLMProvider) {
 			p.Spec.Model = modelViaAnthropic
-			p.Spec.CLI.Agent = agent
-			p.Spec.CLI.Auth = bundle
-			p.Spec.CLI.Env = []v1.SecretEnvVar{{Name: variable, ValueFrom: fromSecret("cli", "value")}}
+			p.Spec.Agent = agent
+			p.Spec.Auth = bundle
+			p.Spec.Env = []v1.SecretEnvVar{{Name: variable, ValueFrom: fromSecret("cli", "value")}}
 		}
 	}
-	for _, agent := range enumOf(t, "llmproviders.crewlet.ai", "spec", "cli", "agent") {
+	for _, agent := range enumOf(t, "llmproviders.crewlet.ai", "spec", "agent") {
 		name := v1.CLIAgentName(agent)
 		for _, variable := range append(slices.Clone(homeIsolation), cliIsolation[name]...) {
 			cases = append(cases, createCase[*v1.LLMProvider]{
@@ -585,10 +469,10 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 	}
 	cases = append(cases,
 		createCase[*v1.LLMProvider]{
-			// The rule sits on cli, and reports the field to change.
+			// The rule sits on spec, and reports the field to change.
 			name:   "an isolation variable in env is reported at env",
 			mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, "HOME"),
-			want:   "spec.cli.env: Invalid value",
+			want:   "spec.env: Invalid value",
 		},
 		createCase[*v1.LLMProvider]{
 			// A profile's own directory is its CLI's alone: OpenCode
@@ -610,7 +494,7 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 	openCodeModel := func(model string, mode v1.CLIAgentMode) func(*v1.LLMProvider) {
 		return func(p *v1.LLMProvider) {
 			keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
-			p.Spec.CLI.Mode = mode
+			p.Spec.Mode = mode
 			p.Spec.Model = model
 		}
 	}
@@ -652,32 +536,28 @@ func TestCLIAgentProviderValidation(t *testing.T) {
 			},
 		},
 	)
-	runCreateCases(t, cliProvider, cases)
+	runCreateCases(t, tokenProvider, cases)
 }
 
-// TestCLIAgentEnvSignInEmptyEnv proves an explicit empty env signs an env
+// TestLLMProviderEnvSignInEmptyEnv proves an explicit empty env signs an env
 // sign-in CLI in to nothing: has() is true of a list written as [], which
 // only an unstructured object can send, since the typed client drops an
 // empty list.
-func TestCLIAgentEnvSignInEmptyEnv(t *testing.T) {
+func TestLLMProviderEnvSignInEmptyEnv(t *testing.T) {
 	namespace := newNamespace(t)
 	for _, agent := range envSignIn {
 		t.Run(string(agent), func(t *testing.T) {
 			p := llmProvider(namespace, strings.ToLower(string(agent)))
-			p.Spec.Type = v1.LLMProviderCLIAgent
+			p.Spec.Agent = agent
 			p.Spec.Model = modelViaAnthropic
-			p.Spec.APIKeySecretRefs = nil
-			p.Spec.CLI = v1.CLIAgentSettings{
-				Agent: agent,
-				Auth:  v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription},
-			}
+			p.Spec.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription}
 			content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(p)
 			if err != nil {
 				t.Fatal(err)
 			}
 			obj := &unstructured.Unstructured{Object: content}
 			obj.SetGroupVersionKind(v1.GroupVersion.WithKind("LLMProvider"))
-			if err := unstructured.SetNestedSlice(obj.Object, []any{}, "spec", "cli", "env"); err != nil {
+			if err := unstructured.SetNestedSlice(obj.Object, []any{}, "spec", "env"); err != nil {
 				t.Fatal(err)
 			}
 			expect(t, k8sClient.Create(ctx, obj), msgCLINoLogin)

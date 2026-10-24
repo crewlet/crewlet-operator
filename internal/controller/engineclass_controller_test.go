@@ -82,8 +82,11 @@ var _ = Describe("EngineClass controller in a manager", Ordered, func() {
 					}},
 				}},
 				PlatformLLMProviders: []crewletaiv1alpha1.PlatformLLMProvider{{
-					Name: "platform-claude", Type: crewletaiv1alpha1.LLMProviderAnthropic, Model: "claude-sonnet-5",
-					APIKeySecretRefs: []crewletaiv1alpha1.NamespacedSecretKeyReference{{Namespace: platform, Name: "llm", Key: "apiKey"}},
+					Name: "platform-claude", Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: "claude-sonnet-5",
+					Auth: crewletaiv1alpha1.PlatformLLMProviderAuth{
+						Mode:            crewletaiv1alpha1.CLIAgentAuthAPIKey,
+						APIKeySecretRef: crewletaiv1alpha1.NamespacedSecretKeyReference{Namespace: platform, Name: "llm", Key: "apiKey"},
+					},
 				}},
 			},
 		}

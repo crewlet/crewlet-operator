@@ -28,7 +28,7 @@ import (
 )
 
 // TestCLIAgentSignInFollowsTheEngine holds the LLMProvider API's rules over a
-// CLIAgent provider's sign-in, and the table docs/guides/cli-agents.md states
+// provider's sign-in, and the table docs/guides/cli-agents.md states
 // them in, to the engine every suite runs (crewlet's main) rather than to a
 // copy of its profile table. The token and key variable of each CLI are read
 // from crewlet's own refusals, and held to the copy the API's own-variable
@@ -52,7 +52,7 @@ import (
 // must agree.
 func TestCLIAgentSignInFollowsTheEngine(t *testing.T) {
 	namespace := newNamespace(t)
-	agents := enumOf(t, "llmproviders.crewlet.ai", "spec", "cli", "agent")
+	agents := enumOf(t, "llmproviders.crewlet.ai", "spec", "agent")
 	// The coding agents an Agent-mode run of the engine works for:
 	// the render tests hold the enum to the engine's runners.
 	agentRunners := enumOf(t, "companies.crewlet.ai", "spec", "sandbox", "defaultCodingAgent")
@@ -81,7 +81,7 @@ func TestCLIAgentSignInFollowsTheEngine(t *testing.T) {
 			verdicts[shape] = map[string]verdict{}
 			for i := range providers {
 				p := &providers[i]
-				verdicts[shape][string(p.Spec.CLI.Agent)] = verdict{
+				verdicts[shape][string(p.Spec.Agent)] = verdict{
 					refusal: admitted[p.Name],
 					problem: first(report.problems[p.Name]),
 					warning: first(report.warnings[p.Name]),
@@ -125,7 +125,7 @@ func TestCLIAgentSignInFollowsTheEngine(t *testing.T) {
 }
 
 // TestCLIAgentModelFollowsTheEngine holds the LLMProvider API's rules over a
-// CLIAgent provider's model to the engine, which refuses a model of
+// provider's model to the engine, which refuses a model of
 // white space alone, and on every write a model with no provider segment for
 // a CLI whose profile reads its model as <provider>/<model>
 // (model_names_provider). Every CLI the API offers is
@@ -147,7 +147,7 @@ func TestCLIAgentSignInFollowsTheEngine(t *testing.T) {
 // override of, so the value the rule judges is spec.model itself.
 func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
 	namespace := newNamespace(t)
-	agents := enumOf(t, "llmproviders.crewlet.ai", "spec", "cli", "agent")
+	agents := enumOf(t, "llmproviders.crewlet.ai", "spec", "agent")
 	variables := engineVariables(t, namespace, agents)
 	models := []string{
 		"claude-sonnet-5", modelViaAnthropic, modelViaOpenRouter,
@@ -193,13 +193,13 @@ func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
 				switch {
 				case refused[p.Name] && !engineRefuses:
 					t.Errorf("%s, mode %s, model %q: the API refuses the model and the engine admits it",
-						p.Spec.CLI.Agent, mode, model)
+						p.Spec.Agent, mode, model)
 				case !refused[p.Name] && engineRefuses:
 					t.Errorf("%s, mode %s, model %q: the engine refuses the model and the API admits it: %s",
-						p.Spec.CLI.Agent, mode, model, report.models[p.Name][0])
+						p.Spec.Agent, mode, model, report.models[p.Name][0])
 				}
 				if engineRefuses {
-					refusedModels[p.Spec.CLI.Agent] = true
+					refusedModels[p.Spec.Agent] = true
 				}
 				// The rule's message quotes the engine's refusal of a
 				// model naming no provider: the error OpenCode refuses it
@@ -217,11 +217,11 @@ func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
 				for _, phrase := range []string{openCodeModelRefusal, openCodeModelListing} {
 					if !strings.Contains(engineRefusal, phrase) {
 						t.Errorf("%s, mode %s, model %q: the engine's refusal no longer says %q, which the API's "+
-							"rule quotes: %s", p.Spec.CLI.Agent, mode, model, phrase, engineRefusal)
+							"rule quotes: %s", p.Spec.Agent, mode, model, phrase, engineRefusal)
 					}
 					if !strings.Contains(refusals[p.Name], phrase) {
 						t.Errorf("%s, mode %s, model %q: the API's refusal does not say %q, as the engine's does: %s",
-							p.Spec.CLI.Agent, mode, model, phrase, refusals[p.Name])
+							p.Spec.Agent, mode, model, phrase, refusals[p.Name])
 					}
 				}
 			}
@@ -253,8 +253,8 @@ func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
 // the variables env may not set, because Crewlet sets them on every call of
 // the CLI to keep it inside its seat's own home and its call's working
 // directory, to the engine every suite runs. The engine refuses one in a
-// cli-agent entry's cli.env naming every variable of the list for that CLI
-// (crewlet's validateCLICredentials, over cliprofile's IsolationVariables), so
+// providers.llm entry's env naming every variable of the list for that CLI
+// (crewlet's validateCredentials, over cliprofile's IsolationVariables), so
 // one provider of each CLI the API offers sets HOME, which every CLI's list
 // holds, and the list is read from the refusal and held to the copy the
 // rule's cases are built from (homeIsolation and cliIsolation). Then every
@@ -269,7 +269,7 @@ func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
 // message and the guide follow it.
 func TestCLIAgentIsolationFollowsTheEngine(t *testing.T) {
 	namespace := newNamespace(t)
-	agents := enumOf(t, "llmproviders.crewlet.ai", "spec", "cli", "agent")
+	agents := enumOf(t, "llmproviders.crewlet.ai", "spec", "agent")
 	bundle := signInShape{
 		name: shapeBundle + ", env HOME",
 		auth: v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("cli", "bundle")},
@@ -292,14 +292,14 @@ func TestCLIAgentIsolationFollowsTheEngine(t *testing.T) {
 			}
 		}
 		if len(lists) != 1 {
-			t.Fatalf("%s: want one problem matching %q, got %q", p.Spec.CLI.Agent, isolationRefusal, report.problems[p.Name])
+			t.Fatalf("%s: want one problem matching %q, got %q", p.Spec.Agent, isolationRefusal, report.problems[p.Name])
 		}
 		got := slices.Sorted(slices.Values(lists[0]))
-		engineLists[p.Spec.CLI.Agent] = got
-		want := slices.Sorted(slices.Values(append(slices.Clone(homeIsolation), cliIsolation[p.Spec.CLI.Agent]...)))
+		engineLists[p.Spec.Agent] = got
+		want := slices.Sorted(slices.Values(append(slices.Clone(homeIsolation), cliIsolation[p.Spec.Agent]...)))
 		if !slices.Equal(got, want) {
 			t.Errorf("%s: the engine sets %v on every call to isolate the CLI, the API's rule refuses %v in env",
-				p.Spec.CLI.Agent, got, want)
+				p.Spec.Agent, got, want)
 		}
 		for _, name := range got {
 			if !slices.Contains(everyName, name) {
@@ -329,7 +329,7 @@ func TestCLIAgentIsolationFollowsTheEngine(t *testing.T) {
 	// The probe above tries the engine's names alone, so a name the rule
 	// refuses that no list holds, a provider the API refuses and the engine
 	// runs, is read off the rule instead.
-	rule := validationOf(t, "llmproviders.crewlet.ai", msgCLIIsolation, "spec", "cli")
+	rule := validationOf(t, "llmproviders.crewlet.ai", msgCLIIsolation, "spec")
 	quoted := quotedVariable.FindAllStringSubmatch(rule.Rule, -1)
 	named := make([]string, 0, len(quoted))
 	for _, m := range quoted {
@@ -477,9 +477,9 @@ func codeSpans(cell string) []string {
 	return out
 }
 
-// isolationRefusal is the engine's refusal of a variable in a cli-agent
-// entry's cli.env that it sets on every call of the CLI, naming every such
-// variable for that CLI (crewlet's internal/config, validateCLICredentials):
+// isolationRefusal is the engine's refusal of a variable in a providers.llm
+// entry's env that it sets on every call of the CLI, naming every such
+// variable for that CLI (crewlet's internal/config, validateCredentials):
 // here, of HOME.
 var isolationRefusal = regexp.MustCompile(`HOME is a variable the engine sets for every call of this CLI to ` +
 	`keep it inside its seat's own home and its call's working directory \(([A-Za-z0-9_, ]+)\)`)
@@ -563,7 +563,7 @@ func signInTableFollows(t *testing.T, agents []string, variables map[v1.CLIAgent
 	fromEnv []v1.CLIAgentName, verdicts map[string]map[string]verdict) {
 	t.Helper()
 	const guide = "docs/guides/cli-agents.md"
-	rows, err := docs.Table(filepath.Join("..", "..", guide), "`cli.agent`")
+	rows, err := docs.Table(filepath.Join("..", "..", guide), "`agent`")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -612,15 +612,25 @@ func signInTableFollows(t *testing.T, agents []string, variables map[v1.CLIAgent
 
 // engineVariables reads from the engine the token and key variable
 // its profile for each of agents names. One provider of each CLI asks for
-// both, in auth mode APIKey with a token and no key, which the engine
-// refuses naming the variable each would have filled, or saying the profile
-// names none.
+// both, in auth mode APIKey with a token, which the engine refuses naming
+// the token variable it would have removed or saying the profile names none,
+// and with every key variable the API's rules name set in env, of which the
+// engine refuses the one auth owns for that CLI, or says the profile names no
+// key variable for auth mode APIKey to fill. A profile that gains a key
+// variable no rule names answers neither, which fails the read.
 func engineVariables(t *testing.T, namespace string, agents []string) map[v1.CLIAgentName]cliVariable {
 	t.Helper()
 	probe := signInShape{auth: v1.CLIAgentAuth{
-		Mode:           v1.CLIAgentAuthAPIKey,
-		TokenSecretRef: secretKey("cli", "token"),
+		Mode:            v1.CLIAgentAuthAPIKey,
+		TokenSecretRef:  secretKey("cli", "token"),
+		APIKeySecretRef: secretKey("cli", apiKeyKey),
 	}}
+	for _, v := range cliVariables {
+		if v.key != "" && !slices.Contains(probe.env, v.key) {
+			probe.env = append(probe.env, v.key)
+		}
+	}
+	slices.Sort(probe.env)
 	providers := make([]v1.LLMProvider, 0, len(agents))
 	for _, agent := range agents {
 		providers = append(providers, *shapedProvider(namespace, v1.CLIAgentName(agent), v1.CLIAgentModeText, &probe))
@@ -647,24 +657,23 @@ func engineVariables(t *testing.T, namespace string, agents []string) map[v1.CLI
 		problems := report.problems[p.Name]
 		key, err := read(problems, keyVariable, noKeyVariable)
 		if err != nil {
-			t.Fatalf("%s: reading its key variable: %v", p.Spec.CLI.Agent, err)
+			t.Fatalf("%s: reading its key variable: %v", p.Spec.Agent, err)
 		}
 		token, err := read(problems, tokenVariable, noTokenVariable)
 		if err != nil {
-			t.Fatalf("%s: reading its token variable: %v", p.Spec.CLI.Agent, err)
+			t.Fatalf("%s: reading its token variable: %v", p.Spec.Agent, err)
 		}
 		if key != "" || token != "" {
-			out[p.Spec.CLI.Agent] = cliVariable{headless: token, key: key}
+			out[p.Spec.Agent] = cliVariable{headless: token, key: key}
 		}
 	}
 	return out
 }
 
 // The engine's refusals of a token and of a key a profile has or lacks the
-// variable for (crewlet's internal/config, validateCLICredentials).
+// variable for (crewlet's internal/config, validateCredentials).
 var (
-	keyVariable = regexp.MustCompile(
-		`auth\.mode api-key puts the api_keys value in ([A-Za-z0-9_]+), and this entry names none`)
+	keyVariable   = regexp.MustCompile(`([A-Za-z0-9_]+) is this CLI's key variable, which auth owns`)
 	noKeyVariable = regexp.MustCompile(`profile names none \(api_key_env\)`)
 	tokenVariable = regexp.MustCompile(
 		`a token is read only under auth\.mode subscription: api-key removes ([A-Za-z0-9_]+) from`)
@@ -707,9 +716,7 @@ const (
 type signInShape struct {
 	name string
 	auth v1.CLIAgentAuth
-	// key gives the provider one apiKeySecretRefs key.
-	key bool
-	// env is the names the cli block's env sets.
+	// env is the names the provider's env sets.
 	env []string
 }
 
@@ -741,7 +748,9 @@ func signInShapes(variables map[v1.CLIAgentName]cliVariable) []signInShape {
 	bundle := v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("cli", "bundle")}
 	shapes := make([]signInShape, 0, 3+len(inEnv)+len(besideBundle))
 	shapes = append(shapes,
-		signInShape{name: shapeAPIKey, auth: v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey}, key: true},
+		signInShape{name: shapeAPIKey, auth: v1.CLIAgentAuth{
+			Mode: v1.CLIAgentAuthAPIKey, APIKeySecretRef: secretKey("cli", apiKeyKey),
+		}},
 		signInShape{name: shapeToken, auth: v1.CLIAgentAuth{TokenSecretRef: secretKey("cli", "token")}},
 		signInShape{name: shapeBundle, auth: bundle},
 	)
@@ -758,19 +767,16 @@ func signInShapes(variables map[v1.CLIAgentName]cliVariable) []signInShape {
 	return shapes
 }
 
-// shapedProvider is a CLIAgent provider of agent in mode, signed in as s,
-// named for its agent so a document can hold one of each.
+// shapedProvider is a provider of agent in mode, signed in as s, named for
+// its agent so a document can hold one of each.
 func shapedProvider(namespace string, agent v1.CLIAgentName, mode v1.CLIAgentMode, s *signInShape) *v1.LLMProvider {
 	p := llmProvider(namespace, strings.ToLower(string(agent)))
-	p.Spec.Type = v1.LLMProviderCLIAgent
+	p.Spec.Agent = agent
 	p.Spec.Model = "probe/probe-model"
-	p.Spec.APIKeySecretRefs = nil
-	if s.key {
-		p.Spec.APIKeySecretRefs = []v1.SecretKeyReference{secretKey("cli", apiKeyKey)}
-	}
-	p.Spec.CLI = v1.CLIAgentSettings{Agent: agent, Mode: mode, Auth: s.auth}
+	p.Spec.Mode = mode
+	p.Spec.Auth = s.auth
 	for _, name := range s.env {
-		p.Spec.CLI.Env = append(p.Spec.CLI.Env, v1.SecretEnvVar{Name: name, ValueFrom: fromSecret("cli", "env")})
+		p.Spec.Env = append(p.Spec.Env, v1.SecretEnvVar{Name: name, ValueFrom: fromSecret("cli", "env")})
 	}
 	return p
 }
