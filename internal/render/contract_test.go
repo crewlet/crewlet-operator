@@ -1262,7 +1262,7 @@ func TestContractContactAdvisoryFollowsTheChatSurface(t *testing.T) {
 			if c.warns {
 				want = append(want, advisory{
 					path: doc.Sources[i].Path.String() + ".contact",
-					says: person.Name + " is a human seat with no account on Slack",
+					says: fmt.Sprintf("the human seat %q has no account on Slack", person.Name),
 				})
 			}
 			env := bootstrapEnv(tierA)
