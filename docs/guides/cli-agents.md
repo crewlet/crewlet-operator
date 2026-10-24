@@ -360,16 +360,30 @@ A bundle restored over a newer login is how a vendor that rotates refresh
 tokens logs a deployment out, which is why a token is the better of the two
 wherever the CLI mints one.
 
-Providers that set the same `loginName` share one login and its seats'
-homes, which is how several models run off one subscription; they must
-drive the same CLI, or the engine refuses the document.
+Providers that set the same `loginName` and drive the same CLI share one
+login and its seats' homes, which is how several models run off one
+subscription. Each CLI keeps its files in a directory of its own under the
+login (`/var/lib/crewlet/llm-cli/<loginName>/<cli>`, such as `claude-code` or
+`codex`), so a provider of another CLI with that `loginName` shares the
+directory and nothing in it
+([Per-phase models](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#per-phase-models)).
+
+**Moving a provider to another `agent`** is an ordinary change, applied
+with no restart: the new CLI starts signed out in a login of its own beside
+the old one's, which stays there for a move back. Sign the new CLI in. A
+bundle belongs to the CLI it was exported from, so a provider's
+`auth.credentialBundleSecretRef` still holds the old CLI's files after the
+move, and the engine refuses to restore it into the new CLI's empty login,
+logging `cli_agent_bundle_restore_failed`, until the Secret holds a bundle
+exported from the new CLI
+([An entry moved to another CLI](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#an-entry-moved-to-another-cli)).
 
 ### An OpenCode login in a bundle
 
 OpenCode 2 keeps its logins in a database of its own rather than in files,
 so an OpenCode bundle holds one file: the document `opencode auth export
 --standalone` printed. The engine keeps it as the login of record
-(`credentials/exported-credentials` under
+(`opencode/credentials/exported-credentials` under
 `/var/lib/crewlet/llm-cli/<loginName>`), imports it into an empty database in
 a seat's home before the seat's calls, and exports it back when OpenCode
 refreshed it

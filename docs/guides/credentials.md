@@ -400,7 +400,10 @@ login is the one to keep ([Signing in](cli-agents.md#signing-in)). To move a
 provider onto a new bundle, give it, and every provider sharing its login, a
 new `loginName`: its login directory is then empty, and the revision that
 moves it restores the bundle there, with no restart. The old directory's
-login and seat homes stay on the data volume.
+login and seat homes stay on the data volume. A bundle belongs to the CLI it
+was exported from: after a provider moves to another `agent`, the new CLI's
+login is empty, and the bundle in the Secret is refused there until it holds
+one exported from the new CLI ([Signing in](cli-agents.md#signing-in)).
 
 What the engine reads when it starts is the other exception. The values in its
 `crewlet.yaml` (the API tokens, the keyring, the Company's object-store keys,
