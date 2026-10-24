@@ -1440,6 +1440,14 @@ func unknownOutcome(stored, node, base string) string {
 // and could not confirm: the 503 naming the revision it stored, and no
 // other. A lost race names a stored revision too, but the engine knows it
 // did not activate, and a 503 naming none stored nothing to look for.
+//
+// It also pins how that answer decodes: ErrUnavailable and not
+// ErrRevisionAdvanced, the Retry-After of an undecided answer, and the
+// engine's hint, which names the node whose history alone holds the revision.
+// Read as a lost race it would send the operator to render again over a
+// revision that may be its own; the wait is when a read may tell, never a
+// cue to send the same write again, which from the same base loses to its
+// own first attempt.
 func TestUnconfirmedActivationIsTheEnginesUnknownOutcome(t *testing.T) {
 	for _, c := range []struct {
 		name, body string
@@ -1457,11 +1465,32 @@ func TestUnconfirmedActivationIsTheEnginesUnknownOutcome(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			f := newFakeEngine(t)
-			f.handle("PUT /config", answer(c.status, c.body))
+			f.handle("PUT /config", func(w http.ResponseWriter, r *http.Request) {
+				if c.stored != "" {
+					w.Header().Set("Retry-After", "2")
+				}
+				answer(c.status, c.body)(w, r)
+			})
 			_, err := apply(f, write)
 			stored, ok := engine.UnconfirmedActivation(err)
 			if ok != (c.stored != "") || stored != c.stored {
 				t.Errorf("UnconfirmedActivation(%v) = %q, %t; want %q, %t", err, stored, ok, c.stored, c.stored != "")
+			}
+			if c.stored == "" {
+				return
+			}
+			var apiErr *engine.APIError
+			if !errors.As(err, &apiErr) || !errors.Is(err, engine.ErrUnavailable) ||
+				errors.Is(err, engine.ErrRevisionAdvanced) {
+				t.Fatalf("ApplyConfig() = %v, want an *APIError matching ErrUnavailable and not ErrRevisionAdvanced", err)
+			}
+			var want struct{ Hint string }
+			if err := json.Unmarshal([]byte(c.body), &want); err != nil {
+				t.Fatal(err)
+			}
+			if apiErr.RetryAfter != 2*time.Second || apiErr.Hint != want.Hint || !strings.Contains(apiErr.Hint, "node-0") {
+				t.Errorf("APIError = {retry after %s, hint %q}, want {2s, the engine's hint naming node-0}",
+					apiErr.RetryAfter, apiErr.Hint)
 			}
 		})
 	}

@@ -14,7 +14,7 @@
 // matches ErrRevisionAdvanced, a refused token ErrUnauthorized, a token the
 // engine will not let do this ErrForbidden, a write a managed document
 // refuses this token ErrConfigManaged, a revision the engine's keyring does
-// not open ErrRevisionUnreadable, a request the engine asks to be sent again
+// not open ErrRevisionUnreadable, a request the engine could not answer now
 // ErrUnavailable, a draining or unconfigured engine ErrNotReady, and anything
 // else an *APIError with the engine's code and message.
 //
@@ -364,8 +364,14 @@ func (c *Client) Revision(ctx context.Context, id string) (Revision, error) {
 // problem; a stale req.IfMatch, or a write that lost a race with another
 // writer, with ErrRevisionAdvanced (a 412 when req.IfMatch is set, a 409 when
 // it is not); req.CreateOnly on a configured engine with ErrAlreadyConfigured;
-// and a write while the engine's keyring does not open the fleet's revision,
-// which the write reads first, with ErrRevisionUnreadable.
+// a write while the engine's keyring does not open the fleet's revision, which
+// the write reads first, with ErrRevisionUnreadable; and a write whose
+// activation the engine sent and could not confirm with ErrUnavailable naming
+// the revision it stored, which UnconfirmedActivation reads. The fleet may run
+// that revision or may not: the caller keeps it until a read of the fleet's
+// activation (Fleet.Activation) says which, and sends the write again, on the
+// condition it was first sent on, only once that read shows the fleet still
+// runs the revision the write was built on.
 func (c *Client) ApplyConfig(ctx context.Context, req ApplyRequest) (ApplyResult, error) {
 	if req.IfMatch != "" && req.CreateOnly {
 		return ApplyResult{}, errors.New("apply the company document: IfMatch and CreateOnly are mutually exclusive: " +

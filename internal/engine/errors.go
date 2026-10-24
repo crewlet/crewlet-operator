@@ -61,11 +61,23 @@ var (
 	// changes nothing.
 	ErrForbidden = errors.New("the engine does not let the API token do this")
 
-	// ErrUnavailable is a request the engine could not answer now and asks
-	// to be sent again (503): it could not decide who is asking, or could
-	// not read what the request needs, such as who holds a seat a write
-	// takes away. The *APIError behind it carries RetryAfter when the
-	// engine said when.
+	// ErrUnavailable is a request the engine could not answer now (503): it
+	// could not decide who is asking, or could not read what the request
+	// needs, such as who holds a seat a write takes away or a store of its
+	// fleet's that did not answer. The *APIError behind it carries
+	// RetryAfter where the engine said when to ask again.
+	//
+	// A config write can be one too after the engine has stored its
+	// revision: the activation was sent to the fleet's coordination store,
+	// whose answer never came back, so the engine may run the revision or
+	// may not. That 503 carries the Retry-After of an undecided answer, when
+	// a read may tell, and names the revision in StoredRevisionID and the
+	// node that stored it in its hint: UnconfirmedActivation tells it from
+	// every other 503. What settles it is a read of the fleet's
+	// activation (Fleet.Activation), before the write is sent again: once
+	// the first did activate, the same write from the same base loses the
+	// race to it and is refused ErrRevisionAdvanced, and a write built on
+	// the revision it stored activates the same document a second time.
 	ErrUnavailable = errors.New("the engine could not answer now")
 
 	// ErrRevisionUnreadable is a revision of the company document that the
@@ -155,9 +167,11 @@ type APIError struct {
 	CurrentRevisionID string
 
 	// StoredRevisionID is the revision a write stored, when the engine kept
-	// one and could not activate it: a write that lost the race, which left
-	// it inert, or one whose activation the engine sent and could not
-	// confirm (UnconfirmedActivation), which it may run or may not.
+	// one and did not confirm activating it: inert history beside a lost
+	// race (ErrRevisionAdvanced, ErrAlreadyConfigured), or, on a 503
+	// (ErrUnavailable, read by UnconfirmedActivation), the revision whose
+	// activation the engine sent and could not confirm, which the fleet may
+	// run or may not.
 	StoredRevisionID string
 
 	// RevisionID is the revision a refusal is about, when the engine named
