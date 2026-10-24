@@ -918,16 +918,16 @@ the start, which `EngineHealthy=False Alarms` shows.
 Take backups through the engine, which is the only process that can read its
 estate. `crewlet backup` writes a verified copy into a directory on the data
 pod's volume, without stopping the engine. Like every command that reaches a
-running node it takes its token from `CREWLET_API_TOKEN` alone, never a flag,
-so pipe in the access token the Company publishes
-([Reaching the engine](#reaching-the-engine)); the directory is named on your
-machine, so the timestamp is its clock's, in UTC:
+running node it takes the node's address with `-api` and its token from
+`CREWLET_API_TOKEN` alone, never a flag, so pipe in the access token the
+Company publishes ([Reaching the engine](#reaching-the-engine)); the
+directory is named on your machine, so the timestamp is its clock's, in UTC:
 
 ```bash
 dir=/var/lib/crewlet/backups/$(date -u +%Y-%m-%dT%H-%M)
 kubectl get secret acme-api-access -n acme -o jsonpath='{.data.token}' | base64 -d |
   kubectl exec -i -n acme acme-data-0 -- sh -c 'CREWLET_API_TOKEN=$(cat) exec crewlet backup \
-    -config /etc/crewlet/crewlet.yaml -url http://127.0.0.1:8080 -dir "$1"' sh "$dir"
+    -config /etc/crewlet/crewlet.yaml -api http://127.0.0.1:8080 -dir "$1"' sh "$dir"
 ```
 
 Run it at least daily. Copy each backup off the volume (`kubectl cp`), since
