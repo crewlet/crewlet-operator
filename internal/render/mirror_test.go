@@ -112,7 +112,7 @@ const (
 	// and an APIKey provider always carries auth.apiKeySecretRef, so its
 	// SandboxLoginNotPortable report still names the remedies a
 	// Subscription or OpenCode head's refusal does.
-	refusalByModeRead = "v0.1.1-0.20261024161738-9df7126ea389"
+	refusalByModeRead = "v0.1.1-0.20261024180236-65ae4e109ab1"
 	// toolCredentialsGo is where the engine decides what a value that
 	// resolves to nothing does to a tool server or a coding run.
 	toolCredentialsGo = "internal/engine/toolcredentials.go"
