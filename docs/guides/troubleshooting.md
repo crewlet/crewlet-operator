@@ -124,7 +124,7 @@ with your last change yet.
 | | False | `WriteRefused` | The engine refuses the operator's own token a change to the document (`403 config_managed`): its `api.auth.company_writers` names other tokens. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
 | | False | `NotGranted` | The engine knows the operator's token and will not let it make a request the operator needs (`403`): the token lacks the grant the message names, or the engine's identity directory binds it to a seat the company no longer has. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
 | | False | `SeatHeld` | The document takes a human seat out of the company, or makes it an agent's, while a person, a service account or an open invitation holds it in the engine (`409 seat_held`). The message names each seat and what holds it; the engine keeps running the revision it runs. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
-| | False | `RevisionUnreadable` | The engine's keyring does not open the fleet's revision of the company document (`409 unreadable_revision` or `unsealed_revision`), so the engine neither shows the document nor takes another. No wait changes that: the operator writes nothing, and looks again when the data pods restart and every five minutes besides. The message names the revision and quotes the engine's account and remedy; see [The engine cannot open its company document](#the-engine-cannot-open-its-company-document). |
+| | False | `RevisionUnreadable` | The engine's keyring does not open the fleet's revision of the company document (`409 unreadable_revision`, `unsealed_revision`, `unreadable_fleet_revision` or `unsealed_fleet_revision`), so the engine neither shows the document nor takes another. No wait changes that: the operator writes nothing, and looks again when the data pods restart and every five minutes besides. The message names the revision and quotes the engine's account and remedy; see [The engine cannot open its company document](#the-engine-cannot-open-its-company-document). |
 
 ### EngineClass
 
@@ -491,7 +491,7 @@ no document until it can open that revision. No wait changes that, and
 nothing the operator sends does, so the operator writes nothing and does not
 ask again every ten seconds: it looks again when the data pods restart, and
 every five minutes besides. The message names the revision, quotes the
-engine's account and its remedy, and says which of two it is:
+engine's account and its remedy, and says which of four it is:
 
 - `unreadable_revision`: the revision is sealed under a key the data pod's
   keyring does not hold. The keyring is the Secret `<company>-keyring`, which
@@ -500,16 +500,27 @@ engine's account and its remedy, and says which of two it is:
   than the volumes. Put the key back in that Secret from the backup kept
   with the volumes, with its `crewlet.ai/active-key-id` annotation as it was:
   the data pods restart with it, and their restart runs the reconcile again.
+- `unreadable_fleet_revision`: the revision the fleet's activation pointer
+  carries is sealed under a key the data pod's keyring was never given.
+  Every pod of the company has its keyring from `<company>-keyring`, so the
+  data pod lacks a key the Secret gained after it started, and takes it when
+  it restarts (the pods roll on their own once the operator sees the
+  change), or a pod that held the key sealed a revision under it and the key
+  has since gone from the Secret: put it back as above.
 - `unsealed_revision`: the revision is stored without a seal, which no keyring
   opens and no engine reads; only an engine older than the keyring every
   engine now requires stored one. The engine's hint says what brings its
   document back.
+- `unsealed_fleet_revision`: the revision on the fleet's activation pointer
+  carries no seal. Every engine seals what it activates, so it was put there
+  from outside the fleet; the engine's hint says what to do.
 
 To see which keys the keyring holds without printing them:
 
 ```bash
 kubectl get secret acme-keyring -n acme -o go-template='{{range $k, $v := .data}}{{$k}}{{"\n"}}{{end}}'
 kubectl get events -n acme --field-selector involvedObject.name=acme,reason=RevisionUnreadable
+kubectl logs acme-data-0 -n acme | grep config_revision_unreadable | tail
 ```
 
 ## The engine did not apply a revision

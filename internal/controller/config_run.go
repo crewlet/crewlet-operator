@@ -1604,7 +1604,9 @@ func (run *configRun) engineRetry(err error) time.Duration {
 // restores the revision: a key the revision is sealed under is one of the
 // keyring Secret's, which the operator renders into every pod and never
 // rewrites, so a key gone from it is put back there, from the backup kept with
-// the data volumes.
+// the data volumes, and a key the fleet sealed under that the data pod lacks
+// is one it takes when it restarts with the Secret. A revision without a seal
+// no key opens, and the engine's hint says what does.
 func (run *configRun) revisionUnreadable(err error) bool {
 	var apiErr *engine.APIError
 	if !errors.Is(err, engine.ErrRevisionUnreadable) || !errors.As(err, &apiErr) {
@@ -1614,12 +1616,23 @@ func (run *configRun) revisionUnreadable(err error) bool {
 	if apiErr.RevisionID != "" {
 		revision = "revision " + apiErr.RevisionID
 	}
-	remedy := fmt.Sprintf("The keyring is Secret %s, which the operator never rewrites: put the key %s is sealed under "+
-		"back in it from the backup kept with the data volumes, and the data pods restart with it.",
-		keyringSecretName(run.company), revision)
-	if apiErr.Code == "unsealed_revision" {
+	var remedy string
+	switch apiErr.Code {
+	case "unsealed_revision":
 		remedy = "A revision without a seal was stored by an engine older than the keyring every engine now " +
 			"requires, and no keyring opens it; the engine's hint says what brings its document back."
+	case "unsealed_fleet_revision":
+		remedy = "Every engine seals what it activates, so a revision on the fleet's activation pointer without a " +
+			"seal was put there from outside the fleet, and no keyring opens it; the engine's hint says what to do."
+	case "unreadable_fleet_revision":
+		remedy = fmt.Sprintf("Every pod of the company has its keyring from Secret %s: a data pod that has not "+
+			"restarted since the Secret gained the key the fleet sealed %s under takes it when it restarts, and a key "+
+			"gone from the Secret is put back in it from the backup kept with the data volumes.",
+			keyringSecretName(run.company), revision)
+	default:
+		remedy = fmt.Sprintf("The keyring is Secret %s, which the operator never rewrites: put the key %s is sealed "+
+			"under back in it from the backup kept with the data volumes, and the data pods restart with it.",
+			keyringSecretName(run.company), revision)
 	}
 	run.blockAndTell(crewletaiv1alpha1.ReasonRevisionUnreadable, "ReadConfig", ended(fmt.Sprintf(
 		"The engine's keyring does not open %s of the company document, so the engine neither shows the document "+

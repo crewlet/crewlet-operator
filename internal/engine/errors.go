@@ -84,13 +84,15 @@ var (
 	ErrUnavailable = errors.New("the engine could not answer now")
 
 	// ErrRevisionUnreadable is a revision of the company document that the
-	// engine's keyring does not open (409 unreadable_revision or
-	// unsealed_revision): sealed under a key the keyring no longer holds, or
-	// stored without a seal, which no node reads. The engine answers it to a
-	// read of the document and to a write, which reads the revision it
-	// replaces, and sends no Retry-After: no wait opens the revision, and
+	// engine's keyring does not open (409): sealed under a key the keyring
+	// no longer holds (unreadable_revision), or, met through the fleet's
+	// activation pointer, under a key this node was never given
+	// (unreadable_fleet_revision); or stored without a seal, which no node
+	// reads (unsealed_revision, unsealed_fleet_revision). The engine answers
+	// it to a read of the document and to a write, which reads the revision
+	// it replaces, and sends no Retry-After: no wait opens the revision, and
 	// nothing the caller sends does, since what does is given to the engine
-	// (a key put back in its keyring, which it reads when it starts). The
+	// (a key put in its keyring, which it reads when it starts). The
 	// *APIError behind it carries the revision in RevisionID, the engine's
 	// account as its Message and the remedy as its Hint.
 	ErrRevisionUnreadable = errors.New("the engine's keyring does not open a revision of its company document")
@@ -124,10 +126,13 @@ const (
 var codesForbidden = []string{"unauthorized", "token_refused", "seat_unavailable"}
 
 // codesRevisionUnreadable are the refusals of a revision the engine's keyring
-// does not open, one per cause because the remedies share nothing: a key put
-// back in the keyring (unreadable_revision), or the document brought back
-// sealed (unsealed_revision).
-var codesRevisionUnreadable = []string{"unreadable_revision", "unsealed_revision"}
+// does not open, one per cause and origin because the remedies share nothing:
+// a key put back in the keyring (unreadable_revision), a key the fleet seals
+// under given to this node (unreadable_fleet_revision), or the document
+// brought back sealed (unsealed_revision, unsealed_fleet_revision).
+var codesRevisionUnreadable = []string{
+	"unreadable_revision", "unsealed_revision", "unreadable_fleet_revision", "unsealed_fleet_revision",
+}
 
 // codesWithProblems are the refusals of a document: the engine located each
 // failure in it, so they become a *ValidationError.

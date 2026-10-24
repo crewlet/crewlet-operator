@@ -45,6 +45,28 @@ func sealMissing(revision string) string {
 		`imports it with `+"`crewlet config import`"+`, either of which stores it sealed."}`, revision)
 }
 
+// fleetKeyMissing and fleetSealMissing are the engine's answers to a read of
+// revision met through the fleet's activation pointer, sealed under a key this
+// node's keyring was never given or carrying no seal, worded and ended as the
+// two above.
+func fleetKeyMissing(revision string) string {
+	return fmt.Sprintf(`{"error":"unreadable_fleet_revision","revision_id":%q,`+
+		`"message":"This node doesn't hold the key the fleet sealed its revision under, so it can't read it. `+
+		`The hint says what fixes it.",`+
+		`"detail":"This node doesn't hold the key the fleet sealed this revision under.",`+
+		`"hint":"Add the key the fleet seals under to this node's secrets.keys and restart it."}`, revision)
+}
+
+func fleetSealMissing(revision string) string {
+	return fmt.Sprintf(`{"error":"unsealed_fleet_revision","revision_id":%q,`+
+		`"message":"The fleet's revision arrived without a seal, so this node won't read it. The hint says `+
+		`what to do.",`+
+		`"detail":"The fleet's revision arrived without a seal, so this node won't read it.",`+
+		`"hint":"Every node seals what it activates, so this body came from outside the fleet and is neither shown `+
+		`nor edited; to replace it, an admin sends the whole document with PUT /config, or imports it with `+
+		"`crewlet config import`"+`, either of which stores it sealed and activates it."}`, revision)
+}
+
 // TestARevisionTheEngineCannotOpenBlocksTheDocument holds an engine whose
 // keyring does not open the fleet's revision to ConfigApplied=False
 // RevisionUnreadable: the message names the revision, quotes the engine's
@@ -60,13 +82,23 @@ func TestARevisionTheEngineCannotOpenBlocksTheDocument(t *testing.T) {
 	}{
 		{
 			name: "a key the keyring lost", answer: keyringLost,
-			says: []string{"revision r1", "doesn't hold the key that revision is sealed under",
+			says: []string{"doesn't hold the key that revision is sealed under",
 				"restore that key to the node's secrets.keys first", "Secret acme-keyring"},
 		},
 		{
 			name: "a revision stored without a seal", answer: sealMissing,
-			says: []string{"revision r1", "stored without a seal, so nothing vouches",
-				"an admin sends the whole document from your own copy", "the engine's hint says what brings its document back"},
+			says: []string{"stored without a seal, so nothing vouches", "an admin sends the whole document from your own copy",
+				"the engine's hint says what brings its document back"},
+		},
+		{
+			name: "the fleet's revision under a key this node lacks", answer: fleetKeyMissing,
+			says: []string{"doesn't hold the key the fleet sealed this revision under",
+				"Add the key the fleet seals under", "Secret acme-keyring", "takes it when it restarts"},
+		},
+		{
+			name: "the fleet's revision without a seal", answer: fleetSealMissing,
+			says: []string{"arrived without a seal", "came from outside the fleet",
+				"put there from outside the fleet", "the engine's hint says what to do"},
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -83,7 +115,8 @@ func TestARevisionTheEngineCannotOpenBlocksTheDocument(t *testing.T) {
 			if got == nil || got.Reason != crewletaiv1alpha1.ReasonRevisionUnreadable {
 				t.Fatalf("ConfigApplied = %+v, want False RevisionUnreadable", got)
 			}
-			for _, s := range c.says {
+			// Every answer names the revision the engine runs, r1.
+			for _, s := range append([]string{"revision r1"}, c.says...) {
 				if !strings.Contains(got.Message, s) {
 					t.Errorf("ConfigApplied does not say %q: %s", s, got.Message)
 				}

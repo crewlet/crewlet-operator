@@ -498,6 +498,16 @@ func TestErrorMapping(t *testing.T) {
 			sentinel: engine.ErrRevisionUnreadable, wantCode: "unsealed_revision", wantStatus: http.StatusConflict,
 		},
 		{
+			name:     "the fleet's revision sealed under a key this node lacks",
+			handler:  answer(http.StatusConflict, unreadableFleetRevision),
+			sentinel: engine.ErrRevisionUnreadable, wantCode: "unreadable_fleet_revision", wantStatus: http.StatusConflict,
+		},
+		{
+			name:     "the fleet's revision without a seal",
+			handler:  answer(http.StatusConflict, unsealedFleetRevision),
+			sentinel: engine.ErrRevisionUnreadable, wantCode: "unsealed_fleet_revision", wantStatus: http.StatusConflict,
+		},
+		{
 			name:       "a proxy's 409",
 			handler:    page(http.StatusConflict),
 			wantStatus: http.StatusConflict,
@@ -563,11 +573,13 @@ func TestErrorMapping(t *testing.T) {
 	}
 }
 
-// unreadableRevision and unsealedRevision are the engine's answers to a read of
-// a revision its keyring does not open, as crewlet's configapi words them
-// (RefuseUnreadable) and its httpjson.Envelope sends them, the detail and the
-// hint each ended as a sentence (httpjson.Sentence): the code's own sentence,
-// the revision, what happened as the detail, and the remedy as the hint.
+// unreadableRevision, unsealedRevision, unreadableFleetRevision and
+// unsealedFleetRevision are the engine's answers to a read of a revision its
+// keyring does not open, this node's copy or one the fleet's activation
+// pointer carries, as crewlet's configapi words them (RefuseUnreadable) and
+// its httpjson.Envelope sends them, the detail and the hint each ended as a
+// sentence (httpjson.Sentence): the code's own sentence, the revision, what
+// happened as the detail, and the remedy as the hint.
 const (
 	unreadableRevision = `{"error":"unreadable_revision","message":"That revision is sealed under a key this ` +
 		`deployment no longer holds, so it cannot be read. Put the key back in the node's keyring first.",` +
@@ -581,6 +593,16 @@ const (
 		`"hint":"It is stored without a seal, so nothing vouches for who wrote it and it is neither shown, edited nor ` +
 		`reverted to; to replace it, an admin sends the whole document from your own copy with PUT /config, or ` +
 		`imports it with ` + "`crewlet config import`" + `, either of which stores it sealed."}`
+	unreadableFleetRevision = `{"error":"unreadable_fleet_revision","message":"This node doesn't hold the key ` +
+		`the fleet sealed its revision under, so it can't read it. The hint says what fixes it.",` +
+		`"revision_id":"rev-4","detail":"This node doesn't hold the key the fleet sealed this revision under.",` +
+		`"hint":"Add the key the fleet seals under to this node's secrets.keys and restart it."}`
+	unsealedFleetRevision = `{"error":"unsealed_fleet_revision","message":"The fleet's revision ` +
+		`arrived without a seal, so this node won't read it. The hint says what to do.","revision_id":"rev-4",` +
+		`"detail":"The fleet's revision arrived without a seal, so this node won't read it.",` +
+		`"hint":"Every node seals what it activates, so this body came from outside the fleet and is neither shown ` +
+		`nor edited; to replace it, an admin sends the whole document with PUT /config, or imports it with ` +
+		"`crewlet config import`" + `, either of which stores it sealed and activates it."}`
 )
 
 // TestAnUnreadableRevisionNamesItAndItsRemedy reads the engine's answer to a
@@ -589,7 +611,7 @@ const (
 // message and its remedy as the hint, which is everything a person has to act
 // on, since no wait and no request clears it.
 func TestAnUnreadableRevisionNamesItAndItsRemedy(t *testing.T) {
-	for _, body := range []string{unreadableRevision, unsealedRevision} {
+	for _, body := range []string{unreadableRevision, unsealedRevision, unreadableFleetRevision, unsealedFleetRevision} {
 		f := newFakeEngine(t)
 		f.handle("GET /health", answer(http.StatusOK, `{"status":"ok","applied_epoch":4}`))
 		f.handle("GET /config", answer(http.StatusConflict, body))
