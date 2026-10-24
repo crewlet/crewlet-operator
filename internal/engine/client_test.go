@@ -565,25 +565,22 @@ func TestErrorMapping(t *testing.T) {
 
 // unreadableRevision and unsealedRevision are the engine's answers to a read of
 // a revision its keyring does not open, as crewlet's configapi words them
-// (refuseUnreadable) and its httpjson.Envelope sends them, the detail and the
+// (RefuseUnreadable) and its httpjson.Envelope sends them, the detail and the
 // hint each ended as a sentence (httpjson.Sentence): the code's own sentence,
-// the revision, the keyring's account of the failure as the detail, and the
-// remedy as the hint.
+// the revision, what happened as the detail, and the remedy as the hint.
 const (
 	unreadableRevision = `{"error":"unreadable_revision","message":"That revision is sealed under a key this ` +
 		`deployment no longer holds, so it cannot be read. Put the key back in the node's keyring first.",` +
-		`"revision_id":"rev-4","detail":"secrets: open document: secret could not be decrypted.",` +
+		`"revision_id":"rev-4","detail":"This node's keyring doesn't hold the key that revision is sealed under.",` +
 		`"hint":"It is sealed under a key that is no longer in the keyring; restore that key to the node's ` +
 		`secrets.keys first."}`
 	unsealedRevision = `{"error":"unsealed_revision","message":"That revision is stored without a seal, which ` +
 		`a build older than the mandatory keyring wrote, and a node reads only sealed revisions because the seal ` +
 		`is what authenticates one. The hint says what brings its document back.","revision_id":"rev-4",` +
-		`"detail":"secrets: this document is stored unsealed, and a node holding a keyring reads only sealed ones ` +
-		`— a plaintext payload is one anything that can write the store or the coordination bucket could have ` +
-		`authored.",` +
-		`"hint":"It is stored without a seal, so nothing vouches for who wrote it and it is neither shown nor ` +
-		`reverted to; to have its document again, import it from your own copy with PUT /config or ` +
-		"`crewlet config import`" + `, which stores it sealed."}`
+		`"detail":"This node's copy of that revision is stored without a seal, so nothing vouches for who wrote it.",` +
+		`"hint":"It is stored without a seal, so nothing vouches for who wrote it and it is neither shown, edited nor ` +
+		`reverted to; to replace it, an admin sends the whole document from your own copy with PUT /config, or ` +
+		`imports it with ` + "`crewlet config import`" + `, either of which stores it sealed."}`
 )
 
 // TestAnUnreadableRevisionNamesItAndItsRemedy reads the engine's answer to a

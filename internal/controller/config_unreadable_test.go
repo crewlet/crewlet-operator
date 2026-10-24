@@ -20,15 +20,16 @@ import (
 // the resync interval, not ten seconds on with a promise of a retry that
 // changes nothing.
 
-// keyringLost and sealMissing are the engine's answers to a read of revision,
-// sealed under a key its keyring no longer holds or stored without a seal, as
-// crewlet's configapi words them (refuseUnreadable) and its httpjson.Envelope
-// sends them, the detail and the hint each ended as a sentence.
+// keyringLost and sealMissing are the engine's answers to a read of
+// revision, sealed under a key its keyring no longer holds or stored without
+// a seal, as crewlet's configapi words them (RefuseUnreadable) and its
+// httpjson.Envelope sends them, the detail and the hint each ended as a
+// sentence.
 func keyringLost(revision string) string {
 	return fmt.Sprintf(`{"error":"unreadable_revision","revision_id":%q,`+
 		`"message":"That revision is sealed under a key this deployment no longer holds, so it cannot be read. `+
 		`Put the key back in the node's keyring first.",`+
-		`"detail":"secrets: open document: secret could not be decrypted.",`+
+		`"detail":"This node's keyring doesn't hold the key that revision is sealed under.",`+
 		`"hint":"It is sealed under a key that is no longer in the keyring; restore that key to the node's `+
 		`secrets.keys first."}`, revision)
 }
@@ -38,12 +39,10 @@ func sealMissing(revision string) string {
 		`"message":"That revision is stored without a seal, which a build older than the mandatory keyring wrote, `+
 		`and a node reads only sealed revisions because the seal is what authenticates one. The hint says what `+
 		`brings its document back.",`+
-		`"detail":"secrets: this document is stored unsealed, and a node holding a keyring reads only sealed ones `+
-		`— a plaintext payload is one anything that can write the store or the coordination bucket could have `+
-		`authored.",`+
-		`"hint":"It is stored without a seal, so nothing vouches for who wrote it and it is neither shown nor `+
-		`reverted to; to have its document again, import it from your own copy with PUT /config or `+
-		"`crewlet config import`"+`, which stores it sealed."}`, revision)
+		`"detail":"This node's copy of that revision is stored without a seal, so nothing vouches for who wrote it.",`+
+		`"hint":"It is stored without a seal, so nothing vouches for who wrote it and it is neither shown, edited nor `+
+		`reverted to; to replace it, an admin sends the whole document from your own copy with PUT /config, or `+
+		`imports it with `+"`crewlet config import`"+`, either of which stores it sealed."}`, revision)
 }
 
 // TestARevisionTheEngineCannotOpenBlocksTheDocument holds an engine whose
@@ -61,13 +60,13 @@ func TestARevisionTheEngineCannotOpenBlocksTheDocument(t *testing.T) {
 	}{
 		{
 			name: "a key the keyring lost", answer: keyringLost,
-			says: []string{"revision r1", "secrets: open document: secret could not be decrypted",
+			says: []string{"revision r1", "doesn't hold the key that revision is sealed under",
 				"restore that key to the node's secrets.keys first", "Secret acme-keyring"},
 		},
 		{
 			name: "a revision stored without a seal", answer: sealMissing,
-			says: []string{"revision r1", "stored unsealed", "import it from your own copy",
-				"the engine's hint says what brings its document back"},
+			says: []string{"revision r1", "stored without a seal, so nothing vouches",
+				"an admin sends the whole document from your own copy", "the engine's hint says what brings its document back"},
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
