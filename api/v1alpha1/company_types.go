@@ -910,26 +910,67 @@ type CompanySpec struct {
 	CompanyName string `json:"companyName,omitempty"`
 
 	// mission is one line on what the company is for; every seat's prompt
-	// carries it. Crewlet's `mission`.
+	// carries it. Crewlet's `mission`, held to its bounds: at most 1024
+	// characters and one line, both judged with the space around it trimmed
+	// (CEL's trim() is Go's strings.TrimSpace, which Crewlet trims with, and
+	// size() counts characters as Crewlet does).
+	//
+	// Judged only when it CHANGES, as Crewlet judges a charter: a Company
+	// written before these bounds keeps applying, and is refused only for a
+	// mission it edits and leaves at fault. maxLength is the bound this field
+	// had before them, kept so such a Company stays valid; it also bounds the
+	// rules' cost.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
+	// +kubebuilder:validation:XValidation:rule="oldSelf.hasValue() || self.trim().size() <= 1024",message="mission can be at most 1024 characters: every seat reads it on every turn",optionalOldSelf=true
+	// +kubebuilder:validation:XValidation:rule="oldSelf.trim() == self.trim() || self.trim().size() <= 1024",message="mission can be at most 1024 characters: every seat reads it on every turn"
+	// +kubebuilder:validation:XValidation:rule="oldSelf.hasValue() || !self.trim().matches('[\\n\\r\\v\\f\\u0085\\u2028\\u2029]')",message="mission is one line: every seat reads it inline",optionalOldSelf=true
+	// +kubebuilder:validation:XValidation:rule="oldSelf.trim() == self.trim() || !self.trim().matches('[\\n\\r\\v\\f\\u0085\\u2028\\u2029]')",message="mission is one line: every seat reads it inline"
 	Mission string `json:"mission,omitempty"`
 
-	// vision is a longer statement of where the company is going. Crewlet's
-	// `vision`.
+	// vision is a longer statement of where the company is going, in
+	// paragraphs if it needs them. Crewlet's `vision`, held to its bound: at
+	// most 2048 characters with the space around it trimmed, judged only when
+	// it changes, and with the bound it had before as maxLength, as on
+	// mission.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=8192
+	// +kubebuilder:validation:XValidation:rule="oldSelf.hasValue() || self.trim().size() <= 2048",message="vision can be at most 2048 characters: every seat reads it on every turn",optionalOldSelf=true
+	// +kubebuilder:validation:XValidation:rule="oldSelf.trim() == self.trim() || self.trim().size() <= 2048",message="vision can be at most 2048 characters: every seat reads it on every turn"
 	Vision string `json:"vision,omitempty"`
 
-	// policies are company-wide rules every seat's prompt carries. Crewlet's
-	// `policies`.
+	// policies are company-wide rules every seat's prompt carries, one item
+	// of a list each. Crewlet's `policies`, held to its bounds: at most 25,
+	// each with the space around it trimmed not blank, at most 1024
+	// characters and one line, and none a repeat of another.
+	//
+	// Judged on what a change makes, as Crewlet judges it: a policy the
+	// Company already held is not judged again, so reordering and removing
+	// policies are never refused; the count only when it passes 25 and grows;
+	// a repeat only when the change adds a copy. One difference is forced by
+	// the API server's budget for a rule's cost: this API recognises a policy
+	// it already held, and a repeat, by its exact text, where Crewlet compares
+	// them trimmed. Two policies differing only in the space around them are
+	// admitted here and refused by Crewlet's write, which the Company reports
+	// as Applied=False. maxItems and items' maxLength are the bounds this
+	// field had before, as on mission.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MaxItems=64
 	// +kubebuilder:validation:items:MinLength=1
 	// +kubebuilder:validation:items:MaxLength=2048
+	// +kubebuilder:validation:XValidation:rule="oldSelf.hasValue() || self.size() <= 25",message="a company can keep at most 25 policies: every seat reads all of them on every turn",optionalOldSelf=true
+	// +kubebuilder:validation:XValidation:rule="self.size() <= 25 || self.size() <= oldSelf.size()",message="a company can keep at most 25 policies: every seat reads all of them on every turn"
+	// +kubebuilder:validation:XValidation:rule="oldSelf.hasValue() || self.all(p, p.trim().size() > 0)",message="a policy cannot be blank",optionalOldSelf=true
+	// +kubebuilder:validation:XValidation:rule="self.all(p, p.trim().size() > 0 || p in oldSelf)",message="a policy cannot be blank"
+	// +kubebuilder:validation:XValidation:rule="oldSelf.hasValue() || self.all(p, p.trim().size() <= 1024)",message="a policy can be at most 1024 characters: every seat reads it on every turn",optionalOldSelf=true
+	// +kubebuilder:validation:XValidation:rule="self.all(p, p.trim().size() <= 1024 || p in oldSelf)",message="a policy can be at most 1024 characters: every seat reads it on every turn"
+	// +kubebuilder:validation:XValidation:rule="oldSelf.hasValue() || self.all(p, !p.trim().matches('[\\n\\r\\v\\f\\u0085\\u2028\\u2029]'))",message="a policy is one line: every seat reads each as one item of a list",optionalOldSelf=true
+	// +kubebuilder:validation:XValidation:rule="self.all(p, !p.trim().matches('[\\n\\r\\v\\f\\u0085\\u2028\\u2029]') || p in oldSelf)",message="a policy is one line: every seat reads each as one item of a list"
+	// +kubebuilder:validation:XValidation:rule="oldSelf.hasValue() || self.all(p, self.filter(q, q == p).size() == 1)",message="policies must not repeat one another",optionalOldSelf=true
+	// +kubebuilder:validation:XValidation:rule="self.all(p, self.filter(q, q == p).size() <= (p in oldSelf ? oldSelf.filter(q, q == p).size() : 1))",message="policies must not repeat one another"
 	Policies []string `json:"policies,omitempty"`
 
 	// timeZone is the company's clock, an IANA time zone such as

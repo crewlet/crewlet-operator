@@ -149,7 +149,7 @@ func TestCompanyValidation(t *testing.T) {
 			// white space as Go's strings.TrimSpace reads it.
 			name: "an embeddings model of white space alone is refused",
 			mutate: func(c *v1.Company) {
-				c.Spec.Embeddings = v1.EmbeddingSettings{Model: " \t ", APIKeySecretRef: secretKey("openai", apiKeyKey)}
+				c.Spec.Embeddings = v1.EmbeddingSettings{Model: whiteSpace, APIKeySecretRef: secretKey("openai", apiKeyKey)}
 			},
 			want: msgBlankEmbeddingModel,
 		},

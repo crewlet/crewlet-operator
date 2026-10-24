@@ -781,18 +781,18 @@ func shapedProvider(namespace string, agent v1.CLIAgentName, mode v1.CLIAgentMod
 	return p
 }
 
-// apiVerdict is the API server's refusal of p, empty when it admits it. The
-// create is a dry run, so a document's providers can share their names.
-func apiVerdict(t *testing.T, p *v1.LLMProvider) string {
+// apiVerdict is the API server's refusal of obj, empty when it admits it. The
+// create is a dry run, so a document's objects can share their names.
+func apiVerdict(t *testing.T, obj client.Object) string {
 	t.Helper()
-	err := k8sClient.Create(ctx, p.DeepCopy(), client.DryRunAll)
+	err := k8sClient.Create(ctx, obj.DeepCopyObject().(client.Object), client.DryRunAll)
 	switch {
 	case err == nil:
 		return ""
 	case apierrors.IsInvalid(err):
 		return err.Error()
 	default:
-		t.Fatalf("creating %s: %v", p.Name, err)
+		t.Fatalf("creating %s: %v", obj.GetName(), err)
 		return ""
 	}
 }

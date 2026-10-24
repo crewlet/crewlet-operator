@@ -25,6 +25,9 @@ const (
 	platformKeyNS = "crewlet-system"
 	containerKey  = "PLAT"
 	poolName      = "general"
+	// whiteSpace is a value of white space alone, which every rule that
+	// trims refuses as empty.
+	whiteSpace = " \t "
 )
 
 // Models the OpenCode cases name, which OpenCode reads as <provider>/<model>:
@@ -113,6 +116,14 @@ const (
 	msgBaseURLRequired             = "baseURL is required for type OpenAICompatible"
 	msgBaseURLShape                = "baseURL must be an absolute http or https URL"
 	msgCompanyName                 = "a Company's name must be a DNS label of at most 47 characters"
+	msgMissionLength               = "mission can be at most 1024 characters"
+	msgMissionLine                 = "mission is one line"
+	msgVisionLength                = "vision can be at most 2048 characters"
+	msgPolicyCount                 = "a company can keep at most 25 policies"
+	msgPolicyBlank                 = "a policy cannot be blank"
+	msgPolicyLength                = "a policy can be at most 1024 characters"
+	msgPolicyLine                  = "a policy is one line"
+	msgPolicyRepeat                = "policies must not repeat one another"
 	msgEnvExactlyOne               = "exactly one of value and valueFrom must be set"
 	msgLiteralCredential           = "value may not be given to a name that says it holds a credential"
 	msgLiteralReference            = "value may not hold a ${NAME} reference"
