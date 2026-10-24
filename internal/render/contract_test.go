@@ -1276,10 +1276,7 @@ func TestContractScheduleRefusalsReachTheSchedule(t *testing.T) {
 // on another object, and checks that the document attributes every problem to
 // the LLMProvider, which is where the controller reports it.
 func TestContractCLIAgentRefusalsReachTheProvider(t *testing.T) {
-	const (
-		providerAgent = "claude-agent"
-		providerCodex = "codex"
-	)
+	const providerAgent = "claude-agent"
 	client := enginetest.Start(t).Client()
 	for _, c := range []struct {
 		name     string
@@ -1292,24 +1289,6 @@ func TestContractCLIAgentRefusalsReachTheProvider(t *testing.T) {
 			name:     "agent mode in a company with no sandbox",
 			mutate:   func(in *Input) { in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{} },
 			provider: providerAgent,
-		},
-		{
-			// One login is one CLI's credential files.
-			name: "two providers of different CLIs share one login",
-			mutate: func(in *Input) {
-				var login string
-				for _, p := range in.LLMProviders {
-					if p.Name == providerAgent {
-						login = p.Spec.LoginName
-					}
-				}
-				for i := range in.LLMProviders {
-					if in.LLMProviders[i].Name == providerCodex {
-						in.LLMProviders[i].Spec.LoginName = login
-					}
-				}
-			},
-			provider: providerCodex,
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -1334,5 +1313,228 @@ func TestContractCLIAgentRefusalsReachTheProvider(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestContractProvidersOfTwoCLIsShareALoginName has the engine run two
+// providers of different CLIs under one loginName, as the loginName field and
+// the cli-agents guide say it does: the render gives both the loginName's
+// state_dir, and Crewlet keeps each CLI's files in a directory of its own
+// under it (<state_dir>/<agent>), so they share the directory and nothing in
+// it.
+//
+// The engine once refused the pair twice over: its validation refused two
+// CLIs on one state_dir, and a workspace registry that lives as long as the
+// process held each directory under the first CLI to open it and refused
+// every other. A dry run reaches only the first. The engine builds a
+// revision's providers, and opens their workspaces, when a node applies the
+// revision, after the write has been answered: a node that cannot build it
+// keeps the revision before, and only its own account says so. So each case
+// applies its revisions to a running engine and waits for that account
+// (awaitApplied).
+//
+// The first case names the pair in the company's first revision. The second
+// runs the case as rendered, then moves the reviewer's provider to another
+// CLI under claude-agent's loginName: the registry, holding that directory
+// under Claude Code since the first revision, refused the move on every node
+// that had run it, and applied it only on a node restarted since. The guide
+// says the move applies with no restart, so it is applied to the engine that
+// runs the first revision, which enginetest never restarts.
+func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
+	const (
+		providerClaude = "claude-agent"
+		providerCodex  = "codex"
+	)
+
+	t.Run("named in the first revision", func(t *testing.T) {
+		in := companyCaseNamed(t, "cli-agent").input(t)
+		login := loginNameOf(modelProvider(in, providerClaude))
+		modelProvider(in, providerCodex).Spec.LoginName = login
+		doc, err := Company(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		requireOneLoginTwoCLIs(t, "the rendered document", doc.YAML, login, providerClaude, providerCodex)
+
+		client := enginetest.Start(t).Client()
+		putCredentials(t, client, doc)
+		applied, err := client.ApplyConfig(t.Context(), engine.ApplyRequest{
+			Document: doc.YAML, CreateOnly: true, Summary: "two CLIs under one loginName",
+		})
+		if err != nil {
+			t.Fatalf("the engine refused two CLIs under one loginName: %v", err)
+		}
+		awaitApplied(t, client, applied)
+	})
+
+	t.Run("moved onto it in a live revision", func(t *testing.T) {
+		in := companyCaseNamed(t, "cli-agent").input(t)
+		first, err := Company(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		client := enginetest.Start(t).Client()
+		putCredentials(t, client, first)
+		running, err := client.ApplyConfig(t.Context(), engine.ApplyRequest{
+			Document: first.YAML, CreateOnly: true, Summary: "the cli-agent company",
+		})
+		if err != nil {
+			t.Fatalf("applying the cli-agent company: %v", err)
+		}
+		awaitApplied(t, client, running)
+
+		// The reviewer's provider moves from Codex to OpenCode, which reads
+		// the same OpenAI model as <provider>/<model>, and onto the login
+		// name of claude-agent, a Claude Code provider: OpenCode opens a
+		// login of its own beside Claude Code's in the directory Claude
+		// Code has held since the first revision.
+		login := loginNameOf(modelProvider(in, providerClaude))
+		codex := modelProvider(in, providerCodex)
+		codex.Spec.Agent = v1alpha1.CLIAgentOpenCode
+		codex.Spec.Model = "openai/" + codex.Spec.Model
+		codex.Spec.LoginName = login
+		moved, err := Company(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := requireOneLoginTwoCLIs(t, "the rendered move", moved.YAML, login, providerClaude, providerCodex)
+
+		putCredentials(t, client, moved)
+		applied, err := client.ApplyConfig(t.Context(), engine.ApplyRequest{
+			Document: moved.YAML, IfMatch: running.RevisionID,
+			Summary: "codex moves to OpenCode under claude-agent's loginName",
+		})
+		if err != nil {
+			t.Fatalf("the engine refused a provider moved to another CLI under another provider's loginName: %v", err)
+		}
+		active := awaitApplied(t, client, applied)
+		got := loginEntries(t, active.Document)
+		for _, name := range []string{providerClaude, providerCodex} {
+			if got[name] != want[name] {
+				t.Errorf("the engine runs providers.llm.%s as %+v, want %+v, as the move renders it", name, got[name], want[name])
+			}
+		}
+	})
+}
+
+// loginNameOf is the loginName p's state_dir is rendered from: its own, else
+// its metadata.name.
+func loginNameOf(p *v1alpha1.LLMProvider) string { return cmp.Or(p.Spec.LoginName, p.Name) }
+
+// putCredentials puts a stand-in value in the engine's secret store under
+// every name doc refers to, as the secret sync does before the operator
+// applies a document.
+func putCredentials(t *testing.T, client *engine.Client, doc *Document) {
+	t.Helper()
+	for _, k := range doc.Refs {
+		if err := client.PutSecret(t.Context(), secretsync.StoreName(k), []byte(dummyCredential(k))); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// loginEntry is what a providers.llm entry says about where its CLI keeps its
+// files.
+type loginEntry struct {
+	Agent    string `json:"agent"`
+	StateDir string `json:"state_dir"`
+}
+
+// loginEntries reads every providers.llm entry of a company document under the
+// keys Crewlet reads, so a check of them holds whatever the YAML's layout,
+// order or quoting.
+func loginEntries(t *testing.T, document []byte) map[string]loginEntry {
+	t.Helper()
+	var doc struct {
+		Providers struct {
+			LLM map[string]loginEntry `json:"llm"`
+		} `json:"providers"`
+	}
+	if err := yaml.Unmarshal(document, &doc); err != nil {
+		t.Fatalf("reading the company document: %v\n%s", err, document)
+	}
+	return doc.Providers.LLM
+}
+
+// requireOneLoginTwoCLIs fails the test unless document, described as what,
+// gives each of the providers the state_dir of loginName login, and drives
+// no two of them on one CLI. It returns the document's entries.
+func requireOneLoginTwoCLIs(t *testing.T, what string, document []byte, login string, providers ...string) map[string]loginEntry {
+	t.Helper()
+	entries := loginEntries(t, document)
+	dir := CLIStateRoot + "/" + login
+	byAgent := map[string]string{}
+	for _, name := range providers {
+		e, ok := entries[name]
+		switch {
+		case !ok:
+			t.Fatalf("%s has no providers.llm.%s:\n%s", what, name, document)
+		case e.StateDir != dir:
+			t.Fatalf("%s gives providers.llm.%s the state_dir %q, want loginName %s's, %q:\n%s", what, name, e.StateDir, login, dir, document)
+		case byAgent[e.Agent] != "":
+			t.Fatalf("%s drives providers.llm.%s and %s on one CLI, %q, want two CLIs:\n%s", what, byAgent[e.Agent], name, e.Agent, document)
+		}
+		byAgent[e.Agent] = name
+	}
+	return entries
+}
+
+// awaitApplied waits until the engine runs the revision applied wrote, by the
+// engine's own account, and returns its active configuration.
+//
+// The write's answer says only that the revision was stored and activated:
+// the node builds it afterwards, its providers and their workspaces included.
+// A node that cannot build it keeps serving the revision before, its posture
+// turns diverged (isolated, on an engine alone) and its record in /fleet
+// names the failed epoch with the engine's account of why, which this fails
+// on at once. Applied is all of: /health has applied the write's epoch and
+// serves it (status ok, posture serve); the node's record names that epoch
+// and revision, applied ok rather than degraded, which is a node that needs a
+// restart; /ready answers; and GET /config names the revision as the one
+// active.
+func awaitApplied(t *testing.T, client *engine.Client, applied engine.ApplyResult) engine.ActiveConfig {
+	t.Helper()
+	want := engine.ApplyRecord{Epoch: applied.Epoch, RevisionID: applied.RevisionID, Status: engine.ApplyOK}
+	var last string
+	for deadline := time.Now().Add(time.Minute); ; time.Sleep(200 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the engine has not applied revision %s (epoch %d) after a minute: %s", applied.RevisionID, applied.Epoch, last)
+		}
+		health, err := client.Health(t.Context())
+		if err != nil {
+			last = fmt.Sprintf("GET /health: %v", err)
+			continue
+		}
+		fleet, err := client.Fleet(t.Context())
+		if err != nil {
+			last = fmt.Sprintf("GET /fleet: %v", err)
+			continue
+		}
+		record := fleet.LastApply()
+		if health.Posture.Diverged() || (record.Status.Failed() && record.Epoch >= applied.Epoch) {
+			t.Fatalf("the engine did not apply revision %s (epoch %d): it reports status %q and posture %q at applied epoch %d, "+
+				"and its record of its last apply is %+v", applied.RevisionID, applied.Epoch, health.Status, health.Posture,
+				health.AppliedEpoch, record)
+		}
+		if health.AppliedEpoch < applied.Epoch || record != want ||
+			health.Status != "ok" || !health.Configured || health.Posture != engine.PostureServe {
+			last = fmt.Sprintf("it reports status %q, configured %t, posture %q at applied epoch %d, and the record %+v; "+
+				"want status ok, configured, posture serve at epoch %d, and the record %+v",
+				health.Status, health.Configured, health.Posture, health.AppliedEpoch, record, applied.Epoch, want)
+			continue
+		}
+		if err := client.Ready(t.Context()); err != nil {
+			last = fmt.Sprintf("GET /ready: %v", err)
+			continue
+		}
+		active, err := client.ActiveConfig(t.Context())
+		if err != nil {
+			last = fmt.Sprintf("GET /config: %v", err)
+			continue
+		}
+		if active.RevisionID != applied.RevisionID {
+			t.Fatalf("the engine applied epoch %d, and its active revision is %s, want %s", applied.Epoch, active.RevisionID, applied.RevisionID)
+		}
+		return active
 	}
 }

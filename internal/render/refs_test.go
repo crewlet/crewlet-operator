@@ -503,6 +503,15 @@ func toolServer(in *Input, name string) *v1alpha1.MCPServer {
 	panic("no MCPServer " + name)
 }
 
+func modelProvider(in *Input, name string) *v1alpha1.LLMProvider {
+	for i := range in.LLMProviders {
+		if in.LLMProviders[i].Name == name {
+			return &in.LLMProviders[i]
+		}
+	}
+	panic("no LLMProvider " + name)
+}
+
 func schedule(in *Input, name string) *v1alpha1.Schedule {
 	for i := range in.Schedules {
 		if in.Schedules[i].Name == name {
