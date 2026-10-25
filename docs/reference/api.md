@@ -468,10 +468,12 @@ models it runs on and the bounds of one turn. It maps onto Crewlet's
 The assistant answers a signed-in person's questions about the company and
 prepares changes for that person to approve, acting only as them: every
 read is a request of theirs, and nothing is written until they approve.
-Every provider in llm must be in mode Text, on a CLI whose Crewlet profile
-denies its local tools, with webTools Denied. Crewlet refuses any other in
-the dry run before every apply, and the refusal is reported on the
-Company, since the rule turns on the providers' own specs.
+Every provider in llm must be in mode Text, on a CLI Crewlet runs with no
+tool of its own (ClaudeCode or Pi; Codex keeps a shell its sandbox only
+confines, and OpenCode's has not been measured to go), with webTools
+Denied. Crewlet refuses any other in the dry run before every apply, and
+the refusal is reported on the Company, since the rule turns on the
+providers' own specs.
 
 _Validation:_
 - MinProperties: 1

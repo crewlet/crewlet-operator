@@ -742,8 +742,12 @@ does for a CLI it cannot do:
 A seat keeps its CLI's own web tools. The Company's Dashboard Assistant
 (`spec.assistant`) does not: it reads only what the signed-in person's own
 requests return, so Crewlet requires every provider in `spec.assistant.llm`
-to run in mode `Text`, on a CLI whose profile denies its local tools, with
-its web tools off. `webTools: Denied` turns them off, and renders as the
+to run in mode `Text`, on a CLI Crewlet runs with no tool of its own (no
+shell, no file reader, no tool server), with its web tools off. Today that is
+`ClaudeCode` or `Pi`: `Codex` keeps a shell its read-only sandbox only
+confines, and `OpenCode`'s deny-all policy has not been measured to take its
+tools away, so both are refused for the assistant though either may still
+turn its web off for a seat. `webTools: Denied` turns them off, and renders as the
 entry's `overrides: {web_tools: denied}`:
 
 ```yaml
@@ -771,9 +775,9 @@ for: `ClaudeCode`, `Codex`, `OpenCode` and `Pi`. Every other CLI's profile
 carries no measured web denial, and Crewlet refuses the setting. A provider
 of its own keeps the person in the drawer from queueing behind a seat's long
 call, and its timeout is sized for one round rather than for a coding task.
-Crewlet refuses an assistant chain naming a provider in mode `Agent`, or one
-that keeps its web tools, in the dry run before every apply, and the refusal
-is reported on the Company. Crewlet's
+Crewlet refuses an assistant chain naming a provider in mode `Agent`, one that
+keeps its web tools, or one on a CLI that keeps a tool of its own, in the dry
+run before every apply, and the refusal is reported on the Company. Crewlet's
 [configuration reference](https://github.com/crewlet/crewlet/blob/main/docs/getting-started/configuration.md)
 describes the block and each bound.
 

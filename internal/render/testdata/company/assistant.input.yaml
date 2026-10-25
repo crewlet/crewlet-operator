@@ -13,7 +13,7 @@ spec:
     enabled: true
     llm:
       - name: assistant
-      - name: assistant-codex
+      - name: assistant-pi
     maxSteps: 12
     turnTimeoutSeconds: 180
     proposalTTLSeconds: 600
@@ -42,14 +42,18 @@ spec:
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
 metadata:
-  name: assistant-codex
+  name: assistant-pi
 spec:
   companyRef:
     name: helm
-  agent: Codex
-  model: gpt-5-codex
+  agent: Pi
+  model: openrouter/anthropic/claude-sonnet-5
   webTools: Denied
   auth:
-    credentialBundleSecretRef:
-      name: codex-login
-      key: bundle
+    mode: Subscription
+  env:
+    - name: OPENROUTER_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: openrouter
+          key: apiKey
