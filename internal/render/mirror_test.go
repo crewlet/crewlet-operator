@@ -104,6 +104,15 @@ const (
 	// in. Launch and LaunchExecutor hand the box the run's model in place of
 	// an API entry's endpoint, which moved no verdict.
 	cliOnlyRead = "v0.1.1-0.20261023214803-bbedf7ecebd7"
+	// standingInstructionsRead is the engine that hands an agent-mode run the
+	// seat's system prompt as its standing instructions, on the coding
+	// agent's append channel, apart from the brief, and names the run by the
+	// turn's task (LaunchExecutor's System and Label), and frames a wider
+	// task after a run_sandbox brief alone (Launch's Wider), an agent-mode
+	// brief being the turn's ask already. None is a verdict: the refusals
+	// before a box exists and the sign-in that must reach it are as at
+	// cliOnlyRead.
+	standingInstructionsRead = "v0.1.1-0.20261025043416-a2634a307854"
 	// refusalByModeRead is the engine whose remote-run refusal is worded by
 	// the entry's auth mode (credentialRefusal): an api-key entry whose key
 	// resolved to nothing is told to give the seat its own key, and an
@@ -198,6 +207,12 @@ const (
 	exposureMd         = "docs/guides/exposure.md"
 	companyTypesGo     = "api/v1alpha1/company_types.go"
 	companyExposureGo  = "internal/controller/company_exposure.go"
+
+	// brandKindRead is the engine that adds the brand kind
+	// (crewlet/crewlet#328), which the dashboard renders natively, so the
+	// kinds framed from the artifact origin are still HTML pages and designs
+	// alone.
+	brandKindRead = "v0.1.1-0.20261025061312-a6fd4b115be7"
 )
 
 // artifactOriginCopies is every operator file that copies which artifact
@@ -457,8 +472,8 @@ var mirrored = []mirror{
 		file: "internal/artifacts/kind.go", name: "kindSpecs",
 		against: framedKinds,
 		decides: "HTML pages and designs are the kinds framed from the artifact origin",
-		digest:  "0ee79203c1ad48ff3c0bd97cc629209bb284ca1f514193c4c432740640544994",
-		read:    artifactOriginRead,
+		digest:  "3ce61727d1fefd666a7f64890b74d4df9ba8fe6ae404ab9b6fa919e68764ef24",
+		read:    brandKindRead,
 	},
 	{
 		file: sandboxGo, name: "(*launcher).Launch",
@@ -467,8 +482,8 @@ var mirrored = []mirror{
 			"the catalogue's default, and refuses before a box exists what newCodingRun and sandboxCredentials " +
 			"refuse, and a run whose environment holds a value that resolves to nothing under a key nothing " +
 			"declares optional (runEnvironment's gap)",
-		digest: "16a15415b97676b6cb4c9f2e9d05ff3595dddb2ab25fd23074fccb5a911fbe98",
-		read:   cliOnlyRead,
+		digest: "b076a76f340bafe020454290babf1f76e03bb9beb78b183a720de3c07d23da75",
+		read:   standingInstructionsRead,
 	},
 	{
 		file: sandboxGo, name: "buildSandbox",
@@ -676,8 +691,8 @@ var mirrored = []mirror{
 			"tool loop (AgentModeBridgeUnsupported, NotExposed), and so is one whose CLI login cannot follow it " +
 			"into the remote sandbox (sandboxCredentials at phase Execute); a run whose environment holds a " +
 			"value that resolves to nothing starts without it",
-		digest: "16bcaa9a0ff723f20fabf196c3fe44a067e2a780bd085c1d9666d4eec01b2360",
-		read:   cliOnlyRead,
+		digest: "05cd682090e7206bb923b20f179e3a2044d9ac2046258efb8ed921f186641032",
+		read:   standingInstructionsRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).executorRun",

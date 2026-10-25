@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
 
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine"
@@ -270,14 +272,13 @@ func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
 func TestCLIAgentIsolationFollowsTheEngine(t *testing.T) {
 	namespace := newNamespace(t)
 	agents := enumOf(t, "llmproviders.crewlet.ai", "spec", "agent")
-	bundle := signInShape{
-		name: shapeBundle + ", env HOME",
-		auth: v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("cli", "bundle")},
-		env:  []string{"HOME"},
-	}
+	beside := map[v1.CLIAgentName]v1.CLIAgentAuth{}
 	providers := make([]v1.LLMProvider, 0, len(agents))
 	for _, agent := range agents {
-		providers = append(providers, *shapedProvider(namespace, v1.CLIAgentName(agent), v1.CLIAgentModeText, &bundle))
+		name := v1.CLIAgentName(agent)
+		beside[name] = loginBeside(t, namespace, name)
+		shape := signInShape{name: "env HOME", auth: beside[name], env: []string{"HOME"}}
+		providers = append(providers, *shapedProvider(namespace, name, v1.CLIAgentModeText, &shape))
 	}
 	report := askEngine(t, providers, false)
 
@@ -312,8 +313,7 @@ func TestCLIAgentIsolationFollowsTheEngine(t *testing.T) {
 	for _, agent := range agents {
 		name := v1.CLIAgentName(agent)
 		for _, variable := range everyName {
-			shape := bundle
-			shape.env = []string{variable}
+			shape := signInShape{name: "env " + variable, auth: beside[name], env: []string{variable}}
 			refusal := apiVerdict(t, shapedProvider(namespace, name, v1.CLIAgentModeText, &shape))
 			switch engineRefuses := slices.Contains(engineLists[name], variable); {
 			case engineRefuses && !strings.Contains(refusal, msgCLIIsolation):
@@ -340,6 +340,130 @@ func TestCLIAgentIsolationFollowsTheEngine(t *testing.T) {
 	}
 	isolationMessageFollows(t, rule.Message, agents, engineLists)
 	isolationTableFollows(t, agents, engineLists)
+}
+
+// TestCLIAgentSubscriptionEnvFollowsTheEngine holds the LLMProvider API's
+// refusal of a subscription variable in env to the engine: the variables each
+// CLI's profile sets under auth.mode subscription alone (subscription_env),
+// read from the profiles of the engine every suite runs, are the copy the
+// rule's cases are built from and the names the rule quotes; and for every CLI
+// and every such variable, the engine refuses it in a Subscription provider's
+// env exactly where the API does. A profile that gains one fails here until
+// the API follows it.
+func TestCLIAgentSubscriptionEnvFollowsTheEngine(t *testing.T) {
+	namespace := newNamespace(t)
+	agents := enumOf(t, "llmproviders.crewlet.ai", "spec", "agent")
+
+	source, err := os.OpenRoot(enginetest.Source(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = source.Close() })
+	raw, err := source.ReadFile(engineProfiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var profiles map[string]struct {
+		SubscriptionEnv map[string]string `json:"subscription_env"`
+	}
+	if err := yaml.Unmarshal(raw, &profiles); err != nil {
+		t.Fatalf("%s: %v", engineProfiles, err)
+	}
+	engineLists := map[v1.CLIAgentName][]string{}
+	var everyName []string
+	for profile, p := range profiles {
+		if len(p.SubscriptionEnv) == 0 {
+			continue
+		}
+		agent, ok := agentOfProfile(agents, profile)
+		if !ok {
+			t.Errorf("the engine's %s profile sets %v under subscription, and no agent the API offers is it",
+				profile, slices.Sorted(maps.Keys(p.SubscriptionEnv)))
+			continue
+		}
+		engineLists[agent] = slices.Sorted(maps.Keys(p.SubscriptionEnv))
+		everyName = append(everyName, engineLists[agent]...)
+	}
+	everyName = slices.Compact(slices.Sorted(slices.Values(everyName)))
+	if !maps.EqualFunc(engineLists, subscriptionEnv, slices.Equal) {
+		t.Errorf("the engine's profiles set %v under subscription, the API's rule refuses %v", engineLists, subscriptionEnv)
+	}
+	rule := validationOf(t, "llmproviders.crewlet.ai", msgCLISubscriptionEnv, "spec")
+	quoted := quotedVariable.FindAllStringSubmatch(rule.Rule, -1)
+	named := make([]string, 0, len(quoted))
+	for _, m := range quoted {
+		named = append(named, m[1])
+	}
+	if got := slices.Compact(slices.Sorted(slices.Values(named))); !slices.Equal(got, everyName) {
+		t.Errorf("the API's subscription rule refuses %v in env, the engine's profiles set %v", got, everyName)
+	}
+
+	// Every CLI with every such variable, beside the login it is admitted
+	// with (loginBeside), so the variable is the only question.
+	providers := make([]v1.LLMProvider, 0, len(agents)*len(everyName))
+	for _, variable := range everyName {
+		for _, agent := range agents {
+			name := v1.CLIAgentName(agent)
+			shape := signInShape{name: "env " + variable, auth: loginBeside(t, namespace, name), env: []string{variable}}
+			p := shapedProvider(namespace, name, v1.CLIAgentModeText, &shape)
+			p.Name = fmt.Sprintf("%s-%d", p.Name, len(providers))
+			providers = append(providers, *p)
+		}
+	}
+	report := askEngine(t, providers, false)
+	for i := range providers {
+		p := &providers[i]
+		variable := p.Spec.Env[0].Name
+		engineRefuses := slices.ContainsFunc(report.problems[p.Name], func(problem string) bool {
+			return strings.Contains(problem, variable+subscriptionRefusal)
+		})
+		if want := slices.Contains(engineLists[p.Spec.Agent], variable); engineRefuses != want {
+			t.Errorf("%s with %s in env under subscription: the engine refuses it = %v, its profile sets it = %v: %q",
+				p.Spec.Agent, variable, engineRefuses, want, report.problems[p.Name])
+		}
+		refusal := apiVerdict(t, p)
+		switch {
+		case engineRefuses && !strings.Contains(refusal, msgCLISubscriptionEnv):
+			t.Errorf("%s with %s in env: the engine refuses it under subscription and the API's rule does not: %q",
+				p.Spec.Agent, variable, refusal)
+		case !engineRefuses && refusal != "":
+			t.Errorf("%s with %s in env: the engine sets no such variable for it and the API refuses it: %s",
+				p.Spec.Agent, variable, refusal)
+		}
+	}
+}
+
+// loginBeside is the sign-in a probe of a variable in env runs beside: a
+// bundle, a Subscription login that leaves the variable the only question,
+// for every CLI the API admits one for, and for a CLI that keeps no login
+// (QwenCode), which the API refuses a bundle, the sign-in it is admitted with.
+func loginBeside(t *testing.T, namespace string, agent v1.CLIAgentName) v1.CLIAgentAuth {
+	t.Helper()
+	bundle := signInShape{name: shapeBundle, auth: v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("cli", "bundle")}}
+	if apiVerdict(t, shapedProvider(namespace, agent, v1.CLIAgentModeText, &bundle)) == "" {
+		return bundle.auth
+	}
+	return admittedSignIn(agent, cliVariables).auth
+}
+
+// engineProfiles is the engine's table of CLI profiles.
+const engineProfiles = "internal/providers/llm/cliagent/cliprofile/profiles.yaml"
+
+// subscriptionRefusal follows the variable in the engine's refusal of one its
+// profile sets under subscription (crewlet's internal/config,
+// validateCredentials).
+const subscriptionRefusal = " is set by the "
+
+// agentOfProfile is the agent of agents the engine's profile named profile
+// drives: the same words, the profile's in kebab case and the agent's in
+// PascalCase (claude-code is ClaudeCode).
+func agentOfProfile(agents []string, profile string) (v1.CLIAgentName, bool) {
+	for _, agent := range agents {
+		if strings.EqualFold(strings.ReplaceAll(profile, "-", ""), agent) {
+			return v1.CLIAgentName(agent), true
+		}
+	}
+	return "", false
 }
 
 // quotedVariable is a variable's name quoted in a CEL rule: upper case, so
