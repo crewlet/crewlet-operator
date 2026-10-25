@@ -11,7 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/render"
@@ -74,7 +73,7 @@ func optionalRun(t *testing.T, secrets ...*corev1.Secret) (*configRun, *part, *e
 	run := &configRun{
 		CompanyConfigReconciler: &CompanyConfigReconciler{
 			Recorder:  recorder,
-			APIReader: fake.NewClientBuilder().WithObjects(objectsOf(secrets)...).Build(),
+			APIReader: fakeClient().WithObjects(objectsOf(secrets)...).Build(),
 		},
 		company: company, class: class, parts: []*part{p, newPart(seat)},
 	}

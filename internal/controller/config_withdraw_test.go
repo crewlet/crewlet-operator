@@ -23,11 +23,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/yaml"
 
@@ -649,13 +647,6 @@ func newWithdrawal(t *testing.T, r running) *withdrawal {
 	}
 	fe, eng := newStoreEngine(t, served)
 
-	scheme := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
-	if err := crewletaiv1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
 	company := run1.company.DeepCopy()
 	company.Spec.Mission = ""
 	company.UID = "6f1c1a5e-0000-4000-8000-000000000002"
@@ -664,7 +655,7 @@ func newWithdrawal(t *testing.T, r running) *withdrawal {
 		Type: crewletaiv1alpha1.ConditionRuntimeReady, Status: metav1.ConditionTrue, Reason: crewletaiv1alpha1.ReasonValid,
 	})
 	cluster := interceptor.NewClient(
-		fake.NewClientBuilder().WithScheme(scheme).WithObjects(company, tavily, npm).WithStatusSubresource(company).Build(),
+		fakeClient().WithObjects(company, tavily, npm).WithStatusSubresource(company).Build(),
 		interceptor.Funcs{Apply: func(ctx context.Context, c client.WithWatch, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
 			if n := w.stateWrites.Add(1); n == w.failWrite.Load() {
 				return errStateWrite
