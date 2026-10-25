@@ -20,9 +20,9 @@ spec:
     - Never push directly to the default branch.
   timeZone: Europe/Berlin
   tracker:
-    backend: Native
+    backend: Worklet
   knowledge:
-    backend: Native
+    backend: Doclet
   tokenBudget:
     day: 3000000
     month: 40000000

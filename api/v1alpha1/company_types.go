@@ -6,24 +6,24 @@ import (
 )
 
 // TrackerBackend is which work tracker a company runs. It maps onto Crewlet's
-// tracker.backend (Native is `native`, Jira is `jira`, None is `none`).
-// +kubebuilder:validation:Enum=Native;Jira;None
+// tracker.backend (Worklet is `worklet`, Jira is `jira`, None is `none`).
+// +kubebuilder:validation:Enum=Worklet;Jira;None
 type TrackerBackend string
 
 // The tracker backends.
 const (
-	// TrackerNative is the engine's own tracker.
-	TrackerNative TrackerBackend = "Native"
+	// TrackerWorklet is Worklet, the engine's own tracker.
+	TrackerWorklet TrackerBackend = "Worklet"
 	// TrackerJira is Jira, connected by the company's Jira Integration.
 	TrackerJira TrackerBackend = "Jira"
 	// TrackerNone is a company with no tracker.
 	TrackerNone TrackerBackend = "None"
 )
 
-// NativeTrackerSettings is the policy of the engine's own tracker. It maps
-// onto Crewlet's tracker.native.
+// WorkletSettings is the policy of Worklet. It maps onto Crewlet's
+// tracker.worklet.
 // +kubebuilder:validation:MinProperties=1
-type NativeTrackerSettings struct {
+type WorkletSettings struct {
 	// inboxRetentionDays is how long a person's inbox keeps a row; the
 	// history the row points at is kept regardless. Unset takes Crewlet's
 	// default of 365. Crewlet's `inbox_retention_days`.
@@ -35,29 +35,29 @@ type NativeTrackerSettings struct {
 
 // TrackerSettings is which work tracker a company runs. It maps onto
 // Crewlet's tracker block.
-// +kubebuilder:validation:XValidation:rule="!has(self.native) || self.backend == 'Native'",message="native applies to backend Native only"
+// +kubebuilder:validation:XValidation:rule="!has(self.worklet) || self.backend == 'Worklet'",message="worklet applies to backend Worklet only"
 // +kubebuilder:validation:MinProperties=1
 type TrackerSettings struct {
 	// backend is which tracker the company runs.
 	// +optional
-	// +default="Native"
+	// +default="Worklet"
 	Backend TrackerBackend `json:"backend,omitempty"`
 
-	// native is the policy of the engine's own tracker, for backend Native.
+	// worklet is the policy of Worklet, for backend Worklet.
 	// +optional
-	Native NativeTrackerSettings `json:"native,omitzero"`
+	Worklet WorkletSettings `json:"worklet,omitzero"`
 }
 
 // KnowledgeBackend is which knowledge base a company runs. It maps onto
-// Crewlet's knowledge.backend (Native is `native`, Confluence is
+// Crewlet's knowledge.backend (Doclet is `doclet`, Confluence is
 // `confluence`, None is `none`).
-// +kubebuilder:validation:Enum=Native;Confluence;None
+// +kubebuilder:validation:Enum=Doclet;Confluence;None
 type KnowledgeBackend string
 
 // The knowledge backends.
 const (
-	// KnowledgeNative is the engine's own knowledge base.
-	KnowledgeNative KnowledgeBackend = "Native"
+	// KnowledgeDoclet is Doclet, the engine's own knowledge base.
+	KnowledgeDoclet KnowledgeBackend = "Doclet"
 	// KnowledgeConfluence is Confluence, connected by the company's
 	// Confluence Integration.
 	KnowledgeConfluence KnowledgeBackend = "Confluence"
@@ -71,7 +71,7 @@ const (
 type KnowledgeSettings struct {
 	// backend is which knowledge base the company runs.
 	// +optional
-	// +default="Native"
+	// +default="Doclet"
 	Backend KnowledgeBackend `json:"backend,omitempty"`
 
 	// scope narrows every knowledge search to these containers. Empty

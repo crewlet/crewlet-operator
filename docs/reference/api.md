@@ -1737,18 +1737,18 @@ _Appears in:_
 _Underlying type:_ _string_
 
 KnowledgeBackend is which knowledge base a company runs. It maps onto
-Crewlet's knowledge.backend (Native is `native`, Confluence is
+Crewlet's knowledge.backend (Doclet is `doclet`, Confluence is
 `confluence`, None is `none`).
 
 _Validation:_
-- Enum: [Native Confluence None]
+- Enum: [Doclet Confluence None]
 
 _Appears in:_
 - [KnowledgeSettings](#knowledgesettings)
 
 | Field | Description |
 | --- | --- |
-| `Native` | KnowledgeNative is the engine's own knowledge base.<br /> |
+| `Doclet` | KnowledgeDoclet is Doclet, the engine's own knowledge base.<br /> |
 | `Confluence` | KnowledgeConfluence is Confluence, connected by the company's<br />Confluence Integration.<br /> |
 | `None` | KnowledgeNone is a company with no knowledge base.<br /> |
 
@@ -1768,7 +1768,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `backend` _[KnowledgeBackend](#knowledgebackend)_ | backend is which knowledge base the company runs. | Native | Enum: [Native Confluence None] <br />Optional: \{\} <br /> |
+| `backend` _[KnowledgeBackend](#knowledgebackend)_ | backend is which knowledge base the company runs. | Doclet | Enum: [Doclet Confluence None] <br />Optional: \{\} <br /> |
 | `scope` _string array_ | scope narrows every knowledge search to these containers. Empty<br />searches the whole company. Each is a container key, which Crewlet<br />requires to be an upper-case letter followed by 1 to 9 upper-case<br />letters or digits, such as PLAT. Crewlet's `scope`. |  | MaxItems: 64 <br />items:MaxLength: 10 <br />items:MinLength: 2 <br />items:Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
 | `skillsContainer` _string_ | skillsContainer is the container holding tool-skill pages, a container<br />key (see scope). Unset takes Crewlet's default container; an empty<br />string turns tool skills off. Crewlet's `skills_container`. |  | MaxLength: 10 <br />Optional: \{\} <br /> |
 | `rootSpace` _string_ | rootSpace is the container holding the company's own pages, such as<br />the root onboarding page, a container key (see scope). Unset takes<br />Crewlet's default. Crewlet's `root_space`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
@@ -2388,24 +2388,6 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `secretKeyRef` _[NamespacedSecretKeyReference](#namespacedsecretkeyreference)_ | secretKeyRef selects the Secret key that holds the value. |  | Required: \{\} <br /> |
-
-
-#### NativeTrackerSettings
-
-
-
-NativeTrackerSettings is the policy of the engine's own tracker. It maps
-onto Crewlet's tracker.native.
-
-_Validation:_
-- MinProperties: 1
-
-_Appears in:_
-- [TrackerSettings](#trackersettings)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `inboxRetentionDays` _integer_ | inboxRetentionDays is how long a person's inbox keeps a row; the<br />history the row points at is kept regardless. Unset takes Crewlet's<br />default of 365. Crewlet's `inbox_retention_days`. |  | Maximum: 3650 <br />Minimum: 30 <br />Optional: \{\} <br /> |
 
 
 #### NetworkPolicyEgress
@@ -3657,17 +3639,17 @@ _Appears in:_
 _Underlying type:_ _string_
 
 TrackerBackend is which work tracker a company runs. It maps onto Crewlet's
-tracker.backend (Native is `native`, Jira is `jira`, None is `none`).
+tracker.backend (Worklet is `worklet`, Jira is `jira`, None is `none`).
 
 _Validation:_
-- Enum: [Native Jira None]
+- Enum: [Worklet Jira None]
 
 _Appears in:_
 - [TrackerSettings](#trackersettings)
 
 | Field | Description |
 | --- | --- |
-| `Native` | TrackerNative is the engine's own tracker.<br /> |
+| `Worklet` | TrackerWorklet is Worklet, the engine's own tracker.<br /> |
 | `Jira` | TrackerJira is Jira, connected by the company's Jira Integration.<br /> |
 | `None` | TrackerNone is a company with no tracker.<br /> |
 
@@ -3687,8 +3669,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `backend` _[TrackerBackend](#trackerbackend)_ | backend is which tracker the company runs. | Native | Enum: [Native Jira None] <br />Optional: \{\} <br /> |
-| `native` _[NativeTrackerSettings](#nativetrackersettings)_ | native is the policy of the engine's own tracker, for backend Native. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `backend` _[TrackerBackend](#trackerbackend)_ | backend is which tracker the company runs. | Worklet | Enum: [Worklet Jira None] <br />Optional: \{\} <br /> |
+| `worklet` _[WorkletSettings](#workletsettings)_ | worklet is the policy of Worklet, for backend Worklet. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### Unit
@@ -3857,5 +3839,23 @@ _Appears in:_
 | --- | --- |
 | `Always` | WorkingStatusAlways shows it on every turn a chat message started.<br /> |
 | `Addressed` | WorkingStatusAddressed shows it only when a person is plausibly<br />waiting: a direct message, a mention, or a thread the seat follows.<br /> |
+
+
+#### WorkletSettings
+
+
+
+WorkletSettings is the policy of Worklet. It maps onto Crewlet's
+tracker.worklet.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [TrackerSettings](#trackersettings)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `inboxRetentionDays` _integer_ | inboxRetentionDays is how long a person's inbox keeps a row; the<br />history the row points at is kept regardless. Unset takes Crewlet's<br />default of 365. Crewlet's `inbox_retention_days`. |  | Maximum: 3650 <br />Minimum: 30 <br />Optional: \{\} <br /> |
 
 
