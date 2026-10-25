@@ -222,16 +222,15 @@ spec:
                       that hung.
 
                       It is at least every bound Crewlet puts on a data pod's boot, laid end
-                      to end, which a window may not cut short: 1676 seconds, or 1816 with
+                      to end, which a window may not cut short: 1656 seconds, or 1796 with
                       objects.backend S3, whose bucket every boot probes. Those are its waits
                       for its own broker and store (provisioning the event stream, the
                       coordination buckets, the object store and the state logs, two minutes
                       a window on the broker of one member a data pod runs, and the requests
                       around them), never for a peer or a seat pod. A few of them grow with
                       what the company holds and are left to the recovery's share, as the
-                      recovery is: a listing of its secrets, at up to 5 s a secret; moving a
-                      secret an offline `crewlet secrets set` left on the node, 10 s each;
-                      the claim of each batch of a seat pod's events a crash left unsettled,
+                      recovery is: a listing of its secrets, at up to 5 s a secret; the
+                      claim of each batch of a seat pod's events a crash left unsettled,
                       15 s a batch; and the restore of each CLI's credential bundle, 10 s
                       each. Unset derives it from the data volume: that floor plus six
                       seconds per GiB of the volume. That is four times the second and a
@@ -242,7 +241,7 @@ spec:
                       Changing it changes the data pods' template, which restarts them.
                     format: int32
                     maximum: 86400
-                    minimum: 1676
+                    minimum: 1656
                     type: integer
                   storage:
                     description: storage is the data volume each data pod gets.
@@ -3559,12 +3558,12 @@ spec:
                 it for its state logs and the object store''s bucket'
               rule: (has(self.objects) && has(self.objects.backend) && self.objects.backend
                 == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('12Gi'))
-            - message: 'data.startupSeconds must be at least 1816 with objects.backend
+            - message: 'data.startupSeconds must be at least 1796 with objects.backend
                 S3: every boot of a data pod probes the bucket, and Crewlet''s bounds
-                on the boot then add up to 1816 seconds, which a shorter window can
+                on the boot then add up to 1796 seconds, which a shorter window can
                 cut short'
               rule: '!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend)
-                || self.objects.backend != ''S3'' || self.data.startupSeconds >= 1816'
+                || self.objects.backend != ''S3'' || self.data.startupSeconds >= 1796'
             - message: 'networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces:
                 without them the policy refuses everything the Ingress forwards'
               rule: self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress)
