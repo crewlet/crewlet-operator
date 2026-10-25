@@ -245,8 +245,10 @@ type SecretInfo struct {
 	OperatorID string
 
 	// Source is the surface the value arrived by, as the engine names it:
-	// "api" for every write through PUT /secrets, "setup", "provision" or
-	// "migrated" for the engine's own. It says how, not who.
+	// "api" for every write through PUT /secrets, "setup" or "provision" for
+	// the engine's own, and "cli", "llm-login" or "provision" for a crewlet
+	// command that wrote the store directly while its node's engine was
+	// stopped. It says how, not who.
 	Source string
 }
 

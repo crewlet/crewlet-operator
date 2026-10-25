@@ -1488,21 +1488,6 @@ var mirrored = []mirror{
 		read:   bootBoundsRead,
 	},
 	{
-		file: "internal/engine/secrets.go", name: "(*Engine).migrateSecrets",
-		against: bootWindows,
-		decides: "a boot moves the secrets an offline write left on the node onto the fleet, logging and carrying " +
-			"on when it cannot",
-		digest: "41eec3a0e737a5a5d232c7efe52ecda8dba4485747481926d7e32d5d3d41a652",
-		read:   bootBoundsRead,
-	},
-	{
-		file: "internal/fleetsecrets/migrate.go", name: "Migrate",
-		against: bootWindows,
-		decides: "moving offline secrets lists the fleet's secrets, then puts and deletes each row",
-		digest:  "1806d14862d2cd93f3fe2e08d37226c4d259caa14e27a7b7fb87b95f8af30db8",
-		read:    bootBoundsRead,
-	},
-	{
 		file: natsObjGo, name: "open",
 		against: bootWindows,
 		decides: "the nats bucket is looked up, created and read back, then bound, under the window it is handed",
