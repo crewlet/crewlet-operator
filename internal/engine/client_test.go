@@ -1384,6 +1384,19 @@ func TestActiveConfigWhileTheFleetCannotBeRead(t *testing.T) {
 	}
 }
 
+// TestAReloadThatLosesItsRaceIsRevisionAdvanced pins that a reload, which
+// names no revision, is a write that races others: one that loses its
+// activation to another write is ErrRevisionAdvanced, as the engine answers it
+// (409 revision_advanced, naming the revision it stored and the one that won).
+func TestAReloadThatLosesItsRaceIsRevisionAdvanced(t *testing.T) {
+	f := newFakeEngine(t)
+	f.handle("POST /config/reload", answer(http.StatusConflict,
+		`{"error":"revision_advanced","current_revision_id":"rev-9","stored_revision_id":"rev-10"}`))
+	if _, err := f.client().ReloadConfig(context.Background(), "a reload that loses"); !errors.Is(err, engine.ErrRevisionAdvanced) {
+		t.Errorf("ReloadConfig() = %v, want ErrRevisionAdvanced", err)
+	}
+}
+
 // TestFleetLastApplyOfAnUnlistedNodeIsNone pins that a node the fleet does
 // not list yet has recorded nothing, rather than another node's record.
 func TestFleetLastApplyOfAnUnlistedNodeIsNone(t *testing.T) {
