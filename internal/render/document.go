@@ -23,11 +23,11 @@ type companyDoc struct {
 }
 
 type trackerDoc struct {
-	Backend string            `json:"backend,omitempty"`
-	Native  *trackerNativeDoc `json:"native,omitempty"`
+	Backend string             `json:"backend,omitempty"`
+	Worklet *trackerWorkletDoc `json:"worklet,omitempty"`
 }
 
-type trackerNativeDoc struct {
+type trackerWorkletDoc struct {
 	InboxRetentionDays int32 `json:"inbox_retention_days,omitempty"`
 }
 

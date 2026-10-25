@@ -16,6 +16,12 @@ const platformURLVar = "PLATFORM_URL"
 
 func TestCompanyDefaults(t *testing.T) {
 	c := company(newNamespace(t), companyName)
+	// A backend is defaulted inside a tracker or knowledge block that is
+	// there; an absent block is left to Crewlet, which derives its own. So
+	// each block states one other setting, and the worklet one is admitted
+	// only because its backend defaults to Worklet before the rule runs.
+	c.Spec.Tracker.Worklet.InboxRetentionDays = 90
+	c.Spec.Knowledge.Scope = []string{containerKey}
 	if err := k8sClient.Create(ctx, c); err != nil {
 		t.Fatal(err)
 	}
@@ -32,6 +38,8 @@ func TestCompanyDefaults(t *testing.T) {
 		{"topology.data.replicas", s.Topology.Data.Replicas, int32(1)},
 		{"topology.defaultSeatPool", s.Topology.DefaultSeatPool, v1.DataPool},
 		{"deletionPolicy", s.DeletionPolicy, v1.DeletionPolicyRetain},
+		{"tracker.backend", s.Tracker.Backend, v1.TrackerWorklet},
+		{"knowledge.backend", s.Knowledge.Backend, v1.KnowledgeDoclet},
 	} {
 		if !equal(d.got, d.want) {
 			t.Errorf("%s defaulted to %v, want %v", d.field, d.got, d.want)
@@ -45,11 +53,11 @@ func fullCompany(c *v1.Company) {
 	c.Spec.Mission = "Ship a reliable cloud storage product."
 	c.Spec.TimeZone = "America/Argentina/Buenos_Aires"
 	c.Spec.Tracker = v1.TrackerSettings{
-		Backend: v1.TrackerNative,
-		Native:  v1.NativeTrackerSettings{InboxRetentionDays: 90},
+		Backend: v1.TrackerWorklet,
+		Worklet: v1.WorkletSettings{InboxRetentionDays: 90},
 	}
 	c.Spec.Knowledge = v1.KnowledgeSettings{
-		Backend:         v1.KnowledgeNative,
+		Backend:         v1.KnowledgeDoclet,
 		Scope:           []string{containerKey, "ENG2"},
 		SkillsContainer: new(""),
 		RootSpace:       "HQ",
@@ -115,14 +123,14 @@ func TestCompanyValidation(t *testing.T) {
 			want:   msgThreeReplicas,
 		},
 		{
-			name: "a native tracker block on backend None is refused",
+			name: "a worklet block on backend None is refused",
 			mutate: func(c *v1.Company) {
 				c.Spec.Tracker = v1.TrackerSettings{
 					Backend: v1.TrackerNone,
-					Native:  v1.NativeTrackerSettings{InboxRetentionDays: 90},
+					Worklet: v1.WorkletSettings{InboxRetentionDays: 90},
 				}
 			},
-			want: "native applies to backend Native only",
+			want: "worklet applies to backend Worklet only",
 		},
 		{
 			// The second reference names the same provider: kind defaults
@@ -279,7 +287,7 @@ func TestCompanyValidation(t *testing.T) {
 		},
 		{
 			name:   "a dashboardBaseURL with a fragment is refused",
-			mutate: func(c *v1.Company) { c.Spec.Exposure.DashboardBaseURL = "https://crewlet.nimbus.example/#/work" },
+			mutate: func(c *v1.Company) { c.Spec.Exposure.DashboardBaseURL = "https://crewlet.nimbus.example/#/worklet" },
 			want:   msgDashboardBaseURLQuery,
 		},
 		// Crewlet refuses to start on a browser's address whose host a

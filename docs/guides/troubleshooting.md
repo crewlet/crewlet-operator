@@ -431,8 +431,8 @@ something a person set up. Or keep the seat: restore its Seat as a Human seat.
 revision the operator wrote and then could not apply it, or never did. It
 keeps serving the revision it applied last; the dry run accepted the new one,
 so what failed is something only applying it meets on this engine: a
-subsystem it could not start (the native tracker, the code sandbox, the
-inbound edge), or a rule that needs the data pod's own configuration. The
+subsystem it could not start (Worklet, the code sandbox, the inbound
+edge), or a rule that needs the data pod's own configuration. The
 condition's message carries the engine's account of the failure, its
 `status` and its `posture`:
 
