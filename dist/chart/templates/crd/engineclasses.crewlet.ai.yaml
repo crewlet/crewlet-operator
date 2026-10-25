@@ -260,10 +260,10 @@ spec:
                           stream.store_max_bytes: the stream reserves what a node keeps there up
                           front, and a fresh node refuses to boot on a share that cannot hold it
                           (Crewlet's engine.BrokerFloor, and its deployment guide's "minimum room
-                          for a fresh node"). Its seven state logs' ceilings at their smallest
-                          come to 6979321856 bytes, so a volume must be at least 9Gi, whose share
+                          for a fresh node"). Its eight state logs' ceilings at their smallest
+                          come to 7046430720 bytes, so a volume must be at least 9Gi, whose share
                           of 6.75Gi holds them. With objects.backend NATS, the default, the object
-                          store's bucket reserves a quarter of the share beside them, 9305762474
+                          store's bucket reserves a quarter of the share beside them, 9395240959
                           bytes in all, so such a class must give at least 12Gi, whose share is
                           9Gi. That is the least that boots: the mailboxes and coordination
                           buckets grow into what is left, so give a company that runs for long
@@ -283,7 +283,7 @@ spec:
                         x-kubernetes-validations:
                         - message: 'size must be at least 9Gi: three quarters of the
                             volume is the engine''s event stream, and a fresh node
-                            of Crewlet reserves at least 6979321856 bytes of it for
+                            of Crewlet reserves at least 7046430720 bytes of it for
                             its state logs'
                           rule: '!quantity(string(self)).isLessThan(quantity(''9Gi''))'
                       storageClassName:
@@ -3555,7 +3555,7 @@ spec:
             x-kubernetes-validations:
             - message: 'data.storage.size must be at least 12Gi with objects.backend
                 NATS: three quarters of the volume is the engine''s event stream,
-                and a fresh node of Crewlet reserves at least 9305762474 bytes of
+                and a fresh node of Crewlet reserves at least 9395240959 bytes of
                 it for its state logs and the object store''s bucket'
               rule: (has(self.objects) && has(self.objects.backend) && self.objects.backend
                 == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('12Gi'))

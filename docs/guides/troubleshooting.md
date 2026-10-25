@@ -207,8 +207,8 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **`the broker refused to reserve the … log's ceiling`**, ending
   `insufficient storage resources available`: the engine could not reserve
   what a fresh node keeps on its event stream. The stream is given three
-  quarters of the data volume, and a fresh node reserves at least 9305762474
-  bytes of it, or 6979321856 when the class keeps its files in S3; the
+  quarters of the data volume, and a fresh node reserves at least 9395240959
+  bytes of it, or 7046430720 when the class keeps its files in S3; the
   message names the figure it needed and breaks it down. The class's
   `data.storage.size` admits no less than `12Gi` (`9Gi` with the files in
   S3), so this is a company whose volume was made smaller: under an older
