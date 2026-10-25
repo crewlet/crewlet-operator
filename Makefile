@@ -85,12 +85,16 @@ gateway-api-crds: ## Copy the Gateway API CRDs of the release go.mod requires in
 # test/docs) runs the crewlet binary `make crewlet` installed
 # (internal/engine/enginetest), named explicitly so a CREWLET_BIN in the
 # caller's environment cannot swap in another engine; test/chart renders the
-# chart with the pinned helm.
+# chart with the pinned helm. The timeout is per test binary and sized to the
+# longest: internal/controller, whose envtest suite runs every config spec
+# against a real engine and takes about eight minutes on a 4-CPU runner under
+# the race detector, which go test's default of ten would fail on any slower
+# one. Twenty still stops a hung suite.
 .PHONY: test
 test: manifests generate fmt vet setup-envtest crewlet helm ## Run the unit, envtest, engine and chart suites of both modules.
 	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" \
 		CREWLET_BIN="$(CREWLET)" HELM="$(HELM)" \
-		go test -race $$(go list ./... | grep -v /test/e2e) -coverprofile cover.out
+		go test -race -timeout 20m $$(go list ./... | grep -v /test/e2e) -coverprofile cover.out
 	cd api && go test -race ./... -coverprofile cover.out
 
 KIND_CLUSTER ?= crewlet-operator-test-e2e
