@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -45,7 +46,7 @@ import (
 // storeEngine answers the engine's /health, /config, /config/revisions,
 // /fleet and /secrets routes from a revision history, the last of which is
 // the fleet's, and a store, as the operator's client reads them. A document
-// it is to refuse is refused as the engine refuses an invalid one.
+// it is to refuse is refused as refusal says.
 // beforeReload, afterReload and afterApply, when set, run once, under its
 // lock, just before a reload is answered and just after a reload or an apply
 // is: somebody else's write landing between two of the operator's. Its fleet
@@ -79,10 +80,16 @@ import (
 // in place of that, as a data node whose record of it the engine has not
 // moved yet to the revision it runs, "" for none.
 type storeEngine struct {
-	mu                        sync.Mutex
-	revisions                 []storeRevision
-	store                     map[string]string
-	refuse                    bool
+	mu        sync.Mutex
+	revisions []storeRevision
+	store     map[string]string
+	// refusal, when set, is how the engine refuses every PUT of the document,
+	// the dry run included: invalidDocument, a document it finds invalid, or
+	// for what only its own users can clear, heldSeat, a human seat somebody
+	// holds that the document takes away, or managedDocument, a token the
+	// engine does not let change the document. A reload it answers as ever:
+	// none of them refuses one.
+	refusal                   *engineRefusal
 	configDown, secretsDown   bool
 	reloadDown                bool
 	beforeReload, afterReload func(e *storeEngine)
@@ -166,6 +173,35 @@ func newStoreEngine(t *testing.T, document []byte) (*storeEngine, *engine.Client
 	return e, engine.New(server.URL, "token")
 }
 
+// engineRefusal is an answer the engine refuses a document with, as it
+// writes it.
+type engineRefusal struct {
+	status int
+	body   string
+}
+
+func (refusal *engineRefusal) answer(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(refusal.status)
+	_, _ = io.WriteString(w, refusal.body)
+}
+
+var (
+	// invalidDocument is the engine's refusal of a document it finds
+	// invalid.
+	invalidDocument = &engineRefusal{status: http.StatusBadRequest, body: `{"error":"validation_error",` +
+		`"detail":"refused","problems":[{"path":"roles","kind":"invalid","message":"refused"}]}`}
+	// heldSeat is the engine's refusal of a document that takes away a
+	// human seat a person holds.
+	heldSeat = &engineRefusal{status: http.StatusConflict, body: `{"error":"seat_held",` +
+		`"detail":"This change removes human seats that people still hold: founder (held by a person).",` +
+		`"held":{"founder":{"person":"p-1","kind":"person","stage":"active"}}}`}
+	// managedDocument is the engine's refusal of a write by a token that
+	// api.auth.company_writers does not name.
+	managedDocument = &engineRefusal{status: http.StatusForbidden, body: `{"error":"config_managed",` +
+		`"managed_by":["ci"],"detail":"the company document is managed by ci"}`}
+)
+
 func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -201,9 +237,8 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 			"applied_epoch": len(e.revisions) - e.appliedLag})
 	case r.Method == http.MethodGet && r.URL.Path == configRoute:
 		e.readActive(w, active)
-	case r.Method == http.MethodPut && r.URL.Path == configRoute && e.refuse:
-		answer(http.StatusBadRequest, map[string]any{"error": "validation_error", "detail": "refused",
-			"problems": []map[string]string{{"path": "roles", "kind": "invalid", "message": "refused"}}})
+	case r.Method == http.MethodPut && r.URL.Path == configRoute && e.refusal != nil:
+		e.refusal.answer(w)
 	case r.Method == http.MethodPut && r.URL.Path == configRoute && dryRun(r):
 		answer(http.StatusOK, map[string]any{"base_revision_id": active.id})
 	case r.Method == http.MethodPut && r.URL.Path == configRoute:
@@ -784,6 +819,26 @@ func (w *withdrawal) enforced(t *testing.T) (ctrl.Result, error) {
 	return w.run.enforce(ctx, w.client, *w.run.desired, active)
 }
 
+// rotatedValue is the value rotate gives the required Secret.
+const rotatedValue = "tvly-rotated"
+
+// rotate gives the Secret behind the required value a new one, as somebody
+// rotating a credential does: the next sync writes it into the engine's
+// store, and what the engine runs reads it only once a revision activates
+// after it.
+func (w *withdrawal) rotate(t *testing.T) {
+	t.Helper()
+	ctx := context.Background()
+	rotated := &corev1.Secret{}
+	if err := w.cluster.Get(ctx, types.NamespacedName{Namespace: "ns", Name: requiredSecret}, rotated); err != nil {
+		t.Fatal(err)
+	}
+	rotated.Data[requiredKey] = []byte(rotatedValue)
+	if err := w.cluster.Update(ctx, rotated); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // told reports whether the reconcile recorded a Normal event of reason, and
 // warned whether a Warning one.
 func told(recorded []string, reason string) bool {
@@ -977,7 +1032,7 @@ func TestARevisionThatLetsAValueGoGoesWithoutItWhateverTheNextDocumentReads(t *t
 					t.Fatal(err)
 				}
 				w.run.doc = doc
-				w.engine.refuse = true
+				w.engine.refusal = invalidDocument
 				if err := w.enforce(t); err != nil {
 					t.Fatal(err)
 				}
@@ -1046,7 +1101,9 @@ func TestTheNextDocumentLetsGoWhatTheRunningRevisionRequired(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			w := newWithdrawal(t, tc.running)
-			w.engine.refuse = tc.refused
+			if tc.refused {
+				w.engine.refusal = invalidDocument
+			}
 			if err := w.enforce(t); err != nil {
 				t.Fatal(err)
 			}
@@ -1407,7 +1464,7 @@ func TestARefusedDocumentComesBackWhenItsWithdrawalReportSays(t *testing.T) {
 	}
 	// The dry run is refused, and the activation owed then meets an engine
 	// that cannot say who is asking, for two seconds.
-	w.engine.refuse = true
+	w.engine.refusal = invalidDocument
 	w.engine.reloadDown = true
 	result, err := w.run.converge(ctx, w.client)
 	if err != nil {
@@ -1418,6 +1475,72 @@ func TestARefusedDocumentComesBackWhenItsWithdrawalReportSays(t *testing.T) {
 	if i < 0 || !strings.Contains(recorded[i], "tries again in 2s") || result.RequeueAfter != 2*time.Second {
 		t.Errorf("the next look is %s on and events %q; want SecretWithdrawalFailed promising 2s, and 2s",
 			result.RequeueAfter, recorded)
+	}
+}
+
+// TestADocumentTheEngineHoldsStillSettlesTheStore pins that a document the
+// engine refuses for what only its own users can clear, a human seat somebody
+// holds or a token it does not let change the document, settles what the
+// store owes as a document it refuses as invalid does: the running revision is
+// activated again without a value whose Secret was deleted, and the refusal is
+// reported and looked at again ten seconds on, or sooner where an activation
+// that failed says so. It went back as an error, which nothing settled, so for
+// as long as the seat was held the engine went on starting tool servers and
+// executor runs with the deleted Secret's value.
+func TestADocumentTheEngineHoldsStillSettlesTheStore(t *testing.T) {
+	for _, tc := range []struct {
+		refusal    *engineRefusal
+		reason     string
+		reloadDown bool
+	}{
+		{refusal: heldSeat, reason: crewletaiv1alpha1.ReasonSeatHeld},
+		{refusal: managedDocument, reason: crewletaiv1alpha1.ReasonWriteRefused},
+		{refusal: heldSeat, reason: crewletaiv1alpha1.ReasonSeatHeld, reloadDown: true},
+	} {
+		name := tc.reason
+		if tc.reloadDown {
+			name += ", and the activation owed fails"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			w := newWithdrawal(t, runningLetsGo)
+			// A rotated value is the change the engine is asked to apply:
+			// its own re-activation at the write fails, so the operator
+			// writes the document.
+			w.rotate(t)
+			w.engine.mu.Lock()
+			w.engine.reloadAnswer = failedReload("unavailable", "the coordination store did not answer")
+			w.engine.refusal, w.engine.reloadDown = tc.refusal, tc.reloadDown
+			w.engine.mu.Unlock()
+			result, err := w.run.converge(ctx, w.client)
+			if err != nil {
+				t.Fatalf("converge() = %v, want the refusal reported", err)
+			}
+			if got := w.run.configApplied; got == nil || got.Reason != tc.reason {
+				t.Errorf("ConfigApplied = %+v, want %s", got, tc.reason)
+			}
+			if tc.reloadDown {
+				recorded := drained(w.events)
+				if !slices.ContainsFunc(recorded, func(e string) bool {
+					return strings.HasPrefix(e, "Warning SecretWithdrawalFailed ") && strings.Contains(e, "tries again in 2s")
+				}) || result.RequeueAfter != 2*time.Second {
+					t.Errorf("the next look is %s on and events %q; want SecretWithdrawalFailed promising 2s, and 2s",
+						result.RequeueAfter, recorded)
+				}
+				return
+			}
+			if got := w.engine.ids(); !slices.Equal(got, []string{"r1", "r2"}) {
+				t.Errorf("the revisions are %v, want r1 activated again as r2, without the registry", got)
+			}
+			if w.engine.holds(w.registry) || len(w.state(t).Withdrawn()) != 0 {
+				t.Errorf("the store holds the registry: %t, and the state owes %v; want it deleted and settled by r2",
+					w.engine.holds(w.registry), w.state(t).Withdrawn())
+			}
+			if result.RequeueAfter != engineRetryInterval {
+				t.Errorf("the next look is %s on, want %s: nothing in the cluster changes when the engine's users "+
+					"clear it", result.RequeueAfter, engineRetryInterval)
+			}
+		})
 	}
 }
 

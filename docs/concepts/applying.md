@@ -201,16 +201,18 @@ flowchart TD
    without, and is told by the event alone. Step 7 deletes the value once
    the next document runs. Whenever the reconcile ends without activating a
    revision after it deleted a value, because the document is held at any
-   step, or because the engine already runs it with every value it
-   references (step 4), the revision the engine runs is activated again,
-   unchanged, so the engine reads its store without the deleted value rather
-   than starting a tool server or an executor run with it (a `Reactivated`
-   event): where that revision read the value, the engine did so itself as
-   the operator removed it, and the operator takes that activation for its
-   own; otherwise, or where the engine's failed, it asks for one
-   (`POST /config/reload`). It keeps what it owes in its record of the store
-   until the engine runs a revision activated after the deletion, whoever
-   activated it ([What the engine has read](#what-the-engine-has-read)).
+   step (the engine's own refusal of it included: a document it finds
+   invalid, a human seat somebody holds that the document takes away, or
+   the operator's token refused the change), or because the engine already
+   runs it with every value it references (step 4), the revision the engine
+   runs is activated again, unchanged, so the engine reads its store without
+   the deleted value rather than starting a tool server or an executor run
+   with it (a `Reactivated` event): where that revision read the value, the
+   engine did so itself as the operator removed it, and the operator takes
+   that activation for its own; otherwise, or where the engine's failed, it
+   asks for one (`POST /config/reload`). It keeps what it owes in its record
+   of the store until the engine runs a revision activated after the
+   deletion, whoever activated it ([What the engine has read](#what-the-engine-has-read)).
    It activates again only a revision that goes without the value, never one
    that keeps it, and records the revision that activates it again as its
    own only once it has read back that it is that document: the engine

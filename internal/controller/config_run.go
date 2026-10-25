@@ -568,10 +568,8 @@ func (run *configRun) enforce(
 
 	checked, err := eng.ApplyConfig(ctx, engine.ApplyRequest{Document: run.doc.YAML, DryRun: true})
 	if err != nil {
-		if run.invalid(err) {
-			// The sync above may have withdrawn a value the running
-			// revision lets go: it is activated again instead.
-			return run.settleRefused(ctx, eng, active, pushed.Reload, pushed.ReloadAction, state, stateRef)
+		if result, refused, saveErr := run.refusedByEngine(ctx, eng, active, pushed.Reload, pushed.ReloadAction, state, stateRef, err); refused {
+			return result, saveErr
 		}
 		return ctrl.Result{}, err
 	}
@@ -602,8 +600,8 @@ func (run *configRun) enforce(
 	}
 	applied, err := eng.ApplyConfig(ctx, req)
 	if err != nil {
-		if run.invalid(err) {
-			return run.settleRefused(ctx, eng, active, pushed.Reload, pushed.ReloadAction, state, stateRef)
+		if result, refused, saveErr := run.refusedByEngine(ctx, eng, active, pushed.Reload, pushed.ReloadAction, state, stateRef, err); refused {
+			return result, saveErr
 		}
 		return ctrl.Result{}, err
 	}
@@ -656,6 +654,51 @@ func (run *configRun) cleanUp(
 		return ctrl.Result{}, err
 	}
 	return run.heldResync(ctrl.Result{RequeueAfter: applyPollInterval}), nil
+}
+
+// refusedByEngine ends the reconcile where the engine refused the rendered
+// document, its dry run or its write, with err, for what no retry of the
+// write changes and the Company's conditions now say: problems with the
+// document (invalid), a human seat somebody holds that it takes away
+// (seatHeld), or the operator's token refused the change (writeRefused,
+// notGranted). It reports false for any other error, which goes back as one
+// (engineFailed).
+//
+// Whatever the refusal, the sync before it may have changed the store under
+// the revision the engine runs, and no write is coming to activate one that
+// reads the change, so the activation owed is made now (settleRefused, which
+// takes the sync's reload and reloadAction, as settle does),
+// before the reconcile ends: a refused document went back as an error, which
+// nothing settled, and for as long as somebody held the seat the engine went
+// on starting tool servers and executor runs with the value of a Secret that no
+// longer exists. Neither a held seat nor a managed document stops a reload of
+// the running revision, which is admin's. A refusal the engine's own users
+// clear is looked at again as engineRetry says, since nothing in the cluster
+// changes when they do; one the Company's objects clear, a document the
+// engine finds invalid, when one of them changes.
+func (run *configRun) refusedByEngine(
+	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, reload *engine.Reload, reloadAction string,
+	state secretsync.State, ref types.NamespacedName, err error,
+) (ctrl.Result, bool, error) {
+	switch {
+	case run.invalid(err):
+		result, saveErr := run.settleRefused(ctx, eng, active, reload, reloadAction, state, ref)
+		return result, true, saveErr
+	case run.seatHeld(err), run.writeRefused(err), run.notGranted(err):
+		result, saveErr := run.settleRefused(ctx, eng, active, reload, reloadAction, state, ref)
+		if saveErr != nil {
+			return result, true, saveErr
+		}
+		wait := run.engineRetry(err)
+		if result.RequeueAfter > 0 {
+			// The look a failed activation's report promises, or the
+			// pointer poll a value kept for another revision asks for
+			// (heldResync), where that is sooner.
+			wait = min(wait, result.RequeueAfter)
+		}
+		return ctrl.Result{RequeueAfter: wait}, true, nil
+	}
+	return ctrl.Result{}, false, nil
 }
 
 // adopt is state recording the reading of active, the revision the engine

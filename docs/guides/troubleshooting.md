@@ -432,9 +432,13 @@ while something in the engine's identity directory holds that seat. A person
 holds a human seat for as long as they are in the company, an open invitation
 holds the seat it invites to, and a service account may be bound to one. The
 engine keeps running the revision it runs, and the operator tries again every
-ten seconds. The message names each seat and what kind of thing holds it,
-never who; a Seat that still exists and is held reports `Applied=False
-SeatHeld` too. An admin of the company frees each seat first, in the engine's
+ten seconds. When it removes a value from the store meanwhile, the value of a
+deleted Secret that revision lets go without, it activates that revision
+again so that the engine reads the store without it, as for any document the
+engine refuses (step 3 of
+[What one reconcile does](../concepts/applying.md#what-one-reconcile-does)).
+The message names each seat and what kind of thing holds it, never who; a
+Seat that still exists and is held reports `Applied=False SeatHeld` too. An admin of the company frees each seat first, in the engine's
 dashboard or with [`crewlet iam`](https://github.com/crewlet/crewlet/blob/main/docs/concepts/identity-and-access.md):
 moves the person to another human seat or removes them, unbinds the service
 account, or cancels the invitation. `crewlet iam seats` lists what holds each
