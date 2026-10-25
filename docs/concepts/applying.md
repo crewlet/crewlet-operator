@@ -310,7 +310,8 @@ sequenceDiagram
 > `stuck` only once it has concluded that it did not: an attempt ended in
 > failure, or the apply has run past the engine's 45-second grace while a peer
 > applied the epoch. On such a posture, or on `wait` still 72 seconds after the
-> write (four of its 18-second polls), the Company reports
+> write (four of its 18-second polls), or after the operator found a revision it
+> adopts (below), the Company reports
 > `ConfigApplied=False ApplyFailed` with the engine's status, posture and
 > account of the failure (from its record of the attempt in `/fleet`), and an
 > `ApplyFailed` event. The fleet's revision stays the one the write activated
@@ -398,7 +399,15 @@ write.
 
 A revision the engine activates on its own with the same content — a reload
 after a credential was minted — is not drift: the operator adopts its id in
-`status.config.revisionID` and writes nothing.
+`status.config.revisionID`, and in `status.config.epoch` the epoch the
+fleet's activation names for it (`GET /fleet`), and writes nothing. It
+reports `ConfigApplied=True` once the engine has applied that epoch, not the
+epoch of the revision it replaced, and `ApplyFailed` when the engine has not
+72 seconds after the operator found it, which `status.config.appliedAt`
+records: the operator's last write is another revision's, and may be days
+old. A fleet whose activation names another revision by then had another
+write activate one between the two reads, and the operator records nothing and
+starts over once from a fresh read, as it does a write that lost its race.
 
 The comparison is over what the engine serves back, which is its own encoding
 of the document rather than the bytes it was given. It disregards the
@@ -533,24 +542,24 @@ takes no work for a person that a pause could hold.
 Besides the conditions:
 
 - **Company** `status.config`: the revision the engine runs the rendered
-  document as, its activation epoch, `appliedHash`, when the operator last
-  applied, and how many objects of each kind it was rendered from (platform
-  model providers included). `status.config.placement` is where the document
-  the engine runs pins its agent seats: every value of `crewlet.ai/pool`
-  (`data` and the Shared pools that run a seat) and of `crewlet.ai/seat` (each
-  seat of a PerSeat pool). It is read from the engine's own document under
-  every policy, so under Observe and Seed too. A new revision's pins join
-  the record before the operator's write that activates it, and while the
-  engine applies it the record is the previous revision's pins and the new
-  one's together, because the engine keeps running the previous revision
-  until it has applied the new one, and for good if that apply fails. Once
-  the engine reports the new revision's epoch applied, the record is its
-  pins alone; a document the engine owns (Observe, Seed) is narrowed to only
-  once the engine's own record of its last apply names that revision and
-  says it ended well.
-  The runtime reconciler reads it to keep a seat pool's pods running for as
-  long as the running revision pins a seat to them ([A pool removed while
-  seats still run in it](runtime.md#a-pool-removed-while-seats-still-run-in-it)).
+  document as, its activation epoch, `appliedHash`, when the operator
+  activated it or found it running (`appliedAt`), and how many objects of each
+  kind it was rendered from (platform model providers included).
+  `status.config.placement` is where the document the engine runs pins its
+  agent seats: every value of `crewlet.ai/pool` (`data` and the Shared pools
+  that run a seat) and of `crewlet.ai/seat` (each seat of a PerSeat pool). It
+  is read from the engine's own document under every policy, so under Observe
+  and Seed too. A new revision's pins join the record before the operator's
+  write that activates it, and while the engine applies it the record is the
+  previous revision's pins and the new one's together, because the engine
+  keeps running the previous revision until it has applied the new one, and
+  for good if that apply fails. Once the engine reports the new revision's
+  epoch applied, the record is its pins alone; a document the engine owns
+  (Observe, Seed) is narrowed to only once the engine's own record of its last
+  apply names that revision and says it ended well. The runtime reconciler
+  reads it to keep a seat pool's pods running for as long as the running
+  revision pins a seat to them ([A pool removed while seats still run in
+  it](runtime.md#a-pool-removed-while-seats-still-run-in-it)).
 - **Seat**: its handle, its identity in the engine (`seatID`, derived from
   the company name and the handle), the pool that runs it and the
   StatefulSet whose pods do (`status.placement.workload`; unset while the

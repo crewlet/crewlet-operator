@@ -117,7 +117,7 @@ with your last change yet.
 | | False | `PoolCapacityExceeded` | The company's seat pods would number more than its class's `seatPools.maxPods`: its Shared pools' replicas alone (the message says so; lower them), or with the pods of its PerSeat seats, each of which reports it too. |
 | | False | `Invalid` | The engine's dry run refused the document, in its own words, every problem in this message. A problem at a place a part rendered (a Seat, Unit, LLMProvider, MCPServer, Integration or Schedule) is also reported on that part, as `Applied=False Invalid`; one at a place the Company renders itself (its own fields, `spec.embeddings`, `spec.sandbox` and its setup steps) is in this message alone. |
 | | False | `Drifted` | Under `Observe`, the engine runs another document; the message names the places that differ. |
-| | False | `Applying` | The operator activated the revision and the engine has not applied it yet; it runs the previous one meanwhile. Usually gone within seconds; it turns into `ApplyFailed` when the engine fails the revision or has not applied it 72 seconds after the write. |
+| | False | `Applying` | The operator activated the revision and the engine has not applied it yet; it runs the previous one meanwhile. Usually gone within seconds; it turns into `ApplyFailed` when the engine fails the revision or has not applied it 72 seconds after the write, or after the operator found it running where it adopts a revision it did not write. |
 | | False | `ApplyFailed` | The engine's first data pod, the one the operator reaches, did not apply the revision: it keeps running the one it ran before, and starts on the one its volume names if it restarts, the same one unless the engine is still moving it (the message says which), and the engine's secret store keeps every value of either meanwhile. The message carries the engine's status, its posture (`isolated` on a single node, `shed` or `stuck` beside peers that applied it) and its own account of the failure; see [The engine did not apply a revision](#the-engine-did-not-apply-a-revision). |
 | | False | `EngineUnavailable` | The operator cannot reach the engine, the engine does not know its token, or the engine asked to be asked again later (`503`: it is starting, or cannot read the coordination store that holds the fleet's revision). Retried every ten seconds, or sooner when the engine says when; see [The operator cannot reach the engine](#the-operator-cannot-reach-the-engine). |
 | | False | `WriteRefused` | The engine refuses the operator's own token a change to the document (`403 config_managed`): its `api.auth.company_writers` names other tokens. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
@@ -474,18 +474,21 @@ kubectl get events -n acme --field-selector involvedObject.name=acme,reason=Revi
 
 ## The engine did not apply a revision
 
-`ConfigApplied=False ApplyFailed` means the engine stored and activated the
-revision the operator wrote and then could not apply it, or never did. The
-revision stays the fleet's: `GET /config` answers it, and every pod tries it
-again. A pod that did not apply it keeps serving the revision it ran before,
-and a data pod starts on the revision its volume names if it restarts, that
-same one unless the engine is still moving it (a seat pod starts on nothing
-and tries the fleet's revision again); the dry run accepted the new one,
-so what failed is something only applying it meets on this engine: a
-subsystem it could not start (Worklet, the code sandbox, the inbound
-edge), or a rule that needs the data pod's own configuration. The
-condition's message carries the engine's account of the failure, its
-`status` and its `posture`:
+`ConfigApplied=False ApplyFailed` means the engine activated a revision of
+the rendered document and then could not apply it, or never did: the revision
+the operator wrote, or one with the same document it found running and
+adopted without a write (a person's `crewlet config reload`, or the engine's
+own reload after it minted a credential). The revision stays the fleet's:
+`GET /config` answers it, and every pod tries it again. A pod that did not
+apply it keeps serving the revision it ran before, and a data pod starts on
+the revision its volume names if it restarts, that same one unless the
+engine is still moving it (a seat pod starts on nothing and tries the
+fleet's revision again); the dry run accepted the document, so what failed
+is something only applying it meets on this engine: a subsystem it could not
+start (Worklet, the code sandbox, the inbound edge), a value it resolves
+when the revision activates, or a rule that needs the data pod's own
+configuration. The condition's message carries the engine's account of the
+failure, its `status` and its `posture`:
 
 - `isolated`: the only node, or every node, failed the revision. It keeps
   serving and stays ready, and retries the revision three times at most.
@@ -544,7 +547,9 @@ has neither applied the revision nor concluded that it failed within 72
 seconds (its posture still reads `wait`), the engine is not polling its
 activation pointer at all, or an apply hangs with no peer to compare it
 against; its log says which, and a restart of the data pod is the usual
-remedy.
+remedy. The 72 seconds run from `status.config.appliedAt`: when the operator
+activated the revision, or found one it adopted running, never from its last
+write of another revision, which may be days old.
 
 ```bash
 kubectl logs acme-data-0 -n acme | grep -E 'config_apply_failed|reconcile_tick_failed' | tail

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -47,7 +48,9 @@ import (
 // it is to refuse is refused as the engine refuses an invalid one.
 // beforeReload, afterReload and afterApply, when set, run once, under its
 // lock, just before a reload is answered and just after a reload or an apply
-// is: somebody else's write landing between two of the operator's.
+// is: somebody else's write landing between two of the operator's. Its fleet
+// answers the activation pointer beside its nodes: the fleet's revision at
+// its place in the history, which is its epoch.
 //
 // A write into its store (PUT /secrets, PUT /secrets/{name}), and a removal
 // of a value (DELETE /secrets/{name}), re-activates the fleet's revision when its
@@ -92,6 +95,15 @@ type storeEngine struct {
 	fleetDown                 bool
 	missing                   map[string]bool
 	unreadable                func(revision string) string
+	// beforeConfig and beforeFleet run once, before the engine answers the
+	// next read of the fleet's document or of its fleet: an activation
+	// somebody else makes in that moment.
+	beforeConfig, beforeFleet func(e *storeEngine)
+	// noActivation makes /fleet answer without its activation pointer, as
+	// an engine that could not read it for the answer does; appliedLag is
+	// how many epochs /health reports the node behind the latest.
+	noActivation bool
+	appliedLag   int
 }
 
 // dataNode reports whether node is a pod of the Company's data StatefulSet,
@@ -149,11 +161,7 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 	defer e.mu.Unlock()
 	body, _ := io.ReadAll(r.Body)
 	answer := func(status int, v any) { answerJSON(w, status, v) }
-	if r.Method == http.MethodPost && r.URL.Path == reloadRoute && e.beforeReload != nil {
-		hook := e.beforeReload
-		e.beforeReload = nil
-		hook(e)
-	}
+	e.before(r)
 	active := e.revisions[len(e.revisions)-1]
 	activate := func(document []byte) storeRevision {
 		revision := storeRevision{id: fmt.Sprintf("r%d", len(e.revisions)+1), document: document, summary: r.Header.Get("X-Summary")}
@@ -175,8 +183,12 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/health":
-		answer(http.StatusOK, map[string]any{"status": "ok", "configured": true, "posture": engine.PostureServe,
-			"applied_epoch": len(e.revisions)})
+		posture := engine.PostureServe
+		if e.appliedLag > 0 {
+			posture = engine.PostureWait
+		}
+		answer(http.StatusOK, map[string]any{"status": "ok", "configured": true, "posture": posture,
+			"applied_epoch": len(e.revisions) - e.appliedLag})
 	case r.Method == http.MethodGet && r.URL.Path == configRoute:
 		e.readActive(w, active)
 	case r.Method == http.MethodPut && r.URL.Path == configRoute && e.refuse:
@@ -350,7 +362,8 @@ func (e *storeEngine) serveServing(w http.ResponseWriter, path string, active st
 		for _, node := range slices.Sorted(maps.Keys(e.runsNone)) {
 			nodes = append(nodes, row(node, len(e.revisions), active.id, engine.ApplyError, ""))
 		}
-		answerJSON(w, http.StatusOK, map[string]any{"this_node": storeNode, "nodes": nodes, "target_epoch": len(e.revisions)})
+		answerJSON(w, http.StatusOK, map[string]any{"this_node": storeNode, "nodes": nodes, "target_epoch": len(e.revisions),
+			"activation": e.activation()})
 	case isRevision:
 		i := slices.IndexFunc(e.revisions, func(rev storeRevision) bool { return rev.id == revisionID })
 		if i < 0 || e.missing[revisionID] {
@@ -368,6 +381,43 @@ func (e *storeEngine) serveServing(w http.ResponseWriter, path string, active st
 		return false
 	}
 	return true
+}
+
+// before runs the hook, if one is set, that r's route takes before the engine
+// answers it, once: beforeReload, beforeConfig or beforeFleet.
+func (e *storeEngine) before(r *http.Request) {
+	var hook *func(e *storeEngine)
+	switch {
+	case r.Method == http.MethodPost && r.URL.Path == reloadRoute:
+		hook = &e.beforeReload
+	case r.Method == http.MethodGet && r.URL.Path == configRoute:
+		hook = &e.beforeConfig
+	case r.Method == http.MethodGet && r.URL.Path == fleetRoute:
+		hook = &e.beforeFleet
+	default:
+		return
+	}
+	if run := *hook; run != nil {
+		*hook = nil
+		run(e)
+	}
+}
+
+// activationAnswer is the activation pointer as GET /fleet answers it.
+type activationAnswer struct {
+	RevisionID string `json:"revision_id"`
+	Epoch      int    `json:"epoch"`
+}
+
+// activation is the activation pointer the engine answers beside its nodes:
+// the fleet's revision at the epoch it activated as, which is its place in
+// the history, nil where noActivation says the engine could not read it. The
+// caller holds e's lock.
+func (e *storeEngine) activation() *activationAnswer {
+	if e.noActivation {
+		return nil
+	}
+	return &activationAnswer{RevisionID: e.revisions[len(e.revisions)-1].id, Epoch: len(e.revisions)}
 }
 
 // answerJSON writes v as the JSON answer, with status.
@@ -1296,5 +1346,174 @@ func TestARefusedDocumentComesBackWhenItsWithdrawalReportSays(t *testing.T) {
 	if i < 0 || !strings.Contains(recorded[i], "tries again in 2s") || result.RequeueAfter != 2*time.Second {
 		t.Errorf("the next look is %s on and events %q; want SecretWithdrawalFailed promising 2s, and 2s",
 			result.RequeueAfter, recorded)
+	}
+}
+
+// TestARevisionAdoptedInSyncIsRecordedAtItsEpoch pins that a revision of the
+// rendered document the operator did not activate, a reload of its document
+// here, is recorded at the epoch the fleet's activation names for it, and as
+// found now (appliedAt), which the wait for the engine to apply it counts
+// from. Recorded at the epoch of the revision it replaced, the engine read as
+// having applied it once it applied that one, and the Applied event paired it
+// with that epoch. A fleet that cannot be read, or that answers without its
+// activation, records nothing and claims no race: the reconcile fails and the
+// next one reads both again. A fleet whose activation names another revision
+// records nothing either, and is a lost race (engine.ErrRevisionAdvanced),
+// which converge reads again from the start.
+func TestARevisionAdoptedInSyncIsRecordedAtItsEpoch(t *testing.T) {
+	ctx := context.Background()
+	found := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	w := newWithdrawal(t, runningLetsGo)
+	company := w.run.company
+	company.Status.Config.Epoch = new(int64(1))
+	company.Status.Config.AppliedAt = &metav1.Time{Time: found.Add(-6 * time.Hour)}
+	w.again(t, company)
+	w.run.now = func() time.Time { return found }
+	if _, err := w.client.ReloadConfig(ctx, "reloaded by a person"); err != nil {
+		t.Fatal(err)
+	}
+	active, err := activeConfig(ctx, w.client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.run.inSync(ctx, w.client, active); err != nil {
+		t.Fatal(err)
+	}
+	config := w.statusWritten().Status.Config
+	if config.RevisionID != "r2" || config.Epoch == nil || *config.Epoch != 2 {
+		epoch := "none"
+		if config.Epoch != nil {
+			epoch = strconv.FormatInt(*config.Epoch, 10)
+		}
+		t.Errorf("status.config = revision %s at epoch %s; want r2 at its own epoch, 2", config.RevisionID, epoch)
+	}
+	if config.AppliedAt == nil || !config.AppliedAt.Equal(&metav1.Time{Time: found}) {
+		t.Errorf("status.config.appliedAt = %v, want when the operator found r2, %s, not its last write", config.AppliedAt, found)
+	}
+
+	w.again(t, company)
+	w.engine.mu.Lock()
+	w.engine.fleetDown = true
+	w.engine.mu.Unlock()
+	if err := w.run.inSync(ctx, w.client, active); err == nil || errors.Is(err, engine.ErrRevisionAdvanced) ||
+		w.run.config != nil {
+		t.Errorf("inSync over a fleet that cannot be read = %v, recording %+v; want an error that claims no race and "+
+			"nothing recorded", err, w.run.config)
+	}
+
+	w.again(t, company)
+	w.engine.mu.Lock()
+	w.engine.fleetDown, w.engine.noActivation = false, true
+	w.engine.mu.Unlock()
+	if err := w.run.inSync(ctx, w.client, active); err == nil || errors.Is(err, engine.ErrRevisionAdvanced) ||
+		strings.Contains(err.Error(), "instead") || w.run.config != nil {
+		t.Errorf("inSync over a fleet answering without its activation = %v, recording %+v; want an error that claims no "+
+			"race and nothing recorded", err, w.run.config)
+	}
+
+	w.again(t, company)
+	w.engine.mu.Lock()
+	w.engine.noActivation = false
+	w.engine.mu.Unlock()
+	if _, err := w.client.ReloadConfig(ctx, "reloaded again"); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.run.inSync(ctx, w.client, active); !errors.Is(err, engine.ErrRevisionAdvanced) || w.run.config != nil {
+		t.Errorf("inSync of r2 while the fleet's activation names r3 = %v, recording %+v; want a lost race "+
+			"(ErrRevisionAdvanced) and nothing recorded", err, w.run.config)
+	}
+}
+
+// TestAnAdoptedRevisionIsHeldToItsOwnApplyDeadline pins that the wait for the
+// engine to apply a revision the operator adopts counts from when it found
+// it, not from the operator's last write, another revision's: a reload the
+// engine has not applied yet is Applying however old that write is, with no
+// ApplyFailed event, and ApplyFailed only applyDeadline after the operator
+// found it, in words that do not say the operator activated it.
+func TestAnAdoptedRevisionIsHeldToItsOwnApplyDeadline(t *testing.T) {
+	ctx := context.Background()
+	found := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	w := newWithdrawal(t, runningLetsGo)
+	company := w.run.company
+	company.Status.Config.Epoch = new(int64(1))
+	company.Status.Config.AppliedAt = &metav1.Time{Time: found.Add(-6 * time.Hour)}
+	if _, err := w.client.ReloadConfig(ctx, "reloaded by a person"); err != nil {
+		t.Fatal(err)
+	}
+	w.engine.mu.Lock()
+	w.engine.appliedLag = 1
+	w.engine.mu.Unlock()
+	look := func(at time.Time) {
+		t.Helper()
+		w.run.now = func() time.Time { return at }
+		active, err := activeConfig(ctx, w.client)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := w.run.inSync(ctx, w.client, active); err != nil {
+			t.Fatal(err)
+		}
+		h, err := w.client.Health(ctx)
+		w.run.verifyApplied(ctx, w.client, h, err, ctrl.Result{})
+	}
+
+	w.again(t, company)
+	look(found)
+	if got := w.run.configApplied; got.Reason != crewletaiv1alpha1.ReasonApplying {
+		t.Fatalf("ConfigApplied of a reload the engine has not applied, six hours after the operator's last write = %+v, "+
+			"want Applying", got)
+	}
+	if warned(drained(w.events), crewletaiv1alpha1.ReasonApplyFailed) {
+		t.Error("an ApplyFailed event for a reload the operator found a moment ago")
+	}
+
+	company = w.statusWritten()
+	meta.SetStatusCondition(&company.Status.Conditions, *w.run.configApplied)
+	w.again(t, company)
+	look(found.Add(applyDeadline))
+	if got := w.run.configApplied; got.Reason != crewletaiv1alpha1.ReasonApplyFailed ||
+		!strings.Contains(got.Message, "found it activated") {
+		t.Errorf("ConfigApplied of that reload %s after the operator found it = %+v, want ApplyFailed saying the operator "+
+			"found it activated", applyDeadline, got)
+	}
+}
+
+// TestAnAttemptReadsTheFleetAfterItsOwnReadOfTheDocument pins that inSync
+// judges the revision an attempt of converge read against a fleet read after
+// that read, in the same attempt (keepServing reads it afresh). An attempt
+// whose fleet names a later revision than its document read starts over (a
+// lost race); judged against the answer the first attempt read, the second
+// attempt's read, later again, would look like a second lost race, and the
+// reconcile would fail over an engine that was fine.
+func TestAnAttemptReadsTheFleetAfterItsOwnReadOfTheDocument(t *testing.T) {
+	ctx := context.Background()
+	w := newWithdrawal(t, runningLetsGo)
+	if err := w.enforce(t); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.engine.ids(); !slices.Equal(got, []string{"r1", "r2"}) {
+		t.Fatalf("revisions after the write = %v, want [r1 r2]", got)
+	}
+	w.again(t, w.statusWritten())
+	if _, err := w.client.ReloadConfig(ctx, "reloaded by a person"); err != nil {
+		t.Fatal(err)
+	}
+	reloadOnce := func(e *storeEngine) { e.activateOther(e.revisions[len(e.revisions)-1].document) }
+	w.engine.mu.Lock()
+	w.engine.beforeFleet = func(e *storeEngine) {
+		reloadOnce(e)
+		e.beforeConfig = reloadOnce
+	}
+	w.engine.mu.Unlock()
+
+	if _, err := w.run.converge(ctx, w.client); err != nil {
+		t.Fatalf("converge() = %v, want the second attempt to adopt the revision it read", err)
+	}
+	config := w.statusWritten().Status.Config
+	if got := w.engine.ids(); !slices.Equal(got, []string{"r1", "r2", "r3", "r4", "r5"}) {
+		t.Errorf("revisions = %v, want [r1 r2 r3 r4 r5]: nothing written, only the reloads", got)
+	}
+	if config.RevisionID != "r5" || config.Epoch == nil || *config.Epoch != 5 {
+		t.Errorf("status.config = %+v, want r5 at epoch 5, the revision the second attempt read", config)
 	}
 }

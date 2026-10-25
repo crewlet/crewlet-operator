@@ -1309,6 +1309,31 @@ func TestFleetReadsNodesAndSeatLeases(t *testing.T) {
 	}); record != want || !record.Status.Failed() {
 		t.Errorf("LastApply() = %+v, want %+v, failed", record, want)
 	}
+	want := engine.Activation{RevisionID: "r7", Epoch: 7}
+	if a := got.Activation; a == nil || *a != want {
+		t.Errorf("Activation = %+v, want %+v", a, want)
+	}
+}
+
+// TestFleetWithNoActivationNamesNone pins that a fleet whose activation
+// pointer names nothing, which the engine answers as null both when nothing
+// has been activated and when it could not read the pointer, has no
+// Activation rather than one naming the empty revision.
+func TestFleetWithNoActivationNamesNone(t *testing.T) {
+	for _, body := range []string{
+		`{"this_node":"node-0","nodes":[],"target_epoch":0,"activation":null}`,
+		`{"this_node":"node-0","nodes":[],"target_epoch":0}`,
+	} {
+		f := newFakeEngine(t)
+		f.handle("GET /fleet", answer(http.StatusOK, body))
+		got, err := f.client().Fleet(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Activation != nil {
+			t.Errorf("Fleet() of %s has Activation %+v, want none", body, got.Activation)
+		}
+	}
 }
 
 // TestRevisionReadsTheStoredDocument pins the read of one stored revision,

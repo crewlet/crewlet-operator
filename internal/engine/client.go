@@ -230,11 +230,18 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 		} `json:"unplaceable"`
 		UnmannedRoles []string `json:"unmanned_roles"`
 		TargetEpoch   int64    `json:"target_epoch"`
+		Activation    *struct {
+			RevisionID string `json:"revision_id"`
+			Epoch      int64  `json:"epoch"`
+		} `json:"activation"`
 	}
 	if err := c.call(ctx, request{method: http.MethodGet, path: "/fleet"}, http.StatusOK, &answer); err != nil {
 		return Fleet{}, err
 	}
 	f := Fleet{ThisNode: answer.ThisNode, UnmannedRoles: answer.UnmannedRoles, TargetEpoch: answer.TargetEpoch}
+	if a := answer.Activation; a != nil && a.RevisionID != "" {
+		f.Activation = &Activation{RevisionID: a.RevisionID, Epoch: a.Epoch}
+	}
 	for i := range answer.Nodes {
 		n := &answer.Nodes[i]
 		f.Nodes = append(f.Nodes, FleetNode{

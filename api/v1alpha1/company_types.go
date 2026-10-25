@@ -1460,7 +1460,10 @@ type ConfigStatus struct {
 	// +kubebuilder:validation:MaxLength=128
 	AppliedHash string `json:"appliedHash,omitempty"`
 
-	// appliedAt is when the operator last applied a revision.
+	// appliedAt is when the operator activated the revision this records,
+	// or found the engine running it where it adopted a revision of the
+	// rendered document it did not write (a reload): what the operator's
+	// wait for the engine to apply its epoch counts from.
 	// +optional
 	AppliedAt *metav1.Time `json:"appliedAt,omitempty"`
 

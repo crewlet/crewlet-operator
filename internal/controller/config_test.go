@@ -1097,10 +1097,17 @@ var _ = Describe("Company config", Ordered, func() {
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 
 		By("a person activating the running document again")
-		_, err := engine.New(e.URL, e.AccessToken).ReloadConfig(ctx, "reloaded by a person")
+		reloaded, err := engine.New(e.URL, e.AccessToken).ReloadConfig(ctx, "reloaded by a person")
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(count).WithTimeout(settle).Should(Equal(3))
 		Consistently(count).WithTimeout(3 * quietPeriod).Should(Equal(3))
+		Eventually(func(g Gomega) crewletaiv1alpha1.ConfigStatus {
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(c), c)).To(Succeed())
+			return c.Status.Config
+		}).WithTimeout(settle).Should(SatisfyAll(
+			HaveField("RevisionID", reloaded.RevisionID),
+			HaveField("Epoch", HaveValue(Equal(reloaded.Epoch))),
+		), "the reload is adopted at its own epoch, not at the epoch of the revision it replaced")
 
 		By("deleting the key's Secret")
 		Expect(k8sClient.Delete(ctx, &corev1.Secret{Namespace: namespace, Name: name + "-npm"})).To(Succeed())

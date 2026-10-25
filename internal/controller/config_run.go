@@ -412,6 +412,26 @@ func (run *configRun) converge(ctx context.Context, eng *engine.Client) (ctrl.Re
 	}
 }
 
+// activationAhead is inSync's answer where the fleet's activation names a
+// revision other than the one GET /config answered with: both read the
+// fleet's activation pointer, so another write activated a revision between
+// the two reads. It is a lost race (engine.ErrRevisionAdvanced), which
+// converge reads again from the start once, as it reads a write that lost.
+type activationAhead struct {
+	// read is the revision GET /config answered with.
+	read string
+	// activation is the fleet's.
+	activation engine.Activation
+}
+
+func (e *activationAhead) Error() string {
+	return fmt.Sprintf("the fleet runs the rendered document as revision %s, which the operator has not recorded, "+
+		"and its activation named revision %s (epoch %d) by the time the operator read the fleet: another write "+
+		"activated a revision between the two reads", e.read, e.activation.RevisionID, e.activation.Epoch)
+}
+
+func (e *activationAhead) Unwrap() error { return engine.ErrRevisionAdvanced }
+
 // activeConfig is the fleet's active configuration, the revision the
 // engine's activation pointer names, which every node answers whatever it
 // runs itself (keepServing reads that), or nil when it has none yet.
@@ -507,16 +527,7 @@ func (run *configRun) enforce(
 	// written or removes (reloadedBySync), or else the operator's apply
 	// below.
 	if active != nil && len(diffs) == 0 && hash == recorded.AppliedHash && len(pushed.Put) == 0 {
-		run.inSync(active)
-		again, err := run.settle(ctx, eng, active, pushed.Reload, pushed.ReloadAction, state, stateRef)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		next := run.resyncInterval()
-		if again > 0 {
-			next = min(again, next)
-		}
-		return run.heldResync(ctrl.Result{RequeueAfter: next}), nil
+		return run.keepInSync(ctx, eng, active, pushed.Reload, pushed.ReloadAction, state, stateRef)
 	}
 	reloaded, err := run.reloadedBySync(ctx, eng, active, diffs, pushed.Reload)
 	if err != nil {
@@ -804,15 +815,67 @@ func diffWith(doc *render.Document, active *engine.ActiveConfig) ([]render.Path,
 	return render.Diff(doc.YAML, active.Document)
 }
 
+// keepInSync is enforce for an engine that runs the rendered document with
+// every value it references: it records the revision (inSync), makes the
+// activation the secret sync's state owes (settle), and comes back at the
+// resync, or sooner where that activation failed and its report says so, or
+// a value is kept for a revision other than the fleet's (heldResync). reload
+// and reloadAction are the sync's, as settle takes them.
+func (run *configRun) keepInSync(
+	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, reload *engine.Reload, reloadAction string,
+	state secretsync.State, ref types.NamespacedName,
+) (ctrl.Result, error) {
+	if err := run.inSync(ctx, eng, active); err != nil {
+		return ctrl.Result{}, err
+	}
+	again, err := run.settle(ctx, eng, active, reload, reloadAction, state, ref)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	next := run.resyncInterval()
+	if again > 0 {
+		next = min(again, next)
+	}
+	return run.heldResync(ctrl.Result{RequeueAfter: next}), nil
+}
+
 // inSync records an engine that runs the rendered document, with every
 // value it references, without a write: possibly as a revision the operator
-// did not write itself, such as a reload of the same document, which it
-// adopts.
-func (run *configRun) inSync(active *engine.ActiveConfig) {
+// has not recorded, such as a reload of the same document, which it adopts at
+// the epoch the fleet's activation names for it, and from now: the engine is
+// held to applying that epoch applyDeadline after the operator found it, not
+// after the operator's last write, another revision's, which may be days old.
+// It fails where the fleet cannot be read or answers without its activation,
+// and with an *activationAhead, a lost race (engine.ErrRevisionAdvanced),
+// where the activation names another revision: converge reads again from the
+// start.
+func (run *configRun) inSync(ctx context.Context, eng *engine.Client, active *engine.ActiveConfig) error {
 	recorded := run.company.Status.Config
 	if recorded.RevisionID != active.RevisionID {
+		// AT THE EPOCH IT ACTIVATED AS, which only the fleet's activation
+		// says: the one recorded is the revision it replaces, so the
+		// engine read as having applied it once it applied that one,
+		// before it had applied this, and the Applied event paired this
+		// revision with the other's epoch.
+		fleet, err := run.fleetOf(ctx, eng)
+		if err != nil {
+			return fmt.Errorf("the engine runs the rendered document as revision %s, which the operator has not recorded, "+
+				"and its fleet, which says as what epoch it activated, could not be read: %w", active.RevisionID, err)
+		}
+		switch {
+		case fleet.Activation == nil:
+			// The read of the document named a revision, so one is active:
+			// the engine answered its fleet without reading the pointer.
+			return fmt.Errorf("the engine runs the rendered document as revision %s, which the operator has not recorded, "+
+				"and its fleet answered without its activation, which says as what epoch it activated", active.RevisionID)
+		case fleet.Activation.RevisionID != active.RevisionID:
+			return &activationAhead{read: active.RevisionID, activation: *fleet.Activation}
+		}
 		config := recorded.DeepCopy()
 		config.RevisionID = active.RevisionID
+		config.Epoch = new(fleet.Activation.Epoch)
+		found := metav1.NewTime(run.clock())
+		config.AppliedAt = &found
 		config.Objects = run.objectCounts()
 		run.config = config
 	}
@@ -830,6 +893,7 @@ func (run *configRun) inSync(active *engine.ActiveConfig) {
 		}
 	}
 	run.applied = appliedVerdict{kind: appliedInRevision, revision: active.RevisionID}
+	return nil
 }
 
 // recordApply records a revision the operator wrote.

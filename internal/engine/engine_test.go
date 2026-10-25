@@ -234,8 +234,9 @@ func TestARecordOfTheApplyIsWaitedForAndAWrongOneFails(t *testing.T) {
 
 // TestEngineFleetNamesTheSeatsHolder pins the read of /fleet against the
 // engine: the answering node, its roles, broker and labels, the seat it holds
-// because its labels match the seat's placement, and a seat whose placement
-// no node matches, which no node holds and the engine calls unplaceable.
+// because its labels match the seat's placement, a seat whose placement no
+// node matches, which no node holds and the engine calls unplaceable, and the
+// fleet's activation, which names the fleet's revision at its epoch.
 func TestEngineFleetNamesTheSeatsHolder(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -270,6 +271,16 @@ func TestEngineFleetNamesTheSeatsHolder(t *testing.T) {
 	if _, held := fleet.Holder("bo", ""); held || !slices.Equal(fleet.Unplaceable, []string{"bo"}) {
 		t.Errorf("bo: held %t, unplaceable %v; want held by nobody and unplaceable, as no node is labelled for its pool",
 			held, fleet.Unplaceable)
+	}
+	// The fleet's activation names the revision GET /config answers, at its
+	// epoch: the one read that says which epoch a revision the operator did
+	// not activate itself activated as.
+	active, err := client.ActiveConfig(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := fleet.Activation; a == nil || a.RevisionID != active.RevisionID || a.Epoch < 1 {
+		t.Errorf("Fleet().Activation = %+v, want the fleet's revision %s at its epoch", a, active.RevisionID)
 	}
 }
 

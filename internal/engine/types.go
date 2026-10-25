@@ -481,6 +481,27 @@ type Fleet struct {
 	// TargetEpoch is the activation epoch the fleet converges on, zero when
 	// nothing has been activated or the engine could not read it.
 	TargetEpoch int64
+
+	// Activation is the fleet's activation pointer as the engine read it:
+	// the revision it names and that revision's activation epoch, read in
+	// one read with TargetEpoch. Nil when nothing has been activated or the
+	// engine could not read the pointer, which it does not tell apart.
+	//
+	// It is the one answer to which epoch a revision the operator did not
+	// activate itself, such as a reload of its document, activated as:
+	// GET /config names the revision and not its epoch, and /health the
+	// epoch a node has applied, which may be another revision's.
+	Activation *Activation
+}
+
+// Activation is one activation of the fleet's company document.
+type Activation struct {
+	// RevisionID is the revision the activation made active.
+	RevisionID string
+
+	// Epoch is the activation's epoch: every engine has applied the
+	// revision once its applied epoch reaches it.
+	Epoch int64
 }
 
 // Holder returns the lease of the seat with handle and the id the engine
