@@ -189,10 +189,19 @@ const (
 	// pod's boot the controller adds up was read at.
 	bootBoundsRead = "v0.1.1-0.20261019181514-fb36f0c31127"
 
-	// stateLogRefusalRead is the engine whose startStateLog names Worklet
-	// and Doclet in its refusal of a broker that cannot host a state log,
-	// with the bounds on its boot as bootBoundsRead read them.
-	stateLogRefusalRead = "v0.1.1-0.20261025080950-dc0cc0490137"
+	// bootRecoveryRead is crewlet#311's engine, where the join was read
+	// again against the windows, and the boot's read of the company's
+	// secrets first read. A join now keeps an installed artefact's pin on
+	// the trim until the node's own position counts it, renewed in the
+	// background as often as startStateLog sets, and comes up on its own
+	// rows when a fault of the node's stops it before anything is
+	// installed. None of it adds a read or a write to a boot: the pin is the
+	// one put it was. The secrets are read by bootSecrets, past the recovery
+	// boundary, which no window counts. Setting that renewal is all that
+	// changed in startStateLog since it was read for its refusal of a broker
+	// that cannot host a state log, which names Worklet and Doclet, the
+	// engine's own tracker and pages; it moves no window either.
+	bootRecoveryRead = "v0.1.1-0.20261025183322-23ffa9027d77"
 
 	// The engine files most of the bounds on a boot are read from, and the
 	// guide that quotes the windows they add up to.
@@ -394,7 +403,11 @@ var bootWindows = []string{
 // restart a boot the engine would finish, with every test green. Which steps
 // a boot runs, and in what order, is engine.New's, which is not read here: it
 // changes with most of the engine's work, and a read of it at each change
-// would be a read of everything else it does.
+// would be a read of everything else it does. One of them is a step the
+// windows leave out, past the recovery boundary: (*Engine).bootSecrets, the
+// boot's read of the company's secrets, which waits out a store that does not
+// answer for as long as the boot lives, as the pages that say what a boot
+// does after /health answers 200 state.
 var mirrored = []mirror{
 	{
 		file: bootGo, name: "ArtifactsListener",
@@ -1145,26 +1158,27 @@ var mirrored = []mirror{
 		read:    bootBoundsRead,
 	},
 	{
-		file: "internal/engine/secrets.go", name: "(*Engine).refreshSecrets",
+		file: "internal/engine/secrets.go", name: "(*Engine).bootSecrets",
 		against: bootWindows,
-		decides: "a boot lists the company's secrets once, logging and carrying on when it cannot",
-		digest:  "c81b2f82061002102de88ad8c82472702299cc41afd4f8df450dea16f3240868",
-		read:    bootBoundsRead,
+		decides: "a boot's read of the company's secrets has no bound: it asks a store that did not answer again " +
+			"for as long as the boot lives, and fails only on a value the node's keyring cannot open",
+		digest: "6c3dd24b5cfa2bd48562316fb4fab85a4489bea1c6a983fa9e8ab35440f573d9",
+		read:   bootRecoveryRead,
 	},
 	{
 		file: stateLogGo, name: "(*Engine).join",
 		against: bootWindows,
 		decides: "a node's join reads whether its rows can replay, and asks for a donor only when they cannot",
-		digest:  "961e7d97e8219d0f757b7a1f5425e129d72cc00eb0d5af1f865bcb442e53a14b",
-		read:    bootBoundsRead,
+		digest:  "51ba54deb4eb2abdc3365a04ca263e2e9c218ac809eba67b43ae5c00d35eb166",
+		read:    bootRecoveryRead,
 	},
 	{
 		file: stateLogGo, name: "(*Engine).startStateLog",
 		against: bootWindows,
 		decides: "the state logs read their ceilings, are provisioned under one sequence ceiling, joined, and " +
 			"started under another",
-		digest: "f6d39ea1fb388225fd11dd05e22b4576bd0d95725c362d77e274cf63b638f6dd",
-		read:   stateLogRefusalRead,
+		digest: "e23f2f866e38084ca2d6ed5034923b4f3ad38703397b23ed6c48f09ad3ec0984",
+		read:   bootRecoveryRead,
 	},
 	{
 		file: stateLogGo, name: "(*stateLog).provisionAll",
