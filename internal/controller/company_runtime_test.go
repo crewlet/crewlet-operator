@@ -450,6 +450,7 @@ var _ = Describe("Company runtime", func() {
 		for _, env := range container.Env {
 			Expect(env.Name).NotTo(HavePrefix("OTEL_"), "no telemetry without a class's telemetry")
 			Expect(env.Name).NotTo(BeElementOf("CREWLET_SANDBOX_OTEL_RECEIVER_URL", "CREWLET_MCP_BRIDGE_URL"))
+			Expect(env.Name).NotTo(Equal("TMPDIR"), "the engine's temporary directory is /tmp, the volume below")
 			// The engine expands ${NAME} in its company document from
 			// its environment: no credential may be there.
 			Expect(env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil).To(BeTrue(),
@@ -459,6 +460,12 @@ var _ = Describe("Company runtime", func() {
 			corev1.VolumeMount{Name: "data", MountPath: "/var/lib/crewlet"},
 			corev1.VolumeMount{Name: configVolumeName, MountPath: "/etc/crewlet", ReadOnly: true},
 		))
+		// On a read-only root, /tmp has to be a volume of its own: the
+		// engine makes the directory of the sockets every host-mode CLI
+		// reaches its seat's tools through under it, and a seat on the data
+		// pods would have no tools without it.
+		Expect(container.VolumeMounts).To(ContainElement(corev1.VolumeMount{Name: tmpVolume, MountPath: "/tmp"}))
+		Expect(pod.Spec.Volumes).To(ContainElement(corev1.Volume{Name: tmpVolume, EmptyDir: &corev1.EmptyDirVolumeSource{}}))
 		Expect(pod.Spec.Volumes).To(ContainElement(corev1.Volume{Name: configVolumeName,
 			Secret: &corev1.SecretVolumeSource{
 				SecretName:  bootstrapName,
