@@ -90,6 +90,12 @@ const (
 	msgCLIOwnVariable = "env may not set the CLI's own token or key variable"
 	msgCLIIsolation   = "env may not set a variable Crewlet sets on every call of the CLI to keep it inside its " +
 		"seat's own home"
+	msgCLISubscriptionEnv = "under auth mode Subscription, env may not set a variable Crewlet sets there to sign " +
+		"the CLI in with the login the seat's home holds"
+	msgQwenKeyOnly = "QwenCode signs in with its key alone, under auth mode APIKey"
+	// atEnv is how the API server reports a rule on spec that names env as
+	// the field to change.
+	atEnv = "spec.env: Invalid value"
 )
 
 // TestLLMProviderSignInValidation covers the rules over a provider's CLI and
@@ -375,7 +381,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	// The exception is the env sign-in CLIs' alone, so every other CLI the
 	// API offers is refused a key in env, read from the installed CRD's enum
 	// so a CLI added later is held to the rule without being listed here. A
-	// CLI whose profile names a key variable (Codex's OPENAI_API_KEY) has it
+	// CLI whose profile names a key variable (Codex's CODEX_API_KEY) has it
 	// dropped under Subscription, so the key would never reach it; one whose
 	// profile names none (KimiCode) reads a key only from its own files.
 	for _, agent := range enumOf(t, "llmproviders.crewlet.ai", "spec", "agent") {
@@ -434,7 +440,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			mutate: func(p *v1.LLMProvider) {
 				p.Spec.Env = []v1.SecretEnvVar{{Name: envAnthropicKey, ValueFrom: fromSecret("cli", "value")}}
 			},
-			want: "spec.env: Invalid value",
+			want: atEnv,
 		},
 		createCase[*v1.LLMProvider]{
 			// Another CLI's variable is that CLI's business: OpenCode
@@ -472,7 +478,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			// The rule sits on spec, and reports the field to change.
 			name:   "an isolation variable in env is reported at env",
 			mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, "HOME"),
-			want:   "spec.env: Invalid value",
+			want:   atEnv,
 		},
 		createCase[*v1.LLMProvider]{
 			// A profile's own directory is its CLI's alone: OpenCode
@@ -487,6 +493,62 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, "home"),
 		},
 	)
+	// Qwen Code keeps no login of its own in the builds Crewlet supports, so
+	// under Subscription it would sign in to nothing, whatever it is handed.
+	qwen := func(auth v1.CLIAgentAuth) func(*v1.LLMProvider) {
+		return func(p *v1.LLMProvider) {
+			p.Spec.Model = "qwen3-coder-plus"
+			p.Spec.Agent = v1.CLIAgentQwenCode
+			p.Spec.Auth = auth
+		}
+	}
+	cases = append(cases,
+		createCase[*v1.LLMProvider]{
+			name:   "QwenCode on a bundle is refused",
+			mutate: qwen(bundle),
+			want:   msgQwenKeyOnly,
+		},
+		createCase[*v1.LLMProvider]{
+			name:   "QwenCode on a bundle is reported at auth",
+			mutate: qwen(bundle),
+			want:   "spec.auth: Invalid value",
+		},
+		createCase[*v1.LLMProvider]{
+			name:   "QwenCode on its key under APIKey is accepted",
+			mutate: qwen(metered),
+		},
+	)
+	// Under Subscription Crewlet sets, after env, what points a CLI that picks
+	// its sign-in from its environment at the login its seat's home holds
+	// (GeminiCLI's GOOGLE_GENAI_USE_GCA), so it refuses that variable in env
+	// there; under APIKey it sets nothing, and the variable is the operator's.
+	for agent, variables := range subscriptionEnv {
+		for _, variable := range variables {
+			cases = append(cases,
+				createCase[*v1.LLMProvider]{
+					name:   fmt.Sprintf("%s with %s in env under Subscription is refused", agent, variable),
+					mutate: inEnvBesideBundle(agent, variable),
+					want:   msgCLISubscriptionEnv,
+				},
+				createCase[*v1.LLMProvider]{
+					name: fmt.Sprintf("%s with %s in env under APIKey is accepted", agent, variable),
+					mutate: func(p *v1.LLMProvider) {
+						inEnvBesideBundle(agent, variable)(p)
+						p.Spec.Auth = metered
+					},
+				},
+				createCase[*v1.LLMProvider]{
+					// Another CLI's variable is that CLI's business.
+					name:   fmt.Sprintf("another CLI with %s in env under Subscription is accepted", variable),
+					mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, variable),
+				},
+				createCase[*v1.LLMProvider]{
+					name:   fmt.Sprintf("%s in env under Subscription is reported at env", variable),
+					mutate: inEnvBesideBundle(agent, variable),
+					want:   atEnv,
+				})
+		}
+	}
 	// OpenCode splits its model at the first slash into a provider and a
 	// model id, and Crewlet refuses a model with nothing but white space on
 	// either side of it, white space as Go's strings.TrimSpace reads it: the

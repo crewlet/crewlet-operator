@@ -58,11 +58,11 @@ type cliVariable struct{ headless, key string }
 // while this copy, which the rule's cases are built from, differs.
 var cliVariables = map[v1.CLIAgentName]cliVariable{
 	v1.CLIAgentClaudeCode:  {headless: "CLAUDE_CODE_OAUTH_TOKEN", key: envAnthropicKey},
-	v1.CLIAgentCodex:       {key: envOpenAIKey},
+	v1.CLIAgentCodex:       {key: "CODEX_API_KEY"},
 	v1.CLIAgentGeminiCLI:   {key: "GEMINI_API_KEY"},
-	v1.CLIAgentQwenCode:    {key: "DASHSCOPE_API_KEY"},
+	v1.CLIAgentQwenCode:    {key: envOpenAIKey},
 	v1.CLIAgentCursorAgent: {key: "CURSOR_API_KEY"},
-	v1.CLIAgentCopilot:     {key: "GITHUB_TOKEN"},
+	v1.CLIAgentCopilot:     {key: "COPILOT_GITHUB_TOKEN"},
 	v1.CLIAgentGrok:        {key: "XAI_API_KEY"},
 	v1.CLIAgentMuseCode:    {key: "META_API_KEY"},
 }
@@ -84,7 +84,7 @@ var (
 	homeIsolation = []string{"HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "TMPDIR"}
 	cliIsolation  = map[v1.CLIAgentName][]string{
 		v1.CLIAgentClaudeCode:  {"CLAUDE_CONFIG_DIR"},
-		v1.CLIAgentCodex:       {"CODEX_HOME"},
+		v1.CLIAgentCodex:       {"CODEX_HOME", "CODEX_SQLITE_HOME"},
 		v1.CLIAgentOpenCode:    {"OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_PROJECT_DISABLE"},
 		v1.CLIAgentCursorAgent: {"CURSOR_CONFIG_DIR"},
 		v1.CLIAgentKimiCode:    {"KIMI_CODE_HOME"},
@@ -92,6 +92,17 @@ var (
 		v1.CLIAgentPi:          {"PI_CODING_AGENT_DIR"},
 	}
 )
+
+// subscriptionEnv are the variables each CLI's profile sets under auth.mode
+// subscription alone, after env, to point it at the login its seat's home
+// holds (subscription_env), in the engine every suite runs: the variables the
+// LLMProvider API's subscription rule refuses in env under Subscription.
+// TestCLIAgentSubscriptionEnvFollowsTheEngine reads them from the engine's
+// profiles and fails while this copy, which the rule's cases are built from,
+// differs.
+var subscriptionEnv = map[v1.CLIAgentName][]string{
+	v1.CLIAgentGeminiCLI: {"GOOGLE_GENAI_USE_GCA"},
+}
 
 // The kinds the tests that apply manifests treat specially.
 const (

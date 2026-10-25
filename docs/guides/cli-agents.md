@@ -223,7 +223,7 @@ takes none and signs in with that key in `env`:
 | Sign-in | What the Secret holds | Use it when |
 |---|---|---|
 | `auth.tokenSecretRef` | a long-lived headless token the CLI mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the CLI is Claude Code, the one CLI whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins an agent-mode run can carry (an agent-mode OpenCode carries its model provider's key in `env` instead) |
-| `auth.credentialBundleSecretRef` | a bundle of the CLI's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any CLI: the others mint no token Crewlet hands on |
+| `auth.credentialBundleSecretRef` | a bundle of the CLI's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any CLI but `QwenCode`, which keeps no login: the others mint no token Crewlet hands on |
 | `auth.mode: APIKey` with `auth.apiKeySecretRef` | the CLI's metered API key | the CLI's Crewlet profile names a key variable ([below](#a-metered-key)) |
 | `env`, with `auth.mode: Subscription` | the key of the model provider the CLI runs on, in the variable the CLI reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the CLI is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
 
@@ -235,11 +235,11 @@ can fall behind it):
 | `agent` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `credentialBundleSecretRef` | `mode: Agent` |
 |---|---|---|---|---|---|
 | `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | yes | on the token or the key |
-| `Codex` | no | `OPENAI_API_KEY` | no | yes | no |
+| `Codex` | no | `CODEX_API_KEY` | no | yes | no |
 | `GeminiCLI` | no | `GEMINI_API_KEY` | no | yes | no |
-| `QwenCode` | no | `DASHSCOPE_API_KEY` | no | yes | no |
+| `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no: it keeps no login, so `auth.mode: APIKey` is its only sign-in | no |
 | `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | yes | no |
-| `Copilot` | no | `GITHUB_TOKEN` | no | yes | no |
+| `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | yes | no |
 | `Grok` | no | `XAI_API_KEY` | no | yes | no |
 | `MuseCode` | no | `META_API_KEY` | no | yes | no |
 | `KimiCode` | no | no: it reads a key only from its own `config.toml`, so give that in the bundle | no | yes | no |
@@ -266,6 +266,11 @@ Subscription provider that names neither is refused, with one exception:
   profile names a key variable takes its key with `auth.mode: APIKey`; the
   engine refuses that variable in `env` (below), and a key in `env` under any
   other name is one the CLI does not read.
+- **QwenCode** keeps to a key alone. The builds of Qwen Code Crewlet supports
+  refuse the OAuth login it once kept, so Crewlet's profile for it keeps no
+  login and names no token variable: under `Subscription` it would sign in to
+  nothing, a bundle included. The engine refuses that, and the API server
+  refuses a QwenCode provider in any mode but `APIKey` first.
 
 `env` may never set the CLI's own token or key variable, the ones the table
 names (`ANTHROPIC_API_KEY` for `ClaudeCode`, `CURSOR_API_KEY` for
@@ -278,7 +283,8 @@ the provider first. Another CLI's variable is no such conflict:
 Nor may `env` set a variable the engine sets on every call to keep the CLI
 inside its seat's own home and the call's working directory: the home, the
 XDG directories and the temporary directory of every CLI, and the CLI's own
-configuration directory, or, for `OpenCode`, its configuration directory and
+configuration directory (and, for `Codex`, the directory of its state
+database), or, for `OpenCode`, its configuration directory and
 `OPENCODE_CONFIG_PROJECT_DISABLE`, the switch that keeps OpenCode from reading
 project configuration from the directories above a seat's call. `env` is
 layered over them, so a value there would replace that isolation for every
@@ -291,12 +297,20 @@ its message and this table to the engine's lists:
 |---|---|
 | `HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, `TMPDIR` | every CLI |
 | `CLAUDE_CONFIG_DIR` | `ClaudeCode` |
-| `CODEX_HOME` | `Codex` |
+| `CODEX_HOME`, `CODEX_SQLITE_HOME` | `Codex` |
 | `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_PROJECT_DISABLE` | `OpenCode` |
 | `CURSOR_CONFIG_DIR` | `CursorAgent` |
 | `KIMI_CODE_HOME` | `KimiCode` |
 | `HERMES_HOME` | `Hermes` |
 | `PI_CODING_AGENT_DIR` | `Pi` |
+
+Under `auth.mode: Subscription`, `env` may not set a variable the engine sets
+there to sign the CLI in with the login its seat's home holds either:
+`GeminiCLI`'s `GOOGLE_GENAI_USE_GCA`, which the engine sets to `true`, since
+Gemini CLI picks its sign-in from its environment and a login alone selects
+nothing. The engine sets it after `env`, so a value there would be replaced on
+every call: it refuses the document, and the API server refuses the provider
+first. Under `APIKey` the engine sets nothing there, and the variable is yours.
 
 ```yaml
 apiVersion: crewlet.ai/v1alpha1
