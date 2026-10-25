@@ -352,8 +352,8 @@ origin to the engine's `api.auth.allowed_origins`, so a person who signs in
 through the route can write as well as read.
 
 A link an agent composes is the base followed by one of the engine
-dashboard's own routes, such as `<base>/#/work/ENG-42` for a work item and
-`<base>/#/knowledge/pages/<page id>` for a page. So an address other than
+dashboard's own routes, such as `<base>/#/worklet/ENG-42` for a work item
+and `<base>/#/doclet/pages/<page id>` for a page. So an address other than
 the API route's must serve the engine there, its `/dashboard` and `/auth`
 routes included, since a person signs in through it: the part after `#`
 never reaches a server, so the dashboard reads it in the browser.

@@ -287,7 +287,7 @@ func TestCompanyValidation(t *testing.T) {
 		},
 		{
 			name:   "a dashboardBaseURL with a fragment is refused",
-			mutate: func(c *v1.Company) { c.Spec.Exposure.DashboardBaseURL = "https://crewlet.nimbus.example/#/work" },
+			mutate: func(c *v1.Company) { c.Spec.Exposure.DashboardBaseURL = "https://crewlet.nimbus.example/#/worklet" },
 			want:   msgDashboardBaseURLQuery,
 		},
 		// Crewlet refuses to start on a browser's address whose host a
