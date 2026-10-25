@@ -121,6 +121,15 @@ plan, so a seat that needs a fallback names a chain. No provider may be named
 Each Seat's `spec.llm` becomes Crewlet's per-phase `llm` mapping, each chain
 naming providers by their key in `providers.llm`.
 
+The Company's `spec.assistant` becomes Crewlet's `assistant` block, its `llm`
+chain naming providers by their key exactly as a seat's does. A provider it
+names that the document does not hold blocks the document, as a seat's does,
+because Crewlet refuses such a chain where `llm_order` would only drop the
+key. An `LLMProvider`'s `webTools: Denied` becomes its entry's
+`overrides: {web_tools: denied}`, the one profile override the API offers;
+Crewlet requires it of every provider the assistant runs on
+([Running Seats on a Coding CLI](../guides/cli-agents.md#a-provider-for-the-dashboard-assistant)).
+
 ### Schedules
 
 A Schedule is written into the entry of what it targets: a Seat's role, or a

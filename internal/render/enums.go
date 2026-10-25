@@ -210,6 +210,16 @@ func cliAgentRunIn(r v1alpha1.CLIAgentRunIn) string {
 	return ""
 }
 
+func cliAgentWebTools(w v1alpha1.CLIAgentWebTools) string {
+	switch w {
+	case v1alpha1.CLIAgentWebToolsAllowed:
+		return "allowed"
+	case v1alpha1.CLIAgentWebToolsDenied:
+		return "denied"
+	}
+	return ""
+}
+
 func cliAgentAuthMode(m v1alpha1.CLIAgentAuthMode) string {
 	switch m {
 	case v1alpha1.CLIAgentAuthSubscription:

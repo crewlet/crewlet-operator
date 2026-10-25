@@ -737,11 +737,52 @@ does for a CLI it cannot do:
   above gives a key variable) or, for Hermes, Pi or OpenCode, its model
   provider's key in `env`, or place the seat in `data`.
 
+## A provider for the Dashboard Assistant
+
+A seat keeps its CLI's own web tools. The Company's Dashboard Assistant
+(`spec.assistant`) does not: it reads only what the signed-in person's own
+requests return, so Crewlet requires every provider in `spec.assistant.llm`
+to run in mode `Text`, on a CLI whose profile denies its local tools, with
+its web tools off. `webTools: Denied` turns them off, and renders as the
+entry's `overrides: {web_tools: denied}`:
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: assistant
+spec:
+  companyRef:
+    name: nimbus
+  agent: ClaudeCode
+  model: sonnet
+  timeoutSeconds: 90
+  maxConcurrent: 4
+  webTools: Denied
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
+      key: apiKey
+```
+
+The API admits `webTools: Denied` only for a CLI Crewlet can turn the web off
+for: `ClaudeCode`, `Codex`, `OpenCode` and `Pi`. Every other CLI's profile
+carries no measured web denial, and Crewlet refuses the setting. A provider
+of its own keeps the person in the drawer from queueing behind a seat's long
+call, and its timeout is sized for one round rather than for a coding task.
+Crewlet refuses an assistant chain naming a provider in mode `Agent`, or one
+that keeps its web tools, in the dry run before every apply, and the refusal
+is reported on the Company. Crewlet's
+[configuration reference](https://github.com/crewlet/crewlet/blob/main/docs/getting-started/configuration.md)
+describes the block and each bound.
+
 ## What v1alpha1 does not offer
 
 Crewlet's `custom` CLI and the profile `overrides` of the built-in ones are
-not offered: they name the binary and the arguments the engine's pod runs.
-Nor are the `direct` and `container` cells, for the reason above.
+not offered, but for the web stance above: they name the binary and the
+arguments the engine's pod runs. Nor are the `direct` and `container` cells,
+for the reason above.
 
 Nor is Crewlet's `inherit-env` login, which gives the CLI whichever token or
 key the engine's container environment holds. A credential there is outside

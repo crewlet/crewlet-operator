@@ -1000,6 +1000,19 @@ func TestPlatformLLMProviders(t *testing.T) {
 			mutate: platform(func(p *v1.PlatformLLMProvider) { p.Agent = v1.CLIAgentCodex; p.Model = "gpt-5" }),
 		},
 		{
+			name:   "a platform provider with web denied is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) { p.WebTools = v1.CLIAgentWebToolsDenied }),
+		},
+		{
+			name: "a platform provider with web denied on a CLI with no web denial is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Agent = v1.CLIAgentGeminiCLI
+				p.Model = "gemini-2.5-pro"
+				p.WebTools = v1.CLIAgentWebToolsDenied
+			}),
+			want: msgWebTools,
+		},
+		{
 			name:   "a platform provider named default is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) { p.Name = "default" }),
 			want:   "a platform provider may not be named default",

@@ -1827,6 +1827,18 @@ spec:
                       format: int32
                       minimum: 1
                       type: integer
+                    webTools:
+                      description: |-
+                        webTools is whether the CLI keeps its own web tools. Unset is
+                        Allowed, every seat's default. Denied is required of every provider
+                        the Company's Dashboard Assistant runs on (spec.assistant.llm), and
+                        is refused for a CLI Crewlet has no way to turn the web off for: it
+                        takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's
+                        `overrides.web_tools`.
+                      enum:
+                      - Allowed
+                      - Denied
+                      type: string
                   required:
                   - agent
                   - auth
@@ -1909,6 +1921,13 @@ spec:
                       >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size()
                       > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size()
                       > 0)
+                  - fieldPath: .webTools
+                    message: 'webTools Denied takes a CLI Crewlet can turn the web
+                      off for: ClaudeCode, Codex, OpenCode or Pi. Crewlet''s profile
+                      for every other CLI carries no measured web denial, and refuses
+                      the setting'
+                    rule: '!has(self.webTools) || self.webTools != ''Denied'' || self.agent
+                      in [''ClaudeCode'', ''Codex'', ''OpenCode'', ''Pi'']'
                 maxItems: 16
                 type: array
                 x-kubernetes-list-map-keys:

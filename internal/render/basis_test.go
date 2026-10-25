@@ -96,8 +96,8 @@ var findings = []struct {
 		"the engine drops an llm_order key naming no provider (no such LLMProvider, or a platform provider the Company " +
 			"does not use): every chainless seat runs on whatever comes first then"},
 	{site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
-		"a seat's chain naming no provider: no such LLMProvider, or a platform provider the Company does not use, " +
-			"which is the tenant's setting and not the class's policy"},
+		"a seat's chain, or the assistant's, naming no provider: no such LLMProvider, or a platform provider the " +
+			"Company does not use, which is the tenant's setting and not the class's policy"},
 	{site{fnIntegrations, HarmsBeyond, v1alpha1.ReasonConflict},
 		"one block per vendor: a new Integration would displace the running one"},
 	{site{fnGitLabAccessLevels, HarmsBeyond, v1alpha1.ReasonRefNotFound},
@@ -480,7 +480,24 @@ func engineCases() []engineCase {
 			write: func(t *testing.T, doc map[string]any) {
 				role(t, doc, seatCTO)["llm"] = map[string]any{"default": []any{missing}}
 			},
-			at: "llm",
+			at: keyLLM,
+		},
+		{
+			// The assistant's chain is refused as a seat's is, where
+			// llm_order would only drop the key.
+			name: "the assistant's chain names no provider", site: site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				in.Company.Spec.Assistant = v1alpha1.CompanyAssistant{
+					Enabled: new(true), LLM: []v1alpha1.LLMProviderReference{{Name: missing}},
+				}
+			},
+			refused: "Company/" + sampleCompany + " spec.assistant.llm[0].name",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				doc["assistant"] = map[string]any{"enabled": true, keyLLM: []any{missing}}
+			},
+			at: "assistant.llm[0]", says: `"missing"`,
 		},
 		{
 			// The class offers the provider; the Company's own setting

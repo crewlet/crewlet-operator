@@ -165,6 +165,70 @@ type CompanyLLMSettings struct {
 	UsePlatformProviders *bool `json:"usePlatformProviders,omitempty"`
 }
 
+// CompanyAssistant is whether the company runs the Dashboard Assistant, the
+// models it runs on and the bounds of one turn. It maps onto Crewlet's
+// `assistant` block, each field onto the field it names.
+//
+// The assistant answers a signed-in person's questions about the company and
+// prepares changes for that person to approve, acting only as them: every
+// read is a request of theirs, and nothing is written until they approve.
+// Every provider in llm must be in mode Text, on a CLI whose Crewlet profile
+// denies its local tools, with webTools Denied. Crewlet refuses any other in
+// the dry run before every apply, and the refusal is reported on the
+// Company, since the rule turns on the providers' own specs.
+// +kubebuilder:validation:MinProperties=1
+// +kubebuilder:validation:XValidation:rule="!has(self.enabled) || !self.enabled || (has(self.llm) && size(self.llm) > 0)",message="an enabled assistant needs llm: name the model provider it runs on, one whose webTools is Denied",fieldPath=".llm"
+type CompanyAssistant struct {
+	// enabled runs the assistant. Unset or false leaves it off. Crewlet's
+	// `enabled`.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// llm is the assistant's model chain, the first provider tried first,
+	// referred to as a Seat's chain is. Required when enabled is true.
+	// Crewlet's `llm`.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="llm must name each provider once"
+	LLM []LLMProviderReference `json:"llm,omitempty"`
+
+	// maxSteps is the most tool steps one turn may take. Unset takes
+	// Crewlet's default of 8. Crewlet's `max_steps`.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=16
+	MaxSteps int32 `json:"maxSteps,omitempty"`
+
+	// turnTimeoutSeconds is the longest one turn may run. Unset takes
+	// Crewlet's default of 120. Crewlet's `turn_timeout_seconds`.
+	// +optional
+	// +kubebuilder:validation:Minimum=30
+	// +kubebuilder:validation:Maximum=600
+	TurnTimeoutSeconds int32 `json:"turnTimeoutSeconds,omitempty"`
+
+	// proposalTTLSeconds is how long a proposed change waits for its
+	// owner's approval. Unset takes Crewlet's default of 900. Crewlet's
+	// `proposal_ttl_seconds`.
+	// +optional
+	// +kubebuilder:validation:Minimum=60
+	// +kubebuilder:validation:Maximum=3600
+	ProposalTTLSeconds int32 `json:"proposalTTLSeconds,omitempty"`
+
+	// retentionDays is how long a person's conversations are kept. Unset
+	// takes Crewlet's default of 30. Crewlet's `retention_days`.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=365
+	RetentionDays int32 `json:"retentionDays,omitempty"`
+
+	// tokenBudget caps the tokens each person's assistant may spend per
+	// window, charged on top of the company's own spec.tokenBudget.
+	// Crewlet's `token_budget`.
+	// +optional
+	TokenBudget TokenBudget `json:"tokenBudget,omitzero"`
+}
+
 // EmbeddingProviderType is which embeddings API a company uses. It maps onto
 // Crewlet's providers.embeddings.type (OpenAI is `openai`, OpenAICompatible
 // is `openai-compatible`).
@@ -999,6 +1063,11 @@ type CompanySpec struct {
 	// +optional
 	LLM CompanyLLMSettings `json:"llm,omitzero"`
 
+	// assistant is the company's Dashboard Assistant. Unset leaves it off.
+	// Crewlet's `assistant`.
+	// +optional
+	Assistant CompanyAssistant `json:"assistant,omitzero"`
+
 	// embeddings is the provider vectors are computed with. Unset leaves
 	// search keyword-only. Crewlet's providers.embeddings.
 	// +optional
@@ -1023,8 +1092,8 @@ type CompanySpec struct {
 	//
 	// It may not set what another field or object of this API owns: name,
 	// mission, vision, policies, timezone, tracker, knowledge, token_budget,
-	// providers, integrations, mcp_servers, roles or units. Every position
-	// Crewlet holds a credential in lives under one of those keys, so
+	// assistant, providers, integrations, mcp_servers, roles or units. Every
+	// position Crewlet holds a credential in lives under one of those keys, so
 	// engineConfig can never carry a credential: the API server refuses a
 	// Company whose engineConfig names one of them, before anything is
 	// stored.
@@ -1032,7 +1101,7 @@ type CompanySpec struct {
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=64
-	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'token_budget', 'providers', 'integrations', 'mcp_servers', 'roles', 'units']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, token_budget, providers, integrations, mcp_servers, roles or units: those are fields and objects of this API, and the only blocks that hold credentials"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_servers', 'roles', 'units']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, token_budget, assistant, providers, integrations, mcp_servers, roles or units: those are fields and objects of this API, among them every block that holds a credential"
 	EngineConfig []EngineConfigEntry `json:"engineConfig,omitempty"`
 
 	// config is how the operator manages the company's document.

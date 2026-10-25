@@ -354,6 +354,38 @@ _Appears in:_
 | `E2B` | CLIAgentRunInE2B is the Company's E2B sandbox.<br /> |
 
 
+#### CLIAgentWebTools
+
+_Underlying type:_ _string_
+
+CLIAgentWebTools is whether a model provider's CLI keeps its own web tools
+(its fetch and its search). It maps onto the `web_tools` of a Crewlet
+providers.llm entry's overrides (Allowed is `allowed`, Denied is
+`denied`).
+
+A seat keeps its CLI's web tools: it must not have less reach than the
+same CLI at a terminal. A provider the Company's Dashboard Assistant runs
+on turns them off, which Crewlet requires of every model in
+spec.assistant.llm: the assistant reads only what the signed-in person's
+own requests return, and a page the model fetched for itself is text no
+authority decision saw. Crewlet turns them off only for a CLI whose profile
+carries a measured way to (its web_denial): ClaudeCode, Codex, OpenCode and
+Pi.
+
+_Validation:_
+- Enum: [Allowed Denied]
+
+_Appears in:_
+- [LLMProviderSettings](#llmprovidersettings)
+- [LLMProviderSpec](#llmproviderspec)
+- [PlatformLLMProvider](#platformllmprovider)
+
+| Field | Description |
+| --- | --- |
+| `Allowed` | CLIAgentWebToolsAllowed keeps the CLI's web tools, every seat's<br />default.<br /> |
+| `Denied` | CLIAgentWebToolsDenied runs the CLI with its web tools off.<br /> |
+
+
 #### ClassEnvVar
 
 
@@ -423,6 +455,39 @@ characters overflows its pods' controller-revision-hash label.
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Optional: \{\} <br /> |
 | `spec` _[CompanySpec](#companyspec)_ | spec is the company's desired state. |  | Required: \{\} <br /> |
 | `status` _[CompanyStatus](#companystatus)_ | status is the company's observed state. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+
+
+#### CompanyAssistant
+
+
+
+CompanyAssistant is whether the company runs the Dashboard Assistant, the
+models it runs on and the bounds of one turn. It maps onto Crewlet's
+`assistant` block, each field onto the field it names.
+
+The assistant answers a signed-in person's questions about the company and
+prepares changes for that person to approve, acting only as them: every
+read is a request of theirs, and nothing is written until they approve.
+Every provider in llm must be in mode Text, on a CLI whose Crewlet profile
+denies its local tools, with webTools Denied. Crewlet refuses any other in
+the dry run before every apply, and the refusal is reported on the
+Company, since the rule turns on the providers' own specs.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [CompanySpec](#companyspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled runs the assistant. Unset or false leaves it off. Crewlet's<br />`enabled`. |  | Optional: \{\} <br /> |
+| `llm` _[LLMProviderReference](#llmproviderreference) array_ | llm is the assistant's model chain, the first provider tried first,<br />referred to as a Seat's chain is. Required when enabled is true.<br />Crewlet's `llm`. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
+| `maxSteps` _integer_ | maxSteps is the most tool steps one turn may take. Unset takes<br />Crewlet's default of 8. Crewlet's `max_steps`. |  | Maximum: 16 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `turnTimeoutSeconds` _integer_ | turnTimeoutSeconds is the longest one turn may run. Unset takes<br />Crewlet's default of 120. Crewlet's `turn_timeout_seconds`. |  | Maximum: 600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
+| `proposalTTLSeconds` _integer_ | proposalTTLSeconds is how long a proposed change waits for its<br />owner's approval. Unset takes Crewlet's default of 900. Crewlet's<br />`proposal_ttl_seconds`. |  | Maximum: 3600 <br />Minimum: 60 <br />Optional: \{\} <br /> |
+| `retentionDays` _integer_ | retentionDays is how long a person's conversations are kept. Unset<br />takes Crewlet's default of 30. Crewlet's `retention_days`. |  | Maximum: 365 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens each person's assistant may spend per<br />window, charged on top of the company's own spec.tokenBudget.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### CompanyEndpoints
@@ -588,10 +653,11 @@ _Appears in:_
 | `knowledge` _[KnowledgeSettings](#knowledgesettings)_ | knowledge is which knowledge base the company runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens all seats together may spend per window.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `llm` _[CompanyLLMSettings](#companyllmsettings)_ | llm is how the company chooses among its model providers. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `assistant` _[CompanyAssistant](#companyassistant)_ | assistant is the company's Dashboard Assistant. Unset leaves it off.<br />Crewlet's `assistant`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `embeddings` _[EmbeddingSettings](#embeddingsettings)_ | embeddings is the provider vectors are computed with. Unset leaves<br />search keyword-only. Crewlet's providers.embeddings. |  | Optional: \{\} <br /> |
 | `sandbox` _[SandboxSettings](#sandboxsettings)_ | sandbox is where seats run code. Unset gives no seat a sandbox.<br />Crewlet's providers.sandbox. |  | Optional: \{\} <br /> |
 | `integrations` _[CompanyIntegrationSettings](#companyintegrationsettings)_ | integrations is company-wide integration behaviour. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, token_budget,<br />providers, integrations, mcp_servers, roles or units. Every position<br />Crewlet holds a credential in lives under one of those keys, so<br />engineConfig can never carry a credential: the API server refuses a<br />Company whose engineConfig names one of them, before anything is<br />stored. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, token_budget,<br />assistant, providers, integrations, mcp_servers, roles or units. Every<br />position Crewlet holds a credential in lives under one of those keys, so<br />engineConfig can never carry a credential: the API server refuses a<br />Company whose engineConfig names one of them, before anything is<br />stored. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
 | `config` _[ConfigSettings](#configsettings)_ | config is how the operator manages the company's document. | \{ managementPolicy:Enforce \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `topology` _[CompanyTopology](#companytopology)_ | topology is how the engine is laid out in pods. | \{ data:map[replicas:1] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `exposure` _[CompanyExposure](#companyexposure)_ | exposure overrides how the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -1826,6 +1892,7 @@ referring object's namespace, or a provider the EngineClass offers.
 
 
 _Appears in:_
+- [CompanyAssistant](#companyassistant)
 - [CompanyLLMSettings](#companyllmsettings)
 - [SeatLLM](#seatllm)
 
@@ -1872,6 +1939,7 @@ _Appears in:_
 | `model` _string_ | model is the model the CLI runs, in the CLI's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds caps one invocation of the CLI, wall clock: its<br />launch, the model's answer and the CLI's own retries. Unset takes<br />Crewlet's default of 600, the ceiling Anthropic documents for one<br />answer of a current Claude model at its full output. A timeout is<br />retryable, so a seat's chain moves on to its next provider. Crewlet's<br />`timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many CLI processes the provider runs at once;<br />each takes 200 to 450 MB of the engine pod's memory, OpenCode's at the<br />top of that range (docs/guides/cli-agents.md). Unset takes<br />Crewlet's default of 4. Crewlet's `max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `webTools` _[CLIAgentWebTools](#cliagentwebtools)_ | webTools is whether the CLI keeps its own web tools. Unset is<br />Allowed, every seat's default. Denied is required of every provider<br />the Company's Dashboard Assistant runs on (spec.assistant.llm), and<br />is refused for a CLI Crewlet has no way to turn the web off for: it<br />takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 
 
 #### LLMProviderSpec
@@ -1923,6 +1991,7 @@ _Appears in:_
 | `model` _string_ | model is the model the CLI runs, in the CLI's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds caps one invocation of the CLI, wall clock: its<br />launch, the model's answer and the CLI's own retries. Unset takes<br />Crewlet's default of 600, the ceiling Anthropic documents for one<br />answer of a current Claude model at its full output. A timeout is<br />retryable, so a seat's chain moves on to its next provider. Crewlet's<br />`timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many CLI processes the provider runs at once;<br />each takes 200 to 450 MB of the engine pod's memory, OpenCode's at the<br />top of that range (docs/guides/cli-agents.md). Unset takes<br />Crewlet's default of 4. Crewlet's `max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `webTools` _[CLIAgentWebTools](#cliagentwebtools)_ | webTools is whether the CLI keeps its own web tools. Unset is<br />Allowed, every seat's default. Denied is required of every provider<br />the Company's Dashboard Assistant runs on (spec.assistant.llm), and<br />is refused for a CLI Crewlet has no way to turn the web off for: it<br />takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 | `mode` _[CLIAgentMode](#cliagentmode)_ | mode is how the engine uses the CLI. Unset is Text. Crewlet's `mode`. |  | Enum: [Text Agent] <br />Optional: \{\} <br /> |
 | `runIn` _[CLIAgentRunIn](#cliagentrunin)_ | runIn is where an Agent-mode run happens. Unset is the Company's<br />sandbox, which is E2B. Crewlet's `run_in`. |  | Enum: [E2B] <br />Optional: \{\} <br /> |
 | `auth` _[CLIAgentAuth](#cliagentauth)_ | auth is how the CLI signs in. Crewlet's `auth`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
@@ -2562,6 +2631,7 @@ _Appears in:_
 | `model` _string_ | model is the model the CLI runs, in the CLI's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds caps one invocation of the CLI, wall clock: its<br />launch, the model's answer and the CLI's own retries. Unset takes<br />Crewlet's default of 600, the ceiling Anthropic documents for one<br />answer of a current Claude model at its full output. A timeout is<br />retryable, so a seat's chain moves on to its next provider. Crewlet's<br />`timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many CLI processes the provider runs at once;<br />each takes 200 to 450 MB of the engine pod's memory, OpenCode's at the<br />top of that range (docs/guides/cli-agents.md). Unset takes<br />Crewlet's default of 4. Crewlet's `max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `webTools` _[CLIAgentWebTools](#cliagentwebtools)_ | webTools is whether the CLI keeps its own web tools. Unset is<br />Allowed, every seat's default. Denied is required of every provider<br />the Company's Dashboard Assistant runs on (spec.assistant.llm), and<br />is refused for a CLI Crewlet has no way to turn the web off for: it<br />takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 | `auth` _[PlatformLLMProviderAuth](#platformllmproviderauth)_ | auth is how the CLI signs in. Crewlet's `auth`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
 | `env` _[NamespacedSecretEnvVar](#namespacedsecretenvvar) array_ | env is extra environment of the CLI, as an LLMProvider's spec.env is,<br />each value read from a Secret in a namespace the platform controls:<br />the model provider's key Hermes, Pi or OpenCode signs in with, or the<br />address of the platform's gateway a CLI reads from its environment<br />(ClaudeCode's ANTHROPIC_BASE_URL). A credential-named value of an<br />OpenCode provider travels into each box of a seat's code work on it,<br />in the tenant's own E2B account. Crewlet's `env`, a credential<br />position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 
@@ -3624,6 +3694,7 @@ _Validation:_
 - MinProperties: 1
 
 _Appears in:_
+- [CompanyAssistant](#companyassistant)
 - [CompanySpec](#companyspec)
 - [SeatSpec](#seatspec)
 

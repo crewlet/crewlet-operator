@@ -1,0 +1,55 @@
+# The Dashboard Assistant on two providers that turn their CLI's web tools
+# off, which Crewlet requires of every model in spec.assistant.llm: Claude
+# Code on a metered key first, then Codex on an exported login. Every bound
+# is set, and each person's assistant has a daily budget of its own.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: helm
+spec:
+  engineClassName: basic
+  companyName: Helm
+  assistant:
+    enabled: true
+    llm:
+      - name: assistant
+      - name: assistant-codex
+    maxSteps: 12
+    turnTimeoutSeconds: 180
+    proposalTTLSeconds: 600
+    retentionDays: 90
+    tokenBudget:
+      day: 200000
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: assistant
+spec:
+  companyRef:
+    name: helm
+  agent: ClaudeCode
+  model: sonnet
+  timeoutSeconds: 90
+  maxConcurrent: 4
+  webTools: Denied
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: assistant-codex
+spec:
+  companyRef:
+    name: helm
+  agent: Codex
+  model: gpt-5-codex
+  webTools: Denied
+  auth:
+    credentialBundleSecretRef:
+      name: codex-login
+      key: bundle

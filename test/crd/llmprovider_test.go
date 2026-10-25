@@ -63,6 +63,45 @@ func TestLLMProviderValidation(t *testing.T) {
 	})
 }
 
+// msgWebTools is the start of the message of the rule that holds webTools
+// Denied to the CLIs Crewlet can turn the web off for, on an LLMProvider and
+// on a platform provider alike.
+const msgWebTools = "webTools Denied takes a CLI Crewlet can turn the web off for"
+
+// TestLLMProviderWebToolsValidation covers the web stance: Denied on a CLI
+// whose Crewlet profile carries a web denial is accepted, Denied on any other
+// is refused, and Allowed is every CLI's. The render suite holds the rule's
+// list of CLIs to the engine's own verdict
+// (TestContractWebToolsDeniedFollowsTheEngine).
+func TestLLMProviderWebToolsValidation(t *testing.T) {
+	stance := func(agent v1.CLIAgentName, web v1.CLIAgentWebTools) func(*v1.LLMProvider) {
+		return func(p *v1.LLMProvider) {
+			p.Spec.Agent = agent
+			p.Spec.WebTools = web
+		}
+	}
+	runCreateCases(t, llmProvider, []createCase[*v1.LLMProvider]{
+		{name: "web denied on Claude Code is accepted", mutate: stance(v1.CLIAgentClaudeCode, v1.CLIAgentWebToolsDenied)},
+		{name: "web denied on Codex is accepted", mutate: stance(v1.CLIAgentCodex, v1.CLIAgentWebToolsDenied)},
+		{name: "web allowed on Gemini CLI is accepted", mutate: stance(v1.CLIAgentGeminiCLI, v1.CLIAgentWebToolsAllowed)},
+		{
+			name:   "web denied on Gemini CLI is refused",
+			mutate: stance(v1.CLIAgentGeminiCLI, v1.CLIAgentWebToolsDenied),
+			want:   msgWebTools,
+		},
+		{
+			name:   "web denied on Grok is refused",
+			mutate: stance(v1.CLIAgentGrok, v1.CLIAgentWebToolsDenied),
+			want:   msgWebTools,
+		},
+		{
+			name:   "a web stance outside the enum is refused",
+			mutate: stance(v1.CLIAgentClaudeCode, "Off"),
+			want:   "spec.webTools: Unsupported value",
+		},
+	})
+}
+
 // The phrases the OpenCode model rule's message quotes from the engine's own
 // refusal of such a model: the error OpenCode 2 refuses it with, and the
 // command that lists the providers OpenCode knows. TestCLIAgentModelFollowsTheEngine
