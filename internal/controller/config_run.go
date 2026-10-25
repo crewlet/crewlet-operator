@@ -508,14 +508,15 @@ func (run *configRun) enforce(
 	// below.
 	if active != nil && len(diffs) == 0 && hash == recorded.AppliedHash && len(pushed.Put) == 0 {
 		run.inSync(active)
-		failed, err := run.settle(ctx, eng, active, pushed.Reload, pushed.ReloadAction, state, stateRef)
+		again, err := run.settle(ctx, eng, active, pushed.Reload, pushed.ReloadAction, state, stateRef)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		if failed {
-			return ctrl.Result{RequeueAfter: min(engineRetryInterval, run.resyncInterval())}, nil
+		next := run.resyncInterval()
+		if again > 0 {
+			next = min(again, next)
 		}
-		return run.heldResync(ctrl.Result{RequeueAfter: run.resyncInterval()}), nil
+		return run.heldResync(ctrl.Result{RequeueAfter: next}), nil
 	}
 	reloaded, err := run.reloadedBySync(ctx, eng, active, diffs, pushed.Reload)
 	if err != nil {

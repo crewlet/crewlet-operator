@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -62,9 +63,10 @@ import (
 // said); runsNone names nodes beside those that refused the fleet's revision
 // and run no company, as a seat pod that started on nothing and refused it
 // does; fleetDown makes GET /fleet unanswerable, and missing names the
-// revisions GET /config/revisions does not find. configDown and secretsDown
-// make it answer a read of the fleet's document, and a write to the store, as
-// an engine that cannot decide who is asking does; unreadable, when set, gives
+// revisions GET /config/revisions does not find. configDown, secretsDown and
+// reloadDown make it answer a read of the fleet's document, a write to the
+// store, and a reload of the fleet's revision, as an engine that cannot decide
+// who is asking does; unreadable, when set, gives
 // the body it answers a read of the fleet's document with, as an engine whose
 // keyring does not open that revision does (config_unreadable_test.go).
 //
@@ -79,6 +81,7 @@ type storeEngine struct {
 	store                     map[string]string
 	refuse                    bool
 	configDown, secretsDown   bool
+	reloadDown                bool
 	beforeReload, afterReload func(e *storeEngine)
 	afterApply                func(e *storeEngine)
 	reloadAnswer              *map[string]any
@@ -101,12 +104,15 @@ func dataNode(node string) bool {
 // otherwise.
 const storeNode = "acme-data-0"
 
-// down reports whether r is a request configDown or secretsDown makes the
-// engine refuse: a read of the fleet's document, or a write to the store, one
-// name's or a batch's.
+// down reports whether r is a request configDown, secretsDown or reloadDown
+// makes the engine refuse: a read of the fleet's document, a write to the
+// store, one name's or a batch's, or a reload of the fleet's revision.
 func (e *storeEngine) down(r *http.Request) bool {
 	if r.Method == http.MethodGet {
 		return r.URL.Path == configRoute && e.configDown
+	}
+	if r.URL.Path == reloadRoute {
+		return e.reloadDown
 	}
 	return (r.URL.Path == secretsRoute || strings.HasPrefix(r.URL.Path, secretsRoute+"/")) && e.secretsDown
 }
@@ -143,7 +149,7 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 	defer e.mu.Unlock()
 	body, _ := io.ReadAll(r.Body)
 	answer := func(status int, v any) { answerJSON(w, status, v) }
-	if r.Method == http.MethodPost && r.URL.Path == "/config/reload" && e.beforeReload != nil {
+	if r.Method == http.MethodPost && r.URL.Path == reloadRoute && e.beforeReload != nil {
 		hook := e.beforeReload
 		e.beforeReload = nil
 		hook(e)
@@ -186,7 +192,7 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 			hook(e)
 		}
 		activated(applied)
-	case r.Method == http.MethodPost && r.URL.Path == "/config/reload":
+	case r.Method == http.MethodPost && r.URL.Path == reloadRoute:
 		reloaded := activate(active.document)
 		if e.afterReload != nil {
 			hook := e.afterReload
@@ -423,11 +429,13 @@ func (e *storeEngine) activateOther(document []byte) {
 	})
 }
 
-// configRoute is the engine's route of the company document, fleetRoute that
-// of its fleet, secretsRoute that of its secret store, and dataRole and
-// seatsRole the roles of a data pod's node and a seat pod's there.
+// configRoute is the engine's route of the company document, reloadRoute the
+// one that activates it again, fleetRoute that of its fleet, secretsRoute
+// that of its secret store, and dataRole and seatsRole the roles of a data
+// pod's node and a seat pod's there.
 const (
 	configRoute  = "/config"
+	reloadRoute  = "/config/reload"
 	fleetRoute   = "/fleet"
 	secretsRoute = "/secrets"
 	dataRole     = "data"
@@ -1251,5 +1259,42 @@ func TestAReactivationByTheEngineNamesTheRequestThatMadeIt(t *testing.T) {
 				t.Errorf("events %q, want Reactivated by %s", recorder.actions, action)
 			}
 		})
+	}
+}
+
+// TestARefusedDocumentComesBackWhenItsWithdrawalReportSays holds a document
+// the engine refused, after which the activation owed could not be made, to
+// the retry the SecretWithdrawalFailed event promises: here the engine's own
+// two seconds. It came back ten seconds on whatever the event said, and a
+// revision the engine cannot open, which the event says is looked at again
+// at the resync interval, ten seconds on as well.
+func TestARefusedDocumentComesBackWhenItsWithdrawalReportSays(t *testing.T) {
+	ctx := context.Background()
+	w := newWithdrawal(t, runningLetsGo)
+	// r1 lets the registry go, and an earlier sync withdrew it: an
+	// activation without it is owed.
+	read := w.resolve(t)
+	read.Keep("r1", w.registry)
+	ref := types.NamespacedName{Namespace: w.run.company.Namespace, Name: secretSyncStateName(w.run.company)}
+	owed, _, err := secretsync.Sync(ctx, w.client, read, w.state(t), operatorLogin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := secretsync.SaveState(ctx, w.cluster, ref, w.run.company, owed); err != nil {
+		t.Fatal(err)
+	}
+	// The dry run is refused, and the activation owed then meets an engine
+	// that cannot say who is asking, for two seconds.
+	w.engine.refuse = true
+	w.engine.reloadDown = true
+	result, err := w.run.converge(ctx, w.client)
+	if err != nil {
+		t.Fatalf("converge() = %v, want the refusal reported", err)
+	}
+	recorded := drained(w.events)
+	i := slices.IndexFunc(recorded, func(e string) bool { return strings.HasPrefix(e, "Warning SecretWithdrawalFailed ") })
+	if i < 0 || !strings.Contains(recorded[i], "tries again in 2s") || result.RequeueAfter != 2*time.Second {
+		t.Errorf("the next look is %s on and events %q; want SecretWithdrawalFailed promising 2s, and 2s",
+			result.RequeueAfter, recorded)
 	}
 }

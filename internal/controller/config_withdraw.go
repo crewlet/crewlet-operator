@@ -8,6 +8,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -359,37 +360,34 @@ func (run *configRun) retainedSentence() string {
 // sync, nil to read it; reload is the engine's own re-activation at the
 // sync's removals (secretsync.Result.Reload), which reactivate takes for the
 // activation where it landed. Its error is the API server's; an activation
-// that failed is reported (withdrawalFailed), and failed says so, for the
-// reconcile to come back engineRetryInterval later.
+// that failed is reported (withdrawalFailed), and retry is when that report
+// says the operator tries again, zero where nothing failed.
 func (run *configRun) settle(
 	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, reload *engine.Reload, reloadAction string,
 	state secretsync.State, ref types.NamespacedName,
-) (failed bool, err error) {
+) (retry time.Duration, err error) {
 	if len(state.Withdrawn()) == 0 {
-		return false, nil
+		return 0, nil
 	}
 	next, reactivateErr := run.reactivate(ctx, eng, active, reload, reloadAction, state)
 	if err := secretsync.SaveState(ctx, run.Client, ref, run.company, next); err != nil {
-		return false, err
+		return 0, err
 	}
 	if reactivateErr != nil {
-		run.withdrawalFailed(ctx, reactivateErr)
-		return true, nil
+		return run.withdrawalFailed(ctx, reactivateErr).RequeueAfter, nil
 	}
-	return false, nil
+	return 0, nil
 }
 
 // settleRefused is settle for a document the engine refused, as the
-// reconcile ends there.
+// reconcile ends there: it comes back when the report of an activation that
+// failed says it does, and otherwise when an object changes.
 func (run *configRun) settleRefused(
 	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, reload *engine.Reload, reloadAction string,
 	state secretsync.State, ref types.NamespacedName,
 ) (ctrl.Result, error) {
-	failed, err := run.settle(ctx, eng, active, reload, reloadAction, state, ref)
-	if failed {
-		return ctrl.Result{RequeueAfter: engineRetryInterval}, err
-	}
-	return run.heldResync(ctrl.Result{}), err
+	retry, err := run.settle(ctx, eng, active, reload, reloadAction, state, ref)
+	return run.heldResync(ctrl.Result{RequeueAfter: retry}), err
 }
 
 // withdrawalFailed reports err, which kept the engine from reading its store
