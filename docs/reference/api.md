@@ -485,8 +485,8 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | enabled runs the assistant. Unset or false leaves it off. Crewlet's<br />`enabled`. |  | Optional: \{\} <br /> |
 | `llm` _[LLMProviderReference](#llmproviderreference) array_ | llm is the assistant's model chain, the first provider tried first,<br />referred to as a Seat's chain is. Required when enabled is true.<br />Crewlet's `llm`. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
-| `maxSteps` _integer_ | maxSteps is the most tool steps one turn may take. Unset takes<br />Crewlet's default of 8. Crewlet's `max_steps`. |  | Maximum: 16 <br />Minimum: 1 <br />Optional: \{\} <br /> |
-| `turnTimeoutSeconds` _integer_ | turnTimeoutSeconds is the longest one turn may run. Unset takes<br />Crewlet's default of 120. Crewlet's `turn_timeout_seconds`. |  | Maximum: 600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
+| `maxSteps` _integer_ | maxSteps is the most tool steps one turn may take. Unset takes<br />Crewlet's default of 30. Crewlet's `max_steps`. |  | Maximum: 40 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `turnTimeoutSeconds` _integer_ | turnTimeoutSeconds is the longest one turn may run. Unset takes<br />Crewlet's default of 900. Crewlet's `turn_timeout_seconds`. |  | Maximum: 1200 <br />Minimum: 30 <br />Optional: \{\} <br /> |
 | `proposalTTLSeconds` _integer_ | proposalTTLSeconds is how long a proposed change waits for its<br />owner's approval. Unset takes Crewlet's default of 900. Crewlet's<br />`proposal_ttl_seconds`. |  | Maximum: 3600 <br />Minimum: 60 <br />Optional: \{\} <br /> |
 | `retentionDays` _integer_ | retentionDays is how long a person's conversations are kept. Unset<br />takes Crewlet's default of 30. Crewlet's `retention_days`. |  | Maximum: 365 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens each person's assistant may spend per<br />window, charged on top of the company's own spec.tokenBudget.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |

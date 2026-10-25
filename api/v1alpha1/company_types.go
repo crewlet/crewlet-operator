@@ -196,17 +196,17 @@ type CompanyAssistant struct {
 	LLM []LLMProviderReference `json:"llm,omitempty"`
 
 	// maxSteps is the most tool steps one turn may take. Unset takes
-	// Crewlet's default of 8. Crewlet's `max_steps`.
+	// Crewlet's default of 30. Crewlet's `max_steps`.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=16
+	// +kubebuilder:validation:Maximum=40
 	MaxSteps int32 `json:"maxSteps,omitempty"`
 
 	// turnTimeoutSeconds is the longest one turn may run. Unset takes
-	// Crewlet's default of 120. Crewlet's `turn_timeout_seconds`.
+	// Crewlet's default of 900. Crewlet's `turn_timeout_seconds`.
 	// +optional
 	// +kubebuilder:validation:Minimum=30
-	// +kubebuilder:validation:Maximum=600
+	// +kubebuilder:validation:Maximum=1200
 	TurnTimeoutSeconds int32 `json:"turnTimeoutSeconds,omitempty"`
 
 	// proposalTTLSeconds is how long a proposed change waits for its

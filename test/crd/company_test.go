@@ -666,7 +666,7 @@ func TestCompanyAssistantValidation(t *testing.T) {
 		{
 			name: "every bound at its edge is accepted",
 			mutate: assistant(func(a *v1.CompanyAssistant) {
-				a.MaxSteps, a.TurnTimeoutSeconds, a.ProposalTTLSeconds, a.RetentionDays = 16, 30, 3600, 1
+				a.MaxSteps, a.TurnTimeoutSeconds, a.ProposalTTLSeconds, a.RetentionDays = 40, 30, 3600, 1
 				a.TokenBudget = v1.TokenBudget{Day: 200000}
 			}),
 		},
@@ -691,8 +691,8 @@ func TestCompanyAssistantValidation(t *testing.T) {
 		over  int32
 		under int32
 	}{
-		{"maxSteps", func(a *v1.CompanyAssistant, v int32) { a.MaxSteps = v }, 17, -1},
-		{"turnTimeoutSeconds", func(a *v1.CompanyAssistant, v int32) { a.TurnTimeoutSeconds = v }, 601, 29},
+		{"maxSteps", func(a *v1.CompanyAssistant, v int32) { a.MaxSteps = v }, 41, -1},
+		{"turnTimeoutSeconds", func(a *v1.CompanyAssistant, v int32) { a.TurnTimeoutSeconds = v }, 1201, 29},
 		{"proposalTTLSeconds", func(a *v1.CompanyAssistant, v int32) { a.ProposalTTLSeconds = v }, 3601, 59},
 		{"retentionDays", func(a *v1.CompanyAssistant, v int32) { a.RetentionDays = v }, 366, -1},
 	} {

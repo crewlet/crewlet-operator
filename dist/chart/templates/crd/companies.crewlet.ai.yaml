@@ -121,9 +121,9 @@ spec:
                   maxSteps:
                     description: |-
                       maxSteps is the most tool steps one turn may take. Unset takes
-                      Crewlet's default of 8. Crewlet's `max_steps`.
+                      Crewlet's default of 30. Crewlet's `max_steps`.
                     format: int32
-                    maximum: 16
+                    maximum: 40
                     minimum: 1
                     type: integer
                   proposalTTLSeconds:
@@ -172,9 +172,9 @@ spec:
                   turnTimeoutSeconds:
                     description: |-
                       turnTimeoutSeconds is the longest one turn may run. Unset takes
-                      Crewlet's default of 120. Crewlet's `turn_timeout_seconds`.
+                      Crewlet's default of 900. Crewlet's `turn_timeout_seconds`.
                     format: int32
-                    maximum: 600
+                    maximum: 1200
                     minimum: 30
                     type: integer
                 type: object
