@@ -207,6 +207,12 @@ const (
 	exposureMd         = "docs/guides/exposure.md"
 	companyTypesGo     = "api/v1alpha1/company_types.go"
 	companyExposureGo  = "internal/controller/company_exposure.go"
+
+	// brandKindRead is the engine that adds the brand kind
+	// (crewlet/crewlet#328), which the dashboard renders natively, so the
+	// kinds framed from the artifact origin are still HTML pages and designs
+	// alone.
+	brandKindRead = "v0.1.1-0.20261025061312-a6fd4b115be7"
 )
 
 // artifactOriginCopies is every operator file that copies which artifact
@@ -466,8 +472,8 @@ var mirrored = []mirror{
 		file: "internal/artifacts/kind.go", name: "kindSpecs",
 		against: framedKinds,
 		decides: "HTML pages and designs are the kinds framed from the artifact origin",
-		digest:  "0ee79203c1ad48ff3c0bd97cc629209bb284ca1f514193c4c432740640544994",
-		read:    artifactOriginRead,
+		digest:  "3ce61727d1fefd666a7f64890b74d4df9ba8fe6ae404ab9b6fa919e68764ef24",
+		read:    brandKindRead,
 	},
 	{
 		file: sandboxGo, name: "(*launcher).Launch",
