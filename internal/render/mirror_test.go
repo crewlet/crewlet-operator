@@ -104,6 +104,13 @@ const (
 	// in. Launch and LaunchExecutor hand the box the run's model in place of
 	// an API entry's endpoint, which moved no verdict.
 	cliOnlyRead = "v0.1.1-0.20261023214803-bbedf7ecebd7"
+	// standingInstructionsRead is the engine that hands an agent-mode run the
+	// seat's system prompt as its standing instructions, on the coding
+	// agent's append channel, apart from the brief, and names the run by the
+	// turn's task (LaunchExecutor's System and Label). Neither is a verdict:
+	// the refusals before a box exists and the sign-in that must reach it are
+	// as at cliOnlyRead.
+	standingInstructionsRead = "v0.1.1-0.20261025040052-a17db07de8ec"
 	// refusalByModeRead is the engine whose remote-run refusal is worded by
 	// the entry's auth mode (credentialRefusal): an api-key entry whose key
 	// resolved to nothing is told to give the seat its own key, and an
@@ -676,8 +683,8 @@ var mirrored = []mirror{
 			"tool loop (AgentModeBridgeUnsupported, NotExposed), and so is one whose CLI login cannot follow it " +
 			"into the remote sandbox (sandboxCredentials at phase Execute); a run whose environment holds a " +
 			"value that resolves to nothing starts without it",
-		digest: "16bcaa9a0ff723f20fabf196c3fe44a067e2a780bd085c1d9666d4eec01b2360",
-		read:   cliOnlyRead,
+		digest: "05cd682090e7206bb923b20f179e3a2044d9ac2046258efb8ed921f186641032",
+		read:   standingInstructionsRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).executorRun",
