@@ -129,7 +129,7 @@ const probePeriodSeconds = 5
 // period short of threshold periods. So the threshold covers the window with
 // threshold-1 periods, rounded up. A threshold of the window over the period
 // truncated, as it was, cut a window that is no multiple of the period (a
-// class's startupSeconds of 1677, the 1772 seconds a 16Gi volume derives) by
+// class's startupSeconds of 1657, the 1752 seconds a 16Gi volume derives) by
 // up to four seconds more on top of that period.
 func startupFailureThreshold(seconds int32) int32 {
 	return (seconds+probePeriodSeconds-1)/probePeriodSeconds + 1
@@ -159,9 +159,6 @@ const (
 	//     (seatPodBootSeconds);
 	//   - 40: four registrations of what the node answers (flushBudget);
 	//   - 40: its admission, a write and seven reads at 5 s (admit);
-	//   - 20: a listing of the company's secrets to move onto them the rows
-	//     an offline `crewlet secrets set` left in the node's store
-	//     (migrateSecrets), only when there are such rows;
 	//   - 20: the listing of the company's secrets (refreshSecrets): the key
 	//     index and the watch, a 5 s idle pass and the 5 s delete of the
 	//     watch's consumer;
@@ -185,12 +182,11 @@ const (
 	// grows with what the company holds is not counted, as its recovery is
 	// not: 5 s for each secret its store holds (10 for one deleted in the
 	// last three hours), which each listing of them may read back one at a
-	// time, 10 s for each row an offline `crewlet secrets set` left, 15 s
-	// for each batch of a seat pod's events a crash left unsettled, which
-	// the custody keeper claims before it attaches, and 10 s for each CLI
-	// whose credential bundle is restored, behind a lock a `crewlet llm`
-	// command in the container may hold.
-	dataPodBootSeconds = 60 + 30 + 60 + 120 + 60 + 120 + 90 + 40 + 40 + 20 + 20 + 10 + 100 + 10 + 35 + 120 + 500 + 10 + 130 + 1
+	// time, 15 s for each batch of a seat pod's events a crash left
+	// unsettled, which the custody keeper claims before it attaches, and
+	// 10 s for each CLI whose credential bundle is restored, behind a lock a
+	// `crewlet llm` command in the container may hold.
+	dataPodBootSeconds = 60 + 30 + 60 + 120 + 60 + 120 + 90 + 40 + 40 + 20 + 10 + 100 + 10 + 35 + 120 + 500 + 10 + 130 + 1
 	// dataPodNATSObjectsSeconds is the object store's step on the default
 	// backend: the broker's limit read (LookupBudget, 30 s), then the bucket
 	// looked up (30 s), created (30 s, soloBudget), read back and bound
