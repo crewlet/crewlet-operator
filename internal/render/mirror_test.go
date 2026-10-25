@@ -189,6 +189,11 @@ const (
 	// pod's boot the controller adds up was read at.
 	bootBoundsRead = "v0.1.1-0.20261019181514-fb36f0c31127"
 
+	// stateLogRefusalRead is the engine whose startStateLog names Worklet
+	// and Doclet in its refusal of a broker that cannot host a state log,
+	// with the bounds on its boot as bootBoundsRead read them.
+	stateLogRefusalRead = "v0.1.1-0.20261025080950-dc0cc0490137"
+
 	// The engine files most of the bounds on a boot are read from, and the
 	// guide that quotes the windows they add up to.
 	jsprovisionGo     = "internal/jsprovision/jsprovision.go"
@@ -1158,8 +1163,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the state logs read their ceilings, are provisioned under one sequence ceiling, joined, and " +
 			"started under another",
-		digest: "5bd1540643c33476574c5f5f4848762e11da1258456ed969852567ad77c56777",
-		read:   bootBoundsRead,
+		digest: "f6d39ea1fb388225fd11dd05e22b4576bd0d95725c362d77e274cf63b638f6dd",
+		read:   stateLogRefusalRead,
 	},
 	{
 		file: stateLogGo, name: "(*stateLog).provisionAll",
