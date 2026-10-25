@@ -221,20 +221,35 @@ type LLMProviderSettings struct {
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="model may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Model string `json:"model,omitempty"`
 
-	// timeoutSeconds caps one invocation of the CLI, wall clock: its
-	// launch, the model's answer and the CLI's own retries. Unset takes
-	// Crewlet's default of 600, the ceiling Anthropic documents for one
-	// answer of a current Claude model at its full output. A timeout is
-	// retryable, so a seat's chain moves on to its next provider. Crewlet's
-	// `timeout_seconds`.
+	// timeoutSeconds bounds one stretch of the CLI's model work, wall clock,
+	// with no call of a seat's tool in flight: from the CLI's launch, or the
+	// answer to its last tool call, to its next tool call or its end, the
+	// model's answer and the CLI's own retries in it. It is not a bound on
+	// a run of the CLI, which asks the model many times and calls the
+	// seat's tools between: a tool call stops the clock however long it
+	// takes (a delegation, a slow tool server), and the next stretch starts
+	// afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic
+	// documents for one answer of a current Claude model at its full
+	// output. A timeout is retryable, so a seat's chain moves on to its
+	// next provider. It bounds the CLI where it runs in the engine's pod;
+	// a Box-mode executor's run in the sandbox is not bounded by it.
+	// Crewlet's `timeout_seconds`.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
 
-	// maxConcurrent is how many CLI processes the provider runs at once;
-	// each takes 200 to 450 MB of the engine pod's memory, OpenCode's at the
-	// top of that range (docs/guides/cli-agents.md). Unset takes
-	// Crewlet's default of 4. Crewlet's `max_concurrent`.
+	// maxConcurrent is how many of the provider's CLI processes run at once
+	// in each engine pod; each takes 200 to 450 MB of the pod's memory,
+	// OpenCode's at the top of that range (docs/guides/cli-agents.md). One
+	// process lives for a whole run of the CLI, many model requests and
+	// tool calls long, and holds its place for all of it, so this is also
+	// how many seats' runs the provider has going at once in a pod: a run
+	// past it waits for a place. A model call made on the same provider
+	// from inside one of a run's tool calls (a delegated worker's) borrows
+	// the run's place rather than wait for another, which the runs holding
+	// every place could leave it waiting for forever. Unset takes
+	// Crewlet's default of 4. A Box-mode executor's run, in the sandbox,
+	// takes none. Crewlet's `max_concurrent`.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=64

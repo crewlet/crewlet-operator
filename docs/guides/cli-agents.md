@@ -36,16 +36,19 @@ engine gives each seat and under `/tmp`, both writable, and the engine keeps
 the socket each host-mode run reaches the seat's tools through in a directory
 of its own under `/tmp` ([Host mode and box mode](#host-mode-and-box-mode)).
 Each running CLI takes 200 to 450 MB, so size the class's `data.resources`
-for `maxConcurrent` of them per provider. An OpenCode call is at the top of
-that range: measured on OpenCode 2.0.32, one call held about 440 MB at its
-peak, some 365 MB of it the private server every call starts, and each call
-running beside it about 250 to 350 MB more, the binary's pages being shared
-between them; a short `opencode api session.get` reading a call's usage
-follows each. OpenCode also unpacks about 19 MB of native libraries into
-each seat's home, under the `TMPDIR` the engine gives it (`<home>/tmp`),
-beside a database of about 7 MB while a seat's calls run: about 26 MB per
-OpenCode seat on the data volume, and on a seat pod's scratch volume
-(`scratchSizeLimit`) for each seat the pod holds.
+for `maxConcurrent` of them per provider; one now lives for a seat's whole
+run, its tool calls included, so where seats wait on each other for a place,
+raise `maxConcurrent` and the pod's memory together
+([Host mode and box mode](#host-mode-and-box-mode)). An OpenCode call is at
+the top of that range: measured on OpenCode 2.0.32, one call held about 440
+MB at its peak, some 365 MB of it the private server every call starts, and
+each call running beside it about 250 to 350 MB more, the binary's pages
+being shared between them; a short `opencode api session.get` reading a
+call's usage follows each. OpenCode also unpacks about 19 MB of native
+libraries into each seat's home, under the `TMPDIR` the engine gives it
+(`<home>/tmp`), beside a database of about 7 MB while a seat's calls run:
+about 26 MB per OpenCode seat on the data volume, and on a seat pod's
+scratch volume (`scratchSizeLimit`) for each seat the pod holds.
 
 ### Claude Code
 
@@ -511,6 +514,26 @@ reports. Everywhere else, in every other phase on the same provider (the
 reviewer, a delegated worker, the summariser) and behind another provider at
 the head of the executor's chain, the provider runs as in host mode, so the
 CLI must be in the engine's image either way.
+
+Two fields bound a provider's CLI in the engine's pod, and since a run of the
+CLI now asks the model many times and calls the seat's tools in between,
+neither is a bound on one request:
+
+- `timeoutSeconds` bounds one stretch of the CLI's model work with no tool
+  call in flight, from its launch or the answer to its last tool call to its
+  next call or its end (600 seconds unset). A tool call stops the clock,
+  however long a delegation or a slow tool server takes, and the next
+  stretch starts afresh. A stretch past it ends the run with a timeout,
+  which is retryable: a seat's chain moves on to its next provider.
+- `maxConcurrent` bounds the provider's live CLI processes in each pod (4
+  unset). One process lives for a whole run and holds its place through the
+  run's tool calls, so it is also how many seats' runs the provider has going
+  at once in the pod, and a run past it waits. A model call made on the same
+  provider from inside a run's tool call, such as a delegated worker's,
+  borrows that run's place: waiting for one of its own could leave every
+  place held by runs that are each waiting on such a call.
+
+A box-mode executor's run, in the sandbox, is bounded by neither.
 
 ```mermaid
 flowchart LR
