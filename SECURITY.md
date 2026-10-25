@@ -69,7 +69,7 @@ breaks one of them is a vulnerability and should be reported as above.
   vendors' webhooks under `/webhooks/`, each verified by the vendor's
   signature or shared token, and a remote sandbox's telemetry (`/otlp/`,
   while the class sends telemetry to a collector) and tool bridge (`/mcp/`,
-  while an `LLMProvider` of the company runs a coding CLI in `mode: Agent`),
+  while an `LLMProvider` of the company runs a coding CLI in `mode: Box`),
   each call carrying a token the engine signed for that one run. It answers
   every other path, the admin API and the probes included, as one nothing
   serves. The engine's API, dashboard, configuration, secrets and setup

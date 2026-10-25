@@ -1501,7 +1501,7 @@ var _ = Describe("Company config", Ordered, func() {
 				{Name: poolIsolated, Mode: crewletaiv1alpha1.SeatPoolPerSeat},
 			}
 			// The seats with no chain of their own run on the provider
-			// that reaches no model, never on the agent-mode CLI below.
+			// that reaches no model, never on the box-mode CLI below.
 			c.Spec.LLM.Order = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-llm"}}
 			g.Expect(k8sClient.Update(ctx, c)).To(Succeed())
 		}).WithTimeout(settle).Should(Succeed())
@@ -1512,18 +1512,18 @@ var _ = Describe("Company config", Ordered, func() {
 		alone := newSeat(namespace, name, "alone", placed(poolIsolated))
 		lost := newSeat(namespace, name, "lost", placed(nowhere))
 		Expect(k8sClient.Create(ctx, &crewletaiv1alpha1.LLMProvider{
-			Namespace: namespace, Name: name + "-agent",
+			Namespace: namespace, Name: name + "-box",
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
 				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
 					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
 				},
-				Mode: crewletaiv1alpha1.CLIAgentModeAgent,
+				Mode: crewletaiv1alpha1.CLIAgentModeBox,
 				Auth: crewletaiv1alpha1.CLIAgentAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
 			},
 		})).To(Succeed())
 		bridged := newSeat(namespace, name, "bridged", placed(poolGeneral), func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-agent"}}
+			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-box"}}
 		})
 		standIn(c)
 
@@ -1537,10 +1537,10 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(conditionOf(alone, crewletaiv1alpha1.ConditionApplied)(Default).Message).To(ContainSubstring("spec.seatPools.allowPerSeat"))
 		Expect(conditionOf(alone, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue))
 
-		By("reporting the seat whose executor runs a CLI in agent mode on a seat pod, which serves no tool bridge, on its Ready alone")
+		By("reporting the seat whose executor runs a CLI in box mode on a seat pod, which serves no tool bridge, on its Ready alone")
 		Eventually(reasonOf(bridged, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported))
-		Expect(conditionOf(bridged, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring("LLMProvider " + name + "-agent, a CLI in mode Agent"))
+			Should(Equal(crewletaiv1alpha1.ReasonBoxModeBridgeUnsupported))
+		Expect(conditionOf(bridged, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring("LLMProvider " + name + "-box, a CLI in mode Box"))
 		Expect(conditionOf(bridged, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue))
 		Eventually(reasonOf(bridged, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonBlocked),
 			"the seat holds nothing: the other seats' refusals hold the document")
@@ -1586,7 +1586,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(log.of(lost.Name)).To(ConsistOf(HavePrefix("Warning " + crewletaiv1alpha1.ReasonPoolNotFound)))
 	})
 
-	It("applies a seat whose agent-mode executor cannot run, and reports it on the Seat and the LLMProvider", func() {
+	It("applies a seat whose box-mode executor cannot run, and reports it on the Seat and the LLMProvider", func() {
 		const name = "bridge"
 		e := startEngine(name)
 		secret(name+"-llm", map[string]string{llmKey: "k"})
@@ -1604,29 +1604,29 @@ var _ = Describe("Company config", Ordered, func() {
 			c.Spec.EngineClassName = pools.Name
 			c.Spec.Topology.SeatPools = []crewletaiv1alpha1.SeatPool{{Name: poolGeneral, Mode: crewletaiv1alpha1.SeatPoolShared}}
 			c.Spec.LLM.Order = []crewletaiv1alpha1.LLMProviderReference{{Name: name + "-llm"}}
-			// An agent-mode run happens in the company's sandbox.
+			// A box-mode run happens in the company's sandbox.
 			c.Spec.Sandbox = crewletaiv1alpha1.SandboxSettings{E2B: crewletaiv1alpha1.E2BSandbox{
 				APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-e2b", Key: llmKey},
 			}}
 		})
-		agent := &crewletaiv1alpha1.LLMProvider{
-			Namespace: namespace, Name: name + "-agent",
+		box := &crewletaiv1alpha1.LLMProvider{
+			Namespace: namespace, Name: name + "-box",
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
 				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
 					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
 				},
-				Mode: crewletaiv1alpha1.CLIAgentModeAgent,
+				Mode: crewletaiv1alpha1.CLIAgentModeBox,
 				Auth: crewletaiv1alpha1.CLIAgentAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
 			},
 		}
-		Expect(k8sClient.Create(ctx, agent)).To(Succeed())
-		onAgent := func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: agent.Name}}
+		Expect(k8sClient.Create(ctx, box)).To(Succeed())
+		onBox := func(s *crewletaiv1alpha1.Seat) {
+			s.Spec.LLM.Default = []crewletaiv1alpha1.LLMProviderReference{{Name: box.Name}}
 		}
-		coder := newSeat(namespace, name, "coder", onAgent)
+		coder := newSeat(namespace, name, "coder", onBox)
 
-		By("applying the company with no public address, which every agent-mode run calls its seat's tools back through")
+		By("applying the company with no public address, which every box-mode run calls its seat's tools back through")
 		standInAt(c, "")
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		active := runsRendered(e, c)
@@ -1634,42 +1634,42 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(reasonOf(coder, crewletaiv1alpha1.ConditionApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonInRevision))
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonNotExposed))
 		Expect(conditionOf(coder, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring("has no public address"))
-		Eventually(reasonOf(agent, crewletaiv1alpha1.ConditionAgentModeRunnable)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonNotExposed))
-		Expect(conditionOf(agent, crewletaiv1alpha1.ConditionAgentModeRunnable)(Default).Status).To(Equal(metav1.ConditionFalse))
-		Expect(reasonOf(agent, crewletaiv1alpha1.ConditionResolvedRefs)(Default)).To(Equal(crewletaiv1alpha1.ReasonResolved))
-		Expect(reasonOf(agent, crewletaiv1alpha1.ConditionApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonInRevision))
+		Eventually(reasonOf(box, crewletaiv1alpha1.ConditionBoxModeRunnable)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonNotExposed))
+		Expect(conditionOf(box, crewletaiv1alpha1.ConditionBoxModeRunnable)(Default).Status).To(Equal(metav1.ConditionFalse))
+		Expect(reasonOf(box, crewletaiv1alpha1.ConditionResolvedRefs)(Default)).To(Equal(crewletaiv1alpha1.ReasonResolved))
+		Expect(reasonOf(box, crewletaiv1alpha1.ConditionApplied)(Default)).To(Equal(crewletaiv1alpha1.ReasonInRevision))
 		Expect(reasonOf(seat(name+"-ana"), crewletaiv1alpha1.ConditionReady)(Default)).
-			To(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced), "a seat on the text provider is not affected")
+			To(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced), "a seat on the host-mode provider is not affected")
 		Expect(log.of(coder.Name)).To(ContainElement(HavePrefix("Warning " + crewletaiv1alpha1.ReasonNotExposed)))
-		Expect(log.of(agent.Name)).To(ContainElement(HavePrefix("Warning " + crewletaiv1alpha1.ReasonNotExposed)))
+		Expect(log.of(box.Name)).To(ContainElement(HavePrefix("Warning " + crewletaiv1alpha1.ReasonNotExposed)))
 
-		By("adding a seat on the agent-mode provider in a seat pool, whose pods serve no tool bridge")
-		bridged := newSeat(namespace, name, "bridged", onAgent, func(s *crewletaiv1alpha1.Seat) {
+		By("adding a seat on the box-mode provider in a seat pool, whose pods serve no tool bridge")
+		bridged := newSeat(namespace, name, "bridged", onBox, func(s *crewletaiv1alpha1.Seat) {
 			s.Spec.Placement = crewletaiv1alpha1.SeatPlacement{Pool: poolGeneral}
 		})
 		Eventually(reasonOf(bridged, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
 		Eventually(reasonOf(bridged, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported))
+			Should(Equal(crewletaiv1alpha1.ReasonBoxModeBridgeUnsupported))
 		Expect(conditionOf(bridged, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring("seat pool " + poolGeneral))
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)
-		Expect(log.of(bridged.Name)).To(ConsistOf(HavePrefix("Warning " + crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported)))
+		Expect(log.of(bridged.Name)).To(ConsistOf(HavePrefix("Warning " + crewletaiv1alpha1.ReasonBoxModeBridgeUnsupported)))
 
 		By("giving the company a public address")
 		standInAt(c, baseURL)
-		Eventually(reasonOf(agent, crewletaiv1alpha1.ConditionAgentModeRunnable)).WithTimeout(settle).
+		Eventually(reasonOf(box, crewletaiv1alpha1.ConditionBoxModeRunnable)).WithTimeout(settle).
 			Should(Equal(crewletaiv1alpha1.ReasonToolBridgeServed))
-		Expect(conditionOf(agent, crewletaiv1alpha1.ConditionAgentModeRunnable)(Default).Message).To(ContainSubstring(baseURL + "/mcp/"))
+		Expect(conditionOf(box, crewletaiv1alpha1.ConditionBoxModeRunnable)(Default).Message).To(ContainSubstring(baseURL + "/mcp/"))
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
 			Should(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced))
-		Expect(reasonOf(bridged, crewletaiv1alpha1.ConditionReady)(Default)).To(Equal(crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported),
+		Expect(reasonOf(bridged, crewletaiv1alpha1.ConditionReady)(Default)).To(Equal(crewletaiv1alpha1.ReasonBoxModeBridgeUnsupported),
 			"a public address reaches the data pods alone")
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)
 		Expect(log.of(bridged.Name)).To(HaveLen(1), "the seat that stayed unrunnable is announced once")
 		Expect(log.of(coder.Name)).To(ConsistOf(HavePrefix("Warning "+crewletaiv1alpha1.ReasonNotExposed)),
 			"the seat is announced once, however many reconciles found it unrunnable")
-		Expect(log.of(agent.Name)).To(ConsistOf(HavePrefix("Warning "+crewletaiv1alpha1.ReasonNotExposed)),
+		Expect(log.of(box.Name)).To(ConsistOf(HavePrefix("Warning "+crewletaiv1alpha1.ReasonNotExposed)),
 			"the provider is announced once, however many reconciles found it unrunnable")
 	})
 

@@ -206,7 +206,7 @@ read. Those files are the renderer's; for the addresses, also the Company
 and EngineClass API types whose rules refuse them, the controller's message
 on a Company held back for one, and the [exposure](docs/guides/exposure.md)
 and [troubleshooting](docs/guides/troubleshooting.md) guides that state
-them; and, for how an agent-mode run's CLI signs in inside the remote
+them; and, for how a box-mode run's CLI signs in inside the remote
 sandbox, also the LLMProvider API's rule on a CLI of mode `Agent`, the
 [CLI agents guide](docs/guides/cli-agents.md) that states it and `test/crd`'s
 reading of the engine's verdicts on it, and, for what a coding box carries of
@@ -284,17 +284,17 @@ is applied and reported (`Reported`). So when you add a finding to
   object that cannot do its job because of it: `ResolvedRefs=False` when a
   reference names what is not there, `Ready=False` when the object cannot do
   its job at all, and a condition of its own when only part of it fails
-  (`CodeWorkRunnable`, `AgentModeRunnable`), with a Warning event when it
+  (`CodeWorkRunnable`, `BoxModeRunnable`), with a Warning event when it
   turns so.
 
 The verdicts on a seat that the engine applies and refuses only at run time
 are statements about the spec beside the render (`CodeWorkOf`, `ExecutorOf`,
-`AgentModeOf`), never findings. `ExecutorOf` and `AgentModeOf` mirror where
-the engine builds its tool bridge and refuses an agent-mode turn without
+`BoxModeOf`), never findings. `ExecutorOf` and `BoxModeOf` mirror where
+the engine builds its tool bridge and refuses a box-mode turn without
 one; `TestExecutorFollowsTheEngineSource` holds the variable the operator
-sets to the engine's, and `TestContractAgentModeIsAppliedWhereItCannotRun`
+sets to the engine's, and `TestContractBoxModeIsAppliedWhereItCannotRun`
 holds the documents to the engine, and `TestMirroredEngineDeclarationsAreUnchanged`
-holds the code that runs a turn in agent mode and refuses it on a node with no
+holds the code that runs a turn in box mode and refuses it on a node with no
 tool bridge (`executorRuntime`, `executorRun` and `LaunchExecutor` in Crewlet's
 `internal/engine/agentrun.go`, `Build` in `internal/api/mcpbridge/build.go`)
 to the code `internal/render/executor.go` and the head of a seat's executor

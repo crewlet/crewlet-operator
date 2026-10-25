@@ -798,7 +798,7 @@ type NetworkPolicySettings struct {
 	// cluster except the cloud metadata endpoints (169.254.169.254,
 	// fd00:ec2::254), which hand out the node's credentials. What else is in
 	// the cluster is unreachable only if listed in exceptCIDRs. A seat's
-	// code work and an agent-mode executor's run, the sandbox's setup
+	// code work and a box-mode executor's run, the sandbox's setup
 	// commands included, run in the Company's E2B sandbox, which this policy
 	// does not reach.
 	// +optional
@@ -979,7 +979,7 @@ type EnginePodTemplate struct {
 // model provider's key from that provider's own variable, the key in env. A
 // subscription's headless token or login is one account's, which every tenant
 // of the class would share: it belongs on a tenant's own LLMProvider. It runs
-// in mode Text, as a model behind the engine's own tool loop, and keeps its
+// in mode Host, in the engine's pod that holds each seat, and keeps its
 // per-seat homes on the data volume under
 // /var/lib/crewlet/llm-cli-platform/<name>, apart from every tenant's
 // loginName. Its rules are an LLMProvider's that apply to such a provider,

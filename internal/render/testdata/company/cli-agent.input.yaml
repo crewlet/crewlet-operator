@@ -1,11 +1,11 @@
 # Coding CLIs as model providers: Claude Code on a subscription's headless
-# token running a seat's executor as its own agentic run in the company's
-# E2B sandbox, beside Codex on an exported login as a text model behind the
-# engine's tool loop, the reviewer's, and Hermes, the delegated workers',
+# token running a seat's executor in mode Box, as a detached run in the
+# company's E2B sandbox, beside Codex on an exported login in mode Host, in
+# the engine's pod, the reviewer's, and Hermes, the delegated workers',
 # signed in with no login of its own: its model provider's key in env,
 # a ${NAME} Crewlet passes to the Hermes process untouched. Pi and OpenCode
 # sign in the same way, and Cursor on a Cursor account's metered key in
-# CURSOR_API_KEY. Agent mode calls the seat's tools back through the
+# CURSOR_API_KEY. Box mode calls the seat's tools back through the
 # company's public address, so the case is exposed.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
@@ -23,13 +23,13 @@ spec:
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
 metadata:
-  name: claude-agent
+  name: claude-box
 spec:
   companyRef:
     name: forge
   agent: ClaudeCode
   model: sonnet
-  mode: Agent
+  mode: Box
   runIn: E2B
   loginName: claude
   timeoutSeconds: 900
@@ -133,7 +133,7 @@ spec:
   goal: Ship the changes the team files.
   llm:
     default:
-      - name: claude-agent
+      - name: claude-box
     review:
       - name: codex
     subagent:

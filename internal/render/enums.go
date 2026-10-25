@@ -193,10 +193,10 @@ func cliAgentName(a v1alpha1.CLIAgentName) string {
 
 func cliAgentMode(m v1alpha1.CLIAgentMode) string {
 	switch m {
-	case v1alpha1.CLIAgentModeText:
-		return "text"
-	case v1alpha1.CLIAgentModeAgent:
-		return "agent"
+	case v1alpha1.CLIAgentModeHost:
+		return "host"
+	case v1alpha1.CLIAgentModeBox:
+		return "box"
 	}
 	return ""
 }

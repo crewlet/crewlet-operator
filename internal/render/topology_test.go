@@ -579,7 +579,7 @@ func TestPerSeatCapacityAdmitsTheRunningSeatsFirst(t *testing.T) {
 func TestAnUndeclaredPoolPinsNoPod(t *testing.T) {
 	const later = "later"
 	in := companyCaseNamed(t, caseSeatPools).input(t)
-	bundled := cliProvider(v1alpha1.CLIAgentModeText)
+	bundled := cliProvider(v1alpha1.CLIAgentModeHost)
 	bundled.Spec.Auth = v1alpha1.CLIAgentAuth{
 		CredentialBundleSecretRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "bundle"},
 	}

@@ -1,13 +1,13 @@
 name: Forge
 providers:
   llm:
-    claude-agent:
+    claude-box:
       agent: claude-code
       auth:
         mode: subscription
         token: ${K8S_CLAUDE_SUBSCRIPTION_OAUTH_TOKEN_5F3I3N4HVTAV}
       max_concurrent: 2
-      mode: agent
+      mode: box
       model: sonnet
       run_in: e2b
       state_dir: /var/lib/crewlet/llm-cli/claude
@@ -50,7 +50,7 @@ providers:
       model: openrouter/anthropic/claude-sonnet-5
       state_dir: /var/lib/crewlet/llm-cli/pi
   llm_order:
-  - claude-agent
+  - claude-box
   - codex
   - cursor
   - hermes
@@ -66,7 +66,7 @@ roles:
   kind: agent
   llm:
     default:
-    - claude-agent
+    - claude-box
     review:
     - codex
     subagent:

@@ -57,7 +57,7 @@ uses is readable by the company's tenant:
   `crewlet.yaml` names the operator's token the document's only writer
   (`api.auth.company_writers`); a value the document references can still
   be replaced through the secret store.
-- A seat's code work and an agent-mode executor's run, the sandbox's setup
+- A seat's code work and a box-mode executor's run, the sandbox's setup
   commands included, run in the Company's E2B sandbox, in the Company's own
   E2B account, where the coding agent, or the executor's CLI, runs with
   every permission.
@@ -66,7 +66,7 @@ uses is readable by the company's tenant:
   headless token or its `auth.apiKeySecretRef` key, under the variable its
   CLI reads (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`), or for
   OpenCode the credential-named variables of its `env`, unless the seat's
-  own sandbox environment sets that variable itself; an agent-mode
+  own sandbox environment sets that variable itself; a box-mode
   provider's travels the same way into each of its executor's runs. The
   coding agent or the CLI can read it, and the run's report is redacted by
   the shape of a credential, not by its value ([What a coding box

@@ -82,12 +82,12 @@ type part struct {
 	// read only once the reconcile rendered (objectsChecked).
 	codeWork *render.CodeWork
 	// executor is what the render found about an agent Seat whose
-	// executor's chain is headed by a CLI in mode Agent, nil for any other;
-	// agentMode is what it found about an LLMProvider in mode Agent, nil
+	// executor's chain is headed by a CLI in mode Box, nil for any other;
+	// boxMode is what it found about an LLMProvider in mode Box, nil
 	// for any other. Both are read only once the reconcile rendered
 	// (objectsChecked), and neither holds the document.
-	executor  *render.Executor
-	agentMode *render.AgentMode
+	executor *render.Executor
+	boxMode  *render.BoxMode
 }
 
 func newPart(obj client.Object) *part {

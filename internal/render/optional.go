@@ -193,7 +193,7 @@ const fieldOptionalKeys = "spec.optionalKeys"
 // server's (resolveServer).
 //
 // A coding run, the run_sandbox code work of a seat Crewlet offers it to or
-// an agent-mode executor's run, is given the Company's setup steps, then the
+// a box-mode executor's run, is given the Company's setup steps, then the
 // seat's, then its spec.sandbox.env, a later variable of the same name
 // winning (runEnvironment), and every file of every step.
 func (r *renderer) markStarted() []StartValue {
@@ -228,8 +228,8 @@ func (r *renderer) markStarted() []StartValue {
 		}
 	}
 	for _, seat := range sortedByName(r.in.Seats) {
-		if _, _, agentMode := r.agentModeExecutor(seat); seat.Spec.Kind == v1alpha1.SeatKindHuman ||
-			!r.offersCodeWork(seat) && !agentMode {
+		if _, _, boxMode := r.boxModeExecutor(seat); seat.Spec.Kind == v1alpha1.SeatKindHuman ||
+			!r.offersCodeWork(seat) && !boxMode {
 			continue
 		}
 		type at struct {
