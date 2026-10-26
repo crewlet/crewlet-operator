@@ -301,7 +301,13 @@ holds the code that runs a turn in box mode and refuses it on a node with no
 tool bridge (`executorRuntime`, `executorRun` and `LaunchExecutor` in Crewlet's
 `internal/engine/agentrun.go`, `Build` in `internal/api/mcpbridge/build.go`)
 to the code `internal/render/executor.go` and the head of a seat's executor
-chain in `internal/render/seatpod_providers.go` were read against.
+chain in `internal/render/seatpod_providers.go` were read against. It holds
+which engine pod's boxes dial their tool bridge on loopback
+(`bridgeHostURL` and `loopbackURL` in Crewlet's `cmd/crewlet/listeners.go`,
+`(*Bridge).Reaches` in `internal/api/mcpbridge/mcpbridge.go`) to
+`internal/controller/company_workload.go`, which gives every engine pod the
+Company's public address as `CREWLET_MCP_BRIDGE_URL` because a seat pod's
+boxes have no other way to it.
 
 The engine is the one thing in the Makefile that is not pinned. Every suite
 runs Crewlet's `main`, as Crewlet publishes it at

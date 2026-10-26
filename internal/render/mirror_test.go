@@ -28,7 +28,10 @@ import (
 // the address a data pod's engine is told is on loopback, and whether it is
 // one the engine refuses to start on at all, which the render holds a data
 // pod back on (and the API refuses where a Company or its class states it)
-// and the engine shows only for the addresses a test tries. A contract test
+// and the engine shows only for the addresses a test tries; and which engine
+// pod's boxes dial its tool bridge on loopback and which dial the address the
+// controller gives every engine pod, which Crewlet decides from the listeners
+// a node binds when it starts. A contract test
 // cannot hold those to the engine, so the operator
 // holds the code it read: the digest of each declaration as it was when it
 // was read against the operator files that copy it.
@@ -203,6 +206,21 @@ const (
 	fleetBridgeRead = "v0.1.1-0.20261026090300-7a96723be5ad"
 	bridgeFleetGo   = "internal/engine/bridgefleet.go"
 	seatPoolsGo     = "internal/controller/company_pools.go"
+
+	// hostBridgeRead is crewlet#388's engine, where every agent seat's
+	// executor is its coding CLI's run in a box, and a box on its node's own
+	// host, the direct cell, dials the bridge on that node's own listener,
+	// on loopback, where the node serves the route: one with the ingress and
+	// seats roles that binds a listener, the public one where it binds one,
+	// which is a data pod. Every other box, a seat pod's direct ones
+	// included, dials CREWLET_MCP_BRIDGE_URL, and a node with neither builds
+	// no bridge and refuses those launches. So the operator gives every
+	// engine pod the Company's public address, whatever cells the company's
+	// runs are placed in.
+	hostBridgeRead    = "v0.1.1-0.20261026201916-b7ebd490a7d1"
+	listenersGo       = "cmd/crewlet/listeners.go"
+	bridgeGo          = "internal/api/mcpbridge/mcpbridge.go"
+	companyWorkloadGo = "internal/controller/company_workload.go"
 
 	// offersSandboxRead is crewlet#271's engine, whose runner was first read
 	// for which seats it offers run_sandbox: never one whose executor runs in
@@ -942,14 +960,43 @@ var mirrored = []mirror{
 	},
 	{
 		file: mcpbridgeGo, name: "Build",
-		against: []string{executorGo},
-		decides: "a node given no CREWLET_MCP_BRIDGE_URL, or one of spaces alone, builds no tool bridge",
-		digest:  "501fff0b61690ae9c940865fbe32e69f1765fd8a90735dfa338a66be77c6d820",
-		read:    fleetBridgeRead,
+		against: []string{executorGo, companyWorkloadGo},
+		decides: "a node builds its tool bridge from CREWLET_MCP_BRIDGE_URL, from the loopback address of its own " +
+			"listener, or from both, and given neither (a variable of spaces alone being none) builds none, so every " +
+			"launch of a box that would dial it is refused",
+		digest: "904155dfd22fec3dbf6518ab5ccc6df7d14b0e8ec0180bc4bc477df57ef672ca",
+		read:   hostBridgeRead,
+	},
+	{
+		file: listenersGo, name: "(*nodeListeners).bridgeHostURL",
+		against: []string{companyWorkloadGo, seatPoolsGo, bootstrapGo},
+		decides: "only a node that runs both the ingress and the seats roles and binds a listener has a loopback " +
+			"address of its own bridge, at api.public where it binds one: a data pod, never a seat pod, whose direct " +
+			"boxes dial CREWLET_MCP_BRIDGE_URL like a remote sandbox's, so the operator gives every engine pod the " +
+			"Company's public address",
+		digest: "bccfb6220c20a79cd5aa212ffb9adb41735772aaa37eff24395e9708b6a82efe",
+		read:   hostBridgeRead,
+	},
+	{
+		file: listenersGo, name: "loopbackURL",
+		against: []string{bootstrapGo, companyWorkloadGo},
+		decides: "a listener bound on every interface, as a data pod's api.public is, is dialled at 127.0.0.1 and its " +
+			"port over plain http, so a data pod's direct boxes reach its bridge with no address of the operator's",
+		digest: "3858556fc7840e1e4d62f1a9b73a8888c265c299aa8c766886017d23db43dc0b",
+		read:   hostBridgeRead,
+	},
+	{
+		file: bridgeGo, name: "(*Bridge).Reaches",
+		against: []string{companyWorkloadGo, executorGo},
+		decides: "a box on its node's own host dials the node's own listener wherever the node has one, ahead of " +
+			"CREWLET_MCP_BRIDGE_URL, and every other box the variable alone, so the public address a data pod is " +
+			"given moves none of its direct boxes off loopback",
+		digest: "c0df6ef2a0204972856c3580b014a6bccc40e3485104c9151de5a08585a1476a",
+		read:   hostBridgeRead,
 	},
 	{
 		file: bridgeFleetGo, name: "(*Engine).joinBridgeFleet",
-		against: []string{executorGo, seatPoolsGo, bootstrapGo},
+		against: []string{executorGo, seatPoolsGo, bootstrapGo, companyWorkloadGo},
 		decides: "every node with a bridge joins the fleet's relay, a seat pod included, so a box's call to the data " +
 			"pods reaches a seat a seat pod holds and the operator gives every engine pod the one address; only an " +
 			"ingress node at api.port 0 stays out",

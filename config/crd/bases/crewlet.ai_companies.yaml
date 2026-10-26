@@ -587,13 +587,15 @@ spec:
                   publicBaseURL:
                     description: |-
                       publicBaseURL is the HTTPS address vendors deliver webhooks to, and a
-                      remote sandbox calls the engine back on, overriding the one the class's
-                      webhooks.hostname derives. Required when the class's webhooks.mode is
-                      External, where something outside the operator (a relay, an API
-                      gateway) forwards it to the engine's public listener. A trailing '/'
-                      is dropped, as Crewlet drops it. Crewlet's api.public.external_url,
-                      in the data pod's crewlet.yaml, which the engine reads only at start:
-                      changing it restarts the data pod. Its host is a name, an IPv4
+                      remote sandbox, or a box on a seat pod, calls the engine back on,
+                      overriding the one the class's webhooks.hostname derives. Required
+                      when the class's webhooks.mode is External, where something outside
+                      the operator (a relay, an API gateway) forwards it to the engine's
+                      public listener. A trailing '/' is dropped, as Crewlet drops it.
+                      Crewlet's api.public.external_url, in the data pod's crewlet.yaml, and
+                      its CREWLET_MCP_BRIDGE_URL on every engine pod, which the engine reads
+                      only at start: changing it restarts the data pod and the seat pods.
+                      Its host is a name, an IPv4
                       address or an IPv6 address in brackets, followed by at most one port,
                       1 to 65535: Crewlet refuses to start on any other, but for an IPv6
                       address whose zone holds a ']' (https://[fe80::1%25eth0]]/), which it

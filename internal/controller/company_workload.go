@@ -272,9 +272,6 @@ type workload struct {
 	bootstrap *render.BootstrapDocument
 	// bootstrapHash is the BootstrapHashAnnotation's value.
 	bootstrapHash string
-	// bridgeURL is the base URL a sandbox reaches the engine's tool bridge
-	// at, or empty for an engine that serves none.
-	bridgeURL string
 	// startupSeconds is the data pod's startup window
 	// (dataPodStartupSeconds).
 	startupSeconds int32
@@ -631,12 +628,6 @@ func engineContainerOf(
 		// On the data volume, so a restart does not extract the store's
 		// 20 MB native library again.
 		tursoCache: render.DataDir + "/cache",
-		// Crewlet's bridge address is the fleet's: the Company's public
-		// address reaches the data pods, and the one a box's call lands on
-		// relays it to whichever pod holds the run's seat, a seat pod's
-		// included, over the broker. Every engine pod is given the same
-		// value (seatPodTemplate).
-		bridgeURL: w.bridgeURL,
 	})
 	if err != nil {
 		return nil, err
@@ -766,9 +757,6 @@ type engineEnvironment struct {
 	statefulSet string
 	// tursoCache is where the store extracts its native library.
 	tursoCache string
-	// bridgeURL is CREWLET_MCP_BRIDGE_URL, or empty while the Company runs
-	// no LLMProvider in mode Box or has no public address.
-	bridgeURL string
 }
 
 // engineEnv is an engine container's environment: what the bootstrap
@@ -801,8 +789,31 @@ func engineEnv(
 		literal(envTursoCache, e.tursoCache),
 	)
 
-	if e.bridgeURL != "" {
-		env = append(env, literal(envMCPBridgeURL, e.bridgeURL))
+	// Crewlet's tool bridge address, the same on every engine pod: the
+	// Company's public address while it has one, and nothing otherwise.
+	// Every agent seat's executor is its coding CLI's run in a box, which
+	// calls the seat's tools back through the bridge the data pods serve on
+	// their public listener, and the data pod a call reaches relays it over
+	// the broker to the pod holding the run's seat, so the address is the
+	// fleet's (Crewlet's ADR-0056). A box on a data pod's own host dials
+	// that pod's listener on loopback, which the engine derives from the
+	// listener itself, and needs none of this. The variable is for every
+	// other box: one in the Company's E2B sandbox, wherever its seat runs,
+	// and one on a seat pod, which has no listener of the bridge's to dial,
+	// a node without the ingress role serving its probes alone (Crewlet's
+	// bridgeHostURL, which TestMirroredEngineDeclarationsAreUnchanged holds).
+	// A pod given no address launches neither, and render.ExecutorOf reports
+	// the seats that need one.
+	//
+	// Nothing but the address decides it, the cells the company's runs are
+	// placed in included: which cell a run takes is the company document's,
+	// applied without a restart, while a pod reads its environment only when
+	// it starts, so a variable given only while some run needed it would
+	// roll every engine pod each time a provider moved between cells, and
+	// leave a pod started before the move without the address its runs now
+	// dial. A pod whose runs dial no address ignores it.
+	if public := c.Status.Endpoints.PublicBaseURL; public != "" {
+		env = append(env, literal(envMCPBridgeURL, public))
 	}
 
 	if t := class.Spec.Telemetry; t.OTLPEndpoint != "" {

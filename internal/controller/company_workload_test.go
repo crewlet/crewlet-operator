@@ -239,7 +239,7 @@ func TestEnginePodsKeepBoxesOnAVolumeOfTheirOwn(t *testing.T) {
 		// As the reconciler plans a pool, from the class's defaults.
 		plan := render.PoolPlanOf(&crewletaiv1alpha1.SeatPool{Name: poolGeneral}, class.Spec.SeatPools.Defaults)
 		return seatPodTemplate(company, class, &seatWorkload{name: "nimbus-seats-general", pool: poolGeneral, plan: &plan},
-			"nimbus-seats-general-bootstrap", engineImageV020, &render.BootstrapDocument{}, "", "")
+			"nimbus-seats-general-bootstrap", engineImageV020, &render.BootstrapDocument{}, "")
 	}
 	for _, c := range []struct {
 		name     string

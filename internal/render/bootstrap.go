@@ -596,8 +596,9 @@ type SeatPodInput struct {
 // with no probe to tell a seat pod that has joined the fleet and claims
 // seats from one that is still starting, or has lost the data pods. It is
 // given no public listener (api.public), which a node without the ingress
-// role never binds: its box-mode seats' tool calls reach it through the data
-// pods' bridge, relayed over the broker, so nothing a sandbox dials is a
+// role never binds: its seats' executor runs, a box on the pod's own host
+// included, call their tools through the data pods' bridge at the Company's
+// public address, relayed back over the broker, so nothing a box dials is a
 // route on a seat pod.
 //
 // A Shared pool's pods carry the pool's own placement label. A PerSeat pool's

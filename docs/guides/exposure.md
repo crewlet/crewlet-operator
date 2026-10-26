@@ -7,8 +7,9 @@ A company with an artifact origin opens a third, 8082
 
 Port 8081 serves only the routes outside parties call, each of which
 authenticates itself without an operator credential: vendors' webhooks
-(`/webhooks/`), and a remote sandbox's telemetry (`/otlp/{token}`) and tool
-calls (`/mcp/{token}`), with a token signed for its one run in the path. Only
+(`/webhooks/`), a remote sandbox's telemetry (`/otlp/{token}`), and a coding
+run's tool calls (`/mcp/{token}`), with a token signed for its one run in the
+path. Only
 the public listener needs to be reachable from the internet, and only it is
 routed there; port 8080 stays in the cluster unless the class gives it an
 internal route ([Reach the API from elsewhere](#reach-the-api-from-elsewhere)).
@@ -64,17 +65,20 @@ say so. What the public listener serves depends on what the engine is given:
 
 - `/webhooks/`: always. A delivery for a vendor the company has not
   connected is refused (`503`).
-- `/mcp/{token}`, the tool bridge, while an `LLMProvider` of the company runs
-  a CLI in `mode: Box`: that run happens in a remote sandbox, which calls
-  the seat's tools back through it ([Running seats on a coding
-  CLI](cli-agents.md)). The operator then gives every engine pod the public
-  address as the bridge's (`CREWLET_MCP_BRIDGE_URL`), and the data pod a call
-  reaches relays it to the pod holding the run's seat, a seat pod included;
-  without one the engine mounts
-  no bridge and `/mcp/` is a path nothing serves, and every box-mode turn
-  fails: the provider reports `BoxModeRunnable=False`, `NotExposed`, and
-  each seat whose executor's chain it heads `Ready=False`, `NotExposed`,
-  while the rest of the company's document applies.
+- `/mcp/{token}`, the tool bridge: always. Every agent seat's executor is
+  its coding CLI's run in a box, which calls the seat's tools back through
+  it ([Running seats on a coding CLI](cli-agents.md)), and the data pod a
+  call reaches relays it to the pod holding the run's seat, a seat pod
+  included. A box on a data pod's own host dials the pod's public listener
+  on loopback and needs no route. Every other box dials the Company's
+  public address, which the operator gives every engine pod as the bridge's
+  (`CREWLET_MCP_BRIDGE_URL`) while there is one: a box in the Company's E2B
+  sandbox, and a box on a seat pod, which serves no bridge of its own and
+  so reaches it back through this route, egress the seat pods' network
+  policy must allow ([Network policy](#network-policy)). Without a public
+  address no pod is given the variable, Crewlet refuses the launch of every
+  such box, and each Seat whose runs need one says so on its `Ready`
+  condition, while the rest of the company's document applies.
 - `/otlp/{token}`, the sandbox telemetry receiver, while the class sends the
   engine's telemetry to a collector (`spec.telemetry`): a remote sandbox's
   coding agent exports its traces there, and the engine forwards them to the
@@ -576,6 +580,17 @@ spec:
           podSelector:
             matchLabels: {app: otel-collector}
 ```
+
+A company that runs seat pods needs one more address outside
+`exceptCIDRs`: its public address. A box on a seat pod calls the seat's
+tools back through the [tool bridge](#choose-how-webhooks-arrive) at that
+address, as a remote sandbox does, since a seat pod serves no bridge of its
+own, so the seat pods' egress must reach whatever the public hostname
+resolves to. A load balancer whose address falls in a range listed there
+cuts every such run off from the seat's tools: in a kind cluster, for one,
+load balancers are usually given addresses from the node network,
+`172.18.0.0/16` above. A data pod's own boxes dial the bridge on loopback,
+which no policy polices.
 
 On AWS, also require IMDSv2 with a hop limit of 1 on the nodes, so that a
 pod that gets past the policy still cannot read the node's role.

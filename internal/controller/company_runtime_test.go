@@ -1487,69 +1487,69 @@ var _ = Describe("Company runtime", func() {
 			Expect(company.Status.Endpoints.ExposedAPI).To(BeEmpty())
 		})
 
-		It("tells the engine the tool bridge's address while a provider runs a CLI in mode Box", func() {
-			class := newClass(gatewayWebhooks)
-			company := reconciled(newCompany(class.Name))
-			host := string(company.UID) + ".hooks.example.com"
-			paths := func() []string {
+		It("gives the engine the Company's public address as the tool bridge's, reading no LLMProvider", func() {
+			// A reconciler that cannot read an LLMProvider, through its
+			// cache or the API server: the bridge address, like everything
+			// else of the Company's engine, is decided without one, so no
+			// change of a provider has to reach this reconciler, which
+			// watches none.
+			unreadable := errors.New("the Company reconciler read an LLMProvider")
+			live, err := client.NewWithWatch(cfg, client.Options{Scheme: k8sClient.Scheme()})
+			Expect(err).NotTo(HaveOccurred())
+			noProviders := interceptor.NewClient(live, interceptor.Funcs{
+				Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+					if _, ok := obj.(*crewletaiv1alpha1.LLMProvider); ok {
+						return unreadable
+					}
+					return c.Get(ctx, key, obj, opts...)
+				},
+				List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+					if _, ok := list.(*crewletaiv1alpha1.LLMProviderList); ok {
+						return unreadable
+					}
+					return c.List(ctx, list, opts...)
+				},
+			})
+			r := newReconciler()
+			r.Client, r.APIReader = noProviders, noProviders
+			reconciledBy := func(company *crewletaiv1alpha1.Company) *crewletaiv1alpha1.Company {
 				GinkgoHelper()
-				route := &gatewayv1.HTTPRoute{}
-				get(route, webhooksRoute)
-				Expect(route.Spec.Rules).To(HaveLen(1))
-				out := make([]string, 0, len(route.Spec.Rules[0].Matches))
-				for _, m := range route.Spec.Rules[0].Matches {
-					Expect(*m.Path.Type).To(Equal(gatewayv1.PathMatchPathPrefix))
-					out = append(out, *m.Path.Value)
-				}
-				return out
+				reconcileWith(r, company)
+				got := &crewletaiv1alpha1.Company{}
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(company), got)).To(Succeed())
+				return got
 			}
 			bridgeURL := func() []string {
 				GinkgoHelper()
 				return envNamed(engine(statefulSet()).Env, "CREWLET_MCP_BRIDGE_URL")
 			}
-			// The route is the same either way: the engine mounts the
-			// bridge on its public listener only when given its address.
-			Expect(paths()).To(Equal([]string{"/"}))
-			Expect(bridgeURL()).To(BeEmpty())
 
-			By("a provider of another company, and one of this company in mode Host, serving no bridge")
-			provider := func(name, company string, mode crewletaiv1alpha1.CLIAgentMode) *crewletaiv1alpha1.LLMProvider {
-				p := &crewletaiv1alpha1.LLMProvider{
-					Namespace: namespace,
-					Name:      name,
-					Spec: crewletaiv1alpha1.LLMProviderSpec{
-						CompanyRef: crewletaiv1alpha1.CompanyReference{Name: company},
-						LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-							Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
-						},
-						Mode: mode,
-						Auth: crewletaiv1alpha1.CLIAgentAuth{
-							TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: "claude", Key: "oauthToken"},
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, p)).To(Succeed())
-				DeferCleanup(func() { Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, p))).To(Succeed()) })
-				return p
-			}
-			provider("other-box", "another-company", crewletaiv1alpha1.CLIAgentModeBox)
-			claude := provider("claude-host", companyName, crewletaiv1alpha1.CLIAgentModeHost)
-			company = reconciled(company)
-			Expect(paths()).To(Equal([]string{"/"}))
-			Expect(bridgeURL()).To(BeEmpty())
+			By("giving no address while the Company has no public one")
+			class := newClass()
+			company := reconciledBy(newCompany(class.Name))
+			Expect(company.Status.Endpoints.PublicBaseURL).To(BeEmpty())
+			Expect(bridgeURL()).To(BeEmpty(), "an engine pod was given a bridge address no box could reach")
 
-			By("switching this company's provider to mode Box")
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(claude), claude)).To(Succeed())
-			claude.Spec.Mode = crewletaiv1alpha1.CLIAgentModeBox
-			Expect(k8sClient.Update(ctx, claude)).To(Succeed())
-			company = reconciled(company)
-			Expect(paths()).To(Equal([]string{"/"}))
-			Expect(bridgeURL()).To(Equal([]string{"https://" + host}))
+			By("giving the public address once the class routes the webhooks")
+			updateClass(class, gatewayWebhooks)
+			company = reconciledBy(company)
+			public := "https://" + string(company.UID) + ".hooks.example.com"
+			Expect(company.Status.Endpoints.PublicBaseURL).To(Equal(public))
+			Expect(bridgeURL()).To(Equal([]string{public}),
+				"the bridge address is the Company's public address, whatever runs its boxes dial it")
 
-			By("deleting it")
-			Expect(k8sClient.Delete(ctx, claude)).To(Succeed())
-			reconciled(company)
-			Expect(paths()).To(Equal([]string{"/"}))
+			By("following the Company's own public address")
+			updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Exposure.PublicBaseURL = relayURL })
+			reconciledBy(company)
+			Expect(bridgeURL()).To(Equal([]string{relayURL}))
+
+			By("taking it away with the public address")
+			updateCompany(company, func(c *crewletaiv1alpha1.Company) { c.Spec.Exposure.PublicBaseURL = "" })
+			updateClass(class, func(c *crewletaiv1alpha1.EngineClass) {
+				c.Spec.Exposure.Webhooks = crewletaiv1alpha1.WebhookExposure{}
+			})
+			company = reconciledBy(company)
+			Expect(company.Status.Endpoints.PublicBaseURL).To(BeEmpty())
 			Expect(bridgeURL()).To(BeEmpty())
 		})
 

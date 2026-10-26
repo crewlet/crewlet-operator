@@ -591,12 +591,11 @@ In box mode:
   `spec.sandbox.env` reaches the box as well, but the API server cannot see
   the Seat from the provider, so it does not count it.
 - The run calls the seat's own tools back through the engine's tool bridge.
-  While any LLMProvider of the company is in box mode, the operator gives
-  every engine pod its public address as the bridge's
-  (`CREWLET_MCP_BRIDGE_URL`), and the data pods serve the bridge on their
-  public listener, beside the webhooks ([Exposure](exposure.md)), relaying
-  each call to the pod that holds the run's seat. A company with no public address
-  cannot run one: the engine applies the provider and refuses every turn
+  The operator gives every engine pod the Company's public address, while
+  it has one, as the bridge's (`CREWLET_MCP_BRIDGE_URL`), and the data pods
+  serve the bridge on their public listener, beside the webhooks
+  ([Exposure](exposure.md)), relaying each call to the pod that holds the
+  run's seat. A company with no public address cannot run one: the engine applies the provider and refuses every turn
   of a seat whose executor's chain it heads. The operator applies it too
   and reports it, so the rest of the company still runs: the LLMProvider
   reports `BoxModeRunnable=False`, `NotExposed`, and each such Seat

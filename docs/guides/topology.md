@@ -239,14 +239,15 @@ operator could no longer tell which pool a pod serves.
   changes a pool's `replicas` itself: moving seats interrupts them, and more
   pods buy availability, not throughput. A platform sets `replicas` itself
   ([Tiers, limits and offboarding](multi-tenancy.md#tiers-limits-and-offboarding)).
-- **No tool bridge on seat pods.** A coding CLI in box mode calls the
-  seat's tools back through the engine pod that holds the seat, which must
-  serve them on an address the sandbox reaches. The engine would serve the
-  bridge on a seat pod's own listener, but the operator publishes no address
-  of a seat pod a remote sandbox could dial, and the company's public address
-  reaches the data pod only, so a seat whose executor runs on such a
-  provider belongs on the data pods
-  ([Running seats on a coding CLI](cli-agents.md#seat-pools)).
+- **No tool bridge on seat pods.** A seat pod serves its probes alone, so
+  the executor runs of its seats call the data pods' tool bridge through the
+  Company's public address, as a remote sandbox does, and the data pod
+  relays each call back to the seat pod over the broker: Crewlet dials a
+  bridge on loopback only on a node that serves the API, so a box on the
+  seat pod itself takes the same way out and back. A company with no public
+  address runs no executor on a seat pod, and one with an address needs the
+  seat pods' egress to reach it
+  ([Exposure](../concepts/runtime.md#exposure)).
 - **Code runs in a remote sandbox.** v1alpha1 offers only E2B for a seat's
   sandbox, which works from any pod; Crewlet's local sandbox cells would be
   polled by a data pod for a box on another pod, and fail.

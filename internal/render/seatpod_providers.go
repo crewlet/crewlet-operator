@@ -24,9 +24,12 @@ import (
 // operator's own: applied, it would log out every seat on that CLI login, the
 // seats on the data pods included, which is harm beyond the seat at fault.
 //
-// A seat pod cannot serve a CLI in mode Box at the head of a seat's
-// executor's chain either, as it serves no tool bridge; that seat is applied
-// and reported on its Ready (ExecutorOf), since only its own turns fail.
+// A seat pod serves no tool bridge of its own, and needs none: the box of a
+// seat's executor run calls the data pods' bridge at the Company's public
+// address, which every engine pod is given, and the data pod relays each
+// call back to the seat pod over the broker. Without a public address that
+// seat's turns fail wherever it is placed, and it is applied and reported on
+// its Ready (ExecutorOf), since only its own turns fail.
 
 // fieldLLMDefault is a Seat's executor chain, the one every phase without a
 // chain of its own runs on.
