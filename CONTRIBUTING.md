@@ -237,12 +237,21 @@ a seat pod's boot, which the controller's startup windows add up
 EngineClass API floors `data.startupSeconds` at, and the runtime and
 troubleshooting pages quote, and one step the windows leave out, past the
 recovery boundary: the boot's read of the company's secrets (`bootSecrets`),
-which waits out a store that does not answer. It names, too, the waits the
-engine bounds by no time, which the windows count as a boot meets them: a
-read of a state log's state or record, asked again while the broker answers
-none (`ReadWith` and `hedge` in `internal/jsprovision/hedge.go`), at the term
-of one request, and the agreement of the object store's fleet record,
-bounded by a number of attempts (`casRetry`), at the one attempt a boot meets.
+which waits out a store that does not answer. It names, too, the one wait
+the engine bounds by no time, which the windows count as a boot meets it:
+the agreement of the object store's fleet record, bounded by a number of
+attempts (`casRetry`), at the one attempt a boot meets. How long a read may
+wait is read down to the function that bounds it, for every read the engine
+asks again while nobody answers it (`hedge` and `ReadBoundedWith` in
+`internal/jsprovision/hedge.go`): a leader read, the pages of a pass's key
+index and the broker's limit read are held to the client's own five seconds
+where their caller set no deadline (`(*Leader).get`, `NewLeader`, `ask`,
+`askTimed`, `page`, `sorted` and `(*Leader).Subjects` in `internal/jsapi`,
+`keysUnder` in `internal/coord/kv/walk.go`, `(*Queue).budget` in
+`internal/queue/jetstream/budget.go`), and a read of a state log's state or
+record to the thirty seconds of its timing's `Lookup` (`ReadWith`, with the
+queue's timing, `(*Queue).provisioning` and `Clustered.Timing`), which a
+boot's read waits out, its context having no deadline.
 How many registrations a step makes is read down to the queue, for every
 step that registers what a node answers: the steer answerer and the fleet
 broker register in their step's own code (`armSteer`, `serveFleetBroker`);

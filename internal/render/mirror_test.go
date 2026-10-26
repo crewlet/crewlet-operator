@@ -259,10 +259,38 @@ const (
 	// moves a digest, as one added to the estate's lanes does.
 	gitLaneRead = "v0.1.1-0.20261026025520-adba06740326"
 
+	// hedgeCeilingRead is crewlet/crewlet#298's engine where a leader read is
+	// asked again while nobody answers it and every read asked that way has
+	// a ceiling, read where the bounds it moved were read again against the
+	// windows. A leader read is asked as a log's reads were, each request
+	// presumed lost after its term and the next sent beside it, and one on a
+	// context with no deadline is held to the client's DefaultTimeout before
+	// it is asked ((*Leader).get, ask, askTimed, NewLeader, ReadBoundedWith),
+	// where get applied that bound itself: the windows' leader reads keep
+	// their 5 s, as does the broker's limit read, which is asked the same
+	// way now ((*Queue).budget). A read asked that way from the start, a
+	// state log's state and its record at a sequence among them, ends at its
+	// timing's Lookup where its caller set no deadline (ReadWith, with the
+	// queue's timing: (*Queue).provisioning, Clustered.Timing), where it was
+	// asked for as long as its caller's context lived: the windows count a
+	// boot's reads of a state log at that ceiling now, where they counted
+	// each at the term of one request for want of a bound. A certified
+	// listing's key index is a listing of the bucket's subjects from its
+	// leader, one page for a list as short as the nodes' positions
+	// (keysUnder, (*Leader).Subjects, page, sorted), where it was two
+	// requests, which takes 5 s off the join's listing of them. The nats
+	// bucket's lookup is held to Lookup by ReadWith rather than by a context
+	// of its own, its open hands the piece reads of a bucket across a link a
+	// longer term, and a log's read of a record across a link is given its
+	// crossing beside the read term, none of which moves a bound.
+	hedgeCeilingRead = "v0.1.1-0.20261026010533-a5bf068300dd"
+
 	// The engine files most of the bounds on a boot are read from, and the
 	// guide that quotes the windows they add up to.
 	jsprovisionGo     = "internal/jsprovision/jsprovision.go"
 	hedgeGo           = "internal/jsprovision/hedge.go"
+	jsapiLeaderGo     = "internal/jsapi/leader.go"
+	jsapiListingGo    = "internal/jsapi/listing.go"
 	embeddedGo        = "internal/queue/jetstream/embedded.go"
 	queueGo           = "internal/queue/jetstream/queue.go"
 	domainLogGo       = "internal/queue/jetstream/domainlog.go"
@@ -484,15 +512,24 @@ var bootWindows = []string{
 // windows leave out, past the recovery boundary: (*Engine).bootSecrets, the
 // boot's read of the company's secrets, which waits out a store that does not
 // answer for as long as the boot lives, as the pages that say what a boot
-// does after /health answers 200 state. Two more are waits the engine bounds
-// by no time, which the windows count as a boot meets them: a read of a log's
-// state or record, asked again while the broker answers none on a boot's
-// context, which has no deadline (ReadWith, hedge), counted at the term of
-// one request; and the agreement of the object store's fleet record, bounded
-// by a number of attempts (casRetry, fleetCASAttempts), counted at the one
-// attempt a boot meets unless someone removes the record meanwhile. And how
-// many registrations a step makes is read down to the queue, for every step
-// that registers what a node answers: the steer answerer and the fleet
+// does after /health answers 200 state. One more is a wait the engine bounds
+// by no time, which the windows count as a boot meets it: the agreement of
+// the object store's fleet record, bounded by a number of attempts
+// (casRetry, fleetCASAttempts), counted at the one attempt a boot meets
+// unless someone removes the record meanwhile. How long a read a step makes
+// may wait is read down to the function that bounds it, for every read the
+// engine asks again while nobody answers it (hedge): ReadBoundedWith holds
+// one whose caller set no deadline to the bound it is handed, and every one
+// to its timing's Lookup. A leader read is handed its client's
+// DefaultTimeout ((*Leader).get, ask, askTimed, NewLeader), as are the pages
+// of a pass's key index (keysUnder, (*Leader).Subjects, page, sorted) and
+// the broker's limit read ((*Queue).budget); a read of a log's state or
+// record is handed Lookup itself (ReadWith, with the queue's timing,
+// (*Queue).provisioning and Clustered.Timing), which a boot's read waits
+// out, its context having no deadline. So a bound moved below a step's read,
+// whose own code need not change for it, sends somebody to the windows. And
+// how many registrations a step makes is read down to the queue, for every
+// step that registers what a node answers: the steer answerer and the fleet
 // broker register in their step's own code (armSteer, serveFleetBroker);
 // the history answerer, the inbox relay and the presence answerer each
 // register one subject in the function their step calls (eventfan's Serve,
@@ -1443,9 +1480,18 @@ var mirrored = []mirror{
 	{
 		file: jsprovisionGo, name: "LookupBudget",
 		against: bootWindows,
-		decides: "a lookup of a stream or bucket, and the broker's limit read, are bounded at 30 s",
-		digest:  "fa87cb9b864068dc2bf52d7f9d17a79b008f788acbf791b1f3737e298adf9de0",
-		read:    bootBoundsRead,
+		decides: "a lookup of a stream or bucket, the broker's limit read, and every read asked again while nobody " +
+			"answers it, a boot's read of a state log among them, are bounded at 30 s",
+		digest: "fa87cb9b864068dc2bf52d7f9d17a79b008f788acbf791b1f3737e298adf9de0",
+		read:   bootBoundsRead,
+	},
+	{
+		file: jsprovisionGo, name: "Clustered.Timing",
+		against: bootWindows,
+		decides: "a topology's provisioning timing takes its budgets, and bounds a read at LookupBudget whatever " +
+			"the topology",
+		digest: "1cb4c07de297eb8d8cd99cc50d7136670dc9a6b3a4599791b14a8066da4ffea3",
+		read:   hedgeCeilingRead,
 	},
 	{
 		file: jsprovisionGo, name: "ReadBack",
@@ -1542,6 +1588,14 @@ var mirrored = []mirror{
 		read:   codeHostRead,
 	},
 	{
+		file: "internal/queue/jetstream/budget.go", name: "(*Queue).budget",
+		against: bootWindows,
+		decides: "the broker's limit is a read asked again while nobody answers it, held to the client's " +
+			"DefaultTimeout where its caller set no deadline",
+		digest: "d3b790a95154bbfb5effdd81becaa86d1f61fc3378f626cacf1dba19e0526119",
+		read:   hedgeCeilingRead,
+	},
+	{
 		file: embeddedGo, name: "(*embeddedServer).awaitLeafReady",
 		against: bootWindows,
 		decides: "a leaf asks for the fleet's JetStream until clusterReadyTimeout, checking the deadline only " +
@@ -1632,6 +1686,13 @@ var mirrored = []mirror{
 		read:   bootBoundsRead,
 	},
 	{
+		file: queueGo, name: "(*Queue).provisioning",
+		against: bootWindows,
+		decides: "the queue's reads, a log's among them, are asked on its topology's provisioning timing",
+		digest:  "ec4ea5f0aec0a8a3b05770e91aa9ad013d80ae070cd1317d02a1863c58d65de1",
+		read:    hedgeCeilingRead,
+	},
+	{
 		file: "internal/queue/jetstream/scatter.go", name: "(*Queue).Serve",
 		against: bootWindows,
 		decides: "registering what a node answers subscribes to its subject, then flushes the subscription once",
@@ -1690,19 +1751,80 @@ var mirrored = []mirror{
 		read:   bootBoundsRead,
 	},
 	{
-		file: "internal/jsapi/leader.go", name: "(*Leader).get",
+		file: walkGo, name: "keysUnder",
 		against: bootWindows,
-		decides: "a leader read on a context with no deadline is bounded by the client's DefaultTimeout",
-		digest:  "2f238e2e50c4fd88d34c368d06b29acb40575b09da6c5e30a6cc0441ad372fe1",
-		read:    bootBoundsRead,
+		decides: "a pass's key index is one listing of the bucket's subjects from its leader",
+		digest:  "390fdd0fae2295dea55d380c4e12d71fa7443c26e05626c5d77dbad61c138012",
+		read:    hedgeCeilingRead,
+	},
+	{
+		file: jsapiLeaderGo, name: "(*Leader).get",
+		against: bootWindows,
+		decides: "a leader read is asked through ask with its reader's term and bound, so one on a context with no " +
+			"deadline is held to the client's DefaultTimeout, and asked again inside it while nobody answers",
+		digest: "0cedea9143c6f0f7761ae11d2a5c25783d052005b4a52a679f40e7c1981cb08d",
+		read:   hedgeCeilingRead,
+	},
+	{
+		file: jsapiLeaderGo, name: "NewLeader",
+		against: bootWindows,
+		decides: "a leader reader's bound is its client's own DefaultTimeout, and its term the read term",
+		digest:  "399059045e1b688fdca2fcceef4b843098de46a4858c328472834413f907aa7a",
+		read:    hedgeCeilingRead,
+	},
+	{
+		file: jsapiListingGo, name: "ask",
+		against: bootWindows,
+		decides: "a leader request is asked as askTimed asks it, with the term and the bound it is handed",
+		digest:  "1ce0f6238e140b6ca0c55bdaef465adbe4f2a40b5522b41963bffd216d35c892",
+		read:    hedgeCeilingRead,
+	},
+	{
+		file: jsapiListingGo, name: "askTimed",
+		against: bootWindows,
+		decides: "a leader request is asked again at the term it is handed while nobody answers it, held to the " +
+			"bound it is handed (ReadBoundedWith)",
+		digest: "79b13c39c613883c04a1b2c775116d86c6838bf6e9b3ff624e0ad133280a6eb6",
+		read:   hedgeCeilingRead,
+	},
+	{
+		file: jsapiListingGo, name: "page",
+		against: bootWindows,
+		decides: "a page of a listing is one leader request, asked as askTimed asks it, with the term and the " +
+			"bound it is handed",
+		digest: "468cd0e20919633f78ea1061aca5adc65eb3ebb5ba0b4be95ada3228ffacca37",
+		read:   hedgeCeilingRead,
+	},
+	{
+		file: jsapiListingGo, name: "sorted",
+		against: bootWindows,
+		decides: "a listing asks no page past the first that reaches the end of its list, so a short list is one page",
+		digest:  "13c9c190383fc71842f410477aacaee4a66d630cd215fbc0b9a7441f62f09286",
+		read:    hedgeCeilingRead,
+	},
+	{
+		file: jsapiListingGo, name: "(*Leader).Subjects",
+		against: bootWindows,
+		decides: "a listing of a stream's subjects asks its leader a page at a time, each page held to the " +
+			"reader's bound, the client's DefaultTimeout",
+		digest: "574c367ad336c710b98a82c8252b437e4f15f2ef2342f62ea26c00be5a4fee08",
+		read:   hedgeCeilingRead,
 	},
 	{
 		file: hedgeGo, name: "ReadWith",
 		against: bootWindows,
-		decides: "a metadata read has no bound of its own beyond its caller's context, which a boot's read of a log " +
-			"has none of",
-		digest: "470f4a21b80e15946340d6c56a02c342334a5e422a4ebbffb35a8f4595192f86",
-		read:   codeHostRead,
+		decides: "a read hedged from the start, a log's state and its record among them, is handed its timing's " +
+			"Lookup as its bound, which a boot's read waits out, its context having no deadline",
+		digest: "72eb5391be043593b8c06e4b59bc4b470eeff3015db304f9191c4a77de5684fc",
+		read:   hedgeCeilingRead,
+	},
+	{
+		file: hedgeGo, name: "ReadBoundedWith",
+		against: bootWindows,
+		decides: "a read asked again while nobody answers it is held to the bound it is handed where its caller set " +
+			"no deadline, before it is asked, and every such read to its timing's Lookup",
+		digest: "660ea8947b4504f311ee63fd0faaa49c6cb656b93ea3d841694be67061202613",
+		read:   hedgeCeilingRead,
 	},
 	{
 		file: hedgeGo, name: "hedge",
@@ -1729,9 +1851,10 @@ var mirrored = []mirror{
 	{
 		file: domainLogGo, name: "(*DomainLog).At",
 		against: bootWindows,
-		decides: "a log's record at a sequence is one read through ReadWith, on its caller's context",
-		digest:  "9c87e3c6cfa6307ba2e6c617bcb325b9fbd0cd9bb3e8dc83326da8eaefd2768d",
-		read:    codeHostRead,
+		decides: "a log's record at a sequence is one read through ReadWith, on its caller's context, given a longer " +
+			"term only across a link and the same bound",
+		digest: "051c726fd957beac0e523ed0e0d7562e7573784dc507b96f97c6e85f38f9d255",
+		read:   hedgeCeilingRead,
 	},
 	{
 		file: "internal/statelog/transfer.go", name: "collectOffers",
@@ -1775,15 +1898,15 @@ var mirrored = []mirror{
 		file: natsObjGo, name: "open",
 		against: bootWindows,
 		decides: "the nats bucket is looked up, created and read back, then bound, under the window it is handed",
-		digest:  "cbd3feceda85543bfd90caae7b2e493b07ad345f28aa4fc93f6761b7716b0a07",
-		read:    codeHostRead,
+		digest:  "e77af5243967860f1886fd619e03808868860e88c2c4a5666660a3969e85f9ee",
+		read:    hedgeCeilingRead,
 	},
 	{
 		file: natsObjGo, name: "lookupBucket",
 		against: bootWindows,
-		decides: "the bucket's lookup is bounded by the timing's Lookup",
-		digest:  "c512a1d74c0b27be8b04fbdfac757b92b0148183061d2944145eb32ac2d7c816",
-		read:    codeHostRead,
+		decides: "the bucket's lookup is a read through ReadWith, bounded by the timing's Lookup",
+		digest:  "3b0dbfbf074b7375a71a0869d86d5ee024216abc6bda6e3142d3189b577806c7",
+		read:    hedgeCeilingRead,
 	},
 	{
 		file: natsObjGo, name: "createBucket",
