@@ -93,7 +93,7 @@ func TestSaveStateRoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadState: %v", err)
 	}
-	if !bytes.Equal(loaded.key, state.key) || !maps.EqualFunc(loaded.fingerprints, state.fingerprints, bytes.Equal) {
+	if loaded.key != state.key || !maps.EqualFunc(loaded.fingerprints, state.fingerprints, bytes.Equal) {
 		t.Fatalf("LoadState read %v back, want %v", loaded, state)
 	}
 	eng.takeCalls()
@@ -349,7 +349,7 @@ func TestFingerprintsRevealNothing(t *testing.T) {
 	}
 
 	other, _ := mustSync(t, newFakeEngine(), desired, State{})
-	if bytes.Equal(other.key, state.key) {
+	if other.key == state.key {
 		t.Fatal("two states share a fingerprint key")
 	}
 	if bytes.Equal(other.fingerprints[nameA], state.fingerprints[nameA]) {
@@ -358,7 +358,7 @@ func TestFingerprintsRevealNothing(t *testing.T) {
 
 	// Pin the construction, so a change to it is a decision: an HMAC of the
 	// name, a NUL and the value, under the state's key.
-	mac := hmac.New(sha256.New, state.key)
+	mac := hmac.New(sha256.New, []byte(state.key))
 	mac.Write([]byte(nameA + "\x00" + value))
 	if !bytes.Equal(state.fingerprints[nameA], mac.Sum(nil)) {
 		t.Error("the fingerprint is not HMAC-SHA256(key, name NUL value)")

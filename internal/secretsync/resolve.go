@@ -63,20 +63,28 @@ func (e *TooLargeError) Error() string {
 }
 
 // Desired is the set of store entries a company's references call for: a
-// value per store name, the names to keep without pushing (see Keep), and the
-// names that are to hold no value: those of optional references whose Secret
-// or key does not exist (see Resolve), each removed from the store unless the
-// revision the engine runs reads it as required, and those the revision the
-// engine runs lets go without whose Secret or key does not exist (see
-// Release).
+// value per store name, the names to keep without pushing (see Keep and
+// KeepServed), and the names that are to hold no value: those of optional
+// references whose Secret or key does not exist (see Resolve), each removed
+// from the store unless a revision kept reads it as required, and those the
+// revision the engine runs lets go without whose Secret or key does not
+// exist (see Release).
 //
 // It formats as its names only, under every verb and through logr, so a
 // Desired that ends up in a log line or an error by mistake leaks nothing.
 type Desired struct {
 	values map[string][]byte
-	// kept are the names the running revision, running, references (Keep).
-	kept    map[string]struct{}
+	// kept are the names each revision kept references, by revision: the
+	// fleet's revision, running, which Keep names, and every other revision
+	// an engine node runs or starts on (KeepServed).
+	kept    map[string]map[string]struct{}
 	running string
+	// unread are the engine nodes the operator does not know the revisions
+	// of, or whose revision it could not read (KeepUnread), as a set: while
+	// there is one, no name is deleted. A set rather than a sorted slice
+	// keeps a Desired, a value every reconcile copies, as small to copy as
+	// it was before it named any node.
+	unread map[string]struct{}
 	// absent are the optional references whose Secret or key does not
 	// exist, by store name, each as the *MissingError it would be were it
 	// required; empty are the references whose Secret key holds an empty
@@ -99,8 +107,12 @@ func (d Desired) Names() []string {
 }
 
 // Keep says what of the store the revision the engine runs needs: revision is
-// its id, and names the store names its document references, which Sync and
-// Withdraw do not delete although Desired pushes no value for them.
+// its id, the fleet's revision (engine.ActiveConfig), and names the store
+// names its document references, which Sync and Withdraw do not delete
+// although Desired pushes no value for them. It is the revision Running
+// names, whose reading of a name State.LetGo answers, and whose released
+// names Release takes; a second call names another one, and keeps the names
+// the first kept as well.
 //
 // It is for the window between two documents. Sync runs before the next
 // document is applied, so that every name the next document references
@@ -122,17 +134,98 @@ func (d Desired) Names() []string {
 // key out.
 func (d *Desired) Keep(revision string, names ...string) {
 	d.running = revision
-	if d.kept == nil {
-		d.kept = make(map[string]struct{}, len(names))
+	d.keep(revision, names)
+}
+
+// KeepServed says what of the store another revision needs that an engine
+// node runs or starts on, as Keep does for the fleet's. A node that refused
+// the fleet's revision goes on running the revision it ran before
+// (engine.ApplyRecord.Serving), and needs its values for as long as it does,
+// since every attempt to apply a revision reads the store again into the
+// snapshot the running revision resolves its references from. A node whose
+// store outlives a restart, as a data pod's does, starts on the revision that
+// store names (engine.ApplyRecord.Boots), the one it runs but while the
+// engine retries moving it, and cannot start once a value that revision
+// requires is gone from the store. Each such revision is passed here, by the
+// node that runs it and by the node that starts on it. A node that runs no
+// company and starts on none has no revision to pass, and needs nothing
+// beyond what Keep names. Its names are kept, and its absent names retained
+// unless the State records revision as letting them go, as the running
+// revision's are; it does not change the revision Keep named.
+func (d *Desired) KeepServed(revision string, names ...string) {
+	d.keep(revision, names)
+}
+
+// KeepUnread says that the engine nodes named may run or start on a revision
+// whose references the operator does not know: one it could not read, or a
+// node whose revisions it has not learned. Every name the store lists is kept
+// then, and every absent name retained, since any may be one such a revision
+// requires, until a later Desired names what they run and start on.
+func (d *Desired) KeepUnread(nodes ...string) {
+	if len(nodes) == 0 {
+		return
+	}
+	// In a set of d's own, as keep's: a copy that names more nodes must
+	// not change the Desired it was copied from.
+	unread := make(map[string]struct{}, len(d.unread)+len(nodes))
+	maps.Copy(unread, d.unread)
+	for _, node := range nodes {
+		unread[node] = struct{}{}
+	}
+	d.unread = unread
+}
+
+// keep adds names to what revision keeps, in maps of d's own: a Desired is a
+// value, and a copy of one that keeps more (a reconcile keeps the running
+// revision's names on a copy of what it read) must not change the original.
+func (d *Desired) keep(revision string, names []string) {
+	kept := make(map[string]map[string]struct{}, len(d.kept)+1)
+	maps.Copy(kept, d.kept)
+	set := maps.Clone(kept[revision])
+	if set == nil {
+		set = make(map[string]struct{}, len(names))
 	}
 	for _, name := range names {
-		d.kept[name] = struct{}{}
+		set[name] = struct{}{}
 	}
+	kept[revision] = set
+	d.kept = kept
 }
 
 // Running is the revision Keep named, empty for none.
 func (d Desired) Running() string {
 	return d.running
+}
+
+// Served are the revisions KeepServed named other than the one Keep named,
+// sorted.
+func (d Desired) Served() []string {
+	return slices.Sorted(func(yield func(string) bool) {
+		for revision := range d.kept {
+			if revision != d.running && !yield(revision) {
+				return
+			}
+		}
+	})
+}
+
+// Unread are the engine nodes KeepUnread named, sorted.
+func (d Desired) Unread() []string {
+	return slices.Sorted(maps.Keys(d.unread))
+}
+
+// Holders are the revisions kept (Keep, KeepServed) that reference name and
+// read it as required, as prev records their reading (State.LetGo), sorted:
+// those that keep an absent name in the store.
+func (d Desired) Holders(name string, prev State) []string {
+	var out []string
+	for revision, names := range d.kept {
+		if _, ok := names[name]; ok && !prev.letsGo(revision, name) {
+			out = append(out, revision)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // Release names the references the revision the engine runs lets go without
@@ -159,20 +252,46 @@ func (d *Desired) Release(absent ...*MissingError) {
 	}
 }
 
-// retains reports whether name, absent, stays in the store: the running
-// revision references it (Keep) and reads it as required, which it does
-// unless prev records it as letting the name go without (State.LetGo).
+// retains reports whether name, absent, stays in the store: a revision kept
+// references it (Keep, KeepServed) and reads it as required, which it does
+// unless prev records it as letting the name go without (State.LetGo), or a
+// node runs a revision the operator does not know (KeepUnread).
 func (d Desired) retains(name string, prev State) bool {
-	_, kept := d.kept[name]
-	return kept && !prev.letsGo(d.running, name)
+	return len(d.unread) > 0 || len(d.Holders(name, prev)) > 0
+}
+
+// keeps reports whether a revision kept references name, or a node runs a
+// revision the operator does not know: either way the store keeps its entry.
+func (d Desired) keeps(name string) bool {
+	if len(d.unread) > 0 {
+		return true
+	}
+	for _, names := range d.kept {
+		if _, ok := names[name]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// letGo reports whether a revision kept references name and, as prev
+// records its reading, lets it go: what makes a released name one to remove,
+// where no other revision kept retains it.
+func (d Desired) letGo(name string, prev State) bool {
+	for revision, names := range d.kept {
+		if _, ok := names[name]; ok && prev.letsGo(revision, name) {
+			return true
+		}
+	}
+	return false
 }
 
 // gone reports whether name stands for a reference whose Secret or key does
-// not exist, absent from the next document (Missing) or released by the
-// running revision (Release), and whether its entry is to leave the store:
-// it is unless the running revision reads it as required (retains). A name
-// Desired pushes a value for is neither, whatever else says it is gone: its
-// Secret was read after.
+// not exist, absent from the next document (Missing) or released by a
+// revision kept that lets it go (Release), and whether its entry is to leave
+// the store: it is unless a revision kept reads it as required (retains). A
+// name Desired pushes a value for is neither, whatever else says it is gone:
+// its Secret was read after.
 func (d Desired) gone(name string, prev State) (absent, removed bool) {
 	if _, ok := d.values[name]; ok {
 		return false, false
@@ -180,10 +299,33 @@ func (d Desired) gone(name string, prev State) (absent, removed bool) {
 	if _, ok := d.absent[name]; ok {
 		return true, !d.retains(name, prev)
 	}
-	if _, ok := d.released[name]; ok && prev.letsGo(d.running, name) {
-		return true, true
+	if _, ok := d.released[name]; ok && d.letGo(name, prev) {
+		return true, !d.retains(name, prev)
 	}
 	return false, false
+}
+
+// deletes reports whether Sync deletes name, an owned name the store lists
+// that Desired pushes no value for: one gone and removed, or one neither gone
+// nor kept.
+func (d Desired) deletes(name string, prev State) bool {
+	absent, removed := d.gone(name, prev)
+	if absent {
+		return removed
+	}
+	return !d.keeps(name)
+}
+
+// fleetsAlone is d keeping only what Keep named, the fleet's revision: what
+// the store would hold were every node running it, against which Sync and
+// Withdraw tell what they keep for another revision (Result.Held).
+func (d Desired) fleetsAlone() Desired {
+	alone := d
+	alone.kept, alone.unread = nil, nil
+	if names, ok := d.kept[d.running]; ok {
+		alone.kept = map[string]map[string]struct{}{d.running: names}
+	}
+	return alone
 }
 
 // goneNames are the store names of absent and released, sorted.
@@ -199,8 +341,8 @@ func (d Desired) goneNames() []string {
 }
 
 // Missing are the optional references whose Secret or key does not exist,
-// which hold no value in the store but where the revision the engine runs
-// reads them as required (see Keep), sorted as Resolve sorts its errors.
+// which hold no value in the store but where a revision kept reads them as
+// required (see Keep), sorted as Resolve sorts its errors.
 func (d Desired) Missing() []*MissingError {
 	return slices.SortedFunc(maps.Values(d.absent), func(a, b *MissingError) int { return secretref.Compare(a.Key, b.Key) })
 }

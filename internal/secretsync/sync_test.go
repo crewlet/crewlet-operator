@@ -179,7 +179,7 @@ func TestSyncIsIdempotent(t *testing.T) {
 	if len(res.Put) != 0 || len(res.Deleted) != 0 {
 		t.Fatalf("the second Sync changed the store: %+v", res)
 	}
-	if !maps.EqualFunc(again.fingerprints, state.fingerprints, slices.Equal) || !slices.Equal(again.key, state.key) {
+	if !maps.EqualFunc(again.fingerprints, state.fingerprints, slices.Equal) || again.key != state.key {
 		t.Fatal("the second Sync changed the state")
 	}
 }
@@ -735,6 +735,151 @@ func TestARevisionThatLetsANameGoGoesWithoutItWhateverTheNextDocumentReads(t *te
 		if !eng.holds(nameB) || len(res.Deleted) != 0 || len(next.Withdrawn()) != 0 {
 			t.Errorf("the store holds %s: %t, Deleted = %v, Withdrawn() = %v; want it pushed and nothing removed",
 				nameB, eng.holds(nameB), res.Deleted, next.Withdrawn())
+		}
+	})
+}
+
+// revision3 is a third revision, which an engine node runs beside the
+// fleet's.
+const revision3 = "0191d4a6-5c1e-7000-8000-000000000003"
+
+// dataNode is an engine node, named as the operator names each one: its
+// pod's name.
+const dataNode = "nimbus-data-1"
+
+// TestSyncKeepsWhatEveryNodeRuns: the store serves every revision an engine
+// node runs, not only the fleet's. A node that refused the fleet's revision
+// runs the one before it, resolving its references from what every apply
+// attempt reads of the store, and a data node starts on the revision its
+// store names when it restarts, which is that one but while the engine
+// retries moving it; each is kept the same way. So a name that revision
+// references stays (KeepServed), and an absent one
+// it reads as required is retained, and both are Held, the names the store
+// keeps for it alone; what no revision kept references goes, as before. A
+// node whose revision the operator does not know (KeepUnread) keeps
+// everything. Without the served revision kept, the same sync deletes what
+// it needs.
+func TestSyncKeepsWhatEveryNodeRuns(t *testing.T) {
+	// revision2 is the fleet's: it references nameA. revision1 is what a
+	// node that refused revision2 runs: it references nameB and nameC,
+	// whose Secret is gone, and lets neither go as far as the state knows.
+	start := func(t *testing.T) (*fakeEngine, State, Desired) {
+		t.Helper()
+		eng := newFakeEngine()
+		eng.entries[foreignName] = fakeEntry{value: foreignValue, by: access}
+		state, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a", nameB: "b", nameC: "c"}), State{})
+		eng.takeCalls()
+		next := desiredOf(map[string]string{nameA: "a"})
+		next.absent = map[string]*MissingError{nameC: {Key: keyC, Reason: SecretNotFound}}
+		next.Keep(revision2, nameA)
+		return eng, state, next
+	}
+	everything := map[string]fakeEntry{
+		nameA: {value: "a", by: self}, nameB: {value: "b", by: self}, nameC: {value: "c", by: self},
+		foreignName: {value: foreignValue, by: access},
+	}
+
+	t.Run("a node runs the revision before the fleet's", func(t *testing.T) {
+		eng, state, next := start(t)
+		next.KeepServed(revision1, nameB, nameC)
+		after, res := mustSync(t, eng, next, state)
+		assertCalls(t, eng, "list")
+		assertStore(t, eng, everything)
+		if len(res.Deleted) != 0 || !slices.Equal(res.Retained, []string{nameC}) || !slices.Equal(res.Held, []string{nameB, nameC}) {
+			t.Errorf("Deleted = %v, Retained = %v and Held = %v, want none, [%s] and [%s %s]",
+				res.Deleted, res.Retained, res.Held, nameC, nameB, nameC)
+		}
+		if len(after.Withdrawn()) != 0 {
+			t.Errorf("Withdrawn() = %v, want none: nothing was removed", after.Withdrawn())
+		}
+		if got := next.Holders(nameC, state); !slices.Equal(got, []string{revision1}) {
+			t.Errorf("Holders(%s) = %v, want [%s]", nameC, got, revision1)
+		}
+		if got := next.Served(); !slices.Equal(got, []string{revision1}) || next.Running() != revision2 {
+			t.Errorf("Served() = %v and Running() = %s, want [%s] and %s", got, next.Running(), revision1, revision2)
+		}
+	})
+
+	t.Run("no node runs it any more", func(t *testing.T) {
+		eng, state, next := start(t)
+		_, res := mustSync(t, eng, next, state)
+		assertCalls(t, eng, "list", "delete "+nameB, "delete "+nameC)
+		if !slices.Equal(res.Deleted, []string{nameB, nameC}) || len(res.Held) != 0 {
+			t.Errorf("Deleted = %v and Held = %v, want [%s %s] and none", res.Deleted, res.Held, nameB, nameC)
+		}
+	})
+
+	t.Run("the revision a node runs lets the absent name go", func(t *testing.T) {
+		eng, state, next := start(t)
+		state = state.Adopted(revision1, []secretref.Key{keyC})
+		next.KeepServed(revision1, nameB, nameC)
+		after, res := mustSync(t, eng, next, state)
+		assertCalls(t, eng, "list", "delete "+nameC)
+		if !slices.Equal(res.Held, []string{nameB}) || !slices.Equal(after.Withdrawn(), []string{nameC}) {
+			t.Errorf("Held = %v and Withdrawn() = %v, want [%s] and [%s]", res.Held, after.Withdrawn(), nameB, nameC)
+		}
+	})
+
+	t.Run("a released name another revision requires", func(t *testing.T) {
+		// The fleet's revision lets nameC go, as the state recorded when
+		// the operator activated it; the node that refused it runs a
+		// revision that requires it.
+		eng, state, next := start(t)
+		state = state.Activated(revision2, []secretref.Key{keyC})
+		next.absent = nil
+		next.Keep(revision2, nameA, nameC)
+		next.Release(&MissingError{Key: keyC, Reason: SecretNotFound})
+		served := next
+		served.KeepServed(revision1, nameB, nameC)
+		_, res := mustSync(t, eng, served, state)
+		assertCalls(t, eng, "list")
+		if !slices.Equal(res.Retained, []string{nameC}) || !slices.Equal(res.Held, []string{nameB, nameC}) {
+			t.Errorf("Retained = %v and Held = %v, want [%s] and [%s %s]", res.Retained, res.Held, nameC, nameB, nameC)
+		}
+	})
+
+	t.Run("a node whose revision is unknown", func(t *testing.T) {
+		eng, state, next := start(t)
+		next.KeepUnread(dataNode)
+		_, res := mustSync(t, eng, next, state)
+		assertCalls(t, eng, "list")
+		assertStore(t, eng, everything)
+		if !slices.Equal(res.Retained, []string{nameC}) || !slices.Equal(res.Held, []string{nameB, nameC}) ||
+			!slices.Equal(next.Unread(), []string{dataNode}) {
+			t.Errorf("Retained = %v, Held = %v and Unread() = %v", res.Retained, res.Held, next.Unread())
+		}
+	})
+
+	t.Run("withdrawn while the next document is held", func(t *testing.T) {
+		eng, state, _ := start(t)
+		held := Desired{partial: true, absent: map[string]*MissingError{nameC: {Key: keyC, Reason: SecretNotFound}}}
+		held.Keep(revision2, nameA)
+		served := held
+		served.KeepServed(revision1, nameB, nameC)
+		_, res, err := Withdraw(context.Background(), eng, served, state)
+		if err != nil {
+			t.Fatalf("Withdraw: %v", err)
+		}
+		assertCalls(t, eng, "list")
+		if len(res.Deleted) != 0 || !slices.Equal(res.Retained, []string{nameC}) || !slices.Equal(res.Held, []string{nameC}) {
+			t.Errorf("Deleted = %v, Retained = %v and Held = %v, want none, [%s] and [%s]", res.Deleted, res.Retained, res.Held, nameC, nameC)
+		}
+		_, res, err = Withdraw(context.Background(), eng, held, state)
+		if err != nil || !slices.Equal(res.Deleted, []string{nameC}) {
+			t.Errorf("Withdraw without the served revision deleted %v (%v), want [%s]", res.Deleted, err, nameC)
+		}
+	})
+
+	t.Run("a third revision", func(t *testing.T) {
+		// Two nodes on two revisions before the fleet's, each keeping its
+		// own.
+		eng, state, next := start(t)
+		next.KeepServed(revision1, nameB)
+		next.KeepServed(revision3, nameC)
+		_, res := mustSync(t, eng, next, state)
+		assertCalls(t, eng, "list")
+		if got := next.Served(); !slices.Equal(got, []string{revision1, revision3}) || !slices.Equal(res.Held, []string{nameB, nameC}) {
+			t.Errorf("Served() = %v and Held = %v", got, res.Held)
 		}
 	})
 }
