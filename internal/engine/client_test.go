@@ -1025,6 +1025,9 @@ func TestHealthReadsThePosture(t *testing.T) {
 // TestFleetReadsNodesAndSeatLeases pins the read of /fleet as the engine
 // writes it: each node's roles, broker, labels and apply record, which node
 // holds each seat since when, and the handles of the seats no node may run.
+// The data node's record names the revision it would start on apart from the
+// one it runs, as the engine's does while its write of the first is being
+// retried; the seat node's names none, as a scratch store's never does.
 func TestFleetReadsNodesAndSeatLeases(t *testing.T) {
 	// seatsNode is the node that answers, a pod of a seat pool, and holds
 	// two of the leases the answer names.
@@ -1034,11 +1037,13 @@ func TestFleetReadsNodesAndSeatLeases(t *testing.T) {
     {"id": "nimbus-data-0", "roles": ["data", "ingress", "seats", "workers"], "broker": "member",
      "labels": {"crewlet.ai/pool": "data"}, "owner": "nimbus-data-0:8f2a", "protocol": 4, "seats": 1, "expires_in": 41,
      "config_epoch": 7, "config_status": "ok", "config_error": "", "config_revision_id": "r7",
-     "config_reported_at": "2026-09-23T08:02:11.482Z", "in_flight": 0, "draining": false},
+     "config_serving_revision_id": "r7", "config_boot_revision_id": "r6",
+     "config_reported_at": "2026-09-23T08:02:11.482Z", "in_flight": 0,
+     "draining": false},
     {"id": "nimbus-seats-general-0", "roles": ["seats"], "broker": "leaf",
      "labels": {"crewlet.ai/pool": "general"}, "owner": "nimbus-seats-general-0:11aa", "protocol": 4, "seats": 1,
      "expires_in": 40, "config_epoch": 7, "config_status": "error", "config_error": "engine: apply: no such provider",
-     "config_revision_id": "r7", "config_reported_at": ""}
+     "config_revision_id": "r7", "config_serving_revision_id": "r6", "config_reported_at": ""}
   ],
   "seats": [
     {"handle": "ana", "node": "nimbus-data-0", "owner": "nimbus-data-0:8f2a", "epoch": 4, "expires_in": 41,
@@ -1067,7 +1072,7 @@ func TestFleetReadsNodesAndSeatLeases(t *testing.T) {
 	data, ok := got.Node("nimbus-data-0")
 	if !ok || data.Broker != engine.BrokerMember || data.Seats != 1 || data.Labels[poolLabel] != dataPool ||
 		!slices.Equal(data.Roles, []string{dataPool, "ingress", "seats", "workers"}) ||
-		data.Apply != (engine.ApplyRecord{Epoch: 7, RevisionID: "r7", Status: engine.ApplyOK}) {
+		data.Apply != (engine.ApplyRecord{Epoch: 7, RevisionID: "r7", Status: engine.ApplyOK, Serving: "r7", Boots: "r6"}) {
 		t.Errorf("Node(nimbus-data-0) = %+v, %t", data, ok)
 	}
 	if _, ok := got.Node("nimbus-data-1"); ok {
@@ -1094,11 +1099,61 @@ func TestFleetReadsNodesAndSeatLeases(t *testing.T) {
 	if _, ok := got.Holder("cy", ""); ok || !slices.Equal(got.Unplaceable, []string{"cy"}) {
 		t.Errorf("cy: held %t, unplaceable %v; want held by nobody and unplaceable", ok, got.Unplaceable)
 	}
-	// The answering node's own record, failed.
+	// The answering node's own record, failed: it attempted r7 and runs r6,
+	// the revision before it, still, and starts on nothing.
 	record := got.LastApply()
-	if want := (engine.ApplyRecord{Epoch: 7, RevisionID: "r7", Status: engine.ApplyError, Error: "engine: apply: no such provider"}); record != want ||
-		!record.Status.Failed() {
+	if want := (engine.ApplyRecord{
+		Epoch: 7, RevisionID: "r7", Status: engine.ApplyError, Error: "engine: apply: no such provider", Serving: "r6",
+	}); record != want || !record.Status.Failed() {
 		t.Errorf("LastApply() = %+v, want %+v, failed", record, want)
+	}
+}
+
+// TestRevisionReadsTheStoredDocument pins the read of one stored revision,
+// GET /config/revisions/{id}: the document is the answer's payload, as the
+// engine encodes it, with every whole ${NAME} reference as it is written;
+// a revision the answering node does not hold is its 404; and an id that is
+// not one path segment is refused before it reaches a URL.
+func TestRevisionReadsTheStoredDocument(t *testing.T) {
+	f := newFakeEngine(t)
+	f.handle("GET /config/revisions/r6", answer(http.StatusOK, `{"revision_id":"r6","created_at":"2026-09-23T08:00:00Z",
+"created_by":"token:operator","source":"api","summary":"crewlet-operator","is_active":false,
+"payload":{"name":"Acme","providers":{"sandbox":{"e2b":{"api_key":"${K8S_ACME_E2B_KEY_AAAAAAAAAAAA}"}}}}}`))
+	f.handle("GET /config/revisions/r5", answer(http.StatusNotFound, `{"error":"not_found","message":"no such revision"}`))
+	got, err := f.client().Revision(context.Background(), "r6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != "r6" || !bytes.Contains(got.Document, []byte(`"api_key":"${K8S_ACME_E2B_KEY_AAAAAAAAAAAA}"`)) {
+		t.Errorf("Revision(r6) = {%q, %s}, want r6's payload with its reference whole", got.ID, got.Document)
+	}
+	_, err = f.client().Revision(context.Background(), "r5")
+	if apiErr, ok := errors.AsType[*engine.APIError](err); !ok || apiErr.StatusCode != http.StatusNotFound {
+		t.Errorf("Revision(r5) = %v, want an *APIError with status 404", err)
+	}
+	before := f.requests()
+	if _, err := f.client().Revision(context.Background(), "../secrets"); err == nil || f.requests() != before {
+		t.Errorf("Revision(../secrets) = %v after %d requests, want a refusal that sends nothing", err, f.requests()-before)
+	}
+}
+
+// TestActiveConfigWhileTheFleetCannotBeRead pins what an engine that cannot
+// read its activation pointer answers GET /config with: 503 with a
+// Retry-After, never a guess, and the client's error is ErrUnavailable with
+// that delay, which the config reconciler retries at rather than reporting a
+// fault.
+func TestActiveConfigWhileTheFleetCannotBeRead(t *testing.T) {
+	f := newFakeEngine(t)
+	f.handle("GET /health", answer(http.StatusOK, `{"status":"ok","applied_epoch":3}`))
+	f.handle("GET /config", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "2")
+		answer(http.StatusServiceUnavailable, `{"error":"unavailable","message":"try again shortly",
+"reason":"the fleet's activation could not be read from the coordination store"}`)(w, r)
+	})
+	_, err := f.client().ActiveConfig(context.Background())
+	apiErr, ok := errors.AsType[*engine.APIError](err)
+	if !errors.Is(err, engine.ErrUnavailable) || !ok || apiErr.RetryAfter != 2*time.Second {
+		t.Fatalf("ActiveConfig() = %v, want ErrUnavailable asking again in 2s", err)
 	}
 }
 

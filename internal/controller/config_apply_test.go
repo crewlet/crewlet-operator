@@ -37,7 +37,7 @@ func (f *fakeEngine) client(t *testing.T) *engine.Client {
 		switch r.URL.Path {
 		case "/health":
 			_, _ = w.Write([]byte(f.health))
-		case "/fleet":
+		case fleetRoute:
 			f.fleetReads++
 			_, _ = w.Write([]byte(f.fleet))
 		default:
@@ -55,8 +55,21 @@ func health(status, posture string, applied int) string {
 }
 
 func fleet(epoch int, revision, status, account string) string {
+	return fleetServing(epoch, revision, status, account, "", "")
+}
+
+// fleetServing is fleet whose node runs serving and starts on boots, as a
+// node that refused revision runs the one it ran before, and starts on it but
+// while the engine retries moving what it starts on; an empty boots is left
+// out, as the engine leaves it out of the row of a node that starts on none.
+func fleetServing(epoch int, revision, status, account, serving, boots string) string {
+	bootField := ""
+	if boots != "" {
+		bootField = `,"config_boot_revision_id":"` + boots + `"`
+	}
 	return `{"this_node":"node-0","nodes":[{"id":"node-0","config_epoch":` + strconv.Itoa(epoch) +
-		`,"config_revision_id":"` + revision + `","config_status":"` + status + `","config_error":"` + account + `"}]}`
+		`,"config_revision_id":"` + revision + `","config_status":"` + status + `","config_error":"` + account +
+		`","config_serving_revision_id":"` + serving + `"` + bootField + `}]}`
 }
 
 // verifyRun is a reconcile that wrote revision r2 as epoch 2 at writtenAt,
@@ -212,10 +225,28 @@ func TestConfigAppliedReportsAFailedApply(t *testing.T) {
 	written := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
 	for _, c := range []struct {
 		name, health, fleet string
+		// runs is what the message says the engine runs meanwhile.
+		runs string
 	}{
-		{"at the epoch", health("isolated", "isolated", 1), fleet(2, "r2", "error", "engine: apply: no sandbox cell")},
-		{"at a later epoch", health("isolated", "isolated", 2), fleet(3, "r3", "error", "engine: apply: no sandbox cell")},
-		{"degraded", health("shed", "shed", 1), fleet(2, "r2", "degraded", "engine: apply: no sandbox cell")},
+		{"at the epoch", health("isolated", "isolated", 1), fleet(2, "r2", "error", "engine: apply: no sandbox cell"),
+			"keeps running epoch 1"},
+		{"at a later epoch", health("isolated", "isolated", 2), fleet(3, "r3", "error", "engine: apply: no sandbox cell"),
+			"keeps running epoch 2"},
+		{"degraded", health("shed", "shed", 1), fleet(2, "r2", "degraded", "engine: apply: no sandbox cell"),
+			"keeps running epoch 1"},
+		// Restarted onto the revision it ran, the node reports no epoch
+		// applied: its record names the revision, and the one it starts on.
+		{"after a restart", health("isolated", "isolated", 0),
+			fleetServing(2, "r2", "error", "engine: apply: no sandbox cell", "r1", "r1"),
+			"keeps running revision r1, the last it applied or started on, which it starts on again if it restarts."},
+		// Its record of what it starts on not moved yet to the revision it
+		// runs, it starts on the one before if it restarts.
+		{"starting on another revision", health("isolated", "isolated", 0),
+			fleetServing(3, "r3", "error", "engine: apply: no sandbox cell", "r2", "r1"),
+			"keeps running revision r2, the last it applied or started on, and starts on revision r1 if it restarts"},
+		{"starting on none", health("isolated", "isolated", 0),
+			fleetServing(2, "r2", "error", "engine: apply: no sandbox cell", "r1", ""),
+			"keeps running revision r1, the last it applied or started on, and starts on no revision if it restarts"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			cl := (&fakeEngine{health: c.health, fleet: c.fleet}).client(t)
@@ -226,7 +257,7 @@ func TestConfigAppliedReportsAFailedApply(t *testing.T) {
 			if got.Status != metav1.ConditionFalse || got.Reason != crewletaiv1alpha1.ReasonApplyFailed {
 				t.Fatalf("ConfigApplied = %+v, want False, ApplyFailed", got)
 			}
-			for _, want := range []string{"engine: apply: no sandbox cell", `status "` + h.Status, `posture "` + string(h.Posture)} {
+			for _, want := range []string{"engine: apply: no sandbox cell", `status "` + h.Status, `posture "` + string(h.Posture), c.runs} {
 				if !strings.Contains(got.Message, want) {
 					t.Errorf("message %q does not carry %q", got.Message, want)
 				}

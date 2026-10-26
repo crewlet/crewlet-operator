@@ -714,12 +714,18 @@ the operator pushes its value and applies the document again. When it is
 deleted, the operator, under the `Enforce` policy, takes the value out of the
 engine's secret store and has the engine read the store again, by applying
 the next document or, while that one is held, by activating the revision the
-engine runs again, so no run starts with a deleted Secret's value, but in a
-revision the engine runs that reads the key as required, as one from before
-the key was listed does, or whose reading the operator does not know, which
-keeps the value until the next document runs, the new revision activating
-once with it and then again without it
-([Applying a document](../concepts/applying.md#what-one-reconcile-does)); a
+engine runs again, so no run starts with a deleted Secret's value. A revision
+the engine runs that reads the key as required, as one from before the key
+was listed does, or whose reading the operator does not know, keeps the value
+instead, until no engine pod runs, or would start on, such a revision, the
+new revision activating once with it and then again without it. A pod that
+refused the next document keeps running the revision before it, which keeps
+the value while it does; only a data pod starts on that revision again if it
+restarts, while a seat pod starts on nothing and tries the fleet's revision
+again, and a pod that runs no company and would start on none holds nothing
+back. A pod whose revision the operator cannot learn keeps every value, as a
+data pod does while it is down or cut off from the engine's fleet
+([Applying a document](../concepts/applying.md#what-one-reconcile-does)). A
 Secret key also read where it is required holds the document instead, and
 keeps its value in a revision the engine runs that requires it too until the
 next one applies. The layers of a run's environment are laid in order, the

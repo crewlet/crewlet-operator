@@ -978,7 +978,12 @@ var _ = Describe("Company config", Ordered, func() {
 		Eventually(count).WithTimeout(settle).Should(Equal(before+2),
 			"the next document, and the same activated again without the value it started with")
 		Expect(revisions(e)[0].Summary).To(ContainSubstring(registry))
-		Expect(log.of(name)).To(ContainElement(HavePrefix("Normal Reactivated ")))
+		// The value goes, and the revision activates again without it, at
+		// the operator's look after the one that applied the next document,
+		// once the engine says it runs that one: the Reactivated event comes
+		// just after the reload the count saw, and no condition waits for it.
+		Eventually(func() []string { return log.of(name) }).WithTimeout(settle).
+			Should(ContainElement(HavePrefix("Normal Reactivated ")))
 		Eventually(startedWith).WithTimeout(settle).ShouldNot(HaveKey(optionalRegistry),
 			"the engine starts the server with the value of a Secret that is gone")
 		Consistently(count).WithTimeout(6 * time.Second).Should(Equal(before + 2))

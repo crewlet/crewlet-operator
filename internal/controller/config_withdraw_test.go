@@ -21,9 +21,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/events"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	"sigs.k8s.io/yaml"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine"
@@ -38,13 +40,27 @@ import (
 // sequence of writes inside one reconcile, which the real engine's suite
 // (config_test.go) sees only as where it ends up.
 
-// storeEngine answers the engine's /health, /config and /secrets routes from
-// a revision history, the last of which is active, and a store, as the
-// operator's client reads them. A document it is to refuse is refused as the
-// engine refuses an invalid one. beforeReload, afterReload and afterApply,
-// when set, run once, under its lock, just before a reload is answered and
-// just after a reload or an apply is: somebody else's write landing between
-// two of the operator's.
+// storeEngine answers the engine's /health, /config, /config/revisions,
+// /fleet and /secrets routes from a revision history, the last of which is
+// the fleet's, and a store, as the operator's client reads them. A document
+// it is to refuse is refused as the engine refuses an invalid one.
+// beforeReload, afterReload and afterApply, when set, run once, under its
+// lock, just before a reload is answered and just after a reload or an apply
+// is: somebody else's write landing between two of the operator's.
+//
+// Its fleet is one node, storeNode, running the fleet's revision, unless
+// serving names what each node runs instead (another revision for one that
+// refused the fleet's, "" for one that has recorded no attempt and so not
+// said); runsNone names nodes beside those that refused the fleet's revision
+// and run no company, as a seat pod that started on nothing and refused it
+// does; fleetDown makes GET /fleet unanswerable, and missing names the
+// revisions GET /config/revisions does not find.
+//
+// Each node's row says what it starts on as the engine's does: a data node
+// (dataNode) the revision it runs, and a seat node, whose store is scratch,
+// and a node that runs no company, none; boots names what a node starts on
+// in place of that, as a data node whose record of it the engine has not
+// moved yet to the revision it runs, "" for none.
 type storeEngine struct {
 	mu                        sync.Mutex
 	revisions                 []storeRevision
@@ -52,7 +68,22 @@ type storeEngine struct {
 	refuse                    bool
 	beforeReload, afterReload func(e *storeEngine)
 	afterApply                func(e *storeEngine)
+	serving                   map[string]string
+	boots                     map[string]string
+	runsNone                  map[string]bool
+	fleetDown                 bool
+	missing                   map[string]bool
 }
+
+// dataNode reports whether node is a pod of the Company's data StatefulSet,
+// as the storeEngine's fleet names them: one whose store outlives a restart.
+func dataNode(node string) bool {
+	return strings.HasPrefix(node, "acme-data-")
+}
+
+// storeNode is the node of a storeEngine's fleet unless serving says
+// otherwise.
+const storeNode = "acme-data-0"
 
 type storeRevision struct {
 	id, summary string
@@ -72,11 +103,7 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	body, _ := io.ReadAll(r.Body)
-	answer := func(status int, v any) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(v)
-	}
+	answer := func(status int, v any) { answerJSON(w, status, v) }
 	if r.Method == http.MethodPost && r.URL.Path == "/config/reload" && e.beforeReload != nil {
 		hook := e.beforeReload
 		e.beforeReload = nil
@@ -90,6 +117,9 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	activated := func(revision storeRevision) {
 		answer(http.StatusCreated, map[string]any{"revision_id": revision.id, "epoch": len(e.revisions)})
+	}
+	if r.Method == http.MethodGet && e.serveServing(w, r.URL.Path, active) {
+		return
 	}
 	name, isSecret := strings.CutPrefix(r.URL.Path, "/secrets/")
 	switch {
@@ -137,6 +167,86 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// serveServing answers what the engine says of what its nodes run, the GET
+// routes /fleet and /config/revisions/{id} at path, and reports whether path
+// is one of them. active is the fleet's revision; the caller holds e's lock.
+func (e *storeEngine) serveServing(w http.ResponseWriter, path string, active storeRevision) bool {
+	revisionID, isRevision := strings.CutPrefix(path, "/config/revisions/")
+	switch {
+	case path == fleetRoute && e.fleetDown:
+		w.Header().Set("Retry-After", "1")
+		answerJSON(w, http.StatusServiceUnavailable, refusal("unavailable", "coordination is unreachable"))
+	case path == fleetRoute:
+		serving := e.serving
+		if serving == nil {
+			serving = map[string]string{storeNode: active.id}
+		}
+		// The rows as the engine writes them: an attempt at the fleet's
+		// epoch, which a node serving any other revision, or none, refused;
+		// and the zero record of a node that has recorded no attempt. What
+		// a node starts on is left out where it starts on none, as the
+		// engine leaves it out.
+		row := func(node string, epoch int, attempted string, status engine.ApplyStatus, revision string) map[string]any {
+			roles, boots := []string{seatsRole}, ""
+			if dataNode(node) {
+				roles, boots = []string{dataRole}, revision
+			}
+			if b, ok := e.boots[node]; ok {
+				boots = b
+			}
+			r := map[string]any{"id": node, "roles": roles, "config_epoch": epoch,
+				"config_revision_id": attempted, "config_serving_revision_id": revision, "config_status": string(status)}
+			if boots != "" && status != "" {
+				r["config_boot_revision_id"] = boots
+			}
+			return r
+		}
+		nodes := make([]map[string]any, 0, len(serving)+len(e.runsNone))
+		for _, node := range slices.Sorted(maps.Keys(serving)) {
+			switch revision := serving[node]; revision {
+			case "":
+				nodes = append(nodes, row(node, 0, "", "", ""))
+			case active.id:
+				nodes = append(nodes, row(node, len(e.revisions), active.id, engine.ApplyOK, revision))
+			default:
+				nodes = append(nodes, row(node, len(e.revisions), active.id, engine.ApplyError, revision))
+			}
+		}
+		for _, node := range slices.Sorted(maps.Keys(e.runsNone)) {
+			nodes = append(nodes, row(node, len(e.revisions), active.id, engine.ApplyError, ""))
+		}
+		answerJSON(w, http.StatusOK, map[string]any{"this_node": storeNode, "nodes": nodes, "target_epoch": len(e.revisions)})
+	case isRevision:
+		i := slices.IndexFunc(e.revisions, func(rev storeRevision) bool { return rev.id == revisionID })
+		if i < 0 || e.missing[revisionID] {
+			answerJSON(w, http.StatusNotFound, refusal("not_found", "no revision "+revisionID))
+			return true
+		}
+		payload, err := yaml.YAMLToJSON(e.revisions[i].document)
+		if err != nil {
+			answerJSON(w, http.StatusInternalServerError, refusal("internal", err.Error()))
+			return true
+		}
+		answerJSON(w, http.StatusOK, map[string]any{"revision_id": revisionID, "is_active": i == len(e.revisions)-1,
+			"payload": json.RawMessage(payload)})
+	default:
+		return false
+	}
+	return true
+}
+
+// answerJSON writes v as the JSON answer, with status.
+func answerJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+// refusal is the engine's error envelope: its code and its detail.
+func refusal(code, detail string) map[string]any {
+	return map[string]any{"error": code, "detail": detail}
+}
+
 // ids are the engine's revisions, oldest first.
 func (e *storeEngine) ids() []string {
 	e.mu.Lock()
@@ -170,8 +280,15 @@ func (e *storeEngine) activateOther(document []byte) {
 	})
 }
 
-// configRoute is the engine's route of the company document.
-const configRoute = "/config"
+// configRoute is the engine's route of the company document, fleetRoute that
+// of its fleet, and dataRole and seatsRole the roles of a data pod's node and
+// a seat pod's there.
+const (
+	configRoute = "/config"
+	fleetRoute  = "/fleet"
+	dataRole    = "data"
+	seatsRole   = "seats"
+)
 
 // running is the revision the engine runs when a withdrawal's reconcile
 // starts: r1, with both values in its store as the operator pushed them.
@@ -379,6 +496,13 @@ func (w *withdrawal) resolve(t *testing.T) secretsync.Desired {
 // as converge does once nothing holds the document.
 func (w *withdrawal) enforce(t *testing.T) error {
 	t.Helper()
+	_, err := w.enforced(t)
+	return err
+}
+
+// enforced is enforce, with when the reconcile asks to run again.
+func (w *withdrawal) enforced(t *testing.T) (ctrl.Result, error) {
+	t.Helper()
 	ctx := context.Background()
 	if blocked, err := w.run.resolveSecrets(ctx); blocked || err != nil {
 		t.Fatalf("the document is held: %t, %v", blocked, err)
@@ -387,8 +511,7 @@ func (w *withdrawal) enforce(t *testing.T) error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = w.run.enforce(ctx, w.client, *w.run.desired, active)
-	return err
+	return w.run.enforce(ctx, w.client, *w.run.desired, active)
 }
 
 // told reports whether the reconcile recorded a Normal event of reason, and

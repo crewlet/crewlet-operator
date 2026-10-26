@@ -1,7 +1,7 @@
 // Package secretsync copies the values of referenced Kubernetes Secret keys
 // into a Crewlet engine's encrypted secret store, and removes the entries
-// nothing references any more, and those of a Secret that is gone where the
-// document the engine runs goes without its value.
+// nothing references any more, and those of a Secret that is gone where every
+// revision an engine node runs or starts on goes without its value.
 //
 // The company document never holds a credential. Every credential position
 // in it is a ${NAME} reference, NAME being StoreName of the referenced
@@ -25,6 +25,34 @@
 //   - A name the running document still references but the next one does
 //     not is passed to Desired.Keep until the next document is applied, so
 //     the engine never resolves a reference to a deleted entry.
+//   - So is every name of each other revision an engine node runs or starts
+//     on (Desired.KeepServed). A node applies the fleet's revision on its
+//     own loop, and one that refuses it goes on running the revision it ran
+//     before, which needs its values for as long as the node runs it: every
+//     attempt to apply a revision reads the store again into the snapshot
+//     the running revision resolves its references from. A node whose store
+//     outlives a restart, as a data pod's does on its volume, starts on the
+//     revision that store names, which the engine reports apart from the one
+//     it runs (engine.ApplyRecord.Boots), since it moves it only after an
+//     apply has succeeded; the node cannot start once a value that revision
+//     requires is gone. A seat pod's store is scratch, which the engine
+//     discards at every start, so it starts on nothing and applies the
+//     fleet's revision; and a node that runs no company and starts on none
+//     needs nothing kept beyond what the fleet's revision references. What
+//     is kept for such a revision alone is reported (Result.Held), and goes
+//     once no node runs or starts on it. A node whose revisions the caller
+//     does not know, or could not read, keeps everything
+//     (Desired.KeepUnread), and the caller knows them only from the fleet:
+//     a node applies the fleet's revision on its own loop, and a data pod
+//     moves what its store starts it on after every apply that succeeds, so
+//     nothing seen of a node before stands for what it runs or starts on
+//     now, and the State remembers none of it. So every data pod the fleet
+//     does not list keeps everything until it is listed again, running or
+//     down, its store starting it on whichever revision it applied last,
+//     which holds every deletion back while a data pod is down; and a seat
+//     pod the fleet does not list keeps everything while its engine runs,
+//     and nothing while it does not, since it then runs nothing and starts
+//     on nothing.
 //   - A reference whose Secret or key is gone has its entry removed where
 //     the revision the engine runs goes without it, so that no engine starts
 //     anything with the value of a Secret Kubernetes no longer holds: by
