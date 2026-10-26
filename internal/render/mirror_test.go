@@ -131,7 +131,7 @@ const (
 	// inherit-env, and an APIKey provider always carries
 	// auth.apiKeySecretRef, so its SandboxLoginNotPortable report still names
 	// the remedies a Subscription or OpenCode head's refusal does.
-	deepWorkRead = "v0.1.1-0.20261026000658-220afa3f1039"
+	deepWorkRead = "v0.1.1-0.20261026010616-d93875db794b"
 	// toolCredentialsGo is where the engine decides what a value that
 	// resolves to nothing does to a tool server or a coding run.
 	toolCredentialsGo = "internal/engine/toolcredentials.go"

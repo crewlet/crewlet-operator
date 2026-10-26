@@ -29,8 +29,9 @@ func assistantCLIsStated(t *testing.T) []v1alpha1.CLIAgentName {
 	if m == nil {
 		t.Fatalf("%s does not say which CLIs the assistant runs on (%q)", guide, assistantCLIsSentence)
 	}
-	var out []v1alpha1.CLIAgentName
-	for _, span := range regexp.MustCompile("`([^`]+)`").FindAllSubmatch(m[1], -1) {
+	spans := regexp.MustCompile("`([^`]+)`").FindAllSubmatch(m[1], -1)
+	out := make([]v1alpha1.CLIAgentName, 0, len(spans))
+	for _, span := range spans {
 		out = append(out, v1alpha1.CLIAgentName(span[1]))
 	}
 	slices.Sort(out)
@@ -49,6 +50,8 @@ func assistantCLIsStated(t *testing.T) []v1alpha1.CLIAgentName {
 // turns on another object's spec, so the dry run's refusal on the Company is
 // the only one a tenant meets, and the guide is what tells them beforehand.
 func TestContractAssistantCLIsFollowTheEngine(t *testing.T) {
+	// assistantProbe is the one provider each case's chain names.
+	const assistantProbe = "probe"
 	tierA, err := Bootstrap(bootstrapCases()[0].input(t))
 	if err != nil {
 		t.Fatal(err)
@@ -65,9 +68,9 @@ func TestContractAssistantCLIsFollowTheEngine(t *testing.T) {
 				Agent: agent, Model: "anthropic/model", WebTools: v1alpha1.CLIAgentWebToolsDenied,
 			},
 		}}}
-		in.LLMProviders[0].Name = "probe"
+		in.LLMProviders[0].Name = assistantProbe
 		in.Company.Spec.Assistant = v1alpha1.CompanyAssistant{Enabled: &on,
-			LLM: []v1alpha1.LLMProviderReference{{Kind: v1alpha1.LLMProviderKindLLMProvider, Name: "probe"}}}
+			LLM: []v1alpha1.LLMProviderReference{{Kind: v1alpha1.LLMProviderKindLLMProvider, Name: assistantProbe}}}
 		doc, err := Company(in)
 		if err != nil {
 			t.Fatalf("%s: %v", agent, err)
