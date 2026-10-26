@@ -9,7 +9,7 @@
   `internal/render.TestAnUndeclaredPoolPinsNoPod`,
   `internal/render.TestContractEngineRefusesWhatItHolds`,
   `internal/render.TestContractReportedIsApplied`,
-  `internal/render.TestContractAgentModeIsAppliedWhereItCannotRun`,
+  `internal/render.TestContractBoxModeIsAppliedWhereItCannotRun`,
   `internal/render.TestContractCodeWorkOnWrite`,
   `internal/secretsync.TestContractStoreRefusesWhatResolveRefuses`
 
@@ -23,7 +23,7 @@ fault is fixed. Some findings describe a document Crewlet would refuse
 anyway, or one whose effect reaches objects that are not at fault. Others
 describe one object that would merely not work, which Crewlet itself
 applies and then refuses at run time, or runs without: a seat's code work on
-a provider its coding agent cannot read, an agent-mode executor with no tool
+a provider its coding agent cannot read, a box-mode executor with no tool
 bridge, a seat pinned to a pool nobody declared. Held for the second kind,
 one seat's mistake stops every other change to the company.
 
@@ -53,7 +53,7 @@ and on each object that cannot do its job because of it: `ResolvedRefs=False`
 with the reason when a reference the object holds names what is not there,
 `Ready=False` with the reason when the object cannot do its job at all, and a
 condition for the capability when only part of it fails (`CodeWorkRunnable`,
-`AgentModeRunnable`). The operator records a Warning event when such a
+`BoxModeRunnable`). The operator records a Warning event when such a
 condition turns False or changes its reason, since nothing on the Company
 says so. What the operator writes for an object is that object's spec, whole:
 it never leaves part of one out, nor one object of several, to make a
@@ -75,7 +75,7 @@ that is someone else's (`NameConflict`) as harm beyond the object.
 
 ## Consequences
 
-A seat that cannot run, a provider whose agent mode cannot, a seat pinned to
+A seat that cannot run, a provider whose box mode cannot, a seat pinned to
 a pool the Company does not declare, a provisioned credential nothing
 provisions yet and a person named in GitLab's access levels no longer hold
 the rest of the company. The cost is that a reported finding can sit

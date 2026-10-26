@@ -211,7 +211,7 @@ func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 // executorReason reports whether reason is Ready's for a seat whose executor
 // cannot run a turn, a verdict of the seat's spec rather than of the fleet.
 func executorReason(reason string) bool {
-	return reason == crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported || reason == crewletaiv1alpha1.ReasonNotExposed
+	return reason == crewletaiv1alpha1.ReasonBoxModeBridgeUnsupported || reason == crewletaiv1alpha1.ReasonNotExposed
 }
 
 // declaredPool reports whether pool is one a seat of the Company can run in:

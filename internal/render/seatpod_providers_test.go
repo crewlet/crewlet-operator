@@ -12,11 +12,11 @@ import (
 // seat pod would restore and refresh on its own and so log every pod on that
 // login out, the data pods' included; a key in env, the sign-in of Hermes, Pi
 // and OpenCode, is as portable as a token. A seat on the data pods may run on
-// either. An agent-mode CLI is refused nowhere: whether a seat's turns can run
+// either. A box-mode CLI is refused nowhere: whether a seat's turns can run
 // on one is ExecutorOf's report (TestExecutor).
 func TestSeatPodProviders(t *testing.T) {
 	bundled := func(in *Input) {
-		p := cliProvider(v1alpha1.CLIAgentModeText)
+		p := cliProvider(v1alpha1.CLIAgentModeHost)
 		p.Spec.Auth = v1alpha1.CLIAgentAuth{
 			CredentialBundleSecretRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "bundle"},
 		}
@@ -25,7 +25,7 @@ func TestSeatPodProviders(t *testing.T) {
 	// keyInEnv is a CLI signed in through env, its model provider's key.
 	keyInEnv := func(agent v1alpha1.CLIAgentName) func(*Input) {
 		return func(in *Input) {
-			p := cliProvider(v1alpha1.CLIAgentModeText)
+			p := cliProvider(v1alpha1.CLIAgentModeHost)
 			p.Spec.Model = "openrouter/anthropic/claude-sonnet-5"
 			p.Spec.Agent = agent
 			p.Spec.Auth = v1alpha1.CLIAgentAuth{Mode: v1alpha1.CLIAgentAuthSubscription}
@@ -87,7 +87,7 @@ func TestSeatPodProviders(t *testing.T) {
 		{
 			name: "a headless token in a pool",
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, cliProvider(v1alpha1.CLIAgentModeText))
+				in.LLMProviders = append(in.LLMProviders, cliProvider(v1alpha1.CLIAgentModeHost))
 				seatNamed(in, seatBo).Spec.LLM.Default = chain(providerCLI)
 			},
 		},

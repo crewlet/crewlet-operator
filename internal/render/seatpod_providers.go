@@ -24,7 +24,7 @@ import (
 // operator's own: applied, it would log out every seat on that CLI login, the
 // seats on the data pods included, which is harm beyond the seat at fault.
 //
-// A seat pod cannot serve a CLI in mode Agent at the head of a seat's
+// A seat pod cannot serve a CLI in mode Box at the head of a seat's
 // executor's chain either, as it serves no tool bridge; that seat is applied
 // and reported on its Ready (ExecutorOf), since only its own turns fail.
 
@@ -103,10 +103,10 @@ func (r *renderer) chainOf(refs []v1alpha1.LLMProviderReference, field string) [
 }
 
 // executorHead is the LLMProvider at the head of a seat's executor chain, the
-// one Crewlet may run as an agentic run, with the field that names it: the
-// first entry of refs that resolves, or with no refs the head of the
+// one Crewlet may run in the sandbox, in mode Box, with the field that names
+// it: the first entry of refs that resolves, or with no refs the head of the
 // document's llm_order. ok is false when the head is a platform provider,
-// which runs in mode Text alone, or when nothing resolves (each such entry is
+// which runs in mode Host alone, or when nothing resolves (each such entry is
 // refused on its own).
 func (r *renderer) executorHead(refs []v1alpha1.LLMProviderReference, field string) (chainLink, bool) {
 	if len(refs) == 0 {

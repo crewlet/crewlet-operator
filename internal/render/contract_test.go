@@ -1276,7 +1276,7 @@ func TestContractScheduleRefusalsReachTheSchedule(t *testing.T) {
 // on another object, and checks that the document attributes every problem to
 // the LLMProvider, which is where the controller reports it.
 func TestContractCLIAgentRefusalsReachTheProvider(t *testing.T) {
-	const providerAgent = "claude-agent"
+	const providerBox = "claude-box"
 	client := enginetest.Start(t).Client()
 	for _, c := range []struct {
 		name     string
@@ -1286,9 +1286,9 @@ func TestContractCLIAgentRefusalsReachTheProvider(t *testing.T) {
 		{
 			// The run is a sandbox run, and the company has no sandbox to
 			// run it in.
-			name:     "agent mode in a company with no sandbox",
+			name:     "box mode in a company with no sandbox",
 			mutate:   func(in *Input) { in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{} },
-			provider: providerAgent,
+			provider: providerBox,
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -1335,14 +1335,14 @@ func TestContractCLIAgentRefusalsReachTheProvider(t *testing.T) {
 //
 // The first case names the pair in the company's first revision. The second
 // runs the case as rendered, then moves the reviewer's provider to another
-// CLI under claude-agent's loginName: the registry, holding that directory
+// CLI under claude-box's loginName: the registry, holding that directory
 // under Claude Code since the first revision, refused the move on every node
 // that had run it, and applied it only on a node restarted since. The guide
 // says the move applies with no restart, so it is applied to the engine that
 // runs the first revision, which enginetest never restarts.
 func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 	const (
-		providerClaude = "claude-agent"
+		providerClaude = "claude-box"
 		providerCodex  = "codex"
 	)
 
@@ -1385,7 +1385,7 @@ func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 
 		// The reviewer's provider moves from Codex to OpenCode, which reads
 		// the same OpenAI model as <provider>/<model>, and onto the login
-		// name of claude-agent, a Claude Code provider: OpenCode opens a
+		// name of claude-box, a Claude Code provider: OpenCode opens a
 		// login of its own beside Claude Code's in the directory Claude
 		// Code has held since the first revision.
 		login := loginNameOf(modelProvider(in, providerClaude))
@@ -1402,7 +1402,7 @@ func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 		putCredentials(t, client, moved)
 		applied, err := client.ApplyConfig(t.Context(), engine.ApplyRequest{
 			Document: moved.YAML, IfMatch: running.RevisionID,
-			Summary: "codex moves to OpenCode under claude-agent's loginName",
+			Summary: "codex moves to OpenCode under claude-box's loginName",
 		})
 		if err != nil {
 			t.Fatalf("the engine refused a provider moved to another CLI under another provider's loginName: %v", err)

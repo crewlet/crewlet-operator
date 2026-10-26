@@ -41,7 +41,7 @@ func assistantCLIsStated(t *testing.T) []v1alpha1.CLIAgentName {
 // TestContractAssistantCLIsFollowTheEngine holds the guide's list of the CLIs
 // the Dashboard Assistant runs on to the engine's own verdict, CLI by CLI: for
 // each CLI the API admits webTools Denied for, a Company whose assistant chain
-// names one provider of that CLI, in mode Text with webTools Denied, is handed
+// names one provider of that CLI, in mode Host with webTools Denied, is handed
 // to `crewlet validate`. The engine refuses a member whose run is not shown to
 // leave the model with no tool of its own (a shell or a file reader on the
 // engine host reads what no request of the person's returned), naming
@@ -102,7 +102,7 @@ var deepWorkRunsOn = regexp.MustCompile("[Dd]eep work runs on an `LLMProvider` d
 
 // TestContractDeepWorkFollowsTheEngine holds what the API and the guide say
 // deep work runs on to the engine's own verdict: for every CLI the API runs
-// in mode Agent, in either mode, a Company whose spec.assistant.deepWork
+// in mode Box, in either mode, a Company whose spec.assistant.deepWork
 // names one provider of that CLI is handed to `crewlet validate`, and the
 // engine must take exactly the CLI and mode the guide names, refusing every
 // other at assistant.deep_work.llm. The API cannot refuse such a provider
@@ -142,7 +142,7 @@ func TestContractDeepWorkFollowsTheEngine(t *testing.T) {
 	}
 	var takes []string
 	for agent, set := range settings {
-		for _, mode := range []v1alpha1.CLIAgentMode{v1alpha1.CLIAgentModeText, v1alpha1.CLIAgentModeAgent} {
+		for _, mode := range []v1alpha1.CLIAgentMode{v1alpha1.CLIAgentModeHost, v1alpha1.CLIAgentModeBox} {
 			in := companyCaseNamed(t, "minimal").input(t)
 			in.PublicBaseURL = "https://minimal.hooks.example.com"
 			spec := v1alpha1.LLMProviderSpec{

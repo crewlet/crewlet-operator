@@ -15,8 +15,8 @@ import (
 
 // mirror is a declaration of the engine whose decision the operator copies
 // where no engine test can show the engine making it: the verdicts on a
-// seat's code work (CodeWorkOf) and on an agent-mode executor (ExecutorOf),
-// and the LLMProvider API's rule on an Agent-mode CLI's login, which Crewlet
+// seat's code work (CodeWorkOf) and on a box-mode executor (ExecutorOf),
+// and the LLMProvider API's rule on a Box-mode CLI's login, which Crewlet
 // reaches only when a seat launches a run, never on a write or in an answer
 // of its API; and which Atlassian deployment the company's Jira and
 // Confluence are on, and the identity each names a person by there, which
@@ -83,7 +83,7 @@ const (
 	// new is that a value that resolves to nothing is left out where the
 	// layer that wins lists its key in optional_keys, and is otherwise a gap
 	// that refuses a run_sandbox launch before a box exists (Launch) and is
-	// said, the run starting without it, in an agent-mode executor's run
+	// said, the run starting without it, in a box-mode executor's run
 	// (LaunchExecutor). A value a provisioning pass mints for the seat is
 	// waited for whatever the declaration says (refGap.hold). The render
 	// follows it: the code-work verdict reads the winning layer and counts an
@@ -104,11 +104,11 @@ const (
 	// in. Launch and LaunchExecutor hand the box the run's model in place of
 	// an API entry's endpoint, which moved no verdict.
 	cliOnlyRead = "v0.1.1-0.20261023214803-bbedf7ecebd7"
-	// standingInstructionsRead is the engine that hands an agent-mode run the
+	// standingInstructionsRead is the engine that hands a box-mode run the
 	// seat's system prompt as its standing instructions, on the coding
 	// agent's append channel, apart from the brief, and names the run by the
 	// turn's task (LaunchExecutor's System and Label), and frames a wider
-	// task after a run_sandbox brief alone (Launch's Wider), an agent-mode
+	// task after a run_sandbox brief alone (Launch's Wider), a box-mode
 	// brief being the turn's ask already. None is a verdict: the refusals
 	// before a box exists and the sign-in that must reach it are as at
 	// cliOnlyRead.
@@ -122,8 +122,8 @@ const (
 	// sandboxCredentials now asks before it refuses. LaunchExecutor opens its
 	// bridge session through mcpbridge.SeatSession, the session it built in
 	// place before. None moved a verdict: the model, the sign-in, the
-	// credential files, the refusals before a box exists and the bridge an
-	// agent-mode run needs are as at cliOnlyRead, and as at
+	// credential files, the refusals before a box exists and the bridge a
+	// box-mode run needs are as at cliOnlyRead, and as at
 	// v0.1.1-0.20261024180236-65ae4e109ab1, whose remote-run refusal is worded
 	// by the entry's auth mode (credentialRefusal): an api-key entry whose key
 	// resolved to nothing is told to give the seat its own key, and an
@@ -190,9 +190,18 @@ const (
 	e2bGo         = "internal/sandbox/e2b.go"
 	e2bCreateRead = "v0.1.1-0.20261019061838-6c1b4361a915"
 
+	// nativeMCPRead is crewlet#371's engine, which hands a phase's tools to its
+	// CLI as one MCP server and renames the provider modes text and agent to
+	// host and box. Its executorRuntime decides box mode by the same head of
+	// the executor's chain under the new name, and its LaunchExecutor refuses
+	// the same box-mode turns — no bridge, a bridge nothing serves, a login
+	// that cannot follow the run into a remote sandbox — while opening the
+	// job's bridge session inside the launch and fencing each bridged call.
+	nativeMCPRead = "v0.1.1-0.20261026003358-0f50276ef71f"
+
 	// offersSandboxRead is crewlet#271's engine, whose runner was first read
 	// for which seats it offers run_sandbox: never one whose executor runs in
-	// agent mode, which the render reports no code work for.
+	// box mode, which the render reports no code work for.
 	offersSandboxRead = "v0.1.1-0.20261020054845-2b4e0d71bce5"
 
 	// bootBoundsRead is the engine every bound on a data pod's and a seat
@@ -299,13 +308,13 @@ var credentialNames = []string{
 	codeWorkGo, "docs/guides/tool-servers.md", "docs/concepts/credentials.md",
 }
 
-// agentLogin is every operator file that copies how an Agent-mode run's CLI
+// boxLogin is every operator file that copies how a Box-mode run's CLI
 // signs in inside the remote sandbox, and is refused when nothing does: the
-// LLMProvider API's rule on a provider of mode Agent, the guide that states
+// LLMProvider API's rule on a provider of mode Box, the guide that states
 // it, and the CRD suite's reading of the engine's verdicts on it (its
 // holdVerdicts). The renderer's code-work verdict copies the same functions
 // for a run_sandbox launch.
-var agentLogin = []string{
+var boxLogin = []string{
 	"api/v1alpha1/llmprovider_types.go", "docs/guides/cli-agents.md", "test/crd/cliagent_engine_test.go",
 }
 
@@ -316,15 +325,15 @@ var agentLogin = []string{
 // concept page.
 var codingBox = []string{"docs/guides/credentials.md", "docs/concepts/credentials.md"}
 
-// agentModeCodeWork is every operator file that copies which seats Crewlet
+// boxModeCodeWork is every operator file that copies which seats Crewlet
 // offers run_sandbox, and so which have code work of their own: the render's
-// code-work verdicts (CodeWorkOf), which leave an agent-mode seat out, and
-// agentModeExecutor, which finds the executor they leave it out by; the Seat
+// code-work verdicts (CodeWorkOf), which leave a box-mode seat out, and
+// boxModeExecutor, which finds the executor they leave it out by; the Seat
 // API, whose spec.llm.sandbox, spec.sandbox.codingAgent and status say what
 // is read for such a seat, and the condition and reason docs beside it; and
 // the guide that states the rule (Code work) and the troubleshooting row that
 // gives CodingAgentMismatch's remedy for either kind of seat.
-var agentModeCodeWork = []string{
+var boxModeCodeWork = []string{
 	codeWorkGo, executorGo, seatTypesGo, "api/v1alpha1/common_types.go",
 	"docs/guides/cli-agents.md", troubleshootingMd,
 }
@@ -345,7 +354,7 @@ var bootWindows = []string{
 // shows without a run is held by a contract test instead, never here: the
 // head of a seat's chain (TestContractChainlessSeatRunsOnTheFirstProviderAlone),
 // the CodingAgentMismatch it refuses on a write, over a seat's sandbox chain
-// or an agent-mode seat's coding agent (TestContractCodeWorkOnWrite),
+// or a box-mode seat's coding agent (TestContractCodeWorkOnWrite),
 // the sign-in a provider's settings give it (test/crd's
 // TestCLIAgentSignInFollowsTheEngine), the deployment its validation reads a
 // Jira or Confluence address on (TestContractAtlassianDeploymentIsTheEngines),
@@ -549,17 +558,17 @@ var mirrored = []mirror{
 	},
 	{
 		file: sandboxGo, name: "newCodingRun",
-		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
+		against: append(append([]string{codeWorkGo}, boxLogin...), codingBox...),
 		decides: "a head another CLI's coding agent cannot run (CodingAgentMismatch), and a head's run, a " +
-			"run_sandbox launch or an agent-mode run alike, built by entryRun from the head's own entry",
+			"run_sandbox launch or a box-mode run alike, built by entryRun from the head's own entry",
 		digest: "10358f7c2c1ca99be8cc0f2d601c6f08a55e08837ca2b71b547e7eccaab4d862",
 		read:   deepWorkRead,
 	},
 	{
 		file: sandboxGo, name: "entryRun",
-		against: append(append([]string{codeWorkGo, cliAgentsMd}, agentLogin...), codingBox...),
-		decides: "a box's run, a seat's run_sandbox launch, its agent-mode run and the assistant's deep work " +
-			"alike, carries its model as the entry's text calls pass it and its provider's own sign-in " +
+		against: append(append([]string{codeWorkGo, cliAgentsMd}, boxLogin...), codingBox...),
+		decides: "a box's run, a seat's run_sandbox launch, its box-mode run and the assistant's deep work " +
+			"alike, carries its model as the entry's runs in the engine's pod pass it and its provider's own sign-in " +
 			"(entrySignIn) under what the caller's environment sets, and its login, the CLI's credential files " +
 			"or the document a CLI that keeps its login in a database of its own exported (OpenCode 2's), as the " +
 			"run's credential files, whatever box the run is placed in: what the box does with them is its " +
@@ -569,7 +578,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
-		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
+		against: append(append([]string{codeWorkGo}, boxLogin...), codingBox...),
 		decides: "a box in the Company's E2B sandbox is created from its template, the run's timeout and the run's " +
 			"environment alone, never from the run's credential files, so a head's login (its credential " +
 			"files, or the document OpenCode 2's export printed) never reaches it, and only a variable of the " +
@@ -579,7 +588,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: sandboxGo, name: "entrySignIn",
-		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
+		against: append(append([]string{codeWorkGo}, boxLogin...), codingBox...),
 		decides: "a ClaudeCode run whose seat's environment signs ClaudeCode in (codingagent.ClaudeCodeCredentialEnv, " +
 			"which TestCodeWorkFollowsTheEngineSource holds) is handed none of its provider's sign-in, and every " +
 			"other run its provider's own (SandboxEnv), beneath the seat's environment",
@@ -595,22 +604,22 @@ var mirrored = []mirror{
 	},
 	{
 		file: sandboxGo, name: "sandboxCredentials",
-		against: append([]string{codeWorkGo}, agentLogin...),
+		against: append([]string{codeWorkGo}, boxLogin...),
 		decides: "a head whose login cannot follow the run into a remote sandbox is refused unless the run's " +
 			"environment signs its CLI in (entrySignsIn): a run_sandbox launch (SandboxLoginNotPortable), and at " +
-			"phase Execute an agent-mode run, which the LLMProvider API refuses on a Subscription login no " +
+			"phase Execute a box-mode run, which the LLMProvider API refuses on a Subscription login no " +
 			"variable carries",
 		digest: "c9053964485043be4a37ed01e10ee1e5d712c94c73a90fc9c636631ebb059312",
 		read:   deepWorkRead,
 	},
 	{
 		file: sandboxGo, name: "entrySignsIn",
-		against: append(append([]string{codeWorkGo, cliAgentsMd}, agentLogin...), codingBox...),
+		against: append(append([]string{codeWorkGo, cliAgentsMd}, boxLogin...), codingBox...),
 		decides: "a run's environment signs its CLI in, in a box off the engine host, when it holds the CLI's " +
 			"token or key variable, for ClaudeCode any variable that signs it in, and for an env sign-in CLI any " +
 			"credential-named one: the rule a seat's remote run and the assistant's deep work, whose environment " +
 			"is its provider's own sign-in alone, are both held to before a box exists, and which the " +
-			"LLMProvider API's rule on a provider of mode Agent satisfies",
+			"LLMProvider API's rule on a provider of mode Box satisfies",
 		digest: "46c439e9448b247366d6d3852f1fdf0cf98cc40f927178a6395653138ecfb018",
 		read:   deepWorkRead,
 	},
@@ -700,7 +709,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: doctorGo, name: "(*Provider).CredentialEnvNames",
-		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
+		against: append(append([]string{codeWorkGo}, boxLogin...), codingBox...),
 		decides: "the variables that sign a CLI in inside a box: its token and key variables, and for an env " +
 			"sign-in CLI the credential-named variables of its env",
 		digest: "091501e8498192be36fc8619232c358a2276c32bae8f412e7197fcc0a8b89667",
@@ -708,7 +717,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: doctorGo, name: "(*Provider).SandboxEnv",
-		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
+		against: append(append([]string{codeWorkGo}, boxLogin...), codingBox...),
 		decides: "a provider's own sign-in follows the run into the box when it is one of those variables",
 		digest:  "f81f2bc4b7fca996eaac300c1ab530d2e357500bd4b76145551412788cc9ddb9",
 		read:    firstRead,
@@ -733,8 +742,8 @@ var mirrored = []mirror{
 	},
 	{
 		file: "internal/agent/runner/phases.go", name: "(*Runner).offersSandbox",
-		against: agentModeCodeWork,
-		decides: "a seat whose executor runs in agent mode is never offered run_sandbox, so it has no code work " +
+		against: boxModeCodeWork,
+		decides: "a seat whose executor runs in box mode is never offered run_sandbox, so it has no code work " +
 			"of its own: what it codes, it codes in its executor's run",
 		digest: "7dd4fb18d5bc2aaf097938b4b13a600c5a631c3e43d1f0dfd3cc9283ba893f77",
 		read:   offersSandboxRead,
@@ -742,25 +751,25 @@ var mirrored = []mirror{
 	{
 		file: agentRunGo, name: "(*Company).executorRuntime",
 		against: []string{executorGo, headsGo},
-		decides: "a seat's executor runs as an agentic run of a CLI when the head of its executor's chain alone is a " +
-			"provider in agent mode",
-		digest: "b03aa59b6706b0dcad0a4c2fb167e5cf22243dffa6a2034ddb6b10a3a640a8dd",
-		read:   firstRead,
+		decides: "a seat's executor runs as a detached run of a CLI in a box when the head of its executor's chain " +
+			"alone is a provider in box mode",
+		digest: "ddf1821989956fb33948fc2f5e2de11596a27e5afd629a12836c97ee3c843cb2",
+		read:   nativeMCPRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).LaunchExecutor",
-		against: append([]string{executorGo, renderCompanyGo, configOptionalGo}, agentLogin...),
-		decides: "an agent-mode turn on a node that serves no tool bridge is refused, never run on the engine's own " +
-			"tool loop (AgentModeBridgeUnsupported, NotExposed), and so is one whose CLI login cannot follow it " +
+		against: append([]string{executorGo, renderCompanyGo, configOptionalGo}, boxLogin...),
+		decides: "a box-mode turn on a node that serves no tool bridge is refused, never run on the engine's host " +
+			"instead (BoxModeBridgeUnsupported, NotExposed), and so is one whose CLI login cannot follow it " +
 			"into the remote sandbox (sandboxCredentials at phase Execute); a run whose environment holds a " +
 			"value that resolves to nothing starts without it",
-		digest: "fdaf22952f546441b70dc0bc08092c1d97d766af6e00b67e50106965062f160e",
-		read:   deepWorkRead,
+		digest: "bd61de506c23e539219789b90294e832cb4a5a8fe43be87534915bbac360935d",
+		read:   nativeMCPRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).executorRun",
-		against: append([]string{executorGo}, agentLogin...),
-		decides: "an agent-mode run is the executor itself: it runs on the head of the seat's executor chain " +
+		against: append([]string{executorGo}, boxLogin...),
+		decides: "a box-mode run is the executor itself: it runs on the head of the seat's executor chain " +
 			"(phase Execute), never on its llm_sandbox, so that head's sign-in is the one that must reach the box",
 		digest: "49679ff36a054ab3dea460a4a5c850c4fafea190b74e37c3a6e72637b25df448",
 		read:   firstRead,

@@ -83,7 +83,7 @@ var envSignIn = []v1.CLIAgentName{v1.CLIAgentHermes, v1.CLIAgentPi, v1.CLIAgentO
 var (
 	homeIsolation = []string{"HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "TMPDIR"}
 	cliIsolation  = map[v1.CLIAgentName][]string{
-		v1.CLIAgentClaudeCode:  {"CLAUDE_CONFIG_DIR"},
+		v1.CLIAgentClaudeCode:  {"CLAUDE_CONFIG_DIR", "CLAUDE_CODE_DISABLE_CLAUDE_MDS", "CLAUDE_CODE_DISABLE_AUTO_MEMORY"},
 		v1.CLIAgentCodex:       {"CODEX_HOME", "CODEX_SQLITE_HOME"},
 		v1.CLIAgentOpenCode:    {"OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_PROJECT_DISABLE"},
 		v1.CLIAgentCursorAgent: {"CURSOR_CONFIG_DIR"},

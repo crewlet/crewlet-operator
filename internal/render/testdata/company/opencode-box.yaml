@@ -15,7 +15,7 @@ providers:
         mode: subscription
       env:
         OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
-      mode: agent
+      mode: box
       model: openrouter/anthropic/claude-sonnet-5
       run_in: e2b
       state_dir: /var/lib/crewlet/llm-cli/opencode

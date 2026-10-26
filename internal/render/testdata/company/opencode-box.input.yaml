@@ -1,10 +1,10 @@
-# OpenCode as a seat's executor in agent mode, signed in by its model
-# provider's key in env, which an agent-mode run carries into the
+# OpenCode as a seat's executor in box mode, signed in by its model
+# provider's key in env, which a box-mode run carries into the
 # company's E2B sandbox, and its model written <provider>/<model>, as
 # OpenCode reads it. The seat codes in that run, so Crewlet offers it no
 # run_sandbox; a second seat's code work runs OpenCode, the company's
-# default coding agent, on an OpenCode provider in mode Text on Anthropic's
-# key. Agent mode calls the seat's tools back through the company's public
+# default coding agent, on an OpenCode provider in mode Host on Anthropic's
+# key. Box mode calls the seat's tools back through the company's public
 # address, so the case is exposed.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
@@ -29,7 +29,7 @@ spec:
     name: harbor
   agent: OpenCode
   model: openrouter/anthropic/claude-sonnet-5
-  mode: Agent
+  mode: Box
   runIn: E2B
   auth:
     mode: Subscription

@@ -9,7 +9,8 @@ subscription you already have, or on a metered API key.
 It renders one entry of Crewlet's `providers.llm`; Crewlet's
 [LLM backends](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md)
 describes what the engine does with it. This guide covers what changes when
-the engine runs in a pod: the image, the login, and agent mode.
+the engine runs in a pod: the image, the login, and the two modes a CLI runs
+in.
 
 ## The image needs the CLI
 
@@ -31,18 +32,23 @@ pasting one Dockerfile into another
 ([One image with a coding CLI](tool-servers.md#one-image-with-a-coding-cli)).
 
 The engine's root filesystem is read-only: a CLI writes under the home the
-engine gives each seat and under `/tmp`, both writable. Each running CLI
-takes 200 to 450 MB, so size the class's `data.resources` for
-`maxConcurrent` of them per provider. An OpenCode call is at the top of
-that range: measured on OpenCode 2.0.32, one call held about 440 MB at its
-peak, some 365 MB of it the private server every call starts, and each call
-running beside it about 250 to 350 MB more, the binary's pages being shared
-between them; a short `opencode api session.get` reading a call's usage
-follows each. OpenCode also unpacks about 19 MB of native libraries into
-each seat's home, under the `TMPDIR` the engine gives it (`<home>/tmp`),
-beside a database of about 7 MB while a seat's calls run: about 26 MB per
-OpenCode seat on the data volume, and on a seat pod's scratch volume
-(`scratchSizeLimit`) for each seat the pod holds.
+engine gives each seat and under `/tmp`, both writable, and the engine keeps
+the socket each host-mode run reaches the seat's tools through in a directory
+of its own under `/tmp` ([Host mode and box mode](#host-mode-and-box-mode)).
+Each running CLI takes 200 to 450 MB, so size the class's `data.resources`
+for `maxConcurrent` of them per provider; one now lives for a seat's whole
+run, its tool calls included, so where seats wait on each other for a place,
+raise `maxConcurrent` and the pod's memory together
+([Host mode and box mode](#host-mode-and-box-mode)). An OpenCode call is at
+the top of that range: measured on OpenCode 2.0.32, one call held about 440
+MB at its peak, some 365 MB of it the private server every call starts, and
+each call running beside it about 250 to 350 MB more, the binary's pages
+being shared between them; a short `opencode api session.get` reading a
+call's usage follows each. OpenCode also unpacks about 19 MB of native
+libraries into each seat's home, under the `TMPDIR` the engine gives it
+(`<home>/tmp`), beside a database of about 7 MB while a seat's calls run:
+about 26 MB per OpenCode seat on the data volume, and on a seat pod's
+scratch volume (`scratchSizeLimit`) for each seat the pod holds.
 
 ### Claude Code
 
@@ -161,7 +167,7 @@ wrong:
 - **Never add an `/etc/opencode` configuration** to the image: OpenCode reads
   it as machine-wide managed configuration over every seat's call, and
   nothing the engine sets overrides it
-  ([Tool calls in text mode](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#tool-calls-in-text-mode)).
+  ([Isolation](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#isolation-the-part-that-actually-matters)).
 - **The binary links glibc**, which the engine image's Debian has; the
   `musl` packages are for Alpine. Of the native libraries it unpacks, only
   its file watcher's needs more, libstdc++ and libgcc_s, which Debian has
@@ -222,7 +228,7 @@ takes none and signs in with that key in `env`:
 
 | Sign-in | What the Secret holds | Use it when |
 |---|---|---|
-| `auth.tokenSecretRef` | a long-lived headless token the CLI mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the CLI is Claude Code, the one CLI whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins an agent-mode run can carry (an agent-mode OpenCode carries its model provider's key in `env` instead) |
+| `auth.tokenSecretRef` | a long-lived headless token the CLI mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the CLI is Claude Code, the one CLI whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins a box-mode run can carry (a box-mode OpenCode carries its model provider's key in `env` instead) |
 | `auth.credentialBundleSecretRef` | a bundle of the CLI's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any CLI but `QwenCode`, which keeps no login: the others mint no token Crewlet hands on |
 | `auth.mode: APIKey` with `auth.apiKeySecretRef` | the CLI's metered API key | the CLI's Crewlet profile names a key variable ([below](#a-metered-key)) |
 | `env`, with `auth.mode: Subscription` | the key of the model provider the CLI runs on, in the variable the CLI reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the CLI is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
@@ -232,7 +238,7 @@ What each CLI takes, in the engine the operator is tested against, Crewlet's
 table to that engine's own verdict on every CLI and every sign-in, so neither
 can fall behind it):
 
-| `agent` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `credentialBundleSecretRef` | `mode: Agent` |
+| `agent` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `credentialBundleSecretRef` | `mode: Box` |
 |---|---|---|---|---|---|
 | `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | yes | on the token or the key |
 | `Codex` | no | `CODEX_API_KEY` | no | yes | no |
@@ -243,7 +249,7 @@ can fall behind it):
 | `Grok` | no | `XAI_API_KEY` | no | yes | no |
 | `MuseCode` | no | `META_API_KEY` | no | yes | no |
 | `KimiCode` | no | no: it reads a key only from its own `config.toml`, so give that in the bundle | no | yes | no |
-| `OpenCode` | no | no | yes | yes | on the key in `env` ([below](#text-mode-and-agent-mode)) |
+| `OpenCode` | no | no | yes | yes | on the key in `env` ([below](#host-mode-and-box-mode)) |
 | `Hermes` | no | no | yes | yes | no |
 | `Pi` | no | no | yes | yes | no |
 
@@ -286,7 +292,10 @@ XDG directories and the temporary directory of every CLI, and the CLI's own
 configuration directory (and, for `Codex`, the directory of its state
 database), or, for `OpenCode`, its configuration directory and
 `OPENCODE_CONFIG_PROJECT_DISABLE`, the switch that keeps OpenCode from reading
-project configuration from the directories above a seat's call. `env` is
+project configuration from the directories above a seat's call, and, for
+`ClaudeCode`, `CLAUDE_CODE_DISABLE_CLAUDE_MDS` and
+`CLAUDE_CODE_DISABLE_AUTO_MEMORY`, the switches that keep every `CLAUDE.md`
+above a seat's call, and Claude Code's auto-memory, out of it. `env` is
 layered over them, so a value there would replace that isolation for every
 seat on the provider: the engine refuses the document, and the API server
 refuses the provider first. Another CLI's variable is no conflict here
@@ -296,7 +305,7 @@ its message and this table to the engine's lists:
 | `env` may not set | For |
 |---|---|
 | `HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, `TMPDIR` | every CLI |
-| `CLAUDE_CONFIG_DIR` | `ClaudeCode` |
+| `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_DISABLE_CLAUDE_MDS`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY` | `ClaudeCode` |
 | `CODEX_HOME`, `CODEX_SQLITE_HOME` | `Codex` |
 | `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_PROJECT_DISABLE` | `OpenCode` |
 | `CURSOR_CONFIG_DIR` | `CursorAgent` |
@@ -419,8 +428,8 @@ home holds the entry's login alone.
 A login OpenCode 1.x made (`~/.local/share/opencode/auth.json`) is not read:
 a bundle holding one is refused when the engine restores it, which it logs
 as `cli_agent_bundle_restore_failed`, and the provider runs signed out, so
-export it again from OpenCode 2. A bundle serves mode Text only: an
-agent-mode run never receives it ([Text mode and agent mode](#text-mode-and-agent-mode)).
+export it again from OpenCode 2. A bundle serves mode Host only: a
+box-mode run never receives it ([Host mode and box mode](#host-mode-and-box-mode)).
 
 ### Which `env` entries sign a CLI in
 
@@ -482,38 +491,79 @@ or proxy in front of the vendor is a variable the CLI reads from its
 environment, which goes in `env` from a Secret, such as Claude Code's
 `ANTHROPIC_BASE_URL`.
 
-## Text mode and agent mode
+## Host mode and box mode
 
-`mode: Text` (the default) runs the CLI as a model behind the engine's
-own tool loop, as a process in the engine's pod. `mode: Agent` runs a
-seat's executor as the CLI's own agentic run, with its own shell and editor,
-in the company's sandbox. Every other phase on the same provider (the
-reviewer, a delegated worker, the summariser) is still a text call, so the
+In either mode the CLI drives its own loop: it asks the model, calls the
+seat's tools, which reach it as the MCP tools of one server, and asks again,
+until the model stops or the engine ends the run. Every call goes through
+the engine's gates on its way to the tool, so a seat's tools are the same in
+both. What `mode` decides is where that loop runs and how long it lives.
+
+`mode: Host` (the default) runs the CLI in the engine's pod that holds the
+seat, a data pod or a seat pod alike, turn by turn, with the CLI's own shell
+and editor denied, so the seat's tools are the only ones it has. The CLI
+reaches them through `crewlet mcp-relay`, the engine's own binary, which it
+starts as a stdio MCP server and which carries its calls over a unix socket
+in a directory the engine makes for itself under the pod's `/tmp`, open to
+the engine's user alone. That is the whole of it: no listener, no token and
+no network, so a host-mode provider needs no public address and no network
+policy of its own. It needs the CLI in the engine's image and a writable
+`/tmp`, which every engine pod the operator runs has.
+
+`mode: Box` runs a seat's executor as a detached run of the CLI in the
+company's sandbox, with the CLI's own shell and editor, and the seat's tools
+reached back over the engine's tool bridge; the turn waits until the run
+reports. Everywhere else, in every other phase on the same provider (the
+reviewer, a delegated worker, the summariser) and behind another provider at
+the head of the executor's chain, the provider runs as in host mode, so the
 CLI must be in the engine's image either way.
+
+Two fields bound a provider's CLI in the engine's pod, and since a run of the
+CLI now asks the model many times and calls the seat's tools in between,
+neither is a bound on one request:
+
+- `timeoutSeconds` bounds one stretch of the CLI's model work with no tool
+  call in flight, from its launch or the answer to its last tool call to its
+  next call or its end (600 seconds unset). A tool call stops the clock,
+  however long a delegation or a slow tool server takes, and the next
+  stretch starts afresh. A stretch past it ends the run with a timeout,
+  which is retryable: a seat's chain moves on to its next provider.
+- `maxConcurrent` bounds the provider's live CLI processes in each pod (4
+  unset). One process lives for a whole run and holds its place through the
+  run's tool calls, so it is also how many seats' runs the provider has going
+  at once in the pod, and a run past it waits. A model call made on the same
+  provider from inside a run's tool call, such as a delegated worker's,
+  borrows that run's place: waiting for one of its own could leave every
+  place held by runs that are each waiting on such a call.
+
+A box-mode executor's run, in the sandbox, is bounded by neither.
 
 ```mermaid
 flowchart LR
     subgraph pod["The data pod"]
         ENG["<b>Engine</b><br/><i>the seat's turn</i>"]
-        TXT["<b>CLI, text mode</b><br/><i>a model behind the<br/>engine's tool loop</i>"]
+        HOST["<b>CLI, host mode</b><br/><i>its own loop, the seat's<br/>tools its only tools</i>"]
+        RELAY["<b>crewlet mcp-relay</b><br/><i>a unix socket under /tmp</i>"]
         PUB["<b>:8081 public listener</b><br/>/mcp/ tool bridge"]
     end
     subgraph box["The company's E2B sandbox"]
-        AG["<b>CLI, agent mode</b><br/><i>its own shell, editor<br/>and agentic loop</i>"]
+        BOX["<b>CLI, box mode</b><br/><i>its own loop, shell<br/>and editor</i>"]
     end
-    ENG <-->|"prompt and answer"| TXT
-    ENG -->|"starts a detached run"| AG
-    AG -->|"the seat's tools, with a token<br/>signed for the run"| PUB
+    ENG -->|"starts a run"| HOST
+    HOST -->|"the seat's tools, over MCP"| RELAY
+    RELAY --> ENG
+    ENG -->|"starts a detached run"| BOX
+    BOX -->|"the seat's tools, with a token<br/>signed for the run"| PUB
     PUB --> ENG
 ```
 
-In agent mode:
+In box mode:
 
 - The run is a sandbox run: the Company needs `spec.sandbox`. With no
   `spec.sandbox.e2b.template`, each run gets E2B's prebuilt template for its
   CLI (`claude` for Claude Code, `opencode` for OpenCode); a template you
   set is used for every run, so it must carry the CLI of every coding agent
-  and agent-mode provider the company runs. For OpenCode that is OpenCode 2,
+  and box-mode provider the company runs. For OpenCode that is OpenCode 2,
   the `@opencode/cli` package (`opencode --version` prints `opencode
   v2.…`): Crewlet's runner ends a run at once in a box that has OpenCode
   1.x, npm's `opencode-ai`, with `this box runs OpenCode 1.…; the opencode
@@ -525,39 +575,39 @@ In agent mode:
   ([Crewlet's OpenCode runner](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#opencode)).
   `runIn` is `E2B`, the only cell v1alpha1 offers: Crewlet's local cells
   would run every seat's code in the engine's pod, with its credentials.
-- Claude Code and OpenCode run in agent mode: they are the CLIs the engine
+- Claude Code and OpenCode run in box mode: they are the CLIs the engine
   has a sandbox runner for, the coding agents `spec.sandbox` offers, and the
-  API server refuses `mode: Agent` for any other. The run is handed `model`
-  exactly as the provider's text calls pass it, so one model serves the
+  API server refuses `mode: Box` for any other. The run is handed `model`
+  exactly as the provider's host-mode runs pass it, so one model serves the
   executor's run and every other phase.
 - The login must follow the run into the remote sandbox, which only a
-  variable of the run's environment can: an agent-mode Claude Code takes
-  `auth.tokenSecretRef` or `auth.mode: APIKey`, and an agent-mode OpenCode
+  variable of the run's environment can: a box-mode Claude Code takes
+  `auth.tokenSecretRef` or `auth.mode: APIKey`, and a box-mode OpenCode
   its model provider's key in `env`, under a name the engine reads as a
   credential, which the engine exports into the box. A credential bundle
   stays on the data volume, since its login carries a refresh token the
-  engine keeps rotating there, so the API server refuses an agent-mode
+  engine keeps rotating there, so the API server refuses a box-mode
   provider signed in with nothing else. A key in the Seat's
   `spec.sandbox.env` reaches the box as well, but the API server cannot see
   the Seat from the provider, so it does not count it.
 - The run calls the seat's own tools back through the engine's tool bridge.
-  While any LLMProvider of the company is in agent mode, the operator gives
+  While any LLMProvider of the company is in box mode, the operator gives
   the engine its public address as the bridge's (`CREWLET_MCP_BRIDGE_URL`),
   and the engine serves the bridge on its public listener, beside the
   webhooks ([Exposure](exposure.md)). A company with no public address
   cannot run one: the engine applies the provider and refuses every turn
   of a seat whose executor's chain it heads. The operator applies it too
   and reports it, so the rest of the company still runs: the LLMProvider
-  reports `AgentModeRunnable=False`, `NotExposed`, and each such Seat
-  `Ready=False`, `NotExposed`. With an address, `AgentModeRunnable` is
+  reports `BoxModeRunnable=False`, `NotExposed`, and each such Seat
+  `Ready=False`, `NotExposed`. With an address, `BoxModeRunnable` is
   `True`, `ToolBridgeServed`, naming the bridge's address.
 
 ```yaml
-spec:                       # LLMProvider claude-agent
+spec:                       # LLMProvider claude-box
   agent: ClaudeCode
   model: sonnet
-  mode: Agent
-  loginName: claude-code        # the same login as the text-mode provider
+  mode: Box
+  loginName: claude-code        # the same login as the host-mode provider
   auth:
     tokenSecretRef: {name: claude-subscription, key: oauthToken}
 ```
@@ -565,10 +615,10 @@ spec:                       # LLMProvider claude-agent
 or OpenCode, on its model provider's key:
 
 ```yaml
-spec:                       # LLMProvider opencode-agent
+spec:                       # LLMProvider opencode-box
   agent: OpenCode
   model: openrouter/anthropic/claude-sonnet-5
-  mode: Agent
+  mode: Box
   auth:
     mode: Subscription
   env:
@@ -604,8 +654,8 @@ time the condition becomes `False` or its reason changes.
   (`CodingAgentMismatch`). Codex, Gemini CLI, Kimi Code, Hermes, Pi and the
   other CLIs have no coding agent, so they cannot back code work: put a
   provider of the seat's coding agent first in `spec.llm.sandbox`. An
-  `OpenCode` coding run needs OpenCode 2 in the box, as an agent-mode run
-  does ([Text mode and agent mode](#text-mode-and-agent-mode)).
+  `OpenCode` coding run needs OpenCode 2 in the box, as a box-mode run
+  does ([Host mode and box mode](#host-mode-and-box-mode)).
 - **The login must reach the remote sandbox.** A credential bundle never
   does, so a `ClaudeCode` provider signed in by a bundle, with nothing in
   the seat's sandbox environment (`spec.sandbox.env`, its setup steps'
@@ -623,7 +673,7 @@ alone, with the provider's model: Crewlet hands the run none of the
 provider's sign-in then, since Claude Code ranks its sign-ins by name, and a
 provider's key beside the seat's plan token would win.
 
-A seat whose executor runs in agent mode has no code work of its own:
+A seat whose executor runs in box mode has no code work of its own:
 Crewlet never offers it `run_sandbox`, since it codes in its executor's run,
 on that provider's CLI, so neither case above applies, its
 `spec.llm.sandbox` is not read for one, and it has no `CodeWorkRunnable`.
@@ -679,7 +729,7 @@ counts for it; a step's files are its own. A provisioned value an
 Integration mints for the seat is never left out, whatever the list says:
 until it is minted, each run is refused, the seat told to try again. One
 nothing mints, while no Integration of the company has
-`provisioning: Engine`, is left out. An agent-mode executor's run starts
+`provisioning: Engine`, is left out. A box-mode executor's run starts
 without a value that holds nothing, listed or not (Crewlet's
 [Credentials and the run environment](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#credentials-and-the-run-environment)).
 
@@ -703,27 +753,29 @@ is in
 ## Seat pools
 
 A seat placed in a [seat pool](topology.md) runs on a seat pod, which keeps
-nothing between starts and serves only its probes. Two things a data pod
-does for a CLI it cannot do:
+nothing between starts and serves only its probes. A provider in host mode
+runs there as it does on a data pod, its CLI reaching the seat's tools through
+a socket under the seat pod's own `/tmp`. Two things a data pod does for a
+CLI a seat pod cannot do:
 
-- **Agent mode.** A run calls the seat's tools back through the tool bridge
+- **Box mode.** A run calls the seat's tools back through the tool bridge
   of the very pod that holds the seat, on an address the sandbox reaches; the
   operator gives the data pod the company's public address for it. The
   engine would serve the bridge on a seat pod too, on the listener its
   probes use, but nothing publishes an address of a seat pod's own that a
   remote sandbox could dial: the company's public address reaches the data
   pod alone, and a seat pod is reached by its kubelet and nothing else.
-  Without an address the engine refuses every agent-mode turn on the pod.
-  Crewlet runs a turn in agent mode only when the HEAD of the executor's
-  chain is in `mode: Agent`, so a seat in a seat pool whose executor's
+  Without an address the engine refuses every box-mode turn on the pod.
+  Crewlet runs a turn in box mode only when the HEAD of the executor's
+  chain is in `mode: Box`, so a seat in a seat pool whose executor's
   chain (`spec.llm.default`, or the Company's first provider when the seat
   names none) starts with such a provider can run no turn. The engine
   applies it all the same, and so does the operator, which reports it on
-  the Seat as `Ready=False`, `AgentModeBridgeUnsupported`, with a Warning
+  the Seat as `Ready=False`, `BoxModeBridgeUnsupported`, with a Warning
   event, rather than hold the rest of the company's changes: place the seat
-  in `data`, or put a provider in `mode: Text` at the head of the chain. The
+  in `data`, or put a provider in `mode: Host` at the head of the chain. The
   same provider behind another in that chain, or in another phase's chain,
-  is a text call, and is fine.
+  runs in the seat pod as in host mode, and is fine.
 - **A credential bundle.** The login lives under the CLI's state directory,
   which on a seat pod is its scratch volume, so every seat pod restores the
   bundle at each start and then refreshes the login on its own, beside the
@@ -805,7 +857,7 @@ spec:
     name: nimbus
   agent: ClaudeCode
   model: sonnet
-  mode: Agent
+  mode: Box
   auth:
     mode: Subscription
     tokenSecretRef:

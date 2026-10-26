@@ -47,7 +47,7 @@ type Input struct {
 	// is not part of the document: Crewlet reads where its public listener
 	// is reached from the data pod's crewlet.yaml (api.public.external_url,
 	// BootstrapInput.PublicURL). It decides what this render reports, the
-	// verdicts of ExecutorOf and AgentModeOf on a run that calls the seat's
+	// verdicts of ExecutorOf and BoxModeOf on a run that calls the seat's
 	// tools back through it, and the webhook addresses a Seat publishes.
 	PublicBaseURL string
 
@@ -434,7 +434,7 @@ func (r *renderer) seatCredential(s *v1alpha1.Seat, field string, src v1alpha1.S
 // written at use, nothing creates. Crewlet holds a value that does not
 // resolve to the rule it holds a missing Secret's to: a tool server is not
 // started without one, nor a run_sandbox coding run, unless the value's key
-// is optional, when it is left out; an agent-mode executor's run starts
+// is optional, when it is left out; a box-mode executor's run starts
 // without it, since refusing it would fail the turn.
 func withoutProvisioner(use *startUse) string {
 	switch {
@@ -449,7 +449,7 @@ func withoutProvisioner(use *startUse) string {
 		return "the seat's coding runs start without it, as the optionalKeys beside it let them"
 	default:
 		return "Crewlet refuses each of the seat's run_sandbox coding runs, whose environment holds it, and an " +
-			"agent-mode run of its executor starts without it"
+			"box-mode run of its executor starts without it"
 	}
 }
 
@@ -684,10 +684,10 @@ func llmEntry(s *v1alpha1.LLMProviderSettings, stateDir string) llmProviderDoc {
 	return doc
 }
 
-// llmProvider renders one of the Company's LLMProviders. In mode Agent its
+// llmProvider renders one of the Company's LLMProviders. In mode Box its
 // runs happen in a remote sandbox and call the seat's tools back through the
 // engine's public address; a company with none is applied all the same, and
-// AgentModeOf reports it, since Crewlet refuses only the turns that need the
+// BoxModeOf reports it, since Crewlet refuses only the turns that need the
 // address.
 func (r *renderer) llmProvider(p *v1alpha1.LLMProvider) llmProviderDoc {
 	s := &p.Spec

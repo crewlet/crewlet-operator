@@ -172,7 +172,7 @@ type CompanyLLMSettings struct {
 // The assistant answers a signed-in person's questions about the company and
 // prepares changes for that person to approve, acting only as them: every
 // read is a request of theirs, and nothing is written until they approve.
-// Every provider in llm must be in mode Text, on a CLI Crewlet runs with no
+// Every provider in llm must be in mode Host, on a CLI Crewlet runs with no
 // tool of its own (ClaudeCode or Pi; Codex keeps a shell its sandbox only
 // confines, and OpenCode's has not been measured to go), with webTools
 // Denied. Crewlet refuses any other in the dry run before every apply, and
@@ -247,7 +247,7 @@ type CompanyAssistant struct {
 // Crewlet is the signed-in person's own assistant tools over the tool
 // bridge, so every read is still that person's request and every write still
 // a proposal they approve. The provider llm names must be an LLMProvider in
-// mode Agent driving ClaudeCode, the one CLI whose run Crewlet continues in
+// mode Box driving ClaudeCode, the one CLI whose run Crewlet continues in
 // its own session after an approval; Crewlet refuses any other in the dry run
 // before every apply, and the refusal is reported on the Company, since the
 // rule turns on the provider's own spec.
@@ -261,11 +261,11 @@ type CompanyAssistant struct {
 // spec.sandbox, and every deep-work run is placed in the Company's E2B
 // sandbox.
 type CompanyAssistantDeepWork struct {
-	// llm is the provider deep work runs on: an LLMProvider in mode Agent
-	// driving ClaudeCode. A platform model provider runs in mode Text, so
+	// llm is the provider deep work runs on: an LLMProvider in mode Box
+	// driving ClaudeCode. A platform model provider runs in mode Host, so
 	// it is refused. Crewlet's `llm`.
 	// +required
-	// +kubebuilder:validation:XValidation:rule="!has(self.kind) || self.kind == 'LLMProvider'",message="deep work runs on an LLMProvider in mode Agent driving ClaudeCode: a platform model provider runs in mode Text, where its CLI has no tool of its own",fieldPath=".kind"
+	// +kubebuilder:validation:XValidation:rule="!has(self.kind) || self.kind == 'LLMProvider'",message="deep work runs on an LLMProvider in mode Box driving ClaudeCode: a platform model provider runs in mode Host, where its CLI has no tool of its own",fieldPath=".kind"
 	LLM LLMProviderReference `json:"llm,omitzero"`
 
 	// timeoutSeconds is the longest one deep-work run may take. Unset takes
@@ -468,7 +468,7 @@ type SandboxSetupStep struct {
 	// never from the engine's. The run's is the steps' env, the Seat's
 	// sandbox env, and what Crewlet adds: the agent's handle and, when it
 	// has one, its email, and the variables that sign the coding agent in
-	// to the provider its code work runs on, or, in an agent-mode
+	// to the provider its code work runs on, or, in a box-mode
 	// executor's run, those of the executor's own provider
 	// (docs/guides/credentials.md says which, and when the seat's own env
 	// leaves them out). The API refuses ${NAME} (NAME an identifier) all
@@ -552,7 +552,7 @@ type E2BSandbox struct {
 	// memory and disk. Unset, each run gets the vendor's prebuilt template
 	// for its coding agent's CLI (claude or opencode); a template set here is
 	// used for every run, so it must carry the CLI of every coding agent and
-	// Agent-mode LLMProvider the company runs. For OpenCode that is
+	// Box-mode LLMProvider the company runs. For OpenCode that is
 	// OpenCode 2, the @opencode/cli package (opencode --version prints
 	// opencode v2.…): Crewlet's OpenCode runner ends a run at once in a box
 	// with OpenCode 1.x (npm's opencode-ai), and E2B does not say which

@@ -214,7 +214,7 @@ func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error
 	// fact about its own spec. Whether its code work can is decided once the
 	// Secrets are read, when writeStatus asks: a sign-in it lets go without
 	// may be missing.
-	run.checkExecutors(render.ExecutorOf(run.input()), render.AgentModeOf(run.input()))
+	run.checkExecutors(render.ExecutorOf(run.input()), render.BoxModeOf(run.input()))
 	run.checkReported(render.ReportedOf(run.input()))
 	if err != nil {
 		refusals := render.RefErrors(err)
@@ -953,8 +953,8 @@ func (run *configRun) checkCodeWork(codeWork map[string]render.CodeWork) {
 }
 
 // checkExecutors records each agent Seat's executor and each LLMProvider's
-// agent mode on its part, for decide to report and announce.
-func (run *configRun) checkExecutors(executors map[string]render.Executor, agentModes map[string]render.AgentMode) {
+// box mode on its part, for decide to report and announce.
+func (run *configRun) checkExecutors(executors map[string]render.Executor, boxModes map[string]render.BoxMode) {
 	for _, p := range run.parts {
 		switch o := p.obj.(type) {
 		case *crewletaiv1alpha1.Seat:
@@ -962,8 +962,8 @@ func (run *configRun) checkExecutors(executors map[string]render.Executor, agent
 				p.executor = &e
 			}
 		case *crewletaiv1alpha1.LLMProvider:
-			if m, ok := agentModes[o.Name]; ok {
-				p.agentMode = &m
+			if m, ok := boxModes[o.Name]; ok {
+				p.boxMode = &m
 			}
 		}
 	}
@@ -986,7 +986,7 @@ func (run *configRun) checkReported(reported []*render.RefError) {
 
 // announce emits a Warning event on a part whose decided status now shows a
 // finding that holds nothing: a Seat whose Ready turns to its executor's
-// reason, an LLMProvider whose AgentModeRunnable turns False, a part whose
+// reason, an LLMProvider whose BoxModeRunnable turns False, a part whose
 // ResolvedRefs turns False for a reported finding. The document applies with
 // each, and nothing on the Company says so. The event follows the condition
 // that shows the finding, from the status the part had to the one decided,
@@ -1012,9 +1012,9 @@ func (run *configRun) announce(p *part) {
 				p.executor.Field, p.executor.Message)
 		}
 	}
-	if p.agentMode != nil {
-		if c := turned(crewletaiv1alpha1.ConditionAgentModeRunnable, p.agentMode.Reason); c != nil {
-			run.Recorder.Eventf(p.obj, nil, corev1.EventTypeWarning, c.Reason, "CheckAgentMode", "%s", p.agentMode.Message+".")
+	if p.boxMode != nil {
+		if c := turned(crewletaiv1alpha1.ConditionBoxModeRunnable, p.boxMode.Reason); c != nil {
+			run.Recorder.Eventf(p.obj, nil, corev1.EventTypeWarning, c.Reason, "CheckBoxMode", "%s", p.boxMode.Message+".")
 		}
 	}
 	if len(p.unresolved) == 0 {

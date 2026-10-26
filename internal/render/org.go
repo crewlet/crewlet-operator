@@ -314,10 +314,10 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 			doc.Sandbox.MCP.Servers = append(doc.Sandbox.MCP.Servers, ref.Name)
 		}
 		// Crewlet refuses a coding agent on another CLI's provider on every
-		// write, and on a seat whose executor runs in agent mode a coding
+		// write, and on a seat whose executor runs in box mode a coding
 		// agent other than that executor's CLI; the other pairings it
 		// cannot run are CodeWorkOf's to report, since Crewlet applies them.
-		if refusal := r.agentModeCodingAgent(s); refusal != "" {
+		if refusal := r.boxModeCodingAgent(s); refusal != "" {
 			r.errs.add(EngineRefuses, KindSeat, s.Name, "spec.sandbox.codingAgent", v1alpha1.ReasonCodingAgentMismatch, refusal)
 		}
 		if r.offersCodeWork(s) {

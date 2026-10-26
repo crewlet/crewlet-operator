@@ -62,7 +62,7 @@ var namesTheHome = []string{
 // its seats' boxes would write; and every path Crewlet refuses the API
 // refuses too, but for namesTheHome, each of which Crewlet must still
 // refuse. Every box the operator renders is an E2B one (default_run_in: e2b,
-// and an agent-mode CLI runs in E2B too), so Crewlet judges each path as such
+// and a box-mode CLI runs in E2B too), so Crewlet judges each path as such
 // a box writes it.
 func TestSetupFilePathsFollowTheEngine(t *testing.T) {
 	namespace := newNamespace(t)

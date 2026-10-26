@@ -115,12 +115,12 @@ const (
 // The messages of the rules over a provider's CLI and its sign-in.
 const (
 	msgCLIKey         = "apiKeySecretRef is the key auth mode APIKey hands the CLI"
-	msgCLIRunIn       = "runIn applies to mode Agent only"
-	msgCLIAgentRunner = "mode Agent runs a CLI Crewlet has a sandbox runner for: ClaudeCode or OpenCode"
+	msgCLIRunIn       = "runIn applies to mode Box only"
+	msgCLIAgentRunner = "mode Box runs a CLI Crewlet has a sandbox runner for: ClaudeCode or OpenCode"
 	msgCLIToken       = "auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode"
 	msgCLIKeyAgent    = "auth mode APIKey takes a CLI Crewlet hands a key to"
 	msgCLITwoLogins   = "tokenSecretRef and credentialBundleSecretRef are two logins"
-	msgCLIRemoteLogin = "a Subscription login reaches an Agent-mode run in a remote sandbox only as a variable of its " +
+	msgCLIRemoteLogin = "a Subscription login reaches a Box-mode run in a remote sandbox only as a variable of its " +
 		"environment: give ClaudeCode auth.tokenSecretRef, or use auth mode APIKey, and give OpenCode its model " +
 		"provider's key in env"
 	msgOpenCodeModel  = "an OpenCode model is <provider>/<model>, which OpenCode splits at its first slash"
@@ -141,14 +141,14 @@ const (
 // how it signs in, each of which Crewlet's admission holds too (the CRD
 // suite's engine tests hold the lists they name to it).
 func TestLLMProviderSignInValidation(t *testing.T) {
-	// tokenProvider is Claude Code as a text model on a headless token.
+	// tokenProvider is Claude Code in mode Host on a headless token.
 	tokenProvider := func(namespace, name string) *v1.LLMProvider {
 		p := llmProvider(namespace, name)
 		p.Spec.Model = "sonnet"
 		p.Spec.Auth = v1.CLIAgentAuth{TokenSecretRef: secretKey("claude", "oauthToken")}
 		return p
 	}
-	agentMode := func(p *v1.LLMProvider) { p.Spec.Mode = v1.CLIAgentModeAgent }
+	boxMode := func(p *v1.LLMProvider) { p.Spec.Mode = v1.CLIAgentModeBox }
 	// metered signs the provider in with auth mode APIKey on one key.
 	metered := v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey, APIKeySecretRef: secretKey(providerName, apiKeyKey)}
 	// keyInEnv signs agent in to a subscription with no login of its own,
@@ -169,7 +169,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		{
 			name: "every setting is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				p.Spec.Mode = v1.CLIAgentModeAgent
+				p.Spec.Mode = v1.CLIAgentModeBox
 				p.Spec.RunIn = v1.CLIAgentRunInE2B
 				p.Spec.Auth.Mode = v1.CLIAgentAuthSubscription
 				p.Spec.Env = []v1.SecretEnvVar{{Name: envProxy, ValueFrom: fromSecret("claude", "proxy")}}
@@ -186,9 +186,9 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			},
 		},
 		{
-			name: "Claude Code in mode Agent on a metered key is accepted",
+			name: "Claude Code in mode Box on a metered key is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				agentMode(p)
+				boxMode(p)
 				p.Spec.Auth = metered
 			},
 		},
@@ -203,18 +203,18 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			// Crewlet hands the run the model as the provider's text
 			// calls pass it, and exports a key in env into the remote
 			// sandbox, where it signs OpenCode in.
-			name: "OpenCode in mode Agent on its model provider's key in env is accepted",
+			name: "OpenCode in mode Box on its model provider's key in env is accepted",
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey)(p)
-				agentMode(p)
+				boxMode(p)
 				p.Spec.RunIn = v1.CLIAgentRunInE2B
 			},
 		},
 		{
-			name: "OpenCode in mode Agent through a gateway's key in env is accepted",
+			name: "OpenCode in mode Box through a gateway's key in env is accepted",
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
-				agentMode(p)
+				boxMode(p)
 				p.Spec.Model = modelViaOpenRouter
 			},
 		},
@@ -222,17 +222,17 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			// The bundle never reaches the sandbox; the key in env does,
 			// and the engine reports the provider signed in through its
 			// environment.
-			name: "OpenCode in mode Agent on an exported login beside a key in env is accepted",
+			name: "OpenCode in mode Box on an exported login beside a key in env is accepted",
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey)(p)
-				agentMode(p)
+				boxMode(p)
 				p.Spec.Auth.CredentialBundleSecretRef = secretKey("opencode", "bundle")
 			},
 		},
 		{
-			name: "OpenCode in mode Agent on an exported login is refused",
+			name: "OpenCode in mode Box on an exported login is refused",
 			mutate: func(p *v1.LLMProvider) {
-				agentMode(p)
+				boxMode(p)
 				p.Spec.Model = modelViaAnthropic
 				p.Spec.Agent = v1.CLIAgentOpenCode
 				p.Spec.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("opencode", "bundle")}
@@ -242,27 +242,27 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		{
 			// A proxy beside the bundle is configuration: nothing in the
 			// run's environment signs OpenCode in.
-			name: "OpenCode in mode Agent on an exported login beside a proxy in env is refused",
+			name: "OpenCode in mode Box on an exported login beside a proxy in env is refused",
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentOpenCode, envProxy)(p)
-				agentMode(p)
+				boxMode(p)
 				p.Spec.Auth.CredentialBundleSecretRef = secretKey("opencode", "bundle")
 			},
 			want: msgCLIRemoteLogin,
 		},
 		{
-			name: "OpenCode in mode Agent on a proxy alone in env is refused",
+			name: "OpenCode in mode Box on a proxy alone in env is refused",
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentOpenCode, envProxy)(p)
-				agentMode(p)
+				boxMode(p)
 			},
 			want: msgCLINoLogin,
 		},
 		{
-			name: "OpenCode in mode Agent on auth mode APIKey is refused",
+			name: "OpenCode in mode Box on auth mode APIKey is refused",
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey)(p)
-				agentMode(p)
+				boxMode(p)
 				p.Spec.Env = nil
 				p.Spec.Auth = metered
 			},
@@ -271,10 +271,10 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		{
 			// Hermes signs in through env too, and has no sandbox
 			// runner.
-			name: "Hermes in mode Agent is refused",
+			name: "Hermes in mode Box is refused",
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentHermes, "OPENROUTER_API_KEY")(p)
-				agentMode(p)
+				boxMode(p)
 			},
 			want: msgCLIAgentRunner,
 		},
@@ -326,22 +326,22 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			want:   msgCLIKey,
 		},
 		{
-			name:   "runIn in mode Text is refused",
+			name:   "runIn in mode Host is refused",
 			mutate: func(p *v1.LLMProvider) { p.Spec.RunIn = v1.CLIAgentRunInE2B },
 			want:   msgCLIRunIn,
 		},
 		{
-			name: "a CLI with no sandbox runner in mode Agent is refused",
+			name: "a CLI with no sandbox runner in mode Box is refused",
 			mutate: func(p *v1.LLMProvider) {
-				agentMode(p)
+				boxMode(p)
 				p.Spec.Agent = v1.CLIAgentCodex
 			},
 			want: msgCLIAgentRunner,
 		},
 		{
-			name: "an exported login in mode Agent is refused",
+			name: "an exported login in mode Box is refused",
 			mutate: func(p *v1.LLMProvider) {
-				agentMode(p)
+				boxMode(p)
 				p.Spec.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("claude", "bundle")}
 			},
 			want: msgCLIRemoteLogin,
@@ -413,7 +413,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		},
 		{
 			name:   "a local run is not offered",
-			mutate: func(p *v1.LLMProvider) { agentMode(p); p.Spec.RunIn = "Direct" },
+			mutate: func(p *v1.LLMProvider) { boxMode(p); p.Spec.RunIn = "Direct" },
 			want:   `Unsupported value: "Direct"`,
 		},
 	}
@@ -492,7 +492,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	// every CLI, and each profile's own configuration directory or switch,
 	// to keep the CLI inside its seat's home and its call's working
 	// directory; env is layered over them, so Crewlet refuses each in env.
-	// Each CLI is signed in with a bundle in mode Text, which the API admits
+	// Each CLI is signed in with a bundle in mode Host, which the API admits
 	// for every one, so the variable is the only fault.
 	inEnvBesideBundle := func(agent v1.CLIAgentName, variable string) func(*v1.LLMProvider) {
 		return func(p *v1.LLMProvider) {
@@ -599,7 +599,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			p.Spec.Model = model
 		}
 	}
-	for _, mode := range []v1.CLIAgentMode{v1.CLIAgentModeText, v1.CLIAgentModeAgent} {
+	for _, mode := range []v1.CLIAgentMode{v1.CLIAgentModeHost, v1.CLIAgentModeBox} {
 		for _, model := range []string{
 			modelViaAnthropic, modelViaOpenRouter,
 			" anthropic/claude-sonnet-5", "anthropic/ claude-sonnet-5", "a/b",
@@ -624,7 +624,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	cases = append(cases,
 		createCase[*v1.LLMProvider]{
 			name:   "an OpenCode model with no provider is reported at model",
-			mutate: openCodeModel(claudeModel, v1.CLIAgentModeText),
+			mutate: openCodeModel(claudeModel, v1.CLIAgentModeHost),
 			want:   "spec.model: Invalid value",
 		},
 		createCase[*v1.LLMProvider]{

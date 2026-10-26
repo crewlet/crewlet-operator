@@ -424,6 +424,10 @@ var _ = Describe("Company seat pools", func() {
 		Expect(*container.SecurityContext.ReadOnlyRootFilesystem).To(BeTrue())
 		Expect(container.Env[:len(want.Env)]).To(Equal(want.Env))
 		Expect(container.Env).To(ContainElement(corev1.EnvVar{Name: "TURSO_GO_CACHE_DIR", Value: "/var/lib/crewlet/cache"}))
+		// The engine makes the directory of the sockets a host-mode CLI
+		// reaches its seat's tools through under its TMPDIR, which is /tmp,
+		// the scratch volume's mount below, while nothing sets another.
+		Expect(container.Env).NotTo(ContainElement(HaveField("Name", "TMPDIR")))
 		Expect(container.VolumeMounts).To(ConsistOf(
 			corev1.VolumeMount{Name: scratchVolume, MountPath: "/var/lib/crewlet"},
 			corev1.VolumeMount{Name: configVolumeName, MountPath: "/etc/crewlet", ReadOnly: true},

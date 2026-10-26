@@ -450,6 +450,7 @@ var _ = Describe("Company runtime", func() {
 		for _, env := range container.Env {
 			Expect(env.Name).NotTo(HavePrefix("OTEL_"), "no telemetry without a class's telemetry")
 			Expect(env.Name).NotTo(BeElementOf("CREWLET_SANDBOX_OTEL_RECEIVER_URL", "CREWLET_MCP_BRIDGE_URL"))
+			Expect(env.Name).NotTo(Equal("TMPDIR"), "the engine's temporary directory is /tmp, the volume below")
 			// The engine expands ${NAME} in its company document from
 			// its environment: no credential may be there.
 			Expect(env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil).To(BeTrue(),
@@ -459,6 +460,12 @@ var _ = Describe("Company runtime", func() {
 			corev1.VolumeMount{Name: "data", MountPath: "/var/lib/crewlet"},
 			corev1.VolumeMount{Name: configVolumeName, MountPath: "/etc/crewlet", ReadOnly: true},
 		))
+		// On a read-only root, /tmp has to be a volume of its own: the
+		// engine makes the directory of the sockets every host-mode CLI
+		// reaches its seat's tools through under it, and a seat on the data
+		// pods would have no tools without it.
+		Expect(container.VolumeMounts).To(ContainElement(corev1.VolumeMount{Name: tmpVolume, MountPath: "/tmp"}))
+		Expect(pod.Spec.Volumes).To(ContainElement(corev1.Volume{Name: tmpVolume, EmptyDir: &corev1.EmptyDirVolumeSource{}}))
 		Expect(pod.Spec.Volumes).To(ContainElement(corev1.Volume{Name: configVolumeName,
 			Secret: &corev1.SecretVolumeSource{
 				SecretName:  bootstrapName,
@@ -1473,7 +1480,7 @@ var _ = Describe("Company runtime", func() {
 			Expect(company.Status.Endpoints.ExposedAPI).To(BeEmpty())
 		})
 
-		It("tells the engine the tool bridge's address while a provider runs a CLI in mode Agent", func() {
+		It("tells the engine the tool bridge's address while a provider runs a CLI in mode Box", func() {
 			class := newClass(gatewayWebhooks)
 			company := reconciled(newCompany(class.Name))
 			host := string(company.UID) + ".hooks.example.com"
@@ -1498,7 +1505,7 @@ var _ = Describe("Company runtime", func() {
 			Expect(paths()).To(Equal([]string{"/"}))
 			Expect(bridgeURL()).To(BeEmpty())
 
-			By("a provider of another company, and one of this company in mode Text, serving no bridge")
+			By("a provider of another company, and one of this company in mode Host, serving no bridge")
 			provider := func(name, company string, mode crewletaiv1alpha1.CLIAgentMode) *crewletaiv1alpha1.LLMProvider {
 				p := &crewletaiv1alpha1.LLMProvider{
 					Namespace: namespace,
@@ -1518,22 +1525,22 @@ var _ = Describe("Company runtime", func() {
 				DeferCleanup(func() { Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, p))).To(Succeed()) })
 				return p
 			}
-			provider("other-agent", "another-company", crewletaiv1alpha1.CLIAgentModeAgent)
-			text := provider("claude-text", companyName, crewletaiv1alpha1.CLIAgentModeText)
+			provider("other-box", "another-company", crewletaiv1alpha1.CLIAgentModeBox)
+			claude := provider("claude-host", companyName, crewletaiv1alpha1.CLIAgentModeHost)
 			company = reconciled(company)
 			Expect(paths()).To(Equal([]string{"/"}))
 			Expect(bridgeURL()).To(BeEmpty())
 
-			By("switching this company's provider to mode Agent")
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(text), text)).To(Succeed())
-			text.Spec.Mode = crewletaiv1alpha1.CLIAgentModeAgent
-			Expect(k8sClient.Update(ctx, text)).To(Succeed())
+			By("switching this company's provider to mode Box")
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(claude), claude)).To(Succeed())
+			claude.Spec.Mode = crewletaiv1alpha1.CLIAgentModeBox
+			Expect(k8sClient.Update(ctx, claude)).To(Succeed())
 			company = reconciled(company)
 			Expect(paths()).To(Equal([]string{"/"}))
 			Expect(bridgeURL()).To(Equal([]string{"https://" + host}))
 
 			By("deleting it")
-			Expect(k8sClient.Delete(ctx, text)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, claude)).To(Succeed())
 			reconciled(company)
 			Expect(paths()).To(Equal([]string{"/"}))
 			Expect(bridgeURL()).To(BeEmpty())

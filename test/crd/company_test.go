@@ -718,8 +718,8 @@ func TestCompanyAssistantValidation(t *testing.T) {
 // TestCompanyAssistantDeepWorkValidation covers the assistant's deep work:
 // every bound Crewlet takes is accepted at its edges and refused past them,
 // it runs on an LLMProvider and never on a platform provider, which runs in
-// mode Text, and it needs the Company's E2B sandbox, the one cell the
-// operator runs it in. Whether the provider is in mode Agent and drives
+// mode Host, and it needs the Company's E2B sandbox, the one cell the
+// operator runs it in. Whether the provider is in mode Box and drives
 // ClaudeCode turns on its own spec, which the engine judges in the dry run.
 func TestCompanyAssistantDeepWorkValidation(t *testing.T) {
 	deepWork := func(edit func(*v1.CompanyAssistantDeepWork)) func(*v1.Company) {
@@ -753,7 +753,7 @@ func TestCompanyAssistantDeepWorkValidation(t *testing.T) {
 			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
 				d.LLM.Kind = v1.LLMProviderKindPlatform
 			}),
-			want: "a platform model provider runs in mode Text",
+			want: "a platform model provider runs in mode Host",
 		},
 		{
 			// A bound keeps the block in the request: an empty one is

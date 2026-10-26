@@ -2,7 +2,7 @@
 # off, which Crewlet requires of every model in spec.assistant.llm: Claude
 # Code on a metered key first, then Pi on its model provider's key. Every
 # bound is set, and each person's assistant has a daily budget of its own.
-# Deep work hands a large task to Claude Code in mode Agent, signed in by a
+# Deep work hands a large task to Claude Code in mode Box, signed in by a
 # headless token that follows the run into the company's E2B sandbox, which
 # the API requires of deep work; its runs reach the person's assistant tools
 # through the company's public address, so the case is exposed.
@@ -82,7 +82,7 @@ spec:
     name: helm
   agent: ClaudeCode
   model: sonnet
-  mode: Agent
+  mode: Box
   auth:
     mode: Subscription
     tokenSecretRef:
