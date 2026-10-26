@@ -352,8 +352,10 @@ type Fleet struct {
 	// claims a few seats every five seconds.
 	Unplaceable []string
 
-	// UnmannedRoles are the node roles (data, ingress, seats, workers) no
-	// live node runs.
+	// UnmannedRoles are the node roles the company needs that no live node
+	// runs: data, ingress, seats and workers always, and git only for a
+	// company that hosts its repositories in the engine (code.native). No
+	// pod the operator runs holds the git role.
 	UnmannedRoles []string
 
 	// TargetEpoch is the activation epoch the fleet converges on, zero when
@@ -408,7 +410,9 @@ type FleetNode struct {
 	// the pod's name.
 	ID string
 
-	// Roles are the node's roles: data, ingress, seats, workers.
+	// Roles are the node's roles, of the engine's data, ingress, seats,
+	// workers and git: a data pod the operator runs holds the first four,
+	// and a seat pod seats alone.
 	Roles []string
 
 	// Broker is how the node's broker takes part in the fleet's.

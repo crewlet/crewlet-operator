@@ -195,8 +195,10 @@ has the engine's side.
 
 ## The image needs the server
 
-Crewlet's image is Debian with `ca-certificates`, `git`, `tini` and the
-engine: no Python, Node.js, `uv`, `npm` or `curl`. Its
+Crewlet's image is Debian with `ca-certificates`, `tini`, the engine and
+git, which the image builds from the source release Crewlet pins
+(`scripts/git-pin.env`) and installs under `/usr/local`, in place of
+Debian's `git` package: no Python, Node.js, `uv`, `npm` or `curl`. Its
 [Dockerfile](https://github.com/crewlet/crewlet/blob/main/Dockerfile) says so
 on purpose: a stdio server whose runtime is not there needs a derived image.
 
