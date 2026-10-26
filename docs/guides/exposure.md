@@ -67,8 +67,10 @@ say so. What the public listener serves depends on what the engine is given:
 - `/mcp/{token}`, the tool bridge, while an `LLMProvider` of the company runs
   a CLI in `mode: Box`: that run happens in a remote sandbox, which calls
   the seat's tools back through it ([Running seats on a coding
-  CLI](cli-agents.md)). The operator then gives the engine the public address
-  as the bridge's (`CREWLET_MCP_BRIDGE_URL`); without one the engine mounts
+  CLI](cli-agents.md)). The operator then gives every engine pod the public
+  address as the bridge's (`CREWLET_MCP_BRIDGE_URL`), and the data pod a call
+  reaches relays it to the pod holding the run's seat, a seat pod included;
+  without one the engine mounts
   no bridge and `/mcp/` is a path nothing serves, and every box-mode turn
   fails: the provider reports `BoxModeRunnable=False`, `NotExposed`, and
   each seat whose executor's chain it heads `Ready=False`, `NotExposed`,

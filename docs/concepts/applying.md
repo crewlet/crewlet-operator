@@ -480,14 +480,13 @@ never a value.
 | Status | Reason | When |
 |---|---|---|
 | False | `Suspended` | The Company is suspended. |
-| False | `BoxModeBridgeUnsupported` | The head of the seat's executor's chain is an `LLMProvider` in `mode: Box`, and the seat is in a seat pool, whose pods serve no tool bridge a run can call back through. |
-| False | `NotExposed` | The same provider heads the chain, and the Company has no public address. |
+| False | `NotExposed` | The head of the seat's executor's chain is an `LLMProvider` in `mode: Box`, and the Company has no public address for a run to call the seat's tools back through. |
 | True | `LeaseHeld` | An engine pod holds the seat's lease, as the engine's `GET /fleet` reports. The message names the pod, and says so when it is not a pod of the seat's StatefulSet yet, while the engine moves it. The engine names a lease by the seat's handle, or by its id (`status.seatID`) when the engine pod that answered does not run the seat yet; the operator finds it either way. |
 | False | `PoolNotFound` | No pod holds the seat and none can: the Company does not declare its pool. |
 | False | `Unplaced` | No pod holds the seat: it is not in the revision the engine runs, its pool runs no pod, or the engine has not claimed it yet. The message says which. |
 | Unknown | `EngineUnavailable` | The engine's fleet could not be read. |
 
-`BoxModeBridgeUnsupported` and `NotExposed` are decided from the spec each
+`NotExposed` is decided from the spec each
 time the document is rendered: the engine applies such a seat and refuses
 every one of its turns, so the condition holds nothing back, names the pod
 that holds the seat if one does, and comes with a Warning event when `Ready`

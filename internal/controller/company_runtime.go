@@ -315,6 +315,7 @@ func (r *CompanyReconciler) runWorkload(
 		platform:  platform,
 		image:     *sts.Spec.Template.Spec.Containers[0].Image,
 		dataReady: progress.ready && *sts.Spec.Replicas > 0,
+		bridgeURL: in.bridgeURL,
 	}); err != nil {
 		return metav1.Condition{}, err
 	}

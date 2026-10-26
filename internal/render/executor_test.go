@@ -12,13 +12,13 @@ import (
 )
 
 // TestExecutor holds the report on a seat whose executor runs a CLI in mode
-// Box to where the engine serves the tool bridge its turns call back
-// through: the data pods, while the Company has a public address. Only the
-// head of the executor's chain runs in the sandbox; a fallback behind it, or
-// a provider of another phase, runs in the pod that holds the seat, as in
-// mode Host, which every pod serves. None of it
-// keeps the document from rendering: the engine applies such a seat and
-// refuses its turns alone.
+// Box to whether the engine serves the tool bridge its turns call back
+// through: the Company's public address, which reaches the data pods and is
+// relayed from there to whichever pod holds the seat, a seat pod's included.
+// Only the head of the executor's chain runs in the sandbox; a fallback behind
+// it, or a provider of another phase, runs in the pod that holds the seat, as
+// in mode Host. None of it keeps the document from rendering: the engine
+// applies such a seat and refuses its turns alone.
 func TestExecutor(t *testing.T) {
 	const (
 		public           = "https://nimbus.example.com"
@@ -49,8 +49,8 @@ func TestExecutor(t *testing.T) {
 				box(in)
 				seatNamed(in, seatBo).Spec.LLM.Default = chain(providerCLI)
 			},
-			want: []string{"bo spec.llm.default[0].name BoxModeBridgeUnsupported"},
-			says: []string{"seat pool general", "Place the seat in data"},
+			want: []string{"bo spec.llm.default[0].name runnable"},
+			says: []string{public + "/mcp/", "relays each call to the engine pod holding the seat"},
 		},
 		{
 			name: "a box-mode executor ahead of another provider in a PerSeat pool", public: public,
@@ -58,7 +58,7 @@ func TestExecutor(t *testing.T) {
 				box(in)
 				seatNamed(in, seatAna).Spec.LLM.Default = chain(providerCLI, "claude")
 			},
-			want: []string{"ana spec.llm.default[0].name BoxModeBridgeUnsupported"},
+			want: []string{"ana spec.llm.default[0].name runnable"},
 		},
 		{
 			// Crewlet runs only the head of the executor's chain in the
@@ -95,15 +95,15 @@ func TestExecutor(t *testing.T) {
 			says: []string{"Company nimbus has no public address", "spec.exposure.publicBaseURL"},
 		},
 		{
-			// The pool is the first thing to change, and the message says
-			// what the data pods would still need.
+			// A seat pool needs nothing the data pods do not: the public
+			// address is all a box-mode seat lacks, wherever it runs.
 			name: "a box-mode executor in a pool of a company with no public address",
 			mutate: func(in *Input) {
 				box(in)
 				seatNamed(in, seatBo).Spec.LLM.Default = chain(providerCLI)
 			},
-			want: []string{"bo spec.llm.default[0].name BoxModeBridgeUnsupported"},
-			says: []string{"seat pool general", "in data it needs Company nimbus to have a public address too"},
+			want: []string{"bo spec.llm.default[0].name NotExposed"},
+			says: []string{"Company nimbus has no public address"},
 		},
 		{
 			// Every seat with no chain of its own runs on the head of the
@@ -114,10 +114,10 @@ func TestExecutor(t *testing.T) {
 				in.Company.Spec.LLM.Order = chain(providerCLI)
 			},
 			want: []string{
-				"ana spec.llm BoxModeBridgeUnsupported",
-				"bo spec.llm BoxModeBridgeUnsupported",
+				"ana spec.llm runnable",
+				"bo spec.llm runnable",
 				"cy spec.llm runnable",
-				"dee spec.llm BoxModeBridgeUnsupported",
+				"dee spec.llm runnable",
 			},
 			// The Seat's own spec.llm is empty: the message names the
 			// Company's order, and what the Seat can set instead.
@@ -131,10 +131,10 @@ func TestExecutor(t *testing.T) {
 				in.Company.Spec.LLM.Order = nil
 			},
 			want: []string{
-				"ana spec.llm BoxModeBridgeUnsupported",
-				"bo spec.llm BoxModeBridgeUnsupported",
+				"ana spec.llm runnable",
+				"bo spec.llm runnable",
 				"cy spec.llm runnable",
-				"dee spec.llm BoxModeBridgeUnsupported",
+				"dee spec.llm runnable",
 			},
 			says: []string{"Company nimbus's first LLMProvider by name"},
 		},
@@ -228,11 +228,11 @@ func TestBoxMode(t *testing.T) {
 }
 
 // TestContractBoxModeIsAppliedWhereItCannotRun has the engine
-// validate the documents the render writes for a box-mode executor it
-// reports rather than refuses: a seat placed in a seat pool, and a Company
-// with no public address. The engine accepts both, and refuses the seat's
-// turns at run time alone, which is what makes reporting them right. When
-// this fails, the engine has started refusing one of them on a write,
+// validate the documents the render writes for a box-mode executor: one it
+// reports rather than refuses, in a Company with no public address, and one
+// in a seat pool, which runs. The engine accepts both, and refuses the first
+// seat's turns at run time alone, which is what makes reporting it right.
+// When this fails, the engine has started refusing one of them on a write,
 // which holds the company on its last revision anyway: refuse it in the
 // render then, where the Seat or the LLMProvider is told why.
 func TestContractBoxModeIsAppliedWhereItCannotRun(t *testing.T) {
@@ -253,8 +253,7 @@ func TestContractBoxModeIsAppliedWhereItCannotRun(t *testing.T) {
 				seatNamed(in, seatBo).Spec.LLM.Default = []v1alpha1.LLMProviderReference{{Name: providerCLI}}
 				return in
 			},
-			seat:   seatBo,
-			reason: v1alpha1.ReasonBoxModeBridgeUnsupported,
+			seat: seatBo,
 		},
 		{
 			name: "a box-mode executor in a company with no public address",

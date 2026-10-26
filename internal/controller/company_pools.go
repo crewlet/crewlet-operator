@@ -412,6 +412,9 @@ type seatInputs struct {
 	image string
 	// dataReady is every data pod ready on the current template.
 	dataReady bool
+	// bridgeURL is the data pods' CREWLET_MCP_BRIDGE_URL, which a seat pod
+	// is given too: see seatPodTemplate.
+	bridgeURL string
 }
 
 // reconcileSeatPools writes the seat pools' objects and records what they
@@ -528,7 +531,7 @@ func (r *CompanyReconciler) writeSeatPool(
 			data[configFile] = doc.YAML
 			hash = hashOf(data)
 		}
-		pod, err := seatPodTemplate(c, class, w, secret, in.image, doc, hash)
+		pod, err := seatPodTemplate(c, class, w, secret, in.image, doc, hash, in.bridgeURL)
 		if err != nil {
 			return err
 		}
@@ -745,10 +748,12 @@ func (r *CompanyReconciler) applySeatStatefulSet(
 // Nothing dials a seat pod: the kubelet probes it from its own node, which a
 // NetworkPolicy does not filter, so the seats policy that admits no other pod
 // leaves the probes alone, and the headless Service that governs the pods
-// publishes no port.
+// publishes no port. A box-mode run of one of its seats calls the data pods'
+// tool bridge, which relays each call here over the broker connection the pod
+// dials out on.
 func seatPodTemplate(
 	c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
-	w *seatWorkload, secret, image string, doc *render.BootstrapDocument, hash string,
+	w *seatWorkload, secret, image string, doc *render.BootstrapDocument, hash, bridgeURL string,
 ) (*corev1ac.PodTemplateSpecApplyConfiguration, error) {
 	env, err := engineEnv(c, class, &engineEnvironment{
 		bootstrap:   doc.Env,
@@ -756,6 +761,12 @@ func seatPodTemplate(
 		statefulSet: w.name,
 		// On the scratch volume: the pod starts with an empty one anyway.
 		tursoCache: render.DataDir + "/cache",
+		// THE DATA PODS' ADDRESS, the Company's public one: Crewlet's
+		// bridge address is the fleet's, and a box's call that reaches a
+		// data pod is relayed to the seat pod holding its run's seat over
+		// the broker the seat pod already dials. The seat pod mints its
+		// runs' endpoints on it and serves no route of its own.
+		bridgeURL: bridgeURL,
 	})
 	if err != nil {
 		return nil, err

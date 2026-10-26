@@ -573,11 +573,11 @@ type SeatPodInput struct {
 // from authentication, and refuses every other route as it would an unknown
 // one. Leaving api.port unset would bind nothing at all, and leave the pod
 // with no probe to tell a seat pod that has joined the fleet and claims
-// seats from one that is still starting, or has lost the data pods. The
-// engine would serve the box-mode tool bridge, its one public route, on
-// the same listener when CREWLET_MCP_BRIDGE_URL is set, which the operator
-// never sets on a seat pod (see ExecutorOf); so it opens no
-// public listener (api.public) either, which would serve nothing.
+// seats from one that is still starting, or has lost the data pods. It is
+// given no public listener (api.public), which a node without the ingress
+// role never binds: its box-mode seats' tool calls reach it through the data
+// pods' bridge, relayed over the broker, so nothing a sandbox dials is a
+// route on a seat pod.
 //
 // A Shared pool's pods carry the pool's own placement label. A PerSeat pool's
 // carry the seat label with the seat's handle, which the document refers to

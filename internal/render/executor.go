@@ -12,15 +12,16 @@ import (
 // whether such a provider can run one at all.
 //
 // A box-mode run happens in the Company's remote sandbox and calls the
-// seat's tools back through the tool bridge of the engine node that holds the
-// seat, at the address the node was given as CREWLET_MCP_BRIDGE_URL
-// (Crewlet's docs/concepts/code-sandbox.md, "The tool bridge"). The operator
-// gives that address, the Company's public address, to the data pods alone,
-// and only while the Company has one (status.endpoints.publicBaseURL): the
-// public address routes to the data pods, and nothing a remote sandbox could
-// dial reaches a seat pod. A node with no bridge address builds no bridge,
-// and Crewlet refuses every box-mode turn there (its agentLauncher): the
-// turn fails, it does not fall back to running the CLI in the engine's pod.
+// seat's tools back through the fleet's tool bridge, at the address every
+// engine node is given as CREWLET_MCP_BRIDGE_URL (Crewlet's
+// docs/concepts/code-sandbox.md, "The tool bridge"): the data pod a call
+// reaches relays it to the pod holding the seat over the broker, a seat pod
+// included. The operator gives that address, the Company's public address,
+// to every engine pod, and only while the Company has one
+// (status.endpoints.publicBaseURL). A node with no bridge address builds no
+// bridge, and Crewlet refuses every box-mode turn there (its agentLauncher):
+// the turn fails, it does not fall back to running the CLI in the engine's
+// pod.
 //
 // Crewlet applies a document holding such a seat or provider, and the turns
 // of every other seat run. So neither is refused here: refusing them would
@@ -35,17 +36,15 @@ import (
 // copies to the ones it was read against, and fails when one changes.
 
 // Executor is what the operator can tell from the objects of a seat whose
-// executor's chain is headed by a CLI in mode Box: whether the node that
-// holds the seat serves the tool bridge its every turn calls back through.
+// executor's chain is headed by a CLI in mode Box: whether the fleet serves
+// the tool bridge its every turn calls back through.
 type Executor struct {
 	// Field is the field of the Seat that names the head, or spec.llm for
 	// a seat with no chain of its own, which runs on the head of the
 	// document's llm_order: the Company's, which the message names.
 	Field string
 	// Reason is empty when the seat's turns can run, and otherwise
-	// v1alpha1.ReasonBoxModeBridgeUnsupported (the seat is placed in a
-	// seat pool) or v1alpha1.ReasonNotExposed (the Company has no public
-	// address).
+	// v1alpha1.ReasonNotExposed (the Company has no public address).
 	Reason string
 	// Message says what the seat runs on and, when it cannot, what to
 	// change, for a condition message after Field.
@@ -65,7 +64,7 @@ func ExecutorOf(in *Input) map[string]Executor {
 	for i := range in.Seats {
 		s := &in.Seats[i]
 		if head, _, ok := r.boxModeExecutor(s); ok {
-			out[s.Name] = r.executor(s, head)
+			out[s.Name] = r.executor(head)
 		}
 	}
 	return out
@@ -93,9 +92,8 @@ func (r *renderer) boxModeExecutor(s *v1alpha1.Seat) (chainLink, cliEntry, bool)
 
 // executor is the verdict on a seat whose executor's head is the box-mode
 // CLI head.
-func (r *renderer) executor(s *v1alpha1.Seat, head chainLink) Executor {
+func (r *renderer) executor(head chainLink) Executor {
 	e := Executor{Field: head.field}
-	pool := SeatPool(r.in.Company, s)
 	// A seat with no chain of its own runs on the head of the Company's
 	// order, which its own spec.llm does not name: the message names the
 	// object that does.
@@ -112,25 +110,16 @@ func (r *renderer) executor(s *v1alpha1.Seat, head chainLink) Executor {
 		host = "name a provider in mode Host first in the Seat's spec.llm.default"
 	}
 	runs := fmt.Sprintf("runs every turn of the seat as a sandbox run of LLMProvider %s, a CLI in mode Box %s, which "+
-		"calls the seat's tools back through the tool bridge of the engine pod that holds the seat", head.provider, heads)
-	switch {
-	case pool != v1alpha1.DataPool:
-		e.Reason = v1alpha1.ReasonBoxModeBridgeUnsupported
-		e.Message = fmt.Sprintf("%s, and places the seat in seat pool %s: the operator publishes no address of a seat pod "+
-			"that a remote sandbox could dial, so a seat pod serves no tool bridge, and Crewlet refuses each of the seat's "+
-			"turns. Place the seat in data, or %s", runs, pool, host)
-		if r.in.PublicBaseURL == "" {
-			e.Message += fmt.Sprintf("; in data it needs Company %s to have a public address too "+
-				"(status.endpoints.publicBaseURL), which it has not", r.in.Company.Name)
-		}
-	case r.in.PublicBaseURL == "":
+		"calls the seat's tools back through the Company's tool bridge", head.provider, heads)
+	if r.in.PublicBaseURL == "" {
 		e.Reason = v1alpha1.ReasonNotExposed
 		e.Message = fmt.Sprintf("%s, and Company %s has no public address (status.endpoints.publicBaseURL) for the "+
 			"sandbox to reach it at, so Crewlet refuses each of the seat's turns. Give its EngineClass a webhooks route, "+
 			"or the Company spec.exposure.publicBaseURL, or %s", runs, r.in.Company.Name, host)
-	default:
-		e.Message = fmt.Sprintf("%s, at %s/mcp/ on the data pods", runs, r.in.PublicBaseURL)
+		return e
 	}
+	e.Message = fmt.Sprintf("%s, at %s/mcp/, which relays each call to the engine pod holding the seat", runs,
+		r.in.PublicBaseURL)
 	return e
 }
 

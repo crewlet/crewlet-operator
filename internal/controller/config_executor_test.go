@@ -60,20 +60,20 @@ func TestExecutorVerdictFollowsTheRender(t *testing.T) {
 		says               []string
 	}{
 		{
-			name:     "bridge unsupported, held",
-			executor: &render.Executor{Field: executorHead, Reason: crewletaiv1alpha1.ReasonBoxModeBridgeUnsupported, Message: noBridge},
+			name:     "not exposed, held",
+			executor: &render.Executor{Field: executorHead, Reason: crewletaiv1alpha1.ReasonNotExposed, Message: noBridge},
 			fleet:    held,
 			wantNode: fleetWorkload + "-0",
-			want:     crewletaiv1alpha1.ReasonBoxModeBridgeUnsupported,
+			want:     crewletaiv1alpha1.ReasonNotExposed,
 			says:     []string{executorHead + ": no bridge.", "Engine node " + fleetWorkload + "-0 holds the seat."},
 		},
 		{
 			// The fleet was not read: the node last reported stands.
-			name:     "bridge unsupported, fleet not read",
-			executor: &render.Executor{Field: executorHead, Reason: crewletaiv1alpha1.ReasonBoxModeBridgeUnsupported, Message: noBridge},
+			name:     "not exposed, fleet not read",
+			executor: &render.Executor{Field: executorHead, Reason: crewletaiv1alpha1.ReasonNotExposed, Message: noBridge},
 			lastNode: fleetWorkload + "-1",
 			wantNode: fleetWorkload + "-1",
-			want:     crewletaiv1alpha1.ReasonBoxModeBridgeUnsupported,
+			want:     crewletaiv1alpha1.ReasonNotExposed,
 			says:     []string{executorHead + ": no bridge."},
 		},
 		{
@@ -245,7 +245,7 @@ func drained(recorder *events.FakeRecorder) []string {
 // the executor is announced once the Company resumes, not on every reconcile
 // before.
 func TestUnrunnableExecutorIsAnnouncedOnce(t *testing.T) {
-	bridge := render.Executor{Field: executorHead, Reason: crewletaiv1alpha1.ReasonBoxModeBridgeUnsupported, Message: noBridge}
+	bridge := render.Executor{Field: executorHead, Reason: crewletaiv1alpha1.ReasonNotExposed, Message: noBridge}
 	announced := "Warning " + bridge.Reason + " " + executorHead + ": no bridge."
 	t.Run("seat", func(t *testing.T) {
 		run, p := seatRun("")

@@ -195,7 +195,7 @@ flowchart LR
 | StatefulSet | `nimbus-seats-general-c53f6a26` | `nimbus-seat-cy-8ae373fd`, one for each seat placed in the pool |
 | Replicas | the pool's `replicas`, 0 to 100 | the pool's `replicas`, 1 or 2 (a warm standby) |
 | Selector | `crewlet.ai/pool: general`, and no `crewlet.ai/seat` label | `crewlet.ai/seat: cy` |
-| Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `TURSO_GO_CACHE_DIR` on the scratch volume; the OpenTelemetry variables and `CREWLET_SANDBOX_OTEL_RECEIVER_URL` as on a data pod (never `CREWLET_MCP_BRIDGE_URL`); the class's and the Company's variables, as on a data pod | the same, and `CREWLET_SEAT: cy` |
+| Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `TURSO_GO_CACHE_DIR` on the scratch volume; the OpenTelemetry variables, `CREWLET_SANDBOX_OTEL_RECEIVER_URL` and `CREWLET_MCP_BRIDGE_URL` as on a data pod; the class's and the Company's variables, as on a data pod | the same, and `CREWLET_SEAT: cy` |
 | Storage | one `emptyDir` at `/var/lib/crewlet`, of the class's `seatPools.defaults.scratchSizeLimit` (2Gi unless set), holding the scratch store, the store's native library, `/tmp` and `HOME`: the limit bounds what the processes the engine runs write too | the same |
 | Stopping | the pool's `terminationGracePeriodSeconds`, else the class's default, else five minutes: running turns finish, waiting ones are handed back, and the seats are released with their mailboxes for another pod to claim | the same |
 | Port and probes | 8080, the probes alone: `/health` for startup (1,142 seconds, 1,192 with an S3 object store) and liveness, `/ready` for readiness | the same |
@@ -522,18 +522,15 @@ The public address is also where a remote sandbox calls the engine back:
   engine is given the public address as `CREWLET_MCP_BRIDGE_URL` and mounts
   its tool bridge: a box-mode run happens in a remote sandbox and calls
   the seat's own tools back there, each request carrying a token signed for
-  its one run, which expires with it. Crewlet requires the address to reach
-  the node that runs the seat, which only the single data pod is: the engine
-  would serve the bridge on a seat pod too, but nothing publishes an address
-  of one, so the variable is given to the data pod alone, and the engine
-  refuses every turn of a seat in a seat pool whose executor runs on such a
-  provider, which the Seat reports as `Ready=False`,
-  `BoxModeBridgeUnsupported` (see [Seat
-  pools](../guides/cli-agents.md#seat-pools)). A company with no public
-  address gives no pod the variable, and every such seat reports
-  `NotExposed`. With no such provider the bridge is not mounted;
-  adding or removing one changes the pod's environment, so the data pod
-  rolls.
+  its one run, which expires with it. Crewlet's bridge address is the
+  fleet's: the data pod a call reaches relays it over the broker to the pod
+  holding the run's seat, a seat pod included, so every engine pod is given
+  the same address, and a seat in a seat pool runs in box mode as well as
+  one on the data pods (see [Seat pools](../guides/cli-agents.md#seat-pools)).
+  A company with no public address gives no pod the variable, and every such
+  seat reports `NotExposed`. With no such provider the bridge is not
+  mounted; adding or removing one changes the pods' environment, so the
+  data pod and the seat pods roll.
 - While the class sends the engine's telemetry to a collector
   (`spec.telemetry`), every engine pod is given the public address as
   `CREWLET_SANDBOX_OTEL_RECEIVER_URL`: a remote sandbox's coding agent
