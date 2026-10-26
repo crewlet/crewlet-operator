@@ -198,6 +198,23 @@ const (
 	// bootBoundsRead is the engine every bound on a data pod's and a seat
 	// pod's boot the controller adds up was read at.
 	bootBoundsRead = "v0.1.1-0.20261019181514-fb36f0c31127"
+	// assistantLogRead is the engine whose data node runs an eighth state
+	// log, the Dashboard Assistant's, read at the head of crewlet's
+	// feat/dashboard-assistant-final, before that change merged. startCore
+	// opens its two sides over the running log (openAssistant, which reads
+	// nothing over the network) and runs a person's erasure from it on a
+	// goroutine of its own, off the boot. The
+	// log is one more in the register every data node runs, so each of the
+	// boot's steps that reads the logs one at a time reads one more: the
+	// join reads the fleet's trim floors once for the generations and once
+	// for each log's floor, each listing reading back one row a log, and
+	// each log's stats (statelog.go's replayable, trimFloor and
+	// fleetGenerations), and the admission reads each log's maintenance
+	// window (maintenance_mode.go's admit). The steps that read them
+	// together or under one window (the ceilings, the streams, the
+	// consumers) do not grow. dataPodBootSeconds follows it: 1666 seconds
+	// before the object store, where seven logs took 1556.
+	assistantLogRead = "v0.1.1-0.20261026010616-d93875db794b"
 
 	// The engine files most of the bounds on a boot are read from, and the
 	// guide that quotes the windows they add up to.
@@ -1108,8 +1125,8 @@ var mirrored = []mirror{
 		file: "internal/engine/core.go", name: "(*Engine).startCore",
 		against: bootWindows,
 		decides: "a data node starts its state logs before it reports itself recovered",
-		digest:  "390b726e7489f221da2395b93fcac08ac91d63f213772b0afc1dda556b6a884d",
-		read:    bootBoundsRead,
+		digest:  "7d56777f94aa8119842badd13a388b3bb8eb9fad27a966c0a5e87bc01112cef3",
+		read:    assistantLogRead,
 	},
 	{
 		file: "internal/engine/evicted.go", name: "(*stateLog).fleetGenerations",
