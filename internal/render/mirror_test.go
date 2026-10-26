@@ -198,8 +198,9 @@ const (
 	// the node a box's call reaches relays it over the broker to the node
 	// holding the run's seat, so a seat pod is given the data pods' address
 	// and runs box-mode seats, and a node without the ingress role serves no
-	// route of the bridge's.
-	fleetBridgeRead = "v0.1.1-0.20261026031301-1c90b80c54fb"
+	// route of the bridge's. A deep-work session, which no seat holds, is
+	// relayed to the pod that opened it, so it needs nothing more here.
+	fleetBridgeRead = "v0.1.1-0.20261026090300-7a96723be5ad"
 	bridgeFleetGo   = "internal/engine/bridgefleet.go"
 	seatPoolsGo     = "internal/controller/company_pools.go"
 
