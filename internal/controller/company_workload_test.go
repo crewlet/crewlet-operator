@@ -18,7 +18,7 @@ import (
 // unless the class names a window, and never past the API's day.
 func TestDataPodStartupSeconds(t *testing.T) {
 	t.Parallel()
-	const nats, s3 = 1766, 1906
+	const nats, s3 = 1746, 1886
 	classWith := func(seconds int32, backend crewletaiv1alpha1.ObjectBackend) *crewletaiv1alpha1.EngineClass {
 		class := &crewletaiv1alpha1.EngineClass{}
 		class.Spec.Data.StartupSeconds = seconds
@@ -42,8 +42,8 @@ func TestDataPodStartupSeconds(t *testing.T) {
 		{"a part of a GiB counts as one", unset, "10737418241", nats + 11*6},
 		{"a volume in decimal units", unset, "500G", nats + 466*6},
 		{"a volume whose window would pass a day", unset, "20Ti", maxStartupSeconds},
-		{"the largest volume whose window is a day", unset, "14105Gi", nats + 14105*6},
-		{"a GiB more", unset, "14106Gi", maxStartupSeconds},
+		{"the largest volume whose window is a day", unset, "14109Gi", nats + 14109*6},
+		{"a GiB more", unset, "14110Gi", maxStartupSeconds},
 		{"a volume whose Value saturates", unset, "16Ei", maxStartupSeconds},
 		{"a volume whose Value wraps below zero", unset, "9223372036854775808", maxStartupSeconds},
 		{"a volume whose Value reads zero", unset, "1e30", maxStartupSeconds},
@@ -64,7 +64,7 @@ func TestDataPodStartupSeconds(t *testing.T) {
 // of a period more.
 func TestStartupFailureThreshold(t *testing.T) {
 	t.Parallel()
-	for _, seconds := range []int32{1162, 1212, 1766, 1767, 1770, 1771, 1862, 1906, maxStartupSeconds - 1, maxStartupSeconds} {
+	for _, seconds := range []int32{1142, 1192, 1746, 1747, 1750, 1751, 1842, 1886, maxStartupSeconds - 1, maxStartupSeconds} {
 		threshold := startupFailureThreshold(seconds)
 		if window := (threshold - 1) * probePeriodSeconds; window < seconds || window >= seconds+probePeriodSeconds {
 			t.Errorf("startupFailureThreshold(%d) = %d, a window of %ds after the first probe", seconds, threshold, window)
@@ -73,15 +73,15 @@ func TestStartupFailureThreshold(t *testing.T) {
 }
 
 // TestSeatPodStartupSeconds holds a seat pod's window to the engine's bounds
-// on a leaf's boot as read from its source, which the mirrors name: 972
+// on a leaf's boot as read from its source, which the mirrors name: 952
 // seconds before its object store, and the store's 190 on the event stream
 // or the 240 of the probe of an S3 bucket.
 func TestSeatPodStartupSeconds(t *testing.T) {
 	t.Parallel()
 	for backend, want := range map[crewletaiv1alpha1.ObjectBackend]int32{
-		"":                                  1162,
-		crewletaiv1alpha1.ObjectBackendNATS: 1162,
-		crewletaiv1alpha1.ObjectBackendS3:   1212,
+		"":                                  1142,
+		crewletaiv1alpha1.ObjectBackendNATS: 1142,
+		crewletaiv1alpha1.ObjectBackendS3:   1192,
 	} {
 		class := &crewletaiv1alpha1.EngineClass{}
 		class.Spec.Objects.Backend = backend

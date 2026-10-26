@@ -861,7 +861,7 @@ _Appears in:_
 | `allowedReplicas` _integer array_ | allowedReplicas is the set of data-pod counts a Company of this class<br />may choose in spec.topology.data.replicas. v1alpha1 runs exactly one<br />data pod, so the only value admitted is 1; 3 and 5, a highly available<br />estate, are added when the operator can run them. | [1] | MaxItems: 1 <br />MinItems: 1 <br />items:Enum: [1] <br />Optional: \{\} <br /> |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#resourcerequirements-v1-core)_ | resources are the compute resources of the engine container. |  | Optional: \{\} <br /> |
 | `storage` _[DataStorage](#datastorage)_ | storage is the data volume each data pod gets. |  | Required: \{\} <br /> |
-| `startupSeconds` _integer_ | startupSeconds is how long a data pod's engine may take, from its<br />start, to answer /health 200: the time it takes to recover what it holds<br />on its volume (the store, the event stream, the replicated estate) and<br />bring its broker up. Crewlet waits that recovery out rather than<br />bounding it, because it grows with the data, so the startup probe is<br />what bounds it: it allows at least this long from the container's<br />start, and less than ten seconds more. A boot that runs past it is<br />restarted and begins its recovery again, so err long: a window that is<br />too long costs nothing on a healthy boot, only the time to restart one<br />that hung.<br />It is at least every bound Crewlet puts on a data pod's boot, laid end<br />to end, which a window may not cut short: 1766 seconds, or 1906 with<br />objects.backend S3, whose bucket every boot probes. Those are its waits<br />for its own broker and store (provisioning the event stream, the<br />coordination buckets, the object store and the state logs, two minutes<br />a window on the broker of one member a data pod runs, and the requests<br />around them), never for a peer or a seat pod. A few of them grow with<br />what the company holds and are left to the recovery's share, as the<br />recovery is: a listing of its secrets, at up to 5 s a secret; the<br />claim of each batch of a seat pod's events a crash left unsettled,<br />15 s a batch; and the restore of each CLI's credential bundle, 10 s<br />each. Unset derives it from the data volume: that floor plus six<br />seconds per GiB of the volume. That is four times the second and a<br />half per GiB Crewlet measured recovering after a crash on a fast local<br />disk, for volumes that are network-attached; set this for disks slower<br />than that. Nothing the company configures counts: the engine answers<br />/health once it has recovered, while the company's tool servers start.<br />Changing it changes the data pods' template, which restarts them. |  | Maximum: 86400 <br />Minimum: 1766 <br />Optional: \{\} <br /> |
+| `startupSeconds` _integer_ | startupSeconds is how long a data pod's engine may take, from its<br />start, to answer /health 200: the time it takes to recover what it holds<br />on its volume (the store, the event stream, the replicated estate) and<br />bring its broker up. Crewlet waits that recovery out rather than<br />bounding it, because it grows with the data, so the startup probe is<br />what bounds it: it allows at least this long from the container's<br />start, and less than ten seconds more. A boot that runs past it is<br />restarted and begins its recovery again, so err long: a window that is<br />too long costs nothing on a healthy boot, only the time to restart one<br />that hung.<br />It is at least every bound Crewlet puts on a data pod's boot, laid end<br />to end, which a window may not cut short: 1746 seconds, or 1886 with<br />objects.backend S3, whose bucket every boot probes. Those are its waits<br />for its own broker and store (provisioning the event stream, the<br />coordination buckets, the object store and the state logs, two minutes<br />a window on the broker of one member a data pod runs, and the requests<br />around them), never for a peer or a seat pod. One of them grows with<br />what the node holds and is left to the recovery's share, as the<br />recovery is: the claim of each batch of a seat pod's events the node<br />kept and could not settle, 15 s a batch. Unset derives it from the<br />data volume: that floor plus six seconds per GiB of the volume. That is<br />four times the second and a half per GiB Crewlet measured recovering<br />after a crash on a fast local disk, for volumes that are<br />network-attached; set this for disks slower than that. Nothing the<br />company configures counts: the engine answers /health once it has<br />recovered, and only then reads the company's secrets, starts its tool<br />servers and restores its CLIs' logins.<br />Changing it changes the data pods' template, which restarts them. |  | Maximum: 86400 <br />Minimum: 1746 <br />Optional: \{\} <br /> |
 | `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long a data pod may take to stop.<br />The engine finishes running turns before it exits and puts no bound on<br />that itself, so the default is five minutes, which covers a long turn,<br />rather than the Kubernetes default of thirty seconds, which does not. | 300 | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
 
 
@@ -1846,18 +1846,18 @@ _Appears in:_
 _Underlying type:_ _string_
 
 KnowledgeBackend is which knowledge base a company runs. It maps onto
-Crewlet's knowledge.backend (Native is `native`, Confluence is
+Crewlet's knowledge.backend (Doclet is `doclet`, Confluence is
 `confluence`, None is `none`).
 
 _Validation:_
-- Enum: [Native Confluence None]
+- Enum: [Doclet Confluence None]
 
 _Appears in:_
 - [KnowledgeSettings](#knowledgesettings)
 
 | Field | Description |
 | --- | --- |
-| `Native` | KnowledgeNative is the engine's own knowledge base.<br /> |
+| `Doclet` | KnowledgeDoclet is Doclet, the engine's own knowledge base.<br /> |
 | `Confluence` | KnowledgeConfluence is Confluence, connected by the company's<br />Confluence Integration.<br /> |
 | `None` | KnowledgeNone is a company with no knowledge base.<br /> |
 
@@ -1877,7 +1877,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `backend` _[KnowledgeBackend](#knowledgebackend)_ | backend is which knowledge base the company runs. | Native | Enum: [Native Confluence None] <br />Optional: \{\} <br /> |
+| `backend` _[KnowledgeBackend](#knowledgebackend)_ | backend is which knowledge base the company runs. | Doclet | Enum: [Doclet Confluence None] <br />Optional: \{\} <br /> |
 | `scope` _string array_ | scope narrows every knowledge search to these containers. Empty<br />searches the whole company. Each is a container key, which Crewlet<br />requires to be an upper-case letter followed by 1 to 9 upper-case<br />letters or digits, such as PLAT. Crewlet's `scope`. |  | MaxItems: 64 <br />items:MaxLength: 10 <br />items:MinLength: 2 <br />items:Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
 | `skillsContainer` _string_ | skillsContainer is the container holding tool-skill pages, a container<br />key (see scope). Unset takes Crewlet's default container; an empty<br />string turns tool skills off. Crewlet's `skills_container`. |  | MaxLength: 10 <br />Optional: \{\} <br /> |
 | `rootSpace` _string_ | rootSpace is the container holding the company's own pages, such as<br />the root onboarding page, a container key (see scope). Unset takes<br />Crewlet's default. Crewlet's `root_space`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
@@ -2501,24 +2501,6 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `secretKeyRef` _[NamespacedSecretKeyReference](#namespacedsecretkeyreference)_ | secretKeyRef selects the Secret key that holds the value. |  | Required: \{\} <br /> |
-
-
-#### NativeTrackerSettings
-
-
-
-NativeTrackerSettings is the policy of the engine's own tracker. It maps
-onto Crewlet's tracker.native.
-
-_Validation:_
-- MinProperties: 1
-
-_Appears in:_
-- [TrackerSettings](#trackersettings)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `inboxRetentionDays` _integer_ | inboxRetentionDays is how long a person's inbox keeps a row; the<br />history the row points at is kept regardless. Unset takes Crewlet's<br />default of 365. Crewlet's `inbox_retention_days`. |  | Maximum: 3650 <br />Minimum: 30 <br />Optional: \{\} <br /> |
 
 
 #### NetworkPolicyEgress
@@ -3772,17 +3754,17 @@ _Appears in:_
 _Underlying type:_ _string_
 
 TrackerBackend is which work tracker a company runs. It maps onto Crewlet's
-tracker.backend (Native is `native`, Jira is `jira`, None is `none`).
+tracker.backend (Worklet is `worklet`, Jira is `jira`, None is `none`).
 
 _Validation:_
-- Enum: [Native Jira None]
+- Enum: [Worklet Jira None]
 
 _Appears in:_
 - [TrackerSettings](#trackersettings)
 
 | Field | Description |
 | --- | --- |
-| `Native` | TrackerNative is the engine's own tracker.<br /> |
+| `Worklet` | TrackerWorklet is Worklet, the engine's own tracker.<br /> |
 | `Jira` | TrackerJira is Jira, connected by the company's Jira Integration.<br /> |
 | `None` | TrackerNone is a company with no tracker.<br /> |
 
@@ -3802,8 +3784,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `backend` _[TrackerBackend](#trackerbackend)_ | backend is which tracker the company runs. | Native | Enum: [Native Jira None] <br />Optional: \{\} <br /> |
-| `native` _[NativeTrackerSettings](#nativetrackersettings)_ | native is the policy of the engine's own tracker, for backend Native. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `backend` _[TrackerBackend](#trackerbackend)_ | backend is which tracker the company runs. | Worklet | Enum: [Worklet Jira None] <br />Optional: \{\} <br /> |
+| `worklet` _[WorkletSettings](#workletsettings)_ | worklet is the policy of Worklet, for backend Worklet. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### Unit
@@ -3972,5 +3954,23 @@ _Appears in:_
 | --- | --- |
 | `Always` | WorkingStatusAlways shows it on every turn a chat message started.<br /> |
 | `Addressed` | WorkingStatusAddressed shows it only when a person is plausibly<br />waiting: a direct message, a mention, or a thread the seat follows.<br /> |
+
+
+#### WorkletSettings
+
+
+
+WorkletSettings is the policy of Worklet. It maps onto Crewlet's
+tracker.worklet.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [TrackerSettings](#trackersettings)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `inboxRetentionDays` _integer_ | inboxRetentionDays is how long a person's inbox keeps a row; the<br />history the row points at is kept regardless. Unset takes Crewlet's<br />default of 365. Crewlet's `inbox_retention_days`. |  | Maximum: 3650 <br />Minimum: 30 <br />Optional: \{\} <br /> |
 
 

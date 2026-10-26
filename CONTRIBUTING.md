@@ -231,9 +231,11 @@ also names every constant and function that bounds a wait on a data pod's or
 a seat pod's boot, which the controller's startup windows add up
 (`dataPodBootSeconds` and `seatPodBootSeconds` in `internal/controller`), the
 EngineClass API floors `data.startupSeconds` at, and the runtime and
-troubleshooting pages quote; which steps a boot runs, and in what order, is
-`engine.New`'s, which is not read, since it changes with most of the
-engine's work. The digest (`enginetest.Fingerprint`) is taken over the
+troubleshooting pages quote, and one step the windows leave out, past the
+recovery boundary: the boot's read of the company's secrets (`bootSecrets`),
+which waits out a store that does not answer. Which steps a boot runs, and in
+what order, is `engine.New`'s, which is not read, since it changes with most
+of the engine's work. The digest (`enginetest.Fingerprint`) is taken over the
 function, or over the one spec that declares a constant, as `go/printer`
 lays it out without its comments or the source's line breaks, so a comment
 or a rewrapped line leaves it alone and a changed statement, value, spread

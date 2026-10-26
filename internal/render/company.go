@@ -488,8 +488,8 @@ func (r *renderer) company() companyDoc {
 		},
 		TokenBudget: tokenBudget(spec.TokenBudget),
 	}
-	if days := spec.Tracker.Native.InboxRetentionDays; days != 0 {
-		doc.Tracker.Native = &trackerNativeDoc{InboxRetentionDays: days}
+	if days := spec.Tracker.Worklet.InboxRetentionDays; days != 0 {
+		doc.Tracker.Worklet = &trackerWorkletDoc{InboxRetentionDays: days}
 	}
 	doc.Providers = r.providersDoc()
 	doc.Assistant = r.assistant()
