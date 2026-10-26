@@ -180,6 +180,15 @@ const (
 	e2bGo         = "internal/sandbox/e2b.go"
 	e2bCreateRead = "v0.1.1-0.20261019061838-6c1b4361a915"
 
+	// nativeMCPRead is crewlet#371's engine, which hands a phase's tools to its
+	// CLI as one MCP server and renames the provider modes text and agent to
+	// host and box. Its executorRuntime decides box mode by the same head of
+	// the executor's chain under the new name, and its LaunchExecutor refuses
+	// the same box-mode turns — no bridge, a bridge nothing serves, a login
+	// that cannot follow the run into a remote sandbox — while opening the
+	// job's bridge session inside the launch and fencing each bridged call.
+	nativeMCPRead = "v0.1.1-0.20261026003358-0f50276ef71f"
+
 	// offersSandboxRead is crewlet#271's engine, whose runner was first read
 	// for which seats it offers run_sandbox: never one whose executor runs in
 	// box mode, which the render reports no code work for.
@@ -699,8 +708,8 @@ var mirrored = []mirror{
 		against: []string{executorGo, headsGo},
 		decides: "a seat's executor runs as a detached run of a CLI in a box when the head of its executor's chain " +
 			"alone is a provider in box mode",
-		digest: "b03aa59b6706b0dcad0a4c2fb167e5cf22243dffa6a2034ddb6b10a3a640a8dd",
-		read:   firstRead,
+		digest: "ddf1821989956fb33948fc2f5e2de11596a27e5afd629a12836c97ee3c843cb2",
+		read:   nativeMCPRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).LaunchExecutor",
@@ -709,8 +718,8 @@ var mirrored = []mirror{
 			"instead (BoxModeBridgeUnsupported, NotExposed), and so is one whose CLI login cannot follow it " +
 			"into the remote sandbox (sandboxCredentials at phase Execute); a run whose environment holds a " +
 			"value that resolves to nothing starts without it",
-		digest: "05cd682090e7206bb923b20f179e3a2044d9ac2046258efb8ed921f186641032",
-		read:   standingInstructionsRead,
+		digest: "bd61de506c23e539219789b90294e832cb4a5a8fe43be87534915bbac360935d",
+		read:   nativeMCPRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).executorRun",
