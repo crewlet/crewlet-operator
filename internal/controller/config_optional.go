@@ -189,15 +189,21 @@ type leftOutValue struct {
 }
 
 // leftOutLines are the lines of values, each saying too where the engine's
-// store keeps the value it held for the revision the engine runs
-// (run.retained).
+// store keeps the value it held for a revision an engine pod runs or starts
+// on (run.retained).
 func (run *configRun) leftOutLines(values []leftOutValue) []string {
 	out := make([]string, len(values))
 	for i, v := range values {
 		out[i] = v.line
-		if slices.Contains(run.retained, v.key) {
-			out[i] += "; the engine keeps the value it held for the revision it runs, which " + run.retainedReading("the key") +
+		switch {
+		case !slices.Contains(run.retained, v.key):
+		case run.keptPlainly():
+			out[i] += "; the engine keeps the value it held for the revision it runs, which " +
+				strings.TrimPrefix(run.keptBecause(false, "the key"), "the revision the engine runs ") +
 				", until a revision that lets it go runs"
+		default:
+			out[i] += "; the engine keeps the value it held, as " + run.keptBecause(false, "the key") +
+				", until no engine pod runs a revision that requires it"
 		}
 	}
 	return out

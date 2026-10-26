@@ -76,7 +76,10 @@ type CompanyConfigReconciler struct {
 
 // Writes are patches, never updates. Secrets are read with get (values,
 // through the APIReader) and watched as metadata; the reconciler writes one
-// Secret per Company, the secret sync's state, with server-side apply.
+// Secret per Company, the secret sync's state, with server-side apply. Pods
+// are listed through the APIReader and never watched: the secret sync reads
+// whether an engine pod the engine's fleet does not list is running at all
+// (keepServing).
 //
 // +kubebuilder:rbac:groups=crewlet.ai,resources=companies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=crewlet.ai,resources=companies/status,verbs=get;patch
@@ -84,6 +87,7 @@ type CompanyConfigReconciler struct {
 // +kubebuilder:rbac:groups=crewlet.ai,resources=units;seats;llmproviders;mcpservers;integrations;schedules,verbs=get;list;watch
 // +kubebuilder:rbac:groups=crewlet.ai,resources=units/status;seats/status;llmproviders/status;mcpservers/status;integrations/status;schedules/status,verbs=get;patch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=list
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 

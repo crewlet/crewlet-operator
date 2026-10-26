@@ -1,5 +1,6 @@
 // Package engine is a typed client for the API of a Crewlet engine: its
-// probes, the company document under /config, the encrypted secret store under
+// probes, the company document and its history under /config, the encrypted
+// secret store under
 // /secrets, the integration status under /integrations, the fleet's nodes and
 // seat leases under /fleet, and its seats' pauses, read from its roster and
 // changed through the pause tools of its operator catalogue over MCP (see
@@ -183,8 +184,9 @@ func (c *Client) Health(ctx context.Context) (Health, error) {
 }
 
 // Fleet returns the engine's view of its fleet, GET /fleet: every live node
-// with its roles, labels and last apply, which node holds each seat's lease,
-// and the agent seats no live node may run.
+// with its roles, labels, last apply, the revision it runs and the one it
+// would start on, which node holds each seat's lease, and the agent seats no
+// live node may run.
 //
 // Every node answers the same, read from the coordination store's lease
 // table rather than from the node that served the request, so the answer
@@ -203,6 +205,8 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 			Seats      int               `json:"seats"`
 			Epoch      int64             `json:"config_epoch"`
 			RevisionID string            `json:"config_revision_id"`
+			Serving    string            `json:"config_serving_revision_id"`
+			Boots      string            `json:"config_boot_revision_id"`
 			Status     string            `json:"config_status"`
 			Error      string            `json:"config_error"`
 		} `json:"nodes"`
@@ -229,7 +233,10 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 		n := &answer.Nodes[i]
 		f.Nodes = append(f.Nodes, FleetNode{
 			ID: n.ID, Roles: n.Roles, Broker: BrokerKind(n.Broker), Labels: n.Labels, Seats: n.Seats,
-			Apply: ApplyRecord{Epoch: n.Epoch, RevisionID: n.RevisionID, Status: ApplyStatus(n.Status), Error: n.Error},
+			Apply: ApplyRecord{
+				Epoch: n.Epoch, RevisionID: n.RevisionID, Status: ApplyStatus(n.Status), Error: n.Error, Serving: n.Serving,
+				Boots: n.Boots,
+			},
 		})
 	}
 	for _, s := range answer.Seats {
@@ -249,8 +256,20 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 	return f, nil
 }
 
-// ActiveConfig returns the company document the engine runs, redacted, with
-// its revision. Before the first apply it fails with ErrNoActiveRevision.
+// ActiveConfig returns the fleet's company document, GET /config, redacted,
+// with its revision: the revision the fleet's activation pointer names, which
+// every node answers the same whatever it runs itself. What each node runs is
+// FleetNode.Apply.Serving, and what it would start on FleetNode.Apply.Boots:
+// a node applies the fleet's revision asynchronously, and one that refuses it
+// goes on running the revision it ran before, and starts on the revision its
+// own store names where that store outlives a restart, as a data pod's does
+// (a seat pod's does not: it starts on nothing and applies the fleet's
+// revision). Before the first apply it fails with ErrNoActiveRevision.
+//
+// An engine that cannot read the activation pointer from its coordination
+// store answers 503 with a Retry-After, which is ErrUnavailable: "the fleet
+// has no company" would send the next write to replace the one it runs, so
+// the engine does not guess, and neither does a caller. Ask again.
 func (c *Client) ActiveConfig(ctx context.Context) (ActiveConfig, error) {
 	// THE EPOCH FIRST: see ActiveConfig.Epoch for why the order matters.
 	health, err := c.Health(ctx)
@@ -277,6 +296,49 @@ func (c *Client) ActiveConfig(ctx context.Context) (ActiveConfig, error) {
 			"is %s a Crewlet engine, and not a proxy that strips headers?", c.baseURL)
 	}
 	return ActiveConfig{RevisionID: revision, Epoch: health.AppliedEpoch, Document: resp.body}, nil
+}
+
+// Revision returns one revision of the company document,
+// GET /config/revisions/{id}, redacted as ActiveConfig's document is: every
+// reference written as a whole ${NAME} stays as it is written. The answering
+// node reads it from its own history, which holds every revision the fleet's
+// pointer named while the node ran on its present store, and which the
+// node's retention sweep prunes by that node's marks alone: it keeps a
+// revision created or last activated within the engine's revision retention
+// (over a year), and, whatever their age, the revision the answering node
+// boots on, the fleet's revision as that node last saw it, and the ancestors
+// of each as far as their parent links reach. Whether another node runs or
+// boots on a revision does not enter into it, so a revision another node
+// runs that is off those chains and older than the retention, or one from
+// before the answering node's store began, is not there: an *APIError with
+// status 404, as is every revision the node does not hold. The operator's
+// secret sync reads that as a revision it cannot read, and keeps every value
+// in the store for the nodes that run it or start on it
+// (secretsync.Desired.KeepUnread).
+//
+// It is how a caller reads a revision some node runs or would start on that
+// is no longer the fleet's (FleetNode.Apply.Serving, FleetNode.Apply.Boots):
+// the document of a node that refused the fleet's revision, which it goes on
+// running, and the one a node starts on where its store outlives a restart,
+// as a data pod's does.
+func (c *Client) Revision(ctx context.Context, id string) (Revision, error) {
+	if id == "" || strings.ContainsAny(id, "/?#%") {
+		// The id becomes a path segment; one that is not a single segment
+		// would address another route.
+		return Revision{}, fmt.Errorf("revision id %q is not one the engine mints", id)
+	}
+	var answer struct {
+		RevisionID string          `json:"revision_id"`
+		Payload    json.RawMessage `json:"payload"`
+	}
+	if err := c.call(ctx, request{method: http.MethodGet, path: "/config/revisions/" + id}, http.StatusOK, &answer); err != nil {
+		return Revision{}, err
+	}
+	if answer.RevisionID != id || len(answer.Payload) == 0 || bytes.Equal(answer.Payload, []byte("null")) {
+		return Revision{}, fmt.Errorf("GET /config/revisions/%s: the engine answered revision %q with no document; "+
+			"is %s a Crewlet engine?", id, answer.RevisionID, c.baseURL)
+	}
+	return Revision{ID: answer.RevisionID, Document: answer.Payload}, nil
 }
 
 // ApplyConfig replaces the engine's company document with req.Document, or,
@@ -325,17 +387,20 @@ func (c *Client) ApplyConfig(ctx context.Context, req ApplyRequest) (ApplyResult
 	return ApplyResult{RevisionID: applied.RevisionID, Epoch: applied.Epoch, Warnings: messages(applied.Warnings)}, nil
 }
 
-// ReloadConfig activates the engine's active document again, unchanged, as a
-// new revision (POST /config/reload), with summary as its summary when it is
-// not empty.
+// ReloadConfig activates the fleet's document again, unchanged, as a new
+// revision (POST /config/reload), with summary as its summary when it is not
+// empty.
 //
 // It is the engine's own gesture for a value its secret store holds that the
 // running document references: the engine reads the store only when a
 // revision activates, so a value written or removed since changes nothing it
 // runs until one does. Nothing is sent but the request, so nothing the
-// operator renders reaches the engine through it, and it races no other
-// writer: whichever document is active when it lands is the one activated
-// again. An engine with no active document fails with ErrNoActiveRevision.
+// operator renders reaches the engine through it, and the caller names no
+// revision: the engine stores again whichever revision the fleet's activation
+// pointer names when the request lands, built on it, and activates it with a
+// compare-and-set against that pointer, so a write landing inside the request
+// fails it with ErrRevisionAdvanced, as any write that lost a race does. An
+// engine with no active document fails with ErrNoActiveRevision.
 func (c *Client) ReloadConfig(ctx context.Context, summary string) (ApplyResult, error) {
 	header := http.Header{}
 	if summary != "" {

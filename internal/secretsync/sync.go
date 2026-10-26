@@ -42,9 +42,18 @@ type Result struct {
 	Overwritten []Overwrite
 	// Retained are the absent names (Desired.Missing) the engine lists that
 	// were left in the store, holding the value their Secret had, because
-	// the revision the engine runs reads them as required, or is one whose
-	// reading the State does not record (Desired.Keep).
+	// a revision kept reads them as required, or is one whose reading the
+	// State does not record (Desired.Keep, Desired.KeepServed), or a node
+	// runs a revision the operator does not know (Desired.KeepUnread).
 	Retained []string
+	// Held are the names the engine lists that were left in the store only
+	// for a revision some engine node runs or starts on other than the
+	// fleet's (Desired.KeepServed), or for a node whose revisions the
+	// operator does not know (Desired.KeepUnread): were every node running
+	// the fleet's revision and starting on it or on none, each would have
+	// been deleted. Each goes once no node runs or starts on a revision that
+	// needs it, which only a later Sync or Withdraw can find.
+	Held []string
 }
 
 // Overwrite is one owned entry somebody other than the operator wrote.
@@ -73,13 +82,16 @@ type Overwrite struct {
 // any caller can say anything about itself, and the operator would then take
 // a value somebody else put there for its own and never notice. Then it
 // deletes every name the engine lists that Owns accepts and desired neither
-// pushes nor keeps, every absent name (Desired.Missing) but one the running
-// revision reads as required (Desired.Keep), which it leaves
-// (Result.Retained, State.Retained), and every name the running revision
-// lets go whose Secret or key is gone (Desired.Release); it records each
-// absent or released name it deleted as withdrawn (State.Withdrawn). Writes
-// come first, in name order, and
-// deletes after them, so an engine never misses a name the next document
+// pushes nor keeps, every absent name (Desired.Missing) but one a revision
+// kept reads as required (Desired.Keep, Desired.KeepServed), which it leaves
+// (Result.Retained, State.Retained), and every name a revision kept lets go
+// whose Secret or key is gone (Desired.Release) that no other revision kept
+// reads as required; it records each absent or released name it deleted as
+// withdrawn (State.Withdrawn). While a node may run or start on a revision the
+// operator does not know (Desired.KeepUnread) it deletes nothing, and what it
+// keeps for any revision but the fleet's it reports (Result.Held). Writes
+// come first, in name order, and deletes after them, so an engine never
+// misses a name the next document
 // references because a delete failed first; a failed write stops the sync
 // before any delete. A Desired that Resolve returned with an error pushes
 // nothing, and Sync refuses it rather than delete every entry.
@@ -149,6 +161,7 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 	}
 
 	var retained []string
+	alone := desired.fleetsAlone()
 	for _, name := range slices.Sorted(maps.Keys(listed)) {
 		if !Owns(name) {
 			continue
@@ -156,12 +169,14 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 		if _, ok := desired.values[name]; ok {
 			continue
 		}
-		absent, removed := desired.gone(name, prev)
-		if absent && !removed {
-			retained = append(retained, name)
-			continue
-		}
-		if _, ok := desired.kept[name]; ok && !absent {
+		absent, _ := desired.gone(name, prev)
+		if !desired.deletes(name, prev) {
+			if absent {
+				retained = append(retained, name)
+			}
+			if alone.deletes(name, prev) {
+				res.Held = append(res.Held, name)
+			}
 			continue
 		}
 		// Whether the entry still existed does not matter: either way it is
@@ -184,12 +199,14 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 }
 
 // Withdraw removes from the engine's store the entry of every absent name of
-// desired (Desired.Missing) that it lists, but one the revision the engine
-// runs reads as required (Desired.Keep), and of every name that revision lets
-// go whose Secret or key is gone (Desired.Release), and records each it
-// removed as withdrawn (State.Withdrawn) in the State it returns, with what
-// it did: Result.Deleted, the names it removed, and Result.Retained, the
-// absent names it left, each sorted. It is the part of Sync that holds while
+// desired (Desired.Missing) that it lists, but one a revision kept reads as
+// required (Desired.Keep, Desired.KeepServed), and of every name a revision
+// kept lets go whose Secret or key is gone (Desired.Release) that no other
+// revision kept reads as required, and records each it removed as withdrawn
+// (State.Withdrawn) in the State it returns, with what it did:
+// Result.Deleted, the names it removed, Result.Retained, the absent names it
+// left, and Result.Held, those of them it left only for a revision other
+// than the fleet's, each sorted. It is the part of Sync that holds while
 // nothing else may be pushed or deleted: a document that cannot be applied
 // leaves the store as the running revision needs it, every name it requires
 // included, but the value of a reference whose Secret is gone that the
@@ -214,6 +231,7 @@ func Withdraw(ctx context.Context, eng EngineSecrets, desired Desired, prev Stat
 	next := prev.carried(maps.Clone(prev.fingerprints))
 	listed := make(map[string]bool, len(listing))
 	var removing []string
+	alone := desired.fleetsAlone()
 	for _, info := range listing {
 		listed[info.Name] = true
 		absent, removed := desired.gone(info.Name, prev)
@@ -223,9 +241,13 @@ func Withdraw(ctx context.Context, eng EngineSecrets, desired Desired, prev Stat
 			removing = append(removing, info.Name)
 		default:
 			res.Retained = append(res.Retained, info.Name)
+			if _, alsoRemoved := alone.gone(info.Name, prev); alsoRemoved {
+				res.Held = append(res.Held, info.Name)
+			}
 		}
 	}
 	slices.Sort(res.Retained)
+	slices.Sort(res.Held)
 	slices.Sort(removing)
 	next.retained = nameSet(res.Retained)
 	// As in Sync: an absent name the operator pushed and the engine no

@@ -61,13 +61,24 @@ const (
 // and the names it last kept for the running revision although their Secret
 // or key is gone (Retained).
 //
+// It records nothing of what an engine node runs or starts on, which the
+// caller reads from the engine's fleet alone: a node applies the fleet's
+// revision on its own loop, and a data node moves the revision its store
+// starts it on after every apply that succeeds, whether or not the caller is
+// looking, so nothing the operator saw of a node before says what it runs or
+// starts on now. For a node the fleet does not list that may need a value,
+// the caller keeps every value instead (Desired.KeepUnread).
+//
 // The zero State knows of nothing pushed, so Sync pushes every name it is
 // given, and of no revision, so it reads every name the running document
 // references as required; it is what LoadState returns for a company that has
 // no state yet. A State formats as its names only, because it holds the
 // fingerprint key.
 type State struct {
-	key          []byte
+	// key is the fingerprint key, a string so that it stays as small to
+	// copy as every other field, and immutable in every copy: a State is a
+	// value its methods return changed copies of, and each copy shares it.
+	key          string
 	fingerprints map[string][]byte
 	withdrawn    map[string]struct{}
 	// revision is the revision whose reading the State records, empty for
@@ -226,7 +237,7 @@ func nameSet(names []string) map[string]struct{} {
 // State's key. The name is part of the input so two names holding the same
 // value do not show it by having the same fingerprint.
 func (s State) fingerprint(name string, value []byte) []byte {
-	mac := hmac.New(sha256.New, s.key)
+	mac := hmac.New(sha256.New, []byte(s.key))
 	mac.Write([]byte(name))
 	mac.Write([]byte{0})
 	mac.Write(value)
@@ -278,10 +289,10 @@ func formatNames(f fmt.State, s string) {
 // newFingerprintKey returns a random fingerprint key. crypto/rand.Read does
 // not return an error: it crashes the program instead, because a process
 // without randomness cannot do anything safely.
-func newFingerprintKey() []byte {
+func newFingerprintKey() string {
 	key := make([]byte, fingerprintKeyLen)
 	_, _ = rand.Read(key)
-	return key
+	return string(key)
 }
 
 // LoadState reads the State saved in the Secret ref, with r, which must be
@@ -312,7 +323,7 @@ func LoadState(ctx context.Context, r client.Reader, ref types.NamespacedName, o
 	if len(key) != fingerprintKeyLen {
 		return State{}, nil
 	}
-	s := State{key: key, fingerprints: make(map[string][]byte, len(secret.Data)-1)}
+	s := State{key: string(key), fingerprints: make(map[string][]byte, len(secret.Data)-1)}
 	for name, fp := range secret.Data {
 		if Owns(name) && len(fp) == sha256.Size {
 			s.fingerprints[name] = fp
@@ -419,7 +430,7 @@ func SaveState(ctx context.Context, c client.Client, ref types.NamespacedName, o
 	data := make(map[string][]byte, len(s.fingerprints)+5)
 	maps.Copy(data, s.fingerprints)
 	if len(s.key) > 0 {
-		data[fingerprintKeyField] = s.key
+		data[fingerprintKeyField] = []byte(s.key)
 	}
 	// Written when they are empty too, so this field manager owns them: a
 	// list it left out would stay where a hand edit put it, and every

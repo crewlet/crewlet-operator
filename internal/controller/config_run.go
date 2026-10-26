@@ -58,16 +58,26 @@ type configRun struct {
 	companyLeftOut []leftOutValue
 	// retained are the references whose Secret or key does not exist, which
 	// the document lets go without, whose value the engine's store keeps for
-	// the revision the engine runs, which reads them as required, or is one
-	// whose reading the operator does not know (retainedUnknown), and so
+	// a revision an engine pod runs or starts on, which reads them as
+	// required, or is one whose reading the operator does not know, and so
 	// takes to (see config_withdraw.go), as the last secret sync of this
-	// reconcile left them. kept are the store names of those it has not yet
-	// said it keeps (keep), keptBy the revision it keeps them for, and told
-	// the names the state the reconcile loaded says it said it keeps.
-	retained        []secretref.Key
-	retainedUnknown bool
-	kept, told      []string
-	keptBy          string
+	// reconcile left them. keptFor are the revisions that keep them, the
+	// fleet's first, keptUnread the pods whose revisions the operator does
+	// not know, which keep everything, kept the store names of those it has
+	// not yet said it keeps (keep), and told the names the state the
+	// reconcile loaded says it said it keeps.
+	retained   []secretref.Key
+	keptFor    []keptRevision
+	keptUnread []string
+	kept, told []string
+
+	// serving is what the last secret sync of this reconcile found the
+	// company's engine pods run and start on (keepServing), nil before one
+	// did, and held the names that sync kept in the store only for a
+	// revision other than the fleet's, or for a pod whose revisions it does
+	// not know.
+	serving *servingView
+	held    []string
 
 	// The Company's conditions this reconcile decided, nil where it left
 	// one as it was, and status.config when it changed it.
@@ -407,8 +417,9 @@ func (run *configRun) converge(ctx context.Context, eng *engine.Client) (ctrl.Re
 	}
 }
 
-// activeConfig is the engine's active configuration, or nil when it has none
-// yet.
+// activeConfig is the fleet's active configuration, the revision the
+// engine's activation pointer names, which every node answers whatever it
+// runs itself (keepServing reads that), or nil when it has none yet.
 func activeConfig(ctx context.Context, eng *engine.Client) (*engine.ActiveConfig, error) {
 	active, err := eng.ActiveConfig(ctx)
 	if errors.Is(err, engine.ErrNoActiveRevision) {
@@ -461,6 +472,13 @@ func (run *configRun) enforce(
 	// value of a deleted Secret too, where the running revision reads it as
 	// required; where it lets the value go, the value goes now, whatever
 	// the next document reads of it (see config_withdraw.go).
+	//
+	// So do the names of every other revision an engine pod runs or starts
+	// on: a pod applies the fleet's revision on its own loop, and one that
+	// refused it runs the revision before it, resolving its references from
+	// the store at every apply attempt, and a data pod starts on the
+	// revision its volume names, which does not start without them
+	// (keepServing).
 	pushing := desired
 	if active != nil {
 		state = run.adopt(state, active, diffs)
@@ -470,6 +488,9 @@ func (run *configRun) enforce(
 			return ctrl.Result{}, err
 		}
 		pushing.Release(released...)
+	}
+	if err := run.keepServing(ctx, eng, &pushing); err != nil {
+		return ctrl.Result{}, err
 	}
 	// SecretKept is said of what the reconcile ends up keeping: a value the
 	// sync below keeps for the running revision goes after the apply.
@@ -496,7 +517,7 @@ func (run *configRun) enforce(
 		if failed {
 			return ctrl.Result{RequeueAfter: min(engineRetryInterval, run.resyncInterval())}, nil
 		}
-		return ctrl.Result{RequeueAfter: run.resyncInterval()}, nil
+		return run.heldResync(ctrl.Result{RequeueAfter: run.resyncInterval()}), nil
 	}
 	// A revision the operator did not write, with other content: an edit
 	// made through the engine's API or dashboard, or a document the engine
@@ -549,22 +570,35 @@ func (run *configRun) enforce(
 	if err := secretsync.SaveState(ctx, run.Client, stateRef, c, state); err != nil {
 		return ctrl.Result{}, err
 	}
-	// Then the names it no longer references go, and so does the value of
-	// a deleted Secret the revision before it read as required, which the
-	// new one lets go: every absent name of desired is one the new document
-	// lets go without, or Resolve would have refused it. Which, is decided
-	// by the revision the engine runs as read now: somebody may have
-	// activated another one since the apply, which keeps every name it
-	// references. The new revision activated with that value still in the
-	// store, so settle activates it again at once, for the engine to read
-	// the store without it.
+	return run.cleanUp(ctx, eng, desired, state, stateRef)
+}
+
+// cleanUp is what follows an apply: the names the new revision no longer
+// references go, and so does the value of a deleted Secret the revision
+// before it read as required, which the new one lets go: every absent name of
+// desired is one the new document lets go without, or Resolve would have
+// refused it. Which, is decided by the fleet's revision as read now: somebody
+// may have activated another one since the apply, which keeps every name it
+// references. And by every revision an engine pod runs or starts on, as it
+// says now: the pods apply the new revision on their own loop, so right after
+// the write they run the one before it still, and keep its names until a
+// later reconcile finds them on the new one (heldResync). The new revision
+// activated with a withdrawn value still in the store, so settle activates
+// it again at once, for the engine to read the store without it. state is
+// the state recording the new revision's activation.
+func (run *configRun) cleanUp(
+	ctx context.Context, eng *engine.Client, desired secretsync.Desired, state secretsync.State, stateRef types.NamespacedName,
+) (ctrl.Result, error) {
 	after, err := activeConfig(ctx, eng)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	pushing = desired
+	pushing := desired
 	if after != nil {
 		pushing.Keep(after.RevisionID, storeNamesIn(after.Document)...)
+	}
+	if err := run.keepServing(ctx, eng, &pushing); err != nil {
+		return ctrl.Result{}, err
 	}
 	state, _, err = run.sync(ctx, eng, pushing, state, stateRef)
 	if err != nil {
@@ -573,7 +607,7 @@ func (run *configRun) enforce(
 	if _, err := run.settle(ctx, eng, after, state, stateRef); err != nil {
 		return ctrl.Result{}, err
 	}
-	return ctrl.Result{RequeueAfter: applyPollInterval}, nil
+	return run.heldResync(ctrl.Result{RequeueAfter: applyPollInterval}), nil
 }
 
 // adopt is state recording the reading of active, the revision the engine
@@ -632,6 +666,7 @@ func (run *configRun) sync(
 			len(result.Overwritten), strings.Join(by, ", "))
 	}
 	run.keep(desired, next, result.Retained)
+	run.held = result.Held
 	message := fmt.Sprintf("The engine's secret store holds the current value of each of the %d Secret keys the document references.",
 		len(desired.Names()))
 	var gone []string
@@ -645,6 +680,7 @@ func (run *configRun) sync(
 			"the engine leaves each out.", len(gone), strings.Join(gone, ", "))
 	}
 	message += run.retainedSentence()
+	message += run.heldSentence()
 	if len(run.companyLeftOut) > 0 {
 		message += " The Company's own setup steps give values they let go without: " +
 			strings.Join(run.leftOutLines(run.companyLeftOut), "; ") + "."

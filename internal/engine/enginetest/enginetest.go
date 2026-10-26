@@ -86,6 +86,42 @@ roles:
     goal: "Answer every question the company is asked"
 `
 
+// SandboxCompany is MinimalCompany with an E2B code sandbox whose API key is
+// the secret-store value ${key}, and its seat running code there.
+//
+// The engine accepts it whatever its store holds, since a reference that
+// resolves to nothing is a warning, and runs it only while the store holds a
+// value under key: a sandbox catalogue whose key resolves empty cannot be
+// built, so an apply of it is refused, and a node that boots on it exits. It
+// is how a test has the engine refuse, at apply, a revision its dry run
+// accepted, and how one shows what a node needs of the store to start on the
+// revision it runs. Building the catalogue calls nothing, so any value under
+// key, such as SandboxKeyValue, runs it.
+func SandboxCompany(key string) []byte {
+	return []byte(`name: Acme
+providers:
+  llm:
+    default:
+      model: sonnet
+      auth:
+        mode: api-key
+        api_key: "${ENGINETEST_LLM_API_KEY}"
+  sandbox:
+    e2b:
+      api_key: "${` + key + `}"
+roles:
+  - name: Ana
+    goal: "Answer every question the company is asked"
+    sandbox:
+      enabled: true
+      run_in: e2b
+`)
+}
+
+// SandboxKeyValue is a value for SandboxCompany's key that builds its
+// catalogue. It is no E2B key, and nothing in a test reaches E2B with it.
+const SandboxKeyValue = "e2b_enginetest_not_a_real_key"
+
 // startTimeout bounds how long an engine may take to answer after it is
 // started. A fresh engine answers in about a second; the margin is for a
 // loaded CI runner, where a -race test binary competes for the same CPUs.
@@ -129,8 +165,24 @@ type Engine struct {
 	Dir string
 
 	// LogPath is the file the engine's stdout and stderr go to. Start prints
-	// its tail when the test fails.
+	// its tail when the test fails. Each start writes it afresh, so after a
+	// Restart it holds the restarted engine's log.
 	LogPath string
+
+	// bin, args and env are how the engine is started, the same on every
+	// start (Restart), and running is the process while it runs: nil while
+	// it does not, after a Restart that failed. The test that started it
+	// is its only user, as with every other field.
+	bin     string
+	args    []string
+	env     []string
+	running *process
+}
+
+// process is one run of the engine binary.
+type process struct {
+	cmd    *exec.Cmd
+	exited <-chan error
 }
 
 // Client returns an API client for the engine, authenticated with the
@@ -323,12 +375,24 @@ func Start(t T, opts ...Option) *Engine {
 		render = func(port int) []byte { return custom.render(port, dir) }
 	}
 
+	e.bin, e.args, e.env = bin, args, env
 	for attempt := 1; ; attempt++ {
 		port := freePort(t)
 		writeFile(t, filepath.Join(dir, "crewlet.yaml"), render(port))
 		e.URL = "http://127.0.0.1:" + strconv.Itoa(port)
-		err := e.run(t, bin, args, env, o.company != nil)
+		err := e.run(o.company != nil)
 		if err == nil {
+			// ONE cleanup, whatever runs then: a Restart replaces the
+			// process, and the one it stopped has nothing left to stop.
+			t.Cleanup(func() {
+				if e.running != nil {
+					e.stop(t, e.running)
+					e.running = nil
+				}
+				if t.Failed() {
+					t.Logf("crewlet engine log (%s):\n%s", e.LogPath, tail(e.LogPath))
+				}
+			})
 			return e
 		}
 		// The port was free when it was chosen; another process can take it
@@ -342,19 +406,18 @@ func Start(t T, opts ...Option) *Engine {
 // errPortTaken is an engine that exited because its port was in use.
 var errPortTaken = errors.New("the engine's port was taken")
 
-// run starts the engine and waits until it answers. On success the engine is
-// stopped at the test's cleanup; on failure it is not running.
-func (e *Engine) run(t T, bin string, args, env []string, seeded bool) error {
-	t.Helper()
+// run starts the engine and waits until it answers. On success it is
+// e.running, which Start's cleanup stops; on failure it is not running.
+func (e *Engine) run(seeded bool) error {
 	// TRUNCATED on every attempt, so the port-taken check below reads this
 	// attempt's log and not the one before it.
 	logFile, err := os.Create(e.LogPath)
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(bin, args...)
+	cmd := exec.Command(e.bin, e.args...)
 	cmd.Dir = e.Dir
-	cmd.Env = env
+	cmd.Env = e.env
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	if err := cmd.Start(); err != nil {
@@ -377,13 +440,28 @@ func (e *Engine) run(t T, bin string, args, env []string, seeded bool) error {
 		}
 		return err
 	}
+	e.running = &process{cmd: cmd, exited: exited}
+	return nil
+}
 
-	t.Cleanup(func() {
-		e.stop(t, cmd, exited)
-		if t.Failed() {
-			t.Logf("crewlet engine log (%s):\n%s", e.LogPath, tail(e.LogPath))
-		}
-	})
+// Restart stops the engine, as Kubernetes stops a pod's container (SIGTERM,
+// and the engine's drain), and starts it again on the same directory, port
+// and tokens: the node boots on what its own store says it boots on, beside
+// the activation pointer and the secret store its stream directory kept. It
+// returns once the engine answers, and does not wait for it to be ready: a
+// node that boots on a revision it cannot run, or never answers, is the error
+// it returns, with the restarted engine's log, as a pod that crash-loops is
+// what such a node is. After an error the engine is not running, and a
+// second Restart starts it again.
+func (e *Engine) Restart(t T) error {
+	t.Helper()
+	if e.running != nil {
+		e.stop(t, e.running)
+		e.running = nil
+	}
+	if err := e.run(false); err != nil {
+		return fmt.Errorf("restarting the crewlet engine (%s): %w\n%s", e.bin, err, tail(e.LogPath))
+	}
 	return nil
 }
 
@@ -430,16 +508,16 @@ func (e *Engine) waitUntilAnswering(exited <-chan error, seeded bool) (stillRunn
 
 // stop sends SIGTERM, the engine's graceful shutdown, and kills it if it has not
 // stopped within stopTimeout.
-func (e *Engine) stop(t T, cmd *exec.Cmd, exited <-chan error) {
+func (e *Engine) stop(t T, p *process) {
 	t.Helper()
-	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
+	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		t.Errorf("stopping the crewlet engine: %v", err)
 	}
 	select {
-	case <-exited:
+	case <-p.exited:
 	case <-time.After(stopTimeout):
-		_ = cmd.Process.Kill()
-		<-exited
+		_ = p.cmd.Process.Kill()
+		<-p.exited
 		t.Errorf("the crewlet engine did not stop within %s of SIGTERM and was killed; its log is %s", stopTimeout, e.LogPath)
 	}
 }

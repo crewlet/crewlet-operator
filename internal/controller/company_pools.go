@@ -30,9 +30,10 @@ import (
 // the data StatefulSet: one per Shared pool (<c>-seats-<pool>) and one per
 // seat of a PerSeat pool (<c>-seat-<handle>). Each pod runs Crewlet with the
 // seats role alone, joins the company's event stream as a leaf of the data
-// pods, keeps a scratch store on an emptyDir it loses at every start, and
-// serves nothing but its probes. A node without the ingress role binds
-// api.port for /health and /ready alone, and its /ready answers whether it is
+// pods, keeps on an emptyDir a scratch store, which the engine discards at
+// every start, a container's restart included, and serves nothing but its
+// probes. A node without the ingress role binds api.port for /health and
+// /ready alone, and its /ready answers whether it is
 // doing its work: linked to the data pods' broker, running the company
 // document, holding its presence lease and admitted by its latest placement
 // pass to claim seats. So a seat pod is ready once it has joined the fleet

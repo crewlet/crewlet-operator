@@ -91,18 +91,17 @@ func TestEngineReloadActivatesTheDocumentAgain(t *testing.T) {
 	if reloaded.RevisionID == "" || reloaded.RevisionID == applied.RevisionID || reloaded.Epoch <= applied.Epoch {
 		t.Fatalf("ReloadConfig() = %+v after the apply's %+v, want a new revision at a later epoch", reloaded, applied)
 	}
-	eventually(t, "the reloaded revision active", func() error {
-		after, err := client.ActiveConfig(ctx)
-		switch {
-		case err != nil:
-			return err
-		case after.RevisionID != reloaded.RevisionID:
-			return fmt.Errorf("the active revision is %s, want %s", after.RevisionID, reloaded.RevisionID)
-		case !bytes.Equal(after.Document, before.Document):
-			return fmt.Errorf("the reloaded document differs:\n%s\nwant\n%s", after.Document, before.Document)
-		}
-		return nil
-	})
+	// READ ONCE: GET /config answers the fleet's activation pointer, which
+	// the reload moved before it answered, whatever the node has applied.
+	after, err := client.ActiveConfig(ctx)
+	switch {
+	case err != nil:
+		t.Fatal(err)
+	case after.RevisionID != reloaded.RevisionID:
+		t.Fatalf("the active revision right after the reload is %s, want %s", after.RevisionID, reloaded.RevisionID)
+	case !bytes.Equal(after.Document, before.Document):
+		t.Fatalf("the reloaded document differs:\n%s\nwant\n%s", after.Document, before.Document)
+	}
 }
 
 // TestEngineHealthReportsTheAppliedEpoch pins what the config reconciler
@@ -110,7 +109,11 @@ func TestEngineReloadActivatesTheDocumentAgain(t *testing.T) {
 // never reading a diverged posture while it does, and its /health then
 // reports it applied, converged (posture serve) and ok, with an applied epoch
 // that reaches the epoch the write returned; and the node's record in /fleet
-// names that epoch, its revision and a clean outcome.
+// names that epoch, its revision and a clean outcome, and that revision as
+// the one it runs and, a data node's store outliving a restart, the one it
+// would start on: the engine moves what it starts on before it records the
+// apply, so no record names the applied revision as run and not as started
+// on.
 func TestEngineHealthReportsTheAppliedEpoch(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -155,7 +158,10 @@ func TestEngineHealthReportsTheAppliedEpoch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if record, want := fleet.LastApply(), (engine.ApplyRecord{Epoch: applied.Epoch, RevisionID: applied.RevisionID, Status: engine.ApplyOK}); record != want {
+	if record, want := fleet.LastApply(), (engine.ApplyRecord{
+		Epoch: applied.Epoch, RevisionID: applied.RevisionID, Status: engine.ApplyOK, Serving: applied.RevisionID,
+		Boots: applied.RevisionID,
+	}); record != want {
 		t.Fatalf("LastApply() = %+v, want %+v", record, want)
 	}
 }
@@ -465,21 +471,161 @@ func TestEngineRefusesAManagedDocumentToEveryOtherToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("an edit with the operator token: %v", err)
 	}
-	// Waited for rather than read once: the write marks its revision this
-	// node's active one, and the node's apply of the first revision, still
-	// finishing, can mark that one active again a moment later (Crewlet's
-	// engine/reconcile.go, holdLocalCopy, compares no epochs), until the
-	// node applies the second and marks it active once more.
-	eventually(t, "the engine running the operator's edit", func() error {
-		active, err := operator.ActiveConfig(ctx)
+	// READ ONCE, right after the write: GET /config answers the fleet's
+	// activation pointer, which the write moved, never the revision this
+	// node is still applying, so the read after a write is the write.
+	active, err = operator.ActiveConfig(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active.RevisionID != second.RevisionID {
+		t.Fatalf("GET /config right after the operator's edit answers revision %s, want %s", active.RevisionID, second.RevisionID)
+	}
+}
+
+// TestEngineARefusedRevisionKeepsServingTheOneBefore pins what the secret sync
+// keeps for: a node that refuses the fleet's revision goes on running the
+// revision it ran before, says so in /fleet, and, its store outliving the
+// restart as a data pod's does, says it would start on that revision (Boots)
+// and boots on it again when it restarts, which it can only while the secret
+// store holds what that revision references. GET /config answers the fleet's
+// revision all along, and GET /config/revisions/{id} the document of the one
+// the node runs, its references whole, which is how the operator learns what
+// that node needs.
+func TestEngineARefusedRevisionKeepsServingTheOneBefore(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	e := enginetest.Start(t)
+	client := e.Client()
+	const kept, unset = "ENGINETEST_E2B_SERVED", "ENGINETEST_E2B_NEVER_SET"
+
+	if err := client.PutSecret(ctx, kept, []byte(enginetest.SandboxKeyValue)); err != nil {
+		t.Fatal(err)
+	}
+	served, err := client.ApplyConfig(ctx, engine.ApplyRequest{
+		Document: enginetest.SandboxCompany(kept), Summary: "enginetest: the revision that runs", CreateOnly: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the engine applying the first revision", func() error { return client.Ready(ctx) })
+
+	// The next revision drops the value the first one references, and
+	// references one the store does not hold, which the dry run accepts
+	// and the apply refuses.
+	refused, err := client.ApplyConfig(ctx, engine.ApplyRequest{
+		Document: enginetest.SandboxCompany(unset), Summary: "enginetest: the revision it refuses", IfMatch: served.RevisionID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := func(record engine.ApplyRecord) error {
+		if record.RevisionID != refused.RevisionID || record.Epoch != refused.Epoch || record.Status != engine.ApplyError ||
+			record.Serving != served.RevisionID || record.Boots != served.RevisionID {
+			return fmt.Errorf("LastApply() = %+v, want revision %s refused at epoch %d, serving and booting on %s",
+				record, refused.RevisionID, refused.Epoch, served.RevisionID)
+		}
+		return nil
+	}
+	eventually(t, "the node refusing the second revision", func() error {
+		fleet, err := client.Fleet(ctx)
 		if err != nil {
 			return err
 		}
-		if active.RevisionID != second.RevisionID {
-			return fmt.Errorf("it runs revision %s, want %s", active.RevisionID, second.RevisionID)
+		return want(fleet.LastApply())
+	})
+	active, err := client.ActiveConfig(ctx)
+	if err != nil || active.RevisionID != refused.RevisionID {
+		t.Fatalf("ActiveConfig() = %s, %v; want the fleet's revision %s, which the node refused", active.RevisionID, err, refused.RevisionID)
+	}
+	running, err := client.Revision(ctx, served.RevisionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if running.ID != served.RevisionID || !bytes.Contains(running.Document, []byte("${"+kept+"}")) {
+		t.Fatalf("Revision(%s) = {%s, %s}, want its document, referencing ${%s}", served.RevisionID, running.ID, running.Document, kept)
+	}
+
+	// Restarted, the node starts on the revision it ran, and refuses the
+	// fleet's again: it is ready, and says it runs the first.
+	if err := e.Restart(t); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the restarted node ready", func() error { return client.Ready(ctx) })
+	eventually(t, "the restarted node refusing the second revision again", func() error {
+		fleet, err := client.Fleet(ctx)
+		if err != nil {
+			return err
+		}
+		return want(fleet.LastApply())
+	})
+
+	// Without the value the revision it runs references, it does not start
+	// at all: the value the secret sync keeps for it.
+	if _, err := client.DeleteSecret(ctx, kept); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Restart(t); err == nil {
+		t.Fatalf("the node started on revision %s with %s gone from its secret store, which its document references",
+			served.RevisionID, kept)
+	}
+}
+
+// TestEngineANodeThatRefusedEveryRevisionRunsNoCompany pins the row the secret
+// sync reads as a node that runs no company, an attempt recorded (Status) and
+// no revision served or started on (Serving and Boots ""), and what such a node
+// boots on. keepServing's branch for that row (internal/controller) lets every
+// delete from the store go ahead beside the node, because the node needs
+// nothing of the store but the fleet's revision. That holds only while the
+// engine keeps both halves: a node that has run nothing and refuses the fleet's
+// revision records the attempt, rather than staying the zero record of a node
+// that has not said, which keeps every value for as long as it runs; and
+// restarted, with no revision it applied, it boots on nothing, not on the
+// fleet's revision it refused, and tries that one again. This is the node that
+// joined on an empty store, which one engine can be; a seat pod, whose store is
+// scratch, boots on nothing at every start whatever it ran.
+func TestEngineANodeThatRefusedEveryRevisionRunsNoCompany(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	e := enginetest.Start(t)
+	client := e.Client()
+	const unset = "ENGINETEST_E2B_NEVER_SET"
+
+	// The first revision references a value the store does not hold,
+	// which the dry run accepts and the apply refuses.
+	refused, err := client.ApplyConfig(ctx, engine.ApplyRequest{
+		Document: enginetest.SandboxCompany(unset), Summary: "enginetest: the revision it refuses", CreateOnly: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runsNone := func() error {
+		fleet, err := client.Fleet(ctx)
+		if err != nil {
+			return err
+		}
+		if record := fleet.LastApply(); record.RevisionID != refused.RevisionID || record.Epoch != refused.Epoch ||
+			record.Status != engine.ApplyError || record.Serving != "" || record.Boots != "" {
+			return fmt.Errorf("LastApply() = %+v, want revision %s refused at epoch %d, serving and booting on none",
+				record, refused.RevisionID, refused.Epoch)
+		}
+		health, err := client.Health(ctx)
+		if err != nil {
+			return err
+		}
+		if health.Configured {
+			return fmt.Errorf("Health() = %+v, want a node that runs no company", health)
 		}
 		return nil
-	})
+	}
+	eventually(t, "the node refusing the first revision", runsNone)
+
+	// Restarted, it starts, which it would not on the revision it refused,
+	// runs nothing, and says so beside its attempt at that revision again.
+	if err := e.Restart(t); err != nil {
+		t.Fatalf("the node that runs no company did not start again: %v", err)
+	}
+	eventually(t, "the restarted node running no company", runsNone)
 }
 
 // founderCompany is MinimalCompany with a human seat, founder, which a test

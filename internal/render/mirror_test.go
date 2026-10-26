@@ -204,6 +204,21 @@ const (
 	bridgeFleetGo   = "internal/engine/bridgefleet.go"
 	seatPoolsGo     = "internal/controller/company_pools.go"
 
+	// bootRevisionRead is crewlet#391's engine, read at the head of its branch
+	// before that change merged. A node starts on the revision its own store
+	// names, which the engine moves only once an apply has succeeded, and a
+	// node whose store is scratch starts on nothing: decideFile reads no
+	// store for it, and OpenNode deletes the file before it opens it. A seat
+	// pod's Tier A sets that store (SeatPodBootstrap), so the secret sync
+	// keeps nothing for a seat pod the fleet does not list whose engine is not
+	// running (judgeUnlisted). No engine test can show it: a node starts on a
+	// scratch store only without the data role, and such a node needs a data
+	// node's broker to start, where enginetest starts one data node alone.
+	bootRevisionRead = "v0.1.1-0.20261026181807-528aee549682"
+	seedGo           = "cmd/crewlet/seed.go"
+	storeGo          = "internal/store/store.go"
+	configServingGo  = "internal/controller/config_serving.go"
+
 	// offersSandboxRead is crewlet#271's engine, whose runner was first read
 	// for which seats it offers run_sandbox: never one whose executor runs in
 	// box mode, which the render reports no code work for.
@@ -955,6 +970,23 @@ var mirrored = []mirror{
 			"ingress node at api.port 0 stays out",
 		digest: "6cb403b397c5b3e76772569894f2052b1b4b75572dfbda6cefec1304d5889610",
 		read:   fleetBridgeRead,
+	},
+	{
+		file: seedGo, name: "decideFile",
+		against: []string{configServingGo, bootstrapGo},
+		decides: "a node whose store is scratch reads nothing of it at boot and starts on its seed alone, which the " +
+			"operator never gives a seat pod, so a seat pod whose engine is not running starts on no revision and " +
+			"needs no value kept for it",
+		digest: "712f6a1328c920bade21f954015f268e8afead6cd200b75df7dc6215a085390e",
+		read:   bootRevisionRead,
+	},
+	{
+		file: storeGo, name: "OpenNode",
+		against: []string{configServingGo, bootstrapGo},
+		decides: "a scratch store's file is deleted before the node opens it, so a seat pod's emptyDir holds no " +
+			"revision across a restart of its container",
+		digest: "e6bccb9596966fc6cd3bba04a8622830b5be4173996ef0cf56dc034f86da3302",
+		read:   bootRevisionRead,
 	},
 	{
 		file: bootGo, name: "PublicListener",
