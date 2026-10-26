@@ -1,7 +1,7 @@
 integrations:
   check_interval_seconds: 300
 knowledge:
-  backend: native
+  backend: doclet
   root_space: ACME
   scope:
   - ENG
@@ -70,8 +70,8 @@ token_budget:
   month: 20000000
   week: 5000000
 tracker:
-  backend: native
-  native:
+  backend: worklet
+  worklet:
     inbox_retention_days: 90
 turn_engine:
   extension_enabled: false

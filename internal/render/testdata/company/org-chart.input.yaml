@@ -15,11 +15,11 @@ spec:
     - Ship small.
   timeZone: America/Phoenix
   tracker:
-    backend: Native
-    native:
+    backend: Worklet
+    worklet:
       inboxRetentionDays: 90
   knowledge:
-    backend: Native
+    backend: Doclet
     scope: [ENG, OPS]
     skillsContainer: ""
     rootSpace: ACME

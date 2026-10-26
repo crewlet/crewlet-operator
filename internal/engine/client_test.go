@@ -434,7 +434,7 @@ func TestErrorMapping(t *testing.T) {
 		{
 			name: "a token without the grant",
 			handler: answer(http.StatusForbidden, `{"error":"unauthorized","grants":["admin"],`+
-				`"message":"You don't have the access this needs (Admin, Tracker or Knowledge). Ask an admin for it.",`+
+				`"message":"You don't have the access this needs (Admin, Worklet, Doclet or Artifacts). Ask an admin for it.",`+
 				`"reason":"no_grant"}`),
 			sentinel: engine.ErrForbidden, wantCode: "unauthorized", wantStatus: http.StatusForbidden,
 		},
@@ -553,7 +553,7 @@ func TestRefusalMessageIsWhatTheEngineSaid(t *testing.T) {
 func TestAuthorityRefusalNamesItsGrants(t *testing.T) {
 	f := newFakeEngine(t)
 	f.handle("PUT /config", answer(http.StatusForbidden, `{"error":"unauthorized","grants":["admin"],`+
-		`"message":"You don't have the access this needs (Admin, Tracker or Knowledge). Ask an admin for it.",`+
+		`"message":"You don't have the access this needs (Admin, Worklet, Doclet or Artifacts). Ask an admin for it.",`+
 		`"reason":"no_grant"}`))
 	_, err := apply(f, write)
 	var apiErr *engine.APIError

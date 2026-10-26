@@ -477,10 +477,10 @@ spec:
                 minProperties: 1
                 properties:
                   backend:
-                    default: Native
+                    default: Doclet
                     description: backend is which knowledge base the company runs.
                     enum:
-                    - Native
+                    - Doclet
                     - Confluence
                     - None
                     type: string
@@ -1338,16 +1338,15 @@ spec:
                 minProperties: 1
                 properties:
                   backend:
-                    default: Native
+                    default: Worklet
                     description: backend is which tracker the company runs.
                     enum:
-                    - Native
+                    - Worklet
                     - Jira
                     - None
                     type: string
-                  native:
-                    description: native is the policy of the engine's own tracker,
-                      for backend Native.
+                  worklet:
+                    description: worklet is the policy of Worklet, for backend Worklet.
                     minProperties: 1
                     properties:
                       inboxRetentionDays:
@@ -1362,8 +1361,8 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-validations:
-                - message: native applies to backend Native only
-                  rule: '!has(self.native) || self.backend == ''Native'''
+                - message: worklet applies to backend Worklet only
+                  rule: '!has(self.worklet) || self.backend == ''Worklet'''
               vision:
                 description: |-
                   vision is a longer statement of where the company is going, in

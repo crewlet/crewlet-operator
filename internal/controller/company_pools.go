@@ -92,17 +92,12 @@ const (
 	//     killed while extracting it leaves on the scratch volume a restart
 	//     keeps (tursoPrepareTimeout, a minute, polled every 25 ms);
 	//   - 20: two registrations of what the node answers, 10 s each
-	//     (flushBudget);
-	//   - 20: the listing of the company's secrets (refreshSecrets: two 5 s
-	//     reads beside the watch, a 5 s idle pass and the 5 s stop of its
-	//     consumer).
+	//     (flushBudget).
 	// Its object store's step is S3's probe (s3ProbeSeconds) or the one
 	// below. Nothing on a seat pod's boot waits on what the company
-	// configures, and only the listing grows with what it holds, by 5 s
-	// for each secret (10 for one deleted in the last three hours) it may
-	// read back one at a time, which is not counted, as a data pod's
-	// recovery is not.
-	seatPodBootSeconds = 60 + 61 + 300 + 60 + 300 + 90 + 61 + 20 + 20
+	// configures or grows with what it holds: the engine lists the
+	// company's secrets after /health answers 200.
+	seatPodBootSeconds = 60 + 61 + 300 + 60 + 300 + 90 + 61 + 20
 	// seatPodNATSObjectsSeconds is the object store's step on the default
 	// backend: the broker's limit read to size the bucket (LookupBudget,
 	// 30 s), then the bucket looked up (30 s), created (2 min, Budget),

@@ -324,7 +324,7 @@ var addressShapes = []string{
 	"http://h.example:65536", "http://h.example:99999", "http://h.example:123456789012345678901234567890",
 	"http://h.example:" + strings.Repeat("9", 2000), "http://h.example:",
 	"HTTP://h.example", "Https://h.example", "ftp://h.example", "h.example", "http://", "http://:8080",
-	"http://h.example/?tenant=nimbus", "http://h.example/#/work", "http://h.example/?", "http://h.example?",
+	"http://h.example/?tenant=nimbus", "http://h.example/#/worklet", "http://h.example/?", "http://h.example?",
 	"http://h.example?a=b", "http://h.example#x", "http://h.example#", "http://u:p@h.example", "http://u@h.example",
 	" http://h.example", "http://h.example ", "  ", "http://a b.example",
 	"http://h.example/a\u0080b", "http://h.example/a\u0085b", "http://h.ex\u0085ample", "http://\u0085h.example",

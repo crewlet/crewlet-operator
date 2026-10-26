@@ -224,18 +224,30 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **The pod restarts, its events saying `Startup probe failed`, and the
   previous log has no `engine_recovered` line**: the recovery of what the
   volume holds took longer than the startup probe allows, and every restart
-  starts it again. The window is 1,656 seconds (1,796 when the class keeps
+  starts it again. The window is 1,636 seconds (1,776 when the class keeps
   files in S3) plus six seconds per GiB of the volume; a disk that reads
   slower than that needs a longer one. Set the class's `data.startupSeconds`
   (up to a day), which rolls the data pods once, and let the next boot
   finish.
 - **The log has `engine_recovered` and no `api_listening` after it**: the
   engine has recovered what the volume holds and is starting what the company
-  configures, its shared tool servers above all. `/health` answers `200`
-  there, so no probe restarts the pod, and a restart would wait on the same
-  thing: the lines after `engine_recovered` say what the engine is starting.
+  configures. It reads the company's secrets first, and while the secret
+  store does not answer it logs `secret_store_unreadable` and asks again for
+  as long as it runs; then come its shared tool servers above all. `/health`
+  answers `200` there, so no probe restarts the pod, and a restart would wait
+  on the same thing: the lines after `engine_recovered` say what the engine is
+  starting.
   A tool server that never answers is its MCPServer's to fix
   ([A tool server does not start](#a-tool-server-does-not-start)).
+- **The pod restarts after its log has `engine_recovered`, and the previous
+  log ends on `the secret store holds a value this node cannot open`**,
+  naming the secret: a key was removed from `<company>-keyring` before what
+  it sealed was sealed again under another. No engine of the company starts
+  while its secret store holds a value its keyring cannot open, so its seat
+  pods restart the same way, and no restart changes the answer. Put the key
+  back in the Secret, keeping its id; the data pod rolls onto it and starts,
+  and the seat pods follow it
+  ([The engine's own Secrets](credentials.md#the-engines-own-secrets)).
 - **The pod restarts, and the previous log refuses a setting of its
   `crewlet.yaml` by name**: `"external_url" isn't a setting. Check the
   spelling and the block it's under`, or, for a setting Crewlet has removed,
@@ -278,6 +290,7 @@ kubectl logs -n acme acme-seats-general-159f80d7-0
 
 | `reason` | What it means for a seat pod |
 |---|---|
+| `starting` | `/health` answers, and it is still building what the company configures, the company's secrets first: while the secret store does not answer, its log has `secret_store_unreadable` and it asks again for as long as it runs, as a data pod does ([The data pod is not ready](#the-data-pod-is-not-ready)). |
 | `broker_unlinked` | Its leaf link to the data pod is down; `detail` says why. See below. |
 | `unconfigured` | No company document has reached it yet: it has just joined. |
 | `shed`, `stuck` | It cannot apply the revision the data pod runs; its log has `config_apply_failed`. |
@@ -431,8 +444,8 @@ something a person set up. Or keep the seat: restore its Seat as a Human seat.
 revision the operator wrote and then could not apply it, or never did. It
 keeps serving the revision it applied last; the dry run accepted the new one,
 so what failed is something only applying it meets on this engine: a
-subsystem it could not start (the native tracker, the code sandbox, the
-inbound edge), or a rule that needs the data pod's own configuration. The
+subsystem it could not start (Worklet, the code sandbox, the inbound
+edge), or a rule that needs the data pod's own configuration. The
 condition's message carries the engine's account of the failure, its
 `status` and its `posture`:
 

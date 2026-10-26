@@ -352,8 +352,8 @@ origin to the engine's `api.auth.allowed_origins`, so a person who signs in
 through the route can write as well as read.
 
 A link an agent composes is the base followed by one of the engine
-dashboard's own routes, such as `<base>/#/work/ENG-42` for a work item and
-`<base>/#/knowledge/pages/<page id>` for a page. So an address other than
+dashboard's own routes, such as `<base>/#/worklet/ENG-42` for a work item
+and `<base>/#/doclet/pages/<page id>` for a page. So an address other than
 the API route's must serve the engine there, its `/dashboard` and `/auth`
 routes included, since a person signs in through it: the part after `#`
 never reaches a server, so the dashboard reads it in the browser.
@@ -396,7 +396,8 @@ An IPv4 address of four decimal octets, an IPv6 address in brackets,
 ## Serve artifacts from an origin of their own
 
 The dashboard frames HTML pages and designs from the engine's artifact
-listener, port 8082 (Crewlet's `api.artifacts`), which serves artifacts and
+listener, port 8082 (Crewlet's `api.artifacts`), which serves artifacts, the
+page runtime and kit, and the files of the company's adopted brand, and
 nothing else, so a page somebody wrote never runs where the dashboard's
 session does. The data pod opens it only while the Company has an address
 for it, `status.endpoints.artifactsBaseURL`: its
@@ -438,6 +439,12 @@ spec:                       # Company
 Publishing an artifact uploads its files through the API port: raise an
 Ingress controller's request body limit there (ingress-nginx's default is
 1 MiB) with `api.ingress.annotations`.
+
+A shared cache in front of the artifacts route may keep `/_crewlet/kit/` and
+`/_crewlet/runtime/` keyed without the host, since they are the same on every
+company's origin. It must keep the host in the key for `/_crewlet/brand/`,
+which serves one company's adopted brand, and must never cache a `/t/` path
+([what a proxy in front of it must do](https://github.com/crewlet/crewlet/blob/main/docs/guides/artifacts-serving.md#a-reverse-proxy-in-front-of-it)).
 
 ## Name the proxies in front of the engine
 

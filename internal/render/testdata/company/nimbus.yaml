@@ -18,7 +18,7 @@ integrations:
   slack:
     typing_status: addressed
 knowledge:
-  backend: native
+  backend: doclet
 learning:
   enabled: true
 mcp_servers:
@@ -98,7 +98,7 @@ token_budget:
   day: 3000000
   month: 40000000
 tracker:
-  backend: native
+  backend: worklet
 turn_engine:
   extension_enabled: true
 units:

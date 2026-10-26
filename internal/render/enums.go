@@ -50,8 +50,8 @@ const crewletNone = "none"
 
 func trackerBackend(b v1alpha1.TrackerBackend) string {
 	switch b {
-	case v1alpha1.TrackerNative:
-		return "native"
+	case v1alpha1.TrackerWorklet:
+		return "worklet"
 	case v1alpha1.TrackerJira:
 		return "jira"
 	case v1alpha1.TrackerNone:
@@ -62,8 +62,8 @@ func trackerBackend(b v1alpha1.TrackerBackend) string {
 
 func knowledgeBackend(b v1alpha1.KnowledgeBackend) string {
 	switch b {
-	case v1alpha1.KnowledgeNative:
-		return "native"
+	case v1alpha1.KnowledgeDoclet:
+		return "doclet"
 	case v1alpha1.KnowledgeConfluence:
 		return "confluence"
 	case v1alpha1.KnowledgeNone:
