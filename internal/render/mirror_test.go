@@ -224,12 +224,40 @@ const (
 	// log's stats and its record at a sequence are read through ReadWith on
 	// their caller's context, asked again while the broker answers none,
 	// where each was one request at the client's default. What else moved
-	// moved no bound: the queue's registrations name how many answers they
-	// run at once, the provisioning reads hand their value back rather than
-	// set it from a closure, the nats bucket's uploads share a window sized
-	// for the link they cross, the S3 client counts into the node's metrics,
-	// and a log's start words one refusal anew.
+	// in the declarations read here moved no bound: the queue's
+	// registrations name how many answers they run at once, the
+	// provisioning reads hand their value back rather than set it from a
+	// closure, the nats bucket's uploads share a window sized for the link
+	// they cross, the S3 client counts into the node's metrics, and a log's
+	// start words one refusal anew. A bound moved outside them: the change
+	// that gave the registrations their answer counts also gave the estate
+	// service a second lane, for a push's proposals, which a data node
+	// registers beside the shared one, one more flush on its boot. That
+	// registration is made below serveEstate, whose own code did not change,
+	// so no declaration read here showed it, and the windows missed it until
+	// gitLaneRead.
 	codeHostRead = "v0.1.1-0.20261025200628-15c2f1a96275"
+
+	// gitLaneRead is crewlet/crewlet#298's engine with the estate service's
+	// git lane, on which a node with the git role answers the git reads of
+	// its repositories, read where serveEstate was read again against the
+	// windows. The estate service registers its lanes one after another,
+	// each one flush, and every data node registers two, the shared lane and
+	// the proposals', which the windows counted as one: the proposals' lane
+	// came in on the branch below serveEstate, whose own code did not change,
+	// so the service's Serve and its lanes are read now too, and the queue's
+	// Serve and flush, which make each registration one flush. The git lanes
+	// are registered only beside a git half, which serveEstate hands the
+	// service only on a node with the git role, and no pod the operator runs
+	// has that role. Every other registration the windows count was read
+	// down to the queue there too: the steer answerer and the fleet broker
+	// register in their step's own code (armSteer, serveFleetBroker), and
+	// the history answerer, the inbox relay and the presence answerer each
+	// register one subject, in a function one call below their step
+	// (eventfan's Serve, (*inboxRelay).serve, presence's (*Hub).Start),
+	// which are read now as well, so a registration added in any of them
+	// moves a digest, as one added to the estate's lanes does.
+	gitLaneRead = "v0.1.1-0.20261026025520-adba06740326"
 
 	// The engine files most of the bounds on a boot are read from, and the
 	// guide that quotes the windows they add up to.
@@ -462,7 +490,17 @@ var bootWindows = []string{
 // context, which has no deadline (ReadWith, hedge), counted at the term of
 // one request; and the agreement of the object store's fleet record, bounded
 // by a number of attempts (casRetry, fleetCASAttempts), counted at the one
-// attempt a boot meets unless someone removes the record meanwhile.
+// attempt a boot meets unless someone removes the record meanwhile. And how
+// many registrations a step makes is read down to the queue, for every step
+// that registers what a node answers: the steer answerer and the fleet
+// broker register in their step's own code (armSteer, serveFleetBroker);
+// the history answerer, the inbox relay and the presence answerer each
+// register one subject in the function their step calls (eventfan's Serve,
+// (*inboxRelay).serve, presence's (*Hub).Start); the estate service
+// registers each of its lanes in turn (estate's Serve and lanes); and every
+// registration is one flush ((*Queue).Serve and flush). So a registration
+// added below a step, whose own code need not change for it, sends somebody
+// to the windows too.
 var mirrored = []mirror{
 	{
 		file: bootGo, name: "ArtifactsListener",
@@ -1257,6 +1295,14 @@ var mirrored = []mirror{
 		read:    bootBoundsRead,
 	},
 	{
+		file: "internal/engine/inboxrelay.go", name: "(*inboxRelay).serve",
+		against: bootWindows,
+		decides: "the inbox relay a data node arms (armInboxRelay) registers one subject, its node's own, through " +
+			"the queue's Serve",
+		digest: "cce917b34fdcc2b5c6f26f1b85ee9ace995b3a0b43dd159137a001a01bc7745a",
+		read:   gitLaneRead,
+	},
+	{
 		file: "internal/engine/maintenance_mode.go", name: "(*Engine).admit",
 		against: bootWindows,
 		decides: "a data node's admission writes its record and reads each log's maintenance window",
@@ -1273,9 +1319,10 @@ var mirrored = []mirror{
 	{
 		file: "internal/engine/remote.go", name: "(*Engine).serveEstate",
 		against: bootWindows,
-		decides: "a data node registers its estate service, one flush",
-		digest:  "d6a146c8e4b638098a187a7b279dd60361f25c6c251590a3243bb1b1a66c720a",
-		read:    bootBoundsRead,
+		decides: "a data node registers its estate service, and hands it a git half only where the node has the git " +
+			"role, which no pod the operator runs has",
+		digest: "7b2a9fbfee94698df1708f53198f434b9d3120c48a875f2b06f247a48f9e54ce",
+		read:   gitLaneRead,
 	},
 	{
 		file: "internal/engine/remote.go", name: "(*Engine).takeCustody",
@@ -1372,6 +1419,28 @@ var mirrored = []mirror{
 		read:    codeHostRead,
 	},
 	{
+		file: "internal/estate/server.go", name: "Serve",
+		against: bootWindows,
+		decides: "the estate service registers its lanes one after the other, each through the queue's Serve, and " +
+			"the git lanes beside them only when it is handed a git half",
+		digest: "a8fb9d8a6c8a3b24aa93f81c43e81e770a9d1a15180766f72fdd183bdf1972ea",
+		read:   gitLaneRead,
+	},
+	{
+		file: "internal/estate/wire.go", name: "lanes",
+		against: bootWindows,
+		decides: "every node that serves the estate registers two lanes, the shared one and the proposals'",
+		digest:  "90f732344404e8d6f55ea3da000d0630598a0f724861fea1e46afa81220d5e38",
+		read:    gitLaneRead,
+	},
+	{
+		file: "internal/eventfan/fanwire.go", name: "Serve",
+		against: bootWindows,
+		decides: "the history answerer a data node arms (armHistory) registers one subject, through the queue's Serve",
+		digest:  "ca0feed0ded0e8803a7ddc32187a6f8f713460a4f2cc0d3d4a1340598f1a85a1",
+		read:    gitLaneRead,
+	},
+	{
 		file: jsprovisionGo, name: "LookupBudget",
 		against: bootWindows,
 		decides: "a lookup of a stream or bucket, and the broker's limit read, are bounded at 30 s",
@@ -1455,6 +1524,14 @@ var mirrored = []mirror{
 		decides: "the custody keeper reconciles what it holds, then attaches to its group",
 		digest:  "1fa472fde8f947abeb6decd310f3ef13b878eb2fd283dc54e23e8a69b3f6ddb3",
 		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/presence/hub.go", name: "(*Hub).Start",
+		against: bootWindows,
+		decides: "the presence answerer every node starts (armPresence) registers one subject, through the queue's " +
+			"Serve, and runs its loops on goroutines the boot does not wait for",
+		digest: "73aa622c3dc1403f8811d251f7ac819722b3e785ee6da02fb68b7358a4864839",
+		read:   gitLaneRead,
 	},
 	{
 		file: "internal/queue/jetstream/attach.go", name: "(*Queue).attach",
@@ -1553,6 +1630,20 @@ var mirrored = []mirror{
 			"streams, in that order",
 		digest: "050788e956291f25654a7097134e229a46c6e4cbc8d8c86d76ff23432a9a6d48",
 		read:   bootBoundsRead,
+	},
+	{
+		file: "internal/queue/jetstream/scatter.go", name: "(*Queue).Serve",
+		against: bootWindows,
+		decides: "registering what a node answers subscribes to its subject, then flushes the subscription once",
+		digest:  "3723b2e3ed09ba3f1a8e462b1a15351e3ecb4679adb1959a2955ee7965887980",
+		read:    gitLaneRead,
+	},
+	{
+		file: "internal/queue/jetstream/scatter.go", name: "(*Queue).flush",
+		against: bootWindows,
+		decides: "a flush waits for the broker's answer for at most flushBudget",
+		digest:  "8fa5c9ae81c1b7fac5457e1385c4925d19030696eb6017d0d608ff275fb7fe0e",
+		read:    gitLaneRead,
 	},
 	{
 		file: "internal/queue/jetstream/scatter.go", name: "flushBudget",

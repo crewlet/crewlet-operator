@@ -243,6 +243,18 @@ read of a state log's state or record, asked again while the broker answers
 none (`ReadWith` and `hedge` in `internal/jsprovision/hedge.go`), at the term
 of one request, and the agreement of the object store's fleet record,
 bounded by a number of attempts (`casRetry`), at the one attempt a boot meets.
+How many registrations a step makes is read down to the queue, for every
+step that registers what a node answers: the steer answerer and the fleet
+broker register in their step's own code (`armSteer`, `serveFleetBroker`);
+the history answerer, the inbox relay and the presence answerer each
+register one subject in the function their step calls (`Serve` in
+`internal/eventfan/fanwire.go`, `(*inboxRelay).serve` in
+`internal/engine/inboxrelay.go` and `(*Hub).Start` in
+`internal/presence/hub.go`); the estate service registers each of its lanes
+in turn (`Serve` and `lanes` in `internal/estate`), two on a data pod; and
+every registration is one flush (`(*Queue).Serve` and `flush` in
+`internal/queue/jetstream/scatter.go`). So a registration added below a
+function whose own code does not change still fails the test.
 Which steps a boot runs, and in what order, is `engine.New`'s, which is not
 read, since it changes with most of the engine's work. The digest (`enginetest.Fingerprint`) is taken over the
 function, or over the one spec that declares a constant, as `go/printer`
