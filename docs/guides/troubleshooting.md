@@ -234,7 +234,7 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **The pod restarts, its events saying `Startup probe failed`, and the
   previous log has no `engine_recovered` line**: the recovery of what the
   volume holds took longer than the startup probe allows, and every restart
-  starts it again. The window is 1,206 seconds (1,346 when the class keeps
+  starts it again. The window is 1,216 seconds (1,356 when the class keeps
   files in S3) plus six seconds per GiB of the volume; a disk that reads
   slower than that needs a longer one. Set the class's `data.startupSeconds`
   (up to a day), which rolls the data pods once, and let the next boot

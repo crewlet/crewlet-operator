@@ -222,7 +222,7 @@ spec:
                       that hung.
 
                       It is at least every bound Crewlet puts on a data pod's boot, laid end
-                      to end, which a window may not cut short: 1206 seconds, or 1346 with
+                      to end, which a window may not cut short: 1216 seconds, or 1356 with
                       objects.backend S3, whose bucket every boot probes. Those are its waits
                       for its own broker and store (provisioning the event stream, the
                       coordination buckets, the object store and the state logs, two minutes
@@ -244,7 +244,7 @@ spec:
                       Changing it changes the data pods' template, which restarts them.
                     format: int32
                     maximum: 86400
-                    minimum: 1206
+                    minimum: 1216
                     type: integer
                   storage:
                     description: storage is the data volume each data pod gets.
@@ -3566,12 +3566,12 @@ spec:
                 it for its state logs and the object store''s bucket'
               rule: (has(self.objects) && has(self.objects.backend) && self.objects.backend
                 == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('14Gi'))
-            - message: 'data.startupSeconds must be at least 1346 with objects.backend
+            - message: 'data.startupSeconds must be at least 1356 with objects.backend
                 S3: every boot of a data pod probes the bucket, and Crewlet''s bounds
-                on the boot then add up to 1346 seconds, which a shorter window can
+                on the boot then add up to 1356 seconds, which a shorter window can
                 cut short'
               rule: '!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend)
-                || self.objects.backend != ''S3'' || self.data.startupSeconds >= 1346'
+                || self.objects.backend != ''S3'' || self.data.startupSeconds >= 1356'
             - message: 'networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces:
                 without them the policy refuses everything the Ingress forwards'
               rule: self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress)

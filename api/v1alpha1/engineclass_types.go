@@ -131,7 +131,7 @@ type DataPodSettings struct {
 	// that hung.
 	//
 	// It is at least every bound Crewlet puts on a data pod's boot, laid end
-	// to end, which a window may not cut short: 1206 seconds, or 1346 with
+	// to end, which a window may not cut short: 1216 seconds, or 1356 with
 	// objects.backend S3, whose bucket every boot probes. Those are its waits
 	// for its own broker and store (provisioning the event stream, the
 	// coordination buckets, the object store and the state logs, two minutes
@@ -152,7 +152,7 @@ type DataPodSettings struct {
 	// its CLIs' logins.
 	// Changing it changes the data pods' template, which restarts them.
 	// +optional
-	// +kubebuilder:validation:Minimum=1206
+	// +kubebuilder:validation:Minimum=1216
 	// +kubebuilder:validation:Maximum=86400
 	StartupSeconds int32 `json:"startupSeconds,omitempty"`
 
@@ -1231,7 +1231,7 @@ type SignInSettings struct {
 // start a node that names another store than the one it recorded, so the
 // backend a volume and a window were sized for is the one it runs with.
 // +kubebuilder:validation:XValidation:rule="(has(self.objects) && has(self.objects.backend) && self.objects.backend == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('14Gi'))",message="data.storage.size must be at least 14Gi with objects.backend NATS: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 10737418239 bytes of it for its state logs and the object store's bucket"
-// +kubebuilder:validation:XValidation:rule="!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend) || self.objects.backend != 'S3' || self.data.startupSeconds >= 1346",message="data.startupSeconds must be at least 1346 with objects.backend S3: every boot of a data pod probes the bucket, and Crewlet's bounds on the boot then add up to 1346 seconds, which a shorter window can cut short"
+// +kubebuilder:validation:XValidation:rule="!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend) || self.objects.backend != 'S3' || self.data.startupSeconds >= 1356",message="data.startupSeconds must be at least 1356 with objects.backend S3: every boot of a data pod probes the bucket, and Crewlet's bounds on the boot then add up to 1356 seconds, which a shorter window can cut short"
 // +kubebuilder:validation:XValidation:rule="self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress) || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress) || has(self.exposure.api.ingress.controllerNamespaces)) && (!has(self.exposure.artifacts) || !has(self.exposure.artifacts.ingress) || has(self.exposure.artifacts.ingress.controllerNamespaces)))",message="networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces: without them the policy refuses everything the Ingress forwards"
 // +kubebuilder:validation:XValidation:rule="!has(self.networkPolicy) || !has(self.networkPolicy.mode) || self.networkPolicy.mode != 'Isolated' || !has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.mode) || self.exposure.webhooks.mode != 'External' || has(self.exposure.webhooks.external)",message="networkPolicy Isolated with External webhooks needs webhooks.external.forwarders: without them the policy refuses everything forwarded to the public port"
 // +kubebuilder:validation:XValidation:rule="!has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.external) || (has(self.networkPolicy) && has(self.networkPolicy.mode) && self.networkPolicy.mode == 'Isolated')",message="webhooks.external.forwarders apply to networkPolicy mode Isolated only: no other mode has a policy to admit them to"

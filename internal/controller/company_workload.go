@@ -129,7 +129,7 @@ const probePeriodSeconds = 5
 // period short of threshold periods. So the threshold covers the window with
 // threshold-1 periods, rounded up. A threshold of the window over the period
 // truncated, as it was, cut a window that is no multiple of the period (a
-// class's startupSeconds of 1207, the 1302 seconds a 16Gi volume derives) by
+// class's startupSeconds of 1217, the 1312 seconds a 16Gi volume derives) by
 // up to four seconds more on top of that period.
 func startupFailureThreshold(seconds int32) int32 {
 	return (seconds+probePeriodSeconds-1)/probePeriodSeconds + 1
@@ -160,7 +160,11 @@ const (
 	//   - 40: four registrations of what the node answers (flushBudget);
 	//   - 45: its admission, a write and a read of each log's maintenance
 	//     window, eight reads, at 5 s each (admit);
-	//   - 10: the estate service's registration;
+	//   - 20: the estate service's registrations, one for each of its two
+	//     lanes, the shared one and the proposals', one after the other
+	//     (flushBudget each); a node with the git role registers its git
+	//     lanes beside them, and render.Bootstrap gives no data pod that
+	//     role;
 	//   - 100: the custody keeper's consumer, looked up, created and read
 	//     back, then looked up and read back again to attach;
 	//   - 10: the fleet broker's registration;
@@ -190,7 +194,7 @@ const (
 	// company configures waits for none of it: the engine takes the
 	// snapshot of the company's secrets, builds the company and restores its
 	// coding CLIs' logins after /health answers 200.
-	dataPodBootSeconds = 60 + 30 + 60 + 120 + 60 + 120 + 85 + 40 + 45 + 10 + 100 + 10 + 35 + 120 + 70 + 10 + 130 + 1
+	dataPodBootSeconds = 60 + 30 + 60 + 120 + 60 + 120 + 85 + 40 + 45 + 20 + 100 + 10 + 35 + 120 + 70 + 10 + 130 + 1
 	// dataPodNATSObjectsSeconds is the object store's step on the default
 	// backend: the broker's limit read (LookupBudget, 30 s), then the bucket
 	// looked up (30 s), created (30 s, soloBudget), read back and bound
