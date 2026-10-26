@@ -1490,11 +1490,16 @@ func requireOneLoginTwoCLIs(t *testing.T, what string, document []byte, login st
 // on at once. Applied is all of: /health has applied the write's epoch and
 // serves it (status ok, posture serve); the node's record names that epoch
 // and revision, applied ok rather than degraded, which is a node that needs a
-// restart; /ready answers; and GET /config names the revision as the one
-// active.
+// restart, and says the node runs that revision (Serving) and would start on
+// it again (Boots), which the engine moves before it records the apply on a
+// node whose store outlives a restart, as this data node's does; /ready
+// answers; and GET /config names the revision as the one active.
 func awaitApplied(t *testing.T, client *engine.Client, applied engine.ApplyResult) engine.ActiveConfig {
 	t.Helper()
-	want := engine.ApplyRecord{Epoch: applied.Epoch, RevisionID: applied.RevisionID, Status: engine.ApplyOK}
+	want := engine.ApplyRecord{
+		Epoch: applied.Epoch, RevisionID: applied.RevisionID, Status: engine.ApplyOK, Serving: applied.RevisionID,
+		Boots: applied.RevisionID,
+	}
 	var last string
 	for deadline := time.Now().Add(time.Minute); ; time.Sleep(200 * time.Millisecond) {
 		if time.Now().After(deadline) {

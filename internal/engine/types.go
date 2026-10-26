@@ -13,9 +13,12 @@ const tokenLoginPrefix = "token:"
 // prefix, so the one place that knows the engine's grammar is here.
 func TokenLogin(id string) string { return tokenLoginPrefix + id }
 
-// ActiveConfig is the company document an engine is running.
+// ActiveConfig is the fleet's company document: the revision the fleet's
+// activation pointer names, which every node answers the same. A node runs it
+// once it has applied it, and a node that refused it runs the revision it ran
+// before (FleetNode.Apply.Serving).
 type ActiveConfig struct {
-	// RevisionID is the active revision, the id an ApplyRequest.IfMatch
+	// RevisionID is the fleet's revision, the id an ApplyRequest.IfMatch
 	// names to make the next write conditional on it.
 	RevisionID string
 
@@ -27,10 +30,21 @@ type ActiveConfig struct {
 	// concludes that a revision is running before it is.
 	Epoch int64
 
-	// Document is the active company document as YAML, REDACTED: every
+	// Document is the fleet's company document as YAML, REDACTED: every
 	// credential the engine holds is "__redacted__", except one written as a
 	// whole ${VAR} reference, which names a credential without carrying it.
 	// It is a document to compare and show, not one to apply back.
+	Document []byte
+}
+
+// Revision is one stored revision of the company document (Client.Revision).
+type Revision struct {
+	// ID is the revision's id.
+	ID string
+
+	// Document is the revision's company document as JSON, which is YAML,
+	// REDACTED as ActiveConfig.Document is: every reference written as a
+	// whole ${VAR} stays as it is written.
 	Document []byte
 }
 
@@ -143,13 +157,15 @@ const (
 func (s ApplyStatus) Failed() bool { return s == ApplyError || s == ApplyDegraded }
 
 // ApplyRecord is what a node recorded about its last attempt to apply an
-// activation epoch: the config_* fields of its row in the engine's /fleet.
-// The zero value is a node that has recorded no attempt.
+// activation epoch, the revision it runs, and the one it would start on: the
+// config_* fields of its row in the engine's /fleet. The zero value is a node
+// that has recorded no attempt.
 type ApplyRecord struct {
 	// Epoch is the activation epoch the attempt was for.
 	Epoch int64
 
-	// RevisionID is the revision that epoch activated.
+	// RevisionID is the revision that epoch activated: the one the node last
+	// attempted, which it runs only where the attempt succeeded (Serving).
 	RevisionID string
 
 	// Status is how the attempt ended.
@@ -160,6 +176,44 @@ type ApplyRecord struct {
 	// at 2000 bytes; it names configuration, never a credential's value,
 	// which the engine resolves only where a provider is constructed.
 	Error string
+
+	// Serving is the revision the node RUNS (config_serving_revision_id):
+	// the one its last successful apply installed, or the one it booted on;
+	// empty while it runs none. It differs from RevisionID exactly when the
+	// node refused the revision it last attempted, and that node goes on
+	// running Serving, resolving its references from the secret snapshot
+	// every attempt reads from the store again, so every value Serving's
+	// document references has to stay in the secret store for as long as
+	// the node runs it. It says nothing of what the node starts on, which
+	// is Boots.
+	Serving string
+
+	// Boots is the revision the node would START ON if it restarted now
+	// (config_boot_revision_id). On a node whose store outlives a restart,
+	// as a data pod's does on its volume, that is the revision the boot row
+	// in its store names, which the engine moves only once an apply has
+	// succeeded, as a local write it retries on every tick until it lands:
+	// so on such a node it is Serving except while that write is being
+	// retried, when the node runs a revision it would not start on, and a
+	// value only the revision it starts on references is what it needs to
+	// start at all.
+	//
+	// Empty beside an attempt (Status) is a node that starts on nothing and
+	// applies the fleet's revision from scratch, whatever it runs: one whose
+	// store is scratch, as every seat pod's is (render.SeatPodBootstrap),
+	// which the engine reports empty whatever the boot row it writes there
+	// holds, since that store is discarded at every start and no start reads
+	// the row; or a data node on a fresh volume, whose boot row names no
+	// revision until its first write lands, its first apply refused or that
+	// write still being retried. The engine reads the boot row before the
+	// node records anything, and a read of it that fails later leaves its
+	// last answer standing, so empty is never a row the engine could not
+	// read. Empty in the zero record says nothing: that node has not
+	// reported. With Serving empty too, beside an attempt, it is a node that
+	// runs no company and starts on none: it started on nothing and refused
+	// the fleet's revision, and needs nothing of the secret store beyond
+	// that revision.
+	Boots string
 }
 
 // Alarms is how many of a node's alarms are firing, and which has stood
