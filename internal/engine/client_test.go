@@ -745,8 +745,12 @@ func TestStartingWriteIsAskedAgainWhenTheEngineSays(t *testing.T) {
 	f := newFakeEngine(t)
 	f.handle("PUT /config", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "10")
-		answer(http.StatusServiceUnavailable, `{"error":"starting","message":"This node is starting.",`+
-			`"hint":"retry after the Retry-After; /health stops answering status \"starting\" once the node serves"}`)(w, r)
+		answer(http.StatusServiceUnavailable, `{"error":"starting",`+
+			`"message":"This node is still starting and is not serving yet. Try again in a moment.",`+
+			`"detail":"This node is recovering what it holds — its store, its broker and its copy of the estate — `+
+			`and serves nothing until it has started.",`+
+			`"hint":"Retry after the Retry-After: once the node serves, /health stops answering status \"starting\" `+
+			`and /ready stops naming reason \"starting\"."}`)(w, r)
 	})
 	_, err := apply(f, write)
 	var apiErr *engine.APIError
@@ -1374,7 +1378,13 @@ func TestFleetLastApplyOfAnUnlistedNodeIsNone(t *testing.T) {
 // empty fleet: an empty one would read as every seat unplaced.
 func TestFleetRefusals(t *testing.T) {
 	unavailable := newFakeEngine(t)
-	unavailable.handle("GET /fleet", answer(http.StatusServiceUnavailable, `{"error":"unavailable","message":"the lease table could not be read"}`))
+	// The lease table is the coordination store's, and one that did not
+	// answer clears by the health tick's five seconds.
+	unavailable.handle("GET /fleet", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "5")
+		answer(http.StatusServiceUnavailable,
+			`{"error":"unavailable","message":"Can't answer right now. Try again in a moment, or ask another node."}`)(w, r)
+	})
 	if got, err := unavailable.client().Fleet(context.Background()); err == nil {
 		t.Errorf("Fleet() of an engine answering 503 = %+v, want an error", got)
 	} else if apiErr, ok := errors.AsType[*engine.APIError](err); !ok || apiErr.StatusCode != http.StatusServiceUnavailable {
