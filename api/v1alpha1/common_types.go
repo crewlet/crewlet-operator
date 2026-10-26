@@ -300,8 +300,8 @@ const (
 	// an engine node holds its lease, as the engine's GET /fleet reports,
 	// and Unplaced while none does, or PoolNotFound when none can, as the
 	// Company does not declare the seat's pool. A seat whose executor's chain is headed
-	// by a CLI in mode Agent that no node holding it can serve a tool bridge
-	// for is not Ready either, whoever holds it (AgentModeBridgeUnsupported,
+	// by a CLI in mode Box that no node holding it can serve a tool bridge
+	// for is not Ready either, whoever holds it (BoxModeBridgeUnsupported,
 	// NotExposed): the engine applies it and refuses every one of its turns.
 	// CodeWorkRunnable does not count towards it: a seat whose code work
 	// cannot run still runs its turns, and a health check gating on Ready
@@ -372,7 +372,7 @@ const (
 	// sign-in the seat's sandbox environment gives it, with every value its
 	// runs are given, so that a run_sandbox launch of the seat can start. It
 	// is set on an Agent seat with spec.sandbox whose executor does not run in
-	// agent mode, in a Company with spec.sandbox (the seats Crewlet offers
+	// box mode, in a Company with spec.sandbox (the seats Crewlet offers
 	// run_sandbox), and is computed from the spec, and from the Secrets once
 	// they are read, under every management policy: under Observe or Seed it
 	// judges the Seat's objects, which may not be the document the engine
@@ -383,16 +383,16 @@ const (
 	// coding runs.
 	ConditionCodeWorkRunnable = "CodeWorkRunnable"
 
-	// ConditionAgentModeRunnable reports whether an LLMProvider in mode
-	// Agent can run as an agentic run at all: its runs
+	// ConditionBoxModeRunnable reports whether an LLMProvider in mode
+	// Box can run a seat's executor in the sandbox at all: its runs
 	// happen in the Company's remote sandbox and call the seat's tools back
 	// through the engine's public address (status.endpoints.publicBaseURL),
 	// so it is False (NotExposed) while the Company has none. It is set on
 	// such a provider only, and does not hold the document: the engine
-	// applies the provider, which still serves a text call behind a chain's
-	// head or in another phase, and refuses each turn of a seat whose
+	// applies the provider, which still runs in the engine's pod behind a
+	// chain's head or in another phase, and refuses each turn of a seat whose
 	// executor's chain it heads (the Seat's Ready says which seats).
-	ConditionAgentModeRunnable = "AgentModeRunnable"
+	ConditionBoxModeRunnable = "BoxModeRunnable"
 
 	// ConditionHealthy reports what the engine says about an integration:
 	// whether its credentials work and its webhooks are registered.
@@ -691,8 +691,8 @@ const (
 
 	// ReasonNotExposed is Healthy=False on an integration that needs inbound
 	// delivery when the company has no public address
-	// (status.endpoints.publicBaseURL), and AgentModeRunnable=False on an
-	// LLMProvider in mode Agent then: its runs happen in a
+	// (status.endpoints.publicBaseURL), and BoxModeRunnable=False on an
+	// LLMProvider in mode Box then: its runs happen in a
 	// remote sandbox, which calls the seat's tools back through the engine's
 	// public address. It is Ready=False on an agent Seat placed in data
 	// whose executor's chain such a provider heads: the engine applies the
@@ -705,7 +705,7 @@ const (
 	// none of the seat's tool servers that take it and refuses each of its
 	// run_sandbox coding runs whose environment holds it, unless the key the
 	// value is written under is optional, when each starts without it; its
-	// chat app, and an agent-mode run of its executor, run without it. It is
+	// chat app, and a box-mode run of its executor, run without it. It is
 	// CodeWorkRunnable=False on such a Seat whose coding runs it refuses. The
 	// seat is applied, with the reference the engine fills once an
 	// Integration provisions.
@@ -919,20 +919,20 @@ const (
 	// they are and starts no other.
 	ReasonPoolCapacityExceeded = "PoolCapacityExceeded"
 
-	// ReasonAgentModeBridgeUnsupported is Ready=False on a Seat placed in a
-	// seat pool whose executor runs on an LLMProvider in mode Agent:
+	// ReasonBoxModeBridgeUnsupported is Ready=False on a Seat placed in a
+	// seat pool whose executor runs on an LLMProvider in mode Box:
 	// one at the head of its executor's chain, the only entry Crewlet runs
-	// as an agentic run (a fallback behind it is a text call).
-	// An agent-mode run calls the seat's tools back through the tool bridge
+	// in the sandbox (a fallback behind it runs in the engine's pod, as in
+	// Host). A box-mode run calls the seat's tools back through the tool bridge
 	// of the engine node that holds the seat, at the address that node was
 	// given (CREWLET_MCP_BRIDGE_URL). The engine would serve the bridge on a
 	// seat pod's own listener, but the operator publishes no address of a
 	// seat pod a remote sandbox could dial (the company's public address
 	// reaches the data pods only), so it gives a seat pod none, and the
-	// engine refuses agent mode on a node with no bridge URL. The seat is
+	// engine refuses box mode on a node with no bridge URL. The seat is
 	// applied (Applied=True) and the engine refuses each of its turns; the
 	// rest of the company runs.
-	ReasonAgentModeBridgeUnsupported = "AgentModeBridgeUnsupported"
+	ReasonBoxModeBridgeUnsupported = "BoxModeBridgeUnsupported"
 
 	// ReasonCLIAuthNotPortable is Applied=False on a Seat placed in a seat
 	// pool that runs on an LLMProvider signed in with a credential
@@ -948,8 +948,8 @@ const (
 	// says which.
 	ReasonCodeWorkSupported = "CodeWorkSupported"
 
-	// ReasonToolBridgeServed is AgentModeRunnable=True on an LLMProvider
-	// whose agent-mode runs can reach the tool bridge at the Company's
+	// ReasonToolBridgeServed is BoxModeRunnable=True on an LLMProvider
+	// whose box-mode runs can reach the tool bridge at the Company's
 	// public address.
 	ReasonToolBridgeServed = "ToolBridgeServed"
 
@@ -962,8 +962,8 @@ const (
 	// order. The provider's model is written in its own CLI's grammar and its
 	// sign-in is that CLI's, so the coding agent can read neither, and
 	// Crewlet refuses the pairing on every write. It is also Applied=False
-	// alone on a Seat whose executor runs in agent mode (an LLMProvider in
-	// mode Agent heads its executor's chain) and whose spec.sandbox.codingAgent
+	// alone on a Seat whose executor runs in box mode (an LLMProvider in
+	// mode Box heads its executor's chain) and whose spec.sandbox.codingAgent
 	// names another CLI than that provider's: Crewlet never offers such a seat
 	// run_sandbox, as it codes in its executor's run, and refuses on every
 	// write a coding agent that would drive nothing.

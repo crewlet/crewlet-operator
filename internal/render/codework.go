@@ -61,12 +61,12 @@ import (
 // provider's (its entrySignIn), since ClaudeCode ranks its sign-ins by name,
 // and its guard passes the run on any of them (sandboxCredentials).
 //
-// A seat whose executor is a CLI in mode Agent has no code work of its own:
+// A seat whose executor is a CLI in mode Box has no code work of its own:
 // Crewlet never offers it run_sandbox (its Runner.offersSandbox), as it codes
 // in its executor's run, on that provider's CLI, and neither pairing applies
 // to it. Its spec.sandbox.codingAgent drives nothing, so Crewlet refuses on
 // every write one other than that CLI (config's validateSandboxGates), and the
-// render refuses it too (agentModeCodingAgent); config's
+// render refuses it too (boxModeCodingAgent); config's
 // validateSandboxCodingAgents judges every other seat alone.
 //
 // Crewlet decides all of it at a launch, where no validation shows it, so
@@ -125,7 +125,7 @@ type CodeWork struct {
 
 // CodeWorkOf is the code work of every Seat Crewlet offers run_sandbox,
 // keyed by the Seat's name: an Agent seat with spec.sandbox whose executor
-// is no CLI in mode Agent, in a Company with a sandbox. A Seat none of
+// is no CLI in mode Box, in a Company with a sandbox. A Seat none of
 // whose sandbox chain resolves has no entry, as each reference that does
 // not is refused on its own. It is apart from Company because it is a
 // statement about each Seat's spec, which holds while another object's
@@ -149,21 +149,21 @@ func CodeWorkOf(in *Input) map[string]CodeWork {
 // with spec.sandbox, which the Seat API admits on an Agent seat only, in a
 // Company whose spec.sandbox is the catalogue of boxes Crewlet requires for
 // it (without one the engine refuses the seat's gate instead), unless the
-// seat's executor is a CLI in mode Agent, whose run is the one box the seat
+// seat's executor is a CLI in mode Box, whose run is the one box the seat
 // codes in (Runner.offersSandbox).
 func (r *renderer) offersCodeWork(s *v1alpha1.Seat) bool {
-	if _, _, agentMode := r.agentModeExecutor(s); agentMode {
+	if _, _, boxMode := r.boxModeExecutor(s); boxMode {
 		return false
 	}
 	return s.Spec.Sandbox != nil && r.in.Company.Spec.Sandbox.E2B.APIKeySecretRef.Name != ""
 }
 
-// agentModeCodingAgent is the refusal of an agent-mode seat's
+// boxModeCodingAgent is the refusal of a box-mode seat's
 // spec.sandbox.codingAgent (config's validateSandboxGates): empty when the
-// seat's executor is no CLI in mode Agent, or when the field is unset or names
+// seat's executor is no CLI in mode Box, or when the field is unset or names
 // that CLI, which is the run the seat codes in.
-func (r *renderer) agentModeCodingAgent(s *v1alpha1.Seat) string {
-	head, cli, ok := r.agentModeExecutor(s)
+func (r *renderer) boxModeCodingAgent(s *v1alpha1.Seat) string {
+	head, cli, ok := r.boxModeExecutor(s)
 	if !ok || s.Spec.Sandbox == nil || s.Spec.Sandbox.CodingAgent == "" ||
 		string(s.Spec.Sandbox.CodingAgent) == string(cli.agent) {
 		return ""
@@ -172,7 +172,7 @@ func (r *renderer) agentModeCodingAgent(s *v1alpha1.Seat) string {
 	if head.field == fieldLLM {
 		named = "which a seat whose spec.llm.default is empty runs on"
 	}
-	return fmt.Sprintf("names the %s coding agent, but the seat's executor runs in agent mode on LLMProvider %s, "+
+	return fmt.Sprintf("names the %s coding agent, but the seat's executor runs in box mode on LLMProvider %s, "+
 		"%s: Crewlet never offers such a seat run_sandbox, as it does its code work in that %s run, so the field "+
 		"drives nothing, and Crewlet refuses one naming another CLI than %s on every write. Leave it out",
 		s.Spec.Sandbox.CodingAgent, head.provider, named, cli.agent, cli.agent)
@@ -309,7 +309,7 @@ func ownEntry(s *v1alpha1.LLMProviderSpec) cliEntry {
 	return e
 }
 
-// platformEntry is what the verdicts read of a platform provider: a Text-mode
+// platformEntry is what the verdicts read of a platform provider: a Host-mode
 // CLI signed in with a key, never a token or a bundle.
 func platformEntry(p *v1alpha1.PlatformLLMProvider) cliEntry {
 	e := cliEntry{agent: p.Agent, authMode: p.Auth.Mode}

@@ -99,7 +99,7 @@ signs in with a key alone: `auth.mode: APIKey` with `auth.apiKeySecretRef`,
 or, for Hermes, Pi and OpenCode, their model provider's key in `env`. A
 subscription's headless token or login is one account's, which every tenant
 of the class would share, so the API refuses one there: it belongs on a
-tenant's own `LLMProvider`. A platform provider runs in `mode: Text`, and
+tenant's own `LLMProvider`. A platform provider runs in `mode: Host`, and
 keeps its seats' homes on each company's data volume under
 `/var/lib/crewlet/llm-cli-platform/<name>`.
 
@@ -267,9 +267,9 @@ kubectl wait company/acme -n tenant-7f3a9c --for=condition=Ready --timeout=10m
 | `Company.status.config.revisionID` | The revision the engine runs. Every part reports the revision it is in. |
 | `Company.status.topology` | The pods that run the company: the data pod's, and each seat pool's. `SeatsPlaced` says whether every pool with a seat has a ready pod. |
 | `Seat.status.seatID` | The seat's identity in the engine, derived from the company's name and the seat's handle: stable for the seat's life, and the same if a deleted Seat is created again with the handle. Key your own records about a seat by it. |
-| `Seat.status.placement`, a Seat's `Ready` | The pool and StatefulSet that run the seat, and the pod whose engine holds it as the engine reports it: `Ready=False Unplaced` while none does and the seat's messages wait; `Ready=False PoolNotFound` while its pool is not one the Company declares, which no wait fixes; `Ready=False` with `AgentModeBridgeUnsupported` or `NotExposed` while its executor is an `LLMProvider` in `mode: Agent` that cannot call its tools back where it runs, so the engine refuses every one of its turns, whichever pod holds it. Show the message, which names the field to change. |
-| a Seat's `CodeWorkRunnable` | On an Agent seat with `spec.sandbox`, in a Company with one, whose executor does not run in agent mode, whether its coding runs can start. `False` with `SandboxLoginNotPortable`, `SecretValueEmpty` or `NoProvisioner` leaves the seat applied and working, every coding run refused: show the message, which names the field to change. |
-| an LLMProvider's `AgentModeRunnable` | On a provider in `mode: Agent`, whether its runs can call a seat's tools back. `False`, `NotExposed`, while the Company has no public address: the provider is applied, and every seat whose executor's chain it heads fails each turn (each such Seat's `Ready` says so). |
+| `Seat.status.placement`, a Seat's `Ready` | The pool and StatefulSet that run the seat, and the pod whose engine holds it as the engine reports it: `Ready=False Unplaced` while none does and the seat's messages wait; `Ready=False PoolNotFound` while its pool is not one the Company declares, which no wait fixes; `Ready=False` with `BoxModeBridgeUnsupported` or `NotExposed` while its executor is an `LLMProvider` in `mode: Box` that cannot call its tools back where it runs, so the engine refuses every one of its turns, whichever pod holds it. Show the message, which names the field to change. |
+| a Seat's `CodeWorkRunnable` | On an Agent seat with `spec.sandbox`, in a Company with one, whose executor does not run in box mode, whether its coding runs can start. `False` with `SandboxLoginNotPortable`, `SecretValueEmpty` or `NoProvisioner` leaves the seat applied and working, every coding run refused: show the message, which names the field to change. |
+| an LLMProvider's `BoxModeRunnable` | On a provider in `mode: Box`, whether its runs can call a seat's tools back. `False`, `NotExposed`, while the Company has no public address: the provider is applied, and every seat whose executor's chain it heads fails each turn (each such Seat's `Ready` says so). |
 | `Seat.status.integrations.slack.requestURL` | The request URL of the seat's own Slack app, for the app's manifest. |
 | `Seat.status.integrations.github.webhookURL` | The webhook URL of the seat's own GitHub App. |
 | `Integration.status.webhookURL` | The company-wide address a vendor delivers to (GitHub's organization webhook). |

@@ -45,7 +45,7 @@ func companyCases() []companyCase {
 		{name: "platform-providers-off", advisories: agentsAlone},
 		{name: "secret-positions", exposed: true, advisories: agentsAlone},
 		{name: "cli-agent", exposed: true, advisories: agentsAlone},
-		{name: "opencode-agent", exposed: true, advisories: agentsAlone},
+		{name: "opencode-box", exposed: true, advisories: agentsAlone},
 		{name: caseAtlassian, exposed: true},
 		{name: caseSeatPools},
 		{name: caseOptionalKeys},

@@ -125,7 +125,7 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 		}
 	case *crewletaiv1alpha1.LLMProvider:
 		if run.objectsChecked {
-			decideAgentMode(p, o)
+			decideBoxMode(p, o)
 		}
 	case *crewletaiv1alpha1.Unit:
 		facts := units[o.Name]
@@ -157,17 +157,17 @@ func decideCodeWork(p *part, seat *crewletaiv1alpha1.Seat) {
 		reason, w.Field+": "+w.Message+".")
 }
 
-// decideAgentMode sets an LLMProvider's AgentModeRunnable condition from what
+// decideBoxMode sets an LLMProvider's BoxModeRunnable condition from what
 // the render found, and removes it from a provider that is not a CLI in mode
 // Agent. Like decideCodeWork it is called only once the reconcile rendered.
-func decideAgentMode(p *part, provider *crewletaiv1alpha1.LLMProvider) {
-	m := p.agentMode
+func decideBoxMode(p *part, provider *crewletaiv1alpha1.LLMProvider) {
+	m := p.boxMode
 	if m == nil {
-		meta.RemoveStatusCondition(&provider.Status.Conditions, crewletaiv1alpha1.ConditionAgentModeRunnable)
+		meta.RemoveStatusCondition(&provider.Status.Conditions, crewletaiv1alpha1.ConditionBoxModeRunnable)
 		return
 	}
 	reason := cmp.Or(m.Reason, crewletaiv1alpha1.ReasonToolBridgeServed)
-	setCondition(&provider.Status.Conditions, provider.Generation, crewletaiv1alpha1.ConditionAgentModeRunnable,
+	setCondition(&provider.Status.Conditions, provider.Generation, crewletaiv1alpha1.ConditionBoxModeRunnable,
 		m.Reason == "", reason, m.Message+".")
 }
 

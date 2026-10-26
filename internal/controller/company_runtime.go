@@ -646,7 +646,7 @@ func (r *CompanyReconciler) deleteDataVolumes(ctx context.Context, c *crewletaiv
 }
 
 // toolBridge reports whether the company's engine serves its tool bridge: it
-// does while an LLMProvider of the company runs a CLI in mode Agent, whose
+// does while an LLMProvider of the company runs a CLI in mode Box, whose
 // runs happen in a remote sandbox and call the seat's tools back through it.
 // Without one the engine is given no CREWLET_MCP_BRIDGE_URL and mounts no
 // bridge, so its public listener answers /mcp/ as a path nothing serves:
@@ -658,7 +658,7 @@ func (r *CompanyReconciler) toolBridge(ctx context.Context, c *crewletaiv1alpha1
 	}
 	for i := range providers.Items {
 		p := &providers.Items[i]
-		if p.Spec.CompanyRef.Name == c.Name && p.Spec.Mode == crewletaiv1alpha1.CLIAgentModeAgent {
+		if p.Spec.CompanyRef.Name == c.Name && p.Spec.Mode == crewletaiv1alpha1.CLIAgentModeBox {
 			return true, nil
 		}
 	}

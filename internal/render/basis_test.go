@@ -134,7 +134,7 @@ var findings = []struct {
 		"the engine runs the unit and every descendant inheriting its lead with no lead"},
 	{site{fnRole, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the sandbox would reach whichever server takes the name later"},
-	{site{fnRole, EngineRefuses, v1alpha1.ReasonCodingAgentMismatch}, "a coding agent an agent-mode seat's run never reads"},
+	{site{fnRole, EngineRefuses, v1alpha1.ReasonCodingAgentMismatch}, "a coding agent a box-mode seat's run never reads"},
 	{site{fnRole, EngineRefuses, v1alpha1.ReasonCodingAgentMismatch}, "code work on another CLI's provider"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonRefNotFound},
 		"a schedule lives inside its seat's entry, which does not exist"},
@@ -152,10 +152,10 @@ var findings = []struct {
 }
 
 // reportedElsewhere are the reasons a statement about an object's spec
-// reports beside the render (CodeWorkOf, ExecutorOf, AgentModeOf), always
+// reports beside the render (CodeWorkOf, ExecutorOf, BoxModeOf), always
 // holding nothing: no place may record one as a finding.
 var reportedElsewhere = []string{
-	v1alpha1.ReasonSandboxLoginNotPortable, v1alpha1.ReasonAgentModeBridgeUnsupported, v1alpha1.ReasonNotExposed,
+	v1alpha1.ReasonSandboxLoginNotPortable, v1alpha1.ReasonBoxModeBridgeUnsupported, v1alpha1.ReasonNotExposed,
 }
 
 // findingSites reads every place the package's source records a finding: a

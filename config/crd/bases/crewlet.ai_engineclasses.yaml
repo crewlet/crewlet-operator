@@ -1285,7 +1285,7 @@ spec:
                       cluster except the cloud metadata endpoints (169.254.169.254,
                       fd00:ec2::254), which hand out the node's credentials. What else is in
                       the cluster is unreachable only if listed in exceptCIDRs. A seat's
-                      code work and an agent-mode executor's run, the sandbox's setup
+                      code work and a box-mode executor's run, the sandbox's setup
                       commands included, run in the Company's E2B sandbox, which this policy
                       does not reach.
                     minProperties: 1
@@ -1626,7 +1626,7 @@ spec:
                     model provider's key from that provider's own variable, the key in env. A
                     subscription's headless token or login is one account's, which every tenant
                     of the class would share: it belongs on a tenant's own LLMProvider. It runs
-                    in mode Text, as a model behind the engine's own tool loop, and keeps its
+                    in mode Host, in the engine's pod that holds each seat, and keeps its
                     per-seat homes on the data volume under
                     /var/lib/crewlet/llm-cli-platform/<name>, apart from every tenant's
                     loginName. Its rules are an LLMProvider's that apply to such a provider,
@@ -1635,7 +1635,7 @@ spec:
                     agent:
                       description: |-
                         agent is which CLI to drive. The model is written as this CLI reads
-                        it, and an Agent-mode run or a seat's code work is handed it
+                        it, and a Box-mode run or a seat's code work is handed it
                         unchanged: OpenCode reads `<provider>/<model>`, such as
                         `anthropic/claude-sonnet-5`. Crewlet's `agent`.
                       enum:
@@ -1770,10 +1770,18 @@ spec:
                       x-kubernetes-list-type: map
                     maxConcurrent:
                       description: |-
-                        maxConcurrent is how many CLI processes the provider runs at once;
-                        each takes 200 to 450 MB of the engine pod's memory, OpenCode's at the
-                        top of that range (docs/guides/cli-agents.md). Unset takes
-                        Crewlet's default of 4. Crewlet's `max_concurrent`.
+                        maxConcurrent is how many of the provider's CLI processes run at once
+                        in each engine pod; each takes 200 to 450 MB of the pod's memory,
+                        OpenCode's at the top of that range (docs/guides/cli-agents.md). One
+                        process lives for a whole run of the CLI, many model requests and
+                        tool calls long, and holds its place for all of it, so this is also
+                        how many seats' runs the provider has going at once in a pod: a run
+                        past it waits for a place. A model call made on the same provider
+                        from inside one of a run's tool calls (a delegated worker's) borrows
+                        the run's place rather than wait for another, which the runs holding
+                        every place could leave it waiting for forever. Unset takes
+                        Crewlet's default of 4. A Box-mode executor's run, in the sandbox,
+                        takes none. Crewlet's `max_concurrent`.
                       format: int32
                       maximum: 64
                       minimum: 1
@@ -1814,12 +1822,19 @@ spec:
                         rule: self != 'default'
                     timeoutSeconds:
                       description: |-
-                        timeoutSeconds caps one invocation of the CLI, wall clock: its
-                        launch, the model's answer and the CLI's own retries. Unset takes
-                        Crewlet's default of 600, the ceiling Anthropic documents for one
-                        answer of a current Claude model at its full output. A timeout is
-                        retryable, so a seat's chain moves on to its next provider. Crewlet's
-                        `timeout_seconds`.
+                        timeoutSeconds bounds one stretch of the CLI's model work, wall clock,
+                        with no call of a seat's tool in flight: from the CLI's launch, or the
+                        answer to its last tool call, to its next tool call or its end, the
+                        model's answer and the CLI's own retries in it. It is not a bound on
+                        a run of the CLI, which asks the model many times and calls the
+                        seat's tools between: a tool call stops the clock however long it
+                        takes (a delegation, a slow tool server), and the next stretch starts
+                        afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic
+                        documents for one answer of a current Claude model at its full
+                        output. A timeout is retryable, so a seat's chain moves on to its
+                        next provider. It bounds the CLI where it runs in the engine's pod;
+                        a Box-mode executor's run in the sandbox is not bounded by it.
+                        Crewlet's `timeout_seconds`.
                       format: int32
                       minimum: 1
                       type: integer
@@ -1877,6 +1892,7 @@ spec:
                       of the CLI to keep it inside its seat''s own home and its call''s
                       working directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME,
                       XDG_CACHE_HOME or TMPDIR for any CLI, and ClaudeCode''s CLAUDE_CONFIG_DIR,
+                      CLAUDE_CODE_DISABLE_CLAUDE_MDS and CLAUDE_CODE_DISABLE_AUTO_MEMORY,
                       Codex''s CODEX_HOME and CODEX_SQLITE_HOME, OpenCode''s OPENCODE_CONFIG_DIR
                       and OPENCODE_CONFIG_PROJECT_DISABLE, CursorAgent''s CURSOR_CONFIG_DIR,
                       KimiCode''s KIMI_CODE_HOME, Hermes''s HERMES_HOME or Pi''s PI_CODING_AGENT_DIR.
@@ -1885,7 +1901,8 @@ spec:
                     rule: '!has(self.env) || !self.env.exists(e, e.name in [''HOME'',
                       ''XDG_CONFIG_HOME'', ''XDG_DATA_HOME'', ''XDG_STATE_HOME'',
                       ''XDG_CACHE_HOME'', ''TMPDIR''] || (self.agent == ''ClaudeCode''
-                      && e.name == ''CLAUDE_CONFIG_DIR'') || (self.agent == ''Codex''
+                      && e.name in [''CLAUDE_CONFIG_DIR'', ''CLAUDE_CODE_DISABLE_CLAUDE_MDS'',
+                      ''CLAUDE_CODE_DISABLE_AUTO_MEMORY'']) || (self.agent == ''Codex''
                       && e.name in [''CODEX_HOME'', ''CODEX_SQLITE_HOME'']) || (self.agent
                       == ''OpenCode'' && e.name in [''OPENCODE_CONFIG_DIR'', ''OPENCODE_CONFIG_PROJECT_DISABLE''])
                       || (self.agent == ''CursorAgent'' && e.name == ''CURSOR_CONFIG_DIR'')

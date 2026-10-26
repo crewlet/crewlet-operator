@@ -23,7 +23,7 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/secretsync"
 )
 
-// The objects of the opencode-agent case the code-work tests break, and the
+// The objects of the opencode-box case the code-work tests break, and the
 // names their providers and Secrets use.
 const (
 	codeWorkSeat  = "fixer"
@@ -35,8 +35,8 @@ const (
 	platformGPT   = "shared-gpt"
 )
 
-// codeWorkProvider is a provider of agent for the opencode-agent case, named
-// head- and its CLI, in mode Text, signed in as the API admits: on its
+// codeWorkProvider is a provider of agent for the opencode-box case, named
+// head- and its CLI, in mode Host, signed in as the API admits: on its
 // headless token, its key, its model provider's key in env, or a bundle, the
 // first its CLI takes.
 func codeWorkProvider(agent v1alpha1.CLIAgentName) v1alpha1.LLMProvider {
@@ -69,7 +69,7 @@ func codeWorkProvider(agent v1alpha1.CLIAgentName) v1alpha1.LLMProvider {
 	return p
 }
 
-// codeWorkKeyed is a provider of agent for the opencode-agent case, named
+// codeWorkKeyed is a provider of agent for the opencode-box case, named
 // key- and its CLI, signed in with auth mode APIKey, whose key every box of
 // the seat's code work carries.
 func codeWorkKeyed(agent v1alpha1.CLIAgentName) v1alpha1.LLMProvider {
@@ -83,7 +83,7 @@ func codeWorkKeyed(agent v1alpha1.CLIAgentName) v1alpha1.LLMProvider {
 	return p
 }
 
-// codeWorkBundled is a provider of agent for the opencode-agent case, named
+// codeWorkBundled is a provider of agent for the opencode-box case, named
 // bundle- and its CLI, signed in by a credential bundle alone, whose login
 // cannot follow a run into a remote sandbox.
 func codeWorkBundled(agent v1alpha1.CLIAgentName) v1alpha1.LLMProvider {
@@ -96,7 +96,7 @@ func codeWorkBundled(agent v1alpha1.CLIAgentName) v1alpha1.LLMProvider {
 	return p
 }
 
-// codeWorkPlatform gives the opencode-agent case's class the platform
+// codeWorkPlatform gives the opencode-box case's class the platform
 // provider platformGPT, driving agent on a key the way codeWorkProvider signs
 // such a CLI in, at the head of the order of its Company, which uses it, and
 // makes fixer a seat with no chain of its own, which runs on it.
@@ -121,11 +121,11 @@ func codeWorkPlatform(agent v1alpha1.CLIAgentName) func(*Input) {
 	}
 }
 
-// codeWorkInput is the opencode-agent case with seat fixer's code work on
+// codeWorkInput is the opencode-box case with seat fixer's code work on
 // head, a new provider, driven by runner.
 func codeWorkInput(t *testing.T, head *v1alpha1.LLMProvider, runner v1alpha1.CodingAgent) *Input {
 	t.Helper()
-	in := companyCaseNamed(t, "opencode-agent").input(t)
+	in := companyCaseNamed(t, "opencode-box").input(t)
 	in.LLMProviders = append(in.LLMProviders, *head)
 	s := seat(in, codeWorkSeat)
 	s.Spec.LLM.Sandbox = []v1alpha1.LLMProviderReference{{Name: head.Name}}
@@ -334,7 +334,7 @@ func TestCodeWork(t *testing.T) {
 			mutate: func(in *Input) {
 				in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{}
 				in.LLMProviders = slices.DeleteFunc(in.LLMProviders, func(p v1alpha1.LLMProvider) bool {
-					return p.Spec.Mode == v1alpha1.CLIAgentModeAgent
+					return p.Spec.Mode == v1alpha1.CLIAgentModeBox
 				})
 				seat(in, "porter").Spec.LLM.Default = nil
 			},
@@ -375,28 +375,28 @@ func TestCodeWork(t *testing.T) {
 	}
 }
 
-// The agent-mode seat of the opencode-agent case, whose executor is
-// LLMProvider opencode, OpenCode in mode Agent, and the field the render
+// The box-mode seat of the opencode-box case, whose executor is
+// LLMProvider opencode, OpenCode in mode Box, and the field the render
 // refuses on it.
 const (
-	agentModeSeat     = "porter"
-	agentModeProvider = "opencode"
-	atCodingAgent     = "spec.sandbox.codingAgent"
+	boxModeSeat     = "porter"
+	boxModeProvider = "opencode"
+	atCodingAgent   = "spec.sandbox.codingAgent"
 )
 
-// TestAgentModeSeatHasNoCodeWork covers a seat whose executor runs in agent
+// TestBoxModeSeatHasNoCodeWork covers a seat whose executor runs in agent
 // mode, which Crewlet never offers run_sandbox: it codes in its executor's
 // run, on that provider's CLI, so the render reports no code work for it
 // whatever its sandbox chain and coding agent, and refuses, as Crewlet does
 // on every write, a spec.sandbox.codingAgent other than that CLI, which
 // drives nothing. The Company's default coding agent is not the seat's own,
 // and is refused nowhere.
-func TestAgentModeSeatHasNoCodeWork(t *testing.T) {
-	refusal := "Seat/" + agentModeSeat + " " + atCodingAgent + " " + v1alpha1.ReasonCodingAgentMismatch
+func TestBoxModeSeatHasNoCodeWork(t *testing.T) {
+	refusal := "Seat/" + boxModeSeat + " " + atCodingAgent + " " + v1alpha1.ReasonCodingAgentMismatch
 	sandboxOn := func(head v1alpha1.LLMProvider, runner v1alpha1.CodingAgent) func(*Input) {
 		return func(in *Input) {
 			in.LLMProviders = append(in.LLMProviders, head)
-			s := seat(in, agentModeSeat)
+			s := seat(in, boxModeSeat)
 			s.Spec.LLM.Sandbox = []v1alpha1.LLMProviderReference{{Name: head.Name}}
 			s.Spec.Sandbox.CodingAgent = runner
 		}
@@ -416,7 +416,7 @@ func TestAgentModeSeatHasNoCodeWork(t *testing.T) {
 			// Its own CLI's coding agent is the run it codes in.
 			name: "a seat naming its executor's own CLI",
 			mutate: func(in *Input) {
-				seat(in, agentModeSeat).Spec.Sandbox.CodingAgent = v1alpha1.CodingAgentOpenCode
+				seat(in, boxModeSeat).Spec.Sandbox.CodingAgent = v1alpha1.CodingAgentOpenCode
 			},
 		},
 		{
@@ -430,13 +430,13 @@ func TestAgentModeSeatHasNoCodeWork(t *testing.T) {
 			mutate:  sandboxOn(codeWorkProvider(v1alpha1.CLIAgentClaudeCode), v1alpha1.CodingAgentClaudeCode),
 			refused: []string{refusal},
 			says: []string{
-				"names the ClaudeCode coding agent, but the seat's executor runs in agent mode on LLMProvider " +
+				"names the ClaudeCode coding agent, but the seat's executor runs in box mode on LLMProvider " +
 					"opencode, at spec.llm.default[0].name:",
 				"in that OpenCode run", "Leave it out",
 			},
 		},
 		{
-			// The Company's default is the catalogue's, which an agent-mode
+			// The Company's default is the catalogue's, which a box-mode
 			// seat's run never reads. The other seat's code work keeps to
 			// OpenCode, the CLI of its sandbox chain.
 			name: "the Company's default coding agent, Claude Code",
@@ -446,10 +446,10 @@ func TestAgentModeSeatHasNoCodeWork(t *testing.T) {
 			},
 		},
 		{
-			name: "a chainless seat on the agent-mode head of the Company's order naming Claude Code",
+			name: "a chainless seat on the box-mode head of the Company's order naming Claude Code",
 			mutate: func(in *Input) {
-				in.Company.Spec.LLM.Order = []v1alpha1.LLMProviderReference{{Name: agentModeProvider}}
-				s := seat(in, agentModeSeat)
+				in.Company.Spec.LLM.Order = []v1alpha1.LLMProviderReference{{Name: boxModeProvider}}
+				s := seat(in, boxModeSeat)
 				s.Spec.LLM.Default = nil
 				s.Spec.Sandbox.CodingAgent = v1alpha1.CodingAgentClaudeCode
 			},
@@ -457,23 +457,23 @@ func TestAgentModeSeatHasNoCodeWork(t *testing.T) {
 			says:    []string{"on LLMProvider opencode, which a seat whose spec.llm.default is empty runs on:"},
 		},
 		{
-			// With no executor in agent mode it is an ordinary seat's code
+			// With no executor in box mode it is an ordinary seat's code
 			// work again, judged on its sandbox chain.
-			name: "the seat in text mode",
+			name: "the seat in host mode",
 			mutate: func(in *Input) {
 				for i := range in.LLMProviders {
-					if in.LLMProviders[i].Name == agentModeProvider {
-						in.LLMProviders[i].Spec.Mode = v1alpha1.CLIAgentModeText
+					if in.LLMProviders[i].Name == boxModeProvider {
+						in.LLMProviders[i].Spec.Mode = v1alpha1.CLIAgentModeHost
 					}
 				}
-				seat(in, agentModeSeat).Spec.Sandbox.CodingAgent = v1alpha1.CodingAgentClaudeCode
+				seat(in, boxModeSeat).Spec.Sandbox.CodingAgent = v1alpha1.CodingAgentClaudeCode
 			},
-			refused:  []string{"Seat/" + agentModeSeat + " " + fieldLLMDefault + "[0].name " + v1alpha1.ReasonCodingAgentMismatch},
+			refused:  []string{"Seat/" + boxModeSeat + " " + fieldLLMDefault + "[0].name " + v1alpha1.ReasonCodingAgentMismatch},
 			reported: true,
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			in := companyCaseNamed(t, "opencode-agent").input(t)
+			in := companyCaseNamed(t, "opencode-box").input(t)
 			if c.mutate != nil {
 				c.mutate(in)
 			}
@@ -481,7 +481,7 @@ func TestAgentModeSeatHasNoCodeWork(t *testing.T) {
 			if got := refusalsOf(err); !slices.Equal(got, c.refused) {
 				t.Fatalf("refused %v (%v), want %v", got, err, c.refused)
 			}
-			if _, reported := CodeWorkOf(in)[agentModeSeat]; reported != c.reported {
+			if _, reported := CodeWorkOf(in)[boxModeSeat]; reported != c.reported {
 				t.Errorf("CodeWorkOf reports the seat's code work: %v, want %v", reported, c.reported)
 			}
 			for _, phrase := range c.says {
@@ -503,7 +503,7 @@ func TestAgentModeSeatHasNoCodeWork(t *testing.T) {
 // the seat (SandboxLoginNotPortable) the engine accepts the document the
 // render writes, which is what makes reporting rather than refusing it right:
 // an engine that refused it on a write would hold the company on its last
-// revision over it anyway. A seat whose executor runs in agent mode is paired
+// revision over it anyway. A seat whose executor runs in box mode is paired
 // with each coding agent, and none, and with a sandbox chain of a provider of
 // another CLI and of ClaudeCode: the render reports no code work for it and
 // refuses a coding agent other than its executor's CLI alone, and `crewlet
@@ -548,10 +548,10 @@ func TestContractCodeWorkOnWrite(t *testing.T) {
 			})
 		}
 	}
-	agentModeInput := func(head v1alpha1.LLMProvider, runner v1alpha1.CodingAgent) *Input {
-		in := companyCaseNamed(t, "opencode-agent").input(t)
+	boxModeInput := func(head v1alpha1.LLMProvider, runner v1alpha1.CodingAgent) *Input {
+		in := companyCaseNamed(t, "opencode-box").input(t)
 		in.LLMProviders = append(in.LLMProviders, head)
-		s := seat(in, agentModeSeat)
+		s := seat(in, boxModeSeat)
 		s.Spec.LLM.Sandbox = []v1alpha1.LLMProviderReference{{Name: head.Name}}
 		s.Spec.Sandbox.CodingAgent = runner
 		return in
@@ -561,20 +561,20 @@ func TestContractCodeWorkOnWrite(t *testing.T) {
 			codeWorkProvider(v1alpha1.CLIAgentCodex),
 			codeWorkProvider(v1alpha1.CLIAgentClaudeCode),
 		} {
-			t.Run(fmt.Sprintf("an agent-mode OpenCode seat naming %q on %s", runner, head.Name), func(t *testing.T) {
-				in := agentModeInput(head, runner)
-				if w, ok := CodeWorkOf(in)[agentModeSeat]; ok {
+			t.Run(fmt.Sprintf("a box-mode OpenCode seat naming %q on %s", runner, head.Name), func(t *testing.T) {
+				in := boxModeInput(head, runner)
+				if w, ok := CodeWorkOf(in)[boxModeSeat]; ok {
 					t.Errorf("the render reports code work for the seat: %s %s", w.Field, w.Message)
 				}
 				doc, err := Company(in)
 				refused := err != nil
-				want := []string{"Seat/" + agentModeSeat + " " + atCodingAgent + " " + v1alpha1.ReasonCodingAgentMismatch}
+				want := []string{"Seat/" + boxModeSeat + " " + atCodingAgent + " " + v1alpha1.ReasonCodingAgentMismatch}
 				if refused && !slices.Equal(refusalsOf(err), want) {
 					t.Fatalf("the render refuses %v (%v), want %v or nothing", refusalsOf(err), err, want)
 				}
 				var document []byte
 				if refused {
-					doc, document = withoutThenWithSandbox(t, agentModeInput(head, runner), agentModeSeat, runner)
+					doc, document = withoutThenWithSandbox(t, boxModeInput(head, runner), boxModeSeat, runner)
 				} else {
 					document = doc.YAML
 				}

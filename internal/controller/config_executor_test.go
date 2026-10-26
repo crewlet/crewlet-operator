@@ -22,10 +22,10 @@ import (
 )
 
 // executorHead is the field of a Seat that names the head of its executor's
-// chain, and agentProvider the LLMProvider in mode Agent there.
+// chain, and boxProvider the LLMProvider in mode Box there.
 const (
-	executorHead  = "spec.llm.default[0].name"
-	agentProvider = "claude-agent"
+	executorHead = "spec.llm.default[0].name"
+	boxProvider  = "claude-box"
 )
 
 // nowhere is a name no object or pool of the specs' companies has, and
@@ -61,19 +61,19 @@ func TestExecutorVerdictFollowsTheRender(t *testing.T) {
 	}{
 		{
 			name:     "bridge unsupported, held",
-			executor: &render.Executor{Field: executorHead, Reason: crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported, Message: noBridge},
+			executor: &render.Executor{Field: executorHead, Reason: crewletaiv1alpha1.ReasonBoxModeBridgeUnsupported, Message: noBridge},
 			fleet:    held,
 			wantNode: fleetWorkload + "-0",
-			want:     crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported,
+			want:     crewletaiv1alpha1.ReasonBoxModeBridgeUnsupported,
 			says:     []string{executorHead + ": no bridge.", "Engine node " + fleetWorkload + "-0 holds the seat."},
 		},
 		{
 			// The fleet was not read: the node last reported stands.
 			name:     "bridge unsupported, fleet not read",
-			executor: &render.Executor{Field: executorHead, Reason: crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported, Message: noBridge},
+			executor: &render.Executor{Field: executorHead, Reason: crewletaiv1alpha1.ReasonBoxModeBridgeUnsupported, Message: noBridge},
 			lastNode: fleetWorkload + "-1",
 			wantNode: fleetWorkload + "-1",
-			want:     crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported,
+			want:     crewletaiv1alpha1.ReasonBoxModeBridgeUnsupported,
 			says:     []string{executorHead + ": no bridge."},
 		},
 		{
@@ -91,7 +91,7 @@ func TestExecutorVerdictFollowsTheRender(t *testing.T) {
 			want:     crewletaiv1alpha1.ReasonLeaseHeld,
 		},
 		{
-			name:     "no agent-mode executor, held",
+			name:     "no box-mode executor, held",
 			fleet:    held,
 			wantNode: fleetWorkload + "-0",
 			want:     crewletaiv1alpha1.ReasonLeaseHeld,
@@ -154,17 +154,17 @@ func TestFixedExecutorVerdictIsNotKept(t *testing.T) {
 	}
 }
 
-// agentModeRun is a reconcile of one accepted Company whose one LLMProvider,
-// agentProvider, reported its agent mode runnable at generation 1 and is now
+// boxModeRun is a reconcile of one accepted Company whose one LLMProvider,
+// boxProvider, reported its box mode runnable at generation 1 and is now
 // at generation 2.
-func agentModeRun() (*configRun, *part, *events.FakeRecorder) {
+func boxModeRun() (*configRun, *part, *events.FakeRecorder) {
 	company := &crewletaiv1alpha1.Company{Namespace: "ns", Name: fleetCompany}
 	meta.SetStatusCondition(&company.Status.Conditions, metav1.Condition{
 		Type: crewletaiv1alpha1.ConditionAccepted, Status: metav1.ConditionTrue, Reason: crewletaiv1alpha1.ReasonValid,
 	})
-	provider := &crewletaiv1alpha1.LLMProvider{Namespace: "ns", Name: agentProvider, Generation: 2}
+	provider := &crewletaiv1alpha1.LLMProvider{Namespace: "ns", Name: boxProvider, Generation: 2}
 	provider.Status.Conditions = []metav1.Condition{{
-		Type: crewletaiv1alpha1.ConditionAgentModeRunnable, Status: metav1.ConditionTrue,
+		Type: crewletaiv1alpha1.ConditionBoxModeRunnable, Status: metav1.ConditionTrue,
 		Reason: crewletaiv1alpha1.ReasonToolBridgeServed, ObservedGeneration: 1,
 	}}
 	p := newPart(provider)
@@ -173,44 +173,44 @@ func agentModeRun() (*configRun, *part, *events.FakeRecorder) {
 	return run, p, recorder
 }
 
-// TestAgentModeRunnableFollowsTheRender holds an LLMProvider's
-// AgentModeRunnable to what the render found, set at the provider's
+// TestBoxModeRunnableFollowsTheRender holds an LLMProvider's
+// BoxModeRunnable to what the render found, set at the provider's
 // generation by a reconcile that rendered, left as it was by one that did
-// not, and removed from a provider that is no CLI in mode Agent.
-func TestAgentModeRunnableFollowsTheRender(t *testing.T) {
-	agentMode := func(p *part) *metav1.Condition {
+// not, and removed from a provider that is no CLI in mode Box.
+func TestBoxModeRunnableFollowsTheRender(t *testing.T) {
+	boxMode := func(p *part) *metav1.Condition {
 		return meta.FindStatusCondition(p.obj.(*crewletaiv1alpha1.LLMProvider).Status.Conditions,
-			crewletaiv1alpha1.ConditionAgentModeRunnable)
+			crewletaiv1alpha1.ConditionBoxModeRunnable)
 	}
 	t.Run("no render", func(t *testing.T) {
-		run, p, _ := agentModeRun()
+		run, p, _ := boxModeRun()
 		run.decide(p, nil, nil)
-		if c := agentMode(p); c == nil || c.ObservedGeneration != 1 {
-			t.Errorf("AgentModeRunnable is %+v, want the last report left as it was", c)
+		if c := boxMode(p); c == nil || c.ObservedGeneration != 1 {
+			t.Errorf("BoxModeRunnable is %+v, want the last report left as it was", c)
 		}
 	})
 	t.Run("not exposed", func(t *testing.T) {
-		run, p, _ := agentModeRun()
+		run, p, _ := boxModeRun()
 		run.objectsChecked = true
-		run.checkExecutors(nil, map[string]render.AgentMode{agentProvider: {Reason: crewletaiv1alpha1.ReasonNotExposed, Message: "No address"}})
+		run.checkExecutors(nil, map[string]render.BoxMode{boxProvider: {Reason: crewletaiv1alpha1.ReasonNotExposed, Message: "No address"}})
 		run.decide(p, nil, nil)
-		c := agentMode(p)
+		c := boxMode(p)
 		if c == nil || c.Status != metav1.ConditionFalse || c.Reason != crewletaiv1alpha1.ReasonNotExposed ||
 			c.ObservedGeneration != 2 || c.Message != "No address." {
-			t.Errorf("AgentModeRunnable is %+v, want False %s at generation 2", c, crewletaiv1alpha1.ReasonNotExposed)
+			t.Errorf("BoxModeRunnable is %+v, want False %s at generation 2", c, crewletaiv1alpha1.ReasonNotExposed)
 		}
 		applied := meta.FindStatusCondition(p.obj.(*crewletaiv1alpha1.LLMProvider).Status.Conditions, crewletaiv1alpha1.ConditionApplied)
 		if p.hasProblem() || (applied != nil && applied.Status == metav1.ConditionFalse) {
 			t.Errorf("the provider holds the document: Applied is %+v", applied)
 		}
 	})
-	t.Run("no agent mode", func(t *testing.T) {
-		run, p, _ := agentModeRun()
+	t.Run("no box mode", func(t *testing.T) {
+		run, p, _ := boxModeRun()
 		run.objectsChecked = true
-		run.checkExecutors(nil, map[string]render.AgentMode{})
+		run.checkExecutors(nil, map[string]render.BoxMode{})
 		run.decide(p, nil, nil)
-		if c := agentMode(p); c != nil {
-			t.Errorf("AgentModeRunnable is %+v on a provider in mode Text", c)
+		if c := boxMode(p); c != nil {
+			t.Errorf("BoxModeRunnable is %+v on a provider in mode Host", c)
 		}
 	})
 }
@@ -239,13 +239,13 @@ func drained(recorder *events.FakeRecorder) []string {
 
 // TestUnrunnableExecutorIsAnnouncedOnce emits one Warning event on a Seat
 // whose Ready turns to its executor's reason, and on an LLMProvider whose
-// AgentModeRunnable turns False, which nothing on the Company says when the
+// BoxModeRunnable turns False, which nothing on the Company says when the
 // document applies, and none on the reconciles after that find them so
 // again. While the Company is suspended the Seat's Ready says so instead, and
 // the executor is announced once the Company resumes, not on every reconcile
 // before.
 func TestUnrunnableExecutorIsAnnouncedOnce(t *testing.T) {
-	bridge := render.Executor{Field: executorHead, Reason: crewletaiv1alpha1.ReasonAgentModeBridgeUnsupported, Message: noBridge}
+	bridge := render.Executor{Field: executorHead, Reason: crewletaiv1alpha1.ReasonBoxModeBridgeUnsupported, Message: noBridge}
 	announced := "Warning " + bridge.Reason + " " + executorHead + ": no bridge."
 	t.Run("seat", func(t *testing.T) {
 		run, p := seatRun("")
@@ -281,11 +281,11 @@ func TestUnrunnableExecutorIsAnnouncedOnce(t *testing.T) {
 		}
 	})
 	t.Run("provider", func(t *testing.T) {
-		exposed := render.AgentMode{Reason: crewletaiv1alpha1.ReasonNotExposed, Message: "No address"}
-		run, p, recorder := agentModeRun()
+		exposed := render.BoxMode{Reason: crewletaiv1alpha1.ReasonNotExposed, Message: "No address"}
+		run, p, recorder := boxModeRun()
 		run.objectsChecked = true
 		for range 3 {
-			run.checkExecutors(nil, map[string]render.AgentMode{agentProvider: exposed})
+			run.checkExecutors(nil, map[string]render.BoxMode{boxProvider: exposed})
 			reconcileStatus(run, p)
 		}
 		if want := "Warning " + exposed.Reason + " No address."; !slices.Equal(drained(recorder), []string{want}) {
@@ -297,7 +297,7 @@ func TestUnrunnableExecutorIsAnnouncedOnce(t *testing.T) {
 // TestExecutorFollowsTheEngineSource holds the operator's name for the tool
 // bridge's address, the one variable whose absence makes the render report a
 // seat's turns unrunnable, to the engine's (mcpbridge.BaseURLVar): a
-// pod given another name would serve no bridge either, and every agent-mode
+// pod given another name would serve no bridge either, and every box-mode
 // seat on the data pods would fail while reported runnable.
 func TestExecutorFollowsTheEngineSource(t *testing.T) {
 	source, err := os.OpenRoot(enginetest.Source(t))

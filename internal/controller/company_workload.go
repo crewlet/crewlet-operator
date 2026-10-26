@@ -51,6 +51,11 @@ const (
 	// dataVolume is the name of the data volume claim template, and so the
 	// first part of each data volume claim's name (data-<sts>-<ordinal>).
 	dataVolume = "data"
+	// tmpVolume is a data pod's /tmp, the engine's TMPDIR on a read-only
+	// root: where the processes it starts write their scratch files, and
+	// where it makes the directory of the sockets a host-mode CLI reaches
+	// its seat's tools through.
+	tmpVolume = "tmp"
 	// portName names the API port on the pods and the Services.
 	portName = "http"
 	// publicPortName names the public port (render.PublicPort) on the data
@@ -484,8 +489,9 @@ func podTemplate(
 			configVolume(bootstrapSecretName(c)),
 			// The root filesystem is read-only; the engine and what it
 			// spawns (git, stdio MCP servers, CLI agents) write their
-			// scratch files under /tmp and their state under HOME.
-			corev1ac.Volume().WithName("tmp").WithEmptyDir(corev1ac.EmptyDirVolumeSource()),
+			// scratch files under /tmp (tmpVolume says what else goes
+			// there) and their state under HOME.
+			corev1ac.Volume().WithName(tmpVolume).WithEmptyDir(corev1ac.EmptyDirVolumeSource()),
 			corev1ac.Volume().WithName("home").WithEmptyDir(corev1ac.EmptyDirVolumeSource()),
 		)
 	labels, annotations := enginePodMetadata(class, labelsFor(c, componentData), w.bootstrapHash)
@@ -603,7 +609,7 @@ func engineContainerOf(
 		// Crewlet requires the URL to address the node that holds each
 		// bridged session. The company's public address reaches the one
 		// data pod, and a seat pod is given no URL, so it opens no bridged
-		// session: the engine refuses the agent-mode turns of a seat placed
+		// session: the engine refuses the box-mode turns of a seat placed
 		// there, which the Seat reports (render's ExecutorOf). Every bridged
 		// session is the data pod's.
 		bridgeURL: w.bridgeURL,
@@ -619,7 +625,7 @@ func engineContainerOf(
 		WithVolumeMounts(
 			corev1ac.VolumeMount().WithName(dataVolume).WithMountPath(render.DataDir),
 			corev1ac.VolumeMount().WithName(configVolumeName).WithMountPath(configDir).WithReadOnly(true),
-			corev1ac.VolumeMount().WithName("tmp").WithMountPath("/tmp"),
+			corev1ac.VolumeMount().WithName(tmpVolume).WithMountPath("/tmp"),
 			corev1ac.VolumeMount().WithName("home").WithMountPath(homeDir),
 		).
 		WithLifecycle(corev1ac.Lifecycle().

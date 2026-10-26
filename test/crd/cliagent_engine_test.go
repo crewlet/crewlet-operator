@@ -47,15 +47,15 @@ import (
 // The engine admits some shapes the API refuses on purpose, which this does
 // not hold against it: a Subscription signed in to nothing (the engine
 // expects `crewlet llm login` at a terminal a pod does not have), and mode
-// Agent for a CLI with no sandbox runner (the engine refuses it when the seat
-// first has work). Mode Agent is offered for exactly the Company's coding
-// agents, the CLIs the engine has a sandbox runner for, which hand an
-// Agent-mode run the model as the provider's text calls pass it. The rest
-// must agree.
+// Box for a CLI with no sandbox runner (the engine refuses it when the seat
+// first has work). Mode Box is offered for exactly the Company's coding
+// agents, the CLIs the engine has a sandbox runner for, which hand a
+// Box-mode run the model as the provider's runs in the engine's pod pass
+// it. The rest must agree.
 func TestCLIAgentSignInFollowsTheEngine(t *testing.T) {
 	namespace := newNamespace(t)
 	agents := enumOf(t, "llmproviders.crewlet.ai", "spec", "agent")
-	// The coding agents an Agent-mode run of the engine works for:
+	// The coding agents a Box-mode run of the engine works for:
 	// the render tests hold the enum to the engine's runners.
 	agentRunners := enumOf(t, "companies.crewlet.ai", "spec", "sandbox", "defaultCodingAgent")
 
@@ -70,7 +70,7 @@ func TestCLIAgentSignInFollowsTheEngine(t *testing.T) {
 
 	verdicts := map[string]map[string]verdict{}
 	for _, s := range signInShapes(variables) {
-		for _, mode := range []v1.CLIAgentMode{v1.CLIAgentModeText, v1.CLIAgentModeAgent} {
+		for _, mode := range []v1.CLIAgentMode{v1.CLIAgentModeHost, v1.CLIAgentModeBox} {
 			shape := s.name + ", mode " + string(mode)
 			providers := make([]v1.LLMProvider, 0, len(agents))
 			admitted := map[string]string{}
@@ -95,25 +95,25 @@ func TestCLIAgentSignInFollowsTheEngine(t *testing.T) {
 
 	holdVerdicts(t, verdicts, agentRunners)
 
-	// Mode Agent is offered exactly for the coding agents an Agent-mode run
+	// Mode Box is offered exactly for the coding agents a Box-mode run
 	// works for, of those the Company's sandbox offers, which the render
 	// tests hold to the engine's runners.
-	var agentMode []string
+	var boxMode []string
 	for _, agent := range agents {
-		if admitsAgentMode(verdicts, agent) {
-			agentMode = append(agentMode, agent)
+		if admitsBoxMode(verdicts, agent) {
+			boxMode = append(boxMode, agent)
 		}
 	}
-	slices.Sort(agentMode)
+	slices.Sort(boxMode)
 	slices.Sort(agentRunners)
-	if !slices.Equal(agentMode, agentRunners) {
-		t.Errorf("the API admits mode Agent for %v, want the coding agents %v", agentMode, agentRunners)
+	if !slices.Equal(boxMode, agentRunners) {
+		t.Errorf("the API admits mode Box for %v, want the coding agents %v", boxMode, agentRunners)
 	}
 
 	// The CLIs a model provider's key in env signs in are the engine's, and
 	// the ones the API's rules and their cases name.
 	var fromEnv []v1.CLIAgentName
-	for agent, v := range verdicts["subscription, env OPENROUTER_API_KEY, mode Text"] {
+	for agent, v := range verdicts["subscription, env OPENROUTER_API_KEY, mode Host"] {
 		if v.signIn == "environment" {
 			fromEnv = append(fromEnv, v1.CLIAgentName(agent))
 		}
@@ -163,7 +163,7 @@ func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
 	}
 	refusedModels := map[v1.CLIAgentName]bool{}
 	quoted := false
-	for _, mode := range []v1.CLIAgentMode{v1.CLIAgentModeText, v1.CLIAgentModeAgent} {
+	for _, mode := range []v1.CLIAgentMode{v1.CLIAgentModeHost, v1.CLIAgentModeBox} {
 		for _, model := range models {
 			providers := make([]v1.LLMProvider, 0, len(agents))
 			refused := map[string]bool{}
@@ -176,10 +176,10 @@ func TestCLIAgentModelFollowsTheEngine(t *testing.T) {
 				refusals[p.Name] = refusal
 				refused[p.Name] = strings.Contains(refusal, msgOpenCodeModel) || strings.Contains(refusal, msgBlankModel)
 				// The shape is admitted but for its model, so the model
-				// rule is the question; in mode Agent, but for a CLI with
+				// rule is the question; in mode Box, but for a CLI with
 				// no sandbox runner.
 				if !refused[p.Name] && refusal != "" &&
-					(mode == v1.CLIAgentModeText || !strings.Contains(refusal, msgCLIAgentRunner)) {
+					(mode == v1.CLIAgentModeHost || !strings.Contains(refusal, msgCLIAgentRunner)) {
 					t.Fatalf("%s, %s, model %q: the API refuses the sign-in shape, not the model: %s",
 						agent, shape.name, model, refusal)
 				}
@@ -278,7 +278,7 @@ func TestCLIAgentIsolationFollowsTheEngine(t *testing.T) {
 		name := v1.CLIAgentName(agent)
 		beside[name] = loginBeside(t, namespace, name)
 		shape := signInShape{name: "env HOME", auth: beside[name], env: []string{"HOME"}}
-		providers = append(providers, *shapedProvider(namespace, name, v1.CLIAgentModeText, &shape))
+		providers = append(providers, *shapedProvider(namespace, name, v1.CLIAgentModeHost, &shape))
 	}
 	report := askEngine(t, providers, false)
 
@@ -314,7 +314,7 @@ func TestCLIAgentIsolationFollowsTheEngine(t *testing.T) {
 		name := v1.CLIAgentName(agent)
 		for _, variable := range everyName {
 			shape := signInShape{name: "env " + variable, auth: beside[name], env: []string{variable}}
-			refusal := apiVerdict(t, shapedProvider(namespace, name, v1.CLIAgentModeText, &shape))
+			refusal := apiVerdict(t, shapedProvider(namespace, name, v1.CLIAgentModeHost, &shape))
 			switch engineRefuses := slices.Contains(engineLists[name], variable); {
 			case engineRefuses && !strings.Contains(refusal, msgCLIIsolation):
 				t.Errorf("%s with %s in env: the engine refuses it and the API's isolation rule does not: %q",
@@ -405,7 +405,7 @@ func TestCLIAgentSubscriptionEnvFollowsTheEngine(t *testing.T) {
 		for _, agent := range agents {
 			name := v1.CLIAgentName(agent)
 			shape := signInShape{name: "env " + variable, auth: loginBeside(t, namespace, name), env: []string{variable}}
-			p := shapedProvider(namespace, name, v1.CLIAgentModeText, &shape)
+			p := shapedProvider(namespace, name, v1.CLIAgentModeHost, &shape)
 			p.Name = fmt.Sprintf("%s-%d", p.Name, len(providers))
 			providers = append(providers, *p)
 		}
@@ -440,7 +440,7 @@ func TestCLIAgentSubscriptionEnvFollowsTheEngine(t *testing.T) {
 func loginBeside(t *testing.T, namespace string, agent v1.CLIAgentName) v1.CLIAgentAuth {
 	t.Helper()
 	bundle := signInShape{name: shapeBundle, auth: v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("cli", "bundle")}}
-	if apiVerdict(t, shapedProvider(namespace, agent, v1.CLIAgentModeText, &bundle)) == "" {
+	if apiVerdict(t, shapedProvider(namespace, agent, v1.CLIAgentModeHost, &bundle)) == "" {
 		return bundle.auth
 	}
 	return admittedSignIn(agent, cliVariables).auth
@@ -626,11 +626,11 @@ func admittedSignIn(agent v1.CLIAgentName, variables map[v1.CLIAgentName]cliVari
 }
 
 // holdVerdicts holds the API server's verdict on each shape to the engine's,
-// but in mode Agent for a CLI outside agentRunners.
+// but in mode Box for a CLI outside agentRunners.
 func holdVerdicts(t *testing.T, verdicts map[string]map[string]verdict, agentRunners []string) {
 	t.Helper()
 	for shape, byAgent := range verdicts {
-		agentMode := strings.HasSuffix(shape, ", mode "+string(v1.CLIAgentModeAgent))
+		boxMode := strings.HasSuffix(shape, ", mode "+string(v1.CLIAgentModeBox))
 		for agent, v := range byAgent {
 			admitted := v.refusal == ""
 			// A bundle signs the CLI in from the login the engine restores
@@ -640,10 +640,10 @@ func holdVerdicts(t *testing.T, verdicts map[string]map[string]verdict, agentRun
 			// is a placeholder no restore can read, so the column cannot
 			// show it: a bundle that restored would be written under the
 			// rendered state directory, in /var/lib/crewlet of the machine
-			// running the test. An Agent-mode run is given none of it, so
+			// running the test. A Box-mode run is given none of it, so
 			// there the bundle is no sign-in.
 			signedIn := slices.Contains([]string{"token", "api key", "environment"}, v.signIn) ||
-				(strings.HasPrefix(shape, "bundle") && !agentMode)
+				(strings.HasPrefix(shape, "bundle") && !boxMode)
 			// What the API admits the engine admits, without a doubt, so a
 			// revision is refused on the object rather than at the apply.
 			if admitted && v.problem != "" {
@@ -656,10 +656,10 @@ func holdVerdicts(t *testing.T, verdicts map[string]map[string]verdict, agentRun
 			if admitted && !signedIn {
 				t.Errorf("%s, %s: the API admits it and the engine reports it signed in with %q", agent, shape, v.signIn)
 			}
-			// What the engine admits and signs in, the API admits, but an
-			// Agent-mode run no coding agent of the engine works for.
+			// What the engine admits and signs in, the API admits, but a
+			// Box-mode run no coding agent of the engine works for.
 			engineAdmits := v.problem == "" && v.warning == ""
-			if !admitted && engineAdmits && signedIn && (!agentMode || slices.Contains(agentRunners, agent)) {
+			if !admitted && engineAdmits && signedIn && (!boxMode || slices.Contains(agentRunners, agent)) {
 				t.Errorf("%s, %s: the engine admits it, signed in with %q, and the API refuses it: %s",
 					agent, shape, v.signIn, v.refusal)
 			}
@@ -667,11 +667,11 @@ func holdVerdicts(t *testing.T, verdicts map[string]map[string]verdict, agentRun
 	}
 }
 
-// admitsAgentMode reports whether the API server admitted agent in mode Agent
+// admitsBoxMode reports whether the API server admitted agent in mode Box
 // in any shape.
-func admitsAgentMode(verdicts map[string]map[string]verdict, agent string) bool {
+func admitsBoxMode(verdicts map[string]map[string]verdict, agent string) bool {
 	for shape, byAgent := range verdicts {
-		if strings.HasSuffix(shape, ", mode "+string(v1.CLIAgentModeAgent)) && byAgent[agent].refusal == "" {
+		if strings.HasSuffix(shape, ", mode "+string(v1.CLIAgentModeBox)) && byAgent[agent].refusal == "" {
 			return true
 		}
 	}
@@ -682,7 +682,7 @@ func admitsAgentMode(verdicts map[string]map[string]verdict, agent string) bool 
 // each CLI takes in to what the engine and the API said: a row for every CLI
 // the API offers, naming its token and key variable as the engine's profile
 // does, a key in env where the engine signs the CLI in from one, a bundle
-// where the API admits one, and mode Agent where the API admits it.
+// where the API admits one, and mode Box where the API admits it.
 func signInTableFollows(t *testing.T, agents []string, variables map[v1.CLIAgentName]cliVariable,
 	fromEnv []v1.CLIAgentName, verdicts map[string]map[string]verdict) {
 	t.Helper()
@@ -719,8 +719,8 @@ func signInTableFollows(t *testing.T, agents []string, variables map[v1.CLIAgent
 			{"tokenSecretRef", variable(row[1]), want.headless},
 			{"auth.mode: APIKey", variable(row[2]), want.key},
 			{"a key in env", yes(row[3]), slices.Contains(fromEnv, v1.CLIAgentName(agent))},
-			{"credentialBundleSecretRef", yes(row[4]), verdicts["bundle, mode Text"][agent].refusal == ""},
-			{"mode: Agent", yes(row[5]), admitsAgentMode(verdicts, agent)},
+			{"credentialBundleSecretRef", yes(row[4]), verdicts["bundle, mode Host"][agent].refusal == ""},
+			{"mode: Box", yes(row[5]), admitsBoxMode(verdicts, agent)},
 		} {
 			if c.got != c.want {
 				t.Errorf("%s: the sign-in table's %s cell for %s says %v, want %v", guide, c.column, agent, c.got, c.want)
@@ -757,7 +757,7 @@ func engineVariables(t *testing.T, namespace string, agents []string) map[v1.CLI
 	slices.Sort(probe.env)
 	providers := make([]v1.LLMProvider, 0, len(agents))
 	for _, agent := range agents {
-		providers = append(providers, *shapedProvider(namespace, v1.CLIAgentName(agent), v1.CLIAgentModeText, &probe))
+		providers = append(providers, *shapedProvider(namespace, v1.CLIAgentName(agent), v1.CLIAgentModeHost, &probe))
 	}
 	report := askEngine(t, providers, true)
 	// Each says what one problem means: the variable it names, or none.
@@ -938,7 +938,7 @@ type engineReport struct {
 // askEngine renders providers into one company document, as the operator
 // would apply it, each driving the executor of an agent seat of its own name,
 // so that the engine's rules over a seat whose executor reaches a provider in
-// mode Agent run too. It asks the engine about each provider: what
+// mode Box run too. It asks the engine about each provider: what
 // `crewlet validate` refuses and warns about in it or in its seat, and the
 // SIGN-IN column `crewlet llm list` prints for it, when list is true. Every
 // reference the document makes resolves to a value, as the operator's secret
@@ -954,7 +954,7 @@ func askEngine(t *testing.T, providers []v1.LLMProvider, list bool) engineReport
 		LLMProviders:    providers,
 		StoreName:       secretsync.StoreName,
 		ProvisionedName: secretsync.ProvisionedName,
-		// A run in mode Agent calls the seat's tools back through the
+		// A run in mode Box calls the seat's tools back through the
 		// company's public address.
 		PublicBaseURL: "https://probe.hooks.example.com",
 	}

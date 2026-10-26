@@ -110,7 +110,7 @@ type SeatLLM struct {
 	// key, or its credential-named env, under the variable its CLI reads,
 	// unless spec.sandbox.env names that variable itself: give code work a
 	// provider whose sign-in is scoped for it. A seat whose executor runs in
-	// agent mode (an LLMProvider in mode Agent heads its executor's chain:
+	// box mode (an LLMProvider in mode Box heads its executor's chain:
 	// default, else the Company's spec.llm.order) has no code work of its
 	// own, so nothing reads this chain for one. Crewlet's `sandbox`.
 	// +optional
@@ -130,7 +130,7 @@ type SeatSandbox struct {
 	// the Company's spec.sandbox.defaultCodingAgent. Each runs on a provider
 	// of its own CLI at the head of spec.llm.sandbox: ClaudeCode on a
 	// ClaudeCode provider, OpenCode on an OpenCode one. A seat whose executor
-	// runs in agent mode (an LLMProvider in mode Agent heads its executor's
+	// runs in box mode (an LLMProvider in mode Box heads its executor's
 	// chain) is never offered run_sandbox: it codes in its executor's run, on
 	// that provider's CLI, so this drives nothing, and the operator refuses
 	// one other than that CLI (CodingAgentMismatch), as Crewlet does.
@@ -763,10 +763,10 @@ type SeatStatus struct {
 	// Secret key exist), Applied (the seat is in the revision the engine
 	// runs) and, on an Agent seat, Ready (an engine node holds the seat's
 	// lease and runs it: LeaseHeld, or Unplaced, or PoolNotFound; or the seat
-	// can run no turn wherever it is held, AgentModeBridgeUnsupported or
+	// can run no turn wherever it is held, BoxModeBridgeUnsupported or
 	// NotExposed) and, once the engine runs it, Paused (whether the engine
 	// holds it paused, and whether that is what spec.paused asks), and, on an
-	// Agent seat with spec.sandbox whose executor does not run in agent mode,
+	// Agent seat with spec.sandbox whose executor does not run in box mode,
 	// in a Company with spec.sandbox, CodeWorkRunnable (whether its coding
 	// agent can run on the head of its sandbox chain or on the sign-in the
 	// seat's sandbox environment gives it; it does not count towards Ready,

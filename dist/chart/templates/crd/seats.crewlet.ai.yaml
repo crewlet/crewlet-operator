@@ -594,7 +594,7 @@ spec:
                       key, or its credential-named env, under the variable its CLI reads,
                       unless spec.sandbox.env names that variable itself: give code work a
                       provider whose sign-in is scoped for it. A seat whose executor runs in
-                      agent mode (an LLMProvider in mode Agent heads its executor's chain:
+                      box mode (an LLMProvider in mode Box heads its executor's chain:
                       default, else the Company's spec.llm.order) has no code work of its
                       own, so nothing reads this chain for one. Crewlet's `sandbox`.
                     items:
@@ -938,7 +938,7 @@ spec:
                       the Company's spec.sandbox.defaultCodingAgent. Each runs on a provider
                       of its own CLI at the head of spec.llm.sandbox: ClaudeCode on a
                       ClaudeCode provider, OpenCode on an OpenCode one. A seat whose executor
-                      runs in agent mode (an LLMProvider in mode Agent heads its executor's
+                      runs in box mode (an LLMProvider in mode Box heads its executor's
                       chain) is never offered run_sandbox: it codes in its executor's run, on
                       that provider's CLI, so this drives nothing, and the operator refuses
                       one other than that CLI (CodingAgentMismatch), as Crewlet does.
@@ -1124,7 +1124,7 @@ spec:
                             never from the engine's. The run's is the steps' env, the Seat's
                             sandbox env, and what Crewlet adds: the agent's handle and, when it
                             has one, its email, and the variables that sign the coding agent in
-                            to the provider its code work runs on, or, in an agent-mode
+                            to the provider its code work runs on, or, in a box-mode
                             executor's run, those of the executor's own provider
                             (docs/guides/credentials.md says which, and when the seat's own env
                             leaves them out). The API refuses ${NAME} (NAME an identifier) all
@@ -1460,10 +1460,10 @@ spec:
                   Secret key exist), Applied (the seat is in the revision the engine
                   runs) and, on an Agent seat, Ready (an engine node holds the seat's
                   lease and runs it: LeaseHeld, or Unplaced, or PoolNotFound; or the seat
-                  can run no turn wherever it is held, AgentModeBridgeUnsupported or
+                  can run no turn wherever it is held, BoxModeBridgeUnsupported or
                   NotExposed) and, once the engine runs it, Paused (whether the engine
                   holds it paused, and whether that is what spec.paused asks), and, on an
-                  Agent seat with spec.sandbox whose executor does not run in agent mode,
+                  Agent seat with spec.sandbox whose executor does not run in box mode,
                   in a Company with spec.sandbox, CodeWorkRunnable (whether its coding
                   agent can run on the head of its sandbox chain or on the sign-in the
                   seat's sandbox environment gives it; it does not count towards Ready,

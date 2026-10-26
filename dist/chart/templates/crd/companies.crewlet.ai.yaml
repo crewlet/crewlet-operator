@@ -879,7 +879,7 @@ spec:
                           memory and disk. Unset, each run gets the vendor's prebuilt template
                           for its coding agent's CLI (claude or opencode); a template set here is
                           used for every run, so it must carry the CLI of every coding agent and
-                          Agent-mode LLMProvider the company runs. For OpenCode that is
+                          Box-mode LLMProvider the company runs. For OpenCode that is
                           OpenCode 2, the @opencode/cli package (opencode --version prints
                           opencode v2.…): Crewlet's OpenCode runner ends a run at once in a box
                           with OpenCode 1.x (npm's opencode-ai), and E2B does not say which
@@ -927,7 +927,7 @@ spec:
                             never from the engine's. The run's is the steps' env, the Seat's
                             sandbox env, and what Crewlet adds: the agent's handle and, when it
                             has one, its email, and the variables that sign the coding agent in
-                            to the provider its code work runs on, or, in an agent-mode
+                            to the provider its code work runs on, or, in a box-mode
                             executor's run, those of the executor's own provider
                             (docs/guides/credentials.md says which, and when the seat's own env
                             leaves them out). The API refuses ${NAME} (NAME an identifier) all

@@ -146,7 +146,7 @@ func (run *configRun) emptyValue(v *render.StartValue) string {
 	switch {
 	case v.Server == "":
 		held = "Crewlet refuses each run_sandbox coding run whose environment it reaches, before a box exists, " +
-			"and an agent-mode run of a seat's executor starts without it"
+			"and a box-mode run of a seat's executor starts without it"
 	case v.Object.Kind == render.KindSeat:
 		held = fmt.Sprintf("the engine starts the seat's instance of MCPServer %s with no value that resolves to nothing, "+
 			"so it does not start it", v.Server)
