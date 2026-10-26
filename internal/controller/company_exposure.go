@@ -373,24 +373,37 @@ func engineAddressesOf(c *crewletaiv1alpha1.Company, routed, artifactsRouted str
 }
 
 // addressRefusalMessage is RuntimeReady's message when Crewlet would refuse to
-// start on an address engineAddressesOf chose: which it is, where it came
-// from and what to change. The API refuses the addresses a Company states
-// that Crewlet would refuse, so the one that reaches here is in practice the
-// API route's host, which the class's template makes of the Company's
-// namespace and name. A Company's own address reaches here only when the
-// API admitted it before it had the rule that refuses it, or on an API
-// server whose URL parser takes a shape Crewlet's refuses that no rule
-// covers.
+// start on an address engineAddressesOf chose, or one boxURLs hands the
+// sandboxes: which it is, where it came from and what to change. The API
+// refuses the addresses a Company states that Crewlet would refuse, so the
+// one that reaches here is in practice a route's host, which the class's
+// template makes of the Company's namespace and name: the API route's, or the
+// webhooks route's where the engine hands it to sandboxes. A Company's own
+// address reaches here only when the API admitted it before it had the rule
+// that refuses it, or on an API server whose URL parser takes a shape
+// Crewlet's refuses that no rule covers.
 func addressRefusalMessage(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, refused *render.AddressError) string {
 	// Where the address came from, as engineAddressesOf chose it. The
 	// addresses the operator chooses for an engine nothing routes to
 	// (localhost, the public listener's in-cluster name) are ones Crewlet
-	// takes, so they need no sentence; and so is the webhooks route's,
-	// https:// and a host name the class's rules hold to a DNS name, with no
-	// port, query or fragment, which is all Crewlet asks of
-	// api.public.external_url.
+	// takes, so they need no sentence; and so is the webhooks route's as
+	// api.public.external_url, https:// and a host name the class's rules
+	// hold to a DNS name, with no port, query or fragment, which is all
+	// Crewlet asks of that key. Handed to sandboxes, it is held to their URL
+	// parser too, which a host whose last label is a number fails.
+	box := refused.Field == render.EnvBridgeURL || refused.Field == render.EnvReceiverURL
 	var where string
 	switch {
+	case box && c.Spec.Exposure.PublicBaseURL != "":
+		where = " It is the Company's spec.exposure.publicBaseURL, which the engine hands its sandboxes: correct it."
+	case box && class.Spec.Exposure.Webhooks.Hostname != "":
+		where = fmt.Sprintf(" It is the address of the webhooks route of EngineClass %s, its spec.exposure.webhooks.hostname "+
+			"%q expanded for this Company, which the engine hands its sandboxes. A template whose last label holds "+
+			"{{namespace}} or {{name}} ends in a number for some Companies: one whose namespace is a number (4711, or 0x "+
+			"and hex digits such as 0x1f), or whose namespace or name makes one with the template's own characters beside "+
+			"it (0x{{name}} for a Company named cafe). End the template in a domain of your own, such as "+
+			"{{uid}}.hooks.example.com, or run the Company in a namespace of another name.",
+			class.Name, class.Spec.Exposure.Webhooks.Hostname)
 	case refused.Field == render.FieldArtifactsURL && c.Spec.Exposure.ArtifactsBaseURL != "":
 		where = " It is the Company's spec.exposure.artifactsBaseURL: correct it, giving artifacts a host of their own."
 	case refused.Field == render.FieldArtifactsURL && class.Spec.Exposure.Artifacts.Hostname != "":
@@ -401,7 +414,7 @@ func addressRefusalMessage(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha
 		where = " It is the Company's spec.exposure.publicBaseURL: correct it."
 	case refused.Field == render.FieldExternalURL && c.Spec.Exposure.DashboardBaseURL != "":
 		where = " It is the Company's spec.exposure.dashboardBaseURL: correct it."
-	case refused.Field != render.FieldPublicURL && class.Spec.Exposure.API.Hostname != "":
+	case !box && refused.Field != render.FieldPublicURL && class.Spec.Exposure.API.Hostname != "":
 		where = fmt.Sprintf(" It is the address of the API route of EngineClass %s, its spec.exposure.api.hostname %q "+
 			"expanded for this Company. A template whose last label holds {{namespace}} or {{name}} ends in a number "+
 			"for some Companies: one whose namespace is a number (4711, or 0x and hex digits such as 0x1f), or whose "+

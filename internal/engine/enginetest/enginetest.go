@@ -560,6 +560,50 @@ func Binary(t T) string {
 	return bin
 }
 
+// BoxURLVerdicts is whether the engine refuses to boot on each of variables,
+// the variables of a node's environment that hand its sandboxes an address to
+// dial back to it (Crewlet's engine.ReadBoxURLs: the tool bridge's and the
+// telemetry receiver's), as env sets them: true where it refuses the value,
+// false where it takes it. A boot reads them before it opens anything, and no
+// validation does, since they are the pod's environment rather than its
+// configuration; `crewlet llm doctor` reads them as the boot does, and says
+// which it would refuse, without running an engine. So that is what this
+// asks, beside document, a company document with a providers.llm entry for
+// doctor to examine, with env alone as its environment (and PATH and HOME)
+// and no Tier A, so that it resolves every reference from env, and without
+// its real completions. Doctor's own verdict on the entry is not read: on a
+// machine without the entry's CLI it reports a problem with it, as it does
+// on a box URL it refuses, and exits with an error for either.
+func BoxURLVerdicts(t T, document []byte, env map[string]string, variables ...string) map[string]bool {
+	t.Helper()
+	dir := t.TempDir()
+	company := filepath.Join(dir, "company.yaml")
+	writeFile(t, company, document)
+	cmd := exec.Command(Binary(t), "llm", "doctor", "-no-smoke",
+		"-company", company, "-config", filepath.Join(dir, "absent.yaml"))
+	cmd.Dir = dir
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + dir}
+	for name, value := range env {
+		cmd.Env = append(cmd.Env, name+"="+value)
+	}
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
+	if exit := (*exec.ExitError)(nil); err != nil && !errors.As(err, &exit) {
+		t.Fatalf("running crewlet llm doctor: %v", err)
+	}
+	if stdout.Len() == 0 {
+		t.Fatalf("crewlet llm doctor printed no report (%v):\n%s", err, stderr.String())
+	}
+	// Each refusal is a problem of the node's, ahead of every entry's, and
+	// starts with the variable it names, never with its value.
+	verdicts := make(map[string]bool, len(variables))
+	for _, variable := range variables {
+		verdicts[variable] = bytes.Contains(stdout.Bytes(), []byte("\n  - "+variable+" "))
+	}
+	return verdicts
+}
+
 // Module is the Go module the crewlet binary is built from.
 const Module = "github.com/crewlet/crewlet"
 

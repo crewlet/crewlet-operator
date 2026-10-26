@@ -26,9 +26,10 @@ import (
 // tool-server API's refusal of a literal value copies and the engine never
 // applies to a tool server's values, taking any literal there; and whether
 // the address a data pod's engine is told is on loopback, and whether it is
-// one the engine refuses to start on at all, which the render holds a data
-// pod back on (and the API refuses where a Company or its class states it)
-// and the engine shows only for the addresses a test tries. A contract test
+// one the engine refuses to start on at all, or to boot on where a pod hands
+// it to sandboxes, which the render holds a data pod back on (and the API
+// refuses where a Company or its class states it) and the engine shows only
+// for the addresses a test tries. A contract test
 // cannot hold those to the engine, so the operator
 // holds the code it read: the digest of each declaration as it was when it
 // was read against the operator files that copy it.
@@ -170,6 +171,11 @@ const (
 	// first read at.
 	addressShapeRead = "v0.1.1-0.20261019003935-7cf6955f22ea"
 	addressGo        = "internal/render/address.go"
+	// boxURLGo is where the engine judges an address a sandbox dials back to
+	// it, and engineBoxURLGo where its boot reads every such address and
+	// refuses one that is set and unusable, both first read at codeHostRead.
+	boxURLGo       = "internal/sandbox/boxurl.go"
+	engineBoxURLGo = "internal/engine/boxurl.go"
 	// engineClassGo is the EngineClass API, which several decisions copied
 	// from the engine are written into.
 	engineClassGo = "api/v1alpha1/engineclass_types.go"
@@ -269,6 +275,15 @@ var framedKinds = []string{companyTypesGo, engineClassGo, companyExposureGo, exp
 // which namespaces and names make a number of a template's last label, and
 // the guides that tell people what to write and what that message means.
 var addressCopies = []string{addressGo, companyTypesGo, engineClassGo, companyExposureGo, exposureMd, troubleshootingMd}
+
+// boxURLCopies is every operator file that copies which addresses handed to
+// sandboxes Crewlet refuses to boot on: those of addressCopies, the render
+// holding a data pod back on one, the API refusing one a Company states as
+// its publicBaseURL or a class's webhooks host name template makes, and the
+// controller's message naming the variable and where its address came from;
+// and the controller's choice of which variables a pod is handed, which the
+// render judges (boxURLs and receiverURL).
+var boxURLCopies = append([]string{"internal/controller/company_workload.go"}, addressCopies...)
 
 // signInPosture is every operator file that copies where Crewlet lets a
 // second factor be optional without the acknowledgement: the render, which
@@ -418,6 +433,15 @@ var bootWindows = []string{
 // Which addresses each is asked of is the wiring that calls them
 // (API.validate, APIAuth.validate), which the contract tests hold, since
 // their every shape reaches the engine through it.
+//
+// So are the addresses handed to sandboxes after them, which the engine
+// refuses to boot on by a grammar of its own (ParseBoxURL and its helpers),
+// and no validation reads, since they are a pod's environment:
+// TestContractBoxURLShapes holds the render's verdict to the one `crewlet llm
+// doctor` reports at every shape it tries, and test/crd's
+// TestAddressShapesFollowTheEngine the API's on a publicBaseURL. Which
+// variables the boot reads and refuses on is ReadBoxURLs' and BoxURLs', whose
+// call in engine.New is not read, for engine.New's reason below.
 //
 // The boot's bounds after them are what the controller's startup windows
 // add up (dataPodBootSeconds, seatPodBootSeconds and the object stores'
@@ -915,9 +939,10 @@ var mirrored = []mirror{
 	{
 		file: mcpbridgeGo, name: "Build",
 		against: []string{executorGo},
-		decides: "a node given no CREWLET_MCP_BRIDGE_URL builds no tool bridge (the test is Configured's)",
-		digest:  "108e637e5417c3bd768bbb6785ede3313232fb828e519f32c1a833125c37e58b",
-		read:    bootBindRead,
+		decides: "a node builds no tool bridge without a base, which its boot reads from CREWLET_MCP_BRIDGE_URL " +
+			"through ParseBoxURL, refusing to start on a value that is set and unusable",
+		digest: "7ccbfd8407f92b705d9a5ff6382016aa7f1360b8c214a438fd9613709ae1f38f",
+		read:   codeHostRead,
 	},
 	{
 		file: mcpbridgeGo, name: "Configured",
@@ -1028,6 +1053,75 @@ var mirrored = []mirror{
 			"or https, with a port checkPort takes and a host checkBrowserHost takes",
 		digest: "b1847a33a8f613437ac8c52830fe6abbf7840d4dd9f0ce79f0550b2c8702f8cc",
 		read:   addressShapeRead,
+	},
+	{
+		file: engineBoxURLGo, name: "ReadBoxURLs",
+		against: boxURLCopies,
+		decides: "a node reads the tool bridge's and the telemetry receiver's addresses, CREWLET_MCP_BRIDGE_URL and " +
+			"CREWLET_SANDBOX_OTEL_RECEIVER_URL, each through ParseBoxURL",
+		digest: "b50a0e635ba5d97bee86cbff5f1678b576f3b93b8d3f6148a0c8e42a4cbc8ccb",
+		read:   codeHostRead,
+	},
+	{
+		file: engineBoxURLGo, name: "BoxURLs.All",
+		against: boxURLCopies,
+		decides: "the addresses a node's boot refuses on are the receiver's and the bridge's",
+		digest:  "e345e77ddce9e86c4fc3f4a3fd330218c015309ab79a5f719ffe2d4b81918f89",
+		read:    codeHostRead,
+	},
+	{
+		file: engineBoxURLGo, name: "BoxURLs.Refusal",
+		against: boxURLCopies,
+		decides: "a boot is refused on any of those addresses that is set and unusable, whatever the company runs",
+		digest:  "da110da53cf23febfa9a9c8b51d4191e4a9c5050c52f37e490a7244408feb73c",
+		read:    codeHostRead,
+	},
+	{
+		file: boxURLGo, name: "ParseBoxURL",
+		against: boxURLCopies,
+		decides: "an address a sandbox dials, with the space around it dropped and unset when nothing is left, is " +
+			"an absolute http or https URL with no user information, a host boxHostRefusal takes, a port from 1 to " +
+			"65535 where it names one, and no query or fragment",
+		digest: "14386a77a82a7374c7e52953c60e84e5d09de8d6ce0774bf2bbb132a6ed7672e",
+		read:   codeHostRead,
+	},
+	{
+		file: boxURLGo, name: "boxHostRefusal",
+		against: boxURLCopies,
+		decides: "that host has no IPv6 zone, is UTF-8 once its escapes are decoded, holds no forbidden domain code " +
+			"point, and ends in a number only as an IPv4 address the WHATWG URL Standard reads",
+		digest: "c02b646fdb22072ec1ae077fe14ab33f4ec40eccafb45bde4965fbd546f11171",
+		read:   codeHostRead,
+	},
+	{
+		file: boxURLGo, name: "forbiddenInADomain",
+		against: boxURLCopies,
+		decides: "the forbidden domain code points are the C0 controls, space, DEL and # % / : < > ? @ [ \\ ] ^ |",
+		digest:  "efc942efcd201819bbc4b389a782c324385ee3577f156b81a713532118ace2be",
+		read:    codeHostRead,
+	},
+	{
+		file: boxURLGo, name: "endsInANumber",
+		against: boxURLCopies,
+		decides: "a name ends in a number when its last label, one trailing dot ignored, is decimal digits or a " +
+			"part ipv4Number reads",
+		digest: "195fefaf6020f2c47e36752f235648edb47ee260937a173c43a50085427c7bdd",
+		read:   codeHostRead,
+	},
+	{
+		file: boxURLGo, name: "isIPv4Address",
+		against: boxURLCopies,
+		decides: "an IPv4 address is at most four parts ipv4Number reads, every one but the last at most 255 and the " +
+			"last below 256 to the power of the bytes left for it",
+		digest: "d9cd518b5a95dc4a62d7293975ef4c119a077054101a6049b2f321a448915465",
+		read:   codeHostRead,
+	},
+	{
+		file: boxURLGo, name: "ipv4Number",
+		against: boxURLCopies,
+		decides: "a part of an IPv4 address is hexadecimal after 0x, octal after a leading 0, and decimal otherwise",
+		digest:  "8eb7861dd55c978ff9b4b4abd409cf7202f6beceddfa30cc1af229cf2e8276de",
+		read:    codeHostRead,
 	},
 	{
 		file: "internal/coord/kv/objects.go", name: "(*FleetStore).AgreeObjectBackend",

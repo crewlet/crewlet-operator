@@ -200,11 +200,16 @@ start on at all (`checkExternalURL`, `checkPort`, `checkBrowserHost`,
 Tier A string in `internal/config/normalize.go`, which
 `TestContractAddressShapes` holds the render to and test/crd's
 `TestAddressShapesFollowTheEngine` the API's rules on a Company's and a
-class's addresses, at the shapes they try) — with
+class's addresses, at the shapes they try; and, for the address a pod hands
+the engine's sandboxes, `ParseBoxURL` and its helpers in
+`internal/sandbox/boxurl.go`, through which the boot reads each such
+variable (`ReadBoxURLs` in `internal/engine/boxurl.go`), and which
+`TestContractBoxURLShapes` holds the render to by asking `crewlet llm doctor`) — with
 every operator file that copies it and a digest of the function as it was
 read. Those files are the renderer's; for the addresses, also the Company
 and EngineClass API types whose rules refuse them, the controller's message
-on a Company held back for one, and the [exposure](docs/guides/exposure.md)
+on a Company held back for one and its choice of the addresses a pod hands
+sandboxes, and the [exposure](docs/guides/exposure.md)
 and [troubleshooting](docs/guides/troubleshooting.md) guides that state
 them; and, for how an agent-mode run's CLI signs in inside the remote
 sandbox, also the LLMProvider API's rule on a CLI of mode `Agent`, the

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -447,6 +448,56 @@ func TestContractAddressShapes(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestContractBoxURLShapes holds the render's verdict on an address handed to
+// sandboxes (BootstrapInput.BoxURLs) to Crewlet's, both ways, at every shape
+// of boxURLTaken, boxURLRefused and addressShapes, in each variable: Bootstrap
+// refuses a shape there with an AddressError naming the variable exactly
+// where the engine refuses to boot on it, which `crewlet llm doctor` reports
+// as its boot would read it (enginetest.BoxURLVerdicts), and renders it
+// wherever the engine takes it; so the render holds back no data pod the
+// engine would run, and starts none it would refuse to boot.
+func TestContractBoxURLShapes(t *testing.T) {
+	doc, err := Company(companyCaseNamed(t, "minimal-agent").input(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{}
+	for _, k := range doc.Refs {
+		env[secretsync.StoreName(k)] = dummyCredential(k)
+	}
+	shapes := slices.Concat(boxURLTaken, boxURLRefused, addressShapes)
+	refusedSomewhere := make([]bool, len(shapes))
+	t.Run("shapes", func(t *testing.T) {
+		for i, shape := range shapes {
+			t.Run(fmt.Sprintf("%.40q", shape), func(t *testing.T) {
+				t.Parallel()
+				withShape := maps.Clone(env)
+				withShape[EnvBridgeURL], withShape[EnvReceiverURL] = shape, shape
+				engine := enginetest.BoxURLVerdicts(t, doc.YAML, withShape, EnvBridgeURL, EnvReceiverURL)
+				refusedSomewhere[i] = engine[EnvBridgeURL] || engine[EnvReceiverURL]
+				for _, variable := range []string{EnvBridgeURL, EnvReceiverURL} {
+					in := bootstrapCases()[0].input(t)
+					in.BoxURLs = []BoxURL{{Variable: variable, URL: shape}}
+					_, err := Bootstrap(in)
+					refused, ok := errors.AsType[*AddressError](err)
+					switch {
+					case err != nil && (!ok || refused.Field != variable || refused.Address != shape):
+						t.Fatalf("Bootstrap refused %s %q with %v", variable, shape, err)
+					case (err != nil) != engine[variable]:
+						t.Errorf("the render refuses %s %q: %v; Crewlet refuses to boot on it: %v",
+							variable, shape, err != nil, engine[variable])
+					}
+				}
+			})
+		}
+	})
+	// A doctor whose report this test misread would read every shape as one
+	// the engine takes, and the render's refusals as the only ones.
+	if !slices.Contains(refusedSomewhere, true) {
+		t.Error("crewlet llm doctor refused no box URL: its report did not name the variables as this test reads it")
+	}
 }
 
 // artifactShapes are artifact origins either side of each line Crewlet draws,

@@ -94,8 +94,8 @@ const (
 	envOTLPProtocol    = "OTEL_EXPORTER_OTLP_PROTOCOL"
 	envOTLPHeaders     = "OTEL_EXPORTER_OTLP_HEADERS"
 	envOTELResourceAtt = "OTEL_RESOURCE_ATTRIBUTES"
-	envMCPBridgeURL    = "CREWLET_MCP_BRIDGE_URL"
-	envOTelReceiverURL = "CREWLET_SANDBOX_OTEL_RECEIVER_URL"
+	envMCPBridgeURL    = render.EnvBridgeURL
+	envOTelReceiverURL = render.EnvReceiverURL
 )
 
 // preStopSleepSeconds is how long a stopping data pod keeps serving before
@@ -746,6 +746,39 @@ type engineEnvironment struct {
 	bridgeURL string
 }
 
+// receiverURL is CREWLET_SANDBOX_OTEL_RECEIVER_URL for a company's pods, or ""
+// for none: Crewlet's sandbox telemetry receiver, to which a remote sandbox
+// exports at the engine's public listener, the one port it can reach, with a
+// token signed for its run, and which forwards to the class's collector with
+// its headers, which never enter the box. Every pod is given it, a seat pod's
+// too: the pod that launches a run mints its endpoint, under the company's
+// address, and the data pod that address reaches verifies it with the keyring
+// every pod shares. Without a collector there is nothing to forward to, and
+// without a public address nothing a sandbox could reach.
+func receiverURL(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass) string {
+	if class.Spec.Telemetry.OTLPEndpoint == "" {
+		return ""
+	}
+	return c.Status.Endpoints.PublicBaseURL
+}
+
+// boxURLs are the addresses a data pod's environment hands its sandboxes, as
+// engineEnv sets them: bridgeURL as the tool bridge's, where the engine serves
+// one, and the telemetry receiver's (receiverURL). Crewlet refuses to boot on
+// a value a sandbox cannot dial, which the render judges with the pod's other
+// addresses. A seat pod is handed the receiver's alone, the same value, so the
+// data pods' verdict holds its pods back too.
+func boxURLs(c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, bridgeURL string) []render.BoxURL {
+	var out []render.BoxURL
+	if bridgeURL != "" {
+		out = append(out, render.BoxURL{Variable: envMCPBridgeURL, URL: bridgeURL})
+	}
+	if receiver := receiverURL(c, class); receiver != "" {
+		out = append(out, render.BoxURL{Variable: envOTelReceiverURL, URL: receiver})
+	}
+	return out
+}
+
 // engineEnv is an engine container's environment: what the bootstrap
 // document references, then the operator's own settings, then the class's
 // and the Company's variables. Kubernetes expands $(VAR) only from variables
@@ -789,17 +822,8 @@ func engineEnv(
 		if t.HeadersSecretRef.Name != "" {
 			env = append(env, fromSecret(envOTLPHeaders, e.secret, platformKeyOTLPHeaders))
 		}
-		// Crewlet's sandbox telemetry receiver: a remote sandbox exports to
-		// the engine's public listener, the one port it can reach, with a
-		// token signed for its run, and the engine forwards to the
-		// collector above with its headers, which never enter the box.
-		// Every pod is given it, a seat pod's too: the pod that launches a
-		// run mints its endpoint, under the company's address, and the data
-		// pod that address reaches verifies it with the keyring every pod
-		// shares. Without a collector there is nothing to forward to, and
-		// without a public address nothing a sandbox could reach.
-		if public := c.Status.Endpoints.PublicBaseURL; public != "" {
-			env = append(env, literal(envOTelReceiverURL, public))
+		if receiver := receiverURL(c, class); receiver != "" {
+			env = append(env, literal(envOTelReceiverURL, receiver))
 		}
 	}
 

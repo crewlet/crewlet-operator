@@ -596,10 +596,25 @@ func TestEngineClassExposure(t *testing.T) {
 			name:   "an API hostname ending in a variable is accepted",
 			mutate: apiGatewayHost("{{uid}}.{{name}}.{{namespace}}"),
 		},
+		// The webhooks' host is no browser's address, but the engine hands
+		// it to sandboxes, whose URL parser reads a host whose last label is
+		// a number as an IPv4 address.
 		{
-			// The webhooks' host is no browser's address.
-			name:   "a webhooks hostname ending in a number is accepted",
+			name:   "a webhooks hostname ending in a number is refused",
 			mutate: gatewayHost("{{uid}}.hooks.123"),
+			want:   msgHostnameNumber,
+		},
+		{
+			name:   "a webhooks hostname ending in a hexadecimal number is refused",
+			mutate: gatewayHost("{{uid}}.hooks.0x1f"),
+			want:   msgHostnameNumber,
+		},
+		{name: "a webhooks hostname ending in a label with a letter is accepted", mutate: gatewayHost("{{uid}}.hooks.123x")},
+		{
+			// Whether {{namespace}} is a number is the Company's to say, so
+			// the operator decides it per Company (AddressRefused).
+			name:   "a webhooks hostname ending in a variable is accepted",
+			mutate: gatewayHost("{{uid}}.{{name}}.{{namespace}}"),
 		},
 
 		// Under networkPolicy Isolated the operator has to know where an

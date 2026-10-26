@@ -23,6 +23,7 @@ import (
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 	"github.com/crewlet/crewlet-operator/internal/render"
+	"github.com/crewlet/crewlet-operator/internal/secretsync"
 )
 
 // baseURLShapes are the addresses TestAddressShapesFollowTheEngine offers as
@@ -87,19 +88,36 @@ var apiRefusesMore = map[string]string{
 	"http://h.example ":    "white space around the address, which the engine trims and the API refuses as no URL",
 }
 
-// zoneBracket is why the API refuses as a publicBaseURL an IPv6 address
-// whose zone holds a ']', which Crewlet takes there.
-const zoneBracket = "a ']' after an IPv6 zone: Go's URL parser, the engine's as well as the API server's, ends the " +
-	"bracketed address at the last ']' and reads the rest into the zone, so the engine starts on a host no vendor " +
-	"or sandbox can reach; the API takes an IPv6 address in brackets whose zone holds no ']'"
+// shortIPv4 is why the API refuses as a publicBaseURL an IPv4 address in a
+// form other than four decimal octets, which Crewlet takes there, and the URL
+// parser of a sandbox it is handed to reads as an address.
+const shortIPv4 = "a host whose last label is a number and that is not four decimal octets: a sandbox's URL parser " +
+	"reads it as an IPv4 address in a short form, and a vendor's may read it as a name, so the API takes an IPv4 " +
+	"address written as four decimal octets alone, as for a dashboardBaseURL"
+
+// escapedName is why the API refuses as a publicBaseURL a host name with a
+// percent-encoded character, which Crewlet takes there and a sandbox's URL
+// parser decodes.
+const escapedName = "a percent-encoded host name: the API refuses every '%' in a host, the IPv6 zone and the " +
+	"escapes a sandbox's URL parser refuses among them, so a host is written as it is"
 
 // publicRefusesMore are the shapes the API refuses as a publicBaseURL alone
-// although Crewlet takes them there, and why: as a dashboardBaseURL Crewlet
-// refuses every IPv6 zone.
+// although Crewlet takes them there, as api.public.external_url and as an
+// address it hands a sandbox, and why.
 var publicRefusesMore = map[string]string{
-	"http://[fe80::1%25eth0]]/":       zoneBracket,
-	"http://[fe80::1%25eth0]h]/p":     zoneBracket,
-	"http://[fe80::1%25eth0]fe80::1]": zoneBracket,
+	"http://127.1:8080":          shortIPv4,
+	"http://127.1":               shortIPv4,
+	"http://2130706433":          shortIPv4,
+	"http://0x7f.0.0.1":          shortIPv4,
+	"http://0177.0.0.1":          shortIPv4,
+	"http://192.168.010.1":       shortIPv4,
+	"http://1.2.3.4.":            shortIPv4,
+	"http://01.2.3.4":            shortIPv4,
+	"http://1.2.3.04":            shortIPv4,
+	"http://1.2.3":               shortIPv4,
+	"http://123.":                shortIPv4,
+	"http://0x.":                 shortIPv4,
+	"http://b%C3%BCcher.example": escapedName,
 }
 
 // apiHostShapes are the host name templates TestAddressShapesFollowTheEngine
@@ -118,7 +136,10 @@ var apiHostShapes = []string{
 // suite runs, both ways where that is honest: every shape the API admits
 // renders to a crewlet.yaml `crewlet validate` takes, so no Company the API
 // admits crash-loops its data pod; and every shape it refuses Crewlet refuses
-// too, but for apiRefusesMore and publicRefusesMore. A Company's two
+// too, but for apiRefusesMore and publicRefusesMore. The public address is
+// also the one the operator hands sandboxes, as the tool bridge's and the
+// telemetry receiver's, so it is held to the engine's verdict on it there
+// too, which `crewlet llm doctor` reports. A Company's two
 // addresses are offered to both API servers, the one whose URL parser takes
 // a second ':' after a host too (looseURLParser): a host and port the engine
 // refuses are refused by the CRD's own rules on either, whatever isURL() and
@@ -337,12 +358,22 @@ func expectLooseParser(t *testing.T, namespace string) {
 func holdAddress(t *testing.T, shape, value string, admissions []admission, field, address string) {
 	t.Helper()
 	engine := engineRefuses(t, field, address)
+	// The public address is handed to sandboxes too, and refused there by a
+	// grammar of the engine's own.
+	box := field == render.FieldPublicURL && !engine && boxURLRefused(t, address)
+	engine = engine || box
 	why, more := apiRefusesMore[shape]
+	if more && box {
+		// apiRefusesMore's reasons hold against Crewlet's Tier A: as an
+		// address handed to sandboxes it refuses a user, a query and a
+		// fragment too, so the refusal is not the API's alone there.
+		more = false
+	}
 	if public, ok := publicRefusesMore[shape]; ok && field == render.FieldPublicURL {
 		why, more = public, true
 	}
 	if more && engine {
-		t.Errorf("%q is listed as refused by the API alone (%s), and crewlet validate refuses %s %q",
+		t.Errorf("%q is listed as refused by the API alone (%s), and Crewlet refuses %s %q",
 			shape, why, field, address)
 	}
 	rendered := false
@@ -353,7 +384,7 @@ func holdAddress(t *testing.T, shape, value string, admissions []admission, fiel
 				t.Errorf("%q is listed as refused by the API alone (%s), and %s admits %q", shape, why, v.server, value)
 			}
 		case v.admitted && engine:
-			t.Errorf("%s admits %q, and crewlet validate refuses %s %q, so the data pod would crash-loop",
+			t.Errorf("%s admits %q, and Crewlet refuses %s %q, so the data pod would crash-loop",
 				v.server, value, field, address)
 		case v.admitted && !rendered:
 			rendered = true
@@ -368,9 +399,45 @@ func holdAddress(t *testing.T, shape, value string, admissions []admission, fiel
 					"so the data pod would crash-loop:\n%s", v.server, value, field, address, out)
 			}
 		case !v.admitted && !engine:
-			t.Errorf("%s refuses %q, and crewlet validate takes %s %q", v.server, value, field, address)
+			t.Errorf("%s refuses %q, and Crewlet takes %s %q", v.server, value, field, address)
 		}
 	}
+}
+
+// boxURLRefused is whether Crewlet refuses to boot with address as one it
+// hands its sandboxes, as the tool bridge's and the telemetry receiver's
+// alike, which `crewlet llm doctor` reports for a company with a provider;
+// it fails the test when the two verdicts differ, since the engine reads both
+// by one grammar.
+func boxURLRefused(t *testing.T, address string) bool {
+	t.Helper()
+	provider := llmProvider("probe", "claude")
+	in := &render.Input{
+		Company:         company("probe", companyName),
+		Class:           engineClass("", "basic"),
+		LLMProviders:    []v1.LLMProvider{*provider},
+		StoreName:       secretsync.StoreName,
+		ProvisionedName: secretsync.ProvisionedName,
+	}
+	in.Company.UID = types.UID("00000000-0000-4000-8000-000000000002")
+	in.Company.Spec.EngineClassName = in.Class.Name
+	s := seat("probe", "prober")
+	s.Spec.LLM.Default = []v1.LLMProviderReference{{Name: provider.Name}}
+	in.Seats = []v1.Seat{*s}
+	doc, err := render.Company(in)
+	if err != nil {
+		t.Fatalf("rendering the company the engine is asked about: %v", err)
+	}
+	env := map[string]string{render.EnvBridgeURL: address, render.EnvReceiverURL: address}
+	for _, k := range doc.Refs {
+		env[secretsync.StoreName(k)] = "probe-" + k.Name + "-" + k.Key
+	}
+	refused := enginetest.BoxURLVerdicts(t, doc.YAML, env, render.EnvBridgeURL, render.EnvReceiverURL)
+	if refused[render.EnvBridgeURL] != refused[render.EnvReceiverURL] {
+		t.Fatalf("Crewlet refuses %q as %s: %v, and as %s: %v", address,
+			render.EnvBridgeURL, refused[render.EnvBridgeURL], render.EnvReceiverURL, refused[render.EnvReceiverURL])
+	}
+	return refused[render.EnvBridgeURL]
 }
 
 // bootstrapInput is a data pod's Tier A for a Company of namespace tenant-a,
@@ -406,7 +473,12 @@ func inputWith(field, address string) *render.BootstrapInput {
 	case render.FieldExternalURL:
 		in.ExternalURL = address
 	case render.FieldPublicURL:
+		// The public address is the one the operator hands sandboxes too,
+		// where the company has them dial the engine back.
 		in.PublicURL = address
+		in.BoxURLs = []render.BoxURL{
+			{Variable: render.EnvBridgeURL, URL: address}, {Variable: render.EnvReceiverURL, URL: address},
+		}
 	case render.FieldAllowedOrigins:
 		in.AllowedOrigins = []string{address}
 	case render.FieldArtifactsURL:

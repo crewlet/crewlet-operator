@@ -685,12 +685,26 @@ type CompanyExposure struct {
 	// is Go's net/url as the API server was built and is run: it takes such
 	// a zone, and under Go's GODEBUG setting urlstrictcolons=0
 	// https://h.example:80:80 too.
+	//
+	// The engine also hands it to its sandboxes, as its tool bridge's address
+	// (CREWLET_MCP_BRIDGE_URL) while an LLMProvider of the company runs in
+	// mode Agent, and as its telemetry receiver's
+	// (CREWLET_SANDBOX_OTEL_RECEIVER_URL) while the class sends telemetry to
+	// a collector, and refuses to start on one the URL parser of a sandbox's
+	// coding agent refuses, the WHATWG URL Standard's. So its host may not
+	// hold an IPv6 zone or another '%', a '<', a '>' or a ']' outside an
+	// IPv6 address's brackets, and a host whose last label is a number must
+	// be an IPv4 address written as four decimal octets: that parser reads
+	// such a host as an address, and Crewlet refuses one that is none.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && self.startsWith('https://') && url(self).getHostname() != ''",message="publicBaseURL must be an absolute URL starting with https://"
 	// +kubebuilder:validation:XValidation:rule="!isURL(self) || !self.matches('^https?://[^/]*:(0+|0*([1-9][0-9]{5,}|[7-9][0-9]{4}|6[6-9][0-9]{3}|65[6-9][0-9]{2}|655[4-9][0-9]|6553[6-9]))(/|$)')",message="publicBaseURL's port must be 1 to 65535: Crewlet refuses to start on any other; leave the port out for https's own, 443"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://') || self.matches('^[^:/?#]+://([^/?#]*@)?([[](([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,7}:|:(:[0-9A-Fa-f]{1,4}){1,7}|::|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){1,6}|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){1,5}|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){1,4}|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){1,3}|([0-9A-Fa-f]{1,4}:){5}(:[0-9A-Fa-f]{1,4}){1,2}|([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){6}|:(:[0-9A-Fa-f]{1,4}){0,5}:|([0-9A-Fa-f]{1,4}:){5}:|([0-9A-Fa-f]{1,4}:)(:[0-9A-Fa-f]{1,4}){0,4}:|([0-9A-Fa-f]{1,4}:){2}(:[0-9A-Fa-f]{1,4}){0,3}:|([0-9A-Fa-f]{1,4}:){3}(:[0-9A-Fa-f]{1,4}){0,2}:|([0-9A-Fa-f]{1,4}:){4}(:[0-9A-Fa-f]{1,4}){0,1}:)(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])([.](25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})(%25[^]/?#]+)?[]]|[^/?#:[]*)(:[0-9]*)?([/?#]|$)')",message="publicBaseURL's host must be a name, an IPv4 address or an IPv6 address in brackets, and at most one ':' and a port may follow it: Crewlet refuses to start on any other address, or starts on one no vendor reaches (write https://[2001:db8::1]:8443, not https://2001:db8::1:8443)"
+	// +kubebuilder:validation:XValidation:rule="!isURL(self) || !self.matches('^https?://[^/]*%')",message="publicBaseURL's host may not hold a '%': the URL parser of a sandbox's coding agent refuses an IPv6 zone (%25eth0) and a character no host may hold, and Crewlet refuses to start when it hands a sandbox such an address; write the host as it is, and an IPv6 address without a zone"
+	// +kubebuilder:validation:XValidation:rule="!isURL(self) || !self.matches('^https?://[^/[]*[]<>]')",message="publicBaseURL's host may not hold a '<', a '>' or a ']': the URL parser of a sandbox's coding agent refuses each in a host name, as it does an unfilled placeholder such as https://<engine-host>, and Crewlet refuses to start when it hands a sandbox such an address"
+	// +kubebuilder:validation:XValidation:rule="!isURL(self) || !self.matches('^https?://([^/:]*[.])?([0-9]+|0[xX][0-9a-fA-F]*)[.]?(:[0-9]*)?(/|$)') || self.matches('^https?://((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])[.]){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(:[0-9]*)?(/|$)')",message="publicBaseURL's host ends in a number, which the URL parser of a sandbox's coding agent reads as an IPv4 address, and Crewlet refuses to start when it hands a sandbox one that is none: write an IPv4 address as four decimal octets, such as 192.0.2.10, and a host name whose last label is not a number"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="publicBaseURL may not hold a user name or password: a credential is named through a Secret, never written into an address"
 	// +kubebuilder:validation:XValidation:rule="!self.contains('?') && !self.contains('#')",message="publicBaseURL may not have a query or a fragment: Crewlet builds every webhook and sandbox address by appending a path to it"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="publicBaseURL may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"

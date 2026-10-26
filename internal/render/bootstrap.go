@@ -139,6 +139,11 @@ type BootstrapInput struct {
 	// ArtifactsURL is Crewlet's api.artifacts.external_url, the Company's
 	// status.endpoints.artifactsBaseURL. Empty opens no artifact listener.
 	ArtifactsURL string
+	// BoxURLs are the addresses the pod's environment hands its sandboxes,
+	// which no crewlet.yaml names: each variable the caller sets, with its
+	// value. Crewlet refuses to boot on one a sandbox cannot dial, so they
+	// are judged with the addresses above, and the pods held back on one.
+	BoxURLs []BoxURL
 }
 
 // ErrNoAddress is a data pod's Tier A asked for without an address the engine
@@ -431,7 +436,7 @@ func Bootstrap(in *BootstrapInput) (*BootstrapDocument, error) {
 	if in.ExternalURL == "" || in.PublicURL == "" {
 		return nil, fmt.Errorf("%w: api.external_url is %q and api.public.external_url %q", ErrNoAddress, in.ExternalURL, in.PublicURL)
 	}
-	if err := refusedAddress(in.ExternalURL, in.PublicURL, in.ArtifactsURL, in.AllowedOrigins); err != nil {
+	if err := refusedAddress(in.ExternalURL, in.PublicURL, in.ArtifactsURL, in.AllowedOrigins, in.BoxURLs); err != nil {
 		return nil, err
 	}
 	signIn := in.Class.Spec.SignIn

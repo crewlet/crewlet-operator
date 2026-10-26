@@ -481,18 +481,47 @@ func TestCompanyValidation(t *testing.T) {
 			mutate: public("https://[fe80::1%25]:8443"),
 			want:   msgPublicBaseURLHost,
 		},
+		// The public address is handed to sandboxes, whose URL parser
+		// refuses what Crewlet then refuses to boot on.
 		{
-			// No browser reaches the public address, and Crewlet takes a
-			// zone there.
-			name:   "a publicBaseURL with an IPv6 zone is accepted",
+			name:   "a publicBaseURL with an IPv6 zone is refused",
 			mutate: public("https://[fe80::1%25eth0]:8443"),
+			want:   msgPublicBaseURLPercent,
 		},
 		{
-			// No browser compares an origin with the public address, so
-			// Crewlet takes a host there that it refuses as a browser's.
-			name:   "a publicBaseURL of an IPv4 short form is accepted",
-			mutate: public("https://127.1"),
+			name:   "a publicBaseURL with an escaped '%' in its host name is refused",
+			mutate: public("https://hooks%25nimbus.example"),
+			want:   msgPublicBaseURLPercent,
 		},
+		{
+			name:   "a publicBaseURL holding an unfilled placeholder is refused",
+			mutate: public("https://<engine-host>:8443"),
+			want:   msgPublicBaseURLName,
+		},
+		{
+			name:   "a publicBaseURL with a ']' in its host name is refused",
+			mutate: public("https://hooks]nimbus.example"),
+			want:   msgPublicBaseURLName,
+		},
+		{
+			name:   "a publicBaseURL whose host name ends in a number is refused",
+			mutate: public("https://hooks.nimbus.123"),
+			want:   msgPublicBaseURLNumber,
+		},
+		{
+			name:   "a publicBaseURL whose host name ends in a hexadecimal number is refused",
+			mutate: public("https://hooks.nimbus.0x1F:8443"),
+			want:   msgPublicBaseURLNumber,
+		},
+		{
+			name:   "a publicBaseURL of an IPv4 short form is refused",
+			mutate: public("https://127.1"),
+			want:   msgPublicBaseURLNumber,
+		},
+		{name: "a publicBaseURL of an IPv4 address is accepted", mutate: public("https://192.0.2.10:8443")},
+		{name: "a publicBaseURL of an IPv6 address is accepted", mutate: public("https://[2001:db8::1]:8443")},
+		{name: "a publicBaseURL whose last label holds a letter is accepted", mutate: public("https://hooks.nimbus.1x")},
+		{name: "a publicBaseURL with a ']' in its path is accepted", mutate: public("https://hooks.nimbus.example/a]b")},
 		{
 			name:   "a publicBaseURL with a path is accepted",
 			mutate: func(c *v1.Company) { c.Spec.Exposure.PublicBaseURL = "https://relay.nimbus.example/nimbus/" },
