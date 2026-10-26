@@ -113,15 +113,25 @@ const (
 	// before a box exists and the sign-in that must reach it are as at
 	// cliOnlyRead.
 	standingInstructionsRead = "v0.1.1-0.20261025043416-a2634a307854"
-	// refusalByModeRead is the engine whose remote-run refusal is worded by
-	// the entry's auth mode (credentialRefusal): an api-key entry whose key
+	// deepWorkRead is the engine that runs the Dashboard Assistant's deep work
+	// in a box of its own, read on top of crewlet's
+	// feat/dashboard-assistant-final at this version, before that change
+	// merged. A box's run is built by entryRun, which newCodingRun now hands
+	// a resolved head to, so a seat's run and deep work sign in alike; and
+	// whether a run's environment signs its CLI in is entrySignsIn, which
+	// sandboxCredentials now asks before it refuses. LaunchExecutor opens its
+	// bridge session through mcpbridge.SeatSession, the session it built in
+	// place before. None moved a verdict: the model, the sign-in, the
+	// credential files, the refusals before a box exists and the bridge an
+	// agent-mode run needs are as at cliOnlyRead, and as at
+	// v0.1.1-0.20261024180236-65ae4e109ab1, whose remote-run refusal is worded
+	// by the entry's auth mode (credentialRefusal): an api-key entry whose key
 	// resolved to nothing is told to give the seat its own key, and an
-	// inherit-env one the variables it forwards. sandboxCredentials refuses
-	// the same runs as at cliOnlyRead. The operator renders no inherit-env,
-	// and an APIKey provider always carries auth.apiKeySecretRef, so its
-	// SandboxLoginNotPortable report still names the remedies a
-	// Subscription or OpenCode head's refusal does.
-	refusalByModeRead = "v0.1.1-0.20261024180236-65ae4e109ab1"
+	// inherit-env one the variables it forwards. The operator renders no
+	// inherit-env, and an APIKey provider always carries
+	// auth.apiKeySecretRef, so its SandboxLoginNotPortable report still names
+	// the remedies a Subscription or OpenCode head's refusal does.
+	deepWorkRead = "v0.1.1-0.20261026000658-220afa3f1039"
 	// toolCredentialsGo is where the engine decides what a value that
 	// resolves to nothing does to a tool server or a coding run.
 	toolCredentialsGo = "internal/engine/toolcredentials.go"
@@ -506,13 +516,21 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "newCodingRun",
 		against: append(append([]string{codeWorkGo}, agentLogin...), codingBox...),
 		decides: "a head another CLI's coding agent cannot run (CodingAgentMismatch), and a head's run, a " +
-			"run_sandbox launch or an agent-mode run alike, carrying its model as the head's text calls pass it " +
-			"and its provider's own sign-in (entrySignIn) under what the seat's environment sets, and its login, " +
-			"the CLI's credential files or the document a CLI that keeps its login in a database of its own " +
-			"exported (OpenCode 2's), as the run's credential files, whatever box the run is placed in: what the " +
-			"box does with them is its backend's to decide ((*E2BProvider).Create)",
-		digest: "7b0a60f2c5cfd8f40aee57595c11ac54033f68faabe9b35af836ad6a76b02b48",
-		read:   cliOnlyRead,
+			"run_sandbox launch or an agent-mode run alike, built by entryRun from the head's own entry",
+		digest: "10358f7c2c1ca99be8cc0f2d601c6f08a55e08837ca2b71b547e7eccaab4d862",
+		read:   deepWorkRead,
+	},
+	{
+		file: sandboxGo, name: "entryRun",
+		against: append(append([]string{codeWorkGo, cliAgentsMd}, agentLogin...), codingBox...),
+		decides: "a box's run, a seat's run_sandbox launch, its agent-mode run and the assistant's deep work " +
+			"alike, carries its model as the entry's text calls pass it and its provider's own sign-in " +
+			"(entrySignIn) under what the caller's environment sets, and its login, the CLI's credential files " +
+			"or the document a CLI that keeps its login in a database of its own exported (OpenCode 2's), as the " +
+			"run's credential files, whatever box the run is placed in: what the box does with them is its " +
+			"backend's to decide ((*E2BProvider).Create)",
+		digest: "5fb5d30fa61e38fbe386d3d6d88d1f177bbdbe1557969b099efe1c4da531fcac",
+		read:   deepWorkRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -544,12 +562,22 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "sandboxCredentials",
 		against: append([]string{codeWorkGo}, agentLogin...),
 		decides: "a head whose login cannot follow the run into a remote sandbox is refused unless the run's " +
-			"environment signs its CLI in (its token or key variable, for ClaudeCode any variable that signs it " +
-			"in, and for an env sign-in CLI any credential-named one): a run_sandbox launch " +
-			"(SandboxLoginNotPortable), and at phase Execute an agent-mode run, which the LLMProvider API refuses " +
-			"on a Subscription login no variable carries",
-		digest: "130c50af56ebe42106c847fb1e06cbe9886d5e8a2ddbb19586e93d3ca63beebc",
-		read:   refusalByModeRead,
+			"environment signs its CLI in (entrySignsIn): a run_sandbox launch (SandboxLoginNotPortable), and at " +
+			"phase Execute an agent-mode run, which the LLMProvider API refuses on a Subscription login no " +
+			"variable carries",
+		digest: "c9053964485043be4a37ed01e10ee1e5d712c94c73a90fc9c636631ebb059312",
+		read:   deepWorkRead,
+	},
+	{
+		file: sandboxGo, name: "entrySignsIn",
+		against: append(append([]string{codeWorkGo, cliAgentsMd}, agentLogin...), codingBox...),
+		decides: "a run's environment signs its CLI in, in a box off the engine host, when it holds the CLI's " +
+			"token or key variable, for ClaudeCode any variable that signs it in, and for an env sign-in CLI any " +
+			"credential-named one: the rule a seat's remote run and the assistant's deep work, whose environment " +
+			"is its provider's own sign-in alone, are both held to before a box exists, and which the " +
+			"LLMProvider API's rule on a provider of mode Agent satisfies",
+		digest: "46c439e9448b247366d6d3852f1fdf0cf98cc40f927178a6395653138ecfb018",
+		read:   deepWorkRead,
 	},
 	{
 		file: sandboxGo, name: "(*Engine).runEnvironment",
@@ -691,8 +719,8 @@ var mirrored = []mirror{
 			"tool loop (AgentModeBridgeUnsupported, NotExposed), and so is one whose CLI login cannot follow it " +
 			"into the remote sandbox (sandboxCredentials at phase Execute); a run whose environment holds a " +
 			"value that resolves to nothing starts without it",
-		digest: "05cd682090e7206bb923b20f179e3a2044d9ac2046258efb8ed921f186641032",
-		read:   standingInstructionsRead,
+		digest: "fdaf22952f546441b70dc0bc08092c1d97d766af6e00b67e50106965062f160e",
+		read:   deepWorkRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).executorRun",
