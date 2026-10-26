@@ -794,8 +794,9 @@ CLI a seat pod cannot do:
 A seat keeps its CLI's own web tools. The Company's Dashboard Assistant
 (`spec.assistant`) does not: it reads only what the signed-in person's own
 requests return, so Crewlet requires every provider in `spec.assistant.llm`
-to run in mode `Text`, on a CLI Crewlet runs with no tool of its own (no
-shell, no file reader, no tool server), with its web tools off. Today that is
+to run in mode `Host`, on a CLI Crewlet runs with no tool of its own (no
+shell, no file reader, no tool server but the engine's own, which serves the
+person's assistant tools), with its web tools off. Today that is
 `ClaudeCode` or `Pi`: `Codex` keeps a shell its read-only sandbox only
 confines, and `OpenCode`'s deny-all policy has not been measured to take its
 tools away, so both are refused for the assistant though either may still
@@ -827,7 +828,7 @@ for: `ClaudeCode`, `Codex`, `OpenCode` and `Pi`. Every other CLI's profile
 carries no measured web denial, and Crewlet refuses the setting. A provider
 of its own keeps the person in the drawer from queueing behind a seat's long
 call, and its timeout is sized for one round rather than for a coding task.
-Crewlet refuses an assistant chain naming a provider in mode `Agent`, one that
+Crewlet refuses an assistant chain naming a provider in mode `Box`, one that
 keeps its web tools, or one on a CLI that keeps a tool of its own, in the dry
 run before every apply, and the refusal is reported on the Company. Crewlet's
 [configuration reference](https://github.com/crewlet/crewlet/blob/main/docs/getting-started/configuration.md)
@@ -842,10 +843,10 @@ reaches Crewlet only through the signed-in person's own assistant tools, over
 the tool bridge, so every read is still their request and every write still a
 proposal they approve. Unset, the assistant answers in quick mode only.
 
-Deep work runs on an `LLMProvider` driving `ClaudeCode` in mode `Agent`, the
+Deep work runs on an `LLMProvider` driving `ClaudeCode` in mode `Box`, the
 one CLI whose run Crewlet continues in its own session after the person
 approves a proposal. It is a provider of its own, beside the assistant's
-chain, which keeps mode `Text`:
+chain, which keeps mode `Host`:
 
 ```yaml
 apiVersion: crewlet.ai/v1alpha1
@@ -887,19 +888,19 @@ spec:
 **Where it runs.** Crewlet places a deep-work run in its provider's own
 `run_in`, else in the first remote or container cell the company configures,
 else on the engine host under operating system confinement. The operator
-offers the remote cell alone, as it does for every Agent-mode run: the engine
+offers the remote cell alone, as it does for every box-mode run: the engine
 pod holds the company's data volume and secret store, and a run steered by
 whatever pages it read is not one to start beside them, confined or not. So
 the API refuses `deepWork` on a Company without `spec.sandbox`, and every
 deep-work run is placed in the Company's E2B sandbox. Its sign-in follows it
-there as an Agent-mode executor's does: a headless token (`tokenSecretRef`)
+there as a box-mode executor's does: a headless token (`tokenSecretRef`)
 or `auth.mode: APIKey`, never a credential bundle, which the LLMProvider API
-already requires of a provider in mode `Agent`. Like an Agent-mode executor,
+already requires of a provider in mode `Box`. Like a box-mode executor,
 it calls back through the Company's public address, so the provider's
-`AgentModeRunnable` condition applies to it too.
+`BoxModeRunnable` condition applies to it too.
 
 The API refuses a platform model provider for deep work, since one runs in
-mode `Text`. Crewlet refuses a provider in mode `Text`, or one driving another
+mode `Host`. Crewlet refuses a provider in mode `Host`, or one driving another
 CLI, in the dry run before every apply, and the refusal is reported on the
 Company, as the assistant chain's is.
 

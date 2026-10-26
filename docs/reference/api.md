@@ -520,7 +520,7 @@ rule turns on the provider's own spec.
 Crewlet places a run in its provider's own runIn, else in the first remote
 or container cell the company configures, else on the engine host under
 operating system confinement. The operator offers the remote cell alone,
-as it does for every Agent-mode run: the engine pod holds the company's
+as it does for every box-mode run: the engine pod holds the company's
 data volume and secret store, and a run steered by whatever pages it read
 is not one to start beside them, confined or not. So deepWork requires
 spec.sandbox, and every deep-work run is placed in the Company's E2B
