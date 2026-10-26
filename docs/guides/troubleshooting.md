@@ -234,11 +234,19 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **The pod restarts, its events saying `Startup probe failed`, and the
   previous log has no `engine_recovered` line**: the recovery of what the
   volume holds took longer than the startup probe allows, and every restart
-  starts it again. The window is 1,636 seconds (1,776 when the class keeps
+  starts it again. The window is 1,206 seconds (1,346 when the class keeps
   files in S3) plus six seconds per GiB of the volume; a disk that reads
   slower than that needs a longer one. Set the class's `data.startupSeconds`
   (up to a day), which rolls the data pods once, and let the next boot
-  finish.
+  finish. If the boot outlasts a longer window as well, look at the broker
+  rather than the window. The window counts each read of a state log's
+  state, and each read that verifies its checkpoint, at the five seconds of
+  one request; the engine asks such a read again for as long as its broker
+  answers none, and logs nothing while it does, so a boot whose broker never
+  answers is one only a restart ends, however long the window. What the
+  broker itself reported is in the previous log under `queue.nats.server`
+  (`kubectl logs acme-data-0 -n acme --previous | grep queue.nats.server`;
+  [The embedded broker's own logs](https://github.com/crewlet/crewlet/blob/main/docs/guides/deployment.md#the-embedded-brokers-own-logs)).
 - **The log has `engine_recovered` and no `api_listening` after it**: the
   engine has recovered what the volume holds and is starting what the company
   configures. It reads the company's secrets first, and while the secret

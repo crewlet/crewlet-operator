@@ -419,7 +419,7 @@ var _ = Describe("Company seat pools", func() {
 			"liveness restarts the engine before its watchdog's 45 seconds")
 		Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/ready"), "ready once the pod has joined and may claim seats")
 		Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/health"))
-		Expect((container.StartupProbe.FailureThreshold-1)*container.StartupProbe.PeriodSeconds).To(BeNumerically(">=", 1142),
+		Expect((container.StartupProbe.FailureThreshold-1)*container.StartupProbe.PeriodSeconds).To(BeNumerically(">=", 1137),
 			"every bound the engine puts on a leaf's boot, with its object store on the event stream")
 		Expect(*container.SecurityContext.ReadOnlyRootFilesystem).To(BeTrue())
 		Expect(container.Env[:len(want.Env)]).To(Equal(want.Env))

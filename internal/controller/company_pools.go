@@ -83,11 +83,16 @@ const (
 	//   - 60: a second connection, for coordination (listenTimeout twice);
 	//   - 300: the coordination buckets, a window of their own
 	//     (clusterSequenceBudget);
-	//   - 90: the fleet's record of its object store (AgreeObjectBackend):
-	//     eight rounds of a write and a read at the client's 5 s default and
-	//     a read after them, begun again within 5 s; a boot meets more than
-	//     three of those requests only if something removes the record
-	//     while it runs, but the rounds are the engine's bound;
+	//   - 85: the fleet's record of its object store (AgreeObjectBackend):
+	//     one attempt, a create of at most eight rounds of a write and a
+	//     read at the client's 5 s default (createKey) and a read after it.
+	//     The engine bounds the agreement by attempts, not time (casRetry,
+	//     up to fleetCASAttempts of them, each after a jittered wait that
+	//     grows with every attempt lost), which no window can lay end to end.
+	//     It makes another only when the record is gone between the
+	//     create's refusal and the read, which only someone removing the
+	//     record does, so a boot nobody does that to meets one, and one is
+	//     what is counted;
 	//   - 61: the lock on the store's native library, which a container
 	//     killed while extracting it leaves on the scratch volume a restart
 	//     keeps (tursoPrepareTimeout, a minute, polled every 25 ms);
@@ -97,7 +102,7 @@ const (
 	// below. Nothing on a seat pod's boot waits on what the company
 	// configures or grows with what it holds: the engine lists the
 	// company's secrets after /health answers 200.
-	seatPodBootSeconds = 60 + 61 + 300 + 60 + 300 + 90 + 61 + 20
+	seatPodBootSeconds = 60 + 61 + 300 + 60 + 300 + 85 + 61 + 20
 	// seatPodNATSObjectsSeconds is the object store's step on the default
 	// backend: the broker's limit read to size the bucket (LookupBudget,
 	// 30 s), then the bucket looked up (30 s), created (2 min, Budget),
