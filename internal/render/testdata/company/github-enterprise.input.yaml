@@ -40,6 +40,7 @@ spec:
   integrations:
     github:
       tier: FullAccess
+      workflows: true
       app:
         id: 42
         slug: forge-builder

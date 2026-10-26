@@ -423,10 +423,11 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 			SigningSecret: r.secret(creds, v1alpha1.SlackSigningSecretKey),
 		}
 	}
-	if g := in.GitHub; g.Tier != "" || len(g.Repos) > 0 || g.App.ID != 0 {
+	if g := in.GitHub; g.Tier != "" || len(g.Repos) > 0 || g.Workflows != nil || g.App.ID != 0 {
 		doc.GitHub = &roleGitHubDoc{
-			Tier:  gitHubAccessTier(g.Tier),
-			Repos: g.Repos,
+			Tier:      gitHubAccessTier(g.Tier),
+			Repos:     g.Repos,
+			Workflows: g.Workflows,
 		}
 		if app := g.App; app.ID != 0 {
 			doc.GitHub.AppID = app.ID
