@@ -59,7 +59,8 @@ import (
 // A seat whose sandbox environment signs ClaudeCode in itself runs a
 // ClaudeCode run on that sign-in alone: Crewlet hands the run none of the
 // provider's (its entrySignIn), since ClaudeCode ranks its sign-ins by name,
-// and its guard passes the run on any of them (sandboxCredentials).
+// and its guard passes the run on any of them (sandboxCredentials, through its
+// entrySignsIn).
 //
 // A seat whose executor is a CLI in mode Box has no code work of its own:
 // Crewlet never offers it run_sandbox (its Runner.offersSandbox), as it codes
@@ -80,7 +81,7 @@ import (
 // the seat's own environment sets one, Crewlet hands a ClaudeCode run none of
 // its provider's sign-in (its entrySignIn), since ClaudeCode ranks its sign-ins
 // by name and a provider's key beside a seat's plan token would win, and its
-// guard passes the run on it (sandboxCredentials).
+// guard passes the run on it (sandboxCredentials, through its entrySignsIn).
 var claudeCodeSignIn = []string{
 	"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
 	"CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
@@ -321,9 +322,9 @@ func platformEntry(p *v1alpha1.PlatformLLMProvider) cliEntry {
 
 // remoteSignIn is how the login of a head that drives one of the coding agents
 // reaches a remote box, given the names of the seat's own environment
-// (Crewlet's entrySignIn and sandboxCredentials): own when the provider's
-// settings carry a sign-in that follows the run, and the variables of the
-// seat's environment that sign its coding agent in. ClaudeCode's own travels
+// (Crewlet's entrySignIn, and sandboxCredentials through its entrySignsIn):
+// own when the provider's settings carry a sign-in that follows the run, and
+// the variables of the seat's environment that sign its coding agent in. ClaudeCode's own travels
 // as its token or key, and the seat's as any variable that signs ClaudeCode in,
 // which then replaces the provider's; OpenCode's, which signs in through its
 // environment, as any variable named as a credential, in its env or the

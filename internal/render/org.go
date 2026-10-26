@@ -451,7 +451,8 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 func (r *renderer) chain(s *v1alpha1.Seat, phase string, refs []v1alpha1.LLMProviderReference) []string {
 	var out []string
 	for i, ref := range refs {
-		if key, ok := r.provider(KindSeat, s.Name, fmt.Sprintf("spec.llm.%s[%d]", phase, i), ref); ok {
+		// Crewlet refuses a seat's chain naming no provider.
+		if key, ok := r.provider(KindSeat, s.Name, fmt.Sprintf("spec.llm.%s[%d]", phase, i), ref, absentRefused); ok {
 			out = append(out, key)
 		}
 	}

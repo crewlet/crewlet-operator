@@ -1000,6 +1000,19 @@ func TestPlatformLLMProviders(t *testing.T) {
 			mutate: platform(func(p *v1.PlatformLLMProvider) { p.Agent = v1.CLIAgentCodex; p.Model = "gpt-5" }),
 		},
 		{
+			name:   "a platform provider with web denied is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) { p.WebTools = v1.CLIAgentWebToolsDenied }),
+		},
+		{
+			name: "a platform provider with web denied on a CLI with no web denial is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Agent = v1.CLIAgentGeminiCLI
+				p.Model = "gemini-2.5-pro"
+				p.WebTools = v1.CLIAgentWebToolsDenied
+			}),
+			want: msgWebTools,
+		},
+		{
 			name:   "a platform provider named default is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) { p.Name = "default" }),
 			want:   "a platform provider may not be named default",
@@ -1123,15 +1136,15 @@ func TestEngineClassStartupWindow(t *testing.T) {
 		}
 	}
 	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
-		{name: "the boot's own bounds are accepted", mutate: window(1636)},
+		{name: "the boot's own bounds are accepted", mutate: window(1746)},
 		{name: "a day is accepted", mutate: window(86400)},
 		{
-			name: "under the boot's own bounds is refused", mutate: window(1635),
-			want: "should be greater than or equal to 1636",
+			name: "under the boot's own bounds is refused", mutate: window(1745),
+			want: "should be greater than or equal to 1746",
 		},
 		{name: "over a day is refused", mutate: window(86401), want: "should be less than or equal to 86400"},
-		{name: "the boot's own bounds with objects in S3 are accepted", mutate: inS3(1776)},
-		{name: "under them with objects in S3 is refused", mutate: inS3(1775), want: msgStartupFloorS3},
+		{name: "the boot's own bounds with objects in S3 are accepted", mutate: inS3(1886)},
+		{name: "under them with objects in S3 is refused", mutate: inS3(1885), want: msgStartupFloorS3},
 		{name: "objects in S3 and no window is accepted", mutate: inS3(0)},
 	})
 }
@@ -1142,8 +1155,8 @@ func TestEngineClassStartupWindow(t *testing.T) {
 func TestEngineClassStartupWindowFollowsTheObjects(t *testing.T) {
 	runUpdateCases(t, engineClass, []updateCase[*v1.EngineClass]{
 		{
-			name:   "a class at 1636 seconds moving its files to S3 is refused",
-			before: func(c *v1.EngineClass) { c.Spec.Data.StartupSeconds = 1636 },
+			name:   "a class at 1746 seconds moving its files to S3 is refused",
+			before: func(c *v1.EngineClass) { c.Spec.Data.StartupSeconds = 1746 },
 			mutate: func(c *v1.EngineClass) {
 				c.Spec.Objects = v1.ObjectSettings{
 					Backend: v1.ObjectBackendS3,

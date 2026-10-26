@@ -184,7 +184,8 @@ Code's token and key variables among them. The rules around those lists decide o
 a launch, which no engine test reaches, so `TestMirroredEngineDeclarationsAreUnchanged`
 holds their code: [`internal/render/mirror_test.go`](internal/render/mirror_test.go)
 names every engine function whose decision the operator copies at a launch —
-`newCodingRun`, `entrySignIn`, `sandboxCredentials` and the
+`newCodingRun` and the `entryRun` it builds a run with, `entrySignIn`,
+`sandboxCredentials` and the `entrySignsIn` it judges a sign-in by, and the
 launch, catalogue and helpers around them in Crewlet's
 `internal/engine/sandbox.go`, `internal/sandbox/manager.go` and the CLI
 provider, what the E2B backend creates a box from (`internal/sandbox/e2b.go`),

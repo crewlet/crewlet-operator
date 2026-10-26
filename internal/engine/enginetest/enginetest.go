@@ -447,8 +447,8 @@ func (e *Engine) stop(t T, cmd *exec.Cmd, exited <-chan error) {
 // streamMaxBytes is the embedded broker's declared limit: 9 GiB, the share
 // the render gives the smallest data volume an EngineClass that keeps its
 // files in the stream's bucket admits (three quarters of 12Gi), as every
-// engine here does. A fresh node reserves at least 9305762474 bytes of it
-// whatever it runs (Crewlet's engine.BrokerFloor: its seven state logs'
+// engine here does. A fresh node reserves at least 9395240959 bytes of it
+// whatever it runs (Crewlet's engine.BrokerFloor: its eight state logs'
 // ceilings at their smallest and the object store's bucket, a quarter of the
 // limit) and refuses to boot on less, and what is left holds the mailboxes
 // and the coordination buckets. A suite runs many engines at

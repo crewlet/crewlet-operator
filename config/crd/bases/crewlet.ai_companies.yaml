@@ -70,6 +70,183 @@ spec:
           spec:
             description: spec is the company's desired state.
             properties:
+              assistant:
+                description: |-
+                  assistant is the company's Dashboard Assistant. Unset leaves it off.
+                  Crewlet's `assistant`.
+                minProperties: 1
+                properties:
+                  deepWork:
+                    description: |-
+                      deepWork lets the assistant hand a large task (research, scripts,
+                      files, many steps) to a coding CLI running its own tools in the
+                      Company's E2B sandbox, which spec.sandbox must configure. Unset, the
+                      assistant answers in quick mode only. Crewlet's `deep_work`.
+                    properties:
+                      llm:
+                        description: |-
+                          llm is the provider deep work runs on: an LLMProvider in mode Box
+                          driving ClaudeCode. A platform model provider runs in mode Host, so
+                          it is refused. Crewlet's `llm`.
+                        properties:
+                          kind:
+                            default: LLMProvider
+                            description: kind is the kind of provider named.
+                            enum:
+                            - LLMProvider
+                            - PlatformLLMProvider
+                            type: string
+                          name:
+                            description: |-
+                              name is the LLMProvider's metadata.name, or the platform provider's
+                              name.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - name
+                        type: object
+                        x-kubernetes-validations:
+                        - fieldPath: .kind
+                          message: 'deep work runs on an LLMProvider in mode Box driving
+                            ClaudeCode: a platform model provider runs in mode Host,
+                            where its CLI has no tool of its own'
+                          rule: '!has(self.kind) || self.kind == ''LLMProvider'''
+                      maxSteps:
+                        description: |-
+                          maxSteps is the most agentic rounds and Crewlet tool calls one
+                          deep-work task may make. Unset takes Crewlet's default of 150.
+                          Crewlet's `max_steps`.
+                        format: int32
+                        maximum: 400
+                        minimum: 10
+                        type: integer
+                      maxTokens:
+                        description: |-
+                          maxTokens is the most tokens one deep-work task may spend before it
+                          is stopped. Unset takes Crewlet's default of 3000000. The person's
+                          tokenBudget and the company's still apply. Crewlet's `max_tokens`.
+                        format: int32
+                        maximum: 20000000
+                        minimum: 10000
+                        type: integer
+                      timeoutSeconds:
+                        description: |-
+                          timeoutSeconds is the longest one deep-work run may take. Unset takes
+                          Crewlet's default of 1200, which is also the most: a run lives inside
+                          the turn's read grant. Crewlet's `timeout_seconds`.
+                        format: int32
+                        maximum: 1200
+                        minimum: 60
+                        type: integer
+                    required:
+                    - llm
+                    type: object
+                  enabled:
+                    description: |-
+                      enabled runs the assistant. Unset or false leaves it off. Crewlet's
+                      `enabled`.
+                    type: boolean
+                  llm:
+                    description: |-
+                      llm is the assistant's model chain, the first provider tried first,
+                      referred to as a Seat's chain is. Required when enabled is true.
+                      Crewlet's `llm`.
+                    items:
+                      description: |-
+                        LLMProviderReference names a model provider: an LLMProvider in the
+                        referring object's namespace, or a provider the EngineClass offers.
+                      properties:
+                        kind:
+                          default: LLMProvider
+                          description: kind is the kind of provider named.
+                          enum:
+                          - LLMProvider
+                          - PlatformLLMProvider
+                          type: string
+                        name:
+                          description: |-
+                            name is the LLMProvider's metadata.name, or the platform provider's
+                            name.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    maxItems: 8
+                    type: array
+                    x-kubernetes-list-type: atomic
+                    x-kubernetes-validations:
+                    - message: llm must name each provider once
+                      rule: self.all(a, self.exists_one(b, b.kind == a.kind && b.name
+                        == a.name))
+                  maxSteps:
+                    description: |-
+                      maxSteps is the most tool steps one turn may take. Unset takes
+                      Crewlet's default of 30. Crewlet's `max_steps`.
+                    format: int32
+                    maximum: 40
+                    minimum: 1
+                    type: integer
+                  proposalTTLSeconds:
+                    description: |-
+                      proposalTTLSeconds is how long a proposed change waits for its
+                      owner's approval. Unset takes Crewlet's default of 900. Crewlet's
+                      `proposal_ttl_seconds`.
+                    format: int32
+                    maximum: 3600
+                    minimum: 60
+                    type: integer
+                  retentionDays:
+                    description: |-
+                      retentionDays is how long a person's conversations are kept. Unset
+                      takes Crewlet's default of 30. Crewlet's `retention_days`.
+                    format: int32
+                    maximum: 365
+                    minimum: 1
+                    type: integer
+                  tokenBudget:
+                    description: |-
+                      tokenBudget caps the tokens each person's assistant may spend per
+                      window, charged on top of the company's own spec.tokenBudget.
+                      Crewlet's `token_budget`.
+                    minProperties: 1
+                    properties:
+                      day:
+                        description: day is the most tokens one local day, midnight
+                          to midnight, may spend.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                      month:
+                        description: month is the most tokens one calendar month may
+                          spend.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                      week:
+                        description: week is the most tokens one ISO week, starting
+                          on Monday, may spend.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                    type: object
+                  turnTimeoutSeconds:
+                    description: |-
+                      turnTimeoutSeconds is the longest one turn may run. Unset takes
+                      Crewlet's default of 900. Crewlet's `turn_timeout_seconds`.
+                    format: int32
+                    maximum: 1200
+                    minimum: 30
+                    type: integer
+                type: object
+                x-kubernetes-validations:
+                - fieldPath: .llm
+                  message: 'an enabled assistant needs llm: name the model provider
+                    it runs on, one whose webTools is Denied'
+                  rule: '!has(self.enabled) || !self.enabled || (has(self.llm) &&
+                    size(self.llm) > 0)'
               companyName:
                 description: |-
                   companyName is the company's name. Crewlet derives every seat's
@@ -247,8 +424,8 @@ spec:
 
                   It may not set what another field or object of this API owns: name,
                   mission, vision, policies, timezone, tracker, knowledge, token_budget,
-                  providers, integrations, mcp_servers, roles or units. Every position
-                  Crewlet holds a credential in lives under one of those keys, so
+                  assistant, providers, integrations, mcp_servers, roles or units. Every
+                  position Crewlet holds a credential in lives under one of those keys, so
                   engineConfig can never carry a credential: the API server refuses a
                   Company whose engineConfig names one of them, before anything is
                   stored.
@@ -280,12 +457,12 @@ spec:
                 x-kubernetes-list-type: map
                 x-kubernetes-validations:
                 - message: 'engineConfig may not set name, mission, vision, policies,
-                    timezone, tracker, knowledge, token_budget, providers, integrations,
-                    mcp_servers, roles or units: those are fields and objects of this
-                    API, and the only blocks that hold credentials'
+                    timezone, tracker, knowledge, token_budget, assistant, providers,
+                    integrations, mcp_servers, roles or units: those are fields and
+                    objects of this API, among them every block that holds a credential'
                   rule: self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies',
-                    'timezone', 'tracker', 'knowledge', 'token_budget', 'providers',
-                    'integrations', 'mcp_servers', 'roles', 'units']))
+                    'timezone', 'tracker', 'knowledge', 'token_budget', 'assistant',
+                    'providers', 'integrations', 'mcp_servers', 'roles', 'units']))
               exposure:
                 description: exposure overrides how the company is reached.
                 minProperties: 1
@@ -1389,6 +1566,12 @@ spec:
                 to compute an embedding with'
               rule: '!has(self.knowledge) || !has(self.knowledge.vectors) || !self.knowledge.vectors
                 || has(self.embeddings)'
+            - fieldPath: .assistant.deepWork
+              message: 'assistant.deepWork needs spec.sandbox: a deep-work run has
+                its own shell, files and web tools, and the operator runs it in the
+                Company''s E2B sandbox only, never in the engine pod beside the company''s
+                data and secret store'
+              rule: '!has(self.assistant) || !has(self.assistant.deepWork) || has(self.sandbox)'
           status:
             description: status is the company's observed state.
             minProperties: 1

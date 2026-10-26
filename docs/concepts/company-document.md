@@ -121,6 +121,20 @@ plan, so a seat that needs a fallback names a chain. No provider may be named
 Each Seat's `spec.llm` becomes Crewlet's per-phase `llm` mapping, each chain
 naming providers by their key in `providers.llm`.
 
+The Company's `spec.assistant` becomes Crewlet's `assistant` block, its `llm`
+chain naming providers by their key exactly as a seat's does. A provider it
+names that the document does not hold blocks the document, as a seat's does,
+because Crewlet refuses such a chain where `llm_order` would only drop the
+key. An `LLMProvider`'s `webTools: Denied` becomes its entry's
+`overrides: {web_tools: denied}`, the one profile override the API offers;
+Crewlet requires it of every provider the assistant runs on
+([Running Seats on a Coding CLI](../guides/cli-agents.md#a-provider-for-the-dashboard-assistant)).
+Its `deepWork` becomes the block's `deep_work`, whose `llm` names one
+provider's key the same way and blocks the document when the document does
+not hold it; the API requires `spec.sandbox` beside it, so every deep-work
+run is placed in the Company's E2B sandbox
+([Deep work](../guides/cli-agents.md#deep-work)).
+
 ### Schedules
 
 A Schedule is written into the entry of what it targets: a Seat's role, or a
@@ -258,9 +272,9 @@ last one is refused with `insufficient storage resources available`. A fresh
 node reserves what it keeps on the stream when it starts, and refuses to boot
 on a stream that cannot hold it
 ([the minimum room for a fresh node](https://github.com/crewlet/crewlet/blob/main/docs/guides/deployment.md#the-minimum-room-for-a-fresh-node)):
-the ceilings of its seven state logs, 6979321856 bytes at their smallest,
+the ceilings of its eight state logs, 7046430720 bytes at their smallest,
 and, with the class's `objects.backend` `NATS` (the default), the object
-store's bucket beside them at a quarter of the stream, 9305762474 bytes in
+store's bucket beside them at a quarter of the stream, 9395240959 bytes in
 all. So an EngineClass's `data.storage.size` is at least `12Gi`, whose three
 quarters is 9 GiB, or `9Gi` for a class that keeps its files in S3. That is
 the least that boots: the mailboxes and the coordination buckets grow into

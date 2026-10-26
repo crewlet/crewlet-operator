@@ -165,6 +165,134 @@ type CompanyLLMSettings struct {
 	UsePlatformProviders *bool `json:"usePlatformProviders,omitempty"`
 }
 
+// CompanyAssistant is whether the company runs the Dashboard Assistant, the
+// models it runs on and the bounds of one turn. It maps onto Crewlet's
+// `assistant` block, each field onto the field it names.
+//
+// The assistant answers a signed-in person's questions about the company and
+// prepares changes for that person to approve, acting only as them: every
+// read is a request of theirs, and nothing is written until they approve.
+// Every provider in llm must be in mode Host, on a CLI Crewlet runs with no
+// tool of its own (ClaudeCode or Pi; Codex keeps a shell its sandbox only
+// confines, and OpenCode's has not been measured to go), with webTools
+// Denied. Crewlet refuses any other in the dry run before every apply, and
+// the refusal is reported on the Company, since the rule turns on the
+// providers' own specs.
+// +kubebuilder:validation:MinProperties=1
+// +kubebuilder:validation:XValidation:rule="!has(self.enabled) || !self.enabled || (has(self.llm) && size(self.llm) > 0)",message="an enabled assistant needs llm: name the model provider it runs on, one whose webTools is Denied",fieldPath=".llm"
+type CompanyAssistant struct {
+	// enabled runs the assistant. Unset or false leaves it off. Crewlet's
+	// `enabled`.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// llm is the assistant's model chain, the first provider tried first,
+	// referred to as a Seat's chain is. Required when enabled is true.
+	// Crewlet's `llm`.
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="llm must name each provider once"
+	LLM []LLMProviderReference `json:"llm,omitempty"`
+
+	// maxSteps is the most tool steps one turn may take. Unset takes
+	// Crewlet's default of 30. Crewlet's `max_steps`.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=40
+	MaxSteps int32 `json:"maxSteps,omitempty"`
+
+	// turnTimeoutSeconds is the longest one turn may run. Unset takes
+	// Crewlet's default of 900. Crewlet's `turn_timeout_seconds`.
+	// +optional
+	// +kubebuilder:validation:Minimum=30
+	// +kubebuilder:validation:Maximum=1200
+	TurnTimeoutSeconds int32 `json:"turnTimeoutSeconds,omitempty"`
+
+	// proposalTTLSeconds is how long a proposed change waits for its
+	// owner's approval. Unset takes Crewlet's default of 900. Crewlet's
+	// `proposal_ttl_seconds`.
+	// +optional
+	// +kubebuilder:validation:Minimum=60
+	// +kubebuilder:validation:Maximum=3600
+	ProposalTTLSeconds int32 `json:"proposalTTLSeconds,omitempty"`
+
+	// retentionDays is how long a person's conversations are kept. Unset
+	// takes Crewlet's default of 30. Crewlet's `retention_days`.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=365
+	RetentionDays int32 `json:"retentionDays,omitempty"`
+
+	// tokenBudget caps the tokens each person's assistant may spend per
+	// window, charged on top of the company's own spec.tokenBudget.
+	// Crewlet's `token_budget`.
+	// +optional
+	TokenBudget TokenBudget `json:"tokenBudget,omitzero"`
+
+	// deepWork lets the assistant hand a large task (research, scripts,
+	// files, many steps) to a coding CLI running its own tools in the
+	// Company's E2B sandbox, which spec.sandbox must configure. Unset, the
+	// assistant answers in quick mode only. Crewlet's `deep_work`.
+	// +optional
+	DeepWork CompanyAssistantDeepWork `json:"deepWork,omitzero"`
+}
+
+// CompanyAssistantDeepWork is the Dashboard Assistant's deep work: the model
+// a large task is handed to and the bounds of one run. It maps onto Crewlet's
+// `assistant.deep_work` block, each field onto the field it names.
+//
+// A deep-work run is Claude Code in its own harness, with its shell, its
+// files and its web tools: the point of the escalation. Its one way into
+// Crewlet is the signed-in person's own assistant tools over the tool
+// bridge, so every read is still that person's request and every write still
+// a proposal they approve. The provider llm names must be an LLMProvider in
+// mode Box driving ClaudeCode, the one CLI whose run Crewlet continues in
+// its own session after an approval; Crewlet refuses any other in the dry run
+// before every apply, and the refusal is reported on the Company, since the
+// rule turns on the provider's own spec.
+//
+// Crewlet places a run in its provider's own runIn, else in the first remote
+// or container cell the company configures, else on the engine host under
+// operating system confinement. The operator offers the remote cell alone,
+// as it does for every box-mode run: the engine pod holds the company's
+// data volume and secret store, and a run steered by whatever pages it read
+// is not one to start beside them, confined or not. So deepWork requires
+// spec.sandbox, and every deep-work run is placed in the Company's E2B
+// sandbox.
+type CompanyAssistantDeepWork struct {
+	// llm is the provider deep work runs on: an LLMProvider in mode Box
+	// driving ClaudeCode. A platform model provider runs in mode Host, so
+	// it is refused. Crewlet's `llm`.
+	// +required
+	// +kubebuilder:validation:XValidation:rule="!has(self.kind) || self.kind == 'LLMProvider'",message="deep work runs on an LLMProvider in mode Box driving ClaudeCode: a platform model provider runs in mode Host, where its CLI has no tool of its own",fieldPath=".kind"
+	LLM LLMProviderReference `json:"llm,omitzero"`
+
+	// timeoutSeconds is the longest one deep-work run may take. Unset takes
+	// Crewlet's default of 1200, which is also the most: a run lives inside
+	// the turn's read grant. Crewlet's `timeout_seconds`.
+	// +optional
+	// +kubebuilder:validation:Minimum=60
+	// +kubebuilder:validation:Maximum=1200
+	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
+
+	// maxSteps is the most agentic rounds and Crewlet tool calls one
+	// deep-work task may make. Unset takes Crewlet's default of 150.
+	// Crewlet's `max_steps`.
+	// +optional
+	// +kubebuilder:validation:Minimum=10
+	// +kubebuilder:validation:Maximum=400
+	MaxSteps int32 `json:"maxSteps,omitempty"`
+
+	// maxTokens is the most tokens one deep-work task may spend before it
+	// is stopped. Unset takes Crewlet's default of 3000000. The person's
+	// tokenBudget and the company's still apply. Crewlet's `max_tokens`.
+	// +optional
+	// +kubebuilder:validation:Minimum=10000
+	// +kubebuilder:validation:Maximum=20000000
+	MaxTokens int32 `json:"maxTokens,omitempty"`
+}
+
 // EmbeddingProviderType is which embeddings API a company uses. It maps onto
 // Crewlet's providers.embeddings.type (OpenAI is `openai`, OpenAICompatible
 // is `openai-compatible`).
@@ -887,6 +1015,7 @@ type CompanyObjects struct {
 // integrations are objects of their own that name the Company in their
 // spec.companyRef.
 // +kubebuilder:validation:XValidation:rule="!has(self.knowledge) || !has(self.knowledge.vectors) || !self.knowledge.vectors || has(self.embeddings)",message="knowledge.vectors needs spec.embeddings: there is nothing to compute an embedding with"
+// +kubebuilder:validation:XValidation:rule="!has(self.assistant) || !has(self.assistant.deepWork) || has(self.sandbox)",message="assistant.deepWork needs spec.sandbox: a deep-work run has its own shell, files and web tools, and the operator runs it in the Company's E2B sandbox only, never in the engine pod beside the company's data and secret store",fieldPath=".assistant.deepWork"
 type CompanySpec struct {
 	// engineClassName is the EngineClass the company runs with. Unset uses
 	// the class annotated crewlet.ai/is-default-class=true.
@@ -999,6 +1128,11 @@ type CompanySpec struct {
 	// +optional
 	LLM CompanyLLMSettings `json:"llm,omitzero"`
 
+	// assistant is the company's Dashboard Assistant. Unset leaves it off.
+	// Crewlet's `assistant`.
+	// +optional
+	Assistant CompanyAssistant `json:"assistant,omitzero"`
+
 	// embeddings is the provider vectors are computed with. Unset leaves
 	// search keyword-only. Crewlet's providers.embeddings.
 	// +optional
@@ -1023,8 +1157,8 @@ type CompanySpec struct {
 	//
 	// It may not set what another field or object of this API owns: name,
 	// mission, vision, policies, timezone, tracker, knowledge, token_budget,
-	// providers, integrations, mcp_servers, roles or units. Every position
-	// Crewlet holds a credential in lives under one of those keys, so
+	// assistant, providers, integrations, mcp_servers, roles or units. Every
+	// position Crewlet holds a credential in lives under one of those keys, so
 	// engineConfig can never carry a credential: the API server refuses a
 	// Company whose engineConfig names one of them, before anything is
 	// stored.
@@ -1032,7 +1166,7 @@ type CompanySpec struct {
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=64
-	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'token_budget', 'providers', 'integrations', 'mcp_servers', 'roles', 'units']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, token_budget, providers, integrations, mcp_servers, roles or units: those are fields and objects of this API, and the only blocks that hold credentials"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_servers', 'roles', 'units']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, token_budget, assistant, providers, integrations, mcp_servers, roles or units: those are fields and objects of this API, among them every block that holds a credential"
 	EngineConfig []EngineConfigEntry `json:"engineConfig,omitempty"`
 
 	// config is how the operator manages the company's document.

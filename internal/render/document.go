@@ -15,6 +15,7 @@ type companyDoc struct {
 	Tracker      trackerDoc      `json:"tracker,omitzero"`
 	Knowledge    knowledgeDoc    `json:"knowledge,omitzero"`
 	TokenBudget  tokenBudgetDoc  `json:"token_budget,omitzero"`
+	Assistant    assistantDoc    `json:"assistant,omitzero"`
 	Providers    providersDoc    `json:"providers,omitzero"`
 	Integrations integrationsDoc `json:"integrations,omitzero"`
 	MCPServers   []mcpServerDoc  `json:"mcp_servers,omitempty"`
@@ -45,6 +46,24 @@ type tokenBudgetDoc struct {
 	Month int64 `json:"month,omitempty"`
 }
 
+type assistantDoc struct {
+	Enabled            *bool          `json:"enabled,omitempty"`
+	LLM                []string       `json:"llm,omitempty"`
+	MaxSteps           int32          `json:"max_steps,omitempty"`
+	TurnTimeoutSeconds int32          `json:"turn_timeout_seconds,omitempty"`
+	ProposalTTLSeconds int32          `json:"proposal_ttl_seconds,omitempty"`
+	RetentionDays      int32          `json:"retention_days,omitempty"`
+	TokenBudget        tokenBudgetDoc `json:"token_budget,omitzero"`
+	DeepWork           *deepWorkDoc   `json:"deep_work,omitempty"`
+}
+
+type deepWorkDoc struct {
+	LLM            string `json:"llm"`
+	TimeoutSeconds int32  `json:"timeout_seconds,omitempty"`
+	MaxSteps       int32  `json:"max_steps,omitempty"`
+	MaxTokens      int32  `json:"max_tokens,omitempty"`
+}
+
 type providersDoc struct {
 	LLM        map[string]llmProviderDoc `json:"llm,omitempty"`
 	LLMOrder   []string                  `json:"llm_order,omitempty"`
@@ -62,6 +81,14 @@ type llmProviderDoc struct {
 	MaxConcurrent  int32             `json:"max_concurrent,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 	Auth           llmAuthDoc        `json:"auth,omitzero"`
+	Overrides      *llmOverridesDoc  `json:"overrides,omitempty"`
+}
+
+// llmOverridesDoc is the part of a CLI profile's overrides the API sets:
+// the web stance alone. Every other override names the CLI's binary and
+// arguments, which the engine's pod runs, and is not offered.
+type llmOverridesDoc struct {
+	WebTools string `json:"web_tools"`
 }
 
 type llmAuthDoc struct {

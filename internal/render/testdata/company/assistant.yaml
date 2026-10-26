@@ -1,0 +1,56 @@
+assistant:
+  deep_work:
+    llm: assistant-deep
+    max_steps: 120
+    max_tokens: 2000000
+    timeout_seconds: 900
+  enabled: true
+  llm:
+  - assistant
+  - assistant-pi
+  max_steps: 12
+  proposal_ttl_seconds: 600
+  retention_days: 90
+  token_budget:
+    day: 200000
+  turn_timeout_seconds: 180
+name: Helm
+providers:
+  llm:
+    assistant:
+      agent: claude-code
+      auth:
+        api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        mode: api-key
+      max_concurrent: 4
+      model: sonnet
+      overrides:
+        web_tools: denied
+      state_dir: /var/lib/crewlet/llm-cli/assistant
+      timeout_seconds: 90
+    assistant-deep:
+      agent: claude-code
+      auth:
+        mode: subscription
+        token: ${K8S_CLAUDE_TOKEN_HWDLXXYNUX5H}
+      mode: box
+      model: sonnet
+      state_dir: /var/lib/crewlet/llm-cli/assistant-deep
+    assistant-pi:
+      agent: pi
+      auth:
+        mode: subscription
+      env:
+        OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
+      model: openrouter/anthropic/claude-sonnet-5
+      overrides:
+        web_tools: denied
+      state_dir: /var/lib/crewlet/llm-cli/assistant-pi
+  llm_order:
+  - assistant
+  - assistant-deep
+  - assistant-pi
+  sandbox:
+    default_run_in: e2b
+    e2b:
+      api_key: ${K8S_E2B_API_KEY_GSEHAAV5THN5}

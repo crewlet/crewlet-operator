@@ -492,6 +492,7 @@ func (r *renderer) company() companyDoc {
 		doc.Tracker.Worklet = &trackerWorkletDoc{InboxRetentionDays: days}
 	}
 	doc.Providers = r.providersDoc()
+	doc.Assistant = r.assistant()
 	doc.Integrations = r.integrations()
 	doc.MCPServers = r.mcpServers()
 	doc.Roles, doc.Units = r.org()
@@ -500,6 +501,41 @@ func (r *renderer) company() companyDoc {
 
 func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
 	return tokenBudgetDoc{Day: b.Day, Week: b.Week, Month: b.Month}
+}
+
+// assistant renders the Company's spec.assistant. Its chain, and the provider
+// its deep work runs on, are resolved as a Seat's chain is, and a provider
+// either names that the document does not hold is refused as the engine
+// refuses it (EngineRefuses): an assistant chain or a deep_work.llm naming no
+// provider is refused on every write, where an llm_order key naming none is
+// dropped.
+func (r *renderer) assistant() assistantDoc {
+	a := &r.in.Company.Spec.Assistant
+	doc := assistantDoc{
+		Enabled:            a.Enabled,
+		MaxSteps:           a.MaxSteps,
+		TurnTimeoutSeconds: a.TurnTimeoutSeconds,
+		ProposalTTLSeconds: a.ProposalTTLSeconds,
+		RetentionDays:      a.RetentionDays,
+		TokenBudget:        tokenBudget(a.TokenBudget),
+	}
+	for i, ref := range a.LLM {
+		field := fmt.Sprintf("spec.assistant.llm[%d]", i)
+		if key, ok := r.provider(KindCompany, r.in.Company.Name, field, ref, absentRefused); ok {
+			doc.LLM = append(doc.LLM, key)
+		}
+	}
+	if d := &a.DeepWork; d.LLM.Name != "" {
+		if key, ok := r.provider(KindCompany, r.in.Company.Name, "spec.assistant.deepWork.llm", d.LLM, absentRefused); ok {
+			doc.DeepWork = &deepWorkDoc{
+				LLM:            key,
+				TimeoutSeconds: d.TimeoutSeconds,
+				MaxSteps:       d.MaxSteps,
+				MaxTokens:      d.MaxTokens,
+			}
+		}
+	}
+	return doc
 }
 
 // ---- providers ----------------------------------------------------------- //
@@ -543,7 +579,10 @@ func (r *renderer) providersDoc() providersDoc {
 	// ahead of the order.
 	named := map[string]bool{}
 	for i, ref := range spec.LLM.Order {
-		key, ok := r.provider(KindCompany, r.in.Company.Name, fmt.Sprintf("spec.llm.order[%d]", i), ref)
+		// Crewlet drops a key of llm_order that names no provider, so
+		// every seat with no chain of its own would run on whichever
+		// provider it then puts first.
+		key, ok := r.provider(KindCompany, r.in.Company.Name, fmt.Sprintf("spec.llm.order[%d]", i), ref, absentDropped)
 		if ok {
 			doc.LLMOrder = append(doc.LLMOrder, key)
 			named[key] = true
@@ -626,14 +665,23 @@ const CLIPlatformStateRoot = DataDir + "/llm-cli-platform"
 
 // llmEntry renders what an LLMProvider and a platform provider share, with
 // the entry's state directory.
+//
+// The web stance is written only when it is Denied: Allowed is the profile's
+// own default, and an override that restates it would still be an override,
+// which Crewlet merges into the profile and the document then carries for
+// nothing.
 func llmEntry(s *v1alpha1.LLMProviderSettings, stateDir string) llmProviderDoc {
-	return llmProviderDoc{
+	doc := llmProviderDoc{
 		Agent:          cliAgentName(s.Agent),
 		Model:          s.Model,
 		StateDir:       stateDir,
 		TimeoutSeconds: s.TimeoutSeconds,
 		MaxConcurrent:  s.MaxConcurrent,
 	}
+	if s.WebTools == v1alpha1.CLIAgentWebToolsDenied {
+		doc.Overrides = &llmOverridesDoc{WebTools: cliAgentWebTools(s.WebTools)}
+	}
+	return doc
 }
 
 // llmProvider renders one of the Company's LLMProviders. In mode Box its
@@ -678,9 +726,23 @@ func (r *renderer) platformProvider(p *v1alpha1.PlatformLLMProvider) llmProvider
 	return doc
 }
 
+// absentKey is what Crewlet does with a providers.llm key the document does
+// not hold, where the reference to it is written: the caller's to say, since
+// one reference type is read in places Crewlet treats differently.
+type absentKey int
+
+const (
+	// absentDropped: Crewlet drops the key (llm_order), and whatever then
+	// comes first takes its place.
+	absentDropped absentKey = iota + 1
+	// absentRefused: Crewlet refuses the document (a seat's chain, the
+	// assistant's chain).
+	absentRefused
+)
+
 // provider resolves a reference to a model provider to its providers.llm
 // key, or records why it cannot be resolved.
-func (r *renderer) provider(kind, name, field string, ref v1alpha1.LLMProviderReference) (string, bool) {
+func (r *renderer) provider(kind, name, field string, ref v1alpha1.LLMProviderReference, absence absentKey) (string, bool) {
 	field += ".name"
 	var absent string
 	switch ref.Kind {
@@ -709,13 +771,12 @@ func (r *renderer) provider(kind, name, field string, ref v1alpha1.LLMProviderRe
 	}
 	// A key providers.llm does not hold is held for what Crewlet does with
 	// it where it is written, whichever reason left it out.
-	if kind == KindCompany {
-		// Crewlet drops a key of llm_order that names no provider, so
-		// every seat with no chain of its own would run on whichever
-		// provider it then puts first.
+	switch absence {
+	case absentDropped:
+		// A dropped key moves every reader of the list onto another
+		// provider: harm beyond the object at fault.
 		r.errs.notFound(HarmsBeyond, kind, name, field, absent)
-	} else {
-		// Crewlet refuses a seat's chain naming no provider.
+	case absentRefused:
 		r.errs.notFound(EngineRefuses, kind, name, field, absent)
 	}
 	return "", false

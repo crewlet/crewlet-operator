@@ -77,6 +77,10 @@ const (
 // a unit's, an engineConfig block's.
 const keyName = "name"
 
+// keyLLM is the key of a model chain in the company document: a seat's, and
+// the assistant's.
+const keyLLM = "llm"
+
 // objects is what a set of manifests holds, sorted into the slices an Input
 // is made of.
 type objects struct {

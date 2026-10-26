@@ -75,6 +75,31 @@ const (
 	CLIAgentRunInE2B CLIAgentRunIn = "E2B"
 )
 
+// CLIAgentWebTools is whether a model provider's CLI keeps its own web tools
+// (its fetch and its search). It maps onto the `web_tools` of a Crewlet
+// providers.llm entry's overrides (Allowed is `allowed`, Denied is
+// `denied`).
+//
+// A seat keeps its CLI's web tools: it must not have less reach than the
+// same CLI at a terminal. A provider the Company's Dashboard Assistant runs
+// on turns them off, which Crewlet requires of every model in
+// spec.assistant.llm: the assistant reads only what the signed-in person's
+// own requests return, and a page the model fetched for itself is text no
+// authority decision saw. Crewlet turns them off only for a CLI whose profile
+// carries a measured way to (its web_denial): ClaudeCode, Codex, OpenCode and
+// Pi.
+// +kubebuilder:validation:Enum=Allowed;Denied
+type CLIAgentWebTools string
+
+// The web tool stances.
+const (
+	// CLIAgentWebToolsAllowed keeps the CLI's web tools, every seat's
+	// default.
+	CLIAgentWebToolsAllowed CLIAgentWebTools = "Allowed"
+	// CLIAgentWebToolsDenied runs the CLI with its web tools off.
+	CLIAgentWebToolsDenied CLIAgentWebTools = "Denied"
+)
+
 // CLIAgentAuthMode is how a model provider's CLI authenticates. It maps onto
 // the `auth.mode` of a Crewlet providers.llm entry (Subscription is
 // `subscription`, APIKey is `api-key`).
@@ -254,6 +279,15 @@ type LLMProviderSettings struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=64
 	MaxConcurrent int32 `json:"maxConcurrent,omitempty"`
+
+	// webTools is whether the CLI keeps its own web tools. Unset is
+	// Allowed, every seat's default. Denied is required of every provider
+	// the Company's Dashboard Assistant runs on (spec.assistant.llm), and
+	// is refused for a CLI Crewlet has no way to turn the web off for: it
+	// takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's
+	// `overrides.web_tools`.
+	// +optional
+	WebTools CLIAgentWebTools `json:"webTools,omitempty"`
 }
 
 // LLMProviderSpec is one model provider of a company: a coding CLI the engine
@@ -288,6 +322,7 @@ type LLMProviderSettings struct {
 // the engine keeps rotating on its data volume. So a Subscription login
 // reaches the run only as a variable of its environment, which for ClaudeCode
 // is its headless token and for OpenCode its model provider's key in env.
+// +kubebuilder:validation:XValidation:rule="!has(self.webTools) || self.webTools != 'Denied' || self.agent in ['ClaudeCode', 'Codex', 'OpenCode', 'Pi']",message="webTools Denied takes a CLI Crewlet can turn the web off for: ClaudeCode, Codex, OpenCode or Pi. Crewlet's profile for every other CLI carries no measured web denial, and refuses the setting",fieldPath=".webTools"
 // +kubebuilder:validation:XValidation:rule="!has(self.runIn) || (has(self.mode) && self.mode == 'Box')",message="runIn applies to mode Box only: in mode Host the CLI runs in the engine's pod"
 // +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'Box' || self.agent in ['ClaudeCode', 'OpenCode']",message="mode Box runs a CLI Crewlet has a sandbox runner for: ClaudeCode or OpenCode"
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || (has(self.auth.mode) && self.auth.mode != 'Subscription') || has(self.auth.tokenSecretRef) || has(self.auth.credentialBundleSecretRef) || (self.agent in ['Hermes', 'Pi', 'OpenCode'] && has(self.env) && self.env.exists(e, e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)')))",message="a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef: a pod has no terminal to log in at. Hermes, Pi and OpenCode alone may sign in with their model provider's key in env instead, under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY), which Crewlet hands them untouched. A CLI with a key variable takes its key through auth mode APIKey, as Crewlet refuses that variable in env",fieldPath=".auth"

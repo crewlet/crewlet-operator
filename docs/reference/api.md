@@ -360,6 +360,38 @@ _Appears in:_
 | `E2B` | CLIAgentRunInE2B is the Company's E2B sandbox.<br /> |
 
 
+#### CLIAgentWebTools
+
+_Underlying type:_ _string_
+
+CLIAgentWebTools is whether a model provider's CLI keeps its own web tools
+(its fetch and its search). It maps onto the `web_tools` of a Crewlet
+providers.llm entry's overrides (Allowed is `allowed`, Denied is
+`denied`).
+
+A seat keeps its CLI's web tools: it must not have less reach than the
+same CLI at a terminal. A provider the Company's Dashboard Assistant runs
+on turns them off, which Crewlet requires of every model in
+spec.assistant.llm: the assistant reads only what the signed-in person's
+own requests return, and a page the model fetched for itself is text no
+authority decision saw. Crewlet turns them off only for a CLI whose profile
+carries a measured way to (its web_denial): ClaudeCode, Codex, OpenCode and
+Pi.
+
+_Validation:_
+- Enum: [Allowed Denied]
+
+_Appears in:_
+- [LLMProviderSettings](#llmprovidersettings)
+- [LLMProviderSpec](#llmproviderspec)
+- [PlatformLLMProvider](#platformllmprovider)
+
+| Field | Description |
+| --- | --- |
+| `Allowed` | CLIAgentWebToolsAllowed keeps the CLI's web tools, every seat's<br />default.<br /> |
+| `Denied` | CLIAgentWebToolsDenied runs the CLI with its web tools off.<br /> |
+
+
 #### ClassEnvVar
 
 
@@ -429,6 +461,82 @@ characters overflows its pods' controller-revision-hash label.
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Optional: \{\} <br /> |
 | `spec` _[CompanySpec](#companyspec)_ | spec is the company's desired state. |  | Required: \{\} <br /> |
 | `status` _[CompanyStatus](#companystatus)_ | status is the company's observed state. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+
+
+#### CompanyAssistant
+
+
+
+CompanyAssistant is whether the company runs the Dashboard Assistant, the
+models it runs on and the bounds of one turn. It maps onto Crewlet's
+`assistant` block, each field onto the field it names.
+
+The assistant answers a signed-in person's questions about the company and
+prepares changes for that person to approve, acting only as them: every
+read is a request of theirs, and nothing is written until they approve.
+Every provider in llm must be in mode Host, on a CLI Crewlet runs with no
+tool of its own (ClaudeCode or Pi; Codex keeps a shell its sandbox only
+confines, and OpenCode's has not been measured to go), with webTools
+Denied. Crewlet refuses any other in the dry run before every apply, and
+the refusal is reported on the Company, since the rule turns on the
+providers' own specs.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [CompanySpec](#companyspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled runs the assistant. Unset or false leaves it off. Crewlet's<br />`enabled`. |  | Optional: \{\} <br /> |
+| `llm` _[LLMProviderReference](#llmproviderreference) array_ | llm is the assistant's model chain, the first provider tried first,<br />referred to as a Seat's chain is. Required when enabled is true.<br />Crewlet's `llm`. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
+| `maxSteps` _integer_ | maxSteps is the most tool steps one turn may take. Unset takes<br />Crewlet's default of 30. Crewlet's `max_steps`. |  | Maximum: 40 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `turnTimeoutSeconds` _integer_ | turnTimeoutSeconds is the longest one turn may run. Unset takes<br />Crewlet's default of 900. Crewlet's `turn_timeout_seconds`. |  | Maximum: 1200 <br />Minimum: 30 <br />Optional: \{\} <br /> |
+| `proposalTTLSeconds` _integer_ | proposalTTLSeconds is how long a proposed change waits for its<br />owner's approval. Unset takes Crewlet's default of 900. Crewlet's<br />`proposal_ttl_seconds`. |  | Maximum: 3600 <br />Minimum: 60 <br />Optional: \{\} <br /> |
+| `retentionDays` _integer_ | retentionDays is how long a person's conversations are kept. Unset<br />takes Crewlet's default of 30. Crewlet's `retention_days`. |  | Maximum: 365 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens each person's assistant may spend per<br />window, charged on top of the company's own spec.tokenBudget.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `deepWork` _[CompanyAssistantDeepWork](#companyassistantdeepwork)_ | deepWork lets the assistant hand a large task (research, scripts,<br />files, many steps) to a coding CLI running its own tools in the<br />Company's E2B sandbox, which spec.sandbox must configure. Unset, the<br />assistant answers in quick mode only. Crewlet's `deep_work`. |  | Optional: \{\} <br /> |
+
+
+#### CompanyAssistantDeepWork
+
+
+
+CompanyAssistantDeepWork is the Dashboard Assistant's deep work: the model
+a large task is handed to and the bounds of one run. It maps onto Crewlet's
+`assistant.deep_work` block, each field onto the field it names.
+
+A deep-work run is Claude Code in its own harness, with its shell, its
+files and its web tools: the point of the escalation. Its one way into
+Crewlet is the signed-in person's own assistant tools over the tool
+bridge, so every read is still that person's request and every write still
+a proposal they approve. The provider llm names must be an LLMProvider in
+mode Box driving ClaudeCode, the one CLI whose run Crewlet continues in
+its own session after an approval; Crewlet refuses any other in the dry run
+before every apply, and the refusal is reported on the Company, since the
+rule turns on the provider's own spec.
+
+Crewlet places a run in its provider's own runIn, else in the first remote
+or container cell the company configures, else on the engine host under
+operating system confinement. The operator offers the remote cell alone,
+as it does for every box-mode run: the engine pod holds the company's
+data volume and secret store, and a run steered by whatever pages it read
+is not one to start beside them, confined or not. So deepWork requires
+spec.sandbox, and every deep-work run is placed in the Company's E2B
+sandbox.
+
+
+
+_Appears in:_
+- [CompanyAssistant](#companyassistant)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `llm` _[LLMProviderReference](#llmproviderreference)_ | llm is the provider deep work runs on: an LLMProvider in mode Box<br />driving ClaudeCode. A platform model provider runs in mode Host, so<br />it is refused. Crewlet's `llm`. |  | Required: \{\} <br /> |
+| `timeoutSeconds` _integer_ | timeoutSeconds is the longest one deep-work run may take. Unset takes<br />Crewlet's default of 1200, which is also the most: a run lives inside<br />the turn's read grant. Crewlet's `timeout_seconds`. |  | Maximum: 1200 <br />Minimum: 60 <br />Optional: \{\} <br /> |
+| `maxSteps` _integer_ | maxSteps is the most agentic rounds and Crewlet tool calls one<br />deep-work task may make. Unset takes Crewlet's default of 150.<br />Crewlet's `max_steps`. |  | Maximum: 400 <br />Minimum: 10 <br />Optional: \{\} <br /> |
+| `maxTokens` _integer_ | maxTokens is the most tokens one deep-work task may spend before it<br />is stopped. Unset takes Crewlet's default of 3000000. The person's<br />tokenBudget and the company's still apply. Crewlet's `max_tokens`. |  | Maximum: 2e+07 <br />Minimum: 10000 <br />Optional: \{\} <br /> |
 
 
 #### CompanyEndpoints
@@ -594,10 +702,11 @@ _Appears in:_
 | `knowledge` _[KnowledgeSettings](#knowledgesettings)_ | knowledge is which knowledge base the company runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens all seats together may spend per window.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `llm` _[CompanyLLMSettings](#companyllmsettings)_ | llm is how the company chooses among its model providers. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `assistant` _[CompanyAssistant](#companyassistant)_ | assistant is the company's Dashboard Assistant. Unset leaves it off.<br />Crewlet's `assistant`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `embeddings` _[EmbeddingSettings](#embeddingsettings)_ | embeddings is the provider vectors are computed with. Unset leaves<br />search keyword-only. Crewlet's providers.embeddings. |  | Optional: \{\} <br /> |
 | `sandbox` _[SandboxSettings](#sandboxsettings)_ | sandbox is where seats run code. Unset gives no seat a sandbox.<br />Crewlet's providers.sandbox. |  | Optional: \{\} <br /> |
 | `integrations` _[CompanyIntegrationSettings](#companyintegrationsettings)_ | integrations is company-wide integration behaviour. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, token_budget,<br />providers, integrations, mcp_servers, roles or units. Every position<br />Crewlet holds a credential in lives under one of those keys, so<br />engineConfig can never carry a credential: the API server refuses a<br />Company whose engineConfig names one of them, before anything is<br />stored. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, token_budget,<br />assistant, providers, integrations, mcp_servers, roles or units. Every<br />position Crewlet holds a credential in lives under one of those keys, so<br />engineConfig can never carry a credential: the API server refuses a<br />Company whose engineConfig names one of them, before anything is<br />stored. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
 | `config` _[ConfigSettings](#configsettings)_ | config is how the operator manages the company's document. | \{ managementPolicy:Enforce \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `topology` _[CompanyTopology](#companytopology)_ | topology is how the engine is laid out in pods. | \{ data:map[replicas:1] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `exposure` _[CompanyExposure](#companyexposure)_ | exposure overrides how the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -758,7 +867,7 @@ _Appears in:_
 | `allowedReplicas` _integer array_ | allowedReplicas is the set of data-pod counts a Company of this class<br />may choose in spec.topology.data.replicas. v1alpha1 runs exactly one<br />data pod, so the only value admitted is 1; 3 and 5, a highly available<br />estate, are added when the operator can run them. | [1] | MaxItems: 1 <br />MinItems: 1 <br />items:Enum: [1] <br />Optional: \{\} <br /> |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#resourcerequirements-v1-core)_ | resources are the compute resources of the engine container. |  | Optional: \{\} <br /> |
 | `storage` _[DataStorage](#datastorage)_ | storage is the data volume each data pod gets. |  | Required: \{\} <br /> |
-| `startupSeconds` _integer_ | startupSeconds is how long a data pod's engine may take, from its<br />start, to answer /health 200: the time it takes to recover what it holds<br />on its volume (the store, the event stream, the replicated estate) and<br />bring its broker up. Crewlet waits that recovery out rather than<br />bounding it, because it grows with the data, so the startup probe is<br />what bounds it: it allows at least this long from the container's<br />start, and less than ten seconds more. A boot that runs past it is<br />restarted and begins its recovery again, so err long: a window that is<br />too long costs nothing on a healthy boot, only the time to restart one<br />that hung.<br />It is at least every bound Crewlet puts on a data pod's boot, laid end<br />to end, which a window may not cut short: 1636 seconds, or 1776 with<br />objects.backend S3, whose bucket every boot probes. Those are its waits<br />for its own broker and store (provisioning the event stream, the<br />coordination buckets, the object store and the state logs, two minutes<br />a window on the broker of one member a data pod runs, and the requests<br />around them), never for a peer or a seat pod. One of them grows with<br />what the node holds and is left to the recovery's share, as the<br />recovery is: the claim of each batch of a seat pod's events the node<br />kept and could not settle, 15 s a batch. Unset derives it from the<br />data volume: that floor plus six seconds per GiB of the volume. That is<br />four times the second and a half per GiB Crewlet measured recovering<br />after a crash on a fast local disk, for volumes that are<br />network-attached; set this for disks slower than that. Nothing the<br />company configures counts: the engine answers /health once it has<br />recovered, and only then reads the company's secrets, starts its tool<br />servers and restores its CLIs' logins.<br />Changing it changes the data pods' template, which restarts them. |  | Maximum: 86400 <br />Minimum: 1636 <br />Optional: \{\} <br /> |
+| `startupSeconds` _integer_ | startupSeconds is how long a data pod's engine may take, from its<br />start, to answer /health 200: the time it takes to recover what it holds<br />on its volume (the store, the event stream, the replicated estate) and<br />bring its broker up. Crewlet waits that recovery out rather than<br />bounding it, because it grows with the data, so the startup probe is<br />what bounds it: it allows at least this long from the container's<br />start, and less than ten seconds more. A boot that runs past it is<br />restarted and begins its recovery again, so err long: a window that is<br />too long costs nothing on a healthy boot, only the time to restart one<br />that hung.<br />It is at least every bound Crewlet puts on a data pod's boot, laid end<br />to end, which a window may not cut short: 1746 seconds, or 1886 with<br />objects.backend S3, whose bucket every boot probes. Those are its waits<br />for its own broker and store (provisioning the event stream, the<br />coordination buckets, the object store and the state logs, two minutes<br />a window on the broker of one member a data pod runs, and the requests<br />around them), never for a peer or a seat pod. One of them grows with<br />what the node holds and is left to the recovery's share, as the<br />recovery is: the claim of each batch of a seat pod's events the node<br />kept and could not settle, 15 s a batch. Unset derives it from the<br />data volume: that floor plus six seconds per GiB of the volume. That is<br />four times the second and a half per GiB Crewlet measured recovering<br />after a crash on a fast local disk, for volumes that are<br />network-attached; set this for disks slower than that. Nothing the<br />company configures counts: the engine answers /health once it has<br />recovered, and only then reads the company's secrets, starts its tool<br />servers and restores its CLIs' logins.<br />Changing it changes the data pods' template, which restarts them. |  | Maximum: 86400 <br />Minimum: 1746 <br />Optional: \{\} <br /> |
 | `terminationGracePeriodSeconds` _integer_ | terminationGracePeriodSeconds is how long a data pod may take to stop.<br />The engine finishes running turns before it exits and puts no bound on<br />that itself, so the default is five minutes, which covers a long turn,<br />rather than the Kubernetes default of thirty seconds, which does not. | 300 | Maximum: 3600 <br />Minimum: 30 <br />Optional: \{\} <br /> |
 
 
@@ -776,7 +885,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `storageClassName` _string_ | storageClassName is the StorageClass of the data volumes. Unset uses<br />the cluster's default class. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | size is the capacity requested for each data volume. It holds the<br />store, the event stream and the store's cache. There is no default: how<br />much a tenant may keep is a platform decision.<br />Three quarters of it is the engine's event stream, Crewlet's<br />stream.store_max_bytes: the stream reserves what a node keeps there up<br />front, and a fresh node refuses to boot on a share that cannot hold it<br />(Crewlet's engine.BrokerFloor, and its deployment guide's "minimum room<br />for a fresh node"). Its seven state logs' ceilings at their smallest<br />come to 6979321856 bytes, so a volume must be at least 9Gi, whose share<br />of 6.75Gi holds them. With objects.backend NATS, the default, the object<br />store's bucket reserves a quarter of the share beside them, 9305762474<br />bytes in all, so such a class must give at least 12Gi, whose share is<br />9Gi. That is the least that boots: the mailboxes and coordination<br />buckets grow into what is left, so give a company that runs for long<br />more. The stream's ceiling is 64Ti (config.StoreMaxBytesCeiling, a<br />guard against a unit mistake), so a volume larger than about 85Ti gives<br />the stream 64Ti and the rest to the store and its snapshots.<br />It applies to the data volumes of companies created after it is set.<br />An existing company's volumes keep the size they were created with:<br />they are claimed through the StatefulSet's volume claim templates,<br />which Kubernetes does not let change, and growing a volume is a<br />decision about one company's storage class and data, not the class's.<br />Its owner expands the company's claim instead, and once the expansion<br />lands the operator sizes the stream from what the claim then has. |  | Required: \{\} <br /> |
+| `size` _[Quantity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#quantity-resource-api)_ | size is the capacity requested for each data volume. It holds the<br />store, the event stream and the store's cache. There is no default: how<br />much a tenant may keep is a platform decision.<br />Three quarters of it is the engine's event stream, Crewlet's<br />stream.store_max_bytes: the stream reserves what a node keeps there up<br />front, and a fresh node refuses to boot on a share that cannot hold it<br />(Crewlet's engine.BrokerFloor, and its deployment guide's "minimum room<br />for a fresh node"). Its eight state logs' ceilings at their smallest<br />come to 7046430720 bytes, so a volume must be at least 9Gi, whose share<br />of 6.75Gi holds them. With objects.backend NATS, the default, the object<br />store's bucket reserves a quarter of the share beside them, 9395240959<br />bytes in all, so such a class must give at least 12Gi, whose share is<br />9Gi. That is the least that boots: the mailboxes and coordination<br />buckets grow into what is left, so give a company that runs for long<br />more. The stream's ceiling is 64Ti (config.StoreMaxBytesCeiling, a<br />guard against a unit mistake), so a volume larger than about 85Ti gives<br />the stream 64Ti and the rest to the store and its snapshots.<br />It applies to the data volumes of companies created after it is set.<br />An existing company's volumes keep the size they were created with:<br />they are claimed through the StatefulSet's volume claim templates,<br />which Kubernetes does not let change, and growing a volume is a<br />decision about one company's storage class and data, not the class's.<br />Its owner expands the company's claim instead, and once the expansion<br />lands the operator sizes the stream from what the claim then has. |  | Required: \{\} <br /> |
 
 
 #### DataTopology
@@ -1832,6 +1941,8 @@ referring object's namespace, or a provider the EngineClass offers.
 
 
 _Appears in:_
+- [CompanyAssistant](#companyassistant)
+- [CompanyAssistantDeepWork](#companyassistantdeepwork)
 - [CompanyLLMSettings](#companyllmsettings)
 - [SeatLLM](#seatllm)
 
@@ -1878,6 +1989,7 @@ _Appears in:_
 | `model` _string_ | model is the model the CLI runs, in the CLI's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one stretch of the CLI's model work, wall clock,<br />with no call of a seat's tool in flight: from the CLI's launch, or the<br />answer to its last tool call, to its next tool call or its end, the<br />model's answer and the CLI's own retries in it. It is not a bound on<br />a run of the CLI, which asks the model many times and calls the<br />seat's tools between: a tool call stops the clock however long it<br />takes (a delegation, a slow tool server), and the next stretch starts<br />afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic<br />documents for one answer of a current Claude model at its full<br />output. A timeout is retryable, so a seat's chain moves on to its<br />next provider. It bounds the CLI where it runs in the engine's pod;<br />a Box-mode executor's run in the sandbox is not bounded by it.<br />Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many of the provider's CLI processes run at once<br />in each engine pod; each takes 200 to 450 MB of the pod's memory,<br />OpenCode's at the top of that range (docs/guides/cli-agents.md). One<br />process lives for a whole run of the CLI, many model requests and<br />tool calls long, and holds its place for all of it, so this is also<br />how many seats' runs the provider has going at once in a pod: a run<br />past it waits for a place. A model call made on the same provider<br />from inside one of a run's tool calls (a delegated worker's) borrows<br />the run's place rather than wait for another, which the runs holding<br />every place could leave it waiting for forever. Unset takes<br />Crewlet's default of 4. A Box-mode executor's run, in the sandbox,<br />takes none. Crewlet's `max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `webTools` _[CLIAgentWebTools](#cliagentwebtools)_ | webTools is whether the CLI keeps its own web tools. Unset is<br />Allowed, every seat's default. Denied is required of every provider<br />the Company's Dashboard Assistant runs on (spec.assistant.llm), and<br />is refused for a CLI Crewlet has no way to turn the web off for: it<br />takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 
 
 #### LLMProviderSpec
@@ -1929,6 +2041,7 @@ _Appears in:_
 | `model` _string_ | model is the model the CLI runs, in the CLI's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one stretch of the CLI's model work, wall clock,<br />with no call of a seat's tool in flight: from the CLI's launch, or the<br />answer to its last tool call, to its next tool call or its end, the<br />model's answer and the CLI's own retries in it. It is not a bound on<br />a run of the CLI, which asks the model many times and calls the<br />seat's tools between: a tool call stops the clock however long it<br />takes (a delegation, a slow tool server), and the next stretch starts<br />afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic<br />documents for one answer of a current Claude model at its full<br />output. A timeout is retryable, so a seat's chain moves on to its<br />next provider. It bounds the CLI where it runs in the engine's pod;<br />a Box-mode executor's run in the sandbox is not bounded by it.<br />Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many of the provider's CLI processes run at once<br />in each engine pod; each takes 200 to 450 MB of the pod's memory,<br />OpenCode's at the top of that range (docs/guides/cli-agents.md). One<br />process lives for a whole run of the CLI, many model requests and<br />tool calls long, and holds its place for all of it, so this is also<br />how many seats' runs the provider has going at once in a pod: a run<br />past it waits for a place. A model call made on the same provider<br />from inside one of a run's tool calls (a delegated worker's) borrows<br />the run's place rather than wait for another, which the runs holding<br />every place could leave it waiting for forever. Unset takes<br />Crewlet's default of 4. A Box-mode executor's run, in the sandbox,<br />takes none. Crewlet's `max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `webTools` _[CLIAgentWebTools](#cliagentwebtools)_ | webTools is whether the CLI keeps its own web tools. Unset is<br />Allowed, every seat's default. Denied is required of every provider<br />the Company's Dashboard Assistant runs on (spec.assistant.llm), and<br />is refused for a CLI Crewlet has no way to turn the web off for: it<br />takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 | `mode` _[CLIAgentMode](#cliagentmode)_ | mode is where a seat's executor runs the CLI's own loop: Host, in the<br />engine's pod that holds the seat, or Box, in the Company's sandbox.<br />Unset is Host. Crewlet's `mode`. |  | Enum: [Host Box] <br />Optional: \{\} <br /> |
 | `runIn` _[CLIAgentRunIn](#cliagentrunin)_ | runIn is where a Box-mode run happens. Unset is the Company's<br />sandbox, which is E2B. Crewlet's `run_in`. |  | Enum: [E2B] <br />Optional: \{\} <br /> |
 | `auth` _[CLIAgentAuth](#cliagentauth)_ | auth is how the CLI signs in. Crewlet's `auth`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
@@ -2550,6 +2663,7 @@ _Appears in:_
 | `model` _string_ | model is the model the CLI runs, in the CLI's own grammar: an alias<br />or an id for ClaudeCode (`sonnet`, `claude-opus-5-5`), an OpenAI id<br />for Codex, `<provider>/<model>` for OpenCode. Crewlet's `model`.<br />Crewlet trims it of white space and refuses a provider with nothing<br />left, as naming no model. |  | MaxLength: 256 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds bounds one stretch of the CLI's model work, wall clock,<br />with no call of a seat's tool in flight: from the CLI's launch, or the<br />answer to its last tool call, to its next tool call or its end, the<br />model's answer and the CLI's own retries in it. It is not a bound on<br />a run of the CLI, which asks the model many times and calls the<br />seat's tools between: a tool call stops the clock however long it<br />takes (a delegation, a slow tool server), and the next stretch starts<br />afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic<br />documents for one answer of a current Claude model at its full<br />output. A timeout is retryable, so a seat's chain moves on to its<br />next provider. It bounds the CLI where it runs in the engine's pod;<br />a Box-mode executor's run in the sandbox is not bounded by it.<br />Crewlet's `timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `maxConcurrent` _integer_ | maxConcurrent is how many of the provider's CLI processes run at once<br />in each engine pod; each takes 200 to 450 MB of the pod's memory,<br />OpenCode's at the top of that range (docs/guides/cli-agents.md). One<br />process lives for a whole run of the CLI, many model requests and<br />tool calls long, and holds its place for all of it, so this is also<br />how many seats' runs the provider has going at once in a pod: a run<br />past it waits for a place. A model call made on the same provider<br />from inside one of a run's tool calls (a delegated worker's) borrows<br />the run's place rather than wait for another, which the runs holding<br />every place could leave it waiting for forever. Unset takes<br />Crewlet's default of 4. A Box-mode executor's run, in the sandbox,<br />takes none. Crewlet's `max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `webTools` _[CLIAgentWebTools](#cliagentwebtools)_ | webTools is whether the CLI keeps its own web tools. Unset is<br />Allowed, every seat's default. Denied is required of every provider<br />the Company's Dashboard Assistant runs on (spec.assistant.llm), and<br />is refused for a CLI Crewlet has no way to turn the web off for: it<br />takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 | `auth` _[PlatformLLMProviderAuth](#platformllmproviderauth)_ | auth is how the CLI signs in. Crewlet's `auth`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
 | `env` _[NamespacedSecretEnvVar](#namespacedsecretenvvar) array_ | env is extra environment of the CLI, as an LLMProvider's spec.env is,<br />each value read from a Secret in a namespace the platform controls:<br />the model provider's key Hermes, Pi or OpenCode signs in with, or the<br />address of the platform's gateway a CLI reads from its environment<br />(ClaudeCode's ANTHROPIC_BASE_URL). A credential-named value of an<br />OpenCode provider travels into each box of a seat's code work on it,<br />in the tenant's own E2B account. Crewlet's `env`, a credential<br />position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 
@@ -3612,6 +3726,7 @@ _Validation:_
 - MinProperties: 1
 
 _Appears in:_
+- [CompanyAssistant](#companyassistant)
 - [CompanySpec](#companyspec)
 - [SeatSpec](#seatspec)
 

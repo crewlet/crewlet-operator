@@ -64,10 +64,10 @@ type DataStorage struct {
 	// stream.store_max_bytes: the stream reserves what a node keeps there up
 	// front, and a fresh node refuses to boot on a share that cannot hold it
 	// (Crewlet's engine.BrokerFloor, and its deployment guide's "minimum room
-	// for a fresh node"). Its seven state logs' ceilings at their smallest
-	// come to 6979321856 bytes, so a volume must be at least 9Gi, whose share
+	// for a fresh node"). Its eight state logs' ceilings at their smallest
+	// come to 7046430720 bytes, so a volume must be at least 9Gi, whose share
 	// of 6.75Gi holds them. With objects.backend NATS, the default, the object
-	// store's bucket reserves a quarter of the share beside them, 9305762474
+	// store's bucket reserves a quarter of the share beside them, 9395240959
 	// bytes in all, so such a class must give at least 12Gi, whose share is
 	// 9Gi. That is the least that boots: the mailboxes and coordination
 	// buckets grow into what is left, so give a company that runs for long
@@ -83,7 +83,7 @@ type DataStorage struct {
 	// Its owner expands the company's claim instead, and once the expansion
 	// lands the operator sizes the stream from what the claim then has.
 	// +required
-	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('9Gi'))",message="size must be at least 9Gi: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 6979321856 bytes of it for its state logs"
+	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('9Gi'))",message="size must be at least 9Gi: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 7046430720 bytes of it for its state logs"
 	Size *resource.Quantity `json:"size,omitempty"`
 }
 
@@ -123,7 +123,7 @@ type DataPodSettings struct {
 	// that hung.
 	//
 	// It is at least every bound Crewlet puts on a data pod's boot, laid end
-	// to end, which a window may not cut short: 1636 seconds, or 1776 with
+	// to end, which a window may not cut short: 1746 seconds, or 1886 with
 	// objects.backend S3, whose bucket every boot probes. Those are its waits
 	// for its own broker and store (provisioning the event stream, the
 	// coordination buckets, the object store and the state logs, two minutes
@@ -141,7 +141,7 @@ type DataPodSettings struct {
 	// servers and restores its CLIs' logins.
 	// Changing it changes the data pods' template, which restarts them.
 	// +optional
-	// +kubebuilder:validation:Minimum=1636
+	// +kubebuilder:validation:Minimum=1746
 	// +kubebuilder:validation:Maximum=86400
 	StartupSeconds int32 `json:"startupSeconds,omitempty"`
 
@@ -989,6 +989,7 @@ type EnginePodTemplate struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, (self.agent == 'ClaudeCode' && e.name in ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']) || (self.agent == 'Codex' && e.name == 'CODEX_API_KEY') || (self.agent == 'GeminiCLI' && e.name == 'GEMINI_API_KEY') || (self.agent == 'QwenCode' && e.name == 'OPENAI_API_KEY') || (self.agent == 'CursorAgent' && e.name == 'CURSOR_API_KEY') || (self.agent == 'Copilot' && e.name == 'COPILOT_GITHUB_TOKEN') || (self.agent == 'Grok' && e.name == 'XAI_API_KEY') || (self.agent == 'MuseCode' && e.name == 'META_API_KEY'))",message="env may not set the CLI's own token or key variable (ClaudeCode's CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY, Codex's CODEX_API_KEY, GeminiCLI's GEMINI_API_KEY, QwenCode's OPENAI_API_KEY, CursorAgent's CURSOR_API_KEY, Copilot's COPILOT_GITHUB_TOKEN, Grok's XAI_API_KEY, MuseCode's META_API_KEY): Crewlet's auth owns it, and whether a value in env reaches the CLI would turn on the auth mode. Give the key as auth.apiKeySecretRef with auth mode APIKey",fieldPath=".env"
 // +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, e.name in ['HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME', 'TMPDIR'] || (self.agent == 'ClaudeCode' && e.name in ['CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_DISABLE_CLAUDE_MDS', 'CLAUDE_CODE_DISABLE_AUTO_MEMORY']) || (self.agent == 'Codex' && e.name in ['CODEX_HOME', 'CODEX_SQLITE_HOME']) || (self.agent == 'OpenCode' && e.name in ['OPENCODE_CONFIG_DIR', 'OPENCODE_CONFIG_PROJECT_DISABLE']) || (self.agent == 'CursorAgent' && e.name == 'CURSOR_CONFIG_DIR') || (self.agent == 'KimiCode' && e.name == 'KIMI_CODE_HOME') || (self.agent == 'Hermes' && e.name == 'HERMES_HOME') || (self.agent == 'Pi' && e.name == 'PI_CODING_AGENT_DIR'))",message="env may not set a variable Crewlet sets on every call of the CLI to keep it inside its seat's own home and its call's working directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME or TMPDIR for any CLI, and ClaudeCode's CLAUDE_CONFIG_DIR, CLAUDE_CODE_DISABLE_CLAUDE_MDS and CLAUDE_CODE_DISABLE_AUTO_MEMORY, Codex's CODEX_HOME and CODEX_SQLITE_HOME, OpenCode's OPENCODE_CONFIG_DIR and OPENCODE_CONFIG_PROJECT_DISABLE, CursorAgent's CURSOR_CONFIG_DIR, KimiCode's KIMI_CODE_HOME, Hermes's HERMES_HOME or Pi's PI_CODING_AGENT_DIR. A value there would replace that isolation for every seat on the provider, so Crewlet refuses the document: drop it",fieldPath=".env"
 // +kubebuilder:validation:XValidation:rule="self.agent != 'OpenCode' || !has(self.model) || (self.model.indexOf('/') >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size() > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size() > 0)",message="an OpenCode model is <provider>/<model>, which OpenCode splits at its first slash: a model with no slash, or with nothing but white space before or after it, names no provider or no model, and every call the provider makes would fail inside OpenCode, which OpenCode 2 refuses as Invalid model reference. Name the provider as OpenCode spells it (opencode models --standalone lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5, with that provider's key in env",fieldPath=".model"
+// +kubebuilder:validation:XValidation:rule="!has(self.webTools) || self.webTools != 'Denied' || self.agent in ['ClaudeCode', 'Codex', 'OpenCode', 'Pi']",message="webTools Denied takes a CLI Crewlet can turn the web off for: ClaudeCode, Codex, OpenCode or Pi. Crewlet's profile for every other CLI carries no measured web denial, and refuses the setting",fieldPath=".webTools"
 type PlatformLLMProvider struct {
 	// name is the provider's name. Seats and the Company's model order refer
 	// to it with kind PlatformLLMProvider. It may not be default, which
@@ -1209,8 +1210,8 @@ type SignInSettings struct {
 // a company's object store cannot move under them, since Crewlet refuses to
 // start a node that names another store than the one it recorded, so the
 // backend a volume and a window were sized for is the one it runs with.
-// +kubebuilder:validation:XValidation:rule="(has(self.objects) && has(self.objects.backend) && self.objects.backend == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('12Gi'))",message="data.storage.size must be at least 12Gi with objects.backend NATS: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 9305762474 bytes of it for its state logs and the object store's bucket"
-// +kubebuilder:validation:XValidation:rule="!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend) || self.objects.backend != 'S3' || self.data.startupSeconds >= 1776",message="data.startupSeconds must be at least 1776 with objects.backend S3: every boot of a data pod probes the bucket, and Crewlet's bounds on the boot then add up to 1776 seconds, which a shorter window can cut short"
+// +kubebuilder:validation:XValidation:rule="(has(self.objects) && has(self.objects.backend) && self.objects.backend == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('12Gi'))",message="data.storage.size must be at least 12Gi with objects.backend NATS: three quarters of the volume is the engine's event stream, and a fresh node of Crewlet reserves at least 9395240959 bytes of it for its state logs and the object store's bucket"
+// +kubebuilder:validation:XValidation:rule="!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend) || self.objects.backend != 'S3' || self.data.startupSeconds >= 1886",message="data.startupSeconds must be at least 1886 with objects.backend S3: every boot of a data pod probes the bucket, and Crewlet's bounds on the boot then add up to 1886 seconds, which a shorter window can cut short"
 // +kubebuilder:validation:XValidation:rule="self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress) || has(self.exposure.webhooks.ingress.controllerNamespaces)) && (!has(self.exposure.api.ingress) || has(self.exposure.api.ingress.controllerNamespaces)) && (!has(self.exposure.artifacts) || !has(self.exposure.artifacts.ingress) || has(self.exposure.artifacts.ingress.controllerNamespaces)))",message="networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces: without them the policy refuses everything the Ingress forwards"
 // +kubebuilder:validation:XValidation:rule="!has(self.networkPolicy) || !has(self.networkPolicy.mode) || self.networkPolicy.mode != 'Isolated' || !has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.mode) || self.exposure.webhooks.mode != 'External' || has(self.exposure.webhooks.external)",message="networkPolicy Isolated with External webhooks needs webhooks.external.forwarders: without them the policy refuses everything forwarded to the public port"
 // +kubebuilder:validation:XValidation:rule="!has(self.exposure) || !has(self.exposure.webhooks) || !has(self.exposure.webhooks.external) || (has(self.networkPolicy) && has(self.networkPolicy.mode) && self.networkPolicy.mode == 'Isolated')",message="webhooks.external.forwarders apply to networkPolicy mode Isolated only: no other mode has a policy to admit them to"

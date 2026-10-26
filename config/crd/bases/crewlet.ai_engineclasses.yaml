@@ -219,7 +219,7 @@ spec:
                       that hung.
 
                       It is at least every bound Crewlet puts on a data pod's boot, laid end
-                      to end, which a window may not cut short: 1636 seconds, or 1776 with
+                      to end, which a window may not cut short: 1746 seconds, or 1886 with
                       objects.backend S3, whose bucket every boot probes. Those are its waits
                       for its own broker and store (provisioning the event stream, the
                       coordination buckets, the object store and the state logs, two minutes
@@ -238,7 +238,7 @@ spec:
                       Changing it changes the data pods' template, which restarts them.
                     format: int32
                     maximum: 86400
-                    minimum: 1636
+                    minimum: 1746
                     type: integer
                   storage:
                     description: storage is the data volume each data pod gets.
@@ -256,10 +256,10 @@ spec:
                           stream.store_max_bytes: the stream reserves what a node keeps there up
                           front, and a fresh node refuses to boot on a share that cannot hold it
                           (Crewlet's engine.BrokerFloor, and its deployment guide's "minimum room
-                          for a fresh node"). Its seven state logs' ceilings at their smallest
-                          come to 6979321856 bytes, so a volume must be at least 9Gi, whose share
+                          for a fresh node"). Its eight state logs' ceilings at their smallest
+                          come to 7046430720 bytes, so a volume must be at least 9Gi, whose share
                           of 6.75Gi holds them. With objects.backend NATS, the default, the object
-                          store's bucket reserves a quarter of the share beside them, 9305762474
+                          store's bucket reserves a quarter of the share beside them, 9395240959
                           bytes in all, so such a class must give at least 12Gi, whose share is
                           9Gi. That is the least that boots: the mailboxes and coordination
                           buckets grow into what is left, so give a company that runs for long
@@ -279,7 +279,7 @@ spec:
                         x-kubernetes-validations:
                         - message: 'size must be at least 9Gi: three quarters of the
                             volume is the engine''s event stream, and a fresh node
-                            of Crewlet reserves at least 6979321856 bytes of it for
+                            of Crewlet reserves at least 7046430720 bytes of it for
                             its state logs'
                           rule: '!quantity(string(self)).isLessThan(quantity(''9Gi''))'
                       storageClassName:
@@ -1838,6 +1838,18 @@ spec:
                       format: int32
                       minimum: 1
                       type: integer
+                    webTools:
+                      description: |-
+                        webTools is whether the CLI keeps its own web tools. Unset is
+                        Allowed, every seat's default. Denied is required of every provider
+                        the Company's Dashboard Assistant runs on (spec.assistant.llm), and
+                        is refused for a CLI Crewlet has no way to turn the web off for: it
+                        takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's
+                        `overrides.web_tools`.
+                      enum:
+                      - Allowed
+                      - Denied
+                      type: string
                   required:
                   - agent
                   - auth
@@ -1922,6 +1934,13 @@ spec:
                       >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size()
                       > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size()
                       > 0)
+                  - fieldPath: .webTools
+                    message: 'webTools Denied takes a CLI Crewlet can turn the web
+                      off for: ClaudeCode, Codex, OpenCode or Pi. Crewlet''s profile
+                      for every other CLI carries no measured web denial, and refuses
+                      the setting'
+                    rule: '!has(self.webTools) || self.webTools != ''Denied'' || self.agent
+                      in [''ClaudeCode'', ''Codex'', ''OpenCode'', ''Pi'']'
                 maxItems: 16
                 type: array
                 x-kubernetes-list-map-keys:
@@ -3549,16 +3568,16 @@ spec:
             x-kubernetes-validations:
             - message: 'data.storage.size must be at least 12Gi with objects.backend
                 NATS: three quarters of the volume is the engine''s event stream,
-                and a fresh node of Crewlet reserves at least 9305762474 bytes of
+                and a fresh node of Crewlet reserves at least 9395240959 bytes of
                 it for its state logs and the object store''s bucket'
               rule: (has(self.objects) && has(self.objects.backend) && self.objects.backend
                 == 'S3') || !has(self.data.storage.size) || !quantity(string(self.data.storage.size)).isLessThan(quantity('12Gi'))
-            - message: 'data.startupSeconds must be at least 1776 with objects.backend
+            - message: 'data.startupSeconds must be at least 1886 with objects.backend
                 S3: every boot of a data pod probes the bucket, and Crewlet''s bounds
-                on the boot then add up to 1776 seconds, which a shorter window can
+                on the boot then add up to 1886 seconds, which a shorter window can
                 cut short'
               rule: '!has(self.data.startupSeconds) || !has(self.objects) || !has(self.objects.backend)
-                || self.objects.backend != ''S3'' || self.data.startupSeconds >= 1776'
+                || self.objects.backend != ''S3'' || self.data.startupSeconds >= 1886'
             - message: 'networkPolicy Isolated with an Ingress needs ingress.controllerNamespaces:
                 without them the policy refuses everything the Ingress forwards'
               rule: self.networkPolicy.mode != 'Isolated' || ((!has(self.exposure.webhooks.ingress)
