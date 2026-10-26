@@ -173,6 +173,12 @@ func (run *configRun) verifyApplied(
 // peer applied the epoch, or a failure the engine has not yet written to
 // the record it keeps for its peers (it updates its own posture first); the
 // next look, engineRetryInterval later, finds the account of the second.
+//
+// What the node runs meanwhile is the revision its record names it serving,
+// and what it starts on if it restarts the one its record names it booting
+// on, which is the same revision but while the engine retries moving what it
+// starts on; the epoch it reports applied says nothing of either after a
+// restart, when it is 0 until the node applies one.
 func (run *configRun) failureAccount(ctx context.Context, eng *engine.Client, health engine.Health, target int64) string {
 	runs := fmt.Sprintf(" It reports status %q and posture %q, and keeps running epoch %d, the last it applied.",
 		health.Status, health.Posture, health.AppliedEpoch)
@@ -182,6 +188,10 @@ func (run *configRun) failureAccount(ctx context.Context, eng *engine.Client, he
 			"could not be read: %v.", err) + runs
 	}
 	record := fleet.LastApply()
+	if record.Serving != "" {
+		runs = fmt.Sprintf(" It reports status %q and posture %q, and keeps running revision %s, the last it applied or "+
+			"started on, %s.", health.Status, health.Posture, record.Serving, startsOn(&record))
+	}
 	if record.Status.Failed() && record.Epoch >= target && record.Epoch > health.AppliedEpoch {
 		account := record.Error
 		if account == "" {
@@ -193,6 +203,19 @@ func (run *configRun) failureAccount(ctx context.Context, eng *engine.Client, he
 	return fmt.Sprintf("The engine reports that it did not apply epoch %d and records no failed attempt at it: its apply "+
 		"has run longer than the engine's %s grace while a peer applied it, or the account of the failure has not reached "+
 		"its record yet.", epoch, engineLagGrace) + runs
+}
+
+// startsOn says, for failureAccount, what a node whose record names it
+// serving a revision starts on if it restarts.
+func startsOn(record *engine.ApplyRecord) string {
+	switch record.Boots {
+	case record.Serving:
+		return "which it starts on again if it restarts"
+	case "":
+		return "and starts on no revision if it restarts, and tries the fleet's again"
+	}
+	return fmt.Sprintf("and starts on revision %s if it restarts, which its store names until the engine has moved "+
+		"what it starts on to the revision it runs", record.Boots)
 }
 
 // settled reports the verdict of an epoch the engine has applied: the write's

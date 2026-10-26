@@ -138,10 +138,16 @@ the key does, or another document somebody else activated, whose reading the
 operator does not know, keeps the value it holds until the next document
 runs, as the last good revision keeps every value it requires; the Company's
 `SecretsSynced`, the object's `ResolvedRefs` message and a `SecretKept` event
-say so (a document the render holds is told by the event alone). Once the
-next document runs, the operator deletes the value and activates the new
-revision again without it at once, so that revision may start the server with
-the deleted Secret's value once, in between
+say so (a document the render holds is told by the event alone). Once no
+engine pod runs, or would start on, a revision that requires it, the operator
+deletes the value and activates the new revision again without it, so that
+revision may start the server with the deleted Secret's value in between. A
+pod that refused the next document keeps running the revision before it, which
+keeps the value while it does; only a data pod starts on that revision again
+if it restarts, while a seat pod starts on nothing and tries the fleet's
+revision again, and a pod that runs no company and would start on none holds
+nothing back. A pod whose revision the operator cannot learn keeps every
+value, as a data pod does while it is down or cut off from the engine's fleet
 ([Applying a document](../concepts/applying.md#what-one-reconcile-does)). A
 Secret key that is also read where it is required, by this server or anything
 else, is not one the company goes without: its deletion holds the document

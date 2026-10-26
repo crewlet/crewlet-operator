@@ -95,9 +95,11 @@ flowchart TD
    out, so the store is to hold none for it. The parts are told what was
    read either way: a value a part goes without, and an empty value under a
    key nothing lists (`SecretValueEmpty`), which holds nothing.
-3. **Push the values.** The operator reads the document the engine runs
-   (`GET /health`, then `GET /config`) and lists the engine's encrypted
-   secret store. Each referenced key is one entry in the store, named as the
+3. **Push the values.** The operator reads the fleet's document, the
+   revision the engine's activation pointer names, which every engine pod
+   answers alike (`GET /health`, then `GET /config`), reads which revisions
+   each engine pod runs and would start on (`GET /fleet`), and lists the
+   engine's encrypted secret store. Each referenced key is one entry in the store, named as the
    document refers to it (`K8S_<SECRET>_<KEY>_<hash>`). Only values that
    changed since the last push are written, and any entry the store lost or
    the engine lists as last written with a credential other than the
@@ -105,8 +107,62 @@ flowchart TD
    the operator writes its value back. The engine records that credential
    from the write's authentication, so no writer can pass for the operator.
    The entries the running document still references are kept until the next
-   document replaces it; an entry of the operator's shape that neither
-   document references is deleted now. So is the entry of a value whose
+   document replaces it, and so are those of every other revision an engine
+   pod runs or would start on: each pod applies the fleet's revision on its
+   own loop, and one that refused it goes on running the revision it ran
+   before. A pod, a seat pod as much as a data pod, needs the values of the
+   revision it runs for as long as it runs it: every attempt to apply a
+   revision, refused or not, reads the store again into what the running
+   revision resolves its references from, so a value gone from the store is
+   gone from the pod at its next attempt, and what it starts afterwards, such
+   as a seat's tool server, finds nothing under that name. And a pod does not
+   start on a revision once a value that revision requires is gone from the
+   store. Only a data pod starts on a revision: the one its volume names,
+   which the engine reports apart from the one it runs
+   (`config_boot_revision_id` beside `config_serving_revision_id` in
+   `GET /fleet`), since it moves it only once an apply has succeeded and
+   retries that write until it lands, the two differing meanwhile. A seat
+   pod's store is scratch (Crewlet's `store.scratch`), which the engine
+   discards at every start, so it starts on nothing, whatever it ran, and
+   applies the fleet's revision. The operator reads the document of each
+   such revision (`GET /config/revisions/<id>`) and keeps what it references
+   until no pod runs it or would start on it, looking at the engine again
+   every 18 seconds (the longest a pod goes before it reads the activation
+   pointer again) while it does; the Company's `SecretsSynced` names the
+   values and the pods. A pod that runs no company and would start on none
+   keeps nothing more: a seat pod that refused the fleet's revision, say, or
+   a data pod that started on an empty volume and refused it. A pod the
+   fleet does not list (restarting, Pending, or cut off from the data pod)
+   is judged by what it can be running, which its Pod says, and never by
+   what the operator saw of it before: a pod applies the fleet's revision on
+   its own loop, and a data pod moves the revision its volume starts it on
+   after every apply that succeeds, so one that applied a revision since the
+   fleet last listed it and then went down (a rolling restart takes each pod
+   down in turn) or was cut off runs, or would start on, a revision no
+   listing named.
+   So a data pod the fleet does not list keeps every value until the fleet
+   lists it again, whether its `engine` container runs or not: running, it
+   may run any revision the fleet named since it last listed the pod; not
+   running (Pending where no node has room for it, waiting in
+   `CrashLoopBackOff`, or not created yet), it would start on whichever
+   revision it applied last. A seat pod the fleet does not list keeps every
+   value while its `engine` container runs, and nothing while it does not:
+   it then runs nothing, and starts on nothing. That has a cost: every
+   deletion waits while a data pod is down, Pending or cut off from the
+   fleet. In v1alpha1 that rarely shows, since the one data pod is the node
+   the operator reaches: when `GET /fleet` answers at all, it lists that
+   pod, and when it does not, every value is kept anyway. And a seat pod's
+   Pod on a node whose kubelet stopped reporting stays `Running`, and holds
+   every deletion back until it is removed. Every value is kept, too, for a
+   node that has not yet recorded an attempt to apply a revision, a revision
+   the engine cannot answer, and every pod while `GET /fleet` cannot be
+   read. The data pod the operator reaches answers a revision from its own history, which
+   keeps one older than Crewlet's revision retention (over a year) only where
+   it is, or is an ancestor of, the revision that pod boots on or the
+   fleet's, whatever another pod runs: a revision another pod still runs or
+   would start on off those lines can be gone, and is then one the engine
+   cannot answer. An entry of the operator's shape that no document a pod
+   runs or would start on references is deleted now. So is the entry of a value whose
    Secret or key no longer exists where the revision the engine runs goes
    without it, so that the revision step 6 writes, or the one activated
    again below, activates without the deleted value: where that revision
@@ -166,15 +222,22 @@ flowchart TD
 7. **Clean up** the store. The operator records the new revision in its
    record of the store, with the Secret keys its document lets go without,
    before it deletes anything, so that a deletion whose own record a failed
-   write loses is withdrawn by the next reconcile. Then it reads the
-   document the engine runs again and lists the store, and every entry of
-   the operator's shape that the new document does not reference, the ones
-   only the replaced document used, is deleted, and so is the value of a
-   deleted Secret the replaced revision kept, which the new one goes
-   without; a revision somebody activated since the apply keeps every value
-   it references instead. The new revision activated with that value still
-   in the store, so the operator activates it again at once, unchanged
-   (`Reactivated`), and the engine reads its store without it. Until then the
+   write loses is withdrawn by the next reconcile. Then it reads the fleet's
+   document again, and which revisions each pod runs and would start on, and
+   lists the store,
+   and every entry of the operator's shape that the new document does not
+   reference, the ones only the replaced document used, is deleted, and so
+   is the value of a deleted Secret the replaced revision kept, which the new
+   one goes without; a revision somebody activated since the apply keeps
+   every value it references instead, and so does the revision before it
+   for as long as a pod runs it or would start on it, as in step 3. Right
+   after the write the pods have yet to apply the new revision, so these
+   entries usually go at the operator's next look, a few seconds later, once
+   the pods report it applied; a pod that refuses it keeps them for as long
+   as it runs the revision before it, or would start on it. The new revision activated with a deleted Secret's
+   value still in the store, so the operator activates it again once that
+   value is gone, unchanged (`Reactivated`), and the engine reads its store
+   without it. Until then the
    new revision may start a tool server or a coding run with the deleted
    Secret's value: that moment is the price of keeping the last good revision
    whole, paid where the revision the engine ran read the key as required,
@@ -192,16 +255,18 @@ flowchart TD
 sequenceDiagram
     participant O as Crewlet Operator
     participant E as Engine API
-    O->>E: GET /health, then GET /config, the document the engine runs
+    O->>E: GET /health, then GET /config, the fleet's document
+    O->>E: GET /fleet, the revisions each pod runs and would start on, and GET /config/revisions/ID of each other one
     O->>E: GET /secrets, then PUT /secrets/NAME for each value that changed
-    O->>E: DELETE /secrets/NAME that neither document references, or of a deleted Secret the running revision goes without
+    O->>E: DELETE /secrets/NAME that no document references, or of a deleted Secret every revision a pod runs or would start on goes without
     O->>E: PUT /config?dry_run=true with the rendered document
     E-->>O: the revision it checked against, or each problem at its place
     O->>E: PUT /config, If-Match the revision it checked
     E-->>O: the new revision and its activation epoch
     Note over O: records the new revision and the keys it lets go without
-    O->>E: GET /health, then GET /config, the document the engine runs now
-    O->>E: GET /secrets, then DELETE /secrets/NAME only the replaced document used
+    O->>E: GET /health, then GET /config, the fleet's document now
+    O->>E: GET /fleet, the revisions each pod runs and would start on now, and GET /config/revisions/ID of each other one
+    O->>E: GET /secrets, then DELETE /secrets/NAME only the replaced document used, once no pod runs it or would start on it
     opt a deleted Secret's value only the replaced revision kept
         O->>E: POST /config/reload, the new revision again without it
         O->>E: GET /health, then GET /config, that it is the document
@@ -221,9 +286,17 @@ sequenceDiagram
 > write (four of its 18-second polls), the Company reports
 > `ConfigApplied=False ApplyFailed` with the engine's status, posture and
 > account of the failure (from its record of the attempt in `/fleet`), and an
-> `ApplyFailed` event; the engine keeps running the revision it applied last.
-> The same check runs on every later look, so an engine that fails a revision
-> someone activates afterwards is reported too.
+> `ApplyFailed` event. The fleet's revision stays the one the write activated
+> (`GET /config` answers it), but a pod that did not apply it keeps running
+> the revision it ran before, and a data pod starts on the revision its
+> volume names if it restarts, that same one unless the engine is still
+> moving it: `/fleet` gives each pod the revision it last attempted
+> (`config_revision_id`), the one it runs (`config_serving_revision_id`) and
+> the one it would start on (`config_boot_revision_id`). So the operator
+> keeps in the store every value the revision a pod runs or would start on
+> references, as step 3 says, for as long as a pod does. The same check
+> runs on every later look, so an engine that fails a revision someone
+> activates afterwards is reported too.
 
 That is the reconcile under `Enforce`. Under `Observe` the operator renders,
 dry-runs and compares, and reads no Secret value and writes nothing; under
@@ -238,15 +311,22 @@ about a value. The same Secret holds the operator's record of the store's
 other facts: the revision whose reading of the values it knows, with the
 Secret keys that revision lets go without (`optional-keys`), the values it
 deleted that a revision has yet to activate without, and the ones it said it
-keeps.
+keeps. It records nothing of the engine's pods: what each runs and would
+start on is what `GET /fleet` says of it now, since a pod applies revisions,
+and a data pod moves the revision its volume starts it on, whether or not
+the operator is looking, and a pod the fleet does not list keeps every value
+it may need instead (step 3).
 
 The engine is reached at its first data pod,
 `http://<company>-data-0.<company>-data.<namespace>.svc:8080`, with the
 operator's own token from the Secret `<company>-api-tokens`, never through the
 `<company>-engine` Service: that Service routes only to a ready pod, and an
 engine is ready only once it runs a document. While the engine does not
-answer, the Company reports `ConfigApplied=False` with the reason
-`EngineUnavailable`, and the operator tries again every ten seconds. Because
+answer, or answers that it cannot read the fleet's coordination store, which
+holds the activation pointer (`GET /config` answers `503` then), the Company
+reports `ConfigApplied=False` with the reason `EngineUnavailable`, and the
+operator tries again every ten seconds, or sooner where the engine's
+`Retry-After` says so. Because
 the address is the cluster's DNS name of the pod, an operator running outside
 the cluster (`make run`) cannot reach any engine.
 
@@ -405,7 +485,7 @@ takes no work for a person that a pause could hold.
 
 | Object | Condition | When |
 |---|---|---|
-| Company | `SecretsSynced` | `True`, `Synced`, once the store holds every referenced value, counting the values a tool server or a coding run may go without whose Secret or key does not exist, which it does not hold, or holds as it was for the revision the engine runs where that revision requires one, or is one whose reading the operator does not know (it names those, and which of the two it is), and, the Company having no `ResolvedRefs`, naming the values of its own setup steps a run goes without and a value of theirs that holds nothing under a key their `optionalKeys` does not list ([What blocks a document](company-document.md#what-blocks-a-document)). `False`, `SecretNotFound` or `SecretTooLarge`, naming each Secret and key; `False`, `EngineUnavailable` when a write to the store failed; `Unknown`, `NotManaged` under Observe, and under Seed once seeded. |
+| Company | `SecretsSynced` | `True`, `Synced`, once the store holds every referenced value, counting the values a tool server or a coding run may go without whose Secret or key does not exist, which it does not hold, or holds as it was for the revision the engine runs where that revision requires one, or is one whose reading the operator does not know (it names those, and which of the two it is), the values it keeps only for a revision an engine pod runs or would start on other than the fleet's, or for a pod whose revisions it does not know (naming the pods), and, the Company having no `ResolvedRefs`, naming the values of its own setup steps a run goes without and a value of theirs that holds nothing under a key their `optionalKeys` does not list ([What blocks a document](company-document.md#what-blocks-a-document)). `False`, `SecretNotFound` or `SecretTooLarge`, naming each Secret and key; `False`, `EngineUnavailable` when a write to the store failed; `Unknown`, `NotManaged` under Observe, and under Seed once seeded. |
 | Company | `ConfigApplied` | `True` with `Applied`, `DriftCorrected`, `InSync` or `Seeded`, once the engine reports the revision's epoch applied. `False` with `Applying` while it applies it, `ApplyFailed` when it did not; otherwise with the reason of whatever blocks the document ([What blocks a document](company-document.md#what-blocks-a-document)): `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `HumanSeat`, `PerSeatNotAllowed`, `PoolCapacityExceeded`, `SeatPoolsNotAllowed`, `CLIAuthNotPortable`, `CodingAgentMismatch`, `OptionalKeyUnused`, `SecretNotFound`, `SecretTooLarge`, `NameConflict` (the Secret `<company>-secret-sync` is someone else's), `Invalid` (the engine's own words), `Drifted` (Observe), `WriteRefused` (the engine refuses the operator's own token a change to the document), `NotGranted` (the engine does not let the operator's token make a request it needs), `SeatHeld` (the document takes away a human seat a person, a service account or an open invitation holds in the engine) or `EngineUnavailable`. |
 | Company | `EngineHealthy` | The engine's alarm table, read each time the engine is reached: `True`, `NoAlarms`; `False`, `Alarms`, naming the one standing longest; `Unknown`, `AlarmsNotReported`, before the engine has evaluated them. Not part of `Ready`. |
 | Company | `IdentityClaimed` | Whether anybody has joined the company, read from the engine's `/health` each time the engine is reached, and every 30 seconds while nobody has, since a person joins where no watch sees it: `True`, `PersonEnrolled`, once its identity directory holds a person; `False`, `Unclaimed`, while nobody has joined, naming up to five of the company's Human seats and the access token to bring the first person in with; `False`, `NoHumanSeat`, when nobody can, for want of a Human seat; `Unknown`, `IdentityNotReported`, when the engine could not read its directory, did not say, or could not be asked. Not part of `Ready`: a company nobody has joined runs its agent seats. |

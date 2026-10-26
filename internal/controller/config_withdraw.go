@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -167,6 +168,11 @@ func (run *configRun) withdrawHeld(ctx context.Context, read secretsync.Desired)
 		// the state records the running one as letting go.
 		read.Release(released...)
 	}
+	// And whatever every other revision an engine pod runs or starts on
+	// reads as required stays for it, as in a sync.
+	if err := run.keepServing(ctx, eng, &read); err != nil {
+		return ctrl.Result{}, err
+	}
 	next, res, withdrawErr := secretsync.Withdraw(ctx, eng, read, state)
 	if len(res.Deleted) > 0 {
 		run.event(corev1.EventTypeNormal, "SecretsSynced", "SyncSecrets",
@@ -174,10 +180,11 @@ func (run *configRun) withdrawHeld(ctx context.Context, read secretsync.Desired)
 				"engine runs goes without, while the next document is held: %s", len(res.Deleted), strings.Join(res.Deleted, ", "))
 	}
 	run.keep(read, next, res.Retained)
+	run.held = res.Held
 	run.tellKept()
 	if run.secretsSynced != nil {
 		// The Secrets another part requires, which hold the document.
-		run.secretsSynced.Message += run.retainedSentence()
+		run.secretsSynced.Message += run.retainedSentence() + run.heldSentence()
 	}
 	var reactivateErr error
 	if withdrawErr == nil {
@@ -190,26 +197,67 @@ func (run *configRun) withdrawHeld(ctx context.Context, read secretsync.Desired)
 		run.withdrawalFailed(ctx, err)
 		return ctrl.Result{RequeueAfter: engineRetryInterval}, nil
 	}
-	return ctrl.Result{}, nil
+	return run.heldResync(ctrl.Result{}), nil
 }
 
 // keep records the absent names of read (Missing) that the secret sync left
-// in the engine's store, retained, because the revision read keeps names for
-// (Desired.Keep) reads them as required, or is one next does not record the
-// reading of: run.retained, which the conditions name, and run.kept, those
-// the state the reconcile loaded did not record as retained (run.told), for
-// tellKept to tell once rather than at every reconcile; next records them.
+// in the engine's store, retained, because a revision read keeps names for
+// (Desired.Keep, Desired.KeepServed) reads them as required, or is one next
+// does not record the reading of, or a pod's revisions are not known
+// (Desired.KeepUnread): run.retained, which the conditions name, the
+// revisions and pods that keep them (run.keptFor, run.keptUnread), and
+// run.kept, those the state the reconcile loaded did not record as retained
+// (run.told), for tellKept to tell once rather than at every reconcile; next
+// records them.
 func (run *configRun) keep(read secretsync.Desired, next secretsync.State, retained []string) {
 	run.retained = nil
+	holders := map[string]bool{}
 	for _, m := range read.Missing() {
-		if slices.Contains(retained, secretsync.StoreName(m.Key)) {
-			run.retained = append(run.retained, m.Key)
+		name := secretsync.StoreName(m.Key)
+		if !slices.Contains(retained, name) {
+			continue
+		}
+		run.retained = append(run.retained, m.Key)
+		for _, revision := range read.Holders(name, next) {
+			holders[revision] = true
 		}
 	}
-	running := read.Running()
-	run.retainedUnknown = !next.Records(running)
+	run.keptFor, run.keptUnread = nil, nil
+	if len(run.retained) > 0 {
+		// The fleet's revision first, which is the one the conditions
+		// have always named, then those pods run beside it.
+		for _, revision := range slices.Sorted(maps.Keys(holders)) {
+			k := keptRevision{revision: revision, fleets: revision == read.Running(), unknown: !next.Records(revision)}
+			if run.serving != nil {
+				k.pods = run.serving.revisions[revision]
+			}
+			run.keptFor = append(run.keptFor, k)
+		}
+		slices.SortStableFunc(run.keptFor, func(a, b keptRevision) int {
+			switch {
+			case a.fleets == b.fleets:
+				return 0
+			case a.fleets:
+				return -1
+			}
+			return 1
+		})
+		if run.serving != nil {
+			run.keptUnread = run.serving.unread
+		}
+	}
 	run.kept = slices.DeleteFunc(next.Retained(), func(name string) bool { return slices.Contains(run.told, name) })
-	run.keptBy = running
+}
+
+// keptRevision is a revision that keeps a value whose Secret is gone: the
+// fleet's, or one engine pods run or start on beside it (pods), which reads
+// it as required, or is one the operator does not know the reading of
+// (unknown).
+type keptRevision struct {
+	revision string
+	fleets   bool
+	pods     revisionPods
+	unknown  bool
 }
 
 // tellKept records a Normal SecretKept event naming the names keep found the
@@ -220,21 +268,61 @@ func (run *configRun) tellKept() {
 	}
 	run.event(corev1.EventTypeNormal, "SecretKept", "SyncSecrets",
 		"Kept %d values in the engine's secret store whose Secret or key no longer exists, which the next document lets go "+
-			"without, because revision %s, which the engine runs, %s: each goes once a revision that lets it go runs: %s",
-		len(run.kept), run.keptBy, run.retainedReading("each"), strings.Join(run.kept, ", "))
+			"without, because %s: each goes once a revision that lets it go runs: %s",
+		len(run.kept), run.keptBecause(true, "each"), strings.Join(run.kept, ", "))
 	run.kept = nil
 }
 
-// retainedReading says why the revision the engine runs keeps what
-// run.retained names: it reads them as required, or the operator does not
-// know how it reads them, and takes it that it does. them names what it
-// reads.
-func (run *configRun) retainedReading(them string) string {
-	if run.retainedUnknown {
-		return "is one the operator has no record of activating and does not render, so it takes it to read " + them +
-			" as required"
+// keptPlainly reports whether what keeps run.retained is the fleet's
+// revision alone, which every pod runs: the case the conditions name it in
+// as "the revision the engine runs".
+func (run *configRun) keptPlainly() bool {
+	return len(run.keptUnread) == 0 && len(run.keptFor) == 1 && run.keptFor[0].fleets
+}
+
+// keptBecause says why the store keeps what run.retained names: each
+// revision that keeps it, the fleet's by its id when byID and as "the
+// revision the engine runs" otherwise, reads them as required, or is one the
+// operator does not know the reading of and takes to; and a pod whose
+// revisions the operator does not know may run or start on one that does.
+// them names what they read.
+func (run *configRun) keptBecause(byID bool, them string) string {
+	var reasons []string
+	for _, k := range run.keptFor {
+		subject := "the revision the engine runs"
+		switch {
+		case !k.fleets:
+			subject = fmt.Sprintf("revision %s, which %s,", k.revision, k.pods.phrase())
+		case byID:
+			subject = fmt.Sprintf("revision %s, which the engine runs,", k.revision)
+		}
+		reading := "reads " + them + " as required"
+		if k.unknown {
+			reading = "is one the operator has no record of activating and does not render, so it takes it to read " + them +
+				" as required"
+		}
+		reasons = append(reasons, subject+" "+reading)
 	}
-	return "reads " + them + " as required"
+	if len(run.keptUnread) > 0 {
+		reasons = append(reasons, fmt.Sprintf("the operator does not know what %s %s or %s on, and takes it to read %s as required",
+			strings.Join(run.keptUnread, ", "), plural(len(run.keptUnread), "runs", "run"),
+			plural(len(run.keptUnread), "boots", "boot"), them))
+	}
+	return strings.Join(reasons, "; and ")
+}
+
+// podsPhrase names engine pods for a sentence: "engine pod a" or "engine
+// pods a, b".
+func podsPhrase(pods []string) string {
+	return plural(len(pods), "engine pod ", "engine pods ") + strings.Join(pods, ", ")
+}
+
+// plural is one for n of 1, and many for any other n.
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // retainedSentence is what the Company's SecretsSynced message says of
@@ -248,8 +336,8 @@ func (run *configRun) retainedSentence() string {
 		keys[i] = k.String()
 	}
 	return fmt.Sprintf(" The engine's secret store keeps the value it held for the %d the document lets go without whose "+
-		"Secret or key no longer exists (%s): the revision the engine runs %s, and each goes once a revision that lets it "+
-		"go runs.", len(run.retained), strings.Join(keys, ", "), run.retainedReading("each"))
+		"Secret or key no longer exists (%s): %s, and each goes once a revision that lets it go runs.",
+		len(run.retained), strings.Join(keys, ", "), run.keptBecause(false, "each"))
 }
 
 // settle makes the activation the secret sync's state owes (reactivate) and
@@ -286,7 +374,7 @@ func (run *configRun) settleRefused(
 	if failed {
 		return ctrl.Result{RequeueAfter: engineRetryInterval}, err
 	}
-	return ctrl.Result{}, err
+	return run.heldResync(ctrl.Result{}), err
 }
 
 // withdrawalFailed reports err, which kept the engine from reading its store
@@ -307,11 +395,13 @@ func (run *configRun) withdrawalFailed(ctx context.Context, err error) {
 // read until the next one runs. active is the engine's document as this
 // reconcile read it, nil to read it here.
 //
-// The engine activates again whichever revision is active when the request
-// lands, and takes no revision to match. So the revision it activates again
-// is read back, and recorded as letting go what the one read lets go only
-// where it is that document; otherwise the state goes on recording the one
-// read, which no longer runs, and a Warning says so.
+// The request names no revision: the engine stores again whichever revision
+// the fleet's activation pointer names when the request lands, built on it,
+// and a write landing inside the request fails it as a lost race. So the
+// revision it activates again is read back, and recorded as letting go what
+// the one read lets go only where it is that document; otherwise the state
+// goes on recording the one read, which is no longer the fleet's, and a
+// Warning says so.
 func (run *configRun) reactivate(
 	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, state secretsync.State,
 ) (secretsync.State, error) {

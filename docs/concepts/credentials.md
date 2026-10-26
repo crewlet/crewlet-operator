@@ -332,9 +332,19 @@ rotating a Secret rewrites an entry rather than replacing it.
 > run with a deleted Secret's value. Where the running configuration reads
 > the key as required, as one from before the key was listed does, or is
 > another configuration somebody else activated, whose reading the operator
-> does not know, it keeps the value until the next configuration is applied,
-> and the value is deleted then; where the running configuration lets the
-> key go, its value is deleted whatever the next configuration reads of it
+> does not know, it keeps the value until no engine pod runs, or would start
+> on, a configuration that references it, and the value is deleted then. A
+> pod that refused the next configuration keeps running the one before it,
+> which keeps every value it references while it does; only a data pod
+> starts on that one again if it restarts, its volume keeping what it ran,
+> while a seat pod starts on nothing and tries the fleet's configuration
+> again, and a pod that runs no company and would start on none (a seat pod
+> that refused it after a restart, or one that never started) holds nothing
+> back.
+> A pod whose configuration the operator cannot learn keeps every value, as
+> a data pod does while it is down or cut off from the engine's fleet.
+> Where the running configuration lets the key go, its value is deleted
+> whatever the next configuration reads of it
 > ([Applying a document](applying.md#what-one-reconcile-does)).
 
 A seat's provisioned credential has an entry of another shape, which the
