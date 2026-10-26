@@ -101,6 +101,12 @@ func run(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	// For the one test that installs the EngineClass CRD with other rules
+	// for a while (storeUnderLowerFloors).
+	if err := apiextensionsv1.AddToScheme(scheme); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
 	if k8sClient, err = client.New(cfg, client.Options{Scheme: scheme}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

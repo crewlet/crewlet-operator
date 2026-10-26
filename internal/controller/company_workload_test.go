@@ -34,9 +34,9 @@ func TestDataPodStartupSeconds(t *testing.T) {
 	}{
 		{"a volume of no size", unset, "0", nats},
 		{"a quantity below zero, which no claim has", unset, "-2Gi", nats},
-		{"the smallest volume", unset, "12Gi", nats + 12*6},
-		{"the smallest volume, objects on the stream", classWith(0, crewletaiv1alpha1.ObjectBackendNATS), "12Gi", nats + 12*6},
-		{"the smallest volume, objects in S3", classWith(0, crewletaiv1alpha1.ObjectBackendS3), "9Gi", s3 + 9*6},
+		{"the smallest volume", unset, "14Gi", nats + 14*6},
+		{"the smallest volume, objects on the stream", classWith(0, crewletaiv1alpha1.ObjectBackendNATS), "14Gi", nats + 14*6},
+		{"the smallest volume, objects in S3", classWith(0, crewletaiv1alpha1.ObjectBackendS3), "10Gi", s3 + 10*6},
 		{"a volume of no size, objects in S3", classWith(0, crewletaiv1alpha1.ObjectBackendS3), "0", s3},
 		{"a volume of whole GiB", unset, "100Gi", nats + 100*6},
 		{"a part of a GiB counts as one", unset, "10737418241", nats + 11*6},

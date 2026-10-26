@@ -1,12 +1,17 @@
 package crd_test
 
 import (
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -81,31 +86,31 @@ func TestEngineClassObjects(t *testing.T) {
 		},
 		{
 			name:   "a storage size just under the floor with files in the stream's bucket is refused",
-			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("12287Mi")) },
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("14335Mi")) },
 			want:   msgStorageFloorNATS,
 		},
 		{
-			name:   "a 9Gi volume with files in the stream's bucket, the default, is refused",
-			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("9Gi")) },
+			name:   "a 10Gi volume with files in the stream's bucket, the default, is refused",
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("10Gi")) },
 			want:   msgStorageFloorNATS,
 		},
 		{
-			name: "a 9Gi volume with files in the stream's bucket, named, is refused",
+			name: "a 10Gi volume with files in the stream's bucket, named, is refused",
 			mutate: func(c *v1.EngineClass) {
-				c.Spec.Data.Storage.Size = new(resource.MustParse("9Gi"))
+				c.Spec.Data.Storage.Size = new(resource.MustParse("10Gi"))
 				c.Spec.Objects = v1.ObjectSettings{Backend: v1.ObjectBackendNATS}
 			},
 			want: msgStorageFloorNATS,
 		},
 		{
 			name:   "a storage size of exactly the floor with files in the stream's bucket is accepted",
-			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("12Gi")) },
+			mutate: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("14Gi")) },
 		},
 		{
 			name: "a storage size just under the floor with files in S3 is refused",
 			mutate: func(c *v1.EngineClass) {
 				s3("")(c)
-				c.Spec.Data.Storage.Size = new(resource.MustParse("9215Mi"))
+				c.Spec.Data.Storage.Size = new(resource.MustParse("10239Mi"))
 			},
 			want: msgStorageFloor,
 		},
@@ -113,7 +118,7 @@ func TestEngineClassObjects(t *testing.T) {
 			name: "a storage size of exactly the floor with files in S3 is accepted",
 			mutate: func(c *v1.EngineClass) {
 				s3("")(c)
-				c.Spec.Data.Storage.Size = new(resource.MustParse("9Gi"))
+				c.Spec.Data.Storage.Size = new(resource.MustParse("10Gi"))
 			},
 		},
 		{
@@ -1230,18 +1235,228 @@ func TestEngineClassFloorFollowsTheObjects(t *testing.T) {
 	}
 	runUpdateCases(t, engineClass, []updateCase[*v1.EngineClass]{
 		{
-			name: "a 9Gi class moving its files from S3 into the stream's bucket is refused",
+			name: "a 10Gi class moving its files from S3 into the stream's bucket is refused",
 			before: func(c *v1.EngineClass) {
 				inS3(c)
-				c.Spec.Data.Storage.Size = new(resource.MustParse("9Gi"))
+				c.Spec.Data.Storage.Size = new(resource.MustParse("10Gi"))
 			},
 			mutate: func(c *v1.EngineClass) { c.Spec.Objects = v1.ObjectSettings{Backend: v1.ObjectBackendNATS} },
 			want:   msgStorageFloorNATS,
 		},
 		{
-			name:   "a 12Gi class moving its files from the stream's bucket to S3 is accepted",
-			before: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("12Gi")) },
+			name:   "a 14Gi class moving its files from the stream's bucket to S3 is accepted",
+			before: func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = new(resource.MustParse("14Gi")) },
 			mutate: inS3,
 		},
 	})
+}
+
+// TestEngineClassStoredBelowTheFloor is what the API server does with a class
+// stored below the floor on its data volume, as one written before the floor
+// last rose is (Crewlet's code host's log, the eighth state log a fresh node
+// reserves, moved it from 12Gi to 14Gi with the files in the stream's bucket
+// and from 9Gi to 10Gi in S3): it keeps the class as it is, and holds a
+// change to it to the rules as they are now, sparing what the change leaves
+// as it was (the API server's validation ratcheting). With the files in the
+// stream's bucket the floor is a rule on the whole spec, so any change to the
+// spec is refused until the size reaches the floor, and one to the metadata
+// alone is not; in S3 it is a rule on the size alone, so only a change of the
+// size that leaves it below the floor is refused. DataStorage.size's doc and
+// the installing and troubleshooting guides, which tell a platform to raise
+// such a class, say so from this test.
+func TestEngineClassStoredBelowTheFloor(t *testing.T) {
+	s3Floor, natsFloor := installedVolumeFloors(t)
+	under := func(floor resource.Quantity, by string) *resource.Quantity {
+		q := floor.DeepCopy()
+		q.Sub(resource.MustParse(by))
+		return &q
+	}
+	prefix := strings.ToLower(namespacePrefix(newNamespace(t)))
+	nats := engineClass("", prefix+"-stored-nats")
+	nats.Spec.Data.Storage.Size = under(natsFloor, "1Gi")
+	inS3 := engineClass("", prefix+"-stored-s3")
+	inS3.Spec.Objects = v1.ObjectSettings{
+		Backend: v1.ObjectBackendS3,
+		S3:      v1.S3ObjectSettings{Region: tenantsRegion, Bucket: tenantsBucket},
+	}
+	inS3.Spec.Data.Storage.Size = under(s3Floor, "1Gi")
+	storeUnderLowerFloors(t, nats, inS3)
+
+	window := func(c *v1.EngineClass) { c.Spec.Data.StartupSeconds = 3600 }
+	sized := func(size *resource.Quantity) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) { c.Spec.Data.Storage.Size = size }
+	}
+	for _, c := range []struct {
+		name   string
+		class  *v1.EngineClass
+		mutate func(*v1.EngineClass)
+		want   string
+	}{
+		{
+			name: "in the stream's bucket, a change to the spec is refused", class: nats,
+			mutate: window, want: msgStorageFloorNATS,
+		},
+		{
+			name: "in the stream's bucket, a change to the labels alone is accepted", class: nats,
+			mutate: func(c *v1.EngineClass) { c.Labels = map[string]string{"example.com/tier": "team"} },
+		},
+		{name: "in the stream's bucket, the size raised to the floor is accepted", class: nats, mutate: sized(&natsFloor)},
+		{name: "in S3, a change to the rest of the spec is accepted", class: inS3, mutate: window},
+		{
+			name: "in S3, a size still below the floor is refused", class: inS3,
+			mutate: sized(under(s3Floor, "512Mi")), want: msgStorageFloor,
+		},
+		{name: "in S3, the size raised to the floor is accepted", class: inS3, mutate: sized(&s3Floor)},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			stored := &v1.EngineClass{}
+			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(c.class), stored); err != nil {
+				t.Fatal(err)
+			}
+			c.mutate(stored)
+			// A dry run, so every case meets the class as it was stored.
+			expect(t, k8sClient.Update(ctx, stored, client.DryRunAll), c.want)
+		})
+	}
+}
+
+// The EngineClass rules that floor the data volume, as controller-gen writes
+// them into the CRD (internal/render's TestContractStreamFloor reads them the
+// same way): the size's own rule, and the class's rule for a class whose
+// objects are in the stream's bucket.
+var (
+	sizeFloorRule = regexp.MustCompile(`^!quantity\(string\(self\)\)\.isLessThan\(quantity\('(\d+Gi)'\)\)$`)
+	natsFloorRule = regexp.MustCompile(`^\(has\(self\.objects\) && has\(self\.objects\.backend\) && ` +
+		`self\.objects\.backend == 'S3'\) \|\| !has\(self\.data\.storage\.size\) \|\| ` +
+		`!quantity\(string\(self\.data\.storage\.size\)\)\.isLessThan\(quantity\('(\d+Gi)'\)\)$`)
+)
+
+// engineClassCRD is the name of the EngineClass CRD.
+const engineClassCRD = "engineclasses.crewlet.ai"
+
+// volumeFloorRules are the two rules of an EngineClass CRD's schema that
+// floor the data volume: the size's own, and the class's for the files in the
+// stream's bucket, each with the floor it names. It fails the test unless
+// each is there exactly once, in the shape the patterns read.
+func volumeFloorRules(
+	t *testing.T, schema *apiextensionsv1.JSONSchemaProps,
+) (size, nats *apiextensionsv1.ValidationRule, s3Floor, natsFloor string) {
+	t.Helper()
+	spec := schema.Properties["spec"]
+	sizeProps := spec.Properties["data"].Properties["storage"].Properties["size"]
+	find := func(
+		rules apiextensionsv1.ValidationRules, pattern *regexp.Regexp, where string,
+	) (*apiextensionsv1.ValidationRule, string) {
+		var found *apiextensionsv1.ValidationRule
+		var floor string
+		for i := range rules {
+			if m := pattern.FindStringSubmatch(rules[i].Rule); m != nil {
+				if found != nil {
+					t.Fatalf("%s: two rules of the shape %s at %s", engineClassCRD, pattern, where)
+				}
+				found, floor = &rules[i], m[1]
+			}
+		}
+		if found == nil {
+			t.Fatalf("%s: no rule of the shape %s at %s", engineClassCRD, pattern, where)
+		}
+		return found, floor
+	}
+	size, s3Floor = find(sizeProps.XValidations, sizeFloorRule, "spec.data.storage.size")
+	nats, natsFloor = find(spec.XValidations, natsFloorRule, "spec")
+	return size, nats, s3Floor, natsFloor
+}
+
+// installedVolumeFloors are the floors on an EngineClass's data volume as the
+// CRD envtest installed holds them: the size's own, which a class whose files
+// are in S3 is held to, and the one for the files in the stream's bucket.
+func installedVolumeFloors(t *testing.T) (s3, nats resource.Quantity) {
+	t.Helper()
+	for _, crd := range installedCRDs {
+		if crd.Name == engineClassCRD {
+			_, _, s3Floor, natsFloor := volumeFloorRules(t, crd.Spec.Versions[0].Schema.OpenAPIV3Schema)
+			return resource.MustParse(s3Floor), resource.MustParse(natsFloor)
+		}
+	}
+	t.Fatalf("no CRD %s was installed", engineClassCRD)
+	return resource.Quantity{}, resource.Quantity{}
+}
+
+// storeUnderLowerFloors stores classes, each below a floor on the data
+// volume, as an API server whose CRD had lower floors did: it installs the
+// EngineClass CRD with both floors at 1Gi, creates the classes once the API
+// server holds them to that, and installs the CRD's own rules again,
+// returning once the API server holds them to those. No other test runs
+// meanwhile, since none of this package runs in parallel with another.
+func storeUnderLowerFloors(t *testing.T, classes ...*v1.EngineClass) {
+	t.Helper()
+	key := client.ObjectKey{Name: engineClassCRD}
+	installed := &apiextensionsv1.CustomResourceDefinition{}
+	if err := k8sClient.Get(ctx, key, installed); err != nil {
+		t.Fatal(err)
+	}
+	own := installed.Spec.DeepCopy()
+	lowered := installed.Spec.DeepCopy()
+	size, nats, s3Floor, natsFloor := volumeFloorRules(t, lowered.Versions[0].Schema.OpenAPIV3Schema)
+	size.Rule = strings.Replace(size.Rule, "quantity('"+s3Floor+"')", "quantity('1Gi')", 1)
+	nats.Rule = strings.Replace(nats.Rule, "quantity('"+natsFloor+"')", "quantity('1Gi')", 1)
+	install := func(spec *apiextensionsv1.CustomResourceDefinitionSpec) error {
+		return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			crd := &apiextensionsv1.CustomResourceDefinition{}
+			if err := k8sClient.Get(ctx, key, crd); err != nil {
+				return err
+			}
+			crd.Spec = *spec.DeepCopy()
+			return k8sClient.Update(ctx, crd)
+		})
+	}
+	restored := false
+	t.Cleanup(func() {
+		if !restored {
+			if err := install(own); err != nil {
+				t.Errorf("installing the EngineClass CRD's own rules again: %v", err)
+			}
+		}
+	})
+	if err := install(lowered); err != nil {
+		t.Fatalf("installing the EngineClass CRD with lower floors: %v", err)
+	}
+	// Asked of a name no class has, so that its create is judged by the
+	// rules alone, never refused as one that exists.
+	probe := classes[0].DeepCopy()
+	probe.Name += "-probe"
+	awaitAdmission(t, probe, true)
+	for _, c := range classes {
+		if err := k8sClient.Create(ctx, c); err != nil {
+			t.Fatalf("storing EngineClass %s under the lower floors: %v", c.Name, err)
+		}
+	}
+	if err := install(own); err != nil {
+		t.Fatalf("installing the EngineClass CRD's own rules again: %v", err)
+	}
+	restored = true
+	awaitAdmission(t, probe, false)
+}
+
+// awaitAdmission waits, for up to half a minute, until the API server's
+// verdict on creating class is admitted, asking with dry runs: a CRD whose
+// rules changed is held to them once the API server has rebuilt its
+// validation, not when the update returns.
+func awaitAdmission(t *testing.T, class *v1.EngineClass, admitted bool) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		err := k8sClient.Create(ctx, class.DeepCopy(), client.DryRunAll)
+		if err != nil && !apierrors.IsInvalid(err) {
+			t.Fatalf("a dry run of EngineClass %s: %v", class.Name, err)
+		}
+		if (err == nil) == admitted {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the API server's verdict on EngineClass %s is still %v after the CRD changed, want admitted %v",
+				class.Name, err, admitted)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }

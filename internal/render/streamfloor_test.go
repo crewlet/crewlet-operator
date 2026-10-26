@@ -15,14 +15,16 @@ import (
 )
 
 // What a fresh node of Crewlet reserves on its event stream before it boots
-// (its engine.BrokerFloorFor): its seven state logs' ceilings at their
-// floors, and, with the objects in the stream's own bucket, that bucket
-// beside them at a quarter of the stream. TestContractStreamFloor holds both
-// to the figure `crewlet validate` names, and TestStreamFloorFiguresAreTheEngines
-// holds every hand-written comment and page that quotes one to these.
+// (its engine.BrokerFloorFor): its eight state logs' ceilings at their
+// floors, the code host's log among them, which every node reserves whether
+// or not the company hosts code, and, with the objects in the stream's own
+// bucket, that bucket beside them at a quarter of the stream.
+// TestContractStreamFloor holds both to the figure `crewlet validate` names,
+// and TestStreamFloorFiguresAreTheEngines holds every hand-written comment
+// and page that quotes one to these.
 const (
-	freshNodeLogsFloor   int64 = 6979321856
-	freshNodeBucketFloor int64 = 9305762474
+	freshNodeLogsFloor   int64 = 8053063680
+	freshNodeBucketFloor int64 = 10737418239
 )
 
 // The EngineClass rules that floor the data volume, as controller-gen writes

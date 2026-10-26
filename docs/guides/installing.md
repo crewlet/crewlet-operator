@@ -19,8 +19,15 @@ page installs it on a cluster you run companies on. The
 - A CNI that enforces NetworkPolicy, for the isolation around each engine
   ([Exposure and network policy](exposure.md#network-policy)).
 - A default StorageClass, or the one your EngineClasses name, that provisions
-  `ReadWriteOnce` volumes of at least 12Gi (9Gi for an EngineClass that keeps
-  its files in S3).
+  `ReadWriteOnce` volumes of at least 14Gi (10Gi for an EngineClass that keeps
+  its files in S3). The floor follows what a fresh engine node reserves on its
+  event stream, so an operator that runs a newer engine can raise it: an
+  EngineClass stored below it keeps its size, every Company created under it
+  gets a volume no engine boots on, and the API refuses a change to its spec
+  until its size is raised (with its files in S3, only a change of its size
+  that leaves it below), so raise its `data.storage.size`. A company already
+  running on such a volume needs its own claim grown
+  ([The data pod is not ready](troubleshooting.md#the-data-pod-is-not-ready)).
 - A way to take each company's backups: the operator takes none, and the
   engine trims its logs only behind a recent one, refusing writes once they
   are full ([Backups](../concepts/runtime.md#backups)).
