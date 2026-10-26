@@ -1042,11 +1042,18 @@ type CompanySpec struct {
 	// engineConfig can never carry a credential: the API server refuses a
 	// Company whose engineConfig names one of them, before anything is
 	// stored.
+	//
+	// Nor may it set code, Crewlet's code host, which keeps the company's git
+	// repositories in the engine and which v1alpha1 does not offer: the host
+	// serves them only from a node with the git role and a cache of them on
+	// its volume, and no pod the operator runs has either, so a document
+	// that set it would declare repositories nothing can clone or push.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=64
 	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'token_budget', 'providers', 'integrations', 'mcp_servers', 'roles', 'units']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, token_budget, providers, integrations, mcp_servers, roles or units: those are fields and objects of this API, and the only blocks that hold credentials"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, e.name != 'code')",message="engineConfig may not set code: Crewlet's code host is not offered in v1alpha1, since no pod the operator runs has the git role or the cache that serves a company's repositories, which nothing could clone or push; remove the entry"
 	EngineConfig []EngineConfigEntry `json:"engineConfig,omitempty"`
 
 	// config is how the operator manages the company's document.

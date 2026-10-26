@@ -135,6 +135,14 @@ warns of it (`code.access … grants nothing`): one on a seat with no
 `spec.integrations.github`, or in a company with no GitHub `Integration`
 ([Read what the engine is worth telling you](../guides/troubleshooting.md#read-what-the-engine-is-worth-telling-you)).
 
+Crewlet's own code host, which keeps the company's git repositories in the
+engine (its top-level `code` block: `native`, `repos`, `limits`), is not
+offered in v1alpha1, and the API refuses a `spec.engineConfig` entry named
+`code`. The host serves its repositories only from a node with the `git`
+role and a cache of them on its volume, and no pod the operator runs has
+either: a document that set it would declare repositories nothing can clone
+or push.
+
 ### Schedules
 
 A Schedule is written into the entry of what it targets: a Seat's role, or a

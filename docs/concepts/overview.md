@@ -197,7 +197,11 @@ entry per top-level key of the document (`turn_engine`, `learning`,
 another field or object owns, and those are the only blocks that hold
 credentials, so engineConfig can never carry one. [Credential Positions](credentials.md)
 lists every credential position Crewlet has and the field that covers it,
-including the ones v1alpha1 does not offer yet.
+including the ones v1alpha1 does not offer yet. It refuses `code` too:
+Crewlet's code host, which keeps the company's git repositories in the
+engine, is not offered in v1alpha1, since no pod the operator runs has the
+`git` role or the cache that serves them
+([Code access](company-document.md#code-access)).
 
 ---
 
