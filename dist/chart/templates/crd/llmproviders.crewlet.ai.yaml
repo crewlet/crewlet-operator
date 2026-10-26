@@ -438,15 +438,17 @@ spec:
               message: 'env may not set a variable Crewlet sets on every call of the
                 CLI to keep it inside its seat''s own home and its call''s working
                 directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME
-                or TMPDIR for any CLI, and ClaudeCode''s CLAUDE_CONFIG_DIR, Codex''s
-                CODEX_HOME and CODEX_SQLITE_HOME, OpenCode''s OPENCODE_CONFIG_DIR
-                and OPENCODE_CONFIG_PROJECT_DISABLE, CursorAgent''s CURSOR_CONFIG_DIR,
-                KimiCode''s KIMI_CODE_HOME, Hermes''s HERMES_HOME or Pi''s PI_CODING_AGENT_DIR.
-                A value there would replace that isolation for every seat on the provider,
-                so Crewlet refuses the document: drop it'
+                or TMPDIR for any CLI, and ClaudeCode''s CLAUDE_CONFIG_DIR, CLAUDE_CODE_DISABLE_CLAUDE_MDS
+                and CLAUDE_CODE_DISABLE_AUTO_MEMORY, Codex''s CODEX_HOME and CODEX_SQLITE_HOME,
+                OpenCode''s OPENCODE_CONFIG_DIR and OPENCODE_CONFIG_PROJECT_DISABLE,
+                CursorAgent''s CURSOR_CONFIG_DIR, KimiCode''s KIMI_CODE_HOME, Hermes''s
+                HERMES_HOME or Pi''s PI_CODING_AGENT_DIR. A value there would replace
+                that isolation for every seat on the provider, so Crewlet refuses
+                the document: drop it'
               rule: '!has(self.env) || !self.env.exists(e, e.name in [''HOME'', ''XDG_CONFIG_HOME'',
                 ''XDG_DATA_HOME'', ''XDG_STATE_HOME'', ''XDG_CACHE_HOME'', ''TMPDIR'']
-                || (self.agent == ''ClaudeCode'' && e.name == ''CLAUDE_CONFIG_DIR'')
+                || (self.agent == ''ClaudeCode'' && e.name in [''CLAUDE_CONFIG_DIR'',
+                ''CLAUDE_CODE_DISABLE_CLAUDE_MDS'', ''CLAUDE_CODE_DISABLE_AUTO_MEMORY''])
                 || (self.agent == ''Codex'' && e.name in [''CODEX_HOME'', ''CODEX_SQLITE_HOME''])
                 || (self.agent == ''OpenCode'' && e.name in [''OPENCODE_CONFIG_DIR'',
                 ''OPENCODE_CONFIG_PROJECT_DISABLE'']) || (self.agent == ''CursorAgent''

@@ -292,7 +292,10 @@ XDG directories and the temporary directory of every CLI, and the CLI's own
 configuration directory (and, for `Codex`, the directory of its state
 database), or, for `OpenCode`, its configuration directory and
 `OPENCODE_CONFIG_PROJECT_DISABLE`, the switch that keeps OpenCode from reading
-project configuration from the directories above a seat's call. `env` is
+project configuration from the directories above a seat's call, and, for
+`ClaudeCode`, `CLAUDE_CODE_DISABLE_CLAUDE_MDS` and
+`CLAUDE_CODE_DISABLE_AUTO_MEMORY`, the switches that keep every `CLAUDE.md`
+above a seat's call, and Claude Code's auto-memory, out of it. `env` is
 layered over them, so a value there would replace that isolation for every
 seat on the provider: the engine refuses the document, and the API server
 refuses the provider first. Another CLI's variable is no conflict here
@@ -302,7 +305,7 @@ its message and this table to the engine's lists:
 | `env` may not set | For |
 |---|---|
 | `HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, `TMPDIR` | every CLI |
-| `CLAUDE_CONFIG_DIR` | `ClaudeCode` |
+| `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_DISABLE_CLAUDE_MDS`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY` | `ClaudeCode` |
 | `CODEX_HOME`, `CODEX_SQLITE_HOME` | `Codex` |
 | `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_PROJECT_DISABLE` | `OpenCode` |
 | `CURSOR_CONFIG_DIR` | `CursorAgent` |
