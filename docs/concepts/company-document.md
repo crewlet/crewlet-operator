@@ -519,11 +519,9 @@ revision:
   Seat reports it on its `CodeWorkRunnable` condition
   ([Code work](../guides/cli-agents.md#code-work)).
 - A seat whose executor's chain starts with an `LLMProvider` in
-  `mode: Box` (the one entry Crewlet runs in the sandbox), where the
-  node that holds it serves no tool bridge for the run to call the seat's
-  tools back through: the seat is placed in a seat pool, for whose pods the
-  operator publishes no address (`BoxModeBridgeUnsupported`), or the
-  company has no public address at all (`NotExposed`). Crewlet refuses each
+  `mode: Box` (the one entry Crewlet runs in the sandbox), in a company
+  with no public address for the run to call the seat's tools back through
+  (`NotExposed`), whatever pool the seat is placed in. Crewlet refuses each
   of the seat's turns, so the Seat reports `Ready=False` with the reason,
   and an `LLMProvider` in `mode: Box` reports `BoxModeRunnable=False`,
   `NotExposed`, while the company has no public address

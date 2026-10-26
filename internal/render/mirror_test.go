@@ -160,17 +160,12 @@ const (
 	orgGo       = "internal/org/organization.go"
 	fileRulesGo = "internal/config/filerules.go"
 
-	// bootBindRead is crewlet#257's engine, which binds api.port, and
-	// api.public where the node serves one, before its boot: whether a node
-	// has a tool bridge is now one function (mcpbridge.Configured) that
-	// crewlet run asks before the engine exists, and which node binds
-	// api.public is another (api.PublicListener). A node given no
-	// CREWLET_MCP_BRIDGE_URL still builds no bridge, and one without the
-	// ingress role still binds api.public only for a bridge it serves.
-	bootBindRead = "v0.1.1-0.20261018071555-ae6e5c16db2e"
-	bootstrapGo  = "internal/render/bootstrap.go"
-	mcpbridgeGo  = "internal/api/mcpbridge/build.go"
-	bootGo       = "internal/api/boot.go"
+	// bootstrapGo is the render of both Tier A documents, mcpbridgeGo where the
+	// engine decides whether a node has a tool bridge, and bootGo which node
+	// binds a public listener.
+	bootstrapGo = "internal/render/bootstrap.go"
+	mcpbridgeGo = "internal/api/mcpbridge/build.go"
+	bootGo      = "internal/api/boot.go"
 
 	// signInRead is the engine the loopback judgement was first read at.
 	signInRead  = "v0.1.1-0.20261018171039-c28489c9c9ca"
@@ -198,6 +193,16 @@ const (
 	// that cannot follow the run into a remote sandbox — while opening the
 	// job's bridge session inside the launch and fencing each bridged call.
 	nativeMCPRead = "v0.1.1-0.20261026003358-0f50276ef71f"
+
+	// fleetBridgeRead is the engine whose tool bridge address is the fleet's:
+	// the node a box's call reaches relays it over the broker to the node
+	// holding the run's seat, so a seat pod is given the data pods' address
+	// and runs box-mode seats, and a node without the ingress role serves no
+	// route of the bridge's. A deep-work session, which no seat holds, is
+	// relayed to the pod that opened it, so it needs nothing more here.
+	fleetBridgeRead = "v0.1.1-0.20261026090300-7a96723be5ad"
+	bridgeFleetGo   = "internal/engine/bridgefleet.go"
+	seatPoolsGo     = "internal/controller/company_pools.go"
 
 	// offersSandboxRead is crewlet#271's engine, whose runner was first read
 	// for which seats it offers run_sandbox: never one whose executor runs in
@@ -759,12 +764,12 @@ var mirrored = []mirror{
 	{
 		file: agentRunGo, name: "(*agentLauncher).LaunchExecutor",
 		against: append([]string{executorGo, renderCompanyGo, configOptionalGo}, boxLogin...),
-		decides: "a box-mode turn on a node that serves no tool bridge is refused, never run on the engine's host " +
-			"instead (BoxModeBridgeUnsupported, NotExposed), and so is one whose CLI login cannot follow it " +
-			"into the remote sandbox (sandboxCredentials at phase Execute); a run whose environment holds a " +
-			"value that resolves to nothing starts without it",
-		digest: "bd61de506c23e539219789b90294e832cb4a5a8fe43be87534915bbac360935d",
-		read:   nativeMCPRead,
+		decides: "a box-mode turn on a node whose tool bridge nothing reaches is refused, never run on the engine's " +
+			"host instead (NotExposed: the Company has no public address to give it), and so is one whose CLI " +
+			"login cannot follow it into the remote sandbox (sandboxCredentials at phase Execute); a run whose " +
+			"environment holds a value that resolves to nothing starts without it",
+		digest: "796d067aeab399d3894c78b915cf3b95edee33ca9d8f3009271c950ad1c07125",
+		read:   fleetBridgeRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).executorRun",
@@ -938,32 +943,25 @@ var mirrored = []mirror{
 	{
 		file: mcpbridgeGo, name: "Build",
 		against: []string{executorGo},
-		decides: "a node given no CREWLET_MCP_BRIDGE_URL builds no tool bridge (the test is Configured's)",
-		digest:  "108e637e5417c3bd768bbb6785ede3313232fb828e519f32c1a833125c37e58b",
-		read:    bootBindRead,
+		decides: "a node given no CREWLET_MCP_BRIDGE_URL, or one of spaces alone, builds no tool bridge",
+		digest:  "501fff0b61690ae9c940865fbe32e69f1765fd8a90735dfa338a66be77c6d820",
+		read:    fleetBridgeRead,
 	},
 	{
-		file: mcpbridgeGo, name: "Configured",
-		against: []string{executorGo, bootstrapGo},
-		decides: "a node has a tool bridge only when CREWLET_MCP_BRIDGE_URL is set to more than spaces, which the " +
-			"operator gives the data pods alone",
-		digest: "8cb9750e7647eb66a8474b39608e911a2975c99bbc36c1362e88ee30431b6950",
-		read:   bootBindRead,
+		file: bridgeFleetGo, name: "(*Engine).joinBridgeFleet",
+		against: []string{executorGo, seatPoolsGo, bootstrapGo},
+		decides: "every node with a bridge joins the fleet's relay, a seat pod included, so a box's call to the data " +
+			"pods reaches a seat a seat pod holds and the operator gives every engine pod the one address; only an " +
+			"ingress node at api.port 0 stays out",
+		digest: "6cb403b397c5b3e76772569894f2052b1b4b75572dfbda6cefec1304d5889610",
+		read:   fleetBridgeRead,
 	},
 	{
 		file: bootGo, name: "PublicListener",
 		against: []string{bootstrapGo},
-		decides: "a node without the ingress role binds api.public only where it serves its tool bridge, so a seat " +
-			"pod, given no bridge address, is given no api.public block",
-		digest: "a83eb8f588e04b36bb5f222173246f63bb564bb521f5a0d9eddf34ba6a1b4b11",
-		read:   bootBindRead,
-	},
-	{
-		file: bootGo, name: "servesBridge",
-		against: []string{bootstrapGo, executorGo},
-		decides: "a node without the ingress role serves a tool bridge only when it runs seats and has a bridge address",
-		digest:  "53129c12fa32a9938afa3d793112e1c700d3ae679f3683f9957cb522b5effa8c",
-		read:    bootBindRead,
+		decides: "a node without the ingress role never binds api.public, so a seat pod is given no api.public block",
+		digest:  "83a3c86ffc1eed9410a71fd6d1298c907c1e444406e1dedf6170a7ab02128b8b",
+		read:    fleetBridgeRead,
 	},
 	{
 		file: apiConfigGo, name: "API.externalLoopback",

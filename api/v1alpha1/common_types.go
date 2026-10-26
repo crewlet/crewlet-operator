@@ -300,9 +300,9 @@ const (
 	// an engine node holds its lease, as the engine's GET /fleet reports,
 	// and Unplaced while none does, or PoolNotFound when none can, as the
 	// Company does not declare the seat's pool. A seat whose executor's chain is headed
-	// by a CLI in mode Box that no node holding it can serve a tool bridge
-	// for is not Ready either, whoever holds it (BoxModeBridgeUnsupported,
-	// NotExposed): the engine applies it and refuses every one of its turns.
+	// by a CLI in mode Box is not Ready either while the Company has no public
+	// address for its tool bridge, whoever holds it (NotExposed): the engine
+	// applies it and refuses every one of its turns.
 	// CodeWorkRunnable does not count towards it: a seat whose code work
 	// cannot run still runs its turns, and a health check gating on Ready
 	// would otherwise hold a rollout over a seat that works.
@@ -694,9 +694,9 @@ const (
 	// (status.endpoints.publicBaseURL), and BoxModeRunnable=False on an
 	// LLMProvider in mode Box then: its runs happen in a
 	// remote sandbox, which calls the seat's tools back through the engine's
-	// public address. It is Ready=False on an agent Seat placed in data
-	// whose executor's chain such a provider heads: the engine applies the
-	// seat and refuses each of its turns.
+	// public address. It is Ready=False on an agent Seat whose executor's
+	// chain such a provider heads, in whatever pool it is placed: the engine
+	// applies the seat and refuses each of its turns.
 	ReasonNotExposed = "NotExposed"
 
 	// ReasonNoProvisioner is ResolvedRefs=False on a Seat that names a
@@ -918,21 +918,6 @@ const (
 	// pools alone run more: the operator then keeps the pools' pods as
 	// they are and starts no other.
 	ReasonPoolCapacityExceeded = "PoolCapacityExceeded"
-
-	// ReasonBoxModeBridgeUnsupported is Ready=False on a Seat placed in a
-	// seat pool whose executor runs on an LLMProvider in mode Box:
-	// one at the head of its executor's chain, the only entry Crewlet runs
-	// in the sandbox (a fallback behind it runs in the engine's pod, as in
-	// Host). A box-mode run calls the seat's tools back through the tool bridge
-	// of the engine node that holds the seat, at the address that node was
-	// given (CREWLET_MCP_BRIDGE_URL). The engine would serve the bridge on a
-	// seat pod's own listener, but the operator publishes no address of a
-	// seat pod a remote sandbox could dial (the company's public address
-	// reaches the data pods only), so it gives a seat pod none, and the
-	// engine refuses box mode on a node with no bridge URL. The seat is
-	// applied (Applied=True) and the engine refuses each of its turns; the
-	// rest of the company runs.
-	ReasonBoxModeBridgeUnsupported = "BoxModeBridgeUnsupported"
 
 	// ReasonCLIAuthNotPortable is Applied=False on a Seat placed in a seat
 	// pool that runs on an LLMProvider signed in with a credential

@@ -592,9 +592,10 @@ In box mode:
   the Seat from the provider, so it does not count it.
 - The run calls the seat's own tools back through the engine's tool bridge.
   While any LLMProvider of the company is in box mode, the operator gives
-  the engine its public address as the bridge's (`CREWLET_MCP_BRIDGE_URL`),
-  and the engine serves the bridge on its public listener, beside the
-  webhooks ([Exposure](exposure.md)). A company with no public address
+  every engine pod its public address as the bridge's
+  (`CREWLET_MCP_BRIDGE_URL`), and the data pods serve the bridge on their
+  public listener, beside the webhooks ([Exposure](exposure.md)), relaying
+  each call to the pod that holds the run's seat. A company with no public address
   cannot run one: the engine applies the provider and refuses every turn
   of a seat whose executor's chain it heads. The operator applies it too
   and reports it, so the rest of the company still runs: the LLMProvider
@@ -755,27 +756,13 @@ is in
 A seat placed in a [seat pool](topology.md) runs on a seat pod, which keeps
 nothing between starts and serves only its probes. A provider in host mode
 runs there as it does on a data pod, its CLI reaching the seat's tools through
-a socket under the seat pod's own `/tmp`. Two things a data pod does for a
-CLI a seat pod cannot do:
+a socket under the seat pod's own `/tmp`. So does a provider in box mode: a
+run calls the seat's tools back through the company's tool bridge, at the
+public address every engine pod is given, and the data pod a call reaches
+relays it over the broker to the seat pod holding the seat, which the seat pod
+already dials out to. Nothing dials a seat pod for it. One thing a data pod
+does for a CLI a seat pod cannot do:
 
-- **Box mode.** A run calls the seat's tools back through the tool bridge
-  of the very pod that holds the seat, on an address the sandbox reaches; the
-  operator gives the data pod the company's public address for it. The
-  engine would serve the bridge on a seat pod too, on the listener its
-  probes use, but nothing publishes an address of a seat pod's own that a
-  remote sandbox could dial: the company's public address reaches the data
-  pod alone, and a seat pod is reached by its kubelet and nothing else.
-  Without an address the engine refuses every box-mode turn on the pod.
-  Crewlet runs a turn in box mode only when the HEAD of the executor's
-  chain is in `mode: Box`, so a seat in a seat pool whose executor's
-  chain (`spec.llm.default`, or the Company's first provider when the seat
-  names none) starts with such a provider can run no turn. The engine
-  applies it all the same, and so does the operator, which reports it on
-  the Seat as `Ready=False`, `BoxModeBridgeUnsupported`, with a Warning
-  event, rather than hold the rest of the company's changes: place the seat
-  in `data`, or put a provider in `mode: Host` at the head of the chain. The
-  same provider behind another in that chain, or in another phase's chain,
-  runs in the seat pod as in host mode, and is fine.
 - **A credential bundle.** The login lives under the CLI's state directory,
   which on a seat pod is its scratch volume, so every seat pod restores the
   bundle at each start and then refreshes the login on its own, beside the

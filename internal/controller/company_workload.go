@@ -608,12 +608,11 @@ func engineContainerOf(
 		// On the data volume, so a restart does not extract the store's
 		// 20 MB native library again.
 		tursoCache: render.DataDir + "/cache",
-		// Crewlet requires the URL to address the node that holds each
-		// bridged session. The company's public address reaches the one
-		// data pod, and a seat pod is given no URL, so it opens no bridged
-		// session: the engine refuses the box-mode turns of a seat placed
-		// there, which the Seat reports (render's ExecutorOf). Every bridged
-		// session is the data pod's.
+		// Crewlet's bridge address is the fleet's: the Company's public
+		// address reaches the data pods, and the one a box's call lands on
+		// relays it to whichever pod holds the run's seat, a seat pod's
+		// included, over the broker. Every engine pod is given the same
+		// value (seatPodTemplate).
 		bridgeURL: w.bridgeURL,
 	})
 	if err != nil {
@@ -743,8 +742,8 @@ type engineEnvironment struct {
 	statefulSet string
 	// tursoCache is where the store extracts its native library.
 	tursoCache string
-	// bridgeURL is CREWLET_MCP_BRIDGE_URL, or empty for a pod that serves
-	// no tool bridge.
+	// bridgeURL is CREWLET_MCP_BRIDGE_URL, or empty while the Company runs
+	// no LLMProvider in mode Box or has no public address.
 	bridgeURL string
 }
 
