@@ -203,15 +203,40 @@ const (
 	// engine's own tracker and pages; it moves no window either.
 	bootRecoveryRead = "v0.1.1-0.20261025183322-23ffa9027d77"
 
+	// codeHostRead is crewlet/crewlet#298's engine, the code host's, read at
+	// the head of its branch, where every bound the windows were read from
+	// that it moved was read again. The code host's log is an eighth state
+	// log, so a data pod's admission reads eight maintenance windows (admit
+	// reads one per registered domain, and the register grew). The join
+	// reads every log's trim floor once, each by its key and all at once
+	// (readFloors, readFloorsOf, (*FleetStore).Floor), where it listed the
+	// fleet's floors once for the join and once more for each log
+	// ((*FleetStore).Floors, gone, and trimFloor, which only a write's fence
+	// reads now, so no boot waits on it). The object store's fleet record is
+	// agreed in casRetry's attempts, bounded by their number, not by time,
+	// where retryRaces (gone) asked again within the client's 5 s default. A
+	// log's stats and its record at a sequence are read through ReadWith on
+	// their caller's context, asked again while the broker answers none,
+	// where each was one request at the client's default. What else moved
+	// moved no bound: the queue's registrations name how many answers they
+	// run at once, the provisioning reads hand their value back rather than
+	// set it from a closure, the nats bucket's uploads share a window sized
+	// for the link they cross, the S3 client counts into the node's metrics,
+	// and a log's start words one refusal anew.
+	codeHostRead = "v0.1.1-0.20261025200628-15c2f1a96275"
+
 	// The engine files most of the bounds on a boot are read from, and the
 	// guide that quotes the windows they add up to.
 	jsprovisionGo     = "internal/jsprovision/jsprovision.go"
+	hedgeGo           = "internal/jsprovision/hedge.go"
 	embeddedGo        = "internal/queue/jetstream/embedded.go"
 	queueGo           = "internal/queue/jetstream/queue.go"
+	domainLogGo       = "internal/queue/jetstream/domainlog.go"
 	stateLogGo        = "internal/engine/statelog.go"
 	backendsGo        = "internal/engine/backends.go"
 	walkGo            = "internal/coord/kv/walk.go"
 	positionsGo       = "internal/coord/kv/positions.go"
+	casLineGo         = "internal/coord/kv/casline.go"
 	natsObjGo         = "internal/objstore/natsobj/natsobj.go"
 	troubleshootingMd = "docs/guides/troubleshooting.md"
 
@@ -407,7 +432,13 @@ var bootWindows = []string{
 // windows leave out, past the recovery boundary: (*Engine).bootSecrets, the
 // boot's read of the company's secrets, which waits out a store that does not
 // answer for as long as the boot lives, as the pages that say what a boot
-// does after /health answers 200 state.
+// does after /health answers 200 state. Two more are waits the engine bounds
+// by no time, which the windows count as a boot meets them: a read of a log's
+// state or record, asked again while the broker answers none on a boot's
+// context, which has no deadline (ReadWith, hedge), counted at the term of
+// one request; and the agreement of the object store's fleet record, bounded
+// by a number of attempts (casRetry, fleetCASAttempts), counted at the one
+// attempt a boot meets unless someone removes the record meanwhile.
 var mirrored = []mirror{
 	{
 		file: bootGo, name: "ArtifactsListener",
@@ -1001,17 +1032,18 @@ var mirrored = []mirror{
 	{
 		file: "internal/coord/kv/objects.go", name: "(*FleetStore).AgreeObjectBackend",
 		against: bootWindows,
-		decides: "the object store's fleet record is created, or read back, in requests bounded only by the " +
-			"client's 5 s default",
-		digest: "df14c1a0c958506e2c63dc1d02480705ef8a34a0d6c0cd6e24e2406eec4f29a8",
-		read:   bootBoundsRead,
+		decides: "the object store's fleet record is created, or read back, in casRetry's attempts, each a create and " +
+			"a leader read at the client's 5 s default, and an attempt is lost only to a record removed between the " +
+			"create's refusal and the read",
+		digest: "22378d242561f7e5c397fe5d5e9a184f947ec8144ba0908b33aa85e5d2281d95",
+		read:   codeHostRead,
 	},
 	{
-		file: positionsGo, name: "(*FleetStore).Floors",
+		file: positionsGo, name: "(*FleetStore).Floor",
 		against: bootWindows,
-		decides: "the fleet's trim floors are one certified listing",
-		digest:  "bfa507886b1a36731fb7ef23a0c0025ebd6e64a7eaebcad7d9664789cfdcd09b",
-		read:    bootBoundsRead,
+		decides: "a domain's trim floor is one leader read of its key, at the client's 5 s default",
+		digest:  "b706cb84a50391e17bad24e514ba31001e05fd7809f4bad660e945dd448b0795",
+		read:    codeHostRead,
 	},
 	{
 		file: positionsGo, name: "(*FleetStore).Maintenance",
@@ -1081,18 +1113,18 @@ var mirrored = []mirror{
 	{
 		file: backendsGo, name: "objectsReservation",
 		against: bootWindows,
-		decides: "sizing the nats bucket reads the broker's limit under LookupBudget, and carries on from the " +
-			"volume's free space past it",
-		digest: "7ba9b5772807a60484d6bbe24850daf0e6b09617a7bd9c95a28722822c38aa45",
-		read:   bootBoundsRead,
+		decides: "sizing the nats bucket reads the broker's limit under LookupBudget, and carries on from a limit " +
+			"made of the volume's free space past it",
+		digest: "cfbb9b3c4231a834f970a45b379af7f50d573b5d8876dc39e936fe82f4a2864a",
+		read:   codeHostRead,
 	},
 	{
 		file: backendsGo, name: "openObjects",
 		against: bootWindows,
 		decides: "the object store agrees the fleet's backend, then opens the nats bucket under a sequence ceiling" +
 			" of its own or probes the S3 bucket",
-		digest: "19bd69c70076d83dff808d97561d6408d2bde7f1f1d48819f82b1ac874f28af1",
-		read:   bootBoundsRead,
+		digest: "25c0df1a1666eadb808e825fddb5ac10bf2327da631b5b92070c1e7446d22945",
+		read:   codeHostRead,
 	},
 	{
 		file: "internal/engine/core.go", name: "(*Engine).startCore",
@@ -1104,16 +1136,17 @@ var mirrored = []mirror{
 	{
 		file: "internal/engine/evicted.go", name: "(*stateLog).fleetGenerations",
 		against: bootWindows,
-		decides: "the join's generations are one listing of the fleet's floors",
-		digest:  "c7b4b8ded7d5a90a16ccdf3879fa9b6e74d8741208d43f845f0d5f732908ee45",
-		read:    bootBoundsRead,
+		decides: "the join's generations are judged from the floors the join read, and read a log only to judge a " +
+			"node ahead of this one evicted, which a lone data node has none of",
+		digest: "0e28bf714bf8c255a8beaf4f84dc122aa95270afbf16bc81b2fc9d00dda24f3a",
+		read:   codeHostRead,
 	},
 	{
 		file: "internal/engine/fleetbroker.go", name: "(*Engine).serveFleetBroker",
 		against: bootWindows,
 		decides: "a broker member registers its fleet broker answerer, one flush",
-		digest:  "acd95e184e9549186af2396272a788ee488cf511b1ce3357fbe96d506dd28d99",
-		read:    bootBoundsRead,
+		digest:  "f77b2a24359ede0f1fbc0ab79168871ce395401314d9863c388ce53a61a5a5c5",
+		read:    codeHostRead,
 	},
 	{
 		file: "internal/engine/history.go", name: "(*Engine).armHistory",
@@ -1190,16 +1223,17 @@ var mirrored = []mirror{
 	{
 		file: stateLogGo, name: "(*stateLog).replayable",
 		against: bootWindows,
-		decides: "the join lists the fleet's positions and floors, then reads each log's stats and trim floor",
-		digest:  "ea1c92e0718f299efaab001075f05a54cf8525842627b3f323f7191fc1b6dd0f",
-		read:    bootBoundsRead,
+		decides: "the join lists the fleet's positions and reads every log's trim floor at once, then reads each " +
+			"log's stats and judges its floor from that one read",
+		digest: "8df5a23499b2d22cd15b742e83cf3f49478392e30008eed1d5d35ff129b5ed4f",
+		read:   codeHostRead,
 	},
 	{
 		file: stateLogGo, name: "(*stateLog).start",
 		against: bootWindows,
 		decides: "a log's start reads its stats, attaches its consumer and verifies its checkpoint",
-		digest:  "db62104d27fe1aba85ff011579ef018f65c2862a9b20930cf31eeed5771bcceb",
-		read:    bootBoundsRead,
+		digest:  "62f930ac3079f85e8704ca3ff2ff4ea7b8771af963dfd8e4c8ecaa3c723b4094",
+		read:    codeHostRead,
 	},
 	{
 		file: stateLogGo, name: "(*stateLog).startLog",
@@ -1209,11 +1243,18 @@ var mirrored = []mirror{
 		read:    bootBoundsRead,
 	},
 	{
-		file: stateLogGo, name: "(*stateLog).trimFloor",
+		file: stateLogGo, name: "(*stateLog).readFloors",
 		against: bootWindows,
-		decides: "a log's trim floor is one listing of the fleet's floors",
-		digest:  "579fb7d3962be4896893e798a1b511f22be5d4d789580da7c70ebf962ee52dc9",
-		read:    bootBoundsRead,
+		decides: "the join reads the trim floor of every registered domain in one read of them all",
+		digest:  "1acf7c934f5bf9c9fd523ca54345b6ba7a4a37fdaaf7f1db5529f82f6b49299f",
+		read:    codeHostRead,
+	},
+	{
+		file: stateLogGo, name: "readFloorsOf",
+		against: bootWindows,
+		decides: "the floors of the domains a read names are read all at once, each by its key",
+		digest:  "7801568deb89f4c30dc12954adefd594b07127b236c4b0c599e195862b981d16",
+		read:    codeHostRead,
 	},
 	{
 		file: "internal/engine/statelogceilings.go", name: "ceilingsFor",
@@ -1233,8 +1274,8 @@ var mirrored = []mirror{
 		file: "internal/engine/steer.go", name: "(*Engine).armSteer",
 		against: bootWindows,
 		decides: "every node registers its steer answerer, one flush",
-		digest:  "4ee600edf7605e6d684024ab1fb004dad231aab572c6f0dae31e80ad18fb07f1",
-		read:    bootBoundsRead,
+		digest:  "34db69352bc8adc9f9674878dad7db6d59b7000f5b2a14b5fbbb54e10cc846c4",
+		read:    codeHostRead,
 	},
 	{
 		file: jsprovisionGo, name: "LookupBudget",
@@ -1326,8 +1367,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "attaching a durable group looks up, creates and reads back its consumer, then looks it up and " +
 			"reads it back again",
-		digest: "c10a5e667bc9202dd55d2322b9a559a79adfde4884020720c8f933c7e196e118",
-		read:   bootBoundsRead,
+		digest: "b6a9e9419ad2f3f2f6ddbfd14c2bb8d08c8f828f4661c5d1118b53521a56cef5",
+		read:   codeHostRead,
 	},
 	{
 		file: embeddedGo, name: "(*embeddedServer).awaitLeafReady",
@@ -1471,6 +1512,43 @@ var mirrored = []mirror{
 		read:    bootBoundsRead,
 	},
 	{
+		file: hedgeGo, name: "ReadWith",
+		against: bootWindows,
+		decides: "a metadata read has no bound of its own beyond its caller's context, which a boot's read of a log " +
+			"has none of",
+		digest: "470f4a21b80e15946340d6c56a02c342334a5e422a4ebbffb35a8f4595192f86",
+		read:   codeHostRead,
+	},
+	{
+		file: hedgeGo, name: "hedge",
+		against: bootWindows,
+		decides: "a read nobody answers is asked again, every request left waiting for its answer, until one is " +
+			"answered or its context ends",
+		digest: "ea86d8197c380b8b8fbb29a107c87f21d9799573eb9762108bf8cab63c2ee34c",
+		read:   codeHostRead,
+	},
+	{
+		file: domainLogGo, name: "(*DomainLog).Stats",
+		against: bootWindows,
+		decides: "a log's stats are one read of its state, on its caller's context",
+		digest:  "153fe4d84bad2026a4bc4ea4bfdb72ecf60a61606d4523281767a02f9b2f7e57",
+		read:    codeHostRead,
+	},
+	{
+		file: domainLogGo, name: "(*DomainLog).stateInfo",
+		against: bootWindows,
+		decides: "a log's state is read through ReadWith",
+		digest:  "366d004324711b563b2016377bf7d1523f91474683b542a1ee79fbf9462fb73a",
+		read:    codeHostRead,
+	},
+	{
+		file: domainLogGo, name: "(*DomainLog).At",
+		against: bootWindows,
+		decides: "a log's record at a sequence is one read through ReadWith, on its caller's context",
+		digest:  "9c87e3c6cfa6307ba2e6c617bcb325b9fbd0cd9bb3e8dc83326da8eaefd2768d",
+		read:    codeHostRead,
+	},
+	{
 		file: "internal/statelog/transfer.go", name: "collectOffers",
 		against: bootWindows,
 		decides: "a donor's offers are collected for the window, and the collection then waits for the listing it " +
@@ -1479,12 +1557,19 @@ var mirrored = []mirror{
 		read:   bootBoundsRead,
 	},
 	{
-		file: "internal/coord/kv/race.go", name: "(*FleetStore).retryRaces",
+		file: casLineGo, name: "casRetry",
 		against: bootWindows,
-		decides: "a fleet write that loses a race is attempted again for as long as the client's 5 s default since" +
-			" the first",
-		digest: "5ab491aab57c57858b1b8b719c64a820599a4b5ae4a3bf1c474ba5980a5cc4b2",
-		read:   bootBoundsRead,
+		decides: "a fleet write is attempted again only after it lost a race, at most fleetCASAttempts times, after a " +
+			"wait that grows with every attempt lost, and no time bounds the whole",
+		digest: "f91023d706284d3861d8e54503a9dc13fd1be098323df660d89dbe02cd10cfb1",
+		read:   codeHostRead,
+	},
+	{
+		file: casLineGo, name: "fleetCASAttempts",
+		against: bootWindows,
+		decides: "the engine's one bound on a fleet write it attempts again is a number of attempts",
+		digest:  "b614f3a6b04f29bc7eabb16fdd28b9fe29f2dc0b0448e3f0fa47908d72b73505",
+		read:    codeHostRead,
 	},
 	{
 		file: "internal/coord/kv/markers.go", name: "createRounds",
@@ -1505,22 +1590,22 @@ var mirrored = []mirror{
 		file: natsObjGo, name: "open",
 		against: bootWindows,
 		decides: "the nats bucket is looked up, created and read back, then bound, under the window it is handed",
-		digest:  "19f98c44b5091f2ee1e02867c3c43c2fdb58d7725922de6e02fad24b4660b5b1",
-		read:    bootBoundsRead,
+		digest:  "cbd3feceda85543bfd90caae7b2e493b07ad345f28aa4fc93f6761b7716b0a07",
+		read:    codeHostRead,
 	},
 	{
 		file: natsObjGo, name: "lookupBucket",
 		against: bootWindows,
 		decides: "the bucket's lookup is bounded by the timing's Lookup",
-		digest:  "5f6d37bb7d8d6d15f34240329eb52abdaf6fadfcbadc5c71ca953f790d6eca98",
-		read:    bootBoundsRead,
+		digest:  "c512a1d74c0b27be8b04fbdfac757b92b0148183061d2944145eb32ac2d7c816",
+		read:    codeHostRead,
 	},
 	{
 		file: natsObjGo, name: "createBucket",
 		against: bootWindows,
 		decides: "the bucket's create is bounded by the timing's Budget, and read back under ReadBack",
-		digest:  "9b6c501a360dc5fa65d799d42ee922e15fe8569074a9fa0c0171b7be007cc36b",
-		read:    bootBoundsRead,
+		digest:  "684a164cd0e747e24c77ad15708c7b266a66cae0994c3eefb6e8ef626798ed35",
+		read:    codeHostRead,
 	},
 	{
 		file: natsObjGo, name: "boundBucket",
