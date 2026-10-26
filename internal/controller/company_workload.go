@@ -56,6 +56,10 @@ const (
 	// where it makes the directory of the sockets a host-mode CLI reaches
 	// its seat's tools through.
 	tmpVolume = "tmp"
+	// sandboxesVolume is every engine pod's volume for the boxes Crewlet
+	// makes on the pod itself, mounted at render.SandboxDir, which says why
+	// it is a volume of its own (sandboxesVolumeOf).
+	sandboxesVolume = "sandboxes"
 	// portName names the API port on the pods and the Services.
 	portName = "http"
 	// publicPortName names the public port (render.PublicPort) on the data
@@ -495,6 +499,9 @@ func podTemplate(
 			// there) and their state under HOME.
 			corev1ac.Volume().WithName(tmpVolume).WithEmptyDir(corev1ac.EmptyDirVolumeSource()),
 			corev1ac.Volume().WithName("home").WithEmptyDir(corev1ac.EmptyDirVolumeSource()),
+			// The boxes of the runs Crewlet places on the pod, under the
+			// class's limit and off the data volume.
+			sandboxesVolumeOf(render.SandboxSizeLimitOf(class.Spec.Data.SandboxSizeLimit)),
 		)
 	labels, annotations := enginePodMetadata(class, labelsFor(c, componentData), w.bootstrapHash)
 	if render.LeafOpen(c, class) {
@@ -523,6 +530,22 @@ func enginePodMetadata(class *crewletaiv1alpha1.EngineClass, own map[string]stri
 	}
 	annotations[BootstrapHashAnnotation] = hash
 	return labels, annotations
+}
+
+// sandboxesVolumeOf is an engine pod's sandboxes volume, bounded by limit.
+// An emptyDir: a box is scratch whose run is a process of the pod, so it
+// has nothing to keep past the pod. On the node's disk, never in memory
+// (medium Memory): a tmpfs is charged to the container's memory limit, and
+// a box's checkout and build tree would take the engine's memory with them.
+func sandboxesVolumeOf(limit resource.Quantity) *corev1ac.VolumeApplyConfiguration {
+	return corev1ac.Volume().WithName(sandboxesVolume).WithEmptyDir(corev1ac.EmptyDirVolumeSource().
+		WithSizeLimit(limit))
+}
+
+// sandboxesMount mounts the sandboxes volume (sandboxesVolumeOf) where the
+// boxes are made.
+func sandboxesMount() *corev1ac.VolumeMountApplyConfiguration {
+	return corev1ac.VolumeMount().WithName(sandboxesVolume).WithMountPath(render.SandboxDir)
 }
 
 // configVolume mounts a bootstrap Secret's crewlet.yaml, readable by the
@@ -628,6 +651,7 @@ func engineContainerOf(
 			corev1ac.VolumeMount().WithName(configVolumeName).WithMountPath(configDir).WithReadOnly(true),
 			corev1ac.VolumeMount().WithName(tmpVolume).WithMountPath("/tmp"),
 			corev1ac.VolumeMount().WithName("home").WithMountPath(homeDir),
+			sandboxesMount(),
 		).
 		WithLifecycle(corev1ac.Lifecycle().
 			WithPreStop(corev1ac.LifecycleHandler().

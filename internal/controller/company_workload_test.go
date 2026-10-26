@@ -1,15 +1,19 @@
 package controller
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
+	"github.com/crewlet/crewlet-operator/internal/render"
 )
 
 // TestDataPodStartupSeconds holds the data pod's startup window to the
@@ -201,4 +205,114 @@ func TestDataClaimWatch(t *testing.T) {
 	if resized.Create(event.CreateEvent{Object: &claim}) || resized.Delete(event.DeleteEvent{Object: &claim}) {
 		t.Error("claimResized queues a claim's creation or deletion, which the StatefulSet reports")
 	}
+}
+
+// TestEnginePodsKeepBoxesOnAVolumeOfTheirOwn holds every engine pod, a data
+// pod and a seat pod alike, to a sandboxes volume of its own mounted at
+// render.SandboxDir: an emptyDir on the node's disk, never in memory, under
+// the limit the class sets for that kind of pod or render's default, and
+// nested in no other mount. A box's checkout written under the data volume
+// would take the event stream's room, under a seat pod's scratch volume its
+// limit, and in memory the engine's.
+func TestEnginePodsKeepBoxesOnAVolumeOfTheirOwn(t *testing.T) {
+	t.Parallel()
+	company := &crewletaiv1alpha1.Company{Namespace: "tenant-a", Name: companyName}
+	// classWith is a class whose data pods' and seat pods' sandboxes limits
+	// are data and pools, each unset when empty.
+	classWith := func(data, pools string) *crewletaiv1alpha1.EngineClass {
+		class := &crewletaiv1alpha1.EngineClass{}
+		class.Spec.Data.Storage.Size = new(resource.MustParse("16Gi"))
+		if data != "" {
+			class.Spec.Data.SandboxSizeLimit = new(resource.MustParse(data))
+		}
+		if pools != "" {
+			class.Spec.SeatPools.Defaults.SandboxSizeLimit = new(resource.MustParse(pools))
+		}
+		return class
+	}
+	dataPod := func(class *crewletaiv1alpha1.EngineClass) (*corev1ac.PodTemplateSpecApplyConfiguration, error) {
+		return podTemplate(company, class, &workload{
+			image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1746,
+		})
+	}
+	seatPod := func(class *crewletaiv1alpha1.EngineClass) (*corev1ac.PodTemplateSpecApplyConfiguration, error) {
+		// As the reconciler plans a pool, from the class's defaults.
+		plan := render.PoolPlanOf(&crewletaiv1alpha1.SeatPool{Name: poolGeneral}, class.Spec.SeatPools.Defaults)
+		return seatPodTemplate(company, class, &seatWorkload{name: "nimbus-seats-general", pool: poolGeneral, plan: &plan},
+			"nimbus-seats-general-bootstrap", engineImageV020, &render.BootstrapDocument{}, "", "")
+	}
+	for _, c := range []struct {
+		name     string
+		template func(*crewletaiv1alpha1.EngineClass) (*corev1ac.PodTemplateSpecApplyConfiguration, error)
+		class    *crewletaiv1alpha1.EngineClass
+		want     string
+	}{
+		{"a data pod of a class that sets no limit", dataPod, classWith("", ""), render.DefaultSandboxSizeLimit},
+		{"a data pod of a class that sets one for seat pods alone", dataPod, classWith("", "8Gi"), render.DefaultSandboxSizeLimit},
+		{"a data pod of a class that sets its limit", dataPod, classWith("50Gi", "8Gi"), "50Gi"},
+		{"a seat pod of a class that sets no limit", seatPod, classWith("", ""), render.DefaultSandboxSizeLimit},
+		{"a seat pod of a class that sets one for data pods alone", seatPod, classWith("50Gi", ""), render.DefaultSandboxSizeLimit},
+		{"a seat pod of a class that sets its limit", seatPod, classWith("50Gi", "8Gi"), "8Gi"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			applied, err := c.template(c.class)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// The apply configuration and the type share their JSON form.
+			raw, err := json.Marshal(applied)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var pod corev1.PodTemplateSpec
+			if err := json.Unmarshal(raw, &pod); err != nil {
+				t.Fatal(err)
+			}
+
+			var volumes []corev1.Volume
+			for _, v := range pod.Spec.Volumes {
+				if v.Name == sandboxesVolume {
+					volumes = append(volumes, v)
+				}
+			}
+			if len(volumes) != 1 {
+				t.Fatalf("the pod has %d volumes named %s, want 1: %+v", len(volumes), sandboxesVolume, pod.Spec.Volumes)
+			}
+			dir := volumes[0].EmptyDir
+			switch {
+			case dir == nil:
+				t.Errorf("volume %s is %+v, want an emptyDir", sandboxesVolume, volumes[0].VolumeSource)
+			case dir.Medium != corev1.StorageMediumDefault:
+				t.Errorf("volume %s is an emptyDir of medium %q, want the node's disk", sandboxesVolume, dir.Medium)
+			case dir.SizeLimit == nil || !dir.SizeLimit.Equal(resource.MustParse(c.want)):
+				t.Errorf("volume %s is limited to %v, want %s", sandboxesVolume, dir.SizeLimit, c.want)
+			}
+
+			if len(pod.Spec.Containers) != 1 {
+				t.Fatalf("the pod has %d containers, want the engine's alone", len(pod.Spec.Containers))
+			}
+			var mounted int
+			for _, m := range pod.Spec.Containers[0].VolumeMounts {
+				if m.Name == sandboxesVolume {
+					mounted++
+					if m.MountPath != render.SandboxDir || m.SubPath != "" || m.ReadOnly {
+						t.Errorf("volume %s is mounted as %+v, want all of it, writable, at %s", sandboxesVolume, m, render.SandboxDir)
+					}
+					continue
+				}
+				if within(m.MountPath, render.SandboxDir) || within(render.SandboxDir, m.MountPath) {
+					t.Errorf("volume %s mounted at %s nests with the boxes at %s", m.Name, m.MountPath, render.SandboxDir)
+				}
+			}
+			if mounted != 1 {
+				t.Errorf("volume %s is mounted %d times, want once", sandboxesVolume, mounted)
+			}
+		})
+	}
+}
+
+// within reports whether path is dir or under it.
+func within(path, dir string) bool {
+	return path == dir || strings.HasPrefix(path, strings.TrimSuffix(dir, "/")+"/")
 }

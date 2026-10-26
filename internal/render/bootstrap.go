@@ -30,6 +30,27 @@ const (
 	// scratch emptyDir. A data pod keeps its store, its snapshots and the
 	// event stream under it; a seat pod its scratch store.
 	DataDir = "/var/lib/crewlet"
+	// SandboxDir is where every engine pod's sandboxes emptyDir is mounted,
+	// a data pod's and a seat pod's alike: where Crewlet makes the boxes of
+	// the coding runs it places on the pod itself (its direct cell,
+	// providers.sandbox.local.state_dir), a directory each, holding the
+	// run's home, its checkout and whatever it installs and builds. It is a
+	// volume of its own, so that the boxes have a limit of their own
+	// (DefaultSandboxSizeLimit) that bounds nothing else and that nothing
+	// else shares, and it is under neither of the obvious places:
+	//   - DataDir: on a data pod that is the company's estate, three
+	//     quarters of it reserved for the event stream (store_max_bytes)
+	//     and the rest the store's and its snapshots', so a run that filled
+	//     it would stop the store and the broker, and the whole company with
+	//     them. A box is scratch besides: its run is a process of the pod
+	//     and ends with it, so a volume that outlived the pod would keep
+	//     boxes nothing runs in.
+	//   - HOME, under which Crewlet keeps its boxes by default
+	//     (~/.crewlet/sandboxes): a seat pod's HOME is on its scratch
+	//     volume, whose limit is sized for the scratch store and the
+	//     processes the engine runs, and a box's checkout would evict the
+	//     pod at it.
+	SandboxDir = "/var/lib/crewlet-sandboxes"
 	// APIPort is the port of an engine's private HTTP listener, api.port. On
 	// a data pod, which has the ingress role, it carries the API, the
 	// dashboard and the probes, and none of the routes outside parties call,

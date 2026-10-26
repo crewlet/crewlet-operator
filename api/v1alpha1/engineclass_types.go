@@ -154,6 +154,25 @@ type DataPodSettings struct {
 	// +kubebuilder:validation:Maximum=3600
 	// +default=300
 	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds,omitempty"`
+
+	// sandboxSizeLimit caps the emptyDir a data pod keeps its sandboxes in,
+	// at /var/lib/crewlet-sandboxes: the boxes Crewlet makes on the pod
+	// itself for the coding runs it places there (its direct cell, under
+	// Crewlet's providers.sandbox.local.state_dir), at most one for each
+	// agent seat of the pod, kept while its run waits on a person's answer
+	// and removed when the run ends. A box holds the run's checkout, its
+	// coding CLI's home and temporary files, and whatever the run installs
+	// and builds. A pod whose boxes write more is evicted, with every run
+	// and turn on it; its data volume is untouched. Unset is 20Gi.
+	//
+	// It bounds the boxes and reserves nothing: the scheduler places the
+	// pod by the ephemeral-storage request in resources, and an
+	// ephemeral-storage limit there bounds the container's own writes and
+	// every emptyDir of the pod together, so give it room for this one.
+	// Changing it changes the data pods' template, which restarts them.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('1Gi'))",message="sandboxSizeLimit must be at least 1Gi: a box holds a checkout of the seat's repository and its coding CLI's home, and the pod is evicted when its boxes write more"
+	SandboxSizeLimit *resource.Quantity `json:"sandboxSizeLimit,omitempty"`
 }
 
 // SeatPoolPolicy is whether a class's companies may run seats on pods of
@@ -209,6 +228,16 @@ type SeatPoolDefaults struct {
 	// +optional
 	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('256Mi'))",message="scratchSizeLimit must be at least 256Mi: the engine extracts its native library of about 20 MB there at every start, beside its scratch store and the files of the processes it runs"
 	ScratchSizeLimit *resource.Quantity `json:"scratchSizeLimit,omitempty"`
+
+	// sandboxSizeLimit caps the emptyDir every seat pod keeps its sandboxes
+	// in, at /var/lib/crewlet-sandboxes, apart from its scratch volume: the
+	// boxes Crewlet makes on the pod itself for the coding runs it places
+	// there, as data.sandboxSizeLimit says of a data pod, one at most for
+	// each seat the pod holds. A pod whose boxes write more is evicted, with
+	// every run and turn on it. Unset is 20Gi.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('1Gi'))",message="sandboxSizeLimit must be at least 1Gi: a box holds a checkout of the seat's repository and its coding CLI's home, and the pod is evicted when its boxes write more"
+	SandboxSizeLimit *resource.Quantity `json:"sandboxSizeLimit,omitempty"`
 }
 
 // SeatPoolSettings is whether, and how far, a class's companies may run seats

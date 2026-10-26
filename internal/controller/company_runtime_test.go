@@ -466,6 +466,13 @@ var _ = Describe("Company runtime", func() {
 		// pods would have no tools without it.
 		Expect(container.VolumeMounts).To(ContainElement(corev1.VolumeMount{Name: tmpVolume, MountPath: "/tmp"}))
 		Expect(pod.Spec.Volumes).To(ContainElement(corev1.Volume{Name: tmpVolume, EmptyDir: &corev1.EmptyDirVolumeSource{}}))
+		// The boxes Crewlet makes on the pod, off the data volume and under
+		// a limit of their own, which a class that sets none leaves at
+		// render's default.
+		Expect(container.VolumeMounts).To(ContainElement(corev1.VolumeMount{Name: sandboxesVolume, MountPath: "/var/lib/crewlet-sandboxes"}))
+		Expect(pod.Spec.Volumes).To(ContainElement(corev1.Volume{Name: sandboxesVolume, EmptyDir: &corev1.EmptyDirVolumeSource{
+			SizeLimit: new(resource.MustParse(render.DefaultSandboxSizeLimit)),
+		}}))
 		Expect(pod.Spec.Volumes).To(ContainElement(corev1.Volume{Name: configVolumeName,
 			Secret: &corev1.SecretVolumeSource{
 				SecretName:  bootstrapName,

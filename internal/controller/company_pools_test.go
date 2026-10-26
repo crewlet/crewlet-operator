@@ -407,6 +407,11 @@ var _ = Describe("Company seat pools", func() {
 			corev1.Volume{Name: scratchVolume, EmptyDir: &corev1.EmptyDirVolumeSource{
 				SizeLimit: new(resource.MustParse(render.DefaultSeatPodScratchSizeLimit)),
 			}},
+			// The boxes Crewlet makes on the pod, apart from the scratch
+			// store's limit.
+			corev1.Volume{Name: sandboxesVolume, EmptyDir: &corev1.EmptyDirVolumeSource{
+				SizeLimit: new(resource.MustParse(render.DefaultSandboxSizeLimit)),
+			}},
 		))
 		container := pod.Spec.Containers[0]
 		Expect(container.Image).To(Equal(engineImageV020), "the seat pods run the data pods' image")
@@ -433,6 +438,7 @@ var _ = Describe("Company seat pools", func() {
 			corev1.VolumeMount{Name: configVolumeName, MountPath: "/etc/crewlet", ReadOnly: true},
 			corev1.VolumeMount{Name: scratchVolume, MountPath: "/tmp", SubPath: "tmp"},
 			corev1.VolumeMount{Name: scratchVolume, MountPath: "/home/crewlet", SubPath: "home"},
+			corev1.VolumeMount{Name: sandboxesVolume, MountPath: "/var/lib/crewlet-sandboxes"},
 		))
 
 		By("giving a PerSeat seat's pods their seat, and no other pool's selector")

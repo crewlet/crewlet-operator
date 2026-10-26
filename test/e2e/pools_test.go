@@ -199,6 +199,18 @@ var _ = Describe("Seat pools", Ordered, func() {
 			}
 		}
 
+		By("finding the sandboxes volume writable as the engine's user, on the data pod and on a seat pod")
+		// Under the restricted standard, on a read-only root: where Crewlet
+		// makes the boxes of the runs it places on a pod. The image's own
+		// shell, as the engine's user, is what a box's command runs as too.
+		for _, name := range []string{poolsDataPod, sharedStatefulSet + "-0"} {
+			out, err := utils.Run(exec.Command("kubectl", "exec", "-n", poolsNamespace, name, "--",
+				"sh", "-c", `probe="$1/.probe" && echo ok > "$probe" && cat "$probe" && rm "$probe"`,
+				"sh", "/var/lib/crewlet-sandboxes"))
+			Expect(err).NotTo(HaveOccurred(), "pod %s cannot write to its sandboxes volume: %s", name, out)
+			Expect(strings.TrimSpace(out)).To(Equal("ok"), "pod %s", name)
+		}
+
 		By("reading the fleet from inside the cluster with the published token")
 		startFleetReader()
 		Eventually(func(g Gomega) {

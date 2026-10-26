@@ -450,6 +450,17 @@ keys and the class's env values too.
     [Choosing where seats run](topology.md) says what each shape buys, and
     what a pod of its own does not isolate: every pod of a company can read
     all of its credentials.
+- **Disk for the coding runs** is a tier's too. The coding runs Crewlet
+  places on an engine pod itself keep a box each (the run's checkout, its
+  CLI's home, what it installs and builds) in an `emptyDir` of the pod,
+  capped by the class's `data.sandboxSizeLimit` on the data pod and
+  `seatPools.defaults.sandboxSizeLimit` on every seat pod, 20Gi each unless
+  set. A pod whose boxes pass it is evicted, with every turn on it, so size
+  it for the largest repositories and builds the tier's seats work on. The
+  limit reserves nothing: give `data.resources` (and `defaults.resources`)
+  an `ephemeral-storage` request for the scheduler to place the pod by, and
+  any `ephemeral-storage` limit there room for the boxes beside the
+  container's own writes ([Box storage](../concepts/runtime.md#box-storage)).
 - **Sign-in** is a tier's too: a class's `spec.signIn.secondFactor: Optional`
   lets its companies' people sign in with a password alone, which only the
   platform decides, since a tenant cannot lower it on its Company. Off

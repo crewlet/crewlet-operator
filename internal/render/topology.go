@@ -66,6 +66,38 @@ const (
 	DefaultSeatPodScratchSizeLimit = "2Gi"
 )
 
+// DefaultSandboxSizeLimit caps an engine pod's sandboxes emptyDir
+// (SandboxDir) when its class does not: data.sandboxSizeLimit for a data
+// pod, seatPools.defaults.sandboxSizeLimit for a seat pod.
+//
+// The volume holds at most one box for each agent seat of the pod, and a box
+// holds the run's checkout, its coding CLI's home and temporary files, and
+// whatever the run installs and builds there: a language's module or
+// package cache and a build tree come to a few GiB for an ordinary project,
+// and more for a large one. 20Gi lets several such runs write at once on
+// one pod.
+//
+// It is a ceiling, not a reservation, which is why it errs high: an
+// emptyDir's limit takes nothing from the node until the boxes write it, so
+// a generous one costs nothing while they stay small, while one a run
+// reaches evicts the pod, with every run and turn on it (on a data pod, the
+// company's API too). What it guards against is a run that writes without
+// end, which it stops at its own pod rather than letting it fill the node's
+// disk under the pods beside it. A class whose seats build large trees
+// raises it, and one that schedules by an ephemeral-storage request sizes
+// the request for it; the right figure for a tier is one measured on its
+// own workloads.
+const DefaultSandboxSizeLimit = "20Gi"
+
+// SandboxSizeLimitOf is the limit of an engine pod's sandboxes volume: the
+// class's, or DefaultSandboxSizeLimit when it sets none.
+func SandboxSizeLimitOf(class *resource.Quantity) resource.Quantity {
+	if class != nil {
+		return *class
+	}
+	return resource.MustParse(DefaultSandboxSizeLimit)
+}
+
 // Topology is where a company's agent seats run: on the data pods, or in one
 // of its seat pools. It is computed from the Company, its EngineClass and its
 // Seats by PlanTopology, and it is what both the company document (each
@@ -100,6 +132,9 @@ type PoolPlan struct {
 	Resources                     *corev1.ResourceRequirements
 	TerminationGracePeriodSeconds int64
 	ScratchSizeLimit              resource.Quantity
+	// SandboxSizeLimit caps each of the pool's pods' sandboxes volume
+	// (SandboxSizeLimitOf), which only the class sets.
+	SandboxSizeLimit resource.Quantity
 }
 
 // Pods is how many pods the pool runs: its replicas, or for a PerSeat pool
@@ -360,6 +395,7 @@ func PoolPlanOf(p *v1alpha1.SeatPool, defaults v1alpha1.SeatPoolDefaults) PoolPl
 		Resources:                     defaults.Resources,
 		TerminationGracePeriodSeconds: cmp.Or(p.TerminationGracePeriodSeconds, defaults.TerminationGracePeriodSeconds, DefaultSeatPodTerminationGracePeriodSeconds),
 		ScratchSizeLimit:              resource.MustParse(DefaultSeatPodScratchSizeLimit),
+		SandboxSizeLimit:              SandboxSizeLimitOf(defaults.SandboxSizeLimit),
 	}
 	if p.Replicas != nil {
 		plan.Replicas = *p.Replicas

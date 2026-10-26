@@ -19,6 +19,7 @@ spec:
       maxConcurrentTurns: 4
       terminationGracePeriodSeconds: 600
       scratchSizeLimit: 4Gi
+      sandboxSizeLimit: 8Gi
   retention:
     backupOwner: platform-oncall
 ---

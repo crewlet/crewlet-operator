@@ -198,6 +198,7 @@ const (
 	msgPoolsAllowedOnly = "allowPerSeat, maxPods and defaults apply to policy Allowed only"
 	msgPoolsCapped      = "a class that allows seat pools caps them: set maxPods, the most seat pods one company may run"
 	msgScratchFloor     = "scratchSizeLimit must be at least 256Mi"
+	msgSandboxFloor     = "sandboxSizeLimit must be at least 1Gi"
 	msgDataPoolName     = "data is the pool of the data pods"
 	msgPerSeatReplicas  = "a PerSeat pool runs 1 or 2 replicas for each seat"
 	msgDefaultSeatPool  = "defaultSeatPool must be data or the name of a Shared pool of seatPools"

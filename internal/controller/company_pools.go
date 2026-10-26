@@ -55,9 +55,12 @@ const (
 	// leafPortName names the data pods' leaf listener on the pods and the
 	// headless data Service.
 	leafPortName = "leaf"
-	// scratchVolume is a seat pod's one writable volume: the scratch store
-	// and the native library under render.DataDir, /tmp and HOME, all
-	// under the pool's scratchSizeLimit.
+	// scratchVolume is a seat pod's writable volume for the engine and what
+	// it runs: the scratch store and the native library under
+	// render.DataDir, /tmp and HOME, all under the pool's
+	// scratchSizeLimit. The boxes Crewlet makes on the pod have a volume
+	// of their own (sandboxesVolume), so that a checkout never evicts the
+	// pod at the scratch store's limit.
 	scratchVolume = "scratch"
 	// seatPodMinReadySeconds is how long a seat pod must be ready before
 	// it counts as available, and a rollout replaces the next one: two of
@@ -284,7 +287,8 @@ func (r *CompanyReconciler) planSeatPools(
 // seat to its pods; the StatefulSet is then kept, and keeps following the
 // data pods (a new image, a new keyring), which takes a template: the grace
 // period and turns recorded here, and the class's current
-// seatPools.defaults.resources, which alone size a seat pod.
+// seatPools.defaults.resources and volume limits, which alone size a seat
+// pod.
 const SeatPoolAnnotation = "crewlet.ai/seat-pool"
 
 // keptPlan is how a kept seat StatefulSet runs: its SeatPoolAnnotation's pool,
@@ -731,7 +735,8 @@ func (r *CompanyReconciler) applySeatStatefulSet(
 }
 
 // seatPodTemplate is a seat pod: the engine container with the seats role
-// alone, its scratch volume and its Tier A, and what the class adds.
+// alone, its scratch and sandboxes volumes and its Tier A, and what the
+// class adds.
 //
 // Its probes are the data pod's, on the same port, where the engine serves a
 // node without the ingress role nothing else. /ready is what makes them worth
@@ -782,6 +787,7 @@ func seatPodTemplate(
 			// stay writable for the pod's seats to have tools.
 			corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath("/tmp").WithSubPath("tmp"),
 			corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath(homeDir).WithSubPath("home"),
+			sandboxesMount(),
 		)
 	if res := w.plan.Resources; res != nil {
 		resources, err := applyConfigOf[corev1ac.ResourceRequirementsApplyConfiguration](res)
@@ -799,6 +805,7 @@ func seatPodTemplate(
 			configVolume(secret),
 			corev1ac.Volume().WithName(scratchVolume).WithEmptyDir(corev1ac.EmptyDirVolumeSource().
 				WithSizeLimit(w.plan.ScratchSizeLimit)),
+			sandboxesVolumeOf(w.plan.SandboxSizeLimit),
 		)
 	labels, annotations := enginePodMetadata(class, seatWorkloadLabels(c, w), hash)
 	return corev1ac.PodTemplateSpec().
