@@ -1,7 +1,11 @@
 # The Dashboard Assistant on two providers that turn their CLI's web tools
 # off, which Crewlet requires of every model in spec.assistant.llm: Claude
-# Code on a metered key first, then Codex on an exported login. Every bound
-# is set, and each person's assistant has a daily budget of its own.
+# Code on a metered key first, then Pi on its model provider's key. Every
+# bound is set, and each person's assistant has a daily budget of its own.
+# Deep work hands a large task to Claude Code in mode Agent, signed in by a
+# headless token that follows the run into the company's E2B sandbox, which
+# the API requires of deep work; its runs reach the person's assistant tools
+# through the company's public address, so the case is exposed.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -20,6 +24,17 @@ spec:
     retentionDays: 90
     tokenBudget:
       day: 200000
+    deepWork:
+      llm:
+        name: assistant-deep
+      timeoutSeconds: 900
+      maxSteps: 120
+      maxTokens: 2000000
+  sandbox:
+    e2b:
+      apiKeySecretRef:
+        name: e2b
+        key: apiKey
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
@@ -57,3 +72,19 @@ spec:
         secretKeyRef:
           name: openrouter
           key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: assistant-deep
+spec:
+  companyRef:
+    name: helm
+  agent: ClaudeCode
+  model: sonnet
+  mode: Agent
+  auth:
+    mode: Subscription
+    tokenSecretRef:
+      name: claude
+      key: token

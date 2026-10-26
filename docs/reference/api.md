@@ -490,6 +490,47 @@ _Appears in:_
 | `proposalTTLSeconds` _integer_ | proposalTTLSeconds is how long a proposed change waits for its<br />owner's approval. Unset takes Crewlet's default of 900. Crewlet's<br />`proposal_ttl_seconds`. |  | Maximum: 3600 <br />Minimum: 60 <br />Optional: \{\} <br /> |
 | `retentionDays` _integer_ | retentionDays is how long a person's conversations are kept. Unset<br />takes Crewlet's default of 30. Crewlet's `retention_days`. |  | Maximum: 365 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens each person's assistant may spend per<br />window, charged on top of the company's own spec.tokenBudget.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `deepWork` _[CompanyAssistantDeepWork](#companyassistantdeepwork)_ | deepWork lets the assistant hand a large task (research, scripts,<br />files, many steps) to a coding CLI running its own tools in the<br />Company's E2B sandbox, which spec.sandbox must configure. Unset, the<br />assistant answers in quick mode only. Crewlet's `deep_work`. |  | Optional: \{\} <br /> |
+
+
+#### CompanyAssistantDeepWork
+
+
+
+CompanyAssistantDeepWork is the Dashboard Assistant's deep work: the model
+a large task is handed to and the bounds of one run. It maps onto Crewlet's
+`assistant.deep_work` block, each field onto the field it names.
+
+A deep-work run is Claude Code in its own harness, with its shell, its
+files and its web tools: the point of the escalation. Its one way into
+Crewlet is the signed-in person's own assistant tools over the tool
+bridge, so every read is still that person's request and every write still
+a proposal they approve. The provider llm names must be an LLMProvider in
+mode Agent driving ClaudeCode, the one CLI whose run Crewlet continues in
+its own session after an approval; Crewlet refuses any other in the dry run
+before every apply, and the refusal is reported on the Company, since the
+rule turns on the provider's own spec.
+
+Crewlet places a run in its provider's own runIn, else in the first remote
+or container cell the company configures, else on the engine host under
+operating system confinement. The operator offers the remote cell alone,
+as it does for every Agent-mode run: the engine pod holds the company's
+data volume and secret store, and a run steered by whatever pages it read
+is not one to start beside them, confined or not. So deepWork requires
+spec.sandbox, and every deep-work run is placed in the Company's E2B
+sandbox.
+
+
+
+_Appears in:_
+- [CompanyAssistant](#companyassistant)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `llm` _[LLMProviderReference](#llmproviderreference)_ | llm is the provider deep work runs on: an LLMProvider in mode Agent<br />driving ClaudeCode. A platform model provider runs in mode Text, so<br />it is refused. Crewlet's `llm`. |  | Required: \{\} <br /> |
+| `timeoutSeconds` _integer_ | timeoutSeconds is the longest one deep-work run may take. Unset takes<br />Crewlet's default of 1200, which is also the most: a run lives inside<br />the turn's read grant. Crewlet's `timeout_seconds`. |  | Maximum: 1200 <br />Minimum: 60 <br />Optional: \{\} <br /> |
+| `maxSteps` _integer_ | maxSteps is the most agentic rounds and Crewlet tool calls one<br />deep-work task may make. Unset takes Crewlet's default of 150.<br />Crewlet's `max_steps`. |  | Maximum: 400 <br />Minimum: 10 <br />Optional: \{\} <br /> |
+| `maxTokens` _integer_ | maxTokens is the most tokens one deep-work task may spend before it<br />is stopped. Unset takes Crewlet's default of 3000000. The person's<br />tokenBudget and the company's still apply. Crewlet's `max_tokens`. |  | Maximum: 2e+07 <br />Minimum: 10000 <br />Optional: \{\} <br /> |
 
 
 #### CompanyEndpoints
@@ -1895,6 +1936,7 @@ referring object's namespace, or a provider the EngineClass offers.
 
 _Appears in:_
 - [CompanyAssistant](#companyassistant)
+- [CompanyAssistantDeepWork](#companyassistantdeepwork)
 - [CompanyLLMSettings](#companyllmsettings)
 - [SeatLLM](#seatllm)
 

@@ -229,6 +229,68 @@ type CompanyAssistant struct {
 	// Crewlet's `token_budget`.
 	// +optional
 	TokenBudget TokenBudget `json:"tokenBudget,omitzero"`
+
+	// deepWork lets the assistant hand a large task (research, scripts,
+	// files, many steps) to a coding CLI running its own tools in the
+	// Company's E2B sandbox, which spec.sandbox must configure. Unset, the
+	// assistant answers in quick mode only. Crewlet's `deep_work`.
+	// +optional
+	DeepWork CompanyAssistantDeepWork `json:"deepWork,omitzero"`
+}
+
+// CompanyAssistantDeepWork is the Dashboard Assistant's deep work: the model
+// a large task is handed to and the bounds of one run. It maps onto Crewlet's
+// `assistant.deep_work` block, each field onto the field it names.
+//
+// A deep-work run is Claude Code in its own harness, with its shell, its
+// files and its web tools: the point of the escalation. Its one way into
+// Crewlet is the signed-in person's own assistant tools over the tool
+// bridge, so every read is still that person's request and every write still
+// a proposal they approve. The provider llm names must be an LLMProvider in
+// mode Agent driving ClaudeCode, the one CLI whose run Crewlet continues in
+// its own session after an approval; Crewlet refuses any other in the dry run
+// before every apply, and the refusal is reported on the Company, since the
+// rule turns on the provider's own spec.
+//
+// Crewlet places a run in its provider's own runIn, else in the first remote
+// or container cell the company configures, else on the engine host under
+// operating system confinement. The operator offers the remote cell alone,
+// as it does for every Agent-mode run: the engine pod holds the company's
+// data volume and secret store, and a run steered by whatever pages it read
+// is not one to start beside them, confined or not. So deepWork requires
+// spec.sandbox, and every deep-work run is placed in the Company's E2B
+// sandbox.
+type CompanyAssistantDeepWork struct {
+	// llm is the provider deep work runs on: an LLMProvider in mode Agent
+	// driving ClaudeCode. A platform model provider runs in mode Text, so
+	// it is refused. Crewlet's `llm`.
+	// +required
+	// +kubebuilder:validation:XValidation:rule="!has(self.kind) || self.kind == 'LLMProvider'",message="deep work runs on an LLMProvider in mode Agent driving ClaudeCode: a platform model provider runs in mode Text, where its CLI has no tool of its own",fieldPath=".kind"
+	LLM LLMProviderReference `json:"llm,omitzero"`
+
+	// timeoutSeconds is the longest one deep-work run may take. Unset takes
+	// Crewlet's default of 1200, which is also the most: a run lives inside
+	// the turn's read grant. Crewlet's `timeout_seconds`.
+	// +optional
+	// +kubebuilder:validation:Minimum=60
+	// +kubebuilder:validation:Maximum=1200
+	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
+
+	// maxSteps is the most agentic rounds and Crewlet tool calls one
+	// deep-work task may make. Unset takes Crewlet's default of 150.
+	// Crewlet's `max_steps`.
+	// +optional
+	// +kubebuilder:validation:Minimum=10
+	// +kubebuilder:validation:Maximum=400
+	MaxSteps int32 `json:"maxSteps,omitempty"`
+
+	// maxTokens is the most tokens one deep-work task may spend before it
+	// is stopped. Unset takes Crewlet's default of 3000000. The person's
+	// tokenBudget and the company's still apply. Crewlet's `max_tokens`.
+	// +optional
+	// +kubebuilder:validation:Minimum=10000
+	// +kubebuilder:validation:Maximum=20000000
+	MaxTokens int32 `json:"maxTokens,omitempty"`
 }
 
 // EmbeddingProviderType is which embeddings API a company uses. It maps onto
@@ -953,6 +1015,7 @@ type CompanyObjects struct {
 // integrations are objects of their own that name the Company in their
 // spec.companyRef.
 // +kubebuilder:validation:XValidation:rule="!has(self.knowledge) || !has(self.knowledge.vectors) || !self.knowledge.vectors || has(self.embeddings)",message="knowledge.vectors needs spec.embeddings: there is nothing to compute an embedding with"
+// +kubebuilder:validation:XValidation:rule="!has(self.assistant) || !has(self.assistant.deepWork) || has(self.sandbox)",message="assistant.deepWork needs spec.sandbox: a deep-work run has its own shell, files and web tools, and the operator runs it in the Company's E2B sandbox only, never in the engine pod beside the company's data and secret store",fieldPath=".assistant.deepWork"
 type CompanySpec struct {
 	// engineClassName is the EngineClass the company runs with. Unset uses
 	// the class annotated crewlet.ai/is-default-class=true.

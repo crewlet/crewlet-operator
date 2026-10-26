@@ -781,6 +781,76 @@ run before every apply, and the refusal is reported on the Company. Crewlet's
 [configuration reference](https://github.com/crewlet/crewlet/blob/main/docs/getting-started/configuration.md)
 describes the block and each bound.
 
+### Deep work
+
+`spec.assistant.deepWork` lets the assistant hand a large task (research,
+scripts, files, many steps) to a coding CLI running its own tools: its shell,
+its files and its web tools, which are the point of the escalation. The run
+reaches Crewlet only through the signed-in person's own assistant tools, over
+the tool bridge, so every read is still their request and every write still a
+proposal they approve. Unset, the assistant answers in quick mode only.
+
+Deep work runs on an `LLMProvider` driving `ClaudeCode` in mode `Agent`, the
+one CLI whose run Crewlet continues in its own session after the person
+approves a proposal. It is a provider of its own, beside the assistant's
+chain, which keeps mode `Text`:
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: assistant-deep
+spec:
+  companyRef:
+    name: nimbus
+  agent: ClaudeCode
+  model: sonnet
+  mode: Agent
+  auth:
+    mode: Subscription
+    tokenSecretRef:
+      name: claude
+      key: token
+```
+
+```yaml
+spec:
+  assistant:
+    enabled: true
+    llm:
+      - name: assistant
+    deepWork:
+      llm:
+        name: assistant-deep
+      timeoutSeconds: 1200   # 60 to 1200; one run lives inside the turn's read grant
+      maxSteps: 150          # 10 to 400 agentic rounds and Crewlet calls
+      maxTokens: 3000000     # 10000 to 20000000; the person's and the company's budgets still apply
+  sandbox:
+    e2b:
+      apiKeySecretRef:
+        name: e2b
+        key: apiKey
+```
+
+**Where it runs.** Crewlet places a deep-work run in its provider's own
+`run_in`, else in the first remote or container cell the company configures,
+else on the engine host under operating system confinement. The operator
+offers the remote cell alone, as it does for every Agent-mode run: the engine
+pod holds the company's data volume and secret store, and a run steered by
+whatever pages it read is not one to start beside them, confined or not. So
+the API refuses `deepWork` on a Company without `spec.sandbox`, and every
+deep-work run is placed in the Company's E2B sandbox. Its sign-in follows it
+there as an Agent-mode executor's does: a headless token (`tokenSecretRef`)
+or `auth.mode: APIKey`, never a credential bundle, which the LLMProvider API
+already requires of a provider in mode `Agent`. Like an Agent-mode executor,
+it calls back through the Company's public address, so the provider's
+`AgentModeRunnable` condition applies to it too.
+
+The API refuses a platform model provider for deep work, since one runs in
+mode `Text`. Crewlet refuses a provider in mode `Text`, or one driving another
+CLI, in the dry run before every apply, and the refusal is reported on the
+Company, as the assistant chain's is.
+
 ## What v1alpha1 does not offer
 
 Crewlet's `custom` CLI and the profile `overrides` of the built-in ones are

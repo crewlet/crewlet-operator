@@ -76,6 +76,72 @@ spec:
                   Crewlet's `assistant`.
                 minProperties: 1
                 properties:
+                  deepWork:
+                    description: |-
+                      deepWork lets the assistant hand a large task (research, scripts,
+                      files, many steps) to a coding CLI running its own tools in the
+                      Company's E2B sandbox, which spec.sandbox must configure. Unset, the
+                      assistant answers in quick mode only. Crewlet's `deep_work`.
+                    properties:
+                      llm:
+                        description: |-
+                          llm is the provider deep work runs on: an LLMProvider in mode Agent
+                          driving ClaudeCode. A platform model provider runs in mode Text, so
+                          it is refused. Crewlet's `llm`.
+                        properties:
+                          kind:
+                            default: LLMProvider
+                            description: kind is the kind of provider named.
+                            enum:
+                            - LLMProvider
+                            - PlatformLLMProvider
+                            type: string
+                          name:
+                            description: |-
+                              name is the LLMProvider's metadata.name, or the platform provider's
+                              name.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - name
+                        type: object
+                        x-kubernetes-validations:
+                        - fieldPath: .kind
+                          message: 'deep work runs on an LLMProvider in mode Agent
+                            driving ClaudeCode: a platform model provider runs in
+                            mode Text, where its CLI has no tool of its own'
+                          rule: '!has(self.kind) || self.kind == ''LLMProvider'''
+                      maxSteps:
+                        description: |-
+                          maxSteps is the most agentic rounds and Crewlet tool calls one
+                          deep-work task may make. Unset takes Crewlet's default of 150.
+                          Crewlet's `max_steps`.
+                        format: int32
+                        maximum: 400
+                        minimum: 10
+                        type: integer
+                      maxTokens:
+                        description: |-
+                          maxTokens is the most tokens one deep-work task may spend before it
+                          is stopped. Unset takes Crewlet's default of 3000000. The person's
+                          tokenBudget and the company's still apply. Crewlet's `max_tokens`.
+                        format: int32
+                        maximum: 20000000
+                        minimum: 10000
+                        type: integer
+                      timeoutSeconds:
+                        description: |-
+                          timeoutSeconds is the longest one deep-work run may take. Unset takes
+                          Crewlet's default of 1200, which is also the most: a run lives inside
+                          the turn's read grant. Crewlet's `timeout_seconds`.
+                        format: int32
+                        maximum: 1200
+                        minimum: 60
+                        type: integer
+                    required:
+                    - llm
+                    type: object
                   enabled:
                     description: |-
                       enabled runs the assistant. Unset or false leaves it off. Crewlet's
@@ -1501,6 +1567,12 @@ spec:
                 to compute an embedding with'
               rule: '!has(self.knowledge) || !has(self.knowledge.vectors) || !self.knowledge.vectors
                 || has(self.embeddings)'
+            - fieldPath: .assistant.deepWork
+              message: 'assistant.deepWork needs spec.sandbox: a deep-work run has
+                its own shell, files and web tools, and the operator runs it in the
+                Company''s E2B sandbox only, never in the engine pod beside the company''s
+                data and secret store'
+              rule: '!has(self.assistant) || !has(self.assistant.deepWork) || has(self.sandbox)'
           status:
             description: status is the company's observed state.
             minProperties: 1

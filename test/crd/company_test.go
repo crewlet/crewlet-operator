@@ -707,6 +707,85 @@ func TestCompanyAssistantValidation(t *testing.T) {
 	runCreateCases(t, company, cases)
 }
 
+// TestCompanyAssistantDeepWorkValidation covers the assistant's deep work:
+// every bound Crewlet takes is accepted at its edges and refused past them,
+// it runs on an LLMProvider and never on a platform provider, which runs in
+// mode Text, and it needs the Company's E2B sandbox, the one cell the
+// operator runs it in. Whether the provider is in mode Agent and drives
+// ClaudeCode turns on its own spec, which the engine judges in the dry run.
+func TestCompanyAssistantDeepWorkValidation(t *testing.T) {
+	deepWork := func(edit func(*v1.CompanyAssistantDeepWork)) func(*v1.Company) {
+		return func(c *v1.Company) {
+			d := v1.CompanyAssistantDeepWork{LLM: v1.LLMProviderReference{Name: providerName}}
+			if edit != nil {
+				edit(&d)
+			}
+			c.Spec.Assistant = v1.CompanyAssistant{
+				Enabled: new(true), LLM: []v1.LLMProviderReference{{Name: providerName}}, DeepWork: d,
+			}
+			c.Spec.Sandbox = v1.SandboxSettings{E2B: v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)}}
+		}
+	}
+	cases := []createCase[*v1.Company]{
+		{name: "deep work on an LLMProvider is accepted", mutate: deepWork(nil)},
+		{
+			name: "every bound at its edge is accepted",
+			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
+				d.TimeoutSeconds, d.MaxSteps, d.MaxTokens = 60, 400, 10000
+			}),
+		},
+		{
+			name: "every bound at its other edge is accepted",
+			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
+				d.TimeoutSeconds, d.MaxSteps, d.MaxTokens = 1200, 10, 20000000
+			}),
+		},
+		{
+			name: "deep work on a platform provider is refused",
+			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
+				d.LLM.Kind = v1.LLMProviderKindPlatform
+			}),
+			want: "a platform model provider runs in mode Text",
+		},
+		{
+			// A bound keeps the block in the request: an empty one is
+			// omitted, which is no deep work at all.
+			name: "deep work naming no provider is refused",
+			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
+				d.LLM, d.MaxSteps = v1.LLMProviderReference{}, 150
+			}),
+			want: "spec.assistant.deepWork.llm",
+		},
+		{
+			name: "deep work without the Company's sandbox is refused",
+			mutate: func(c *v1.Company) {
+				deepWork(nil)(c)
+				c.Spec.Sandbox = v1.SandboxSettings{}
+			},
+			want: "assistant.deepWork needs spec.sandbox",
+		},
+	}
+	for _, bound := range []struct {
+		field string
+		set   func(*v1.CompanyAssistantDeepWork, int32)
+		over  int32
+		under int32
+	}{
+		{"timeoutSeconds", func(d *v1.CompanyAssistantDeepWork, v int32) { d.TimeoutSeconds = v }, 1201, 59},
+		{"maxSteps", func(d *v1.CompanyAssistantDeepWork, v int32) { d.MaxSteps = v }, 401, 9},
+		{"maxTokens", func(d *v1.CompanyAssistantDeepWork, v int32) { d.MaxTokens = v }, 20000001, 9999},
+	} {
+		for _, v := range []int32{bound.over, bound.under} {
+			cases = append(cases, createCase[*v1.Company]{
+				name:   fmt.Sprintf("%s %d is refused", bound.field, v),
+				mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) { bound.set(d, v) }),
+				want:   "spec.assistant.deepWork." + bound.field,
+			})
+		}
+	}
+	runCreateCases(t, company, cases)
+}
+
 func TestCompanyEngineConfigReservedKeys(t *testing.T) {
 	reserved := []string{
 		"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge",

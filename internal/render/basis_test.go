@@ -96,8 +96,9 @@ var findings = []struct {
 		"the engine drops an llm_order key naming no provider (no such LLMProvider, or a platform provider the Company " +
 			"does not use): every chainless seat runs on whatever comes first then"},
 	{site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
-		"a seat's chain, or the assistant's, naming no provider: no such LLMProvider, or a platform provider the " +
-			"Company does not use, which is the tenant's setting and not the class's policy"},
+		"a seat's chain, the assistant's, or the provider its deep work runs on, naming no provider: no such " +
+			"LLMProvider, or a platform provider the Company does not use, which is the tenant's setting and not the " +
+			"class's policy"},
 	{site{fnIntegrations, HarmsBeyond, v1alpha1.ReasonConflict},
 		"one block per vendor: a new Integration would displace the running one"},
 	{site{fnGitLabAccessLevels, HarmsBeyond, v1alpha1.ReasonRefNotFound},
@@ -498,6 +499,23 @@ func engineCases() []engineCase {
 				doc["assistant"] = map[string]any{"enabled": true, keyLLM: []any{missing}}
 			},
 			at: "assistant.llm[0]", says: `"missing"`,
+		},
+		{
+			// So is the provider its deep work runs on, which Crewlet
+			// refuses whether or not the assistant is on.
+			name: "the assistant's deep work names no provider", site: site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				in.Company.Spec.Assistant = v1alpha1.CompanyAssistant{
+					DeepWork: v1alpha1.CompanyAssistantDeepWork{LLM: v1alpha1.LLMProviderReference{Name: missing}},
+				}
+			},
+			refused: "Company/" + sampleCompany + " spec.assistant.deepWork.llm.name",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				doc["assistant"] = map[string]any{"deep_work": map[string]any{keyLLM: missing}}
+			},
+			at: "assistant.deep_work.llm", says: `"missing"`,
 		},
 		{
 			// The class offers the provider; the Company's own setting

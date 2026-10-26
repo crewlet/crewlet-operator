@@ -1,4 +1,9 @@
 assistant:
+  deep_work:
+    llm: assistant-deep
+    max_steps: 120
+    max_tokens: 2000000
+    timeout_seconds: 900
   enabled: true
   llm:
   - assistant
@@ -23,6 +28,14 @@ providers:
         web_tools: denied
       state_dir: /var/lib/crewlet/llm-cli/assistant
       timeout_seconds: 90
+    assistant-deep:
+      agent: claude-code
+      auth:
+        mode: subscription
+        token: ${K8S_CLAUDE_TOKEN_HWDLXXYNUX5H}
+      mode: agent
+      model: sonnet
+      state_dir: /var/lib/crewlet/llm-cli/assistant-deep
     assistant-pi:
       agent: pi
       auth:
@@ -35,4 +48,9 @@ providers:
       state_dir: /var/lib/crewlet/llm-cli/assistant-pi
   llm_order:
   - assistant
+  - assistant-deep
   - assistant-pi
+  sandbox:
+    default_run_in: e2b
+    e2b:
+      api_key: ${K8S_E2B_API_KEY_GSEHAAV5THN5}

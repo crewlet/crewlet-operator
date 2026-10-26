@@ -503,11 +503,12 @@ func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
 	return tokenBudgetDoc{Day: b.Day, Week: b.Week, Month: b.Month}
 }
 
-// assistant renders the Company's spec.assistant. Its chain is resolved as a
-// Seat's is, and a provider it names that the document does not hold is
-// refused as the engine refuses it (EngineRefuses): an assistant chain naming
-// no provider is refused on every write, where an llm_order key naming none
-// is dropped.
+// assistant renders the Company's spec.assistant. Its chain, and the provider
+// its deep work runs on, are resolved as a Seat's chain is, and a provider
+// either names that the document does not hold is refused as the engine
+// refuses it (EngineRefuses): an assistant chain or a deep_work.llm naming no
+// provider is refused on every write, where an llm_order key naming none is
+// dropped.
 func (r *renderer) assistant() assistantDoc {
 	a := &r.in.Company.Spec.Assistant
 	doc := assistantDoc{
@@ -522,6 +523,16 @@ func (r *renderer) assistant() assistantDoc {
 		field := fmt.Sprintf("spec.assistant.llm[%d]", i)
 		if key, ok := r.provider(KindCompany, r.in.Company.Name, field, ref, absentRefused); ok {
 			doc.LLM = append(doc.LLM, key)
+		}
+	}
+	if d := &a.DeepWork; d.LLM.Name != "" {
+		if key, ok := r.provider(KindCompany, r.in.Company.Name, "spec.assistant.deepWork.llm", d.LLM, absentRefused); ok {
+			doc.DeepWork = &deepWorkDoc{
+				LLM:            key,
+				TimeoutSeconds: d.TimeoutSeconds,
+				MaxSteps:       d.MaxSteps,
+				MaxTokens:      d.MaxTokens,
+			}
 		}
 	}
 	return doc

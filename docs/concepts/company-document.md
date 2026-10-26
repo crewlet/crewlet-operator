@@ -129,6 +129,11 @@ key. An `LLMProvider`'s `webTools: Denied` becomes its entry's
 `overrides: {web_tools: denied}`, the one profile override the API offers;
 Crewlet requires it of every provider the assistant runs on
 ([Running Seats on a Coding CLI](../guides/cli-agents.md#a-provider-for-the-dashboard-assistant)).
+Its `deepWork` becomes the block's `deep_work`, whose `llm` names one
+provider's key the same way and blocks the document when the document does
+not hold it; the API requires `spec.sandbox` beside it, so every deep-work
+run is placed in the Company's E2B sandbox
+([Deep work](../guides/cli-agents.md#deep-work)).
 
 ### Schedules
 
