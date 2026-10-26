@@ -285,6 +285,7 @@ type roleDoc struct {
 	MCPEnv               map[string]map[string]string `json:"mcp_env,omitempty"`
 	Sandbox              *roleSandboxDoc              `json:"sandbox,omitempty"`
 	Placement            *placementDoc                `json:"placement,omitempty"`
+	Code                 *roleCodeDoc                 `json:"code,omitempty"`
 	Integrations         roleIntegrationsDoc          `json:"integrations,omitzero"`
 	Project              string                       `json:"project,omitempty"`
 	Space                string                       `json:"space,omitempty"`
@@ -336,6 +337,13 @@ type placementDoc struct {
 	Labels map[string]string `json:"labels"`
 }
 
+// roleCodeDoc is a role's code access: one tier for every code host the
+// engine drives, which a seat's GitHub App is created with and mints its
+// tokens at.
+type roleCodeDoc struct {
+	Access string `json:"access"`
+}
+
 type roleIntegrationsDoc struct {
 	Slack      *roleSlackDoc      `json:"slack,omitempty"`
 	GitHub     *roleGitHubDoc     `json:"github,omitempty"`
@@ -354,7 +362,6 @@ type roleSlackDoc struct {
 }
 
 type roleGitHubDoc struct {
-	Tier           string   `json:"tier,omitempty"`
 	Repos          []string `json:"repos,omitempty"`
 	AppID          int64    `json:"app_id,omitempty"`
 	AppSlug        string   `json:"app_slug,omitempty"`

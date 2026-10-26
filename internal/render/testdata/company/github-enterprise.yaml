@@ -12,26 +12,28 @@ integrations:
     webhook_secret: ${K8S_FORGE_GITHUB_WEBHOOK_SECRET_TBDDG2MGKIUZ}
 name: Forge
 roles:
-- handle: builder
+- code:
+    access: full_access
+  handle: builder
   integrations:
     github:
       app_id: 42
       app_slug: forge-builder
       installation_id: 4242
       private_key: ${K8S_BUILDER_GITHUB_APP_PRIVATE_KEY_XJ3ZLBDFZG45}
-      tier: full_access
       webhook_secret: ${K8S_BUILDER_GITHUB_APP_WEBHOOK_SECRET_2FHJJ6YLPUEG}
   kind: agent
   name: builder
   placement:
     labels:
       crewlet.ai/pool: data
-- handle: reviewer
+- code:
+    access: read_only
+  handle: reviewer
   integrations:
     github:
       repos:
       - forge/api
-      tier: read_only
   kind: agent
   name: reviewer
   placement:

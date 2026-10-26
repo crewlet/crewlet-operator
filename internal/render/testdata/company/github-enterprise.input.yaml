@@ -37,9 +37,10 @@ metadata:
 spec:
   companyRef:
     name: forge
+  code:
+    access: FullAccess
   integrations:
     github:
-      tier: FullAccess
       app:
         id: 42
         slug: forge-builder
@@ -54,8 +55,9 @@ metadata:
 spec:
   companyRef:
     name: forge
+  code:
+    access: ReadOnly
   integrations:
     github:
-      tier: ReadOnly
       repos:
         - forge/api

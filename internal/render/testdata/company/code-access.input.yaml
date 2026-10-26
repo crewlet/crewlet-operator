@@ -1,0 +1,37 @@
+# An agent seat with a code access tier and nothing it applies to: no GitHub
+# Integration in the company, and no GitHub identity on the seat. Crewlet
+# runs the seat, and warns that the tier grants nothing.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: shed
+spec:
+  engineClassName: basic
+  companyName: Shed
+  mission: Keep the build scripts tidy.
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude
+spec:
+  companyRef:
+    name: shed
+  agent: ClaudeCode
+  model: claude-sonnet-5
+  auth:
+    mode: APIKey
+    apiKeySecretRef:
+      name: anthropic
+      key: apiKey
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: Seat
+metadata:
+  name: tidier
+spec:
+  companyRef:
+    name: shed
+  goal: Tidy the build scripts.
+  code:
+    access: Review

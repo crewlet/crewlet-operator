@@ -128,13 +128,13 @@ func containerWebhookMode(m v1alpha1.ContainerWebhookMode) string {
 	return ""
 }
 
-func gitHubAccessTier(t v1alpha1.GitHubAccessTier) string {
+func codeAccessTier(t v1alpha1.CodeAccessTier) string {
 	switch t {
-	case v1alpha1.GitHubAccessReadOnly:
+	case v1alpha1.CodeAccessReadOnly:
 		return "read_only"
-	case v1alpha1.GitHubAccessReview:
+	case v1alpha1.CodeAccessReview:
 		return "review"
-	case v1alpha1.GitHubAccessFullAccess:
+	case v1alpha1.CodeAccessFullAccess:
 		return "full_access"
 	}
 	return ""

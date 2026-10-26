@@ -1,0 +1,23 @@
+mission: Keep the build scripts tidy.
+name: Shed
+providers:
+  llm:
+    claude:
+      agent: claude-code
+      auth:
+        api_key: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
+        mode: api-key
+      model: claude-sonnet-5
+      state_dir: /var/lib/crewlet/llm-cli/claude
+  llm_order:
+  - claude
+roles:
+- code:
+    access: review
+  goal: Tidy the build scripts.
+  handle: tidier
+  kind: agent
+  name: tidier
+  placement:
+    labels:
+      crewlet.ai/pool: data

@@ -113,10 +113,10 @@ func fullAgent(s *v1.Seat) {
 	s.Spec.Paused = new(true)
 	s.Spec.PauseReason = "Deploy freeze until the incident review"
 	s.Spec.StopRunning = new(true)
+	s.Spec.Code = v1.SeatCode{Access: v1.CodeAccessReview}
 	s.Spec.Integrations = v1.SeatIntegrations{
 		Slack: v1.SlackSeatIntegration{CredentialsSecretRef: v1.SecretReference{Name: "ana-slack"}},
 		GitHub: v1.GitHubSeatIntegration{
-			Tier:  v1.GitHubAccessReview,
 			Repos: []string{"nimbus-hq/nimbuscore"},
 			App: v1.GitHubApp{
 				ID:                   1234567,
@@ -188,6 +188,17 @@ func TestSeatValidation(t *testing.T) {
 			name:   "availability on an agent seat is refused",
 			mutate: func(s *v1.Seat) { s.Spec.Availability = "CET business hours" },
 			want:   msgAgentContact,
+		},
+
+		// Code access, in the API's own spelling.
+		{
+			name:   "a code access tier on an agent seat is accepted",
+			mutate: func(s *v1.Seat) { s.Spec.Code = v1.SeatCode{Access: v1.CodeAccessFullAccess} },
+		},
+		{
+			name:   "Crewlet's own spelling of a code access tier is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Code = v1.SeatCode{Access: "full_access"} },
+			want:   `spec.code.access: Unsupported value: "full_access"`,
 		},
 
 		// Contact accounts, each in its platform's own form.
@@ -361,6 +372,13 @@ func TestSeatValidation(t *testing.T) {
 		{
 			name:   "a sandbox on a human seat is refused",
 			mutate: asHuman(func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{} }),
+			want:   msgHumanForbidden,
+		},
+		{
+			// A person acts as their own identity on every code host, so a
+			// tier on their seat would cap nothing, and Crewlet refuses one.
+			name:   "a code access tier on a human seat is refused",
+			mutate: asHuman(func(s *v1.Seat) { s.Spec.Code = v1.SeatCode{Access: v1.CodeAccessReadOnly} }),
 			want:   msgHumanForbidden,
 		},
 		{

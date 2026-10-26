@@ -25,9 +25,18 @@ type companyCase struct {
 	exposed bool
 	// advisories are the advisories Crewlet's validator gives the
 	// document, about choices of the tenant's that no render avoids: a
-	// chart of agents alone, which has no human seat.
+	// chart of agents alone, which has no human seat, and a code access
+	// tier nothing applies.
 	advisories []advisory
 }
+
+// advisoryCodeAccessGrantsNothing is Crewlet's advisory on a seat whose
+// role.code.access nothing applies (config.roleCodeWarnings): the company
+// hosts no code of its own, which the operator never asks of it, and either
+// has no GitHub integration or the seat has no GitHub identity of its own,
+// the only places a tier caps what the seat may do. The render writes the
+// tier the Seat states all the same, as Crewlet runs it.
+var advisoryCodeAccessGrantsNothing = advisory{path: "roles[0].code.access", says: "grants nothing"}
 
 func companyCases() []companyCase {
 	agentsAlone := []advisory{advisoryNoHumanSeat}
@@ -46,6 +55,7 @@ func companyCases() []companyCase {
 		{name: "secret-positions", exposed: true, advisories: agentsAlone},
 		{name: "cli-agent", exposed: true, advisories: agentsAlone},
 		{name: "opencode-agent", exposed: true, advisories: agentsAlone},
+		{name: "code-access", advisories: []advisory{advisoryNoHumanSeat, advisoryCodeAccessGrantsNothing}},
 		{name: caseAtlassian, exposed: true},
 		{name: caseSeatPools},
 		{name: caseOptionalKeys},

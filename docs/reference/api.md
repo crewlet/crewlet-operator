@@ -379,6 +379,27 @@ _Appears in:_
 | `valueFrom` _[NamespacedSecretValueSource](#namespacedsecretvaluesource)_ | valueFrom reads the value from a Secret key in a namespace the<br />platform controls. |  | Optional: \{\} <br /> |
 
 
+#### CodeAccessTier
+
+_Underlying type:_ _string_
+
+CodeAccessTier is how much a seat may do in a repository. It maps onto
+Crewlet's role code.access (ReadOnly is `read_only`, Review is `review`,
+FullAccess is `full_access`).
+
+_Validation:_
+- Enum: [ReadOnly Review FullAccess]
+
+_Appears in:_
+- [SeatCode](#seatcode)
+
+| Field | Description |
+| --- | --- |
+| `ReadOnly` |  |
+| `Review` |  |
+| `FullAccess` |  |
+
+
 #### CodingAgent
 
 _Underlying type:_ _string_
@@ -1336,27 +1357,6 @@ _Appears in:_
 | `sectionName` _string_ | sectionName is the name of one listener of the Gateway. Unset attaches<br />to every listener that accepts the route. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
-#### GitHubAccessTier
-
-_Underlying type:_ _string_
-
-GitHubAccessTier is how much a seat may do in a repository. It maps onto
-Crewlet's role integrations.github.tier (ReadOnly is `read_only`, Review is
-`review`, FullAccess is `full_access`).
-
-_Validation:_
-- Enum: [ReadOnly Review FullAccess]
-
-_Appears in:_
-- [GitHubSeatIntegration](#githubseatintegration)
-
-| Field | Description |
-| --- | --- |
-| `ReadOnly` |  |
-| `Review` |  |
-| `FullAccess` |  |
-
-
 #### GitHubApp
 
 
@@ -1427,7 +1427,8 @@ _Appears in:_
 
 GitHubSeatIntegration is a seat's identity on GitHub. It maps onto
 Crewlet's role integrations.github and needs the company's GitHub
-Integration.
+Integration. How much the identity may do is the seat's spec.code.access,
+which its app is created with and mints every token at.
 
 _Validation:_
 - MinProperties: 1
@@ -1437,7 +1438,6 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `tier` _[GitHubAccessTier](#githubaccesstier)_ | tier is how much the seat may do in a repository. Unset is ReadOnly.<br />Crewlet's `tier`. |  | Enum: [ReadOnly Review FullAccess] <br />Optional: \{\} <br /> |
 | `repos` _string array_ | repos are the repositories the seat works in, as owner/name. Unset is<br />every repository the app's installation covers. Crewlet's `repos`. |  | MaxItems: 64 <br />items:MaxLength: 201 <br />items:Pattern: `^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$` <br />Optional: \{\} <br /> |
 | `app` _[GitHubApp](#githubapp)_ | app is the GitHub App the seat acts as. |  | Optional: \{\} <br /> |
 
@@ -2875,6 +2875,31 @@ a letter or digit, at most 63 characters. The handle cannot change.
 | `status` _[SeatStatus](#seatstatus)_ | status is the seat's observed state. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
+#### SeatCode
+
+
+
+SeatCode is an agent seat's access to the company's code. It maps onto
+Crewlet's role `code`, which holds one tier for every code host the engine
+drives: the seat's GitHub App is created with, and mints every token at,
+the permissions of its tier, and Crewlet's own code host, which this API
+does not offer, caps what the org chart grants the seat by the same tier.
+The tier is a setting of the seat's rather than of its GitHub identity, so
+it says the same on every host. A person acts as their own identity on
+every host, so a tier on a Human seat would cap nothing, and the API
+refuses one.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [SeatSpec](#seatspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `access` _[CodeAccessTier](#codeaccesstier)_ | access is how much of a repository the seat may do. Unset is<br />ReadOnly, the least the engine hands out. Crewlet's `access`. The<br />engine warns that the tier grants nothing where nothing applies it:<br />in a company with no GitHub Integration, or for a seat without<br />spec.integrations.github. |  | Enum: [ReadOnly Review FullAccess] <br />Optional: \{\} <br /> |
+
+
 #### SeatContact
 
 
@@ -3283,6 +3308,7 @@ _Appears in:_
 | `paused` _boolean_ | paused says whether the seat may take work. True pauses it: it starts<br />no new turn, the mail it is sent waits on its inbox in order, and its<br />schedules' fires are skipped rather than queued; the turn it is on<br />finishes first unless stopRunning is set. False resumes it, and what<br />waited is delivered first. Unset leaves the seat's pause to the people<br />who run the company in the engine's dashboard: the operator reports a<br />pause they take, and never lifts it.<br />A pause is not part of the company document. Crewlet keeps it in its<br />coordination store, changed through its operator catalogue's<br />pause_seat and resume_seat tools, which the operator calls under the<br />Company's Enforce policy whenever the seat's pause differs from this<br />field; under Observe and Seed it only reports the difference. |  | Optional: \{\} <br /> |
 | `pauseReason` _string_ | pauseReason is why the seat is paused, shown on the seat and in its<br />feed in the engine. Only with paused true. The engine keeps the<br />reason a pause was taken with, so a reason changed while the seat<br />stays paused shows from the seat's next pause on. Crewlet's pause<br />`reason`. |  | MaxLength: 500 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `stopRunning` _boolean_ | stopRunning ends the turn the seat is on at its next round when it is<br />paused, rather than letting the turn finish; the stopped turn is not<br />run again. Only with paused true. Setting it on a seat already paused<br />stops the turn it is on then; unsetting it changes nothing, since a<br />stopped turn stays stopped. Crewlet's pause `stop_running`. |  | Optional: \{\} <br /> |
+| `code` _[SeatCode](#seatcode)_ | code is the seat's access to the company's code, on every code host<br />the engine drives. Unset runs the seat at access ReadOnly. Crewlet's<br />`code`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `integrations` _[SeatIntegrations](#seatintegrations)_ | integrations is the seat's own identity on the company's<br />integrations. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `project` _string_ | project is the tracker project a seat outside every unit owns, by its<br />key; a seat in a unit takes its unit's. Crewlet requires a container<br />key to be an upper-case letter followed by 1 to 9 upper-case letters or<br />digits, such as LEAD. Crewlet's `project`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
 | `space` _string_ | space is the knowledge container a seat outside every unit owns, by<br />its key, which follows the same rule as project; a seat in a unit<br />takes its unit's. Crewlet's `space`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |

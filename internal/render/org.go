@@ -326,6 +326,9 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 			}
 		}
 	}
+	if access := spec.Code.Access; access != "" {
+		doc.Code = &roleCodeDoc{Access: codeAccessTier(access)}
+	}
 	doc.Integrations = r.roleIntegrations(s)
 	doc.Schedules = r.schedules(at, r.seatSchedules[s.Name])
 	return doc
@@ -423,11 +426,8 @@ func (r *renderer) roleIntegrations(s *v1alpha1.Seat) roleIntegrationsDoc {
 			SigningSecret: r.secret(creds, v1alpha1.SlackSigningSecretKey),
 		}
 	}
-	if g := in.GitHub; g.Tier != "" || len(g.Repos) > 0 || g.App.ID != 0 {
-		doc.GitHub = &roleGitHubDoc{
-			Tier:  gitHubAccessTier(g.Tier),
-			Repos: g.Repos,
-		}
+	if g := in.GitHub; len(g.Repos) > 0 || g.App.ID != 0 {
+		doc.GitHub = &roleGitHubDoc{Repos: g.Repos}
 		if app := g.App; app.ID != 0 {
 			doc.GitHub.AppID = app.ID
 			doc.GitHub.AppSlug = app.Slug

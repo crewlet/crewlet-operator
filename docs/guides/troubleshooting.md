@@ -684,7 +684,9 @@ a routable address sends passwords unencrypted. An `https` address with no
 proxy listed shows every caller as the proxy. A class may let people sign in
 with a password alone at a routable address, which it acknowledged. A company
 may have no human seat anyone can sign in to, or a token ceiling another
-leaves idle. None of these stops the engine. It says so in two places:
+leaves idle. A seat's `spec.code.access` may grant nothing, for want of a
+GitHub `Integration` in the company or of `spec.integrations.github` on the
+seat. None of these stops the engine. It says so in two places:
 
 - **The Company's events**: the engine's answer to each revision the operator
   writes, as an `EngineWarnings` event (`The engine runs revision … with

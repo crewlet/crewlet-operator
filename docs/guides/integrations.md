@@ -378,7 +378,10 @@ Slack has no company-wide credential: each agent seat is its own app, in its
 Seat's `spec.integrations.slack`. GitHub's Integration holds the webhook
 secret of the company-wide route and an optional organization token, and
 each agent seat is its own GitHub App, in `spec.integrations.github`.
-[Supplying credentials](credentials.md#an-agents-slack-app) shows both.
+[Supplying credentials](credentials.md#an-agents-slack-app) shows both. How
+much a seat's app may do in a repository is the Seat's `spec.code.access`
+(`ReadOnly`, the default, `Review` or `FullAccess`), Crewlet's one tier for
+every code host it drives.
 
 A Slack agent posts through the `slack` tool server, `slack-mcp-server`, on
 its app's bot token, which its Seat names a second time for the server; the

@@ -201,9 +201,10 @@ kubectl create secret generic lead-github-app -n acme \
 
 ```yaml
 spec:                       # Seat lead
+  code:
+    access: Review          # how much the app may do; ReadOnly when unset
   integrations:
     github:
-      tier: Review
       repos: [acme/widgets]
       app:
         id: 1234567
@@ -212,7 +213,10 @@ spec:                       # Seat lead
         credentialsSecretRef: {name: lead-github-app}   # keys privateKey, webhookSecret
 ```
 
-The webhook URL for the app is `status.integrations.github.webhookURL`.
+The webhook URL for the app is `status.integrations.github.webhookURL`. How
+much the app may do is the seat's `spec.code.access`, not a field of its
+GitHub identity: Crewlet keeps one tier for every code host it drives, and
+creates the app with that tier's permissions.
 
 ### The company's GitHub organization
 

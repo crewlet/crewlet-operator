@@ -240,18 +240,38 @@ type SlackSeatIntegration struct {
 	CredentialsSecretRef SecretReference `json:"credentialsSecretRef,omitzero"`
 }
 
-// GitHubAccessTier is how much a seat may do in a repository. It maps onto
-// Crewlet's role integrations.github.tier (ReadOnly is `read_only`, Review is
-// `review`, FullAccess is `full_access`).
+// CodeAccessTier is how much a seat may do in a repository. It maps onto
+// Crewlet's role code.access (ReadOnly is `read_only`, Review is `review`,
+// FullAccess is `full_access`).
 // +kubebuilder:validation:Enum=ReadOnly;Review;FullAccess
-type GitHubAccessTier string
+type CodeAccessTier string
 
-// The GitHub access tiers, least first.
+// The code access tiers, least first.
 const (
-	GitHubAccessReadOnly   GitHubAccessTier = "ReadOnly"
-	GitHubAccessReview     GitHubAccessTier = "Review"
-	GitHubAccessFullAccess GitHubAccessTier = "FullAccess"
+	CodeAccessReadOnly   CodeAccessTier = "ReadOnly"
+	CodeAccessReview     CodeAccessTier = "Review"
+	CodeAccessFullAccess CodeAccessTier = "FullAccess"
 )
+
+// SeatCode is an agent seat's access to the company's code. It maps onto
+// Crewlet's role `code`, which holds one tier for every code host the engine
+// drives: the seat's GitHub App is created with, and mints every token at,
+// the permissions of its tier, and Crewlet's own code host, which this API
+// does not offer, caps what the org chart grants the seat by the same tier.
+// The tier is a setting of the seat's rather than of its GitHub identity, so
+// it says the same on every host. A person acts as their own identity on
+// every host, so a tier on a Human seat would cap nothing, and the API
+// refuses one.
+// +kubebuilder:validation:MinProperties=1
+type SeatCode struct {
+	// access is how much of a repository the seat may do. Unset is
+	// ReadOnly, the least the engine hands out. Crewlet's `access`. The
+	// engine warns that the tier grants nothing where nothing applies it:
+	// in a company with no GitHub Integration, or for a seat without
+	// spec.integrations.github.
+	// +optional
+	Access CodeAccessTier `json:"access,omitempty"`
+}
 
 // GitHubApp is the GitHub App a seat acts as. An app carries exactly one bot
 // identity, so every agent seat that works on GitHub has its own.
@@ -286,14 +306,10 @@ type GitHubApp struct {
 
 // GitHubSeatIntegration is a seat's identity on GitHub. It maps onto
 // Crewlet's role integrations.github and needs the company's GitHub
-// Integration.
+// Integration. How much the identity may do is the seat's spec.code.access,
+// which its app is created with and mints every token at.
 // +kubebuilder:validation:MinProperties=1
 type GitHubSeatIntegration struct {
-	// tier is how much the seat may do in a repository. Unset is ReadOnly.
-	// Crewlet's `tier`.
-	// +optional
-	Tier GitHubAccessTier `json:"tier,omitempty"`
-
 	// repos are the repositories the seat works in, as owner/name. Unset is
 	// every repository the app's installation covers. Crewlet's `repos`.
 	// +optional
@@ -438,7 +454,7 @@ type SeatContact struct {
 // SeatSpec is one seat of a company: an AI agent or a person. It renders to
 // one entry of Crewlet's roles, nested under its unit's.
 // +kubebuilder:validation:XValidation:rule="self.kind != 'Agent' || (!has(self.contact) && !has(self.availability))",message="contact and availability apply to Human seats only"
-// +kubebuilder:validation:XValidation:rule="self.kind != 'Human' || !(has(self.llm) || has(self.tokenBudget) || has(self.workers) || has(self.learningEnabled) || has(self.mcp) || has(self.sandbox) || has(self.integrations) || has(self.behavioralGuidelines) || has(self.project) || has(self.space) || has(self.placement) || has(self.paused))",message="a Human seat is never run by the engine: llm, tokenBudget, workers, learningEnabled, mcp, sandbox, integrations, behavioralGuidelines, project, space, placement and paused apply to Agent seats only"
+// +kubebuilder:validation:XValidation:rule="self.kind != 'Human' || !(has(self.llm) || has(self.tokenBudget) || has(self.workers) || has(self.learningEnabled) || has(self.mcp) || has(self.sandbox) || has(self.code) || has(self.integrations) || has(self.behavioralGuidelines) || has(self.project) || has(self.space) || has(self.placement) || has(self.paused))",message="a Human seat is never run by the engine: llm, tokenBudget, workers, learningEnabled, mcp, sandbox, code, integrations, behavioralGuidelines, project, space, placement and paused apply to Agent seats only"
 // +kubebuilder:validation:XValidation:rule="(!has(self.pauseReason) && !has(self.stopRunning)) || (has(self.paused) && self.paused)",message="pauseReason and stopRunning describe a pause: they apply only while paused is true"
 type SeatSpec struct {
 	// companyRef names the Company this seat belongs to. Immutable.
@@ -610,6 +626,12 @@ type SeatSpec struct {
 	// stopped turn stays stopped. Crewlet's pause `stop_running`.
 	// +optional
 	StopRunning *bool `json:"stopRunning,omitempty"`
+
+	// code is the seat's access to the company's code, on every code host
+	// the engine drives. Unset runs the seat at access ReadOnly. Crewlet's
+	// `code`.
+	// +optional
+	Code SeatCode `json:"code,omitzero"`
 
 	// integrations is the seat's own identity on the company's
 	// integrations.

@@ -114,6 +114,8 @@ units:
     roles:
     - behavioral_guidelines:
       - Prefer small pull requests.
+      code:
+        access: review
       email: ana@nimbus.example
       goal: Keep CI green and deploys boring.
       handle: ana
@@ -125,7 +127,6 @@ units:
           private_key: ${K8S_ANA_GITHUB_APP_PRIVATE_KEY_JSUSQ7FYDCSN}
           repos:
           - nimbus-hq/nimbuscore
-          tier: review
           webhook_secret: ${K8S_ANA_GITHUB_APP_WEBHOOK_SECRET_DE4RFGLQA4OW}
         slack:
           bot_token: ${K8S_ANA_SLACK_BOT_TOKEN_HGFIPUYDX4KF}

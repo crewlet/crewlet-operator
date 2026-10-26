@@ -103,13 +103,16 @@ spec:
         valueFrom:
           provisioned:
             name: gitlab-token
+  # How much of a repository the seat may do, on GitHub through its app
+  # below.
+  code:
+    access: Review
   integrations:
     slack:
       # Keys: botToken, signingSecret.
       credentialsSecretRef:
         name: ana-slack
     github:
-      tier: Review
       repos:
         - nimbus-hq/nimbuscore
       app:

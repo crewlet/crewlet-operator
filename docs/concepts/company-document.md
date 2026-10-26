@@ -121,6 +121,20 @@ plan, so a seat that needs a fallback names a chain. No provider may be named
 Each Seat's `spec.llm` becomes Crewlet's per-phase `llm` mapping, each chain
 naming providers by their key in `providers.llm`.
 
+### Code access
+
+An agent Seat's `spec.code.access` becomes its role's `code.access`
+(`read_only`, `review` or `full_access`), Crewlet's one tier for every code
+host it drives: the seat's GitHub App is created with that tier's
+permissions and mints every token at it. A seat that sets none runs at
+`read_only`. The tier is the seat's, not its GitHub identity's, so
+`spec.integrations.github` names only the app and the repositories it works
+in, and the API refuses a tier on a Human seat, since a person acts as their
+own identity on every host. Crewlet applies a tier that nothing caps and
+warns of it (`code.access … grants nothing`): one on a seat with no
+`spec.integrations.github`, or in a company with no GitHub `Integration`
+([Read what the engine is worth telling you](../guides/troubleshooting.md#read-what-the-engine-is-worth-telling-you)).
+
 ### Schedules
 
 A Schedule is written into the entry of what it targets: a Seat's role, or a
