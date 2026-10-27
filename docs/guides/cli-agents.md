@@ -796,9 +796,12 @@ given: a step's variable the Seat's own `env` replaces is none.
 
 The executor verdict ([What the operator reports](#where-a-seats-executor-runs))
 reads the variables that sign the seat's CLI in once the reconcile has read
-their Secrets: one a run goes without, listed and missing or empty, signs
-nothing in, and the box is given the provider's sign-in as it is with no
-variable of the seat's. What the box receives from the provider is in
+their Secrets: one a run goes without signs nothing in, and the box is given
+the provider's sign-in as it is with no variable of the seat's. A run goes
+without a value that is empty, whether or not its key is listed; one whose
+Secret or key is missing, under a key `optionalKeys` lists; and a
+provisioned one while no Integration of the company has `provisioning:
+Engine`. What the box receives from the provider is in
 [What a coding box carries](credentials.md#what-a-coding-box-carries).
 
 ## Seat pools

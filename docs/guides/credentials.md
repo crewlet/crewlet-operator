@@ -174,11 +174,13 @@ A seat that signs Claude Code in itself, with `CLAUDE_CODE_OAUTH_TOKEN`,
 in `spec.sandbox.env` or a setup step's `env`, gets none of the provider's
 sign-in: its own is what the run uses, as Claude Code ranks its sign-ins by
 name and a provider's key beside a seat's plan token would win. A sign-in
-the run goes without, its key listed in `optionalKeys` and its Secret or key
-missing or empty, signs nothing in: the run is given the provider's sign-in,
-as one with no sign-in of its own is. Under OpenCode the provider's key is
-added beneath the seat's variables, so a seat variable of the same name
-wins.
+the run goes without signs nothing in: one whose value is empty, whether or
+not `optionalKeys` lists its key, one whose Secret or key is missing under a
+key `optionalKeys` lists, and a provisioned one while no Integration of the
+company has `provisioning: Engine`. The run is then given the provider's
+sign-in, as one with no sign-in of its own is. Under OpenCode the provider's
+key is added beneath the seat's variables, so a seat variable of the same
+name wins.
 
 ### An agent's Slack app
 
