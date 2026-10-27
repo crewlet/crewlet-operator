@@ -515,6 +515,37 @@ func engineCases() []engineCase {
 			at: "providers.sandbox", says: "configures none",
 		},
 		{
+			// Every providers.llm entry the document holds is a model a
+			// seat's executor can run on, the class's as much as the
+			// Company's own.
+			name: "agent seats on the class's models alone and no spec.sandbox", site: site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				platform := []v1alpha1.LLMProviderReference{{Kind: v1alpha1.LLMProviderKindPlatform, Name: samplePlatformProvider}}
+				in.LLMProviders = nil
+				in.Company.Spec.LLM.Order = platform
+				seat(in, seatAna).Spec.LLM.Default = platform
+				seat(in, seatCTO).Spec.LLM.Default = platform
+				in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{}
+			},
+			refused: "Company/nimbus spec.sandbox",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				providers, _ := doc[keyProviders].(map[string]any)
+				delete(providers, "sandbox")
+				llm, _ := providers["llm"].(map[string]any)
+				if _, ok := llm["anthropic"]; !ok {
+					t.Fatal("the document has no provider anthropic")
+				}
+				delete(llm, "anthropic")
+				providers["llm_order"] = []any{samplePlatformProvider}
+				for _, handle := range []string{seatAna, seatCTO} {
+					role(t, doc, handle)[keyLLM].(map[string]any)["default"] = []any{samplePlatformProvider}
+				}
+			},
+			at: "providers.sandbox", says: "configures none",
+		},
+		{
 			name:  "a provider placed in an E2B sandbox the company does not configure",
 			site:  site{fnUnoffered, EngineRefuses, v1alpha1.ReasonSandboxPlacementNotOffered},
 			input: sampleCompany,
