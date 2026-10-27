@@ -2,10 +2,13 @@ package render
 
 import (
 	"cmp"
+	"encoding/json"
 	"maps"
 	"slices"
 	"strings"
 	"testing"
+
+	"sigs.k8s.io/yaml"
 
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/secretref"
@@ -501,6 +504,121 @@ func TestContractExecutorIsAppliedWhereItCannotRun(t *testing.T) {
 				env[secretsync.StoreName(k)] = dummyCredential(k)
 			}
 			validate(t, env, c.advisories, "-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
+		})
+	}
+}
+
+// TestContractDirectCell holds the direct cell a document configures to the
+// volume the operator keeps a Direct run's boxes on and to what the engine
+// takes. A run can be placed Direct by the Company's
+// spec.sandbox.defaultRunIn or by a provider's runIn, and wherever one can,
+// the document configures Crewlet's local backend with its boxes under
+// SandboxDir, where every engine pod mounts its sandboxes volume, and nothing
+// else of it, the rest being the container cell's; where none can, it
+// configures no local backend, so the cells a document configures are the
+// ones the Company offers. The engine takes each, the direct cell alone and
+// beside E2B. And every document that configures the direct cell is handed
+// to the engine again without it, which the engine must refuse where the run
+// is placed Direct: the block is what lets a run go Direct, not one the
+// engine would make up for, so a case it took either way would hold nothing.
+func TestContractDirectCell(t *testing.T) {
+	tierA, err := Bootstrap(bootstrapCases()[0].input(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := write(t, "crewlet.yaml", tierA.YAML)
+	const (
+		catalogue     = keyProviders + ".sandbox"
+		defaultRunIn  = catalogue + ".default_run_in"
+		providerRunIn = keyProviders + ".llm.claude.run_in"
+	)
+	for _, c := range []struct {
+		name   string
+		mutate func(*Input)
+		// directAt is where the engine refuses the document without its
+		// local backend: the field that places a run Direct, or the
+		// catalogue, when that was its one cell; empty when no run is
+		// placed Direct and the document configures none.
+		directAt string
+	}{
+		{name: "Direct alone", mutate: func(*Input) {}, directAt: catalogue},
+		{name: "Direct beside E2B", mutate: withE2B, directAt: defaultRunIn},
+		{
+			name: "E2B by default and one provider Direct",
+			mutate: func(in *Input) {
+				in.Company.Spec.Sandbox.DefaultRunIn = v1alpha1.SandboxPlacementE2B
+				withE2B(in)
+				in.LLMProviders[0].Spec.RunIn = v1alpha1.SandboxPlacementDirect
+			},
+			directAt: providerRunIn,
+		},
+		{
+			name: "E2B alone",
+			mutate: func(in *Input) {
+				in.Company.Spec.Sandbox.DefaultRunIn = v1alpha1.SandboxPlacementE2B
+				withE2B(in)
+			},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			// One ClaudeCode provider, claude, on a key, and one agent seat
+			// with no chain of its own, whose executor runs on it.
+			const base = "minimal-agent"
+			in := companyCaseNamed(t, base).input(t)
+			c.mutate(in)
+			doc, err := Company(in)
+			if err != nil {
+				t.Fatalf("the render refuses the document: %v", err)
+			}
+			var tree struct {
+				Providers struct {
+					Sandbox map[string]any `json:"sandbox"`
+				} `json:"providers"`
+			}
+			if err := yaml.Unmarshal(doc.YAML, &tree); err != nil {
+				t.Fatal(err)
+			}
+			local, configured := tree.Providers.Sandbox["local"]
+			switch {
+			case c.directAt == "" && configured:
+				t.Errorf("no run is placed Direct, and the document configures the direct cell: %v", local)
+			case c.directAt != "" && !configured:
+				t.Errorf("a run is placed Direct, and the document configures no direct cell:\n%s", doc.YAML)
+			case c.directAt != "":
+				want := map[string]any{"state_dir": SandboxDir}
+				if got, ok := local.(map[string]any); !ok || !maps.Equal(got, want) {
+					t.Errorf("the direct cell is %v, want %v: its boxes on the sandboxes volume, and nothing of the container cell", local, want)
+				}
+			}
+
+			env := bootstrapEnv(tierA)
+			for _, k := range doc.Refs {
+				env[secretsync.StoreName(k)] = dummyCredential(k)
+			}
+			validate(t, env, companyCaseNamed(t, base).advisories,
+				"-config", config, "-company", write(t, "company.yaml", doc.YAML))
+			if c.directAt == "" {
+				return
+			}
+
+			var without map[string]any
+			if err := yaml.Unmarshal(doc.YAML, &without); err != nil {
+				t.Fatal(err)
+			}
+			delete(without[keyProviders].(map[string]any)["sandbox"].(map[string]any), "local")
+			data, err := yaml.Marshal(without)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, stdout, stderr, _ := verdict(t, env, "-config", config, "-company", write(t, "without-local.yaml", data))
+			refused := slices.ContainsFunc(got.Problems, func(raw json.RawMessage) bool {
+				var p struct{ Path string }
+				return json.Unmarshal(raw, &p) == nil && p.Path == c.directAt
+			})
+			if got.Valid || !refused {
+				t.Errorf("crewlet validate took a run placed Direct with no local backend, or refused it elsewhere than at %s:\n%s\n%s",
+					c.directAt, stdout, stderr)
+			}
 		})
 	}
 }
