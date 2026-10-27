@@ -545,6 +545,11 @@ func (in *DataPodSettings) DeepCopyInto(out *DataPodSettings) {
 		(*in).DeepCopyInto(*out)
 	}
 	in.Storage.DeepCopyInto(&out.Storage)
+	if in.ScratchSizeLimit != nil {
+		in, out := &in.ScratchSizeLimit, &out.ScratchSizeLimit
+		x := (*in).DeepCopy()
+		*out = &x
+	}
 	if in.SandboxSizeLimit != nil {
 		in, out := &in.SandboxSizeLimit, &out.SandboxSizeLimit
 		x := (*in).DeepCopy()

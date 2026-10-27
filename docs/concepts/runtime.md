@@ -123,7 +123,7 @@ Two cases are refused rather than guessed at:
 |---|---|
 | **Image** | The class's `engine.image`; with `engine.allowVersionOverride`, its tag replaced by the Company's `spec.runtime.version`. |
 | **Command** | `crewlet run -config /etc/crewlet/crewlet.yaml`, the bootstrap Secret's `crewlet.yaml` mounted read-only, readable by the engine's user alone (mode `0440`, group `fsGroup`). |
-| **Storage** | One volume claim per pod (`data-nimbus-data-0`) at `/var/lib/crewlet`, from the class's `data.storage`: the store, the event stream (three quarters of the volume, [sized from the claim](company-document.md#the-data-pods-crewletyaml)), and the store's native library cache (`TURSO_GO_CACHE_DIR`), so a restart does not extract it again. Beside it, the `sandboxes` `emptyDir` at `/var/lib/crewlet-sandboxes`, of the class's `data.sandboxSizeLimit` (20Gi unless set), on the node's disk: the boxes Crewlet makes on the pod for the seats' executor runs it places there (`Direct`), at most one for each agent seat of the pod, each holding the run's checkout, its CLI's home and what it installs and builds. A pod whose boxes write more is evicted; the data volume is never theirs ([Box storage](#box-storage)). |
+| **Storage** | One volume claim per pod (`data-nimbus-data-0`) at `/var/lib/crewlet`, from the class's `data.storage`: the store, the event stream (three quarters of the volume, [sized from the claim](company-document.md#the-data-pods-crewletyaml)), and the store's native library cache (`TURSO_GO_CACHE_DIR`), so a restart does not extract it again. Beside it, the `scratch` `emptyDir`, of the class's `data.scratchSizeLimit` (10Gi unless set), on the node's disk, holding `/tmp` and `HOME`: what the processes the engine runs write off the data volume and outside a box, a seat's `Direct` run's writes to `/tmp` or the engine's home among it. And the `sandboxes` `emptyDir` at `/var/lib/crewlet-sandboxes`, of the class's `data.sandboxSizeLimit` (20Gi unless set), on the node's disk: the boxes Crewlet makes on the pod for the seats' executor runs it places there (`Direct`), at most one for each agent seat of the pod, each holding the run's checkout, its CLI's home and what it installs and builds. A pod that writes more to either is evicted; neither limit bounds the data volume ([Box storage](#box-storage)). |
 | **Environment** | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the tool bridge's address, which is the Company's public address while it has one, on every engine pod alike (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`, and with them `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, the Company's public address, while the Company has one (see [Exposure](#exposure)); then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). All of it is the engine's: a stdio tool server the engine starts is handed only the part of it [Crewlet's allowlist](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#what-a-stdio-servers-environment-is) names, the proxy and TLS variables among it, a coding CLI that part and the variables its Crewlet profile passes through, a box Crewlet makes on the pod (a seat's `Direct` executor run, a deep-work run) that part alone, and a box in `E2B` none of it ([Stdio and HTTP](../guides/tool-servers.md#stdio-and-http)). |
 | **Ports** | 8080 (`http`), the API, the dashboard and the probes; 8081 (`public`), the public listener: the webhooks, the telemetry receiver, `/otlp/`, which every seat's executor run exports its traces to at the Company's public address, and the tool bridge, `/mcp/`, which a seat's box on the pod itself dials on loopback and every other run at the public address; 8082 (`artifacts`), the artifact listener, while the company has an artifact origin; and 7422 (`leaf`), the leaf listener seat pods join the event stream through, while the class's `seatPools.policy` is `Allowed`. The headless Service `nimbus-data` names 8080 and 7422; `nimbus-engine` names 8080, 8081 and 8082. |
 | **Probes** | `/health` for startup and liveness, `/ready` for readiness. Startup allows at least the class's `data.startupSeconds`, counted from the container's start, or, unset, 1,746 seconds (1,886 when the class keeps files in S3) plus six seconds per GiB of the data volume. The first figure is every bound the engine puts on a data pod's boot, laid end to end, and the API refuses a `startupSeconds` below it: its waits for its own broker and store, never for a peer. One of them grows with what the node holds and is left to the second figure, as the recovery is: the claim of each batch of a seat pod's events the node kept and could not settle, 15 s a batch. The second is for what the engine waits out unbounded: it recovers what it holds on the volume before `/health` answers `200`, which takes longer the more it holds, and a pod restarted mid-recovery starts it again. What the company configures does not count: `/health` answers once the recovery is over, and only then does the engine read the company's secrets, start its tool servers and restore its CLIs' logins, while `/ready` answers `503` `starting` until it serves. Liveness allows a minute of failures before a restart, longer than the 45 seconds in which the engine's watchdog ends a wedged process itself. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
@@ -137,9 +137,10 @@ no privilege escalation and every capability dropped. Its root filesystem is
 read-only. The engine writes only to its data volume, its home, `/tmp` and
 its sandboxes volume ([Box storage](#box-storage)). A stdio MCP server it
 starts is handed the engine's `HOME` and writes to its home and `/tmp`,
-which are `emptyDir` volumes, and `HOME` is set explicitly so an image built
-on another base still has a writable one. A coding CLI is handed
-a home, a `TMPDIR` and XDG directories of its seat's own instead, under
+which share the scratch `emptyDir` and its limit, and `HOME` is set
+explicitly so an image built on another base still has a writable one. A
+coding CLI is handed a home, a `TMPDIR` and XDG directories of its seat's
+own instead, under
 `/var/lib/crewlet/llm-cli` on the data volume (`llm-cli-platform` for a
 model the class provides). A seat's executor runs as its CLI's own run in a
 box: placed `Direct`, a process tree of the pod in a box on its sandboxes
@@ -176,8 +177,9 @@ its run waits on a person's answer, and removed when the run is over.
 - **A volume of its own.** Not the data volume, which is the company's
   estate, three quarters of it the event stream: a run that filled it would
   stop the store and the broker, and the company with them. Not `HOME`
-  either, where Crewlet keeps its boxes by default: a seat pod's `HOME` is
-  on its scratch volume, sized for the scratch store.
+  either, where Crewlet keeps its boxes by default: an engine pod's `HOME`
+  is on its scratch volume, sized for what the engine's processes write
+  outside a box.
 - **An `emptyDir` on the node's disk.** A box's run is a process of the pod
   and ends with it, so its directory has nothing to keep past the pod; and a
   memory-backed volume would charge a checkout to the engine container's
@@ -193,6 +195,18 @@ its run waits on a person's answer, and removed when the run is over.
   ephemeral-storage limit there bounds the container's own writes and every
   `emptyDir` of the pod together, so a class that sets one gives it room for
   the boxes. Changing a limit rolls the pods it sizes.
+- **The box, not the run.** The volume bounds what a run writes inside its
+  box. Crewlet confines a seat's `Direct` run to nothing: it points the
+  run's home and temporary directories (`TMPDIR`, `TMP`, `TEMP`,
+  `CLAUDE_CODE_TMPDIR`) into the box, and a command that names a path
+  outright writes where the path is. `/tmp` and the engine's home are on the
+  pod's scratch volume, whose limit (`data.scratchSizeLimit`,
+  `seatPools.defaults.scratchSizeLimit`, 10Gi unless set) evicts the pod as
+  this one does, on a seat pod beside its scratch store. On a data pod a
+  path under `/var/lib/crewlet` is the data volume, which no `emptyDir`
+  limit bounds: a run that filled it would stop the store and the broker.
+  Every other place an engine pod writes is bounded, so a run that writes
+  without end is stopped at its own pod and never fills the node's disk.
 - **Not a deep-work run's.** The Dashboard Assistant's deep work, when it
   runs on the data pod rather than in `E2B`, is a box Crewlet makes beside
   its store, on the data volume (`/var/lib/crewlet/store/assistant-boxes`),
@@ -237,7 +251,7 @@ flowchart LR
 | Replicas | the pool's `replicas`, 0 to 100 | the pool's `replicas`, 1 or 2 (a warm standby) |
 | Selector | `crewlet.ai/pool: general`, and no `crewlet.ai/seat` label | `crewlet.ai/seat: cy` |
 | Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `TURSO_GO_CACHE_DIR` on the scratch volume; the OpenTelemetry variables, `CREWLET_SANDBOX_OTEL_RECEIVER_URL` and `CREWLET_MCP_BRIDGE_URL` as on a data pod; the class's and the Company's variables, as on a data pod | the same, and `CREWLET_SEAT: cy` |
-| Storage | one `emptyDir` at `/var/lib/crewlet`, of the class's `seatPools.defaults.scratchSizeLimit` (2Gi unless set), holding the scratch store, the store's native library, `/tmp` and `HOME`: the limit bounds what the processes the engine runs write too; and the `sandboxes` `emptyDir` at `/var/lib/crewlet-sandboxes`, of the class's `seatPools.defaults.sandboxSizeLimit` (20Gi unless set), for the boxes of the pod's seats, as on a data pod ([Box storage](#box-storage)) | the same |
+| Storage | one `emptyDir` at `/var/lib/crewlet`, of the class's `seatPools.defaults.scratchSizeLimit` (10Gi unless set), holding the scratch store, the store's native library, `/tmp` and `HOME`: the limit bounds what the processes the engine runs write too, a seat's `Direct` run's writes to `/tmp` or the engine's home among it; and the `sandboxes` `emptyDir` at `/var/lib/crewlet-sandboxes`, of the class's `seatPools.defaults.sandboxSizeLimit` (20Gi unless set), for the boxes of the pod's seats, as on a data pod ([Box storage](#box-storage)) | the same |
 | Stopping | the pool's `terminationGracePeriodSeconds`, else the class's default, else five minutes: the turn segments the engine runs in its own process finish, waiting turns are handed back, and the seats are released with their mailboxes for another pod to claim. A seat's executor run is not waited for: one running `Direct` on the pod ends with it, and Crewlet collects it as a run that did not finish, or, once a pod that does not come back has been gone for the Company's `spec.sandbox.defaultTimeoutSeconds`, ends it as `launch_node_gone`; one in `E2B` runs on, and the pod that holds the seat next resumes its turn | the same |
 | Port and probes | 8080, the probes alone: `/health` for startup (1,142 seconds, 1,192 with an S3 object store) and liveness, `/ready` for readiness | the same |
 | Updates | `RollingUpdate`, `maxUnavailable: 1`, `podManagementPolicy: Parallel`, `minReadySeconds: 10` | the same |

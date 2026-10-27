@@ -468,12 +468,19 @@ var _ = Describe("Company runtime", func() {
 			corev1.VolumeMount{Name: "data", MountPath: "/var/lib/crewlet"},
 			corev1.VolumeMount{Name: configVolumeName, MountPath: "/etc/crewlet", ReadOnly: true},
 		))
-		// On a read-only root, /tmp has to be a volume of its own: the
-		// engine makes the directory of the sockets every CLI it runs on the
-		// pod reaches its seat's tools through under it, and a seat on the
-		// data pods would have no tools but its executor's without it.
-		Expect(container.VolumeMounts).To(ContainElement(corev1.VolumeMount{Name: tmpVolume, MountPath: "/tmp"}))
-		Expect(pod.Spec.Volumes).To(ContainElement(corev1.Volume{Name: tmpVolume, EmptyDir: &corev1.EmptyDirVolumeSource{}}))
+		// On a read-only root, /tmp has to be on a volume: the engine makes
+		// the directory of the sockets every CLI it runs on the pod reaches
+		// its seat's tools through under it, and a seat on the data pods
+		// would have no tools but its executor's without it. It and HOME
+		// share the scratch volume, under one limit, which a class that sets
+		// none leaves at render's default.
+		Expect(container.VolumeMounts).To(ContainElements(
+			corev1.VolumeMount{Name: scratchVolume, MountPath: "/tmp", SubPath: tmpSubPath},
+			corev1.VolumeMount{Name: scratchVolume, MountPath: "/home/crewlet", SubPath: homeSubPath},
+		))
+		Expect(pod.Spec.Volumes).To(ContainElement(corev1.Volume{Name: scratchVolume, EmptyDir: &corev1.EmptyDirVolumeSource{
+			SizeLimit: new(resource.MustParse(render.DefaultScratchSizeLimit)),
+		}}))
 		// The boxes Crewlet makes on the pod, off the data volume and under
 		// a limit of their own, which a class that sets none leaves at
 		// render's default.

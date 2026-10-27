@@ -266,9 +266,9 @@ func TestPlanTopologySizesEachPool(t *testing.T) {
 	}
 	p := topology.Pool(poolGeneral)
 	if p.MaxConcurrentTurns != 0 || p.TerminationGracePeriodSeconds != DefaultSeatPodTerminationGracePeriodSeconds ||
-		p.ScratchSizeLimit.String() != DefaultSeatPodScratchSizeLimit || p.SandboxSizeLimit.String() != DefaultSandboxSizeLimit {
+		p.ScratchSizeLimit.String() != DefaultScratchSizeLimit || p.SandboxSizeLimit.String() != DefaultSandboxSizeLimit {
 		t.Errorf("pool general with no defaults = %+v, want no turn limit, %ds, a %s scratch volume and %s for its boxes", p,
-			DefaultSeatPodTerminationGracePeriodSeconds, DefaultSeatPodScratchSizeLimit, DefaultSandboxSizeLimit)
+			DefaultSeatPodTerminationGracePeriodSeconds, DefaultScratchSizeLimit, DefaultSandboxSizeLimit)
 	}
 }
 

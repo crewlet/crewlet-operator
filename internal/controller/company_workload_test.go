@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -166,7 +167,7 @@ func claimRequesting(size string) corev1.PersistentVolumeClaim {
 // queues it.
 func TestDataClaimWatch(t *testing.T) {
 	t.Parallel()
-	company := &crewletaiv1alpha1.Company{Namespace: "tenant-a", Name: companyName}
+	company := &crewletaiv1alpha1.Company{Namespace: testTenant, Name: companyName}
 	claim := claimRequesting("16Gi")
 	claim.Namespace = company.Namespace
 	claim.Labels = labelsFor(company, componentData)
@@ -207,6 +208,52 @@ func TestDataClaimWatch(t *testing.T) {
 	}
 }
 
+// testTenant is the namespace of the Companies whose pods these tests render.
+const testTenant = "tenant-a"
+
+// podOfClass is an engine pod's template of a class, as the reconciler renders
+// it: a data pod's (dataPodOf) or a seat pod's (seatPodOf).
+type podOfClass func(*testing.T, *crewletaiv1alpha1.EngineClass) corev1.PodTemplateSpec
+
+// dataPodOf is a data pod's template of class, decoded.
+func dataPodOf(t *testing.T, class *crewletaiv1alpha1.EngineClass) corev1.PodTemplateSpec {
+	t.Helper()
+	company := &crewletaiv1alpha1.Company{Namespace: testTenant, Name: companyName}
+	return decodedPod(t)(podTemplate(company, class, &workload{
+		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1746,
+	}))
+}
+
+// seatPodOf is a seat pod's template of class, decoded, its pool planned as
+// the reconciler plans one, from the class's defaults.
+func seatPodOf(t *testing.T, class *crewletaiv1alpha1.EngineClass) corev1.PodTemplateSpec {
+	t.Helper()
+	company := &crewletaiv1alpha1.Company{Namespace: testTenant, Name: companyName}
+	plan := render.PoolPlanOf(&crewletaiv1alpha1.SeatPool{Name: poolGeneral}, class.Spec.SeatPools.Defaults)
+	return decodedPod(t)(seatPodTemplate(company, class, &seatWorkload{name: "nimbus-seats-general", pool: poolGeneral, plan: &plan},
+		"nimbus-seats-general-bootstrap", engineImageV020, &render.BootstrapDocument{}, ""))
+}
+
+// decodedPod decodes a rendered template into the type, failing t on an
+// error: the apply configuration and the type share their JSON form.
+func decodedPod(t *testing.T) func(*corev1ac.PodTemplateSpecApplyConfiguration, error) corev1.PodTemplateSpec {
+	return func(applied *corev1ac.PodTemplateSpecApplyConfiguration, err error) corev1.PodTemplateSpec {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := json.Marshal(applied)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var pod corev1.PodTemplateSpec
+		if err := json.Unmarshal(raw, &pod); err != nil {
+			t.Fatal(err)
+		}
+		return pod
+	}
+}
+
 // TestEnginePodsKeepBoxesOnAVolumeOfTheirOwn holds every engine pod, a data
 // pod and a seat pod alike, to a sandboxes volume of its own mounted at
 // render.SandboxDir: an emptyDir on the node's disk, never in memory, under
@@ -216,7 +263,6 @@ func TestDataClaimWatch(t *testing.T) {
 // limit, and in memory the engine's.
 func TestEnginePodsKeepBoxesOnAVolumeOfTheirOwn(t *testing.T) {
 	t.Parallel()
-	company := &crewletaiv1alpha1.Company{Namespace: "tenant-a", Name: companyName}
 	// classWith is a class whose data pods' and seat pods' sandboxes limits
 	// are data and pools, each unset when empty.
 	classWith := func(data, pools string) *crewletaiv1alpha1.EngineClass {
@@ -230,45 +276,22 @@ func TestEnginePodsKeepBoxesOnAVolumeOfTheirOwn(t *testing.T) {
 		}
 		return class
 	}
-	dataPod := func(class *crewletaiv1alpha1.EngineClass) (*corev1ac.PodTemplateSpecApplyConfiguration, error) {
-		return podTemplate(company, class, &workload{
-			image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1746,
-		})
-	}
-	seatPod := func(class *crewletaiv1alpha1.EngineClass) (*corev1ac.PodTemplateSpecApplyConfiguration, error) {
-		// As the reconciler plans a pool, from the class's defaults.
-		plan := render.PoolPlanOf(&crewletaiv1alpha1.SeatPool{Name: poolGeneral}, class.Spec.SeatPools.Defaults)
-		return seatPodTemplate(company, class, &seatWorkload{name: "nimbus-seats-general", pool: poolGeneral, plan: &plan},
-			"nimbus-seats-general-bootstrap", engineImageV020, &render.BootstrapDocument{}, "")
-	}
 	for _, c := range []struct {
-		name     string
-		template func(*crewletaiv1alpha1.EngineClass) (*corev1ac.PodTemplateSpecApplyConfiguration, error)
-		class    *crewletaiv1alpha1.EngineClass
-		want     string
+		name  string
+		pod   podOfClass
+		class *crewletaiv1alpha1.EngineClass
+		want  string
 	}{
-		{"a data pod of a class that sets no limit", dataPod, classWith("", ""), render.DefaultSandboxSizeLimit},
-		{"a data pod of a class that sets one for seat pods alone", dataPod, classWith("", "8Gi"), render.DefaultSandboxSizeLimit},
-		{"a data pod of a class that sets its limit", dataPod, classWith("50Gi", "8Gi"), "50Gi"},
-		{"a seat pod of a class that sets no limit", seatPod, classWith("", ""), render.DefaultSandboxSizeLimit},
-		{"a seat pod of a class that sets one for data pods alone", seatPod, classWith("50Gi", ""), render.DefaultSandboxSizeLimit},
-		{"a seat pod of a class that sets its limit", seatPod, classWith("50Gi", "8Gi"), "8Gi"},
+		{"a data pod of a class that sets no limit", dataPodOf, classWith("", ""), render.DefaultSandboxSizeLimit},
+		{"a data pod of a class that sets one for seat pods alone", dataPodOf, classWith("", "8Gi"), render.DefaultSandboxSizeLimit},
+		{"a data pod of a class that sets its limit", dataPodOf, classWith("50Gi", "8Gi"), "50Gi"},
+		{"a seat pod of a class that sets no limit", seatPodOf, classWith("", ""), render.DefaultSandboxSizeLimit},
+		{"a seat pod of a class that sets one for data pods alone", seatPodOf, classWith("50Gi", ""), render.DefaultSandboxSizeLimit},
+		{"a seat pod of a class that sets its limit", seatPodOf, classWith("50Gi", "8Gi"), "8Gi"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			applied, err := c.template(c.class)
-			if err != nil {
-				t.Fatal(err)
-			}
-			// The apply configuration and the type share their JSON form.
-			raw, err := json.Marshal(applied)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var pod corev1.PodTemplateSpec
-			if err := json.Unmarshal(raw, &pod); err != nil {
-				t.Fatal(err)
-			}
+			pod := c.pod(t, c.class)
 
 			var volumes []corev1.Volume
 			for _, v := range pod.Spec.Volumes {
@@ -307,6 +330,102 @@ func TestEnginePodsKeepBoxesOnAVolumeOfTheirOwn(t *testing.T) {
 			}
 			if mounted != 1 {
 				t.Errorf("volume %s is mounted %d times, want once", sandboxesVolume, mounted)
+			}
+		})
+	}
+}
+
+// TestEnginePodsBoundWhatTheyWriteOutsideABox holds every engine pod, a data
+// pod and a seat pod alike, to a limit on all its engine container writes but
+// the data volume: /tmp and HOME on one scratch emptyDir of the node's disk,
+// under the limit the class sets for that kind of pod or render's default,
+// and every other writable mount on a bounded emptyDir too. A seat's Direct
+// executor run is confined to nothing but the pod, and Crewlet points only
+// its temporary directories into its box, so a command that names /tmp or
+// the engine's home outright writes there: an unbounded emptyDir would let
+// it fill the node's disk under the pods beside it.
+func TestEnginePodsBoundWhatTheyWriteOutsideABox(t *testing.T) {
+	t.Parallel()
+	// classWith is a class whose data pods' and seat pods' scratch limits
+	// are data and pools, each unset when empty.
+	classWith := func(data, pools string) *crewletaiv1alpha1.EngineClass {
+		class := &crewletaiv1alpha1.EngineClass{}
+		class.Spec.Data.Storage.Size = new(resource.MustParse("16Gi"))
+		if data != "" {
+			class.Spec.Data.ScratchSizeLimit = new(resource.MustParse(data))
+		}
+		if pools != "" {
+			class.Spec.SeatPools.Defaults.ScratchSizeLimit = new(resource.MustParse(pools))
+		}
+		return class
+	}
+	for _, c := range []struct {
+		name  string
+		pod   podOfClass
+		class *crewletaiv1alpha1.EngineClass
+		// claim is whether the pod may write its data volume, which a
+		// volume claim template gives a data pod and no emptyDir bounds.
+		claim bool
+		want  string
+	}{
+		{"a data pod of a class that sets no limit", dataPodOf, classWith("", ""), true, render.DefaultScratchSizeLimit},
+		{"a data pod of a class that sets one for seat pods alone", dataPodOf, classWith("", "4Gi"), true, render.DefaultScratchSizeLimit},
+		{"a data pod of a class that sets its limit", dataPodOf, classWith("6Gi", "4Gi"), true, "6Gi"},
+		{"a seat pod of a class that sets no limit", seatPodOf, classWith("", ""), false, render.DefaultScratchSizeLimit},
+		{"a seat pod of a class that sets one for data pods alone", seatPodOf, classWith("6Gi", ""), false, render.DefaultScratchSizeLimit},
+		{"a seat pod of a class that sets its limit", seatPodOf, classWith("6Gi", "4Gi"), false, "4Gi"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			pod := c.pod(t, c.class)
+			volumes := make(map[string]corev1.Volume, len(pod.Spec.Volumes))
+			for _, v := range pod.Spec.Volumes {
+				volumes[v.Name] = v
+			}
+			if len(pod.Spec.Containers) != 1 {
+				t.Fatalf("the pod has %d containers, want the engine's alone", len(pod.Spec.Containers))
+			}
+
+			// Every place the engine container writes is bounded, but for a
+			// data pod's own data volume, which its claim sizes.
+			for _, m := range pod.Spec.Containers[0].VolumeMounts {
+				if m.ReadOnly {
+					continue
+				}
+				v, ok := volumes[m.Name]
+				switch {
+				case !ok && c.claim && m.Name == dataVolume && m.MountPath == render.DataDir:
+				case !ok:
+					t.Errorf("%s is writable on volume %s, which is neither the pod's nor its data volume", m.MountPath, m.Name)
+				case v.EmptyDir == nil:
+					t.Errorf("%s is writable on volume %s, %+v, want a bounded emptyDir", m.MountPath, m.Name, v.VolumeSource)
+				case v.EmptyDir.SizeLimit == nil:
+					t.Errorf("%s is writable on emptyDir %s, which has no size limit", m.MountPath, m.Name)
+				case v.EmptyDir.Medium != corev1.StorageMediumDefault:
+					t.Errorf("%s is on emptyDir %s of medium %q, want the node's disk", m.MountPath, m.Name, v.EmptyDir.Medium)
+				}
+			}
+
+			// /tmp and HOME share the scratch volume, under the class's
+			// limit for this kind of pod.
+			for path, sub := range map[string]string{tmpDir: tmpSubPath, homeDir: homeSubPath} {
+				i := slices.IndexFunc(pod.Spec.Containers[0].VolumeMounts, func(m corev1.VolumeMount) bool {
+					return m.MountPath == path
+				})
+				if i < 0 {
+					t.Errorf("nothing is mounted at %s", path)
+					continue
+				}
+				if m := pod.Spec.Containers[0].VolumeMounts[i]; m.Name != scratchVolume || m.SubPath != sub || m.ReadOnly {
+					t.Errorf("%s is mounted as %+v, want %s's %s, writable", path, m, scratchVolume, sub)
+				}
+			}
+			scratch, ok := volumes[scratchVolume]
+			switch {
+			case !ok || scratch.EmptyDir == nil:
+				t.Errorf("the pod has no scratch emptyDir: %+v", pod.Spec.Volumes)
+			case scratch.EmptyDir.SizeLimit == nil || !scratch.EmptyDir.SizeLimit.Equal(resource.MustParse(c.want)):
+				t.Errorf("volume %s is limited to %v, want %s", scratchVolume, scratch.EmptyDir.SizeLimit, c.want)
 			}
 		})
 	}

@@ -46,10 +46,16 @@ const (
 	//     and ends with it, so a volume that outlived the pod would keep
 	//     boxes nothing runs in.
 	//   - HOME, under which Crewlet keeps its boxes by default
-	//     (~/.crewlet/sandboxes): a seat pod's HOME is on its scratch
-	//     volume, whose limit is sized for the scratch store and the
-	//     processes the engine runs, and a box's checkout would evict the
-	//     pod at it.
+	//     (~/.crewlet/sandboxes): an engine pod's HOME is on its scratch
+	//     volume, whose limit is sized for what the processes the engine
+	//     runs write outside a box (DefaultScratchSizeLimit), and a box's
+	//     checkout would evict the pod at it.
+	//
+	// The volume holds a run's box, not every write the run makes: Crewlet
+	// confines a seat's Direct run to nothing, and only points its temporary
+	// directories into the box, so a command that names /tmp or the
+	// engine's home outright writes to the pod's scratch volume, and one
+	// that names a path under DataDir writes to a data pod's data volume.
 	// ADR-0008 records the decision.
 	SandboxDir = "/var/lib/crewlet-sandboxes"
 	// APIPort is the port of an engine's private HTTP listener, api.port. On

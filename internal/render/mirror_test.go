@@ -365,6 +365,16 @@ var runTelemetry = []string{
 	adr0008Md,
 }
 
+// boxWrites is every operator file that copies where a Direct run's writes
+// land outside its box: the scratch volume the controller bounds on every
+// engine pod, the defaults and the API docs of its limit and of the boxes',
+// and the pages and the record that say what each limit bounds.
+var boxWrites = []string{
+	"internal/render/topology.go", bootstrapGo, companyWorkloadGo, engineClassGo,
+	runtimeMd, cliAgentsMd, "docs/guides/multi-tenancy.md", troubleshootingMd,
+	adr0008Md,
+}
+
 // bootWindows is every operator file that copies the bounds the engine puts
 // on its own boot: the controller's data pod and seat pod startup windows,
 // which add them up, the test that pins their sums, the EngineClass API's
@@ -823,6 +833,16 @@ var mirrored = []mirror{
 			"box's home, XDG and temporary directories, and the run's environment, so of the pod's environment only " +
 			"what PassthroughEnv names reaches a Direct run",
 		digest: "2ba9f4a8443ffe0d5fbbc823b3179c8194e7b837e74032f125f799d84aa45afa",
+		read:   executorRead,
+	},
+	{
+		file: "internal/sandbox/local_box.go", name: "TempRootEnv",
+		against: boxWrites,
+		decides: "a direct box's temporary directories are pointed into the box by these variables alone, and a " +
+			"seat's Direct run is confined to nothing else, so a write that names /tmp or the engine's home " +
+			"outright lands on the pod's scratch volume, and one under the data volume's path on a data pod's " +
+			"data volume, not on the sandboxes volume",
+		digest: "4d3c2d2b1c696693b9b574b7bb04e587964f778e89330e0031e327f78f2458f3",
 		read:   executorRead,
 	},
 	{

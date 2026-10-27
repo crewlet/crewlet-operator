@@ -733,8 +733,11 @@ kubectl logs acme-data-0 -n acme | grep -E 'cli_agent_bundle_(restore_failed|wit
   restarted: a `Direct` run is a process of the engine's container, and ends
   with it, a rolling update and an eviction included. Nothing relaunches it;
   the seat's next turn starts a new one. An eviction for a `sandboxes`
-  volume past its `sandboxSizeLimit` is in the pod's events: raise the
-  class's limit, or have the seat's work clean its box up.
+  volume past its `sandboxSizeLimit`, or a `scratch` volume past its
+  `scratchSizeLimit`, is in the pod's events: raise the class's limit, or
+  have the seat's work clean up after itself, in its box and in `/tmp`,
+  which a command that names it outright writes to rather than the box
+  ([Box storage](../concepts/runtime.md#box-storage)).
 
 ## Read what the engine is worth telling you
 

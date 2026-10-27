@@ -46,16 +46,33 @@ const (
 	// homeDir is the engine user's home in Crewlet's image, where the CLI
 	// agents and the git the sandbox recipes drive keep their state.
 	homeDir = "/home/crewlet"
+	// tmpDir is an engine pod's /tmp, the engine's TMPDIR, which the
+	// operator leaves unset.
+	tmpDir = "/tmp"
+	// tmpSubPath and homeSubPath are the directories of the scratch volume
+	// (scratchVolume) mounted at tmpDir and at homeDir.
+	tmpSubPath  = "tmp"
+	homeSubPath = "home"
 	// engineUID is the user Crewlet's image runs as.
 	engineUID int64 = 10001
 	// dataVolume is the name of the data volume claim template, and so the
 	// first part of each data volume claim's name (data-<sts>-<ordinal>).
 	dataVolume = "data"
-	// tmpVolume is a data pod's /tmp, the engine's TMPDIR on a read-only
-	// root: where the processes it starts write their scratch files, and
+	// scratchVolume is every engine pod's writable volume for the engine
+	// and what it runs outside a box, under the class's scratchSizeLimit
+	// (render.ScratchSizeLimitOf): its /tmp and HOME, each a subPath of it,
+	// and on a seat pod its scratch store and native library under
+	// render.DataDir besides. /tmp is the engine's TMPDIR on a read-only
+	// root, where the processes it starts write their scratch files and
 	// where it makes the directory of the sockets a CLI it runs on the pod
-	// reaches its seat's tools through, in every phase but the executor's.
-	tmpVolume = "tmp"
+	// reaches its seat's tools through, in every phase but the executor's;
+	// HOME is where its stdio tool servers keep their packages. One volume
+	// for both, so that one limit bounds what lands outside the data volume
+	// and the boxes, a Direct run's writes to /tmp or HOME named outright
+	// among it, rather than two whose sum nobody set. The boxes Crewlet
+	// makes on the pod have a volume of their own (sandboxesVolume), so that
+	// a checkout never evicts the pod at this one's limit.
+	scratchVolume = "scratch"
 	// sandboxesVolume is every engine pod's volume for the boxes Crewlet
 	// makes on the pod itself, mounted at render.SandboxDir, which says why
 	// it is a volume of its own (sandboxesVolumeOf).
@@ -492,10 +509,10 @@ func podTemplate(
 			configVolume(bootstrapSecretName(c)),
 			// The root filesystem is read-only; the engine and what it
 			// spawns (git, stdio MCP servers, CLI agents) write their
-			// scratch files under /tmp (tmpVolume says what else goes
-			// there) and their state under HOME.
-			corev1ac.Volume().WithName(tmpVolume).WithEmptyDir(corev1ac.EmptyDirVolumeSource()),
-			corev1ac.Volume().WithName("home").WithEmptyDir(corev1ac.EmptyDirVolumeSource()),
+			// scratch files under /tmp and their state under HOME, both on
+			// the scratch volume, under the class's limit (scratchVolume
+			// says what else goes there).
+			scratchVolumeOf(render.ScratchSizeLimitOf(class.Spec.Data.ScratchSizeLimit)),
 			// The boxes of the runs Crewlet places on the pod, under the
 			// class's limit and off the data volume.
 			sandboxesVolumeOf(render.SandboxSizeLimitOf(class.Spec.Data.SandboxSizeLimit)),
@@ -527,6 +544,24 @@ func enginePodMetadata(class *crewletaiv1alpha1.EngineClass, own map[string]stri
 	}
 	annotations[BootstrapHashAnnotation] = hash
 	return labels, annotations
+}
+
+// scratchVolumeOf is an engine pod's scratch volume, bounded by limit: an
+// emptyDir on the node's disk, as sandboxesVolumeOf says of the boxes', for
+// what the engine and its processes write outside the data volume and a box,
+// none of which outlives the pod.
+func scratchVolumeOf(limit resource.Quantity) *corev1ac.VolumeApplyConfiguration {
+	return corev1ac.Volume().WithName(scratchVolume).WithEmptyDir(corev1ac.EmptyDirVolumeSource().
+		WithSizeLimit(limit))
+}
+
+// scratchMounts mounts the scratch volume (scratchVolumeOf) at /tmp and at
+// HOME, each a directory of its own on it.
+func scratchMounts() []*corev1ac.VolumeMountApplyConfiguration {
+	return []*corev1ac.VolumeMountApplyConfiguration{
+		corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath(tmpDir).WithSubPath(tmpSubPath),
+		corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath(homeDir).WithSubPath(homeSubPath),
+	}
 }
 
 // sandboxesVolumeOf is an engine pod's sandboxes volume, bounded by limit
@@ -640,10 +675,9 @@ func engineContainerOf(
 		WithVolumeMounts(
 			corev1ac.VolumeMount().WithName(dataVolume).WithMountPath(render.DataDir),
 			corev1ac.VolumeMount().WithName(configVolumeName).WithMountPath(configDir).WithReadOnly(true),
-			corev1ac.VolumeMount().WithName(tmpVolume).WithMountPath("/tmp"),
-			corev1ac.VolumeMount().WithName("home").WithMountPath(homeDir),
-			sandboxesMount(),
 		).
+		WithVolumeMounts(scratchMounts()...).
+		WithVolumeMounts(sandboxesMount()).
 		WithLifecycle(corev1ac.Lifecycle().
 			WithPreStop(corev1ac.LifecycleHandler().
 				WithSleep(corev1ac.SleepAction().WithSeconds(preStopSleepSeconds))))

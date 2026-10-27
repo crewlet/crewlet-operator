@@ -484,6 +484,14 @@ keys and the class's env values too.
   an `ephemeral-storage` request for the scheduler to place the pod by, and
   any `ephemeral-storage` limit there room for the boxes beside the
   container's own writes ([Box storage](../concepts/runtime.md#box-storage)).
+  The boxes' limit bounds a box, not every write of its run: Crewlet confines
+  a `Direct` run to nothing, so what the run writes to `/tmp` or the
+  engine's home outright counts against the pod's scratch volume
+  (`data.scratchSizeLimit`, `seatPools.defaults.scratchSizeLimit`, 10Gi
+  each unless set), beside its stdio tool servers' packages, and evicts the
+  pod there, with every seat it holds; and on a data pod what it writes
+  under `/var/lib/crewlet` counts against the data volume, which a tier that
+  must keep runs off it avoids with seat pools or `E2B`.
 - **Sign-in** is a tier's too: a class's `spec.signIn.secondFactor: Optional`
   lets its companies' people sign in with a password alone, which only the
   platform decides, since a tenant cannot lower it on its Company. Off

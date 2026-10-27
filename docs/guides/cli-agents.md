@@ -217,8 +217,8 @@ OpenCode: it carries on without it, prints the same answer, exits 0, and
 says so only in its log, as `level=ERROR` with `watcher backend not
 supported`, which is why the check reads the log. That is what a missing
 libstdc++ looks like, and what a plain `--tmpfs` does, which mounts
-`noexec`: the pod's `/tmp` and home are `emptyDir` volumes, which allow
-exec, and each seat's `TMPDIR` is on the data volume, which ordinarily does
+`noexec`: the pod's `/tmp` and home are on an `emptyDir` volume, which
+allows exec, and each seat's `TMPDIR` is on the data volume, which ordinarily does
 too. Run the check on a machine of the platform the image is for: under
 emulation, as `docker buildx` runs another platform's image, OpenCode
 misses its own five-second deadline for activating its plugins and fails
@@ -614,7 +614,12 @@ the engine. Place agent seats in a [seat pool](topology.md) to keep their runs
 off the data volume, or run them in `E2B`. Its box is a directory on the pod's
 `sandboxes` volume, an `emptyDir` the class bounds (`data.sandboxSizeLimit`
 for the data pods, and `seatPools.defaults.sandboxSizeLimit` for every seat
-pod): a box past it has the kubelet evict the pod. Whatever the run's shell runs (`git`, a compiler, a package manager) is
+pod): a box past it has the kubelet evict the pod. Crewlet points the run's
+temporary directories into its box and confines it to nothing else, so a
+command that names `/tmp` or the engine's home outright writes to the pod's
+scratch volume (`scratchSizeLimit`), which evicts the pod the same way, and
+one that names a path under `/var/lib/crewlet` on a data pod writes to its
+data volume ([Box storage](../concepts/runtime.md#box-storage)). Whatever the run's shell runs (`git`, a compiler, a package manager) is
 the image's, or what the run installs into its box's home. A Direct run is
 detached from the engine's process, but not from its container: a restart of
 the engine's container or pod ends it, and Crewlet collects it as a run that

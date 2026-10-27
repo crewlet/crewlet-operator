@@ -959,6 +959,24 @@ func TestEngineClassSandboxes(t *testing.T) {
 	})
 }
 
+// TestEngineClassDataScratch holds the limit on a data pod's scratch volume,
+// its /tmp and HOME, to the 256Mi the processes the engine runs there need at
+// the least, in binary and decimal units alike, with the data pods' own
+// message rather than a seat pod's.
+func TestEngineClassDataScratch(t *testing.T) {
+	data := func(size string) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) { c.Spec.Data.ScratchSizeLimit = new(resource.MustParse(size)) }
+	}
+	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
+		{name: "a data pod's limit of 256Mi is accepted", mutate: data("256Mi")},
+		{name: "a data pod's limit of 256Mi in bytes is accepted", mutate: data("268435456")},
+		{name: "a data pod's limit of 100Gi is accepted", mutate: data("100Gi")},
+		{name: "a data pod's limit under 256Mi is refused", mutate: data("255Mi"), want: msgDataScratchFloor},
+		{name: "a data pod's limit of 256M, under 256Mi, is refused", mutate: data("256M"), want: msgDataScratchFloor},
+		{name: "a data pod's limit of zero is refused", mutate: data("0"), want: msgDataScratchFloor},
+	})
+}
+
 // platformKeyVar is a variable a platform sets on every engine of a class,
 // from platformKey, a Secret in the platform's namespace.
 const platformKeyVar = "PLATFORM_KEY"

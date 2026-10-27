@@ -164,6 +164,26 @@ type DataPodSettings struct {
 	// +default=300
 	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds,omitempty"`
 
+	// scratchSizeLimit caps the emptyDir a data pod keeps its /tmp and HOME
+	// on: what the processes the engine runs on the pod write off its data
+	// volume, the packages and files of the stdio tool servers it starts
+	// (a launcher such as npx or uvx installs a server under HOME), git's
+	// and their scratch files, the sockets of its tool sessions, and what a
+	// seat's Direct executor run writes outside its box. Crewlet points a
+	// run's temporary directories into its box but confines it to nothing
+	// else, so a command that names /tmp or the engine's home outright
+	// writes here. A pod that writes more is evicted, with every run and
+	// turn on it and the company's API; its data volume is untouched. Unset
+	// is 10Gi.
+	//
+	// It bounds and reserves as sandboxSizeLimit does, and the
+	// ephemeral-storage limit in resources bounds the two together with the
+	// container's own writes. Changing it changes the data pods' template,
+	// which restarts them.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('256Mi'))",message="scratchSizeLimit must be at least 256Mi: the processes the engine runs on the pod, its stdio tool servers among them, keep their packages and files there, and the pod is evicted when they write more"
+	ScratchSizeLimit *resource.Quantity `json:"scratchSizeLimit,omitempty"`
+
 	// sandboxSizeLimit caps the emptyDir a data pod keeps its sandboxes in,
 	// at /var/lib/crewlet-sandboxes: the boxes Crewlet makes on the pod
 	// itself for the executor runs it places there (its direct cell, under
@@ -172,7 +192,9 @@ type DataPodSettings struct {
 	// and removed when the run ends. A box holds the run's checkout, its
 	// coding CLI's home and temporary files, and whatever the run installs
 	// and builds. A pod whose boxes write more is evicted, with every run
-	// and turn on it; its data volume is untouched. Unset is 20Gi.
+	// and turn on it; its data volume is untouched. Unset is 20Gi. It bounds
+	// the boxes alone: what a run writes outside its box counts against
+	// scratchSizeLimit, or, under /var/lib/crewlet, against the data volume.
 	//
 	// It bounds the boxes and reserves nothing: the scheduler places the
 	// pod by the ephemeral-storage request in resources, and an
@@ -238,10 +260,13 @@ type SeatPoolDefaults struct {
 	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds,omitempty"`
 
 	// scratchSizeLimit caps the emptyDir a seat pod keeps its scratch store
-	// in: a store the engine deletes at every start, its native library
-	// (about 20 MB, extracted at every start) and the files of the
-	// processes it runs (stdio MCP servers, git). A pod that writes more is
-	// evicted. Unset is 2Gi.
+	// in, and its /tmp and HOME: a store the engine deletes at every start,
+	// its native library (about 20 MB, extracted at every start), and what
+	// the processes it runs write outside a box, as data.scratchSizeLimit
+	// says of a data pod, the stdio tool servers' packages and files and
+	// what a seat's Direct executor run writes to /tmp or the engine's home
+	// outright among them. A pod that writes more is evicted, with every
+	// run and turn on it. Unset is 10Gi.
 	// +optional
 	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('256Mi'))",message="scratchSizeLimit must be at least 256Mi: the engine extracts its native library of about 20 MB there at every start, beside its scratch store and the files of the processes it runs"
 	ScratchSizeLimit *resource.Quantity `json:"scratchSizeLimit,omitempty"`
@@ -251,7 +276,8 @@ type SeatPoolDefaults struct {
 	// boxes Crewlet makes on the pod itself for the executor runs it places
 	// there, as data.sandboxSizeLimit says of a data pod, one at most for
 	// each seat the pod holds. A pod whose boxes write more is evicted, with
-	// every run and turn on it. Unset is 20Gi.
+	// every run and turn on it. Unset is 20Gi. It bounds the boxes alone:
+	// what a run writes outside its box counts against scratchSizeLimit.
 	// +optional
 	// +kubebuilder:validation:XValidation:rule="!quantity(string(self)).isLessThan(quantity('1Gi'))",message="sandboxSizeLimit must be at least 1Gi: a box holds a checkout of the seat's repository and its coding CLI's home, and the pod is evicted when its boxes write more"
 	SandboxSizeLimit *resource.Quantity `json:"sandboxSizeLimit,omitempty"`

@@ -56,13 +56,6 @@ const (
 	// leafPortName names the data pods' leaf listener on the pods and the
 	// headless data Service.
 	leafPortName = "leaf"
-	// scratchVolume is a seat pod's writable volume for the engine and what
-	// it runs: the scratch store and the native library under
-	// render.DataDir, /tmp and HOME, all under the pool's
-	// scratchSizeLimit. The boxes Crewlet makes on the pod have a volume
-	// of their own (sandboxesVolume), so that a checkout never evicts the
-	// pod at the scratch store's limit.
-	scratchVolume = "scratch"
 	// seatPodMinReadySeconds is how long a seat pod must be ready before
 	// it counts as available, and a rollout replaces the next one: two of
 	// the engine's five-second placement passes. /ready turns 200 in the
@@ -774,15 +767,14 @@ func seatPodTemplate(
 		WithVolumeMounts(
 			corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath(render.DataDir),
 			corev1ac.VolumeMount().WithName(configVolumeName).WithMountPath(configDir).WithReadOnly(true),
-			// One volume, so that the pool's scratch limit bounds what
-			// the processes the engine runs write as well. /tmp is also
-			// where the engine makes the directory of the sockets a CLI
-			// it runs on the pod reaches its seat's tools through, so it
-			// must stay writable for the pod's seats to have tools.
-			corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath("/tmp").WithSubPath("tmp"),
-			corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath(homeDir).WithSubPath("home"),
-			sandboxesMount(),
-		)
+		).
+		// The same volume, so that the pool's scratch limit bounds what the
+		// processes the engine runs write as well. /tmp is also where the
+		// engine makes the directory of the sockets a CLI it runs on the pod
+		// reaches its seat's tools through, so it must stay writable for the
+		// pod's seats to have tools.
+		WithVolumeMounts(scratchMounts()...).
+		WithVolumeMounts(sandboxesMount())
 	if res := w.plan.Resources; res != nil {
 		resources, err := applyConfigOf[corev1ac.ResourceRequirementsApplyConfiguration](res)
 		if err != nil {
@@ -797,8 +789,7 @@ func seatPodTemplate(
 	spec.WithContainers(container).
 		WithVolumes(
 			configVolume(secret),
-			corev1ac.Volume().WithName(scratchVolume).WithEmptyDir(corev1ac.EmptyDirVolumeSource().
-				WithSizeLimit(w.plan.ScratchSizeLimit)),
+			scratchVolumeOf(w.plan.ScratchSizeLimit),
 			sandboxesVolumeOf(w.plan.SandboxSizeLimit),
 		)
 	labels, annotations := enginePodMetadata(class, seatWorkloadLabels(c, w), hash)

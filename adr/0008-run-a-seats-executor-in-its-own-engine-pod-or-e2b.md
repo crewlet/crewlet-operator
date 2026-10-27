@@ -17,7 +17,9 @@
   `test/crd.TestSandboxPlacementValidation`,
   `test/crd.TestSeatEmptySandboxIsRefused`,
   `test/crd.TestEngineClassSandboxes`,
+  `test/crd.TestEngineClassDataScratch`,
   `internal/controller.TestEnginePodsKeepBoxesOnAVolumeOfTheirOwn`,
+  `internal/controller.TestEnginePodsBoundWhatTheyWriteOutsideABox`,
   `internal/controller.TestEveryEnginePodIsGivenTheFleetsBridgeAddress`,
   the runtime suite's bridge spec, the runtime and pools suites' pod and
   policy specs,
@@ -56,7 +58,7 @@ and a seat pod, which runs seats alone and serves its probes. Both run
 non-root, with the security context the restricted Pod Security Standard
 admits, on a read-only root filesystem, with no container runtime. A data
 pod's volume is three quarters event stream (`store_max_bytes`), and a seat
-pod's home is on its scratch volume, 2Gi unless its class says. A tenant's
+pod's home is on its scratch volume, which its class bounds. A tenant's
 code already runs in the pod as the engine's user: a stdio tool server is a
 command an `MCPServer` names. The operator applies a company's document whole
 and holds it only for what cannot be applied safely
@@ -102,6 +104,16 @@ EngineClass bounds it (`data.sandboxSizeLimit`,
 `seatPools.defaults.sandboxSizeLimit`): 20Gi unset, at least 1Gi, a ceiling
 that reserves nothing (`render.DefaultSandboxSizeLimit` says why).
 
+**Every other place an engine pod writes is bounded too, but its data
+volume.** Crewlet confines a seat's `Direct` run to nothing and points only
+its home and temporary directories into its box, so a command that names
+`/tmp` or the engine's home outright writes outside the box. Both are on the
+pod's `scratch` `emptyDir`, a data pod's as a seat pod's, bounded by the
+class (`data.scratchSizeLimit`, `seatPools.defaults.scratchSizeLimit`):
+10Gi unset, at least 256Mi, a ceiling that reserves nothing
+(`render.DefaultScratchSizeLimit` says why). One volume holds both, so one
+limit bounds what lands outside the data volume and the boxes.
+
 **Every engine pod is given the bridge's address.** `CREWLET_MCP_BRIDGE_URL`
 is the Company's `status.endpoints.publicBaseURL` while it has one, on a data
 pod and a seat pod alike, and unset otherwise; nothing else decides it, and
@@ -142,10 +154,14 @@ confines it is the pod's boundary, the restricted security context and the
 class's network policy. A company that wants its runs off the data volume
 places its agent seats in a seat pool or runs them in `E2B`. A `Direct` run
 ends with its container: a restart, a rolling update or an eviction of the
-pod (a box past its volume's limit evicts the whole pod) ends the runs in
-flight on it, and Crewlet relaunches none of them, while an `E2B` run goes
-on. Nothing measured sets the 20Gi default; it errs high because it costs
-nothing until written and reaching it evicts the pod.
+pod (a box past its volume's limit evicts the whole pod, as a run's writes
+past the scratch volume's do) ends the runs in flight on it, and Crewlet
+relaunches none of them, while an `E2B` run goes on. Nothing measured sets
+the 20Gi and 10Gi defaults; they err high because they cost nothing until
+written and reaching one evicts the pod. A `Direct` run on a data pod can
+still write the data volume by its path, which no `emptyDir` limit bounds:
+the volumes bound where a run's writes land, not what the run may name, and
+confining a `Direct` run to its box is Crewlet's to do.
 
 A deep-work run placed on the data pod is not on the sandboxes volume.
 Crewlet makes its confined box beside its store
@@ -185,11 +201,14 @@ security context to run one. A class-level switch forbidding `Direct`
 pod, and a platform provider's key is already one the tenant can read
 (`PlatformLLMProvider`), so it would guard nothing the tenant cannot reach.
 Boxes on the data volume, which a run could fill under the store and the
-broker, or under the engine's home, which on a seat pod is the scratch
-volume and on a data pod is bounded by nothing. A generic ephemeral volume,
-which would turn the eviction into a disk-full error inside the box at the
-price of a claim provisioned on every pod start, a storage dependency a seat
-pod otherwise does not have, for a box with nothing to keep past its pod.
+broker, or under the engine's home, the pod's scratch volume, whose limit is
+sized for what the engine's processes write outside a box. Separate
+`emptyDir` volumes for a data pod's `/tmp` and `HOME`, two limits whose sum
+nobody set, or none, which let what a run writes outside its box fill the
+node's disk. A generic ephemeral volume, which would turn the eviction into
+a disk-full error inside the box at the price of a claim provisioned on
+every pod start, a storage dependency a seat pod otherwise does not have,
+for a box with nothing to keep past its pod.
 The bridge's address only while some run is placed in `E2B`: which cell a
 run takes is the document's, applied without a restart, so the variable
 would roll every pod each time a provider moved and leave a pod started

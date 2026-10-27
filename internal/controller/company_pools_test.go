@@ -405,7 +405,7 @@ var _ = Describe("Company seat pools", func() {
 				SecretName: generalBootstrap, Items: []corev1.KeyToPath{{Key: configFile, Path: configFile}}, DefaultMode: new(int32(0o440)),
 			}},
 			corev1.Volume{Name: scratchVolume, EmptyDir: &corev1.EmptyDirVolumeSource{
-				SizeLimit: new(resource.MustParse(render.DefaultSeatPodScratchSizeLimit)),
+				SizeLimit: new(resource.MustParse(render.DefaultScratchSizeLimit)),
 			}},
 			// The boxes Crewlet makes on the pod, apart from the scratch
 			// store's limit.
@@ -436,8 +436,8 @@ var _ = Describe("Company seat pools", func() {
 		Expect(container.VolumeMounts).To(ConsistOf(
 			corev1.VolumeMount{Name: scratchVolume, MountPath: "/var/lib/crewlet"},
 			corev1.VolumeMount{Name: configVolumeName, MountPath: "/etc/crewlet", ReadOnly: true},
-			corev1.VolumeMount{Name: scratchVolume, MountPath: "/tmp", SubPath: "tmp"},
-			corev1.VolumeMount{Name: scratchVolume, MountPath: "/home/crewlet", SubPath: "home"},
+			corev1.VolumeMount{Name: scratchVolume, MountPath: "/tmp", SubPath: tmpSubPath},
+			corev1.VolumeMount{Name: scratchVolume, MountPath: "/home/crewlet", SubPath: homeSubPath},
 			corev1.VolumeMount{Name: sandboxesVolume, MountPath: "/var/lib/crewlet-sandboxes"},
 		))
 
