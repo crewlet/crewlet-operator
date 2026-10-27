@@ -144,9 +144,9 @@ own instead, under
 `/var/lib/crewlet/llm-cli` on the data volume (`llm-cli-platform` for a
 model the class provides). A seat's executor runs as its CLI's own run in a
 box: placed `Direct`, a process tree of the pod in a box on its sandboxes
-volume, as the engine's user, with the pod's `PATH`, locale, TLS trust and
-proxy variables and none of the rest of its environment; placed in `E2B`,
-outside the pod. The sockets a CLI the engine runs in the pod for a seat's
+volume, as the engine's user, with the pod's `PATH`, locale, `TERM`, `TZ`,
+TLS trust and proxy variables and none of the rest of its environment;
+placed in `E2B`, outside the pod. The sockets a CLI the engine runs in the pod for a seat's
 other phases reaches its seat's tools through are the engine's own, in a
 directory it makes under its `TMPDIR`, open to its user alone; the operator
 leaves `TMPDIR` unset, so that is `/tmp`, on a data pod and a seat pod alike

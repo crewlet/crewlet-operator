@@ -631,15 +631,17 @@ resuming its turn (`collect_unreachable`). Nothing relaunches either
 ([When a Direct run's pod stops](../concepts/runtime.md#when-a-direct-runs-pod-stops)).
 An E2B run is not touched.
 
-**A Direct box's environment** is the pod's `PATH`, locale, TLS trust and
-proxy variables, the box's home and temporary directories, and the run's own:
-the seat's identity, the Company's and the Seat's setup steps' `env`, the
-Seat's `spec.sandbox.env`, and the provider's sign-in. An E2B box gets the
-run's own alone. Of the provider's `env`, only its sign-in reaches an executor
-run, in either cell: a gateway's `ANTHROPIC_BASE_URL`, or a Bedrock or Vertex
-switch and its region, reach the provider's other phases and no executor run,
-so give a run such a variable in the Seat's `spec.sandbox.env`. What each box
-carries of a credential is in
+**A Direct box's environment** is the pod's `PATH`, locale, `TERM`, `TZ`, TLS
+trust and proxy variables, the box's home and temporary directories, and the
+run's own: the seat's identity, the Company's and the Seat's setup steps'
+`env`, the Seat's `spec.sandbox.env`, and the provider's sign-in. So a `TZ`
+the class's `podTemplate` or the Company's `runtime.env` sets on the pod
+reaches every Direct run, and no E2B one. An E2B box gets the run's own alone.
+Of the provider's `env`, only its sign-in reaches an executor run, in either
+cell: a gateway's `ANTHROPIC_BASE_URL`, or a Bedrock or Vertex switch and its
+region, reach the provider's other phases and no executor run, so give a run
+such a variable in the Seat's `spec.sandbox.env`. What each box carries of a
+credential is in
 [What a coding box carries](credentials.md#what-a-coding-box-carries).
 
 **An E2B run** gets, with no `spec.sandbox.e2b.template`, E2B's prebuilt

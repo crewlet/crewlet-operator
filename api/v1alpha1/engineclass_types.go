@@ -1028,9 +1028,9 @@ type EnginePodSpec struct {
 	// PATH and the TLS and proxy variables, a coding CLI that part and the
 	// variables its Crewlet profile passes through, such as GeminiCLI's
 	// GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION, a seat's Direct
-	// executor run that part alone (the allowlist: PATH, the locale, the TLS
-	// trust and proxy variables), and an E2B run none of it. So a variable a
-	// tool server reads goes in its MCPServer's env
+	// executor run that part alone (the allowlist: PATH, the locale, TERM,
+	// TZ, the TLS trust and proxy variables), and an E2B run none of it. So a
+	// variable a tool server reads goes in its MCPServer's env
 	// (docs/guides/tool-servers.md), one a coding CLI reads in the engine's
 	// pod in its LLMProvider's spec.env, and one a seat's executor run reads
 	// in the Seat's spec.sandbox.env. A Company's spec.runtime.env is merged over
