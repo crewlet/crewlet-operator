@@ -537,7 +537,7 @@ flowchart LR
         X["<b>:8082</b> artifact listener"]
         L["<b>:7422</b> leaf listener"]
     end
-    pod -->|"DNS, its namespace, egress.to,<br/>any address but exceptCIDRs<br/>and the metadata endpoints"| OUT["<b>Outward</b>"]
+    pod -->|"DNS, its namespace, egress.to,<br/>the webhooks' proxy or forwarders,<br/>any address but exceptCIDRs<br/>and the metadata endpoints"| OUT["<b>Outward</b>"]
 ```
 
 So a webhook's proxy reaches no admin route, and an API consumer cannot
@@ -587,22 +587,33 @@ spec:
             matchLabels: {app: otel-collector}
 ```
 
-A company that runs seat pods needs one more address outside
-`exceptCIDRs`: its public address. A box on a seat pod calls the seat's
-tools back through the [tool bridge](#choose-how-webhooks-arrive) at that
-address, as a remote sandbox does, since a seat pod serves no bridge of its
-own, so the seat pods' egress must reach whatever the public hostname
-resolves to. A load balancer whose address falls in a range listed there
-cuts every such run off from the seat's tools: in a kind cluster, for one,
-load balancers are usually given addresses from the node network,
-`172.18.0.0/16` above. A data pod's own boxes dial the bridge on loopback,
-which no policy polices.
+An engine pod also calls the Company's own public address. A box on a seat
+pod calls the seat's tools back through the [tool
+bridge](#choose-how-webhooks-arrive) there, as a remote sandbox does, since a
+seat pod serves no bridge of its own; a deep-work run on a data pod is held
+to that address too, and a `Direct` box sends its traces there. Inside the
+cluster such a call to the route's load balancer usually lands on the
+route's proxies without leaving it, and a CNI that polices it after that
+(Calico) or never matches a pod by its address (Cilium) judges it by the
+proxy's pod, which no address outside `exceptCIDRs` admits once the pod
+network is listed. So under `Isolated` every engine pod may also reach
+whatever the public port admits: the namespaces of the webhooks route's
+proxies, on any port, since their ports are the implementation's, or the
+class's `external.forwarders`. Where the call does leave the cluster, through
+a load balancer outside it or one whose address the CNI polices before it is
+translated, the public address must be outside `exceptCIDRs` as well: in a
+kind cluster, for one, load balancers are usually given addresses from the
+node network, `172.18.0.0/16` above, and listing it there cuts every such
+call off. Only a seat's box on a data pod dials the bridge on loopback, which
+no policy polices; its traces still go to the public address.
 
 On AWS, also require IMDSv2 with a hop limit of 1 on the nodes, so that a
 pod that gets past the policy still cannot read the node's role.
 
 Set `gateway.proxyNamespaces` when your Gateway implementation runs its proxy
-somewhere other than the Gateway's namespace:
+somewhere other than the Gateway's namespace, so that the policy names the
+proxies' namespace and no wider one, in what the data pods admit and, for the
+webhooks, in what every engine pod may reach:
 
 ```yaml
 gateway:

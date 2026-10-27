@@ -580,8 +580,10 @@ The public address is also where a coding run calls the engine back:
   which Crewlet holds to the fleet's address wherever it runs, the data pod
   included. A box on a seat pod therefore reaches the bridge as a remote
   sandbox does, through the route to the public listener, so the
-  seat pods must be able to reach the public address, which under
-  `networkPolicy: Isolated` means an address outside the class's
+  seat pods must be able to reach the public address: under
+  `networkPolicy: Isolated` the operator lets every engine pod reach the
+  route's proxies, where such a call lands inside the cluster, and a load
+  balancer the call leaves the cluster through must be outside the class's
   `egress.exceptCIDRs` ([Network policy](#network-policy)). A company with no
   public address gives no pod the variable, and Crewlet refuses the launch of
   every run that would dial it, while the seats' boxes on a data pod still
@@ -664,9 +666,15 @@ sources, so a webhook's proxy reaches no admin route and an API consumer
 cannot reach the port published to the internet. Everything
 else is refused. Outward, the engine, which runs code its tenant
 supplies, may reach DNS, the pods of its own namespace, the class's
-`networkPolicy.egress.to`, and every address but the cloud metadata
+`networkPolicy.egress.to`, whatever port 8081 admits (the webhooks route's
+proxies or forwarders), and every address but the cloud metadata
 endpoints and the class's `networkPolicy.egress.exceptCIDRs`, where the
 cluster's own networks belong ([Network policy](../guides/exposure.md#network-policy)).
+The route's proxies are there because the engine calls the Company's own
+public address, for a seat pod's boxes' tool bridge, a deep-work run and a
+box's traces, and inside the cluster that call usually lands on a proxy's
+pod without leaving it, where an address outside `exceptCIDRs` does not
+admit it.
 
 Two more policies come with seat pools:
 

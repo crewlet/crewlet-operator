@@ -1001,6 +1001,35 @@ var _ = Describe("Company seat pools", func() {
 		Expect(seats.Spec.Ingress).To(BeEmpty())
 	})
 
+	// A seat pod serves no tool bridge, so its Direct boxes call the seat's
+	// tools back at the Company's public address, which inside the cluster
+	// most often lands on the route's proxies without leaving it: under
+	// Isolated, whose exceptCIDRs hold the pod network, only a rule naming
+	// the proxies lets that call through.
+	It("lets the seat pods reach the public route's proxies under Isolated, as the data pods do", func() {
+		class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.Exposure.Webhooks = crewletaiv1alpha1.WebhookExposure{
+				Mode: crewletaiv1alpha1.WebhookExposureGateway,
+				Gateway: crewletaiv1alpha1.GatewayExposure{
+					ParentRefs:      []crewletaiv1alpha1.GatewayParentReference{{Namespace: gatewayNamespace, Name: publicGateway}},
+					ProxyNamespaces: []string{"envoy-gateway-system"},
+				},
+				Hostname: webhooksHostname,
+			}
+			c.Spec.NetworkPolicy.Egress.ExceptCIDRs = []string{"10.0.0.0/8"}
+		})
+		company := running(class.Name)
+		Expect(company.Status.Endpoints.PublicBaseURL).NotTo(BeEmpty())
+		for _, name := range []string{seatsPolicy, engineName} {
+			policy := &networkingv1.NetworkPolicy{}
+			get(policy, name)
+			Expect(egressRules(policy)).To(ContainElement(toNamespaces("envoy-gateway-system")),
+				"%s keeps its pods from the proxies a call to the public address lands on", name)
+			Expect(egressRules(policy)).NotTo(ContainElement(toNamespaces(gatewayNamespace)),
+				"%s lets its pods reach the Gateway's namespace, which the class says the proxies are not in", name)
+		}
+	})
+
 	It("deletes the seat pods before the data pods when the Company is deleted", func() {
 		class := newClass()
 		company := running(class.Name)

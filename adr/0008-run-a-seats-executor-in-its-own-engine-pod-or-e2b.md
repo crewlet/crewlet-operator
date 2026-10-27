@@ -19,7 +19,8 @@
   `test/crd.TestEngineClassSandboxes`,
   `internal/controller.TestEnginePodsKeepBoxesOnAVolumeOfTheirOwn`,
   `internal/controller.TestEveryEnginePodIsGivenTheFleetsBridgeAddress`,
-  the runtime suite's bridge spec, the runtime and pools suites' pod specs,
+  the runtime suite's bridge spec, the runtime and pools suites' pod and
+  policy specs,
   the config suite's executor specs, the e2e pools spec
 
 ## Context
@@ -159,13 +160,22 @@ will not take that risk places deep work in `E2B`. Moving the box root is
 Crewlet's to do, and the mirror of `boxRoot` fails the day it moves.
 
 A seat pod's `Direct` box reaches its own pod through the Company's public
-route and a data pod's relay, so a seat pod needs egress to the public
-address, outside the class's `egress.exceptCIDRs`, and a Company with no
-public address runs no executor on a seat pod (`BridgeUnreachable`), while
-the seats on its data pods run theirs. A Company that gains or changes its
-public address restarts its seat pods as well as its data pods. Should
-Crewlet serve a seat pod's own boxes on loopback, the verdict goes and the
-variable could narrow to the companies that offer `E2B`: the mirror of
+route and a data pod's relay, as a deep-work run on a data pod reaches
+Crewlet and every executor run sends its traces, so every engine pod needs
+egress to the public address, and a Company with no public address runs no
+executor on a seat pod (`BridgeUnreachable`), while the seats on its data
+pods run theirs. Inside the cluster a call to the route's load balancer
+usually lands on the route's proxies without leaving it, which a CNI that
+polices after the translation (Calico) or never matches a pod by its address
+(Cilium) judges by the proxy's pod, so under `Isolated` every engine pod may
+reach the peers the public port admits (the webhooks route's proxy
+namespaces, or its external forwarders), on any port, as their ports are the
+implementation's; a load balancer the call leaves the cluster through must
+stay outside `egress.exceptCIDRs`. A Company that gains or changes its public
+address restarts its seat pods as well as its data pods. Should
+Crewlet serve a seat pod's own boxes on loopback, the verdict goes, and so
+does a seat pod's call to the public route for its seats' tools, while
+`E2B` runs, deep work and every run's traces keep the address: the mirror of
 Crewlet's `bridgeHostURL` fails the day it does.
 
 Rejected: Crewlet's `container` cell, which starts a container per box, and

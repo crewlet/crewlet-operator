@@ -355,11 +355,12 @@ var directBox = []string{
 
 // runTelemetry is every operator file that states where a seat's executor run
 // exports its traces: to the receiver at the Company's public address, Direct
-// as well as in E2B. The controller gives every engine pod that address, the
+// as well as in E2B. The controller gives every engine pod that address and
+// lets every engine pod reach the public route's proxies partly for it, the
 // API docs of the address, of the route that carries it and of the class's
 // telemetry say who calls it, and the pages and the security policy say so.
 var runTelemetry = []string{
-	companyWorkloadGo, companyTypesGo, engineClassGo, exposureMd, runtimeMd,
+	companyWorkloadGo, companyExposureGo, companyTypesGo, engineClassGo, exposureMd, runtimeMd,
 	"docs/concepts/overview.md", credentialsConceptMd, "SECURITY.md", "README.md",
 	adr0008Md,
 }
@@ -854,8 +855,8 @@ var mirrored = []mirror{
 	},
 	{
 		file: "internal/engine/assistantdeep.go", name: "(*assistantDeep).target",
-		against: []string{companyTypesGo, engineClassGo, cliAgentsMd, exposureMd, runtimeMd, "SECURITY.md",
-			adr0008Md},
+		against: []string{companyTypesGo, engineClassGo, companyExposureGo, cliAgentsMd, exposureMd, runtimeMd,
+			"SECURITY.md", adr0008Md},
 		decides: "deep work reaches Crewlet at the fleet's bridge address in whichever cell it runs, never at its " +
 			"node's own listener, so a Company with no public address runs no deep work, and a run placed on the " +
 			"engine host needs the host's confinement",
@@ -1034,12 +1035,13 @@ var mirrored = []mirror{
 	},
 	{
 		file: listenersGo, name: "(*nodeListeners).bridgeHostURL",
-		against: append([]string{companyWorkloadGo, seatPoolsGo}, bridgeVerdict...),
+		against: append([]string{companyWorkloadGo, seatPoolsGo, companyExposureGo}, bridgeVerdict...),
 		decides: "only a node that runs both the ingress and the seats roles and binds a listener has a loopback " +
 			"address of its own bridge, at api.public where it binds one: a data pod, never a seat pod, whose direct " +
 			"boxes dial CREWLET_MCP_BRIDGE_URL like a remote sandbox's, so the operator gives every engine pod the " +
-			"Company's public address, and ExecutorOf reports a Direct seat on a data pod as runnable with no " +
-			"address, and one in a seat pool as BridgeUnreachable while the Company has none",
+			"Company's public address and, under Isolated, lets it reach the public route's proxies (engineEgress), " +
+			"and ExecutorOf reports a Direct seat on a data pod as runnable with no address, and one in a seat pool " +
+			"as BridgeUnreachable while the Company has none",
 		digest: "bccfb6220c20a79cd5aa212ffb9adb41735772aaa37eff24395e9708b6a82efe",
 		read:   executorRead,
 	},

@@ -315,7 +315,9 @@ which engine pod's boxes dial their tool bridge on loopback
 `(*Bridge).Reaches` in `internal/api/mcpbridge/mcpbridge.go`) to
 `internal/controller/company_workload.go`, which gives every engine pod the
 Company's public address as `CREWLET_MCP_BRIDGE_URL` because a seat pod's
-boxes have no other way to it, and to `internal/render/executor.go`, whose
+boxes have no other way to it, to `internal/controller/company_exposure.go`,
+which under `Isolated` lets every engine pod reach the public route's proxies
+that such a call lands on, and to `internal/render/executor.go`, whose
 verdict reports a `Direct` seat on a data pod as runnable without that
 address and one in a seat pool as `BridgeUnreachable`.
 
