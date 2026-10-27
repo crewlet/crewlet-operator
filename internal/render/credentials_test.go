@@ -288,9 +288,9 @@ func TestCredentialPositionsAreTheEnginesMarks(t *testing.T) {
 // credentials.
 const engineConfigRefusal = "engineConfig may not set"
 
-// engineConfigValidator runs the CEL rules of Company.spec.engineConfig as
-// the generated CRD states them, with the validator the API server runs.
-func engineConfigValidator(t *testing.T) func(entries ...any) field.ErrorList {
+// engineConfigSchema is Company.spec.engineConfig as the generated CRD
+// states it.
+func engineConfigSchema(t *testing.T) *apiextensionsv1.JSONSchemaProps {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("..", "..", "config", "crd", "bases", "crewlet.ai_companies.yaml"))
 	if err != nil {
@@ -313,6 +313,14 @@ func engineConfigValidator(t *testing.T) func(entries ...any) field.ErrorList {
 	if node == nil {
 		t.Fatal("the Company CRD has no v1alpha1 spec.engineConfig")
 	}
+	return node
+}
+
+// engineConfigValidator runs the CEL rules of Company.spec.engineConfig as
+// the generated CRD states them, with the validator the API server runs.
+func engineConfigValidator(t *testing.T) func(entries ...any) field.ErrorList {
+	t.Helper()
+	node := engineConfigSchema(t)
 	var internal apiextensions.JSONSchemaProps
 	if err := apiextensionsv1.Convert_v1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(node, &internal, nil); err != nil {
 		t.Fatal(err)

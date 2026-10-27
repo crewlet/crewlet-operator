@@ -20,32 +20,14 @@ const (
 	TrackerNone TrackerBackend = "None"
 )
 
-// WorkletSettings is the policy of Worklet. It maps onto Crewlet's
-// tracker.worklet.
-// +kubebuilder:validation:MinProperties=1
-type WorkletSettings struct {
-	// inboxRetentionDays is how long a person's inbox keeps a row; the
-	// history the row points at is kept regardless. Unset takes Crewlet's
-	// default of 365. Crewlet's `inbox_retention_days`.
-	// +optional
-	// +kubebuilder:validation:Minimum=30
-	// +kubebuilder:validation:Maximum=3650
-	InboxRetentionDays int32 `json:"inboxRetentionDays,omitempty"`
-}
-
 // TrackerSettings is which work tracker a company runs. It maps onto
 // Crewlet's tracker block.
-// +kubebuilder:validation:XValidation:rule="!has(self.worklet) || self.backend == 'Worklet'",message="worklet applies to backend Worklet only"
 // +kubebuilder:validation:MinProperties=1
 type TrackerSettings struct {
 	// backend is which tracker the company runs.
 	// +optional
 	// +default="Worklet"
 	Backend TrackerBackend `json:"backend,omitempty"`
-
-	// worklet is the policy of Worklet, for backend Worklet.
-	// +optional
-	Worklet WorkletSettings `json:"worklet,omitzero"`
 }
 
 // KnowledgeBackend is which knowledge base a company runs. It maps onto
@@ -109,6 +91,29 @@ type KnowledgeSettings struct {
 	// Crewlet's `vectors`.
 	// +optional
 	Vectors *bool `json:"vectors,omitempty"`
+}
+
+// InboxSettings is the company's policy over a person's inbox: the notices
+// the engine writes to each person its work concerns. It maps onto
+// Crewlet's inbox block.
+//
+// It is the company's rather than its tracker's, and applies whatever
+// tracker the company runs: a person's inbox holds the notices of every part
+// of the engine that writes them, Worklet's among them, and one horizon ages
+// them all.
+// +kubebuilder:validation:MinProperties=1
+type InboxSettings struct {
+	// retentionSeconds is how long a person's inbox keeps a notice; the
+	// history the notice points at is kept regardless. Crewlet keeps the
+	// horizon in whole days, so it is a whole number of days in seconds,
+	// from 30 days (2592000) to 3650 days (315360000), such as 7776000 for
+	// 90 days. Unset takes Crewlet's default of 365 days. Crewlet's
+	// `inbox.retention_days`, which is this divided by 86400.
+	// +optional
+	// +kubebuilder:validation:Minimum=2592000
+	// +kubebuilder:validation:Maximum=315360000
+	// +kubebuilder:validation:XValidation:rule="self % 86400 == 0",message="retentionSeconds must be whole days, a multiple of 86400 such as 7776000 for 90 days: Crewlet keeps a person's inbox for whole days"
+	RetentionSeconds int32 `json:"retentionSeconds,omitempty"`
 }
 
 // LLMProviderKind is the kind of model provider a reference names.
@@ -1004,6 +1009,10 @@ type CompanySpec struct {
 	// +optional
 	Knowledge KnowledgeSettings `json:"knowledge,omitzero"`
 
+	// inbox is the company's policy over a person's inbox.
+	// +optional
+	Inbox InboxSettings `json:"inbox,omitzero"`
+
 	// tokenBudget caps the tokens all seats together may spend per window.
 	// Crewlet's `token_budget`.
 	// +optional
@@ -1036,12 +1045,12 @@ type CompanySpec struct {
 	// apply, and a refusal is reported on the Company.
 	//
 	// It may not set what another field or object of this API owns: name,
-	// mission, vision, policies, timezone, tracker, knowledge, token_budget,
-	// providers, integrations, mcp_servers, roles or units. Every position
-	// Crewlet holds a credential in lives under one of those keys, so
-	// engineConfig can never carry a credential: the API server refuses a
-	// Company whose engineConfig names one of them, before anything is
-	// stored.
+	// mission, vision, policies, timezone, tracker, knowledge, inbox,
+	// token_budget, providers, integrations, mcp_servers, roles or units.
+	// Every position Crewlet holds a credential in lives under one of those
+	// keys, so engineConfig can never carry a credential: the API server
+	// refuses a Company whose engineConfig names one of them, before anything
+	// is stored.
 	//
 	// Nor may it set code, Crewlet's code host, which keeps the company's git
 	// repositories in the engine and which v1alpha1 does not offer: the host
@@ -1052,7 +1061,7 @@ type CompanySpec struct {
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=64
-	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'token_budget', 'providers', 'integrations', 'mcp_servers', 'roles', 'units']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, token_budget, providers, integrations, mcp_servers, roles or units: those are fields and objects of this API, and the only blocks that hold credentials"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'inbox', 'token_budget', 'providers', 'integrations', 'mcp_servers', 'roles', 'units']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, inbox, token_budget, providers, integrations, mcp_servers, roles or units: those are fields and objects of this API, and the only blocks that hold credentials"
 	// +kubebuilder:validation:XValidation:rule="self.all(e, e.name != 'code')",message="engineConfig may not set code: Crewlet's code host is not offered in v1alpha1, since no pod the operator runs has the git role or the cache that serves a company's repositories, which nothing could clone or push; remove the entry"
 	EngineConfig []EngineConfigEntry `json:"engineConfig,omitempty"`
 

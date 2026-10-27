@@ -607,12 +607,13 @@ _Appears in:_
 | `timeZone` _string_ | timeZone is the company's clock, an IANA time zone such as<br />Europe/Berlin: where its days begin for budgets, due dates and<br />schedules. Unset is UTC. Crewlet's `timezone`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)*$` <br />Optional: \{\} <br /> |
 | `tracker` _[TrackerSettings](#trackersettings)_ | tracker is which work tracker the company runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `knowledge` _[KnowledgeSettings](#knowledgesettings)_ | knowledge is which knowledge base the company runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `inbox` _[InboxSettings](#inboxsettings)_ | inbox is the company's policy over a person's inbox. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens all seats together may spend per window.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `llm` _[CompanyLLMSettings](#companyllmsettings)_ | llm is how the company chooses among its model providers. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `embeddings` _[EmbeddingSettings](#embeddingsettings)_ | embeddings is the provider vectors are computed with. Unset leaves<br />search keyword-only. Crewlet's providers.embeddings. |  | Optional: \{\} <br /> |
 | `sandbox` _[SandboxSettings](#sandboxsettings)_ | sandbox is where seats run code. Unset gives no seat a sandbox.<br />Crewlet's providers.sandbox. |  | Optional: \{\} <br /> |
 | `integrations` _[CompanyIntegrationSettings](#companyintegrationsettings)_ | integrations is company-wide integration behaviour. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, token_budget,<br />providers, integrations, mcp_servers, roles or units. Every position<br />Crewlet holds a credential in lives under one of those keys, so<br />engineConfig can never carry a credential: the API server refuses a<br />Company whose engineConfig names one of them, before anything is<br />stored.<br />Nor may it set code, Crewlet's code host, which keeps the company's git<br />repositories in the engine and which v1alpha1 does not offer: the host<br />serves them only from a node with the git role and a cache of them on<br />its volume, and no pod the operator runs has either, so a document<br />that set it would declare repositories nothing can clone or push. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, inbox,<br />token_budget, providers, integrations, mcp_servers, roles or units.<br />Every position Crewlet holds a credential in lives under one of those<br />keys, so engineConfig can never carry a credential: the API server<br />refuses a Company whose engineConfig names one of them, before anything<br />is stored.<br />Nor may it set code, Crewlet's code host, which keeps the company's git<br />repositories in the engine and which v1alpha1 does not offer: the host<br />serves them only from a node with the git role and a cache of them on<br />its volume, and no pod the operator runs has either, so a document<br />that set it would declare repositories nothing can clone or push. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
 | `config` _[ConfigSettings](#configsettings)_ | config is how the operator manages the company's document. | \{ managementPolicy:Enforce \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `topology` _[CompanyTopology](#companytopology)_ | topology is how the engine is laid out in pods. | \{ data:map[replicas:1] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `exposure` _[CompanyExposure](#companyexposure)_ | exposure overrides how the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -1568,6 +1569,30 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | name is the metadata.name of the Seat, in this namespace. Crewlet keys<br />the override by the seat's handle, which the operator renders. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `accessLevel` _[GitLabAccessLevel](#gitlabaccesslevel)_ | accessLevel is the seat's membership level. |  | Enum: [Developer Maintainer] <br />Required: \{\} <br /> |
+
+
+#### InboxSettings
+
+
+
+InboxSettings is the company's policy over a person's inbox: the notices
+the engine writes to each person its work concerns. It maps onto
+Crewlet's inbox block.
+
+It is the company's rather than its tracker's, and applies whatever
+tracker the company runs: a person's inbox holds the notices of every part
+of the engine that writes them, Worklet's among them, and one horizon ages
+them all.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [CompanySpec](#companyspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `retentionSeconds` _integer_ | retentionSeconds is how long a person's inbox keeps a notice; the<br />history the notice points at is kept regardless. Crewlet keeps the<br />horizon in whole days, so it is a whole number of days in seconds,<br />from 30 days (2592000) to 3650 days (315360000), such as 7776000 for<br />90 days. Unset takes Crewlet's default of 365 days. Crewlet's<br />`inbox.retention_days`, which is this divided by 86400. |  | Maximum: 3.1536e+08 <br />Minimum: 2.592e+06 <br />Optional: \{\} <br /> |
 
 
 #### IngressExposure
@@ -3696,7 +3721,6 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `backend` _[TrackerBackend](#trackerbackend)_ | backend is which tracker the company runs. | Worklet | Enum: [Worklet Jira None] <br />Optional: \{\} <br /> |
-| `worklet` _[WorkletSettings](#workletsettings)_ | worklet is the policy of Worklet, for backend Worklet. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
 #### Unit
@@ -3865,23 +3889,5 @@ _Appears in:_
 | --- | --- |
 | `Always` | WorkingStatusAlways shows it on every turn a chat message started.<br /> |
 | `Addressed` | WorkingStatusAddressed shows it only when a person is plausibly<br />waiting: a direct message, a mention, or a thread the seat follows.<br /> |
-
-
-#### WorkletSettings
-
-
-
-WorkletSettings is the policy of Worklet. It maps onto Crewlet's
-tracker.worklet.
-
-_Validation:_
-- MinProperties: 1
-
-_Appears in:_
-- [TrackerSettings](#trackersettings)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `inboxRetentionDays` _integer_ | inboxRetentionDays is how long a person's inbox keeps a row; the<br />history the row points at is kept regardless. Unset takes Crewlet's<br />default of 365. Crewlet's `inbox_retention_days`. |  | Maximum: 3650 <br />Minimum: 30 <br />Optional: \{\} <br /> |
 
 

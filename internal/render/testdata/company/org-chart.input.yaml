@@ -16,14 +16,14 @@ spec:
   timeZone: America/Phoenix
   tracker:
     backend: Worklet
-    worklet:
-      inboxRetentionDays: 90
   knowledge:
     backend: Doclet
     scope: [ENG, OPS]
     skillsContainer: ""
     rootSpace: ACME
     vectors: false
+  inbox:
+    retentionSeconds: 7776000
   tokenBudget:
     day: 1000000
     week: 5000000

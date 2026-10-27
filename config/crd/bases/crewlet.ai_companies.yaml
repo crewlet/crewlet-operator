@@ -246,12 +246,12 @@ spec:
                   apply, and a refusal is reported on the Company.
 
                   It may not set what another field or object of this API owns: name,
-                  mission, vision, policies, timezone, tracker, knowledge, token_budget,
-                  providers, integrations, mcp_servers, roles or units. Every position
-                  Crewlet holds a credential in lives under one of those keys, so
-                  engineConfig can never carry a credential: the API server refuses a
-                  Company whose engineConfig names one of them, before anything is
-                  stored.
+                  mission, vision, policies, timezone, tracker, knowledge, inbox,
+                  token_budget, providers, integrations, mcp_servers, roles or units.
+                  Every position Crewlet holds a credential in lives under one of those
+                  keys, so engineConfig can never carry a credential: the API server
+                  refuses a Company whose engineConfig names one of them, before anything
+                  is stored.
 
                   Nor may it set code, Crewlet's code host, which keeps the company's git
                   repositories in the engine and which v1alpha1 does not offer: the host
@@ -286,11 +286,11 @@ spec:
                 x-kubernetes-list-type: map
                 x-kubernetes-validations:
                 - message: 'engineConfig may not set name, mission, vision, policies,
-                    timezone, tracker, knowledge, token_budget, providers, integrations,
-                    mcp_servers, roles or units: those are fields and objects of this
-                    API, and the only blocks that hold credentials'
+                    timezone, tracker, knowledge, inbox, token_budget, providers,
+                    integrations, mcp_servers, roles or units: those are fields and
+                    objects of this API, and the only blocks that hold credentials'
                   rule: self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies',
-                    'timezone', 'tracker', 'knowledge', 'token_budget', 'providers',
+                    'timezone', 'tracker', 'knowledge', 'inbox', 'token_budget', 'providers',
                     'integrations', 'mcp_servers', 'roles', 'units']))
                 - message: 'engineConfig may not set code: Crewlet''s code host is
                     not offered in v1alpha1, since no pod the operator runs has the
@@ -498,6 +498,28 @@ spec:
                         environment, which hold credentials that are not this object''s
                         to name'
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                type: object
+              inbox:
+                description: inbox is the company's policy over a person's inbox.
+                minProperties: 1
+                properties:
+                  retentionSeconds:
+                    description: |-
+                      retentionSeconds is how long a person's inbox keeps a notice; the
+                      history the notice points at is kept regardless. Crewlet keeps the
+                      horizon in whole days, so it is a whole number of days in seconds,
+                      from 30 days (2592000) to 3650 days (315360000), such as 7776000 for
+                      90 days. Unset takes Crewlet's default of 365 days. Crewlet's
+                      `inbox.retention_days`, which is this divided by 86400.
+                    format: int32
+                    maximum: 315360000
+                    minimum: 2592000
+                    type: integer
+                    x-kubernetes-validations:
+                    - message: 'retentionSeconds must be whole days, a multiple of
+                        86400 such as 7776000 for 90 days: Crewlet keeps a person''s
+                        inbox for whole days'
+                      rule: self % 86400 == 0
                 type: object
               integrations:
                 description: integrations is company-wide integration behaviour.
@@ -1386,24 +1408,7 @@ spec:
                     - Jira
                     - None
                     type: string
-                  worklet:
-                    description: worklet is the policy of Worklet, for backend Worklet.
-                    minProperties: 1
-                    properties:
-                      inboxRetentionDays:
-                        description: |-
-                          inboxRetentionDays is how long a person's inbox keeps a row; the
-                          history the row points at is kept regardless. Unset takes Crewlet's
-                          default of 365. Crewlet's `inbox_retention_days`.
-                        format: int32
-                        maximum: 3650
-                        minimum: 30
-                        type: integer
-                    type: object
                 type: object
-                x-kubernetes-validations:
-                - message: worklet applies to backend Worklet only
-                  rule: '!has(self.worklet) || self.backend == ''Worklet'''
               vision:
                 description: |-
                   vision is a longer statement of where the company is going, in

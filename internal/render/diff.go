@@ -12,9 +12,11 @@ import (
 
 // typedKeys are the top-level keys of a company document that fields and
 // objects of the API render, the same list the API refuses in a Company's
-// engineConfig. Every other top-level key is an engineConfig entry.
+// engineConfig (TestEngineConfigCannotSetAKeyAFieldRenders holds the two to
+// each other and to companyDoc, each both ways). Every other top-level key is
+// an engineConfig entry.
 var typedKeys = []string{
-	"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "token_budget",
+	"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "inbox", "token_budget",
 	keyProviders, keyIntegrations, keyMCPServers, keyRoles, keyUnits,
 }
 

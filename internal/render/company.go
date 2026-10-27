@@ -486,16 +486,24 @@ func (r *renderer) company() companyDoc {
 			RootSpace:       spec.Knowledge.RootSpace,
 			Vectors:         spec.Knowledge.Vectors,
 		},
+		Inbox:       inbox(spec.Inbox),
 		TokenBudget: tokenBudget(spec.TokenBudget),
-	}
-	if days := spec.Tracker.Worklet.InboxRetentionDays; days != 0 {
-		doc.Tracker.Worklet = &trackerWorkletDoc{InboxRetentionDays: days}
 	}
 	doc.Providers = r.providersDoc()
 	doc.Integrations = r.integrations()
 	doc.MCPServers = r.mcpServers()
 	doc.Roles, doc.Units = r.org()
 	return doc
+}
+
+// secondsPerDay is a day in seconds.
+const secondsPerDay = 24 * 60 * 60
+
+// inbox is Crewlet's inbox block. The API states the horizon in seconds, as
+// it states every duration, and Crewlet keeps it in whole days: the API
+// refuses a horizon that is not whole days, so the division is exact.
+func inbox(s v1alpha1.InboxSettings) inboxDoc {
+	return inboxDoc{RetentionDays: s.RetentionSeconds / secondsPerDay}
 }
 
 func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {

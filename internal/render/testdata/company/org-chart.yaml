@@ -1,3 +1,5 @@
+inbox:
+  retention_days: 90
 integrations:
   check_interval_seconds: 300
 knowledge:
@@ -71,8 +73,6 @@ token_budget:
   week: 5000000
 tracker:
   backend: worklet
-  worklet:
-    inbox_retention_days: 90
 turn_engine:
   extension_enabled: false
   max_iterations: 4

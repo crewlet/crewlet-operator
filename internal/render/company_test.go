@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/yaml"
 
 	"github.com/crewlet/crewlet-operator/internal/secretref"
@@ -367,4 +370,92 @@ func TestCompanyLeavesItsInputAlone(t *testing.T) {
 			t.Fatalf("the Seats were reordered: %v, then %s at %d", before, s.Name, i)
 		}
 	}
+}
+
+// TestEngineConfigCannotSetAKeyAFieldRenders holds the three lists of the
+// top-level keys the API's fields and objects render to one another, each
+// both ways: the keys of the company document (companyDoc), the keys Diff
+// compares as the API's own (typedKeys), and the keys the CRD's rule on a
+// Company's engineConfig refuses, read off the rule (engineConfigReserved).
+// The render merges every engineConfig entry into the document as a
+// top-level key, trusting the API to refuse each key a field renders: a key
+// the rule let through would be replaced by an entry of its name, and a key
+// the rule refused that no field renders would be one nothing could set. A
+// key typedKeys left out would be compared as a tuning block, so an edit made
+// to it through the engine would go unfound; one it listed that no field
+// renders would be compared exactly, so the defaults the engine serves for
+// it would read as drift.
+func TestEngineConfigCannotSetAKeyAFieldRenders(t *testing.T) {
+	doc := reflect.TypeFor[companyDoc]()
+	rendered := make([]string, 0, doc.NumField())
+	for f := range doc.Fields() {
+		key, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		rendered = append(rendered, key)
+	}
+	for _, key := range lacking(typedKeys, rendered) {
+		t.Errorf("a field of the API renders %s, and typedKeys does not list it: Diff would compare it as a "+
+			"tuning block, so an edit made to it through the engine would go unfound", key)
+	}
+	for _, key := range lacking(rendered, typedKeys) {
+		t.Errorf("typedKeys lists %s, which no field of the API renders: Diff would compare it exactly, so the "+
+			"defaults the engine serves for it would read as drift", key)
+	}
+	reserved := engineConfigReserved(t)
+	for _, key := range lacking(reserved, rendered) {
+		t.Errorf("a field of the API renders %s, and the CRD's rule lets engineConfig set it: an entry of that "+
+			"name would replace what the field renders; add it to the rule on Company.spec.engineConfig", key)
+	}
+	for _, key := range lacking(rendered, reserved) {
+		t.Errorf("the CRD's rule refuses %s in engineConfig, and no field of the API renders it: nothing could "+
+			"set it; remove it from the rule on Company.spec.engineConfig", key)
+	}
+	// The keys read off the rule are the ones the API server refuses, with
+	// the rule's message.
+	validate := engineConfigValidator(t)
+	for _, key := range reserved {
+		errs := validate(map[string]any{keyName: key, "value": map[string]any{}})
+		if !slices.ContainsFunc(errs, func(e *field.Error) bool { return strings.HasPrefix(e.Detail, engineConfigRefusal) }) {
+			t.Errorf("the CRD's rule names %s, and its validator lets engineConfig set it (%v)", key, errs)
+		}
+	}
+}
+
+// reservedKeysRule is the rule on Company.spec.engineConfig that refuses the
+// keys a field renders, as controller-gen writes it into the CRD, its list of
+// quoted keys the first group. The rule that refuses code, a key no field
+// renders, has another shape and is not read.
+var reservedKeysRule = regexp.MustCompile(
+	`^self\.all\(e, !\(e\.name in \[('[a-z][a-z0-9_]*'(?:, '[a-z][a-z0-9_]*')*)\]\)\)$`)
+
+// engineConfigReserved is the keys the CRD's rule on Company.spec.engineConfig
+// refuses as ones a field renders, read off the rule. It must be there
+// exactly once, in the shape reservedKeysRule reads, or the test fails
+// rather than read nothing.
+func engineConfigReserved(t *testing.T) []string {
+	t.Helper()
+	var lists []string
+	for _, r := range engineConfigSchema(t).XValidations {
+		if m := reservedKeysRule.FindStringSubmatch(r.Rule); m != nil {
+			lists = append(lists, m[1])
+		}
+	}
+	if len(lists) != 1 {
+		t.Fatalf("want exactly one rule of the shape %s on Company.spec.engineConfig, found %q", reservedKeysRule, lists)
+	}
+	keys := strings.Split(lists[0], ", ")
+	for i, quoted := range keys {
+		keys[i] = strings.Trim(quoted, "'")
+	}
+	return keys
+}
+
+// lacking is every key of want that keys does not hold.
+func lacking(keys, want []string) []string {
+	var out []string
+	for _, key := range want {
+		if !slices.Contains(keys, key) {
+			out = append(out, key)
+		}
+	}
+	return out
 }
