@@ -301,7 +301,19 @@ const (
 	// pass did not deliver live ((*leaderReader).last, (*Leader).Last). A
 	// request added in any of them would have moved no digest, so they are
 	// read here too, and each makes no more requests than the windows count
-	// for a listing.
+	// for a listing. No row read the way the other reads of one key the
+	// windows count reach that same leader read either (a log's trim floor
+	// and its maintenance window, the object store's fleet record and the
+	// rounds of its create): the store's read of a key's live value
+	// ((*FleetStore).get, getLatest, (*leaderReader).live) and its create
+	// ((*FleetStore).create). Nor did any row read what bounds the write each
+	// of those rounds makes before its read: a settled update, which waits
+	// out the leader's answer that another write to the key is still in
+	// flight, no longer than the client's DefaultTimeout where its caller set
+	// no deadline (settled, settledBucket.Update, settledBucket.settle and
+	// jsinflight's Decide). Each read is one leader read of the key, and each
+	// round's write one settled update, at the client's 5 s, and they are
+	// read here as well.
 	clockSkewRead = "v0.1.1-0.20261026011712-cbc031701107"
 
 	// The engine files most of the bounds on a boot are read from, and the
@@ -319,6 +331,7 @@ const (
 	positionsGo       = "internal/coord/kv/positions.go"
 	fleetGo           = "internal/coord/kv/fleet.go"
 	casLineGo         = "internal/coord/kv/casline.go"
+	settleGo          = "internal/coord/kv/settle.go"
 	natsObjGo         = "internal/objstore/natsobj/natsobj.go"
 	troubleshootingMd = "docs/guides/troubleshooting.md"
 
@@ -546,8 +559,21 @@ var bootWindows = []string{
 // the broker's limit read ((*Queue).budget); a read of a log's state or
 // record is handed Lookup itself (ReadWith, with the queue's timing,
 // (*Queue).provisioning and Clustered.Timing), which a boot's read waits
-// out, its context having no deadline. So a bound moved below a step's read,
-// whose own code need not change for it, sends somebody to the windows. And
+// out, its context having no deadline. Each read of one key the windows
+// count, of the key's live value ((*FleetStore).get, getLatest,
+// (*leaderReader).live), in a round of a create ((*FleetStore).create,
+// createKey) or as a certified listing's read back, is one leader read of
+// the key's newest message ((*leaderReader).last, (*Leader).Last). The write
+// each round of that create makes before its read is read down to its bound
+// as well: it is a settled update, which waits out the leader's answer that
+// another write to the key is still in flight, no longer than the client's
+// DefaultTimeout where its caller set no deadline (settled,
+// settledBucket.Update, settledBucket.settle, Decide). The objects bucket it
+// writes is settled where the fleet store opens it (OpenFleet), which is not
+// read here, since Crewlet's
+// TestAConditionalWriteIsAnsweredByWhatTheLeaderDecided requires that bucket
+// to be settled. So a bound moved below a step's read or write, whose own
+// code need not change for it, sends somebody to the windows. And
 // how many registrations a step makes is read down to the queue, for every
 // step that registers what a node answers: the steer answerer and the fleet
 // broker register in their step's own code (armSteer, serveFleetBroker);
@@ -1842,6 +1868,28 @@ var mirrored = []mirror{
 		read:   bootBoundsRead,
 	},
 	{
+		file: fleetGo, name: "(*FleetStore).get",
+		against: bootWindows,
+		decides: "the fleet store's read of one key is one getLatest on the store's client",
+		digest:  "6b976d59a8c3cb725e30ff4cd913f2fe317c36a912e0ba804d73f8ef979d1a41",
+		read:    clockSkewRead,
+	},
+	{
+		file: walkGo, name: "getLatest",
+		against: bootWindows,
+		decides: "a read of one key addresses its leader reads without a request, then is one read of the key's live " +
+			"value (live)",
+		digest: "6e289db52cad44133ae891fd3ab23152bf91e349c8cf700ccc84cc12c3061d39",
+		read:   clockSkewRead,
+	},
+	{
+		file: walkGo, name: "(*leaderReader).live",
+		against: bootWindows,
+		decides: "a key's live value is one read of its newest message (last)",
+		digest:  "49c30248ccfd5bdbf1fac4931841df6886e4526e165ada4155bde1d16bd0c567",
+		read:    clockSkewRead,
+	},
+	{
 		file: walkGo, name: "(*leaderReader).last",
 		against: bootWindows,
 		decides: "a key's newest message is one leader read of its subject (Last)",
@@ -1985,6 +2033,13 @@ var mirrored = []mirror{
 		read:    codeHostRead,
 	},
 	{
+		file: fleetGo, name: "(*FleetStore).create",
+		against: bootWindows,
+		decides: "the fleet store's create of one key is one createKey on the store's client",
+		digest:  "0ad4ffe5e3400dc8a40ac8751ab9748bf16880e4bb7ea58b063fcebfb7cc5bab",
+		read:    clockSkewRead,
+	},
+	{
 		file: "internal/coord/kv/markers.go", name: "createRounds",
 		against: bootWindows,
 		decides: "a create-only write goes on for at most eight rounds over removal markers",
@@ -1998,6 +2053,35 @@ var mirrored = []mirror{
 			"s default",
 		digest: "d52d5def68b8d33f4b3f0e48d94386f5632a0f24fd0c5e470bd98032c32ce6c0",
 		read:   bootBoundsRead,
+	},
+	{
+		file: settleGo, name: "settled",
+		against: bootWindows,
+		decides: "a settled bucket's conditional writes fall back to its client's own DefaultTimeout",
+		digest:  "d574c24c954f803deccf9622e5a8cdd97039cc6d5161e6438aa0f0e2c6c88acf",
+		read:    clockSkewRead,
+	},
+	{
+		file: settleGo, name: "settledBucket.Update",
+		against: bootWindows,
+		decides: "a settled bucket's conditional update is one settle of the client's own update",
+		digest:  "bd17315473d3f04657610788c4961e3f029918ad04533f466534c5dab2882c90",
+		read:    clockSkewRead,
+	},
+	{
+		file: settleGo, name: "settledBucket.settle",
+		against: bootWindows,
+		decides: "a settled write is one Decide, with the bucket's timeout as its fallback",
+		digest:  "211820629cbab521ec48f901c6a2f829b9161d761254ee384faee9f8cb3dadda",
+		read:    clockSkewRead,
+	},
+	{
+		file: "internal/jsinflight/jsinflight.go", name: "Decide",
+		against: bootWindows,
+		decides: "a publish the leader answers in flight is asked again within its caller's deadline or, where it " +
+			"set none, the fallback it is handed, each attempt handed that budget and no wait outlasting it",
+		digest: "7c7e9741b58d504b4ad9693aede7c91f9baadfd3fb96b0e5e4432fdece9805aa",
+		read:   clockSkewRead,
 	},
 	{
 		file: natsObjGo, name: "open",

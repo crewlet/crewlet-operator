@@ -251,7 +251,22 @@ where their caller set no deadline (`(*Leader).get`, `NewLeader`, `ask`,
 `internal/queue/jetstream/budget.go`), and a read of a state log's state or
 record to the thirty seconds of its timing's `Lookup` (`ReadWith`, with the
 queue's timing, `(*Queue).provisioning` and `Clustered.Timing`), which a
-boot's read waits out, its context having no deadline.
+boot's read waits out, its context having no deadline. Each read of one key
+the windows count is one such leader read, of the key's newest message
+(`(*leaderReader).last` in `internal/coord/kv/walk.go` and `(*Leader).Last`
+in `internal/jsapi`), whether it reads the key's live value
+(`(*FleetStore).get` in `internal/coord/kv/fleet.go`, `getLatest` and
+`(*leaderReader).live`), is a round of a create (`(*FleetStore).create`, and
+`createKey` in `internal/coord/kv/markers.go`) or is a listing's read back.
+The write each round of that create makes before its read is read down to
+its bound too: it is a settled update, which waits out the leader's answer
+that another write to the key is still in flight, no longer than the
+client's own five seconds where its caller set no deadline (`settled`,
+`settledBucket.Update` and `settledBucket.settle` in
+`internal/coord/kv/settle.go`, and `Decide` in
+`internal/jsinflight/jsinflight.go`). That the bucket it writes is settled
+is not read: Crewlet's own
+`TestAConditionalWriteIsAnsweredByWhatTheLeaderDecided` requires it.
 How many registrations a step makes is read down to the queue, for every
 step that registers what a node answers: the steer answerer and the fleet
 broker register in their step's own code (`armSteer`, `serveFleetBroker`);
