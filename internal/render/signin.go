@@ -194,8 +194,8 @@ func leftOutNote(names []string) string {
 	if len(names) == 0 {
 		return ""
 	}
-	return fmt.Sprintf(". The seat's spec.sandbox gives %s, which every run goes without, as its value resolves "+
-		"to nothing", strings.Join(names, ", "))
+	return fmt.Sprintf(". The Company's or the seat's spec.sandbox gives %s, which every run goes without, as its "+
+		"value resolves to nothing", strings.Join(names, ", "))
 }
 
 // key is ref's Secret key, in the Company's namespace.

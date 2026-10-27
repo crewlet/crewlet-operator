@@ -562,7 +562,7 @@ never a value.
 | False | `Suspended` | The Company is suspended. |
 | False | `NotExposed` | The seat's executor runs in `E2B`, and the Company has no public address for the box to call the seat's tools back at. |
 | False | `BridgeUnreachable` | The seat is in a seat pool, its executor runs `Direct` there, and the Company has no public address: a seat pod serves no tool bridge of its own. |
-| False | `SandboxLoginNotPortable` | The seat's executor runs in `E2B` on a provider whose login cannot follow it there, and nothing in the seat's sandbox environment signs its CLI in. |
+| False | `SandboxLoginNotPortable` | The seat's executor runs in `E2B` on a provider whose login cannot follow it there, and nothing in the run's environment (the env of the Company's and the Seat's setup steps, and the Seat's `spec.sandbox.env`) signs its CLI in. |
 | True | `LeaseHeld` | An engine pod holds the seat's lease, as the engine's `GET /fleet` reports. The message names the pod, and says so when it is not a pod of the seat's StatefulSet yet, while the engine moves it; and it names the provider, the CLI and the cell the seat's executor runs in. The engine names a lease by the seat's handle, or by its id (`status.seatID`) when the engine pod that answered does not run the seat yet; the operator finds it either way. |
 | False | `PoolNotFound` | No pod holds the seat and none can: the Company does not declare its pool. |
 | False | `Unplaced` | No pod holds the seat: it is not in the revision the engine runs, its pool runs no pod, or the engine has not claimed it yet. The message says which. |

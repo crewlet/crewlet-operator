@@ -519,9 +519,10 @@ revision:
   in; one in a seat pool whose run goes `Direct` there, in a company with no
   public address, since a seat pod serves no tool bridge of its own
   (`BridgeUnreachable`); and one whose run goes to `E2B` on a provider whose
-  login cannot follow it there, while nothing in the seat's sandbox
-  environment signs its CLI in (`SandboxLoginNotPortable`). The Seat reports
-  it as `Ready=False` with the reason, whichever node holds it
+  login cannot follow it there, while nothing in the run's environment (the
+  env of the Company's and the Seat's setup steps, and the Seat's
+  `spec.sandbox.env`) signs its CLI in (`SandboxLoginNotPortable`). The Seat
+  reports it as `Ready=False` with the reason, whichever node holds it
   ([Where a seat's executor runs](../guides/cli-agents.md#where-a-seats-executor-runs)).
 
 Each is applied (`Applied=True`), and the operator records a Warning event

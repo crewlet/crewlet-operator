@@ -298,13 +298,13 @@ func (r *renderer) verdict(s *v1alpha1.Seat, m *member, env, leftOut envNames) (
 			"a data pod relays each call to the engine pod holding the seat", runs, public)
 		switch {
 		case len(seat) > 0 && m.cli.agent == v1alpha1.CLIAgentClaudeCode:
-			return "", fmt.Sprintf("%s, signed in by %s from the seat's spec.sandbox, which Crewlet hands the run in "+
-				"place of the provider's own sign-in", bridged, strings.Join(seat, ", "))
+			return "", fmt.Sprintf("%s, signed in by %s from the Company's or the seat's spec.sandbox, which Crewlet "+
+				"hands the run in place of the provider's own sign-in", bridged, strings.Join(seat, ", "))
 		case own:
 			return "", bridged
 		case len(seat) > 0:
-			return "", fmt.Sprintf("%s, signed in by %s from the seat's spec.sandbox, as the provider's own %s login "+
-				"cannot follow the run there", bridged, strings.Join(seat, ", "), m.cli.agent)
+			return "", fmt.Sprintf("%s, signed in by %s from the Company's or the seat's spec.sandbox, as the "+
+				"provider's own %s login cannot follow the run there", bridged, strings.Join(seat, ", "), m.cli.agent)
 		}
 		_, lost := m.cli.remoteSignIn(leftOut)
 		return v1alpha1.ReasonSandboxLoginNotPortable, fmt.Sprintf("%s, in the Company's E2B sandbox, where %s's %s login "+

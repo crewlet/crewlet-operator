@@ -245,7 +245,39 @@ func TestExecutor(t *testing.T) {
 			},
 			want:   runnableBut(cyOwn(runnable)),
 			saysOf: seatCy,
-			says:   []string{"signed in by CLAUDE_CODE_OAUTH_TOKEN from the seat's spec.sandbox"},
+			says:   []string{"signed in by CLAUDE_CODE_OAUTH_TOKEN from the Company's or the seat's spec.sandbox"},
+		},
+		{
+			// The run's environment is the Company's setup steps' env, then
+			// the seat's, then its spec.sandbox.env: a sign-in in any of
+			// them signs the run in.
+			name: "a bundled ClaudeCode login in E2B, signed in by a Company setup step", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				p := bundled(cliProvider)
+				p.Spec.RunIn = v1alpha1.SandboxPlacementE2B
+				in.LLMProviders = append(in.LLMProviders, p)
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCLI)
+				in.Company.Spec.Sandbox.Setup = []v1alpha1.SandboxSetupStep{setupSignIn("CLAUDE_CODE_OAUTH_TOKEN")}
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"signed in by CLAUDE_CODE_OAUTH_TOKEN from the Company's or the seat's spec.sandbox"},
+		},
+		{
+			name: "a bundled ClaudeCode login in E2B, signed in by a seat's setup step", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				p := bundled(cliProvider)
+				p.Spec.RunIn = v1alpha1.SandboxPlacementE2B
+				in.LLMProviders = append(in.LLMProviders, p)
+				cy := seatNamed(in, seatCy)
+				cy.Spec.LLM.Default = chainOfNames(providerCLI)
+				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Setup: []v1alpha1.SandboxSetupStep{setupSignIn("ANTHROPIC_API_KEY")}}
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"signed in by ANTHROPIC_API_KEY from the Company's or the seat's spec.sandbox"},
 		},
 		{
 			// A run goes without a value that holds nothing, listed or not,
@@ -406,6 +438,18 @@ func seatSecret(name string) v1alpha1.SeatEnvVar {
 		ValueFrom: v1alpha1.SeatCredentialSource{
 			SecretKeyRef: v1alpha1.SecretKeyReference{Name: "cy-token", Key: name},
 		},
+	}
+}
+
+// setupSignIn is a setup step whose env gives the variable named, read from
+// the Secret claude-token under its own name.
+func setupSignIn(name string) v1alpha1.SandboxSetupStep {
+	return v1alpha1.SandboxSetupStep{
+		Name: "sign-in",
+		Env: []v1alpha1.SecretEnvVar{{
+			Name:      name,
+			ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "claude-token", Key: name}},
+		}},
 	}
 }
 

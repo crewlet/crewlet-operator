@@ -680,7 +680,8 @@ each time `Ready` turns to it:
 - `SandboxLoginNotPortable`: its run goes to `E2B`, and nothing in the run's
   environment signs its CLI in: a Claude Code provider signed in with a
   credential bundle alone, or an OpenCode one with no key in `env`, and no
-  sign-in in the Seat's `spec.sandbox`.
+  sign-in in the env of the Company's or the Seat's setup steps or in the
+  Seat's `spec.sandbox.env`.
 
 The verdict judges the first provider a launch takes, as Crewlet's own guard
 does: a launch the box's login refuses fails, it does not move on down the
