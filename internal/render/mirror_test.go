@@ -285,6 +285,25 @@ const (
 	// crossing beside the read term, none of which moves a bound.
 	hedgeCeilingRead = "v0.1.1-0.20261026010533-a5bf068300dd"
 
+	// clockSkewRead is crewlet/crewlet#298's engine that measures each node's
+	// clock against its broker's (clock_skew), read where the fleet's
+	// positions listing was read again against the windows. Each row the
+	// listing answers now carries the instant the broker stored it, which the
+	// walk of the register's node class hands on from the entry it holds
+	// already ((*FleetStore).eachPositionKey) and Positions sets on the row:
+	// the listing asks nothing it did not, so the join's listing of the
+	// positions keeps its 20 s. That walk was read by no row, though, and nor
+	// was the way from it to the certified listing it is, a fleet bucket's
+	// filtered walk with the leader reader it addresses
+	// ((*FleetStore).eachUnder, eachEntryUnder, newLeaderReader), or the
+	// steps of the pass between listUnder and the functions that bound them
+	// ((*pass).walk, stop, certify and close), or the read back of a key the
+	// pass did not deliver live ((*leaderReader).last, (*Leader).Last). A
+	// request added in any of them would have moved no digest, so they are
+	// read here too, and each makes no more requests than the windows count
+	// for a listing.
+	clockSkewRead = "v0.1.1-0.20261026011712-cbc031701107"
+
 	// The engine files most of the bounds on a boot are read from, and the
 	// guide that quotes the windows they add up to.
 	jsprovisionGo     = "internal/jsprovision/jsprovision.go"
@@ -298,6 +317,7 @@ const (
 	backendsGo        = "internal/engine/backends.go"
 	walkGo            = "internal/coord/kv/walk.go"
 	positionsGo       = "internal/coord/kv/positions.go"
+	fleetGo           = "internal/coord/kv/fleet.go"
 	casLineGo         = "internal/coord/kv/casline.go"
 	natsObjGo         = "internal/objstore/natsobj/natsobj.go"
 	troubleshootingMd = "docs/guides/troubleshooting.md"
@@ -537,7 +557,19 @@ var bootWindows = []string{
 // registers each of its lanes in turn (estate's Serve and lanes); and every
 // registration is one flush ((*Queue).Serve and flush). So a registration
 // added below a step, whose own code need not change for it, sends somebody
-// to the windows too.
+// to the windows too. And the listing the windows count, the join's of the
+// fleet's positions, is read down to the certified listing it is, and that
+// listing to the functions that bound its waits: a class of the positions
+// register is one walk of the register ((*FleetStore).eachPositionKey), a
+// filtered walk of a fleet bucket one certified listing, its leader reader
+// addressed without a request ((*FleetStore).eachUnder, eachEntryUnder,
+// newLeaderReader), and a certified listing a pass begun beside its key
+// index, walked to its end, stopped, certified and closed (listUnder,
+// beginPass, (*pass).walk, passOver, passIdle, (*pass).stop,
+// (*pass).certify, certify, (*pass).close), whose certifying read of a key
+// is one leader read ((*leaderReader).last, (*Leader).Last). So a request
+// added below that listing, whose own code need not change for it, sends
+// somebody to the windows as well.
 var mirrored = []mirror{
 	{
 		file: bootGo, name: "ArtifactsListener",
@@ -1225,8 +1257,37 @@ var mirrored = []mirror{
 		file: positionsGo, name: "(*FleetStore).Positions",
 		against: bootWindows,
 		decides: "the fleet's positions are one certified listing",
-		digest:  "138413da5b12c93bcc094b3e9a44623b5395b25f4c1f29d9038b0b3cd54d20b5",
-		read:    bootBoundsRead,
+		digest:  "88fe79922377dee667b5bc655b010eea3cf9ad394583c0c2f2fd92ddd297c87e",
+		read:    clockSkewRead,
+	},
+	{
+		file: positionsGo, name: "(*FleetStore).eachPositionKey",
+		against: bootWindows,
+		decides: "a key class of the positions register is one filtered walk of the register, each of its entries " +
+			"handed on with the instant the broker stored it, which the entry already carries",
+		digest: "ff039de2ad4de929638d75f4ed4592d3450b09c2fb6308c135615902b7ef711d",
+		read:   clockSkewRead,
+	},
+	{
+		file: fleetGo, name: "(*FleetStore).eachUnder",
+		against: bootWindows,
+		decides: "a filtered walk of a fleet bucket is one eachEntryUnder on the store's client",
+		digest:  "24d6c44892f1ec779606075259970a7c3a60f278428c6486661c3fb1df98884f",
+		read:    clockSkewRead,
+	},
+	{
+		file: walkGo, name: "eachEntryUnder",
+		against: bootWindows,
+		decides: "a filtered walk addresses its certifying reads without a request, then is one certified listing",
+		digest:  "42b80859a1b27b6cbdc702d5859deab28e3b5b9f744269034eab0ce203c7a1cb",
+		read:    clockSkewRead,
+	},
+	{
+		file: walkGo, name: "newLeaderReader",
+		against: bootWindows,
+		decides: "a bucket's leader reads are addressed by NewLeader for the bucket's stream, without a request",
+		digest:  "b2fde2aad29b0b030cb4c761da926af5c2eb5c307915e46c21df67666edc1ebb",
+		read:    clockSkewRead,
 	},
 	{
 		file: positionsGo, name: "(*FleetStore).PutAdmission",
@@ -1263,6 +1324,36 @@ var mirrored = []mirror{
 			"answered",
 		digest: "c35d03701efa142d2d79312757ee4923e8b028ce5b336ab3cafa30777b125f95",
 		read:   bootBoundsRead,
+	},
+	{
+		file: walkGo, name: "(*pass).walk",
+		against: bootWindows,
+		decides: "a pass is walked to its end by one passOver, keeping the key index when it answered during the walk",
+		digest:  "5ee4064276f1fda1bf68996064462051a00f969c4baf4c6345e86d874ee03d06",
+		read:    clockSkewRead,
+	},
+	{
+		file: walkGo, name: "(*pass).stop",
+		against: bootWindows,
+		decides: "a pass's watcher is stopped once, by its own Stop",
+		digest:  "bf2ef70d2391df82d61fb4a08234c45a354c82ab959dbc5a281ef27d988de124",
+		read:    clockSkewRead,
+	},
+	{
+		file: walkGo, name: "(*pass).certify",
+		against: bootWindows,
+		decides: "a pass is certified by one certify against its key index, which it waits for only when the pass " +
+			"ended before the index answered",
+		digest: "ce99a60a0adb4f6e09e5811d1a773dc2545f9d39693b5b0c3565e14cd6fd120e",
+		read:   clockSkewRead,
+	},
+	{
+		file: walkGo, name: "(*pass).close",
+		against: bootWindows,
+		decides: "a pass's close cancels its key index read and, where the pass has not read its answer, waits " +
+			"for it to return, asking nothing",
+		digest: "d167d12a0cd1285afaadea7ea94d9a456b57cfbbf908841a784c1e48d1ad197f",
+		read:   clockSkewRead,
 	},
 	{
 		file: backendsGo, name: "attachCoordination",
@@ -1751,6 +1842,13 @@ var mirrored = []mirror{
 		read:   bootBoundsRead,
 	},
 	{
+		file: walkGo, name: "(*leaderReader).last",
+		against: bootWindows,
+		decides: "a key's newest message is one leader read of its subject (Last)",
+		digest:  "1c37b5838fdc14b39f539128e1fe0c15efe5d8cf7ebe482c209b95b3f7d66b3a",
+		read:    clockSkewRead,
+	},
+	{
 		file: walkGo, name: "keysUnder",
 		against: bootWindows,
 		decides: "a pass's key index is one listing of the bucket's subjects from its leader",
@@ -1764,6 +1862,13 @@ var mirrored = []mirror{
 			"deadline is held to the client's DefaultTimeout, and asked again inside it while nobody answers",
 		digest: "0cedea9143c6f0f7761ae11d2a5c25783d052005b4a52a679f40e7c1981cb08d",
 		read:   hedgeCeilingRead,
+	},
+	{
+		file: jsapiLeaderGo, name: "(*Leader).Last",
+		against: bootWindows,
+		decides: "a subject's newest message is one leader read, through get",
+		digest:  "04a4497229210e557d517813166a097d48c082f725f297328f75798747c4a43e",
+		read:    clockSkewRead,
 	},
 	{
 		file: jsapiLeaderGo, name: "NewLeader",
