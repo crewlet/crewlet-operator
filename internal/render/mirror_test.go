@@ -316,6 +316,21 @@ const (
 	// read here as well.
 	clockSkewRead = "v0.1.1-0.20261026011712-cbc031701107"
 
+	// inboxLiftRead is crewlet/crewlet#298's engine that lifts a person's
+	// inbox out of the tracker (crewlet/crewlet@1a61828c7), read at the head
+	// of its branch, where the inbox relay a data node arms was read again
+	// against the windows. armInboxRelay hands the relay every domain whose
+	// applier announces a person's movements (inboxSources) and the check of
+	// which of them this node's copy holds out of service
+	// ((*localEstate).outOfService), where it handed it the tracker's copy's
+	// alone, and the relay delivers the movements as the inbox's own, of any
+	// domain (deliverInbox). Neither is a request on the boot: the relay
+	// still serves every domain on its node's one subject, registered once
+	// through (*inboxRelay).serve, whose digest holds, so a data pod's boot
+	// counts it as the one flush it was, and a node without data registers
+	// none.
+	inboxLiftRead = "v0.1.1-0.20261027063930-66e8ad593665"
+
 	// The engine files most of the bounds on a boot are read from, and the
 	// guide that quotes the windows they add up to.
 	jsprovisionGo     = "internal/jsprovision/jsprovision.go"
@@ -1445,8 +1460,8 @@ var mirrored = []mirror{
 		file: "internal/engine/inboxrelay.go", name: "(*Engine).armInboxRelay",
 		against: bootWindows,
 		decides: "a data node registers its inbox relay, one flush",
-		digest:  "673a18d6bcdf74dad77ace48bd70a663d2879b58bd0e5590de638434cb204d53",
-		read:    bootBoundsRead,
+		digest:  "f51056d70715262b7ad2a9a4d489552726857565b25405d5a28acd9cca7a43c6",
+		read:    inboxLiftRead,
 	},
 	{
 		file: "internal/engine/inboxrelay.go", name: "(*inboxRelay).serve",
