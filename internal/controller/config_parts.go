@@ -35,7 +35,7 @@ type part struct {
 	// of the first.
 	unresolved       []string
 	unresolvedReason string
-	// leftOut are the values it gives a tool server or a coding run under
+	// leftOut are the values it gives a tool server or an executor run under
 	// a key it declares optional whose Secret or key does not exist, which
 	// the engine leaves out (checkSecretValues).
 	leftOut []leftOutValue
@@ -51,11 +51,11 @@ type part struct {
 	// the same.
 	unplaceable       []string
 	unplaceableReason string
-	// unrunnable are why a Seat cannot run on the pods of the pool it is
-	// placed in, which its class admits, because the pods cannot keep the
-	// login of a CLI it runs on, or why its code work runs on a provider of
-	// another CLI. Its references resolve; the document is
-	// refused all the same.
+	// unrunnable are why the engine cannot run the part as written: a Seat
+	// whose pool's pods cannot keep the login of a CLI it runs on, or whose
+	// executor chain has no CLI that runs it, and an LLMProvider whose
+	// executor runs are placed in a cell the Company does not configure.
+	// Its references resolve; the document is refused all the same.
 	unrunnable       []string
 	unrunnableReason string
 	// invalid are the engine's refusals of its part of the document.
@@ -77,17 +77,12 @@ type part struct {
 	// no seat of, whose Paused condition goes.
 	pause     *pauseVerdict
 	pauseGone bool
-	// codeWork is what the render found about a Seat's code work, nil when
-	// Crewlet offers the seat none or none of its sandbox chain resolves;
-	// read only once the reconcile rendered (objectsChecked).
-	codeWork *render.CodeWork
-	// executor is what the render found about an agent Seat whose
-	// executor's chain is headed by a CLI in mode Box, nil for any other;
-	// boxMode is what it found about an LLMProvider in mode Box, nil
-	// for any other. Both are read only once the reconcile rendered
-	// (objectsChecked), and neither holds the document.
+	// executor is what the render found about an agent Seat's executor,
+	// nil for a seat whose executor chain resolves to nothing or holds no
+	// CLI that runs it (each refused on its own), and for every seat of a
+	// Company with no spec.sandbox; read only once the reconcile rendered
+	// and read the Secrets (objectsChecked), and holding nothing.
 	executor *render.Executor
-	boxMode  *render.BoxMode
 }
 
 func newPart(obj client.Object) *part {

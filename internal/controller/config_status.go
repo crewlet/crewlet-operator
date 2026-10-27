@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -23,10 +22,11 @@ import (
 // Company's conditions and status.config.
 func (run *configRun) writeStatus(ctx context.Context) error {
 	if run.objectsChecked {
-		// Whether a seat's code work can run is a fact about its own spec
-		// and the Secrets read for it, so it is decided whatever became of
-		// the document, once they have been read (Input.Unset).
-		run.checkCodeWork(render.CodeWorkOf(run.input()))
+		// Whether a seat's executor can run is a fact about its own spec
+		// and the Secrets read for it (a sign-in of its own may hold
+		// nothing), so it is decided whatever became of the document, once
+		// they have been read (Input.Unset).
+		run.checkExecutors(render.ExecutorOf(run.input()))
 	}
 	vendors := run.vendors()
 	units := unitTree(run.parts)
@@ -88,9 +88,6 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 	switch o := p.obj.(type) {
 	case *crewletaiv1alpha1.Seat:
 		decidePause(p, o)
-		if run.objectsChecked {
-			decideCodeWork(p, o)
-		}
 		handle := render.SeatHandle(o)
 		o.Status.Handle = handle
 		o.Status.SeatID = ""
@@ -123,10 +120,6 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 		if base != "" && vendors[render.VendorGitHub] {
 			o.Status.Integrations.GitHub.WebhookURL = base + "/webhooks/github/" + handle
 		}
-	case *crewletaiv1alpha1.LLMProvider:
-		if run.objectsChecked {
-			decideBoxMode(p, o)
-		}
 	case *crewletaiv1alpha1.Unit:
 		facts := units[o.Name]
 		o.Status.Depth = facts.depth
@@ -140,35 +133,6 @@ func (run *configRun) decide(p *part, vendors map[string]bool, units map[string]
 		run.decideHealthy(p, vendor, base)
 	}
 	p.setObservedGeneration()
-}
-
-// decideCodeWork sets a Seat's CodeWorkRunnable condition from what the render
-// found, and removes it from a Seat Crewlet offers no code work. It is called
-// only once the reconcile rendered, so a Seat keeps what it had while its
-// Company is not accepted.
-func decideCodeWork(p *part, seat *crewletaiv1alpha1.Seat) {
-	w := p.codeWork
-	if w == nil {
-		meta.RemoveStatusCondition(&seat.Status.Conditions, crewletaiv1alpha1.ConditionCodeWorkRunnable)
-		return
-	}
-	reason := cmp.Or(w.Reason, crewletaiv1alpha1.ReasonCodeWorkSupported)
-	setCondition(&seat.Status.Conditions, seat.Generation, crewletaiv1alpha1.ConditionCodeWorkRunnable, w.Reason == "",
-		reason, w.Field+": "+w.Message+".")
-}
-
-// decideBoxMode sets an LLMProvider's BoxModeRunnable condition from what
-// the render found, and removes it from a provider that is not a CLI in mode
-// Agent. Like decideCodeWork it is called only once the reconcile rendered.
-func decideBoxMode(p *part, provider *crewletaiv1alpha1.LLMProvider) {
-	m := p.boxMode
-	if m == nil {
-		meta.RemoveStatusCondition(&provider.Status.Conditions, crewletaiv1alpha1.ConditionBoxModeRunnable)
-		return
-	}
-	reason := cmp.Or(m.Reason, crewletaiv1alpha1.ReasonToolBridgeServed)
-	setCondition(&provider.Status.Conditions, provider.Generation, crewletaiv1alpha1.ConditionBoxModeRunnable,
-		m.Reason == "", reason, m.Message+".")
 }
 
 // decideApplied sets a part's Applied condition from the reconcile's verdict.

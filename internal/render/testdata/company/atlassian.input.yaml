@@ -16,6 +16,8 @@ spec:
     backend: Jira
   knowledge:
     backend: Confluence
+  sandbox:
+    defaultRunIn: Direct
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider

@@ -12,14 +12,17 @@ import (
 // Keys that may go without their value.
 //
 // Crewlet starts a tool server only once every value it is started with
-// resolves to something, and refuses a run_sandbox coding run whose
-// environment or files hold one that does not: a ${NAME} nothing answers for,
-// or one set to an empty value (its toolcredentials.go, resolveServer and
-// runEnvironment). A key the block holding the value lists in its
-// optional_keys is left out instead, whole, and what it would have been given
-// to starts without it. The operator mirrors the field on the three blocks
-// that have it (an MCPServer, a Seat's spec.sandbox, a setup step) and follows
-// the rule in what it reads of a Secret:
+// resolves to something: a ${NAME} nothing answers for, or one set to an
+// empty value, holds it back (its toolcredentials.go, resolveServer). A key
+// the block holding the value lists in its optional_keys is left out instead,
+// whole, and the server starts without it. A seat's executor run starts
+// without every value of its environment or files that resolves to nothing,
+// listed or not, as refusing it would fail the seat's turn: the list says
+// only which absences are expected, which the engine leaves out quietly where
+// it logs every other as a gap of the run (runEnvironment). The operator
+// mirrors the field on the three blocks that have it (an MCPServer, a Seat's
+// spec.sandbox, a setup step) and follows the rule in what it reads of a
+// Secret:
 //
 //   - A value read from a Secret under an optional key is a StartValue with
 //     Optional set, and a Secret key every reference to which is one is in
@@ -31,10 +34,10 @@ import (
 //     nothing and leaves the key out rather than starting with a deleted
 //     Secret's value.
 //   - A required StartValue the engine starts something with (Started) whose
-//     Secret key holds nothing keeps the server or the run from starting,
-//     which the controller reports on the object that gives it
-//     (ReasonSecretValueEmpty), and CodeWorkOf on the Seat whose runs it
-//     refuses: the engine says so only in its own log and dashboard.
+//     Secret key holds nothing keeps the server from starting, and the run
+//     starts without it, which the controller reports on the object that
+//     gives it (ReasonSecretValueEmpty): the engine says so only in its own
+//     log and dashboard.
 //   - An MCPServer's optionalKeys entry under which no value read from a
 //     Secret, or provisioned, is written, by the server or by a Seat's or a
 //     Unit's spec.mcp for it, every value there a literal or none at all, is
@@ -58,8 +61,8 @@ import (
 // anything is resolved, and an HTTP server's keys are headers, one header in
 // any case (Crewlet's MCPServer.ValueKey): optionalKey compares them so.
 
-// StartValue is one Secret key the document gives a tool server or a coding
-// run under a key: a variable of a stdio server's environment or of a run's,
+// StartValue is one Secret key the document gives a tool server or a seat's
+// executor run under a key: a variable of a stdio server's environment or of a run's,
 // an HTTP server's header, or a setup step's file.
 type StartValue struct {
 	// Key is the Secret key the value is read from.
@@ -71,8 +74,8 @@ type StartValue struct {
 	// Name is the key the value is written under: a variable, a header or a
 	// file's path.
 	Name string
-	// Server is the MCPServer the value is given to; empty for a value of a
-	// coding run.
+	// Server is the MCPServer the value is given to; empty for a value of an
+	// executor run.
 	Server string
 	// Optional is whether the optionalKeys list that governs the value lists
 	// Name, so that the engine leaves the key out when the value resolves to
@@ -86,7 +89,7 @@ type StartValue struct {
 	List      ObjectRef
 	ListField string
 	// Started is whether the engine starts something with the value: a
-	// server instance, the company's or a seat's, or a seat's coding runs,
+	// server instance, the company's or a seat's, or a seat's executor runs,
 	// for which it is the value that wins its key. A value another one
 	// replaces wherever it would be read starts nothing, whatever it holds.
 	Started bool
@@ -110,8 +113,8 @@ func StartValuesOf(in *Input) []StartValue {
 	return r.markStarted()
 }
 
-// startUse is where a value the engine starts a tool server or a coding run
-// with is written, before it is known to come from a Secret.
+// startUse is where a value the engine starts a tool server or an executor
+// run with is written, before it is known to come from a Secret.
 type startUse struct {
 	object    ObjectRef
 	field     string
@@ -184,7 +187,7 @@ const fieldOptionalKeys = "spec.optionalKeys"
 // A tool server is started as the company's instance, when it is shared,
 // with its own values alone; as a seat's instance, for every agent seat a
 // per-seat server is granted to by a block of values for it, the seat's own
-// or its unit's (Crewlet's MCPServer.Grants); and in a coding run's box, for
+// or its unit's (Crewlet's MCPServer.Grants); and in an executor's box, for
 // every agent seat whose spec.sandbox.mcpServerRefs names it, shared or not.
 // A seat's instance and box are given the server's own values with its
 // unit's block laid over them and its own over that, a key compared as the
@@ -192,10 +195,11 @@ const fieldOptionalKeys = "spec.optionalKeys"
 // direct agent members' (inheritMCPEnv), and a seat's whole block over the
 // server's (resolveServer).
 //
-// A coding run, the run_sandbox code work of a seat Crewlet offers it to or
-// a box-mode executor's run, is given the Company's setup steps, then the
-// seat's, then its spec.sandbox.env, a later variable of the same name
-// winning (runEnvironment), and every file of every step.
+// A seat's executor run, which every agent seat whose executor can launch
+// starts once the Company places its runs (ExecutorOf), is given the
+// Company's setup steps, then the seat's, then its spec.sandbox.env, a later
+// variable of the same name winning (runEnvironment), and every file of every
+// step.
 func (r *renderer) markStarted() []StartValue {
 	started := map[ObjectRef]map[string]bool{}
 	start := func(o ObjectRef, field string) {
@@ -220,7 +224,7 @@ func (r *renderer) markStarted() []StartValue {
 			}
 			block := blockValues(ObjectRef{Kind: KindSeat, Name: seat.Name}, seat.Spec.MCP, s.Name)
 			granted := !shared && (unit.declared || block.declared)
-			boxed := seat.Spec.Sandbox != nil && slices.ContainsFunc(seat.Spec.Sandbox.MCPServerRefs,
+			boxed := slices.ContainsFunc(seat.Spec.Sandbox.MCPServerRefs,
 				func(ref v1alpha1.LocalObjectReference) bool { return ref.Name == s.Name })
 			if granted || boxed {
 				startWinners(s, start, own, unit, block)
@@ -228,8 +232,7 @@ func (r *renderer) markStarted() []StartValue {
 		}
 	}
 	for _, seat := range sortedByName(r.in.Seats) {
-		if _, _, boxMode := r.boxModeExecutor(seat); seat.Spec.Kind == v1alpha1.SeatKindHuman ||
-			!r.offersCodeWork(seat) && !boxMode {
+		if !r.launches(seat) {
 			continue
 		}
 		type at struct {
@@ -247,15 +250,11 @@ func (r *renderer) markStarted() []StartValue {
 				}
 			}
 		}
-		if r.in.Company.Spec.Sandbox.E2B.APIKeySecretRef.Name != "" {
-			steps(r.owner, r.in.Company.Spec.Sandbox.Setup)
-		}
+		steps(r.owner, r.in.Company.Spec.Sandbox.Setup)
 		owner := ObjectRef{Kind: KindSeat, Name: seat.Name}
-		if sb := seat.Spec.Sandbox; sb != nil {
-			steps(owner, sb.Setup)
-			for j, e := range sb.Env {
-				won[e.Name] = at{owner, fmt.Sprintf("spec.sandbox.env[%d].valueFrom", j)}
-			}
+		steps(owner, seat.Spec.Sandbox.Setup)
+		for j, e := range seat.Spec.Sandbox.Env {
+			won[e.Name] = at{owner, fmt.Sprintf("spec.sandbox.env[%d].valueFrom", j)}
 		}
 		for _, w := range won {
 			start(w.object, w.field)

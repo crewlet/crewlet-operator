@@ -74,7 +74,6 @@ type providersDoc struct {
 type llmProviderDoc struct {
 	Agent          string            `json:"agent"`
 	Model          string            `json:"model"`
-	Mode           string            `json:"mode,omitempty"`
 	RunIn          string            `json:"run_in,omitempty"`
 	StateDir       string            `json:"state_dir"`
 	TimeoutSeconds int32             `json:"timeout_seconds,omitempty"`
@@ -110,13 +109,21 @@ type embeddingsDoc struct {
 }
 
 type sandboxDoc struct {
-	E2B                    e2bDoc         `json:"e2b"`
-	DefaultRunIn           string         `json:"default_run_in"`
-	DefaultCodingAgent     string         `json:"default_coding_agent,omitempty"`
-	DefaultTimeoutSeconds  int32          `json:"default_timeout_seconds,omitempty"`
-	DefaultPauseTTLSeconds *int32         `json:"default_pause_ttl_seconds,omitempty"`
-	DefaultMaxTurns        *int32         `json:"default_max_turns,omitempty"`
-	Setup                  []setupStepDoc `json:"setup,omitempty"`
+	E2B                    *e2bDoc          `json:"e2b,omitempty"`
+	Local                  *localSandboxDoc `json:"local,omitempty"`
+	DefaultRunIn           string           `json:"default_run_in"`
+	DefaultTimeoutSeconds  int32            `json:"default_timeout_seconds,omitempty"`
+	DefaultPauseTTLSeconds *int32           `json:"default_pause_ttl_seconds,omitempty"`
+	DefaultMaxTurns        *int32           `json:"default_max_turns,omitempty"`
+	Setup                  []setupStepDoc   `json:"setup,omitempty"`
+}
+
+// localSandboxDoc is Crewlet's local backend as the operator renders it: the
+// direct cell alone, with its boxes on the engine pod's sandboxes volume. Its
+// other fields configure the container cell, which an engine pod cannot run
+// and Crewlet refuses where no run is placed in it.
+type localSandboxDoc struct {
+	StateDir string `json:"state_dir"`
 }
 
 type e2bDoc struct {
@@ -341,12 +348,9 @@ type phaseLLMDoc struct {
 	Subagent  []string `json:"subagent,omitempty"`
 	Auxiliary []string `json:"auxiliary,omitempty"`
 	Judge     []string `json:"judge,omitempty"`
-	Sandbox   []string `json:"sandbox,omitempty"`
 }
 
 type roleSandboxDoc struct {
-	Enabled         bool              `json:"enabled"`
-	CodingAgent     string            `json:"coding_agent,omitempty"`
 	PauseTTLSeconds *int32            `json:"pause_ttl_seconds,omitempty"`
 	MaxTurns        *int32            `json:"max_turns,omitempty"`
 	MCP             *roleSandboxMCP   `json:"mcp,omitempty"`

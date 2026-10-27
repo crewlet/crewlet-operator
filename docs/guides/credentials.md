@@ -48,9 +48,9 @@ reason `SecretNotFound`, naming the Secret and key, and the Company reports
 operator waits two quiet seconds before it renders, so objects and Secrets
 written together are applied together.
 
-A tool server or a coding run may go without a value whose key an
+A tool server or a seat's executor run may go without a value whose key an
 `optionalKeys` list names (the MCPServer's for a tool server, the Seat's
-`spec.sandbox` or a setup step's for a coding run), the way a pod goes without
+`spec.sandbox` or a setup step's for a run), the way a pod goes without
 an `optional` `secretKeyRef`: a missing Secret or key there holds nothing
 back, the engine starts the server or the run without the value, and the
 object that gives the value names it in its `ResolvedRefs=True` message, or
@@ -109,45 +109,65 @@ spec:                       # Company
     model: text-embedding-3-large
     apiKeySecretRef: {name: openai, key: apiKey}
   sandbox:
+    defaultRunIn: E2B
     e2b:
       apiKeySecretRef: {name: e2b, key: apiKey}
 ```
 
-Variables and files the sandbox sets up for every run (`sandbox.setup[].env`,
-`sandbox.setup[].files`) and a Seat's own sandbox variables
-(`Seat.spec.sandbox.env`) take `valueFrom.secretKeyRef` for every entry.
+Variables and files the sandbox sets up for every seat's executor run
+(`sandbox.setup[].env`, `sandbox.setup[].files`) and a Seat's own sandbox
+variables (`Seat.spec.sandbox.env`) take `valueFrom.secretKeyRef` for every
+entry.
 
-A file's `path` is where the seat's E2B box writes it. Name it relative to
-the box's home, `/home/user` (`.npmrc`), or under `~/` (`~/.npmrc`); a `..`
-that climbs out of the home lands where it resolves. An absolute path works
-only where the box's account may write, which is not `/root`, and a path that
-names a directory, such as `/tmp`, fails every box at setup. The API refuses
-a path of white space alone or under another account's home (`~root/…`).
-Crewlet refuses one that names the home itself or a directory above it (`~`,
-`/home`): a step of the Company's own reports it on the Company as
-`ConfigApplied=False Invalid`, and a Seat's on the Seat as
-`Applied=False Invalid`.
+A file's `path` is where the seat's box writes it, and the safe way to write
+one is relative to the box's home (`.npmrc`, `.local/bin/tool`) or under `~/`
+(`~/.npmrc`), which every cell writes under its home. A `Direct` box writes a
+file only inside its home, which it mints per box, so it refuses every
+absolute path and every one whose `..` climbs out of the home. An `E2B` box's
+home is `/home/user`: a `..` that climbs out of it lands where it resolves,
+an absolute path works only where the box's account may write, which is not
+`/root`, and a path that names a directory, such as `/tmp`, fails every box
+at setup. The API refuses a path of white space alone or under another
+account's home (`~root/…`). Crewlet refuses, in every cell a seat's box can
+be placed in, one that names the home itself or a directory above it (`~`,
+`/home`), and in `Direct` one outside the home: a step of the Company's own
+reports it on the Company as `ConfigApplied=False Invalid`, and a Seat's on
+the Seat as `Applied=False Invalid`.
 
 ### What a coding box carries
 
-A seat's code work signs its coding agent in with the provider it runs on:
-the head of `spec.llm.sandbox`, else of `spec.llm.default`, else of the
-Company's order, an `LLMProvider` or a platform provider, which drives the
-coding agent's own CLI. The engine exports into every box of such a seat the
-provider's headless token or its `auth.apiKeySecretRef` key, under the
-variable its CLI reads (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`), or
-for OpenCode the credential-named variables of its `env`, and never its
-credential bundle. A gateway address in its `env` (`ANTHROPIC_BASE_URL`)
-is no credential, and stays in the engine's pod: a run that needs it is
-given it in `spec.sandbox.env`.
+Every agent seat's executor is its coding CLI's own run in a box, signed in
+by the provider the launch picked: the first of its executor chain that
+drives `ClaudeCode` or `OpenCode`, an `LLMProvider` or a platform provider
+([Where a seat's executor runs](cli-agents.md#where-a-seats-executor-runs)).
+The engine hands the run the provider's headless token or its
+`auth.apiKeySecretRef` key, under the variable its CLI reads
+(`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`), or for OpenCode the
+credential-named variables of its `env`, beneath the seat's own variables. No
+other variable of the provider's `env` reaches the run: a gateway address
+(`ANTHROPIC_BASE_URL`) is no credential, and stays with the provider's other
+phases in the engine's pod, so a run that needs it is given it in
+`spec.sandbox.env`.
 
-The box runs in the Company's own E2B account, and the coding agent in it
-runs with every permission, so it can read the key; the report the run
-sends back is redacted by the shape of a credential, not by its value. A
-box holds the key it started with and never rotates it, so rotating the
-provider's key reaches a running box only when its next run starts. Give
-code work a key of its own: a provider whose key is scoped and limited for
-code work, first in `spec.llm.sandbox`.
+What else the box gets turns on its cell:
+
+- **`Direct`**: the box is seeded with the provider's login, its credential
+  files or, for OpenCode, the document OpenCode's export printed, from the
+  login on the pod, and writes a refreshed one back over it, so a credential
+  bundle signs a run in as it signs the provider's other phases. The run is a
+  process of the engine pod, as the engine's user, with every permission its
+  CLI has: it can read its sign-in, and whatever else that user can on the
+  pod.
+- **`E2B`**: the box gets the variables alone, never a credential bundle,
+  whose login carries a refresh token the engine keeps rotating on the data
+  volume. It runs in the Company's own E2B account, with every permission its
+  CLI has, so it can read the key.
+
+The report a run sends back is redacted by the shape of a credential, not by
+its value. A box holds the sign-in it started with, so rotating the
+provider's key reaches a running box only when its next run starts. Give the
+seats whose executors run in `E2B` a key of their own: a provider whose key
+is scoped and limited for that, first in their `spec.llm.default`.
 
 A seat that signs Claude Code in itself, with `CLAUDE_CODE_OAUTH_TOKEN`,
 `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or a `CLAUDE_CODE_USE_*` toggle
@@ -159,16 +179,6 @@ missing or empty, signs nothing in: the run is given the provider's sign-in,
 as one with no sign-in of its own is. Under OpenCode the provider's key is
 added beneath the seat's variables, so a seat variable of the same name
 wins.
-
-A seat whose executor runs in box mode has no code work of its own, but
-its executor's every run is a box of the same sandbox, with the same
-setup and the seat's sandbox environment, and the engine exports into it
-the executor's own provider's headless token, its key, or the
-credential-named variables of its `env`, beneath the seat's variables,
-never its credential bundle
-([Host mode and box mode](cli-agents.md#host-mode-and-box-mode)). The
-CLI runs there with every permission and can read them, as a coding agent
-can.
 
 ### An agent's Slack app
 
@@ -386,10 +396,10 @@ annotation, another key nothing references) writes nothing.
 To rotate a provider's key without a moment where the vendor refuses the
 one in use, mind the order: write the new key into the Secret, wait for the
 revision that carries it, and only then revoke the old key at the vendor.
-Every CLI call after that revision is handed the new key. A coding box holds
-the key it started with and never rotates it
+Every CLI call after that revision is handed the new key. A seat's executor
+run holds the key it started with and never rotates it
 ([What a coding box carries](#what-a-coding-box-carries)), so for a
-provider that backs code work wait too for the coding runs already going to
+provider a seat's executor runs on wait too for the runs already going to
 end before you revoke.
 
 A provider's `auth.credentialBundleSecretRef` is an exception. The
@@ -468,8 +478,8 @@ everything it did); removing one is not.
 | `RuntimeReady=False SecretNotFound` | A Secret the EngineClass references for the pods is missing in the platform's namespace, or the Company's `spec.objects.credentialsSecretRef` is. |
 | `RuntimeReady=False APITokensInvalid` | A supplied `<company>-api-tokens` lacks a token or holds one the engine should not be guarded by; the message says which. |
 | `Integration` `Healthy=False CheckFailed` | The engine reached the vendor and the credential did not work; the message carries the vendor's answer. |
-| `ResolvedRefs=False SecretValueEmpty` | A Secret key the object gives a tool server or a coding run holds an empty value, under a key no `optionalKeys` lists: the object is applied, and the engine does not start the server, or refuses each coding run, until the key holds a value. The message names the Secret, the key, the variable, and the `optionalKeys` that could list it where Crewlet offers one: never for a Seat's or a Unit's value for a tool server, the identity the seat's instance acts as. The Company's own setup steps say it in `SecretsSynced`. |
-| `Seat` `ResolvedRefs=False NoProvisioner` | The Seat names a provisioned credential, and no Integration of its company has `provisioning: Engine` to create it. The seat is applied; until one does, the engine starts none of its tool servers that take the value and refuses each of its coding runs, unless the `optionalKeys` that governs the value lets them go without it (the MCPServer's, or the seat's `spec.sandbox.optionalKeys`), and its chat app runs without it. |
+| `ResolvedRefs=False SecretValueEmpty` | A Secret key the object gives a tool server or a seat's executor run holds an empty value, under a key no `optionalKeys` lists: the object is applied, and the engine does not start the server, or starts each run without the value, until the key holds a value. The message names the Secret, the key, the variable, and the `optionalKeys` that could list it where Crewlet offers one: never for a Seat's or a Unit's value for a tool server, the identity the seat's instance acts as. The Company's own setup steps say it in `SecretsSynced`. |
+| `Seat` `ResolvedRefs=False NoProvisioner` | The Seat names a provisioned credential, and no Integration of its company has `provisioning: Engine` to create it. The seat is applied; until one does, the engine starts none of its tool servers that take the value, unless the MCPServer's `optionalKeys` lets them go without it, and its executor runs and its chat app run without it. |
 
 [Troubleshooting](troubleshooting.md) lists every condition.
 

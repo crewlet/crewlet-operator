@@ -461,9 +461,9 @@ var _ = Describe("Company runtime", func() {
 			corev1.VolumeMount{Name: configVolumeName, MountPath: "/etc/crewlet", ReadOnly: true},
 		))
 		// On a read-only root, /tmp has to be a volume of its own: the
-		// engine makes the directory of the sockets every host-mode CLI
-		// reaches its seat's tools through under it, and a seat on the data
-		// pods would have no tools without it.
+		// engine makes the directory of the sockets every CLI it runs on the
+		// pod reaches its seat's tools through under it, and a seat on the
+		// data pods would have no tools but its executor's without it.
 		Expect(container.VolumeMounts).To(ContainElement(corev1.VolumeMount{Name: tmpVolume, MountPath: "/tmp"}))
 		Expect(pod.Spec.Volumes).To(ContainElement(corev1.Volume{Name: tmpVolume, EmptyDir: &corev1.EmptyDirVolumeSource{}}))
 		// The boxes Crewlet makes on the pod, off the data volume and under

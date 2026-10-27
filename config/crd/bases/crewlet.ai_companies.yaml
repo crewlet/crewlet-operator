@@ -79,15 +79,14 @@ spec:
                   deepWork:
                     description: |-
                       deepWork lets the assistant hand a large task (research, scripts,
-                      files, many steps) to a coding CLI running its own tools in the
-                      Company's E2B sandbox, which spec.sandbox must configure. Unset, the
-                      assistant answers in quick mode only. Crewlet's `deep_work`.
+                      files, many steps) to a coding CLI running its own tools in a box of
+                      its own, which needs spec.sandbox. Unset, the assistant answers in
+                      quick mode only. Crewlet's `deep_work`.
                     properties:
                       llm:
                         description: |-
-                          llm is the provider deep work runs on: an LLMProvider in mode Box
-                          driving ClaudeCode. A platform model provider runs in mode Host, so
-                          it is refused. Crewlet's `llm`.
+                          llm is the provider deep work runs on: one driving ClaudeCode, an
+                          LLMProvider or a platform model provider. Crewlet's `llm`.
                         properties:
                           kind:
                             default: LLMProvider
@@ -106,12 +105,6 @@ spec:
                         required:
                         - name
                         type: object
-                        x-kubernetes-validations:
-                        - fieldPath: .kind
-                          message: 'deep work runs on an LLMProvider in mode Box driving
-                            ClaudeCode: a platform model provider runs in mode Host,
-                            where its CLI has no tool of its own'
-                          rule: '!has(self.kind) || self.kind == ''LLMProvider'''
                       maxSteps:
                         description: |-
                           maxSteps is the most agentic rounds and Crewlet tool calls one
@@ -586,15 +579,22 @@ spec:
                       rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   publicBaseURL:
                     description: |-
-                      publicBaseURL is the HTTPS address vendors deliver webhooks to, and a
-                      remote sandbox, or a box on a seat pod, calls the engine back on,
-                      overriding the one the class's webhooks.hostname derives. Required
+                      publicBaseURL is the HTTPS address vendors deliver webhooks to and
+                      coding runs call the engine back on, overriding the one the class's
+                      webhooks.hostname derives. Every seat's executor run, Direct or E2B,
+                      exports its traces there while the class sends telemetry, and every
+                      run but a seat's Direct one on a data pod, which dials that pod's
+                      listener on loopback, calls the engine's tool bridge there: an E2B
+                      executor run, a Direct one on a seat pod, and the Dashboard
+                      Assistant's deep work wherever it runs. Required
                       when the class's webhooks.mode is External, where something outside
                       the operator (a relay, an API gateway) forwards it to the engine's
                       public listener. A trailing '/' is dropped, as Crewlet drops it.
                       Crewlet's api.public.external_url, in the data pod's crewlet.yaml, and
-                      its CREWLET_MCP_BRIDGE_URL on every engine pod, which the engine reads
-                      only at start: changing it restarts the data pod and the seat pods.
+                      its CREWLET_MCP_BRIDGE_URL on every engine pod, with its
+                      CREWLET_SANDBOX_OTEL_RECEIVER_URL while the class sends telemetry,
+                      which the engine reads only at start: changing it restarts the data
+                      pod and the seat pods.
                       Its host is a name, an IPv4
                       address or an IPv6 address in brackets, followed by at most one port,
                       1 to 65535: Crewlet refuses to start on any other, but for an IPv6
@@ -888,9 +888,12 @@ spec:
                       the part Crewlet's allowlist names, such as PATH and the TLS and proxy
                       variables, a coding CLI that part and the variables its Crewlet profile
                       passes through, such as GeminiCLI's GOOGLE_CLOUD_PROJECT and
-                      GOOGLE_CLOUD_LOCATION, and a sandbox run none of it. So a variable a tool
-                      server reads goes in its MCPServer's env (docs/guides/tool-servers.md),
-                      and any other a coding CLI reads in its LLMProvider's spec.env.
+                      GOOGLE_CLOUD_LOCATION, a seat's Direct executor run that part alone
+                      (the allowlist: PATH, the locale, the TLS trust and proxy variables),
+                      and an E2B run none of it. So a variable a tool server reads goes in
+                      its MCPServer's env (docs/guides/tool-servers.md), one a coding CLI
+                      reads in the engine's pod in its LLMProvider's spec.env, and one a
+                      seat's executor run reads in the Seat's spec.sandbox.env.
 
                       Names starting with CREWLET_ or OTEL_ are the operator's own.
                       ANTHROPIC_API_KEY and OPENAI_API_KEY are refused too: Crewlet reads them
@@ -977,43 +980,55 @@ spec:
                 type: object
               sandbox:
                 description: |-
-                  sandbox is where seats run code. Unset gives no seat a sandbox.
-                  Crewlet's providers.sandbox.
+                  sandbox is where the company's agent seats' executors run. Required
+                  of a company with an Agent seat and a model provider, which Crewlet
+                  refuses without it (SandboxRequired). Crewlet's providers.sandbox.
                 properties:
-                  defaultCodingAgent:
-                    description: |-
-                      defaultCodingAgent is the coding agent of seats that name none.
-                      Crewlet's `default_coding_agent`.
-                    enum:
-                    - ClaudeCode
-                    - OpenCode
-                    type: string
                   defaultMaxTurns:
                     description: |-
-                      defaultMaxTurns caps the agentic rounds of a coding run on seats that
-                      name none. Unset or 0 is uncapped. Crewlet's `default_max_turns`.
+                      defaultMaxTurns caps the agentic rounds of one executor run on seats
+                      that name none. It is the only bound on a seat's turn: an executor run
+                      is never stopped on a clock. Unset takes Crewlet's default of 96; 0 is
+                      uncapped. Crewlet's `default_max_turns`.
                     format: int32
                     minimum: 0
                     type: integer
                   defaultPauseTTLSeconds:
                     description: |-
-                      defaultPauseTTLSeconds is how long a sandbox waiting on a person's
+                      defaultPauseTTLSeconds is how long a box waiting on a person's
                       answer stays paused before it is reclaimed. Unset takes Crewlet's
                       default of 1800; 0 never pauses. Crewlet's
                       `default_pause_ttl_seconds`.
                     format: int32
                     minimum: 0
                     type: integer
+                  defaultRunIn:
+                    description: |-
+                      defaultRunIn is where a seat's executor run happens when the provider
+                      it launches on names no runIn: Direct, on the engine pod that holds
+                      the seat, or E2B, in the Company's E2B sandbox. Crewlet's
+                      `default_run_in`.
+                    enum:
+                    - Direct
+                    - E2B
+                    type: string
                   defaultTimeoutSeconds:
                     description: |-
-                      defaultTimeoutSeconds is how long a sandbox outlives an engine that
-                      stopped renewing it. It never stops a running job. Crewlet's
-                      `default_timeout_seconds`.
+                      defaultTimeoutSeconds is how long a box outlives an engine that
+                      stopped renewing it, in either cell. It never stops a running job:
+                      the engine renews a box while its run works. An engine pod gone for
+                      this long has the Direct runs it launched, which were its processes
+                      and died with it, ended (launch_node_gone). Unset takes Crewlet's
+                      default of 900.
+                      Crewlet's `default_timeout_seconds`.
                     format: int32
                     minimum: 1
                     type: integer
                   e2b:
-                    description: e2b is the remote sandbox service.
+                    description: |-
+                      e2b is the remote sandbox service, required where a run is placed in
+                      E2B: by defaultRunIn, or by the runIn of a provider a seat's executor
+                      can launch on (SandboxPlacementNotOffered otherwise).
                     properties:
                       apiKeySecretRef:
                         description: |-
@@ -1053,9 +1068,9 @@ spec:
                         description: |-
                           template is the sandbox template, which also fixes each sandbox's CPU,
                           memory and disk. Unset, each run gets the vendor's prebuilt template
-                          for its coding agent's CLI (claude or opencode); a template set here is
-                          used for every run, so it must carry the CLI of every coding agent and
-                          Box-mode LLMProvider the company runs. For OpenCode that is
+                          for its CLI (claude or opencode); a template set here is used for every
+                          run, so it must carry the CLI of every ClaudeCode or OpenCode provider
+                          whose executor runs are placed in E2B. For OpenCode that is
                           OpenCode 2, the @opencode/cli package (opencode --version prints
                           opencode v2.…): Crewlet's OpenCode runner ends a run at once in a box
                           with OpenCode 1.x (npm's opencode-ai), and E2B does not say which
@@ -1077,38 +1092,36 @@ spec:
                     type: object
                   setup:
                     description: |-
-                      setup is applied to every sandbox before each seat's own steps.
+                      setup is applied to every executor box before each seat's own steps.
                       Crewlet's `setup`.
                     items:
                       description: |-
-                        SandboxSetupStep is one provisioning step applied to a sandbox before the
-                        coding agent starts. It maps onto a Crewlet sandbox setup step, which
-                        Crewlet refuses when it does nothing (no files, commands, env or brief):
-                        that is almost always an unfinished edit, which would otherwise apply
-                        cleanly for ever and look like it was working.
+                        SandboxSetupStep is one provisioning step applied to a seat's executor box
+                        before its coding CLI starts. It maps onto a Crewlet sandbox setup step,
+                        which Crewlet refuses when it does nothing (no files, commands, env or
+                        brief): that is almost always an unfinished edit, which would otherwise
+                        apply cleanly for ever and look like it was working.
                       properties:
                         brief:
                           description: |-
-                            brief tells the coding agent what this step made true about the
-                            sandbox.
+                            brief tells the executor's CLI what this step made true about its
+                            box.
                           maxLength: 2048
                           minLength: 1
                           type: string
                         commands:
                           description: |-
                             commands are shell commands run in order; one that exits non-zero
-                            fails the sandbox. Crewlet's `commands`. Crewlet resolves nothing in a
-                            command: the sandbox's login shell expands $NAME and ${NAME} from the
-                            box's own environment (its HOME and PATH among it) and the run's,
-                            never from the engine's. The run's is the steps' env, the Seat's
-                            sandbox env, and what Crewlet adds: the agent's handle and, when it
-                            has one, its email, and the variables that sign the coding agent in
-                            to the provider its code work runs on, or, in a box-mode
-                            executor's run, those of the executor's own provider
-                            (docs/guides/credentials.md says which, and when the seat's own env
-                            leaves them out). The API refuses ${NAME} (NAME an identifier) all
-                            the same, as the operator refuses every ${NAME} it did not write in a
-                            string it renders: write a sandbox variable as $NAME. Parameter
+                            fails the box. Crewlet's `commands`. Crewlet resolves nothing in a
+                            command: the box's shell expands $NAME and ${NAME} from the box's own
+                            environment (its HOME and PATH among it) and the run's, never from the
+                            engine's. The run's is the steps' env, the Seat's sandbox env, and
+                            what Crewlet adds: the agent's handle and, when it has one, its email,
+                            and the variables that sign the executor's CLI in to the provider it
+                            runs on (docs/guides/credentials.md says which, and when the seat's
+                            own env leaves them out). The API refuses ${NAME} (NAME an identifier)
+                            all the same, as the operator refuses every ${NAME} it did not write
+                            in a string it renders: write a box variable as $NAME. Parameter
                             expansions such as ${1:-x} are allowed.
                           items:
                             maxLength: 4096
@@ -1122,8 +1135,8 @@ spec:
                               operator refuses every one it did not write, since in
                               many fields the engine resolves one from its own secret
                               store and environment, which hold credentials that are
-                              not this object''s to name; write a sandbox variable
-                              as $NAME'
+                              not this object''s to name; write a box variable as
+                              $NAME'
                             rule: self.all(x, !x.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]'))
                         env:
                           description: |-
@@ -1181,41 +1194,48 @@ spec:
                           x-kubernetes-list-type: map
                         files:
                           description: |-
-                            files are written into the sandbox before the commands run. Crewlet's
+                            files are written into the box before the commands run. Crewlet's
                             `files`, a credential position.
                           items:
                             description: |-
-                              SandboxFile is a file written into a sandbox before its commands run. Its
-                              content is a credential position in Crewlet (it typically holds a git or
-                              registry login), so it always comes from a Secret.
+                              SandboxFile is a file written into a seat's executor box before its
+                              commands run. Its content is a credential position in Crewlet (it typically
+                              holds a git or registry login), so it always comes from a Secret.
                             properties:
                               path:
                                 description: |-
-                                  path is where the file is written in the seat's E2B box. The box's own
-                                  agent writes it as the account every template runs as, and creates any
-                                  directory it needs. A relative path, such as .npmrc, and one starting
-                                  ~/ are joined onto that account's home, /home/user, and cleaned, so one
-                                  that climbs with .. (../x) lands outside the home. An absolute path is
-                                  written where it names, which works only where that account may write
-                                  (not under /root, for one). Crewlet's `files` key.
+                                  path is where the file is written in a seat's executor box, whose
+                                  rule turns on the box's cell. A relative path, such as .npmrc, and one
+                                  starting ~/ are joined onto the box's home in either cell, and that is
+                                  the shape that works in both.
 
-                                  The box refuses a path that names a directory rather than a file, and
-                                  a path starting ~ and a name, such as ~root/.npmrc, since it does not
-                                  expand another account's home. A path naming a directory only the
-                                  template made, such as /tmp, fails every box at setup: nothing can tell
-                                  beforehand. Crewlet refuses a company document that gives a seat's box
-                                  one of the shapes it can judge without the template: another account's
-                                  home, and the home or a directory above it (such as ~, . or /home),
-                                  which every template has. It also refuses a path of white space alone
-                                  on every step.
+                                  A Direct box is a directory Crewlet mints for each run on the engine
+                                  pod, and writes a setup file only inside its own home: an absolute
+                                  path, one that climbs out with .., and one naming the home itself are
+                                  refused, since no document can name a home minted per box.
+
+                                  An E2B box's own agent writes the file as the account every template
+                                  runs as, under its home, /home/user, and creates any directory it
+                                  needs: a relative path is cleaned, so one that climbs with .. (../x)
+                                  lands outside the home, and an absolute path is written where it
+                                  names, which works only where that account may write (not under /root,
+                                  for one). It refuses a path that names a directory rather than a
+                                  file: the home and every directory above it (such as ~, . or /home)
+                                  in every template, and a directory only the template made, such as
+                                  /tmp, at setup, where nothing can tell beforehand.
+
+                                  Either box refuses a path starting ~ and a name, such as ~root/.npmrc,
+                                  since neither expands another account's home. Crewlet refuses a
+                                  company document that gives a seat's box a path its cell refuses, in
+                                  every cell a seat's executor can launch in, and a path of white space
+                                  alone on every step. Crewlet's `files` key.
 
                                   The API refuses white space alone and another account's home itself.
-                                  Whether a path names the home depends on how .. and repeated
-                                  separators resolve, so that is left to Crewlet, whose refusal is
-                                  reported on the Company as ConfigApplied=False Invalid for a step of
-                                  the Company's own, and on the Seat as Applied=False Invalid for a step
-                                  of a Seat's. Either way the document is held and the running revision
-                                  stays.
+                                  The rest turns on the cell and on how .. and repeated separators
+                                  resolve, so it is left to Crewlet, whose refusal is reported on the
+                                  Company as ConfigApplied=False Invalid for a step of the Company's own,
+                                  and on the Seat as Applied=False Invalid for a step of a Seat's.
+                                  Either way the document is held and the running revision stays.
                                 maxLength: 1024
                                 minLength: 1
                                 type: string
@@ -1224,9 +1244,9 @@ spec:
                                     refuses a setup file whose path names nothing'
                                   rule: self.trim().size() > 0
                                 - message: 'path may not start with ~ followed by
-                                    a name, such as ~root: the sandbox''s box does
-                                    not expand another account''s home, so write the
-                                    file relative to its own, or under ~/'
+                                    a name, such as ~root: a box does not expand another
+                                    account''s home, so write the file relative to
+                                    its own, or under ~/'
                                   rule: '!self.startsWith(''~'') || size(self) ==
                                     1 || self.substring(1, 2) in [''/'', ''\\'']'
                               valueFrom:
@@ -1280,26 +1300,31 @@ spec:
                             rule: self.trim().size() > 0
                         optionalKeys:
                           description: |-
-                            optionalKeys names variables of env, and paths of files, whose value may go
-                            missing. Crewlet refuses to start a run_sandbox coding run whose environment
-                            or files hold a value that does not resolve: a Secret that does not exist,
-                            holds no such key or holds an empty value. Under an entry listed here, such
-                            a variable is left out of the run and such a file is not written, and the
-                            run starts without it. A missing Secret or key under one is then no failure
-                            of the object's references and holds nothing back. Under the Enforce policy
-                            the operator also takes the value it pushed for it out of the engine's
-                            secret store, and has the engine read the store again whether or not the
-                            document can be applied, so no run starts with a deleted Secret's value, but
-                            in a revision the engine runs that reads the key as required (one from
-                            before the key was listed) or whose reading the operator does not know
-                            (another document somebody else activated), which keeps the value until the
-                            next document runs, and that one is activated once with it and at once again
-                            without it; a Secret key that is also read where it is required holds the
-                            document while it is missing, and keeps the value it had in a revision the
-                            engine runs that requires it too until the document applies. A later step's
-                            variable of the same name wins over this one's, and the Seat's
-                            spec.sandbox.env over every step's, and the list beside the value that wins
-                            is the one that counts for it; a file is the step's own. Crewlet's
+                            optionalKeys names variables of env, and paths of files, whose value
+                            may go missing. A seat's executor run starts without a value that does
+                            not resolve, a Secret that does not exist, holds no such key or holds
+                            an empty value, whether or not it is listed here: the run is the
+                            seat's turn itself, and refusing it would fail every message the seat
+                            could answer meanwhile. Unlisted, the engine logs each such value as a
+                            gap of the run (sandbox_env_unresolved), and the operator reports an
+                            empty one on the object that gives it; listed, the variable is left
+                            out of the run and the file is not written, quietly, as an absence
+                            that is expected. A missing Secret or key under one is then no failure
+                            of the object's references and holds nothing back. Under the Enforce
+                            policy the operator also takes the value it pushed for it out of the
+                            engine's secret store, and has the engine read the store again whether
+                            or not the document can be applied, so no run starts with a deleted
+                            Secret's value, but in a revision the engine runs that reads the key as
+                            required (one from before the key was listed) or whose reading the
+                            operator does not know (another document somebody else activated),
+                            which keeps the value until the next document runs, and that one is
+                            activated once with it and at once again without it; a Secret key that
+                            is also read where it is required holds the document while it is
+                            missing, and keeps the value it had in a revision the engine runs that
+                            requires it too until the document applies. A later step's variable of
+                            the same name wins over this one's, and the Seat's spec.sandbox.env
+                            over every step's, and the list beside the value that wins is the one
+                            that counts for it; a file is the step's own. Crewlet's
                             `optional_keys`.
                           items:
                             maxLength: 1024
@@ -1335,8 +1360,14 @@ spec:
                     - name
                     x-kubernetes-list-type: map
                 required:
-                - e2b
+                - defaultRunIn
                 type: object
+                x-kubernetes-validations:
+                - fieldPath: .defaultRunIn
+                  message: 'defaultRunIn E2B places every executor run whose provider
+                    names no runIn in the Company''s E2B sandbox: set e2b, or run
+                    them Direct'
+                  rule: self.defaultRunIn != 'E2B' || has(self.e2b)
               suspend:
                 description: |-
                   suspend stops the engine and keeps its data volumes; setting it back
@@ -1358,6 +1389,11 @@ spec:
               tokenBudget:
                 description: |-
                   tokenBudget caps the tokens all seats together may spend per window.
+                  Each window binds every agent seat, so Crewlet refuses one below
+                  turn_engine.executor_min_budget_tokens (25000 unless spec.engineConfig
+                  sets turn_engine): an executor launch needs that much of every window
+                  left, and a seat under a smaller ceiling would never launch one. The
+                  refusal comes from the engine's dry run, Invalid on the Company.
                   Crewlet's `token_budget`.
                 minProperties: 1
                 properties:
@@ -1442,8 +1478,12 @@ spec:
                       properties:
                         maxConcurrentTurns:
                           description: |-
-                            maxConcurrentTurns is how many turns one of the pool's pods runs at
-                            once: Crewlet's node.max_concurrent. Unset takes the class's
+                            maxConcurrentTurns is how many turn segments one of the pool's pods
+                            runs at once in the engine (a seat's onboarding pass, the launch of its
+                            executor, the collection of its run and the review): Crewlet's
+                            node.max_concurrent. An executor run is not one: its turn gives the
+                            place back while the run works, and a seat runs one at a time, so the
+                            seats a pod holds bound its Direct runs. Unset takes the class's
                             seatPools.defaults.
                           format: int32
                           minimum: 1
@@ -1483,9 +1523,15 @@ spec:
                         terminationGracePeriodSeconds:
                           description: |-
                             terminationGracePeriodSeconds is how long one of the pool's pods may
-                            take to stop, finishing its running turns: the engine puts no bound
-                            of its own on that drain, so it must cover the longest turn. Unset
-                            takes the class's seatPools.defaults, else 300.
+                            take to stop, finishing the turn segments the engine runs in its own
+                            process (a seat's launch, the collection of its run, the review, a
+                            delegated worker): the engine puts no bound of its own on that drain,
+                            so it must cover the longest of them. A seat's executor run is not
+                            waited for: a Direct one on the pod ends with it, collected as a run
+                            that did not finish, or, on a pod that does not come back, ended once
+                            it has been gone for spec.sandbox.defaultTimeoutSeconds
+                            (launch_node_gone); an E2B one carries on in its sandbox. Unset takes
+                            the class's seatPools.defaults, else 300.
                           format: int64
                           maximum: 3600
                           minimum: 30
@@ -1570,9 +1616,9 @@ spec:
                 || has(self.embeddings)'
             - fieldPath: .assistant.deepWork
               message: 'assistant.deepWork needs spec.sandbox: a deep-work run has
-                its own shell, files and web tools, and the operator runs it in the
-                Company''s E2B sandbox only, never in the engine pod beside the company''s
-                data and secret store'
+                its own shell, files and web tools, and runs in its provider''s runIn,
+                else in the Company''s E2B sandbox when spec.sandbox.e2b configures
+                one, else confined on the engine pod, so the Company states which'
               rule: '!has(self.assistant) || !has(self.assistant.deepWork) || has(self.sandbox)'
           status:
             description: status is the company's observed state.

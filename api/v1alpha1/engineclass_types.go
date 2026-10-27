@@ -103,7 +103,12 @@ type DataPodSettings struct {
 	// +default=[1]
 	AllowedReplicas []int32 `json:"allowedReplicas,omitempty"`
 
-	// resources are the compute resources of the engine container.
+	// resources are the compute resources of the engine container. Its
+	// memory holds the engine, the CLI processes its providers run in its
+	// process (each provider's maxConcurrent of them, 200 to 450 MB each),
+	// and a seat's Direct executor run, one CLI and the tools it starts,
+	// for each agent seat the pod holds that runs Direct: a run that takes
+	// the container past its limit can take the engine with it.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
@@ -146,9 +151,13 @@ type DataPodSettings struct {
 	StartupSeconds int32 `json:"startupSeconds,omitempty"`
 
 	// terminationGracePeriodSeconds is how long a data pod may take to stop.
-	// The engine finishes running turns before it exits and puts no bound on
-	// that itself, so the default is five minutes, which covers a long turn,
-	// rather than the Kubernetes default of thirty seconds, which does not.
+	// The engine finishes the turn segments it runs in its own process
+	// before it exits (a seat's launch, the collection of its run, the
+	// review, a delegated worker) and puts no bound on that itself, so the
+	// default is five minutes, which covers a long segment, rather than the
+	// Kubernetes default of thirty seconds, which does not. A seat's
+	// executor run is not waited for: a Direct one on the pod is a process
+	// of it and ends with it, and an E2B one carries on in its sandbox.
 	// +optional
 	// +kubebuilder:validation:Minimum=30
 	// +kubebuilder:validation:Maximum=3600
@@ -157,7 +166,7 @@ type DataPodSettings struct {
 
 	// sandboxSizeLimit caps the emptyDir a data pod keeps its sandboxes in,
 	// at /var/lib/crewlet-sandboxes: the boxes Crewlet makes on the pod
-	// itself for the coding runs it places there (its direct cell, under
+	// itself for the executor runs it places there (its direct cell, under
 	// Crewlet's providers.sandbox.local.state_dir), at most one for each
 	// agent seat of the pod, kept while its run waits on a person's answer
 	// and removed when the run ends. A box holds the run's checkout, its
@@ -198,23 +207,31 @@ const (
 // class what each of them may take, as it does for the data pods.
 // +kubebuilder:validation:MinProperties=1
 type SeatPoolDefaults struct {
-	// maxConcurrentTurns is how many turns one seat pod runs at once: Crewlet's
+	// maxConcurrentTurns is how many turn segments one seat pod runs at once
+	// in the engine (a seat's onboarding pass, the launch of its executor,
+	// the collection of its run and the review): Crewlet's
 	// node.max_concurrent. Unset takes the engine's default, 32. A seat runs
-	// one turn at a time, so a pod never runs more turns at once than it
-	// holds seats.
+	// one turn at a time, so a pod never runs more at once than it holds
+	// seats; and an executor run is not a segment, as its turn gives the
+	// place back while the run works, so the seats a pod holds bound its
+	// Direct runs too.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	MaxConcurrentTurns int32 `json:"maxConcurrentTurns,omitempty"`
 
 	// resources are the compute resources of every seat pod's engine
-	// container. Unset sets none.
+	// container, sized as data.resources says of a data pod's: the engine,
+	// its providers' CLI processes, and a Direct executor run for each
+	// agent seat the pod holds that runs Direct. Unset sets none.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
 	// terminationGracePeriodSeconds is how long a seat pod may take to stop.
-	// A seat pod finishes its running turns before it exits, with no bound
-	// of its own, so unset is five minutes, as for a data pod, rather than
-	// the Kubernetes default of thirty seconds.
+	// A seat pod finishes the turn segments it runs in its own process
+	// before it exits, with no bound of its own, so unset is five minutes,
+	// as for a data pod, rather than the Kubernetes default of thirty
+	// seconds. A seat's executor run is not waited for: a Direct one on the
+	// pod ends with it, and an E2B one carries on in its sandbox.
 	// +optional
 	// +kubebuilder:validation:Minimum=30
 	// +kubebuilder:validation:Maximum=3600
@@ -231,7 +248,7 @@ type SeatPoolDefaults struct {
 
 	// sandboxSizeLimit caps the emptyDir every seat pod keeps its sandboxes
 	// in, at /var/lib/crewlet-sandboxes, apart from its scratch volume: the
-	// boxes Crewlet makes on the pod itself for the coding runs it places
+	// boxes Crewlet makes on the pod itself for the executor runs it places
 	// there, as data.sandboxSizeLimit says of a data pod, one at most for
 	// each seat the pod holds. A pod whose boxes write more is evicted, with
 	// every run and turn on it. Unset is 20Gi.
@@ -546,8 +563,10 @@ const (
 	WebhookExposureNone WebhookExposureMode = "None"
 )
 
-// WebhookExposure is how vendors' webhooks, and the calls a remote sandbox
-// makes back to the engine, reach a company's engine. Whatever the mode, they
+// WebhookExposure is how vendors' webhooks, and the calls coding runs make
+// back to the engine, reach a company's engine: every seat's executor run's
+// traces, and the tool bridge calls of every run but a seat's Direct one on
+// a data pod, which dials that pod on loopback. Whatever the mode, they
 // reach the engine's public listener (Crewlet's api.public), a port of its
 // own that serves only the routes outside parties call without an operator
 // credential (/webhooks/, /otlp/{token}, /mcp/{token}) and answers every
@@ -634,7 +653,7 @@ const (
 )
 
 // APIExposure is how a company's engine API is reached. Every request needs
-// a credential, but for the probes, the vendors' webhooks and a sandbox's
+// a credential, but for the probes, the vendors' webhooks and a box's
 // per-run endpoints: a person's session, signed in at the dashboard, or a
 // bearer token, such as the one the operator generates per company and
 // publishes in a Secret named by the Company's status.apiAccessSecretRef.
@@ -827,9 +846,13 @@ type NetworkPolicySettings struct {
 	// cluster except the cloud metadata endpoints (169.254.169.254,
 	// fd00:ec2::254), which hand out the node's credentials. What else is in
 	// the cluster is unreachable only if listed in exceptCIDRs. A seat's
-	// code work and a box-mode executor's run, the sandbox's setup
-	// commands included, run in the Company's E2B sandbox, which this policy
-	// does not reach.
+	// Direct executor run is a process of the engine pod, so it egresses
+	// under this policy, its box's setup commands included: its vendor, its
+	// code host and the package registries it installs from are reached
+	// from the pod, and a seat pod's runs call the tool bridge back at the
+	// Company's public address, which exceptCIDRs must leave reachable. An
+	// E2B run happens in the Company's E2B sandbox, which this policy does
+	// not reach.
 	// +optional
 	Egress NetworkPolicyEgress `json:"egress,omitzero"`
 }
@@ -962,10 +985,13 @@ type EnginePodSpec struct {
 	// tool server is handed only the part Crewlet's allowlist names, such as
 	// PATH and the TLS and proxy variables, a coding CLI that part and the
 	// variables its Crewlet profile passes through, such as GeminiCLI's
-	// GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION, and a sandbox run none
-	// of it. So a variable a tool server reads goes in its MCPServer's env
-	// (docs/guides/tool-servers.md), and any other a coding CLI reads in its
-	// LLMProvider's spec.env. A Company's spec.runtime.env is merged over
+	// GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION, a seat's Direct
+	// executor run that part alone (the allowlist: PATH, the locale, the TLS
+	// trust and proxy variables), and an E2B run none of it. So a variable a
+	// tool server reads goes in its MCPServer's env
+	// (docs/guides/tool-servers.md), one a coding CLI reads in the engine's
+	// pod in its LLMProvider's spec.env, and one a seat's executor run reads
+	// in the Seat's spec.sandbox.env. A Company's spec.runtime.env is merged over
 	// this env by name. The same names are refused as there: those
 	// starting with CREWLET_ or OTEL_, and ANTHROPIC_API_KEY and
 	// OPENAI_API_KEY.
@@ -1007,12 +1033,22 @@ type EnginePodTemplate struct {
 // Crewlet hands a key to, or, for Hermes, Pi and OpenCode, which read their
 // model provider's key from that provider's own variable, the key in env. A
 // subscription's headless token or login is one account's, which every tenant
-// of the class would share: it belongs on a tenant's own LLMProvider. It runs
-// in mode Host, in the engine's pod that holds each seat, and keeps its
-// per-seat homes on the data volume under
-// /var/lib/crewlet/llm-cli-platform/<name>, apart from every tenant's
-// loginName. Its rules are an LLMProvider's that apply to such a provider,
-// each with the same message's start, and hold to the same engine.
+// of the class would share: it belongs on a tenant's own LLMProvider. The
+// phases it serves in the engine's pod keep their per-seat homes on the data
+// volume under /var/lib/crewlet/llm-cli-platform/<name>, apart from every
+// tenant's loginName.
+//
+// A ClaudeCode or OpenCode platform provider may also be the member a seat's
+// executor launches on, its CLI's own run, in the Company's
+// spec.sandbox.defaultRunIn, as a platform provider names no runIn: its key
+// is then in the tenant's engine pod, where the tenant reads it already, for
+// a Direct run, or in the tenant's E2B sandbox. Of its env, that run gets an
+// OpenCode provider's credential-named variables and nothing else, as of an
+// LLMProvider's: a ClaudeCode platform provider whose env points it at the
+// platform's gateway (ANTHROPIC_BASE_URL) runs its seats' executors against
+// Anthropic's own API, with the key the gateway issued. Its rules are an
+// LLMProvider's that apply to such a provider, each with the same message's
+// start, and hold to the same engine.
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || (has(self.auth.mode) && self.auth.mode == 'APIKey') || (self.agent in ['Hermes', 'Pi', 'OpenCode'] && has(self.env) && self.env.exists(e, e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)')))",message="a platform provider signs its CLI in with a key the class gives each tenant: auth mode APIKey with auth.apiKeySecretRef, for a CLI Crewlet hands a key to, or for Hermes, Pi and OpenCode their model provider's key in env, under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY). A subscription's token or login is one account's, which every tenant of the class would share: it belongs on a tenant's own LLMProvider",fieldPath=".auth"
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'APIKey' || self.agent in ['ClaudeCode', 'Codex', 'GeminiCLI', 'QwenCode', 'CursorAgent', 'Copilot', 'Grok', 'MuseCode']",message="auth mode APIKey takes a CLI Crewlet hands a key to: ClaudeCode, Codex, GeminiCLI, QwenCode, CursorAgent, Copilot, Grok or MuseCode. Crewlet's profiles for OpenCode, KimiCode, Hermes and Pi name no key variable: give Hermes, Pi or OpenCode its model provider's key in env under mode Subscription; KimiCode reads a key only from its own files, which a platform provider does not give it"
 // +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, (self.agent == 'ClaudeCode' && e.name in ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']) || (self.agent == 'Codex' && e.name == 'CODEX_API_KEY') || (self.agent == 'GeminiCLI' && e.name == 'GEMINI_API_KEY') || (self.agent == 'QwenCode' && e.name == 'OPENAI_API_KEY') || (self.agent == 'CursorAgent' && e.name == 'CURSOR_API_KEY') || (self.agent == 'Copilot' && e.name == 'COPILOT_GITHUB_TOKEN') || (self.agent == 'Grok' && e.name == 'XAI_API_KEY') || (self.agent == 'MuseCode' && e.name == 'META_API_KEY'))",message="env may not set the CLI's own token or key variable (ClaudeCode's CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY, Codex's CODEX_API_KEY, GeminiCLI's GEMINI_API_KEY, QwenCode's OPENAI_API_KEY, CursorAgent's CURSOR_API_KEY, Copilot's COPILOT_GITHUB_TOKEN, Grok's XAI_API_KEY, MuseCode's META_API_KEY): Crewlet's auth owns it, and whether a value in env reaches the CLI would turn on the auth mode. Give the key as auth.apiKeySecretRef with auth mode APIKey",fieldPath=".env"
@@ -1041,10 +1077,11 @@ type PlatformLLMProvider struct {
 	// each value read from a Secret in a namespace the platform controls:
 	// the model provider's key Hermes, Pi or OpenCode signs in with, or the
 	// address of the platform's gateway a CLI reads from its environment
-	// (ClaudeCode's ANTHROPIC_BASE_URL). A credential-named value of an
-	// OpenCode provider travels into each box of a seat's code work on it,
-	// in the tenant's own E2B account. Crewlet's `env`, a credential
-	// position.
+	// (ClaudeCode's ANTHROPIC_BASE_URL), for the phases the provider serves
+	// in the engine's pod. A seat's executor run on the provider gets only
+	// an OpenCode provider's credential-named values, Direct on the tenant's
+	// engine pod or in the tenant's own E2B sandbox, and never a gateway's
+	// address. Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
@@ -1097,10 +1134,11 @@ type EngineLimits struct {
 // two cannot be turned off separately (OTEL_ names are the operator's, so
 // OTEL_METRICS_EXPORTER cannot be set in env). While a Company has a public
 // address (status.endpoints.publicBaseURL), the operator also wires Crewlet's
-// sandbox telemetry receiver there (CREWLET_SANDBOX_OTEL_RECEIVER_URL): code
-// a remote sandbox runs exports to the engine's public listener with a token
-// signed for its one run, and the engine forwards it to this collector with
-// the headers below, which never enter the sandbox.
+// sandbox telemetry receiver there (CREWLET_SANDBOX_OTEL_RECEIVER_URL): a
+// seat's executor run, in E2B or Direct, exports to the engine's public
+// listener with a token signed for its one run, and the engine forwards it to
+// this collector with the headers below, which never enter the box. Without a
+// public address no box exports anything.
 type TelemetrySettings struct {
 	// otlpEndpoint is the collector's OTLP/HTTP endpoint
 	// (OTEL_EXPORTER_OTLP_ENDPOINT).

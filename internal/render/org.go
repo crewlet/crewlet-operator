@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -290,12 +291,10 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 		Subagent:  r.chain(s, "subagent", spec.LLM.Subagent),
 		Auxiliary: r.chain(s, "auxiliary", spec.LLM.Auxiliary),
 		Judge:     r.chain(s, "judge", spec.LLM.Judge),
-		Sandbox:   r.chain(s, "sandbox", spec.LLM.Sandbox),
 	}
-	if sb := spec.Sandbox; sb != nil {
+	r.noExecutor(s)
+	if sb := &spec.Sandbox; seatSandboxSet(sb) {
 		doc.Sandbox = &roleSandboxDoc{
-			Enabled:         true,
-			CodingAgent:     codingAgent(sb.CodingAgent),
 			PauseTTLSeconds: sb.PauseTTLSeconds,
 			MaxTurns:        sb.MaxTurns,
 			Env:             r.seatEnv(s, sb),
@@ -312,18 +311,6 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 				doc.Sandbox.MCP = &roleSandboxMCP{}
 			}
 			doc.Sandbox.MCP.Servers = append(doc.Sandbox.MCP.Servers, ref.Name)
-		}
-		// Crewlet refuses a coding agent on another CLI's provider on every
-		// write, and on a seat whose executor runs in box mode a coding
-		// agent other than that executor's CLI; the other pairings it
-		// cannot run are CodeWorkOf's to report, since Crewlet applies them.
-		if refusal := r.boxModeCodingAgent(s); refusal != "" {
-			r.errs.add(EngineRefuses, KindSeat, s.Name, "spec.sandbox.codingAgent", v1alpha1.ReasonCodingAgentMismatch, refusal)
-		}
-		if r.offersCodeWork(s) {
-			if w, ok := r.codeWork(s); ok && w.Reason == v1alpha1.ReasonCodingAgentMismatch {
-				r.errs.add(EngineRefuses, KindSeat, s.Name, w.Field, v1alpha1.ReasonCodingAgentMismatch, w.Message)
-			}
 		}
 	}
 	doc.Integrations = r.roleIntegrations(s)
@@ -396,7 +383,7 @@ func (r *renderer) schedules(owner Path, schedules []*v1alpha1.Schedule) []sched
 	return out
 }
 
-// seatEnv renders the environment of a seat's sandbox runs, sb's env, each
+// seatEnv renders the environment of a seat's executor runs, sb's env, each
 // variable from a Secret or provisioned.
 func (r *renderer) seatEnv(s *v1alpha1.Seat, sb *v1alpha1.SeatSandbox) map[string]string {
 	if len(sb.Env) == 0 {
@@ -524,4 +511,13 @@ func seatName(s *v1alpha1.Seat) string {
 // which is also its Crewlet id.
 func unitName(u *v1alpha1.Unit) string {
 	return cmp.Or(u.Spec.DisplayName, u.Name)
+}
+
+// seatSandboxSet reports whether a Seat sets anything of its spec.sandbox,
+// which the role's sandbox is written for. The API refuses one that sets
+// nothing ({}), as every agent seat's executor runs in a box whether or not
+// the seat says anything of it; unset, the role has no sandbox and its box
+// runs on the company's settings alone.
+func seatSandboxSet(sb *v1alpha1.SeatSandbox) bool {
+	return !reflect.ValueOf(*sb).IsZero()
 }

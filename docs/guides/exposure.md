@@ -7,9 +7,8 @@ A company with an artifact origin opens a third, 8082
 
 Port 8081 serves only the routes outside parties call, each of which
 authenticates itself without an operator credential: vendors' webhooks
-(`/webhooks/`), a remote sandbox's telemetry (`/otlp/{token}`), and a coding
-run's tool calls (`/mcp/{token}`), with a token signed for its one run in the
-path. Only
+(`/webhooks/`), and a coding run's telemetry (`/otlp/{token}`) and tool calls
+(`/mcp/{token}`), with a token signed for its one run in the path. Only
 the public listener needs to be reachable from the internet, and only it is
 routed there; port 8080 stays in the cluster unless the class gives it an
 internal route ([Reach the API from elsewhere](#reach-the-api-from-elsewhere)).
@@ -21,11 +20,11 @@ the network policy around each engine. The objects involved are described in
 ```mermaid
 flowchart LR
     V["<b>Vendors</b><br/><i>Slack, GitHub, GitLab, …</i>"] -->|"/webhooks/"| GW
-    SB["<b>A remote sandbox</b>"] -->|"/otlp/ · /mcp/"| GW
+    SB["<b>A coding run</b><br/><i>in E2B, or in a box on an engine pod</i>"] -->|"/otlp/ · /mcp/"| GW
     GW["<b>Gateway or Ingress</b><br/><i>or your own forwarder</i>"]
     IN["<b>The operator, API consumers</b><br/><i>in the cluster, or an internal route</i>"]
     subgraph pod["The engine's data pod"]
-        PUB["<b>:8081 public listener</b><br/>webhooks, sandbox calls"]
+        PUB["<b>:8081 public listener</b><br/>webhooks, coding runs' calls"]
         API["<b>:8080 API</b><br/>configuration, secrets,<br/>dashboard, probes"]
     end
     GW -->|every path| PUB
@@ -67,24 +66,30 @@ say so. What the public listener serves depends on what the engine is given:
   connected is refused (`503`).
 - `/mcp/{token}`, the tool bridge: always. Every agent seat's executor is
   its coding CLI's run in a box, which calls the seat's tools back through
-  it ([Running seats on a coding CLI](cli-agents.md)), and the data pod a
-  call reaches relays it to the pod holding the run's seat, a seat pod
-  included. A box on a data pod's own host dials the pod's public listener
-  on loopback and needs no route. Every other box dials the Company's
-  public address, which the operator gives every engine pod as the bridge's
+  it ([Running seats on a coding CLI](cli-agents.md)), as the Dashboard
+  Assistant's deep work calls the person's, and the data pod a call reaches
+  relays it to the pod holding the run's seat, a seat pod included. A seat's
+  box on a data pod's own host dials the pod's public listener on loopback
+  and needs no route. Every other run dials the Company's public address,
+  which the operator gives every engine pod as the bridge's
   (`CREWLET_MCP_BRIDGE_URL`) while there is one: a box in the Company's E2B
-  sandbox, and a box on a seat pod, which serves no bridge of its own and
-  so reaches it back through this route, egress the seat pods' network
-  policy must allow ([Network policy](#network-policy)). Without a public
-  address no pod is given the variable, Crewlet refuses the launch of every
-  such box, and each Seat whose runs need one says so on its `Ready`
-  condition, while the rest of the company's document applies.
+  sandbox; a box on a seat pod, which serves no bridge of its own; and a
+  deep-work run wherever it is placed, the data pod included, since Crewlet
+  holds deep work to the fleet's address. Each reaches it back through this
+  route, egress the engine pods' network policy must allow ([Network
+  policy](#network-policy)). Without a public address no pod is given the
+  variable, Crewlet refuses the launch of every such run, and each Seat whose
+  runs need one says so on its `Ready` condition, while the rest of the
+  company's document applies.
 - `/otlp/{token}`, the sandbox telemetry receiver, while the class sends the
-  engine's telemetry to a collector (`spec.telemetry`): a remote sandbox's
-  coding agent exports its traces there, and the engine forwards them to the
-  collector with the class's headers, which never enter the sandbox. The
-  operator gives the engine the public address as the receiver's
-  (`CREWLET_SANDBOX_OTEL_RECEIVER_URL`).
+  engine's telemetry to a collector (`spec.telemetry`): every seat's
+  executor run exports its traces there, wherever it runs, `Direct` on an
+  engine pod as well as in `E2B`, as the engine hands each run the one
+  receiver address it is given, and the engine forwards them to the
+  collector with the class's headers, which never enter a box. The operator
+  gives every engine pod the public address as the receiver's
+  (`CREWLET_SANDBOX_OTEL_RECEIVER_URL`), so a box on an engine pod reaches
+  it through this route too.
 
 The address appears in the Company's `status.endpoints.publicBaseURL`, and
 each Seat's and Integration's status carries the exact URL to register with
@@ -555,10 +560,11 @@ Only whoever writes EngineClasses decides this; no label a tenant or a
 namespace editor can set admits anything.
 
 The engine runs code its tenant supplies in its own pod: stdio MCP servers,
-coding CLIs, and whatever its agents have them do. So the policy also limits
-where the engine connects to. A seat's code work and a box-mode
-executor's run, a sandbox's setup commands included, run in the Company's
-E2B sandbox, which this policy does not reach. The engine may reach DNS (port 53), the pods of its own namespace,
+coding CLIs, a seat's executor runs placed `Direct` with their shells and
+setup commands, and whatever its agents have them do. So the policy also
+limits where the engine connects to, a `Direct` run's included. An executor
+run in `E2B`, a sandbox's setup commands included, runs in the Company's E2B
+sandbox, which this policy does not reach. The engine may reach DNS (port 53), the pods of its own namespace,
 and every address except the cloud metadata endpoints (`169.254.169.254`,
 `fd00:ec2::254`), which hand the node's credentials to whatever asks. A
 NetworkPolicy cannot tell an address inside the cluster from one outside it,

@@ -38,7 +38,7 @@ import (
 //     document is applied, and Withdraw removes it, and no other entry,
 //     while that document cannot be.
 //   - A revision activates after it went. The engine reads its store only
-//     then, and starts every tool server and coding run with what it read,
+//     then, and starts every tool server and executor run with what it read,
 //     the server's restarts included, so a removal reaches nothing until the
 //     next activation. The next document's apply is one; while that
 //     document is held, or when it activated before the entry went, the
@@ -379,11 +379,11 @@ func (run *configRun) settleRefused(
 
 // withdrawalFailed reports err, which kept the engine from reading its store
 // without a value whose Secret no longer exists: until the operator gets
-// through, the engine may still start a tool server or a coding run with it.
+// through, the engine may still start a tool server or an executor run with it.
 func (run *configRun) withdrawalFailed(ctx context.Context, err error) {
 	logf.FromContext(ctx).Error(err, "Failed to keep the value of a deleted Secret from the engine")
 	run.event(corev1.EventTypeWarning, "SecretWithdrawalFailed", "ReloadConfig",
-		"The engine may still start a tool server or a coding run with the value of a Secret that no longer exists, "+
+		"The engine may still start a tool server or an executor run with the value of a Secret that no longer exists, "+
 			"which the revision it runs lets go without; the operator tries again in %s: %s", engineRetryInterval, err)
 }
 
@@ -499,7 +499,7 @@ func (run *configRun) reactivatedUnconfirmed(active *engine.ActiveConfig, reload
 // readOptional reads, while the render refuses the document, the Secret keys
 // the objects let go without their value: those every reference to which, in
 // the specs of the Company, its class and its parts, is a value a tool server
-// or a coding run is started with under a key its block declares optional.
+// or an executor run is started with under a key its block declares optional.
 // A reference the render did not reach, in an object it refused, counts as
 // required, so what it reads is never a value a revision may need. A value
 // too large for the store is there, so it is no concern here.

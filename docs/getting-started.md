@@ -129,10 +129,14 @@ A namespace for the company, the Secret holding its model provider's API key,
 and the objects: the `Company`, a `Unit`, two agent `Seat`s in it, the
 `LLMProvider` they run on, and a Human `Seat` for you, which manages the unit.
 The provider is Claude Code on an Anthropic API key: every model Crewlet runs
-is a coding CLI it drives. The key is only read when an agent works, so any
-value brings the company up. For agents that can do something, put a real
-Anthropic key in `ANTHROPIC_API_KEY` and give the class an engine image with
-Claude Code installed, which Crewlet's own image is not
+is a coding CLI it drives, and each agent seat's work is Claude Code's own run.
+The Company's `sandbox` places those runs `Direct`, a process of the data pod
+that holds each seat, with a box of its own on the pod's `sandboxes` volume
+([Where a seat's executor runs](guides/cli-agents.md#where-a-seats-executor-runs)).
+The key is only read when an agent works, so any value brings the company up.
+For agents that can do something, put a real Anthropic key in
+`ANTHROPIC_API_KEY` and give the class an engine image with Claude Code
+installed, which Crewlet's own image is not
 ([The image needs the CLI](guides/cli-agents.md#the-image-needs-the-cli)).
 
 ```bash
@@ -149,6 +153,8 @@ spec:
   engineClassName: local
   companyName: Acme
   mission: Make widgets people love.
+  sandbox:
+    defaultRunIn: Direct
   deletionPolicy: Delete
 ---
 apiVersion: crewlet.ai/v1alpha1

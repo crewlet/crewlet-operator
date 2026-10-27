@@ -174,23 +174,27 @@ A mock would agree with the code by
 construction; the real engine is what tells the two apart when Crewlet's API
 or schema moves.
 
-What no validation shows is what a launch runs and signs a coding agent in
-with, which the renderer's verdict on a seat's code work turns on. The renderer's
-`TestCodeWorkFollowsTheEngineSource` reads it from the engine's own source
+What no validation shows is what a seat's executor launch runs and signs its
+CLI in with, which the renderer's verdict on a seat's executor turns on. The
+renderer's `TestExecutorSignInFollowsTheEngineSource` and
+`TestRunnerCLIsFollowTheEngineSource` read it from the engine's own source
 (`enginetest.Source`, the module `make crewlet` installed from): the
-coding agent of a seat and a catalogue that name none, the
-variables that sign Claude Code in from a run's environment, and Claude
-Code's token and key variables among them. The rules around those lists decide only at
-a launch, which no engine test reaches, so `TestMirroredEngineDeclarationsAreUnchanged`
-holds their code: [`internal/render/mirror_test.go`](internal/render/mirror_test.go)
-names every engine function whose decision the operator copies at a launch —
-`newCodingRun` and the `entryRun` it builds a run with, `entrySignIn`,
-`sandboxCredentials` and the `entrySignsIn` it judges a sign-in by, and the
-launch, catalogue and helpers around them in Crewlet's
-`internal/engine/sandbox.go`, `internal/sandbox/manager.go` and the CLI
-provider, what the E2B backend creates a box from (`internal/sandbox/e2b.go`),
-which is why a CLI's login never reaches one, config's write-time twins of
-two of them in `internal/config/company.go`, and the two start-time
+variables that sign Claude Code in from a run's environment, Claude Code's
+token and key variables among them, and the CLIs Crewlet has an in-box
+runner for, which test/crd's `TestCLIAgentRunInFollowsTheEngine` holds to
+the engine's verdict on a provider's `run_in` too. The rules around those
+lists decide only at a launch, which no engine test reaches, so
+`TestMirroredEngineDeclarationsAreUnchanged` holds their code:
+[`internal/render/mirror_test.go`](internal/render/mirror_test.go) names every
+engine function whose decision the operator copies at a launch —
+`LaunchExecutor`, the `member` it picks a run's provider by among
+`executorRunners`, the `agentPlacement` that places it and
+`Placement.OnEngineHost`, `entrySignIn`, `sandboxCredentials` and the
+`entrySignsIn` it judges a sign-in by, what a direct box is made of on the
+pod (`NewLocal`, `DefaultBoxRoot`, `localOptions`, `(*directBox).childEnv`
+and `PassthroughEnv`), and where deep work is placed
+(`(*Company).DeepWorkPlacement`), in Crewlet's `internal/engine`,
+`internal/sandbox`, `internal/hostbox` and `internal/config`, and the two start-time
 decisions the renderer holds a data pod back on: whether the address the
 engine is told is on loopback (`externalLoopback` in
 `internal/config/api.go`, which `TestContractSignInPosture` also holds at the
@@ -207,13 +211,13 @@ read. Those files are the renderer's; for the addresses, also the Company
 and EngineClass API types whose rules refuse them, the controller's message
 on a Company held back for one, and the [exposure](docs/guides/exposure.md)
 and [troubleshooting](docs/guides/troubleshooting.md) guides that state
-them; and, for how a box-mode run's CLI signs in inside the remote
-sandbox, also the LLMProvider API's rule on a CLI of mode `Agent`, the
-[CLI agents guide](docs/guides/cli-agents.md) that states it and `test/crd`'s
-reading of the engine's verdicts on it, and, for what a coding box carries of
-its provider, the [credentials guide](docs/guides/credentials.md#what-a-coding-box-carries)
+them; and, for how an executor run's CLI signs in where it runs, also the
+LLMProvider API's rule on `runIn`, the [CLI agents guide](docs/guides/cli-agents.md)
+that states it and `test/crd`'s reading of the engine's verdicts on it, and,
+for what a coding box carries of its provider, the
+[credentials guide](docs/guides/credentials.md#what-a-coding-box-carries)
 and the [credentials concept page](docs/concepts/credentials.md). For a
-value a tool server or a coding run may go without, the table names what
+value a tool server or an executor run may go without, the table names what
 the engine starts each with (`resolveServer` and `(*refGap).hold` in
 `internal/engine/toolcredentials.go`, `(*Engine).runEnvironment` in
 `internal/engine/sandbox.go`), which instances of a server it starts and
@@ -245,15 +249,19 @@ to read it against and the `git log` that shows the change; read it, make
 the operator follow it, and record the digest and version the failure
 prints. When the engine removes or renames one, the test says so: name the
 declaration that decides it now in its place, with any digest at first, and
-the next run prints the digest to record. Of the renderer's two code-work verdicts,
-`SandboxLoginNotPortable` mirrors what the engine refuses only when a seat
-launches a coding run, never on a write, so the operator reports it on the
-Seat's `CodeWorkRunnable` and applies the seat, as the engine does: drift
-there leaves a stale condition, not a held company. `CodingAgentMismatch` mirrors a refusal on every write and blocks
-the document. `TestContractCodeWorkOnWrite` holds the split to the engine:
-it refuses at the seat's `llm_sandbox` exactly the pairings the
-renderer refuses, and accepts the ones it only reports, so an engine that
-starts refusing one of those on a write fails it.
+the next run prints the digest to record. Of the renderer's executor
+verdicts, `NotExposed`, `BridgeUnreachable` and `SandboxLoginNotPortable`
+mirror what the engine refuses only when a seat launches its executor, never
+on a write, so the operator reports them on the Seat's `Ready` and applies
+the seat, as the engine does: drift there leaves a stale condition, not a held
+company. `NoExecutorCLI`, `SandboxRequired` and `SandboxPlacementNotOffered`
+mirror refusals on every write and block the document.
+`TestContractExecutorIsAppliedWhereItCannotRun` and
+`TestContractExecutorRefusalsReachTheirObject` hold the split to the engine:
+it accepts every document the renderer only reports on, and refuses, at the
+object's own place, every one the renderer refuses, so an engine that starts
+refusing one of the former on a write, or stops refusing one of the latter,
+fails them.
 
 ### When a finding holds the document
 
@@ -286,28 +294,30 @@ is applied and reported (`Reported`). So when you add a finding to
 - Report a finding that holds nothing on the object at fault, and on each
   object that cannot do its job because of it: `ResolvedRefs=False` when a
   reference names what is not there, `Ready=False` when the object cannot do
-  its job at all, and a condition of its own when only part of it fails
-  (`CodeWorkRunnable`, `BoxModeRunnable`), with a Warning event when it
-  turns so.
+  its job at all, and a condition of its own when only part of it fails, with
+  a Warning event when it turns so.
 
-The verdicts on a seat that the engine applies and refuses only at run time
-are statements about the spec beside the render (`CodeWorkOf`, `ExecutorOf`,
-`BoxModeOf`), never findings. `ExecutorOf` and `BoxModeOf` mirror where
-the engine builds its tool bridge and refuses a box-mode turn without
-one; `TestExecutorFollowsTheEngineSource` holds the variable the operator
-sets to the engine's, and `TestContractBoxModeIsAppliedWhereItCannotRun`
-holds the documents to the engine, and `TestMirroredEngineDeclarationsAreUnchanged`
-holds the code that runs a turn in box mode and refuses it on a node with no
-tool bridge (`executorRuntime`, `executorRun` and `LaunchExecutor` in Crewlet's
+The verdict on a seat's executor, which the engine applies and refuses only
+at a launch, is a statement about the spec beside the render (`ExecutorOf`),
+never a finding. It mirrors which provider a launch runs on, where it places
+the run, and whether the box reaches the seat's tools and signs its CLI in
+there; `TestExecutorFollowsTheEngineSource` holds the variable the operator
+sets to the engine's, `TestContractExecutorIsAppliedWhereItCannotRun` holds
+the documents to the engine, and `TestMirroredEngineDeclarationsAreUnchanged`
+holds the code that launches a seat's executor and refuses it (`LaunchExecutor`,
+`member`, `executorRunners` and `agentPlacement` in Crewlet's
 `internal/engine/agentrun.go`, `Build` in `internal/api/mcpbridge/build.go`)
-to the code `internal/render/executor.go` and the head of a seat's executor
-chain in `internal/render/seatpod_providers.go` were read against. It holds
+to the code `internal/render/executor.go`, `internal/render/signin.go` and
+the head of a seat's executor chain in
+`internal/render/seatpod_providers.go` were read against. It holds
 which engine pod's boxes dial their tool bridge on loopback
 (`bridgeHostURL` and `loopbackURL` in Crewlet's `cmd/crewlet/listeners.go`,
 `(*Bridge).Reaches` in `internal/api/mcpbridge/mcpbridge.go`) to
 `internal/controller/company_workload.go`, which gives every engine pod the
 Company's public address as `CREWLET_MCP_BRIDGE_URL` because a seat pod's
-boxes have no other way to it.
+boxes have no other way to it, and to `internal/render/executor.go`, whose
+verdict reports a `Direct` seat on a data pod as runnable without that
+address and one in a seat pool as `BridgeUnreachable`.
 
 The engine is the one thing in the Makefile that is not pinned. Every suite
 runs Crewlet's `main`, as Crewlet publishes it at
@@ -390,7 +400,7 @@ closely enough that nobody has to learn a house style:
   is a tool server's `env` and `headers` and a Unit's or Seat's `spec.mcp`,
   where a setting is told apart by its name: a literal `value` is refused
   under any name Crewlet reads as a credential's (`credentialNamePattern` in
-  `internal/render/codework.go`, which tests hold to the engine's
+  `internal/render/signin.go`, which tests hold to the engine's
   `cliprofile.IsCredentialName` and to the names it reads a seat's tool
   credentials under), because a seat needs a setting of its own there, such as
   a cache path. No field accepts a literal secret, and the pass-through

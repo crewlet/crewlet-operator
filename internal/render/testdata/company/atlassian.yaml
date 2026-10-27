@@ -49,6 +49,10 @@ providers:
       state_dir: /var/lib/crewlet/llm-cli/claude
   llm_order:
   - claude
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
 roles:
 - contact:
     atlassian_account_id: 557058:0d3b7c6e-2a41-4c8f-9e1d-5b6a7c8d9e0f

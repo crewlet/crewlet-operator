@@ -474,7 +474,7 @@ func TestProvisionedCredentials(t *testing.T) {
 					s.Spec.MCP = []v1.MCPCredentials{{Name: gitlabServer, Env: []v1.MCPCredentialValue{
 						{Name: gitlabToken, ValueFrom: provisioned("gitlab-token")},
 					}}}
-					s.Spec.Sandbox = &v1.SeatSandbox{Env: []v1.SeatEnvVar{
+					s.Spec.Sandbox = v1.SeatSandbox{Env: []v1.SeatEnvVar{
 						{Name: gitlabToken, ValueFrom: provisioned("gitlab-token")},
 						{Name: "NPM_TOKEN", ValueFrom: seatFromSecret("ana-npm", "token")},
 					}}
@@ -512,7 +512,7 @@ func TestProvisionedCredentials(t *testing.T) {
 			{
 				name: "a provisioned name that is no slug is refused",
 				mutate: func(s *v1.Seat) {
-					s.Spec.Sandbox = &v1.SeatSandbox{Env: []v1.SeatEnvVar{
+					s.Spec.Sandbox = v1.SeatSandbox{Env: []v1.SeatEnvVar{
 						{Name: gitlabToken, ValueFrom: provisioned("GitLab Token")},
 					}}
 				},

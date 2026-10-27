@@ -38,19 +38,23 @@ spec:
     apiKeySecretRef:
       name: nimbus-openai
       key: apiKey
+  # Every agent seat's executor is its coding CLI's own run in a box. This
+  # company places them in its E2B sandbox; Direct would run them on the
+  # engine pod that holds each seat instead.
   sandbox:
+    defaultRunIn: E2B
     e2b:
       apiKeySecretRef:
         name: nimbus-e2b
         key: apiKey
-    defaultCodingAgent: ClaudeCode
     defaultPauseTTLSeconds: 1800
-    # Every coding run's box logs npm in to the company's own registry,
-    # where the Secret holds a login. optionalKeys lets a run go without
-    # it: without the Secret, or with the key empty, the file is not
+    # Every executor box logs npm in to the company's own registry, where
+    # the Secret holds a login. optionalKeys lets a run go without it
+    # quietly: without the Secret, or with the key empty, the file is not
     # written and the run starts all the same. Unlisted, a missing Secret
-    # would hold the company's document, and an empty key have every run
-    # refused.
+    # would hold the company's document, and an empty key would be reported
+    # on the Company, and logged by the engine, as a value every run goes
+    # without.
     setup:
       - name: npm-registry
         files:

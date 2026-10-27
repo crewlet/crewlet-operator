@@ -57,20 +57,21 @@ uses is readable by the company's tenant:
   `crewlet.yaml` names the operator's token the document's only writer
   (`api.auth.company_writers`); a value the document references can still
   be replaced through the secret store.
-- A seat's code work and a box-mode executor's run, the sandbox's setup
-  commands included, run in the Company's E2B sandbox, in the Company's own
-  E2B account, where the coding agent, or the executor's CLI, runs with
-  every permission.
-  Crewlet exports into each box of code work the sign-in of the provider
-  the code work runs on, an `LLMProvider` or a platform provider: its
-  headless token or its `auth.apiKeySecretRef` key, under the variable its
-  CLI reads (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`), or for
-  OpenCode the credential-named variables of its `env`, unless the seat's
-  own sandbox environment sets that variable itself; a box-mode
-  provider's travels the same way into each of its executor's runs. The
-  coding agent or the CLI can read it, and the run's report is redacted by
-  the shape of a credential, not by its value ([What a coding box
-  carries](../guides/credentials.md#what-a-coding-box-carries)).
+- Every agent seat's executor is its coding CLI's own run in a box, the
+  sandbox's setup commands included, where the CLI runs with every
+  permission: placed `Direct`, a process of the engine pod that holds the
+  seat, as the engine's user, which can read what that user can on the pod,
+  a data pod's data volume and the engine's secret store included; placed in
+  `E2B`, a box in the Company's own E2B account.
+  Crewlet hands each run the sign-in of the provider it launched on, an
+  `LLMProvider` or a platform provider: its headless token or its
+  `auth.apiKeySecretRef` key, under the variable its CLI reads
+  (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`), or for OpenCode the
+  credential-named variables of its `env`, unless the seat's own sandbox
+  environment sets that variable itself; a `Direct` box is seeded with the
+  provider's login on the pod too. The CLI can read it, and the run's report
+  is redacted by the shape of a credential, not by its value ([What a coding
+  box carries](../guides/credentials.md#what-a-coding-box-carries)).
 
 > **Caution: what a class gives its companies is every tenant's.** A
 > credential an `EngineClass` gives its companies (a platform model key,
@@ -155,7 +156,7 @@ coding CLI's, take no literal value.
 
 | Crewlet position | Why it is not offered |
 |---|---|
-| `providers.sandbox.local.runtime_env.*` | A seat's code work runs in E2B alone (`Company.spec.sandbox.e2b`), and `spec.engineConfig` may not set `providers`, so no company runs a sandbox on the engine's host, whose container runtime this environment is for. |
+| `providers.sandbox.local.runtime_env.*` | Crewlet's `container` cell, the one this environment is for, is not offered: `Company.spec.sandbox` places a seat's executor run `Direct` or in `E2B`, and `spec.engineConfig` may not set `providers`. |
 
 ---
 
@@ -195,11 +196,9 @@ server that takes the value starts once it is minted, not before. Every place
 a seat names one provisioned `name` is one value. Only an Integration of its
 company with `provisioning: Engine` creates the value: while none does, the
 seat is applied with the reference all the same, the engine starts none of
-its tool servers that take the value and refuses each of its `run_sandbox`
-coding runs, unless the `optionalKeys` that governs the value lets them go
-without it (the MCPServer's for a tool server's value, the seat's
-`spec.sandbox.optionalKeys` for its coding runs'), and its chat app runs
-without it, and the Seat reports
+its tool servers that take the value, unless the MCPServer's `optionalKeys`
+lets them go without it, its executor runs and its chat app run without it,
+and the Seat reports
 `ResolvedRefs=False` with reason `NoProvisioner` (which holds nothing else
 back). A Unit's credentials are
 every member's, so they always come from Secrets.
@@ -271,10 +270,11 @@ document. The operator handles them without a field:
   reads them from there, so the values never appear in a pod template. No
   credential of the engine's own is an environment variable, since the
   engine resolves a `${NAME}` in its company document from its
-  environment. The telemetry headers never reach a sandbox either: a remote
-  sandbox exports its telemetry to the engine's public listener with a
-  token signed for its one run (`CREWLET_SANDBOX_OTEL_RECEIVER_URL`), and
-  the engine adds the headers when it forwards to the collector.
+  environment. The telemetry headers never reach a box either: a seat's
+  executor run, `Direct` or in `E2B`, exports its telemetry to the engine's
+  public listener with a token signed for its one run
+  (`CREWLET_SANDBOX_OTEL_RECEIVER_URL`), and the engine adds the headers
+  when it forwards to the collector.
 - **Platform wiring** goes in the engine's environment: what every company
   of a class shares in `EngineClass.spec.podTemplate.spec.env` (from a
   Secret in the platform's namespace), and what is one company's own in
@@ -323,7 +323,7 @@ rotating a Secret rewrites an entry rather than replacing it.
 > written into the store by hand or by Crewlet's own provisioning are left
 > alone. A name the running configuration still references is kept until the
 > next configuration is applied, except the name of a value a tool server or a
-> coding run may go without (its key listed in the `optionalKeys` that governs
+> seat's executor run may go without (its key listed in the `optionalKeys` that governs
 > it), read nowhere it is required, whose Secret or key no longer exists:
 > under the `Enforce` policy, that one is deleted, and the engine reads its
 > store again without it, when the next configuration is applied or, while

@@ -298,14 +298,16 @@ const (
 	//
 	// On an agent Seat, Ready reports whether the seat runs: LeaseHeld while
 	// an engine node holds its lease, as the engine's GET /fleet reports,
-	// and Unplaced while none does, or PoolNotFound when none can, as the
-	// Company does not declare the seat's pool. A seat whose executor's chain is headed
-	// by a CLI in mode Box is not Ready either while the Company has no public
-	// address for its tool bridge, whoever holds it (NotExposed): the engine
-	// applies it and refuses every one of its turns.
-	// CodeWorkRunnable does not count towards it: a seat whose code work
-	// cannot run still runs its turns, and a health check gating on Ready
-	// would otherwise hold a rollout over a seat that works.
+	// naming the provider its executor runs on and where, and Unplaced while
+	// none does, or PoolNotFound when none can, as the Company does not
+	// declare the seat's pool. A seat whose executor cannot run a turn as
+	// its spec places it is not Ready either, whoever holds it: its first
+	// ClaudeCode or OpenCode member runs in E2B while the Company has no
+	// public address for the box to call the tool bridge back on
+	// (NotExposed) or on a login that cannot follow the run there
+	// (SandboxLoginNotPortable), or runs Direct on a seat pod while the
+	// Company has no public address (BridgeUnreachable). The engine applies
+	// such a seat and fails every one of its turns at launch.
 	ConditionReady = "Ready"
 
 	// ConditionRuntimeReady reports whether a Company's engine pods exist,
@@ -352,11 +354,12 @@ const (
 	// findings the operator applies and reports only, because only the part
 	// at fault suffers them: a Seat's PoolNotFound, NoProvisioner and
 	// NotAnAccountID, a Human seat named in a GitLab Integration's
-	// accessLevels (HumanSeat), and a value a tool server or a coding run is
-	// started with that a Secret holds empty (SecretValueEmpty). Applied says
-	// which. True names, in its message, every value the child gives a tool
-	// server or a coding run under a key an optionalKeys list lets go
-	// without it whose Secret or key does not exist, or holds nothing.
+	// accessLevels (HumanSeat), and a value a tool server or a seat's
+	// executor run is started with that a Secret holds empty
+	// (SecretValueEmpty). Applied says which. True names, in its message,
+	// every value the child gives a tool server or an executor run under a
+	// key an optionalKeys list lets go without it whose Secret or key does
+	// not exist, or holds nothing.
 	ConditionResolvedRefs = "ResolvedRefs"
 
 	// ConditionApplied reports whether a child is part of the revision the
@@ -366,33 +369,6 @@ const (
 	// ConditionPaused reports whether the engine holds an agent seat
 	// paused: True while it does, whoever paused it.
 	ConditionPaused = "Paused"
-
-	// ConditionCodeWorkRunnable reports whether an agent Seat's coding agent
-	// can run on the provider at the head of its sandbox chain, or on the
-	// sign-in the seat's sandbox environment gives it, with every value its
-	// runs are given, so that a run_sandbox launch of the seat can start. It
-	// is set on an Agent seat with spec.sandbox whose executor does not run in
-	// box mode, in a Company with spec.sandbox (the seats Crewlet offers
-	// run_sandbox), and is computed from the spec, and from the Secrets once
-	// they are read, under every management policy: under Observe or Seed it
-	// judges the Seat's objects, which may not be the document the engine
-	// runs (Applied says whether they are). Only CodingAgentMismatch also
-	// holds the document (Applied=False), as Crewlet refuses it on every
-	// write; with SandboxLoginNotPortable, SecretValueEmpty or NoProvisioner
-	// the seat is applied and runs its turns, and Crewlet refuses each of its
-	// coding runs.
-	ConditionCodeWorkRunnable = "CodeWorkRunnable"
-
-	// ConditionBoxModeRunnable reports whether an LLMProvider in mode
-	// Box can run a seat's executor in the sandbox at all: its runs
-	// happen in the Company's remote sandbox and call the seat's tools back
-	// through the engine's public address (status.endpoints.publicBaseURL),
-	// so it is False (NotExposed) while the Company has none. It is set on
-	// such a provider only, and does not hold the document: the engine
-	// applies the provider, which still runs in the engine's pod behind a
-	// chain's head or in another phase, and refuses each turn of a seat whose
-	// executor's chain it heads (the Seat's Ready says which seats).
-	ConditionBoxModeRunnable = "BoxModeRunnable"
 
 	// ConditionHealthy reports what the engine says about an integration:
 	// whether its credentials work and its webhooks are registered.
@@ -691,24 +667,21 @@ const (
 
 	// ReasonNotExposed is Healthy=False on an integration that needs inbound
 	// delivery when the company has no public address
-	// (status.endpoints.publicBaseURL), and BoxModeRunnable=False on an
-	// LLMProvider in mode Box then: its runs happen in a
-	// remote sandbox, which calls the seat's tools back through the engine's
-	// public address. It is Ready=False on an agent Seat whose executor's
-	// chain such a provider heads, in whatever pool it is placed: the engine
-	// applies the seat and refuses each of its turns.
+	// (status.endpoints.publicBaseURL), and Ready=False on an agent Seat
+	// whose executor runs in E2B then, in whatever pool it is placed: the
+	// first ClaudeCode or OpenCode member of its executor chain is placed in
+	// E2B, whose box calls the seat's tools back through the engine's public
+	// address. The engine applies the seat and fails each of its turns at
+	// launch.
 	ReasonNotExposed = "NotExposed"
 
 	// ReasonNoProvisioner is ResolvedRefs=False on a Seat that names a
 	// provisioned credential while no Integration of its Company has
 	// provisioning Engine: nothing creates the value, so the engine starts
-	// none of the seat's tool servers that take it and refuses each of its
-	// run_sandbox coding runs whose environment holds it, unless the key the
-	// value is written under is optional, when each starts without it; its
-	// chat app, and a box-mode run of its executor, run without it. It is
-	// CodeWorkRunnable=False on such a Seat whose coding runs it refuses. The
-	// seat is applied, with the reference the engine fills once an
-	// Integration provisions.
+	// none of the seat's tool servers that take it, unless the key the value
+	// is written under is optional, when each starts without it; its chat
+	// app, and its executor runs, run without it. The seat is applied, with
+	// the reference the engine fills once an Integration provisions.
 	ReasonNoProvisioner = "NoProvisioner"
 
 	// ReasonNotAnAccountID is ResolvedRefs=False on a Seat whose
@@ -752,7 +725,7 @@ const (
 
 	// ReasonSecretNotFound is ResolvedRefs=False (or SecretsSynced=False)
 	// when a referenced Secret or Secret key does not exist, but for a value
-	// a tool server or a coding run is started with under a key an
+	// a tool server or a seat's executor run is started with under a key an
 	// optionalKeys list lets go without it, which holds nothing back; and
 	// RuntimeReady=False when a Secret the engine's pods are given values
 	// from does not: one the EngineClass references (telemetry.headersSecretRef,
@@ -763,20 +736,20 @@ const (
 	ReasonSecretNotFound = "SecretNotFound"
 
 	// ReasonSecretValueEmpty is ResolvedRefs=False on an object that gives a
-	// tool server or a coding run a value from a Secret key that holds
-	// nothing, under a key no optionalKeys list lets go without it, where the
-	// value is the one the engine starts with: Crewlet starts no tool server,
-	// and no run_sandbox coding run, with a value that resolves to nothing, so
-	// the server it is given to does not start, for a seat or for the
-	// company, and the seat's coding runs are refused, which is
-	// CodeWorkRunnable=False with this reason on the Seat. The object is
-	// applied, and the value reaches the engine once the Secret holds one.
-	// Listing the key in the optionalKeys list that governs it has it left
-	// out instead: the MCPServer's spec.optionalKeys for a value a tool
-	// server is started with, the server's own or a Seat's or a Unit's, though
-	// a seat's own credential, the identity its instance acts as, is not one
-	// to start without; a Seat's spec.sandbox.optionalKeys, or the step's own,
-	// for a coding run's.
+	// tool server or a seat's executor run a value from a Secret key that
+	// holds nothing, under a key no optionalKeys list lets go without it,
+	// where the value is the one the engine starts with: Crewlet starts no
+	// tool server with a value that resolves to nothing, so the server it is
+	// given to does not start, for a seat or for the company, and an executor
+	// run starts without it, which the engine logs as a gap of the run
+	// (sandbox_env_unresolved). The object is applied, and the value reaches
+	// the engine once the Secret holds one. Listing the key in the
+	// optionalKeys list that governs it has it left out instead: the
+	// MCPServer's spec.optionalKeys for a value a tool server is started
+	// with, the server's own or a Seat's or a Unit's, though a seat's own
+	// credential, the identity its instance acts as, is not one to start
+	// without; a Seat's spec.sandbox.optionalKeys, or the step's own, for an
+	// executor run's, which is then left out quietly.
 	ReasonSecretValueEmpty = "SecretValueEmpty"
 
 	// ReasonOptionalKeyUnused is ResolvedRefs=False on an MCPServer whose
@@ -927,43 +900,47 @@ const (
 	// whole company out.
 	ReasonCLIAuthNotPortable = "CLIAuthNotPortable"
 
-	// ReasonCodeWorkSupported is CodeWorkRunnable=True on a Seat whose
-	// coding agent can run on the provider at the head of its sandbox chain,
-	// or on the sign-in the seat's sandbox environment gives it; the message
-	// says which.
-	ReasonCodeWorkSupported = "CodeWorkSupported"
+	// ReasonNoExecutorCLI is Applied=False on a Seat whose executor chain
+	// has no member that drives ClaudeCode or OpenCode, the CLIs Crewlet
+	// runs a seat's executor on: its spec.llm.default, or, with none, the
+	// head of the Company's model order, which a seat with no chain runs
+	// on. Crewlet refuses such a document on every write, as the seat could
+	// run no turn.
+	ReasonNoExecutorCLI = "NoExecutorCLI"
 
-	// ReasonToolBridgeServed is BoxModeRunnable=True on an LLMProvider
-	// whose box-mode runs can reach the tool bridge at the Company's
-	// public address.
-	ReasonToolBridgeServed = "ToolBridgeServed"
+	// ReasonSandboxRequired is ConfigApplied=False on a Company with an
+	// Agent seat and a model provider and no spec.sandbox: every agent
+	// seat's executor runs in a box, and Crewlet refuses on every write a
+	// company that configures none.
+	ReasonSandboxRequired = "SandboxRequired"
 
-	// ReasonCodingAgentMismatch is Applied=False and CodeWorkRunnable=False
-	// on a Seat whose code work (spec.sandbox) runs on a model provider, an
-	// LLMProvider or a platform provider, driving another CLI than the seat's
-	// coding agent (spec.sandbox.codingAgent, else the Company's
-	// spec.sandbox.defaultCodingAgent, else ClaudeCode): the head of
-	// spec.llm.sandbox, else of spec.llm.default, else of the Company's model
-	// order. The provider's model is written in its own CLI's grammar and its
-	// sign-in is that CLI's, so the coding agent can read neither, and
-	// Crewlet refuses the pairing on every write. It is also Applied=False
-	// alone on a Seat whose executor runs in box mode (an LLMProvider in
-	// mode Box heads its executor's chain) and whose spec.sandbox.codingAgent
-	// names another CLI than that provider's: Crewlet never offers such a seat
-	// run_sandbox, as it codes in its executor's run, and refuses on every
-	// write a coding agent that would drive nothing.
-	ReasonCodingAgentMismatch = "CodingAgentMismatch"
+	// ReasonSandboxPlacementNotOffered is Applied=False on an LLMProvider
+	// with runIn E2B that a seat's executor can launch on, as a ClaudeCode
+	// or OpenCode member of its executor chain, while the Company's
+	// spec.sandbox configures no e2b: Crewlet refuses on every write a run
+	// placed in a cell nothing configures.
+	ReasonSandboxPlacementNotOffered = "SandboxPlacementNotOffered"
 
-	// ReasonSandboxLoginNotPortable is CodeWorkRunnable=False on a Seat
-	// whose code work runs on an LLMProvider of its coding agent's CLI whose
-	// login cannot follow a run into the Company's remote sandbox: a
-	// ClaudeCode signed in by a credential bundle with neither
-	// CLAUDE_CODE_OAUTH_TOKEN nor ANTHROPIC_API_KEY in the seat's sandbox
-	// environment, or an OpenCode with no credential-named variable in its
-	// env or the seat's sandbox environment. A bundle stays on the
-	// engine's data volume: Crewlet applies the seat, which runs its turns,
-	// and refuses each run_sandbox launch of it.
+	// ReasonSandboxLoginNotPortable is Ready=False on an agent Seat whose
+	// executor runs in E2B on a login that cannot follow the run there: the
+	// first ClaudeCode or OpenCode member of its executor chain, placed in
+	// E2B, is a ClaudeCode LLMProvider signed in with a credential bundle,
+	// or an OpenCode one with no credential-named variable in its env, and
+	// nothing in the seat's spec.sandbox.env signs its CLI in. A bundle
+	// stays on the engine's data volume, as it carries a refresh token the
+	// engine keeps rotating: Crewlet applies the seat and refuses each
+	// launch of its executor. A Direct run is seeded with the login, so it
+	// is never this.
 	ReasonSandboxLoginNotPortable = "SandboxLoginNotPortable"
+
+	// ReasonBridgeUnreachable is Ready=False on an agent Seat placed in a
+	// seat pool whose executor runs Direct while the Company has no public
+	// address: a seat pod serves no tool bridge route of its own, so its
+	// Direct boxes call the seat's tools back at the address the Company's
+	// public listener is reached at, and the engine on the pod refuses each
+	// launch without one. A data pod's Direct boxes call it on the pod's own
+	// loopback, so a seat placed in data is never this.
+	ReasonBridgeUnreachable = "BridgeUnreachable"
 
 	// ReasonPlacementPending is Applied=False on an agent Seat placed in a
 	// pool other than the one the revision the engine runs pins it to,

@@ -94,7 +94,7 @@ type State struct {
 // revision last activated, sorted.
 //
 // The engine reads its store when a revision activates, and starts every tool
-// server and coding run with what it read then: removing a name changes
+// server and executor run with what it read then: removing a name changes
 // nothing it runs until the next activation, which may be minutes away, or
 // none at all while the next document cannot be applied. Until then it would
 // go on starting things with the value of a Secret Kubernetes no longer

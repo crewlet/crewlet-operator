@@ -67,14 +67,16 @@ breaks one of them is a vulnerability and should be reported as above.
   listener, a port of its own, is routed publicly. The engine serves there
   only the routes outside parties call without an operator credential: the
   vendors' webhooks under `/webhooks/`, each verified by the vendor's
-  signature or shared token, and a remote sandbox's telemetry (`/otlp/`,
-  while the class sends telemetry to a collector) and the tool bridge every
-  seat's coding run calls its tools through (`/mcp/`), each call carrying a
-  token the engine signed for that one run. A run in a box on a data pod
-  dials the bridge on loopback; one in the Company's E2B sandbox, or in a
-  box on a seat pod, which serves no bridge of its own, dials the Company's
-  public address, which every engine pod is given while the Company has
-  one. It answers every other path, the admin API and the probes included,
+  signature or shared token, and a coding run's telemetry (`/otlp/`, while
+  the class sends telemetry to a collector) and the tool bridge every seat's
+  executor run and deep-work run calls its tools through (`/mcp/`), each
+  call carrying a token the engine signed for that one run. Every engine
+  pod is given the Company's public address while it has one, and every
+  seat's executor run exports its traces there. A seat's run in a box on a
+  data pod dials the bridge on loopback; every other run dials the public
+  address: one in the Company's E2B sandbox, one in a box on a seat pod,
+  which serves no bridge of its own, and a deep-work run wherever it runs.
+  It answers every other path, the admin API and the probes included,
   as one nothing serves. The engine's API, dashboard, configuration,
   secrets and setup endpoints are on another port, which stays on the
   cluster network, where a NetworkPolicy (when the engine class enables
@@ -82,6 +84,16 @@ breaks one of them is a vulnerability and should be reported as above.
   whole API (`exposure.api`) through a Gateway or an Ingress of your own,
   which should be internal.
   Your CNI must enforce NetworkPolicy for that layer to exist.
+- **A seat's executor run placed `Direct` is a process of the engine pod.**
+  Every agent seat's executor is its coding CLI's own run, with its shell and
+  editor, the sandbox's setup commands included. Placed `Direct`, it runs on
+  the engine pod that holds the seat, as the engine's user, and can read and
+  write what that user can there: the engine's keyring and secret store,
+  and, on a data pod, the company's data volume. What it may reach on the
+  network is what the pod's NetworkPolicy allows. Place agent seats whose
+  work you would not run beside the company's data in a seat pool, or run
+  their executors in the Company's E2B sandbox (`runIn: E2B`)
+  ([Running seats on a coding CLI](docs/guides/cli-agents.md#where-a-seats-executor-runs)).
 - **The data pods' leaf listener is unauthenticated.** While a company may
   run seat pools, its data pods listen on port 7422 for the seat pods to
   join the event stream, with no authentication and no TLS; whoever connects

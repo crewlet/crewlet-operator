@@ -149,8 +149,13 @@ spec:
                     type: array
                     x-kubernetes-list-type: set
                   resources:
-                    description: resources are the compute resources of the engine
-                      container.
+                    description: |-
+                      resources are the compute resources of the engine container. Its
+                      memory holds the engine, the CLI processes its providers run in its
+                      process (each provider's maxConcurrent of them, 200 to 450 MB each),
+                      and a seat's Direct executor run, one CLI and the tools it starts,
+                      for each agent seat the pod holds that runs Direct: a run that takes
+                      the container past its limit can take the engine with it.
                     properties:
                       claims:
                         description: |-
@@ -215,7 +220,7 @@ spec:
                     description: |-
                       sandboxSizeLimit caps the emptyDir a data pod keeps its sandboxes in,
                       at /var/lib/crewlet-sandboxes: the boxes Crewlet makes on the pod
-                      itself for the coding runs it places there (its direct cell, under
+                      itself for the executor runs it places there (its direct cell, under
                       Crewlet's providers.sandbox.local.state_dir), at most one for each
                       agent seat of the pod, kept while its run waits on a person's answer
                       and removed when the run ends. A box holds the run's checkout, its
@@ -326,9 +331,13 @@ spec:
                     default: 300
                     description: |-
                       terminationGracePeriodSeconds is how long a data pod may take to stop.
-                      The engine finishes running turns before it exits and puts no bound on
-                      that itself, so the default is five minutes, which covers a long turn,
-                      rather than the Kubernetes default of thirty seconds, which does not.
+                      The engine finishes the turn segments it runs in its own process
+                      before it exits (a seat's launch, the collection of its run, the
+                      review, a delegated worker) and puts no bound on that itself, so the
+                      default is five minutes, which covers a long segment, rather than the
+                      Kubernetes default of thirty seconds, which does not. A seat's
+                      executor run is not waited for: a Direct one on the pod is a process
+                      of it and ends with it, and an E2B one carries on in its sandbox.
                     format: int64
                     maximum: 3600
                     minimum: 30
@@ -1315,9 +1324,13 @@ spec:
                       cluster except the cloud metadata endpoints (169.254.169.254,
                       fd00:ec2::254), which hand out the node's credentials. What else is in
                       the cluster is unreachable only if listed in exceptCIDRs. A seat's
-                      code work and a box-mode executor's run, the sandbox's setup
-                      commands included, run in the Company's E2B sandbox, which this policy
-                      does not reach.
+                      Direct executor run is a process of the engine pod, so it egresses
+                      under this policy, its box's setup commands included: its vendor, its
+                      code host and the package registries it installs from are reached
+                      from the pod, and a seat pod's runs call the tool bridge back at the
+                      Company's public address, which exceptCIDRs must leave reachable. An
+                      E2B run happens in the Company's E2B sandbox, which this policy does
+                      not reach.
                     minProperties: 1
                     properties:
                       exceptCIDRs:
@@ -1655,19 +1668,31 @@ spec:
                     Crewlet hands a key to, or, for Hermes, Pi and OpenCode, which read their
                     model provider's key from that provider's own variable, the key in env. A
                     subscription's headless token or login is one account's, which every tenant
-                    of the class would share: it belongs on a tenant's own LLMProvider. It runs
-                    in mode Host, in the engine's pod that holds each seat, and keeps its
-                    per-seat homes on the data volume under
-                    /var/lib/crewlet/llm-cli-platform/<name>, apart from every tenant's
-                    loginName. Its rules are an LLMProvider's that apply to such a provider,
-                    each with the same message's start, and hold to the same engine.
+                    of the class would share: it belongs on a tenant's own LLMProvider. The
+                    phases it serves in the engine's pod keep their per-seat homes on the data
+                    volume under /var/lib/crewlet/llm-cli-platform/<name>, apart from every
+                    tenant's loginName.
+
+                    A ClaudeCode or OpenCode platform provider may also be the member a seat's
+                    executor launches on, its CLI's own run, in the Company's
+                    spec.sandbox.defaultRunIn, as a platform provider names no runIn: its key
+                    is then in the tenant's engine pod, where the tenant reads it already, for
+                    a Direct run, or in the tenant's E2B sandbox. Of its env, that run gets an
+                    OpenCode provider's credential-named variables and nothing else, as of an
+                    LLMProvider's: a ClaudeCode platform provider whose env points it at the
+                    platform's gateway (ANTHROPIC_BASE_URL) runs its seats' executors against
+                    Anthropic's own API, with the key the gateway issued. Its rules are an
+                    LLMProvider's that apply to such a provider, each with the same message's
+                    start, and hold to the same engine.
                   properties:
                     agent:
                       description: |-
                         agent is which CLI to drive. The model is written as this CLI reads
-                        it, and a Box-mode run or a seat's code work is handed it
-                        unchanged: OpenCode reads `<provider>/<model>`, such as
-                        `anthropic/claude-sonnet-5`. Crewlet's `agent`.
+                        it, and a seat's executor run on the provider is handed it unchanged:
+                        OpenCode reads `<provider>/<model>`, such as
+                        `anthropic/claude-sonnet-5`. Only ClaudeCode and OpenCode run a
+                        seat's executor; every CLI serves a seat's other phases. Crewlet's
+                        `agent`.
                       enum:
                       - ClaudeCode
                       - Codex
@@ -1736,10 +1761,11 @@ spec:
                         each value read from a Secret in a namespace the platform controls:
                         the model provider's key Hermes, Pi or OpenCode signs in with, or the
                         address of the platform's gateway a CLI reads from its environment
-                        (ClaudeCode's ANTHROPIC_BASE_URL). A credential-named value of an
-                        OpenCode provider travels into each box of a seat's code work on it,
-                        in the tenant's own E2B account. Crewlet's `env`, a credential
-                        position.
+                        (ClaudeCode's ANTHROPIC_BASE_URL), for the phases the provider serves
+                        in the engine's pod. A seat's executor run on the provider gets only
+                        an OpenCode provider's credential-named values, Direct on the tenant's
+                        engine pod or in the tenant's own E2B sandbox, and never a gateway's
+                        address. Crewlet's `env`, a credential position.
                       items:
                         description: |-
                           NamespacedSecretEnvVar is a named credential an EngineClass gives, delivered
@@ -1810,8 +1836,9 @@ spec:
                         from inside one of a run's tool calls (a delegated worker's) borrows
                         the run's place rather than wait for another, which the runs holding
                         every place could leave it waiting for forever. Unset takes
-                        Crewlet's default of 4. A Box-mode executor's run, in the sandbox,
-                        takes none. Crewlet's `max_concurrent`.
+                        Crewlet's default of 4. A seat's executor run takes none: it is a
+                        process of its own box, and a seat runs one at a time. Crewlet's
+                        `max_concurrent`.
                       format: int32
                       maximum: 64
                       minimum: 1
@@ -1862,8 +1889,11 @@ spec:
                         afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic
                         documents for one answer of a current Claude model at its full
                         output. A timeout is retryable, so a seat's chain moves on to its
-                        next provider. It bounds the CLI where it runs in the engine's pod;
-                        a Box-mode executor's run in the sandbox is not bounded by it.
+                        next provider. It bounds the phases the CLI runs in the engine's
+                        process (the reviewer, delegated workers, the summariser, the judge);
+                        a seat's executor run on the provider, its CLI's own run in a box, is
+                        bounded by its round cap instead (the Company's
+                        spec.sandbox.defaultMaxTurns and the Seat's spec.sandbox.maxTurns).
                         Crewlet's `timeout_seconds`.
                       format: int32
                       minimum: 1
@@ -2941,10 +2971,13 @@ spec:
                           tool server is handed only the part Crewlet's allowlist names, such as
                           PATH and the TLS and proxy variables, a coding CLI that part and the
                           variables its Crewlet profile passes through, such as GeminiCLI's
-                          GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION, and a sandbox run none
-                          of it. So a variable a tool server reads goes in its MCPServer's env
-                          (docs/guides/tool-servers.md), and any other a coding CLI reads in its
-                          LLMProvider's spec.env. A Company's spec.runtime.env is merged over
+                          GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION, a seat's Direct
+                          executor run that part alone (the allowlist: PATH, the locale, the TLS
+                          trust and proxy variables), and an E2B run none of it. So a variable a
+                          tool server reads goes in its MCPServer's env
+                          (docs/guides/tool-servers.md), one a coding CLI reads in the engine's
+                          pod in its LLMProvider's spec.env, and one a seat's executor run reads
+                          in the Seat's spec.sandbox.env. A Company's spec.runtime.env is merged over
                           this env by name. The same names are refused as there: those
                           starting with CREWLET_ or OTEL_, and ANTHROPIC_API_KEY and
                           OPENAI_API_KEY.
@@ -3306,17 +3339,23 @@ spec:
                     properties:
                       maxConcurrentTurns:
                         description: |-
-                          maxConcurrentTurns is how many turns one seat pod runs at once: Crewlet's
+                          maxConcurrentTurns is how many turn segments one seat pod runs at once
+                          in the engine (a seat's onboarding pass, the launch of its executor,
+                          the collection of its run and the review): Crewlet's
                           node.max_concurrent. Unset takes the engine's default, 32. A seat runs
-                          one turn at a time, so a pod never runs more turns at once than it
-                          holds seats.
+                          one turn at a time, so a pod never runs more at once than it holds
+                          seats; and an executor run is not a segment, as its turn gives the
+                          place back while the run works, so the seats a pod holds bound its
+                          Direct runs too.
                         format: int32
                         minimum: 1
                         type: integer
                       resources:
                         description: |-
                           resources are the compute resources of every seat pod's engine
-                          container. Unset sets none.
+                          container, sized as data.resources says of a data pod's: the engine,
+                          its providers' CLI processes, and a Direct executor run for each
+                          agent seat the pod holds that runs Direct. Unset sets none.
                         properties:
                           claims:
                             description: |-
@@ -3381,7 +3420,7 @@ spec:
                         description: |-
                           sandboxSizeLimit caps the emptyDir every seat pod keeps its sandboxes
                           in, at /var/lib/crewlet-sandboxes, apart from its scratch volume: the
-                          boxes Crewlet makes on the pod itself for the coding runs it places
+                          boxes Crewlet makes on the pod itself for the executor runs it places
                           there, as data.sandboxSizeLimit says of a data pod, one at most for
                           each seat the pod holds. A pod whose boxes write more is evicted, with
                           every run and turn on it. Unset is 20Gi.
@@ -3413,9 +3452,11 @@ spec:
                       terminationGracePeriodSeconds:
                         description: |-
                           terminationGracePeriodSeconds is how long a seat pod may take to stop.
-                          A seat pod finishes its running turns before it exits, with no bound
-                          of its own, so unset is five minutes, as for a data pod, rather than
-                          the Kubernetes default of thirty seconds.
+                          A seat pod finishes the turn segments it runs in its own process
+                          before it exits, with no bound of its own, so unset is five minutes,
+                          as for a data pod, rather than the Kubernetes default of thirty
+                          seconds. A seat's executor run is not waited for: a Direct one on the
+                          pod ends with it, and an E2B one carries on in its sandbox.
                         format: int64
                         maximum: 3600
                         minimum: 30

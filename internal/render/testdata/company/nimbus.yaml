@@ -70,7 +70,6 @@ providers:
   - anthropic
   - platform-claude
   sandbox:
-    default_coding_agent: claude-code
     default_pause_ttl_seconds: 1800
     default_run_in: e2b
     e2b:
@@ -148,7 +147,6 @@ units:
       responsibilities:
       - Own the deploy pipeline
       sandbox:
-        enabled: true
         env:
           GITHUB_TOKEN: ${K8S_ANA_GITHUB_TOKEN_OI3SDKAPI3E5}
           GITLAB_TOKEN: ${PROVISIONED_ANA_GITLAB_TOKEN_ZXUWOCASQLKO}

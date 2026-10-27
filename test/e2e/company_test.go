@@ -430,6 +430,9 @@ func applyCompany(deletion v1.DeletionPolicy) {
 			CompanyName:     "Acme",
 			Mission:         "Prove the operator end to end.",
 			DeletionPolicy:  deletion,
+			// Every agent seat's executor runs in a box: Direct, on the
+			// data pod that holds the seat.
+			Sandbox: v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementDirect},
 		},
 	})
 	applyProvider(tenantNamespace, companyName)

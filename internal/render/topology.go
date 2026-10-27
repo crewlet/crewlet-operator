@@ -22,8 +22,8 @@ import (
 //
 // Every agent seat is pinned, the data pods' too, because an unpinned seat
 // may run on any node, a seat pod among them, and a seat pod cannot serve
-// every seat (a bundled login: seatPodProviders; a box-mode CLI at the
-// head of the executor's chain: ExecutorOf). The
+// every seat (a bundled login: seatPodProviders; a Direct executor while the
+// Company has no public address: ExecutorOf). The
 // pins are literals, since Crewlet expands no ${NAME} in a Tier B placement,
 // and one label per pod lets placement status and settling map each pod to
 // exactly one workload. Capacity is no reason for it: Crewlet bounds a node
@@ -52,10 +52,11 @@ const (
 // What a seat pool runs with when neither it nor its class says.
 const (
 	// DefaultSeatPodTerminationGracePeriodSeconds is a seat pod's grace
-	// period: five minutes, as for a data pod. A seat pod finishes its
-	// running turns before it exits and puts no bound on that itself, and
-	// Crewlet suggests two to five minutes; the Kubernetes default of thirty
-	// seconds would kill a turn in the middle.
+	// period: five minutes, as for a data pod. A seat pod finishes the turn
+	// segments it runs in its own process before it exits (a seat's executor
+	// run is not one, and is not waited for) and puts no bound on that
+	// itself, and Crewlet suggests two to five minutes; the Kubernetes
+	// default of thirty seconds would kill a segment in the middle.
 	DefaultSeatPodTerminationGracePeriodSeconds = 300
 	// DefaultSeatPodScratchSizeLimit caps a seat pod's scratch emptyDir:
 	// the scratch store (a copy of its seats' memory and its working rows),

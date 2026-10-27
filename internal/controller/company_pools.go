@@ -776,9 +776,9 @@ func seatPodTemplate(
 			corev1ac.VolumeMount().WithName(configVolumeName).WithMountPath(configDir).WithReadOnly(true),
 			// One volume, so that the pool's scratch limit bounds what
 			// the processes the engine runs write as well. /tmp is also
-			// where the engine makes the directory of the sockets a
-			// host-mode CLI reaches its seat's tools through, so it must
-			// stay writable for the pod's seats to have tools.
+			// where the engine makes the directory of the sockets a CLI
+			// it runs on the pod reaches its seat's tools through, so it
+			// must stay writable for the pod's seats to have tools.
 			corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath("/tmp").WithSubPath("tmp"),
 			corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath(homeDir).WithSubPath("home"),
 			sandboxesMount(),

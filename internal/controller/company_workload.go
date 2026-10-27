@@ -53,8 +53,8 @@ const (
 	dataVolume = "data"
 	// tmpVolume is a data pod's /tmp, the engine's TMPDIR on a read-only
 	// root: where the processes it starts write their scratch files, and
-	// where it makes the directory of the sockets a host-mode CLI reaches
-	// its seat's tools through.
+	// where it makes the directory of the sockets a CLI it runs on the pod
+	// reaches its seat's tools through, in every phase but the executor's.
 	tmpVolume = "tmp"
 	// sandboxesVolume is every engine pod's volume for the boxes Crewlet
 	// makes on the pod itself, mounted at render.SandboxDir, which says why
@@ -825,15 +825,17 @@ func engineEnv(
 		if t.HeadersSecretRef.Name != "" {
 			env = append(env, fromSecret(envOTLPHeaders, e.secret, platformKeyOTLPHeaders))
 		}
-		// Crewlet's sandbox telemetry receiver: a remote sandbox exports to
-		// the engine's public listener, the one port it can reach, with a
-		// token signed for its run, and the engine forwards to the
-		// collector above with its headers, which never enter the box.
-		// Every pod is given it, a seat pod's too: the pod that launches a
-		// run mints its endpoint, under the company's address, and the data
-		// pod that address reaches verifies it with the keyring every pod
-		// shares. Without a collector there is nothing to forward to, and
-		// without a public address nothing a sandbox could reach.
+		// Crewlet's sandbox telemetry receiver: every seat's executor run,
+		// Direct on an engine pod as well as in E2B, exports to the
+		// engine's public listener at this address, the one Crewlet hands
+		// every run whatever its cell, with a token signed for the run, and
+		// the engine forwards to the collector above with its headers,
+		// which never enter the box. Every pod is given it, a seat pod's
+		// too: the pod that launches a run mints its endpoint, under the
+		// company's address, and the data pod that address reaches verifies
+		// it with the keyring every pod shares. Without a collector there is
+		// nothing to forward to, and without a public address nothing an E2B
+		// box could reach.
 		if public := c.Status.Endpoints.PublicBaseURL; public != "" {
 			env = append(env, literal(envOTelReceiverURL, public))
 		}

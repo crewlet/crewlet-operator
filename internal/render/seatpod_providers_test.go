@@ -12,29 +12,30 @@ import (
 // seat pod would restore and refresh on its own and so log every pod on that
 // login out, the data pods' included; a key in env, the sign-in of Hermes, Pi
 // and OpenCode, is as portable as a token. A seat on the data pods may run on
-// either. A box-mode CLI is refused nowhere: whether a seat's turns can run
-// on one is ExecutorOf's report (TestExecutor).
+// either. Where a seat's executor runs, and whether it can, is ExecutorOf's
+// report (TestExecutor).
 func TestSeatPodProviders(t *testing.T) {
 	bundled := func(in *Input) {
-		p := cliProvider(v1alpha1.CLIAgentModeHost)
+		p := cliProvider()
 		p.Spec.Auth = v1alpha1.CLIAgentAuth{
 			CredentialBundleSecretRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "bundle"},
 		}
 		in.LLMProviders = append(in.LLMProviders, p)
 	}
-	// keyInEnv is a CLI signed in through env, its model provider's key.
+	// keyInEnv is a CLI signed in through env, its model provider's key, as
+	// the seat's reviewer: Hermes and Pi run no executor.
 	keyInEnv := func(agent v1alpha1.CLIAgentName) func(*Input) {
 		return func(in *Input) {
-			p := cliProvider(v1alpha1.CLIAgentModeHost)
-			p.Spec.Model = "openrouter/anthropic/claude-sonnet-5"
+			p := cliProvider()
+			p.Spec.Model = modelOpenCode
 			p.Spec.Agent = agent
 			p.Spec.Auth = v1alpha1.CLIAgentAuth{Mode: v1alpha1.CLIAgentAuthSubscription}
 			p.Spec.Env = []v1alpha1.SecretEnvVar{{
-				Name:      "OPENROUTER_API_KEY",
+				Name:      envGatewayKey,
 				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "openrouter"}},
 			}}
 			in.LLMProviders = append(in.LLMProviders, p)
-			seatNamed(in, seatBo).Spec.LLM.Default = []v1alpha1.LLMProviderReference{{Name: providerCLI}}
+			seatNamed(in, seatBo).Spec.LLM.Review = []v1alpha1.LLMProviderReference{{Name: providerCLI}}
 		}
 	}
 	chain := func(name string) []v1alpha1.LLMProviderReference {
@@ -87,7 +88,7 @@ func TestSeatPodProviders(t *testing.T) {
 		{
 			name: "a headless token in a pool",
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, cliProvider(v1alpha1.CLIAgentModeHost))
+				in.LLMProviders = append(in.LLMProviders, cliProvider())
 				seatNamed(in, seatBo).Spec.LLM.Default = chain(providerCLI)
 			},
 		},

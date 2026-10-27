@@ -8,6 +8,7 @@ providers:
       env:
         ANTHROPIC_API_KEY: ${K8S_ANTHROPIC_API_KEY_NP33B5LRRKLS}
       model: anthropic/claude-sonnet-5
+      run_in: direct
       state_dir: /var/lib/crewlet/llm-cli/anthropic
     opencode:
       agent: opencode
@@ -15,18 +16,17 @@ providers:
         mode: subscription
       env:
         OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
-      mode: box
       model: openrouter/anthropic/claude-sonnet-5
-      run_in: e2b
       state_dir: /var/lib/crewlet/llm-cli/opencode
   llm_order:
   - anthropic
   - opencode
   sandbox:
-    default_coding_agent: opencode
     default_run_in: e2b
     e2b:
       api_key: ${K8S_E2B_API_KEY_GSEHAAV5THN5}
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
 roles:
 - goal: Fix what the port breaks.
   handle: fixer
@@ -38,8 +38,6 @@ roles:
   placement:
     labels:
       crewlet.ai/pool: data
-  sandbox:
-    enabled: true
 - goal: Port the services to the new runtime.
   handle: porter
   kind: agent
@@ -51,4 +49,4 @@ roles:
     labels:
       crewlet.ai/pool: data
   sandbox:
-    enabled: true
+    max_turns: 64

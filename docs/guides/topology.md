@@ -53,8 +53,8 @@ and hands it its last records when it stops.
 Seat pools are worth their cost when a company needs one of these:
 
 - **More concurrent turns than one pod should run**, or seats whose tool
-  servers and coding agents need more memory than you want beside the
-  estate: a Shared pool spreads the seats over several pods.
+  servers and `Direct` executor runs need more memory or disk than you want
+  beside the estate: a Shared pool spreads the seats over several pods.
 - **A pod that can fail without stopping the company**: a seat pod that runs
   out of memory or wedges costs the seats on it, which another pod of the
   pool takes over, while the data pod keeps serving.
@@ -115,7 +115,7 @@ and the engine then runs on each PerSeat pod its own seat and no other.
 | It gives the seat | It does not give it |
 |---|---|
 | CPU and memory of its own: a pod of the class's seat pod size (`seatPools.defaults.resources`) that no other seat's work shares | **Credential isolation.** Every node of a company holds the keyring and reads the whole secret store, and resolves every seat's vendor identities. A seat pod that is compromised can reach every credential of the company, its own seat's or not. Treat every pod of a company as holding all of its secrets. |
-| A filesystem and processes of its own: other seats' tool servers and coding agents do not run beside it | Speed: the seat still takes one batch of messages at a time. |
+| A filesystem and processes of its own: other seats' tool servers and executor runs do not run beside it, and its own `Direct` executor runs on no pod that holds the company's data volume | Speed: the seat still takes one batch of messages at a time. |
 | A failure of its own: an out-of-memory kill or a wedged engine costs this seat alone | Continuity at `replicas: 1`: while its pod restarts, the seat runs nowhere and its messages wait. `replicas: 2` keeps a standby. |
 
 ## What pools cost
@@ -159,9 +159,9 @@ kubectl get seats -n nimbus -o wide
 ```
 
 ```
-NAME              COMPANY   KIND    UNIT   APPLIED   READY   PAUSED   CODEWORK   POOL       NODE                                     AGE
-release-manager   nimbus    Agent          True      True    False    True       isolated   nimbus-seat-release-manager-89b42764-0   3d
-triage            nimbus    Agent          True      True    False               general    nimbus-seats-general-c53f6a26-1          3d
+NAME              COMPANY   KIND    UNIT   APPLIED   READY   PAUSED   POOL       NODE                                     AGE
+release-manager   nimbus    Agent          True      True    False    isolated   nimbus-seat-release-manager-89b42764-0   3d
+triage            nimbus    Agent          True      True    False    general    nimbus-seats-general-c53f6a26-1          3d
 ```
 
 | Seat field | What it says |
@@ -169,8 +169,7 @@ triage            nimbus    Agent          True      True    False              
 | `status.placement.pool` | the pool the seat is placed in |
 | `status.placement.workload` | the StatefulSet whose pods may run it |
 | `status.placement.node` | the pod whose engine holds the seat's lease and runs it, unset while none does |
-| `CodeWorkRunnable` (the `CODEWORK` column) | whether the seat's coding agent can run on its sandbox provider, or on the sign-in its sandbox environment gives it; blank on a seat without `spec.sandbox`, and on one whose executor runs in box mode ([Code work](cli-agents.md#code-work)) |
-| `Ready` | `True`, `LeaseHeld`, while a pod holds it; `False`, `Unplaced`, while none does, saying why: its pool runs no pod, the seat is not in the revision the engine runs yet, or the engine has not claimed it yet (a few seats every five seconds); `False`, `Suspended`, while the Company is suspended; `Unknown`, `EngineUnavailable`, when the engine's fleet could not be read |
+| `Ready` | `True`, `LeaseHeld`, while a pod holds it, naming where its executor runs; `False`, `Unplaced`, while none does, saying why: its pool runs no pod, the seat is not in the revision the engine runs yet, or the engine has not claimed it yet (a few seats every five seconds); `False`, `BridgeUnreachable`, while its executor runs `Direct` in a seat pool and the Company has no public address ([Where a seat's executor runs](cli-agents.md#where-a-seats-executor-runs)); `False`, `Suspended`, while the Company is suspended; `Unknown`, `EngineUnavailable`, when the engine's fleet could not be read |
 
 A Human seat is never run by the engine and has no `Ready`. On the Company,
 `status.topology.seatPools` counts each pool's pods and seats, and
@@ -196,10 +195,15 @@ every seat.
   `PlacementPending` meanwhile), then moves it with one release and one
   claim.
 - **Scaling a Shared pool** moves seats onto new pods, and off pods that go.
-  A stopping pod finishes its running turns, hands back the waiting ones and
-  releases its seats, so give a pool a `terminationGracePeriodSeconds` longer
-  than its longest turn (five minutes unless the pool or the class says
-  otherwise).
+  A stopping pod finishes the turn segments the engine runs in its own
+  process (a seat's launch, the collection of its run, the review, a
+  delegated worker), hands back the waiting turns and releases its seats, so
+  give a pool a `terminationGracePeriodSeconds` longer than its longest such
+  segment (five minutes unless the pool or the class says otherwise). A
+  seat's executor run is not waited for: a `Direct` one on the pod ends with
+  it, and is ended as `launch_node_gone` once the pod has been gone for the
+  Company's `spec.sandbox.defaultTimeoutSeconds`; an `E2B` one carries on,
+  and the pod that holds the seat next resumes its turn.
 - **Suspension and deletion** stop the seat pods first and the data pod
   after them.
 - **Removing a pool** keeps its pods running for as long as the revision the
@@ -241,16 +245,27 @@ operator could no longer tell which pool a pod serves.
   ([Tiers, limits and offboarding](multi-tenancy.md#tiers-limits-and-offboarding)).
 - **No tool bridge on seat pods.** A seat pod serves its probes alone, so
   the executor runs of its seats call the data pods' tool bridge through the
-  Company's public address, as a remote sandbox does, and the data pod
-  relays each call back to the seat pod over the broker: Crewlet dials a
-  bridge on loopback only on a node that serves the API, so a box on the
-  seat pod itself takes the same way out and back. A company with no public
-  address runs no executor on a seat pod, and one with an address needs the
-  seat pods' egress to reach it
+  Company's public address, as an E2B box does, and the data pod relays each
+  call back to the seat pod over the broker: Crewlet dials a bridge on
+  loopback only on a node that serves the API, so a `Direct` box on the seat
+  pod itself takes the same way out and back. A company with no public
+  address runs no executor on a seat pod (`BridgeUnreachable` on the Seat's
+  `Ready`), and one with an address needs the seat pods' egress to reach it
   ([Exposure](../concepts/runtime.md#exposure)).
-- **Code runs in a remote sandbox.** v1alpha1 offers only E2B for a seat's
-  sandbox, which works from any pod; Crewlet's local sandbox cells would be
-  polled by a data pod for a box on another pod, and fail.
+- **A `Direct` run does not outlive its pod.** A seat's executor run placed
+  `Direct` is a process of the pod that launched it, in a box on that pod's
+  `sandboxes` volume, which only that pod drives: a run whose seat moves to
+  another pod meanwhile carries on, and the pod that holds the seat next
+  collects it by asking the box's pod over the broker. A run on a pod that is
+  replaced (a rollout, a restart) ends with it, and Crewlet collects it as a
+  run that did not finish; one on a pod that goes for good (a pool scaled
+  down or removed) is ended as `launch_node_gone` once the pod has been gone
+  for the Company's `spec.sandbox.defaultTimeoutSeconds` (15 minutes unless
+  set). Nothing relaunches either, and a run in `E2B` carries on wherever its
+  seat goes ([Where a seat's executor
+  runs](cli-agents.md#where-a-seats-executor-runs), and Crewlet's
+  [durability of a
+  run](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#durability-completion-and-observability)).
 
 ## See also
 

@@ -90,7 +90,7 @@ flowchart TD
 2. **Read the Secret values** the document references, from the API server
    directly. A missing Secret or key, or a value over the 64 KiB the engine's
    store accepts, stops here, except a missing one every reference to which
-   is a value a tool server or a coding run may go without (its key listed
+   is a value a tool server or a seat's executor run may go without (its key listed
    in the `optionalKeys` that governs it): the engine is to leave that value
    out, so the store is to hold none for it. The parts are told what was
    read either way: a value a part goes without, and an empty value under a
@@ -189,7 +189,7 @@ flowchart TD
    step, the operator activates the revision the engine runs again,
    unchanged (`POST /config/reload`, with a `Reactivated` event), so the
    engine reads its store without the deleted value rather than starting a
-   tool server or a coding run with it; it keeps what it owes in its record
+   tool server or an executor run with it; it keeps what it owes in its record
    of the store until a revision has activated. It activates again only a
    revision that goes without the value, never one that keeps it, and
    records the revision that activates it again as its own only once it has
@@ -238,7 +238,7 @@ flowchart TD
    value still in the store, so the operator activates it again once that
    value is gone, unchanged (`Reactivated`), and the engine reads its store
    without it. Until then the
-   new revision may start a tool server or a coding run with the deleted
+   new revision may start a tool server or an executor run with the deleted
    Secret's value: that moment is the price of keeping the last good revision
    whole, paid where the revision the engine ran read the key as required,
    or was one whose reading the operator did not know, when the key's Secret
@@ -422,7 +422,7 @@ waited. `Seat.spec.paused` is how the objects say the same:
 spec:                       # Seat ana
   paused: true
   pauseReason: Deploy freeze until the incident review   # optional
-  stopRunning: true                                      # optional: end the turn it is on now
+  stopRunning: true                                      # optional: end the turn it is on now, and its executor run
 ```
 
 On every look at the engine, whatever became of the document, the operator,
@@ -460,8 +460,10 @@ for a token no seat is bound to. A pause the operator took reads
 
 The engine keeps the reason a pause was taken with: a `pauseReason` changed
 while the seat stays paused shows from its next pause on. Setting
-`stopRunning` on a seat already paused ends the turn it is on then; unsetting
-it changes nothing, since a stopped turn is not run again.
+`stopRunning` on a seat already paused ends the turn it is on then, at its
+next round, and its executor run at once, the box reclaimed; unsetting it
+changes nothing, since a stopped turn is not run again. A run parked on a
+person's question stays parked behind the pause.
 
 The engine knows no seat it does not run, so a Seat created with
 `paused: true` is paused once the revision that adds it is applied: the
@@ -485,17 +487,15 @@ takes no work for a person that a pause could hold.
 
 | Object | Condition | When |
 |---|---|---|
-| Company | `SecretsSynced` | `True`, `Synced`, once the store holds every referenced value, counting the values a tool server or a coding run may go without whose Secret or key does not exist, which it does not hold, or holds as it was for the revision the engine runs where that revision requires one, or is one whose reading the operator does not know (it names those, and which of the two it is), the values it keeps only for a revision an engine pod runs or would start on other than the fleet's, or for a pod whose revisions it does not know (naming the pods), and, the Company having no `ResolvedRefs`, naming the values of its own setup steps a run goes without and a value of theirs that holds nothing under a key their `optionalKeys` does not list ([What blocks a document](company-document.md#what-blocks-a-document)). `False`, `SecretNotFound` or `SecretTooLarge`, naming each Secret and key; `False`, `EngineUnavailable` when a write to the store failed; `Unknown`, `NotManaged` under Observe, and under Seed once seeded. |
-| Company | `ConfigApplied` | `True` with `Applied`, `DriftCorrected`, `InSync` or `Seeded`, once the engine reports the revision's epoch applied. `False` with `Applying` while it applies it, `ApplyFailed` when it did not; otherwise with the reason of whatever blocks the document ([What blocks a document](company-document.md#what-blocks-a-document)): `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `HumanSeat`, `PerSeatNotAllowed`, `PoolCapacityExceeded`, `SeatPoolsNotAllowed`, `CLIAuthNotPortable`, `CodingAgentMismatch`, `OptionalKeyUnused`, `SecretNotFound`, `SecretTooLarge`, `NameConflict` (the Secret `<company>-secret-sync` is someone else's), `Invalid` (the engine's own words), `Drifted` (Observe), `WriteRefused` (the engine refuses the operator's own token a change to the document), `NotGranted` (the engine does not let the operator's token make a request it needs), `SeatHeld` (the document takes away a human seat a person, a service account or an open invitation holds in the engine) or `EngineUnavailable`. |
+| Company | `SecretsSynced` | `True`, `Synced`, once the store holds every referenced value, counting the values a tool server or a seat's executor run may go without whose Secret or key does not exist, which it does not hold, or holds as it was for the revision the engine runs where that revision requires one, or is one whose reading the operator does not know (it names those, and which of the two it is), the values it keeps only for a revision an engine pod runs or would start on other than the fleet's, or for a pod whose revisions it does not know (naming the pods), and, the Company having no `ResolvedRefs`, naming the values of its own setup steps a run goes without and a value of theirs that holds nothing under a key their `optionalKeys` does not list ([What blocks a document](company-document.md#what-blocks-a-document)). `False`, `SecretNotFound` or `SecretTooLarge`, naming each Secret and key; `False`, `EngineUnavailable` when a write to the store failed; `Unknown`, `NotManaged` under Observe, and under Seed once seeded. |
+| Company | `ConfigApplied` | `True` with `Applied`, `DriftCorrected`, `InSync` or `Seeded`, once the engine reports the revision's epoch applied. `False` with `Applying` while it applies it, `ApplyFailed` when it did not; otherwise with the reason of whatever blocks the document ([What blocks a document](company-document.md#what-blocks-a-document)): `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `HumanSeat`, `PerSeatNotAllowed`, `PoolCapacityExceeded`, `SeatPoolsNotAllowed`, `CLIAuthNotPortable`, `NoExecutorCLI`, `SandboxPlacementNotOffered`, `SandboxRequired`, `OptionalKeyUnused`, `SecretNotFound`, `SecretTooLarge`, `NameConflict` (the Secret `<company>-secret-sync` is someone else's), `Invalid` (the engine's own words), `Drifted` (Observe), `WriteRefused` (the engine refuses the operator's own token a change to the document), `NotGranted` (the engine does not let the operator's token make a request it needs), `SeatHeld` (the document takes away a human seat a person, a service account or an open invitation holds in the engine) or `EngineUnavailable`. |
 | Company | `EngineHealthy` | The engine's alarm table, read each time the engine is reached: `True`, `NoAlarms`; `False`, `Alarms`, naming the one standing longest; `Unknown`, `AlarmsNotReported`, before the engine has evaluated them. Not part of `Ready`. |
 | Company | `IdentityClaimed` | Whether anybody has joined the company, read from the engine's `/health` each time the engine is reached, and every 30 seconds while nobody has, since a person joins where no watch sees it: `True`, `PersonEnrolled`, once its identity directory holds a person; `False`, `Unclaimed`, while nobody has joined, naming up to five of the company's Human seats and the access token to bring the first person in with; `False`, `NoHumanSeat`, when nobody can, for want of a Human seat; `Unknown`, `IdentityNotReported`, when the engine could not read its directory, did not say, or could not be asked. Not part of `Ready`: a company nobody has joined runs its agent seats. |
 | every part | `Accepted` | `True` once its Company exists; `False` with `CompanyNotFound`, or `Conflict` when it collides with another object of its company. |
-| every part | `ResolvedRefs` | `True`, `Resolved`, its message naming any value it gives a tool server or a coding run that the engine starts with and goes without, under a key an `optionalKeys` list lets go (the message names it: the MCPServer's for a tool server's value, a Seat's or Unit's included), whose Secret or key does not exist or holds an empty value, also while a Secret another part requires holds the document, and saying where the engine keeps the value it held for the revision it runs, which requires it, or whose reading the operator does not know. `False` with `RefNotFound`, `Cycle`, `HumanSeat`, `ReferenceNotAllowed`, `SecretNotFound`, `SecretTooLarge`, `OptionalKeyUnused`, `PoolNotFound`, `NoProvisioner`, `SecretValueEmpty` or `NotAnAccountID`, saying what it references that is missing or cannot be there. Most hold the document, and the part reports the same reason on `Applied`; `PoolNotFound`, `NoProvisioner`, `SecretValueEmpty`, `NotAnAccountID`, and `HumanSeat` on a GitLab `accessLevels` entry hold nothing, because only the part at fault suffers them: it is applied (`Applied=True`) and reported, with a Warning event when the condition turns so. |
-| every part | `Applied` | `True`, `InRevision`, naming the revision, with the generation that revision was rendered from as its `observedGeneration`, once the engine has applied it. `False` with the part's own problem (`Invalid`, `RefNotFound`, a Seat's `PerSeatNotAllowed`, `PoolCapacityExceeded`, `CLIAuthNotPortable`, `CodingAgentMismatch`, or `SeatHeld` when it turns a held human seat into an agent's, ...), a Seat's `PlacementPending` while it stays where it runs until a pod of the pool it moves to is ready (or for good, while the Company does not declare that pool), `Blocked` when another object keeps the document from being applied, `Applying` while the engine applies the revision, or `ApplyFailed` when it did not. A part whose current generation already runs keeps `True` meanwhile: only what changed is held back. |
+| every part | `ResolvedRefs` | `True`, `Resolved`, its message naming any value it gives a tool server or a seat's executor run that the engine starts with and goes without, under a key an `optionalKeys` list lets go (the message names it: the MCPServer's for a tool server's value, a Seat's or Unit's included), whose Secret or key does not exist or holds an empty value, also while a Secret another part requires holds the document, and saying where the engine keeps the value it held for the revision it runs, which requires it, or whose reading the operator does not know. `False` with `RefNotFound`, `Cycle`, `HumanSeat`, `ReferenceNotAllowed`, `SecretNotFound`, `SecretTooLarge`, `OptionalKeyUnused`, `PoolNotFound`, `NoProvisioner`, `SecretValueEmpty` or `NotAnAccountID`, saying what it references that is missing or cannot be there. Most hold the document, and the part reports the same reason on `Applied`; `PoolNotFound`, `NoProvisioner`, `SecretValueEmpty`, `NotAnAccountID`, and `HumanSeat` on a GitLab `accessLevels` entry hold nothing, because only the part at fault suffers them: it is applied (`Applied=True`) and reported, with a Warning event when the condition turns so. |
+| every part | `Applied` | `True`, `InRevision`, naming the revision, with the generation that revision was rendered from as its `observedGeneration`, once the engine has applied it. `False` with the part's own problem (`Invalid`, `RefNotFound`, a Seat's `PerSeatNotAllowed`, `PoolCapacityExceeded`, `CLIAuthNotPortable`, `NoExecutorCLI`, or `SeatHeld` when it turns a held human seat into an agent's, an LLMProvider's `SandboxPlacementNotOffered`, ...), a Seat's `PlacementPending` while it stays where it runs until a pod of the pool it moves to is ready (or for good, while the Company does not declare that pool), `Blocked` when another object keeps the document from being applied, `Applying` while the engine applies the revision, or `ApplyFailed` when it did not. A part whose current generation already runs keeps `True` meanwhile: only what changed is held back. |
 | Seat (agent) | `Ready` | Whether the seat runs: see [A Seat's `Ready` condition](#a-seats-ready-condition). A Human seat has none. |
 | Seat (Agent) | `Paused` | Whether the engine holds the seat paused, once it runs the seat: `True`, `SeatPaused`, naming who paused it, when and why; `False`, `SeatRunning`; with `PauseNotManaged` instead when the pause differs from `spec.paused` under `Observe` or `Seed`. `Unknown`, `PauseUnknown`, while a pause or resume the engine may or may not have recorded is retried; `Unknown`, `PauseRefused`, with the engine's words when it refused one, which is asked for again ten seconds later. None while the engine runs no seat of the Seat's (not in its revision, or a handle another Seat derives too). |
-| Seat (Agent) | `CodeWorkRunnable` | On an Agent seat with `spec.sandbox` whose executor does not run in box mode, in a Company with `spec.sandbox`: whether its coding agent can run on the provider at the head of its sandbox chain, or on the sign-in the seat's sandbox environment gives it, decided from the spec, and the Secrets once they are read, each time the document is rendered, whatever became of the document: a sign-in variable the run goes without, under a key listed in the `optionalKeys` that governs the value that wins (the seat's `spec.sandbox.optionalKeys`, or its step's), counts for nothing once the reconcile has found its Secret or key missing, or its value empty. Under `Observe` or `Seed` it judges the Seat's objects, which may not be the document the engine runs; `Applied` says whether they are. `True`, `CodeWorkSupported`, naming the coding agent and what it runs on; `False` with `CodingAgentMismatch`, which also holds the document (`Applied`), or with `SandboxLoginNotPortable`, `SecretValueEmpty` (a value the runs are given holds an empty value, under a key nothing lists) or `NoProvisioner` (one is a provisioned credential nothing creates), which do not: the seat is applied and runs its turns, and Crewlet refuses each of its coding runs. The operator records a Warning event on the Seat each time the condition becomes `False` or its reason changes. Not part of `Ready`, which says whether a pod runs the seat. None on any other Seat (a seat whose executor runs in box mode codes in that run, and Crewlet never offers it `run_sandbox`), or while none of the seat's sandbox chain resolves; unchanged while the Company is not accepted. |
-| LLMProvider (in `mode: Box`) | `BoxModeRunnable` | Whether its runs can call a seat's tools back through the tool bridge, decided from the spec each time the document is rendered: `True`, `ToolBridgeServed`, naming the bridge at the Company's public address; `False`, `NotExposed`, while the Company has none. The provider is applied either way (it still runs in the engine's pod behind a chain's head or in another phase); the operator records a Warning event when the condition becomes `False`. None on any other provider; unchanged while the Company is not accepted. |
 | Integration | `Healthy` | The engine's own verdict on the vendor: `True`, `CheckPassed`, when it reports the tool connected; `False`, `CheckFailed`, with the engine's reason otherwise; `False`, `NotExposed` while the Company has no public address, since no webhook can reach the engine. |
 
 Besides the conditions:
@@ -560,15 +560,19 @@ never a value.
 | Status | Reason | When |
 |---|---|---|
 | False | `Suspended` | The Company is suspended. |
-| False | `NotExposed` | The head of the seat's executor's chain is an `LLMProvider` in `mode: Box`, and the Company has no public address for a run to call the seat's tools back through. |
-| True | `LeaseHeld` | An engine pod holds the seat's lease, as the engine's `GET /fleet` reports. The message names the pod, and says so when it is not a pod of the seat's StatefulSet yet, while the engine moves it. The engine names a lease by the seat's handle, or by its id (`status.seatID`) when the engine pod that answered does not run the seat yet; the operator finds it either way. |
+| False | `NotExposed` | The seat's executor runs in `E2B`, and the Company has no public address for the box to call the seat's tools back at. |
+| False | `BridgeUnreachable` | The seat is in a seat pool, its executor runs `Direct` there, and the Company has no public address: a seat pod serves no tool bridge of its own. |
+| False | `SandboxLoginNotPortable` | The seat's executor runs in `E2B` on a provider whose login cannot follow it there, and nothing in the seat's sandbox environment signs its CLI in. |
+| True | `LeaseHeld` | An engine pod holds the seat's lease, as the engine's `GET /fleet` reports. The message names the pod, and says so when it is not a pod of the seat's StatefulSet yet, while the engine moves it; and it names the provider, the CLI and the cell the seat's executor runs in. The engine names a lease by the seat's handle, or by its id (`status.seatID`) when the engine pod that answered does not run the seat yet; the operator finds it either way. |
 | False | `PoolNotFound` | No pod holds the seat and none can: the Company does not declare its pool. |
 | False | `Unplaced` | No pod holds the seat: it is not in the revision the engine runs, its pool runs no pod, or the engine has not claimed it yet. The message says which. |
 | Unknown | `EngineUnavailable` | The engine's fleet could not be read. |
 
-`NotExposed` is decided from the spec each
-time the document is rendered: the engine applies such a seat and refuses
-every one of its turns, so the condition holds nothing back, names the pod
+`NotExposed`, `BridgeUnreachable` and `SandboxLoginNotPortable` are decided
+from the spec, and the Secrets once they are read, each time the document is
+rendered ([Where a seat's executor runs](../guides/cli-agents.md#where-a-seats-executor-runs)):
+the engine applies such a seat and refuses each launch of its executor, so
+the condition holds nothing back, names the pod
 that holds the seat if one does, and comes with a Warning event when `Ready`
 becomes so (a suspended Company's seat, whose `Ready` says `Suspended`, is
 announced once it resumes). Once the spec is fixed, a reconcile that does not

@@ -134,14 +134,15 @@ func (run *configRun) leaseOf(handle string) (engine.SeatLease, bool) {
 
 // decideReady sets an agent Seat's Ready condition and status.placement.node
 // from the engine's fleet: True (LeaseHeld) while a node holds the seat's
-// lease, False (Unplaced) while none does. Neither changes when this
-// reconcile did not read the fleet, which it reads whenever the Company runs
-// an engine; Unknown is an engine whose fleet could not be read. A seat whose
-// executor cannot run a turn on the node its spec places it on is False with
-// that reason whoever holds it: the engine applies the seat and refuses
-// every one of its turns, so a lease says nothing about whether it works.
-// The verdict is the spec's, also while a move holds the seat's pin where it
-// ran (PlacementPending): that lasts until a pod of its new pool starts.
+// lease, naming where its executor runs, False (Unplaced) while none does.
+// Neither changes when this reconcile did not read the fleet, which it reads
+// whenever the Company runs an engine; Unknown is an engine whose fleet could
+// not be read. A seat whose executor cannot run a turn as its spec places it
+// is False with that reason whoever holds it: the engine applies the seat and
+// fails every one of its turns at the launch, so a lease says nothing about
+// whether it works. The verdict is the spec's, also while a move holds the
+// seat's pin where it ran (PlacementPending): that lasts until a pod of its
+// new pool starts.
 func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 	gen := s.Generation
 	conditions := p.conditions()
@@ -171,8 +172,11 @@ func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 		lease, held := run.leaseOf(handle)
 		if held {
 			s.Status.Placement.Node = lease.Node
-			setCondition(conditions, gen, crewletaiv1alpha1.ConditionReady, true, crewletaiv1alpha1.ReasonLeaseHeld,
-				heldMessage(lease, workload))
+			message := heldMessage(lease, workload)
+			if p.executor != nil {
+				message += " It " + p.executor.Message + "."
+			}
+			setCondition(conditions, gen, crewletaiv1alpha1.ConditionReady, true, crewletaiv1alpha1.ReasonLeaseHeld, message)
 			return
 		}
 		if pool := s.Status.Placement.Pool; !declaredPool(run.company, pool) {
@@ -211,7 +215,12 @@ func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 // executorReason reports whether reason is Ready's for a seat whose executor
 // cannot run a turn, a verdict of the seat's spec rather than of the fleet.
 func executorReason(reason string) bool {
-	return reason == crewletaiv1alpha1.ReasonNotExposed
+	switch reason {
+	case crewletaiv1alpha1.ReasonNotExposed, crewletaiv1alpha1.ReasonSandboxLoginNotPortable,
+		crewletaiv1alpha1.ReasonBridgeUnreachable:
+		return true
+	}
+	return false
 }
 
 // declaredPool reports whether pool is one a seat of the Company can run in:

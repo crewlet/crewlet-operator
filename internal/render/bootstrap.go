@@ -32,7 +32,7 @@ const (
 	DataDir = "/var/lib/crewlet"
 	// SandboxDir is where every engine pod's sandboxes emptyDir is mounted,
 	// a data pod's and a seat pod's alike: where Crewlet makes the boxes of
-	// the coding runs it places on the pod itself (its direct cell,
+	// the executor runs it places on the pod itself (its direct cell,
 	// providers.sandbox.local.state_dir), a directory each, holding the
 	// run's home, its checkout and whatever it installs and builds. It is a
 	// volume of its own, so that the boxes have a limit of their own
@@ -64,8 +64,8 @@ const (
 	// PublicPort is the port of a data pod's public listener, api.public:
 	// the routes outside parties call without an operator credential, and
 	// nothing else — the vendors' webhooks and app landings (/webhooks/),
-	// and a remote sandbox's per-run telemetry (/otlp/{token}) and tool
-	// bridge (/mcp/{token}), each admitted by a provider signature or a
+	// and a coding run's per-run telemetry (/otlp/{token}) and tool bridge
+	// (/mcp/{token}), each admitted by a provider signature or a
 	// token signed for its one run. Crewlet decides which routes are public
 	// from one list of its own, and answers every other route there as a
 	// path nothing serves, so the address published to the internet cannot

@@ -67,9 +67,9 @@ type credentialSource struct {
 const (
 	notOfferedStreamToken = "The data pod runs Crewlet's embedded broker, which needs no token; an external NATS " +
 		"cluster (`stream.type: nats`), where Crewlet reads one, is not offered."
-	notOfferedLocalSandbox = "A seat's code work runs in E2B alone (`Company.spec.sandbox.e2b`), and " +
-		"`spec.engineConfig` may not set `providers`, so no company runs a sandbox on the engine's host, " +
-		"whose container runtime this environment is for."
+	notOfferedLocalSandbox = "Crewlet's `container` cell, the one this environment is for, is not offered: " +
+		"`Company.spec.sandbox` places a seat's executor run `Direct` or in `E2B`, and `spec.engineConfig` " +
+		"may not set `providers`."
 )
 
 // The references a covered position's sources take.

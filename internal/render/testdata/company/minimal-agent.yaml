@@ -11,6 +11,10 @@ providers:
       state_dir: /var/lib/crewlet/llm-cli/claude
   llm_order:
   - claude
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
 roles:
 - goal: Answer support email.
   handle: support
