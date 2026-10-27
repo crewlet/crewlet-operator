@@ -1530,9 +1530,10 @@ spec:
                             process (a seat's launch, the collection of its run, the review, a
                             delegated worker): the engine puts no bound of its own on that drain,
                             so it must cover the longest of them. A seat's executor run is not
-                            waited for: a Direct one on the pod ends with it, collected as a run
-                            that did not finish, or, on a pod that does not come back, ended once
-                            it has been gone for spec.sandbox.defaultTimeoutSeconds
+                            waited for: a Direct one on the pod ends with it, and its box with the
+                            pod's sandboxes volume, so Crewlet ends it without resuming its turn,
+                            once a pod of the same name is back (collect_unreachable) or once the
+                            pod has been gone for spec.sandbox.defaultTimeoutSeconds
                             (launch_node_gone); an E2B one carries on in its sandbox. Unset takes
                             the class's seatPools.defaults, else 300.
                           format: int64

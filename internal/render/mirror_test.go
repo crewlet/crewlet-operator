@@ -375,6 +375,19 @@ var boxWrites = []string{
 	adr0008Md,
 }
 
+// directRunEnds is every operator file that copies what becomes of a seat's
+// Direct run whose pod stops: a restart of the engine's container keeps its
+// box on the sandboxes emptyDir, and Crewlet collects the run from it as one
+// that did not finish; a pod that is replaced comes back without the box, and
+// Crewlet ends the run without resuming its turn (collect_unreachable); and a
+// pod gone for the box timeout has its runs ended as launch_node_gone. The
+// render's rationale for the emptyDir, the API docs of the pods' grace
+// periods, and the pages and the record that say so.
+var directRunEnds = []string{
+	bootstrapGo, companyTypesGo, engineClassGo, runtimeMd, cliAgentsMd, "docs/guides/topology.md",
+	troubleshootingMd, adr0008Md,
+}
+
 // bootWindows is every operator file that copies the bounds the engine puts
 // on its own boot: the controller's data pod and seat pod startup windows,
 // which add them up, the test that pins their sums, the EngineClass API's
@@ -833,6 +846,31 @@ var mirrored = []mirror{
 			"box's home, XDG and temporary directories, and the run's environment, so of the pod's environment only " +
 			"what PassthroughEnv names reaches a Direct run",
 		digest: "2ba9f4a8443ffe0d5fbbc823b3179c8194e7b837e74032f125f799d84aa45afa",
+		read:   executorRead,
+	},
+	{
+		file: localGo, name: "(*Local).reattach",
+		against: directRunEnds,
+		decides: "a box whose directory is no longer on its node's host is gone (ErrBoxGone), as every box of a " +
+			"pod replaced with its sandboxes emptyDir is, and one whose directory is there is read back as it is, " +
+			"as every box of a pod whose engine's container alone restarted is",
+		digest: "e110c16af07de262bc9cf2412503245704619a8d0150b77312a5da40afafffb3",
+		read:   executorRead,
+	},
+	{
+		file: "internal/sandbox/coordinator.go", name: "(*Coordinator).collectFailed",
+		against: directRunEnds,
+		decides: "a run whose box is gone is ended at once as collect_unreachable, without resuming its turn, so a " +
+			"Direct run whose pod was replaced loses its turn",
+		digest: "6e51910dff65767b5f1908b35abee0b3332b2821d0ad765c716e8ba0a591fb7b",
+		read:   executorRead,
+	},
+	{
+		file: "internal/sandbox/waiterhost.go", name: "(*Waiter).goneAfter",
+		against: directRunEnds,
+		decides: "a running job whose box is on the host of a node absent for the box timeout " +
+			"(default_timeout_seconds) is ended as launch_node_gone, and one whose node is back within it is not",
+		digest: "fe9306cd8f560af34ee8a78abee8a609e07f9e88d3599da12df7e297dc058561",
 		read:   executorRead,
 	},
 	{

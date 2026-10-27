@@ -156,9 +156,14 @@ places its agent seats in a seat pool or runs them in `E2B`. A `Direct` run
 ends with its container: a restart, a rolling update or an eviction of the
 pod (a box past its volume's limit evicts the whole pod, as a run's writes
 past the scratch volume's do) ends the runs in flight on it, and Crewlet
-relaunches none of them, while an `E2B` run goes on. Nothing measured sets
-the 20Gi and 10Gi defaults; they err high because they cost nothing until
-written and reaching one evicts the pod. A `Direct` run on a data pod can
+relaunches none of them, while an `E2B` run goes on. A restart of the
+container alone keeps the `sandboxes` `emptyDir`, and Crewlet collects each
+run from its box as one that did not finish; a pod that is replaced takes
+the boxes with it, and Crewlet ends each run without resuming its turn
+(`collect_unreachable`), which a volume that outlived the pod would spare
+only at the cost of a volume claim for every engine pod. Nothing measured
+sets the 20Gi and 10Gi defaults; they err high because they cost nothing
+until written and reaching one evicts the pod. A `Direct` run on a data pod can
 still write the data volume by its path, which no `emptyDir` limit bounds:
 the volumes bound where a run's writes land, not what the run may name, and
 confining a `Direct` run to its box is Crewlet's to do.

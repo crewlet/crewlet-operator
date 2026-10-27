@@ -43,8 +43,13 @@ const (
 	//     and the rest the store's and its snapshots', so a run that filled
 	//     it would stop the store and the broker, and the whole company with
 	//     them. A box is scratch besides: its run is a process of the pod
-	//     and ends with it, so a volume that outlived the pod would keep
-	//     boxes nothing runs in.
+	//     and ends with it. The emptyDir keeps the box through a restart
+	//     of the engine's container, so Crewlet collects a run the restart
+	//     cut short as one that did not finish, and goes with the pod, whose
+	//     replacement has Crewlet end the run without resuming its turn
+	//     (collect_unreachable). A volume that outlived the pod would keep
+	//     that turn only by giving every engine pod, a seat pod too, a
+	//     volume claim of its own.
 	//   - HOME, under which Crewlet keeps its boxes by default
 	//     (~/.crewlet/sandboxes): an engine pod's HOME is on its scratch
 	//     volume, whose limit is sized for what the processes the engine

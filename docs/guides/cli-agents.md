@@ -622,8 +622,12 @@ one that names a path under `/var/lib/crewlet` on a data pod writes to its
 data volume ([Box storage](../concepts/runtime.md#box-storage)). Whatever the run's shell runs (`git`, a compiler, a package manager) is
 the image's, or what the run installs into its box's home. A Direct run is
 detached from the engine's process, but not from its container: a restart of
-the engine's container or pod ends it, and Crewlet collects it as a run that
-did not finish, with nothing relaunching it. An E2B run is not touched.
+the engine's container ends it, and Crewlet collects it from its box as a run
+that did not finish; a pod replaced by a rollout, a drain or an eviction takes
+the box with its `sandboxes` volume, and Crewlet ends the run without
+resuming its turn (`collect_unreachable`). Nothing relaunches either
+([When a Direct run's pod stops](../concepts/runtime.md#when-a-direct-runs-pod-stops)).
+An E2B run is not touched.
 
 **A Direct box's environment** is the pod's `PATH`, locale, TLS trust and
 proxy variables, the box's home and temporary directories, and the run's own:

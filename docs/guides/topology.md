@@ -201,9 +201,9 @@ every seat.
   give a pool a `terminationGracePeriodSeconds` longer than its longest such
   segment (five minutes unless the pool or the class says otherwise). A
   seat's executor run is not waited for: a `Direct` one on the pod ends with
-  it, and is ended as `launch_node_gone` once the pod has been gone for the
-  Company's `spec.sandbox.defaultTimeoutSeconds`; an `E2B` one carries on,
-  and the pod that holds the seat next resumes its turn.
+  it, and is ended as `launch_node_gone`, its turn lost, once the pod has
+  been gone for the Company's `spec.sandbox.defaultTimeoutSeconds`; an `E2B`
+  one carries on, and the pod that holds the seat next resumes its turn.
 - **Suspension and deletion** stop the seat pods first and the data pod
   after them.
 - **Removing a pool** keeps its pods running for as long as the revision the
@@ -256,14 +256,17 @@ operator could no longer tell which pool a pod serves.
   `Direct` is a process of the pod that launched it, in a box on that pod's
   `sandboxes` volume, which only that pod drives: a run whose seat moves to
   another pod meanwhile carries on, and the pod that holds the seat next
-  collects it by asking the box's pod over the broker. A run on a pod that is
-  replaced (a rollout, a restart) ends with it, and Crewlet collects it as a
-  run that did not finish; one on a pod that goes for good (a pool scaled
-  down or removed) is ended as `launch_node_gone` once the pod has been gone
-  for the Company's `spec.sandbox.defaultTimeoutSeconds` (15 minutes unless
-  set). Nothing relaunches either, and a run in `E2B` carries on wherever its
-  seat goes ([Where a seat's executor
-  runs](cli-agents.md#where-a-seats-executor-runs), and Crewlet's
+  collects it by asking the box's pod over the broker. A restart of the
+  engine's container keeps the box, and Crewlet collects the run as one that
+  did not finish. A run on a pod that is replaced (a rollout, a drain, an
+  eviction) ends with it, and its box with the pod's `sandboxes` volume:
+  Crewlet ends it as `collect_unreachable` once the pod is back, without
+  resuming its turn. One on a pod that goes for good (a pool scaled down or
+  removed) is ended as `launch_node_gone`, its turn lost too, once the pod
+  has been gone for the Company's `spec.sandbox.defaultTimeoutSeconds` (15
+  minutes unless set). Nothing relaunches any of them, and a run in `E2B`
+  carries on wherever its seat goes ([When a Direct run's pod
+  stops](../concepts/runtime.md#when-a-direct-runs-pod-stops), and Crewlet's
   [durability of a
   run](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#durability-completion-and-observability)).
 

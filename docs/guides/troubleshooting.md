@@ -729,15 +729,24 @@ kubectl logs acme-data-0 -n acme | grep -E 'cli_agent_bundle_(restore_failed|wit
   saying its CLI was not found (`claude` or `opencode`): the run is `Direct`,
   and the engine image has no such CLI. Nothing validates that before a run:
   build the class's image with it ([The image needs the CLI](cli-agents.md#the-image-needs-the-cli)).
-- **A seat's executor run ends as one that did not finish** after its pod
-  restarted: a `Direct` run is a process of the engine's container, and ends
-  with it, a rolling update and an eviction included. Nothing relaunches it;
-  the seat's next turn starts a new one. An eviction for a `sandboxes`
-  volume past its `sandboxSizeLimit`, or a `scratch` volume past its
-  `scratchSizeLimit`, is in the pod's events: raise the class's limit, or
-  have the seat's work clean up after itself, in its box and in `/tmp`,
-  which a command that names it outright writes to rather than the box
-  ([Box storage](../concepts/runtime.md#box-storage)).
+- **A seat's executor run fails as `sandbox_run_failed`, reason
+  `collect_unreachable`,** after its pod was replaced, by a rolling update,
+  a drain or an eviction: a `Direct` run is a process of the engine's
+  container, and its box a directory of the pod's `sandboxes` `emptyDir`, so
+  the pod that comes back under the same name finds the box gone, and
+  Crewlet ends the run without resuming its turn.
+  The turn is lost, whatever the run pushed is on its branch, and nothing
+  relaunches it; the seat's next turn starts a new run. A restart of the
+  engine's container alone keeps the box, and Crewlet collects the run as one
+  that did not finish instead; a pod gone for longer than the Company's
+  `spec.sandbox.defaultTimeoutSeconds` has its runs ended as
+  `launch_node_gone`
+  ([When a Direct run's pod stops](../concepts/runtime.md#when-a-direct-runs-pod-stops)).
+  An eviction for a `sandboxes` volume past its `sandboxSizeLimit`, or a
+  `scratch` volume past its `scratchSizeLimit`, is in the pod's events:
+  raise the class's limit, or have the seat's work clean up after itself, in
+  its box and in `/tmp`, which a command that names it outright writes to
+  rather than the box ([Box storage](../concepts/runtime.md#box-storage)).
 
 ## Read what the engine is worth telling you
 
