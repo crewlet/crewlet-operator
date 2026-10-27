@@ -181,6 +181,7 @@ const (
 	// environment that resolves to nothing.
 	executorRead      = "v0.1.1-0.20261026201916-b7ebd490a7d1"
 	localGo           = "internal/sandbox/local.go"
+	localBoxGo        = "internal/sandbox/local_box.go"
 	assistantGo       = "internal/config/assistant.go"
 	llmProviderTypes  = "api/v1alpha1/llmprovider_types.go"
 	listenersGo       = "cmd/crewlet/listeners.go"
@@ -386,6 +387,17 @@ var boxWrites = []string{
 var directRunEnds = []string{
 	bootstrapGo, companyTypesGo, engineClassGo, runtimeMd, cliAgentsMd, "docs/guides/topology.md",
 	troubleshootingMd, adr0008Md,
+}
+
+// parkedBoxes is every operator file that copies how many boxes, and how many
+// runs' processes, an engine pod holds: one running run for each agent seat,
+// and beside it each run parked on a person's question, which frees its seat
+// and keeps its box with its processes stopped until it resumes or its pause
+// TTL expires. The render's rationale for the sandboxes volume's default
+// limit, the API docs of that limit, of the pods' resources and of the turns
+// a seat pod runs at once, and the pages that size a pod by them.
+var parkedBoxes = []string{
+	"internal/render/topology.go", engineClassGo, companyTypesGo, runtimeMd, cliAgentsMd,
 }
 
 // bootWindows is every operator file that copies the bounds the engine puts
@@ -840,7 +852,7 @@ var mirrored = []mirror{
 		read:   executorRead,
 	},
 	{
-		file: "internal/sandbox/local_box.go", name: "(*directBox).childEnv",
+		file: localBoxGo, name: "(*directBox).childEnv",
 		against: directBox,
 		decides: "a direct box's processes are given the engine's environment through hostbox.Inherit alone, the " +
 			"box's home, XDG and temporary directories, and the run's environment, so of the pod's environment only " +
@@ -874,7 +886,23 @@ var mirrored = []mirror{
 		read:   executorRead,
 	},
 	{
-		file: "internal/sandbox/local_box.go", name: "TempRootEnv",
+		file: "internal/sandbox/pending.go", name: "Holding",
+		against: parkedBoxes,
+		decides: "a run holds its seat while it launches, runs or resumes, and not while it is parked on a " +
+			"person's question, so the seat's next run gets a box of its own beside the parked run's",
+		digest: "a06607cd7ae9b1818f9c00edbb72df7914713fe7334712b0d70c049256eb7137",
+		read:   executorRead,
+	},
+	{
+		file: localBoxGo, name: "(*directBox).Pause",
+		against: parkedBoxes,
+		decides: "a Direct box parked on a person's question keeps its processes, stopped, and so their memory, " +
+			"until it resumes or the pause reaper reclaims it at its pause TTL",
+		digest: "607863a3b9692b8b1085feaeb2fd0a6d82bbccdf68de3006d5fbd3f43d0be601",
+		read:   executorRead,
+	},
+	{
+		file: localBoxGo, name: "TempRootEnv",
 		against: boxWrites,
 		decides: "a direct box's temporary directories are pointed into the box by these variables alone, and a " +
 			"seat's Direct run is confined to nothing else, so a write that names /tmp or the engine's home " +

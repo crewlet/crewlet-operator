@@ -804,8 +804,9 @@ type SeatPool struct {
 	// executor, the collection of its run and the review): Crewlet's
 	// node.max_concurrent. An executor run is not one: its turn gives the
 	// place back while the run works, and a seat runs one at a time, so the
-	// seats a pod holds bound its Direct runs. Unset takes the class's
-	// seatPools.defaults.
+	// seats a pod holds bound the Direct runs it has running, beside those
+	// parked on a person's question, whose processes are stopped. Unset
+	// takes the class's seatPools.defaults.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	MaxConcurrentTurns int32 `json:"maxConcurrentTurns,omitempty"`

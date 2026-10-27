@@ -102,12 +102,18 @@ func ScratchSizeLimitOf(class *resource.Quantity) resource.Quantity {
 // (SandboxDir) when its class does not: data.sandboxSizeLimit for a data
 // pod, seatPools.defaults.sandboxSizeLimit for a seat pod.
 //
-// The volume holds at most one box for each agent seat of the pod, and a box
-// holds the run's checkout, its coding CLI's home and temporary files, and
-// whatever the run installs and builds there: a language's module or
-// package cache and a build tree come to a few GiB for an ordinary project,
-// and more for a large one. 20Gi lets several such runs write at once on
-// one pod.
+// The volume holds a box for each of the pod's seats' runs that has one: one
+// running for each agent seat at most, as a seat runs one at a time, and one
+// for each run parked on a person's question. A parked run does not hold its
+// seat, so the seat runs on and its next run gets a box of its own, while the
+// parked one's is kept, its processes stopped, until the run resumes on its
+// answer or its pause TTL expires (the Seat's pauseTTLSeconds, else the
+// Company's defaultPauseTTLSeconds, 1800 seconds unless set; 0 tears the box
+// down at once). A box holds the run's checkout, its coding CLI's home and
+// temporary files, and whatever the run installs and builds there: a
+// language's module or package cache and a build tree come to a few GiB for
+// an ordinary project, and more for a large one. 20Gi lets several such boxes
+// live at once on one pod.
 //
 // It is a ceiling, not a reservation, which is why it errs high: an
 // emptyDir's limit takes nothing from the node until the boxes write it, so

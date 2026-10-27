@@ -106,9 +106,11 @@ type DataPodSettings struct {
 	// resources are the compute resources of the engine container. Its
 	// memory holds the engine, the CLI processes its providers run in its
 	// process (each provider's maxConcurrent of them, 200 to 450 MB each),
-	// and a seat's Direct executor run, one CLI and the tools it starts,
-	// for each agent seat the pod holds that runs Direct: a run that takes
-	// the container past its limit can take the engine with it.
+	// a seat's Direct executor run, one CLI and the tools it starts, for
+	// each agent seat the pod holds that runs Direct, and the stopped
+	// processes of each Direct run parked on a person's question, which keep
+	// their memory until the run resumes or its pause TTL expires: a run
+	// that takes the container past its limit can take the engine with it.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
@@ -188,14 +190,19 @@ type DataPodSettings struct {
 	// sandboxSizeLimit caps the emptyDir a data pod keeps its sandboxes in,
 	// at /var/lib/crewlet-sandboxes: the boxes Crewlet makes on the pod
 	// itself for the executor runs it places there (its direct cell, under
-	// Crewlet's providers.sandbox.local.state_dir), at most one for each
-	// agent seat of the pod, kept while its run waits on a person's answer
-	// and removed when the run ends. A box holds the run's checkout, its
-	// coding CLI's home and temporary files, and whatever the run installs
-	// and builds. A pod whose boxes write more is evicted, with every run
-	// and turn on it; its data volume is untouched. Unset is 20Gi. It bounds
-	// the boxes alone: what a run writes outside its box counts against
-	// scratchSizeLimit, or, under /var/lib/crewlet, against the data volume.
+	// Crewlet's providers.sandbox.local.state_dir): one for each agent seat
+	// of the pod whose run is running, a seat running one at a time, and one
+	// for each run parked on a person's question, which frees its seat for
+	// its next run and keeps its box, its processes stopped, until it
+	// resumes or its pause TTL expires (the Seat's pauseTTLSeconds, else the
+	// Company's spec.sandbox.defaultPauseTTLSeconds, 1800 seconds unless
+	// set; 0 removes the box at once). A box is removed when its run ends,
+	// and holds the run's checkout, its coding CLI's home and temporary
+	// files, and whatever the run installs and builds. A pod whose boxes
+	// write more is evicted, with every run and turn on it; its data volume
+	// is untouched. Unset is 20Gi. It bounds the boxes alone: what a run
+	// writes outside its box counts against scratchSizeLimit, or, under
+	// /var/lib/crewlet, against the data volume.
 	//
 	// It bounds the boxes and reserves nothing: the scheduler places the
 	// pod by the ephemeral-storage request in resources, and an
@@ -236,16 +243,18 @@ type SeatPoolDefaults struct {
 	// node.max_concurrent. Unset takes the engine's default, 32. A seat runs
 	// one turn at a time, so a pod never runs more at once than it holds
 	// seats; and an executor run is not a segment, as its turn gives the
-	// place back while the run works, so the seats a pod holds bound its
-	// Direct runs too.
+	// place back while the run works, so the seats a pod holds bound the
+	// Direct runs it has running too, beside those parked on a person's
+	// question, whose processes are stopped.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	MaxConcurrentTurns int32 `json:"maxConcurrentTurns,omitempty"`
 
 	// resources are the compute resources of every seat pod's engine
 	// container, sized as data.resources says of a data pod's: the engine,
-	// its providers' CLI processes, and a Direct executor run for each
-	// agent seat the pod holds that runs Direct. Unset sets none.
+	// its providers' CLI processes, a Direct executor run for each agent
+	// seat the pod holds that runs Direct, and the stopped processes of each
+	// Direct run parked on a person's question. Unset sets none.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
@@ -276,8 +285,9 @@ type SeatPoolDefaults struct {
 	// sandboxSizeLimit caps the emptyDir every seat pod keeps its sandboxes
 	// in, at /var/lib/crewlet-sandboxes, apart from its scratch volume: the
 	// boxes Crewlet makes on the pod itself for the executor runs it places
-	// there, as data.sandboxSizeLimit says of a data pod, one at most for
-	// each seat the pod holds. A pod whose boxes write more is evicted, with
+	// there, as data.sandboxSizeLimit says of a data pod: one for each seat
+	// the pod holds whose run is running, and one for each run parked on a
+	// person's question. A pod whose boxes write more is evicted, with
 	// every run and turn on it. Unset is 20Gi. It bounds the boxes alone:
 	// what a run writes outside its box counts against scratchSizeLimit.
 	// +optional

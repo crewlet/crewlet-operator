@@ -40,22 +40,24 @@ placed `Direct` runs in the pod too, in a box directory on the pod's
 there (`git`, a compiler, a package manager) has to be in the image, or be
 installed by the run into its box's home
 ([Where a seat's executor runs](#where-a-seats-executor-runs)). Each running
-CLI takes 200 to 450 MB. Size the class's `data.resources` for
-`maxConcurrent` of them per provider, which bounds the provider's CLI in every
-phase but the executor's, and for one more, with whatever its shell runs, for
-each agent seat whose executor runs `Direct` on the pod at once, which
-`maxConcurrent` does not bound. One process lives for a phase's whole run, its
-tool calls included, so where seats wait on each other for a place, raise
-`maxConcurrent` and the pod's memory together. An OpenCode call is at
-the top of that range: measured on OpenCode 2.0.32, one call held about 440
-MB at its peak, some 365 MB of it the private server every call starts, and
-each call running beside it about 250 to 350 MB more, the binary's pages
-being shared between them; a short `opencode api session.get` reading a
-call's usage follows each. OpenCode also unpacks about 19 MB of native
-libraries into each seat's home, under the `TMPDIR` the engine gives it
+CLI takes 200 to 450 MB. Size the class's `data.resources` for `maxConcurrent`
+of them per provider, which bounds the provider's CLI in every phase but the
+executor's, and for one more, with whatever its shell runs, for each agent
+seat whose executor runs `Direct` on the pod at once, which `maxConcurrent`
+does not bound, and for each `Direct` run parked on a person's question, whose
+processes are stopped but keep their memory until the run resumes or its pause
+TTL expires ([Box storage](../concepts/runtime.md#box-storage)). One process
+lives for a phase's whole run, its tool calls included, so where seats wait on
+each other for a place, raise `maxConcurrent` and the pod's memory together.
+An OpenCode call is at the top of that range: measured on OpenCode 2.0.32, one
+call held about 440 MB at its peak, some 365 MB of it the private server every
+call starts, and each call running beside it about 250 to 350 MB more, the
+binary's pages being shared between them; a short `opencode api session.get`
+reading a call's usage follows each. OpenCode also unpacks about 19 MB of
+native libraries into each seat's home, under the `TMPDIR` the engine gives it
 (`<home>/tmp`), beside a database of about 7 MB while a seat's calls run:
-about 26 MB per OpenCode seat on the data volume, and on a seat pod's
-scratch volume (`scratchSizeLimit`) for each seat the pod holds.
+about 26 MB per OpenCode seat on the data volume, and on a seat pod's scratch
+volume (`scratchSizeLimit`) for each seat the pod holds.
 
 ### Claude Code
 
