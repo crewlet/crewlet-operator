@@ -92,6 +92,20 @@ const (
 	// launch runs, the head it runs on and every other refusal before a box
 	// exists are as they were.
 	optionalKeysRead = "v0.1.1-0.20261021054645-37bd6f2e0c50"
+	// seatAppTokenRead is crewlet#395's engine, read at the head of its branch
+	// before that change merged, which every mirror it moved was read again
+	// at. A seat whose GitHub App is installed is issued its installation
+	// token at use, as ${GITHUB_APP_TOKEN_<HANDLE>}, and only the seat's own
+	// resolution answers it: runEnvironment, sandboxMCP and seatSpecs read the
+	// seat's values through that resolution, resolveServer and refGap.hold
+	// take what is minted or issued for the seat as one set, and a value
+	// naming the token waits for the app's installation as a minted one waits
+	// for its seal. Every layer, every merge order and every optional_keys
+	// rule is as it was. The operator follows it by writing nothing: the API
+	// refuses every ${NAME} the operator did not write, and the render writes
+	// no ${GITHUB_APP_TOKEN_<HANDLE>}, so no value it renders is one the
+	// engine issues, and each copy below holds for every document it renders.
+	seatAppTokenRead = "v0.1.1-0.20261026223946-d58ab9ddf7af"
 	// cliOnlyRead is the engine every model of which is a coding CLI, read
 	// on top of crewlet's main at this version, before that change merged:
 	// a providers.llm entry has no type, the cli block's fields are its own,
@@ -652,8 +666,8 @@ var mirrored = []mirror{
 			"role.sandbox.env, each later layer winning a name, and a value that resolves to nothing is left out " +
 			"where the optional_keys beside the value that wins lists its key (a setup file's path likewise), " +
 			"and is the run's gap otherwise",
-		digest: "413112e3769c5d2a4a1a84d84bf6bb3e7f7439acabbe210cb3c9c818b9452189",
-		read:   optionalKeysRead,
+		digest: "daf3aed9247874be8c712bfa72898cc7c5b598d671ef0f24b6d582e5691ab24a",
+		read:   seatAppTokenRead,
 	},
 	{
 		file: toolCredentialsGo, name: "resolveServer",
@@ -663,16 +677,16 @@ var mirrored = []mirror{
 			"key replaces the server's whole; a value that resolves to nothing, or to an empty value, is left out " +
 			"where the server's optional_keys lists its key, whichever layer wrote it, and holds the server back " +
 			"otherwise; and a url that resolves to nothing holds it back whatever optional_keys says",
-		digest: "2883d7f46a0787adfe1194f21693365ab5729bb46466bbdaeeef8522faff7041",
-		read:   optionalKeysRead,
+		digest: "9c0e4c752f99ed95681917f85f0168b0ef8e690b7454d07341d88788200fad67",
+		read:   seatAppTokenRead,
 	},
 	{
 		file: toolCredentialsGo, name: "(*refGap).hold",
 		against: []string{renderCompanyGo, codeWorkGo, mcpServerTypesGo, seatTypesGo},
-		decides: "a value a provisioning pass mints for the seat holds a tool server or a run back whatever " +
-			"optional_keys says, and a declared key's value that nothing mints is left out",
-		digest: "0b885181d18a78a921a37fae2c37e6f1e40a508f1a55c59a89cfb9de528dd14c",
-		read:   optionalKeysRead,
+		decides: "a value a provisioning pass mints or the engine issues for the seat holds a tool server or a run " +
+			"back whatever optional_keys says, and a declared key's value that nothing mints or issues is left out",
+		digest: "1aa6cffd1765e774ef6b019ed89ebfefcd385c60a585307f017e631d33e369bd",
+		read:   seatAppTokenRead,
 	},
 	{
 		file: engineMCPGo, name: "(*Engine).startSharedServers",
@@ -685,8 +699,8 @@ var mirrored = []mirror{
 		file: engineMCPGo, name: "seatSpecs",
 		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
 		decides: "a seat's instance is started of every per-seat server it is granted, with the seat's block for it",
-		digest:  "f173aa5f383a5c87f0897455a9545d3ef6e70c05d42b4a7a1f7b3b710e37f3a5",
-		read:    optionalKeysRead,
+		digest:  "d8e12f522b6ea44fc231bb81b07cca8f43900333742901aa433d2713e1cf65f6",
+		read:    seatAppTokenRead,
 	},
 	{
 		file: mcpConfigGo, name: "(*MCPServer).Grants",
@@ -709,8 +723,8 @@ var mirrored = []mirror{
 		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "a coding run's box is given every server its seat's sandbox scopes, shared or not, with the seat's " +
 			"block for it",
-		digest: "7cd2c2e82ba70b3327284d26e450b09b34549baacc50b22e8927405c3e9fc0a6",
-		read:   optionalKeysRead,
+		digest: "5c62f8967868099d4f70147181d286d06db85047965d6609b22fcf35c49bdc9b",
+		read:   seatAppTokenRead,
 	},
 	{
 		file: fileRulesGo, name: "(*Company).validateHeaderSpellings",

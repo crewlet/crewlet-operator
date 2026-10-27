@@ -21,6 +21,7 @@ roles:
       private_key: ${K8S_BUILDER_GITHUB_APP_PRIVATE_KEY_XJ3ZLBDFZG45}
       tier: full_access
       webhook_secret: ${K8S_BUILDER_GITHUB_APP_WEBHOOK_SECRET_2FHJJ6YLPUEG}
+      workflows: true
   kind: agent
   name: builder
   placement:

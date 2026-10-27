@@ -288,6 +288,7 @@ type GitHubApp struct {
 // Crewlet's role integrations.github and needs the company's GitHub
 // Integration.
 // +kubebuilder:validation:MinProperties=1
+// +kubebuilder:validation:XValidation:rule="!has(self.workflows) || !self.workflows || (has(self.tier) && self.tier == 'FullAccess')",message="workflows applies to a FullAccess seat only: a seat that cannot push code has nothing to push a workflow with",fieldPath=".workflows"
 type GitHubSeatIntegration struct {
 	// tier is how much the seat may do in a repository. Unset is ReadOnly.
 	// Crewlet's `tier`.
@@ -302,6 +303,15 @@ type GitHubSeatIntegration struct {
 	// +kubebuilder:validation:items:MaxLength=201
 	// +kubebuilder:validation:items:Pattern=`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`
 	Repos []string `json:"repos,omitempty"`
+
+	// workflows grants the seat GitHub's workflows write permission, without
+	// which GitHub refuses any push whose commits change a file under
+	// .github/workflows. FullAccess seats only, and off unless set: the same
+	// grant lets the seat's branches run a workflow it rewrote with the
+	// secrets the repository hands its runs, so pair it with branch
+	// protection and environment-scoped secrets. Crewlet's `workflows`.
+	// +optional
+	Workflows *bool `json:"workflows,omitempty"`
 
 	// app is the GitHub App the seat acts as.
 	// +optional

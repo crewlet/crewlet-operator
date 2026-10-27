@@ -383,6 +383,7 @@ type roleSlackDoc struct {
 type roleGitHubDoc struct {
 	Tier           string   `json:"tier,omitempty"`
 	Repos          []string `json:"repos,omitempty"`
+	Workflows      *bool    `json:"workflows,omitempty"`
 	AppID          int64    `json:"app_id,omitempty"`
 	AppSlug        string   `json:"app_slug,omitempty"`
 	InstallationID int64    `json:"installation_id,omitempty"`
