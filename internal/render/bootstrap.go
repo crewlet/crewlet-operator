@@ -50,6 +50,7 @@ const (
 	//     volume, whose limit is sized for the scratch store and the
 	//     processes the engine runs, and a box's checkout would evict the
 	//     pod at it.
+	// ADR-0008 records the decision.
 	SandboxDir = "/var/lib/crewlet-sandboxes"
 	// APIPort is the port of an engine's private HTTP listener, api.port. On
 	// a data pod, which has the ingress role, it carries the API, the

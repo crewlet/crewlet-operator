@@ -38,6 +38,11 @@ import (
 //     credential bundle restores cannot run there unless the seat's own
 //     environment signs its CLI in (SandboxLoginNotPortable).
 //
+// These two cells are the ones the operator offers, Crewlet's container cell
+// not among them, and a Direct box is made on the pod's sandboxes volume
+// (SandboxDir): ADR-0008 records why, with the bridge's address every engine
+// pod is given.
+//
 // The verdict judges the first runner member alone, because that is the one
 // every launch picks while it can run: a launch the box's login refuses
 // fails, it does not move on down the chain. The later runner members are

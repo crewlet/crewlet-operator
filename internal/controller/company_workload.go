@@ -529,9 +529,9 @@ func enginePodMetadata(class *crewletaiv1alpha1.EngineClass, own map[string]stri
 	return labels, annotations
 }
 
-// sandboxesVolumeOf is an engine pod's sandboxes volume, bounded by limit.
-// An emptyDir: a box is scratch whose run is a process of the pod, so it
-// has nothing to keep past the pod. On the node's disk, never in memory
+// sandboxesVolumeOf is an engine pod's sandboxes volume, bounded by limit
+// (ADR-0008). An emptyDir: a box is scratch whose run is a process of the
+// pod, so it has nothing to keep past the pod. On the node's disk, never in memory
 // (medium Memory): a tmpfs is charged to the container's memory limit, and
 // a box's checkout and build tree would take the engine's memory with them.
 func sandboxesVolumeOf(limit resource.Quantity) *corev1ac.VolumeApplyConfiguration {
@@ -811,7 +811,8 @@ func engineEnv(
 	// it starts, so a variable given only while some run needed it would
 	// roll every engine pod each time a provider moved between cells, and
 	// leave a pod started before the move without the address its runs now
-	// dial. A pod whose runs dial no address ignores it.
+	// dial. A pod whose runs dial no address ignores it. ADR-0008 records
+	// the rule, and the in-cluster address it rules out.
 	if public := c.Status.Endpoints.PublicBaseURL; public != "" {
 		env = append(env, literal(envMCPBridgeURL, public))
 	}

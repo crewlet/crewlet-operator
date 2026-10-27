@@ -361,6 +361,7 @@ var directBox = []string{
 var runTelemetry = []string{
 	companyWorkloadGo, companyTypesGo, engineClassGo, exposureMd, runtimeMd,
 	"docs/concepts/overview.md", credentialsConceptMd, "SECURITY.md", "README.md",
+	adr0008Md,
 }
 
 // bootWindows is every operator file that copies the bounds the engine puts
@@ -833,7 +834,8 @@ var mirrored = []mirror{
 	},
 	{
 		file: assistantGo, name: "(*Company).DeepWorkPlacement",
-		against: []string{companyTypesGo, executorGo, cliAgentsMd, runtimeMd},
+		against: []string{companyTypesGo, executorGo, cliAgentsMd, runtimeMd,
+			adr0008Md},
 		decides: "deep work runs in its provider's run_in, else in E2B where the company configures it, else in a " +
 			"container with an image, else on the engine host under the engine's own confinement, never by " +
 			"default_run_in",
@@ -852,7 +854,8 @@ var mirrored = []mirror{
 	},
 	{
 		file: "internal/engine/assistantdeep.go", name: "(*assistantDeep).target",
-		against: []string{companyTypesGo, engineClassGo, cliAgentsMd, exposureMd, runtimeMd, "SECURITY.md"},
+		against: []string{companyTypesGo, engineClassGo, cliAgentsMd, exposureMd, runtimeMd, "SECURITY.md",
+			adr0008Md},
 		decides: "deep work reaches Crewlet at the fleet's bridge address in whichever cell it runs, never at its " +
 			"node's own listener, so a Company with no public address runs no deep work, and a run placed on the " +
 			"engine host needs the host's confinement",

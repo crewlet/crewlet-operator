@@ -584,6 +584,9 @@ seat's executor or the Company's deep work can launch on, in a Company with no
 (`SandboxPlacementNotOffered`). The API refuses `runIn` on a provider of any
 other CLI, since no run is ever launched on it. Want both cells? Make two
 providers and point each seat at the one that is right for it.
+[ADR-0008](../../adr/0008-run-a-seats-executor-in-its-own-engine-pod-or-e2b.md)
+records why these are the cells, and what was ruled out: Crewlet's
+`container` cell, and a class setting that forbids `Direct`.
 
 ```yaml
 spec:                       # Company acme
