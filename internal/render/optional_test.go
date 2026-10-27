@@ -13,11 +13,12 @@ import (
 )
 
 // The fields of a value the first setup step of a Company's or a Seat's
-// spec.sandbox gives a seat's executor runs: its first variable and its
-// first file.
+// spec.sandbox gives a seat's executor runs, its first variable and its
+// first file, and of the first variable of a Seat's spec.sandbox.env.
 const (
 	firstStepEnv  = "spec.sandbox.setup[0].env[0].valueFrom"
 	firstStepFile = "spec.sandbox.setup[0].files[0].valueFrom"
+	seatEnv       = "spec.sandbox.env[0].valueFrom"
 )
 
 // The objects of the optional-keys case the tests break, and the keys and
@@ -102,7 +103,7 @@ func TestStartValuesSayWhichValuesMayGoMissing(t *testing.T) {
 		unitHeader,
 		value(optionalSecret("coder-github", headerLower), coder, "spec.mcp[0].env[0].valueFrom", headerAuthorization,
 			sampleGitHub, true, github, fieldOptionalKeys),
-		value(optionalSecret("coder-github", optionalToken), coder, "spec.sandbox.env[0].valueFrom", envGitHubSignIn, "", false,
+		value(optionalSecret("coder-github", optionalToken), coder, seatEnv, envGitHubSignIn, "", false,
 			coder, seatSandbox),
 		value(optionalSecret("coder-db", "url"), coder, "spec.sandbox.env[1].valueFrom", envDatabaseURL, "", true, coder, seatSandbox),
 		value(optionalSecret("coder-db", "user"), coder, firstStepEnv, envPGUser, "", false,
@@ -261,6 +262,41 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 				in.Seats = slices.DeleteFunc(in.Seats, func(s v1alpha1.Seat) bool { return s.Spec.Kind != v1alpha1.SeatKindHuman })
 			},
 			object: ObjectRef{Kind: KindCompany, Name: optionalInput(t).Company.Name}, field: firstStepEnv,
+		},
+		{
+			name:   "a seat's env its executor runs with",
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv, want: true,
+		},
+		// An agent seat whose executor never launches starts nothing with
+		// its run's values, so an empty one holds nothing up.
+		{
+			// A valid company: no model, so no executor, and no box to
+			// configure.
+			name: "a seat's env in a company with no model and no spec.sandbox",
+			mutate: func(in *Input) {
+				in.LLMProviders = nil
+				in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{}
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv,
+		},
+		{
+			// Crewlet refuses the document (SandboxRequired), so it starts
+			// nothing on it.
+			name:   "a seat's env in a company with a model and no spec.sandbox",
+			mutate: func(in *Input) { in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{} },
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv,
+		},
+		{
+			name:   "a seat's env whose executor chain resolves to nothing",
+			mutate: func(in *Input) { in.LLMProviders = nil },
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv,
+		},
+		{
+			name: "a seat's env whose executor chain holds no CLI that runs it",
+			mutate: func(in *Input) {
+				in.LLMProviders[0].Spec.Agent, in.LLMProviders[0].Spec.Model = v1alpha1.CLIAgentCodex, modelCodex
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv,
 		},
 	}
 	for _, c := range cases {
