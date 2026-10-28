@@ -169,7 +169,7 @@ triage            nimbus    Agent          True      True    False    general   
 | `status.placement.pool` | the pool the seat is placed in |
 | `status.placement.workload` | the StatefulSet whose pods may run it |
 | `status.placement.node` | the pod whose engine holds the seat's lease and runs it, unset while none does |
-| `Ready` | `True`, `LeaseHeld`, while a pod holds it, naming where its executor runs; `False`, `Unplaced`, while none does, saying why: its pool runs no pod, the seat is not in the revision the engine runs yet, or the engine has not claimed it yet (a few seats every five seconds); `False`, `BridgeUnreachable`, while its executor runs `Direct` in a seat pool and the Company has no public address ([Where a seat's executor runs](cli-agents.md#where-a-seats-executor-runs)); `False`, `Suspended`, while the Company is suspended; `Unknown`, `EngineUnavailable`, when the engine's fleet could not be read |
+| `Ready` | `True`, `LeaseHeld`, while a pod holds it, naming where its executor runs; `False`, `Unplaced`, while none does, saying why: its pool runs no pod, the seat is not in the revision the engine runs yet, or the engine has not claimed it yet (a few seats every five seconds); `False`, `NotExposed` or `SandboxLoginNotPortable`, while the engine refuses each launch of its executor ([Where a seat's executor runs](cli-agents.md#where-a-seats-executor-runs)); `False`, `Suspended`, while the Company is suspended; `Unknown`, `EngineUnavailable`, when the engine's fleet could not be read |
 
 A Human seat is never run by the engine and has no `Ready`. On the Company,
 `status.topology.seatPools` counts each pool's pods and seats, and
@@ -243,15 +243,14 @@ operator could no longer tell which pool a pod serves.
   changes a pool's `replicas` itself: moving seats interrupts them, and more
   pods buy availability, not throughput. A platform sets `replicas` itself
   ([Tiers, limits and offboarding](multi-tenancy.md#tiers-limits-and-offboarding)).
-- **No tool bridge on seat pods.** A seat pod serves its probes alone, so
-  the executor runs of its seats call the data pods' tool bridge through the
-  Company's public address, as an E2B box does, and the data pod relays each
-  call back to the seat pod over the broker: Crewlet dials a bridge on
-  loopback only on a node that serves the API, so a `Direct` box on the seat
-  pod itself takes the same way out and back. A company with no public
-  address runs no executor on a seat pod (`BridgeUnreachable` on the Seat's
-  `Ready`), and one with an address needs the seat pods' egress to reach it
-  ([Exposure](../concepts/runtime.md#exposure)).
+- **A seat pod serves its own boxes alone.** A seat pod serves its probes
+  and, to loopback alone, the tool bridge and the telemetry receiver its
+  seats' `Direct` boxes dial, so a `Direct` run in a seat pool needs no
+  public address and no egress of its own. A run placed in `E2B` calls the
+  data pods' tool bridge through the Company's public address, and the data
+  pod relays each call back to the seat pod over the broker: a company with
+  no public address runs no `E2B` executor in any pool (`NotExposed` on the
+  Seat's `Ready`) ([Exposure](../concepts/runtime.md#exposure)).
 - **A `Direct` run does not outlive its pod.** A seat's executor run placed
   `Direct` is a process of the pod that launched it, in a box on that pod's
   `sandboxes` volume, which only that pod drives: a run whose seat moves to

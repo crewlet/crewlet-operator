@@ -250,7 +250,7 @@ the operator follow it, and record the digest and version the failure
 prints. When the engine removes or renames one, the test says so: name the
 declaration that decides it now in its place, with any digest at first, and
 the next run prints the digest to record. Of the renderer's executor
-verdicts, `NotExposed`, `BridgeUnreachable` and `SandboxLoginNotPortable`
+verdicts, `NotExposed` and `SandboxLoginNotPortable`
 mirror what the engine refuses only when a seat launches its executor, never
 on a write, so the operator reports them on the Seat's `Ready` and applies
 the seat, as the engine does: drift there leaves a stale condition, not a held
@@ -315,15 +315,17 @@ to the code `internal/render/executor.go`, `internal/render/signin.go` and
 the head of a seat's executor chain in
 `internal/render/seatpod_providers.go` were read against. It holds
 which engine pod's boxes dial their tool bridge on loopback
-(`bridgeHostURL` and `loopbackURL` in Crewlet's `cmd/crewlet/listeners.go`,
+(`boxHostURL` and `loopbackURL` in Crewlet's `cmd/crewlet/listeners.go`,
 `(*Bridge).Reaches` in `internal/api/mcpbridge/mcpbridge.go`) to
 `internal/controller/company_workload.go`, which gives every engine pod the
-Company's public address as `CREWLET_MCP_BRIDGE_URL` because a seat pod's
-boxes have no other way to it, to `internal/controller/company_exposure.go`,
-which under `Isolated` lets every engine pod reach the public route's proxies
-that such a call lands on, and to `internal/render/executor.go`, whose
-verdict reports a `Direct` seat on a data pod as runnable without that
-address and one in a seat pool as `BridgeUnreachable`.
+Company's public address as `CREWLET_MCP_BRIDGE_URL` for the runs placed in
+E2B and the Dashboard Assistant's deep work alone, to
+`internal/render/bootstrap.go`, which binds a seat pod's `api.port` on every
+interface so that its own `Direct` boxes reach it on loopback, to
+`internal/controller/company_exposure.go`, which under `Isolated` lets the
+data pods alone reach the public route's proxies that a deep-work call lands
+on, and to `internal/render/executor.go`, whose verdict reports a `Direct`
+seat as runnable in any pool, with or without that address.
 
 The engine is the one thing in the Makefile that is not pinned. Every suite
 runs Crewlet's `main`, as Crewlet publishes it at

@@ -193,7 +193,19 @@ const (
 	// seeded with its member's login, and is given of the pod's environment
 	// the allowlisted part alone; a run starts without a value of its
 	// environment that resolves to nothing.
-	executorRead      = "v0.1.1-0.20261026201916-b7ebd490a7d1"
+	executorRead = "v0.1.1-0.20261026201916-b7ebd490a7d1"
+	// executorFinalRead is crewlet#388's engine again, read at the head of
+	// its branch once crewlet's main to 7cd6b68b80 was merged into it,
+	// before that change merged. A node without the ingress role that runs
+	// seats now serves its own direct boxes the tool bridge and the
+	// telemetry receiver on api.port, to loopback alone, where loopback
+	// reaches the listener (boxHostURL, reachedOnLoopback), so a seat pod's
+	// Direct boxes need no address of the operator's and nothing on a seat
+	// pod dials the public route; a direct box exports its traces to its
+	// own node's listener where the node forwards them (BuildOtelReceiver,
+	// withTelemetry). Each mirror that moved was read again at it.
+	executorFinalRead = "v0.1.1-0.20261028203606-c6ba342a52ad"
+	otelGo            = "internal/sandbox/otel.go"
 	localGo           = "internal/sandbox/local.go"
 	localBoxGo        = "internal/sandbox/local_box.go"
 	assistantGo       = "internal/config/assistant.go"
@@ -348,11 +360,11 @@ var executorLogin = []string{
 var executorBox = []string{"docs/guides/credentials.md", credentialsConceptMd}
 
 // bridgeVerdict is every operator file that copies which engine pod's direct
-// boxes reach the tool bridge on loopback and which only at the Company's
-// public address: the render, which writes the pods' api.public and reports a
-// Direct seat in a seat pool with no public address as BridgeUnreachable
-// (ExecutorOf), the API's reason, and the pages and the record that state the
-// verdict.
+// boxes reach the tool bridge on loopback, every one's, and which runs reach
+// it only at the Company's public address, those in E2B and deep work: the
+// render, which binds the pods' listeners and reports a Direct seat as
+// runnable in any pool (ExecutorOf), the API's Ready reasons, and the pages
+// and the record that state the verdict.
 var bridgeVerdict = []string{
 	bootstrapGo, executorGo, "api/v1alpha1/common_types.go", cliAgentsMd, troubleshootingMd,
 	"docs/guides/topology.md", "docs/concepts/applying.md", runtimeMd, exposureMd,
@@ -369,11 +381,13 @@ var directBox = []string{
 }
 
 // runTelemetry is every operator file that states where a seat's executor run
-// exports its traces: to the receiver at the Company's public address, Direct
-// as well as in E2B. The controller gives every engine pod that address and
-// lets every engine pod reach the public route's proxies partly for it, the
-// API docs of the address, of the route that carries it and of the class's
-// telemetry say who calls it, and the pages and the security policy say so.
+// exports its traces: in E2B to the receiver at the Company's public address,
+// and Direct to its own pod's listener, on loopback, which every pod given
+// the class's collector serves. The controller gives every engine pod that
+// address and the collector, and lets the data pods alone reach the public
+// route's proxies, the API docs of the address, of the route that carries it
+// and of the class's telemetry say who calls it, and the pages and the
+// security policy say so.
 var runTelemetry = []string{
 	companyWorkloadGo, companyExposureGo, companyTypesGo, engineClassGo, exposureMd, runtimeMd,
 	"docs/concepts/overview.md", credentialsConceptMd, "SECURITY.md", "README.md",
@@ -460,7 +474,7 @@ var bootWindows = []string{
 // executorRunners), the cell it places the run in (agentPlacement,
 // buildSandbox and its round cap, defaultSandboxMaxTurns), the address the
 // box dials (LaunchExecutor, with the bridge's own Build, Reaches and the
-// node's bridgeHostURL and loopbackURL), and the login it hands the box
+// node's boxHostURL, reachedOnLoopback and loopbackURL), and the login it hands the box
 // (newCodingRun, entrySignIn, sandboxCredentials and OnEngineHost). Some are
 // a sandbox backend's: what an E2B box is created from, (*E2BProvider).Create,
 // since the launch hands a run's credential files to whatever box it is placed
@@ -792,21 +806,31 @@ var mirrored = []mirror{
 		decides: "a launch, behind the turn's fence on a node with a sandbox runtime and a bridge something reaches, " +
 			"picks its member (member), places the run in the member's cell (agentPlacement, else the catalogue's " +
 			"default), refuses a cell whose box cannot dial the bridge (Reaches: a Direct box dials its node's own " +
-			"listener where the node serves one, every other the fleet's address; BridgeUnreachable, NotExposed), " +
+			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable)",
-		digest: "e513b05ddd1d7323f89dede43d5712f40082184b390e261ea6ff174d8b4cde0d",
-		read:   executorRead,
+		digest: "734b3c9e72ad0143cfc1c3f35807532c7a4549862455c9104c72348c35679e1f",
+		read:   executorFinalRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
 		against: runTelemetry,
-		decides: "every executor launch, whatever its cell, is given the run's OTel environment, an endpoint under " +
-			"the one receiver address the node was given (CREWLET_SANDBOX_OTEL_RECEIVER_URL) with a token signed " +
-			"for the run, so a Direct box on an engine pod exports its traces to the Company's public address as " +
-			"an E2B box does",
-		digest: "0d16b5ee99d997bfe0a31ca979204f9519fad0f1cb16776982957893e0353830",
-		read:   executorRead,
+		decides: "every executor launch is given the run's OTel environment, an endpoint with a token signed for " +
+			"the run under the receiver address its cell reaches: a Direct box its own node's listener, on " +
+			"loopback, where the node has one, an E2B box the address the node was given " +
+			"(CREWLET_SANDBOX_OTEL_RECEIVER_URL), the Company's public address",
+		digest: "5d15ea5b0c97e36290b2d93b9dd98f63caeb27859e46a500a7db255895b1bf3b",
+		read:   executorFinalRead,
+	},
+	{
+		file: otelGo, name: "BuildOtelReceiver",
+		against: runTelemetry,
+		decides: "a node builds the receiver with its own listener's loopback address only where it forwards to a " +
+			"collector (OTEL_EXPORTER_OTLP_ENDPOINT), which the operator sets on every engine pod with the " +
+			"receiver's address, so every pod that hands a box an endpoint hands a Direct box its own listener, " +
+			"and builds none with neither address",
+		digest: "8c4efc8ac2c9d57a7ec151db0280fccd5e6285f96855758d276a85738134a8c1",
+		read:   executorFinalRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).member",
@@ -1134,23 +1158,32 @@ var mirrored = []mirror{
 		read:   executorRead,
 	},
 	{
-		file: listenersGo, name: "(*nodeListeners).bridgeHostURL",
+		file: listenersGo, name: "(*nodeListeners).boxHostURL",
 		against: append([]string{companyWorkloadGo, seatPoolsGo, companyExposureGo}, bridgeVerdict...),
-		decides: "only a node that runs both the ingress and the seats roles and binds a listener has a loopback " +
-			"address of its own bridge, at api.public where it binds one: a data pod, never a seat pod, whose direct " +
-			"boxes dial CREWLET_MCP_BRIDGE_URL like a remote sandbox's, so the operator gives every engine pod the " +
-			"Company's public address and, under Isolated, lets it reach the public route's proxies (engineEgress), " +
-			"and ExecutorOf reports a Direct seat on a data pod as runnable with no address, and one in a seat pool " +
-			"as BridgeUnreachable while the Company has none",
-		digest: "bccfb6220c20a79cd5aa212ffb9adb41735772aaa37eff24395e9708b6a82efe",
-		read:   executorRead,
+		decides: "every node that runs seats and binds a listener its boxes reach has a loopback address of its own " +
+			"bridge and telemetry receiver: an ingress node at api.public where it binds one, and a node without " +
+			"the role, a seat pod, at api.port where loopback reaches it, so no engine pod's direct boxes dial " +
+			"CREWLET_MCP_BRIDGE_URL, the operator gives every engine pod the Company's public address for E2B runs " +
+			"and deep work alone and, under Isolated, lets the data pods alone reach the public route's proxies " +
+			"(dataPodEgress), and ExecutorOf reports a Direct seat as runnable in any pool with no address",
+		digest: "24f42453fc8d7c6a4366c1ff8feeb748dbffb20a389dbba35546a550afadbb0d",
+		read:   executorFinalRead,
+	},
+	{
+		file: listenersGo, name: "reachedOnLoopback",
+		against: append([]string{companyWorkloadGo}, bridgeVerdict...),
+		decides: "a listener bound on every interface, as a seat pod's api.port is, is one loopback reaches, so a " +
+			"seat pod derives its own boxes' address",
+		digest: "4a505982fd19d6c0aba6b35135e59f124cc70777a2b141b0e848d80cc042119c",
+		read:   executorFinalRead,
 	},
 	{
 		file: listenersGo, name: "loopbackURL",
 		against: append([]string{companyWorkloadGo}, bridgeVerdict...),
-		decides: "a listener bound on every interface, as a data pod's api.public is, is dialled at 127.0.0.1 and its " +
-			"port over plain http, so a data pod's direct boxes reach its bridge with no address of the operator's, " +
-			"and ExecutorOf reports a Direct seat on a data pod as runnable whether or not the Company has one",
+		decides: "a listener bound on every interface, as a data pod's api.public and a seat pod's api.port are, is " +
+			"dialled at 127.0.0.1 and its port over plain http, so an engine pod's direct boxes reach its bridge " +
+			"with no address of the operator's, and ExecutorOf reports a Direct seat as runnable whether or not the " +
+			"Company has one",
 		digest: "3858556fc7840e1e4d62f1a9b73a8888c265c299aa8c766886017d23db43dc0b",
 		read:   executorRead,
 	},
@@ -1158,8 +1191,8 @@ var mirrored = []mirror{
 		file: bridgeGo, name: "(*Bridge).Reaches",
 		against: []string{companyWorkloadGo, executorGo},
 		decides: "a box on its node's own host dials the node's own listener wherever the node has one, ahead of " +
-			"CREWLET_MCP_BRIDGE_URL, and every other box the variable alone, so the public address a data pod is " +
-			"given moves none of its direct boxes off loopback",
+			"CREWLET_MCP_BRIDGE_URL, and every other box the variable alone, so the public address an engine pod " +
+			"is given moves none of its direct boxes off loopback",
 		digest: "c0df6ef2a0204972856c3580b014a6bccc40e3485104c9151de5a08585a1476a",
 		read:   executorRead,
 	},

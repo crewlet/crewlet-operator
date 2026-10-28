@@ -602,9 +602,10 @@ const (
 )
 
 // WebhookExposure is how vendors' webhooks, and the calls coding runs make
-// back to the engine, reach a company's engine: every seat's executor run's
-// traces, and the tool bridge calls of every run but a seat's Direct one on
-// a data pod, which dials that pod on loopback. Whatever the mode, they
+// back to the engine, reach a company's engine: the tool bridge calls and the
+// traces of a seat's executor run in E2B, and the Dashboard Assistant's deep
+// work's calls, a seat's Direct run dialling its own engine pod on loopback
+// instead. Whatever the mode, they
 // reach the engine's public listener (Crewlet's api.public), a port of its
 // own that serves only the routes outside parties call without an operator
 // credential (/webhooks/, /otlp/{token}, /mcp/{token}) and answers every
@@ -887,14 +888,15 @@ type NetworkPolicySettings struct {
 	// Direct executor run is a process of the engine pod, so it egresses
 	// under this policy, its box's setup commands included: its vendor, its
 	// code host and the package registries it installs from are reached
-	// from the pod. Every engine pod also calls the Company's public address:
-	// a seat pod's runs for the tool bridge, a deep-work run for Crewlet, and
-	// every executor run for its traces. A call that lands on the public
-	// route's proxies inside the cluster is admitted by a rule of its own,
-	// naming the webhooks route's proxy namespaces or the class's external
-	// forwarders; a load balancer the call leaves the cluster through must
-	// stay outside exceptCIDRs. An E2B run happens in the Company's E2B
-	// sandbox, which this policy does not reach.
+	// from the pod; it calls its tools and sends its traces to its own pod's
+	// listener on loopback, which no policy polices. A data pod also calls
+	// the Company's public address, for the Dashboard Assistant's deep work,
+	// which Crewlet holds to it in whichever cell it runs. A call that lands
+	// on the public route's proxies inside the cluster is admitted by a rule
+	// of the data pods' own, naming the webhooks route's proxy namespaces or
+	// the class's external forwarders; a load balancer the call leaves the
+	// cluster through must stay outside exceptCIDRs. An E2B run happens in
+	// the Company's E2B sandbox, which this policy does not reach.
 	// +optional
 	Egress NetworkPolicyEgress `json:"egress,omitzero"`
 }
@@ -1177,10 +1179,11 @@ type EngineLimits struct {
 // OTEL_METRICS_EXPORTER cannot be set in env). While a Company has a public
 // address (status.endpoints.publicBaseURL), the operator also wires Crewlet's
 // sandbox telemetry receiver there (CREWLET_SANDBOX_OTEL_RECEIVER_URL): a
-// seat's executor run, in E2B or Direct, exports to the engine's public
-// listener with a token signed for its one run, and the engine forwards it to
-// this collector with the headers below, which never enter the box. Without a
-// public address no box exports anything.
+// seat's executor run in E2B exports to the engine's public listener with a
+// token signed for its one run, and the engine forwards it to this collector
+// with the headers below, which never enter the box. A seat's Direct run
+// exports the same way to its own engine pod's listener on loopback, with or
+// without a public address. Without one, no E2B box exports anything.
 type TelemetrySettings struct {
 	// otlpEndpoint is the collector's OTLP/HTTP endpoint
 	// (OTEL_EXPORTER_OTLP_ENDPOINT).

@@ -1570,8 +1570,9 @@ var _ = Describe("Company config", Ordered, func() {
 		Eventually(reasonOf(shared, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonBlocked),
 			"the seat holds nothing: the other seats' refusals hold the document")
 		Expect(conditionOf(shared, crewletaiv1alpha1.ConditionResolvedRefs)(Default).Status).To(Equal(metav1.ConditionTrue))
-		Expect(reasonOf(shared, crewletaiv1alpha1.ConditionReady)(Default)).NotTo(Equal(crewletaiv1alpha1.ReasonBridgeUnreachable),
-			"the company has a public address, which a seat pod's Direct boxes call the seat's tools back at")
+		Expect(reasonOf(shared, crewletaiv1alpha1.ConditionReady)(Default)).
+			NotTo(BeElementOf(crewletaiv1alpha1.ReasonNotExposed, crewletaiv1alpha1.ReasonSandboxLoginNotPortable),
+				"a seat pod's Direct boxes call the seat's tools back on the pod's own listener")
 		Expect(log.of(shared.Name)).To(BeEmpty(), "a seat whose executor can run is not announced")
 		Expect(shared.Status.Placement.Pool).To(Equal(poolGeneral))
 		Expect(shared.Status.Placement.Workload).To(Equal(sharedPoolStatefulSetName(c, poolGeneral)))
@@ -1664,28 +1665,25 @@ var _ = Describe("Company config", Ordered, func() {
 				"a seat whose executor runs Direct on a data pod reaches its tools on the pod's own listener")
 		Expect(log.of(coder.Name)).To(ConsistOf(HavePrefix("Warning " + crewletaiv1alpha1.ReasonNotExposed)))
 
-		By("adding a seat in a seat pool whose executor runs Direct, which reaches its tools only at the public address")
+		By("adding a seat in a seat pool whose executor runs Direct, which reaches its tools on its seat pod's own listener")
 		pooled := newSeat(namespace, name, "pooled", func(s *crewletaiv1alpha1.Seat) {
 			s.Spec.Placement = crewletaiv1alpha1.SeatPlacement{Pool: poolGeneral}
 		})
 		Eventually(reasonOf(pooled, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).Should(Equal(crewletaiv1alpha1.ReasonInRevision))
 		Eventually(reasonOf(pooled, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
-			Should(Equal(crewletaiv1alpha1.ReasonBridgeUnreachable))
-		Expect(conditionOf(pooled, crewletaiv1alpha1.ConditionReady)(Default).Message).To(ContainSubstring("a seat pod serves no tool bridge of its own"))
+			Should(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced),
+				"a seat pod serves its own Direct boxes the tool bridge on loopback, with no public address")
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)
-		Expect(log.of(pooled.Name)).To(ConsistOf(HavePrefix("Warning " + crewletaiv1alpha1.ReasonBridgeUnreachable)))
+		Expect(log.of(pooled.Name)).To(BeEmpty(), "a seat whose executor can run is not announced")
 
 		By("giving the company a public address")
 		standInAt(c, baseURL)
 		Eventually(reasonOf(coder, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
 			Should(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced))
-		Eventually(reasonOf(pooled, crewletaiv1alpha1.ConditionReady)).WithTimeout(settle).
-			Should(BeElementOf(crewletaiv1alpha1.ReasonLeaseHeld, crewletaiv1alpha1.ReasonUnplaced),
-				"a data pod relays a call at the public address to the seat pod holding the seat")
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)
-		Expect(log.of(pooled.Name)).To(HaveLen(1), "a seat that became runnable is not announced again")
+		Expect(log.of(pooled.Name)).To(BeEmpty(), "a seat that could always run is never announced")
 		Expect(log.of(coder.Name)).To(ConsistOf(HavePrefix("Warning "+crewletaiv1alpha1.ReasonNotExposed)),
 			"the seat is announced once, however many reconciles found it unrunnable")
 	})

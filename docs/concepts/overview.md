@@ -236,7 +236,7 @@ part is in the running revision, and only it suffers what is reported
 | `EngineClass` | `Accepted` |
 | `Unit`, `MCPServer`, `Schedule` | `Accepted`, `ResolvedRefs`, `Applied` |
 | `LLMProvider` | `Accepted`, `ResolvedRefs`, `Applied` |
-| `Seat` | `Accepted`, `ResolvedRefs`, `Applied`, and on an Agent seat `Ready` (whether it runs: `True`, `LeaseHeld`, while an engine pod holds it, naming where its executor runs; `False` with `Unplaced` while none does, `PoolNotFound` when its pool is not one the Company declares, or `NotExposed`, `BridgeUnreachable` or `SandboxLoginNotPortable` when the engine refuses each launch of its executor), and once the engine runs it `Paused` |
+| `Seat` | `Accepted`, `ResolvedRefs`, `Applied`, and on an Agent seat `Ready` (whether it runs: `True`, `LeaseHeld`, while an engine pod holds it, naming where its executor runs; `False` with `Unplaced` while none does, `PoolNotFound` when its pool is not one the Company declares, or `NotExposed` or `SandboxLoginNotPortable` when the engine refuses each launch of its executor), and once the engine runs it `Paused` |
 | `Integration` | `Accepted`, `ResolvedRefs`, `Applied`, `Healthy` |
 
 A Company also reports the revision the engine runs, its endpoints and the

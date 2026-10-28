@@ -101,7 +101,7 @@ flowchart LR
     E["<b>Crewlet engine</b><br/><i>one per Company</i>"]
     E -->|"each agent seat's executor,<br/>its coding CLI's own run"| D["<b>A box on the engine pod</b><br/><i>Direct</i>"]
     E -->|"each agent seat's executor,<br/>its coding CLI's own run"| SB["<b>The Company's E2B sandbox</b>"]
-    D -->|"/mcp/, the seat's tools,<br/>and /otlp/, its traces"| E
+    D -->|"/mcp/, the seat's tools,<br/>and /otlp/, its traces,<br/>on the pod's loopback"| E
     V["<b>Slack, GitHub, GitLab, …</b>"] -->|"/webhooks/ on the public listener"| E
     SB -->|"/otlp/ and /mcp/ on the public listener"| E
 ```

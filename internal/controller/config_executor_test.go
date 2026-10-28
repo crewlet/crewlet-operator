@@ -91,15 +91,6 @@ func TestExecutorVerdictFollowsTheRender(t *testing.T) {
 			says:     []string{executorField + ": no login.", "Engine node " + fleetWorkload + "-0 holds the seat."},
 		},
 		{
-			name: "a Direct run on a seat pod with no address, held",
-			executor: &render.Executor{Field: executorField, Reason: crewletaiv1alpha1.ReasonBridgeUnreachable,
-				Message: noBridge},
-			fleet:    held,
-			wantNode: fleetWorkload + "-0",
-			want:     crewletaiv1alpha1.ReasonBridgeUnreachable,
-			says:     []string{executorField + ": no bridge.", "Engine node " + fleetWorkload + "-0 holds the seat."},
-		},
-		{
 			name:     "runnable, held",
 			executor: &render.Executor{Field: executorField, Message: "runs the seat's executor as ClaudeCode, Direct"},
 			fleet:    held,
@@ -140,11 +131,10 @@ func TestExecutorVerdictFollowsTheRender(t *testing.T) {
 // TestFixedExecutorVerdictIsNotKept holds an agent Seat's Ready to the render
 // when the fleet was not read: a verdict of the spec's that the render no
 // longer finds is not kept as what the engine last reported, whichever of the
-// three it was, while one a reconcile that did not render cannot judge stands.
+// two it was, while one a reconcile that did not render cannot judge stands.
 func TestFixedExecutorVerdictIsNotKept(t *testing.T) {
 	for _, before := range []string{
 		crewletaiv1alpha1.ReasonNotExposed, crewletaiv1alpha1.ReasonSandboxLoginNotPortable,
-		crewletaiv1alpha1.ReasonBridgeUnreachable,
 	} {
 		for _, c := range []struct {
 			name     string

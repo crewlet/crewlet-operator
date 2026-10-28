@@ -779,7 +779,7 @@ type SeatStatus struct {
 	// the seat's lease and runs it, naming the provider its executor runs on
 	// and where; False while none does (Unplaced, or PoolNotFound), and
 	// False whoever holds it while its executor can run no turn as its spec
-	// places it: NotExposed, SandboxLoginNotPortable or BridgeUnreachable.
+	// places it: NotExposed or SandboxLoginNotPortable.
 	// +optional
 	// +listType=map
 	// +listMapKey=type

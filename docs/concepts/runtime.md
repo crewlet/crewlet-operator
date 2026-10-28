@@ -289,7 +289,7 @@ flowchart LR
 | Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `TURSO_GO_CACHE_DIR` on the scratch volume; the OpenTelemetry variables, `CREWLET_SANDBOX_OTEL_RECEIVER_URL` and `CREWLET_MCP_BRIDGE_URL` as on a data pod; the class's and the Company's variables, as on a data pod | the same, and `CREWLET_SEAT: cy` |
 | Storage | one `emptyDir` at `/var/lib/crewlet`, of the class's `seatPools.defaults.scratchSizeLimit` (10Gi unless set), holding the scratch store, the store's native library, `/tmp` and `HOME`: the limit bounds what the processes the engine runs write too, a seat's `Direct` run's writes to `/tmp` or the engine's home among it; and the `sandboxes` `emptyDir` at `/var/lib/crewlet-sandboxes`, of the class's `seatPools.defaults.sandboxSizeLimit` (20Gi unless set), for the boxes of the pod's seats, as on a data pod ([Box storage](#box-storage)) | the same |
 | Stopping | the pool's `terminationGracePeriodSeconds`, else the class's default, else five minutes: the turn segments the engine runs in its own process finish, waiting turns are handed back, and the seats are released with their mailboxes for another pod to claim. A seat's executor run is not waited for: one in `E2B` runs on, and the pod that holds the seat next resumes its turn; one running `Direct` on the pod ends with it, and its box with the pod's `sandboxes` volume, so Crewlet ends it without resuming its turn, as `collect_unreachable` once a pod of the same name is back, or as `launch_node_gone` once the pod has been gone for the Company's `spec.sandbox.defaultTimeoutSeconds` ([When a Direct run's pod stops](#when-a-direct-runs-pod-stops)) | the same |
-| Port and probes | 8080, the probes alone: `/health` for startup (1,142 seconds, 1,192 with an S3 object store) and liveness, `/ready` for readiness | the same |
+| Port and probes | 8080, the probes, and the tool bridge and telemetry receiver of the pod's own `Direct` boxes, to loopback alone: `/health` for startup (1,142 seconds, 1,192 with an S3 object store) and liveness, `/ready` for readiness | the same |
 | Updates | `RollingUpdate`, `maxUnavailable: 1`, `podManagementPolicy: Parallel`, `minReadySeconds: 10` | the same |
 | Resources | the class's `seatPools.defaults.resources`: the class sizes every seat pod, as it sizes the data pods, and a Company chooses only how many its pools run, within `maxPods` | the same |
 
@@ -298,16 +298,18 @@ Standard, as the engine's ServiceAccount with no token mounted, scheduled by
 the class's `podTemplate`, and on the data pods' image: it never runs another
 version than the data pods.
 
-A seat pod binds **port 8080 for its probes and nothing else**, and no
+A seat pod binds **port 8080 for its probes and its own boxes**, and no
 public listener. A node
-without the `ingress` role serves `/health` and `/ready` on its `api.port`
-and refuses every other route as an unknown one, with no API token to
-accept. It serves no tool bridge either: the executor runs of its seats, a
-box on the seat pod itself included, call the data pods' bridge at the
-Company's public address, which every engine pod is given as
+without the `ingress` role serves `/health` and `/ready` on its `api.port`,
+and, to a caller on the pod's own loopback alone, the tool bridge and the
+telemetry receiver its seats' `Direct` boxes dial, which needs the port
+bound on every interface, as the operator binds it; it refuses every other
+route, and every other caller of those two, as an unknown one, with no API
+token to accept. A seat's executor run in `E2B` calls the data pods' bridge
+at the Company's public address, which every engine pod is given as
 `CREWLET_MCP_BRIDGE_URL`, and the data pod a call reaches relays it back
 over the broker the seat pod dials out to (see [Exposure](#exposure)).
-Nothing dials it but the kubelet, which probes the pod from
+Nothing off the pod dials the port but the kubelet, which probes the pod from
 its own node, and traffic from a pod's own node is not policed (Kubernetes
 documents it as always allowed, and Calico and Cilium hold to that; see
 [Network policy](#network-policy)): the seat pods' policy, which admits no
@@ -618,38 +620,37 @@ The public address is also where a coding run calls the engine back:
   bridge](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#the-tool-bridge--a-seats-own-tools-from-inside-a-box):
   every agent seat's executor is its coding CLI's run in a box, which calls
   the seat's own tools back at `/mcp/{token}`, each request carrying a token
-  signed for its one run, which expires with it. Crewlet's bridge address is
-  the fleet's, the same on every node: the data pod a call reaches relays it
-  over the broker to the pod holding the run's seat, a seat pod included
-  (see [Seat pools](../guides/cli-agents.md#seat-pools)). A seat's box on a
-  data pod's own host dials that pod's public listener on loopback, which
-  the engine derives itself, so the variable is for every other run: a box
-  in the Company's E2B sandbox, wherever its seat runs; a box on a seat pod,
-  which serves no route of the bridge's (a node without Crewlet's `ingress`
-  role serves its probes alone); and the Dashboard Assistant's deep work,
-  which Crewlet holds to the fleet's address wherever it runs, the data pod
-  included. A box on a seat pod therefore reaches the bridge as a remote
-  sandbox does, through the route to the public listener, so the
-  seat pods must be able to reach the public address: under
-  `networkPolicy: Isolated` the operator lets every engine pod reach the
-  route's proxies, where such a call lands inside the cluster, and a load
-  balancer the call leaves the cluster through must be outside the class's
-  `egress.exceptCIDRs` ([Network policy](#network-policy)). A company with no
-  public address gives no pod the variable, and Crewlet refuses the launch of
-  every run that would dial it, while the seats' boxes on a data pod still
-  run; each Seat whose runs need it says so on its `Ready` condition. The
-  variable
-  follows the public address alone, never the cells the company's runs are
-  placed in, which the engine applies with the document and no restart, so
-  moving a provider between them rolls no pod.
+  signed for its one run, which expires with it. A seat's box on its engine
+  pod's own host, a `Direct` one, dials that pod's own listener on loopback,
+  which the engine derives itself: a data pod's public listener, and a seat
+  pod's port 8080, which serves the route to loopback alone. So the variable
+  is for every other run: a box in the Company's E2B sandbox, wherever its
+  seat runs, which reaches Crewlet's bridge at the fleet's address, the same
+  on every node, the data pod a call reaches relaying it over the broker to
+  the pod holding the run's seat, a seat pod included (see [Seat
+  pools](../guides/cli-agents.md#seat-pools)); and the Dashboard Assistant's
+  deep work, which Crewlet holds to the fleet's address wherever it runs, a
+  `Direct` run on the data pod included. The data pods must therefore be
+  able to reach the public address: under `networkPolicy: Isolated` the
+  operator lets them reach the route's proxies, where such a call lands
+  inside the cluster, and a load balancer the call leaves the cluster
+  through must be outside the class's `egress.exceptCIDRs` ([Network
+  policy](#network-policy)). A company with no public address gives no pod
+  the variable, and Crewlet refuses the launch of every run in `E2B` and of
+  deep work, while every seat's `Direct` run still runs; each Seat whose
+  runs need it says so on its `Ready` condition. The variable follows the
+  public address alone, never the cells the company's runs are placed in,
+  which the engine applies with the document and no restart, so moving a
+  provider between them rolls no pod.
 - While the class sends the engine's telemetry to a collector
   (`spec.telemetry`), every engine pod is given the public address as
-  `CREWLET_SANDBOX_OTEL_RECEIVER_URL`: every seat's executor run exports
-  its traces to `/otlp/{token}` there, `Direct` on an engine pod as well as
-  in `E2B`, with a token signed for its run, and the engine forwards them to
-  the collector with the class's headers, which never enter a box. Any
-  engine pod of the company verifies the token, since all share the
-  keyring.
+  `CREWLET_SANDBOX_OTEL_RECEIVER_URL`: a seat's executor run in `E2B`
+  exports its traces to `/otlp/{token}` there, with a token signed for its
+  run, and the engine forwards them to the collector with the class's
+  headers, which never enter a box. Any engine pod of the company verifies
+  the token, since all share the keyring. A `Direct` run exports the same
+  way to its own engine pod's listener on loopback, with or without a
+  public address.
 
 `exposure.api.mode` `Gateway` or `Ingress` creates `<name>-api` the same way,
 for every path of port `http`, and `status.endpoints.exposedAPI` is its
@@ -720,11 +721,10 @@ supplies, may reach DNS, the pods of its own namespace, the class's
 proxies or forwarders), and every address but the cloud metadata
 endpoints and the class's `networkPolicy.egress.exceptCIDRs`, where the
 cluster's own networks belong ([Network policy](../guides/exposure.md#network-policy)).
-The route's proxies are there because the engine calls the Company's own
-public address, for a seat pod's boxes' tool bridge, a deep-work run and a
-box's traces, and inside the cluster that call usually lands on a proxy's
-pod without leaving it, where an address outside `exceptCIDRs` does not
-admit it.
+The route's proxies are there because a data pod calls the Company's own
+public address, for the Dashboard Assistant's deep work, and inside the
+cluster that call usually lands on a proxy's pod without leaving it, where
+an address outside `exceptCIDRs` does not admit it.
 
 Two more policies come with seat pools:
 
@@ -743,8 +743,10 @@ Two more policies come with seat pools:
   without a policy and closes only the broker.
 - `nimbus-seats` exists while the company runs seat pods. It selects them and
   admits nothing: a seat pod serves no other pod, and the kubelet probes it
-  from its own node, which no policy polices. Under `Isolated` it also holds
-  them to the data pods' egress, port 7422 of the data pods included.
+  from its own node, which no policy polices, nor the pod's own `Direct`
+  boxes, which call it on loopback. Under `Isolated` it also holds them to
+  the data pods' egress, without the route's proxies, which nothing on a
+  seat pod calls, and with port 7422 of the data pods.
 
 NetworkPolicies are additive: a pod two policies select is open to what
 either admits. That is why `nimbus-engine` and `nimbus-broker` select the data

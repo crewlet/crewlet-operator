@@ -56,7 +56,7 @@ and on each object that cannot do its job because of it: `ResolvedRefs=False`
 with the reason when a reference the object holds names what is not there,
 `Ready=False` with the reason when the object cannot do its job at all (a
 seat whose every executor launch Crewlet refuses: `NotExposed`,
-`BridgeUnreachable`, `SandboxLoginNotPortable`), and a condition for the
+`SandboxLoginNotPortable`), and a condition for the
 capability when only part of it fails. The operator records a Warning event
 when such a condition turns False or changes its reason, since nothing on
 the Company says so. What the operator writes for an object is that object's spec, whole:

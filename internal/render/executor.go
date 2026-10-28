@@ -23,12 +23,11 @@ import (
 //
 //   - Direct is a process tree of the engine pod that holds the seat. It
 //     calls the seat's tools back through the tool bridge on that pod's own
-//     listener, on loopback, where the pod serves the route: a node with the
-//     ingress and seats roles that binds a listener, the public one, which is
-//     a data pod. A seat pod serves no route of its own, so its boxes dial
-//     the fleet's address, CREWLET_MCP_BRIDGE_URL, which the operator gives
-//     every engine pod while the Company has a public address; without one
-//     Crewlet refuses every launch there (BridgeUnreachable). A Direct box is
+//     listener, on loopback, which every engine pod serves its own boxes: a
+//     data pod on its public listener, and a seat pod, which has no ingress
+//     role, on api.port beside its probes, to loopback alone, as the render
+//     binds it on every interface (Crewlet's boxHostURL). So a Direct run
+//     needs no address of the operator's, in any pool. A Direct box is
 //     seeded with its provider's login, so any sign-in runs there.
 //   - E2B is the Company's E2B sandbox. It dials the fleet's address, the
 //     Company's public one, which any data pod answers and relays to the pod
@@ -41,7 +40,7 @@ import (
 // These two cells are the ones the operator offers, Crewlet's container cell
 // not among them, and a Direct box is made on the pod's sandboxes volume
 // (SandboxDir): ADR-0008 records why, with the bridge's address every engine
-// pod is given.
+// pod is given for the runs in E2B.
 //
 // The verdict judges the first runner member alone, because that is the one
 // every launch picks while it can run: a launch the box's login refuses
@@ -50,7 +49,7 @@ import (
 // out their plans.
 //
 // Crewlet applies a document holding a seat its executor cannot run, and the
-// turns of every other seat run. So none of the three is refused here:
+// turns of every other seat run. So neither of the two is refused here:
 // refusing it would hold the whole company on its last revision over a seat
 // the engine would apply and fail alone (ADR-0005). It is reported on the
 // seat's Ready instead. What Crewlet refuses on every write is refused here,
@@ -85,8 +84,7 @@ type Executor struct {
 	// Placement is the cell the member's runs go to.
 	Placement v1alpha1.SandboxPlacement
 	// Reason is empty when the seat's turns can run, and otherwise
-	// v1alpha1.ReasonNotExposed, v1alpha1.ReasonSandboxLoginNotPortable or
-	// v1alpha1.ReasonBridgeUnreachable.
+	// v1alpha1.ReasonNotExposed or v1alpha1.ReasonSandboxLoginNotPortable.
 	Reason string
 	// Message says what the executor runs on and where and, when it cannot,
 	// what to change, for a condition message: a clause, after Field when
@@ -275,23 +273,17 @@ func (r *renderer) verdict(s *v1alpha1.Seat, m *member, env, leftOut envNames) (
 	exposeIt := "Give the Company's EngineClass a webhooks route, or the Company spec.exposure.publicBaseURL"
 	switch r.cellOf(m) {
 	case v1alpha1.SandboxPlacementDirect:
-		switch {
-		case pool == v1alpha1.DataPool:
-			return "", runs + ", Direct, on the data pod that holds the seat, whose box calls the seat's tools back " +
-				"through the tool bridge on the pod's own loopback listener"
-		case public == "":
-			return v1alpha1.ReasonBridgeUnreachable, fmt.Sprintf("%s, Direct, on a pod of seat pool %s, and %s: a seat "+
-				"pod serves no tool bridge of its own, so its boxes call the seat's tools back at the Company's public "+
-				"address, and Crewlet refuses each launch of the seat's executor there without one. %s, or place the "+
-				"seat in data, whose pods serve the bridge to their own boxes", runs, pool, noAddress, exposeIt)
+		where := "the data pod that holds the seat"
+		if pool != v1alpha1.DataPool {
+			where = fmt.Sprintf("the pod of seat pool %s that holds the seat", pool)
 		}
-		return "", fmt.Sprintf("%s, Direct, on the pod of seat pool %s that holds the seat, whose box calls the seat's "+
-			"tools back at %s/mcp/, where a data pod relays each call to it", runs, pool, public)
+		return "", fmt.Sprintf("%s, Direct, on %s, whose box calls the seat's tools back through the tool bridge on "+
+			"the pod's own listener, on loopback", runs, where)
 	default:
 		if public == "" {
 			return v1alpha1.ReasonNotExposed, fmt.Sprintf("%s, in the Company's E2B sandbox, and %s for the box to call "+
 				"the seat's tools back at, so Crewlet refuses each launch of the seat's executor. %s, or %s",
-				runs, noAddress, exposeIt, r.directRemedy(m, pool))
+				runs, noAddress, exposeIt, directRemedy(m))
 		}
 		own, seat := m.cli.remoteSignIn(env)
 		bridged := fmt.Sprintf("%s, in the Company's E2B sandbox, which calls the seat's tools back at %s/mcp/, where "+
@@ -311,7 +303,7 @@ func (r *renderer) verdict(s *v1alpha1.Seat, m *member, env, leftOut envNames) (
 			"cannot follow it: a credential bundle stays on the engine's data volume, as it carries a refresh token "+
 			"the engine keeps rotating, and nothing in the run's environment signs %s in, so Crewlet refuses each "+
 			"launch of the seat's executor. To fix it, %s, or %s%s", runs, m.describe(), m.cli.agent, m.cli.agent,
-			signInRemedy(m), r.directRemedy(m, pool), leftOutNote(lost))
+			signInRemedy(m), directRemedy(m), leftOutNote(lost))
 	}
 }
 
@@ -347,9 +339,9 @@ func signInRemedy(m *member) string {
 }
 
 // directRemedy is how to run m's executor runs Direct, which reach the seat's
-// tools on a data pod without a public address and are seeded with the
-// provider's login.
-func (r *renderer) directRemedy(m *member, pool string) string {
+// tools on the engine pod that holds the seat, in any pool, without a public
+// address, and are seeded with the provider's login.
+func directRemedy(m *member) string {
 	var how string
 	switch {
 	case m.platform:
@@ -359,10 +351,7 @@ func (r *renderer) directRemedy(m *member, pool string) string {
 	default:
 		how = fmt.Sprintf("set LLMProvider %s's spec.runIn, or the Company's spec.sandbox.defaultRunIn, to Direct,", m.name)
 	}
-	if pool != v1alpha1.DataPool {
-		how += " and place the seat in data,"
-	}
-	return how + " to run it Direct on the data pod that holds the seat, seeded with the provider's login"
+	return how + " to run it Direct on the engine pod that holds the seat, seeded with the provider's login"
 }
 
 // fallbacks is the end of a seat's message naming the runner members a

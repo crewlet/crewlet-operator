@@ -100,10 +100,10 @@ func chainOfNames(names ...string) []v1alpha1.LLMProviderReference {
 
 // TestExecutor holds the report on every agent seat's executor to where
 // Crewlet runs it and whether its box can reach the seat's tools from there:
-// a Direct box on a data pod dials the pod's own listener on loopback, and on
-// a seat pod, which serves no route, the Company's public address; an E2B box
-// dials the public address, and runs on a login that follows it as a
-// variable, a provider's token or key or the seat's own sign-in. The verdict
+// a Direct box dials its engine pod's own listener on loopback, a data pod's
+// and a seat pod's alike, with or without a public address; an E2B box dials
+// the public address, and runs on a login that follows it as a variable, a
+// provider's token or key or the seat's own sign-in. The verdict
 // judges the first member of the chain a launch can run, and names the
 // members a launch falls back to and those it never runs. None of it keeps
 // the document from rendering: the engine applies such a seat and fails its
@@ -113,6 +113,9 @@ func TestExecutor(t *testing.T) {
 		public = "https://nimbus.example.com"
 		// runnable is the verdict on a seat whose turns can run.
 		runnable = "runnable"
+		// ownListener is where a Direct box calls the seat's tools back,
+		// on a data pod and a seat pod alike.
+		ownListener = "on the pod's own listener, on loopback"
 	)
 	everySeat := func(field, verdict string) []string {
 		return []string{
@@ -158,23 +161,19 @@ func TestExecutor(t *testing.T) {
 		{
 			name: "Direct on the data pods", public: public,
 			want: everySeat(fieldLLM, runnable), saysOf: seatCy,
-			says: []string{"on the data pod that holds the seat", "on the pod's own loopback listener"},
+			says: []string{"on the data pod that holds the seat", ownListener},
 		},
 		{
 			name: "Direct on a seat pod", public: public,
 			want: everySeat(fieldLLM, runnable), saysOf: seatBo,
-			says: []string{"on the pod of seat pool general", public + "/mcp/", "a data pod relays each call to it"},
+			says: []string{"on the pod of seat pool general that holds the seat", ownListener},
 		},
 		{
-			// A data pod needs no address; a seat pod serves no route of
-			// its own, and dials the public one.
+			// A seat pod serves its own boxes the bridge on loopback, as a
+			// data pod does: no seat's Direct run needs an address.
 			name: "Direct with no public address",
-			want: runnableBut(
-				seatAna+" "+fieldLLM+" "+v1alpha1.ReasonBridgeUnreachable, seatBo+" "+fieldLLM+" "+v1alpha1.ReasonBridgeUnreachable,
-				seatDee+" "+fieldLLM+" "+v1alpha1.ReasonBridgeUnreachable,
-			),
-			saysOf: seatBo,
-			says:   []string{"seat pool general", "Company nimbus has no public address", "place the seat in data"},
+			want: everySeat(fieldLLM, runnable), saysOf: seatBo,
+			says: []string{"on the pod of seat pool general that holds the seat", ownListener},
 		},
 		{
 			name: "E2B by the provider's runIn", public: public,
@@ -199,8 +198,8 @@ func TestExecutor(t *testing.T) {
 			},
 		},
 		{
-			// A seat in a pool needs a public address Direct too: running
-			// it Direct also takes placing it in data.
+			// Running it Direct is the remedy in a pool too: a seat pod
+			// serves its own boxes the bridge.
 			name: "E2B with no public address, a seat in a pool",
 			mutate: func(in *Input) {
 				withE2B(in)
@@ -208,7 +207,7 @@ func TestExecutor(t *testing.T) {
 			},
 			want:   everySeat(fieldLLM, v1alpha1.ReasonNotExposed),
 			saysOf: seatBo,
-			says:   []string{"set LLMProvider claude's spec.runIn to Direct, and place the seat in data"},
+			says:   []string{"set LLMProvider claude's spec.runIn to Direct, to run it Direct on the engine pod that holds the seat"},
 		},
 		{
 			name: "a bundled ClaudeCode login in E2B", public: public,
@@ -480,9 +479,8 @@ func TestRunnerCLIsAreTheRunIn(t *testing.T) {
 
 // TestContractExecutorIsAppliedWhereItCannotRun has the engine validate the
 // documents the render writes for a seat whose executor it reports rather
-// than refuses: one placed in E2B in a Company with no public address, one
-// in E2B on a login that cannot follow it there, and one Direct on a seat
-// pod in a Company with no public address. The engine accepts each, and
+// than refuses: one placed in E2B in a Company with no public address, and
+// one in E2B on a login that cannot follow it there. The engine accepts each, and
 // fails the seat's turns at the launch alone, which is what makes reporting
 // it right. When this fails, the engine has started refusing one of them on
 // a write, which holds the company on its last revision anyway: refuse it in
@@ -520,14 +518,6 @@ func TestContractExecutorIsAppliedWhereItCannotRun(t *testing.T) {
 			},
 			seat:   seatCy,
 			reason: v1alpha1.ReasonSandboxLoginNotPortable,
-		},
-		{
-			name: "Direct on a seat pod of a company with no public address",
-			input: func(t *testing.T) *Input {
-				return companyCaseNamed(t, caseSeatPools).input(t)
-			},
-			seat:   seatBo,
-			reason: v1alpha1.ReasonBridgeUnreachable,
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {

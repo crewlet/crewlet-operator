@@ -403,8 +403,8 @@ const (
 	// and reads what the engine reads, the keyring in its crewlet.yaml and
 	// the store among it, and on a data pod the data volume. A box is seeded
 	// with its provider's login, a credential bundle's included, and calls
-	// the seat's tools back on the pod's own loopback listener on a data
-	// pod, and at the Company's public address on a seat pod. A run dies
+	// the seat's tools back on the pod's own listener, on loopback, a data
+	// pod's or a seat pod's, with or without a public address. A run dies
 	// with its pod: a restart or a rolling update ends the runs in flight
 	// on it.
 	SandboxPlacementDirect SandboxPlacement = "Direct"
@@ -864,12 +864,12 @@ type CompanyTopology struct {
 type CompanyExposure struct {
 	// publicBaseURL is the HTTPS address vendors deliver webhooks to and
 	// coding runs call the engine back on, overriding the one the class's
-	// webhooks.hostname derives. Every seat's executor run, Direct or E2B,
-	// exports its traces there while the class sends telemetry, and every
-	// run but a seat's Direct one on a data pod, which dials that pod's
-	// listener on loopback, calls the engine's tool bridge there: an E2B
-	// executor run, a Direct one on a seat pod, and the Dashboard
-	// Assistant's deep work wherever it runs. Required
+	// webhooks.hostname derives. A seat's executor run in E2B calls the
+	// engine's tool bridge there, and exports its traces there while the
+	// class sends telemetry, and the Dashboard Assistant's deep work calls
+	// the bridge there wherever it runs; a seat's Direct run, on a data pod
+	// or a seat pod, dials its own pod's listener on loopback for both.
+	// Required
 	// when the class's webhooks.mode is External, where something outside
 	// the operator (a relay, an API gateway) forwards it to the engine's
 	// public listener. A trailing '/' is dropped, as Crewlet drops it.

@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"slices"
 	"strings"
 	"time"
 
@@ -543,10 +542,10 @@ func readFleet(g Gomega) fleetAnswer {
 }
 
 // expectSeatsFollowTheFleet waits until every agent Seat's status names the
-// node the engine's fleet says holds it: Ready=True for a seat on the data
-// pods, and BridgeUnreachable for one in a seat pool, whose Direct box would
-// call the seat's tools back at the Company's public address, which the
-// class's webhooks None leaves it without.
+// node the engine's fleet says holds it, and Ready=True for every one: a seat
+// in a seat pool too, whose Direct box calls the seat's tools back on its seat
+// pod's own listener, though the class's webhooks None leaves the Company
+// without a public address.
 func expectSeatsFollowTheFleet() {
 	GinkgoHelper()
 	Eventually(func(g Gomega) {
@@ -559,11 +558,7 @@ func expectSeatsFollowTheFleet() {
 			g.Expect(seat.Status.Placement.Node).To(Equal(node), "Seat %s", handle)
 			ready := meta.FindStatusCondition(seat.Status.Conditions, v1.ConditionReady)
 			g.Expect(ready).NotTo(BeNil(), "Seat %s has no Ready", handle)
-			want := v1.ReasonLeaseHeld
-			if !slices.Contains(dataSeats, handle) {
-				want = v1.ReasonBridgeUnreachable
-			}
-			g.Expect(ready.Reason).To(Equal(want), "Seat %s: %s", handle, ready.Message)
+			g.Expect(ready.Reason).To(Equal(v1.ReasonLeaseHeld), "Seat %s: %s", handle, ready.Message)
 		}
 	}).WithTimeout(placed).Should(Succeed())
 }

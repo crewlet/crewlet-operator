@@ -601,17 +601,20 @@ type SeatPodInput struct {
 // pods'.
 //
 // Its API block binds APIPort on every interface and holds no token: a node
-// without the ingress role serves only its probes there, /health and /ready,
+// without the ingress role serves its probes there, /health and /ready,
 // which the kubelet reaches at the pod's own address and which are exempt
-// from authentication, and refuses every other route as it would an unknown
-// one. Leaving api.port unset would bind nothing at all, and leave the pod
-// with no probe to tell a seat pod that has joined the fleet and claims
-// seats from one that is still starting, or has lost the data pods. It is
+// from authentication, and, to loopback alone, the tool bridge and the
+// telemetry receiver its own Direct boxes dial (Crewlet's boxHostURL, which
+// derives their address only from a listener loopback reaches, as every
+// interface is), and refuses every other route, and every caller of those two
+// off the pod, as it would an unknown one. Leaving api.port unset would bind
+// nothing at all, and leave the pod with no probe to tell a seat pod that has
+// joined the fleet and claims seats from one that is still starting, or has
+// lost the data pods, and its Direct boxes with no bridge to dial. It is
 // given no public listener (api.public), which a node without the ingress
-// role never binds: its seats' executor runs, a box on the pod's own host
-// included, call their tools through the data pods' bridge at the Company's
-// public address, relayed back over the broker, so nothing a box dials is a
-// route on a seat pod.
+// role never binds: its seats' runs in E2B call their tools through the data
+// pods' bridge at the Company's public address, relayed back over the broker,
+// so nothing a box off the pod dials is a route on a seat pod.
 //
 // A Shared pool's pods carry the pool's own placement label. A PerSeat pool's
 // carry the seat label with the seat's handle, which the document refers to

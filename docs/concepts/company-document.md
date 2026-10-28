@@ -516,9 +516,7 @@ revision:
   whose every launch it refuses, while every other seat runs: one whose
   run goes to `E2B` in a company with no public address for the box to call
   the seat's tools back at (`NotExposed`), whatever pool the seat is placed
-  in; one in a seat pool whose run goes `Direct` there, in a company with no
-  public address, since a seat pod serves no tool bridge of its own
-  (`BridgeUnreachable`); and one whose run goes to `E2B` on a provider whose
+  in; and one whose run goes to `E2B` on a provider whose
   login cannot follow it there, while nothing in the run's environment (the
   env of the Company's and the Seat's setup steps, and the Seat's
   `spec.sandbox.env`) signs its CLI in (`SandboxLoginNotPortable`). The Seat

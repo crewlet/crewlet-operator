@@ -537,7 +537,7 @@ flowchart LR
         HOST["<b>CLI, every other phase</b><br/><i>the seat's tools<br/>its only tools</i>"]
         RELAY["<b>crewlet mcp-relay</b><br/><i>a unix socket under /tmp</i>"]
         DIRECT["<b>CLI, the executor, Direct</b><br/><i>its own loop, shell and editor,<br/>in a box on the sandboxes volume</i>"]
-        PUB["<b>/mcp/ tool bridge</b><br/><i>a data pod's public listener</i>"]
+        PUB["<b>/mcp/ tool bridge</b><br/><i>the pod's own listener</i>"]
     end
     subgraph box["The company's E2B sandbox"]
         E2B["<b>CLI, the executor, E2B</b><br/><i>its own loop, shell and editor</i>"]
@@ -547,8 +547,8 @@ flowchart LR
     RELAY --> ENG
     ENG -->|"starts a detached run"| DIRECT
     ENG -->|"starts a detached run"| E2B
-    DIRECT -->|"the seat's tools, with a token<br/>signed for the run"| PUB
-    E2B -->|"the seat's tools, at the<br/>Company's public address"| PUB
+    DIRECT -->|"the seat's tools, on loopback, with<br/>a token signed for the run"| PUB
+    E2B -->|"the seat's tools, at the<br/>Company's public address,<br/>relayed by a data pod"| PUB
     PUB --> ENG
 ```
 
@@ -574,7 +574,7 @@ Seat's `Ready` message names the providers that never run its executor.
 | Where | a process tree of the engine pod that holds the seat, in a box directory on the pod's `sandboxes` volume | the Company's E2B sandbox |
 | The CLI | the engine image's ([The image needs the CLI](#the-image-needs-the-cli)) | the E2B template's |
 | Its sign-in | any: the box is seeded with the provider's login, and writes a refreshed one back | a variable of the run's environment only: Claude Code's headless token or key, OpenCode's model provider's key in `env`, or a sign-in in the Seat's `spec.sandbox` |
-| The seat's tools | on a data pod, the pod's own listener, on loopback; on a seat pod, the Company's public address | the Company's public address |
+| The seat's tools | the pod's own listener, on loopback, a data pod's or a seat pod's | the Company's public address |
 | A restart of the pod | ends the run | leaves it running |
 
 Crewlet refuses a company with an agent seat and a model provider whose
@@ -659,13 +659,15 @@ The run's login must follow it there, which only a variable of its
 environment can: a credential bundle stays on the engine's data volume, since
 its login carries a refresh token the engine keeps rotating there.
 
-**The seat's tools** reach a run through the engine's tool bridge, at `/mcp/`
-on the data pods' public listener ([Exposure](exposure.md)). A Direct run on
-a data pod dials its own pod on loopback, and needs nothing more. Every other
-run dials the Company's public address, which the operator gives every engine
-pod while the Company has one (`CREWLET_MCP_BRIDGE_URL`): a data pod relays
-each call over the broker to the pod that holds the run's seat, which the seat
-pod already dials out to, so nothing dials a seat pod.
+**The seat's tools** reach a run through the engine's tool bridge, at
+`/mcp/`. A Direct run dials its own engine pod's listener on loopback: a data
+pod's public listener, or a seat pod's port 8080, which serves the bridge to
+loopback alone. It needs nothing more, in any pool. A run in E2B dials the
+data pods' public listener at the Company's public address, which the
+operator gives every engine pod while the Company has one
+(`CREWLET_MCP_BRIDGE_URL`, [Exposure](exposure.md)): a data pod relays each
+call over the broker to the pod that holds the run's seat, which the seat
+pod already dials out to, so nothing off a seat pod dials it.
 
 **What the operator reports.** Crewlet applies a seat whose executor it can
 launch nowhere, and refuses each of its launches, while every other seat runs;
@@ -675,8 +677,6 @@ each time `Ready` turns to it:
 
 - `NotExposed`: its run goes to `E2B`, and the Company has no public address
   for the box to call the seat's tools back at.
-- `BridgeUnreachable`: its run goes `Direct` on a seat pod, and the Company has
-  no public address: a seat pod serves no tool bridge of its own.
 - `SandboxLoginNotPortable`: its run goes to `E2B`, and nothing in the run's
   environment signs its CLI in: a Claude Code provider signed in with a
   credential bundle alone, or an OpenCode one with no key in `env`, and no
@@ -807,16 +807,17 @@ Engine`. What the box receives from the provider is in
 ## Seat pools
 
 A seat placed in a [seat pool](topology.md) runs on a seat pod, which keeps
-nothing between starts and serves only its probes. Every phase but the
-executor runs its CLI there as it does on a data pod, reaching the seat's
-tools through a socket under the seat pod's own `/tmp`. The seat's executor
-runs `Direct` on the seat pod, in a box on its own `sandboxes` volume, or in
-`E2B`, and either run calls the seat's tools back through the company's tool
-bridge, at the public address every engine pod is given: the data pod a call
-reaches relays it over the broker to the seat pod holding the seat, which the
-seat pod already dials out to. Nothing dials a seat pod for it, and a seat pod
-serves no bridge of its own, so a Company with no public address runs no
-executor in a seat pool (`BridgeUnreachable`, or `NotExposed` in `E2B`, on the
+nothing between starts and serves only its probes and its own boxes. Every
+phase but the executor runs its CLI there as it does on a data pod, reaching
+the seat's tools through a socket under the seat pod's own `/tmp`. The
+seat's executor runs `Direct` on the seat pod, in a box on its own
+`sandboxes` volume, calling the seat's tools back through the bridge the
+seat pod serves its own boxes on loopback, with or without a public address;
+or in `E2B`, calling them back through the company's tool bridge at the
+public address every engine pod is given: the data pod a call reaches
+relays it over the broker to the seat pod holding the seat, which the seat
+pod already dials out to. Nothing off a seat pod dials it, so a Company with
+no public address runs no `E2B` executor in a seat pool (`NotExposed` on the
 Seat's `Ready`). One thing a data pod does for a CLI a seat pod cannot do:
 
 - **A credential bundle.** The login lives under the CLI's state directory,

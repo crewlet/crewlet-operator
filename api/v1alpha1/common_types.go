@@ -304,10 +304,11 @@ const (
 	// its spec places it is not Ready either, whoever holds it: its first
 	// ClaudeCode or OpenCode member runs in E2B while the Company has no
 	// public address for the box to call the tool bridge back on
-	// (NotExposed) or on a login that cannot follow the run there
-	// (SandboxLoginNotPortable), or runs Direct on a seat pod while the
-	// Company has no public address (BridgeUnreachable). The engine applies
-	// such a seat and fails every one of its turns at launch.
+	// (NotExposed), or on a login that cannot follow the run there
+	// (SandboxLoginNotPortable). A member that runs Direct always can, on a
+	// data pod or a seat pod: its box calls the tool bridge back on the
+	// pod's own listener. The engine applies such a seat and fails every one
+	// of its turns at launch.
 	ConditionReady = "Ready"
 
 	// ConditionRuntimeReady reports whether a Company's engine pods exist,
@@ -934,15 +935,6 @@ const (
 	// refuses each launch of its executor. A Direct run is seeded with the
 	// login, so it is never this.
 	ReasonSandboxLoginNotPortable = "SandboxLoginNotPortable"
-
-	// ReasonBridgeUnreachable is Ready=False on an agent Seat placed in a
-	// seat pool whose executor runs Direct while the Company has no public
-	// address: a seat pod serves no tool bridge route of its own, so its
-	// Direct boxes call the seat's tools back at the address the Company's
-	// public listener is reached at, and the engine on the pod refuses each
-	// launch without one. A data pod's Direct boxes call it on the pod's own
-	// loopback, so a seat placed in data is never this.
-	ReasonBridgeUnreachable = "BridgeUnreachable"
 
 	// ReasonPlacementPending is Applied=False on an agent Seat placed in a
 	// pool other than the one the revision the engine runs pins it to,

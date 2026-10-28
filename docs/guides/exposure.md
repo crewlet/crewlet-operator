@@ -69,27 +69,27 @@ say so. What the public listener serves depends on what the engine is given:
   it ([Running seats on a coding CLI](cli-agents.md)), as the Dashboard
   Assistant's deep work calls the person's, and the data pod a call reaches
   relays it to the pod holding the run's seat, a seat pod included. A seat's
-  box on a data pod's own host dials the pod's public listener on loopback
-  and needs no route. Every other run dials the Company's public address,
-  which the operator gives every engine pod as the bridge's
-  (`CREWLET_MCP_BRIDGE_URL`) while there is one: a box in the Company's E2B
-  sandbox; a box on a seat pod, which serves no bridge of its own; and a
-  deep-work run wherever it is placed, the data pod included, since Crewlet
-  holds deep work to the fleet's address. Each reaches it back through this
-  route, egress the engine pods' network policy must allow ([Network
+  box on its engine pod's own host, a `Direct` one, dials that pod's own
+  listener on loopback and needs no route: a data pod's public listener, or
+  a seat pod's port 8080, which serves its own boxes the bridge to loopback
+  alone. Every other run dials the Company's public address, which the
+  operator gives every engine pod as the bridge's (`CREWLET_MCP_BRIDGE_URL`)
+  while there is one: a box in the Company's E2B sandbox, and a deep-work run
+  wherever it is placed, the data pod included, since Crewlet holds deep work
+  to the fleet's address. Each reaches it back through this route, egress
+  the data pods' network policy must allow for deep work ([Network
   policy](#network-policy)). Without a public address no pod is given the
   variable, Crewlet refuses the launch of every such run, and each Seat whose
   runs need one says so on its `Ready` condition, while the rest of the
   company's document applies.
 - `/otlp/{token}`, the sandbox telemetry receiver, while the class sends the
-  engine's telemetry to a collector (`spec.telemetry`): every seat's
-  executor run exports its traces there, wherever it runs, `Direct` on an
-  engine pod as well as in `E2B`, as the engine hands each run the one
-  receiver address it is given, and the engine forwards them to the
+  engine's telemetry to a collector (`spec.telemetry`): a seat's executor
+  run in `E2B` exports its traces there, and the engine forwards them to the
   collector with the class's headers, which never enter a box. The operator
   gives every engine pod the public address as the receiver's
-  (`CREWLET_SANDBOX_OTEL_RECEIVER_URL`), so a box on an engine pod reaches
-  it through this route too.
+  (`CREWLET_SANDBOX_OTEL_RECEIVER_URL`). A `Direct` run exports the same way
+  to its own engine pod's listener on loopback, as it calls its tools, and
+  needs neither this route nor a public address.
 
 The address appears in the Company's `status.endpoints.publicBaseURL`, and
 each Seat's and Integration's status carries the exact URL to register with
@@ -587,25 +587,23 @@ spec:
             matchLabels: {app: otel-collector}
 ```
 
-An engine pod also calls the Company's own public address. A box on a seat
-pod calls the seat's tools back through the [tool
-bridge](#choose-how-webhooks-arrive) there, as a remote sandbox does, since a
-seat pod serves no bridge of its own; a deep-work run on a data pod is held
-to that address too, and a `Direct` box sends its traces there. Inside the
-cluster such a call to the route's load balancer usually lands on the
-route's proxies without leaving it, and a CNI that polices it after that
-(Calico) or never matches a pod by its address (Cilium) judges it by the
-proxy's pod, which no address outside `exceptCIDRs` admits once the pod
-network is listed. So under `Isolated` every engine pod may also reach
-whatever the public port admits: the namespaces of the webhooks route's
-proxies, on any port, since their ports are the implementation's, or the
-class's `external.forwarders`. Where the call does leave the cluster, through
-a load balancer outside it or one whose address the CNI polices before it is
-translated, the public address must be outside `exceptCIDRs` as well: in a
-kind cluster, for one, load balancers are usually given addresses from the
-node network, `172.18.0.0/16` above, and listing it there cuts every such
-call off. Only a seat's box on a data pod dials the bridge on loopback, which
-no policy polices; its traces still go to the public address.
+A data pod also calls the Company's own public address: a deep-work run on
+it is held to that address for the [tool bridge](#choose-how-webhooks-arrive),
+in whichever cell it runs. Inside the cluster such a call to the route's
+load balancer usually lands on the route's proxies without leaving it, and a
+CNI that polices it after that (Calico) or never matches a pod by its
+address (Cilium) judges it by the proxy's pod, which no address outside
+`exceptCIDRs` admits once the pod network is listed. So under `Isolated` the
+data pods may also reach whatever the public port admits: the namespaces of
+the webhooks route's proxies, on any port, since their ports are the
+implementation's, or the class's `external.forwarders`. Where the call does
+leave the cluster, through a load balancer outside it or one whose address
+the CNI polices before it is translated, the public address must be outside
+`exceptCIDRs` as well: in a kind cluster, for one, load balancers are usually
+given addresses from the node network, `172.18.0.0/16` above, and listing it
+there cuts every such call off. A seat's `Direct` box, on a data pod or a
+seat pod, calls its tools and sends its traces on its own pod's listener, on
+loopback, which no policy polices, so a seat pod is given no such rule.
 
 On AWS, also require IMDSv2 with a hop limit of 1 on the nodes, so that a
 pod that gets past the policy still cannot read the node's role.
@@ -613,7 +611,7 @@ pod that gets past the policy still cannot read the node's role.
 Set `gateway.proxyNamespaces` when your Gateway implementation runs its proxy
 somewhere other than the Gateway's namespace, so that the policy names the
 proxies' namespace and no wider one, in what the data pods admit and, for the
-webhooks, in what every engine pod may reach:
+webhooks, in what the data pods may reach:
 
 ```yaml
 gateway:

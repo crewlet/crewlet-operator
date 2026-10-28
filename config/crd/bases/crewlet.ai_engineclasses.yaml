@@ -1363,14 +1363,15 @@ spec:
                       Direct executor run is a process of the engine pod, so it egresses
                       under this policy, its box's setup commands included: its vendor, its
                       code host and the package registries it installs from are reached
-                      from the pod. Every engine pod also calls the Company's public address:
-                      a seat pod's runs for the tool bridge, a deep-work run for Crewlet, and
-                      every executor run for its traces. A call that lands on the public
-                      route's proxies inside the cluster is admitted by a rule of its own,
-                      naming the webhooks route's proxy namespaces or the class's external
-                      forwarders; a load balancer the call leaves the cluster through must
-                      stay outside exceptCIDRs. An E2B run happens in the Company's E2B
-                      sandbox, which this policy does not reach.
+                      from the pod; it calls its tools and sends its traces to its own pod's
+                      listener on loopback, which no policy polices. A data pod also calls
+                      the Company's public address, for the Dashboard Assistant's deep work,
+                      which Crewlet holds to it in whichever cell it runs. A call that lands
+                      on the public route's proxies inside the cluster is admitted by a rule
+                      of the data pods' own, naming the webhooks route's proxy namespaces or
+                      the class's external forwarders; a load balancer the call leaves the
+                      cluster through must stay outside exceptCIDRs. An E2B run happens in
+                      the Company's E2B sandbox, which this policy does not reach.
                     minProperties: 1
                     properties:
                       exceptCIDRs:

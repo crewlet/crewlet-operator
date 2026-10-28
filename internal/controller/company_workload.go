@@ -826,18 +826,20 @@ func engineEnv(
 	// Crewlet's tool bridge address, the same on every engine pod: the
 	// Company's public address while it has one, and nothing otherwise.
 	// Every agent seat's executor is its coding CLI's run in a box, which
-	// calls the seat's tools back through the bridge the data pods serve on
-	// their public listener, and the data pod a call reaches relays it over
-	// the broker to the pod holding the run's seat, so the address is the
-	// fleet's (Crewlet's ADR-0056). A box on a data pod's own host dials
-	// that pod's listener on loopback, which the engine derives from the
-	// listener itself, and needs none of this. The variable is for every
-	// other box: one in the Company's E2B sandbox, wherever its seat runs,
-	// and one on a seat pod, which has no listener of the bridge's to dial,
-	// a node without the ingress role serving its probes alone (Crewlet's
-	// bridgeHostURL, which TestMirroredEngineDeclarationsAreUnchanged holds).
-	// A pod given no address launches neither, and render.ExecutorOf reports
-	// the seats that need one.
+	// calls the seat's tools back through the bridge. A box on its engine
+	// pod's own host, a Direct one, dials that pod's own listener on
+	// loopback, which the engine derives from the listener itself, a data
+	// pod's public one and a seat pod's api.port alike (Crewlet's
+	// boxHostURL, which TestMirroredEngineDeclarationsAreUnchanged holds),
+	// and needs none of this. The variable is for every other box: one in
+	// the Company's E2B sandbox, wherever its seat runs, which dials the
+	// bridge the data pods serve on their public listener, the data pod a
+	// call reaches relaying it over the broker to the pod holding the run's
+	// seat, so the address is the fleet's (Crewlet's ADR-0056); and the
+	// Dashboard Assistant's deep work on a data pod, which Crewlet holds to
+	// the fleet's address in whichever cell it runs. A pod given no address
+	// launches no E2B run and runs no deep work, and render.ExecutorOf
+	// reports the seats that need one.
 	//
 	// Nothing but the address decides it, the cells the company's runs are
 	// placed in included: which cell a run takes is the company document's,
@@ -860,17 +862,18 @@ func engineEnv(
 		if t.HeadersSecretRef.Name != "" {
 			env = append(env, fromSecret(envOTLPHeaders, e.secret, platformKeyOTLPHeaders))
 		}
-		// Crewlet's sandbox telemetry receiver: every seat's executor run,
-		// Direct on an engine pod as well as in E2B, exports to the
-		// engine's public listener at this address, the one Crewlet hands
-		// every run whatever its cell, with a token signed for the run, and
-		// the engine forwards to the collector above with its headers,
-		// which never enter the box. Every pod is given it, a seat pod's
-		// too: the pod that launches a run mints its endpoint, under the
-		// company's address, and the data pod that address reaches verifies
-		// it with the keyring every pod shares. Without a collector there is
-		// nothing to forward to, and without a public address nothing an E2B
-		// box could reach.
+		// Crewlet's sandbox telemetry receiver for a seat's executor run in
+		// E2B, which exports to the engine's public listener at this
+		// address with a token signed for the run, and the engine forwards
+		// to the collector above with its headers, which never enter the
+		// box. Every pod is given it, a seat pod's too: the pod that
+		// launches a run mints its endpoint, under the company's address,
+		// and the data pod that address reaches verifies it with the
+		// keyring every pod shares. A Direct run exports to its own pod's
+		// listener on loopback instead, which every pod given the collector
+		// above serves its own boxes (Crewlet's boxHostURL and withTelemetry).
+		// Without a collector there is nothing to forward to, and without a
+		// public address nothing an E2B box could reach.
 		if public := c.Status.Endpoints.PublicBaseURL; public != "" {
 			env = append(env, literal(envOTelReceiverURL, public))
 		}

@@ -26,12 +26,13 @@ import (
 //
 // A seat pod's login on its scratch volume also seeds its Direct boxes, which
 // write a refreshed login back there, so the same holds for a seat's executor
-// run on such a provider. A seat pod serves no tool bridge of its own: the box
-// of a seat's executor run on it, Direct or E2B, calls the data pods' bridge at
-// the Company's public address, which every engine pod is given, and the data
-// pod relays each call back to the seat pod over the broker. Without a public
-// address that seat's turns fail, and it is applied and reported on its Ready
-// (ExecutorOf), since only its own turns fail.
+// run on such a provider. A seat pod serves its own Direct boxes the tool
+// bridge on api.port, to loopback alone; the box of a seat's executor run in
+// E2B calls the data pods' bridge at the Company's public address, which every
+// engine pod is given, and the data pod relays each call back to the seat pod
+// over the broker. Without a public address that seat's turns fail, and it is
+// applied and reported on its Ready (ExecutorOf), since only its own turns
+// fail.
 
 // fieldLLMDefault is a Seat's executor chain, the one every phase without a
 // chain of its own runs on.

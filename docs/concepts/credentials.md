@@ -271,10 +271,11 @@ document. The operator handles them without a field:
   credential of the engine's own is an environment variable, since the
   engine resolves a `${NAME}` in its company document from its
   environment. The telemetry headers never reach a box either: a seat's
-  executor run, `Direct` or in `E2B`, exports its telemetry to the engine's
-  public listener with a token signed for its one run
-  (`CREWLET_SANDBOX_OTEL_RECEIVER_URL`), and the engine adds the headers
-  when it forwards to the collector.
+  executor run exports its telemetry to the engine with a token signed for
+  its one run, in `E2B` at the public listener
+  (`CREWLET_SANDBOX_OTEL_RECEIVER_URL`) and `Direct` at its own engine
+  pod's listener on loopback, and the engine adds the headers when it
+  forwards to the collector.
 - **Platform wiring** goes in the engine's environment: what every company
   of a class shares in `EngineClass.spec.podTemplate.spec.env` (from a
   Secret in the platform's namespace), and what is one company's own in

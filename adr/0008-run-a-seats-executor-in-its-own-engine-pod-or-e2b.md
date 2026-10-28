@@ -39,12 +39,14 @@ of a seat's chain over, and it refuses on every write a company with an agent
 seat and a model provider and no catalogue, a seat whose chain holds no such
 CLI, and a `run_in` on any other CLI.
 
-A box calls the seat's tools back through the tool bridge, `/mcp/` on a node
-that serves the API's ingress. A `direct` box on such a node dials its
-listener on loopback. Every other box, an `e2b` one and a `direct` one on a
-node without the ingress role, dials `CREWLET_MCP_BRIDGE_URL`, which is one
-address for the whole fleet (Crewlet's ADR-0056), and Crewlet refuses each
-launch it can reach no bridge for. A `direct` box is made under
+A box calls the seat's tools back through the tool bridge, `/mcp/`. A
+`direct` box dials its own node's listener on loopback: a node that serves
+the API's ingress serves the bridge on its public listener where it binds
+one, and a node without the role on `api.port`, to loopback alone, where
+loopback reaches it (Crewlet's `boxHostURL`). Every other box, an `e2b` one,
+dials `CREWLET_MCP_BRIDGE_URL`, which is one address for the whole fleet
+(Crewlet's ADR-0056), and Crewlet refuses each launch it can reach no bridge
+for. A `direct` box is made under
 `providers.sandbox.local.state_dir`, else under the engine user's home, and
 its run is a process of the node that launched it, which alone drives it
 (Crewlet's ADR-0057), and dies with that node's container. An `e2b` box is
@@ -88,8 +90,7 @@ deep work can launch on while the Company configures no `e2b`
 
 **Reported where Crewlet applies the seat and refuses its launches**: on the
 Agent Seat's `Ready`, with no condition of its own. `NotExposed`: the run
-goes to `E2B` and the Company has no public address. `BridgeUnreachable`: the
-run goes `Direct` on a seat pod and the Company has no public address.
+goes to `E2B` and the Company has no public address.
 `SandboxLoginNotPortable`: the run goes to `E2B` and nothing in the run's
 environment signs its CLI in. The verdict judges the first runner member of
 the chain, as a launch does, and while a node holds a seat that can run, the
@@ -117,14 +118,15 @@ limit bounds what lands outside the data volume and the boxes.
 **Every engine pod is given the bridge's address.** `CREWLET_MCP_BRIDGE_URL`
 is the Company's `status.endpoints.publicBaseURL` while it has one, on a data
 pod and a seat pod alike, and unset otherwise; nothing else decides it, and
-the controller reads no LLMProvider for it. A data pod's seats' `Direct`
-boxes dial the pod's own listener on loopback; a seat pod's `Direct` boxes,
-every `E2B` box and every deep-work run, on the data pod too, dial the public
-address, where a data pod relays each call to the pod holding the run. While
-the class sends telemetry, every engine pod is given the same address as
-`CREWLET_SANDBOX_OTEL_RECEIVER_URL`, which Crewlet hands every executor run
-whatever its cell, so a `Direct` box exports its traces there as an `E2B` box
-does.
+the controller reads no LLMProvider for it. A seat's `Direct` box dials its
+own pod's listener on loopback, a data pod's public listener or a seat pod's
+`api.port`, which the render binds on every interface so that loopback
+reaches it; every `E2B` box and every deep-work run, on the data pod too,
+dial the public address, where a data pod relays each call to the pod
+holding the run. While the class sends telemetry, every engine pod is given
+the same address as `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, to which an `E2B`
+box exports its traces; a `Direct` box exports to its own pod's listener on
+loopback, which every pod given the collector serves its own boxes.
 
 **No class gate on `Direct`.** An EngineClass bounds a `Direct` run by the
 pod's resources (`data.resources`, `seatPools.defaults.resources`) and its
@@ -180,24 +182,24 @@ run from the engine's files, not from the volume's space. A Company that
 will not take that risk places deep work in `E2B`. Moving the box root is
 Crewlet's to do, and the mirror of `boxRoot` fails the day it moves.
 
-A seat pod's `Direct` box reaches its own pod through the Company's public
-route and a data pod's relay, as a deep-work run on a data pod reaches
-Crewlet and every executor run sends its traces, so every engine pod needs
-egress to the public address, and a Company with no public address runs no
-executor on a seat pod (`BridgeUnreachable`), while the seats on its data
-pods run theirs. Inside the cluster a call to the route's load balancer
-usually lands on the route's proxies without leaving it, which a CNI that
-polices after the translation (Calico) or never matches a pod by its address
-(Cilium) judges by the proxy's pod, so under `Isolated` every engine pod may
-reach the peers the public port admits (the webhooks route's proxy
-namespaces, or its external forwarders), on any port, as their ports are the
-implementation's; a load balancer the call leaves the cluster through must
-stay outside `egress.exceptCIDRs`. A Company that gains or changes its public
-address restarts its seat pods as well as its data pods. Should
-Crewlet serve a seat pod's own boxes on loopback, the verdict goes, and so
-does a seat pod's call to the public route for its seats' tools, while
-`E2B` runs, deep work and every run's traces keep the address: the mirror of
-Crewlet's `bridgeHostURL` fails the day it does.
+A seat's `Direct` box reaches its tools and sends its traces on its own
+pod's listener, a seat pod's included, so a Company with no public address
+runs every `Direct` executor, in any pool, and only its `E2B` runs and its
+deep work need the address. A deep-work run on a data pod reaches Crewlet
+through the Company's public route and a data pod's relay, so the data pods
+need egress to the public address. Inside the cluster a call to the route's
+load balancer usually lands on the route's proxies without leaving it,
+which a CNI that polices after the translation (Calico) or never matches a
+pod by its address (Cilium) judges by the proxy's pod, so under `Isolated`
+the data pods may reach the peers the public port admits (the webhooks
+route's proxy namespaces, or its external forwarders), on any port, as
+their ports are the implementation's; a load balancer the call leaves the
+cluster through must stay outside `egress.exceptCIDRs`. A seat pod, where
+nothing calls the public route, is given no such rule. A Company that gains
+or changes its public address restarts its seat pods as well as its data
+pods, for the runs they launch in `E2B`. Should Crewlet stop serving a seat
+pod's own boxes on loopback, the mirror of Crewlet's `boxHostURL` fails the
+day it does.
 
 Rejected: Crewlet's `container` cell, which starts a container per box, and
 an engine pod has no container runtime, nor the privileges under its

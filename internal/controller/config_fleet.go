@@ -216,8 +216,7 @@ func (run *configRun) decideReady(p *part, s *crewletaiv1alpha1.Seat) {
 // cannot run a turn, a verdict of the seat's spec rather than of the fleet.
 func executorReason(reason string) bool {
 	switch reason {
-	case crewletaiv1alpha1.ReasonNotExposed, crewletaiv1alpha1.ReasonSandboxLoginNotPortable,
-		crewletaiv1alpha1.ReasonBridgeUnreachable:
+	case crewletaiv1alpha1.ReasonNotExposed, crewletaiv1alpha1.ReasonSandboxLoginNotPortable:
 		return true
 	}
 	return false
