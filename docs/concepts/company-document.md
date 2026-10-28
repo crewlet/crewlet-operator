@@ -150,7 +150,7 @@ fire run twice.
 | `spec.prompt` | `task` | |
 | `spec.target.fanOut` | `target` | `each` or `lead`; a unit's schedule only. Unset is Crewlet's own default, `each` |
 | `spec.suspend: true` | `enabled: false` | Unset or `false` is left out: Crewlet's default fires the schedule |
-| `spec.timeoutSeconds` | `timeout_seconds` | Unset is Crewlet's default, 180 seconds |
+| `spec.timeoutSeconds` | `timeout_seconds` | Unset is Crewlet's default, 1800 seconds |
 | `spec.catchUp` | `catchup` | Unset is Crewlet's default, `true` |
 
 Crewlet refuses a schedule on a person's seat, since it runs no turn for a
