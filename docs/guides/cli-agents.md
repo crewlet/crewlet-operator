@@ -576,7 +576,7 @@ Seat's `Ready` message names the providers that never run its executor.
 | The CLI | the engine image's ([The image needs the CLI](#the-image-needs-the-cli)) | the E2B template's |
 | Its sign-in | any: the box is seeded with the provider's login, and writes a refreshed one back | a variable of the run's environment only: Claude Code's headless token or key, OpenCode's model provider's key in `env`, or a sign-in in the Seat's `spec.sandbox` |
 | The seat's tools | the pod's own listener, on loopback, a data pod's or a seat pod's | the Company's public address |
-| A restart of the pod | ends the run | leaves it running |
+| A restart of the pod | ends the run, and Crewlet carries its round on in a fresh one | leaves it running |
 
 Crewlet refuses a company with an agent seat and a model provider whose
 `spec.sandbox` places no run, and the operator refuses it first, on the
@@ -625,10 +625,10 @@ one that names a path under `/var/lib/crewlet` on a data pod writes to its
 data volume ([Box storage](../concepts/runtime.md#box-storage)). Whatever the run's shell runs (`git`, a compiler, a package manager) is
 the image's, or what the run installs into its box's home. A Direct run is
 detached from the engine's process, but not from its container: a restart of
-the engine's container ends it, and Crewlet collects it from its box as a run
-that did not finish; a pod replaced by a rollout, a drain or an eviction takes
-the box with its `sandboxes` volume, and Crewlet ends the run without
-resuming its turn (`collect_unreachable`). Nothing relaunches either
+the engine's container, or a pod replaced by a rollout, a drain or an
+eviction, ends it, and Crewlet carries its round on in a fresh run, in the
+same box where the pod kept it and in a fresh one from what the run pushed
+where the pod's `sandboxes` volume went with it, at most twice a round
 ([When a Direct run's pod stops](../concepts/runtime.md#when-a-direct-runs-pod-stops)).
 An E2B run is not touched.
 

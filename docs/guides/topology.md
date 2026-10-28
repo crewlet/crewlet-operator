@@ -201,9 +201,10 @@ every seat.
   give a pool a `terminationGracePeriodSeconds` longer than its longest such
   segment (five minutes unless the pool or the class says otherwise). A
   seat's executor run is not waited for: a `Direct` one on the pod ends with
-  it, and is ended as `launch_node_gone`, its turn lost, once the pod has
-  been gone for the Company's `spec.sandbox.defaultTimeoutSeconds`; an `E2B`
-  one carries on, and the pod that holds the seat next resumes its turn.
+  it, and the pod that holds the seat next carries its round on in a fresh
+  run once the pod has been gone for the Company's
+  `spec.sandbox.defaultTimeoutSeconds`; an `E2B` one carries on, and the pod
+  that holds the seat next resumes its turn.
 - **Suspension and deletion** stop the seat pods first and the data pod
   after them.
 - **Removing a pool** keeps its pods running for as long as the revision the
@@ -251,20 +252,21 @@ operator could no longer tell which pool a pod serves.
   pod relays each call back to the seat pod over the broker: a company with
   no public address runs no `E2B` executor in any pool (`NotExposed` on the
   Seat's `Ready`) ([Exposure](../concepts/runtime.md#exposure)).
-- **A `Direct` run does not outlive its pod.** A seat's executor run placed
-  `Direct` is a process of the pod that launched it, in a box on that pod's
-  `sandboxes` volume, which only that pod drives: a run whose seat moves to
-  another pod meanwhile carries on, and the pod that holds the seat next
-  collects it by asking the box's pod over the broker. A restart of the
-  engine's container keeps the box, and Crewlet collects the run as one that
-  did not finish. A run on a pod that is replaced (a rollout, a drain, an
-  eviction) ends with it, and its box with the pod's `sandboxes` volume:
-  Crewlet ends it as `collect_unreachable` once the pod is back, without
-  resuming its turn. One on a pod that goes for good (a pool scaled down or
-  removed) is ended as `launch_node_gone`, its turn lost too, once the pod
-  has been gone for the Company's `spec.sandbox.defaultTimeoutSeconds` (15
-  minutes unless set). Nothing relaunches any of them, and a run in `E2B`
-  carries on wherever its seat goes ([When a Direct run's pod
+- **A `Direct` run does not outlive its pod, and its round does.** A seat's
+  executor run placed `Direct` is a process of the pod that launched it, in
+  a box on that pod's `sandboxes` volume, which only that pod drives: a run
+  whose seat moves to another pod meanwhile carries on, and the pod that
+  holds the seat next collects it by asking the box's pod over the broker. A
+  restart of the engine's container ends the run and keeps the box, and
+  Crewlet carries the run's round on in a fresh run in that box. A run on a
+  pod that is replaced (a rollout, a drain, an eviction) ends with it, and
+  its box with the pod's `sandboxes` volume: once the pod is back, Crewlet
+  carries the round on in a fresh box, from what the run pushed. One on a
+  pod that goes for good (a pool scaled down or removed) is carried on by
+  the pod that holds the seat next, once the pod has been gone for the
+  Company's `spec.sandbox.defaultTimeoutSeconds` (15 minutes unless set). A
+  round lost a third time ends the seat's turn, and a run in `E2B` carries
+  on wherever its seat goes ([When a Direct run's pod
   stops](../concepts/runtime.md#when-a-direct-runs-pod-stops), and Crewlet's
   [durability of a
   run](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#durability-completion-and-observability)).

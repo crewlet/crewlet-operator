@@ -127,7 +127,7 @@ Two cases are refused rather than guessed at:
 | **Environment** | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the tool bridge's address, which is the Company's public address while it has one, on every engine pod alike (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`, and with them `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, the Company's public address, while the Company has one (see [Exposure](#exposure)); then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). All of it is the engine's: a stdio tool server the engine starts is handed only the part of it [Crewlet's allowlist](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#what-a-stdio-servers-environment-is) names, the proxy and TLS variables among it, a coding CLI that part and the variables its Crewlet profile passes through, a box Crewlet makes on the pod (a seat's `Direct` executor run, a deep-work run) that part alone, and a box in `E2B` none of it ([Stdio and HTTP](../guides/tool-servers.md#stdio-and-http)). |
 | **Ports** | 8080 (`http`), the API, the dashboard and the probes; 8081 (`public`), the public listener: the webhooks, the telemetry receiver, `/otlp/`, and the tool bridge, `/mcp/`, which a seat's box on the pod itself dials on loopback and every other run at the public address; 8082 (`artifacts`), the artifact listener, while the company has an artifact origin; and 7422 (`leaf`), the leaf listener seat pods join the event stream through, while the class's `seatPools.policy` is `Allowed`. The headless Service `nimbus-data` names 8080 and 7422; `nimbus-engine` names 8080, 8081 and 8082. |
 | **Probes** | `/health` for startup and liveness, `/ready` for readiness. Startup allows at least the class's `data.startupSeconds`, counted from the container's start, or, unset, 1,746 seconds (1,886 when the class keeps files in S3) plus six seconds per GiB of the data volume. The first figure is every bound the engine puts on a data pod's boot, laid end to end, and the API refuses a `startupSeconds` below it: its waits for its own broker and store, never for a peer. One of them grows with what the node holds and is left to the second figure, as the recovery is: the claim of each batch of a seat pod's events the node kept and could not settle, 15 s a batch. The second is for what the engine waits out unbounded: it recovers what it holds on the volume before `/health` answers `200`, which takes longer the more it holds, and a pod restarted mid-recovery starts it again. What the company configures does not count: `/health` answers once the recovery is over, and only then does the engine read the company's secrets, start its tool servers and restore its CLIs' logins, while `/ready` answers `503` `starting` until it serves. Liveness allows a minute of failures before a restart, longer than the 45 seconds in which the engine's watchdog ends a wedged process itself. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
-| **Stopping** | A five-second `preStop` sleep, so the endpoint is gone from the Services and Gateways before the engine drains, and the class's `data.terminationGracePeriodSeconds` (default five minutes) for the drain: the turn segments the engine runs in its own process finish, waiting turns are handed back. A seat's executor run is detached from its turn and does not hold the drain: one in `E2B` runs on, and the pod that holds the seat next resumes its turn; one running `Direct` on the pod ends with it, and its box with the pod's `sandboxes` volume, so Crewlet ends it once the pod is back, without resuming its turn (`collect_unreachable`; [When a Direct run's pod stops](#when-a-direct-runs-pod-stops)). |
+| **Stopping** | A five-second `preStop` sleep, so the endpoint is gone from the Services and Gateways before the engine drains, and the class's `data.terminationGracePeriodSeconds` (default five minutes) for the drain: the turn segments the engine runs in its own process finish, waiting turns are handed back. A seat's executor run is detached from its turn and does not hold the drain: one in `E2B` runs on, and the pod that holds the seat next resumes its turn; one running `Direct` on the pod ends with it, and its box with the pod's `sandboxes` volume, and Crewlet carries its round on in a fresh run once the pod is back ([When a Direct run's pod stops](#when-a-direct-runs-pod-stops)). |
 | **Updates** | `RollingUpdate` with `maxUnavailable: 1`, `podManagementPolicy: Parallel`. |
 | **Scheduling** | The class's `podTemplate`: labels, annotations, node selector, tolerations, affinity, topology spread, runtime and priority class; and its `data.resources`. |
 
@@ -188,12 +188,14 @@ over.
   outside a box.
 - **An `emptyDir` on the node's disk.** A box's run is a process of the pod
   and ends with it. The volume keeps the box through a restart of the
-  engine's container, so Crewlet reads back a run the restart cut short, and
-  goes with the pod, whose replacement ends the run without resuming its
-  turn ([When a Direct run's pod stops](#when-a-direct-runs-pod-stops)). A
-  volume that outlived the pod would keep that turn only by giving every
-  engine pod, a seat pod too, a volume claim of its own; and a memory-backed
-  volume would charge a checkout to the engine container's memory limit.
+  engine's container, so the run Crewlet relaunches for the round the
+  restart cut short carries on in it, its working tree as the run left it,
+  and goes with the pod, whose replacement has the round carried on in a
+  fresh box, from what the run pushed ([When a Direct run's pod
+  stops](#when-a-direct-runs-pod-stops)). A volume that outlived the pod
+  would keep that working tree only by giving every engine pod, a seat pod
+  too, a volume claim of its own; and a memory-backed volume would charge a
+  checkout to the engine container's memory limit.
 - **Bounded, not reserved.** The class's `data.sandboxSizeLimit`, for the
   data pods, and `seatPools.defaults.sandboxSizeLimit`, for every seat pod,
   cap it: 20Gi unless set, and at least 1Gi. A pod whose boxes write more is
@@ -228,27 +230,37 @@ over.
 
 A seat's `Direct` executor run is a process tree of the engine's container:
 detached from the engine's process, but not from its container, and no drain
-waits for it. What Crewlet makes of a run cut short turns on whether its box
-is still on the pod's `sandboxes` volume when the pod's engine is back:
+waits for it. A run cut short that way did not fail, and its turn is not
+lost: Crewlet records the run as lost with its host, and the seat's turn
+carries the round on, relaunching the executor for the same round in a fresh
+CLI session, told that a run before it was cut off and where to look for
+what it left. Where the new run starts turns on whether the box is still on
+the pod's `sandboxes` volume:
 
 - **The engine's container restarts in its pod**, a liveness restart or the
   container killed for its memory: the `emptyDir` keeps the box. The engine
-  finds the run's processes gone and collects the run from its box as one
-  that did not finish, and the seat's turn resumes with what it did.
+  finds the run's processes gone with the engine that watched them
+  (`engine_restarted`), charges what the run spent from its box, and the new
+  run carries on in that box, its working tree as the run left it, where the
+  pod that holds the seat now is the one the box is on.
 - **The pod is replaced**, by a rolling update, a drain, an eviction or the
   loss of its node: the pod that comes back under the same name starts on
-  an empty volume. The engine finds the box gone and ends the run at once,
-  without resuming its turn: `sandbox_run_failed`, reason
-  `collect_unreachable`. The turn is lost; what the run pushed is on its
-  branch.
+  an empty volume. The engine finds the box gone (`box_gone`), and the new
+  run starts in a fresh box, from whatever the lost one pushed to its
+  branch; what it had not pushed is gone.
 - **The pod does not come back** within the Company's
   `spec.sandbox.defaultTimeoutSeconds` (15 minutes unless set), as when a
-  seat pool is scaled down or removed: the fleet ends the run as
-  `launch_node_gone`, its turn lost the same way.
+  seat pool is scaled down or removed: the fleet records the run lost
+  (`launch_node_gone`), and the pod that holds the seat next carries the
+  round on in a box of its own.
 
-Nothing relaunches a run that ends either way; the seat's next turn starts a
-new one. A run in `E2B` is outside the pod, carries on through all three,
-and the pod that holds its seat next resumes its turn.
+A round is carried on after two such losses at most: a third ends the
+seat's turn, since a run that keeps taking its pod down, past its memory
+limit say, takes every other run on that pod down with it each time.
+Whatever the lost run did through the seat's tools did happen, and the run
+that carries the round on is told to check before doing it again. A run in
+`E2B` is outside the pod, carries on through all three, and the pod that
+holds its seat next resumes its turn.
 
 ---
 
@@ -288,7 +300,7 @@ flowchart LR
 | Selector | `crewlet.ai/pool: general`, and no `crewlet.ai/seat` label | `crewlet.ai/seat: cy` |
 | Environment | `CREWLET_NODE_ID`, the pod's name; `HOME`; `TURSO_GO_CACHE_DIR` on the scratch volume; the OpenTelemetry variables, `CREWLET_SANDBOX_OTEL_RECEIVER_URL` and `CREWLET_MCP_BRIDGE_URL` as on a data pod; the class's and the Company's variables, as on a data pod | the same, and `CREWLET_SEAT: cy` |
 | Storage | one `emptyDir` at `/var/lib/crewlet`, of the class's `seatPools.defaults.scratchSizeLimit` (10Gi unless set), holding the scratch store, the store's native library, `/tmp` and `HOME`: the limit bounds what the processes the engine runs write too, a seat's `Direct` run's writes to `/tmp` or the engine's home among it; and the `sandboxes` `emptyDir` at `/var/lib/crewlet-sandboxes`, of the class's `seatPools.defaults.sandboxSizeLimit` (20Gi unless set), for the boxes of the pod's seats, as on a data pod ([Box storage](#box-storage)) | the same |
-| Stopping | the pool's `terminationGracePeriodSeconds`, else the class's default, else five minutes: the turn segments the engine runs in its own process finish, waiting turns are handed back, and the seats are released with their mailboxes for another pod to claim. A seat's executor run is not waited for: one in `E2B` runs on, and the pod that holds the seat next resumes its turn; one running `Direct` on the pod ends with it, and its box with the pod's `sandboxes` volume, so Crewlet ends it without resuming its turn, as `collect_unreachable` once a pod of the same name is back, or as `launch_node_gone` once the pod has been gone for the Company's `spec.sandbox.defaultTimeoutSeconds` ([When a Direct run's pod stops](#when-a-direct-runs-pod-stops)) | the same |
+| Stopping | the pool's `terminationGracePeriodSeconds`, else the class's default, else five minutes: the turn segments the engine runs in its own process finish, waiting turns are handed back, and the seats are released with their mailboxes for another pod to claim. A seat's executor run is not waited for: one in `E2B` runs on, and the pod that holds the seat next resumes its turn; one running `Direct` on the pod ends with it, and its box with the pod's `sandboxes` volume, and Crewlet carries its round on in a fresh run once a pod of the same name is back, or, through the pod that holds the seat next, once the pod has been gone for the Company's `spec.sandbox.defaultTimeoutSeconds` ([When a Direct run's pod stops](#when-a-direct-runs-pod-stops)) | the same |
 | Port and probes | 8080, the probes, and the tool bridge and telemetry receiver of the pod's own `Direct` boxes, to loopback alone: `/health` for startup (1,142 seconds, 1,192 with an S3 object store) and liveness, `/ready` for readiness | the same |
 | Updates | `RollingUpdate`, `maxUnavailable: 1`, `podManagementPolicy: Parallel`, `minReadySeconds: 10` | the same |
 | Resources | the class's `seatPools.defaults.resources`: the class sizes every seat pod, as it sizes the data pods, and a Company chooses only how many its pools run, within `maxPods` | the same |

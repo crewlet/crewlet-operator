@@ -406,7 +406,8 @@ const (
 	// the seat's tools back on the pod's own listener, on loopback, a data
 	// pod's or a seat pod's, with or without a public address. A run dies
 	// with its pod: a restart or a rolling update ends the runs in flight
-	// on it.
+	// on it, and Crewlet carries each run's round on in a fresh run, at
+	// most twice a round.
 	SandboxPlacementDirect SandboxPlacement = "Direct"
 	// SandboxPlacementE2B runs the CLI in the Company's E2B sandbox, a
 	// machine of its own per run, which calls the seat's tools back at the
@@ -634,8 +635,9 @@ type SandboxSettings struct {
 	// stopped renewing it, in either cell. It never stops a running job:
 	// the engine renews a box while its run works. An engine pod gone for
 	// this long has the Direct runs it launched, which were its processes
-	// and died with it, ended (launch_node_gone). Unset takes Crewlet's
-	// default of 900.
+	// and died with it, found lost (launch_node_gone), and the pod that holds
+	// each run's seat next carries its round on in a fresh run. Unset takes
+	// Crewlet's default of 900.
 	// Crewlet's `default_timeout_seconds`.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
@@ -817,11 +819,11 @@ type SeatPool struct {
 	// delegated worker): the engine puts no bound of its own on that drain,
 	// so it must cover the longest of them. A seat's executor run is not
 	// waited for: a Direct one on the pod ends with it, and its box with the
-	// pod's sandboxes volume, so Crewlet ends it without resuming its turn,
-	// once a pod of the same name is back (collect_unreachable) or once the
-	// pod has been gone for spec.sandbox.defaultTimeoutSeconds
-	// (launch_node_gone); an E2B one carries on in its sandbox. Unset takes
-	// the class's seatPools.defaults, else 300.
+	// pod's sandboxes volume, and Crewlet carries its round on in a fresh
+	// run, once a pod of the same name is back or once the pod has been gone
+	// for spec.sandbox.defaultTimeoutSeconds (launch_node_gone); an E2B one
+	// carries on in its sandbox. Unset takes the class's seatPools.defaults,
+	// else 300.
 	// +optional
 	// +kubebuilder:validation:Minimum=30
 	// +kubebuilder:validation:Maximum=3600

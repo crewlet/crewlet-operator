@@ -1018,8 +1018,9 @@ spec:
                       stopped renewing it, in either cell. It never stops a running job:
                       the engine renews a box while its run works. An engine pod gone for
                       this long has the Direct runs it launched, which were its processes
-                      and died with it, ended (launch_node_gone). Unset takes Crewlet's
-                      default of 900.
+                      and died with it, found lost (launch_node_gone), and the pod that holds
+                      each run's seat next carries its round on in a fresh run. Unset takes
+                      Crewlet's default of 900.
                       Crewlet's `default_timeout_seconds`.
                     format: int32
                     minimum: 1
@@ -1529,11 +1530,11 @@ spec:
                             delegated worker): the engine puts no bound of its own on that drain,
                             so it must cover the longest of them. A seat's executor run is not
                             waited for: a Direct one on the pod ends with it, and its box with the
-                            pod's sandboxes volume, so Crewlet ends it without resuming its turn,
-                            once a pod of the same name is back (collect_unreachable) or once the
-                            pod has been gone for spec.sandbox.defaultTimeoutSeconds
-                            (launch_node_gone); an E2B one carries on in its sandbox. Unset takes
-                            the class's seatPools.defaults, else 300.
+                            pod's sandboxes volume, and Crewlet carries its round on in a fresh
+                            run, once a pod of the same name is back or once the pod has been gone
+                            for spec.sandbox.defaultTimeoutSeconds (launch_node_gone); an E2B one
+                            carries on in its sandbox. Unset takes the class's seatPools.defaults,
+                            else 300.
                           format: int64
                           maximum: 3600
                           minimum: 30

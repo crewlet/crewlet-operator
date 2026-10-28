@@ -49,7 +49,8 @@ dials `CREWLET_MCP_BRIDGE_URL`, which is one address for the whole fleet
 for. A `direct` box is made under
 `providers.sandbox.local.state_dir`, else under the engine user's home, and
 its run is a process of the node that launched it, which alone drives it
-(Crewlet's ADR-0057), and dies with that node's container. An `e2b` box is
+(Crewlet's ADR-0057), and dies with that node's container, when Crewlet
+carries the run's round on in a fresh run. An `e2b` box is
 given only the variables that sign its CLI in, so a login a credential bundle
 restores, whose refresh token the engine keeps rotating on its data volume,
 cannot follow a run there.
@@ -157,13 +158,15 @@ class's network policy. A company that wants its runs off the data volume
 places its agent seats in a seat pool or runs them in `E2B`. A `Direct` run
 ends with its container: a restart, a rolling update or an eviction of the
 pod (a box past its volume's limit evicts the whole pod, as a run's writes
-past the scratch volume's do) ends the runs in flight on it, and Crewlet
-relaunches none of them, while an `E2B` run goes on. A restart of the
-container alone keeps the `sandboxes` `emptyDir`, and Crewlet collects each
-run from its box as one that did not finish; a pod that is replaced takes
-the boxes with it, and Crewlet ends each run without resuming its turn
-(`collect_unreachable`), which a volume that outlived the pod would spare
-only at the cost of a volume claim for every engine pod. Nothing measured
+past the scratch volume's do) ends the runs in flight on it, while an `E2B`
+run goes on. Crewlet carries each lost run's round on in a fresh run, at
+most twice a round, the third loss ending the seat's turn. A restart of the
+container alone keeps the `sandboxes` `emptyDir`, and the fresh run carries
+on in the lost run's box, its working tree as that run left it; a pod that
+is replaced takes the boxes with it, and the fresh run starts in a fresh
+box, from what the lost one pushed, a loss of the working tree that a volume
+that outlived the pod would spare only at the cost of a volume claim for
+every engine pod. Nothing measured
 sets the 20Gi and 10Gi defaults; they err high because they cost nothing
 until written and reaching one evicts the pod. A `Direct` run on a data pod can
 still write the data volume by its path, which no `emptyDir` limit bounds:

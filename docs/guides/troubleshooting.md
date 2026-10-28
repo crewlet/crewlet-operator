@@ -728,19 +728,19 @@ kubectl logs acme-data-0 -n acme | grep -E 'cli_agent_bundle_(restore_failed|wit
   saying its CLI was not found (`claude` or `opencode`): the run is `Direct`,
   and the engine image has no such CLI. Nothing validates that before a run:
   build the class's image with it ([The image needs the CLI](cli-agents.md#the-image-needs-the-cli)).
-- **A seat's executor run fails as `sandbox_run_failed`, reason
-  `collect_unreachable`,** after its pod was replaced, by a rolling update,
-  a drain or an eviction: a `Direct` run is a process of the engine's
-  container, and its box a directory of the pod's `sandboxes` `emptyDir`, so
-  the pod that comes back under the same name finds the box gone, and
-  Crewlet ends the run without resuming its turn.
-  The turn is lost, whatever the run pushed is on its branch, and nothing
-  relaunches it; the seat's next turn starts a new run. A restart of the
-  engine's container alone keeps the box, and Crewlet collects the run as one
-  that did not finish instead; a pod gone for longer than the Company's
-  `spec.sandbox.defaultTimeoutSeconds` has its runs ended as
-  `launch_node_gone`
-  ([When a Direct run's pod stops](../concepts/runtime.md#when-a-direct-runs-pod-stops)).
+- **A seat's executor run starts again, its run's record saying it was cut
+  off before it finished,** after its pod's engine restarted or its pod was
+  replaced, by a rolling update, a drain or an eviction: a `Direct` run is a
+  process of the engine's container, and Crewlet carries the round it was
+  working on in a fresh run (the engine's log says
+  `sandbox_run_lost_carried_on`), in its box where the pod kept it and in a
+  fresh one, from what the run pushed, where the pod's `sandboxes` `emptyDir`
+  went with it; a pod gone for longer than the Company's
+  `spec.sandbox.defaultTimeoutSeconds` has its runs carried on by the pod
+  that holds the seat next. A round lost a third time ends the seat's turn
+  ([When a Direct run's pod stops](../concepts/runtime.md#when-a-direct-runs-pod-stops)):
+  a run that keeps taking its pod down, past its memory limit say, is one to
+  size the pod for.
   An eviction for a `sandboxes` volume past its `sandboxSizeLimit`, or a
   `scratch` volume past its `scratchSizeLimit`, is in the pod's events:
   raise the class's limit, or have the seat's work clean up after itself, in

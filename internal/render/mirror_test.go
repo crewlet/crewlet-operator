@@ -405,13 +405,15 @@ var boxWrites = []string{
 }
 
 // directRunEnds is every operator file that copies what becomes of a seat's
-// Direct run whose pod stops: a restart of the engine's container keeps its
-// box on the sandboxes emptyDir, and Crewlet collects the run from it as one
-// that did not finish; a pod that is replaced comes back without the box, and
-// Crewlet ends the run without resuming its turn (collect_unreachable); and a
-// pod gone for the box timeout has its runs ended as launch_node_gone. The
-// render's rationale for the emptyDir, the API docs of the pods' grace
-// periods, and the pages and the record that say so.
+// Direct run whose pod stops: the run is lost with its host, never collected
+// as its result, and Crewlet carries its round on in a fresh run, at most
+// twice a round. A restart of the engine's container keeps its box on the
+// sandboxes emptyDir, and the fresh run carries on in it (engine_restarted);
+// a pod that is replaced comes back without the box, and the fresh run starts
+// in a fresh one (box_gone); and a pod gone for the box timeout has its runs
+// carried on by the seat's next holder (launch_node_gone). The render's
+// rationale for the emptyDir, the API docs of the pods' grace periods, and the
+// pages and the record that say so.
 var directRunEnds = []string{
 	bootstrapGo, companyTypesGo, engineClassGo, runtimeMd, cliAgentsMd, "docs/guides/topology.md",
 	troubleshootingMd, adr0008Md,
@@ -913,26 +915,45 @@ var mirrored = []mirror{
 		file: localGo, name: "(*Local).reattach",
 		against: directRunEnds,
 		decides: "a box whose directory is no longer on its node's host is gone (ErrBoxGone), as every box of a " +
-			"pod replaced with its sandboxes emptyDir is, and one whose directory is there is read back as it is, " +
-			"as every box of a pod whose engine's container alone restarted is",
+			"pod replaced with its sandboxes emptyDir is, so its lost run's round is carried on in a fresh box, " +
+			"and one whose directory is there is read back as it is, as every box of a pod whose engine's " +
+			"container alone restarted is, so the round is carried on in it",
 		digest: "e110c16af07de262bc9cf2412503245704619a8d0150b77312a5da40afafffb3",
-		read:   executorRead,
+		read:   executorFinalRead,
 	},
 	{
-		file: "internal/sandbox/coordinator.go", name: "(*Coordinator).collectFailed",
+		file: "internal/sandbox/local_witness.go", name: "jobEnd",
 		against: directRunEnds,
-		decides: "a run whose box is gone is ended at once as collect_unreachable, without resuming its turn, so a " +
-			"Direct run whose pod was replaced loses its turn",
-		digest: "6e51910dff65767b5f1908b35abee0b3332b2821d0ad765c716e8ba0a591fb7b",
-		read:   executorRead,
+		decides: "a direct box's job that is not running was lost, not ended, once the engine process that last " +
+			"saw it running is gone, as a restart of an engine pod's container takes it, so its round is " +
+			"carried on rather than collected as its result",
+		digest: "79b1d6c93cc645fb43b5b6afc40111f646e0e60e78fa6e043993ed2cd8b526fb",
+		read:   executorFinalRead,
+	},
+	{
+		file: "internal/sandbox/lost.go", name: "(*Coordinator).carryOnLost",
+		against: directRunEnds,
+		decides: "a job lost with its host is never collected as the run's result: what it spent is read off its " +
+			"box where the box is left, and the seat's turn resumes to carry its round on in a fresh run, in the " +
+			"kept box after its engine restarted and in a fresh one where the box went with its pod or its node",
+		digest: "5f63c165e6ca5421bdc3102beb063a8ee787afcbb31277ff6880d90ff31ff223",
+		read:   executorFinalRead,
+	},
+	{
+		file: "internal/sandbox/lost.go", name: "MaxRoundLosses",
+		against: directRunEnds,
+		decides: "a round is carried on after two losses at most, and the third ends the seat's turn",
+		digest:  "3348ab90d8005a621166bb4d0023764e94f1de531aec0dc5476945797f382508",
+		read:    executorFinalRead,
 	},
 	{
 		file: "internal/sandbox/waiterhost.go", name: "(*Waiter).goneAfter",
 		against: directRunEnds,
 		decides: "a running job whose box is on the host of a node absent for the box timeout " +
-			"(default_timeout_seconds) is ended as launch_node_gone, and one whose node is back within it is not",
+			"(default_timeout_seconds) is recorded lost (launch_node_gone), and its round carried on by the " +
+			"seat's next holder, and one whose node is back within it is not",
 		digest: "fe9306cd8f560af34ee8a78abee8a609e07f9e88d3599da12df7e297dc058561",
-		read:   executorRead,
+		read:   executorFinalRead,
 	},
 	{
 		file: "internal/sandbox/pending.go", name: "Holding",

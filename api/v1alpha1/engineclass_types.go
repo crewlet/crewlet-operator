@@ -159,8 +159,9 @@ type DataPodSettings struct {
 	// default is five minutes, which covers a long segment, rather than the
 	// Kubernetes default of thirty seconds, which does not. A seat's
 	// executor run is not waited for: a Direct one on the pod is a process
-	// of it and ends with it, its box with the pod's sandboxes volume and its
-	// turn with the box, and an E2B one carries on in its sandbox.
+	// of it and ends with it, its box with the pod's sandboxes volume, and
+	// Crewlet carries its round on in a fresh run once the pod is back, and
+	// an E2B one carries on in its sandbox.
 	// +optional
 	// +kubebuilder:validation:Minimum=30
 	// +kubebuilder:validation:Maximum=3600
@@ -263,8 +264,9 @@ type SeatPoolDefaults struct {
 	// before it exits, with no bound of its own, so unset is five minutes,
 	// as for a data pod, rather than the Kubernetes default of thirty
 	// seconds. A seat's executor run is not waited for: a Direct one on the
-	// pod ends with it, its box with the pod's sandboxes volume and its turn
-	// with the box, and an E2B one carries on in its sandbox.
+	// pod ends with it, its box with the pod's sandboxes volume, and Crewlet
+	// carries its round on in a fresh run, and an E2B one carries on in its
+	// sandbox.
 	// +optional
 	// +kubebuilder:validation:Minimum=30
 	// +kubebuilder:validation:Maximum=3600
