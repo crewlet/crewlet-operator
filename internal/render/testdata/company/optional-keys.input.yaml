@@ -10,6 +10,7 @@ spec:
   engineClassName: basic
   companyName: Optional
   sandbox:
+    defaultRunIn: E2B
     e2b:
       apiKeySecretRef:
         name: e2b

@@ -50,7 +50,7 @@ type configRun struct {
 	read, desired *secretsync.Desired
 	missing       []*secretsync.MissingError
 	// companyEmpty are the values the Company's own setup steps give a
-	// coding run from a Secret key that holds an empty value, under a key
+	// seat's executor run from a Secret key that holds an empty value, under a key
 	// they do not declare optional, and companyLeftOut those under a key
 	// they do whose Secret or key does not exist or holds nothing
 	// (checkSecretValues).
@@ -220,11 +220,9 @@ func (run *configRun) reconcileDocument(ctx context.Context) (ctrl.Result, error
 	// render reports every reference that does not resolve at once, so
 	// the parts it does not name have none.
 	run.objectsChecked = true
-	// Whatever became of the document: whether a seat's turns can run is a
-	// fact about its own spec. Whether its code work can is decided once the
-	// Secrets are read, when writeStatus asks: a sign-in it lets go without
-	// may be missing.
-	run.checkExecutors(render.ExecutorOf(run.input()), render.BoxModeOf(run.input()))
+	// Whatever became of the document. Whether a seat's executor can run
+	// is decided once the Secrets are read, when writeStatus asks: a
+	// sign-in of the seat's own may hold nothing.
 	run.checkReported(render.ReportedOf(run.input()))
 	if err != nil {
 		refusals := render.RefErrors(err)
@@ -950,56 +948,27 @@ func (run *configRun) refused(refusals []*render.RefError) {
 	run.block(refusals[0].Reason, "The document cannot be rendered: "+sentences(refusalLines(refusals)))
 }
 
-// unrunnable reports whether reason refuses a seat whose CLI login its pods
-// cannot keep, or whose code work runs on another CLI's provider, which the
-// seat reports as Applied=False rather than as an unresolved reference.
+// unrunnable reports whether reason refuses a part the engine cannot run as
+// written, which the part reports as Applied=False rather than as an
+// unresolved reference: a Seat whose CLI login its pods cannot keep, or
+// whose executor chain has no CLI that runs it, and an LLMProvider whose
+// executor runs are placed in a cell the Company does not configure.
 func unrunnable(reason string) bool {
 	switch reason {
-	case crewletaiv1alpha1.ReasonCLIAuthNotPortable, crewletaiv1alpha1.ReasonCodingAgentMismatch:
+	case crewletaiv1alpha1.ReasonCLIAuthNotPortable, crewletaiv1alpha1.ReasonNoExecutorCLI,
+		crewletaiv1alpha1.ReasonSandboxPlacementNotOffered:
 		return true
 	}
 	return false
 }
 
-// checkCodeWork records each Seat's code work on its part, and emits a
-// Warning event on a Seat whose code work turns unrunnable or changes its
-// reason, a new problem to announce: with SandboxLoginNotPortable,
-// SecretValueEmpty or NoProvisioner the document applies and nothing on the
-// Company says so.
-func (run *configRun) checkCodeWork(codeWork map[string]render.CodeWork) {
+// checkExecutors records each agent Seat's executor on its part, for decide
+// to report and announce.
+func (run *configRun) checkExecutors(executors map[string]render.Executor) {
 	for _, p := range run.parts {
-		seat, ok := p.obj.(*crewletaiv1alpha1.Seat)
-		if !ok {
-			continue
-		}
-		w, ok := codeWork[seat.Name]
-		if !ok {
-			continue
-		}
-		p.codeWork = &w
-		if w.Reason == "" {
-			continue
-		}
-		before := meta.FindStatusCondition(p.base.(*crewletaiv1alpha1.Seat).Status.Conditions,
-			crewletaiv1alpha1.ConditionCodeWorkRunnable)
-		if before == nil || before.Reason != w.Reason {
-			run.Recorder.Eventf(seat, nil, corev1.EventTypeWarning, w.Reason, "CheckCodeWork", "%s: %s.", w.Field, w.Message)
-		}
-	}
-}
-
-// checkExecutors records each agent Seat's executor and each LLMProvider's
-// box mode on its part, for decide to report and announce.
-func (run *configRun) checkExecutors(executors map[string]render.Executor, boxModes map[string]render.BoxMode) {
-	for _, p := range run.parts {
-		switch o := p.obj.(type) {
-		case *crewletaiv1alpha1.Seat:
+		if o, ok := p.obj.(*crewletaiv1alpha1.Seat); ok {
 			if e, ok := executors[o.Name]; ok {
 				p.executor = &e
-			}
-		case *crewletaiv1alpha1.LLMProvider:
-			if m, ok := boxModes[o.Name]; ok {
-				p.boxMode = &m
 			}
 		}
 	}
@@ -1022,8 +991,7 @@ func (run *configRun) checkReported(reported []*render.RefError) {
 
 // announce emits a Warning event on a part whose decided status now shows a
 // finding that holds nothing: a Seat whose Ready turns to its executor's
-// reason, an LLMProvider whose BoxModeRunnable turns False, a part whose
-// ResolvedRefs turns False for a reported finding. The document applies with
+// reason, a part whose ResolvedRefs turns False for a reported finding. The document applies with
 // each, and nothing on the Company says so. The event follows the condition
 // that shows the finding, from the status the part had to the one decided,
 // rather than the finding alone: a Seat's Ready says Suspended while its
@@ -1046,11 +1014,6 @@ func (run *configRun) announce(p *part) {
 		if c := turned(crewletaiv1alpha1.ConditionReady, p.executor.Reason); c != nil {
 			run.Recorder.Eventf(p.obj, nil, corev1.EventTypeWarning, c.Reason, "CheckExecutor", "%s: %s.",
 				p.executor.Field, p.executor.Message)
-		}
-	}
-	if p.boxMode != nil {
-		if c := turned(crewletaiv1alpha1.ConditionBoxModeRunnable, p.boxMode.Reason); c != nil {
-			run.Recorder.Eventf(p.obj, nil, corev1.EventTypeWarning, c.Reason, "CheckBoxMode", "%s", p.boxMode.Message+".")
 		}
 	}
 	if len(p.unresolved) == 0 {

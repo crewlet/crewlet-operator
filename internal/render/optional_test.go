@@ -12,6 +12,15 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/secretref"
 )
 
+// The fields of a value the first setup step of a Company's or a Seat's
+// spec.sandbox gives a seat's executor runs, its first variable and its
+// first file, and of the first variable of a Seat's spec.sandbox.env.
+const (
+	firstStepEnv  = "spec.sandbox.setup[0].env[0].valueFrom"
+	firstStepFile = "spec.sandbox.setup[0].files[0].valueFrom"
+	seatEnv       = "spec.sandbox.env[0].valueFrom"
+)
+
 // The objects of the optional-keys case the tests break, and the keys and
 // Secret keys they write.
 const (
@@ -51,7 +60,7 @@ func optionalSecret(name, key string) secretref.Key {
 }
 
 // TestStartValuesSayWhichValuesMayGoMissing holds what the render records of
-// every Secret key a tool server or a coding run is started with: where it is
+// every Secret key a tool server or an executor run is started with: where it is
 // written, under which key, for which server, which optionalKeys list governs
 // it and whether that list lets the key go without it, and whether the engine
 // starts anything with it. A key every reference to which may go without it is
@@ -83,9 +92,9 @@ func TestStartValuesSayWhichValuesMayGoMissing(t *testing.T) {
 		"spec.mcp[0].env[0].valueFrom", headerAuthorization, sampleGitHub, true, github, fieldOptionalKeys)
 	unitHeader.Started = false
 	want := []StartValue{
-		value(optionalSecret("npm", optionalToken), company, "spec.sandbox.setup[0].env[0].valueFrom", "NPM_TOKEN", "", false,
+		value(optionalSecret("npm", optionalToken), company, firstStepEnv, "NPM_TOKEN", "", false,
 			company, firstStep),
-		value(optionalSecret("npm", "npmrc"), company, "spec.sandbox.setup[0].files[0].valueFrom", fileNPMRC, "", true,
+		value(optionalSecret("npm", "npmrc"), company, firstStepFile, fileNPMRC, "", true,
 			company, firstStep),
 		value(optionalSecret("tavily", keyAPIKey), tavily, "spec.env[0].valueFrom", envTavilyKey, optionalTavily, false,
 			tavily, fieldOptionalKeys),
@@ -94,12 +103,12 @@ func TestStartValuesSayWhichValuesMayGoMissing(t *testing.T) {
 		unitHeader,
 		value(optionalSecret("coder-github", headerLower), coder, "spec.mcp[0].env[0].valueFrom", headerAuthorization,
 			sampleGitHub, true, github, fieldOptionalKeys),
-		value(optionalSecret("coder-github", optionalToken), coder, "spec.sandbox.env[0].valueFrom", envGitHubSignIn, "", false,
+		value(optionalSecret("coder-github", optionalToken), coder, seatEnv, envGitHubSignIn, "", false,
 			coder, seatSandbox),
 		value(optionalSecret("coder-db", "url"), coder, "spec.sandbox.env[1].valueFrom", envDatabaseURL, "", true, coder, seatSandbox),
-		value(optionalSecret("coder-db", "user"), coder, "spec.sandbox.setup[0].env[0].valueFrom", envPGUser, "", false,
+		value(optionalSecret("coder-db", "user"), coder, firstStepEnv, envPGUser, "", false,
 			coder, firstStep),
-		value(optionalSecret("coder-db", "pgpass"), coder, "spec.sandbox.setup[0].files[0].valueFrom", filePGPass, "", true,
+		value(optionalSecret("coder-db", "pgpass"), coder, firstStepFile, filePGPass, "", true,
 			coder, firstStep),
 	}
 	order := func(a, b StartValue) int {
@@ -141,9 +150,11 @@ func TestStartValuesSayWhichValuesMayGoMissing(t *testing.T) {
 }
 
 // TestStartedValuesAreTheOnesTheEngineStartsWith holds Started to what the
-// engine starts each tool server and coding run with: a value nothing starts
-// with, because no instance of its server runs or another value replaces it
-// wherever it would be read, is not started, whatever the Secret holds.
+// engine starts each tool server and executor run with: a value nothing
+// starts with, because no instance of its server runs, no agent seat's
+// executor runs, or another value replaces it wherever it would be read, is
+// not started, whatever the Secret holds. Every agent seat's executor runs in
+// a box, its own spec.sandbox or none, so each is given the Company's steps.
 func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 	const own, registry = "spec.env[0].valueFrom", "spec.env[1].valueFrom"
 	cases := []struct {
@@ -185,7 +196,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own,
 		},
 		{
-			name: "a per-seat server's own value a coding run's box is given",
+			name: "a per-seat server's own value an executor's box is given",
 			mutate: func(in *Input) {
 				toolServer(in, optionalTavily).Spec.Shared = new(false)
 				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
@@ -230,19 +241,62 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			mutate: func(in *Input) {
 				seat(in, optionalSeat).Spec.Sandbox.Env[0].Name = "NPM_TOKEN"
 			},
-			object: ObjectRef{Kind: KindCompany, Name: optionalInput(t).Company.Name}, field: "spec.sandbox.setup[0].env[0].valueFrom",
+			object: ObjectRef{Kind: KindCompany, Name: optionalInput(t).Company.Name}, field: firstStepEnv,
 		},
 		{
 			name: "a Company step's file, which no seat replaces",
 			mutate: func(in *Input) {
 				seat(in, optionalSeat).Spec.Sandbox.Env[0].Name = "NPM_TOKEN"
 			},
-			object: ObjectRef{Kind: KindCompany, Name: optionalInput(t).Company.Name}, field: "spec.sandbox.setup[0].files[0].valueFrom", want: true,
+			object: ObjectRef{Kind: KindCompany, Name: optionalInput(t).Company.Name}, field: firstStepFile, want: true,
 		},
 		{
-			name:   "a Company step's variable with no seat to run it",
-			mutate: func(in *Input) { seat(in, optionalSeat).Spec.Sandbox = nil },
-			object: ObjectRef{Kind: KindCompany, Name: optionalInput(t).Company.Name}, field: "spec.sandbox.setup[0].env[0].valueFrom",
+			name:   "a Company step's variable a seat with no spec.sandbox of its own runs",
+			mutate: func(in *Input) { seat(in, optionalSeat).Spec.Sandbox = v1alpha1.SeatSandbox{} },
+			object: ObjectRef{Kind: KindCompany, Name: optionalInput(t).Company.Name}, field: firstStepEnv,
+			want: true,
+		},
+		{
+			name: "a Company step's variable with no agent seat to run it",
+			mutate: func(in *Input) {
+				in.Seats = slices.DeleteFunc(in.Seats, func(s v1alpha1.Seat) bool { return s.Spec.Kind != v1alpha1.SeatKindHuman })
+			},
+			object: ObjectRef{Kind: KindCompany, Name: optionalInput(t).Company.Name}, field: firstStepEnv,
+		},
+		{
+			name:   "a seat's env its executor runs with",
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv, want: true,
+		},
+		// An agent seat whose executor never launches starts nothing with
+		// its run's values, so an empty one holds nothing up.
+		{
+			// A valid company: no model, so no executor, and no box to
+			// configure.
+			name: "a seat's env in a company with no model and no spec.sandbox",
+			mutate: func(in *Input) {
+				in.LLMProviders = nil
+				in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{}
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv,
+		},
+		{
+			// Crewlet refuses the document (SandboxRequired), so it starts
+			// nothing on it.
+			name:   "a seat's env in a company with a model and no spec.sandbox",
+			mutate: func(in *Input) { in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{} },
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv,
+		},
+		{
+			name:   "a seat's env whose executor chain resolves to nothing",
+			mutate: func(in *Input) { in.LLMProviders = nil },
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv,
+		},
+		{
+			name: "a seat's env whose executor chain holds no CLI that runs it",
+			mutate: func(in *Input) {
+				in.LLMProviders[0].Spec.Agent, in.LLMProviders[0].Spec.Model = v1alpha1.CLIAgentCodex, modelCodex
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv,
 		},
 	}
 	for _, c := range cases {
@@ -446,8 +500,9 @@ func TestAnOptionalKeyNeedsAValueThatCanGoMissing(t *testing.T) {
 
 // TestNoProvisionerSaysWhatGoesWithoutIt holds the report on a provisioned
 // credential nothing creates to what Crewlet does without its value, by where
-// it is written: a tool server is not started, nor a run_sandbox coding run,
-// unless the key is optional, when they start without it.
+// it is written: a tool server is not started unless the key is optional,
+// when it starts without it, and an executor run starts without it either
+// way, logged as a gap of the run unless the key is optional.
 func TestNoProvisionerSaysWhatGoesWithoutIt(t *testing.T) {
 	provisioned := v1alpha1.SeatCredentialSource{Provisioned: v1alpha1.ProvisionedCredential{Name: provisionedGitLab}}
 	in := companyCaseNamed(t, caseOptionalKeys).input(t)
@@ -470,8 +525,8 @@ func TestNoProvisionerSaysWhatGoesWithoutIt(t *testing.T) {
 	for field, says := range map[string]string{
 		"spec.mcp[0].env[1].valueFrom":  "the engine does not start the seat's instance of MCPServer github",
 		"spec.mcp[0].env[2].valueFrom":  "starts the seat's instance of MCPServer github without it",
-		"spec.sandbox.env[2].valueFrom": "Crewlet refuses each of the seat's run_sandbox coding runs",
-		"spec.sandbox.env[3].valueFrom": "the seat's coding runs start without it",
+		"spec.sandbox.env[2].valueFrom": "the seat's executor runs start without it, and the engine logs it as a gap",
+		"spec.sandbox.env[3].valueFrom": "the seat's executor runs start without it, quietly",
 	} {
 		if got, ok := reported[field]; !ok || !strings.Contains(got, says) {
 			t.Errorf("%s is reported %q, want it to say %q", field, got, says)
@@ -479,16 +534,32 @@ func TestNoProvisionerSaysWhatGoesWithoutIt(t *testing.T) {
 	}
 }
 
-// TestCodeWorkGoesWithoutAMissingOptionalSignIn holds the code-work verdict
-// to the run's environment as Crewlet lays it, on a ClaudeCode provider whose
-// credential bundle cannot follow the run: a variable that would sign
-// ClaudeCode in counts for nothing where the value that wins is optional and
-// missing or empty, since the run goes without it; a required one that is
-// missing counts, since the document is held and the running revision keeps
-// the value it had; and a required one that is empty, which the engine reads
-// as nothing, has every run refused, whatever signs in.
-func TestCodeWorkGoesWithoutAMissingOptionalSignIn(t *testing.T) {
-	head := codeWorkBundled(v1alpha1.CLIAgentClaudeCode)
+// executorLoginInput is the opencode-executor case with seat fixer's executor
+// on head, a new provider placed in the Company's E2B sandbox, and a
+// spec.sandbox of its own.
+func executorLoginInput(t *testing.T, head *v1alpha1.LLMProvider) *Input {
+	t.Helper()
+	in := companyCaseNamed(t, "opencode-executor").input(t)
+	head.Spec.RunIn = v1alpha1.SandboxPlacementE2B
+	in.LLMProviders = append(in.LLMProviders, *head)
+	fixer := seat(in, executorSeat)
+	fixer.Spec.LLM.Default = chainOfNames(head.Name)
+	fixer.Spec.Sandbox = v1alpha1.SeatSandbox{}
+	return in
+}
+
+// executorSeat is the seat of the opencode-executor case the executor
+// login tests break.
+const executorSeat = "fixer"
+
+// TestExecutorGoesWithoutASignInThatHoldsNothing holds the verdict on an
+// executor run in E2B, on a ClaudeCode provider whose credential bundle
+// cannot follow it there, to the run's environment as Crewlet lays it: a
+// variable that would sign ClaudeCode in counts for nothing where the value
+// that wins resolves to nothing, optional or not, since the run starts
+// without it; a required one that is missing counts, since the document is
+// held and the running revision keeps the value it had.
+func TestExecutorGoesWithoutASignInThatHoldsNothing(t *testing.T) {
 	signIn := v1alpha1.SecretKeyReference{Name: "fixer-claude", Key: optionalToken}
 	stepSignIn := v1alpha1.SecretKeyReference{Name: "fixer-claude", Key: "step-token"}
 	cases := []struct {
@@ -502,22 +573,21 @@ func TestCodeWorkGoesWithoutAMissingOptionalSignIn(t *testing.T) {
 		// says is what the message must say.
 		says string
 	}{
-		{name: "an optional sign-in whose value is there", optional: true},
+		{name: "an optional sign-in whose value is there", optional: true, says: "signed in by " + envClaudeSignIn},
 		{
 			name: "an optional sign-in whose value is missing", optional: true, unset: []secretref.Key{optionalSecretOf(signIn)},
-			reason: v1alpha1.ReasonSandboxLoginNotPortable, says: "leaves it out of every run",
+			reason: v1alpha1.ReasonSandboxLoginNotPortable, says: "gives " + envClaudeSignIn + ", which every run goes without",
 		},
 		{
 			name: "an optional sign-in whose value is empty", optional: true, empty: []secretref.Key{optionalSecretOf(signIn)},
-			reason: v1alpha1.ReasonSandboxLoginNotPortable, says: "leaves it out of every run",
+			reason: v1alpha1.ReasonSandboxLoginNotPortable, says: "which every run goes without",
 		},
 		{name: "a required sign-in whose value is missing", unset: []secretref.Key{optionalSecretOf(signIn)}},
 		{
+			// The engine reads an empty value as nothing, and starts the
+			// run without it.
 			name: "a required sign-in whose value is empty", empty: []secretref.Key{optionalSecretOf(signIn)},
-			reason: v1alpha1.ReasonSecretValueEmpty,
-			says: "Crewlet refuses each run_sandbox launch of the seat before a box exists, as its sandbox gives it " +
-				envClaudeSignIn + " at spec.sandbox.env[0].valueFrom and Secret " + testNamespace + "/fixer-claude holds an empty value " +
-				`under "token"`,
+			reason: v1alpha1.ReasonSandboxLoginNotPortable, says: "which every run goes without",
 		},
 		{
 			name: "a step's optional sign-in the seat's own env replaces", step: true, stepOptional: true,
@@ -530,9 +600,9 @@ func TestCodeWorkGoesWithoutAMissingOptionalSignIn(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			in := codeWorkInput(t, &head, v1alpha1.CodingAgentClaudeCode)
+			in := executorLoginInput(t, new(bundled(cliProvider)))
 			in.Unset, in.Empty = c.unset, c.empty
-			fixer := seat(in, codeWorkSeat)
+			fixer := seat(in, executorSeat)
 			fixer.Spec.Sandbox.Env = append(fixer.Spec.Sandbox.Env, v1alpha1.SeatEnvVar{
 				Name: envClaudeSignIn, ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: signIn},
 			})
@@ -548,59 +618,48 @@ func TestCodeWorkGoesWithoutAMissingOptionalSignIn(t *testing.T) {
 				}
 				fixer.Spec.Sandbox.Setup = append(fixer.Spec.Sandbox.Setup, step)
 			}
-			w, ok := CodeWorkOf(in)[codeWorkSeat]
+			e, ok := ExecutorOf(in)[executorSeat]
 			if !ok {
-				t.Fatal("the seat has no code work")
+				t.Fatal("the seat has no executor")
 			}
-			if w.Reason != c.reason {
-				t.Fatalf("the code work's reason is %q (%s), want %q", w.Reason, w.Message, c.reason)
+			if e.Reason != c.reason {
+				t.Fatalf("the executor's reason is %q (%s), want %q", e.Reason, e.Message, c.reason)
 			}
-			if !strings.Contains(w.Message, c.says) {
-				t.Errorf("the message is %q, want it to say %q", w.Message, c.says)
+			if !strings.Contains(e.Message, c.says) {
+				t.Errorf("the message is %q, want it to say %q", e.Message, c.says)
 			}
 		})
 	}
 }
 
-// TestCodeWorkIsRefusedForAValueThatHoldsNothing holds the code-work verdict
-// to every value a run is given that keeps it from starting where it is not
-// optional, whatever signs the coding agent in: a provisioned variable no
-// Integration mints, and an empty file of a step, the Company's or the
-// seat's; and to none where the step lets the file go.
-func TestCodeWorkIsRefusedForAValueThatHoldsNothing(t *testing.T) {
-	head := codeWorkProvider(v1alpha1.CLIAgentClaudeCode)
-	company := codeWorkInput(t, &head, v1alpha1.CodingAgentClaudeCode).Company.Name
+// TestExecutorStartsWithoutAValueThatHoldsNothing holds the verdict on a
+// seat's executor, and what the render records of the values its runs are
+// given, to Crewlet's rule that a run starts without any value that resolves
+// to nothing: a provisioned variable no Integration mints, or an empty file
+// of a step, the Company's or the seat's, is no reason the seat's turns
+// cannot run, whatever optionalKeys says, and each is a value the engine
+// starts the run with, which the controller reports when it holds nothing
+// and is not optional.
+func TestExecutorStartsWithoutAValueThatHoldsNothing(t *testing.T) {
 	npmrc := v1alpha1.SecretKeyReference{Name: "npm", Key: "npmrc"}
 	step := v1alpha1.SandboxSetupStep{Name: "npm", Files: []v1alpha1.SandboxFile{{
 		Path: fileNPMRC, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: npmrc},
 	}}}
+	provisioned := v1alpha1.SeatEnvVar{
+		Name: envGitLabToken, ValueFrom: v1alpha1.SeatCredentialSource{Provisioned: v1alpha1.ProvisionedCredential{Name: provisionedGitLab}},
+	}
 	cases := []struct {
 		name   string
 		mutate func(in *Input)
-		reason string
-		says   string
+		// started is the field of a value the engine starts the run with,
+		// and its object's kind.
+		started, kind string
 	}{
-		{name: "nothing holds nothing"},
 		{
 			name: "a provisioned variable nothing mints",
 			mutate: func(in *Input) {
 				in.Integrations = nil
-				seat(in, codeWorkSeat).Spec.Sandbox.Env = []v1alpha1.SeatEnvVar{{
-					Name: envGitLabToken, ValueFrom: v1alpha1.SeatCredentialSource{Provisioned: v1alpha1.ProvisionedCredential{Name: provisionedGitLab}},
-				}}
-			},
-			reason: v1alpha1.ReasonNoProvisioner,
-			says:   "it is the provisioned credential gitlab-token, and no Integration of Company",
-		},
-		{
-			name: "a provisioned variable nothing mints that the seat lets go",
-			mutate: func(in *Input) {
-				in.Integrations = nil
-				sb := seat(in, codeWorkSeat).Spec.Sandbox
-				sb.Env = []v1alpha1.SeatEnvVar{{
-					Name: envGitLabToken, ValueFrom: v1alpha1.SeatCredentialSource{Provisioned: v1alpha1.ProvisionedCredential{Name: provisionedGitLab}},
-				}}
-				sb.OptionalKeys = []string{envGitLabToken}
+				seat(in, executorSeat).Spec.Sandbox.Env = []v1alpha1.SeatEnvVar{provisioned}
 			},
 		},
 		{
@@ -609,43 +668,36 @@ func TestCodeWorkIsRefusedForAValueThatHoldsNothing(t *testing.T) {
 				in.Company.Spec.Sandbox.Setup = []v1alpha1.SandboxSetupStep{step}
 				in.Empty = []secretref.Key{optionalSecretOf(npmrc)}
 			},
-			reason: v1alpha1.ReasonSecretValueEmpty,
-			says:   "gives it .npmrc at Company " + company + "'s spec.sandbox.setup[0].files[0].valueFrom and Secret",
+			started: firstStepFile, kind: KindCompany,
 		},
 		{
 			name: "an empty file of the seat's step",
 			mutate: func(in *Input) {
-				seat(in, codeWorkSeat).Spec.Sandbox.Setup = []v1alpha1.SandboxSetupStep{step}
+				seat(in, executorSeat).Spec.Sandbox.Setup = []v1alpha1.SandboxSetupStep{step}
 				in.Empty = []secretref.Key{optionalSecretOf(npmrc)}
 			},
-			reason: v1alpha1.ReasonSecretValueEmpty,
-			says:   "or list .npmrc in spec.sandbox.setup[0].optionalKeys",
-		},
-		{
-			name: "an empty file the step lets go",
-			mutate: func(in *Input) {
-				optional := step
-				optional.OptionalKeys = []string{fileNPMRC}
-				seat(in, codeWorkSeat).Spec.Sandbox.Setup = []v1alpha1.SandboxSetupStep{optional}
-				in.Empty = []secretref.Key{optionalSecretOf(npmrc)}
-			},
+			started: firstStepFile, kind: KindSeat,
 		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			in := codeWorkInput(t, &head, v1alpha1.CodingAgentClaudeCode)
-			if c.mutate != nil {
-				c.mutate(in)
+			in := executorLoginInput(t, new(cliProvider()))
+			c.mutate(in)
+			e, ok := ExecutorOf(in)[executorSeat]
+			if !ok || e.Reason != "" {
+				t.Fatalf("the seat's executor is %q (%s), want one that runs", e.Reason, e.Message)
 			}
-			w, ok := CodeWorkOf(in)[codeWorkSeat]
-			if !ok {
-				t.Fatal("the seat has no code work")
+			if c.started == "" {
+				return
 			}
-			if w.Reason != c.reason || !strings.Contains(w.Message, c.says) {
-				t.Errorf("the code work is %q: %s, want %q saying %q", w.Reason, w.Message, c.reason, c.says)
+			doc, err := Company(in)
+			if err != nil {
+				t.Fatal(err)
 			}
-			if c.reason != "" && w.Field != "spec.sandbox" {
-				t.Errorf("the code work is reported at %s, want spec.sandbox", w.Field)
+			if !slices.ContainsFunc(doc.StartValues, func(v StartValue) bool {
+				return v.Started && v.Field == c.started && v.Object.Kind == c.kind
+			}) {
+				t.Errorf("the value at %s %s is not one the engine starts the run with: %+v", c.kind, c.started, doc.StartValues)
 			}
 		})
 	}

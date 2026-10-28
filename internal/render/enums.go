@@ -83,16 +83,6 @@ func embeddingProviderType(t v1alpha1.EmbeddingProviderType) string {
 	return ""
 }
 
-func codingAgent(a v1alpha1.CodingAgent) string {
-	switch a {
-	case v1alpha1.CodingAgentClaudeCode:
-		return "claude-code"
-	case v1alpha1.CodingAgentOpenCode:
-		return "opencode"
-	}
-	return ""
-}
-
 func mcpTransport(t v1alpha1.MCPTransport) string {
 	switch t {
 	case v1alpha1.MCPTransportStdio, "":
@@ -191,20 +181,11 @@ func cliAgentName(a v1alpha1.CLIAgentName) string {
 	return ""
 }
 
-func cliAgentMode(m v1alpha1.CLIAgentMode) string {
-	switch m {
-	case v1alpha1.CLIAgentModeHost:
-		return "host"
-	case v1alpha1.CLIAgentModeBox:
-		return "box"
-	}
-	return ""
-}
-
-func cliAgentRunIn(r v1alpha1.CLIAgentRunIn) string {
-	//nolint:gocritic // singleCaseSwitch: a switch, so the exhaustive linter fails the build when the API gains a run cell nobody mapped.
-	switch r {
-	case v1alpha1.CLIAgentRunInE2B:
+func sandboxPlacement(p v1alpha1.SandboxPlacement) string {
+	switch p {
+	case v1alpha1.SandboxPlacementDirect:
+		return "direct"
+	case v1alpha1.SandboxPlacementE2B:
 		return "e2b"
 	}
 	return ""

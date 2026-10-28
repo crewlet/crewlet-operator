@@ -155,9 +155,8 @@ Vendors deliver webhooks to the company's public address, which the class
 derives from a host name template (`{{uid}}.hooks.example.com`) or which the
 Company states itself (`spec.exposure.publicBaseURL`). That address reaches
 only the engine's public listener, a port of its own that serves the routes
-outside parties call (the webhooks, and the endpoints a remote sandbox calls
-back: its telemetry and, for a box-mode coding CLI, the seat's tools) and
-nothing else ([Exposure](../guides/exposure.md)); the engine's admin API and
+outside parties call (the webhooks, and the endpoints a coding run calls
+back: its telemetry, and the seat's tools) and nothing else ([Exposure](../guides/exposure.md)); the engine's admin API and
 dashboard are on another port, which stays inside the cluster unless the
 class routes it through an internal gateway.
 
@@ -236,8 +235,8 @@ part is in the running revision, and only it suffers what is reported
 | `Company` | `Ready` (the summary), `Accepted`, `RuntimeReady`, `SecretsSynced`, `ConfigApplied`, `Exposed`, `EngineHealthy`, `IdentityClaimed` (whether anybody has joined the company; not part of `Ready`), `SeatsPlaced` |
 | `EngineClass` | `Accepted` |
 | `Unit`, `MCPServer`, `Schedule` | `Accepted`, `ResolvedRefs`, `Applied` |
-| `LLMProvider` | `Accepted`, `ResolvedRefs`, `Applied`, and on a provider in `mode: Box` `BoxModeRunnable` (whether its runs can call a seat's tools back: `False`, `NotExposed`, while the Company has no public address) |
-| `Seat` | `Accepted`, `ResolvedRefs`, `Applied`, and on an Agent seat `Ready` (whether it runs: `True`, `LeaseHeld`, while an engine pod holds it; `False` with `Unplaced` while none does, `PoolNotFound` when its pool is not one the Company declares, or `NotExposed` when the engine refuses every one of its turns), once the engine runs it `Paused`, and with `spec.sandbox` and an executor that does not run in box mode, in a Company with `spec.sandbox`, `CodeWorkRunnable` (whether its coding agent can run on its sandbox provider; not part of `Ready`) |
+| `LLMProvider` | `Accepted`, `ResolvedRefs`, `Applied` |
+| `Seat` | `Accepted`, `ResolvedRefs`, `Applied`, and on an Agent seat `Ready` (whether it runs: `True`, `LeaseHeld`, while an engine pod holds it, naming where its executor runs; `False` with `Unplaced` while none does, `PoolNotFound` when its pool is not one the Company declares, or `NotExposed` or `SandboxLoginNotPortable` when the engine refuses each launch of its executor), and once the engine runs it `Paused` |
 | `Integration` | `Accepted`, `ResolvedRefs`, `Applied`, `Healthy` |
 
 A Company also reports the revision the engine runs, its endpoints and the

@@ -11,14 +11,16 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/secretsync"
 )
 
-// What a Secret read for a tool server or a coding run costs when it holds
-// nothing.
+// What a Secret read for a tool server or a seat's executor run costs when it
+// holds nothing.
 //
-// Crewlet starts a tool server, and a run_sandbox coding run, only with every
-// value it is started with resolved to something: a reference that resolves
-// to nothing, or to an empty value, keeps it from starting, unless the
-// optionalKeys list that governs the value names its key, when the key is
-// left out instead (crewlet#293). The operator reads every Secret before the
+// Crewlet starts a tool server only with every value it is started with
+// resolved to something: a reference that resolves to nothing, or to an empty
+// value, keeps it from starting, unless the optionalKeys list that governs
+// the value names its key, when the key is left out instead (crewlet#293). A
+// seat's executor run starts without such a value either way, as refusing it
+// would fail the seat's turn: the list says only whether the engine leaves it
+// out quietly or logs it as a gap of the run. The operator reads every Secret before the
 // engine does, and says what it read, of every value the engine starts
 // something with (render.StartValue.Started): one another value replaces
 // wherever it would be read costs nothing, whatever it holds.
@@ -38,14 +40,14 @@ import (
 //     that read it there: a part that reads the key under an optional key
 //     alone does not need it.
 //   - An empty value under a key that is not optional is applied, since the
-//     engine takes the document and only the server or the run goes without
-//     its start, and reported on the part that gives it, ResolvedRefs=False
-//     SecretValueEmpty, with a Warning event when it turns so; the Company's
-//     own steps in the SecretsSynced message. Without that, the server
-//     failing to start would show only on the engine's own dashboard and
+//     engine takes the document and only the server goes without its start,
+//     or the run without the value, and reported on the part that gives it,
+//     ResolvedRefs=False SecretValueEmpty, with a Warning event when it turns
+//     so; the Company's own steps in the SecretsSynced message. Without that,
+//     the server failing to start, or the run going without a token it was
+//     meant to clone with, would show only on the engine's own dashboard and
 //     log: neither GET /fleet, which the operator reads, nor anything else it
-//     reads reports a tool server. A Seat whose coding runs it refuses says
-//     so on CodeWorkRunnable too (render.CodeWorkOf).
+//     reads reports a tool server or a run's environment.
 
 // requires reports whether p reads k somewhere it does not let go without its
 // value: one of the references in p's spec that name k, or k's whole Secret,
@@ -73,11 +75,11 @@ func requiresKey(owner render.ObjectRef, refs []secretref.Key, k secretref.Key, 
 }
 
 // checkSecretValues records on each part what the reconcile read of the
-// values the document starts a tool server or a coding run with: the
+// values the document starts a tool server or an executor run with: the
 // optional ones whose Secret or key does not exist (run.missing), or whose
 // value is empty (desired.Empty), which the engine leaves out, and the
-// required ones whose value is empty, which keep a server or a run from
-// starting. The Company's own are recorded for the SecretsSynced message.
+// required ones whose value is empty, which keep a server from starting and
+// which a run starts without. The Company's own are recorded for the SecretsSynced message.
 func (run *configRun) checkSecretValues(desired secretsync.Desired) {
 	missing := map[secretref.Key]*secretsync.MissingError{}
 	for _, m := range run.missing {
@@ -145,8 +147,8 @@ func (run *configRun) emptyValue(v *render.StartValue) string {
 	var held string
 	switch {
 	case v.Server == "":
-		held = "Crewlet refuses each run_sandbox coding run whose environment it reaches, before a box exists, " +
-			"and a box-mode run of a seat's executor starts without it"
+		held = "each executor run whose environment it reaches starts without it, which the engine logs as a gap " +
+			"of the run (sandbox_env_unresolved)"
 	case v.Object.Kind == render.KindSeat:
 		held = fmt.Sprintf("the engine starts the seat's instance of MCPServer %s with no value that resolves to nothing, "+
 			"so it does not start it", v.Server)
@@ -180,7 +182,7 @@ func (run *configRun) serverShared(name string) bool {
 }
 
 // leftOutValue is a value a part, or the Company's own setup steps, gives a
-// tool server or a coding run under a key an optionalKeys list lets go
+// tool server or an executor run under a key an optionalKeys list lets go
 // without it, whose Secret or key does not exist or holds nothing: line says
 // so, and key is the Secret key.
 type leftOutValue struct {

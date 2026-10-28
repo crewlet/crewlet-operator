@@ -1,11 +1,13 @@
-# Coding CLIs as model providers: Claude Code on a subscription's headless
-# token running a seat's executor in mode Box, as a detached run in the
-# company's E2B sandbox, beside Codex on an exported login in mode Host, in
-# the engine's pod, the reviewer's, and Hermes, the delegated workers',
-# signed in with no login of its own: its model provider's key in env,
-# a ${NAME} Crewlet passes to the Hermes process untouched. Pi and OpenCode
-# sign in the same way, and Cursor on a Cursor account's metered key in
-# CURSOR_API_KEY. Box mode calls the seat's tools back through the
+# Coding CLIs as model providers. A seat's executor is its CLI's own run in a
+# box: Claude Code on a subscription's headless token runs it in the
+# company's E2B sandbox (its runIn), and OpenCode, behind it in the seat's
+# chain, runs it while Claude Code sits out its plan, in the company's
+# default cell, Direct, on the engine pod that holds the seat. Codex on an
+# exported login is the reviewer, in the engine's pod, and Hermes, signed in
+# with no login of its own (its model provider's key in env, a ${NAME}
+# Crewlet passes to the Hermes process untouched), the delegated workers'.
+# Pi signs in the same way, and Cursor on a Cursor account's metered key in
+# CURSOR_API_KEY. An E2B run calls the seat's tools back through the
 # company's public address, so the case is exposed.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
@@ -15,6 +17,7 @@ spec:
   engineClassName: basic
   companyName: Forge
   sandbox:
+    defaultRunIn: Direct
     e2b:
       apiKeySecretRef:
         name: e2b
@@ -23,13 +26,12 @@ spec:
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
 metadata:
-  name: claude-box
+  name: claude-e2b
 spec:
   companyRef:
     name: forge
   agent: ClaudeCode
   model: sonnet
-  mode: Box
   runIn: E2B
   loginName: claude
   timeoutSeconds: 900
@@ -133,7 +135,8 @@ spec:
   goal: Ship the changes the team files.
   llm:
     default:
-      - name: claude-box
+      - name: claude-e2b
+      - name: opencode
     review:
       - name: codex
     subagent:

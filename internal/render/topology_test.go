@@ -23,13 +23,14 @@ const (
 	poolData = v1alpha1.DataPool
 )
 
-// The pools of the seat-pools company, and the scratch limit its class gives
-// them.
+// The pools of the seat-pools company, and the scratch and sandboxes limits
+// its class gives them.
 const (
-	poolGeneral  = "general"
-	poolBatch    = "batch"
-	poolIsolated = "isolated"
-	classScratch = "4Gi"
+	poolGeneral    = "general"
+	poolBatch      = "batch"
+	poolIsolated   = "isolated"
+	classScratch   = "4Gi"
+	classSandboxes = "8Gi"
 )
 
 // rolePlacements reads each role's placement labels out of a rendered company
@@ -220,15 +221,23 @@ func TestPlanTopologySizesEachPool(t *testing.T) {
 		maxConcurrentTurns int32
 		grace              int64
 		scratch            string
+		sandboxes          string
 	}
 	want := map[string]sizing{
 		// The class's defaults.
-		poolGeneral: {mode: v1alpha1.SeatPoolShared, replicas: 2, pods: 2, seats: seatBo, maxConcurrentTurns: 4, grace: 600, scratch: classScratch},
-		poolIsolated: {
-			mode: v1alpha1.SeatPoolPerSeat, replicas: 2, pods: 2, seats: seatAna, maxConcurrentTurns: 4, grace: 600, scratch: classScratch,
+		poolGeneral: {
+			mode: v1alpha1.SeatPoolShared, replicas: 2, pods: 2, seats: seatBo, maxConcurrentTurns: 4, grace: 600,
+			scratch: classScratch, sandboxes: classSandboxes,
 		},
-		// The pool's own, over the class's.
-		poolBatch: {mode: v1alpha1.SeatPoolShared, replicas: 0, pods: 0, seats: seatDee, maxConcurrentTurns: 8, grace: 120, scratch: classScratch},
+		poolIsolated: {
+			mode: v1alpha1.SeatPoolPerSeat, replicas: 2, pods: 2, seats: seatAna, maxConcurrentTurns: 4, grace: 600,
+			scratch: classScratch, sandboxes: classSandboxes,
+		},
+		// The pool's own, over the class's; a pool sizes no volume.
+		poolBatch: {
+			mode: v1alpha1.SeatPoolShared, replicas: 0, pods: 0, seats: seatDee, maxConcurrentTurns: 8, grace: 120,
+			scratch: classScratch, sandboxes: classSandboxes,
+		},
 	}
 	for name, w := range want {
 		p := topology.Pool(name)
@@ -238,6 +247,7 @@ func TestPlanTopologySizesEachPool(t *testing.T) {
 		got := sizing{
 			mode: p.Mode, replicas: p.Replicas, pods: p.Pods(), seats: strings.Join(p.Seats, ","),
 			maxConcurrentTurns: p.MaxConcurrentTurns, grace: p.TerminationGracePeriodSeconds, scratch: p.ScratchSizeLimit.String(),
+			sandboxes: p.SandboxSizeLimit.String(),
 		}
 		if got != w {
 			t.Errorf("pool %s = %+v, want %+v", name, got, w)
@@ -248,7 +258,7 @@ func TestPlanTopologySizesEachPool(t *testing.T) {
 	}
 
 	// A class with no defaults: the engine's turn limit, and the
-	// operator's grace period and scratch limit.
+	// operator's grace period and volume limits.
 	in.Class.Spec.SeatPools.Defaults = v1alpha1.SeatPoolDefaults{}
 	topology, err = PlanTopology(in.Company, in.Class, in.Seats)
 	if err != nil {
@@ -256,9 +266,9 @@ func TestPlanTopologySizesEachPool(t *testing.T) {
 	}
 	p := topology.Pool(poolGeneral)
 	if p.MaxConcurrentTurns != 0 || p.TerminationGracePeriodSeconds != DefaultSeatPodTerminationGracePeriodSeconds ||
-		p.ScratchSizeLimit.String() != DefaultSeatPodScratchSizeLimit {
-		t.Errorf("pool general with no defaults = %+v, want no turn limit, %ds and %s", p,
-			DefaultSeatPodTerminationGracePeriodSeconds, DefaultSeatPodScratchSizeLimit)
+		p.ScratchSizeLimit.String() != DefaultScratchSizeLimit || p.SandboxSizeLimit.String() != DefaultSandboxSizeLimit {
+		t.Errorf("pool general with no defaults = %+v, want no turn limit, %ds, a %s scratch volume and %s for its boxes", p,
+			DefaultSeatPodTerminationGracePeriodSeconds, DefaultScratchSizeLimit, DefaultSandboxSizeLimit)
 	}
 }
 
@@ -579,7 +589,7 @@ func TestPerSeatCapacityAdmitsTheRunningSeatsFirst(t *testing.T) {
 func TestAnUndeclaredPoolPinsNoPod(t *testing.T) {
 	const later = "later"
 	in := companyCaseNamed(t, caseSeatPools).input(t)
-	bundled := cliProvider(v1alpha1.CLIAgentModeHost)
+	bundled := cliProvider()
 	bundled.Spec.Auth = v1alpha1.CLIAgentAuth{
 		CredentialBundleSecretRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "bundle"},
 	}

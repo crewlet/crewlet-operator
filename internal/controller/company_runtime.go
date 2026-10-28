@@ -114,16 +114,8 @@ func (r *CompanyReconciler) reconcileRuntimeObjects(
 		return err
 	}
 
-	bridge, err := r.toolBridge(ctx, c)
-	if err != nil {
-		return err
-	}
-	var bridgeURL string
-	if bridge {
-		bridgeURL = c.Status.Endpoints.PublicBaseURL
-	}
 	runtimeReady, err := r.reconcileWorkload(ctx, c, class,
-		&workloadInputs{keyring, tokens, objects, platform, missing, hold, bridgeURL, addresses})
+		&workloadInputs{keyring, tokens, objects, platform, missing, hold, addresses})
 	if err != nil {
 		return err
 	}
@@ -145,9 +137,6 @@ type workloadInputs struct {
 	// are held back otherwise.
 	missing []string
 	hold    *held
-	// bridgeURL is where the engine's tool bridge is reached from a
-	// sandbox, or empty when the engine serves none.
-	bridgeURL string
 	// addresses are where the engine is reached, which its crewlet.yaml
 	// tells it.
 	addresses engineAddresses
@@ -297,7 +286,6 @@ func (r *CompanyReconciler) runWorkload(
 		image:          image,
 		bootstrap:      bootstrap,
 		bootstrapHash:  bootstrapHash,
-		bridgeURL:      in.bridgeURL,
 		startupSeconds: dataPodStartupSeconds(class, volume),
 		artifacts:      render.ArtifactsOpen(in.addresses.artifacts),
 	})
@@ -315,7 +303,6 @@ func (r *CompanyReconciler) runWorkload(
 		platform:  platform,
 		image:     *sts.Spec.Template.Spec.Containers[0].Image,
 		dataReady: progress.ready && *sts.Spec.Replicas > 0,
-		bridgeURL: in.bridgeURL,
 	}); err != nil {
 		return metav1.Condition{}, err
 	}
@@ -644,24 +631,4 @@ func (r *CompanyReconciler) deleteDataVolumes(ctx context.Context, c *crewletaiv
 		}
 	}
 	return nil
-}
-
-// toolBridge reports whether the company's engine serves its tool bridge: it
-// does while an LLMProvider of the company runs a CLI in mode Box, whose
-// runs happen in a remote sandbox and call the seat's tools back through it.
-// Without one the engine is given no CREWLET_MCP_BRIDGE_URL and mounts no
-// bridge, so its public listener answers /mcp/ as a path nothing serves:
-// no company serves a route it does not use.
-func (r *CompanyReconciler) toolBridge(ctx context.Context, c *crewletaiv1alpha1.Company) (bool, error) {
-	var providers crewletaiv1alpha1.LLMProviderList
-	if err := r.List(ctx, &providers, client.InNamespace(c.Namespace)); err != nil {
-		return false, fmt.Errorf("listing the LLMProviders of namespace %s: %w", c.Namespace, err)
-	}
-	for i := range providers.Items {
-		p := &providers.Items[i]
-		if p.Spec.CompanyRef.Name == c.Name && p.Spec.Mode == crewletaiv1alpha1.CLIAgentModeBox {
-			return true, nil
-		}
-	}
-	return false, nil
 }

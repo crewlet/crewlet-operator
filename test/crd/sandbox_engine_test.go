@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -45,64 +46,92 @@ var setupFilePaths = []string{
 }
 
 // namesTheHome are the shapes of setupFilePaths that name the box's home or a
-// directory above it, which the API admits and Crewlet refuses: whether a
-// path names one depends on how .. and repeated separators resolve, which no
-// rule the API server runs can follow. Crewlet's refusal is reported instead:
-// on the Company's ConfigApplied for a step of the Company's own, as every one
-// this test offers is, and on the Seat's Applied for a step of a Seat's.
+// directory above it, which the API admits and Crewlet refuses in every cell:
+// whether a path names one depends on how .. and repeated separators resolve,
+// which no rule the API server runs can follow. Crewlet's refusal is reported
+// instead: on the Company's ConfigApplied for a step of the Company's own, as
+// every one this test offers is, and on the Seat's Applied for a step of a
+// Seat's.
+//
+// outsideTheDirectHome are the shapes a Direct box refuses beside those, and
+// an E2B box writes: every absolute path, and every relative one that climbs
+// out of the home. A Direct box's home is minted per box on the engine pod,
+// so no path a document holds names it absolutely, and it writes a setup file
+// only inside it. The API admits them, as whether a step reaches a Direct box
+// turns on the cells of the providers its seats' executors launch on, which
+// no rule over the Company alone can see; Crewlet's refusal is reported as
+// namesTheHome's is.
 var namesTheHome = []string{
 	"~", "~/", "~//", ".", "./", "..", "../..", "a/..", "/", "//", "/home", "/home/", "/home/user",
 	"/home/user/", "/home//user", "/home/user/.", "/home/user/x/..", "/home/../home/user", "~/..", "~/../..",
 	"~/a/../..",
 }
 
+var outsideTheDirectHome = []string{
+	"/home/user/.npmrc", "/home/user//.npmrc", "/home/user/../user/.npmrc", "/tmp/x", "/etc/x", "/root/.npmrc",
+	"/home/x", "../x", "~/../x",
+}
+
 // TestSetupFilePathsFollowTheEngine holds the API's verdict on a sandbox
-// setup step's file path to Crewlet's, both ways where that is honest: every
-// path the API refuses Crewlet refuses too, so no Company is refused a file
-// its seats' boxes would write; and every path Crewlet refuses the API
-// refuses too, but for namesTheHome, each of which Crewlet must still
-// refuse. Every box the operator renders is an E2B one (default_run_in: e2b,
-// and a box-mode CLI runs in E2B too), so Crewlet judges each path as such
-// a box writes it.
+// setup step's file path to Crewlet's, in each cell a seat's box can be
+// placed in, both ways where that is honest: every path the API refuses
+// Crewlet refuses too, so no Company is refused a file its seats' boxes would
+// write; and every path Crewlet refuses the API refuses too, but for
+// namesTheHome in every cell and outsideTheDirectHome in Direct, each of
+// which Crewlet must still refuse there. Crewlet judges a path in each cell a
+// step reaches, as the box placed there writes it.
 func TestSetupFilePathsFollowTheEngine(t *testing.T) {
 	namespace := newNamespace(t)
 	steps := make([]v1.SandboxSetupStep, len(setupFilePaths))
 	for i, path := range setupFilePaths {
 		steps[i] = setupStepWritingFile(fmt.Sprintf("s%02d", i), path)
 	}
-	refused := engineRefusesSetupSteps(t, steps, func(i int, rest []engine.Segment) bool {
-		// At the step's files, or at the file's own entry under them.
-		return len(rest) >= 1 && rest[0].Key == "files" &&
-			(len(rest) == 1 || (len(rest) == 2 && rest[1].Key == setupFilePaths[i]))
-	})
-	apiRefused := 0
-	for i, path := range setupFilePaths {
-		c := company(namespace, fmt.Sprintf("f%02d", i))
-		c.Spec.Sandbox = v1.SandboxSettings{
-			E2B:   v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
-			Setup: []v1.SandboxSetupStep{setupStepWritingFile("files", path)},
+	for _, cell := range []v1.SandboxPlacement{v1.SandboxPlacementDirect, v1.SandboxPlacementE2B} {
+		refused := engineRefusesSetupSteps(t, steps, cell, func(i int, rest []engine.Segment) bool {
+			// At the step's files, or at the file's own entry under them.
+			return len(rest) >= 1 && rest[0].Key == "files" &&
+				(len(rest) == 1 || (len(rest) == 2 && rest[1].Key == setupFilePaths[i]))
+		})
+		leftToCrewlet := namesTheHome
+		if cell == v1.SandboxPlacementDirect {
+			leftToCrewlet = slices.Concat(namesTheHome, outsideTheDirectHome)
 		}
-		apiAdmits := admitted(t, k8sClient, c)
-		crewletRefuses := refused[i]
-		home := slices.Contains(namesTheHome, path)
-		if !apiAdmits {
-			apiRefused++
+		apiRefused := 0
+		for i, path := range setupFilePaths {
+			c := company(namespace, fmt.Sprintf("f%s%02d", strings.ToLower(string(cell)), i))
+			c.Spec.Sandbox = sandboxIn(cell, []v1.SandboxSetupStep{setupStepWritingFile("files", path)})
+			apiAdmits := admitted(t, k8sClient, c)
+			crewletRefuses := refused[i]
+			left := slices.Contains(leftToCrewlet, path)
+			if !apiAdmits {
+				apiRefused++
+			}
+			switch {
+			case !apiAdmits && !crewletRefuses:
+				t.Errorf("%s: the API refuses the setup file %q, and crewlet validate takes it", cell, path)
+			case !apiAdmits && left:
+				t.Errorf("%s: %q is listed as one the API admits and Crewlet refuses, and the API refuses it", cell, path)
+			case apiAdmits && crewletRefuses && !left:
+				t.Errorf("%s: the API admits the setup file %q, and crewlet validate refuses it, so the Company is "+
+					"applied nowhere", cell, path)
+			case !crewletRefuses && left:
+				t.Errorf("%s: %q is listed as one a box there refuses, and crewlet validate takes it", cell, path)
+			}
 		}
-		switch {
-		case !apiAdmits && !crewletRefuses:
-			t.Errorf("the API refuses the setup file %q, and crewlet validate takes it", path)
-		case !apiAdmits && home:
-			t.Errorf("%q is listed as one the API admits for naming the home, and the API refuses it", path)
-		case apiAdmits && crewletRefuses && !home:
-			t.Errorf("the API admits the setup file %q, and crewlet validate refuses it, so the Company is "+
-				"applied nowhere", path)
-		case !crewletRefuses && home:
-			t.Errorf("%q is listed as naming the box's home, and crewlet validate takes it", path)
+		if apiRefused == 0 {
+			t.Errorf("%s: the API refuses none of the setup files: its rules on a path are tried nowhere", cell)
 		}
 	}
-	if apiRefused == 0 {
-		t.Error("the API refuses none of the setup files: its rules on a path are tried nowhere")
+}
+
+// sandboxIn is a Company's spec.sandbox placing every seat's executor in
+// cell, with the E2B sandbox that cell needs, and running steps.
+func sandboxIn(cell v1.SandboxPlacement, steps []v1.SandboxSetupStep) v1.SandboxSettings {
+	sb := v1.SandboxSettings{DefaultRunIn: cell, Setup: steps}
+	if cell == v1.SandboxPlacementE2B {
+		sb.E2B = v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)}
 	}
+	return sb
 }
 
 // setupStepWritingFile is a setup step named name that writes one file, at
@@ -142,9 +171,9 @@ func setupStepShapes() []stepShape {
 
 // TestSetupStepShapesFollowTheEngine holds the API's verdict on a setup
 // step's name, and on whether it does anything, to Crewlet's, both ways: the
-// API refuses a step exactly when crewlet validate refuses it. Crewlet's
-// rules here hold on every step whatever box it reaches, so nothing is left
-// to Crewlet alone.
+// API refuses a step exactly when crewlet validate refuses it, in each cell a
+// seat's box can be placed in. Crewlet's rules here hold on every step
+// whatever box it reaches, so nothing is left to Crewlet alone.
 func TestSetupStepShapesFollowTheEngine(t *testing.T) {
 	namespace := newNamespace(t)
 	shapes := setupStepShapes()
@@ -157,45 +186,45 @@ func TestSetupStepShapesFollowTheEngine(t *testing.T) {
 			t.Fatalf("shape %q has no name", shapes[i].name)
 		}
 	}
-	refused := engineRefusesSetupSteps(t, steps, func(_ int, rest []engine.Segment) bool {
-		// At the step itself (it does nothing), or at its name.
-		return len(rest) == 0 || (len(rest) == 1 && rest[0].Key == "name")
-	})
-	apiRefused := 0
-	for i, shape := range shapes {
-		c := company(namespace, fmt.Sprintf("s%02d", i))
-		c.Spec.Sandbox = v1.SandboxSettings{
-			E2B:   v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
-			Setup: []v1.SandboxSetupStep{shape.step},
+	for _, cell := range []v1.SandboxPlacement{v1.SandboxPlacementDirect, v1.SandboxPlacementE2B} {
+		refused := engineRefusesSetupSteps(t, steps, cell, func(_ int, rest []engine.Segment) bool {
+			// At the step itself (it does nothing), or at its name.
+			return len(rest) == 0 || (len(rest) == 1 && rest[0].Key == "name")
+		})
+		apiRefused := 0
+		for i, shape := range shapes {
+			c := company(namespace, fmt.Sprintf("s%s%02d", strings.ToLower(string(cell)), i))
+			c.Spec.Sandbox = sandboxIn(cell, []v1.SandboxSetupStep{shape.step})
+			apiAdmits := admitted(t, k8sClient, c)
+			if !apiAdmits {
+				apiRefused++
+			}
+			switch {
+			case apiAdmits && refused[i]:
+				t.Errorf("%s, %s: the API admits it, and crewlet validate refuses it, so the Company is applied "+
+					"nowhere", cell, shape.name)
+			case !apiAdmits && !refused[i]:
+				t.Errorf("%s, %s: the API refuses it, and crewlet validate takes it", cell, shape.name)
+			}
 		}
-		apiAdmits := admitted(t, k8sClient, c)
-		if !apiAdmits {
-			apiRefused++
+		if apiRefused == 0 {
+			t.Errorf("%s: the API refuses none of the setup steps: its rules on a step are tried nowhere", cell)
 		}
-		switch {
-		case apiAdmits && refused[i]:
-			t.Errorf("%s: the API admits it, and crewlet validate refuses it, so the Company is applied nowhere",
-				shape.name)
-		case !apiAdmits && !refused[i]:
-			t.Errorf("%s: the API refuses it, and crewlet validate takes it", shape.name)
-		}
-	}
-	if apiRefused == 0 {
-		t.Error("the API refuses none of the setup steps: its rules on a step are tried nowhere")
 	}
 }
 
 // engineRefusesSetupSteps renders one company document whose sandbox runs
-// steps, and an agent seat whose box is given every one, and reports which
-// steps `crewlet validate` refuses, by index. at says whether a refusal of
+// steps, and an agent seat whose box, placed in cell, is given every one, and
+// reports which steps `crewlet validate` refuses, by index. at says whether a
+// refusal of
 // step i at rest (the place below providers.sandbox.setup[i]) is one the
 // caller expects. Every reference resolves, and a refusal anywhere else fails
 // the test, so a step is refused for itself alone.
 func engineRefusesSetupSteps(
-	t *testing.T, steps []v1.SandboxSetupStep, at func(i int, rest []engine.Segment) bool,
+	t *testing.T, steps []v1.SandboxSetupStep, cell v1.SandboxPlacement, at func(i int, rest []engine.Segment) bool,
 ) map[int]bool {
 	t.Helper()
-	in := sandboxCompany(steps, &v1.SeatSandbox{})
+	in := sandboxCompany(steps, nil, cell)
 	refused := map[int]bool{}
 	for _, p := range validateProblems(t, in) {
 		s := p.Segments
@@ -211,21 +240,21 @@ func engineRefusesSetupSteps(
 	return refused
 }
 
-// sandboxCompany is the render input of a company whose sandbox runs steps,
-// with an agent seat, coder, whose sandbox is sandbox.
-func sandboxCompany(steps []v1.SandboxSetupStep, sandbox *v1.SeatSandbox) *render.Input {
+// sandboxCompany is the render input of a company whose sandbox places every
+// seat's executor in cell and runs steps, with an agent seat, coder, whose
+// sandbox is sandbox.
+func sandboxCompany(steps []v1.SandboxSetupStep, sandbox *v1.SeatSandbox, cell v1.SandboxPlacement) *render.Input {
 	in := probeCompany()
-	in.Company.Spec.Sandbox = v1.SandboxSettings{
-		E2B:   v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
-		Setup: steps,
+	in.Company.Spec.Sandbox = sandboxIn(cell, steps)
+	if sandbox != nil {
+		in.Seats[0].Spec.Sandbox = *sandbox
 	}
-	in.Seats[0].Spec.Sandbox = sandbox
 	return in
 }
 
 // probeCompany is the render input of a company the engine has nothing to
-// say about: an agent seat, coder, on one provider, and a person on a seat of
-// their own.
+// say about: an agent seat, coder, on one provider, its executor run Direct,
+// and a person on a seat of their own.
 func probeCompany() *render.Input {
 	in := &render.Input{
 		Company:         company("probe", companyName),
@@ -236,6 +265,7 @@ func probeCompany() *render.Input {
 	}
 	in.Company.UID = types.UID("00000000-0000-4000-8000-000000000002")
 	in.Company.Spec.EngineClassName = "basic"
+	in.Company.Spec.Sandbox = v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementDirect}
 	coder := seat("probe", "coder")
 	coder.Spec.Goal = "Write the code."
 	coder.Spec.LLM.Default = providers(providerName)

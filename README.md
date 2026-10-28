@@ -99,8 +99,11 @@ flowchart LR
     O -->|"company document, applied whole"| E
     O -->|"referenced secret values"| E
     E["<b>Crewlet engine</b><br/><i>one per Company</i>"]
+    E -->|"each agent seat's executor,<br/>its coding CLI's own run"| D["<b>A box on the engine pod</b><br/><i>Direct</i>"]
+    E -->|"each agent seat's executor,<br/>its coding CLI's own run"| SB["<b>The Company's E2B sandbox</b>"]
+    D -->|"/mcp/, the seat's tools,<br/>and /otlp/, its traces,<br/>on the pod's loopback"| E
     V["<b>Slack, GitHub, GitLab, …</b>"] -->|"/webhooks/ on the public listener"| E
-    SB["<b>A remote sandbox</b>"] -->|"/otlp/ and /mcp/ on the public listener"| E
+    SB -->|"/otlp/ and /mcp/ on the public listener"| E
 ```
 
 - **The runtime reconciler makes the engine exist.** From the `Company` and the
@@ -158,6 +161,8 @@ spec:
   engineClassName: local
   companyName: Acme
   mission: Make widgets people love.
+  sandbox:
+    defaultRunIn: Direct
   deletionPolicy: Delete
 ---
 apiVersion: crewlet.ai/v1alpha1

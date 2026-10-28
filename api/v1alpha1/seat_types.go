@@ -54,8 +54,17 @@ type ManagedReference struct {
 // provider of the Company's spec.llm.order alone, with no fallback.
 // +kubebuilder:validation:MinProperties=1
 type SeatLLM struct {
-	// default is the chain of every phase not set below, including the
-	// executor that does the seat's work. Crewlet's `default`.
+	// default is the chain of every phase not set below, and of the seat's
+	// executor, which does its work. Crewlet runs the executor as the
+	// agentic run of the chain's first member that drives ClaudeCode or
+	// OpenCode and is not sitting out its spent plan on the node, in that
+	// member's cell (its runIn, else the Company's spec.sandbox.defaultRunIn),
+	// and a launch falls back along the chain to the next such member. A
+	// member of any other CLI never runs the executor and still serves every
+	// phase below that is unset. Crewlet refuses a chain with no ClaudeCode
+	// or OpenCode member, which the operator refuses as NoExecutorCLI, and
+	// applies one that mixes them with an advisory that its executor never
+	// falls back to the others. Crewlet's `default`.
 	// +optional
 	// +listType=atomic
 	// +kubebuilder:validation:MinItems=1
@@ -98,60 +107,35 @@ type SeatLLM struct {
 	// +kubebuilder:validation:MaxItems=8
 	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
 	Judge []LLMProviderReference `json:"judge,omitempty"`
-
-	// sandbox is the chain the coding agent in the seat's sandbox runs on.
-	// Unset takes default, then the Company's model order. A coding run uses
-	// the chain's head alone, as its model and its sign-in, so the head must
-	// be a provider of the coding agent's own CLI: a ClaudeCode provider for
-	// ClaudeCode, an OpenCode one for OpenCode. The operator refuses a
-	// provider of another CLI (CodingAgentMismatch), and reports a head whose
-	// login cannot follow a run into the sandbox in the CodeWorkRunnable
-	// condition. Every box of the seat carries the head's headless token, its
-	// key, or its credential-named env, under the variable its CLI reads,
-	// unless spec.sandbox.env names that variable itself: give code work a
-	// provider whose sign-in is scoped for it. A seat whose executor runs in
-	// box mode (an LLMProvider in mode Box heads its executor's chain:
-	// default, else the Company's spec.llm.order) has no code work of its
-	// own, so nothing reads this chain for one. Crewlet's `sandbox`.
-	// +optional
-	// +listType=atomic
-	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=8
-	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.kind == a.kind && b.name == a.name))",message="a provider may appear only once in a chain"
-	Sandbox []LLMProviderReference `json:"sandbox,omitempty"`
 }
 
-// SeatSandbox gives a seat a sandbox to run code in, on the Company's
-// spec.sandbox. It maps onto Crewlet's role `sandbox`; its presence is
-// Crewlet's `enabled: true`.
+// SeatSandbox is what a seat's executor box reads beyond the Company's
+// spec.sandbox: its own provisioning and environment, the tool servers it is
+// given, and the bounds of one run. It maps onto Crewlet's role `sandbox`.
+// Nothing here places the box or picks its CLI: every agent seat's executor
+// is its coding CLI's own run, placed by the provider it launches on, so a
+// seat with no spec.sandbox runs on the Company's settings alone. An empty
+// one says nothing, and the API refuses it.
+// +kubebuilder:validation:MinProperties=1
 // +kubebuilder:validation:XValidation:rule="!has(self.optionalKeys) || self.optionalKeys.all(k, has(self.env) && self.env.exists(e, e.name == k))",message="optionalKeys may name only a variable of env: an entry naming anything else leaves nothing out",fieldPath=".optionalKeys"
 type SeatSandbox struct {
-	// codingAgent is the coding agent the seat's sandbox runs. Unset takes
-	// the Company's spec.sandbox.defaultCodingAgent. Each runs on a provider
-	// of its own CLI at the head of spec.llm.sandbox: ClaudeCode on a
-	// ClaudeCode provider, OpenCode on an OpenCode one. A seat whose executor
-	// runs in box mode (an LLMProvider in mode Box heads its executor's
-	// chain) is never offered run_sandbox: it codes in its executor's run, on
-	// that provider's CLI, so this drives nothing, and the operator refuses
-	// one other than that CLI (CodingAgentMismatch), as Crewlet does.
-	// Crewlet's `coding_agent`.
-	// +optional
-	CodingAgent CodingAgent `json:"codingAgent,omitempty"`
-
-	// pauseTTLSeconds is how long the seat's sandbox stays paused while it
+	// pauseTTLSeconds is how long the seat's box stays paused while its run
 	// waits on a person. Unset takes the Company's default; 0 never pauses.
 	// Crewlet's `pause_ttl_seconds`.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	PauseTTLSeconds *int32 `json:"pauseTTLSeconds,omitempty"`
 
-	// maxTurns caps the agentic rounds of the seat's coding runs. Unset
-	// takes the Company's default; 0 is uncapped. Crewlet's `max_turns`.
+	// maxTurns caps the agentic rounds of one of the seat's executor runs,
+	// the only bound on its turn. Unset takes the Company's
+	// spec.sandbox.defaultMaxTurns, else Crewlet's default of 96; 0 is
+	// uncapped. Crewlet's `max_turns`.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	MaxTurns *int32 `json:"maxTurns,omitempty"`
 
-	// mcpServerRefs name the MCPServers the coding agent may use. Crewlet's
+	// mcpServerRefs name the MCPServers the seat's executor box is given,
+	// beside its tool bridge, which every executor box is given. Crewlet's
 	// mcp.servers.
 	// +optional
 	// +listType=map
@@ -159,43 +143,51 @@ type SeatSandbox struct {
 	// +kubebuilder:validation:MaxItems=16
 	MCPServerRefs []LocalObjectReference `json:"mcpServerRefs,omitempty"`
 
-	// env is the environment of the seat's sandbox runs, for the external
-	// tokens its code work needs: from Secrets, or provisioned by the
-	// engine, such as the GitLab token a provisioning Integration mints for
-	// the seat, named as its tool server's is so both are one token. A
-	// ClaudeCode sign-in here (CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY,
-	// ANTHROPIC_AUTH_TOKEN or a CLAUDE_CODE_USE_* toggle) keeps the key and
-	// endpoint of the provider the code work runs on out of the box, unless
-	// a run goes without its value (optionalKeys), when the box is given
-	// them as it is with no sign-in; and a variable named as one the
-	// provider would set wins over it. Crewlet's `env`, a credential
-	// position.
+	// env is the environment of the seat's executor runs, for the external
+	// tokens its work needs: from Secrets, or provisioned by the engine,
+	// such as the GitLab token a provisioning Integration mints for the
+	// seat, named as its tool server's is so both are one token. A run gets
+	// its provider's whole env beneath this, so a variable named here wins
+	// over the provider's of that name. A ClaudeCode sign-in here
+	// (CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or a
+	// CLAUDE_CODE_USE_* toggle) keeps the provider's own sign-in out of the
+	// box, its token or key and every sign-in in its env, a gateway's
+	// bearer token or a cloud switch, while the rest of its env, such as a
+	// gateway's address, still reaches the run: a seat meant to bypass the
+	// gateway names ANTHROPIC_BASE_URL here itself. A run that goes without
+	// the value is given the provider's sign-in as one with no sign-in here
+	// is. Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=32
 	Env []SeatEnvVar `json:"env,omitempty"`
 
-	// optionalKeys names variables of env whose value may go missing. Crewlet
-	// refuses to start a run_sandbox coding run whose environment holds a value
-	// that does not resolve: a Secret that does not exist, holds no such key or
-	// holds an empty value, or a provisioned value nothing mints. Under a variable
-	// listed here, such a value is left out of the run instead, which starts
-	// without it. A missing Secret or key under one is then no failure of the
-	// Seat's references and holds nothing back. Under the Enforce policy the
-	// operator also takes the value it pushed for it out of the engine's secret
-	// store, and has the engine read the store again whether or not the document
-	// can be applied, so no run starts with a deleted Secret's value, but in a
-	// revision the engine runs that reads the key as required (one from before the
-	// key was listed) or whose reading the operator does not know (another
-	// document somebody else activated), which keeps the value until the next
-	// document runs, and that one is activated once with it and at once again
-	// without it; a Secret key that is also read where it is required holds the
-	// document while it is missing, and keeps the value it had in a revision the
-	// engine runs that requires it too until the document applies. A provisioned
-	// value an Integration mints for the seat is waited for whatever this says.
-	// env wins over a setup step's variable of the same name, and so does this
-	// list over the step's optionalKeys for it. Crewlet's `optional_keys`.
+	// optionalKeys names variables of env whose value may go missing. An
+	// executor run starts without a value that does not resolve, a Secret
+	// that does not exist, holds no such key or holds an empty value, or a
+	// provisioned value nothing has minted yet, whether or not it is listed
+	// here: the run is the seat's turn itself, and refusing it would fail
+	// every message the seat could answer meanwhile. Unlisted, the engine
+	// logs each such value as a gap of the run (sandbox_env_unresolved), and
+	// the operator reports an empty one on the Seat; listed, the variable is
+	// left out quietly, as an absence that is expected, but for a value an
+	// Integration mints for the seat, which is logged as awaited whatever
+	// this says. A missing Secret or key under a listed variable is then no
+	// failure of the Seat's references and holds nothing back. Under the
+	// Enforce policy the operator also takes the value it pushed for it out
+	// of the engine's secret store, and has the engine read the store again
+	// whether or not the document can be applied, so no run starts with a
+	// deleted Secret's value, but in a revision the engine runs that reads
+	// the key as required (one from before the key was listed) or whose
+	// reading the operator does not know (another document somebody else
+	// activated), which keeps the value until the next document runs, and
+	// that one is activated once with it and at once again without it; a
+	// Secret key that is also read where it is required holds the document
+	// while it is missing, and keeps the value it had in a revision the
+	// engine runs that requires it too until the document applies. env wins
+	// over a setup step's variable of the same name, and so does this list
+	// over the step's optionalKeys for it. Crewlet's `optional_keys`.
 	// +optional
 	// +listType=set
 	// +kubebuilder:validation:MaxItems=32
@@ -204,8 +196,8 @@ type SeatSandbox struct {
 	// +kubebuilder:validation:items:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
 	OptionalKeys []string `json:"optionalKeys,omitempty"`
 
-	// setup is the seat's own provisioning, applied after the Company's.
-	// Crewlet's `setup`.
+	// setup is the seat's own provisioning of its executor box, applied
+	// after the Company's. Crewlet's `setup`.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
@@ -553,7 +545,12 @@ type SeatSpec struct {
 	Workers []string `json:"workers,omitempty"`
 
 	// tokenBudget caps the tokens this seat may spend per window, on top of
-	// the Company's caps. Crewlet's `token_budget`.
+	// the Company's caps. Crewlet refuses a window below
+	// turn_engine.executor_min_budget_tokens (25000 unless the Company's
+	// spec.engineConfig sets turn_engine) on an Agent seat: an executor
+	// launch needs that much of the window left, so the seat would never
+	// launch one. The refusal comes from the engine's dry run, Invalid on
+	// the Seat. Crewlet's `token_budget`.
 	// +optional
 	TokenBudget TokenBudget `json:"tokenBudget,omitzero"`
 
@@ -578,9 +575,11 @@ type SeatSpec struct {
 	// +kubebuilder:validation:MaxItems=16
 	MCP []MCPCredentials `json:"mcp,omitempty"`
 
-	// sandbox gives the seat a sandbox to run code in. Unset gives it none.
+	// sandbox is the seat's own settings for its executor's box, which runs
+	// whether or not it is set. Unset takes the Company's spec.sandbox alone.
+	// Agent seats only. Crewlet's `sandbox`.
 	// +optional
-	Sandbox *SeatSandbox `json:"sandbox,omitempty"`
+	Sandbox SeatSandbox `json:"sandbox,omitzero"`
 
 	// placement is where the seat runs. Unset runs it in the Company's
 	// spec.topology.defaultSeatPool.
@@ -613,11 +612,15 @@ type SeatSpec struct {
 	// +kubebuilder:validation:MaxLength=500
 	PauseReason string `json:"pauseReason,omitempty"`
 
-	// stopRunning ends the turn the seat is on at its next round when it is
-	// paused, rather than letting the turn finish; the stopped turn is not
-	// run again. Only with paused true. Setting it on a seat already paused
-	// stops the turn it is on then; unsetting it changes nothing, since a
-	// stopped turn stays stopped. Crewlet's pause `stop_running`.
+	// stopRunning ends the seat's running work when it is paused, rather
+	// than letting it finish: the turn it is on at its next round, and its
+	// executor run, launching or running, at once, its tool bridge closed,
+	// what it spent charged and its box reclaimed. What was stopped is not
+	// run again, and the engine records the stop as the operator's. A run
+	// parked on a person's question stays parked behind the pause. Only with
+	// paused true. Setting it on a seat already paused stops its running
+	// work then; unsetting it changes nothing, since a stopped turn stays
+	// stopped. Crewlet's pause `stop_running`.
 	// +optional
 	StopRunning *bool `json:"stopRunning,omitempty"`
 
@@ -771,15 +774,13 @@ type SeatStatus struct {
 	// handle, the email or a contact account; Conflict names the other),
 	// ResolvedRefs (the unit, the providers, the tool servers and every
 	// Secret key exist), Applied (the seat is in the revision the engine
-	// runs) and, on an Agent seat, Ready (an engine node holds the seat's
-	// lease and runs it: LeaseHeld, or Unplaced, or PoolNotFound; or the seat
-	// can run no turn wherever it is held, NotExposed) and, once the engine runs it, Paused (whether the engine
-	// holds it paused, and whether that is what spec.paused asks), and, on an
-	// Agent seat with spec.sandbox whose executor does not run in box mode,
-	// in a Company with spec.sandbox, CodeWorkRunnable (whether its coding
-	// agent can run on the head of its sandbox chain or on the sign-in the
-	// seat's sandbox environment gives it; it does not count towards Ready,
-	// as the seat runs its turns either way).
+	// runs), and on an Agent seat Ready and, once the engine runs it, Paused
+	// (whether the engine holds it paused, and whether that is what
+	// spec.paused asks). Ready is True, LeaseHeld, while an engine node holds
+	// the seat's lease and runs it, naming the provider its executor runs on
+	// and where; False while none does (Unplaced, or PoolNotFound), and
+	// False whoever holds it while its executor can run no turn as its spec
+	// places it: NotExposed or SandboxLoginNotPortable.
 	// +optional
 	// +listType=map
 	// +listMapKey=type
@@ -842,7 +843,6 @@ type SeatStatus struct {
 // +kubebuilder:printcolumn:name="Applied",type=string,JSONPath=`.status.conditions[?(@.type=="Applied")].status`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 // +kubebuilder:printcolumn:name="Paused",type=string,JSONPath=`.status.conditions[?(@.type=="Paused")].status`
-// +kubebuilder:printcolumn:name="CodeWork",type=string,JSONPath=`.status.conditions[?(@.type=="CodeWorkRunnable")].status`,priority=1
 // +kubebuilder:printcolumn:name="Pool",type=string,JSONPath=`.status.placement.pool`,priority=1
 // +kubebuilder:printcolumn:name="Node",type=string,JSONPath=`.status.placement.node`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`

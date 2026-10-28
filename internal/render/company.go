@@ -47,20 +47,20 @@ type Input struct {
 	// is not part of the document: Crewlet reads where its public listener
 	// is reached from the data pod's crewlet.yaml (api.public.external_url,
 	// BootstrapInput.PublicURL). It decides what this render reports, the
-	// verdicts of ExecutorOf and BoxModeOf on a run that calls the seat's
-	// tools back through it, and the webhook addresses a Seat publishes.
+	// verdicts of ExecutorOf on a run that calls the seat's tools back
+	// through it, and the webhook addresses a Seat publishes.
 	PublicBaseURL string
 
 	// Unset are the Secret keys the reconcile read and found holding no
 	// value: a Secret or a key that does not exist, or an empty value. A
 	// value read from one under a key its block declares optional is left
-	// out of what the engine starts, which CodeWorkOf follows. Before the
+	// out of what the engine starts, which ExecutorOf follows. Before the
 	// Secrets are read it is empty, and every key reads as holding a value.
 	Unset []secretref.Key
 	// Empty are the keys of Unset that exist and hold an empty value, which
-	// the engine reads as nothing too: under a key not declared optional,
-	// what it is given to does not start, where a missing one holds the
-	// document instead, and CodeWorkOf says so of a seat's coding runs.
+	// the engine reads as nothing too: under a key not declared optional, a
+	// tool server it is given to does not start and an executor run starts
+	// without it, where a missing one holds the document instead.
 	Empty []secretref.Key
 
 	// HeldPlacements are the role.placement labels to render for the agent
@@ -88,7 +88,7 @@ type Document struct {
 	// keeps its entry out of the engine's store.
 	Optional []secretref.Key
 	// StartValues are the references to Secret keys the document gives a
-	// tool server or a coding run under a key, in the order rendered.
+	// tool server or an executor run under a key, in the order rendered.
 	StartValues []StartValue
 	// Provisioned is every store entry the document refers to that the
 	// engine's provisioning fills rather than the operator, sorted and
@@ -148,7 +148,7 @@ func Company(in *Input) (*Document, error) {
 // ReportedOf is every finding about the objects of in that holds nothing
 // (Basis Reported), sorted by object and field: each such object is rendered
 // as its spec says, and the finding is the controller's to report on it. Like
-// CodeWorkOf it is a statement about the objects' specs, which holds while
+// ExecutorOf it is a statement about the objects' specs, which holds while
 // another object's refusal keeps Company from returning a document.
 func ReportedOf(in *Input) []*RefError {
 	r := newRenderer(in)
@@ -407,7 +407,7 @@ func (r *renderer) optional() []secretref.Key {
 // seatCredential returns the pointer the document holds for one of a seat's
 // own credentials: a Secret key's store entry, which the secret sync fills,
 // or a provisioned credential's, which the engine's provisioning fills. use
-// is the tool server or coding run the value is started with, nil for a
+// is the tool server or executor run the value is started with, nil for a
 // value of any other position. A provisioned credential in a company where no
 // Integration provisions is reported at field, as nothing fills it until one
 // does; it is rendered all the same, since Crewlet applies the reference and
@@ -433,9 +433,10 @@ func (r *renderer) seatCredential(s *v1alpha1.Seat, field string, src v1alpha1.S
 // withoutProvisioner is what becomes of a seat whose provisioned credential,
 // written at use, nothing creates. Crewlet holds a value that does not
 // resolve to the rule it holds a missing Secret's to: a tool server is not
-// started without one, nor a run_sandbox coding run, unless the value's key
-// is optional, when it is left out; a box-mode executor's run starts
-// without it, since refusing it would fail the turn.
+// started without one unless the value's key is optional, when it is left
+// out. A seat's executor run starts without it either way, since refusing the
+// run would fail the seat's turn: the key's optionalKeys says only whether the
+// engine logs the absence as a gap of the run.
 func withoutProvisioner(use *startUse) string {
 	switch {
 	case use == nil:
@@ -446,10 +447,10 @@ func withoutProvisioner(use *startUse) string {
 	case use.server != "":
 		return fmt.Sprintf("the engine does not start the seat's instance of MCPServer %s, which takes it", use.server)
 	case use.optional:
-		return "the seat's coding runs start without it, as the optionalKeys beside it let them"
+		return "the seat's executor runs start without it, quietly, as the optionalKeys beside it let them"
 	default:
-		return "Crewlet refuses each of the seat's run_sandbox coding runs, whose environment holds it, and an " +
-			"box-mode run of its executor starts without it"
+		return "the seat's executor runs start without it, and the engine logs it as a gap of each " +
+			"(sandbox_env_unresolved)"
 	}
 }
 
@@ -496,6 +497,8 @@ func (r *renderer) company() companyDoc {
 	doc.Integrations = r.integrations()
 	doc.MCPServers = r.mcpServers()
 	doc.Roles, doc.Units = r.org()
+	r.sandboxRequired(len(doc.Providers.LLM) > 0)
+	r.unofferedPlacements()
 	return doc
 }
 
@@ -623,22 +626,31 @@ func (r *renderer) providersDoc() providersDoc {
 		r.source(Path{keyProviders, "embeddings"}, r.owner)
 	}
 
-	if s := spec.Sandbox; s.E2B.APIKeySecretRef.Name != "" {
+	if s := &spec.Sandbox; s.DefaultRunIn != "" {
 		doc.Sandbox = &sandboxDoc{
-			E2B: e2bDoc{
-				APIKey:   r.secret(s.E2B.APIKeySecretRef.Name, s.E2B.APIKeySecretRef.Key),
-				Domain:   s.E2B.Domain,
-				Template: s.E2B.Template,
-			},
-			// The remote sandbox is the only cell v1alpha1 offers; naming
-			// it keeps the document valid without relying on Crewlet's
-			// rule that a catalogue of one cell needs no default.
-			DefaultRunIn:           "e2b",
-			DefaultCodingAgent:     codingAgent(s.DefaultCodingAgent),
+			// Always written, though a catalogue of one cell would resolve
+			// it, so the document alone says where a run on a provider
+			// that names no runIn goes.
+			DefaultRunIn:           sandboxPlacement(s.DefaultRunIn),
 			DefaultTimeoutSeconds:  s.DefaultTimeoutSeconds,
 			DefaultPauseTTLSeconds: s.DefaultPauseTTLSeconds,
 			DefaultMaxTurns:        s.DefaultMaxTurns,
 			Setup:                  r.setup(r.owner, s.Setup),
+		}
+		if r.offersDirect() {
+			// The direct cell's boxes go on the pod's sandboxes volume,
+			// which the operator mounts on every engine pod: Crewlet
+			// would otherwise make them under its user's home, which on a
+			// seat pod is the scratch volume and on a data pod is bounded
+			// by nothing (SandboxDir).
+			doc.Sandbox.Local = &localSandboxDoc{StateDir: SandboxDir}
+		}
+		if e := s.E2B; e.APIKeySecretRef.Name != "" {
+			doc.Sandbox.E2B = &e2bDoc{
+				APIKey:   r.secret(e.APIKeySecretRef.Name, e.APIKeySecretRef.Key),
+				Domain:   e.Domain,
+				Template: e.Template,
+			}
 		}
 		r.source(Path{keyProviders, "sandbox"}, r.owner)
 	}
@@ -684,16 +696,13 @@ func llmEntry(s *v1alpha1.LLMProviderSettings, stateDir string) llmProviderDoc {
 	return doc
 }
 
-// llmProvider renders one of the Company's LLMProviders. In mode Box its
-// runs happen in a remote sandbox and call the seat's tools back through the
-// engine's public address; a company with none is applied all the same, and
-// BoxModeOf reports it, since Crewlet refuses only the turns that need the
-// address.
+// llmProvider renders one of the Company's LLMProviders, with the cell a
+// seat's executor run on it is placed in when it names one (ExecutorOf says
+// whether such a run can reach the seat's tools from there).
 func (r *renderer) llmProvider(p *v1alpha1.LLMProvider) llmProviderDoc {
 	s := &p.Spec
 	doc := llmEntry(&s.LLMProviderSettings, CLIStateRoot+"/"+cmp.Or(s.LoginName, p.Name))
-	doc.Mode = cliAgentMode(s.Mode)
-	doc.RunIn = cliAgentRunIn(s.RunIn)
+	doc.RunIn = sandboxPlacement(s.RunIn)
 	doc.Env = r.secretEnv(s.Env)
 	doc.Auth = llmAuthDoc{Mode: cliAgentAuthMode(s.Auth.Mode)}
 	if k := s.Auth.TokenSecretRef; k.Name != "" {

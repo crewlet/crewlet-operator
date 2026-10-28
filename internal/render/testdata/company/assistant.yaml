@@ -33,7 +33,6 @@ providers:
       auth:
         mode: subscription
         token: ${K8S_CLAUDE_TOKEN_HWDLXXYNUX5H}
-      mode: box
       model: sonnet
       state_dir: /var/lib/crewlet/llm-cli/assistant-deep
     assistant-pi:

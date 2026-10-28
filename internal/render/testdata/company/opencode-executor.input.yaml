@@ -1,11 +1,10 @@
-# OpenCode as a seat's executor in box mode, signed in by its model
-# provider's key in env, which a box-mode run carries into the
-# company's E2B sandbox, and its model written <provider>/<model>, as
-# OpenCode reads it. The seat codes in that run, so Crewlet offers it no
-# run_sandbox; a second seat's code work runs OpenCode, the company's
-# default coding agent, on an OpenCode provider in mode Host on Anthropic's
-# key. Box mode calls the seat's tools back through the company's public
-# address, so the case is exposed.
+# OpenCode as two seats' executor, each its own agentic run in a box, signed
+# in by its model provider's key in env, which a run carries into its box,
+# and its model written <provider>/<model>, as OpenCode reads it. porter's
+# runs go to the company's default cell, its E2B sandbox; fixer's provider
+# names Direct, a box on the engine pod that holds the seat. An E2B run calls
+# the seat's tools back through the company's public address, so the case is
+# exposed.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
 metadata:
@@ -14,11 +13,11 @@ spec:
   engineClassName: basic
   companyName: Harbor
   sandbox:
+    defaultRunIn: E2B
     e2b:
       apiKeySecretRef:
         name: e2b
         key: apiKey
-    defaultCodingAgent: OpenCode
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: LLMProvider
@@ -29,8 +28,6 @@ spec:
     name: harbor
   agent: OpenCode
   model: openrouter/anthropic/claude-sonnet-5
-  mode: Box
-  runIn: E2B
   auth:
     mode: Subscription
   env:
@@ -49,6 +46,7 @@ spec:
     name: harbor
   agent: OpenCode
   model: anthropic/claude-sonnet-5
+  runIn: Direct
   auth:
     mode: Subscription
   env:
@@ -69,7 +67,8 @@ spec:
   llm:
     default:
       - name: opencode
-  sandbox: {}
+  sandbox:
+    maxTurns: 64
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat
@@ -82,4 +81,3 @@ spec:
   llm:
     default:
       - name: anthropic
-  sandbox: {}

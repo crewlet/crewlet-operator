@@ -1,13 +1,12 @@
 name: Forge
 providers:
   llm:
-    claude-box:
+    claude-e2b:
       agent: claude-code
       auth:
         mode: subscription
         token: ${K8S_CLAUDE_SUBSCRIPTION_OAUTH_TOKEN_5F3I3N4HVTAV}
       max_concurrent: 2
-      mode: box
       model: sonnet
       run_in: e2b
       state_dir: /var/lib/crewlet/llm-cli/claude
@@ -50,23 +49,26 @@ providers:
       model: openrouter/anthropic/claude-sonnet-5
       state_dir: /var/lib/crewlet/llm-cli/pi
   llm_order:
-  - claude-box
+  - claude-e2b
   - codex
   - cursor
   - hermes
   - opencode
   - pi
   sandbox:
-    default_run_in: e2b
+    default_run_in: direct
     e2b:
       api_key: ${K8S_E2B_API_KEY_GSEHAAV5THN5}
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
 roles:
 - goal: Ship the changes the team files.
   handle: builder
   kind: agent
   llm:
     default:
-    - claude-box
+    - claude-e2b
+    - opencode
     review:
     - codex
     subagent:

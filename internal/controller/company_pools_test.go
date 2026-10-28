@@ -405,7 +405,12 @@ var _ = Describe("Company seat pools", func() {
 				SecretName: generalBootstrap, Items: []corev1.KeyToPath{{Key: configFile, Path: configFile}}, DefaultMode: new(int32(0o440)),
 			}},
 			corev1.Volume{Name: scratchVolume, EmptyDir: &corev1.EmptyDirVolumeSource{
-				SizeLimit: new(resource.MustParse(render.DefaultSeatPodScratchSizeLimit)),
+				SizeLimit: new(resource.MustParse(render.DefaultScratchSizeLimit)),
+			}},
+			// The boxes Crewlet makes on the pod, apart from the scratch
+			// store's limit.
+			corev1.Volume{Name: sandboxesVolume, EmptyDir: &corev1.EmptyDirVolumeSource{
+				SizeLimit: new(resource.MustParse(render.DefaultSandboxSizeLimit)),
 			}},
 		))
 		container := pod.Spec.Containers[0]
@@ -424,15 +429,16 @@ var _ = Describe("Company seat pools", func() {
 		Expect(*container.SecurityContext.ReadOnlyRootFilesystem).To(BeTrue())
 		Expect(container.Env[:len(want.Env)]).To(Equal(want.Env))
 		Expect(container.Env).To(ContainElement(corev1.EnvVar{Name: "TURSO_GO_CACHE_DIR", Value: "/var/lib/crewlet/cache"}))
-		// The engine makes the directory of the sockets a host-mode CLI
-		// reaches its seat's tools through under its TMPDIR, which is /tmp,
+		// The engine makes the directory of the sockets a CLI it runs on the
+		// pod reaches its seat's tools through under its TMPDIR, which is /tmp,
 		// the scratch volume's mount below, while nothing sets another.
 		Expect(container.Env).NotTo(ContainElement(HaveField("Name", "TMPDIR")))
 		Expect(container.VolumeMounts).To(ConsistOf(
 			corev1.VolumeMount{Name: scratchVolume, MountPath: "/var/lib/crewlet"},
 			corev1.VolumeMount{Name: configVolumeName, MountPath: "/etc/crewlet", ReadOnly: true},
-			corev1.VolumeMount{Name: scratchVolume, MountPath: "/tmp", SubPath: "tmp"},
-			corev1.VolumeMount{Name: scratchVolume, MountPath: "/home/crewlet", SubPath: "home"},
+			corev1.VolumeMount{Name: scratchVolume, MountPath: "/tmp", SubPath: tmpSubPath},
+			corev1.VolumeMount{Name: scratchVolume, MountPath: "/home/crewlet", SubPath: homeSubPath},
+			corev1.VolumeMount{Name: sandboxesVolume, MountPath: "/var/lib/crewlet-sandboxes"},
 		))
 
 		By("giving a PerSeat seat's pods their seat, and no other pool's selector")
@@ -993,6 +999,43 @@ var _ = Describe("Company seat pools", func() {
 		get(seats, seatsPolicy)
 		Expect(seats.Spec.PolicyTypes).To(Equal([]networkingv1.PolicyType{networkingv1.PolicyTypeIngress}))
 		Expect(seats.Spec.Ingress).To(BeEmpty())
+	})
+
+	// A data pod's deep work calls the engine back at the Company's public
+	// address, which inside the cluster most often lands on the route's
+	// proxies without leaving it: under Isolated, whose exceptCIDRs hold the
+	// pod network, only a rule naming the proxies lets that call through. A
+	// seat pod's Direct boxes call the tool bridge on the pod's own listener
+	// instead, and its pods are given no such rule.
+	It("lets the data pods alone reach the public route's proxies under Isolated", func() {
+		class := newClass(func(c *crewletaiv1alpha1.EngineClass) {
+			c.Spec.Exposure.Webhooks = crewletaiv1alpha1.WebhookExposure{
+				Mode: crewletaiv1alpha1.WebhookExposureGateway,
+				Gateway: crewletaiv1alpha1.GatewayExposure{
+					ParentRefs:      []crewletaiv1alpha1.GatewayParentReference{{Namespace: gatewayNamespace, Name: publicGateway}},
+					ProxyNamespaces: []string{"envoy-gateway-system"},
+				},
+				Hostname: webhooksHostname,
+			}
+			c.Spec.NetworkPolicy.Egress.ExceptCIDRs = []string{"10.0.0.0/8"}
+		})
+		company := running(class.Name)
+		Expect(company.Status.Endpoints.PublicBaseURL).NotTo(BeEmpty())
+		engine := &networkingv1.NetworkPolicy{}
+		get(engine, engineName)
+		Expect(egressRules(engine)).To(ContainElement(toNamespaces("envoy-gateway-system")),
+			"the data pods are kept from the proxies a call to the public address lands on")
+		Expect(egressRules(engine)).NotTo(ContainElement(toNamespaces(gatewayNamespace)),
+			"the data pods may reach the Gateway's namespace, which the class says the proxies are not in")
+		seats := &networkingv1.NetworkPolicy{}
+		get(seats, seatsPolicy)
+		Expect(egressRules(seats)).NotTo(ContainElement(toNamespaces("envoy-gateway-system")),
+			"the seat pods may reach the public route's proxies, which nothing on them calls")
+		for _, rule := range egressRules(engine) {
+			if rule != toNamespaces("envoy-gateway-system") {
+				Expect(egressRules(seats)).To(ContainElement(rule), "the seat pods are held to the data pods' egress but the proxies")
+			}
+		}
 	})
 
 	It("deletes the seat pods before the data pods when the Company is deleted", func() {

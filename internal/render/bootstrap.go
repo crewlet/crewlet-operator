@@ -30,6 +30,40 @@ const (
 	// scratch emptyDir. A data pod keeps its store, its snapshots and the
 	// event stream under it; a seat pod its scratch store.
 	DataDir = "/var/lib/crewlet"
+	// SandboxDir is where every engine pod's sandboxes emptyDir is mounted,
+	// a data pod's and a seat pod's alike: where Crewlet makes the boxes of
+	// the executor runs it places on the pod itself (its direct cell,
+	// providers.sandbox.local.state_dir), a directory each, holding the
+	// run's home, its checkout and whatever it installs and builds. It is a
+	// volume of its own, so that the boxes have a limit of their own
+	// (DefaultSandboxSizeLimit) that bounds nothing else and that nothing
+	// else shares, and it is under neither of the obvious places:
+	//   - DataDir: on a data pod that is the company's estate, three
+	//     quarters of it reserved for the event stream (store_max_bytes)
+	//     and the rest the store's and its snapshots', so a run that filled
+	//     it would stop the store and the broker, and the whole company with
+	//     them. A box is scratch besides: its run is a process of the pod
+	//     and ends with it, and Crewlet carries the run's round on in a
+	//     fresh run either way. The emptyDir keeps the box through a restart
+	//     of the engine's container, so the fresh run carries on in it, its
+	//     working tree as the lost one left it, and goes with the pod, whose
+	//     replacement has the fresh run start in a fresh box, from what the
+	//     lost one pushed (engine_restarted, box_gone). A volume that
+	//     outlived the pod would keep that working tree only by giving every
+	//     engine pod, a seat pod too, a volume claim of its own.
+	//   - HOME, under which Crewlet keeps its boxes by default
+	//     (~/.crewlet/sandboxes): an engine pod's HOME is on its scratch
+	//     volume, whose limit is sized for what the processes the engine
+	//     runs write outside a box (DefaultScratchSizeLimit), and a box's
+	//     checkout would evict the pod at it.
+	//
+	// The volume holds a run's box, not every write the run makes: Crewlet
+	// confines a seat's Direct run to nothing, and only points its temporary
+	// directories into the box, so a command that names /tmp or the
+	// engine's home outright writes to the pod's scratch volume, and one
+	// that names a path under DataDir writes to a data pod's data volume.
+	// ADR-0008 records the decision.
+	SandboxDir = "/var/lib/crewlet-sandboxes"
 	// APIPort is the port of an engine's private HTTP listener, api.port. On
 	// a data pod, which has the ingress role, it carries the API, the
 	// dashboard and the probes, and none of the routes outside parties call,
@@ -43,8 +77,8 @@ const (
 	// PublicPort is the port of a data pod's public listener, api.public:
 	// the routes outside parties call without an operator credential, and
 	// nothing else — the vendors' webhooks and app landings (/webhooks/),
-	// and a remote sandbox's per-run telemetry (/otlp/{token}) and tool
-	// bridge (/mcp/{token}), each admitted by a provider signature or a
+	// and a coding run's per-run telemetry (/otlp/{token}) and tool bridge
+	// (/mcp/{token}), each admitted by a provider signature or a
 	// token signed for its one run. Crewlet decides which routes are public
 	// from one list of its own, and answers every other route there as a
 	// path nothing serves, so the address published to the internet cannot
@@ -568,16 +602,20 @@ type SeatPodInput struct {
 // pods'.
 //
 // Its API block binds APIPort on every interface and holds no token: a node
-// without the ingress role serves only its probes there, /health and /ready,
+// without the ingress role serves its probes there, /health and /ready,
 // which the kubelet reaches at the pod's own address and which are exempt
-// from authentication, and refuses every other route as it would an unknown
-// one. Leaving api.port unset would bind nothing at all, and leave the pod
-// with no probe to tell a seat pod that has joined the fleet and claims
-// seats from one that is still starting, or has lost the data pods. It is
+// from authentication, and, to loopback alone, the tool bridge and the
+// telemetry receiver its own Direct boxes dial (Crewlet's boxHostURL, which
+// derives their address only from a listener loopback reaches, as every
+// interface is), and refuses every other route, and every caller of those two
+// off the pod, as it would an unknown one. Leaving api.port unset would bind
+// nothing at all, and leave the pod with no probe to tell a seat pod that has
+// joined the fleet and claims seats from one that is still starting, or has
+// lost the data pods, and its Direct boxes with no bridge to dial. It is
 // given no public listener (api.public), which a node without the ingress
-// role never binds: its box-mode seats' tool calls reach it through the data
-// pods' bridge, relayed over the broker, so nothing a sandbox dials is a
-// route on a seat pod.
+// role never binds: its seats' runs in E2B call their tools through the data
+// pods' bridge at the Company's public address, relayed back over the broker,
+// so nothing a box off the pod dials is a route on a seat pod.
 //
 // A Shared pool's pods carry the pool's own placement label. A PerSeat pool's
 // carry the seat label with the seat's handle, which the document refers to

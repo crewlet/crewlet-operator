@@ -24,9 +24,15 @@ import (
 // operator's own: applied, it would log out every seat on that CLI login, the
 // seats on the data pods included, which is harm beyond the seat at fault.
 //
-// A seat pod cannot serve a CLI in mode Box at the head of a seat's
-// executor's chain either, as it serves no tool bridge; that seat is applied
-// and reported on its Ready (ExecutorOf), since only its own turns fail.
+// A seat pod's login on its scratch volume also seeds its Direct boxes, which
+// write a refreshed login back there, so the same holds for a seat's executor
+// run on such a provider. A seat pod serves its own Direct boxes the tool
+// bridge on api.port, to loopback alone; the box of a seat's executor run in
+// E2B calls the data pods' bridge at the Company's public address, which every
+// engine pod is given, and the data pod relays each call back to the seat pod
+// over the broker. Without a public address that seat's turns fail, and it is
+// applied and reported on its Ready (ExecutorOf), since only its own turns
+// fail.
 
 // fieldLLMDefault is a Seat's executor chain, the one every phase without a
 // chain of its own runs on.
@@ -49,7 +55,6 @@ func (r *renderer) seatPodProviders(s *v1alpha1.Seat, pool string) {
 		{llm.Subagent, "spec.llm.subagent"},
 		{llm.Auxiliary, "spec.llm.auxiliary"},
 		{llm.Judge, "spec.llm.judge"},
-		{llm.Sandbox, "spec.llm.sandbox"},
 	}
 	var refused []string
 	for _, phase := range phases {
@@ -100,32 +105,6 @@ func (r *renderer) chainOf(refs []v1alpha1.LLMProviderReference, field string) [
 		}
 	}
 	return out
-}
-
-// executorHead is the LLMProvider at the head of a seat's executor chain, the
-// one Crewlet may run in the sandbox, in mode Box, with the field that names
-// it: the first entry of refs that resolves, or with no refs the head of the
-// document's llm_order. ok is false when the head is a platform provider,
-// which runs in mode Host alone, or when nothing resolves (each such entry is
-// refused on its own).
-func (r *renderer) executorHead(refs []v1alpha1.LLMProviderReference, field string) (chainLink, bool) {
-	if len(refs) == 0 {
-		head, ok := r.orderHead()
-		return chainLink{provider: head, field: fieldLLM}, ok
-	}
-	for i, ref := range refs {
-		switch cmp.Or(ref.Kind, v1alpha1.LLMProviderKindLLMProvider) {
-		case v1alpha1.LLMProviderKindLLMProvider:
-			if r.providers[ref.Name] {
-				return chainLink{provider: ref.Name, field: fmt.Sprintf("%s[%d].name", field, i)}, true
-			}
-		case v1alpha1.LLMProviderKindPlatform:
-			if r.usesPlatformProviders() && r.platform[ref.Name] != nil {
-				return chainLink{}, false
-			}
-		}
-	}
-	return chainLink{}, false
 }
 
 // orderHead is the LLMProvider a seat with no chain runs on: the head of the

@@ -32,49 +32,6 @@ const (
 	CLIAgentPi          CLIAgentName = "Pi"
 )
 
-// CLIAgentMode is where the engine runs a seat's executor on the CLI. It maps
-// onto the `mode` of a Crewlet providers.llm entry (Host is `host`, Box is
-// `box`).
-//
-// In either mode the CLI drives its own loop: it asks the model, calls the
-// seat's tools as MCP tools of one server, every call passing the engine's
-// gates, and asks again, until the model stops or the engine ends the run. The
-// mode decides where that loop runs and how long it lives.
-// +kubebuilder:validation:Enum=Host;Box
-type CLIAgentMode string
-
-// The CLI agent modes.
-const (
-	// CLIAgentModeHost runs the CLI in the engine's pod that holds the
-	// seat, turn by turn, with its own shell and editor denied. It reaches
-	// the seat's tools through `crewlet mcp-relay`, which it starts, over a
-	// unix socket in a directory of the engine's own under the pod's /tmp:
-	// no listener, no token and no network, so it runs on a data pod and a
-	// seat pod alike.
-	CLIAgentModeHost CLIAgentMode = "Host"
-	// CLIAgentModeBox runs a seat's executor as a detached run of the CLI
-	// in the Company's sandbox, with its own shell and editor, reaching the
-	// seat's tools back over the engine's tool bridge at the Company's
-	// public address. It is offered for the CLIs Crewlet has a sandbox
-	// runner for, ClaudeCode and OpenCode. Anywhere but at the head of a
-	// seat's executor's chain, in every other phase and behind another
-	// provider, it runs as in Host.
-	CLIAgentModeBox CLIAgentMode = "Box"
-)
-
-// CLIAgentRunIn is where a Box-mode run happens. It maps onto the `run_in`
-// of a Crewlet providers.llm entry (E2B is `e2b`). Crewlet's local cells,
-// `direct` and `container`, are not offered, as the Company's spec.sandbox does
-// not offer them.
-// +kubebuilder:validation:Enum=E2B
-type CLIAgentRunIn string
-
-// The places a Box-mode run happens.
-const (
-	// CLIAgentRunInE2B is the Company's E2B sandbox.
-	CLIAgentRunInE2B CLIAgentRunIn = "E2B"
-)
-
 // CLIAgentWebTools is whether a model provider's CLI keeps its own web tools
 // (its fetch and its search). It maps onto the `web_tools` of a Crewlet
 // providers.llm entry's overrides (Allowed is `allowed`, Denied is
@@ -228,9 +185,11 @@ type CLIAgentAuth struct {
 // the schema of the type that inlines it. The API tests exercise both copies.
 type LLMProviderSettings struct {
 	// agent is which CLI to drive. The model is written as this CLI reads
-	// it, and a Box-mode run or a seat's code work is handed it
-	// unchanged: OpenCode reads `<provider>/<model>`, such as
-	// `anthropic/claude-sonnet-5`. Crewlet's `agent`.
+	// it, and a seat's executor run on the provider is handed it unchanged:
+	// OpenCode reads `<provider>/<model>`, such as
+	// `anthropic/claude-sonnet-5`. Only ClaudeCode and OpenCode run a
+	// seat's executor; every CLI serves a seat's other phases. Crewlet's
+	// `agent`.
 	// +required
 	Agent CLIAgentName `json:"agent,omitempty"`
 
@@ -256,8 +215,11 @@ type LLMProviderSettings struct {
 	// afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic
 	// documents for one answer of a current Claude model at its full
 	// output. A timeout is retryable, so a seat's chain moves on to its
-	// next provider. It bounds the CLI where it runs in the engine's pod;
-	// a Box-mode executor's run in the sandbox is not bounded by it.
+	// next provider. It bounds the phases the CLI runs in the engine's
+	// process (the reviewer, delegated workers, the summariser, the judge);
+	// a seat's executor run on the provider, its CLI's own run in a box, is
+	// bounded by its round cap instead (the Company's
+	// spec.sandbox.defaultMaxTurns and the Seat's spec.sandbox.maxTurns).
 	// Crewlet's `timeout_seconds`.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
@@ -273,8 +235,9 @@ type LLMProviderSettings struct {
 	// from inside one of a run's tool calls (a delegated worker's) borrows
 	// the run's place rather than wait for another, which the runs holding
 	// every place could leave it waiting for forever. Unset takes
-	// Crewlet's default of 4. A Box-mode executor's run, in the sandbox,
-	// takes none. Crewlet's `max_concurrent`.
+	// Crewlet's default of 4. A seat's executor run takes none: it is a
+	// process of its own box, and a seat runs one at a time. Crewlet's
+	// `max_concurrent`.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=64
@@ -313,18 +276,27 @@ type LLMProviderSettings struct {
 // Crewlet refuses the document. A test holds that list to the engine's
 // refusals too.
 //
-// Mode Box runs the CLIs Crewlet has a sandbox runner for, ClaudeCode and
-// OpenCode: the Company's coding agents. Crewlet hands a Box-mode run its
-// provider's model exactly as the provider's runs in the engine's pod pass it
-// (the reviewer's, a delegated worker's, the summariser's), so one model
-// serves every phase. The run happens in the Company's E2B sandbox, which never
-// receives a credential bundle: the bundle's login carries a refresh token
-// the engine keeps rotating on its data volume. So a Subscription login
-// reaches the run only as a variable of its environment, which for ClaudeCode
-// is its headless token and for OpenCode its model provider's key in env.
+// A seat's executor, which does the seat's work, is its CLI's own agentic
+// run: the CLI's loop with its own shell and editor, fully permissioned, as
+// a headless run has nobody to answer a permission prompt, calling the
+// seat's tools as one MCP server through the engine's tool bridge. Crewlet
+// runs it on the first member of the seat's executor chain that drives
+// ClaudeCode or OpenCode, the CLIs it has an in-box runner for, and is not
+// sitting out its spent plan on the node, in a box placed by that member's
+// runIn, else by the Company's spec.sandbox.defaultRunIn: Direct, a process
+// of the engine pod that holds the seat, or E2B, the Company's E2B sandbox.
+// Every other CLI serves a seat's other phases alone (the reviewer,
+// delegated workers, the summariser and the judge), in the engine's pod.
+// Crewlet hands an executor run its provider's model exactly as the
+// provider's runs in the engine's pod pass it, so one model serves every
+// phase. A Direct box is seeded with the provider's login, its credential
+// files or the document OpenCode 2's export printed, and writes a refreshed
+// login back. An E2B box never receives it, as the login carries a refresh
+// token the engine keeps rotating, so there a Subscription login reaches the
+// run only as a variable of its environment, which for ClaudeCode is its
+// headless token and for OpenCode its model provider's key in env.
 // +kubebuilder:validation:XValidation:rule="!has(self.webTools) || self.webTools != 'Denied' || self.agent in ['ClaudeCode', 'Codex', 'OpenCode', 'Pi']",message="webTools Denied takes a CLI Crewlet can turn the web off for: ClaudeCode, Codex, OpenCode or Pi. Crewlet's profile for every other CLI carries no measured web denial, and refuses the setting",fieldPath=".webTools"
-// +kubebuilder:validation:XValidation:rule="!has(self.runIn) || (has(self.mode) && self.mode == 'Box')",message="runIn applies to mode Box only: in mode Host the CLI runs in the engine's pod"
-// +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'Box' || self.agent in ['ClaudeCode', 'OpenCode']",message="mode Box runs a CLI Crewlet has a sandbox runner for: ClaudeCode or OpenCode"
+// +kubebuilder:validation:XValidation:rule="!has(self.runIn) || self.agent in ['ClaudeCode', 'OpenCode']",message="runIn places the provider's executor runs, and Crewlet launches an executor run only on ClaudeCode or OpenCode: a provider of another CLI serves a seat's other phases alone, in the engine's pod, and Crewlet refuses a runIn on it",fieldPath=".runIn"
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || (has(self.auth.mode) && self.auth.mode != 'Subscription') || has(self.auth.tokenSecretRef) || has(self.auth.credentialBundleSecretRef) || (self.agent in ['Hermes', 'Pi', 'OpenCode'] && has(self.env) && self.env.exists(e, e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)')))",message="a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef: a pod has no terminal to log in at. Hermes, Pi and OpenCode alone may sign in with their model provider's key in env instead, under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY), which Crewlet hands them untouched. A CLI with a key variable takes its key through auth mode APIKey, as Crewlet refuses that variable in env",fieldPath=".auth"
 // +kubebuilder:validation:XValidation:rule="self.agent != 'QwenCode' || (has(self.auth) && has(self.auth.mode) && self.auth.mode == 'APIKey')",message="QwenCode signs in with its key alone, under auth mode APIKey: Crewlet's profile for it keeps no login and names no token variable, as the builds of Qwen Code Crewlet supports refuse the OAuth login it once kept, so under Subscription it would sign in to nothing. Give it its key with auth mode APIKey and auth.apiKeySecretRef",fieldPath=".auth"
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.tokenSecretRef) || self.agent == 'ClaudeCode'",message="auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode (CLAUDE_CODE_OAUTH_TOKEN): its profile for every other CLI names no token variable. Sign that CLI in with auth.credentialBundleSecretRef, with auth mode APIKey where it has a key variable, or, for Hermes, Pi and OpenCode, with its model provider's key in env"
@@ -332,8 +304,7 @@ type LLMProviderSettings struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, (self.agent == 'ClaudeCode' && e.name in ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']) || (self.agent == 'Codex' && e.name == 'CODEX_API_KEY') || (self.agent == 'GeminiCLI' && e.name == 'GEMINI_API_KEY') || (self.agent == 'QwenCode' && e.name == 'OPENAI_API_KEY') || (self.agent == 'CursorAgent' && e.name == 'CURSOR_API_KEY') || (self.agent == 'Copilot' && e.name == 'COPILOT_GITHUB_TOKEN') || (self.agent == 'Grok' && e.name == 'XAI_API_KEY') || (self.agent == 'MuseCode' && e.name == 'META_API_KEY'))",message="env may not set the CLI's own token or key variable (ClaudeCode's CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY, Codex's CODEX_API_KEY, GeminiCLI's GEMINI_API_KEY, QwenCode's OPENAI_API_KEY, CursorAgent's CURSOR_API_KEY, Copilot's COPILOT_GITHUB_TOKEN, Grok's XAI_API_KEY, MuseCode's META_API_KEY): Crewlet's auth owns it, and whether a value in env reaches the CLI would turn on the auth mode. Give a token as auth.tokenSecretRef, and a key as auth.apiKeySecretRef with auth mode APIKey",fieldPath=".env"
 // +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, e.name in ['HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME', 'TMPDIR'] || (self.agent == 'ClaudeCode' && e.name in ['CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_DISABLE_CLAUDE_MDS', 'CLAUDE_CODE_DISABLE_AUTO_MEMORY']) || (self.agent == 'Codex' && e.name in ['CODEX_HOME', 'CODEX_SQLITE_HOME']) || (self.agent == 'OpenCode' && e.name in ['OPENCODE_CONFIG_DIR', 'OPENCODE_CONFIG_PROJECT_DISABLE']) || (self.agent == 'CursorAgent' && e.name == 'CURSOR_CONFIG_DIR') || (self.agent == 'KimiCode' && e.name == 'KIMI_CODE_HOME') || (self.agent == 'Hermes' && e.name == 'HERMES_HOME') || (self.agent == 'Pi' && e.name == 'PI_CODING_AGENT_DIR'))",message="env may not set a variable Crewlet sets on every call of the CLI to keep it inside its seat's own home and its call's working directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME or TMPDIR for any CLI, and ClaudeCode's CLAUDE_CONFIG_DIR, CLAUDE_CODE_DISABLE_CLAUDE_MDS and CLAUDE_CODE_DISABLE_AUTO_MEMORY, Codex's CODEX_HOME and CODEX_SQLITE_HOME, OpenCode's OPENCODE_CONFIG_DIR and OPENCODE_CONFIG_PROJECT_DISABLE, CursorAgent's CURSOR_CONFIG_DIR, KimiCode's KIMI_CODE_HOME, Hermes's HERMES_HOME or Pi's PI_CODING_AGENT_DIR. A value there would replace that isolation for every seat on the provider, so Crewlet refuses the document: drop it",fieldPath=".env"
 // +kubebuilder:validation:XValidation:rule="(has(self.auth) && has(self.auth.mode) && self.auth.mode != 'Subscription') || !has(self.env) || !self.env.exists(e, self.agent == 'GeminiCLI' && e.name == 'GOOGLE_GENAI_USE_GCA')",message="under auth mode Subscription, env may not set a variable Crewlet sets there to sign the CLI in with the login the seat's home holds: GeminiCLI's GOOGLE_GENAI_USE_GCA, which Crewlet sets to true. A value there would be replaced on every call, so Crewlet refuses the document: drop it",fieldPath=".env"
-// +kubebuilder:validation:XValidation:rule="!has(self.mode) || self.mode != 'Box' || (has(self.auth) && has(self.auth.mode) && self.auth.mode != 'Subscription') || (self.agent == 'ClaudeCode' && has(self.auth) && has(self.auth.tokenSecretRef)) || (self.agent == 'OpenCode' && has(self.env) && self.env.exists(e, e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)')))",message="a Subscription login reaches a Box-mode run in a remote sandbox only as a variable of its environment: give ClaudeCode auth.tokenSecretRef, or use auth mode APIKey, and give OpenCode its model provider's key in env under a name Crewlet reads as a credential, such as ANTHROPIC_API_KEY or OPENROUTER_API_KEY. A credential bundle stays on the engine's data volume"
-// +kubebuilder:validation:XValidation:rule="self.agent != 'OpenCode' || !has(self.model) || (self.model.indexOf('/') >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size() > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size() > 0)",message="an OpenCode model is <provider>/<model>, which OpenCode splits at its first slash: a model with no slash, or with nothing but white space before or after it, names no provider or no model, and every call the provider makes, a Box-mode run's included, would fail inside OpenCode, which OpenCode 2 refuses as Invalid model reference. Name the provider as OpenCode spells it (opencode models --standalone lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5, with that provider's key in env or, in mode Host, a login of OpenCode's own in auth.credentialBundleSecretRef",fieldPath=".model"
+// +kubebuilder:validation:XValidation:rule="self.agent != 'OpenCode' || !has(self.model) || (self.model.indexOf('/') >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size() > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size() > 0)",message="an OpenCode model is <provider>/<model>, which OpenCode splits at its first slash: a model with no slash, or with nothing but white space before or after it, names no provider or no model, and every call the provider makes, an executor run's included, would fail inside OpenCode, which OpenCode 2 refuses as Invalid model reference. Name the provider as OpenCode spells it (opencode models --standalone lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5, with that provider's key in env, or a login of OpenCode's own in auth.credentialBundleSecretRef, which a Direct run is seeded with and an E2B run never receives",fieldPath=".model"
 type LLMProviderSpec struct {
 	// companyRef names the Company this provider belongs to. Immutable.
 	// +required
@@ -342,29 +313,30 @@ type LLMProviderSpec struct {
 
 	LLMProviderSettings `json:",inline"`
 
-	// mode is where a seat's executor runs the CLI's own loop: Host, in the
-	// engine's pod that holds the seat, or Box, in the Company's sandbox.
-	// Unset is Host. Crewlet's `mode`.
+	// runIn is where a seat's executor run launched on the provider happens:
+	// Direct, a process of the engine pod that holds the seat, or E2B, the
+	// Company's E2B sandbox, which spec.sandbox.e2b must then configure.
+	// Unset takes the Company's spec.sandbox.defaultRunIn. It is read
+	// wherever a seat's executor can launch on the provider: as the first
+	// ClaudeCode or OpenCode member of its executor chain, and as a later
+	// one a launch falls back to while the members before it sit out their
+	// spent plans, so each run is placed by the member it runs on. Only
+	// ClaudeCode and OpenCode take it, as only they run an executor.
+	// Crewlet's `run_in`.
 	// +optional
-	Mode CLIAgentMode `json:"mode,omitempty"`
-
-	// runIn is where a Box-mode run happens. Unset is the Company's
-	// sandbox, which is E2B. Crewlet's `run_in`.
-	// +optional
-	RunIn CLIAgentRunIn `json:"runIn,omitempty"`
+	RunIn SandboxPlacement `json:"runIn,omitempty"`
 
 	// auth is how the CLI signs in. Crewlet's `auth`.
 	// +required
 	Auth CLIAgentAuth `json:"auth,omitzero"`
 
-	// env is extra environment of the CLI where it runs in the engine's pod:
-	// in every phase a Host-mode provider runs, and in every phase but the
-	// executor's of a Box-mode one. There the CLI does not get the engine's
-	// environment: it gets the part Crewlet's allowlist names, such as PATH
-	// and the TLS and proxy variables, and the variables the CLI's Crewlet
-	// profile passes through, such as GeminiCLI's GOOGLE_CLOUD_PROJECT, with
-	// a HOME, a TMPDIR and XDG directories of its seat's own rather than the
-	// engine's.
+	// env is extra environment of the CLI, in every phase a seat runs on the
+	// provider, its executor run included. In the engine's pod the CLI does
+	// not get the engine's environment: it gets the part Crewlet's
+	// allowlist names, such as PATH and the TLS and proxy variables, and the
+	// variables the CLI's Crewlet profile passes through, such as
+	// GeminiCLI's GOOGLE_CLOUD_PROJECT, with a HOME, a TMPDIR and XDG
+	// directories of its seat's own rather than the engine's.
 	// So a variable the CLI needs beyond that is given here, such as the
 	// address of a gateway a CLI reads from its environment (ClaudeCode's
 	// ANTHROPIC_BASE_URL). It is how Hermes, Pi and OpenCode sign in under
@@ -378,12 +350,15 @@ type LLMProviderSpec struct {
 	// not set a variable Crewlet sets there to sign the CLI in with its
 	// seat's login either: GeminiCLI's GOOGLE_GENAI_USE_GCA.
 	//
-	// A Box-mode run, and a seat's code work on the provider, run the CLI
-	// in the Company's E2B sandbox. There it gets none of that environment,
-	// and of env only an OpenCode provider's credential-named variables,
-	// where the coding agent can read them; a variable of no credential that
-	// such a run needs goes in the Seat's spec.sandbox.env. Crewlet's `env`,
-	// a credential position.
+	// A seat's executor run on the provider, Direct or E2B, gets all of env,
+	// beneath the Seat's own spec.sandbox.env, which wins a name: a
+	// gateway's address and the bearer token it takes, a cloud switch such
+	// as CLAUDE_CODE_USE_BEDROCK and its region, a proxy, so the run reaches
+	// its model as the provider's other phases do. A ClaudeCode sign-in in
+	// env (ANTHROPIC_AUTH_TOKEN or a CLAUDE_CODE_USE_* toggle) also signs an
+	// E2B run in. A Seat whose spec.sandbox.env signs ClaudeCode in itself
+	// keeps every sign-in of the provider's out of its runs, and the rest of
+	// env in them. Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
@@ -409,10 +384,10 @@ type LLMProviderSpec struct {
 // +kubebuilder:validation:MinProperties=1
 type LLMProviderStatus struct {
 	// conditions are Accepted (the Company exists), ResolvedRefs (every
-	// Secret key exists), Applied (the provider is in the revision the
-	// engine runs) and, on a provider in mode Box, BoxModeRunnable
-	// (whether its runs can call a seat's tools back through the Company's
-	// public address).
+	// Secret key exists) and Applied (the provider is in the revision the
+	// engine runs; False with SandboxPlacementNotOffered while a seat's
+	// executor can launch on it in a cell the Company's spec.sandbox does
+	// not configure).
 	// +optional
 	// +listType=map
 	// +listMapKey=type
@@ -439,7 +414,7 @@ type LLMProviderStatus struct {
 // +kubebuilder:printcolumn:name="Agent",type=string,JSONPath=`.spec.agent`
 // +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.model`
 // +kubebuilder:printcolumn:name="Applied",type=string,JSONPath=`.status.conditions[?(@.type=="Applied")].status`
-// +kubebuilder:printcolumn:name="BoxMode",type=string,JSONPath=`.status.conditions[?(@.type=="BoxModeRunnable")].status`,priority=1
+// +kubebuilder:printcolumn:name="RunIn",type=string,JSONPath=`.spec.runIn`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type LLMProvider struct {
 	metav1.TypeMeta `json:",inline"`

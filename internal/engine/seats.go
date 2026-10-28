@@ -137,9 +137,12 @@ func (c *Client) SeatPauses(ctx context.Context) (map[string]SeatPause, error) {
 
 // PauseSeat pauses the agent seat handle: it starts no new turn until it is
 // resumed, its mail waits on its inbox in order, and its scheduled runs are
-// skipped. stopRunning also ends the turn it is on at its next round; reason
-// is shown on the seat and in its feed, at most MaxPauseReasonRunes
-// characters. The pause is recorded as the operator token's.
+// skipped. stopRunning also ends its running work: the turn it is on at its
+// next round, and its executor run, launching or running, at once, its box
+// reclaimed and what it spent charged; a run parked on a person's question
+// stays parked behind the pause. reason is shown on the seat and in its feed,
+// at most MaxPauseReasonRunes characters. The pause is recorded as the
+// operator token's.
 //
 // Pausing a paused seat changes nothing, unless stopRunning adds a stop the
 // pause in place did not ask for; the reason a pause was taken with stays.

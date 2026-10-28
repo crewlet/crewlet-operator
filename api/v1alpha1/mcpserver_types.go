@@ -300,8 +300,9 @@ type MCPServerStatus struct {
 
 // MCPServer is a Model Context Protocol tool server a company's agents call.
 //
-// The name crewlet is reserved: the engine gives a seat's own tool bridge that
-// name inside a coding agent's sandbox.
+// The name crewlet is reserved: the engine gives a seat's own tools that name,
+// as the one MCP server each run of its coding CLI calls them through, inside
+// an executor's box beside the servers its spec.sandbox.mcpServerRefs name.
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

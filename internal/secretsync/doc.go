@@ -16,7 +16,7 @@
 //     Desired set of store entries. A Secret or key that does not exist is a
 //     *MissingError naming the reference, and the set it returns with one is
 //     partial, which Sync refuses, unless every reference to it is one the
-//     document lets go without its value (a tool server's or a coding run's
+//     document lets go without its value (a tool server's or an executor run's
 //     key listed in optionalKeys): there it is a value that is not there
 //     (Desired.Missing), as a missing optional secretKeyRef is to
 //     Kubernetes.

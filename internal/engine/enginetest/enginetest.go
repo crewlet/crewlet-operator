@@ -68,11 +68,14 @@ const (
 )
 
 // MinimalCompany is the smallest company document the engine accepts and runs
-// in full: a name, one agent seat, and one LLM provider. The provider is
-// Claude Code, the engine's default CLI, on a metered key that is a ${VAR}
-// reference nothing sets, which the engine accepts and resolves when it
-// builds the provider: a seat that ever tried to take a turn would hand the
-// CLI no key, and fail at once rather than reach a real model.
+// in full: a name, one agent seat, one LLM provider, and the box its
+// executor runs in. The provider is Claude Code, the engine's default CLI, on
+// a metered key that is a ${VAR} reference nothing sets, which the engine
+// accepts and resolves when it builds the provider: a seat that ever tried to
+// take a turn would hand the CLI no key, and fail at once rather than reach a
+// real model. Every agent seat's executor is its CLI's own run in a box, and
+// Crewlet refuses a company with an agent seat and a model provider that
+// configures none, so the seat's runs go Direct, on the engine's own host.
 const MinimalCompany = `name: Acme
 providers:
   llm:
@@ -81,13 +84,16 @@ providers:
       auth:
         mode: api-key
         api_key: "${ENGINETEST_LLM_API_KEY}"
+  sandbox:
+    local: {}
+    default_run_in: direct
 roles:
   - name: Ana
     goal: "Answer every question the company is asked"
 `
 
-// SandboxCompany is MinimalCompany with an E2B code sandbox whose API key is
-// the secret-store value ${key}, and its seat running code there.
+// SandboxCompany is MinimalCompany with its seat's executor running in an E2B
+// sandbox whose API key is the secret-store value ${key}.
 //
 // The engine accepts it whatever its store holds, since a reference that
 // resolves to nothing is a warning, and runs it only while the store holds a
@@ -109,12 +115,10 @@ providers:
   sandbox:
     e2b:
       api_key: "${` + key + `}"
+    default_run_in: e2b
 roles:
   - name: Ana
     goal: "Answer every question the company is asked"
-    sandbox:
-      enabled: true
-      run_in: e2b
 `)
 }
 

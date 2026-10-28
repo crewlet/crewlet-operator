@@ -114,15 +114,12 @@ const (
 
 // The messages of the rules over a provider's CLI and its sign-in.
 const (
-	msgCLIKey         = "apiKeySecretRef is the key auth mode APIKey hands the CLI"
-	msgCLIRunIn       = "runIn applies to mode Box only"
-	msgCLIAgentRunner = "mode Box runs a CLI Crewlet has a sandbox runner for: ClaudeCode or OpenCode"
+	msgCLIKey   = "apiKeySecretRef is the key auth mode APIKey hands the CLI"
+	msgCLIRunIn = "runIn places the provider's executor runs, and Crewlet launches an executor run " +
+		"only on ClaudeCode or OpenCode"
 	msgCLIToken       = "auth.tokenSecretRef is a headless token, which Crewlet hands only to ClaudeCode"
 	msgCLIKeyAgent    = "auth mode APIKey takes a CLI Crewlet hands a key to"
 	msgCLITwoLogins   = "tokenSecretRef and credentialBundleSecretRef are two logins"
-	msgCLIRemoteLogin = "a Subscription login reaches a Box-mode run in a remote sandbox only as a variable of its " +
-		"environment: give ClaudeCode auth.tokenSecretRef, or use auth mode APIKey, and give OpenCode its model " +
-		"provider's key in env"
 	msgOpenCodeModel  = "an OpenCode model is <provider>/<model>, which OpenCode splits at its first slash"
 	msgCLINoLogin     = "a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef"
 	msgCLILoginFields = "tokenSecretRef and credentialBundleSecretRef sign in to a subscription"
@@ -141,14 +138,14 @@ const (
 // how it signs in, each of which Crewlet's admission holds too (the CRD
 // suite's engine tests hold the lists they name to it).
 func TestLLMProviderSignInValidation(t *testing.T) {
-	// tokenProvider is Claude Code in mode Host on a headless token.
+	// tokenProvider is Claude Code on a headless token.
 	tokenProvider := func(namespace, name string) *v1.LLMProvider {
 		p := llmProvider(namespace, name)
 		p.Spec.Model = "sonnet"
 		p.Spec.Auth = v1.CLIAgentAuth{TokenSecretRef: secretKey("claude", "oauthToken")}
 		return p
 	}
-	boxMode := func(p *v1.LLMProvider) { p.Spec.Mode = v1.CLIAgentModeBox }
+	inE2B := func(p *v1.LLMProvider) { p.Spec.RunIn = v1.SandboxPlacementE2B }
 	// metered signs the provider in with auth mode APIKey on one key.
 	metered := v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey, APIKeySecretRef: secretKey(providerName, apiKeyKey)}
 	// keyInEnv signs agent in to a subscription with no login of its own,
@@ -169,8 +166,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		{
 			name: "every setting is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				p.Spec.Mode = v1.CLIAgentModeBox
-				p.Spec.RunIn = v1.CLIAgentRunInE2B
+				p.Spec.RunIn = v1.SandboxPlacementE2B
 				p.Spec.Auth.Mode = v1.CLIAgentAuthSubscription
 				p.Spec.Env = []v1.SecretEnvVar{{Name: envProxy, ValueFrom: fromSecret("claude", "proxy")}}
 				p.Spec.TimeoutSeconds = 900
@@ -186,9 +182,9 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			},
 		},
 		{
-			name: "Claude Code in mode Box on a metered key is accepted",
+			name: "Claude Code in E2B on a metered key is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				boxMode(p)
+				inE2B(p)
 				p.Spec.Auth = metered
 			},
 		},
@@ -203,80 +199,57 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			// Crewlet hands the run the model as the provider's text
 			// calls pass it, and exports a key in env into the remote
 			// sandbox, where it signs OpenCode in.
-			name: "OpenCode in mode Box on its model provider's key in env is accepted",
+			name: "OpenCode in E2B on its model provider's key in env is accepted",
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey)(p)
-				boxMode(p)
-				p.Spec.RunIn = v1.CLIAgentRunInE2B
+				inE2B(p)
 			},
 		},
 		{
-			name: "OpenCode in mode Box through a gateway's key in env is accepted",
+			name: "OpenCode run Direct through a gateway's key in env is accepted",
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
-				boxMode(p)
+				p.Spec.RunIn = v1.SandboxPlacementDirect
 				p.Spec.Model = modelViaOpenRouter
 			},
 		},
 		{
-			// The bundle never reaches the sandbox; the key in env does,
-			// and the engine reports the provider signed in through its
-			// environment.
-			name: "OpenCode in mode Box on an exported login beside a key in env is accepted",
+			// Where a login can follow a run is the engine's to judge at
+			// each launch, on the seat the run is for, whose own
+			// spec.sandbox may sign the CLI in: the operator reports a
+			// seat whose executor it cannot sign in on the Seat's Ready
+			// (SandboxLoginNotPortable), and admits the provider.
+			name: "OpenCode in E2B on an exported login is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey)(p)
-				boxMode(p)
-				p.Spec.Auth.CredentialBundleSecretRef = secretKey("opencode", "bundle")
-			},
-		},
-		{
-			name: "OpenCode in mode Box on an exported login is refused",
-			mutate: func(p *v1.LLMProvider) {
-				boxMode(p)
+				inE2B(p)
 				p.Spec.Model = modelViaAnthropic
 				p.Spec.Agent = v1.CLIAgentOpenCode
 				p.Spec.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("opencode", "bundle")}
 			},
-			want: msgCLIRemoteLogin,
 		},
 		{
-			// A proxy beside the bundle is configuration: nothing in the
-			// run's environment signs OpenCode in.
-			name: "OpenCode in mode Box on an exported login beside a proxy in env is refused",
+			name: "Claude Code in E2B on an exported login is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				keyInEnv(v1.CLIAgentOpenCode, envProxy)(p)
-				boxMode(p)
-				p.Spec.Auth.CredentialBundleSecretRef = secretKey("opencode", "bundle")
+				inE2B(p)
+				p.Spec.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("claude", "bundle")}
 			},
-			want: msgCLIRemoteLogin,
 		},
 		{
-			name: "OpenCode in mode Box on a proxy alone in env is refused",
+			name: "OpenCode in E2B on a proxy alone in env is refused",
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentOpenCode, envProxy)(p)
-				boxMode(p)
+				inE2B(p)
 			},
 			want: msgCLINoLogin,
 		},
 		{
-			name: "OpenCode in mode Box on auth mode APIKey is refused",
-			mutate: func(p *v1.LLMProvider) {
-				keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey)(p)
-				boxMode(p)
-				p.Spec.Env = nil
-				p.Spec.Auth = metered
-			},
-			want: msgCLIKeyAgent,
-		},
-		{
-			// Hermes signs in through env too, and has no sandbox
-			// runner.
-			name: "Hermes in mode Box is refused",
+			// Hermes signs in through env too, and has no in-box runner.
+			name: "Hermes with a runIn is refused",
 			mutate: func(p *v1.LLMProvider) {
 				keyInEnv(v1.CLIAgentHermes, "OPENROUTER_API_KEY")(p)
-				boxMode(p)
+				inE2B(p)
 			},
-			want: msgCLIAgentRunner,
+			want: msgCLIRunIn,
 		},
 		{
 			name: "a headless token for a CLI other than Claude Code is refused",
@@ -326,25 +299,22 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			want:   msgCLIKey,
 		},
 		{
-			name:   "runIn in mode Host is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.RunIn = v1.CLIAgentRunInE2B },
-			want:   msgCLIRunIn,
-		},
-		{
-			name: "a CLI with no sandbox runner in mode Box is refused",
+			name: "a runIn on a CLI with no in-box runner is refused",
 			mutate: func(p *v1.LLMProvider) {
-				boxMode(p)
+				p.Spec.RunIn = v1.SandboxPlacementDirect
 				p.Spec.Agent = v1.CLIAgentCodex
+				p.Spec.Auth = metered
 			},
-			want: msgCLIAgentRunner,
+			want: msgCLIRunIn,
 		},
 		{
-			name: "an exported login in mode Box is refused",
+			name: "a runIn refusal is reported at runIn",
 			mutate: func(p *v1.LLMProvider) {
-				boxMode(p)
-				p.Spec.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("claude", "bundle")}
+				inE2B(p)
+				p.Spec.Agent = v1.CLIAgentCodex
+				p.Spec.Auth = metered
 			},
-			want: msgCLIRemoteLogin,
+			want: "spec.runIn: Invalid value",
 		},
 		{
 			name:   "a subscription with no login is refused",
@@ -412,9 +382,10 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			want:   `Unsupported value: "Custom"`,
 		},
 		{
-			name:   "a local run is not offered",
-			mutate: func(p *v1.LLMProvider) { boxMode(p); p.Spec.RunIn = "Direct" },
-			want:   `Unsupported value: "Direct"`,
+			// An engine pod has no container runtime to run one in.
+			name:   "a container run is not offered",
+			mutate: func(p *v1.LLMProvider) { p.Spec.RunIn = "Container" },
+			want:   `Unsupported value: "Container"`,
 		},
 	}
 	// The exception is the env sign-in CLIs' alone, so every other CLI the
@@ -423,7 +394,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	// CLI whose profile names a key variable (Codex's CODEX_API_KEY) has it
 	// dropped under Subscription, so the key would never reach it; one whose
 	// profile names none (KimiCode) reads a key only from its own files.
-	for _, agent := range enumOf(t, "llmproviders.crewlet.ai", "spec", "agent") {
+	for _, agent := range llmProviderEnum(t, "spec", "agent") {
 		if slices.Contains(envSignIn, v1.CLIAgentName(agent)) {
 			cases = append(cases,
 				createCase[*v1.LLMProvider]{
@@ -492,8 +463,8 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	// every CLI, and each profile's own configuration directory or switch,
 	// to keep the CLI inside its seat's home and its call's working
 	// directory; env is layered over them, so Crewlet refuses each in env.
-	// Each CLI is signed in with a bundle in mode Host, which the API admits
-	// for every one, so the variable is the only fault.
+	// Each CLI is signed in with a bundle, which the API admits for every
+	// one, so the variable is the only fault.
 	inEnvBesideBundle := func(agent v1.CLIAgentName, variable string) func(*v1.LLMProvider) {
 		return func(p *v1.LLMProvider) {
 			p.Spec.Model = modelViaAnthropic
@@ -502,7 +473,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			p.Spec.Env = []v1.SecretEnvVar{{Name: variable, ValueFrom: fromSecret("cli", "value")}}
 		}
 	}
-	for _, agent := range enumOf(t, "llmproviders.crewlet.ai", "spec", "agent") {
+	for _, agent := range llmProviderEnum(t, "spec", "agent") {
 		name := v1.CLIAgentName(agent)
 		for _, variable := range append(slices.Clone(homeIsolation), cliIsolation[name]...) {
 			cases = append(cases, createCase[*v1.LLMProvider]{
@@ -592,21 +563,21 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	// model id, and Crewlet refuses a model with nothing but white space on
 	// either side of it, white space as Go's strings.TrimSpace reads it: the
 	// Unicode spaces beyond ASCII's among it.
-	openCodeModel := func(model string, mode v1.CLIAgentMode) func(*v1.LLMProvider) {
+	openCodeModel := func(model string, runIn v1.SandboxPlacement) func(*v1.LLMProvider) {
 		return func(p *v1.LLMProvider) {
 			keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
-			p.Spec.Mode = mode
+			p.Spec.RunIn = runIn
 			p.Spec.Model = model
 		}
 	}
-	for _, mode := range []v1.CLIAgentMode{v1.CLIAgentModeHost, v1.CLIAgentModeBox} {
+	for _, runIn := range []v1.SandboxPlacement{"", v1.SandboxPlacementDirect, v1.SandboxPlacementE2B} {
 		for _, model := range []string{
 			modelViaAnthropic, modelViaOpenRouter,
 			" anthropic/claude-sonnet-5", "anthropic/ claude-sonnet-5", "a/b",
 		} {
 			cases = append(cases, createCase[*v1.LLMProvider]{
-				name:   fmt.Sprintf("an OpenCode model %q in mode %s is accepted", model, mode),
-				mutate: openCodeModel(model, mode),
+				name:   fmt.Sprintf("an OpenCode model %q with runIn %q is accepted", model, runIn),
+				mutate: openCodeModel(model, runIn),
 			})
 		}
 		for _, model := range []string{
@@ -615,8 +586,8 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			"\u2028/x", "anthropic/\u0085", "   ",
 		} {
 			cases = append(cases, createCase[*v1.LLMProvider]{
-				name:   fmt.Sprintf("an OpenCode model %q in mode %s is refused", model, mode),
-				mutate: openCodeModel(model, mode),
+				name:   fmt.Sprintf("an OpenCode model %q with runIn %q is refused", model, runIn),
+				mutate: openCodeModel(model, runIn),
 				want:   msgOpenCodeModel,
 			})
 		}
@@ -624,7 +595,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	cases = append(cases,
 		createCase[*v1.LLMProvider]{
 			name:   "an OpenCode model with no provider is reported at model",
-			mutate: openCodeModel(claudeModel, v1.CLIAgentModeHost),
+			mutate: openCodeModel(claudeModel, ""),
 			want:   "spec.model: Invalid value",
 		},
 		createCase[*v1.LLMProvider]{

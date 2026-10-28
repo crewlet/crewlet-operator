@@ -56,10 +56,6 @@ const (
 	// leafPortName names the data pods' leaf listener on the pods and the
 	// headless data Service.
 	leafPortName = "leaf"
-	// scratchVolume is a seat pod's one writable volume: the scratch store
-	// and the native library under render.DataDir, /tmp and HOME, all
-	// under the pool's scratchSizeLimit.
-	scratchVolume = "scratch"
 	// seatPodMinReadySeconds is how long a seat pod must be ready before
 	// it counts as available, and a rollout replaces the next one: two of
 	// the engine's five-second placement passes. /ready turns 200 in the
@@ -82,7 +78,8 @@ const (
 	//   - 300: the event stream's streams, looked up or created across the
 	//     link, which counts as clustered (clusterSequenceBudget);
 	//   - 60: a second connection, for coordination (listenTimeout twice);
-	//   - 300: the coordination buckets, a window of their own
+	//   - 300: the coordination buckets, and the floor of each seat's fencing
+	//     epoch above its sandbox runs, a window of their own
 	//     (clusterSequenceBudget);
 	//   - 90: the fleet's record of its object store (AgreeObjectBackend):
 	//     eight rounds of a write and a read at the client's 5 s default and
@@ -285,7 +282,8 @@ func (r *CompanyReconciler) planSeatPools(
 // seat to its pods; the StatefulSet is then kept, and keeps following the
 // data pods (a new image, a new keyring), which takes a template: the grace
 // period and turns recorded here, and the class's current
-// seatPools.defaults.resources, which alone size a seat pod.
+// seatPools.defaults.resources and volume limits, which alone size a seat
+// pod.
 const SeatPoolAnnotation = "crewlet.ai/seat-pool"
 
 // keptPlan is how a kept seat StatefulSet runs: its SeatPoolAnnotation's pool,
@@ -413,9 +411,6 @@ type seatInputs struct {
 	image string
 	// dataReady is every data pod ready on the current template.
 	dataReady bool
-	// bridgeURL is the data pods' CREWLET_MCP_BRIDGE_URL, which a seat pod
-	// is given too: see seatPodTemplate.
-	bridgeURL string
 }
 
 // reconcileSeatPools writes the seat pools' objects and records what they
@@ -532,7 +527,7 @@ func (r *CompanyReconciler) writeSeatPool(
 			data[configFile] = doc.YAML
 			hash = hashOf(data)
 		}
-		pod, err := seatPodTemplate(c, class, w, secret, in.image, doc, hash, in.bridgeURL)
+		pod, err := seatPodTemplate(c, class, w, secret, in.image, doc, hash)
 		if err != nil {
 			return err
 		}
@@ -732,7 +727,8 @@ func (r *CompanyReconciler) applySeatStatefulSet(
 }
 
 // seatPodTemplate is a seat pod: the engine container with the seats role
-// alone, its scratch volume and its Tier A, and what the class adds.
+// alone, its scratch and sandboxes volumes and its Tier A, and what the
+// class adds.
 //
 // Its probes are the data pod's, on the same port, where the engine serves a
 // node without the ingress role nothing else. /ready is what makes them worth
@@ -749,12 +745,14 @@ func (r *CompanyReconciler) applySeatStatefulSet(
 // Nothing dials a seat pod: the kubelet probes it from its own node, which a
 // NetworkPolicy does not filter, so the seats policy that admits no other pod
 // leaves the probes alone, and the headless Service that governs the pods
-// publishes no port. A box-mode run of one of its seats calls the data pods'
-// tool bridge, which relays each call here over the broker connection the pod
-// dials out on.
+// publishes no port. The executor run of one of its seats calls the data
+// pods' tool bridge at the Company's public address, a box on the pod's own
+// host included, since the pod serves no route of the bridge's to dial on
+// loopback, and the data pod a call reaches relays it here over the broker
+// connection the pod dials out on (engineEnv).
 func seatPodTemplate(
 	c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass,
-	w *seatWorkload, secret, image string, doc *render.BootstrapDocument, hash, bridgeURL string,
+	w *seatWorkload, secret, image string, doc *render.BootstrapDocument, hash string,
 ) (*corev1ac.PodTemplateSpecApplyConfiguration, error) {
 	env, err := engineEnv(c, class, &engineEnvironment{
 		bootstrap:   doc.Env,
@@ -762,12 +760,6 @@ func seatPodTemplate(
 		statefulSet: w.name,
 		// On the scratch volume: the pod starts with an empty one anyway.
 		tursoCache: render.DataDir + "/cache",
-		// THE DATA PODS' ADDRESS, the Company's public one: Crewlet's
-		// bridge address is the fleet's, and a box's call that reaches a
-		// data pod is relayed to the seat pod holding its run's seat over
-		// the broker the seat pod already dials. The seat pod mints its
-		// runs' endpoints on it and serves no route of its own.
-		bridgeURL: bridgeURL,
 	})
 	if err != nil {
 		return nil, err
@@ -776,14 +768,14 @@ func seatPodTemplate(
 		WithVolumeMounts(
 			corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath(render.DataDir),
 			corev1ac.VolumeMount().WithName(configVolumeName).WithMountPath(configDir).WithReadOnly(true),
-			// One volume, so that the pool's scratch limit bounds what
-			// the processes the engine runs write as well. /tmp is also
-			// where the engine makes the directory of the sockets a
-			// host-mode CLI reaches its seat's tools through, so it must
-			// stay writable for the pod's seats to have tools.
-			corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath("/tmp").WithSubPath("tmp"),
-			corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath(homeDir).WithSubPath("home"),
-		)
+		).
+		// The same volume, so that the pool's scratch limit bounds what the
+		// processes the engine runs write as well. /tmp is also where the
+		// engine makes the directory of the sockets a CLI it runs on the pod
+		// reaches its seat's tools through, so it must stay writable for the
+		// pod's seats to have tools.
+		WithVolumeMounts(scratchMounts()...).
+		WithVolumeMounts(sandboxesMount())
 	if res := w.plan.Resources; res != nil {
 		resources, err := applyConfigOf[corev1ac.ResourceRequirementsApplyConfiguration](res)
 		if err != nil {
@@ -798,8 +790,8 @@ func seatPodTemplate(
 	spec.WithContainers(container).
 		WithVolumes(
 			configVolume(secret),
-			corev1ac.Volume().WithName(scratchVolume).WithEmptyDir(corev1ac.EmptyDirVolumeSource().
-				WithSizeLimit(w.plan.ScratchSizeLimit)),
+			scratchVolumeOf(w.plan.ScratchSizeLimit),
+			sandboxesVolumeOf(w.plan.SandboxSizeLimit),
 		)
 	labels, annotations := enginePodMetadata(class, seatWorkloadLabels(c, w), hash)
 	return corev1ac.PodTemplateSpec().

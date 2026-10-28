@@ -85,10 +85,11 @@ spec:
           valueFrom:
             provisioned:
               name: gitlab-token
-  # Ana's code work runs Claude Code on the head of her default chain,
-  # LLMProvider anthropic, whose key Crewlet exports into each of her
-  # sandboxes as ANTHROPIC_API_KEY: spec.llm.sandbox gives code work a
-  # provider, and a key, of its own.
+  # Ana's executor is Claude Code's own run on the head of her default
+  # chain, LLMProvider anthropic, in the company's E2B sandbox, whose key
+  # Crewlet exports into each of her boxes as ANTHROPIC_API_KEY. Her box
+  # gets the GitHub tool server beside its tool bridge, and the tokens git
+  # uses there.
   sandbox:
     mcpServerRefs:
       - name: github
@@ -98,7 +99,7 @@ spec:
           secretKeyRef:
             name: ana-github
             key: token
-      # The same token as the tool server's, for git in the sandbox.
+      # The same token as the tool server's, for git in the box.
       - name: GITLAB_TOKEN
         valueFrom:
           provisioned:

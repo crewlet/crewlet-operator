@@ -22,8 +22,7 @@ import (
 //
 // Every agent seat is pinned, the data pods' too, because an unpinned seat
 // may run on any node, a seat pod among them, and a seat pod cannot serve
-// every seat (a bundled login: seatPodProviders; a box-mode CLI at the
-// head of the executor's chain: ExecutorOf). The
+// every seat (a bundled login: seatPodProviders). The
 // pins are literals, since Crewlet expands no ${NAME} in a Tier B placement,
 // and one label per pod lets placement status and settling map each pod to
 // exactly one workload. Capacity is no reason for it: Crewlet bounds a node
@@ -52,19 +51,96 @@ const (
 // What a seat pool runs with when neither it nor its class says.
 const (
 	// DefaultSeatPodTerminationGracePeriodSeconds is a seat pod's grace
-	// period: five minutes, as for a data pod. A seat pod finishes its
-	// running turns before it exits and puts no bound on that itself, and
-	// Crewlet suggests two to five minutes; the Kubernetes default of thirty
-	// seconds would kill a turn in the middle.
+	// period: five minutes, as for a data pod. A seat pod finishes the turn
+	// segments it runs in its own process before it exits (a seat's executor
+	// run is not one, and is not waited for) and puts no bound on that
+	// itself, and Crewlet suggests two to five minutes; the Kubernetes
+	// default of thirty seconds would kill a segment in the middle.
 	DefaultSeatPodTerminationGracePeriodSeconds = 300
-	// DefaultSeatPodScratchSizeLimit caps a seat pod's scratch emptyDir:
-	// the scratch store (a copy of its seats' memory and its working rows),
-	// the engine's native library of about 20 MB, and what the processes it
-	// runs write (git checkouts, stdio MCP servers' files). Two gibibytes
-	// is ample for the store and the library and leaves the rest to the
-	// processes; a class whose seats clone large repositories raises it.
-	DefaultSeatPodScratchSizeLimit = "2Gi"
 )
+
+// DefaultScratchSizeLimit caps an engine pod's scratch emptyDir when its class
+// does not: data.scratchSizeLimit for a data pod, which keeps its /tmp and
+// HOME there, and seatPools.defaults.scratchSizeLimit for a seat pod, which
+// keeps its scratch store and the store's native library there besides.
+//
+// What fills it is what the processes the engine runs on the pod write off
+// the data volume and outside a box: the stdio tool servers' packages, which
+// a launcher such as npx or uvx installs under HOME, a few hundred MiB each,
+// so a dozen of them come to a few GiB; their and git's scratch files under
+// /tmp, and the sockets of the tool sessions; a seat pod's scratch store, a
+// copy of its seats' memory and working rows, and the library of about 20 MB.
+// And what a seat's Direct executor run writes outside its box: Crewlet
+// points a box's temporary directories into it (TMPDIR, TMP, TEMP,
+// CLAUDE_CODE_TMPDIR) and confines the run to nothing else, so a command
+// that names /tmp outright, or the engine's home, writes here, on the pod's
+// scratch rather than its sandboxes volume (SandboxDir). 10Gi leaves several
+// GiB above the tool servers to that, half of what DefaultSandboxSizeLimit
+// leaves several runs to write inside their boxes.
+//
+// It is a ceiling, not a reservation, as DefaultSandboxSizeLimit is, and errs
+// high for the same reason: it takes nothing from the node until it is
+// written, while a pod that reaches it is evicted with every run and turn on
+// it (on a data pod, the company's API too). What it guards against is a
+// process that writes without end, which it stops at its own pod rather than
+// letting it fill the node's disk under the pods beside it. Nothing measured
+// sets the figure: the right one for a tier is one measured on its own
+// workloads.
+const DefaultScratchSizeLimit = "10Gi"
+
+// ScratchSizeLimitOf is the limit of an engine pod's scratch volume: the
+// class's, or DefaultScratchSizeLimit when it sets none.
+func ScratchSizeLimitOf(class *resource.Quantity) resource.Quantity {
+	if class != nil {
+		return *class
+	}
+	return resource.MustParse(DefaultScratchSizeLimit)
+}
+
+// DefaultSandboxSizeLimit caps an engine pod's sandboxes emptyDir
+// (SandboxDir) when its class does not: data.sandboxSizeLimit for a data
+// pod, seatPools.defaults.sandboxSizeLimit for a seat pod.
+//
+// The volume holds a box for each of the pod's seats' runs that has one: one
+// running for each agent seat at most, as a seat runs one at a time, and one
+// for each run parked on a person's question; and on a data pod the confined
+// box of each Dashboard Assistant deep-work run placed there, in a directory
+// of its own (Crewlet's hostCell, under the same state_dir). A parked run does not hold its
+// seat, so the seat runs on and its next run gets a box of its own, while the
+// parked one's is kept, its processes stopped, until the run resumes on its
+// answer or its pause TTL expires (the Seat's pauseTTLSeconds, else the
+// Company's defaultPauseTTLSeconds, 1800 seconds unless set; 0 tears the box
+// down at once). A box holds the run's checkout, its coding CLI's home and
+// temporary files, and whatever the run installs and builds there: a
+// language's module or package cache and a build tree come to a few GiB for
+// an ordinary project, and more for a large one. 20Gi lets several such boxes
+// live at once on one pod.
+//
+// It is a ceiling, not a reservation, which is why it errs high: an
+// emptyDir's limit takes nothing from the node until the boxes write it, so
+// a generous one costs nothing while they stay small, while one a run
+// reaches evicts the pod, with every run and turn on it (on a data pod, the
+// company's API too). What it guards against is a run that writes without
+// end inside its box, which it stops at its own pod rather than letting it
+// fill the node's disk under the pods beside it. It bounds the box alone: a
+// Direct run is not confined to it, and what the run writes elsewhere counts
+// against the volume it lands on, a path under /tmp named outright or the
+// engine's home against the pod's scratch volume (DefaultScratchSizeLimit),
+// and on a data pod anything under DataDir against the company's data
+// volume, which no emptyDir limit bounds. A class whose seats build large trees
+// raises it, and one that schedules by an ephemeral-storage request sizes
+// the request for it; the right figure for a tier is one measured on its
+// own workloads.
+const DefaultSandboxSizeLimit = "20Gi"
+
+// SandboxSizeLimitOf is the limit of an engine pod's sandboxes volume: the
+// class's, or DefaultSandboxSizeLimit when it sets none.
+func SandboxSizeLimitOf(class *resource.Quantity) resource.Quantity {
+	if class != nil {
+		return *class
+	}
+	return resource.MustParse(DefaultSandboxSizeLimit)
+}
 
 // Topology is where a company's agent seats run: on the data pods, or in one
 // of its seat pools. It is computed from the Company, its EngineClass and its
@@ -100,6 +176,9 @@ type PoolPlan struct {
 	Resources                     *corev1.ResourceRequirements
 	TerminationGracePeriodSeconds int64
 	ScratchSizeLimit              resource.Quantity
+	// SandboxSizeLimit caps each of the pool's pods' sandboxes volume
+	// (SandboxSizeLimitOf), which only the class sets.
+	SandboxSizeLimit resource.Quantity
 }
 
 // Pods is how many pods the pool runs: its replicas, or for a PerSeat pool
@@ -359,13 +438,11 @@ func PoolPlanOf(p *v1alpha1.SeatPool, defaults v1alpha1.SeatPoolDefaults) PoolPl
 		MaxConcurrentTurns:            cmp.Or(p.MaxConcurrentTurns, defaults.MaxConcurrentTurns),
 		Resources:                     defaults.Resources,
 		TerminationGracePeriodSeconds: cmp.Or(p.TerminationGracePeriodSeconds, defaults.TerminationGracePeriodSeconds, DefaultSeatPodTerminationGracePeriodSeconds),
-		ScratchSizeLimit:              resource.MustParse(DefaultSeatPodScratchSizeLimit),
+		ScratchSizeLimit:              ScratchSizeLimitOf(defaults.ScratchSizeLimit),
+		SandboxSizeLimit:              SandboxSizeLimitOf(defaults.SandboxSizeLimit),
 	}
 	if p.Replicas != nil {
 		plan.Replicas = *p.Replicas
-	}
-	if defaults.ScratchSizeLimit != nil {
-		plan.ScratchSizeLimit = *defaults.ScratchSizeLimit
 	}
 	return plan
 }

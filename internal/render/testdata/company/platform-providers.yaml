@@ -40,6 +40,10 @@ providers:
   - own-openai
   - platform-gateway
   - platform-open
+  sandbox:
+    default_run_in: direct
+    local:
+      state_dir: /var/lib/crewlet-sandboxes
 roles:
 - handle: analyst
   kind: agent

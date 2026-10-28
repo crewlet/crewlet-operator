@@ -99,9 +99,15 @@ type ScheduleSpec struct {
 	// +optional
 	Suspend *bool `json:"suspend,omitempty"`
 
-	// timeoutSeconds caps one scheduled turn's wall-clock time: a turn past
-	// it starts no further round and ends failed. Unset is the engine's
-	// default, 180 seconds. Crewlet's `timeout_seconds`.
+	// timeoutSeconds caps one scheduled turn's wall-clock time, the seat's
+	// executor run included: a run still working when it passes is ended,
+	// and the turn starts no further round and ends failed. Unset is the
+	// engine's default, 1800 seconds, which leaves a slow ritual room for its
+	// box's start, its setup, its run and a review sent back once. A
+	// schedule that fires more often than its turns take queues its fires
+	// behind the turn, never merging them, so give one that fires every few
+	// minutes a timeoutSeconds below its period. Crewlet's
+	// `timeout_seconds`.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`

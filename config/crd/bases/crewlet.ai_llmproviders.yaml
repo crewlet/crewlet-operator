@@ -31,8 +31,8 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Applied")].status
       name: Applied
       type: string
-    - jsonPath: .status.conditions[?(@.type=="BoxModeRunnable")].status
-      name: BoxMode
+    - jsonPath: .spec.runIn
+      name: RunIn
       priority: 1
       type: string
     - jsonPath: .metadata.creationTimestamp
@@ -71,9 +71,11 @@ spec:
               agent:
                 description: |-
                   agent is which CLI to drive. The model is written as this CLI reads
-                  it, and a Box-mode run or a seat's code work is handed it
-                  unchanged: OpenCode reads `<provider>/<model>`, such as
-                  `anthropic/claude-sonnet-5`. Crewlet's `agent`.
+                  it, and a seat's executor run on the provider is handed it unchanged:
+                  OpenCode reads `<provider>/<model>`, such as
+                  `anthropic/claude-sonnet-5`. Only ClaudeCode and OpenCode run a
+                  seat's executor; every CLI serves a seat's other phases. Crewlet's
+                  `agent`.
                 enum:
                 - ClaudeCode
                 - Codex
@@ -202,14 +204,13 @@ spec:
                   rule: self == oldSelf
               env:
                 description: |-
-                  env is extra environment of the CLI where it runs in the engine's pod:
-                  in every phase a Host-mode provider runs, and in every phase but the
-                  executor's of a Box-mode one. There the CLI does not get the engine's
-                  environment: it gets the part Crewlet's allowlist names, such as PATH
-                  and the TLS and proxy variables, and the variables the CLI's Crewlet
-                  profile passes through, such as GeminiCLI's GOOGLE_CLOUD_PROJECT, with
-                  a HOME, a TMPDIR and XDG directories of its seat's own rather than the
-                  engine's.
+                  env is extra environment of the CLI, in every phase a seat runs on the
+                  provider, its executor run included. In the engine's pod the CLI does
+                  not get the engine's environment: it gets the part Crewlet's
+                  allowlist names, such as PATH and the TLS and proxy variables, and the
+                  variables the CLI's Crewlet profile passes through, such as
+                  GeminiCLI's GOOGLE_CLOUD_PROJECT, with a HOME, a TMPDIR and XDG
+                  directories of its seat's own rather than the engine's.
                   So a variable the CLI needs beyond that is given here, such as the
                   address of a gateway a CLI reads from its environment (ClaudeCode's
                   ANTHROPIC_BASE_URL). It is how Hermes, Pi and OpenCode sign in under
@@ -223,12 +224,15 @@ spec:
                   not set a variable Crewlet sets there to sign the CLI in with its
                   seat's login either: GeminiCLI's GOOGLE_GENAI_USE_GCA.
 
-                  A Box-mode run, and a seat's code work on the provider, run the CLI
-                  in the Company's E2B sandbox. There it gets none of that environment,
-                  and of env only an OpenCode provider's credential-named variables,
-                  where the coding agent can read them; a variable of no credential that
-                  such a run needs goes in the Seat's spec.sandbox.env. Crewlet's `env`,
-                  a credential position.
+                  A seat's executor run on the provider, Direct or E2B, gets all of env,
+                  beneath the Seat's own spec.sandbox.env, which wins a name: a
+                  gateway's address and the bearer token it takes, a cloud switch such
+                  as CLAUDE_CODE_USE_BEDROCK and its region, a proxy, so the run reaches
+                  its model as the provider's other phases do. A ClaudeCode sign-in in
+                  env (ANTHROPIC_AUTH_TOKEN or a CLAUDE_CODE_USE_* toggle) also signs an
+                  E2B run in. A Seat whose spec.sandbox.env signs ClaudeCode in itself
+                  keeps every sign-in of the provider's out of its runs, and the rest of
+                  env in them. Crewlet's `env`, a credential position.
                 items:
                   description: |-
                     SecretEnvVar is a named credential delivered as an environment variable,
@@ -302,21 +306,13 @@ spec:
                   from inside one of a run's tool calls (a delegated worker's) borrows
                   the run's place rather than wait for another, which the runs holding
                   every place could leave it waiting for forever. Unset takes
-                  Crewlet's default of 4. A Box-mode executor's run, in the sandbox,
-                  takes none. Crewlet's `max_concurrent`.
+                  Crewlet's default of 4. A seat's executor run takes none: it is a
+                  process of its own box, and a seat runs one at a time. Crewlet's
+                  `max_concurrent`.
                 format: int32
                 maximum: 64
                 minimum: 1
                 type: integer
-              mode:
-                description: |-
-                  mode is where a seat's executor runs the CLI's own loop: Host, in the
-                  engine's pod that holds the seat, or Box, in the Company's sandbox.
-                  Unset is Host. Crewlet's `mode`.
-                enum:
-                - Host
-                - Box
-                type: string
               model:
                 description: |-
                   model is the model the CLI runs, in the CLI's own grammar: an alias
@@ -338,9 +334,18 @@ spec:
                   rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
               runIn:
                 description: |-
-                  runIn is where a Box-mode run happens. Unset is the Company's
-                  sandbox, which is E2B. Crewlet's `run_in`.
+                  runIn is where a seat's executor run launched on the provider happens:
+                  Direct, a process of the engine pod that holds the seat, or E2B, the
+                  Company's E2B sandbox, which spec.sandbox.e2b must then configure.
+                  Unset takes the Company's spec.sandbox.defaultRunIn. It is read
+                  wherever a seat's executor can launch on the provider: as the first
+                  ClaudeCode or OpenCode member of its executor chain, and as a later
+                  one a launch falls back to while the members before it sit out their
+                  spent plans, so each run is placed by the member it runs on. Only
+                  ClaudeCode and OpenCode take it, as only they run an executor.
+                  Crewlet's `run_in`.
                 enum:
+                - Direct
                 - E2B
                 type: string
               timeoutSeconds:
@@ -355,8 +360,11 @@ spec:
                   afresh. Unset takes Crewlet's default of 600, the ceiling Anthropic
                   documents for one answer of a current Claude model at its full
                   output. A timeout is retryable, so a seat's chain moves on to its
-                  next provider. It bounds the CLI where it runs in the engine's pod;
-                  a Box-mode executor's run in the sandbox is not bounded by it.
+                  next provider. It bounds the phases the CLI runs in the engine's
+                  process (the reviewer, delegated workers, the summariser, the judge);
+                  a seat's executor run on the provider, its CLI's own run in a box, is
+                  bounded by its round cap instead (the Company's
+                  spec.sandbox.defaultMaxTurns and the Seat's spec.sandbox.maxTurns).
                   Crewlet's `timeout_seconds`.
                 format: int32
                 minimum: 1
@@ -386,13 +394,12 @@ spec:
                 CLI carries no measured web denial, and refuses the setting'
               rule: '!has(self.webTools) || self.webTools != ''Denied'' || self.agent
                 in [''ClaudeCode'', ''Codex'', ''OpenCode'', ''Pi'']'
-            - message: 'runIn applies to mode Box only: in mode Host the CLI runs
-                in the engine''s pod'
-              rule: '!has(self.runIn) || (has(self.mode) && self.mode == ''Box'')'
-            - message: 'mode Box runs a CLI Crewlet has a sandbox runner for: ClaudeCode
-                or OpenCode'
-              rule: '!has(self.mode) || self.mode != ''Box'' || self.agent in [''ClaudeCode'',
-                ''OpenCode'']'
+            - fieldPath: .runIn
+              message: 'runIn places the provider''s executor runs, and Crewlet launches
+                an executor run only on ClaudeCode or OpenCode: a provider of another
+                CLI serves a seat''s other phases alone, in the engine''s pod, and
+                Crewlet refuses a runIn on it'
+              rule: '!has(self.runIn) || self.agent in [''ClaudeCode'', ''OpenCode'']'
             - fieldPath: .auth
               message: 'a Subscription login needs auth.tokenSecretRef or auth.credentialBundleSecretRef:
                 a pod has no terminal to log in at. Hermes, Pi and OpenCode alone
@@ -479,27 +486,17 @@ spec:
               rule: (has(self.auth) && has(self.auth.mode) && self.auth.mode != 'Subscription')
                 || !has(self.env) || !self.env.exists(e, self.agent == 'GeminiCLI'
                 && e.name == 'GOOGLE_GENAI_USE_GCA')
-            - message: 'a Subscription login reaches a Box-mode run in a remote sandbox
-                only as a variable of its environment: give ClaudeCode auth.tokenSecretRef,
-                or use auth mode APIKey, and give OpenCode its model provider''s key
-                in env under a name Crewlet reads as a credential, such as ANTHROPIC_API_KEY
-                or OPENROUTER_API_KEY. A credential bundle stays on the engine''s
-                data volume'
-              rule: '!has(self.mode) || self.mode != ''Box'' || (has(self.auth) &&
-                has(self.auth.mode) && self.auth.mode != ''Subscription'') || (self.agent
-                == ''ClaudeCode'' && has(self.auth) && has(self.auth.tokenSecretRef))
-                || (self.agent == ''OpenCode'' && has(self.env) && self.env.exists(e,
-                e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')))'
             - fieldPath: .model
               message: 'an OpenCode model is <provider>/<model>, which OpenCode splits
                 at its first slash: a model with no slash, or with nothing but white
                 space before or after it, names no provider or no model, and every
-                call the provider makes, a Box-mode run''s included, would fail inside
+                call the provider makes, an executor run''s included, would fail inside
                 OpenCode, which OpenCode 2 refuses as Invalid model reference. Name
                 the provider as OpenCode spells it (opencode models --standalone lists
                 them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5,
-                with that provider''s key in env or, in mode Host, a login of OpenCode''s
-                own in auth.credentialBundleSecretRef'
+                with that provider''s key in env, or a login of OpenCode''s own in
+                auth.credentialBundleSecretRef, which a Direct run is seeded with
+                and an E2B run never receives'
               rule: self.agent != 'OpenCode' || !has(self.model) || (self.model.indexOf('/')
                 >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size()
                 > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size()
@@ -511,10 +508,10 @@ spec:
               conditions:
                 description: |-
                   conditions are Accepted (the Company exists), ResolvedRefs (every
-                  Secret key exists), Applied (the provider is in the revision the
-                  engine runs) and, on a provider in mode Box, BoxModeRunnable
-                  (whether its runs can call a seat's tools back through the Company's
-                  public address).
+                  Secret key exists) and Applied (the provider is in the revision the
+                  engine runs; False with SandboxPlacementNotOffered while a seat's
+                  executor can launch on it in a cell the Company's spec.sandbox does
+                  not configure).
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.

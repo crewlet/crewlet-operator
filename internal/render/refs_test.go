@@ -380,7 +380,7 @@ func reportedCases() []reportedCase {
 	return []reportedCase{
 		{
 			// Nothing creates the value until an Integration provisions:
-			// the seat's tool server is not started, and its code work runs
+			// the seat's tool server is not started, and its executor runs
 			// without it.
 			name: "a seat names a provisioned credential and no integration provisions", fn: fnSeatCredential,
 			input: sampleCompany,
@@ -401,7 +401,7 @@ func reportedCases() []reportedCase {
 				in.Integrations = slices.DeleteFunc(in.Integrations, func(i v1alpha1.Integration) bool { return i.Name == sampleGitLab })
 				for i := range in.Seats {
 					in.Seats[i].Spec.MCP = slices.DeleteFunc(in.Seats[i].Spec.MCP, func(c v1alpha1.MCPCredentials) bool { return c.Name == sampleGitLab })
-					if sb := in.Seats[i].Spec.Sandbox; sb != nil {
+					if sb := &in.Seats[i].Spec.Sandbox; seatSandboxSet(sb) {
 						sb.Env = slices.DeleteFunc(sb.Env, func(e v1alpha1.SeatEnvVar) bool { return e.ValueFrom.SecretKeyRef.Name == "" })
 					}
 				}
@@ -672,16 +672,15 @@ func TestEveryReferenceInADocumentIsTheOperators(t *testing.T) {
 // providerCLI names the LLMProvider cliProvider makes.
 const providerCLI = "claude-cli"
 
-// cliProvider is a provider of Claude Code on a headless token, in
-// the mode given.
-func cliProvider(mode v1alpha1.CLIAgentMode) v1alpha1.LLMProvider {
+// cliProvider is a provider of Claude Code on a headless token, placed in
+// the Company's default cell.
+func cliProvider() v1alpha1.LLMProvider {
 	return v1alpha1.LLMProvider{
 		Namespace: testNamespace,
 		Name:      providerCLI,
 		Spec: v1alpha1.LLMProviderSpec{
 			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
-			LLMProviderSettings: v1alpha1.LLMProviderSettings{Agent: v1alpha1.CLIAgentClaudeCode, Model: "sonnet"},
-			Mode:                mode,
+			LLMProviderSettings: v1alpha1.LLMProviderSettings{Agent: v1alpha1.CLIAgentClaudeCode, Model: modelSonnet},
 			Auth: v1alpha1.CLIAgentAuth{
 				TokenSecretRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "oauthToken"},
 			},

@@ -886,6 +886,7 @@ func TestEngineClassSeatPools(t *testing.T) {
 					},
 					TerminationGracePeriodSeconds: 600,
 					ScratchSizeLimit:              new(resource.MustParse("4Gi")),
+					SandboxSizeLimit:              new(resource.MustParse("40Gi")),
 				},
 			}),
 		},
@@ -927,6 +928,52 @@ func TestEngineClassSeatPools(t *testing.T) {
 			}),
 			want: "should be greater than or equal to 30",
 		},
+	})
+}
+
+// TestEngineClassSandboxes holds both limits on the volume an engine pod
+// keeps its boxes in, a data pod's and a seat pod's, to the 1Gi a box needs
+// at the least, in binary and decimal units alike.
+func TestEngineClassSandboxes(t *testing.T) {
+	data := func(size string) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) { c.Spec.Data.SandboxSizeLimit = new(resource.MustParse(size)) }
+	}
+	pools := func(size string) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) {
+			c.Spec.SeatPools = v1.SeatPoolSettings{
+				Policy: v1.SeatPoolsAllowed, MaxPods: 6,
+				Defaults: v1.SeatPoolDefaults{SandboxSizeLimit: new(resource.MustParse(size))},
+			}
+		}
+	}
+	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
+		{name: "a data pod's limit of 1Gi is accepted", mutate: data("1Gi")},
+		{name: "a data pod's limit of 1Gi in bytes is accepted", mutate: data("1073741824")},
+		{name: "a data pod's limit of 500Gi is accepted", mutate: data("500Gi")},
+		{name: "a data pod's limit under 1Gi is refused", mutate: data("1023Mi"), want: msgSandboxFloor},
+		{name: "a data pod's limit of 1G, under 1Gi, is refused", mutate: data("1G"), want: msgSandboxFloor},
+		{name: "a data pod's limit of zero is refused", mutate: data("0"), want: msgSandboxFloor},
+		{name: "a seat pod's limit of 1Gi is accepted", mutate: pools("1Gi")},
+		{name: "a seat pod's limit under 1Gi is refused", mutate: pools("1023Mi"), want: msgSandboxFloor},
+		{name: "a seat pod's limit of 1G, under 1Gi, is refused", mutate: pools("1G"), want: msgSandboxFloor},
+	})
+}
+
+// TestEngineClassDataScratch holds the limit on a data pod's scratch volume,
+// its /tmp and HOME, to the 256Mi the processes the engine runs there need at
+// the least, in binary and decimal units alike, with the data pods' own
+// message rather than a seat pod's.
+func TestEngineClassDataScratch(t *testing.T) {
+	data := func(size string) func(*v1.EngineClass) {
+		return func(c *v1.EngineClass) { c.Spec.Data.ScratchSizeLimit = new(resource.MustParse(size)) }
+	}
+	runCreateCases(t, engineClass, []createCase[*v1.EngineClass]{
+		{name: "a data pod's limit of 256Mi is accepted", mutate: data("256Mi")},
+		{name: "a data pod's limit of 256Mi in bytes is accepted", mutate: data("268435456")},
+		{name: "a data pod's limit of 100Gi is accepted", mutate: data("100Gi")},
+		{name: "a data pod's limit under 256Mi is refused", mutate: data("255Mi"), want: msgDataScratchFloor},
+		{name: "a data pod's limit of 256M, under 256Mi, is refused", mutate: data("256M"), want: msgDataScratchFloor},
+		{name: "a data pod's limit of zero is refused", mutate: data("0"), want: msgDataScratchFloor},
 	})
 }
 

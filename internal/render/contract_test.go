@@ -91,6 +91,14 @@ type advisory struct{ path, says string }
 // tenant's is.
 var advisoryNoHumanSeat = advisory{path: keyRoles, says: "no `kind: human` seats"}
 
+// advisoryExecutorNeverRuns is Crewlet's advisory on the first seat of a
+// document whose executor chain holds a CLI that can never run its executor
+// beside one that can (config.executorWarnings): a launch passes over it, and
+// it serves the seat's other phases alone. The platform-providers case's seat
+// puts the Company's own Codex ahead of a platform Claude Code, a choice of
+// the tenant's the render reports on the seat's Ready rather than refuses.
+var advisoryExecutorNeverRuns = advisory{path: keyRoles + "[0].llm", says: "'s executor never runs on"}
+
 // advisoriesOf sorts what the validator warned against what a case expects:
 // the warnings no expected advisory accounts for, and the expected advisories
 // no warning gave. An expected advisory accounts for one warning of kind
@@ -1271,24 +1279,39 @@ func TestContractScheduleRefusalsReachTheSchedule(t *testing.T) {
 	}
 }
 
-// TestContractCLIAgentRefusalsReachTheProvider has the engine's dry run refuse
-// the mistakes of a provider's CLI no API rule can see, because each turns
-// on another object, and checks that the document attributes every problem to
-// the LLMProvider, which is where the controller reports it.
-func TestContractCLIAgentRefusalsReachTheProvider(t *testing.T) {
-	const providerBox = "claude-box"
+// TestContractExecutorRefusalsReachTheirObject has the engine's dry run
+// refuse the mistakes about a seat's executor that the render leaves to it,
+// as no object's own spec shows them, and checks that the document attributes
+// every problem to the object that holds the setting, which is where the
+// controller reports it (Invalid): a setup file at an absolute path, which a
+// Direct box writes nowhere, on a step of the Company's or of a Seat's. A
+// token ceiling below the executor's floor is
+// TestContractExecutorFloorIsTheEngines's.
+func TestContractExecutorRefusalsReachTheirObject(t *testing.T) {
+	const seatBuilder = "builder"
+	absolute := v1alpha1.SandboxSetupStep{Name: "tool", Files: []v1alpha1.SandboxFile{{
+		Path: "/usr/local/bin/tool", ValueFrom: v1alpha1.SecretValueSource{
+			SecretKeyRef: v1alpha1.SecretKeyReference{Name: "tool", Key: "binary"},
+		},
+	}}}
 	client := enginetest.Start(t).Client()
 	for _, c := range []struct {
-		name     string
-		mutate   func(*Input)
-		provider string
+		name   string
+		mutate func(*Input)
+		want   ObjectRef
 	}{
 		{
-			// The run is a sandbox run, and the company has no sandbox to
-			// run it in.
-			name:     "box mode in a company with no sandbox",
-			mutate:   func(in *Input) { in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{} },
-			provider: providerBox,
+			// builder's executor can run Direct, on its fallback.
+			name: "a seat's setup file a Direct box cannot write",
+			mutate: func(in *Input) {
+				seat(in, seatBuilder).Spec.Sandbox = v1alpha1.SeatSandbox{Setup: []v1alpha1.SandboxSetupStep{absolute}}
+			},
+			want: ObjectRef{Kind: KindSeat, Name: seatBuilder},
+		},
+		{
+			name:   "the company's setup file a Direct box cannot write",
+			mutate: func(in *Input) { in.Company.Spec.Sandbox.Setup = []v1alpha1.SandboxSetupStep{absolute} },
+			want:   ObjectRef{Kind: KindCompany, Name: "forge"},
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -1306,13 +1329,95 @@ func TestContractCLIAgentRefusalsReachTheProvider(t *testing.T) {
 			if len(verr.Problems) == 0 {
 				t.Fatalf("the refusal names no problem: %v", verr)
 			}
-			want := ObjectRef{Kind: KindLLMProvider, Name: c.provider}
 			for _, p := range verr.Problems {
-				if got, ok := doc.Attribute(PathOf(p.Segments)); !ok || got != want {
-					t.Errorf("the engine's problem at %q (%s) is attributed to %v, %v; want %v", p.Path, p.Message, got, ok, want)
+				if got, ok := doc.Attribute(PathOf(p.Segments)); !ok || got != c.want {
+					t.Errorf("the engine's problem at %q (%s) is attributed to %v, %v; want %v", p.Path, p.Message, got, ok, c.want)
 				}
 			}
 		})
+	}
+}
+
+// executorFloorTokens is Crewlet's default turn_engine.executor_min_budget_tokens:
+// the least of every token window of an agent seat's, and of its Company's,
+// that an executor launch needs left, so a ceiling below it parks the seat
+// before its first run and the engine refuses it on every write. The
+// Company's and the Seat's tokenBudget docs, the cli-agents and
+// troubleshooting guides and ADR-0008 state it, since the API cannot refuse
+// it (spec.engineConfig may move the floor), and
+// TestContractExecutorFloorIsTheEngines holds it to the engine.
+const executorFloorTokens = 25000
+
+// TestContractExecutorFloorIsTheEngines has the engine's dry run judge a token
+// ceiling at executorFloorTokens and one token under it, in every window of an
+// agent Seat's tokenBudget and of the Company's: the floor the operator's docs
+// state is the one the engine applies at and refuses below, and the document
+// attributes the refusal to the object whose window it is, where the
+// controller reports it (Invalid), at that window.
+func TestContractExecutorFloorIsTheEngines(t *testing.T) {
+	const seatBuilder = "builder"
+	client := enginetest.Start(t).Client()
+	windows := []struct {
+		name   string
+		budget func(int64) v1alpha1.TokenBudget
+	}{
+		{"day", func(n int64) v1alpha1.TokenBudget { return v1alpha1.TokenBudget{Day: n} }},
+		{"week", func(n int64) v1alpha1.TokenBudget { return v1alpha1.TokenBudget{Week: n} }},
+		{"month", func(n int64) v1alpha1.TokenBudget { return v1alpha1.TokenBudget{Month: n} }},
+	}
+	scopes := []struct {
+		name string
+		set  func(*Input, v1alpha1.TokenBudget)
+		want ObjectRef
+	}{
+		{
+			name: "an agent seat's",
+			set:  func(in *Input, b v1alpha1.TokenBudget) { seat(in, seatBuilder).Spec.TokenBudget = b },
+			want: ObjectRef{Kind: KindSeat, Name: seatBuilder},
+		},
+		{
+			name: "the company's",
+			set:  func(in *Input, b v1alpha1.TokenBudget) { in.Company.Spec.TokenBudget = b },
+			want: ObjectRef{Kind: KindCompany, Name: "forge"},
+		},
+	}
+	dryRun := func(t *testing.T, set func(*Input, v1alpha1.TokenBudget), budget v1alpha1.TokenBudget) (*Document, error) {
+		t.Helper()
+		in := companyCaseNamed(t, "cli-agent").input(t)
+		set(in, budget)
+		doc, err := Company(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = client.ApplyConfig(t.Context(), engine.ApplyRequest{Document: doc.YAML, DryRun: true})
+		return doc, err
+	}
+	for _, scope := range scopes {
+		for _, window := range windows {
+			t.Run(scope.name+" "+window.name+" ceiling", func(t *testing.T) {
+				if _, err := dryRun(t, scope.set, window.budget(executorFloorTokens)); err != nil {
+					t.Errorf("a ceiling of %d, the floor the docs state, is refused: %v", executorFloorTokens, err)
+				}
+				doc, err := dryRun(t, scope.set, window.budget(executorFloorTokens-1))
+				verr, ok := errors.AsType[*engine.ValidationError](err)
+				if !ok {
+					t.Fatalf("a ceiling of %d, under the floor the docs state, is answered %v, want a refusal",
+						executorFloorTokens-1, err)
+				}
+				if len(verr.Problems) == 0 {
+					t.Fatalf("the refusal names no problem: %v", verr)
+				}
+				for _, p := range verr.Problems {
+					if got, ok := doc.Attribute(PathOf(p.Segments)); !ok || got != scope.want {
+						t.Errorf("the engine's problem at %q (%s) is attributed to %v, %v; want %v",
+							p.Path, p.Message, got, ok, scope.want)
+					}
+					if !strings.HasSuffix(p.Path, "token_budget."+window.name) {
+						t.Errorf("the engine's problem is at %q (%s), not at the %s window", p.Path, p.Message, window.name)
+					}
+				}
+			})
+		}
 	}
 }
 
@@ -1335,14 +1440,14 @@ func TestContractCLIAgentRefusalsReachTheProvider(t *testing.T) {
 //
 // The first case names the pair in the company's first revision. The second
 // runs the case as rendered, then moves the reviewer's provider to another
-// CLI under claude-box's loginName: the registry, holding that directory
+// CLI under claude-e2b's loginName: the registry, holding that directory
 // under Claude Code since the first revision, refused the move on every node
 // that had run it, and applied it only on a node restarted since. The guide
 // says the move applies with no restart, so it is applied to the engine that
 // runs the first revision, which enginetest never restarts.
 func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 	const (
-		providerClaude = "claude-box"
+		providerClaude = "claude-e2b"
 		providerCodex  = "codex"
 	)
 
@@ -1385,7 +1490,7 @@ func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 
 		// The reviewer's provider moves from Codex to OpenCode, which reads
 		// the same OpenAI model as <provider>/<model>, and onto the login
-		// name of claude-box, a Claude Code provider: OpenCode opens a
+		// name of claude-e2b, a Claude Code provider: OpenCode opens a
 		// login of its own beside Claude Code's in the directory Claude
 		// Code has held since the first revision.
 		login := loginNameOf(modelProvider(in, providerClaude))
@@ -1402,7 +1507,7 @@ func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 		putCredentials(t, client, moved)
 		applied, err := client.ApplyConfig(t.Context(), engine.ApplyRequest{
 			Document: moved.YAML, IfMatch: running.RevisionID,
-			Summary: "codex moves to OpenCode under claude-box's loginName",
+			Summary: "codex moves to OpenCode under claude-e2b's loginName",
 		})
 		if err != nil {
 			t.Fatalf("the engine refused a provider moved to another CLI under another provider's loginName: %v", err)

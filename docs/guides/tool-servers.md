@@ -193,7 +193,7 @@ go.
   document, as anywhere else (`SecretNotFound`).
 
 A Seat's `spec.sandbox` and a setup step take an `optionalKeys` of their own
-for a coding run's environment and files
+for a seat's executor run's environment and files
 ([A value a run may go without](cli-agents.md#a-value-a-run-may-go-without)).
 Crewlet's
 [A key that may go without its value](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#a-key-that-may-go-without-its-value)

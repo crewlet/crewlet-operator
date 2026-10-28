@@ -73,6 +73,7 @@ func fullCompany(c *v1.Company) {
 		APIKeySecretRef: secretKey("openai", apiKeyKey),
 	}
 	c.Spec.Sandbox = v1.SandboxSettings{
+		DefaultRunIn:           v1.SandboxPlacementE2B,
 		E2B:                    v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
 		DefaultPauseTTLSeconds: new(int32(0)),
 	}
@@ -717,10 +718,11 @@ func TestCompanyAssistantValidation(t *testing.T) {
 
 // TestCompanyAssistantDeepWorkValidation covers the assistant's deep work:
 // every bound Crewlet takes is accepted at its edges and refused past them,
-// it runs on an LLMProvider and never on a platform provider, which runs in
-// mode Host, and it needs the Company's E2B sandbox, the one cell the
-// operator runs it in. Whether the provider is in mode Box and drives
-// ClaudeCode turns on its own spec, which the engine judges in the dry run.
+// it runs on an LLMProvider or a platform provider, and it needs
+// spec.sandbox, which, unless its provider's runIn places it, states whether
+// it runs in the Company's E2B sandbox or confined on the engine pod, and so
+// needs no e2b. Whether the provider drives ClaudeCode turns on its own spec,
+// which the engine judges in the dry run.
 func TestCompanyAssistantDeepWorkValidation(t *testing.T) {
 	deepWork := func(edit func(*v1.CompanyAssistantDeepWork)) func(*v1.Company) {
 		return func(c *v1.Company) {
@@ -731,11 +733,18 @@ func TestCompanyAssistantDeepWorkValidation(t *testing.T) {
 			c.Spec.Assistant = v1.CompanyAssistant{
 				Enabled: new(true), LLM: []v1.LLMProviderReference{{Name: providerName}}, DeepWork: d,
 			}
-			c.Spec.Sandbox = v1.SandboxSettings{E2B: v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)}}
+			c.Spec.Sandbox = v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementDirect}
 		}
 	}
 	cases := []createCase[*v1.Company]{
 		{name: "deep work on an LLMProvider is accepted", mutate: deepWork(nil)},
+		{
+			name: "deep work in a Company with an E2B sandbox is accepted",
+			mutate: func(c *v1.Company) {
+				deepWork(nil)(c)
+				c.Spec.Sandbox.E2B = v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)}
+			},
+		},
 		{
 			name: "every bound at its edge is accepted",
 			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
@@ -749,11 +758,12 @@ func TestCompanyAssistantDeepWorkValidation(t *testing.T) {
 			}),
 		},
 		{
-			name: "deep work on a platform provider is refused",
+			// A platform provider driving ClaudeCode runs deep work as an
+			// LLMProvider does: Crewlet asks only which CLI it drives.
+			name: "deep work on a platform provider is accepted",
 			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
 				d.LLM.Kind = v1.LLMProviderKindPlatform
 			}),
-			want: "a platform model provider runs in mode Host",
 		},
 		{
 			// A bound keeps the block in the request: an empty one is
@@ -770,7 +780,8 @@ func TestCompanyAssistantDeepWorkValidation(t *testing.T) {
 				deepWork(nil)(c)
 				c.Spec.Sandbox = v1.SandboxSettings{}
 			},
-			want: "assistant.deepWork needs spec.sandbox",
+			want: "assistant.deepWork needs spec.sandbox: a deep-work run has its own shell, files and web tools, " +
+				"and runs in its provider's runIn, else in the Company's E2B sandbox",
 		},
 	}
 	for _, bound := range []struct {
@@ -897,6 +908,54 @@ func TestCompanyImmutability(t *testing.T) {
 	})
 }
 
+// TestSandboxPlacementValidation covers where a Company's agent seats'
+// executors run: spec.sandbox names a default cell, Direct with nothing more
+// or E2B with the sandbox it configures, and offers no container cell, as an
+// engine pod has no container runtime to run one in.
+func TestSandboxPlacementValidation(t *testing.T) {
+	sandbox := func(sb v1.SandboxSettings) func(*v1.Company) {
+		return func(c *v1.Company) { c.Spec.Sandbox = sb }
+	}
+	e2b := v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)}
+	runCreateCases(t, company, []createCase[*v1.Company]{
+		{
+			name:   "executors run Direct with nothing more",
+			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementDirect}),
+		},
+		{
+			name:   "executors run in E2B with its sandbox",
+			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementE2B, E2B: e2b}),
+		},
+		{
+			// A provider's runIn may place its runs in E2B.
+			name:   "executors run Direct beside an E2B sandbox",
+			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementDirect, E2B: e2b}),
+		},
+		{
+			name:   "an E2B default without its sandbox is refused",
+			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementE2B}),
+			want:   msgSandboxE2BDefault,
+		},
+		{
+			name:   "an E2B default without its sandbox is reported at defaultRunIn",
+			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: v1.SandboxPlacementE2B}),
+			want:   "spec.sandbox.defaultRunIn: Invalid value",
+		},
+		{
+			// Crewlet refuses a catalogue of more than one cell that
+			// names no default, and the API states it whatever the cells.
+			name:   "a sandbox naming no default is refused",
+			mutate: sandbox(v1.SandboxSettings{E2B: e2b}),
+			want:   "spec.sandbox.defaultRunIn: Required value",
+		},
+		{
+			name:   "a container default is not offered",
+			mutate: sandbox(v1.SandboxSettings{DefaultRunIn: "Container"}),
+			want:   `Unsupported value: "Container"`,
+		},
+	})
+}
+
 // TestSandboxSetupFileValidation covers the API's rules on a setup file's
 // path, on a Company's steps and a Seat's: another account's home and white
 // space alone are refused, the box's own home under ~/ is taken, and so is ~
@@ -909,8 +968,9 @@ func TestSandboxSetupFileValidation(t *testing.T) {
 	onCompany := func(path string) func(*v1.Company) {
 		return func(c *v1.Company) {
 			c.Spec.Sandbox = v1.SandboxSettings{
-				E2B:   v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
-				Setup: writing(path),
+				DefaultRunIn: v1.SandboxPlacementE2B,
+				E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
+				Setup:        writing(path),
 			}
 		}
 	}
@@ -928,17 +988,17 @@ func TestSandboxSetupFileValidation(t *testing.T) {
 	runCreateCases(t, seat, []createCase[*v1.Seat]{
 		{
 			name:   "a seat's file under another account's home is refused",
-			mutate: func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{Setup: writing("~root/.npmrc")} },
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{Setup: writing("~root/.npmrc")} },
 			want:   msgSetupFileTilde,
 		},
 		{
 			name:   "a seat's file of white space alone is refused",
-			mutate: func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{Setup: writing(" ")} },
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{Setup: writing(" ")} },
 			want:   msgSetupFileBlank,
 		},
 		{
 			name:   "a seat's file under ~/ is accepted",
-			mutate: func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{Setup: writing("~/.npmrc")} },
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{Setup: writing("~/.npmrc")} },
 		},
 	})
 }
@@ -951,8 +1011,9 @@ func TestSandboxSetupStepValidation(t *testing.T) {
 	onCompany := func(step v1.SandboxSetupStep) func(*v1.Company) {
 		return func(c *v1.Company) {
 			c.Spec.Sandbox = v1.SandboxSettings{
-				E2B:   v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
-				Setup: []v1.SandboxSetupStep{step},
+				DefaultRunIn: v1.SandboxPlacementE2B,
+				E2B:          v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
+				Setup:        []v1.SandboxSetupStep{step},
 			}
 		}
 	}
@@ -978,13 +1039,13 @@ func TestSandboxSetupStepValidation(t *testing.T) {
 		{
 			name: "a seat's step named with white space alone is refused",
 			mutate: func(s *v1.Seat) {
-				s.Spec.Sandbox = &v1.SeatSandbox{Setup: []v1.SandboxSetupStep{{Name: " ", Brief: "b"}}}
+				s.Spec.Sandbox = v1.SeatSandbox{Setup: []v1.SandboxSetupStep{{Name: " ", Brief: "b"}}}
 			},
 			want: msgSetupStepName,
 		},
 		{
 			name:   "a seat's step that does nothing is refused",
-			mutate: func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{Setup: []v1.SandboxSetupStep{{Name: "x"}}} },
+			mutate: func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{Setup: []v1.SandboxSetupStep{{Name: "x"}}} },
 			want:   msgSetupStepEmpty,
 		},
 	})

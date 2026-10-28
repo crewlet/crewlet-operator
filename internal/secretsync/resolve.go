@@ -348,10 +348,10 @@ func (d Desired) Missing() []*MissingError {
 }
 
 // Empty are the references whose Secret key holds an empty value, sorted. The
-// value is pushed as it is: the engine starts no tool server or coding run
-// with a value that resolves to nothing, unless the key it is written under
-// is optional, when it leaves the key out, and reads it as written anywhere
-// else.
+// value is pushed as it is: the engine starts no tool server with a value
+// that resolves to nothing and starts an executor run without it, leaves the
+// key out where it is written under an optional key, and reads it as written
+// anywhere else.
 func (d Desired) Empty() []secretref.Key {
 	return slices.SortedFunc(maps.Keys(d.empty), secretref.Compare)
 }

@@ -4,6 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 )
 
@@ -104,8 +107,7 @@ func fullAgent(s *v1.Seat) {
 	}
 	s.Spec.LearningEnabled = new(false)
 	s.Spec.MCP = []v1.MCPCredentials{mcpCredentials("github")}
-	s.Spec.Sandbox = &v1.SeatSandbox{
-		CodingAgent:   v1.CodingAgentClaudeCode,
+	s.Spec.Sandbox = v1.SeatSandbox{
 		MaxTurns:      new(int32(0)),
 		MCPServerRefs: []v1.LocalObjectReference{{Name: "github"}},
 	}
@@ -360,7 +362,7 @@ func TestSeatValidation(t *testing.T) {
 		},
 		{
 			name:   "a sandbox on a human seat is refused",
-			mutate: asHuman(func(s *v1.Seat) { s.Spec.Sandbox = &v1.SeatSandbox{} }),
+			mutate: asHuman(func(s *v1.Seat) { s.Spec.Sandbox = v1.SeatSandbox{MaxTurns: new(int32(48))} }),
 			want:   msgHumanForbidden,
 		},
 		{
@@ -551,6 +553,29 @@ func TestSeatValidation(t *testing.T) {
 			want: msgWorkflowsFullAccess,
 		},
 	})
+}
+
+// TestSeatEmptySandboxIsRefused proves a Seat's spec.sandbox written as {}
+// is refused: every agent seat's executor runs in a box whether or not the
+// seat says anything of it, so an empty block would read as a switch that
+// switches nothing. Only an unstructured object can send one, since the
+// typed client omits a sandbox that sets nothing.
+func TestSeatEmptySandboxIsRefused(t *testing.T) {
+	namespace := newNamespace(t)
+	content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(seat(namespace, "coder"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := &unstructured.Unstructured{Object: content}
+	obj.SetGroupVersionKind(v1.GroupVersion.WithKind("Seat"))
+	if err := unstructured.SetNestedMap(obj.Object, map[string]any{}, "spec", "sandbox"); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, k8sClient.Create(ctx, obj), "spec.sandbox: Invalid value")
+	if err := unstructured.SetNestedField(obj.Object, int64(48), "spec", "sandbox", "maxTurns"); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, k8sClient.Create(ctx, obj), "")
 }
 
 // msgWorkflowsFullAccess is the refusal of workflows on a seat below

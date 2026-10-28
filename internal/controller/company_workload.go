@@ -46,16 +46,37 @@ const (
 	// homeDir is the engine user's home in Crewlet's image, where the CLI
 	// agents and the git the sandbox recipes drive keep their state.
 	homeDir = "/home/crewlet"
+	// tmpDir is an engine pod's /tmp, the engine's TMPDIR, which the
+	// operator leaves unset.
+	tmpDir = "/tmp"
+	// tmpSubPath and homeSubPath are the directories of the scratch volume
+	// (scratchVolume) mounted at tmpDir and at homeDir.
+	tmpSubPath  = "tmp"
+	homeSubPath = "home"
 	// engineUID is the user Crewlet's image runs as.
 	engineUID int64 = 10001
 	// dataVolume is the name of the data volume claim template, and so the
 	// first part of each data volume claim's name (data-<sts>-<ordinal>).
 	dataVolume = "data"
-	// tmpVolume is a data pod's /tmp, the engine's TMPDIR on a read-only
-	// root: where the processes it starts write their scratch files, and
-	// where it makes the directory of the sockets a host-mode CLI reaches
-	// its seat's tools through.
-	tmpVolume = "tmp"
+	// scratchVolume is every engine pod's writable volume for the engine
+	// and what it runs outside a box, under the class's scratchSizeLimit
+	// (render.ScratchSizeLimitOf): its /tmp and HOME, each a subPath of it,
+	// and on a seat pod its scratch store and native library under
+	// render.DataDir besides. /tmp is the engine's TMPDIR on a read-only
+	// root, where the processes it starts write their scratch files and
+	// where it makes the directory of the sockets a CLI it runs on the pod
+	// reaches its seat's tools through, in every phase but the executor's;
+	// HOME is where its stdio tool servers keep their packages. One volume
+	// for both, so that one limit bounds what lands outside the data volume
+	// and the boxes, a Direct run's writes to /tmp or HOME named outright
+	// among it, rather than two whose sum nobody set. The boxes Crewlet
+	// makes on the pod have a volume of their own (sandboxesVolume), so that
+	// a checkout never evicts the pod at this one's limit.
+	scratchVolume = "scratch"
+	// sandboxesVolume is every engine pod's volume for the boxes Crewlet
+	// makes on the pod itself, mounted at render.SandboxDir, which says why
+	// it is a volume of its own (sandboxesVolumeOf).
+	sandboxesVolume = "sandboxes"
 	// portName names the API port on the pods and the Services.
 	portName = "http"
 	// publicPortName names the public port (render.PublicPort) on the data
@@ -159,7 +180,8 @@ const (
 	//     flush that reads the broker's max_payload (listenTimeout twice);
 	//   - 120: the event stream's own streams (soloSequenceBudget);
 	//   - 60: a second connection, for coordination;
-	//   - 120: the coordination buckets, a window of their own;
+	//   - 120: the coordination buckets, and the floor of each seat's fencing
+	//     epoch above its sandbox runs, a window of their own;
 	//   - 90: the fleet's record of its object store, as on a seat pod
 	//     (seatPodBootSeconds);
 	//   - 40: four registrations of what the node answers (flushBudget);
@@ -268,9 +290,6 @@ type workload struct {
 	bootstrap *render.BootstrapDocument
 	// bootstrapHash is the BootstrapHashAnnotation's value.
 	bootstrapHash string
-	// bridgeURL is the base URL a sandbox reaches the engine's tool bridge
-	// at, or empty for an engine that serves none.
-	bridgeURL string
 	// startupSeconds is the data pod's startup window
 	// (dataPodStartupSeconds).
 	startupSeconds int32
@@ -491,10 +510,13 @@ func podTemplate(
 			configVolume(bootstrapSecretName(c)),
 			// The root filesystem is read-only; the engine and what it
 			// spawns (git, stdio MCP servers, CLI agents) write their
-			// scratch files under /tmp (tmpVolume says what else goes
-			// there) and their state under HOME.
-			corev1ac.Volume().WithName(tmpVolume).WithEmptyDir(corev1ac.EmptyDirVolumeSource()),
-			corev1ac.Volume().WithName("home").WithEmptyDir(corev1ac.EmptyDirVolumeSource()),
+			// scratch files under /tmp and their state under HOME, both on
+			// the scratch volume, under the class's limit (scratchVolume
+			// says what else goes there).
+			scratchVolumeOf(render.ScratchSizeLimitOf(class.Spec.Data.ScratchSizeLimit)),
+			// The boxes of the runs Crewlet places on the pod, under the
+			// class's limit and off the data volume.
+			sandboxesVolumeOf(render.SandboxSizeLimitOf(class.Spec.Data.SandboxSizeLimit)),
 		)
 	labels, annotations := enginePodMetadata(class, labelsFor(c, componentData), w.bootstrapHash)
 	if render.LeafOpen(c, class) {
@@ -523,6 +545,40 @@ func enginePodMetadata(class *crewletaiv1alpha1.EngineClass, own map[string]stri
 	}
 	annotations[BootstrapHashAnnotation] = hash
 	return labels, annotations
+}
+
+// scratchVolumeOf is an engine pod's scratch volume, bounded by limit: an
+// emptyDir on the node's disk, as sandboxesVolumeOf says of the boxes', for
+// what the engine and its processes write outside the data volume and a box,
+// none of which outlives the pod.
+func scratchVolumeOf(limit resource.Quantity) *corev1ac.VolumeApplyConfiguration {
+	return corev1ac.Volume().WithName(scratchVolume).WithEmptyDir(corev1ac.EmptyDirVolumeSource().
+		WithSizeLimit(limit))
+}
+
+// scratchMounts mounts the scratch volume (scratchVolumeOf) at /tmp and at
+// HOME, each a directory of its own on it.
+func scratchMounts() []*corev1ac.VolumeMountApplyConfiguration {
+	return []*corev1ac.VolumeMountApplyConfiguration{
+		corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath(tmpDir).WithSubPath(tmpSubPath),
+		corev1ac.VolumeMount().WithName(scratchVolume).WithMountPath(homeDir).WithSubPath(homeSubPath),
+	}
+}
+
+// sandboxesVolumeOf is an engine pod's sandboxes volume, bounded by limit
+// (ADR-0008). An emptyDir: a box is scratch whose run is a process of the
+// pod, so it has nothing to keep past the pod. On the node's disk, never in memory
+// (medium Memory): a tmpfs is charged to the container's memory limit, and
+// a box's checkout and build tree would take the engine's memory with them.
+func sandboxesVolumeOf(limit resource.Quantity) *corev1ac.VolumeApplyConfiguration {
+	return corev1ac.Volume().WithName(sandboxesVolume).WithEmptyDir(corev1ac.EmptyDirVolumeSource().
+		WithSizeLimit(limit))
+}
+
+// sandboxesMount mounts the sandboxes volume (sandboxesVolumeOf) where the
+// boxes are made.
+func sandboxesMount() *corev1ac.VolumeMountApplyConfiguration {
+	return corev1ac.VolumeMount().WithName(sandboxesVolume).WithMountPath(render.SandboxDir)
 }
 
 // configVolume mounts a bootstrap Secret's crewlet.yaml, readable by the
@@ -608,12 +664,6 @@ func engineContainerOf(
 		// On the data volume, so a restart does not extract the store's
 		// 20 MB native library again.
 		tursoCache: render.DataDir + "/cache",
-		// Crewlet's bridge address is the fleet's: the Company's public
-		// address reaches the data pods, and the one a box's call lands on
-		// relays it to whichever pod holds the run's seat, a seat pod's
-		// included, over the broker. Every engine pod is given the same
-		// value (seatPodTemplate).
-		bridgeURL: w.bridgeURL,
 	})
 	if err != nil {
 		return nil, err
@@ -626,9 +676,9 @@ func engineContainerOf(
 		WithVolumeMounts(
 			corev1ac.VolumeMount().WithName(dataVolume).WithMountPath(render.DataDir),
 			corev1ac.VolumeMount().WithName(configVolumeName).WithMountPath(configDir).WithReadOnly(true),
-			corev1ac.VolumeMount().WithName(tmpVolume).WithMountPath("/tmp"),
-			corev1ac.VolumeMount().WithName("home").WithMountPath(homeDir),
 		).
+		WithVolumeMounts(scratchMounts()...).
+		WithVolumeMounts(sandboxesMount()).
 		WithLifecycle(corev1ac.Lifecycle().
 			WithPreStop(corev1ac.LifecycleHandler().
 				WithSleep(corev1ac.SleepAction().WithSeconds(preStopSleepSeconds))))
@@ -742,9 +792,6 @@ type engineEnvironment struct {
 	statefulSet string
 	// tursoCache is where the store extracts its native library.
 	tursoCache string
-	// bridgeURL is CREWLET_MCP_BRIDGE_URL, or empty while the Company runs
-	// no LLMProvider in mode Box or has no public address.
-	bridgeURL string
 }
 
 // engineEnv is an engine container's environment: what the bootstrap
@@ -777,8 +824,34 @@ func engineEnv(
 		literal(envTursoCache, e.tursoCache),
 	)
 
-	if e.bridgeURL != "" {
-		env = append(env, literal(envMCPBridgeURL, e.bridgeURL))
+	// Crewlet's tool bridge address, the same on every engine pod: the
+	// Company's public address while it has one, and nothing otherwise.
+	// Every agent seat's executor is its coding CLI's run in a box, which
+	// calls the seat's tools back through the bridge. A box on its engine
+	// pod's own host, a Direct one, dials that pod's own listener on
+	// loopback, which the engine derives from the listener itself, a data
+	// pod's public one and a seat pod's api.port alike (Crewlet's
+	// boxHostURL, which TestMirroredEngineDeclarationsAreUnchanged holds),
+	// and needs none of this. The variable is for every other box: one in
+	// the Company's E2B sandbox, wherever its seat runs, which dials the
+	// bridge the data pods serve on their public listener, the data pod a
+	// call reaches relaying it over the broker to the pod holding the run's
+	// seat, so the address is the fleet's (Crewlet's ADR-0056); and the
+	// Dashboard Assistant's deep work on a data pod, which Crewlet holds to
+	// the fleet's address in whichever cell it runs. A pod given no address
+	// launches no E2B run and runs no deep work, and render.ExecutorOf
+	// reports the seats that need one.
+	//
+	// Nothing but the address decides it, the cells the company's runs are
+	// placed in included: which cell a run takes is the company document's,
+	// applied without a restart, while a pod reads its environment only when
+	// it starts, so a variable given only while some run needed it would
+	// roll every engine pod each time a provider moved between cells, and
+	// leave a pod started before the move without the address its runs now
+	// dial. A pod whose runs dial no address ignores it. ADR-0008 records
+	// the rule, and the in-cluster address it rules out.
+	if public := c.Status.Endpoints.PublicBaseURL; public != "" {
+		env = append(env, literal(envMCPBridgeURL, public))
 	}
 
 	if t := class.Spec.Telemetry; t.OTLPEndpoint != "" {
@@ -790,15 +863,18 @@ func engineEnv(
 		if t.HeadersSecretRef.Name != "" {
 			env = append(env, fromSecret(envOTLPHeaders, e.secret, platformKeyOTLPHeaders))
 		}
-		// Crewlet's sandbox telemetry receiver: a remote sandbox exports to
-		// the engine's public listener, the one port it can reach, with a
-		// token signed for its run, and the engine forwards to the
-		// collector above with its headers, which never enter the box.
-		// Every pod is given it, a seat pod's too: the pod that launches a
-		// run mints its endpoint, under the company's address, and the data
-		// pod that address reaches verifies it with the keyring every pod
-		// shares. Without a collector there is nothing to forward to, and
-		// without a public address nothing a sandbox could reach.
+		// Crewlet's sandbox telemetry receiver for a seat's executor run in
+		// E2B, which exports to the engine's public listener at this
+		// address with a token signed for the run, and the engine forwards
+		// to the collector above with its headers, which never enter the
+		// box. Every pod is given it, a seat pod's too: the pod that
+		// launches a run mints its endpoint, under the company's address,
+		// and the data pod that address reaches verifies it with the
+		// keyring every pod shares. A Direct run exports to its own pod's
+		// listener on loopback instead, which every pod given the collector
+		// above serves its own boxes (Crewlet's boxHostURL and withTelemetry).
+		// Without a collector there is nothing to forward to, and without a
+		// public address nothing an E2B box could reach.
 		if public := c.Status.Endpoints.PublicBaseURL; public != "" {
 			env = append(env, literal(envOTelReceiverURL, public))
 		}
