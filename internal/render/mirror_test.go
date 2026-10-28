@@ -211,7 +211,13 @@ const (
 	// (attachCoordination); and runEnvironment and sandboxMCP renamed a
 	// parameter. Each mirror that moved was read again at it.
 	executorFinalRead = "v0.1.1-0.20261028203606-c6ba342a52ad"
-	otelGo            = "internal/sandbox/otel.go"
+	// lostCarryRead is the same branch five commits on, where a lost job's
+	// round is resumed under its completion's admission: carryOnLost returns
+	// what the round is carried on with, and completeAdmitted resumes the
+	// turn with it. What becomes of a lost job is as at executorFinalRead,
+	// and no other mirror moved.
+	lostCarryRead = "v0.1.1-0.20261028211709-efc0c04f2beb"
+	otelGo        = "internal/sandbox/otel.go"
 	// topologyGo and assistantDeepGo are the render's pod sizes and the
 	// engine's deep-work backend, which several rows name.
 	topologyGo        = "internal/render/topology.go"
@@ -954,10 +960,11 @@ var mirrored = []mirror{
 		file: "internal/sandbox/lost.go", name: "(*Coordinator).carryOnLost",
 		against: directRunEnds,
 		decides: "a job lost with its host is never collected as the run's result: what it spent is read off its " +
-			"box where the box is left, and the seat's turn resumes to carry its round on in a fresh run, in the " +
-			"kept box after its engine restarted and in a fresh one where the box went with its pod or its node",
-		digest: "5f63c165e6ca5421bdc3102beb063a8ee787afcbb31277ff6880d90ff31ff223",
-		read:   executorFinalRead,
+			"box where the box is left, and the seat's turn resumes, with what this returns, to carry its round " +
+			"on in a fresh run, in the kept box after its engine restarted and in a fresh one where the box went " +
+			"with its pod or its node",
+		digest: "4c1ae37d0582b7f9f90ed5e8ebf329931dde2549c95ed873dadb00db448c733b",
+		read:   lostCarryRead,
 	},
 	{
 		file: "internal/sandbox/lost.go", name: "MaxRoundLosses",
