@@ -49,7 +49,7 @@ dials `CREWLET_MCP_BRIDGE_URL`, which is one address for the whole fleet
 for. A `direct` box is made under
 `providers.sandbox.local.state_dir`, else under the engine user's home, and
 its run is a process of the node that launched it, which alone drives it
-(Crewlet's ADR-0057), and dies with that node's container, when Crewlet
+(Crewlet's ADR-0065), and dies with that node's container, when Crewlet
 carries the run's round on in a fresh run. An `e2b` box is
 given only the variables that sign its CLI in, so a login a credential bundle
 restores, whose refresh token the engine keeps rotating on its data volume,
