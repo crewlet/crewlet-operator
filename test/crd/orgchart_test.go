@@ -528,6 +528,30 @@ func TestSeatValidation(t *testing.T) {
 			mutate: func(s *v1.Seat) { s.Spec.Integrations.GitHub.Repos = []string{"nimbuscore"} },
 			want:   "spec.integrations.github.repos[0]",
 		},
+		{
+			name: "workflows on a FullAccess seat is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GitHub.Tier = v1.GitHubAccessFullAccess
+				s.Spec.Integrations.GitHub.Workflows = new(true)
+			},
+		},
+		{
+			name:   "workflows set false on a Review seat is accepted",
+			mutate: func(s *v1.Seat) { s.Spec.Integrations.GitHub.Workflows = new(false) },
+		},
+		{
+			name:   "workflows on a Review seat is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Integrations.GitHub.Workflows = new(true) },
+			want:   msgWorkflowsFullAccess,
+		},
+		{
+			name: "workflows on a seat with no tier is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GitHub.Tier = ""
+				s.Spec.Integrations.GitHub.Workflows = new(true)
+			},
+			want: msgWorkflowsFullAccess,
+		},
 	})
 }
 
@@ -553,6 +577,10 @@ func TestSeatEmptySandboxIsRefused(t *testing.T) {
 	}
 	expect(t, k8sClient.Create(ctx, obj), "")
 }
+
+// msgWorkflowsFullAccess is the refusal of workflows on a seat below
+// FullAccess, which Crewlet refuses too.
+const msgWorkflowsFullAccess = "workflows applies to a FullAccess seat only"
 
 func TestSeatHandleIsImmutable(t *testing.T) {
 	withHandle := func(s *v1.Seat) { s.Spec.Handle = seatHandle }

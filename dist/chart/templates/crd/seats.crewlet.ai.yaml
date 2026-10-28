@@ -324,7 +324,22 @@ spec:
                         - Review
                         - FullAccess
                         type: string
+                      workflows:
+                        description: |-
+                          workflows grants the seat GitHub's workflows write permission, without
+                          which GitHub refuses any push whose commits change a file under
+                          .github/workflows. FullAccess seats only, and off unless set: the same
+                          grant lets the seat's branches run a workflow it rewrote with the
+                          secrets the repository hands its runs, so pair it with branch
+                          protection and environment-scoped secrets. Crewlet's `workflows`.
+                        type: boolean
                     type: object
+                    x-kubernetes-validations:
+                    - fieldPath: .workflows
+                      message: 'workflows applies to a FullAccess seat only: a seat
+                        that cannot push code has nothing to push a workflow with'
+                      rule: '!has(self.workflows) || !self.workflows || (has(self.tier)
+                        && self.tier == ''FullAccess'')'
                   mattermost:
                     description: mattermost is the seat's own Mattermost bot.
                     properties:

@@ -226,6 +226,15 @@ spec:                       # Seat lead
 
 The webhook URL for the app is `status.integrations.github.webhookURL`.
 
+A `FullAccess` seat that has to change CI sets `workflows: true` beside its
+tier. GitHub refuses any push whose commits touch `.github/workflows` without
+that permission, and the same grant lets the seat's branches run a workflow
+it rewrote with the secrets the repository hands its runs, so it is off unless
+set and refused on any other tier. An app created before the seat opted in
+gains the permission only once its owner adds it at GitHub and the
+installation approves it
+([Workflow writes](https://github.com/crewlet/crewlet/blob/main/docs/integrations/github.md#workflow-writes-an-opt-in-for-full-access)).
+
 ### The company's GitHub organization
 
 ```yaml

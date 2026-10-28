@@ -1504,6 +1504,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `tier` _[GitHubAccessTier](#githubaccesstier)_ | tier is how much the seat may do in a repository. Unset is ReadOnly.<br />Crewlet's `tier`. |  | Enum: [ReadOnly Review FullAccess] <br />Optional: \{\} <br /> |
 | `repos` _string array_ | repos are the repositories the seat works in, as owner/name. Unset is<br />every repository the app's installation covers. Crewlet's `repos`. |  | MaxItems: 64 <br />items:MaxLength: 201 <br />items:Pattern: `^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$` <br />Optional: \{\} <br /> |
+| `workflows` _boolean_ | workflows grants the seat GitHub's workflows write permission, without<br />which GitHub refuses any push whose commits change a file under<br />.github/workflows. FullAccess seats only, and off unless set: the same<br />grant lets the seat's branches run a workflow it rewrote with the<br />secrets the repository hands its runs, so pair it with branch<br />protection and environment-scoped secrets. Crewlet's `workflows`. |  | Optional: \{\} <br /> |
 | `app` _[GitHubApp](#githubapp)_ | app is the GitHub App the seat acts as. |  | Optional: \{\} <br /> |
 
 

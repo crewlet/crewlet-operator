@@ -1237,6 +1237,11 @@ func (in *GitHubSeatIntegration) DeepCopyInto(out *GitHubSeatIntegration) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.Workflows != nil {
+		in, out := &in.Workflows, &out.Workflows
+		*out = new(bool)
+		**out = **in
+	}
 	out.App = in.App
 }
 
