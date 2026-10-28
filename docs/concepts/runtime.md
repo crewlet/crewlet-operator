@@ -254,6 +254,19 @@ the pod's `sandboxes` volume:
   (`launch_node_gone`), and the pod that holds the seat next carries the
   round on in a box of its own.
 
+A box that runs its pod out of memory takes the engine with it unless the
+node says otherwise. Crewlet raises every box process's `oom_score_adj` so
+the kernel picks a box before the engine, but on cgroup v2 the kubelet sets
+`memory.oom.group` on every container, so the kernel's kill of any process
+in the engine's container takes every process in it, the engine's own: the
+container restarts as above, with every run and turn on the pod. On a node
+whose kubelet sets `singleProcessOOMKill: true` the kill stays with the one
+process, and the box's run ends as a failed run while the engine carries
+on; on any other, give the class's `data.resources`
+(`seatPools.defaults.resources`) a memory limit with room for the engine and
+every box its pod runs at once (Crewlet's [When the host runs out of
+memory](https://github.com/crewlet/crewlet/blob/main/docs/guides/deployment.md#when-the-host-runs-out-of-memory)).
+
 A round is carried on after two such losses at most: a third ends the
 seat's turn, since a run that keeps taking its pod down, past its memory
 limit say, takes every other run on that pod down with it each time.
