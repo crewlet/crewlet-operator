@@ -146,16 +146,17 @@ type SeatSandbox struct {
 	// env is the environment of the seat's executor runs, for the external
 	// tokens its work needs: from Secrets, or provisioned by the engine,
 	// such as the GitLab token a provisioning Integration mints for the
-	// seat, named as its tool server's is so both are one token. It is where
-	// a variable the run's CLI reads goes too, such as a gateway's address,
-	// since of its provider's env a run gets only the variables that sign
-	// its CLI in. A ClaudeCode sign-in here (CLAUDE_CODE_OAUTH_TOKEN,
-	// ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or a CLAUDE_CODE_USE_* toggle)
-	// keeps the token or key of the provider the executor runs on out of
-	// the box, unless a run goes without its value, when the box is given
-	// them as it is with no sign-in; and a variable named as one the
-	// provider would set wins over it. Crewlet's `env`, a credential
-	// position.
+	// seat, named as its tool server's is so both are one token. A run gets
+	// its provider's whole env beneath this, so a variable named here wins
+	// over the provider's of that name. A ClaudeCode sign-in here
+	// (CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or a
+	// CLAUDE_CODE_USE_* toggle) keeps the provider's own sign-in out of the
+	// box, its token or key and every sign-in in its env, a gateway's
+	// bearer token or a cloud switch, while the rest of its env, such as a
+	// gateway's address, still reaches the run: a seat meant to bypass the
+	// gateway names ANTHROPIC_BASE_URL here itself. A run that goes without
+	// the value is given the provider's sign-in as one with no sign-in here
+	// is. Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name

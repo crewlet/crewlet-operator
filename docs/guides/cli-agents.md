@@ -506,7 +506,8 @@ Crewlet would read the CLI's key variable from its own secret store and the
 engine's environment then, which hold no key this provider names. A gateway
 or proxy in front of the vendor is a variable the CLI reads from its
 environment, which goes in `env` from a Secret, such as Claude Code's
-`ANTHROPIC_BASE_URL`.
+`ANTHROPIC_BASE_URL`, and reaches every phase of the provider, a seat's
+executor run included.
 
 ## Where a seat's executor runs
 
@@ -634,13 +635,13 @@ An E2B run is not touched.
 **A Direct box's environment** is the pod's `PATH`, locale, `TERM`, `TZ`, TLS
 trust and proxy variables, the box's home and temporary directories, and the
 run's own: the seat's identity, the Company's and the Seat's setup steps'
-`env`, the Seat's `spec.sandbox.env`, and the provider's sign-in. So a `TZ`
-the class's `podTemplate` or the Company's `runtime.env` sets on the pod
-reaches every Direct run, and no E2B one. An E2B box gets the run's own alone.
-Of the provider's `env`, only its sign-in reaches an executor run, in either
-cell: a gateway's `ANTHROPIC_BASE_URL`, or a Bedrock or Vertex switch and its
-region, reach the provider's other phases and no executor run, so give a run
-such a variable in the Seat's `spec.sandbox.env`. What each box carries of a
+`env`, the Seat's `spec.sandbox.env`, and the provider's sign-in and its
+whole `env` beneath them. So a `TZ` the class's `podTemplate` or the
+Company's `runtime.env` sets on the pod reaches every Direct run, and no E2B
+one. An E2B box gets the run's own alone. The provider's `env` reaches an
+executor run in either cell, as it reaches the provider's other phases: a
+gateway's `ANTHROPIC_BASE_URL` and the `ANTHROPIC_AUTH_TOKEN` it takes, or a
+Bedrock or Vertex switch and its region. What each box carries of a
 credential is in
 [What a coding box carries](credentials.md#what-a-coding-box-carries).
 
@@ -679,9 +680,9 @@ each time `Ready` turns to it:
   for the box to call the seat's tools back at.
 - `SandboxLoginNotPortable`: its run goes to `E2B`, and nothing in the run's
   environment signs its CLI in: a Claude Code provider signed in with a
-  credential bundle alone, or an OpenCode one with no key in `env`, and no
-  sign-in in the env of the Company's or the Seat's setup steps or in the
-  Seat's `spec.sandbox.env`.
+  credential bundle alone, with no Claude Code sign-in in its `env`, or an
+  OpenCode one with no key in `env`, and no sign-in in the env of the
+  Company's or the Seat's setup steps or in the Seat's `spec.sandbox.env`.
 
 The verdict judges the first provider a launch takes, as Crewlet's own guard
 does: a launch the box's login refuses fails, it does not move on down the
@@ -696,8 +697,10 @@ A seat whose own `spec.sandbox` signs Claude Code in, with
 `CLAUDE_CODE_USE_FOUNDRY` in its `env` or its setup steps' or the Company's
 setup steps' `env`, runs its Claude Code executor on that sign-in alone, with
 the provider's model, in either cell: Crewlet hands the run none of the
-provider's sign-in then, since Claude Code ranks its sign-ins by name, and a
-provider's key beside the seat's plan token would win.
+provider's sign-in then, its token, its key or a sign-in in its `env`, since
+Claude Code ranks its sign-ins by name, and a provider's key beside the
+seat's plan token would win. The rest of the provider's `env`, a gateway's
+address among it, still reaches the run.
 
 **Its bounds.** Two fields bound a provider's CLI in the engine's pod, in
 every phase but the executor's, and since a run of the CLI asks the model many

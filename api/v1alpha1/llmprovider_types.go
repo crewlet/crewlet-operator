@@ -330,13 +330,13 @@ type LLMProviderSpec struct {
 	// +required
 	Auth CLIAgentAuth `json:"auth,omitzero"`
 
-	// env is extra environment of the CLI where it runs in the engine's pod,
-	// in every phase but a seat's executor. There the CLI does not get the
-	// engine's environment: it gets the part Crewlet's allowlist names, such
-	// as PATH and the TLS and proxy variables, and the variables the CLI's
-	// Crewlet profile passes through, such as GeminiCLI's
-	// GOOGLE_CLOUD_PROJECT, with a HOME, a TMPDIR and XDG directories of its
-	// seat's own rather than the engine's.
+	// env is extra environment of the CLI, in every phase a seat runs on the
+	// provider, its executor run included. In the engine's pod the CLI does
+	// not get the engine's environment: it gets the part Crewlet's
+	// allowlist names, such as PATH and the TLS and proxy variables, and the
+	// variables the CLI's Crewlet profile passes through, such as
+	// GeminiCLI's GOOGLE_CLOUD_PROJECT, with a HOME, a TMPDIR and XDG
+	// directories of its seat's own rather than the engine's.
 	// So a variable the CLI needs beyond that is given here, such as the
 	// address of a gateway a CLI reads from its environment (ClaudeCode's
 	// ANTHROPIC_BASE_URL). It is how Hermes, Pi and OpenCode sign in under
@@ -350,14 +350,15 @@ type LLMProviderSpec struct {
 	// not set a variable Crewlet sets there to sign the CLI in with its
 	// seat's login either: GeminiCLI's GOOGLE_GENAI_USE_GCA.
 	//
-	// A seat's executor run on the provider, Direct or E2B, gets of env only
-	// the variables that sign its CLI in: an OpenCode provider's
-	// credential-named variables, and none of a ClaudeCode provider's,
-	// whose sign-in is auth's. Every other variable stays out of the run,
-	// a gateway's address and a cloud switch such as CLAUDE_CODE_USE_BEDROCK
-	// included, so the run calls its vendor directly: a variable such a run
-	// needs goes in the Seat's spec.sandbox.env. Crewlet's `env`, a
-	// credential position.
+	// A seat's executor run on the provider, Direct or E2B, gets all of env,
+	// beneath the Seat's own spec.sandbox.env, which wins a name: a
+	// gateway's address and the bearer token it takes, a cloud switch such
+	// as CLAUDE_CODE_USE_BEDROCK and its region, a proxy, so the run reaches
+	// its model as the provider's other phases do. A ClaudeCode sign-in in
+	// env (ANTHROPIC_AUTH_TOKEN or a CLAUDE_CODE_USE_* toggle) also signs an
+	// E2B run in. A Seat whose spec.sandbox.env signs ClaudeCode in itself
+	// keeps every sign-in of the provider's out of its runs, and the rest of
+	// env in them. Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name

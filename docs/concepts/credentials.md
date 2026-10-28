@@ -66,10 +66,10 @@ uses is readable by the company's tenant:
   Crewlet hands each run the sign-in of the provider it launched on, an
   `LLMProvider` or a platform provider: its headless token or its
   `auth.apiKeySecretRef` key, under the variable its CLI reads
-  (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`), or for OpenCode the
-  credential-named variables of its `env`, unless the seat's own sandbox
-  environment sets that variable itself; a `Direct` box is seeded with the
-  provider's login on the pod too. The CLI can read it, and the run's report
+  (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`), and its whole `env`, a
+  model provider's key or a gateway's bearer token among it, beneath the
+  seat's own sandbox environment, which wins a name; a `Direct` box is
+  seeded with the provider's login on the pod too. The CLI can read it, and the run's report
   is redacted by the shape of a credential, not by its value ([What a coding
   box carries](../guides/credentials.md#what-a-coding-box-carries)).
 

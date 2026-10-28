@@ -189,7 +189,7 @@ lists decide only at a launch, which no engine test reaches, so
 engine function whose decision the operator copies at a launch —
 `LaunchExecutor`, the `member` it picks a run's provider by among
 `executorRunners`, the `agentPlacement` that places it and
-`Placement.OnEngineHost`, `entrySignIn`, `sandboxCredentials` and the
+`Placement.OnEngineHost`, `entryEnv` and `entrySignInName`, `sandboxCredentials` and the
 `entrySignsIn` it judges a sign-in by, what a direct box is made of on the
 pod (`NewLocal`, `DefaultBoxRoot`, `localOptions`, `(*directBox).childEnv`
 and `PassthroughEnv`), and where deep work is placed

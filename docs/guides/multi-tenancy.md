@@ -84,8 +84,8 @@ spec:
         mode: APIKey
         apiKeySecretRef: {namespace: platform, name: llm-gateway-team, key: apiKey}
       env:
-        # The gateway Claude Code calls in place of Anthropic's API, in the
-        # phases it serves in the engine's pod: no executor run gets it.
+        # The gateway Claude Code calls in place of Anthropic's API, in every
+        # phase, a seat's executor run included.
         - name: ANTHROPIC_BASE_URL
           valueFrom:
             secretKeyRef: {namespace: platform, name: llm-gateway-team, key: baseURL}
@@ -102,26 +102,12 @@ subscription's headless token or login is one account's, which every tenant
 of the class would share, so the API refuses one there: it belongs on a
 tenant's own `LLMProvider`. A platform provider names no `runIn`: a seat's
 executor run launched on it goes to the Company's `spec.sandbox.defaultRunIn`,
-and its key follows the run into either cell. It keeps its seats' homes on
-each company's data volume under `/var/lib/crewlet/llm-cli-platform/<name>`.
-
-**A gateway in `env` does not reach a seat's executor.** Of a provider's
-`env`, Crewlet hands an executor run only the variables that sign its CLI in,
-in either cell ([What a coding box
-carries](credentials.md#what-a-coding-box-carries)): the gateway's
-`ANTHROPIC_BASE_URL` above reaches the phases the provider serves in the
-tenant's engine pod, and no executor run. A seat whose executor launches on
-`platform-claude` therefore runs Claude Code against Anthropic's own API with
-the gateway's virtual key, which Anthropic refuses, so every turn of that seat
-fails, and a key it accepts would bypass the gateway and its spend limit.
-Until Crewlet carries a provider's other variables into the run, give the
-runs the address themselves: a variable `ANTHROPIC_BASE_URL` in each agent
-Seat's `spec.sandbox.env`, or in a step of the Company's
-`spec.sandbox.setup`, read from a Secret the control plane writes into the
-tenant's namespace. Those are the tenant's objects, which its own editors can
-change, so the address holds only as long as nobody does; a class whose
-tenants edit their seats offers agent seats a provider whose key works at
-its vendor directly instead.
+and its key and the rest of its `env`, the gateway's `ANTHROPIC_BASE_URL`
+above included, follow the run into either cell ([What a coding box
+carries](credentials.md#what-a-coding-box-carries)), so a seat's executor
+reaches its model through the gateway as the provider's other phases do. It
+keeps its seats' homes on each company's data volume under
+`/var/lib/crewlet/llm-cli-platform/<name>`.
 
 The control plane runs with the chart's tenant provisioner role
 (`tenantProvisioner` in the chart's values). It creates each tenant's

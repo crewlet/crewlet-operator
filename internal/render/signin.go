@@ -13,19 +13,21 @@ import (
 
 // What signs a seat's executor run in where it runs.
 //
-// A run is handed the sign-in of the provider it launches on, beneath the
-// seat's own environment (Crewlet's entrySignIn): its headless token, its API
-// key, or, for OpenCode, the credential-named variables of its env. Nothing
-// else of the provider's env reaches a run, in either cell
-// ((*Provider).SandboxEnv). A Direct box is also seeded with the provider's
-// login, its credential files or the document OpenCode 2's export printed,
-// and writes a refreshed one back, so on the engine pod a credential bundle
-// signs a run in as it signs the provider's other phases in. An E2B box never
-// receives it: a bundle's login carries a refresh token the engine keeps
-// rotating, and the run there needs a token or a key in its environment.
-// Crewlet refuses each launch of a run whose box could not authenticate,
-// judged on the member the launch picked (sandboxCredentials), and never
-// refuses a Direct one for it (Placement.OnEngineHost).
+// A run is handed the environment of the provider it launches on, beneath the
+// seat's own environment (Crewlet's entryEnv): the provider's whole env, a
+// gateway's address and the bearer token it takes or a cloud switch
+// included, with its sign-in, its headless token or its API key, in either
+// cell ((*Provider).SandboxEnv). A Direct box is also seeded with the
+// provider's login, its credential files or the document OpenCode 2's export
+// printed, and writes a refreshed one back, so on the engine pod a credential
+// bundle signs a run in as it signs the provider's other phases in. An E2B
+// box never receives it: a bundle's login carries a refresh token the engine
+// keeps rotating, and the run there needs a variable of its environment that
+// signs its CLI in, a token or a key, a ClaudeCode sign-in in the provider's
+// env, or an OpenCode provider's key in its env. Crewlet refuses each launch
+// of a run whose box could not authenticate, judged on the member the launch
+// picked (sandboxCredentials), and never refuses a Direct one for it
+// (Placement.OnEngineHost).
 //
 // The seat's own environment is the union of its spec.sandbox.env, its
 // spec.sandbox.setup steps' env and the Company's spec.sandbox.setup steps'
@@ -41,10 +43,11 @@ import (
 // revision keeps the value it had, so it counts.
 //
 // A seat whose environment signs ClaudeCode in itself runs a ClaudeCode run
-// on that sign-in alone: Crewlet hands the run none of the provider's
-// (entrySignIn), since ClaudeCode ranks its sign-ins by name, and its guard
-// passes the run on any of them (sandboxCredentials, through its
-// entrySignsIn).
+// on that sign-in alone: Crewlet hands the run none of the provider's sign-in,
+// its token, its key and every sign-in its env carries, but the rest of its
+// env (entryEnv, entrySignInName), since ClaudeCode ranks its sign-ins by
+// name, and its guard passes the run on any of them (sandboxCredentials,
+// through its entrySignsIn).
 //
 // Crewlet decides all of it at a launch, where no validation shows it, so
 // TestMirroredEngineDeclarationsAreUnchanged holds the engine functions this
@@ -55,9 +58,10 @@ import (
 // toggle moving it onto a cloud provider's credentials (Crewlet's
 // codingagent.ClaudeCodeCredentialEnv, to which a test holds this copy). When
 // the seat's own environment sets one, Crewlet hands a ClaudeCode run none of
-// its provider's sign-in (its entrySignIn), since ClaudeCode ranks its sign-ins
+// its provider's sign-in (its entryEnv), since ClaudeCode ranks its sign-ins
 // by name and a provider's key beside a seat's plan token would win, and its
-// guard passes the run on it (sandboxCredentials, through its entrySignsIn).
+// guard passes the run on it, as on one the provider's env carries into the
+// run (sandboxCredentials, through its entrySignsIn).
 var claudeCodeSignIn = []string{
 	"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
 	"CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
@@ -117,16 +121,22 @@ func platformEntry(p *v1alpha1.PlatformLLMProvider) cliEntry {
 
 // remoteSignIn is how the login of a provider that runs an executor reaches a
 // box off the engine's pod, given the names of the seat's own environment
-// (Crewlet's entrySignIn, and sandboxCredentials through its entrySignsIn):
+// (Crewlet's entryEnv, and sandboxCredentials through its entrySignsIn):
 // own when the provider's settings carry a sign-in that follows the run, and
 // the variables of the seat's environment that sign its CLI in. ClaudeCode's
-// own travels as its token or key, and the seat's as any variable that signs
-// ClaudeCode in, which then replaces the provider's; OpenCode's, which signs
-// in through its environment, as any variable named as a credential, in its
-// env or the seat's environment, the seat's winning a name.
+// own travels as its token or key, or as a variable of its env that signs
+// ClaudeCode in, a gateway's bearer token or a cloud switch, which the run
+// carries with the rest of the env; the API keeps the token's and the key's
+// own names out of env, so no auth mode takes one of those back out. The
+// seat's travels as any variable that signs ClaudeCode in, which then
+// replaces the provider's. OpenCode's, which signs in through its
+// environment, travels as any variable named as a credential, in its env or
+// the seat's environment, the seat's winning a name.
 func (c *cliEntry) remoteSignIn(env envNames) (own bool, seat []string) {
 	if c.agent == v1alpha1.CLIAgentClaudeCode {
-		return c.token || c.authMode == v1alpha1.CLIAgentAuthAPIKey, env.among(claudeCodeSignIn)
+		own = c.token || c.authMode == v1alpha1.CLIAgentAuthAPIKey ||
+			slices.ContainsFunc(c.env, func(name string) bool { return slices.Contains(claudeCodeSignIn, name) })
+		return own, env.among(claudeCodeSignIn)
 	}
 	own = slices.ContainsFunc(c.env, credentialName.MatchString)
 	for _, name := range slices.Sorted(maps.Keys(env)) {

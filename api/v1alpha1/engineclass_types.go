@@ -1086,11 +1086,10 @@ type EnginePodTemplate struct {
 // executor launches on, its CLI's own run, in the Company's
 // spec.sandbox.defaultRunIn, as a platform provider names no runIn: its key
 // is then in the tenant's engine pod, where the tenant reads it already, for
-// a Direct run, or in the tenant's E2B sandbox. Of its env, that run gets an
-// OpenCode provider's credential-named variables and nothing else, as of an
-// LLMProvider's: a ClaudeCode platform provider whose env points it at the
-// platform's gateway (ANTHROPIC_BASE_URL) runs its seats' executors against
-// Anthropic's own API, with the key the gateway issued. Its rules are an
+// a Direct run, or in the tenant's E2B sandbox. That run gets its whole env,
+// as of an LLMProvider's, so a ClaudeCode platform provider whose env points
+// it at the platform's gateway (ANTHROPIC_BASE_URL) runs its seats'
+// executors through the gateway too, with the key it issued. Its rules are an
 // LLMProvider's that apply to such a provider, each with the same message's
 // start, and hold to the same engine.
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || (has(self.auth.mode) && self.auth.mode == 'APIKey') || (self.agent in ['Hermes', 'Pi', 'OpenCode'] && has(self.env) && self.env.exists(e, e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)')))",message="a platform provider signs its CLI in with a key the class gives each tenant: auth mode APIKey with auth.apiKeySecretRef, for a CLI Crewlet hands a key to, or for Hermes, Pi and OpenCode their model provider's key in env, under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY). A subscription's token or login is one account's, which every tenant of the class would share: it belongs on a tenant's own LLMProvider",fieldPath=".auth"
@@ -1121,11 +1120,11 @@ type PlatformLLMProvider struct {
 	// each value read from a Secret in a namespace the platform controls:
 	// the model provider's key Hermes, Pi or OpenCode signs in with, or the
 	// address of the platform's gateway a CLI reads from its environment
-	// (ClaudeCode's ANTHROPIC_BASE_URL), for the phases the provider serves
-	// in the engine's pod. A seat's executor run on the provider gets only
-	// an OpenCode provider's credential-named values, Direct on the tenant's
-	// engine pod or in the tenant's own E2B sandbox, and never a gateway's
-	// address. Crewlet's `env`, a credential position.
+	// (ClaudeCode's ANTHROPIC_BASE_URL), for every phase the provider
+	// serves. A seat's executor run on the provider gets all of it, beneath
+	// the Seat's own spec.sandbox.env, Direct on the tenant's engine pod or
+	// in the tenant's own E2B sandbox, the gateway's address included.
+	// Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name

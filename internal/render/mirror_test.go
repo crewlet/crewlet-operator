@@ -475,7 +475,7 @@ var bootWindows = []string{
 // buildSandbox and its round cap, defaultSandboxMaxTurns), the address the
 // box dials (LaunchExecutor, with the bridge's own Build, Reaches and the
 // node's boxHostURL, reachedOnLoopback and loopbackURL), and the login it hands the box
-// (newCodingRun, entrySignIn, sandboxCredentials and OnEngineHost). Some are
+// (newCodingRun, entryEnv, entrySignInName, sandboxCredentials and OnEngineHost). Some are
 // a sandbox backend's: what an E2B box is created from, (*E2BProvider).Create,
 // since the launch hands a run's credential files to whatever box it is placed
 // in and each backend decides what to do with them; where a direct box lives
@@ -646,11 +646,11 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "newCodingRun",
 		against: append(slices.Clone(executorLogin), executorBox...),
 		decides: "a run on the member a launch picked is handed that member's model as its runs in the engine's pod " +
-			"pass it, its sign-in (entrySignIn) beneath the seat's environment, and its login, the CLI's credential " +
-			"files or the document OpenCode 2's export printed, as the run's credential files, for the box to seed " +
-			"or to ignore ((*E2BProvider).Create)",
-		digest: "1527131dde11c15181a40fa3ce3061b492b31a11054d197e6c29ece72774a2a5",
-		read:   executorRead,
+			"pass it, its environment (entryEnv) beneath the seat's, and its login, the CLI's credential files or " +
+			"the document OpenCode 2's export printed, as the run's credential files, for the box to seed or to " +
+			"ignore ((*E2BProvider).Create)",
+		digest: "930018749609e0fbdb8ad020c4b1c3ecbc03ba226bc13a1ae9eb781fdbdec5f4",
+		read:   executorFinalRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -663,13 +663,23 @@ var mirrored = []mirror{
 		read:   e2bCreateRead,
 	},
 	{
-		file: sandboxGo, name: "entrySignIn",
+		file: sandboxGo, name: "entryEnv",
 		against: append(slices.Clone(executorLogin), executorBox...),
-		decides: "a ClaudeCode run whose seat's environment signs ClaudeCode in (codingagent.ClaudeCodeCredentialEnv, " +
-			"which TestExecutorSignInFollowsTheEngineSource holds) is handed none of its member's sign-in, and every " +
-			"other run its member's own (SandboxEnv), beneath the seat's environment",
-		digest: "0057bb67a4aa5b34269adc0b3f86eccf82bbb4ddc0edd4cccec029a16078de71",
-		read:   executorRead,
+		decides: "a run is handed its member's environment (SandboxEnv) beneath the seat's, and a ClaudeCode run " +
+			"whose seat's environment signs ClaudeCode in (codingagent.ClaudeCodeCredentialEnv, which " +
+			"TestExecutorSignInFollowsTheEngineSource holds) none of its member's sign-in (entrySignInName) and " +
+			"the rest of that environment",
+		digest: "c0c6ff832afdca0ea19e0cc3abf09b7f6b3831cf52f9d708f03301486da6175c",
+		read:   executorFinalRead,
+	},
+	{
+		file: sandboxGo, name: "entrySignInName",
+		against: append(slices.Clone(executorLogin), executorBox...),
+		decides: "a member's sign-in, which a seat that signs ClaudeCode in itself keeps out of its run, is every " +
+			"variable that signs ClaudeCode in, the CLI's token and key variables and every credential-named " +
+			"one, a gateway's bearer token among them, and nothing else, so a gateway's address stays",
+		digest: "9d944c1c12bde19b5f6b311aea464a4713dcda977ae276daac39a0e45df11d0c",
+		read:   executorFinalRead,
 	},
 	{
 		file: sandboxGo, name: "signsIn",
@@ -694,7 +704,7 @@ var mirrored = []mirror{
 		decides: "a run's environment signs its CLI in, in a box off the engine host, when it holds the CLI's " +
 			"token or key variable, for ClaudeCode any variable that signs it in, and for an env sign-in CLI any " +
 			"credential-named one: the rule a seat's E2B run and the assistant's deep work, whose environment " +
-			"is its provider's own sign-in alone, are both held to before a box exists",
+			"is its provider's alone, are both held to before a box exists",
 		digest: "46c439e9448b247366d6d3852f1fdf0cf98cc40f927178a6395653138ecfb018",
 		read:   deepWorkRead,
 	},
@@ -794,11 +804,12 @@ var mirrored = []mirror{
 	{
 		file: doctorGo, name: "(*Provider).SandboxEnv",
 		against: append(append([]string{engineClassGo, "docs/guides/multi-tenancy.md"}, executorLogin...), executorBox...),
-		decides: "a provider's own sign-in follows an executor run into its box, Direct or E2B, when it is one of " +
-			"those variables, and nothing else of the provider's env does: a gateway's address or a cloud switch " +
-			"in env reaches no executor run",
-		digest: "f81f2bc4b7fca996eaac300c1ab530d2e357500bd4b76145551412788cc9ddb9",
-		read:   firstRead,
+		decides: "a provider's whole env follows an executor run into its box, Direct or E2B, with the sign-in its " +
+			"auth mode sets, less what the mode removes, the isolation variables and blank values: a gateway's " +
+			"address and bearer token, a cloud switch and its region reach every executor run, and a ClaudeCode " +
+			"sign-in there signs an E2B run in (signin.go's remoteSignIn)",
+		digest: "99dcdf37e05b3c0eec68291d82ae3fa74783ac6c5a09355cb99e9ff8dff034d1",
+		read:   executorFinalRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).LaunchExecutor",

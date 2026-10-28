@@ -223,6 +223,25 @@ func TestExecutor(t *testing.T) {
 			says:   []string{"ClaudeCode login cannot follow it", "auth.tokenSecretRef", "CLAUDE_CODE_OAUTH_TOKEN", "to Direct"},
 		},
 		{
+			// The provider's whole env follows the run into the box, so a
+			// gateway's bearer token there signs the run in.
+			name: "a bundled ClaudeCode login in E2B, signed in by its env", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				p := bundled(cliProvider)
+				p.Spec.RunIn = v1alpha1.SandboxPlacementE2B
+				p.Spec.Env = []v1alpha1.SecretEnvVar{{
+					Name:      "ANTHROPIC_AUTH_TOKEN",
+					ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "claude-gateway", Key: keyAPIKey}},
+				}}
+				in.LLMProviders = append(in.LLMProviders, p)
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCLI)
+			},
+			want:   runnableBut(cyOwn(runnable)),
+			saysOf: seatCy,
+			says:   []string{"in the Company's E2B sandbox", public + "/mcp/"},
+		},
+		{
 			// The box is seeded with the login on the engine pod.
 			name: "a bundled ClaudeCode login Direct", public: public,
 			mutate: func(in *Input) {

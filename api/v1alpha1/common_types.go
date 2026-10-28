@@ -925,12 +925,12 @@ const (
 	// ReasonSandboxLoginNotPortable is Ready=False on an agent Seat whose
 	// executor runs in E2B on a login that cannot follow the run there: the
 	// first ClaudeCode or OpenCode member of its executor chain, placed in
-	// E2B, is a ClaudeCode LLMProvider signed in with a credential bundle,
-	// or an OpenCode one with no credential-named variable in its env, and
-	// nothing in the run's environment signs its CLI in: the env of the
-	// Company's spec.sandbox.setup steps, then of the Seat's, then the
-	// Seat's spec.sandbox.env, a value that resolves to nothing counting for
-	// none. A bundle stays on the engine's data volume, as it carries a
+	// E2B, is a ClaudeCode LLMProvider signed in with a credential bundle
+	// and no ClaudeCode sign-in in its env, or an OpenCode one with no
+	// credential-named variable in its env, and nothing in the run's
+	// environment signs its CLI in: the env of the Company's
+	// spec.sandbox.setup steps, then of the Seat's, then the Seat's
+	// spec.sandbox.env, a value that resolves to nothing counting for none. A bundle stays on the engine's data volume, as it carries a
 	// refresh token the engine keeps rotating: Crewlet applies the seat and
 	// refuses each launch of its executor. A Direct run is seeded with the
 	// login, so it is never this.

@@ -142,12 +142,13 @@ drives `ClaudeCode` or `OpenCode`, an `LLMProvider` or a platform provider
 ([Where a seat's executor runs](cli-agents.md#where-a-seats-executor-runs)).
 The engine hands the run the provider's headless token or its
 `auth.apiKeySecretRef` key, under the variable its CLI reads
-(`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`), or for OpenCode the
-credential-named variables of its `env`, beneath the seat's own variables. No
-other variable of the provider's `env` reaches the run: a gateway address
-(`ANTHROPIC_BASE_URL`) is no credential, and stays with the provider's other
-phases in the engine's pod, so a run that needs it is given it in
-`spec.sandbox.env`.
+(`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`), and the provider's whole
+`env`, beneath the seat's own variables: an OpenCode provider's model
+provider key, and a gateway's address (`ANTHROPIC_BASE_URL`) and the bearer
+token it takes (`ANTHROPIC_AUTH_TOKEN`), or a cloud switch and its region,
+which the run reaches its model through as the provider's other phases do.
+A Claude Code sign-in in `env`, such as that bearer token, signs the run in
+wherever it runs.
 
 What else the box gets turns on its cell:
 
@@ -172,15 +173,18 @@ is scoped and limited for that, first in their `spec.llm.default`.
 A seat that signs Claude Code in itself, with `CLAUDE_CODE_OAUTH_TOKEN`,
 `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or a `CLAUDE_CODE_USE_*` toggle
 in `spec.sandbox.env` or a setup step's `env`, gets none of the provider's
-sign-in: its own is what the run uses, as Claude Code ranks its sign-ins by
-name and a provider's key beside a seat's plan token would win. A sign-in
+sign-in, its token, its key or a sign-in in its `env`: its own is what the
+run uses, as Claude Code ranks its sign-ins by name and a provider's key
+beside a seat's plan token would win. The rest of the provider's `env`, a
+gateway's address among it, still reaches the run, so a seat meant to bypass
+the gateway sets `ANTHROPIC_BASE_URL` itself. A sign-in
 the run goes without signs nothing in: one whose value is empty, whether or
 not `optionalKeys` lists its key, one whose Secret or key is missing under a
 key `optionalKeys` lists, and a provisioned one while no Integration of the
 company has `provisioning: Engine`. The run is then given the provider's
-sign-in, as one with no sign-in of its own is. Under OpenCode the provider's
-key is added beneath the seat's variables, so a seat variable of the same
-name wins.
+sign-in, as one with no sign-in of its own is. Every other variable of the
+provider's `env` is added beneath the seat's variables, so a seat variable of
+the same name wins.
 
 ### An agent's Slack app
 
