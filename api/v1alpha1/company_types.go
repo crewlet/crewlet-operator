@@ -259,16 +259,17 @@ type CompanyAssistant struct {
 // the pod lets it start a namespace, else with the kernel's Landlock: kept
 // from the engine's data, its configuration, its keyring and every other
 // box. On a pod that enforces neither Crewlet starts no such run, and gives
-// that as the reason. Crewlet makes that box beside its store, on the data
-// volume (/var/lib/crewlet/store/assistant-boxes), not on the sandboxes
-// volume: what the run writes there is bounded by no sandboxSizeLimit, and
-// counts against the volume the store and the event stream live on, which a
-// run that filled it would stop, and the company with them; a Company that
-// will not take that risk places deep work in E2B (spec.sandbox.e2b, or its
-// provider's runIn). A run reaches the bridge at the Company's public address
-// wherever it is placed, so a Company with no public address runs no deep
-// work. It is not placed by spec.sandbox.defaultRunIn, which places seats'
-// executors: a seat's Direct box is not confined. deepWork requires
+// that as the reason. Crewlet makes that box on the data pod's sandboxes
+// volume, in a directory of its own beside the seats' boxes
+// (/var/lib/crewlet-sandboxes/assistant, under the
+// providers.sandbox.local.state_dir the operator writes whenever a run can
+// be placed on the pod), so the class's data.sandboxSizeLimit bounds what
+// the run writes there, and a run past it evicts the pod as a seat's box
+// does, never filling the data volume. A run reaches the bridge at the
+// Company's public address wherever it is placed, so a Company with no
+// public address runs no deep work. It is not placed by
+// spec.sandbox.defaultRunIn, which places seats' executors: a seat's Direct
+// box is not confined. deepWork requires
 // spec.sandbox all the same, so that whether deep work runs in E2B or on
 // the engine pod is a choice the Company states rather than one its absence
 // makes.

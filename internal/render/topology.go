@@ -103,7 +103,9 @@ func ScratchSizeLimitOf(class *resource.Quantity) resource.Quantity {
 //
 // The volume holds a box for each of the pod's seats' runs that has one: one
 // running for each agent seat at most, as a seat runs one at a time, and one
-// for each run parked on a person's question. A parked run does not hold its
+// for each run parked on a person's question; and on a data pod the confined
+// box of each Dashboard Assistant deep-work run placed there, in a directory
+// of its own (Crewlet's hostCell, under the same state_dir). A parked run does not hold its
 // seat, so the seat runs on and its next run gets a box of its own, while the
 // parked one's is kept, its processes stopped, until the run resumes on its
 // answer or its pause TTL expires (the Seat's pauseTTLSeconds, else the

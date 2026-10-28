@@ -206,6 +206,10 @@ const (
 	// withTelemetry). Each mirror that moved was read again at it.
 	executorFinalRead = "v0.1.1-0.20261028203606-c6ba342a52ad"
 	otelGo            = "internal/sandbox/otel.go"
+	// topologyGo and assistantDeepGo are the render's pod sizes and the
+	// engine's deep-work backend, which several rows name.
+	topologyGo        = "internal/render/topology.go"
+	assistantDeepGo   = "internal/engine/assistantdeep.go"
 	localGo           = "internal/sandbox/local.go"
 	localBoxGo        = "internal/sandbox/local_box.go"
 	assistantGo       = "internal/config/assistant.go"
@@ -399,7 +403,7 @@ var runTelemetry = []string{
 // engine pod, the defaults and the API docs of its limit and of the boxes',
 // and the pages and the record that say what each limit bounds.
 var boxWrites = []string{
-	"internal/render/topology.go", bootstrapGo, companyWorkloadGo, engineClassGo,
+	topologyGo, bootstrapGo, companyWorkloadGo, engineClassGo,
 	runtimeMd, cliAgentsMd, "docs/guides/multi-tenancy.md", troubleshootingMd,
 	adr0008Md,
 }
@@ -419,6 +423,15 @@ var directRunEnds = []string{
 	troubleshootingMd, adr0008Md,
 }
 
+// deepWorkBox is every operator file that copies where a deep-work run placed
+// on a data pod keeps its confined box: on the pod's sandboxes volume, under
+// the state_dir the render writes, which data.sandboxSizeLimit bounds. The
+// render's rationale for the volume and its default limit, the API docs of
+// deep work and of the limit, and the pages and the record that say so.
+var deepWorkBox = []string{
+	bootstrapGo, topologyGo, companyTypesGo, engineClassGo, cliAgentsMd, runtimeMd, adr0008Md,
+}
+
 // parkedBoxes is every operator file that copies how many boxes, and how many
 // runs' processes, an engine pod holds: one running run for each agent seat,
 // and beside it each run parked on a person's question, which frees its seat
@@ -427,7 +440,7 @@ var directRunEnds = []string{
 // limit, the API docs of that limit, of the pods' resources and of the turns
 // a seat pod runs at once, and the pages that size a pod by them.
 var parkedBoxes = []string{
-	"internal/render/topology.go", engineClassGo, companyTypesGo, runtimeMd, cliAgentsMd,
+	topologyGo, engineClassGo, companyTypesGo, runtimeMd, cliAgentsMd,
 }
 
 // bootWindows is every operator file that copies the bounds the engine puts
@@ -482,8 +495,9 @@ var bootWindows = []string{
 // since the launch hands a run's credential files to whatever box it is placed
 // in and each backend decides what to do with them; where a direct box lives
 // (NewLocal, DefaultBoxRoot, localOptions) and what of the pod's environment it
-// is given (childEnv, PassthroughEnv). And two are deep work's, which no seat
-// launches: where it runs (DeepWorkPlacement) and the address it dials
+// is given (childEnv, PassthroughEnv). And the rest are deep work's, which no seat
+// launches: where it runs (DeepWorkPlacement), where it keeps its box on the
+// engine host (boxRootOf, hostCell, BoxRoot) and the address it dials
 // ((*assistantDeep).target).
 //
 // The Atlassian ones are the chain from a company's Jira or Confluence block
@@ -881,10 +895,10 @@ var mirrored = []mirror{
 	{
 		file: localGo, name: "NewLocal",
 		against: directBox,
-		decides: "a direct box is made under providers.sandbox.local.state_dir, made absolute, and only with none " +
-			"under DefaultBoxRoot, so the state_dir the render writes puts every box on the pod's sandboxes volume",
-		digest: "7196f5bbbc3de78eb9f93dd245fa7cace5888fe8699e0e20507e63b9e053e1d2",
-		read:   executorRead,
+		decides: "a direct box is made under its box root (BoxRoot), made absolute, so the state_dir the render " +
+			"writes puts every box on the pod's sandboxes volume",
+		digest: "185d33ccd9ab0188e75622adb0c2712a1833dce1ad665fb2a47a37f293a57302",
+		read:   executorFinalRead,
 	},
 	{
 		file: localGo, name: "DefaultBoxRoot",
@@ -1000,24 +1014,40 @@ var mirrored = []mirror{
 		read:   executorRead,
 	},
 	{
-		file: "internal/engine/assistantdeep.go", name: "(*assistantDeep).boxRoot",
-		against: []string{companyTypesGo, bootstrapGo, cliAgentsMd, runtimeMd,
-			adr0008Md},
-		decides: "a deep-work run placed on the engine host keeps its confined box beside the node's store, under " +
-			"the directory of the store path the render writes (/var/lib/crewlet/store/assistant-boxes on the " +
-			"data volume), never under providers.sandbox.local.state_dir, so no sandboxSizeLimit bounds it",
-		digest: "cd3f5182fffdbe1e0cead0b77f3ee6ece5b470f25d23d6f20e780409e339a16d",
-		read:   executorRead,
+		file: assistantDeepGo, name: "boxRootOf",
+		against: deepWorkBox,
+		decides: "a deep-work run placed on the engine host keeps its confined box under the company's box root, " +
+			"providers.sandbox.local.state_dir, which the render writes whenever deep work can be placed on the " +
+			"pod, so the data pods' sandboxSizeLimit bounds it",
+		digest: "68d2a128ab0409ecb1d68c42913322b2662cb7b76c502a9cf8ddab141abc1701",
+		read:   executorFinalRead,
 	},
 	{
-		file: "internal/engine/assistantdeep.go", name: "(*assistantDeep).target",
+		file: assistantDeepGo, name: "hostCell",
+		against: deepWorkBox,
+		decides: "a deep-work box is made in a directory of its own under the box root " +
+			"(/var/lib/crewlet-sandboxes/assistant), which a seat's backend never reaches",
+		digest: "564bf34e6cf2448eaade7ac077f8f0d7338c63f12fe8d0c615365255e861a87b",
+		read:   executorFinalRead,
+	},
+	{
+		file: localGo, name: "BoxRoot",
+		against: append([]string{renderCompanyGo, companyWorkloadGo, seatPoolsGo}, deepWorkBox...),
+		decides: "every box the engine makes on its host, a seat's and deep work's, is made under the state_dir as " +
+			"written, and only with none under DefaultBoxRoot",
+		digest: "63f5a8ac99347ea69e69ca315d9199267b3433213b05f3a22e19f66b77f9e6b8",
+		read:   executorFinalRead,
+	},
+	{
+		file: assistantDeepGo, name: "(*assistantDeep).target",
 		against: []string{companyTypesGo, engineClassGo, companyExposureGo, cliAgentsMd, exposureMd, runtimeMd,
 			"SECURITY.md", adr0008Md},
 		decides: "deep work reaches Crewlet at the fleet's bridge address in whichever cell it runs, never at its " +
-			"node's own listener, so a Company with no public address runs no deep work, and a run placed on the " +
-			"engine host needs the host's confinement",
-		digest: "00a568fc5466cf94401190d850322014d35eae81771a6d37eae2adc8ab93931f",
-		read:   executorRead,
+			"node's own listener, so a Company with no public address runs no deep work, the data pods alone need " +
+			"egress to the public route (dataPodEgress), and a run placed on the engine host needs the host's " +
+			"confinement",
+		digest: "f4e0156246cfdaa7ae8d6c052b5fc39cf69f8cd2a964985195508c1813c1251b",
+		read:   executorFinalRead,
 	},
 	{
 		file: jiraClient, name: "DeploymentOf",

@@ -219,12 +219,12 @@ over.
   limit bounds: a run that filled it would stop the store and the broker.
   Every other place an engine pod writes is bounded, so a run that writes
   without end is stopped at its own pod and never fills the node's disk.
-- **Not a deep-work run's.** The Dashboard Assistant's deep work, when it
-  runs on the data pod rather than in `E2B`, is a box Crewlet makes beside
-  its store, on the data volume (`/var/lib/crewlet/store/assistant-boxes`),
-  whatever this volume: no `sandboxSizeLimit` bounds what it writes, and a
-  run that filled the data volume would stop the store and the broker
-  ([Deep work](../guides/cli-agents.md#deep-work)).
+- **A deep-work run's too.** The Dashboard Assistant's deep work, when it
+  runs on the data pod rather than in `E2B`, is a confined box Crewlet makes
+  on this volume, in a directory of its own beside the seats' boxes
+  (`/var/lib/crewlet-sandboxes/assistant`), so `data.sandboxSizeLimit`
+  bounds what it writes as it bounds a seat's box ([Deep
+  work](../guides/cli-agents.md#deep-work)).
 
 ### When a Direct run's pod stops
 

@@ -197,9 +197,11 @@ type DataPodSettings struct {
 	// its next run and keeps its box, its processes stopped, until it
 	// resumes or its pause TTL expires (the Seat's pauseTTLSeconds, else the
 	// Company's spec.sandbox.defaultPauseTTLSeconds, 1800 seconds unless
-	// set; 0 removes the box at once). A box is removed when its run ends,
-	// and holds the run's checkout, its coding CLI's home and temporary
-	// files, and whatever the run installs and builds. A pod whose boxes
+	// set; 0 removes the box at once). It holds the confined box of each
+	// Dashboard Assistant deep-work run placed on the pod too, in a
+	// directory of its own. A box is removed when its run ends, and holds
+	// the run's checkout, its coding CLI's home and temporary files, and
+	// whatever the run installs and builds. A pod whose boxes
 	// write more is evicted, with every run and turn on it; its data volume
 	// is untouched. Unset is 20Gi. It bounds the boxes alone: what a run
 	// writes outside its box counts against scratchSizeLimit, or, under

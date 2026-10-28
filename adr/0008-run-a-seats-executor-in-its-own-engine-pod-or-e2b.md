@@ -173,17 +173,15 @@ still write the data volume by its path, which no `emptyDir` limit bounds:
 the volumes bound where a run's writes land, not what the run may name, and
 confining a `Direct` run to its box is Crewlet's to do.
 
-A deep-work run placed on the data pod is not on the sandboxes volume.
-Crewlet makes its confined box beside its store
-(`(*assistantDeep).boxRoot`: `/var/lib/crewlet/store/assistant-boxes` under
-the store path the render writes), not under
-`providers.sandbox.local.state_dir`, so what the run writes counts against
-the data volume, which no `sandboxSizeLimit` bounds and which a run that
-filled it would stop the store and the broker on: the risk the sandboxes
-volume exists to keep a seat's `Direct` run from. The confinement keeps the
-run from the engine's files, not from the volume's space. A Company that
-will not take that risk places deep work in `E2B`. Moving the box root is
-Crewlet's to do, and the mirror of `boxRoot` fails the day it moves.
+A deep-work run placed on the data pod is on the sandboxes volume too.
+Crewlet makes its confined box under the company's box root, the
+`providers.sandbox.local.state_dir` the render writes whenever a run can be
+placed on the pod, in a directory of its own (`boxRootOf` and `hostCell`:
+`/var/lib/crewlet-sandboxes/assistant`), which a seat's backend never
+reaches, so `data.sandboxSizeLimit` bounds what the run writes there, never
+the data volume. Where
+deep work lands on the pod is Crewlet's to decide, and the mirror of
+`boxRootOf`, `hostCell` and `BoxRoot` fails the day it moves.
 
 A seat's `Direct` box reaches its tools and sends its traces on its own
 pod's listener, a seat pod's included, so a Company with no public address

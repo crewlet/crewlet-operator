@@ -940,13 +940,12 @@ one, else on the data pod that opened the turn, in a box it confines with
 bubblewrap where the pod lets it start a namespace, else with the kernel's
 Landlock: kept from the engine's data, its configuration, its keyring and
 every other box. A pod that enforces neither starts no such run, and says so
-as the reason. Crewlet makes that box beside its store, on the data volume
-(`/var/lib/crewlet/store/assistant-boxes`), and not on the pod's `sandboxes`
-volume as a seat's `Direct` box: no `sandboxSizeLimit` bounds what the run
-writes there, and it counts against the volume the store and the event
-stream live on, which a run that filled it would stop, and the company with
-them ([Box storage](../concepts/runtime.md#box-storage)). A Company that will
-not take that risk places deep work in `E2B`. `spec.sandbox.defaultRunIn`
+as the reason. Crewlet makes that box on the pod's `sandboxes` volume, in a
+directory of its own beside the seats' `Direct` boxes
+(`/var/lib/crewlet-sandboxes/assistant`), so the class's
+`data.sandboxSizeLimit` bounds what the run writes there, and never the data
+volume the store and the event stream live on ([Box
+storage](../concepts/runtime.md#box-storage)). `spec.sandbox.defaultRunIn`
 does not place it: that places the seats' executors, and a seat's `Direct`
 box is not confined. The API refuses
 `deepWork` on a Company without `spec.sandbox` all the same, so that whether
