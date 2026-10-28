@@ -180,7 +180,8 @@ const (
 	//     flush that reads the broker's max_payload (listenTimeout twice);
 	//   - 120: the event stream's own streams (soloSequenceBudget);
 	//   - 60: a second connection, for coordination;
-	//   - 120: the coordination buckets, a window of their own;
+	//   - 120: the coordination buckets, and the floor of each seat's fencing
+	//     epoch above its sandbox runs, a window of their own;
 	//   - 90: the fleet's record of its object store, as on a seat pod
 	//     (seatPodBootSeconds);
 	//   - 40: four registrations of what the node answers (flushBudget);

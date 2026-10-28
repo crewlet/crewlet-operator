@@ -203,7 +203,13 @@ const (
 	// Direct boxes need no address of the operator's and nothing on a seat
 	// pod dials the public route; a direct box exports its traces to its
 	// own node's listener where the node forwards them (BuildOtelReceiver,
-	// withTelemetry). Each mirror that moved was read again at it.
+	// withTelemetry). A box is handed its entry's whole env (entryEnv,
+	// SandboxEnv); a direct job lost with its engine is carried on, never
+	// collected (jobEnd, carryOnLost); a deep-work box on the host lives under
+	// the company's box root (boxRootOf, hostCell, BoxRoot); a boot floors
+	// each seat's fencing epoch within the coordination window
+	// (attachCoordination); and runEnvironment and sandboxMCP renamed a
+	// parameter. Each mirror that moved was read again at it.
 	executorFinalRead = "v0.1.1-0.20261028203606-c6ba342a52ad"
 	otelGo            = "internal/sandbox/otel.go"
 	// topologyGo and assistantDeepGo are the render's pod sizes and the
@@ -733,8 +739,8 @@ var mirrored = []mirror{
 			"role.sandbox.env, each later layer winning a name, and a value that resolves to nothing is left out, " +
 			"quietly where the optional_keys beside the value that wins lists its key (a setup file's path " +
 			"likewise), and as the run's gap otherwise, which LaunchExecutor logs and starts the run without",
-		digest: "daf3aed9247874be8c712bfa72898cc7c5b598d671ef0f24b6d582e5691ab24a",
-		read:   seatAppTokenRead,
+		digest: "0ec78491f7653695460cde07c92b37f0fd44f9cb10d2e1bd7decfad44094be2a",
+		read:   executorFinalRead,
 	},
 	{
 		file: toolCredentialsGo, name: "resolveServer",
@@ -791,8 +797,8 @@ var mirrored = []mirror{
 		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "an executor's box is given every server its seat's sandbox scopes, shared or not, with the seat's " +
 			"block for it",
-		digest: "5c62f8967868099d4f70147181d286d06db85047965d6609b22fcf35c49bdc9b",
-		read:   seatAppTokenRead,
+		digest: "5a808c6a2bed31c6c956ccbf60d362c565d837f342f78b2d808e3f2a08aa21f4",
+		read:   executorFinalRead,
 	},
 	{
 		file: fileRulesGo, name: "(*Company).validateHeaderSpellings",
@@ -1446,9 +1452,10 @@ var mirrored = []mirror{
 	{
 		file: backendsGo, name: "attachCoordination",
 		against: bootWindows,
-		decides: "the coordination buckets are opened under one sequence ceiling of their own",
-		digest:  "f5e65acfd07add41b5831c2e593e55405c36745610b0d7110f66d48013c32bd4",
-		read:    bootBoundsRead,
+		decides: "the coordination buckets are opened, and each seat's fencing epoch floored above its sandbox " +
+			"runs, under one sequence ceiling of their own",
+		digest: "2f72ff42c018781caf2954d7fad78fcb41a101a58075fa621ff9277b92528eb2",
+		read:   executorFinalRead,
 	},
 	{
 		file: backendsGo, name: "clusteredStream",

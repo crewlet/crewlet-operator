@@ -78,7 +78,8 @@ const (
 	//   - 300: the event stream's streams, looked up or created across the
 	//     link, which counts as clustered (clusterSequenceBudget);
 	//   - 60: a second connection, for coordination (listenTimeout twice);
-	//   - 300: the coordination buckets, a window of their own
+	//   - 300: the coordination buckets, and the floor of each seat's fencing
+	//     epoch above its sandbox runs, a window of their own
 	//     (clusterSequenceBudget);
 	//   - 90: the fleet's record of its object store (AgreeObjectBackend):
 	//     eight rounds of a write and a read at the client's 5 s default and
