@@ -177,59 +177,9 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 		}
 	}
 
-	var single, batched []string
-	fingerprints := map[string][]byte{}
-	for _, name := range desired.Names() {
-		value := desired.values[name]
-		fp := next.fingerprint(name, value)
-		info, ok := listed[name]
-		if ok && info.OperatorID == self && hmac.Equal(next.fingerprints[name], fp) {
-			continue
-		}
-		// Until the write is answered the engine may or may not hold it.
-		delete(next.fingerprints, name)
-		fingerprints[name] = fp
-		if utf8.Valid(value) {
-			batched = append(batched, name)
-		} else {
-			single = append(single, name)
-		}
+	if err := push(ctx, eng, desired, listed, &next, self, &res); err != nil {
+		return next, res, err
 	}
-	wrote := func(name string) {
-		next.fingerprints[name] = fingerprints[name]
-		res.Put = append(res.Put, name)
-		if info, ok := listed[name]; ok && info.OperatorID != self {
-			res.Overwritten = append(res.Overwritten, Overwrite{Name: name, By: info.UpdatedBy, Credential: info.OperatorID})
-		}
-	}
-	// Each written alone re-activates the revision too, where it reads it,
-	// before the batch that re-activates it again with every value: what the
-	// last re-activation did is what Result.Reload reports.
-	for _, name := range single {
-		written, err := eng.WriteSecret(ctx, name, desired.values[name])
-		if err != nil {
-			sortWritten(&res)
-			return next, res, fmt.Errorf("writing %s into the engine's secret store: %w", name, err)
-		}
-		wrote(name)
-		res.written(written)
-	}
-	for batch := range slices.Chunk(batched, engine.MaxSecretBatch) {
-		values := make(map[string][]byte, len(batch))
-		for _, name := range batch {
-			values[name] = desired.values[name]
-		}
-		written, err := eng.PutSecrets(ctx, values)
-		if err != nil {
-			sortWritten(&res)
-			return next, res, fmt.Errorf("writing %s into the engine's secret store: %w", strings.Join(batch, ", "), err)
-		}
-		for _, name := range batch {
-			wrote(name)
-		}
-		res.written(written)
-	}
-	sortWritten(&res)
 
 	var retained []string
 	alone := desired.fleetsAlone()
@@ -269,6 +219,69 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 	}
 	res.Retained, next.retained = retained, nameSet(retained)
 	return next, res, nil
+}
+
+// push writes every value of desired that the engine does not hold as the
+// operator last wrote it, as Sync says, recording each written in next and
+// in res, with the engine's last re-activation; a failed write stops it.
+func push(
+	ctx context.Context, eng EngineSecrets, desired Desired, listed map[string]engine.SecretInfo, next *State,
+	self string, res *Result,
+) error {
+	var single, batched []string
+	fingerprints := map[string][]byte{}
+	for _, name := range desired.Names() {
+		value := desired.values[name]
+		fp := next.fingerprint(name, value)
+		info, ok := listed[name]
+		if ok && info.OperatorID == self && hmac.Equal(next.fingerprints[name], fp) {
+			continue
+		}
+		// Until the write is answered the engine may or may not hold it.
+		delete(next.fingerprints, name)
+		fingerprints[name] = fp
+		if utf8.Valid(value) {
+			batched = append(batched, name)
+		} else {
+			single = append(single, name)
+		}
+	}
+	wrote := func(name string) {
+		next.fingerprints[name] = fingerprints[name]
+		res.Put = append(res.Put, name)
+		if info, ok := listed[name]; ok && info.OperatorID != self {
+			res.Overwritten = append(res.Overwritten, Overwrite{Name: name, By: info.UpdatedBy, Credential: info.OperatorID})
+		}
+	}
+	// Each written alone re-activates the revision too, where it reads it,
+	// before the batch that re-activates it again with every value: what the
+	// last re-activation did is what Result.Reload reports.
+	for _, name := range single {
+		written, err := eng.WriteSecret(ctx, name, desired.values[name])
+		if err != nil {
+			sortWritten(res)
+			return fmt.Errorf("writing %s into the engine's secret store: %w", name, err)
+		}
+		wrote(name)
+		res.written(written)
+	}
+	for batch := range slices.Chunk(batched, engine.MaxSecretBatch) {
+		values := make(map[string][]byte, len(batch))
+		for _, name := range batch {
+			values[name] = desired.values[name]
+		}
+		written, err := eng.PutSecrets(ctx, values)
+		if err != nil {
+			sortWritten(res)
+			return fmt.Errorf("writing %s into the engine's secret store: %w", strings.Join(batch, ", "), err)
+		}
+		for _, name := range batch {
+			wrote(name)
+		}
+		res.written(written)
+	}
+	sortWritten(res)
+	return nil
 }
 
 // removed records in res the engine's answer to a removal: its

@@ -55,6 +55,9 @@ const DefaultTimeout = 30 * time.Second
 // derived hierarchy beside a refusal.
 const maxResponseBytes = 16 << 20
 
+// headerContentType is the header that says what a request's body is.
+const headerContentType = "Content-Type"
+
 // secretName is the grammar the engine keys its secret store by: an
 // environment-variable name, because that is what a ${NAME} in the company
 // document resolves through.
@@ -354,7 +357,7 @@ func (c *Client) ApplyConfig(ctx context.Context, req ApplyRequest) (ApplyResult
 		return ApplyResult{}, errors.New("apply the company document: IfMatch and CreateOnly are mutually exclusive: " +
 			"a write cannot require both a particular active revision and none at all")
 	}
-	header := http.Header{"Content-Type": {"application/yaml"}}
+	header := http.Header{headerContentType: {"application/yaml"}}
 	if req.Summary != "" {
 		header.Set("X-Summary", req.Summary)
 	}
@@ -488,7 +491,7 @@ func (c *Client) WriteSecret(ctx context.Context, name string, value []byte) (Se
 	}
 	if err := c.call(ctx, request{
 		method: http.MethodPut, path: "/secrets/" + name,
-		header: http.Header{"Content-Type": {"application/octet-stream"}},
+		header: http.Header{headerContentType: {"application/octet-stream"}},
 		body:   value,
 	}, http.StatusOK, &answer); err != nil {
 		return SecretsWritten{}, err
@@ -543,7 +546,7 @@ func (c *Client) PutSecrets(ctx context.Context, values map[string][]byte) (Secr
 	}
 	if err := c.call(ctx, request{
 		method: http.MethodPut, path: "/secrets",
-		header: http.Header{"Content-Type": {"application/json"}},
+		header: http.Header{headerContentType: {"application/json"}},
 		body:   encoded,
 	}, http.StatusOK, &answer); err != nil {
 		return SecretsWritten{}, err

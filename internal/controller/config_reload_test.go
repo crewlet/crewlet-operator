@@ -104,12 +104,10 @@ func TestARotationIsAppliedWhereTheEngineDidNotReactivate(t *testing.T) {
 		want      []string
 	}{
 		{name: "nothing read the value", reload: new(map[string]any(nil)), want: []string{"r1", "r2"}},
-		{name: "the re-activation lost a race", reload: &map[string]any{
-			"error": "revision_advanced", "detail": "another configuration write activated first",
-		}, want: []string{"r1", "r2"}},
-		{name: "the re-activation could not be confirmed", reload: &map[string]any{
-			"error": "unavailable", "detail": "the coordination store did not answer", "stored_revision_id": "r9",
-		}, want: []string{"r1", "r2"}},
+		{name: "the re-activation lost a race", reload: failedReload("revision_advanced", "another configuration write activated first"),
+			want: []string{"r1", "r2"}},
+		{name: "the re-activation could not be confirmed", reload: failedReload("unavailable", "the coordination store did not answer"),
+			want: []string{"r1", "r2"}},
 		{name: "somebody else's write overtook it", overtaken: true, want: []string{"r1", "r2", "r3", "r4"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -136,4 +134,11 @@ func TestARotationIsAppliedWhereTheEngineDidNotReactivate(t *testing.T) {
 			}
 		})
 	}
+}
+
+// failedReload is the engine's answer on a re-activation that did not land,
+// as a storeEngine's reloadAnswer.
+func failedReload(code, detail string) *map[string]any {
+	failed := refusal(code, detail)
+	return &failed
 }

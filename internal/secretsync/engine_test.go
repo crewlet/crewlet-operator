@@ -124,7 +124,7 @@ func TestContractASyncIsOneActivation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, res, err := Sync(ctx, eng, desiredOf(map[string]string{read: "k1", slack: "xoxb", signing: "sig"}), State{}, self)
+	state, res, err := Sync(ctx, eng, desiredOf(map[string]string{read: "k1", slack: "xoxb", signing: "signing"}), State{}, self)
 	if err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestContractASyncIsOneActivation(t *testing.T) {
 		t.Fatalf("the engine runs revision %s, want the re-activation %s", active.RevisionID, res.Reload.RevisionID)
 	}
 
-	_, res, err = Sync(ctx, eng, desiredOf(map[string]string{read: "k1", slack: "xoxb-rotated", signing: "sig"}), state, self)
+	_, res, err = Sync(ctx, eng, desiredOf(map[string]string{read: "k1", slack: "xoxb-rotated", signing: "signing"}), state, self)
 	if err != nil {
 		t.Fatalf("Sync: %v", err)
 	}

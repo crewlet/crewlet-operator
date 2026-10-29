@@ -126,12 +126,14 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 		return revision
 	}
 	activated := func(revision storeRevision) {
-		answer(http.StatusCreated, map[string]any{"revision_id": revision.id, "epoch": len(e.revisions)})
+		answer(http.StatusCreated, map[string]any{revisionIDField: revision.id, "epoch": len(e.revisions)})
 	}
 	if r.Method == http.MethodGet && e.serveServing(w, r.URL.Path, active) {
 		return
 	}
-	name, isSecret := strings.CutPrefix(r.URL.Path, "/secrets/")
+	if r.Method != http.MethodGet && e.serveSecretWrite(w, r, body, active, activate) {
+		return
+	}
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/health":
 		answer(http.StatusOK, map[string]any{"status": "ok", "configured": true, "posture": "serving", "applied_epoch": len(e.revisions)})
@@ -165,13 +167,28 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 			listing = append(listing, map[string]string{"name": name, "updated_by": operatorLogin, "operator_id": operatorLogin})
 		}
 		answer(http.StatusOK, map[string]any{"secrets": listing})
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+// serveSecretWrite answers a write into the store or a removal from it,
+// PUT /secrets, PUT /secrets/{name} and DELETE /secrets/{name}, and reports
+// whether r is one of them. active is the fleet's revision and activate
+// stores and activates a document; the caller holds e's lock.
+func (e *storeEngine) serveSecretWrite(
+	w http.ResponseWriter, r *http.Request, body []byte, active storeRevision, activate func([]byte) storeRevision,
+) bool {
+	reads := func(name string) bool { return strings.Contains(string(active.document), "${"+name+"}") }
+	name, isSecret := strings.CutPrefix(r.URL.Path, "/secrets/")
+	switch {
 	case r.Method == http.MethodPut && r.URL.Path == "/secrets":
 		var batch struct {
 			Values map[string]string `json:"values"`
 		}
 		if err := json.Unmarshal(body, &batch); err != nil || len(batch.Values) == 0 || len(batch.Values) > engine.MaxSecretBatch {
-			answer(http.StatusBadRequest, refusal("invalid_body", "not a batch"))
-			return
+			answerJSON(w, http.StatusBadRequest, refusal("invalid_body", "not a batch"))
+			return true
 		}
 		names := slices.Sorted(maps.Keys(batch.Values))
 		readBy := map[string][]string{}
@@ -179,8 +196,8 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 		for _, name := range names {
 			e.store[name] = batch.Values[name]
 			readBy[name] = []string{}
-			if strings.Contains(string(active.document), "${"+name+"}") {
-				readBy[name] = []string{"mcp.servers.env"}
+			if reads(name) {
+				readBy[name] = []string{readPath}
 				read = append(read, name)
 			}
 		}
@@ -188,30 +205,41 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 		if len(read) > 0 {
 			reload = e.reactivate(activate, active, "reload: secrets "+strings.Join(read, ", ")+" written")
 		}
-		answer(http.StatusOK, map[string]any{"names": names, "read_by": readBy, "reload": reload})
+		answerJSON(w, http.StatusOK, map[string]any{"names": names, readByField: readBy, reloadField: reload})
 	case r.Method == http.MethodPut && isSecret:
 		e.store[name] = string(body)
 		readBy, reload := []string{}, any(nil)
-		if strings.Contains(string(active.document), "${"+name+"}") {
-			readBy = []string{"mcp.servers.env"}
+		if reads(name) {
+			readBy = []string{readPath}
 			reload = e.reactivate(activate, active, "reload: secret "+name+" written")
 		}
-		answer(http.StatusOK, map[string]any{"name": name, "read_by": readBy, "reload": reload})
+		answerJSON(w, http.StatusOK, map[string]any{"name": name, readByField: readBy, reloadField: reload})
 	case r.Method == http.MethodDelete && isSecret:
 		_, ok := e.store[name]
 		delete(e.store, name)
 		readBy, reload := []string{}, any(nil)
-		if strings.Contains(string(active.document), "${"+name+"}") {
-			readBy = []string{"mcp.servers.env"}
+		if reads(name) {
+			readBy = []string{readPath}
 			if ok {
 				reload = e.reactivate(activate, active, "reload: secret "+name+" removed")
 			}
 		}
-		answer(http.StatusOK, map[string]any{"removed": ok, "read_by": readBy, "reload": reload})
+		answerJSON(w, http.StatusOK, map[string]any{"removed": ok, readByField: readBy, reloadField: reload})
 	default:
-		http.NotFound(w, r)
+		return false
 	}
+	return true
 }
+
+// readPath is the path of a document the storeEngine answers reads a name,
+// and readByField, reloadField and revisionIDField the keys of the engine's
+// answers that carry such paths, a re-activation and a revision.
+const (
+	readPath        = "mcp.servers.env"
+	readByField     = "read_by"
+	reloadField     = "reload"
+	revisionIDField = "revision_id"
+)
 
 // reactivate is the engine's re-activation of active at a write or a
 // removal of a value its document reads, with summary, as the answer's
@@ -232,7 +260,7 @@ func (e *storeEngine) reactivate(activate func([]byte) storeRevision, active sto
 		e.afterSecretsReload = nil
 		hook(e)
 	}
-	return map[string]any{"revision_id": reloaded.id, "epoch": len(e.revisions)}
+	return map[string]any{revisionIDField: reloaded.id, "epoch": len(e.revisions)}
 }
 
 // serveServing answers what the engine says of what its nodes run, the GET
@@ -295,7 +323,7 @@ func (e *storeEngine) serveServing(w http.ResponseWriter, path string, active st
 			answerJSON(w, http.StatusInternalServerError, refusal("internal", err.Error()))
 			return true
 		}
-		answerJSON(w, http.StatusOK, map[string]any{"revision_id": revisionID, "is_active": i == len(e.revisions)-1,
+		answerJSON(w, http.StatusOK, map[string]any{revisionIDField: revisionID, "is_active": i == len(e.revisions)-1,
 			"payload": json.RawMessage(payload)})
 	default:
 		return false
@@ -980,7 +1008,7 @@ func TestAnApplyIsRecordedBeforeAnythingIsDeletedAfterIt(t *testing.T) {
 			if len(state.Withdrawn()) != 0 {
 				t.Errorf("the state owes %v, want nothing", state.Withdrawn())
 			}
-			if letsGo := !(tc.fails == 3 && tc.held); letsGo != slices.Equal(state.LetGo(last), []string{w.registry}) {
+			if letsGo := tc.fails != 3 || !tc.held; letsGo != slices.Equal(state.LetGo(last), []string{w.registry}) {
 				t.Errorf("the state lets %v go for %s, want the registry: %t", state.LetGo(last), last, letsGo)
 			}
 		})
@@ -1023,7 +1051,7 @@ func TestAReloadIsRecordedOnlyForTheDocumentItRead(t *testing.T) {
 				w.engine.afterReload = func(e *storeEngine) { e.activateOther(e.revisions[len(e.revisions)-1].document) }
 			}
 			if !tc.byEngine {
-				w.engine.reloadAnswer = &map[string]any{"error": "unavailable", "detail": "the coordination store did not answer"}
+				w.engine.reloadAnswer = failedReload("unavailable", "the coordination store did not answer")
 			}
 			if _, err := w.run.withdrawHeld(ctx, w.resolve(t)); err != nil {
 				t.Fatal(err)
