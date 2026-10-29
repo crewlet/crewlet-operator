@@ -427,6 +427,60 @@ func TestEngineASecretWriteReactivatesTheRevisionThatReadsIt(t *testing.T) {
 	reactivated("the removal", removed.Reload, first.Epoch+2)
 }
 
+// TestEngineDeferredWritesActivateNothingUntilTheLiveOne pins, against the
+// real engine, what a secret sync's one activation rests on (Crewlet's
+// ADR-0070, PUT /secrets/{name}?defer_reload=true): a batch written with
+// defer_reload and a value written alone, as raw bytes, with defer_reload,
+// both of a name the active revision reads, re-activate nothing and say so,
+// and the one live write after them re-activates the revision exactly once,
+// an epoch past where the deferred ones left it.
+func TestEngineDeferredWritesActivateNothingUntilTheLiveOne(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client := enginetest.Start(t).Client()
+	const read = "ENGINETEST_LLM_API_KEY"
+
+	first, err := client.ApplyConfig(ctx, engine.ApplyRequest{
+		Document: []byte(enginetest.MinimalCompany), Summary: "enginetest: reads " + read, CreateOnly: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deferred := func(what string, written engine.SecretsWritten) {
+		t.Helper()
+		if written.Reload == nil || !written.Reload.Deferred || written.Reload.Landed() || len(written.ReadBy[read]) == 0 {
+			t.Fatalf("%s = %+v, want it deferred, nothing re-activated, and %s read", what, written, read)
+		}
+	}
+	batch, err := client.PutSecrets(ctx, map[string][]byte{read: []byte("sk-enginetest-deferred")}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deferred("the deferred batch", batch)
+	alone, err := client.WriteSecret(ctx, read, []byte{0xff, 0xfe, 's', 'k'}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deferred("the deferred single write", alone)
+	if active, err := client.ActiveConfig(ctx); err != nil || active.RevisionID != first.RevisionID {
+		t.Fatalf("after the deferred writes the engine runs %+v (%v), want revision %s still", active, err,
+			first.RevisionID)
+	}
+
+	live, err := client.PutSecrets(ctx, map[string][]byte{read: []byte("sk-enginetest-live")}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !live.Reload.Landed() || live.Reload.Epoch != first.Epoch+1 {
+		t.Fatalf("the live write = %+v, want one re-activation, at epoch %d", live.Reload, first.Epoch+1)
+	}
+	active, err := client.ActiveConfig(ctx)
+	if err != nil || active.RevisionID != live.Reload.RevisionID {
+		t.Fatalf("after the live write the engine runs %+v (%v), want its re-activation %s", active, err,
+			live.Reload.RevisionID)
+	}
+}
+
 // TestEngineIntegrationsOfACompanyWithoutAny pins the empty answers: no company
 // reports no tools, and a company with no integration reports every tool as
 // not in use.
