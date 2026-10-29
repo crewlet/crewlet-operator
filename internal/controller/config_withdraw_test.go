@@ -48,8 +48,8 @@ import (
 // lock, just before a reload is answered and just after a reload or an apply
 // is: somebody else's write landing between two of the operator's.
 //
-// A batch write into its store (PUT /secrets), and a removal of a value
-// (DELETE /secrets/{name}), re-activates the fleet's revision when its
+// A write into its store (PUT /secrets, PUT /secrets/{name}), and a removal
+// of a value (DELETE /secrets/{name}), re-activates the fleet's revision when its
 // document reads one of the names, as the engine does, answering 200 with
 // what that did; reloadAnswer, when set, is what it answers instead,
 // activating nothing (nil for the engine's null, else a failed
@@ -191,7 +191,12 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 		answer(http.StatusOK, map[string]any{"names": names, "read_by": readBy, "reload": reload})
 	case r.Method == http.MethodPut && isSecret:
 		e.store[name] = string(body)
-		answer(http.StatusOK, map[string]any{})
+		readBy, reload := []string{}, any(nil)
+		if strings.Contains(string(active.document), "${"+name+"}") {
+			readBy = []string{"mcp.servers.env"}
+			reload = e.reactivate(activate, active, "reload: secret "+name+" written")
+		}
+		answer(http.StatusOK, map[string]any{"name": name, "read_by": readBy, "reload": reload})
 	case r.Method == http.MethodDelete && isSecret:
 		_, ok := e.store[name]
 		delete(e.store, name)

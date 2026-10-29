@@ -18,8 +18,8 @@
 // anything else an *APIError with the engine's code and message.
 //
 // No error this package returns carries a secret value: the engine never
-// echoes one, and a secret written with PutSecret or PutSecrets travels only
-// in the request body, which no error, log line or wrap here includes.
+// echoes one, and a secret written with WriteSecret or PutSecrets travels
+// only in the request body, which no error, log line or wrap here includes.
 package engine
 
 import (
@@ -458,27 +458,44 @@ func (c *Client) ListSecrets(ctx context.Context) ([]SecretInfo, error) {
 }
 
 // PutSecret stores or rotates the value of name in the engine's encrypted
-// secret store. When the active revision reads name, the engine re-activates
-// it in the same request, so that a ${name} in the running document resolves
-// to the new value from then on; it answers 200 whether or not that
-// re-activation landed, and this method does not read what it did
-// (PutSecrets does, for a batch). The engine records who wrote it from the
-// credential this client authenticates with, never from anything the
-// request says: see SecretInfo.OperatorID.
+// secret store: WriteSecret, for a caller that needs no more than whether it
+// was stored.
+func (c *Client) PutSecret(ctx context.Context, name string, value []byte) error {
+	_, err := c.WriteSecret(ctx, name, value)
+	return err
+}
+
+// WriteSecret stores or rotates the value of name in the engine's encrypted
+// secret store (PUT /secrets/{name}). When the active revision reads name,
+// the engine re-activates it in the same request, so that a ${name} in the
+// running document resolves to the new value from then on, and answers 200
+// whatever that re-activation did: SecretsWritten.Reload says. The engine
+// records who wrote it from the credential this client authenticates with,
+// never from anything the request says: see SecretInfo.OperatorID.
 //
 // The value is the request body, sent as raw bytes: the engine stores exactly
 // what it receives, and an encoding step in between is a credential the
 // vendor then refuses. So this is the write for a value that is not UTF-8,
 // which PutSecrets cannot carry. Nothing this returns contains it.
-func (c *Client) PutSecret(ctx context.Context, name string, value []byte) error {
+func (c *Client) WriteSecret(ctx context.Context, name string, value []byte) (SecretsWritten, error) {
 	if err := checkSecretName(name); err != nil {
-		return err
+		return SecretsWritten{}, err
 	}
-	return c.call(ctx, request{
+	var answer struct {
+		Name   string        `json:"name"`
+		ReadBy []string      `json:"read_by"`
+		Reload *reloadAnswer `json:"reload"`
+	}
+	if err := c.call(ctx, request{
 		method: http.MethodPut, path: "/secrets/" + name,
 		header: http.Header{"Content-Type": {"application/octet-stream"}},
 		body:   value,
-	}, http.StatusOK, nil)
+	}, http.StatusOK, &answer); err != nil {
+		return SecretsWritten{}, err
+	}
+	return SecretsWritten{
+		Names: []string{name}, ReadBy: map[string][]string{name: answer.ReadBy}, Reload: answer.Reload.reload(),
+	}, nil
 }
 
 // MaxSecretBatch is the most values one PutSecrets writes: the engine
@@ -495,7 +512,7 @@ const MaxSecretBatch = 64
 //
 // It writes 1 to MaxSecretBatch values, each named in the store's grammar
 // and valid UTF-8, since the body is JSON and a JSON string cannot carry
-// other bytes unchanged (PutSecret can); anything else is refused before a
+// other bytes unchanged (WriteSecret can); anything else is refused before a
 // request is sent. The engine refuses the whole body when it refuses any
 // value, so a failed batch may have sealed none of them, or, for an error
 // inside the engine, some. Nothing this returns contains a value.
@@ -701,7 +718,7 @@ func (c *Client) call(ctx context.Context, r request, want int, out any) error {
 // roundTrip sends r and reads the answer, whatever its status.
 //
 // Every error it returns names the method and path and never the body, which
-// for PutSecret and PutSecrets is a credential.
+// for WriteSecret and PutSecrets is a credential.
 func (c *Client) roundTrip(ctx context.Context, r request) (*response, error) {
 	target, err := url.Parse(c.baseURL + r.path)
 	if err != nil {

@@ -25,10 +25,11 @@ type EngineSecrets interface {
 	// active revision once if it reads any of them. The engine records the
 	// credential that wrote them (SecretInfo.OperatorID).
 	PutSecrets(ctx context.Context, values map[string][]byte) (engine.SecretsWritten, error)
-	// PutSecret stores or replaces one value as raw bytes
+	// WriteSecret stores or replaces one value as raw bytes
 	// (PUT /secrets/{name}), for a value that is not UTF-8, which a batch's
-	// JSON body cannot carry.
-	PutSecret(ctx context.Context, name string, value []byte) error
+	// JSON body cannot carry, and the engine re-activates the active
+	// revision if it reads the name.
+	WriteSecret(ctx context.Context, name string, value []byte) (engine.SecretsWritten, error)
 	// DeleteSecret removes one entry, reporting whether it existed
 	// (DELETE /secrets/{name}), and the engine re-activates the active
 	// revision if it reads the name. Removing an absent entry is not an
@@ -71,9 +72,8 @@ type Result struct {
 	// a request changes a value it reads, so that one read the store as the
 	// Sync left it, for every value the revision reads. A request that
 	// changed only values the revision does not read made none, and changes
-	// nothing here. Nil when no request changed a value the revision reads,
-	// or the last that may have was a value written alone, whose answer is
-	// not read: the caller then activates the revision itself.
+	// nothing here. Nil when no request changed a value the revision reads:
+	// the caller then activates the revision itself where it has to.
 	Reload *engine.Reload
 }
 
@@ -122,7 +122,9 @@ type Overwrite struct {
 // mix of the old and the new values between them. So a sync of up to
 // engine.MaxSecretBatch values is one activation, which Result.Reload
 // reports. A value that is not UTF-8 is written alone, before them, since a
-// JSON body cannot carry it unchanged. The engine re-activates the revision
+// JSON body cannot carry it unchanged: each is an activation of its own
+// where the revision reads it, the price of a credential that is not text,
+// which none of the positions the operator renders expects. The engine re-activates the revision
 // at the removal of a value it reads too, one removal at a time, which is
 // what Result.Reload reports where one comes last.
 //
@@ -200,17 +202,17 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 			res.Overwritten = append(res.Overwritten, Overwrite{Name: name, By: info.UpdatedBy, Credential: info.OperatorID})
 		}
 	}
-	// Each written alone re-activates the revision too, before the batch
-	// that re-activates it again with every value: what the last write's
-	// re-activation did is what Result.Reload reports.
+	// Each written alone re-activates the revision too, where it reads it,
+	// before the batch that re-activates it again with every value: what the
+	// last re-activation did is what Result.Reload reports.
 	for _, name := range single {
-		if err := eng.PutSecret(ctx, name, desired.values[name]); err != nil {
+		written, err := eng.WriteSecret(ctx, name, desired.values[name])
+		if err != nil {
 			sortWritten(&res)
 			return next, res, fmt.Errorf("writing %s into the engine's secret store: %w", name, err)
 		}
 		wrote(name)
-		// The engine may have re-activated at it, or not: unknown.
-		res.Reload = nil
+		res.written(written)
 	}
 	for batch := range slices.Chunk(batched, engine.MaxSecretBatch) {
 		values := make(map[string][]byte, len(batch))
@@ -225,9 +227,7 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 		for _, name := range batch {
 			wrote(name)
 		}
-		if read(written.ReadBy) || written.Reload != nil {
-			res.Reload = written.Reload
-		}
+		res.written(written)
 	}
 	sortWritten(&res)
 
@@ -279,15 +279,18 @@ func (res *Result) removed(answer engine.SecretRemoved) {
 	}
 }
 
-// read reports whether readBy, a write's paths reading each name, has a
-// name the active revision reads.
-func read(readBy map[string][]string) bool {
-	for _, paths := range readBy {
+// written records in res the engine's answer to a write: its
+// re-activation, where the active revision reads one of the names.
+func (res *Result) written(answer engine.SecretsWritten) {
+	for _, paths := range answer.ReadBy {
 		if len(paths) > 0 {
-			return true
+			res.Reload = answer.Reload
+			return
 		}
 	}
-	return false
+	if answer.Reload != nil {
+		res.Reload = answer.Reload
+	}
 }
 
 // sortWritten sorts what res says was written by name, as Result promises:

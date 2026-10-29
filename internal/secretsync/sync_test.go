@@ -94,19 +94,24 @@ func (e *fakeEngine) PutSecrets(_ context.Context, values map[string][]byte) (en
 	return written, nil
 }
 
-func (e *fakeEngine) PutSecret(_ context.Context, name string, value []byte) error {
+func (e *fakeEngine) WriteSecret(_ context.Context, name string, value []byte) (engine.SecretsWritten, error) {
 	e.calls = append(e.calls, "put-raw "+name)
 	if err := e.failPut[name]; err != nil {
-		return err
+		return engine.SecretsWritten{}, err
 	}
 	if !storeGrammar.MatchString(name) {
-		return fmt.Errorf("invalid_name %q", name)
+		return engine.SecretsWritten{}, fmt.Errorf("invalid_name %q", name)
 	}
 	if len(value) > MaxValueBytes {
-		return errors.New("value_too_large")
+		return engine.SecretsWritten{}, errors.New("value_too_large")
 	}
 	e.entries[name] = fakeEntry{value: string(value), by: self}
-	return nil
+	written := engine.SecretsWritten{Names: []string{name}, ReadBy: map[string][]string{name: {}}}
+	if e.reads[name] {
+		written.ReadBy[name] = []string{"llm.api_key"}
+		written.Reload = e.reactivate()
+	}
+	return written, nil
 }
 
 func (e *fakeEngine) DeleteSecret(_ context.Context, name string) (engine.SecretRemoved, error) {
@@ -352,7 +357,7 @@ func TestSyncSplitsALargeSetIntoBatches(t *testing.T) {
 // TestSyncWritesAValueThatIsNotUTF8Alone: a JSON body cannot carry such a
 // value unchanged, so it is written as raw bytes on its own, before the
 // batch, whose re-activation, made with it in the store, is the one
-// reported.
+// reported; written last, its own is.
 func TestSyncWritesAValueThatIsNotUTF8Alone(t *testing.T) {
 	eng := newFakeEngine()
 	eng.reads = map[string]bool{nameA: true, nameB: true}
@@ -366,12 +371,17 @@ func TestSyncWritesAValueThatIsNotUTF8Alone(t *testing.T) {
 	}
 	assertStore(t, eng, map[string]fakeEntry{nameA: {"a1", self}, nameB: {"\xff\xfe", self}, nameC: {"c1", self}})
 
-	// Written alone and last, its re-activation is not read: none reported.
+	if len(eng.reloaded) != 2 || res.Reload.RevisionID != eng.reloaded[1] {
+		t.Fatalf("Reload = %+v after %v, want the batch's, the last", res.Reload, eng.reloaded)
+	}
+
+	// Written alone and last, its own re-activation is the one reported.
 	eng = newFakeEngine()
+	eng.reads = map[string]bool{nameB: true}
 	_, res = mustSync(t, eng, desiredOf(map[string]string{nameB: "\xff"}), State{})
 	assertCalls(t, eng, "list", "put-raw "+nameB)
-	if res.Reload != nil {
-		t.Fatalf("Reload = %+v, want none", res.Reload)
+	if !res.Reload.Landed() || res.Reload.RevisionID != "reloaded-1" {
+		t.Fatalf("Reload = %+v, want the write's own re-activation", res.Reload)
 	}
 }
 
