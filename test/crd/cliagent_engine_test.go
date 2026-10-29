@@ -552,12 +552,12 @@ func TestCLIAgentSignInEnvFollowsTheEngine(t *testing.T) {
 		listed := slices.Contains(engineLists[p.Spec.Agent], variable)
 		refusal := apiVerdict(t, p)
 		if mode == v1.CLIAgentAuthEnv {
-			// An env sign-in CLI reads a credential-named name as its
-			// model provider's key, and reports itself signed in from its
-			// environment.
-			signedIn := slices.Contains([]string{signInEnvMode, signInEnvironment}, report.signIns[p.Name])
-			engineAdmits := len(report.problems[p.Name]) == 0 && len(report.warnings[p.Name]) == 0 && signedIn
-			if listed && (!engineAdmits || report.signIns[p.Name] != signInEnvMode) {
+			// Under auth.mode env the engine reports every CLI it admits
+			// signed in with env, an env sign-in CLI that reads a
+			// credential-named name as its model provider's key included.
+			engineAdmits := len(report.problems[p.Name]) == 0 && len(report.warnings[p.Name]) == 0 &&
+				report.signIns[p.Name] == signInEnvMode
+			if listed && !engineAdmits {
 				t.Errorf("%s with %s in env under Env: its profile lists it, and the engine refuses it or reports it "+
 					"signed in with %q: %q", p.Spec.Agent, variable, report.signIns[p.Name], report.problems[p.Name])
 			}
@@ -849,11 +849,14 @@ func signInTableFollows(t *testing.T, agents []string, variables map[v1.CLIAgent
 		return name
 	}
 	yes := func(cell string) bool { return !strings.HasPrefix(cell, "no") }
-	// envMode is what the engine signs agent in by under auth mode Env:
-	// the names one of which it admits and reports signed in with env, a
-	// key in env where it admits a model provider's key and reports the CLI
-	// signed in from its environment, and no where it admits neither.
+	// envMode is what the engine signs agent in by under auth mode Env, which
+	// it reports as env whatever the CLI: a key in env where it admits a
+	// model provider's key, the names one of which it admits where it does
+	// not, and no where it admits neither.
 	envMode := func(agent string) string {
+		if v := verdicts[shapeEnvMode+"OPENROUTER_API_KEY"][agent]; v.problem == "" && v.signIn == signInEnvMode {
+			return "a key in `env`"
+		}
 		var names []string
 		for shape, byAgent := range verdicts {
 			name, ok := strings.CutPrefix(shape, shapeEnvMode)
@@ -864,9 +867,6 @@ func signInTableFollows(t *testing.T, agents []string, variables map[v1.CLIAgent
 		if len(names) > 0 {
 			slices.Sort(names)
 			return strings.Join(names, ", ")
-		}
-		if v := verdicts[shapeEnvMode+"OPENROUTER_API_KEY"][agent]; v.problem == "" && v.signIn == signInEnvMode {
-			return "a key in `env`"
 		}
 		return "no"
 	}
@@ -1015,7 +1015,8 @@ type verdict struct {
 
 // The SIGN-IN words of `crewlet llm list` the suite reads beside its token
 // and its key: a CLI signed in by a model provider's key in its environment
-// (env_sign_in), and one signed in by its env under auth.mode env.
+// (env_sign_in) under auth.mode subscription, and any CLI signed in by its env
+// under auth.mode env.
 const (
 	signInEnvironment = "environment"
 	signInEnvMode     = "env"
