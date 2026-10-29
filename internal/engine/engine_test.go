@@ -351,8 +351,8 @@ func TestEngineSecretsRoundTrip(t *testing.T) {
 
 	for _, want := range []bool{true, false} {
 		removed, err := client.DeleteSecret(ctx, name)
-		if err != nil || removed != want {
-			t.Fatalf("DeleteSecret() = %v, %v, want %v, nil", removed, err, want)
+		if err != nil || removed.Removed != want || removed.Reload != nil {
+			t.Fatalf("DeleteSecret() = %+v, %v, want removed %v, nothing re-activated, nil", removed, err, want)
 		}
 	}
 	listed, err = client.ListSecrets(ctx)
@@ -362,6 +362,69 @@ func TestEngineSecretsRoundTrip(t *testing.T) {
 	if slices.ContainsFunc(listed, func(s engine.SecretInfo) bool { return s.Name == name }) {
 		t.Fatalf("ListSecrets() after the delete = %+v, still lists %s", listed, name)
 	}
+}
+
+// TestEngineASecretWriteReactivatesTheRevisionThatReadsIt pins what the
+// operator's secret sync and withdrawals rest on (Crewlet's ADR-0070): a
+// batch write of values the active revision reads is one re-activation of it,
+// unchanged, which the 200 names and the engine then runs; a write or a
+// removal of a value nothing reads re-activates nothing; and a removal of a
+// value the revision reads re-activates it as a write does.
+func TestEngineASecretWriteReactivatesTheRevisionThatReadsIt(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	client := enginetest.Start(t).Client()
+	const read, unread = "ENGINETEST_LLM_API_KEY", "ENGINETEST_READ_BY_NOTHING"
+
+	first, err := client.ApplyConfig(ctx, engine.ApplyRequest{
+		Document: []byte(enginetest.MinimalCompany), Summary: "enginetest: reads " + read, CreateOnly: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := client.ActiveConfig(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reactivated := func(what string, reload *engine.Reload, epoch int64) {
+		t.Helper()
+		if !reload.Landed() || reload.Epoch != epoch {
+			t.Fatalf("%s: reload = %+v, want one re-activation, at epoch %d", what, reload, epoch)
+		}
+		active, err := client.ActiveConfig(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if active.RevisionID != reload.RevisionID || !bytes.Equal(active.Document, before.Document) {
+			t.Fatalf("%s: the engine runs revision %s, want the re-activation %s of the same document",
+				what, active.RevisionID, reload.RevisionID)
+		}
+	}
+
+	written, err := client.PutSecrets(ctx, map[string][]byte{read: []byte("sk-enginetest-not-a-key"), unread: []byte("x")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(written.Names, []string{read, unread}) || len(written.ReadBy[read]) == 0 ||
+		written.ReadBy[unread] == nil || len(written.ReadBy[unread]) != 0 {
+		t.Fatalf("PutSecrets() = %+v, want both written, %s read and %s read by nothing", written, read, unread)
+	}
+	reactivated("the batch", written.Reload, first.Epoch+1)
+
+	written, err = client.PutSecrets(ctx, map[string][]byte{unread: []byte("y")})
+	if err != nil || written.Reload != nil {
+		t.Fatalf("PutSecrets() of a value nothing reads = %+v, %v; want nothing re-activated", written, err)
+	}
+	removed, err := client.DeleteSecret(ctx, unread)
+	if err != nil || !removed.Removed || removed.Reload != nil || len(removed.ReadBy) != 0 {
+		t.Fatalf("DeleteSecret() of a value nothing reads = %+v, %v; want it removed and nothing re-activated", removed, err)
+	}
+
+	removed, err = client.DeleteSecret(ctx, read)
+	if err != nil || !removed.Removed || len(removed.ReadBy) == 0 {
+		t.Fatalf("DeleteSecret() of %s = %+v, %v; want it removed and read", read, removed, err)
+	}
+	reactivated("the removal", removed.Reload, first.Epoch+2)
 }
 
 // TestEngineIntegrationsOfACompanyWithoutAny pins the empty answers: no company

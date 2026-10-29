@@ -306,6 +306,74 @@ type SecretInfo struct {
 	Source string
 }
 
+// SecretsWritten is what one batch write into the engine's secret store
+// (Client.PutSecrets) did: the values it sealed, and what that did to the
+// running company.
+type SecretsWritten struct {
+	// Names are the names written, sorted.
+	Names []string
+
+	// ReadBy are, by name, the paths of the active revision's document that
+	// read it, an empty list for a name nothing reads.
+	ReadBy map[string][]string
+
+	// Reload is the re-activation the write made of the active revision
+	// because that revision reads one of the names: nil when it reads none,
+	// so that nothing was re-activated.
+	Reload *Reload
+}
+
+// SecretRemoved is what one removal from the engine's secret store
+// (Client.DeleteSecret) did.
+type SecretRemoved struct {
+	// Removed is whether there was a value to remove.
+	Removed bool
+
+	// ReadBy are the paths of the active revision's document that read the
+	// name, empty when nothing reads it.
+	ReadBy []string
+
+	// Reload is the re-activation the removal made of the active revision
+	// because that revision reads the name: nil when it reads it not, or
+	// nothing was removed, so that nothing was re-activated.
+	Reload *Reload
+}
+
+// Reload is the engine's answer on the re-activation a write through
+// /secrets made of the active revision, after it had sealed every value
+// (Crewlet's ADR-0070). The engine answers 200 whatever the re-activation
+// did, so a write that sealed its values and could not re-activate says so
+// here rather than in an error.
+type Reload struct {
+	// RevisionID and Epoch are the revision the re-activation stored and
+	// activated, and its activation epoch, set when it landed.
+	RevisionID string
+	Epoch      int64
+
+	// Error is the engine's code for a re-activation that did not land:
+	// revision_advanced, validation_error, unavailable, no_active_revision
+	// or internal_error. Detail is its sentence.
+	Error  string
+	Detail string
+
+	// StoredRevisionID and Node name the revision a re-activation stored
+	// whose activation was lost or went unanswered, and the node whose
+	// history alone holds it.
+	StoredRevisionID string
+	Node             string
+
+	// Deferred is a write that asked the engine to re-activate nothing
+	// (defer_reload, which this client never sends): the values are sealed
+	// and not active yet.
+	Deferred bool
+}
+
+// Landed reports whether r is a re-activation that stored and activated a
+// revision. A nil Reload is none.
+func (r *Reload) Landed() bool {
+	return r != nil && r.RevisionID != "" && r.Error == ""
+}
+
 // IntegrationState is one tool's standing as the engine judges it.
 type IntegrationState string
 

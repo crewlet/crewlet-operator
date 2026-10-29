@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/crewlet/crewlet-operator/internal/engine"
 	"github.com/crewlet/crewlet-operator/internal/secretref"
@@ -16,12 +18,24 @@ import (
 // fakeEngine is the engine's /secrets surface as its documentation describes
 // it: names in the environment-variable grammar, values up to 64 KiB, a
 // listing without values that names the credential each entry was last
-// written with, an idempotent delete. Every write it takes is Sync's, so it
-// records self as the writer; a test plays anybody else by writing an entry
-// directly. It records every call, and fails the ones a test names.
+// written with, an idempotent delete, and a batch write of up to 64 values
+// that re-activates the active revision once when it reads any of them
+// (reads), as a delete of a value it reads does, answering 200 whatever the
+// re-activation did (reload). Every
+// write it takes is Sync's, so it records self as the writer; a test plays
+// anybody else by writing an entry directly. It records every call, a batch
+// as "put" and its names, a value written alone as "put-raw" and its name,
+// and fails the ones a test names: a batch fails when any of its names does.
 type fakeEngine struct {
 	entries map[string]fakeEntry
 	calls   []string
+
+	// reads are the names the active revision reads, and reload what a
+	// batch that writes one answers about its re-activation; a nil reload
+	// is one that lands as the next revision of reloaded.
+	reads    map[string]bool
+	reload   *engine.Reload
+	reloaded []string
 
 	failList   error
 	failPut    map[string]error
@@ -52,8 +66,36 @@ func (e *fakeEngine) ListSecrets(context.Context) ([]engine.SecretInfo, error) {
 	return out, nil
 }
 
+func (e *fakeEngine) PutSecrets(_ context.Context, values map[string][]byte) (engine.SecretsWritten, error) {
+	names := slices.Sorted(maps.Keys(values))
+	e.calls = append(e.calls, "put "+strings.Join(names, " "))
+	if len(values) == 0 || len(values) > engine.MaxSecretBatch {
+		return engine.SecretsWritten{}, fmt.Errorf("invalid_body: %d values", len(values))
+	}
+	for _, name := range names {
+		if err := e.failPut[name]; err != nil {
+			return engine.SecretsWritten{}, err
+		}
+		if !storeGrammar.MatchString(name) || len(values[name]) > MaxValueBytes || !utf8.Valid(values[name]) {
+			return engine.SecretsWritten{}, fmt.Errorf("invalid_body: %s", name)
+		}
+	}
+	written := engine.SecretsWritten{Names: names, ReadBy: map[string][]string{}}
+	for _, name := range names {
+		e.entries[name] = fakeEntry{value: string(values[name]), by: self}
+		written.ReadBy[name] = []string{}
+		if e.reads[name] {
+			written.ReadBy[name] = []string{"llm.api_key"}
+		}
+	}
+	if slices.ContainsFunc(names, func(name string) bool { return e.reads[name] }) {
+		written.Reload = e.reactivate()
+	}
+	return written, nil
+}
+
 func (e *fakeEngine) PutSecret(_ context.Context, name string, value []byte) error {
-	e.calls = append(e.calls, "put "+name)
+	e.calls = append(e.calls, "put-raw "+name)
 	if err := e.failPut[name]; err != nil {
 		return err
 	}
@@ -67,14 +109,31 @@ func (e *fakeEngine) PutSecret(_ context.Context, name string, value []byte) err
 	return nil
 }
 
-func (e *fakeEngine) DeleteSecret(_ context.Context, name string) (bool, error) {
+func (e *fakeEngine) DeleteSecret(_ context.Context, name string) (engine.SecretRemoved, error) {
 	e.calls = append(e.calls, "delete "+name)
 	if err := e.failDelete[name]; err != nil {
-		return false, err
+		return engine.SecretRemoved{}, err
 	}
 	_, ok := e.entries[name]
 	delete(e.entries, name)
-	return ok, nil
+	removed := engine.SecretRemoved{Removed: ok, ReadBy: []string{}}
+	if e.reads[name] {
+		removed.ReadBy = []string{"mcp.servers.env"}
+		if ok {
+			removed.Reload = e.reactivate()
+		}
+	}
+	return removed, nil
+}
+
+// reactivate is the engine's re-activation at a write of a value the active
+// revision reads: reload, or the next revision of reloaded.
+func (e *fakeEngine) reactivate() *engine.Reload {
+	if e.reload != nil {
+		return e.reload
+	}
+	e.reloaded = append(e.reloaded, fmt.Sprintf("reloaded-%d", len(e.reloaded)+1))
+	return &engine.Reload{RevisionID: e.reloaded[len(e.reloaded)-1], Epoch: int64(len(e.reloaded))}
 }
 
 // holds reports whether the store holds name.
@@ -166,7 +225,7 @@ func TestSyncIsIdempotent(t *testing.T) {
 	desired := desiredOf(map[string]string{nameC: "c1", nameA: "a1", nameB: "b1"})
 
 	state, res := mustSync(t, eng, desired, State{})
-	assertCalls(t, eng, "list", "put "+nameA, "put "+nameB, "put "+nameC)
+	assertCalls(t, eng, "list", "put "+nameA+" "+nameB+" "+nameC)
 	if !slices.Equal(res.Put, []string{nameA, nameB, nameC}) || len(res.Deleted) != 0 {
 		t.Fatalf("Result = %+v", res)
 	}
@@ -181,6 +240,138 @@ func TestSyncIsIdempotent(t *testing.T) {
 	}
 	if !maps.EqualFunc(again.fingerprints, state.fingerprints, slices.Equal) || again.key != state.key {
 		t.Fatal("the second Sync changed the state")
+	}
+}
+
+// TestSyncWritesItsValuesAsOneBatch: the engine re-activates its active
+// revision at every write of a value it reads, so a sync writes every value
+// in one request, which is one activation, and reports what that
+// re-activation did; a sync that writes nothing the revision reads reports
+// none, and one whose re-activation failed says why.
+func TestSyncWritesItsValuesAsOneBatch(t *testing.T) {
+	eng := newFakeEngine()
+	eng.reads = map[string]bool{nameA: true, nameC: true}
+	desired := desiredOf(map[string]string{nameA: "a1", nameB: "b1", nameC: "c1"})
+
+	state, res := mustSync(t, eng, desired, State{})
+	assertCalls(t, eng, "list", "put "+nameA+" "+nameB+" "+nameC)
+	if !slices.Equal(eng.reloaded, []string{"reloaded-1"}) {
+		t.Fatalf("the engine re-activated %q, want one revision for the sync", eng.reloaded)
+	}
+	if !res.Reload.Landed() || res.Reload.RevisionID != "reloaded-1" || res.Reload.Epoch != 1 {
+		t.Fatalf("Reload = %+v, want the engine's re-activation", res.Reload)
+	}
+
+	// Only a value nothing reads changes: nothing is re-activated.
+	state, res = mustSync(t, eng, desiredOf(map[string]string{nameA: "a1", nameB: "b2", nameC: "c1"}), state)
+	assertCalls(t, eng, "list", "put "+nameB)
+	if res.Reload != nil {
+		t.Fatalf("Reload = %+v, want none for a value no revision reads", res.Reload)
+	}
+
+	// A re-activation that failed is the engine's 200 with its reason.
+	eng.reload = &engine.Reload{Error: "revision_advanced", Detail: "another configuration write activated first"}
+	_, res = mustSync(t, eng, desiredOf(map[string]string{nameA: "a2", nameB: "b2", nameC: "c1"}), state)
+	assertCalls(t, eng, "list", "put "+nameA)
+	if res.Reload == nil || res.Reload.Landed() || res.Reload.Error != "revision_advanced" {
+		t.Fatalf("Reload = %+v, want the engine's failed re-activation", res.Reload)
+	}
+	assertStore(t, eng, map[string]fakeEntry{nameA: {"a2", self}, nameB: {"b2", self}, nameC: {"c1", self}})
+}
+
+// TestSyncReportsTheLastReactivation: the engine re-activates its revision
+// at a removal of a value it reads too, so what a sync reports is the
+// re-activation at its last request that changed a value the revision reads:
+// a removal of one comes after the write, and a removal of a value nothing
+// reads changes nothing.
+func TestSyncReportsTheLastReactivation(t *testing.T) {
+	eng := newFakeEngine()
+	eng.reads = map[string]bool{nameA: true, nameB: true}
+	state, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a1", nameB: "b1", nameC: "c1"}), State{})
+	eng.takeCalls()
+
+	// C, read by nothing, goes after A's write: A's re-activation stands.
+	state, res := mustSync(t, eng, desiredOf(map[string]string{nameA: "a2", nameB: "b1"}), state)
+	assertCalls(t, eng, "list", "put "+nameA, "delete "+nameC)
+	if want := eng.reloaded[len(eng.reloaded)-1]; res.Reload.RevisionID != want {
+		t.Fatalf("Reload = %+v, want the write's, %s", res.Reload, want)
+	}
+
+	// B, which the revision reads, goes after A's write: its own stands.
+	_, res = mustSync(t, eng, desiredOf(map[string]string{nameA: "a3"}), state)
+	assertCalls(t, eng, "list", "put "+nameA, "delete "+nameB)
+	if len(eng.reloaded) != 4 || res.Reload.RevisionID != eng.reloaded[3] {
+		t.Fatalf("Reload = %+v after %v, want the removal's", res.Reload, eng.reloaded)
+	}
+}
+
+// TestSyncSplitsALargeSetIntoBatches: the engine takes at most
+// engine.MaxSecretBatch values a request, so a larger set goes in requests
+// of that many, in name order, and the re-activation reported is the last
+// one's, made with every value in the store. A batch that fails stops the
+// sync with those before it recorded.
+func TestSyncSplitsALargeSetIntoBatches(t *testing.T) {
+	values := map[string]string{}
+	for i := range 2*engine.MaxSecretBatch + 2 {
+		values[StoreName(secretref.Key{Namespace: "ns", Name: fmt.Sprintf("s%03d", i), Key: tokenKey})] = fmt.Sprintf("v%d", i)
+	}
+	names := slices.Sorted(maps.Keys(values))
+	first, second, third := names[:engine.MaxSecretBatch], names[engine.MaxSecretBatch:2*engine.MaxSecretBatch],
+		names[2*engine.MaxSecretBatch:]
+
+	eng := newFakeEngine()
+	eng.reads = map[string]bool{}
+	for _, name := range names {
+		eng.reads[name] = true
+	}
+	boom := errors.New("engine unavailable")
+	eng.failPut[second[0]] = boom
+	partial, res, err := Sync(context.Background(), eng, desiredOf(values), State{}, self)
+	if !errors.Is(err, boom) {
+		t.Fatalf("Sync() error = %v, want the engine's", err)
+	}
+	assertCalls(t, eng, "list", "put "+strings.Join(first, " "), "put "+strings.Join(second, " "))
+	if !slices.Equal(res.Put, first) {
+		t.Fatalf("Put = %v, want the first batch alone", res.Put)
+	}
+	if got := slices.Sorted(maps.Keys(partial.fingerprints)); !slices.Equal(got, first) {
+		t.Fatalf("the state records %d names, want the %d of the first batch", len(got), len(first))
+	}
+
+	delete(eng.failPut, second[0])
+	_, res = mustSync(t, eng, desiredOf(values), partial)
+	assertCalls(t, eng, "list", "put "+strings.Join(second, " "), "put "+strings.Join(third, " "))
+	if !slices.Equal(res.Put, slices.Concat(second, third)) {
+		t.Fatalf("Put = %v", res.Put)
+	}
+	if want := eng.reloaded[len(eng.reloaded)-1]; res.Reload.RevisionID != want {
+		t.Fatalf("Reload = %+v, want the last batch's, %s", res.Reload, want)
+	}
+}
+
+// TestSyncWritesAValueThatIsNotUTF8Alone: a JSON body cannot carry such a
+// value unchanged, so it is written as raw bytes on its own, before the
+// batch, whose re-activation, made with it in the store, is the one
+// reported.
+func TestSyncWritesAValueThatIsNotUTF8Alone(t *testing.T) {
+	eng := newFakeEngine()
+	eng.reads = map[string]bool{nameA: true, nameB: true}
+	_, res := mustSync(t, eng, desiredOf(map[string]string{nameA: "a1", nameB: "\xff\xfe", nameC: "c1"}), State{})
+	assertCalls(t, eng, "list", "put-raw "+nameB, "put "+nameA+" "+nameC)
+	if !slices.Equal(res.Put, []string{nameA, nameB, nameC}) {
+		t.Fatalf("Put = %v, want every name, sorted", res.Put)
+	}
+	if !res.Reload.Landed() {
+		t.Fatalf("Reload = %+v, want the batch's re-activation", res.Reload)
+	}
+	assertStore(t, eng, map[string]fakeEntry{nameA: {"a1", self}, nameB: {"\xff\xfe", self}, nameC: {"c1", self}})
+
+	// Written alone and last, its re-activation is not read: none reported.
+	eng = newFakeEngine()
+	_, res = mustSync(t, eng, desiredOf(map[string]string{nameB: "\xff"}), State{})
+	assertCalls(t, eng, "list", "put-raw "+nameB)
+	if res.Reload != nil {
+		t.Fatalf("Reload = %+v, want none", res.Reload)
 	}
 }
 
@@ -213,7 +404,7 @@ func TestSyncRepairsTheStore(t *testing.T) {
 	eng.entries[nameB] = fakeEntry{value: "typed-by-hand", by: access}
 
 	state, res := mustSync(t, eng, desired, state)
-	assertCalls(t, eng, "list", "put "+nameA, "put "+nameB)
+	assertCalls(t, eng, "list", "put "+nameA+" "+nameB)
 	if !slices.Equal(res.Put, []string{nameA, nameB}) {
 		t.Fatalf("Put = %v", res.Put)
 	}
@@ -299,13 +490,14 @@ func TestSyncWritesBeforeItDeletes(t *testing.T) {
 	eng.takeCalls()
 
 	mustSync(t, eng, desiredOf(map[string]string{nameB: "b1", nameC: "c1"}), state)
-	assertCalls(t, eng, "list", "put "+nameB, "put "+nameC, "delete "+nameA)
+	assertCalls(t, eng, "list", "put "+nameB+" "+nameC, "delete "+nameA)
 }
 
 // TestSyncReturnsWhatItAchieved: after a failure, the state returned records
 // exactly what is known to be in the store, so saving it and retrying
 // writes only what is missing, and nothing is deleted while a write is
-// outstanding.
+// outstanding. A refused batch is refused whole, and one that failed inside
+// the engine may have sealed any of its values, so none of them is claimed.
 func TestSyncReturnsWhatItAchieved(t *testing.T) {
 	eng := newFakeEngine()
 	state, _ := mustSync(t, eng, desiredOf(map[string]string{nameB: "b1", nameC: "stale"}), State{})
@@ -318,16 +510,15 @@ func TestSyncReturnsWhatItAchieved(t *testing.T) {
 	if !errors.Is(err, boom) {
 		t.Fatalf("Sync() error = %v, want the engine's", err)
 	}
-	assertCalls(t, eng, "list", "put "+nameA, "put "+nameB)
-	if !slices.Equal(res.Put, []string{nameA}) || len(res.Deleted) != 0 {
-		t.Fatalf("Result = %+v, want only %s written", res, nameA)
-	}
-	if _, ok := partial.fingerprints[nameA]; !ok {
-		t.Error("the state does not record the write that succeeded")
+	assertCalls(t, eng, "list", "put "+nameA+" "+nameB)
+	if len(res.Put) != 0 || len(res.Deleted) != 0 || res.Reload != nil {
+		t.Fatalf("Result = %+v, want nothing written", res)
 	}
 	// The engine may or may not hold b2 now, so the state must not claim b1.
-	if _, ok := partial.fingerprints[nameB]; ok {
-		t.Error("the state records a fingerprint for the write that failed")
+	for _, name := range []string{nameA, nameB} {
+		if _, ok := partial.fingerprints[name]; ok {
+			t.Errorf("the state records a fingerprint for %s, whose batch failed", name)
+		}
 	}
 
 	delete(eng.failPut, nameB)
@@ -336,8 +527,8 @@ func TestSyncReturnsWhatItAchieved(t *testing.T) {
 	if !errors.Is(err, boom) {
 		t.Fatalf("Sync() error = %v, want the engine's", err)
 	}
-	assertCalls(t, eng, "list", "put "+nameB, "delete "+nameC)
-	if !slices.Equal(res.Put, []string{nameB}) || len(res.Deleted) != 0 {
+	assertCalls(t, eng, "list", "put "+nameA+" "+nameB, "delete "+nameC)
+	if !slices.Equal(res.Put, []string{nameA, nameB}) || len(res.Deleted) != 0 {
 		t.Fatalf("Result = %+v", res)
 	}
 

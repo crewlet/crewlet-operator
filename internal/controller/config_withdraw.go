@@ -42,9 +42,22 @@ import (
 //     the server's restarts included, so a removal reaches nothing until the
 //     next activation. The next document's apply is one; while that
 //     document is held, or when it activated before the entry went, the
-//     running one is activated again, unchanged (engine.Client.ReloadConfig),
+//     running one is activated again, unchanged. The engine does that
+//     itself, in the same request, when it removes a value the revision it
+//     runs reads, as it does when it is written one (Crewlet's ADR-0070):
+//     its answer says what that did (engine.SecretRemoved.Reload), and the
+//     operator takes a re-activation that landed for its own. Where none
+//     did (the revision does not read the value, or the engine's attempt
+//     failed), the operator asks for one (engine.Client.ReloadConfig),
 //     which is the engine's own gesture for a value its store changed under
 //     it.
+//
+// The same holds for a value written: the engine re-activates the revision
+// that reads it at the write, so the secret sync writes every value it
+// pushes in one request (engine.Client.PutSecrets), one activation for all of
+// them, and a rotation of a value the running document reads needs no apply
+// of the same document from the operator, who records the engine's
+// re-activation as its own (reloadedBySync).
 //
 // The store serves every revision by that revision's own reading of a key,
 // though, and the revision the engine runs is the last good one, which keeps
@@ -92,12 +105,13 @@ import (
 //
 // The engine offers no conditional reload and no conditional delete:
 // whichever revision is active when the request lands is the one activated
-// again, and a revision somebody activates between the operator's read of
-// the running one and its deletion of a key that one lets go may require the
-// key. The operator records an activation again only once it has read back
-// that the revision it activated is the document it read (reactivate), and
-// otherwise reads the revision activated as one whose reading it does not
-// know, and says so.
+// again, by a reload or by the engine at a write or a removal, and a revision
+// somebody activates between the operator's read of the running one and its
+// deletion of a key that one lets go may require the key. The operator
+// records an activation again, its own or the engine's, only once it has read
+// back that the revision activated is the document it read (reactivate,
+// reloadedBySync), and otherwise reads the revision activated as one whose
+// reading it does not know, and says so.
 
 // withdrawHeld does, for a document this reconcile could not apply, what the
 // secret sync does before an apply that is not coming: it removes from the
@@ -188,7 +202,7 @@ func (run *configRun) withdrawHeld(ctx context.Context, read secretsync.Desired)
 	}
 	var reactivateErr error
 	if withdrawErr == nil {
-		next, reactivateErr = run.reactivate(ctx, eng, active, next)
+		next, reactivateErr = run.reactivate(ctx, eng, active, res.Reload, next)
 	}
 	if err := secretsync.SaveState(ctx, run.Client, stateRef, c, next); err != nil {
 		return ctrl.Result{}, err
@@ -344,17 +358,20 @@ func (run *configRun) retainedSentence() string {
 // saves the state it ends with: in a reconcile of enforce that applies
 // nothing, after a document the engine refused, and after an apply, whose
 // sync may have withdrawn a name the revision just applied started with.
-// active is the engine's document as the reconcile last read it, nil to read
-// it. Its error is the API server's; an activation that failed is reported
-// (withdrawalFailed), and failed says so, for the reconcile to come back
-// engineRetryInterval later.
+// active is the engine's document as the reconcile last read it, before the
+// sync, nil to read it; reload is the engine's own re-activation at the
+// sync's removals (secretsync.Result.Reload), which reactivate takes for the
+// activation where it landed. Its error is the API server's; an activation
+// that failed is reported (withdrawalFailed), and failed says so, for the
+// reconcile to come back engineRetryInterval later.
 func (run *configRun) settle(
-	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, state secretsync.State, ref types.NamespacedName,
+	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, reload *engine.Reload, state secretsync.State,
+	ref types.NamespacedName,
 ) (failed bool, err error) {
 	if len(state.Withdrawn()) == 0 {
 		return false, nil
 	}
-	next, reactivateErr := run.reactivate(ctx, eng, active, state)
+	next, reactivateErr := run.reactivate(ctx, eng, active, reload, state)
 	if err := secretsync.SaveState(ctx, run.Client, ref, run.company, next); err != nil {
 		return false, err
 	}
@@ -368,9 +385,10 @@ func (run *configRun) settle(
 // settleRefused is settle for a document the engine refused, as the
 // reconcile ends there.
 func (run *configRun) settleRefused(
-	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, state secretsync.State, ref types.NamespacedName,
+	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, reload *engine.Reload, state secretsync.State,
+	ref types.NamespacedName,
 ) (ctrl.Result, error) {
-	failed, err := run.settle(ctx, eng, active, state, ref)
+	failed, err := run.settle(ctx, eng, active, reload, state, ref)
 	if failed {
 		return ctrl.Result{RequeueAfter: engineRetryInterval}, err
 	}
@@ -393,17 +411,24 @@ func (run *configRun) withdrawalFailed(ctx context.Context, err error) {
 // nothing that references them, or runs a revision that reads them as
 // required, or one whose reading state does not record, which keeps what it
 // read until the next one runs. active is the engine's document as this
-// reconcile read it, nil to read it here.
+// reconcile read it before it removed anything, nil to read it here.
 //
-// The request names no revision: the engine stores again whichever revision
-// the fleet's activation pointer names when the request lands, built on it,
-// and a write landing inside the request fails it as a lost race. So the
-// revision it activates again is read back, and recorded as letting go what
-// the one read lets go only where it is that document; otherwise the state
-// goes on recording the one read, which is no longer the fleet's, and a
-// Warning says so.
+// The engine activates its revision again itself when a removal takes a
+// value that revision reads (Crewlet's ADR-0070), and reload is what the
+// last such removal answered (secretsync.Result.Reload): where it landed,
+// the engine read its store without every name removed, and it is the
+// activation; asking for another would activate the same document twice.
+// Where it is nil or failed, the operator asks for one (POST /config/reload).
+//
+// Neither names a revision: the engine stores again whichever revision the
+// fleet's activation pointer names when the request lands, built on it, and
+// a write landing inside the request fails it as a lost race. So the
+// revision activated again is read back, and recorded as letting go what the
+// one read lets go only where it is that document; otherwise the state goes
+// on recording the one read, which is no longer the fleet's, and a Warning
+// says so.
 func (run *configRun) reactivate(
-	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, state secretsync.State,
+	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, reload *engine.Reload, state secretsync.State,
 ) (secretsync.State, error) {
 	withdrawn := state.Withdrawn()
 	if len(withdrawn) == 0 {
@@ -423,22 +448,28 @@ func (run *configRun) reactivate(
 	if len(held) == 0 {
 		return state.Reactivated(), nil
 	}
-	reloaded, err := eng.ReloadConfig(ctx, reactivationSummary(held))
-	if err != nil {
-		return state, fmt.Errorf("activating revision %s again, so that the engine reads its secret store without %s: %w",
-			active.RevisionID, strings.Join(held, ", "), err)
+	byEngine := reload.Landed()
+	reloaded := engine.ApplyResult{}
+	if byEngine {
+		reloaded.RevisionID, reloaded.Epoch = reload.RevisionID, reload.Epoch
+	} else {
+		var err error
+		if reloaded, err = eng.ReloadConfig(ctx, reactivationSummary(held)); err != nil {
+			return state, fmt.Errorf("activating revision %s again, so that the engine reads its secret store without %s: %w",
+				active.RevisionID, strings.Join(held, ", "), err)
+		}
 	}
 	now, err := activeConfig(ctx, eng)
 	switch {
 	case err != nil:
-		run.reactivatedUnconfirmed(active, reloaded, held, "the operator could not read it back: "+err.Error())
+		run.reactivatedUnconfirmed(active, reloaded, byEngine, held, "the operator could not read it back: "+err.Error())
 	case now == nil || now.RevisionID != reloaded.RevisionID:
-		run.reactivatedUnconfirmed(active, reloaded, held, "the engine runs another revision since")
+		run.reactivatedUnconfirmed(active, reloaded, byEngine, held, "the engine runs another revision since")
 	case !bytes.Equal(now.Document, active.Document):
-		run.reactivatedUnconfirmed(active, reloaded, held,
+		run.reactivatedUnconfirmed(active, reloaded, byEngine, held,
 			"its document is not that one: somebody activated another revision before the request landed")
 	default:
-		run.recordReactivation(active, reloaded, held)
+		run.recordReactivation(active, reloaded, byEngine, held)
 		return state.Activated(reloaded.RevisionID, state.LetGoKeys(active.RevisionID)), nil
 	}
 	return state.Reactivated(), nil
@@ -456,15 +487,20 @@ func reactivationSummary(held []string) string {
 }
 
 // recordReactivation records the running document activated again as
-// reloaded, without held. A revision the operator recorded as its own is
-// replaced by the one that activates it again, with the same content, so that
-// the next one it applies does not take it for an edit somebody else made;
-// one it did not write stays somebody else's.
-func (run *configRun) recordReactivation(active *engine.ActiveConfig, reloaded engine.ApplyResult, held []string) {
-	run.event(corev1.EventTypeNormal, "Reactivated", "ReloadConfig",
-		"Activated revision %s again, unchanged, as revision %s (epoch %d), so that the engine reads its secret store "+
+// reloaded, without held, by the engine at the removal of a value it reads
+// (byEngine) or at the operator's request. A revision the operator recorded
+// as its own is replaced by the one that activates it again, with the same
+// content, so that the next one it applies does not take it for an edit
+// somebody else made; one it did not write stays somebody else's.
+func (run *configRun) recordReactivation(active *engine.ActiveConfig, reloaded engine.ApplyResult, byEngine bool, held []string) {
+	who, action := "Activated", "ReloadConfig"
+	if byEngine {
+		who, action = "The engine activated", "DeleteSecret"
+	}
+	run.event(corev1.EventTypeNormal, "Reactivated", action,
+		"%s revision %s again, unchanged, as revision %s (epoch %d), so that the engine reads its secret store "+
 			"without %s: the Secret or key each stands for no longer exists, and the revision lets it go without its value.",
-		active.RevisionID, reloaded.RevisionID, reloaded.Epoch, strings.Join(held, ", "))
+		who, active.RevisionID, reloaded.RevisionID, reloaded.Epoch, strings.Join(held, ", "))
 	recorded := run.company.Status.Config
 	if run.config != nil {
 		recorded = *run.config
@@ -481,18 +517,25 @@ func (run *configRun) recordReactivation(active *engine.ActiveConfig, reloaded e
 	}
 }
 
-// reactivatedUnconfirmed reports a request to activate active again, without
-// held, that activated reloaded, which the operator could not confirm is
-// active's document, for why: it takes reloaded to read every name as
-// required, and a revision somebody else activated may have needed a value it
-// removed for active, which let it go.
-func (run *configRun) reactivatedUnconfirmed(active *engine.ActiveConfig, reloaded engine.ApplyResult, held []string, why string) {
-	run.event(corev1.EventTypeWarning, "Reactivated", "ReloadConfig",
-		"Activated the engine's document again as revision %s (epoch %d), so that the engine reads its secret store without "+
+// reactivatedUnconfirmed reports an activation of active again, without
+// held, by the engine at a removal (byEngine) or at the operator's request,
+// that activated reloaded, which the operator could not confirm is active's
+// document, for why: it takes reloaded to read every name as required, and a
+// revision somebody else activated may have needed a value it removed for
+// active, which let it go.
+func (run *configRun) reactivatedUnconfirmed(
+	active *engine.ActiveConfig, reloaded engine.ApplyResult, byEngine bool, held []string, why string,
+) {
+	who, action := "Activated", "ReloadConfig"
+	if byEngine {
+		who, action = "The engine activated", "DeleteSecret"
+	}
+	run.event(corev1.EventTypeWarning, "Reactivated", action,
+		"%s the engine's document again as revision %s (epoch %d), so that the engine reads its secret store without "+
 			"%s, whose Secret or key no longer exists and which revision %s lets go without; but the operator cannot confirm "+
 			"that revision %s is revision %s's document, as %s. It takes revision %s to read every value as required, and "+
 			"one that reads a value it removed so goes without what it starts with it until the Secret exists again.",
-		reloaded.RevisionID, reloaded.Epoch, strings.Join(held, ", "), active.RevisionID, reloaded.RevisionID,
+		who, reloaded.RevisionID, reloaded.Epoch, strings.Join(held, ", "), active.RevisionID, reloaded.RevisionID,
 		active.RevisionID, why, reloaded.RevisionID)
 }
 
