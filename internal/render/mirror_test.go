@@ -233,7 +233,17 @@ const (
 	// (childZone), its name cliprofile.ZoneVariable, which an entry's env may
 	// not set.
 	envSignInRead = "v0.1.1-0.20261029081131-3ccda043792f"
-	otelGo        = "internal/sandbox/otel.go"
+	// signInStampRead is crewlet#453's engine, read on crewlet's main where
+	// crewlet#452 merged on top of crewlet#454: an executor launch now stamps
+	// the picked member's sign-in identity on the run's row (the launch
+	// request's SignInID), which the run's collection compares to relaunch,
+	// once, a run its vendor refused on a sign-in replaced while it ran. The
+	// member a launch picks, the cell it places the run in, the bridge it
+	// refuses, the environment it starts the run with and the login it
+	// refuses off the engine host are as at executorFinalRead, so the
+	// render's copies hold.
+	signInStampRead = "v0.1.1-0.20261029083537-e0328e5d9daf"
+	otelGo          = "internal/sandbox/otel.go"
 	// topologyGo and assistantDeepGo are the render's pod sizes and the
 	// engine's deep-work backend, which several rows name.
 	topologyGo        = "internal/render/topology.go"
@@ -892,8 +902,8 @@ var mirrored = []mirror{
 			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable)",
-		digest: "734b3c9e72ad0143cfc1c3f35807532c7a4549862455c9104c72348c35679e1f",
-		read:   executorFinalRead,
+		digest: "43e5c7c3c53bfdec54e1a05295aadaadc617d83f72b03cd73b2d8b28daa789a6",
+		read:   signInStampRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
