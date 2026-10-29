@@ -102,12 +102,6 @@ const (
 	// no ${GITHUB_APP_TOKEN_<HANDLE>}, so no value it renders is one the
 	// engine issues, and each copy below holds for every document it renders.
 	seatAppTokenRead = "v0.1.1-0.20261026223946-d58ab9ddf7af"
-	// deepWorkRead is the engine that runs the Dashboard Assistant's deep work
-	// in a box of its own, read on top of crewlet's
-	// feat/dashboard-assistant-final at this version, before that change
-	// merged: whether a run's environment signs its CLI in is entrySignsIn,
-	// which a seat's run and deep work are both judged by.
-	deepWorkRead = "v0.1.1-0.20261026010616-d93875db794b"
 	// toolCredentialsGo is where the engine decides what a value that
 	// resolves to nothing does to a tool server or an executor run.
 	toolCredentialsGo = "internal/engine/toolcredentials.go"
@@ -219,7 +213,37 @@ const (
 	// with under its completion's admission. What becomes of a lost job is
 	// as at executorFinalRead, and no other mirror moved.
 	runAskRead = "v0.1.1-0.20261029002927-2c650d0b2c33"
-	otelGo     = "internal/sandbox/otel.go"
+	// envSignInRead is the engine of crewlet's feat/models-signin, read at
+	// the head of its branch before that change merged, which adds auth.mode
+	// env: a providers.llm entry whose env alone signs its CLI in. The names
+	// that sign a CLI in beyond its token and key variables moved from a list
+	// of the Claude Code runner's (codingagent.ClaudeCodeCredentialEnv, now
+	// gone) into the CLI's profile (sign_in_env, which only claude-code's
+	// names), so entryEnv, entrySignInName and entrySignsIn ask
+	// CredentialEnvNames, which reads it, where they asked the runner's list.
+	// For every profile the engine ships the names are the ones they were, in
+	// their order, so what a run is handed and whether it signs in are as at
+	// executorFinalRead, and the render's copy follows the profile instead.
+	// A box of an entry that signs in with no login (api-key, env) is seeded
+	// with none (SandboxCredentials), which the render's verdict never
+	// counted on: such an entry signs a box in by a variable. And SandboxEnv
+	// carries the engine's zone into every executor run's box, E2B included:
+	// the zone it reads a reset the CLI names without one in, the engine's
+	// own TZ where it names a zone the system knows, and UTC otherwise
+	// (childZone), its name cliprofile.ZoneVariable, which an entry's env may
+	// not set.
+	envSignInRead = "v0.1.1-0.20261029081131-3ccda043792f"
+	// signInStampRead is crewlet#453's engine, read on crewlet's main where
+	// crewlet#452 merged on top of crewlet#454: an executor launch now stamps
+	// the picked member's sign-in identity on the run's row (the launch
+	// request's SignInID), which the run's collection compares to relaunch,
+	// once, a run its vendor refused on a sign-in replaced while it ran. The
+	// member a launch picks, the cell it places the run in, the bridge it
+	// refuses, the environment it starts the run with and the login it
+	// refuses off the engine host are as at executorFinalRead, so the
+	// render's copies hold.
+	signInStampRead = "v0.1.1-0.20261029083537-e0328e5d9daf"
+	otelGo          = "internal/sandbox/otel.go"
 	// topologyGo and assistantDeepGo are the render's pod sizes and the
 	// engine's deep-work backend, which several rows name.
 	topologyGo        = "internal/render/topology.go"
@@ -695,12 +719,13 @@ var mirrored = []mirror{
 	{
 		file: sandboxGo, name: "entryEnv",
 		against: append(slices.Clone(executorLogin), executorBox...),
-		decides: "a run is handed its member's environment (SandboxEnv) beneath the seat's, and a ClaudeCode run " +
-			"whose seat's environment signs ClaudeCode in (codingagent.ClaudeCodeCredentialEnv, which " +
+		decides: "a run is handed its member's environment (SandboxEnv) beneath the seat's, and a run of a CLI " +
+			"whose profile names sign_in_env (ClaudeCode's alone) whose seat's environment signs it in " +
+			"(CredentialEnvNames: its token_env, api_key_env and sign_in_env, which " +
 			"TestExecutorSignInFollowsTheEngineSource holds) none of its member's sign-in (entrySignInName) and " +
 			"the rest of that environment",
-		digest: "c0c6ff832afdca0ea19e0cc3abf09b7f6b3831cf52f9d708f03301486da6175c",
-		read:   executorFinalRead,
+		digest: "4b479aa3a1c24ce73476dc2c723ca50747a6000d0dc7ca631b79a5cacb093981",
+		read:   envSignInRead,
 	},
 	{
 		file: sandboxGo, name: "entrySignInName",
@@ -708,8 +733,8 @@ var mirrored = []mirror{
 		decides: "a member's sign-in, which a seat that signs ClaudeCode in itself keeps out of its run, is every " +
 			"variable that signs ClaudeCode in, the CLI's token and key variables and every credential-named " +
 			"one, a gateway's bearer token among them, and nothing else, so a gateway's address stays",
-		digest: "9d944c1c12bde19b5f6b311aea464a4713dcda977ae276daac39a0e45df11d0c",
-		read:   executorFinalRead,
+		digest: "2fcc1173c42d6f02b7978e9d418f8f2908132f8f858075ec4c5ab7289a767d2b",
+		read:   envSignInRead,
 	},
 	{
 		file: sandboxGo, name: "signsIn",
@@ -735,8 +760,8 @@ var mirrored = []mirror{
 			"token or key variable, for ClaudeCode any variable that signs it in, and for an env sign-in CLI any " +
 			"credential-named one: the rule a seat's E2B run and the assistant's deep work, whose environment " +
 			"is its provider's alone, are both held to before a box exists",
-		digest: "46c439e9448b247366d6d3852f1fdf0cf98cc40f927178a6395653138ecfb018",
-		read:   deepWorkRead,
+		digest: "b00aa590b340b4130c59e24319a58a38093dc7d5cddbc29eaad4ba855cff593d",
+		read:   envSignInRead,
 	},
 	{
 		file: sandboxGo, name: "(*Engine).runEnvironment",
@@ -826,10 +851,36 @@ var mirrored = []mirror{
 	{
 		file: doctorGo, name: "(*Provider).CredentialEnvNames",
 		against: append(slices.Clone(executorLogin), executorBox...),
-		decides: "the variables that sign a CLI in inside a box: its token and key variables, and for an env " +
+		decides: "the variables that sign a CLI in inside a box: its token and key variables, the names its profile " +
+			"signs it in by from env (sign_in_env: ClaudeCode's gateway token and cloud switches), and for an env " +
 			"sign-in CLI the credential-named variables of its env",
-		digest: "091501e8498192be36fc8619232c358a2276c32bae8f412e7197fcc0a8b89667",
-		read:   firstRead,
+		digest: "ca27a1868275b6f61d45d1c27689420ab4e519603128d751fd8075aaf611654c",
+		read:   envSignInRead,
+	},
+	{
+		file: doctorGo, name: "(*Provider).SandboxCredentials",
+		against: append(slices.Clone(executorLogin), executorBox...),
+		decides: "a Direct box is seeded with its provider's login, its credential files, only where the provider " +
+			"signs in with one: an APIKey or Env provider's box, and one handed a key, is seeded with none, as its " +
+			"key or its env signs the run in",
+		digest: "dc8db6274961434364726c08ce591b7fb73d2dc78bbebc02a21603107b34f084",
+		read:   envSignInRead,
+	},
+	{
+		file: doctorGo, name: "(*Provider).SandboxCredentialDocument",
+		against: append(slices.Clone(executorLogin), executorBox...),
+		decides: "a Direct box of an OpenCode provider is seeded with the document its export printed only where " +
+			"the provider signs in with a login, as SandboxCredentials seeds credential files",
+		digest: "43e00f3286f884c3623679e523446928c51068b5754f904cdd5c697bed69a689",
+		read:   envSignInRead,
+	},
+	{
+		file: "internal/providers/llm/cliagent/signin.go", name: "(*Provider).signsInWithKey",
+		against: append(slices.Clone(executorLogin), executorBox...),
+		decides: "an entry signs in with no login under auth mode api-key and env, whatever else it holds, which " +
+			"SandboxCredentials and SandboxCredentialDocument seed its Direct box with none of",
+		digest: "1ce030093a2da737623dc5ce2342eb217bba9996902258afd8d71c250737d63d",
+		read:   envSignInRead,
 	},
 	{
 		file: doctorGo, name: "(*Provider).SandboxEnv",
@@ -837,9 +888,10 @@ var mirrored = []mirror{
 		decides: "a provider's whole env follows an executor run into its box, Direct or E2B, with the sign-in its " +
 			"auth mode sets, less what the mode removes, the isolation variables and blank values: a gateway's " +
 			"address and bearer token, a cloud switch and its region reach every executor run, and a ClaudeCode " +
-			"sign-in there signs an E2B run in (signin.go's remoteSignIn)",
-		digest: "99dcdf37e05b3c0eec68291d82ae3fa74783ac6c5a09355cb99e9ff8dff034d1",
-		read:   executorFinalRead,
+			"sign-in there signs an E2B run in (signin.go's remoteSignIn); and the engine's zone, TZ, reaches every " +
+			"run, E2B included",
+		digest: "9550ddc63baf6f5dfb890558f26bd4a08f7658004efb626096f97a6968dac7bd",
+		read:   envSignInRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).LaunchExecutor",
@@ -850,8 +902,8 @@ var mirrored = []mirror{
 			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable)",
-		digest: "734b3c9e72ad0143cfc1c3f35807532c7a4549862455c9104c72348c35679e1f",
-		read:   executorFinalRead,
+		digest: "43e5c7c3c53bfdec54e1a05295aadaadc617d83f72b03cd73b2d8b28daa789a6",
+		read:   signInStampRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",

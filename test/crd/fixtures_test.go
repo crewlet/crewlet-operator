@@ -104,6 +104,18 @@ var subscriptionEnv = map[v1.CLIAgentName][]string{
 	v1.CLIAgentGeminiCLI: {"GOOGLE_GENAI_USE_GCA"},
 }
 
+// signInEnv are the variables each CLI's profile lists as signing it in from
+// a provider's env (sign_in_env), in the engine every suite runs: what auth
+// mode Env requires one of, and what the LLMProvider API refuses in env under
+// every other mode. TestCLIAgentSignInEnvFollowsTheEngine reads them from the
+// engine's profiles and fails while this copy, which the rules' cases are
+// built from, differs.
+var signInEnv = map[v1.CLIAgentName][]string{
+	v1.CLIAgentClaudeCode: {
+		"ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
+	},
+}
+
 // The kinds the tests that apply manifests treat specially.
 const (
 	kindEngineClass = "EngineClass"

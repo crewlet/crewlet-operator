@@ -607,7 +607,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Consistently(func() []revision { return revisions(e) }).WithTimeout(3 * quietPeriod).Should(HaveLen(3))
 	})
 
-	It("pushes a rotated Secret value and has the engine read it, without changing the document", func() {
+	It("pushes a rotated Secret value and has the engine read it, without changing the document, in one activation", func() {
 		const name = "rotate"
 		e := startEngine(name)
 		key := secret(name+"-llm", map[string]string{llmKey: "first"})
@@ -627,11 +627,17 @@ var _ = Describe("Company config", Ordered, func() {
 			"the engine reads a rotated value only when a revision activates")
 		after := runsRendered(e, c)
 		Expect(after.Document).To(Equal(before.Document), "a rotation changes no byte of the document")
-		Expect(revisions(e)[0].Summary).To(Equal("crewlet-operator: Secret " + namespace + "/" + name + "-llm"))
+		// The engine's own re-activation at the write, which the operator
+		// takes for its apply rather than activating the same document
+		// again.
+		Expect(revisions(e)[0].Summary).To(Equal("reload: secret " + storeName + " written"))
 		Eventually(func(g Gomega) string {
 			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(c), c)).To(Succeed())
+			g.Expect(c.Status.Config.RevisionID).To(Equal(after.RevisionID), "the operator records the engine's re-activation as its apply")
 			return c.Status.Config.AppliedHash
 		}).WithTimeout(settle).ShouldNot(Equal(hash))
+		Consistently(func() []revision { return revisions(e) }).WithTimeout(3*quietPeriod).Should(HaveLen(2),
+			"a rotation is one activation")
 
 		By("changing only the Secret's labels")
 		updatedAt := storeListing(e)[storeName].UpdatedAt
@@ -656,16 +662,21 @@ var _ = Describe("Company config", Ordered, func() {
 
 		Eventually(func() string { return storedValue(e, storeName) }).WithTimeout(settle).Should(Equal("ours"))
 		Expect(storeListing(e)[storeName].OperatorID).To(Equal(engine.TokenLogin(enginetest.OperatorTokenID)))
-		Eventually(func() []revision { return revisions(e) }).WithTimeout(settle).Should(HaveLen(2),
+		// The engine re-activates at the other credential's write, and again
+		// at the operator's write back, which the operator takes for its
+		// apply rather than activating the same document a third time.
+		Eventually(func() []revision { return revisions(e) }).WithTimeout(settle).Should(HaveLen(3),
 			"the engine reads the value written back only when a revision activates")
-		Expect(revisions(e)[0].Summary).To(Equal("crewlet-operator: Secret " + namespace + "/" + name + "-llm"))
-		Expect(log.of(name)).To(ContainElement(SatisfyAll(
+		Expect(revisions(e)[0].Summary).To(Equal("reload: secret " + storeName + " written"))
+		// The engine activates at the write back, before the reconcile that
+		// made it says so.
+		Eventually(func() []string { return log.of(name) }).WithTimeout(settle).Should(ContainElement(SatisfyAll(
 			HavePrefix("Warning SecretOverwritten Wrote back 1 values somebody else had replaced"),
 			ContainSubstring(storeName+" (written by "+access+", with "+access+")"),
 		)))
 
 		By("leaving the store alone once it holds the operator's value again")
-		Consistently(func() []revision { return revisions(e) }).WithTimeout(3 * quietPeriod).Should(HaveLen(2))
+		Consistently(func() []revision { return revisions(e) }).WithTimeout(3 * quietPeriod).Should(HaveLen(3))
 	})
 
 	It("reports a missing Secret on the part that references it and applies nothing until it exists", func() {
@@ -1194,7 +1205,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(ready.Status).To(Equal(metav1.ConditionFalse))
 		Expect(ready.ObservedGeneration).To(Equal(coder.Generation))
 		Expect(ready.Message).To(ContainSubstring("a credential bundle stays on the engine's data volume"))
-		Expect(ready.Message).To(ContainSubstring("auth.tokenSecretRef or auth mode APIKey"))
+		Expect(ready.Message).To(ContainSubstring("auth.tokenSecretRef, with auth mode APIKey, or with auth mode Env"))
 		Expect(ready.Message).To(ContainSubstring("set LLMProvider " + bundle.Name + "'s spec.runIn to Direct"))
 
 		By("applying the company with the seat all the same, as Crewlet applies it")

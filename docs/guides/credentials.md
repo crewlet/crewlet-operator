@@ -147,15 +147,18 @@ The engine hands the run the provider's headless token or its
 provider key, and a gateway's address (`ANTHROPIC_BASE_URL`) and the bearer
 token it takes (`ANTHROPIC_AUTH_TOKEN`), or a cloud switch and its region,
 which the run reaches its model through as the provider's other phases do.
-A Claude Code sign-in in `env`, such as that bearer token, signs the run in
-wherever it runs.
+Under `auth.mode: Env` that `env` is the provider's whole sign-in, such as
+the bearer token, and signs the run in wherever it runs.
 
 What else the box gets turns on its cell:
 
-- **`Direct`**: the box is seeded with the provider's login, its credential
-  files or, for OpenCode, the document OpenCode's export printed, from the
-  login on the pod, and writes a refreshed one back over it, so a credential
-  bundle signs a run in as it signs the provider's other phases. The run is a
+- **`Direct`**: the box of a provider that signs in with a login
+  (`Subscription`) is seeded with it, its credential files or, for OpenCode,
+  the document OpenCode's export printed, from the login on the pod, and
+  writes a refreshed one back over it, so a credential bundle signs a run in
+  as it signs the provider's other phases. A provider under `APIKey` or `Env`
+  seeds no login: its key or its `env` is the run's sign-in, and a login
+  beside it is one the run would not use. The run is a
   process of the engine pod, as the engine's user, with every permission its
   CLI has: it can read its sign-in, and whatever else that user can on the
   pod.
@@ -394,10 +397,13 @@ namespace directly.
 ## Rotating a credential
 
 Write the new value into the same Secret and key. The operator sees the
-change, pushes the new value into the engine's secret store, and applies a
-revision with the same document, because the engine reads a value when a
-revision activates. The revision's summary names the Secret. The engine does
-not restart and no seat loses its conversation.
+change and pushes the new value into the engine's secret store, every value
+that changed in one write, and the engine activates the revision it runs
+again with the new values, once, because it reads a value only when a
+revision activates. The operator records that revision as its own; where the
+engine made none, it applies a revision with the same document itself, whose
+summary names the Secret. The engine does not restart and no seat loses its
+conversation.
 
 ```bash
 kubectl create secret generic anthropic -n acme --from-literal=apiKey=sk-ant-new... \
@@ -418,13 +424,17 @@ provider a seat's executor runs on wait too for the runs already going to
 end before you revoke.
 
 A provider's `auth.credentialBundleSecretRef` is an exception. The
-engine restores a bundle only into an empty login, when it starts and at
-every revision it applies, so a new bundle in the Secret reaches nothing
-while the provider's login on the data volume exists, and that refreshed
-login is the one to keep ([Signing in](cli-agents.md#signing-in)). To move a
-provider onto a new bundle, give it, and every provider sharing its login, a
-new `loginName`: its login directory is then empty, and the revision that
-moves it restores the bundle there, with no restart. The old directory's
+engine restores a bundle, when it starts and at every revision it applies,
+only into a login that is empty or that was installed before the bundle's
+own login, by the install record each carries, and a refresh keeps its
+login's record: so a bundle of the login the provider holds on the data
+volume reaches nothing, and that refreshed login is the one to keep
+([Signing in](cli-agents.md#signing-in)), while one `crewlet llm export`
+wrote after a new login replaces it the next time the engine starts or
+applies a revision. To move a provider onto a new bundle at once, give it,
+and every provider sharing its login, a new `loginName`: its login directory
+is then empty, and the revision that moves it restores the bundle there,
+with no restart. The old directory's
 login and seat homes stay on the data volume. A bundle belongs to the CLI it
 was exported from: after a provider moves to another `agent`, the new CLI's
 login is empty, and the bundle in the Secret is refused there until it holds

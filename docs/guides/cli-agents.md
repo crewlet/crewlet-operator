@@ -238,9 +238,10 @@ spec:
 
 A subscription login is made at a terminal, by `crewlet llm login` or the
 CLI's own command, and a pod has none. `auth` therefore takes the login
-from a Secret, in one of two forms; takes a metered key instead; or, for the
+from a Secret, in one of two forms; takes a metered key instead; for the
 three CLIs that read their model provider's key from their environment,
-takes none and signs in with that key in `env`:
+takes none and signs in with that key in `env`; or, for a cloud provider or
+a gateway, signs in with `env` alone:
 
 | Sign-in | What the Secret holds | Use it when |
 |---|---|---|
@@ -248,26 +249,27 @@ takes none and signs in with that key in `env`:
 | `auth.credentialBundleSecretRef` | a bundle of the CLI's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any CLI but `QwenCode`, which keeps no login: the others mint no token Crewlet hands on |
 | `auth.mode: APIKey` with `auth.apiKeySecretRef` | the CLI's metered API key | the CLI's Crewlet profile names a key variable ([below](#a-metered-key)) |
 | `env`, with `auth.mode: Subscription` | the key of the model provider the CLI runs on, in the variable the CLI reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the CLI is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
+| `env`, with `auth.mode: Env` | what signs the CLI in from its environment: for Claude Code a gateway's `ANTHROPIC_AUTH_TOKEN`, or a cloud provider's switch and that provider's credentials; for Hermes, Pi and OpenCode their model provider's key | the CLI reaches its model through a cloud provider or a gateway rather than on the vendor's own subscription or key ([below](#a-cloud-provider-or-a-gateway)) |
 
 What each CLI takes, in the engine the operator is tested against, Crewlet's
 `main` (Crewlet's profiles name the variables; a test holds the API's rules and this
 table to that engine's own verdict on every CLI and every sign-in, so neither
 can fall behind it):
 
-| `agent` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `credentialBundleSecretRef` | Runs a seat's executor |
-|---|---|---|---|---|---|
-| `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | yes | yes: `Direct` on any sign-in; `E2B` on the token or the key |
-| `Codex` | no | `CODEX_API_KEY` | no | yes | no: the seat's other phases only |
-| `GeminiCLI` | no | `GEMINI_API_KEY` | no | yes | no: the seat's other phases only |
-| `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no: it keeps no login, so `auth.mode: APIKey` is its only sign-in | no: the seat's other phases only |
-| `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | yes | no: the seat's other phases only |
-| `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | yes | no: the seat's other phases only |
-| `Grok` | no | `XAI_API_KEY` | no | yes | no: the seat's other phases only |
-| `MuseCode` | no | `META_API_KEY` | no | yes | no: the seat's other phases only |
-| `KimiCode` | no | no: it reads a key only from its own `config.toml`, so give that in the bundle | no | yes | no: the seat's other phases only |
-| `OpenCode` | no | no | yes | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env` ([below](#where-a-seats-executor-runs)) |
-| `Hermes` | no | no | yes | yes | no: the seat's other phases only |
-| `Pi` | no | no | yes | yes | no: the seat's other phases only |
+| `agent` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `auth.mode: Env` signs in with | `credentialBundleSecretRef` | Runs a seat's executor |
+|---|---|---|---|---|---|---|
+| `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the token, the key or `auth.mode: Env` |
+| `Codex` | no | `CODEX_API_KEY` | no | no | yes | no: the seat's other phases only |
+| `GeminiCLI` | no | `GEMINI_API_KEY` | no | no | yes | no: the seat's other phases only |
+| `QwenCode` | no | `OPENAI_API_KEY`, with `--auth-type openai`: DashScope's key by default, or another OpenAI-compatible service's with its `OPENAI_BASE_URL` in `env` | no | no | no: it keeps no login, so `auth.mode: APIKey` is its only sign-in | no: the seat's other phases only |
+| `CursorAgent` | no | `CURSOR_API_KEY`, a Cursor account's API key | no | no | yes | no: the seat's other phases only |
+| `Copilot` | no | `COPILOT_GITHUB_TOKEN`, the first of the three variables it reads, ahead of `GH_TOKEN` and `GITHUB_TOKEN` | no | no | yes | no: the seat's other phases only |
+| `Grok` | no | `XAI_API_KEY` | no | no | yes | no: the seat's other phases only |
+| `MuseCode` | no | `META_API_KEY` | no | no | yes | no: the seat's other phases only |
+| `KimiCode` | no | no: it reads a key only from its own `config.toml`, so give that in the bundle | no | no | yes | no: the seat's other phases only |
+| `OpenCode` | no | no | yes | a key in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the key in `env` ([below](#where-a-seats-executor-runs)) |
+| `Hermes` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
+| `Pi` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
 
 A provider names one of the two logins: given both, which login the CLI acts
 on would be its own choice between its environment and its files, so the
@@ -300,7 +302,9 @@ names (`ANTHROPIC_API_KEY` for `ClaudeCode`, `CURSOR_API_KEY` for
 value in `env` reached the CLI would turn on the mode and on what else holds
 a credential, so the engine refuses the document and the API server refuses
 the provider first. Another CLI's variable is no such conflict:
-`ANTHROPIC_API_KEY` is OpenCode's Anthropic key.
+`ANTHROPIC_API_KEY` is OpenCode's Anthropic key. Nor may `env` set
+`ClaudeCode`'s `ANTHROPIC_AUTH_TOKEN` or a `CLAUDE_CODE_USE_*` switch under
+any mode but `Env` ([A cloud provider or a gateway](#a-cloud-provider-or-a-gateway)).
 
 Nor may `env` set a variable the engine sets on every call to keep the CLI
 inside its seat's own home and the call's working directory: the home, the
@@ -328,6 +332,14 @@ its message and this table to the engine's lists:
 | `KIMI_CODE_HOME` | `KimiCode` |
 | `HERMES_HOME` | `Hermes` |
 | `PI_CODING_AGENT_DIR` | `Pi` |
+
+Nor may `env` set `TZ`. The engine hands every CLI it starts its own zone,
+the `TZ` of its pod where that names a zone it knows and `UTC` otherwise, and
+reads a limit's reset in it when the CLI names its time without one, so a
+zone of the provider's own would be replaced, or would have the reset read
+in the wrong zone: the engine refuses the document, and the API server
+refuses the provider first. Set `TZ` on the engine instead, in the class's
+`podTemplate` or the Company's `runtime.env`, to move every CLI's zone.
 
 Under `auth.mode: Subscription`, `env` may not set a variable the engine sets
 there to sign the CLI in with the login its seat's home holds either:
@@ -388,11 +400,15 @@ The login, and the homes the CLI keeps for each seat, live on the data
 volume, under `/var/lib/crewlet/llm-cli/<loginName>`, so a restarted data pod
 keeps them; a seat pod keeps them on a scratch volume it loses at every start
 (see [Seat pools](#seat-pools)). That matters for a bundle: the engine
-restores one, when it starts and at every revision it applies, only while the
-login there is empty, so the login the running engine refreshed wins over the
-bundle in the Secret, whose refresh token the vendor may have retired since,
-and a new bundle in the Secret reaches nothing until the provider moves to
-another `loginName` ([Rotating a credential](credentials.md#rotating-a-credential)).
+restores one, when it starts and at every revision it applies, only into a
+login there that is empty or that was installed before the bundle's own
+login, which the bundle's install record says. A refresh keeps its login's
+record, so the login the running engine refreshed wins over a bundle of the
+same login in the Secret, whose refresh token the vendor may have retired
+since; a bundle `crewlet llm export` wrote after a new login replaces it the
+next time the engine starts or applies a revision, and moving the provider to
+another `loginName` restores one at once
+([Rotating a credential](credentials.md#rotating-a-credential)).
 Nor does it restore one into a login `crewlet llm logout` emptied
 ([A seat on a coding CLI runs signed out](troubleshooting.md#a-seat-on-a-coding-cli-runs-signed-out)).
 A bundle restored over a newer login is how a vendor that rotates refresh
@@ -451,8 +467,8 @@ export it again from OpenCode 2. A bundle signs in a seat's executor run
 ### Which `env` entries sign a CLI in
 
 This is the sign-in of a Hermes, Pi or OpenCode provider in
-`auth.mode: Subscription` with neither a token nor a bundle: a key in its
-`env`. Crewlet counts an entry as that sign-in only when its name says it
+`auth.mode: Subscription` with neither a token nor a bundle, or in
+`auth.mode: Env`: a key in its `env`. Crewlet counts an entry as that sign-in only when its name says it
 holds a credential: one of its parts between underscores is, in any case,
 `KEY`, `KEYS`, `APIKEY`, `ACCESSKEY`, `SECRETKEY`, `TOKEN`, `SECRET`,
 `PASSWORD`, `PASSWD`, `CREDENTIAL`, `CREDENTIALS`, `AUTH`, `OAUTH` or `PAT`.
@@ -507,7 +523,85 @@ engine's environment then, which hold no key this provider names. A gateway
 or proxy in front of the vendor is a variable the CLI reads from its
 environment, which goes in `env` from a Secret, such as Claude Code's
 `ANTHROPIC_BASE_URL`, and reaches every phase of the provider, a seat's
-executor run included.
+executor run included. A gateway that takes a token of its own in place of
+the vendor's key signs the CLI in under `auth.mode: Env` instead (below).
+
+### A cloud provider or a gateway
+
+`auth.mode: Env` signs the CLI in with its `env` and nothing else: a cloud
+provider's switch and that provider's credentials, such as Claude Code on
+Amazon Bedrock, Google Vertex AI or Microsoft Foundry, or a gateway's
+address and the token it issued you. Crewlet hands the CLI neither its token
+variable nor its key variable under it, and seeds no login into the homes it
+runs in, so the cloud provider or the gateway is the CLI's one sign-in: under
+`Subscription` or `APIKey` the mode's own token or key would reach the CLI
+beside it, and the CLI would pick between the two by rules of its own.
+`crewlet llm list` reports a provider under it signed in with `env`, whichever
+CLI reads the env.
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude-bedrock
+spec:
+  companyRef: {name: acme}
+  agent: ClaudeCode
+  model: sonnet
+  auth:
+    mode: Env
+  env:
+    - name: CLAUDE_CODE_USE_BEDROCK
+      valueFrom:
+        secretKeyRef: {name: claude-bedrock, key: useBedrock}    # holds 1
+    - name: AWS_REGION
+      valueFrom:
+        secretKeyRef: {name: claude-bedrock, key: region}
+    - name: AWS_BEARER_TOKEN_BEDROCK
+      valueFrom:
+        secretKeyRef: {name: claude-bedrock, key: bearerToken}
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude-gateway
+spec:
+  companyRef: {name: acme}
+  agent: ClaudeCode
+  model: sonnet
+  auth:
+    mode: Env
+  env:
+    - name: ANTHROPIC_BASE_URL
+      valueFrom:
+        secretKeyRef: {name: llm-gateway, key: baseURL}
+    - name: ANTHROPIC_AUTH_TOKEN
+      valueFrom:
+        secretKeyRef: {name: llm-gateway, key: token}
+```
+
+Every value of `env` comes from a Secret, the cloud switch's `1` included, and
+reaches every phase of the provider, a seat's executor run in `E2B` too, which
+it signs in as it signs the provider's other phases in
+([Where a seat's executor runs](#where-a-seats-executor-runs)). The API
+server holds the provider to what signs its CLI in from `env`, as the engine
+does (the table above):
+
+- **`ClaudeCode`** needs one of the names its Crewlet profile lists as
+  signing it in from its environment: `ANTHROPIC_AUTH_TOKEN`,
+  `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or
+  `CLAUDE_CODE_USE_FOUNDRY`, with what the gateway or the cloud provider
+  reads beside it. Those four are refused in `env` under `Subscription` and
+  `APIKey`, which hand Claude Code a token or a key beside them.
+- **Hermes, Pi and OpenCode** need their model provider's key under a name
+  Crewlet reads as a credential ([below](#which-env-entries-sign-a-cli-in)),
+  as under `Subscription`, with no login of theirs beside it.
+- **Every other CLI** is refused the mode: its Crewlet profile names nothing
+  that signs it in from its environment, so it would sign in to nothing.
+
+`tokenSecretRef` and `credentialBundleSecretRef` are refused with the mode,
+since no token or login reaches the CLI, and so is `apiKeySecretRef`, which
+`APIKey` alone reads.
 
 ## Where a seat's executor runs
 
@@ -574,7 +668,7 @@ Seat's `Ready` message names the providers that never run its executor.
 |---|---|---|
 | Where | a process tree of the engine pod that holds the seat, in a box directory on the pod's `sandboxes` volume | the Company's E2B sandbox |
 | The CLI | the engine image's ([The image needs the CLI](#the-image-needs-the-cli)) | the E2B template's |
-| Its sign-in | any: the box is seeded with the provider's login, and writes a refreshed one back | a variable of the run's environment only: Claude Code's headless token or key, OpenCode's model provider's key in `env`, or a sign-in in the Seat's `spec.sandbox` |
+| Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, OpenCode's model provider's key in `env`, or a sign-in in the Seat's `spec.sandbox` |
 | The seat's tools | the pod's own listener, on loopback, a data pod's or a seat pod's | the Company's public address |
 | A restart of the pod | ends the run, and Crewlet carries its round on in a fresh one | leaves it running |
 
@@ -636,12 +730,16 @@ An E2B run is not touched.
 trust and proxy variables, the box's home and temporary directories, and the
 run's own: the seat's identity, the Company's and the Seat's setup steps'
 `env`, the Seat's `spec.sandbox.env`, and the provider's sign-in and its
-whole `env` beneath them. So a `TZ` the class's `podTemplate` or the
-Company's `runtime.env` sets on the pod reaches every Direct run, and no E2B
-one. An E2B box gets the run's own alone. The provider's `env` reaches an
+whole `env` beneath them. An E2B box gets the run's own alone. Every run,
+in either cell, is also handed the engine's time zone as `TZ`, the zone
+Crewlet reads a limit's reset in when the CLI names its time without one:
+the `TZ` the class's `podTemplate` or the Company's `runtime.env` sets on the
+pod where it names a zone the engine knows, and `UTC` otherwise, never the
+image's local time. The provider's `env` reaches an
 executor run in either cell, as it reaches the provider's other phases: a
-gateway's `ANTHROPIC_BASE_URL` and the `ANTHROPIC_AUTH_TOKEN` it takes, or a
-Bedrock or Vertex switch and its region. What each box carries of a
+gateway's `ANTHROPIC_BASE_URL`, and under `auth.mode: Env` the
+`ANTHROPIC_AUTH_TOKEN` it takes, or a Bedrock or Vertex switch and its
+region. What each box carries of a
 credential is in
 [What a coding box carries](credentials.md#what-a-coding-box-carries).
 
@@ -680,9 +778,9 @@ each time `Ready` turns to it:
   for the box to call the seat's tools back at.
 - `SandboxLoginNotPortable`: its run goes to `E2B`, and nothing in the run's
   environment signs its CLI in: a Claude Code provider signed in with a
-  credential bundle alone, with no Claude Code sign-in in its `env`, or an
-  OpenCode one with no key in `env`, and no sign-in in the env of the
-  Company's or the Seat's setup steps or in the Seat's `spec.sandbox.env`.
+  credential bundle, or an OpenCode one with no key in `env`, and no sign-in
+  in the env of the Company's or the Seat's setup steps or in the Seat's
+  `spec.sandbox.env`.
 
 The verdict judges the first provider a launch takes, as Crewlet's own guard
 does: a launch the box's login refuses fails, it does not move on down the

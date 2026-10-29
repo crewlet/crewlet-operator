@@ -129,9 +129,14 @@ const (
 	msgCLISubscriptionEnv = "under auth mode Subscription, env may not set a variable Crewlet sets there to sign " +
 		"the CLI in with the login the seat's home holds"
 	msgQwenKeyOnly = "QwenCode signs in with its key alone, under auth mode APIKey"
-	// atEnv is how the API server reports a rule on spec that names env as
-	// the field to change.
-	atEnv = "spec.env: Invalid value"
+	msgCLIZone     = "env may not set TZ: Crewlet hands every CLI it starts the engine's own zone"
+	msgCLIEnvAgent = "auth mode Env takes a CLI Crewlet signs in from its env"
+	msgCLIEnvUnset = "auth mode Env signs the CLI in with env alone, and env sets nothing that signs it in"
+	msgCLIEnvOnly  = "env may set a variable that signs the CLI in from env"
+	// atEnv and atAuth are how the API server reports a rule on spec that
+	// names env, or auth, as the field to change.
+	atEnv  = "spec.env: Invalid value"
+	atAuth = "spec.auth: Invalid value"
 )
 
 // TestLLMProviderSignInValidation covers the rules over a provider's CLI and
@@ -326,7 +331,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			// reports the field a person has to change.
 			name:   "a subscription with no login is reported at auth",
 			mutate: func(p *v1.LLMProvider) { p.Spec.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription} },
-			want:   "spec.auth: Invalid value",
+			want:   atAuth,
 		},
 		{
 			// Crewlet compares a name's parts ignoring case.
@@ -502,7 +507,25 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			name:   "an isolation variable's name in lower case is accepted",
 			mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, "home"),
 		},
+		createCase[*v1.LLMProvider]{
+			name:   "TZ in env is reported at env",
+			mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, "TZ"),
+			want:   atEnv,
+		},
+		createCase[*v1.LLMProvider]{
+			name:   "a zone's name in lower case is accepted",
+			mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, "tz"),
+		},
 	)
+	// Crewlet hands every CLI it starts the engine's own zone, and reads its
+	// limit resets in it, so it refuses TZ in env for every CLI.
+	for _, agent := range llmProviderEnum(t, "spec", "agent") {
+		cases = append(cases, createCase[*v1.LLMProvider]{
+			name:   agent + " with TZ in env is refused",
+			mutate: inEnvBesideBundle(v1.CLIAgentName(agent), "TZ"),
+			want:   msgCLIZone,
+		})
+	}
 	// Qwen Code keeps no login of its own in the builds Crewlet supports, so
 	// under Subscription it would sign in to nothing, whatever it is handed.
 	qwen := func(auth v1.CLIAgentAuth) func(*v1.LLMProvider) {
@@ -521,7 +544,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		createCase[*v1.LLMProvider]{
 			name:   "QwenCode on a bundle is reported at auth",
 			mutate: qwen(bundle),
-			want:   "spec.auth: Invalid value",
+			want:   atAuth,
 		},
 		createCase[*v1.LLMProvider]{
 			name:   "QwenCode on its key under APIKey is accepted",
@@ -556,6 +579,164 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 					name:   fmt.Sprintf("%s in env under Subscription is reported at env", variable),
 					mutate: inEnvBesideBundle(agent, variable),
 					want:   atEnv,
+				})
+		}
+	}
+	// Under auth mode Env the provider's env alone signs its CLI in: Crewlet
+	// hands it neither its token nor its key variable and seeds no login.
+	// So env must set what signs the CLI in, one of the names its profile
+	// lists (sign_in_env) or, for an env sign-in CLI, a credential-named
+	// one, and a CLI whose profile has neither cannot take the mode. A name
+	// of sign_in_env is refused under every other mode, which hands the CLI a
+	// credential of its own beside it.
+	envMode := func(agent v1.CLIAgentName, names ...string) func(*v1.LLMProvider) {
+		return func(p *v1.LLMProvider) {
+			p.Spec.Model = modelViaAnthropic
+			p.Spec.Agent = agent
+			p.Spec.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthEnv}
+			p.Spec.Env = nil
+			for _, name := range names {
+				p.Spec.Env = append(p.Spec.Env, v1.SecretEnvVar{Name: name, ValueFrom: fromSecret("cloud", name)})
+			}
+		}
+	}
+	cases = append(cases,
+		createCase[*v1.LLMProvider]{
+			name: "Claude Code on Bedrock under auth mode Env is accepted",
+			mutate: envMode(v1.CLIAgentClaudeCode,
+				"CLAUDE_CODE_USE_BEDROCK", "AWS_REGION", "AWS_BEARER_TOKEN_BEDROCK"),
+		},
+		createCase[*v1.LLMProvider]{
+			name:   "Claude Code through a gateway's token under auth mode Env is accepted",
+			mutate: envMode(v1.CLIAgentClaudeCode, envBaseURL, "ANTHROPIC_AUTH_TOKEN"),
+		},
+		createCase[*v1.LLMProvider]{
+			name: "Claude Code in E2B under auth mode Env is accepted",
+			mutate: func(p *v1.LLMProvider) {
+				envMode(v1.CLIAgentClaudeCode, "CLAUDE_CODE_USE_VERTEX", "CLOUD_ML_REGION")(p)
+				inE2B(p)
+			},
+		},
+		createCase[*v1.LLMProvider]{
+			// A gateway's address says where the calls go, not whom
+			// they are made as.
+			name:   "Claude Code on a gateway's address alone under auth mode Env is refused",
+			mutate: envMode(v1.CLIAgentClaudeCode, envBaseURL),
+			want:   msgCLIEnvUnset,
+		},
+		createCase[*v1.LLMProvider]{
+			name:   "Claude Code under auth mode Env with no env is refused",
+			mutate: envMode(v1.CLIAgentClaudeCode),
+			want:   msgCLIEnvUnset,
+		},
+		createCase[*v1.LLMProvider]{
+			name:   "an env that signs nothing in under auth mode Env is reported at env",
+			mutate: envMode(v1.CLIAgentClaudeCode, envBaseURL),
+			want:   atEnv,
+		},
+		createCase[*v1.LLMProvider]{
+			// Another CLI's key signs Claude Code in to nothing.
+			name:   "Claude Code on a model provider's key under auth mode Env is refused",
+			mutate: envMode(v1.CLIAgentClaudeCode, "OPENROUTER_API_KEY"),
+			want:   msgCLIEnvUnset,
+		},
+		createCase[*v1.LLMProvider]{
+			name: "a headless token under auth mode Env is refused",
+			mutate: func(p *v1.LLMProvider) {
+				envMode(v1.CLIAgentClaudeCode, "ANTHROPIC_AUTH_TOKEN")(p)
+				p.Spec.Auth.TokenSecretRef = secretKey("claude", "oauthToken")
+			},
+			want: msgCLILoginFields,
+		},
+		createCase[*v1.LLMProvider]{
+			name: "a bundle under auth mode Env is refused",
+			mutate: func(p *v1.LLMProvider) {
+				envMode(v1.CLIAgentClaudeCode, "ANTHROPIC_AUTH_TOKEN")(p)
+				p.Spec.Auth.CredentialBundleSecretRef = secretKey("claude", "bundle")
+			},
+			want: msgCLILoginFields,
+		},
+		createCase[*v1.LLMProvider]{
+			name: "a key under auth mode Env is refused",
+			mutate: func(p *v1.LLMProvider) {
+				envMode(v1.CLIAgentClaudeCode, "ANTHROPIC_AUTH_TOKEN")(p)
+				p.Spec.Auth.APIKeySecretRef = secretKey(providerName, apiKeyKey)
+			},
+			want: msgCLIKey,
+		},
+		createCase[*v1.LLMProvider]{
+			name:   "the CLI's own key variable in env under auth mode Env is refused",
+			mutate: envMode(v1.CLIAgentClaudeCode, "ANTHROPIC_AUTH_TOKEN", envAnthropicKey),
+			want:   msgCLIOwnVariable,
+		},
+	)
+	for _, agent := range llmProviderEnum(t, "spec", "agent") {
+		name := v1.CLIAgentName(agent)
+		switch {
+		case slices.Contains(envSignIn, name):
+			cases = append(cases,
+				createCase[*v1.LLMProvider]{
+					name:   agent + " on its model provider's key under auth mode Env is accepted",
+					mutate: envMode(name, "OPENROUTER_API_KEY"),
+				},
+				createCase[*v1.LLMProvider]{
+					name:   agent + " on a proxy alone under auth mode Env is refused",
+					mutate: envMode(name, envProxy),
+					want:   msgCLIEnvUnset,
+				},
+				createCase[*v1.LLMProvider]{
+					// A cloud switch is no credential, and signs only
+					// Claude Code in.
+					name:   agent + " on Claude Code's cloud switch under auth mode Env is refused",
+					mutate: envMode(name, "CLAUDE_CODE_USE_BEDROCK"),
+					want:   msgCLIEnvUnset,
+				})
+		case len(signInEnv[name]) > 0:
+			// Each of its names is tried below, under every mode.
+		default:
+			cases = append(cases,
+				createCase[*v1.LLMProvider]{
+					name:   agent + " under auth mode Env is refused",
+					mutate: envMode(name, "OPENROUTER_API_KEY", "ANTHROPIC_AUTH_TOKEN"),
+					want:   msgCLIEnvAgent,
+				},
+				createCase[*v1.LLMProvider]{
+					name:   agent + " under auth mode Env is reported at auth",
+					mutate: envMode(name, "OPENROUTER_API_KEY"),
+					want:   atAuth,
+				})
+		}
+	}
+	for agent, names := range signInEnv {
+		for _, variable := range names {
+			cases = append(cases,
+				createCase[*v1.LLMProvider]{
+					name:   fmt.Sprintf("%s on %s under auth mode Env is accepted", agent, variable),
+					mutate: envMode(agent, variable),
+				},
+				createCase[*v1.LLMProvider]{
+					name:   fmt.Sprintf("%s with %s in env under Subscription is refused", agent, variable),
+					mutate: inEnvBesideBundle(agent, variable),
+					want:   msgCLIEnvOnly,
+				},
+				createCase[*v1.LLMProvider]{
+					name: fmt.Sprintf("%s with %s in env under APIKey is refused", agent, variable),
+					mutate: func(p *v1.LLMProvider) {
+						inEnvBesideBundle(agent, variable)(p)
+						p.Spec.Auth = metered
+					},
+					want: msgCLIEnvOnly,
+				},
+				createCase[*v1.LLMProvider]{
+					name:   fmt.Sprintf("%s in env under Subscription is reported at env", variable),
+					mutate: inEnvBesideBundle(agent, variable),
+					want:   atEnv,
+				},
+				createCase[*v1.LLMProvider]{
+					// The name signs only its own CLI in: to OpenCode it
+					// is a variable like any other.
+					name:   fmt.Sprintf("another CLI with %s in env under Subscription is accepted", variable),
+					mutate: inEnvBesideBundle(v1.CLIAgentOpenCode, variable),
 				})
 		}
 	}
@@ -611,18 +792,33 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	runCreateCases(t, tokenProvider, cases)
 }
 
-// TestLLMProviderEnvSignInEmptyEnv proves an explicit empty env signs an env
-// sign-in CLI in to nothing: has() is true of a list written as [], which
-// only an unstructured object can send, since the typed client drops an
-// empty list.
+// TestLLMProviderEnvSignInEmptyEnv proves an explicit empty env signs a CLI in
+// to nothing where env is its sign-in: an env sign-in CLI's under
+// Subscription, and every CLI's that takes auth mode Env under it. has() is
+// true of a list written as [], which only an unstructured object can send,
+// since the typed client drops an empty list.
 func TestLLMProviderEnvSignInEmptyEnv(t *testing.T) {
 	namespace := newNamespace(t)
+	type probe struct {
+		agent v1.CLIAgentName
+		mode  v1.CLIAgentAuthMode
+		want  string
+	}
+	probes := make([]probe, 0, 2*len(envSignIn)+len(signInEnv))
 	for _, agent := range envSignIn {
-		t.Run(string(agent), func(t *testing.T) {
-			p := llmProvider(namespace, strings.ToLower(string(agent)))
-			p.Spec.Agent = agent
+		probes = append(probes,
+			probe{agent: agent, mode: v1.CLIAgentAuthSubscription, want: msgCLINoLogin},
+			probe{agent: agent, mode: v1.CLIAgentAuthEnv, want: msgCLIEnvUnset})
+	}
+	for _, agent := range slices.Sorted(maps.Keys(signInEnv)) {
+		probes = append(probes, probe{agent: agent, mode: v1.CLIAgentAuthEnv, want: msgCLIEnvUnset})
+	}
+	for _, pr := range probes {
+		t.Run(string(pr.agent)+" "+string(pr.mode), func(t *testing.T) {
+			p := llmProvider(namespace, strings.ToLower(string(pr.agent)))
+			p.Spec.Agent = pr.agent
 			p.Spec.Model = modelViaAnthropic
-			p.Spec.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription}
+			p.Spec.Auth = v1.CLIAgentAuth{Mode: pr.mode}
 			content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(p)
 			if err != nil {
 				t.Fatal(err)
@@ -632,7 +828,7 @@ func TestLLMProviderEnvSignInEmptyEnv(t *testing.T) {
 			if err := unstructured.SetNestedSlice(obj.Object, []any{}, "spec", "env"); err != nil {
 				t.Fatal(err)
 			}
-			expect(t, k8sClient.Create(ctx, obj), msgCLINoLogin)
+			expect(t, k8sClient.Create(ctx, obj), pr.want)
 		})
 	}
 }

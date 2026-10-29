@@ -28,7 +28,8 @@ import (
 //     role, on api.port beside its probes, to loopback alone, as the render
 //     binds it on every interface (Crewlet's boxHostURL). So a Direct run
 //     needs no address of the operator's, in any pool. A Direct box is
-//     seeded with its provider's login, so any sign-in runs there.
+//     seeded with its provider's login where it signs in with one, and is
+//     handed its key or its env where it does not, so any sign-in runs there.
 //   - E2B is the Company's E2B sandbox. It dials the fleet's address, the
 //     Company's public one, which any data pod answers and relays to the pod
 //     holding the seat over the broker (ADR-0056 in Crewlet): without one
@@ -334,8 +335,9 @@ func signInRemedy(m *member) string {
 		return "put its model provider's key in the provider's env, or in the seat's spec.sandbox.env, under a " +
 			"name Crewlet reads as a credential, such as OPENROUTER_API_KEY"
 	}
-	return fmt.Sprintf("sign the provider in with auth.tokenSecretRef or auth mode APIKey, or sign ClaudeCode in "+
-		"for the seat in spec.sandbox.env (%s)", strings.Join(claudeCodeSignIn, ", "))
+	return fmt.Sprintf("sign the provider in with auth.tokenSecretRef, with auth mode APIKey, or with auth mode Env "+
+		"and its gateway's token or cloud switch in env (%s), or sign ClaudeCode in for the seat in "+
+		"spec.sandbox.env (%s)", strings.Join(claudeCodeEnvSignIn, ", "), strings.Join(claudeCodeSignIn, ", "))
 }
 
 // directRemedy is how to run m's executor runs Direct, which reach the seat's

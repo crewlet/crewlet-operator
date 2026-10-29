@@ -13,7 +13,7 @@ import (
 //
 // A CLI's login lives under its state directory, which on a data pod is the
 // data volume and on a seat pod the scratch volume it loses at every start.
-// A credential bundle is restored only into an empty login, so every seat pod
+// A credential bundle is restored into an empty login, so every seat pod
 // would restore it at each start and then refresh it on its own, beside the
 // data pod: a vendor that rotates refresh tokens retires the token the
 // others hold at each refresh, and logs the company out. A headless token

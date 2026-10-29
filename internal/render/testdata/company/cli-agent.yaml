@@ -11,6 +11,16 @@ providers:
       run_in: e2b
       state_dir: /var/lib/crewlet/llm-cli/claude
       timeout_seconds: 900
+    claude-gateway:
+      agent: claude-code
+      auth:
+        mode: env
+      env:
+        ANTHROPIC_AUTH_TOKEN: ${K8S_LLM_GATEWAY_TOKEN_J5TIHN6PRZSM}
+        ANTHROPIC_BASE_URL: ${K8S_LLM_GATEWAY_BASE_URL_RID37YAGFZ7L}
+      model: sonnet
+      run_in: e2b
+      state_dir: /var/lib/crewlet/llm-cli/claude-gateway
     codex:
       agent: codex
       auth:
@@ -50,6 +60,7 @@ providers:
       state_dir: /var/lib/crewlet/llm-cli/pi
   llm_order:
   - claude-e2b
+  - claude-gateway
   - codex
   - cursor
   - hermes
@@ -69,6 +80,7 @@ roles:
     default:
     - claude-e2b
     - opencode
+    - claude-gateway
     review:
     - codex
     subagent:

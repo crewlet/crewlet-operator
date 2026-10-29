@@ -1035,7 +1035,9 @@ type EnginePodSpec struct {
 	// variables its Crewlet profile passes through, such as GeminiCLI's
 	// GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION, a seat's Direct
 	// executor run that part alone (the allowlist: PATH, the locale, TERM,
-	// TZ, the TLS trust and proxy variables), and an E2B run none of it. So a
+	// TZ, the TLS trust and proxy variables), and an E2B run none of it but
+	// TZ, which Crewlet hands every executor run as the zone it reads a
+	// limit's reset in (UTC where TZ names no zone it knows). So a
 	// variable a tool server reads goes in its MCPServer's env
 	// (docs/guides/tool-servers.md), one a coding CLI reads in the engine's
 	// pod in its LLMProvider's spec.env, and one a seat's executor run reads
@@ -1078,8 +1080,11 @@ type EnginePodTemplate struct {
 // per-tenant virtual keys of an LLM gateway, never the platform's own.
 //
 // It signs its CLI in with a key and nothing else: auth mode APIKey for a CLI
-// Crewlet hands a key to, or, for Hermes, Pi and OpenCode, which read their
-// model provider's key from that provider's own variable, the key in env. A
+// Crewlet hands a key to; auth mode Env, whose env signs the CLI in alone,
+// such as a ClaudeCode provider on the platform's gateway with the token it
+// issued the tenant in ANTHROPIC_AUTH_TOKEN; or, for Hermes, Pi and OpenCode,
+// which read their model provider's key from that provider's own variable,
+// the key in env. A
 // subscription's headless token or login is one account's, which every tenant
 // of the class would share: it belongs on a tenant's own LLMProvider. The
 // phases it serves in the engine's pod keep their per-seat homes on the data
@@ -1096,10 +1101,14 @@ type EnginePodTemplate struct {
 // executors through the gateway too, with the key it issued. Its rules are an
 // LLMProvider's that apply to such a provider, each with the same message's
 // start, and hold to the same engine.
-// +kubebuilder:validation:XValidation:rule="!has(self.auth) || (has(self.auth.mode) && self.auth.mode == 'APIKey') || (self.agent in ['Hermes', 'Pi', 'OpenCode'] && has(self.env) && self.env.exists(e, e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)')))",message="a platform provider signs its CLI in with a key the class gives each tenant: auth mode APIKey with auth.apiKeySecretRef, for a CLI Crewlet hands a key to, or for Hermes, Pi and OpenCode their model provider's key in env, under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY). A subscription's token or login is one account's, which every tenant of the class would share: it belongs on a tenant's own LLMProvider",fieldPath=".auth"
+// +kubebuilder:validation:XValidation:rule="!has(self.auth) || (has(self.auth.mode) && self.auth.mode in ['APIKey', 'Env']) || (self.agent in ['Hermes', 'Pi', 'OpenCode'] && has(self.env) && self.env.exists(e, e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)')))",message="a platform provider signs its CLI in with a key the class gives each tenant: auth mode APIKey with auth.apiKeySecretRef, for a CLI Crewlet hands a key to, auth mode Env with what signs the CLI in from env, such as a gateway's token, or for Hermes, Pi and OpenCode their model provider's key in env, under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY). A subscription's token or login is one account's, which every tenant of the class would share: it belongs on a tenant's own LLMProvider",fieldPath=".auth"
+// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'Env' || self.agent in ['ClaudeCode', 'Hermes', 'Pi', 'OpenCode']",message="auth mode Env takes a CLI Crewlet signs in from its env: ClaudeCode, by a gateway's token or a cloud provider's switch, and Hermes, Pi or OpenCode, by their model provider's key. Crewlet's profiles for every other CLI name no variable that signs it in from env (sign_in_env) and read no model provider's key from it (env_sign_in), so the provider would sign in to nothing, and Crewlet refuses the document: sign it in with auth mode APIKey",fieldPath=".auth"
+// +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'Env' || !(self.agent in ['ClaudeCode', 'Hermes', 'Pi', 'OpenCode']) || (has(self.env) && self.env.exists(e, (self.agent == 'ClaudeCode' && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY']) || (self.agent in ['Hermes', 'Pi', 'OpenCode'] && e.name.matches('(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'))))",message="auth mode Env signs the CLI in with env alone, and env sets nothing that signs it in, so the provider would sign in to nothing and Crewlet refuses the document: give ClaudeCode ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX or CLAUDE_CODE_USE_FOUNDRY, with the gateway's address or the cloud provider's credentials beside it, and Hermes, Pi or OpenCode their model provider's key under a name Crewlet reads as a credential, one of whose parts between underscores is, in any case, KEY, KEYS, APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT (such as OPENROUTER_API_KEY)",fieldPath=".env"
+// +kubebuilder:validation:XValidation:rule="(has(self.auth) && has(self.auth.mode) && self.auth.mode == 'Env') || !has(self.env) || !self.env.exists(e, self.agent == 'ClaudeCode' && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY'])",message="env may set a variable that signs the CLI in from env (ClaudeCode's ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX and CLAUDE_CODE_USE_FOUNDRY) only under auth mode Env: Subscription and APIKey hand the CLI a credential of their own beside it, which the CLI then ranks by rules of its own, so Crewlet refuses the document. Set auth mode Env, so that env is the provider's one sign-in",fieldPath=".env"
 // +kubebuilder:validation:XValidation:rule="!has(self.auth) || !has(self.auth.mode) || self.auth.mode != 'APIKey' || self.agent in ['ClaudeCode', 'Codex', 'GeminiCLI', 'QwenCode', 'CursorAgent', 'Copilot', 'Grok', 'MuseCode']",message="auth mode APIKey takes a CLI Crewlet hands a key to: ClaudeCode, Codex, GeminiCLI, QwenCode, CursorAgent, Copilot, Grok or MuseCode. Crewlet's profiles for OpenCode, KimiCode, Hermes and Pi name no key variable: give Hermes, Pi or OpenCode its model provider's key in env under mode Subscription; KimiCode reads a key only from its own files, which a platform provider does not give it"
 // +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, (self.agent == 'ClaudeCode' && e.name in ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY']) || (self.agent == 'Codex' && e.name == 'CODEX_API_KEY') || (self.agent == 'GeminiCLI' && e.name == 'GEMINI_API_KEY') || (self.agent == 'QwenCode' && e.name == 'OPENAI_API_KEY') || (self.agent == 'CursorAgent' && e.name == 'CURSOR_API_KEY') || (self.agent == 'Copilot' && e.name == 'COPILOT_GITHUB_TOKEN') || (self.agent == 'Grok' && e.name == 'XAI_API_KEY') || (self.agent == 'MuseCode' && e.name == 'META_API_KEY'))",message="env may not set the CLI's own token or key variable (ClaudeCode's CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY, Codex's CODEX_API_KEY, GeminiCLI's GEMINI_API_KEY, QwenCode's OPENAI_API_KEY, CursorAgent's CURSOR_API_KEY, Copilot's COPILOT_GITHUB_TOKEN, Grok's XAI_API_KEY, MuseCode's META_API_KEY): Crewlet's auth owns it, and whether a value in env reaches the CLI would turn on the auth mode. Give the key as auth.apiKeySecretRef with auth mode APIKey",fieldPath=".env"
 // +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, e.name in ['HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME', 'TMPDIR'] || (self.agent == 'ClaudeCode' && e.name in ['CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_DISABLE_CLAUDE_MDS', 'CLAUDE_CODE_DISABLE_AUTO_MEMORY']) || (self.agent == 'Codex' && e.name in ['CODEX_HOME', 'CODEX_SQLITE_HOME']) || (self.agent == 'OpenCode' && e.name in ['OPENCODE_CONFIG_DIR', 'OPENCODE_CONFIG_PROJECT_DISABLE']) || (self.agent == 'CursorAgent' && e.name == 'CURSOR_CONFIG_DIR') || (self.agent == 'KimiCode' && e.name == 'KIMI_CODE_HOME') || (self.agent == 'Hermes' && e.name == 'HERMES_HOME') || (self.agent == 'Pi' && e.name == 'PI_CODING_AGENT_DIR'))",message="env may not set a variable Crewlet sets on every call of the CLI to keep it inside its seat's own home and its call's working directory: HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME or TMPDIR for any CLI, and ClaudeCode's CLAUDE_CONFIG_DIR, CLAUDE_CODE_DISABLE_CLAUDE_MDS and CLAUDE_CODE_DISABLE_AUTO_MEMORY, Codex's CODEX_HOME and CODEX_SQLITE_HOME, OpenCode's OPENCODE_CONFIG_DIR and OPENCODE_CONFIG_PROJECT_DISABLE, CursorAgent's CURSOR_CONFIG_DIR, KimiCode's KIMI_CODE_HOME, Hermes's HERMES_HOME or Pi's PI_CODING_AGENT_DIR. A value there would replace that isolation for every seat on the provider, so Crewlet refuses the document: drop it",fieldPath=".env"
+// +kubebuilder:validation:XValidation:rule="!has(self.env) || !self.env.exists(e, e.name == 'TZ')",message="env may not set TZ: Crewlet hands every CLI it starts the engine's own zone, its TZ, else UTC, and reads the CLI's limit resets in it, so a zone of the provider's own would be replaced or would have the resets read in the wrong zone, and Crewlet refuses the document. Drop it, and set TZ on the engine to move every CLI's zone: the class's podTemplate.spec.env or the Company's spec.runtime.env",fieldPath=".env"
 // +kubebuilder:validation:XValidation:rule="self.agent != 'OpenCode' || !has(self.model) || (self.model.indexOf('/') >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size() > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size() > 0)",message="an OpenCode model is <provider>/<model>, which OpenCode splits at its first slash: a model with no slash, or with nothing but white space before or after it, names no provider or no model, and every call the provider makes would fail inside OpenCode, which OpenCode 2 refuses as Invalid model reference. Name the provider as OpenCode spells it (opencode models --standalone lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5, with that provider's key in env",fieldPath=".model"
 // +kubebuilder:validation:XValidation:rule="!has(self.webTools) || self.webTools != 'Denied' || self.agent in ['ClaudeCode', 'Codex', 'OpenCode', 'Pi']",message="webTools Denied takes a CLI Crewlet can turn the web off for: ClaudeCode, Codex, OpenCode or Pi. Crewlet's profile for every other CLI carries no measured web denial, and refuses the setting",fieldPath=".webTools"
 type PlatformLLMProvider struct {
@@ -1122,10 +1131,13 @@ type PlatformLLMProvider struct {
 
 	// env is extra environment of the CLI, as an LLMProvider's spec.env is,
 	// each value read from a Secret in a namespace the platform controls:
-	// the model provider's key Hermes, Pi or OpenCode signs in with, or the
+	// the model provider's key Hermes, Pi or OpenCode signs in with, the
 	// address of the platform's gateway a CLI reads from its environment
-	// (ClaudeCode's ANTHROPIC_BASE_URL), for every phase the provider
-	// serves. A seat's executor run on the provider gets all of it, beneath
+	// (ClaudeCode's ANTHROPIC_BASE_URL), or, under auth mode Env, the token
+	// that gateway issued the tenant (ANTHROPIC_AUTH_TOKEN), for every phase
+	// the provider serves. ClaudeCode's sign-in names (ANTHROPIC_AUTH_TOKEN
+	// and the CLAUDE_CODE_USE_* switches) are refused under every other
+	// mode. A seat's executor run on the provider gets all of it, beneath
 	// the Seat's own spec.sandbox.env, Direct on the tenant's engine pod or
 	// in the tenant's own E2B sandbox, the gateway's address included.
 	// Crewlet's `env`, a credential position.
@@ -1143,9 +1155,10 @@ type PlatformLLMProvider struct {
 // +kubebuilder:validation:XValidation:rule="has(self.apiKeySecretRef) == (has(self.mode) && self.mode == 'APIKey')",message="apiKeySecretRef is the key auth mode APIKey hands the CLI: it is required with mode APIKey and not allowed otherwise, as Crewlet reads a key under no other mode"
 // +kubebuilder:validation:MinProperties=1
 type PlatformLLMProviderAuth struct {
-	// mode is how the CLI signs in: APIKey, with apiKeySecretRef, or
-	// Subscription, which signs Hermes, Pi or OpenCode in with its model
-	// provider's key in env. Unset is Subscription. Crewlet's `mode`.
+	// mode is how the CLI signs in: APIKey, with apiKeySecretRef; Env, which
+	// signs the CLI in with env alone, as an LLMProvider's auth mode Env
+	// does; or Subscription, which signs Hermes, Pi or OpenCode in with its
+	// model provider's key in env. Unset is Subscription. Crewlet's `mode`.
 	// +optional
 	Mode CLIAgentAuthMode `json:"mode,omitempty"`
 

@@ -989,6 +989,10 @@ func classEnv(env ...v1.ClassEnvVar) func(*v1.EngineClass) {
 	return func(c *v1.EngineClass) { c.Spec.PodTemplate.Spec.Env = env }
 }
 
+// atPlatformEnv is how the API server reports a platform provider's rule that
+// names its env as the field to change.
+const atPlatformEnv = "spec.platformLLMProviders[0].env: Invalid value"
+
 // msgPlatformSignIn is the start of the platform provider's rule over how its
 // CLI signs in, which takes a key alone.
 const msgPlatformSignIn = "a platform provider signs its CLI in with a key the class gives each tenant"
@@ -1137,7 +1141,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envAnthropicKey)}
 			}),
-			want: "spec.platformLLMProviders[0].env: Invalid value",
+			want: atPlatformEnv,
 		},
 		{
 			name: "a platform provider with an isolation variable in env is refused",
@@ -1145,6 +1149,13 @@ func TestPlatformLLMProviders(t *testing.T) {
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom("CLAUDE_CONFIG_DIR")}
 			}),
 			want: msgCLIIsolation,
+		},
+		{
+			name: "a platform provider with TZ in env is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom("TZ")}
+			}),
+			want: msgCLIZone,
 		},
 		{
 			name: "a platform OpenCode model with no provider is refused",
@@ -1161,6 +1172,67 @@ func TestPlatformLLMProviders(t *testing.T) {
 				p.Model = "anthropic/ "
 			}),
 			want: "spec.platformLLMProviders[0].model: Invalid value",
+		},
+		{
+			// The platform's gateway, on the token it issued the tenant.
+			name: "a platform Claude Code provider on its gateway's token under auth mode Env is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv}
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envBaseURL), envFrom("ANTHROPIC_AUTH_TOKEN")}
+			}),
+		},
+		{
+			name: "a platform OpenCode provider on its model provider's key under auth mode Env is accepted",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv}
+			}),
+		},
+		{
+			name: "a platform Codex provider under auth mode Env is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				keyInEnv(v1.CLIAgentCodex, "OPENROUTER_API_KEY")(p)
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv}
+			}),
+			want: msgCLIEnvAgent,
+		},
+		{
+			name: "a platform Claude Code provider on its gateway's address alone under auth mode Env is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv}
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envBaseURL)}
+			}),
+			want: msgCLIEnvUnset,
+		},
+		{
+			name: "a platform provider's env that signs nothing in under auth mode Env is reported at env",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv}
+			}),
+			want: atPlatformEnv,
+		},
+		{
+			name: "a key under auth mode Env is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv, APIKeySecretRef: key}
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom("ANTHROPIC_AUTH_TOKEN")}
+			}),
+			want: msgCLIKey,
+		},
+		{
+			// Under APIKey the key competes with the gateway's token.
+			name: "a platform Claude Code provider with its gateway's token under APIKey is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envBaseURL), envFrom("ANTHROPIC_AUTH_TOKEN")}
+			}),
+			want: msgCLIEnvOnly,
+		},
+		{
+			name: "a platform provider's sign-in in env outside auth mode Env is reported at env",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom("CLAUDE_CODE_USE_BEDROCK")}
+			}),
+			want: atPlatformEnv,
 		},
 	})
 }
