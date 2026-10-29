@@ -185,6 +185,9 @@ var (
 	nameC = StoreName(keyC)
 )
 
+// firstReload is the first revision a fakeEngine re-activates.
+const firstReload = "reloaded-1"
+
 // revision1 and revision2 are two revisions of the engine's document.
 const (
 	revision1 = "0191d4a6-5c1e-7000-8000-000000000001"
@@ -260,10 +263,10 @@ func TestSyncWritesItsValuesAsOneBatch(t *testing.T) {
 
 	state, res := mustSync(t, eng, desired, State{})
 	assertCalls(t, eng, "list", "put "+nameA+" "+nameB+" "+nameC)
-	if !slices.Equal(eng.reloaded, []string{"reloaded-1"}) {
+	if !slices.Equal(eng.reloaded, []string{firstReload}) {
 		t.Fatalf("the engine re-activated %q, want one revision for the sync", eng.reloaded)
 	}
-	if !res.Reload.Landed() || res.Reload.RevisionID != "reloaded-1" || res.Reload.Epoch != 1 {
+	if !res.Reload.Landed() || res.Reload.RevisionID != firstReload || res.Reload.Epoch != 1 {
 		t.Fatalf("Reload = %+v, want the engine's re-activation", res.Reload)
 	}
 
@@ -380,7 +383,7 @@ func TestSyncWritesAValueThatIsNotUTF8Alone(t *testing.T) {
 	eng.reads = map[string]bool{nameB: true}
 	_, res = mustSync(t, eng, desiredOf(map[string]string{nameB: "\xff"}), State{})
 	assertCalls(t, eng, "list", "put-raw "+nameB)
-	if !res.Reload.Landed() || res.Reload.RevisionID != "reloaded-1" {
+	if !res.Reload.Landed() || res.Reload.RevisionID != firstReload {
 		t.Fatalf("Reload = %+v, want the write's own re-activation", res.Reload)
 	}
 }

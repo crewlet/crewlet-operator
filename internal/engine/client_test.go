@@ -768,15 +768,16 @@ func TestPutSecretErrorsNeverContainTheValue(t *testing.T) {
 // carries every value as it is, and the engine's 200 says what the write did
 // to the running company: its re-activation, landed or failed, or none.
 func TestPutSecretsSendsOneBody(t *testing.T) {
-	values := map[string][]byte{"K8S_A": []byte("line1\n\"x\" <&>"), "K8S_B": []byte("b")}
+	const other = "K8S_B"
+	values := map[string][]byte{storedName: []byte("line1\n\"x\" <&>"), other: []byte("b")}
 	for name, tc := range map[string]struct {
 		reload string
 		want   *engine.Reload
 	}{
 		"nothing reads them": {reload: `null`},
 		"re-activated": {
-			reload: `{"revision_id":"rev-2","epoch":7}`,
-			want:   &engine.Reload{RevisionID: "rev-2", Epoch: 7},
+			reload: `{"revision_id":"rev-8","epoch":7}`,
+			want:   &engine.Reload{RevisionID: "rev-8", Epoch: 7},
 		},
 		"the re-activation lost a race": {
 			reload: `{"error":"revision_advanced","detail":"another configuration write activated first",
@@ -793,9 +794,9 @@ func TestPutSecretsSendsOneBody(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !slices.Equal(got.Names, []string{"K8S_A", "K8S_B"}) ||
-				!slices.Equal(got.ReadBy["K8S_A"], []string{"providers.llm.default.auth.api_key"}) ||
-				got.ReadBy["K8S_B"] == nil || len(got.ReadBy["K8S_B"]) != 0 {
+			if !slices.Equal(got.Names, []string{storedName, other}) ||
+				!slices.Equal(got.ReadBy[storedName], []string{"providers.llm.default.auth.api_key"}) ||
+				got.ReadBy[other] == nil || len(got.ReadBy[other]) != 0 {
 				t.Errorf("PutSecrets() = %+v", got)
 			}
 			if (got.Reload == nil) != (tc.want == nil) || (got.Reload != nil && *got.Reload != *tc.want) {
@@ -815,8 +816,8 @@ func TestPutSecretsSendsOneBody(t *testing.T) {
 			if err := json.Unmarshal(sent.body, &body); err != nil {
 				t.Fatalf("the body is not JSON: %v", err)
 			}
-			if len(body.Values) != len(values) || body.Values["K8S_A"] != string(values["K8S_A"]) ||
-				body.Values["K8S_B"] != "b" {
+			if len(body.Values) != len(values) || body.Values[storedName] != string(values[storedName]) ||
+				body.Values[other] != "b" {
 				t.Errorf("body values = %q, want every value byte for byte", body.Values)
 			}
 			// The write re-activates: a deferred one would leave the
@@ -841,8 +842,8 @@ func TestPutSecretsRefusesWhatTheEngineWouldBeforeSending(t *testing.T) {
 	for name, values := range map[string]map[string][]byte{
 		"none":           {},
 		"too many":       tooMany,
-		"a bad name":     {"K8S_A": []byte(value), "../config": []byte(value)},
-		"a binary value": {"K8S_A": []byte(value), "K8S_B": []byte("\xff" + value)},
+		"a bad name":     {storedName: []byte(value), "../config": []byte(value)},
+		"a binary value": {storedName: []byte(value), "K8S_BINARY": []byte("\xff" + value)},
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newFakeEngine(t)
@@ -861,7 +862,7 @@ func TestPutSecretsRefusesWhatTheEngineWouldBeforeSending(t *testing.T) {
 	f := newFakeEngine(t)
 	f.handle("PUT /secrets", answer(http.StatusBadRequest, `{"error":"invalid_body",
 		"detail":"K8S_A cannot be stored, so nothing was","invalid":{"K8S_A":"the value is too large"}}`))
-	_, err := f.client().PutSecrets(context.Background(), map[string][]byte{"K8S_A": []byte(value)})
+	_, err := f.client().PutSecrets(context.Background(), map[string][]byte{storedName: []byte(value)})
 	if err == nil || strings.Contains(err.Error(), value) {
 		t.Fatalf("PutSecrets() = %v, want the engine's refusal without the value", err)
 	}
@@ -906,7 +907,7 @@ func TestDeleteSecretReadsTheReactivation(t *testing.T) {
 		reload string
 		want   engine.Reload
 	}{
-		"re-activated": {reload: `{"revision_id":"rev-2","epoch":7}`, want: engine.Reload{RevisionID: "rev-2", Epoch: 7}},
+		"re-activated": {reload: `{"revision_id":"rev-9","epoch":7}`, want: engine.Reload{RevisionID: "rev-9", Epoch: 7}},
 		"refused": {
 			reload: `{"error":"validation_error","detail":"the company does not run without it"}`,
 			want:   engine.Reload{Error: "validation_error", Detail: "the company does not run without it"},

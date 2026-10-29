@@ -521,7 +521,7 @@ func (run *configRun) enforce(
 		}
 		return run.heldResync(ctrl.Result{RequeueAfter: run.resyncInterval()}), nil
 	}
-	reloaded, err := run.reloadedBySync(ctx, eng, active, diffs, pushed)
+	reloaded, err := run.reloadedBySync(ctx, eng, active, diffs, pushed.Reload)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -653,8 +653,8 @@ func (run *configRun) adopt(state secretsync.State, active *engine.ActiveConfig,
 //
 // The engine re-activates its active revision whenever a request writes or
 // removes a value that revision reads, once for all the values of one write,
-// and answers what that did; secretsync.Result.Reload is the answer to the
-// last such request of the sync, after which the store held, of every value
+// and answers what that did; reload, secretsync.Result.Reload, is the answer
+// to the last such request of the sync, after which the store held, of every value
 // the revision reads, what it holds now. Where that re-activation landed and
 // the document the engine ran before it is the rendered one (diffs is empty,
 // and both reference every store name as often, so that the rendered
@@ -669,9 +669,8 @@ func (run *configRun) adopt(state secretsync.State, active *engine.ActiveConfig,
 // the revision reads changed, and a write whose answer is not read, leave the
 // apply to the operator, as before the engine re-activated at all.
 func (run *configRun) reloadedBySync(
-	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, diffs []render.Path, pushed secretsync.Result,
+	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, diffs []render.Path, reload *engine.Reload,
 ) (*engine.ApplyResult, error) {
-	reload := pushed.Reload
 	if active == nil || reload == nil || len(diffs) > 0 ||
 		!maps.Equal(storeReferences(run.doc.YAML), storeReferences(active.Document)) {
 		return nil, nil
