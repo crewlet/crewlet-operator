@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1504,9 +1505,11 @@ func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 		}
 		want := requireOneLoginTwoCLIs(t, "the rendered move", moved.YAML, login, providerClaude, providerCodex)
 
-		putCredentials(t, client, moved)
+		// The engine activates the running revision again as it takes the
+		// values the move reads, so the move is made on that revision.
+		activated := putCredentials(t, client, moved)
 		applied, err := client.ApplyConfig(t.Context(), engine.ApplyRequest{
-			Document: moved.YAML, IfMatch: running.RevisionID,
+			Document: moved.YAML, IfMatch: activated,
 			Summary: "codex moves to OpenCode under claude-e2b's loginName",
 		})
 		if err != nil {
@@ -1528,14 +1531,41 @@ func loginNameOf(p *v1alpha1.LLMProvider) string { return cmp.Or(p.Spec.LoginNam
 
 // putCredentials puts a stand-in value in the engine's secret store under
 // every name doc refers to, as the secret sync does before the operator
-// applies a document.
-func putCredentials(t *testing.T, client *engine.Client, doc *Document) {
+// applies a document: in batches, each of which the engine follows with an
+// activation of its running revision again where that revision reads one of
+// the names. It returns the revision the engine runs after the writes, empty
+// for none, which a following write's If-Match names: the one before them is
+// no longer the active one.
+func putCredentials(t *testing.T, client *engine.Client, doc *Document) string {
 	t.Helper()
+	values := map[string][]byte{}
 	for _, k := range doc.Refs {
-		if err := client.PutSecret(t.Context(), secretsync.StoreName(k), []byte(dummyCredential(k))); err != nil {
+		values[secretsync.StoreName(k)] = []byte(dummyCredential(k))
+	}
+	names := slices.Sorted(maps.Keys(values))
+	running := ""
+	for batch := range slices.Chunk(names, engine.MaxSecretBatch) {
+		chunk := make(map[string][]byte, len(batch))
+		for _, name := range batch {
+			chunk[name] = values[name]
+		}
+		written, err := client.PutSecrets(t.Context(), chunk)
+		if err != nil {
 			t.Fatal(err)
 		}
+		if written.Reload != nil && !written.Reload.Landed() {
+			t.Fatalf("the engine sealed the stand-in values and did not activate its revision again: %+v", *written.Reload)
+		}
 	}
+	active, err := client.ActiveConfig(t.Context())
+	switch {
+	case errors.Is(err, engine.ErrNoActiveRevision):
+	case err != nil:
+		t.Fatal(err)
+	default:
+		running = active.RevisionID
+	}
+	return running
 }
 
 // loginEntry is what a providers.llm entry says about where its CLI keeps its
