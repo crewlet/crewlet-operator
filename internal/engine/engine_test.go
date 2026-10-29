@@ -108,12 +108,12 @@ func TestEngineReloadActivatesTheDocumentAgain(t *testing.T) {
 // waits for after a write: the engine applies the revision asynchronously,
 // never reading a diverged posture while it does, and its /health then
 // reports it applied, converged (posture serve) and ok, with an applied epoch
-// that reaches the epoch the write returned; and the node's record in /fleet
-// names that epoch, its revision and a clean outcome, and that revision as
-// the one it runs and, a data node's store outliving a restart, the one it
-// would start on: the engine moves what it starts on before it records the
-// apply, so no record names the applied revision as run and not as started
-// on.
+// that reaches the epoch the write returned; and the node's record in /fleet,
+// which follows /health and is waited for as it is, names that epoch, its
+// revision and a clean outcome, and that revision as the one it runs and, a
+// data node's store outliving a restart, the one it would start on: the
+// engine moves what it starts on before it records the apply, so no record
+// names the applied revision as run and not as started on.
 func TestEngineHealthReportsTheAppliedEpoch(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -154,15 +154,81 @@ func TestEngineHealthReportsTheAppliedEpoch(t *testing.T) {
 	if len(diverged) > 0 {
 		t.Errorf("Health() read a diverged posture during an apply that succeeded: %+v", diverged)
 	}
-	fleet, err := client.Fleet(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if record, want := fleet.LastApply(), (engine.ApplyRecord{
+	// THE PEERS' RECORD FOLLOWS /health, waited for as /health was. The
+	// engine moves its own progress, which /health reads, then writes its
+	// boot row to its own store, and only then the record its peers read in
+	// /fleet to the coordination store (Crewlet's internal/engine
+	// Reconciler.apply), so a read between finds the record not yet written.
+	want := engine.ApplyRecord{
 		Epoch: applied.Epoch, RevisionID: applied.RevisionID, Status: engine.ApplyOK, Serving: applied.RevisionID,
 		Boots: applied.RevisionID,
-	}); record != want {
-		t.Fatalf("LastApply() = %+v, want %+v", record, want)
+	}
+	eventually(t, "the engine's /fleet record of the apply", func() error {
+		fleet, err := client.Fleet(ctx)
+		if err != nil {
+			return err
+		}
+		record := fleet.LastApply()
+		settled, err := recordSettled(&record, &want)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !settled {
+			return fmt.Errorf("LastApply() = %+v, not yet the apply's record", record)
+		}
+		return nil
+	})
+}
+
+// recordSettled reports whether record, a node's /fleet record of its last
+// apply, is want, the record of the apply the case made: false while the
+// record is behind want's epoch, which is a record not yet written (the zero
+// record) or one of an earlier apply, and an error naming the record for one
+// at want's epoch or later that is not want, which waiting will not change.
+// FAILING FAST THERE IS ON PURPOSE: an error record at the apply's epoch is the
+// engine's account of a failed apply, not a lag, so do not turn it into a wait.
+func recordSettled(record, want *engine.ApplyRecord) (bool, error) {
+	switch {
+	case *record == *want:
+		return true, nil
+	case record.Epoch < want.Epoch:
+		return false, nil
+	}
+	return false, fmt.Errorf("LastApply() = %+v, want %+v", *record, *want)
+}
+
+// A RECORD NOT YET WRITTEN IS WAITED FOR, AND A WRONG ONE FAILS AT ONCE: the
+// zero record and an earlier apply's are the lag between the engine's own
+// progress and its peers' record; a record at the apply's epoch that names
+// another revision, or a failure, is not, and fails naming itself.
+func TestARecordOfTheApplyIsWaitedForAndAWrongOneFails(t *testing.T) {
+	t.Parallel()
+	const applied, before, another = "applied-revision", "earlier-revision", "another-revision"
+	want := engine.ApplyRecord{Epoch: 3, RevisionID: applied, Status: engine.ApplyOK, Serving: applied, Boots: applied}
+	earlier := engine.ApplyRecord{Epoch: 2, RevisionID: before, Status: engine.ApplyOK, Serving: before, Boots: before}
+	other := want
+	other.RevisionID, other.Serving, other.Boots = another, another, another
+	failed := want
+	failed.Status, failed.Serving, failed.Boots = engine.ApplyError, before, before
+	for _, tc := range []struct {
+		name    string
+		record  engine.ApplyRecord
+		settled bool
+		wrong   bool
+	}{
+		{"not yet written", engine.ApplyRecord{}, false, false},
+		{"an earlier apply's", earlier, false, false},
+		{"the apply's", want, true, false},
+		{"another revision at the apply's epoch", other, false, true},
+		{"a failure at the apply's epoch", failed, false, true},
+	} {
+		settled, err := recordSettled(&tc.record, &want)
+		if settled != tc.settled || (err != nil) != tc.wrong {
+			t.Errorf("%s: recordSettled = (%v, %v), want settled %v, wrong %v", tc.name, settled, err, tc.settled, tc.wrong)
+		}
+		if tc.wrong && (err == nil || !strings.Contains(err.Error(), tc.record.RevisionID)) {
+			t.Errorf("%s: the failure %v does not name the record", tc.name, err)
+		}
 	}
 }
 
