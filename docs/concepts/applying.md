@@ -106,6 +106,14 @@ flowchart TD
    operator's own token: somebody with an admin credential replaced it, and
    the operator writes its value back. The engine records that credential
    from the write's authentication, so no writer can pass for the operator.
+   The values are written together, as one batch of up to 64 (`PUT
+   /secrets`; a larger set goes in batches of 64, and a value that is not
+   UTF-8, which a JSON body cannot carry, goes alone before them), because
+   the engine activates the revision it runs again, unchanged, at every
+   write or removal of a value that revision reads, so that it runs with
+   the new value: one write per value would be one activation per value,
+   the company running a mix of old and new values between them. A sync's
+   values are one activation.
    The entries the running document still references are kept until the next
    document replaces it, and so are those of every other revision an engine
    pod runs or would start on: each pod applies the fleet's revision on its
@@ -187,10 +195,13 @@ flowchart TD
    the next document runs. Whenever the reconcile ends without activating a
    revision after it deleted a value, because the document is held at any
    step, the operator activates the revision the engine runs again,
-   unchanged (`POST /config/reload`, with a `Reactivated` event), so the
-   engine reads its store without the deleted value rather than starting a
-   tool server or an executor run with it; it keeps what it owes in its record
-   of the store until a revision has activated. It activates again only a
+   unchanged, so the engine reads its store without the deleted value
+   rather than starting a tool server or an executor run with it (a
+   `Reactivated` event): where that revision read the value, the engine did
+   so itself as the operator removed it, and the operator takes that
+   activation for its own; otherwise, or where the engine's failed, it asks
+   for one (`POST /config/reload`). It keeps what it owes in its record of
+   the store until a revision has activated. It activates again only a
    revision that goes without the value, never one that keeps it, and
    records the revision that activates it again as its own only once it has
    read back that it is that document: the engine activates again whichever
@@ -204,11 +215,19 @@ flowchart TD
    rendered one, and compares a hash of the rendered document and
    of the values it references with the one it recorded when it last applied
    (`status.config.appliedHash`). If both match, there is nothing to write.
-   A changed value alone is a reason to write: the engine reads a rotated
-   value only when a revision activates, so rewriting a Secret produces a new
-   revision with the same document, and its summary names the Secret. So is
-   a value written back in step 3, for the same reason: since it was
-   replaced, a reload may have handed the engine the other value.
+   A changed value alone needs a new revision: the engine reads a rotated
+   value only when a revision activates. Where the engine runs the rendered
+   document, the write in step 3 made that revision, since the engine
+   activates the revision that reads a value it is written, and the
+   operator records it as its own apply (`status.config`), once it has read
+   back that the engine runs it, rather than activating the same document a
+   second time; its summary is the engine's, `reload: secret <NAME>
+   written`. Where the engine did not activate one (nothing it runs reads
+   the value, or its activation failed or was overtaken by another write),
+   the operator applies the same document itself, with a summary that names
+   the Secret. So with a value written back in step 3, for the same reason:
+   since it was replaced, a reload may have handed the engine the other
+   value.
 5. **Dry-run** the document. The engine checks everything the API server
    cannot: rules that span objects, such as a Seat that asks for a sandbox
    the Company does not offer. Each problem the engine reports is traced back,
@@ -235,8 +254,9 @@ flowchart TD
    entries usually go at the operator's next look, a few seconds later, once
    the pods report it applied; a pod that refuses it keeps them for as long
    as it runs the revision before it, or would start on it. The new revision activated with a deleted Secret's
-   value still in the store, so the operator activates it again once that
-   value is gone, unchanged (`Reactivated`), and the engine reads its store
+   value still in the store, so it is activated again once that value is
+   gone, unchanged (`Reactivated`), by the engine as the operator removes the
+   value, or else at the operator's request, and the engine reads its store
    without it. Until then the
    new revision may start a tool server or an executor run with the deleted
    Secret's value: that moment is the price of keeping the last good revision
@@ -395,8 +415,9 @@ Observe is how to hand the objects a company the engine already runs (one
 run from its dashboard under Seed, or a Company created again over the
 volumes a [Retain](runtime.md#deletion) deletion kept): once it reports
 `InSync`, the objects say what the engine runs, and switching to `Enforce`
-pushes the Secret values and applies the same document once, as a revision
-of the operator's own.
+pushes the Secret values, which the engine activates the same document again
+with once, a revision the operator records as its own (or, where the engine
+does not, the operator applies the same document once itself).
 
 ### Seed
 

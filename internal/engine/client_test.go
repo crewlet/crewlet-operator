@@ -764,6 +764,109 @@ func TestPutSecretErrorsNeverContainTheValue(t *testing.T) {
 	})
 }
 
+// TestPutSecretsSendsOneBody: a batch is one PUT /secrets whose JSON body
+// carries every value as it is, and the engine's 200 says what the write did
+// to the running company: its re-activation, landed or failed, or none.
+func TestPutSecretsSendsOneBody(t *testing.T) {
+	values := map[string][]byte{"K8S_A": []byte("line1\n\"x\" <&>"), "K8S_B": []byte("b")}
+	for name, tc := range map[string]struct {
+		reload string
+		want   *engine.Reload
+	}{
+		"nothing reads them": {reload: `null`},
+		"re-activated": {
+			reload: `{"revision_id":"rev-2","epoch":7}`,
+			want:   &engine.Reload{RevisionID: "rev-2", Epoch: 7},
+		},
+		"the re-activation lost a race": {
+			reload: `{"error":"revision_advanced","detail":"another configuration write activated first",
+				"stored_revision_id":"rev-3","node":"node-a"}`,
+			want: &engine.Reload{Error: "revision_advanced", Detail: "another configuration write activated first",
+				StoredRevisionID: "rev-3", Node: "node-a"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			f.handle("PUT /secrets", answer(http.StatusOK, `{"names":["K8S_A","K8S_B"],"bytes":{"K8S_A":16,"K8S_B":1},
+				"read_by":{"K8S_A":["providers.llm.default.auth.api_key"],"K8S_B":[]},"reload":`+tc.reload+`}`))
+			got, err := f.client().PutSecrets(context.Background(), values)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(got.Names, []string{"K8S_A", "K8S_B"}) ||
+				!slices.Equal(got.ReadBy["K8S_A"], []string{"providers.llm.default.auth.api_key"}) ||
+				got.ReadBy["K8S_B"] == nil || len(got.ReadBy["K8S_B"]) != 0 {
+				t.Errorf("PutSecrets() = %+v", got)
+			}
+			if (got.Reload == nil) != (tc.want == nil) || (got.Reload != nil && *got.Reload != *tc.want) {
+				t.Errorf("Reload = %+v, want %+v", got.Reload, tc.want)
+			}
+			if landed := got.Reload.Landed(); landed != (tc.want != nil && tc.want.RevisionID != "") {
+				t.Errorf("Landed() = %v", landed)
+			}
+			sent := f.only()
+			if sent.query != "" || sent.header.Get("Content-Type") != "application/json" {
+				t.Errorf("query %q, Content-Type %q, want none and JSON", sent.query, sent.header.Get("Content-Type"))
+			}
+			var body struct {
+				Values      map[string]string `json:"values"`
+				DeferReload *bool             `json:"defer_reload"`
+			}
+			if err := json.Unmarshal(sent.body, &body); err != nil {
+				t.Fatalf("the body is not JSON: %v", err)
+			}
+			if len(body.Values) != len(values) || body.Values["K8S_A"] != string(values["K8S_A"]) ||
+				body.Values["K8S_B"] != "b" {
+				t.Errorf("body values = %q, want every value byte for byte", body.Values)
+			}
+			// The write re-activates: a deferred one would leave the
+			// values sealed and running nowhere.
+			if body.DeferReload != nil {
+				t.Errorf("the body sets defer_reload")
+			}
+		})
+	}
+}
+
+// TestPutSecretsRefusesWhatTheEngineWouldBeforeSending: no batch, one of
+// more than the engine takes, a name outside the grammar and a value a JSON
+// string cannot carry unchanged never reach the engine, and no error, the
+// engine's included, names a value.
+func TestPutSecretsRefusesWhatTheEngineWouldBeforeSending(t *testing.T) {
+	const value = "sk-live-do-not-leak"
+	tooMany := map[string][]byte{}
+	for i := range engine.MaxSecretBatch + 1 {
+		tooMany[fmt.Sprintf("K8S_%d", i)] = []byte(value)
+	}
+	for name, values := range map[string]map[string][]byte{
+		"none":           {},
+		"too many":       tooMany,
+		"a bad name":     {"K8S_A": []byte(value), "../config": []byte(value)},
+		"a binary value": {"K8S_A": []byte(value), "K8S_B": []byte("\xff" + value)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			_, err := f.client().PutSecrets(context.Background(), values)
+			if err == nil {
+				t.Fatal("PutSecrets() succeeded, want an error")
+			}
+			if strings.Contains(err.Error(), value) {
+				t.Fatalf("PutSecrets() error %q contains a secret value", err)
+			}
+			if n := f.requests(); n != 0 {
+				t.Fatalf("the engine received %d requests, want none", n)
+			}
+		})
+	}
+	f := newFakeEngine(t)
+	f.handle("PUT /secrets", answer(http.StatusBadRequest, `{"error":"invalid_body",
+		"detail":"K8S_A cannot be stored, so nothing was","invalid":{"K8S_A":"the value is too large"}}`))
+	_, err := f.client().PutSecrets(context.Background(), map[string][]byte{"K8S_A": []byte(value)})
+	if err == nil || strings.Contains(err.Error(), value) {
+		t.Fatalf("PutSecrets() = %v, want the engine's refusal without the value", err)
+	}
+}
+
 // TestSecretNamesOutsideTheGrammarNeverReachTheEngine guards the path: a name
 // is a URL segment, and "../config" would address another route.
 func TestSecretNamesOutsideTheGrammarNeverReachTheEngine(t *testing.T) {
@@ -784,15 +887,41 @@ func TestSecretNamesOutsideTheGrammarNeverReachTheEngine(t *testing.T) {
 func TestDeleteSecret(t *testing.T) {
 	for _, removed := range []bool{true, false} {
 		f := newFakeEngine(t)
-		body, err := json.Marshal(map[string]any{"name": storedName, "removed": removed})
+		body, err := json.Marshal(map[string]any{"name": storedName, "removed": removed, "read_by": []string{}, "reload": nil})
 		if err != nil {
 			t.Fatal(err)
 		}
 		f.handle("DELETE "+storedPath, answer(http.StatusOK, string(body)))
 		got, err := f.client().DeleteSecret(context.Background(), storedName)
-		if err != nil || got != removed {
-			t.Fatalf("DeleteSecret() = %v, %v, want %v, nil", got, err, removed)
+		if err != nil || got.Removed != removed || got.Reload != nil || len(got.ReadBy) != 0 {
+			t.Fatalf("DeleteSecret() = %+v, %v, want removed %v, nothing re-activated, nil", got, err, removed)
 		}
+	}
+}
+
+// TestDeleteSecretReadsTheReactivation: the removal of a value the active
+// revision reads re-activates it, and the engine's 200 says how that went.
+func TestDeleteSecretReadsTheReactivation(t *testing.T) {
+	for name, tc := range map[string]struct {
+		reload string
+		want   engine.Reload
+	}{
+		"re-activated": {reload: `{"revision_id":"rev-2","epoch":7}`, want: engine.Reload{RevisionID: "rev-2", Epoch: 7}},
+		"refused": {
+			reload: `{"error":"validation_error","detail":"the company does not run without it"}`,
+			want:   engine.Reload{Error: "validation_error", Detail: "the company does not run without it"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			f.handle("DELETE "+storedPath, answer(http.StatusOK, `{"name":"K8S_A","removed":true,
+				"read_by":["mcp.servers[0].env.NPM_CONFIG_REGISTRY"],"reload":`+tc.reload+`}`))
+			got, err := f.client().DeleteSecret(context.Background(), storedName)
+			if err != nil || !got.Removed || got.Reload == nil || *got.Reload != tc.want ||
+				!slices.Equal(got.ReadBy, []string{"mcp.servers[0].env.NPM_CONFIG_REGISTRY"}) {
+				t.Fatalf("DeleteSecret() = %+v, %v, want the re-activation %+v", got, err, tc.want)
+			}
+		})
 	}
 }
 

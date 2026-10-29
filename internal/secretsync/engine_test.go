@@ -104,6 +104,51 @@ func TestSyncAgainstTheEngine(t *testing.T) {
 	}
 }
 
+// TestContractASyncIsOneActivation runs Sync against the real engine, which
+// re-activates its active revision at every write of a value it reads: a
+// sync that writes several values, one of which the revision reads, is one
+// re-activation, which Result.Reload names and the engine then runs, and a
+// sync that writes only a value nothing reads is none.
+func TestContractASyncIsOneActivation(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	eng := enginetest.Start(t).Client()
+	self := engine.TokenLogin(enginetest.OperatorTokenID)
+	const read = "ENGINETEST_LLM_API_KEY"
+	slack := StoreName(secretref.Key{Namespace: nimbusNS, Name: slackSecret, Key: botTokenKey})
+	signing := StoreName(secretref.Key{Namespace: nimbusNS, Name: slackSecret, Key: signingSecretKey})
+
+	first, err := eng.ApplyConfig(ctx, engine.ApplyRequest{
+		Document: []byte(enginetest.MinimalCompany), Summary: "secretsync: reads " + read, CreateOnly: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, res, err := Sync(ctx, eng, desiredOf(map[string]string{read: "k1", slack: "xoxb", signing: "sig"}), State{}, self)
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if len(res.Put) != 3 || !res.Reload.Landed() || res.Reload.Epoch != first.Epoch+1 {
+		t.Fatalf("Result = %+v, Reload %+v; want three values written and one re-activation, at epoch %d",
+			res, res.Reload, first.Epoch+1)
+	}
+	active, err := eng.ActiveConfig(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active.RevisionID != res.Reload.RevisionID {
+		t.Fatalf("the engine runs revision %s, want the re-activation %s", active.RevisionID, res.Reload.RevisionID)
+	}
+
+	_, res, err = Sync(ctx, eng, desiredOf(map[string]string{read: "k1", slack: "xoxb-rotated", signing: "sig"}), state, self)
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if !slices.Equal(res.Put, []string{slack}) || res.Reload != nil {
+		t.Fatalf("Result = %+v, Reload %+v; want %s written and nothing re-activated", res, res.Reload, slack)
+	}
+}
+
 // TestContractStoreRefusesWhatResolveRefuses holds MaxValueBytes to the
 // engine's store: a value of exactly that size is stored, and one a
 // byte larger is refused. Resolve refuses the larger value before the engine

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/crewlet/crewlet-operator/internal/engine"
 )
@@ -18,12 +20,20 @@ import (
 type EngineSecrets interface {
 	// ListSecrets lists every entry in the store (GET /secrets).
 	ListSecrets(ctx context.Context) ([]engine.SecretInfo, error)
-	// PutSecret stores or replaces one value (PUT /secrets/{name}). The
-	// engine records the credential that wrote it (SecretInfo.OperatorID).
+	// PutSecrets stores or replaces up to engine.MaxSecretBatch values, each
+	// UTF-8, in one request (PUT /secrets), and the engine re-activates the
+	// active revision once if it reads any of them. The engine records the
+	// credential that wrote them (SecretInfo.OperatorID).
+	PutSecrets(ctx context.Context, values map[string][]byte) (engine.SecretsWritten, error)
+	// PutSecret stores or replaces one value as raw bytes
+	// (PUT /secrets/{name}), for a value that is not UTF-8, which a batch's
+	// JSON body cannot carry.
 	PutSecret(ctx context.Context, name string, value []byte) error
 	// DeleteSecret removes one entry, reporting whether it existed
-	// (DELETE /secrets/{name}). Removing an absent entry is not an error.
-	DeleteSecret(ctx context.Context, name string) (removed bool, err error)
+	// (DELETE /secrets/{name}), and the engine re-activates the active
+	// revision if it reads the name. Removing an absent entry is not an
+	// error.
+	DeleteSecret(ctx context.Context, name string) (engine.SecretRemoved, error)
 }
 
 // The controller hands Sync the same *engine.Client it applies documents
@@ -54,6 +64,17 @@ type Result struct {
 	// been deleted. Each goes once no node runs or starts on a revision that
 	// needs it, which only a later Sync or Withdraw can find.
 	Held []string
+	// Reload is what the engine's re-activation of its active revision did
+	// at the last request of this Sync, or Withdraw, that wrote or removed
+	// a value that revision reads (engine.Reload.Landed says whether it
+	// activated a revision): the engine re-activates the revision whenever
+	// a request changes a value it reads, so that one read the store as the
+	// Sync left it, for every value the revision reads. A request that
+	// changed only values the revision does not read made none, and changes
+	// nothing here. Nil when no request changed a value the revision reads,
+	// or the last that may have was a value written alone, whose answer is
+	// not read: the caller then activates the revision itself.
+	Reload *engine.Reload
 }
 
 // Overwrite is one owned entry somebody other than the operator wrote.
@@ -90,11 +111,23 @@ type Overwrite struct {
 // withdrawn (State.Withdrawn). While a node may run or start on a revision the
 // operator does not know (Desired.KeepUnread) it deletes nothing, and what it
 // keeps for any revision but the fleet's it reports (Result.Held). Writes
-// come first, in name order, and deletes after them, so an engine never
-// misses a name the next document
-// references because a delete failed first; a failed write stops the sync
-// before any delete. A Desired that Resolve returned with an error pushes
-// nothing, and Sync refuses it rather than delete every entry.
+// come first and deletes after them, so an engine never misses a name the
+// next document references because a delete failed first; a failed write
+// stops the sync before any delete.
+//
+// The values are written together, in requests of up to
+// engine.MaxSecretBatch names in name order (PutSecrets), because the engine
+// re-activates its active revision at every write of a value it reads: one
+// request per value would be one activation per value, the company running a
+// mix of the old and the new values between them. So a sync of up to
+// engine.MaxSecretBatch values is one activation, which Result.Reload
+// reports. A value that is not UTF-8 is written alone, before them, since a
+// JSON body cannot carry it unchanged. The engine re-activates the revision
+// at the removal of a value it reads too, one removal at a time, which is
+// what Result.Reload reports where one comes last.
+//
+// A Desired that Resolve returned with an error pushes nothing, and Sync
+// refuses it rather than delete every entry.
 //
 // Every step is checked against the engine's listing rather than prev alone,
 // so Sync is idempotent: a second Sync with the same arguments writes and
@@ -142,6 +175,8 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 		}
 	}
 
+	var single, batched []string
+	fingerprints := map[string][]byte{}
 	for _, name := range desired.Names() {
 		value := desired.values[name]
 		fp := next.fingerprint(name, value)
@@ -149,16 +184,52 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 		if ok && info.OperatorID == self && hmac.Equal(next.fingerprints[name], fp) {
 			continue
 		}
+		// Until the write is answered the engine may or may not hold it.
 		delete(next.fingerprints, name)
-		if err := eng.PutSecret(ctx, name, value); err != nil {
-			return next, res, fmt.Errorf("writing %s into the engine's secret store: %w", name, err)
+		fingerprints[name] = fp
+		if utf8.Valid(value) {
+			batched = append(batched, name)
+		} else {
+			single = append(single, name)
 		}
-		next.fingerprints[name] = fp
+	}
+	wrote := func(name string) {
+		next.fingerprints[name] = fingerprints[name]
 		res.Put = append(res.Put, name)
-		if ok && info.OperatorID != self {
+		if info, ok := listed[name]; ok && info.OperatorID != self {
 			res.Overwritten = append(res.Overwritten, Overwrite{Name: name, By: info.UpdatedBy, Credential: info.OperatorID})
 		}
 	}
+	// Each written alone re-activates the revision too, before the batch
+	// that re-activates it again with every value: what the last write's
+	// re-activation did is what Result.Reload reports.
+	for _, name := range single {
+		if err := eng.PutSecret(ctx, name, desired.values[name]); err != nil {
+			sortWritten(&res)
+			return next, res, fmt.Errorf("writing %s into the engine's secret store: %w", name, err)
+		}
+		wrote(name)
+		// The engine may have re-activated at it, or not: unknown.
+		res.Reload = nil
+	}
+	for batch := range slices.Chunk(batched, engine.MaxSecretBatch) {
+		values := make(map[string][]byte, len(batch))
+		for _, name := range batch {
+			values[name] = desired.values[name]
+		}
+		written, err := eng.PutSecrets(ctx, values)
+		if err != nil {
+			sortWritten(&res)
+			return next, res, fmt.Errorf("writing %s into the engine's secret store: %w", strings.Join(batch, ", "), err)
+		}
+		for _, name := range batch {
+			wrote(name)
+		}
+		if read(written.ReadBy) || written.Reload != nil {
+			res.Reload = written.Reload
+		}
+	}
+	sortWritten(&res)
 
 	var retained []string
 	alone := desired.fleetsAlone()
@@ -181,13 +252,15 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 		}
 		// Whether the entry still existed does not matter: either way it is
 		// gone now, which is all the sync needs.
-		if _, err := eng.DeleteSecret(ctx, name); err != nil {
+		removed, err := eng.DeleteSecret(ctx, name)
+		if err != nil {
 			what := "which nothing references"
 			if absent {
 				what = "whose Secret or key does not exist"
 			}
 			return next, res, fmt.Errorf("deleting %s, %s, from the engine's secret store: %w", name, what, err)
 		}
+		res.removed(removed)
 		delete(next.fingerprints, name)
 		res.Deleted = append(res.Deleted, name)
 		if absent {
@@ -198,6 +271,32 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 	return next, res, nil
 }
 
+// removed records in res the engine's answer to a removal: its
+// re-activation, where the active revision reads the name.
+func (res *Result) removed(answer engine.SecretRemoved) {
+	if len(answer.ReadBy) > 0 || answer.Reload != nil {
+		res.Reload = answer.Reload
+	}
+}
+
+// read reports whether readBy, a write's paths reading each name, has a
+// name the active revision reads.
+func read(readBy map[string][]string) bool {
+	for _, paths := range readBy {
+		if len(paths) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// sortWritten sorts what res says was written by name, as Result promises:
+// a value written alone comes before the batches.
+func sortWritten(res *Result) {
+	slices.Sort(res.Put)
+	slices.SortFunc(res.Overwritten, func(a, b Overwrite) int { return strings.Compare(a.Name, b.Name) })
+}
+
 // Withdraw removes from the engine's store the entry of every absent name of
 // desired (Desired.Missing) that it lists, but one a revision kept reads as
 // required (Desired.Keep, Desired.KeepServed), and of every name a revision
@@ -206,7 +305,9 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 // (State.Withdrawn) in the State it returns, with what it did:
 // Result.Deleted, the names it removed, Result.Retained, the absent names it
 // left, and Result.Held, those of them it left only for a revision other
-// than the fleet's, each sorted. It is the part of Sync that holds while
+// than the fleet's, each sorted, and Result.Reload, the engine's
+// re-activation at the last removal of a value the active revision reads.
+// It is the part of Sync that holds while
 // nothing else may be pushed or deleted: a document that cannot be applied
 // leaves the store as the running revision needs it, every name it requires
 // included, but the value of a reference whose Secret is gone that the
@@ -260,10 +361,12 @@ func Withdraw(ctx context.Context, eng EngineSecrets, desired Desired, prev Stat
 		}
 	}
 	for _, name := range removing {
-		if _, err := eng.DeleteSecret(ctx, name); err != nil {
+		removed, err := eng.DeleteSecret(ctx, name)
+		if err != nil {
 			return next, res, fmt.Errorf("deleting %s, whose Secret or key does not exist, from the engine's secret store: %w",
 				name, err)
 		}
+		res.removed(removed)
 		delete(next.fingerprints, name)
 		next.withdraw(name)
 		res.Deleted = append(res.Deleted, name)
