@@ -199,11 +199,13 @@ headless token, such as the CLAUDE_CODE_OAUTH_TOKEN `claude setup-token`
 mints, or with a credential bundle `crewlet llm export` wrote from a login
 made elsewhere: the CLI's login, which is its credential files, or, for
 OpenCode, which keeps its logins in a database of its own, the document
-OpenCode 2's auth export printed. A bundle is restored only while the
-provider's login on the data volume is empty, so the refreshed login a
-running engine keeps there wins over the bundle; a token never needs
-refreshing, which makes it the better of the two wherever the CLI mints
-one. A provider names one of the two: given both, which login the CLI acts
+OpenCode 2's auth export printed. A bundle is restored only into a
+provider's login on the data volume that is empty or that was installed
+before the bundle's own login, by the install record each carries; a
+refresh keeps its login's record, so the refreshed login a running engine
+keeps there wins over a bundle of the same login, and only a bundle
+exported after a newer login replaces it. A token never needs refreshing,
+which makes it the better of the two wherever the CLI mints one. A provider names one of the two: given both, which login the CLI acts
 on would be the CLI's choice between its environment and its own files,
 which nothing here can see.
 

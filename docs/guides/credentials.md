@@ -421,13 +421,17 @@ provider a seat's executor runs on wait too for the runs already going to
 end before you revoke.
 
 A provider's `auth.credentialBundleSecretRef` is an exception. The
-engine restores a bundle only into an empty login, when it starts and at
-every revision it applies, so a new bundle in the Secret reaches nothing
-while the provider's login on the data volume exists, and that refreshed
-login is the one to keep ([Signing in](cli-agents.md#signing-in)). To move a
-provider onto a new bundle, give it, and every provider sharing its login, a
-new `loginName`: its login directory is then empty, and the revision that
-moves it restores the bundle there, with no restart. The old directory's
+engine restores a bundle, when it starts and at every revision it applies,
+only into a login that is empty or that was installed before the bundle's
+own login, by the install record each carries, and a refresh keeps its
+login's record: so a bundle of the login the provider holds on the data
+volume reaches nothing, and that refreshed login is the one to keep
+([Signing in](cli-agents.md#signing-in)), while one `crewlet llm export`
+wrote after a new login replaces it the next time the engine starts or
+applies a revision. To move a provider onto a new bundle at once, give it,
+and every provider sharing its login, a new `loginName`: its login directory
+is then empty, and the revision that moves it restores the bundle there,
+with no restart. The old directory's
 login and seat homes stay on the data volume. A bundle belongs to the CLI it
 was exported from: after a provider moves to another `agent`, the new CLI's
 login is empty, and the bundle in the Secret is refused there until it holds

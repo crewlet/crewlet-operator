@@ -392,11 +392,15 @@ The login, and the homes the CLI keeps for each seat, live on the data
 volume, under `/var/lib/crewlet/llm-cli/<loginName>`, so a restarted data pod
 keeps them; a seat pod keeps them on a scratch volume it loses at every start
 (see [Seat pools](#seat-pools)). That matters for a bundle: the engine
-restores one, when it starts and at every revision it applies, only while the
-login there is empty, so the login the running engine refreshed wins over the
-bundle in the Secret, whose refresh token the vendor may have retired since,
-and a new bundle in the Secret reaches nothing until the provider moves to
-another `loginName` ([Rotating a credential](credentials.md#rotating-a-credential)).
+restores one, when it starts and at every revision it applies, only into a
+login there that is empty or that was installed before the bundle's own
+login, which the bundle's install record says. A refresh keeps its login's
+record, so the login the running engine refreshed wins over a bundle of the
+same login in the Secret, whose refresh token the vendor may have retired
+since; a bundle `crewlet llm export` wrote after a new login replaces it the
+next time the engine starts or applies a revision, and moving the provider to
+another `loginName` restores one at once
+([Rotating a credential](credentials.md#rotating-a-credential)).
 Nor does it restore one into a login `crewlet llm logout` emptied
 ([A seat on a coding CLI runs signed out](troubleshooting.md#a-seat-on-a-coding-cli-runs-signed-out)).
 A bundle restored over a newer login is how a vendor that rotates refresh
