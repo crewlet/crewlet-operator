@@ -89,8 +89,10 @@ something else:
    `Observe`, over the kept volumes), with the Secrets its objects reference.
 2. Edit the objects until the Company reports `ConfigApplied=True InSync`.
 3. Switch the Company to `Enforce`. The operator pushes the Secret values
-   into the engine's secret store and applies the same document once, as a
-   revision of its own.
+   into the engine's secret store, in one write, and the engine activates
+   the same document again with them, once, which the operator records as a
+   revision of its own (where the engine does not, the operator applies the
+   same document once itself).
 
 ## Seed
 

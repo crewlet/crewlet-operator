@@ -394,10 +394,13 @@ namespace directly.
 ## Rotating a credential
 
 Write the new value into the same Secret and key. The operator sees the
-change, pushes the new value into the engine's secret store, and applies a
-revision with the same document, because the engine reads a value when a
-revision activates. The revision's summary names the Secret. The engine does
-not restart and no seat loses its conversation.
+change and pushes the new value into the engine's secret store, every value
+that changed in one write, and the engine activates the revision it runs
+again with the new values, once, because it reads a value only when a
+revision activates. The operator records that revision as its own; where the
+engine made none, it applies a revision with the same document itself, whose
+summary names the Secret. The engine does not restart and no seat loses its
+conversation.
 
 ```bash
 kubectl create secret generic anthropic -n acme --from-literal=apiKey=sk-ant-new... \

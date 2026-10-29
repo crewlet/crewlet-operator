@@ -28,7 +28,11 @@ How references work is explained in
 [How the operator models a company](overview.md#credentials-by-reference-never-by-value).
 In short: the operator reads each referenced value, pushes it into the
 engine's encrypted secret store, and writes only the value's name into the
-document. Rewriting a Secret rotates its value without restarting the engine.
+document. Rewriting a Secret rotates its value without restarting the engine:
+the engine activates the revision that reads a value again, unchanged,
+whenever the value is written or removed, and the operator writes the values
+one sync pushes as one batch, so that they reach the running company in one
+activation ([Applying a document](applying.md#what-one-reconcile-does)).
 Secrets referenced from a namespaced object are in that object's namespace;
 those referenced from an `EngineClass` name their namespace.
 
@@ -328,7 +332,8 @@ rotating a Secret rewrites an entry rather than replacing it.
 > it), read nowhere it is required, whose Secret or key no longer exists:
 > under the `Enforce` policy, that one is deleted, and the engine reads its
 > store again without it, when the next configuration is applied or, while
-> that one is held, when the running one is activated again, so that the
+> that one is held, when the running one is activated again (by the engine
+> itself at the deletion, where the running one reads it), so that the
 > engine leaves the value out rather than starting a tool server or a coding
 > run with a deleted Secret's value. Where the running configuration reads
 > the key as required, as one from before the key was listed does, or is

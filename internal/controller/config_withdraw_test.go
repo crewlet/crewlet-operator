@@ -48,6 +48,14 @@ import (
 // lock, just before a reload is answered and just after a reload or an apply
 // is: somebody else's write landing between two of the operator's.
 //
+// A batch write into its store (PUT /secrets), and a removal of a value
+// (DELETE /secrets/{name}), re-activates the fleet's revision when its
+// document reads one of the names, as the engine does, answering 200 with
+// what that did; reloadAnswer, when set, is what it answers instead,
+// activating nothing (nil for the engine's null, else a failed
+// re-activation's object), and afterSecretsReload, when set, runs once just
+// after the re-activation.
+//
 // Its fleet is one node, storeNode, running the fleet's revision, unless
 // serving names what each node runs instead (another revision for one that
 // refused the fleet's, "" for one that has recorded no attempt and so not
@@ -68,6 +76,8 @@ type storeEngine struct {
 	refuse                    bool
 	beforeReload, afterReload func(e *storeEngine)
 	afterApply                func(e *storeEngine)
+	reloadAnswer              *map[string]any
+	afterSecretsReload        func(e *storeEngine)
 	serving                   map[string]string
 	boots                     map[string]string
 	runsNone                  map[string]bool
@@ -155,16 +165,69 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 			listing = append(listing, map[string]string{"name": name, "updated_by": operatorLogin, "operator_id": operatorLogin})
 		}
 		answer(http.StatusOK, map[string]any{"secrets": listing})
+	case r.Method == http.MethodPut && r.URL.Path == "/secrets":
+		var batch struct {
+			Values map[string]string `json:"values"`
+		}
+		if err := json.Unmarshal(body, &batch); err != nil || len(batch.Values) == 0 || len(batch.Values) > engine.MaxSecretBatch {
+			answer(http.StatusBadRequest, refusal("invalid_body", "not a batch"))
+			return
+		}
+		names := slices.Sorted(maps.Keys(batch.Values))
+		readBy := map[string][]string{}
+		var read []string
+		for _, name := range names {
+			e.store[name] = batch.Values[name]
+			readBy[name] = []string{}
+			if strings.Contains(string(active.document), "${"+name+"}") {
+				readBy[name] = []string{"mcp.servers.env"}
+				read = append(read, name)
+			}
+		}
+		var reload any
+		if len(read) > 0 {
+			reload = e.reactivate(activate, active, "reload: secrets "+strings.Join(read, ", ")+" written")
+		}
+		answer(http.StatusOK, map[string]any{"names": names, "read_by": readBy, "reload": reload})
 	case r.Method == http.MethodPut && isSecret:
 		e.store[name] = string(body)
 		answer(http.StatusOK, map[string]any{})
 	case r.Method == http.MethodDelete && isSecret:
 		_, ok := e.store[name]
 		delete(e.store, name)
-		answer(http.StatusOK, map[string]any{"removed": ok})
+		readBy, reload := []string{}, any(nil)
+		if strings.Contains(string(active.document), "${"+name+"}") {
+			readBy = []string{"mcp.servers.env"}
+			if ok {
+				reload = e.reactivate(activate, active, "reload: secret "+name+" removed")
+			}
+		}
+		answer(http.StatusOK, map[string]any{"removed": ok, "read_by": readBy, "reload": reload})
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// reactivate is the engine's re-activation of active at a write or a
+// removal of a value its document reads, with summary, as the answer's
+// `reload` says it: reloadAnswer where it is set, activating nothing. The
+// caller holds e's lock.
+func (e *storeEngine) reactivate(activate func([]byte) storeRevision, active storeRevision, summary string) any {
+	if e.reloadAnswer != nil {
+		if *e.reloadAnswer == nil {
+			return nil
+		}
+		return *e.reloadAnswer
+	}
+	reloaded := activate(active.document)
+	reloaded.summary = summary
+	e.revisions[len(e.revisions)-1] = reloaded
+	if e.afterSecretsReload != nil {
+		hook := e.afterSecretsReload
+		e.afterSecretsReload = nil
+		hook(e)
+	}
+	return map[string]any{"revision_id": reloaded.id, "epoch": len(e.revisions)}
 }
 
 // serveServing answers what the engine says of what its nodes run, the GET
@@ -420,10 +483,14 @@ func newWithdrawal(t *testing.T, r running) *withdrawal {
 	if r.recorded != "" {
 		state = state.Activated(r.recorded, runningDoc.Optional)
 	}
+	// Pushed before r1 activated, so that r1 read them: nothing is
+	// re-activated for them.
+	fe.reloadAnswer = new(map[string]any(nil))
 	state, _, err = secretsync.Sync(ctx, eng, present, state, operatorLogin)
 	if err != nil {
 		t.Fatal(err)
 	}
+	fe.reloadAnswer = nil
 	stateRef := types.NamespacedName{Namespace: company.Namespace, Name: secretSyncStateName(company)}
 	if err := secretsync.SaveState(ctx, cluster, stateRef, company, state); err != nil {
 		t.Fatal(err)
@@ -743,9 +810,10 @@ func TestARevisionThatLetsAValueGoGoesWithoutItWhateverTheNextDocumentReads(t *t
 // the engine refuses activates nothing, the value stays, and SecretKept says
 // so, while one that runs ends the reconcile with nothing kept to say. Where
 // the running revision lets it go too, the operator's own or the document it
-// renders, it goes before the apply, which is then the one activation it
-// takes, or, the document refused, the running revision is activated again
-// without it.
+// renders, it goes before the apply, and the engine activates the running
+// revision again at its removal, which reads it: that is the document the
+// operator renders, so it is the one activation it takes, recorded as the
+// operator's apply, and nothing is dry-run that the engine could refuse.
 func TestTheNextDocumentLetsGoWhatTheRunningRevisionRequired(t *testing.T) {
 	for _, tc := range []struct {
 		running
@@ -754,13 +822,17 @@ func TestTheNextDocumentLetsGoWhatTheRunningRevisionRequired(t *testing.T) {
 		// the last lets the registry go when it is gone from the store.
 		revisions []string
 		kept      bool
+		// byEngine is the engine's re-activation at the removal, the
+		// document being the one the engine runs, taken for the apply
+		// before anything is dry-run.
+		byEngine bool
 	}{
 		{running: runningRequires, revisions: []string{"r1", "r2", "r3"}},
 		{running: runningRequires, refused: true, revisions: []string{"r1"}, kept: true},
 		{running: runningOther, revisions: []string{"r1", "r2", "r3"}},
 		{running: runningOther, refused: true, revisions: []string{"r1"}, kept: true},
 		{running: runningLetsGo, revisions: []string{"r1", "r2"}},
-		{running: runningLetsGo, refused: true, revisions: []string{"r1", "r2"}},
+		{running: runningLetsGo, refused: true, revisions: []string{"r1", "r2"}, byEngine: true},
 		{running: runningAdopted, revisions: []string{"r1", "r2"}},
 	} {
 		name := tc.name
@@ -801,14 +873,15 @@ func TestTheNextDocumentLetsGoWhatTheRunningRevisionRequired(t *testing.T) {
 				t.Errorf("the state lets %v go for %s, owes %v and retains %v, want the registry, nothing and nothing",
 					state.LetGo(last), last, state.Withdrawn(), state.Retained())
 			}
-			reactivated := len(tc.revisions) == 3 || tc.refused
+			reactivated := len(tc.revisions) == 3 || tc.refused && !tc.byEngine
 			if told(recorded, "Reactivated") != reactivated {
 				t.Errorf("events %q: Reactivated told %t, want %t", recorded, !reactivated, reactivated)
 			}
 			if reactivated && !strings.Contains(w.engine.summaryOf(), w.registry) {
 				t.Errorf("revision %s is summarised %q, which does not name the registry", last, w.engine.summaryOf())
 			}
-			if !tc.refused && (w.run.config == nil || w.run.config.RevisionID != last || w.run.applied.revision != last) {
+			if (!tc.refused || tc.byEngine) &&
+				(w.run.config == nil || w.run.config.RevisionID != last || w.run.applied.revision != last) {
 				t.Errorf("the reconcile records %+v and parts in %q, want %s", w.run.config, w.run.applied.revision, last)
 			}
 			if msg := w.run.secretsSynced.Message; !strings.Contains(msg, "It holds none for the 1") {
@@ -824,7 +897,8 @@ func TestTheNextDocumentLetsGoWhatTheRunningRevisionRequired(t *testing.T) {
 // before the value is deleted, so a write of the state that fails at either
 // step leaves the next reconcile, which finds the revision running and the
 // document applied, knowing that it lets the value go, and it deletes the
-// value and activates the revision again.
+// value and activates the revision again, unless the engine did so at a
+// removal that was made.
 func TestAnApplyIsRecordedBeforeAnythingIsDeletedAfterIt(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -847,10 +921,17 @@ func TestAnApplyIsRecordedBeforeAnythingIsDeletedAfterIt(t *testing.T) {
 			if err := w.enforce(t); !errors.Is(err, errStateWrite) {
 				t.Fatalf("the reconcile ends with %v, want the state write that failed", err)
 			}
-			if got, deleted := w.engine.ids(), !w.engine.holds(w.registry); !slices.Equal(got, []string{"r1", "r2"}) ||
+			// The engine activates r2 again itself as the registry, which
+			// r2 reads, is removed: a record of the deletion lost is one of
+			// that activation lost too.
+			first := []string{"r1", "r2"}
+			if tc.fails == 3 {
+				first = append(first, "r3")
+			}
+			if got, deleted := w.engine.ids(), !w.engine.holds(w.registry); !slices.Equal(got, first) ||
 				deleted != (tc.fails == 3) {
-				t.Fatalf("the revisions are %v and the registry is deleted: %t, want r2 applied, and deleted: %t",
-					got, deleted, tc.fails == 3)
+				t.Fatalf("the revisions are %v and the registry is deleted: %t, want %v, and deleted: %t",
+					got, deleted, first, tc.fails == 3)
 			}
 
 			w.failWrite.Store(0)
@@ -874,12 +955,28 @@ func TestAnApplyIsRecordedBeforeAnythingIsDeletedAfterIt(t *testing.T) {
 			} else if err := w.enforce(t); err != nil {
 				t.Fatal(err)
 			}
-			if got := w.engine.ids(); !slices.Equal(got, []string{"r1", "r2", "r3"}) || w.engine.holds(w.registry) {
-				t.Fatalf("the revisions are %v and the store holds the registry: %t, want r2 activated again without it as r3",
-					got, w.engine.holds(w.registry))
+			// Activated again without it: by the engine at the removal, or,
+			// where the record of that was lost, at the operator's request,
+			// where it finds the engine running the document it renders, and
+			// so knows that revision lets the value go. A held document is
+			// not that one: the revision the engine activated at the removal
+			// is one whose reading the operator does not know, which needs no
+			// activation for a value it already went without.
+			want := []string{"r1", "r2", "r3"}
+			if tc.fails == 3 && !tc.held {
+				want = append(want, "r4")
 			}
-			if state := w.state(t); !slices.Equal(state.LetGo("r3"), []string{w.registry}) || len(state.Withdrawn()) != 0 {
-				t.Errorf("the state lets %v go for r3 and owes %v, want the registry and nothing", state.LetGo("r3"), state.Withdrawn())
+			last := want[len(want)-1]
+			if got := w.engine.ids(); !slices.Equal(got, want) || w.engine.holds(w.registry) {
+				t.Fatalf("the revisions are %v and the store holds the registry: %t, want %v, the last activating r2's "+
+					"document again without it", got, w.engine.holds(w.registry), want)
+			}
+			state := w.state(t)
+			if len(state.Withdrawn()) != 0 {
+				t.Errorf("the state owes %v, want nothing", state.Withdrawn())
+			}
+			if letsGo := !(tc.fails == 3 && tc.held); letsGo != slices.Equal(state.LetGo(last), []string{w.registry}) {
+				t.Errorf("the state lets %v go for %s, want the registry: %t", state.LetGo(last), last, letsGo)
 			}
 		})
 	}
@@ -891,24 +988,37 @@ func TestAnApplyIsRecordedBeforeAnythingIsDeletedAfterIt(t *testing.T) {
 // or activated another revision after it, so that the operator cannot read
 // back what its request activated, the revision activated again is not
 // recorded as letting go what the one read lets go, nor as the operator's
-// own, and a Warning says so.
+// own, and a Warning says so. So with the engine's own re-activation at the
+// removal, where another revision overtook it; the operator's request is
+// made where the engine's failed.
 func TestAReloadIsRecordedOnlyForTheDocumentItRead(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		before bool
+		// byEngine is the engine's own re-activation at the removal, which
+		// otherwise fails.
+		byEngine bool
 	}{
 		{name: "another document activated before the request", before: true},
 		{name: "the same document activated again after it"},
+		{name: "the same document activated again after the engine's own re-activation", byEngine: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			w := newWithdrawal(t, runningLetsGo)
 			reload := "r3"
-			if tc.before {
+			switch {
+			case tc.byEngine:
+				reload = "r2"
+				w.engine.afterSecretsReload = func(e *storeEngine) { e.activateOther(e.revisions[len(e.revisions)-1].document) }
+			case tc.before:
 				w.engine.beforeReload = func(e *storeEngine) { e.activateOther(w.requiring) }
-			} else {
+			default:
 				reload = "r2"
 				w.engine.afterReload = func(e *storeEngine) { e.activateOther(e.revisions[len(e.revisions)-1].document) }
+			}
+			if !tc.byEngine {
+				w.engine.reloadAnswer = &map[string]any{"error": "unavailable", "detail": "the coordination store did not answer"}
 			}
 			if _, err := w.run.withdrawHeld(ctx, w.resolve(t)); err != nil {
 				t.Fatal(err)
@@ -960,7 +1070,9 @@ func TestTheSyncAfterAnApplyDecidesByTheRevisionThatRuns(t *testing.T) {
 // recorded as the revision that activates it again; and nothing where the
 // running revision requires the value, or is one the operator does not know
 // the reading of, which keeps what it read. Either way the removal is
-// settled.
+// settled. Where the engine activated the running revision again itself, at
+// the removal of a value it reads, that is the activation, and the operator
+// asks for none.
 func TestReactivateRepeatsOnlyARevisionThatLetsTheValueGo(t *testing.T) {
 	for _, tc := range []struct {
 		running
@@ -970,31 +1082,53 @@ func TestReactivateRepeatsOnlyARevisionThatLetsTheValueGo(t *testing.T) {
 		{running: runningRequires},
 		{running: runningOther},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
-			w := newWithdrawal(t, tc.running)
-			// Removed by a sync that kept nothing for the running revision.
-			state, _, err := secretsync.Sync(ctx, w.client, w.resolve(t), w.state(t), operatorLogin)
-			if err != nil || !slices.Equal(state.Withdrawn(), []string{w.registry}) {
-				t.Fatalf("the sync withdrew %v (%v), want the registry", state.Withdrawn(), err)
+		for _, byEngine := range []bool{false, true} {
+			name := tc.name
+			if byEngine {
+				name += ", and the engine activated it again at the removal"
 			}
-			next, err := w.run.reactivate(ctx, w.client, nil, state)
-			if err != nil {
-				t.Fatal(err)
-			}
-			want := []string{"r1"}
-			if tc.again {
-				want = append(want, "r2")
-			}
-			if got := w.engine.ids(); !slices.Equal(got, want) {
-				t.Fatalf("the revisions are %v, want %v", got, want)
-			}
-			if len(next.Withdrawn()) != 0 {
-				t.Errorf("the removal is owed still: %v", next.Withdrawn())
-			}
-			if tc.again && !slices.Equal(next.LetGo("r2"), []string{w.registry}) {
-				t.Errorf("the revision that activated r1 again lets %v go, want the registry", next.LetGo("r2"))
-			}
-		})
+			t.Run(name, func(t *testing.T) {
+				ctx := context.Background()
+				w := newWithdrawal(t, tc.running)
+				if !byEngine {
+					w.engine.reloadAnswer = new(map[string]any(nil))
+				}
+				active, err := activeConfig(ctx, w.client)
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Removed by a sync that kept nothing for the running revision.
+				state, res, err := secretsync.Sync(ctx, w.client, w.resolve(t), w.state(t), operatorLogin)
+				if err != nil || !slices.Equal(state.Withdrawn(), []string{w.registry}) {
+					t.Fatalf("the sync withdrew %v (%v), want the registry", state.Withdrawn(), err)
+				}
+				if res.Reload.Landed() != byEngine {
+					t.Fatalf("the sync reports the engine's re-activation %+v", res.Reload)
+				}
+				next, err := w.run.reactivate(ctx, w.client, active, res.Reload, state)
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := []string{"r1"}
+				if tc.again || byEngine {
+					want = append(want, "r2")
+				}
+				if got := w.engine.ids(); !slices.Equal(got, want) {
+					t.Fatalf("the revisions are %v, want %v", got, want)
+				}
+				if len(next.Withdrawn()) != 0 {
+					t.Errorf("the removal is owed still: %v", next.Withdrawn())
+				}
+				if tc.again && !slices.Equal(next.LetGo("r2"), []string{w.registry}) {
+					t.Errorf("the revision that activated r1 again lets %v go, want the registry", next.LetGo("r2"))
+				}
+				if !tc.again && next.Records("r2") {
+					t.Errorf("the state records r2, which activated a revision that does not let the registry go")
+				}
+				if recorded := drained(w.events); tc.again && !told(recorded, "Reactivated") {
+					t.Errorf("events %q, want Reactivated", recorded)
+				}
+			})
+		}
 	}
 }
