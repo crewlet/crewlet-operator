@@ -68,8 +68,9 @@ uses is readable by the company's tenant:
   `auth.apiKeySecretRef` key, under the variable its CLI reads
   (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`), and its whole `env`, a
   model provider's key or a gateway's bearer token among it, beneath the
-  seat's own sandbox environment, which wins a name; a `Direct` box is
-  seeded with the provider's login on the pod too. The CLI can read it, and the run's report
+  seat's own sandbox environment, which wins a name; a `Direct` box of a
+  provider that signs in with a login (`Subscription`) is seeded with that
+  login on the pod too, and one under `APIKey` or `Env` with none. The CLI can read it, and the run's report
   is redacted by the shape of a credential, not by its value ([What a coding
   box carries](../guides/credentials.md#what-a-coding-box-carries)).
 

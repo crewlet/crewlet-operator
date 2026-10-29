@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -20,39 +21,46 @@ import (
 
 // TestExecutorSignInFollowsTheEngineSource holds the render's copies of what
 // signs a seat's executor run in, which no validation shows, to the engine's
-// source: the variables that sign ClaudeCode in from a run's environment
-// (codingagent.ClaudeCodeCredentialEnv), and among them ClaudeCode's token
-// and key variables (its profile's token_env and api_key_env), which carry a
-// provider's own sign-in into the run. The pattern of a credential's name is
-// held by TestCredentialNameFollowsTheEngineSource.
+// profiles: the variables that sign ClaudeCode in from a run's environment
+// are its profile's token_env and api_key_env, which carry a provider's own
+// sign-in into the run, then its sign_in_env, the names that sign it in from
+// a provider's env (a gateway's token, a cloud switch), as Crewlet's
+// CredentialEnvNames reads them, in that order. No other profile may name
+// sign_in_env: the render, and the API's rules over auth mode Env, read such
+// names for ClaudeCode alone. The pattern of a credential's name is held by
+// TestCredentialNameFollowsTheEngineSource.
 func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 	source := openSource(t, enginetest.Source(t))
-	const file = "internal/sandbox/codingagent/claudecode.go"
-	src, err := source.ReadFile(file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := stringSliceVar(t, file, src, "ClaudeCodeCredentialEnv"); !slices.Equal(got, claudeCodeSignIn) {
-		t.Errorf("the engine signs ClaudeCode in from a run's %v, the render from %v", got, claudeCodeSignIn)
-	}
-
 	raw, err := source.ReadFile("internal/providers/llm/cliagent/cliprofile/profiles.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var profiles map[string]struct {
-		TokenEnv  string `json:"token_env"`
-		APIKeyEnv string `json:"api_key_env"`
+		TokenEnv  string   `json:"token_env"`
+		APIKeyEnv string   `json:"api_key_env"`
+		SignInEnv []string `json:"sign_in_env"`
 	}
 	if err := yaml.Unmarshal(raw, &profiles); err != nil {
 		t.Fatal(err)
 	}
-	claude, ok := profiles[cliAgentName(v1alpha1.CLIAgentClaudeCode)]
-	for _, name := range []string{claude.TokenEnv, claude.APIKeyEnv} {
-		if !ok || name == "" || !slices.Contains(claudeCodeSignIn, name) {
-			t.Errorf("the engine's claude-code profile hands its own sign-in to a run in %q (token_env %q, "+
-				"api_key_env %q), which the render does not read as signing ClaudeCode in: %v",
-				name, claude.TokenEnv, claude.APIKeyEnv, claudeCodeSignIn)
+	claudeCode := cliAgentName(v1alpha1.CLIAgentClaudeCode)
+	claude, ok := profiles[claudeCode]
+	if !ok {
+		t.Fatalf("the engine has no %s profile", claudeCode)
+	}
+	if !slices.Equal(claude.SignInEnv, claudeCodeEnvSignIn) {
+		t.Errorf("the engine's %s profile signs it in from env by %v (sign_in_env), the render by %v",
+			claudeCode, claude.SignInEnv, claudeCodeEnvSignIn)
+	}
+	if want := slices.Concat([]string{claude.TokenEnv, claude.APIKeyEnv}, claude.SignInEnv); !slices.Equal(
+		want, claudeCodeSignIn) {
+		t.Errorf("the engine signs ClaudeCode in from a run's %v (token_env, api_key_env, sign_in_env), the render "+
+			"from %v", want, claudeCodeSignIn)
+	}
+	for _, name := range slices.Sorted(maps.Keys(profiles)) {
+		if p := profiles[name]; name != claudeCode && len(p.SignInEnv) > 0 {
+			t.Errorf("the engine's %s profile signs its CLI in from env by %v (sign_in_env), which the render and "+
+				"the API's rules over auth mode Env read for ClaudeCode alone", name, p.SignInEnv)
 		}
 	}
 }
@@ -204,13 +212,14 @@ const profileFile = "internal/providers/llm/cliagent/cliprofile/profile.go"
 
 // credentialNameRules are the kinds whose CRDs read a credential's name, and
 // how many of their rules do (every other kind's, none): the LLMProvider
-// API's one over a CLI's sign-in in env and the platform provider's one, and
+// API's two over a CLI's sign-in in env, under Subscription and under Env,
+// and the platform provider's two, and
 // the tool-server API's refusal of a literal value under such a name, on each
 // type that takes one (an MCPServer's env and headers, and the values of a
 // Seat's or a Unit's spec.mcp).
 var credentialNameRules = map[string]int{
-	"engineclasses": 1,
-	"llmproviders":  1,
+	"engineclasses": 2,
+	"llmproviders":  2,
 	"mcpservers":    2,
 	"seats":         1,
 	"units":         1,

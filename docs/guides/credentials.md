@@ -147,15 +147,18 @@ The engine hands the run the provider's headless token or its
 provider key, and a gateway's address (`ANTHROPIC_BASE_URL`) and the bearer
 token it takes (`ANTHROPIC_AUTH_TOKEN`), or a cloud switch and its region,
 which the run reaches its model through as the provider's other phases do.
-A Claude Code sign-in in `env`, such as that bearer token, signs the run in
-wherever it runs.
+Under `auth.mode: Env` that `env` is the provider's whole sign-in, such as
+the bearer token, and signs the run in wherever it runs.
 
 What else the box gets turns on its cell:
 
-- **`Direct`**: the box is seeded with the provider's login, its credential
-  files or, for OpenCode, the document OpenCode's export printed, from the
-  login on the pod, and writes a refreshed one back over it, so a credential
-  bundle signs a run in as it signs the provider's other phases. The run is a
+- **`Direct`**: the box of a provider that signs in with a login
+  (`Subscription`) is seeded with it, its credential files or, for OpenCode,
+  the document OpenCode's export printed, from the login on the pod, and
+  writes a refreshed one back over it, so a credential bundle signs a run in
+  as it signs the provider's other phases. A provider under `APIKey` or `Env`
+  seeds no login: its key or its `env` is the run's sign-in, and a login
+  beside it is one the run would not use. The run is a
   process of the engine pod, as the engine's user, with every permission its
   CLI has: it can read its sign-in, and whatever else that user can on the
   pod.

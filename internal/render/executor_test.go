@@ -84,6 +84,21 @@ func bundled(provider func() v1alpha1.LLMProvider) v1alpha1.LLMProvider {
 	return p
 }
 
+// gatewayed is the provider provider makes, signed in under auth mode Env by
+// its env alone, which sets names, each from a Secret of its own.
+func gatewayed(provider func() v1alpha1.LLMProvider, names ...string) v1alpha1.LLMProvider {
+	p := provider()
+	p.Spec.Auth = v1alpha1.CLIAgentAuth{Mode: v1alpha1.CLIAgentAuthEnv}
+	p.Spec.Env = nil
+	for _, name := range names {
+		p.Spec.Env = append(p.Spec.Env, v1alpha1.SecretEnvVar{
+			Name:      name,
+			ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "cloud", Key: name}},
+		})
+	}
+	return p
+}
+
 // withE2B gives the Company its E2B sandbox.
 func withE2B(in *Input) {
 	in.Company.Spec.Sandbox.E2B.APIKeySecretRef = v1alpha1.SecretKeyReference{Name: "e2b", Key: keyAPIKey}
@@ -223,23 +238,48 @@ func TestExecutor(t *testing.T) {
 			says:   []string{"ClaudeCode login cannot follow it", "auth.tokenSecretRef", "CLAUDE_CODE_OAUTH_TOKEN", "to Direct"},
 		},
 		{
-			// The provider's whole env follows the run into the box, so a
-			// gateway's bearer token there signs the run in.
-			name: "a bundled ClaudeCode login in E2B, signed in by its env", public: public,
+			// Under auth mode Env the provider's env is its sign-in, and
+			// it follows the run into the box, so a gateway's bearer token
+			// there signs the run in.
+			name: "a ClaudeCode provider under auth mode Env in E2B", public: public,
 			mutate: func(in *Input) {
 				withE2B(in)
-				p := bundled(cliProvider)
+				p := gatewayed(cliProvider, "ANTHROPIC_AUTH_TOKEN")
 				p.Spec.RunIn = v1alpha1.SandboxPlacementE2B
-				p.Spec.Env = []v1alpha1.SecretEnvVar{{
-					Name:      "ANTHROPIC_AUTH_TOKEN",
-					ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "claude-gateway", Key: keyAPIKey}},
-				}}
 				in.LLMProviders = append(in.LLMProviders, p)
 				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCLI)
 			},
 			want:   runnableBut(cyOwn(runnable)),
 			saysOf: seatCy,
 			says:   []string{"in the Company's E2B sandbox", public + "/mcp/"},
+		},
+		{
+			// So does a cloud provider's switch, beside its credentials.
+			name: "a ClaudeCode provider on Bedrock under auth mode Env in E2B", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				p := gatewayed(cliProvider, "CLAUDE_CODE_USE_BEDROCK", "AWS_REGION", "AWS_BEARER_TOKEN_BEDROCK")
+				p.Spec.RunIn = v1alpha1.SandboxPlacementE2B
+				in.LLMProviders = append(in.LLMProviders, p)
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCLI)
+			},
+			want: runnableBut(cyOwn(runnable)),
+		},
+		{
+			// A gateway's address says where the calls go, not whom they
+			// are made as: beside a bundle, nothing signs the run in.
+			name: "a bundled ClaudeCode login in E2B beside a gateway's address", public: public,
+			mutate: func(in *Input) {
+				withE2B(in)
+				p := bundled(cliProvider)
+				p.Spec.RunIn = v1alpha1.SandboxPlacementE2B
+				p.Spec.Env = gatewayed(cliProvider, "ANTHROPIC_BASE_URL").Spec.Env
+				in.LLMProviders = append(in.LLMProviders, p)
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCLI)
+			},
+			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
+			saysOf: seatCy,
+			says:   []string{"ClaudeCode login cannot follow it", "auth mode Env", "ANTHROPIC_AUTH_TOKEN"},
 		},
 		{
 			// The box is seeded with the login on the engine pod.

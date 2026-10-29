@@ -17,14 +17,17 @@ import (
 // seat's own environment (Crewlet's entryEnv): the provider's whole env, a
 // gateway's address and the bearer token it takes or a cloud switch
 // included, with its sign-in, its headless token or its API key, in either
-// cell ((*Provider).SandboxEnv). A Direct box is also seeded with the
-// provider's login, its credential files or the document OpenCode 2's export
-// printed, and writes a refreshed one back, so on the engine pod a credential
-// bundle signs a run in as it signs the provider's other phases in. An E2B
+// cell ((*Provider).SandboxEnv). A Direct box of a provider that signs in with
+// a login, under Subscription, is also seeded with it, its credential files
+// or the document OpenCode 2's export printed, and writes a refreshed one
+// back, so on the engine pod a credential bundle signs a run in as it signs
+// the provider's other phases in; one under APIKey or Env is seeded with none
+// ((*Provider).SandboxCredentials), as its key or its env is its sign-in. An E2B
 // box never receives it: a bundle's login carries a refresh token the engine
 // keeps rotating, and the run there needs a variable of its environment that
-// signs its CLI in, a token or a key, a ClaudeCode sign-in in the provider's
-// env, or an OpenCode provider's key in its env. Crewlet refuses each launch
+// signs its CLI in, a token or a key, the provider's env under auth mode Env
+// (a gateway's token or a cloud switch for ClaudeCode), or an OpenCode
+// provider's key in its env. Crewlet refuses each launch
 // of a run whose box could not authenticate, judged on the member the launch
 // picked (sandboxCredentials), and never refuses a Direct one for it
 // (Placement.OnEngineHost).
@@ -42,30 +45,47 @@ import (
 // missing under a key that is not optional holds the document, whose running
 // revision keeps the value it had, so it counts.
 //
+// Under auth mode Env the provider's env is its whole sign-in: Crewlet hands
+// the CLI neither its token variable nor its key variable and seeds no login,
+// in the engine's pod and in a box of either cell ((*Provider).SandboxEnv),
+// so the run signs in, Direct or E2B, by what env carries, which the API
+// requires to sign the CLI in. Under every other mode the API keeps
+// ClaudeCode's env sign-ins out of env, so there its sign-in is its token,
+// its key or its login.
+//
 // A seat whose environment signs ClaudeCode in itself runs a ClaudeCode run
 // on that sign-in alone: Crewlet hands the run none of the provider's sign-in,
 // its token, its key and every sign-in its env carries, but the rest of its
 // env (entryEnv, entrySignInName), since ClaudeCode ranks its sign-ins by
 // name, and its guard passes the run on any of them (sandboxCredentials,
-// through its entrySignsIn).
+// through its entrySignsIn). Crewlet decides that by the profile's list of the
+// names that sign the CLI in (CredentialEnvNames), which only ClaudeCode's
+// profile extends beyond its token and key variables.
 //
 // Crewlet decides all of it at a launch, where no validation shows it, so
 // TestMirroredEngineDeclarationsAreUnchanged holds the engine functions this
 // copies to the ones it was read against, and fails when one changes.
 
-// claudeCodeSignIn are the variables that sign ClaudeCode in from a run's
-// environment: a plan's headless token, an Anthropic key or bearer token, or a
-// toggle moving it onto a cloud provider's credentials (Crewlet's
-// codingagent.ClaudeCodeCredentialEnv, to which a test holds this copy). When
-// the seat's own environment sets one, Crewlet hands a ClaudeCode run none of
-// its provider's sign-in (its entryEnv), since ClaudeCode ranks its sign-ins
-// by name and a provider's key beside a seat's plan token would win, and its
-// guard passes the run on it, as on one the provider's env carries into the
-// run (sandboxCredentials, through its entrySignsIn).
-var claudeCodeSignIn = []string{
-	"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
-	"CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
+// claudeCodeEnvSignIn are the variables that sign ClaudeCode in from a
+// provider's env, beyond its token and key variables: a gateway's bearer
+// token, or a toggle moving it onto a cloud provider's credentials (the
+// sign_in_env of Crewlet's claude-code profile). Under auth mode Env the API
+// requires one in env, and under every other mode it refuses each there.
+var claudeCodeEnvSignIn = []string{
+	"ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
 }
+
+// claudeCodeSignIn are the variables that sign ClaudeCode in from a run's
+// environment: a plan's headless token and an Anthropic key (the profile's
+// token_env and api_key_env), then claudeCodeEnvSignIn, in the order of
+// Crewlet's CredentialEnvNames, which reads them from the claude-code profile
+// and to whose profile a test holds this copy. When the seat's own
+// environment sets one, Crewlet hands a ClaudeCode run none of its provider's
+// sign-in (its entryEnv), since ClaudeCode ranks its sign-ins by name and a
+// provider's key beside a seat's plan token would win, and its guard passes
+// the run on it, as on one the provider's env carries into the run
+// (sandboxCredentials, through its entrySignsIn).
+var claudeCodeSignIn = slices.Concat([]string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"}, claudeCodeEnvSignIn)
 
 // credentialName is the names Crewlet reads as holding a credential, which
 // sign an env sign-in CLI in: one of their parts, cut at every character that
@@ -124,18 +144,29 @@ func platformEntry(p *v1alpha1.PlatformLLMProvider) cliEntry {
 // (Crewlet's entryEnv, and sandboxCredentials through its entrySignsIn):
 // own when the provider's settings carry a sign-in that follows the run, and
 // the variables of the seat's environment that sign its CLI in. ClaudeCode's
-// own travels as its token or key, or as a variable of its env that signs
-// ClaudeCode in, a gateway's bearer token or a cloud switch, which the run
-// carries with the rest of the env; the API keeps the token's and the key's
-// own names out of env, so no auth mode takes one of those back out. The
-// seat's travels as any variable that signs ClaudeCode in, which then
-// replaces the provider's. OpenCode's, which signs in through its
-// environment, travels as any variable named as a credential, in its env or
-// the seat's environment, the seat's winning a name.
+// own travels as what its auth mode hands the CLI, its token under
+// Subscription and its key under APIKey, and as a variable of its env that
+// signs ClaudeCode in, a gateway's bearer token or a cloud switch, which the
+// run carries with the rest of the env whatever the mode. Under Env that is
+// the only one: the mode hands the CLI neither the token nor the key, and the
+// API requires such a variable in env then and refuses one under every other
+// mode. The seat's travels as any variable that signs ClaudeCode in, which
+// then replaces the provider's. OpenCode's, which signs in through its
+// environment, under Subscription and Env alike, travels as any variable
+// named as a credential, in its env or the seat's environment, the seat's
+// winning a name.
 func (c *cliEntry) remoteSignIn(env envNames) (own bool, seat []string) {
 	if c.agent == v1alpha1.CLIAgentClaudeCode {
-		own = c.token || c.authMode == v1alpha1.CLIAgentAuthAPIKey ||
-			slices.ContainsFunc(c.env, func(name string) bool { return slices.Contains(claudeCodeSignIn, name) })
+		switch c.authMode {
+		case v1alpha1.CLIAgentAuthAPIKey:
+			own = true
+		case v1alpha1.CLIAgentAuthEnv:
+			// Neither the token nor the key reaches the CLI: env alone
+			// signs it in, below.
+		case v1alpha1.CLIAgentAuthSubscription, "":
+			own = c.token
+		}
+		own = own || slices.ContainsFunc(c.env, func(name string) bool { return slices.Contains(claudeCodeSignIn, name) })
 		return own, env.among(claudeCodeSignIn)
 	}
 	own = slices.ContainsFunc(c.env, credentialName.MatchString)

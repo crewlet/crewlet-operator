@@ -1194,7 +1194,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(ready.Status).To(Equal(metav1.ConditionFalse))
 		Expect(ready.ObservedGeneration).To(Equal(coder.Generation))
 		Expect(ready.Message).To(ContainSubstring("a credential bundle stays on the engine's data volume"))
-		Expect(ready.Message).To(ContainSubstring("auth.tokenSecretRef or auth mode APIKey"))
+		Expect(ready.Message).To(ContainSubstring("auth.tokenSecretRef, with auth mode APIKey, or with auth mode Env"))
 		Expect(ready.Message).To(ContainSubstring("set LLMProvider " + bundle.Name + "'s spec.runIn to Direct"))
 
 		By("applying the company with the seat all the same, as Crewlet applies it")

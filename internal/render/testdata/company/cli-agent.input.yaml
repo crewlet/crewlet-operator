@@ -7,7 +7,9 @@
 # with no login of its own (its model provider's key in env, a ${NAME}
 # Crewlet passes to the Hermes process untouched), the delegated workers'.
 # Pi signs in the same way, and Cursor on a Cursor account's metered key in
-# CURSOR_API_KEY. An E2B run calls the seat's tools back through the
+# CURSOR_API_KEY. Claude Code through a gateway, last in the seat's chain,
+# signs in with its env alone (auth mode Env): the gateway's address and the
+# token it issued. An E2B run calls the seat's tools back through the
 # company's public address, so the case is exposed.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
@@ -126,6 +128,30 @@ spec:
           key: apiKey
 ---
 apiVersion: crewlet.ai/v1alpha1
+kind: LLMProvider
+metadata:
+  name: claude-gateway
+spec:
+  companyRef:
+    name: forge
+  agent: ClaudeCode
+  model: sonnet
+  runIn: E2B
+  auth:
+    mode: Env
+  env:
+    - name: ANTHROPIC_BASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: llm-gateway
+          key: baseURL
+    - name: ANTHROPIC_AUTH_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: llm-gateway
+          key: token
+---
+apiVersion: crewlet.ai/v1alpha1
 kind: Seat
 metadata:
   name: builder
@@ -137,6 +163,7 @@ spec:
     default:
       - name: claude-e2b
       - name: opencode
+      - name: claude-gateway
     review:
       - name: codex
     subagent:

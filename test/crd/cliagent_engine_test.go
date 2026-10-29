@@ -3,6 +3,7 @@ package crd_test
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -91,7 +92,7 @@ func TestCLIAgentSignInFollowsTheEngine(t *testing.T) {
 	// the ones the API's rules and their cases name.
 	var fromEnv []v1.CLIAgentName
 	for agent, v := range verdicts[shapeEnv+"OPENROUTER_API_KEY"] {
-		if v.signIn == "environment" {
+		if v.signIn == signInEnvironment {
 			fromEnv = append(fromEnv, v1.CLIAgentName(agent))
 		}
 	}
@@ -464,6 +465,131 @@ func TestCLIAgentSubscriptionEnvFollowsTheEngine(t *testing.T) {
 	}
 }
 
+// TestCLIAgentSignInEnvFollowsTheEngine holds the LLMProvider API's rules over
+// auth mode Env to the engine: the variables each CLI's profile lists as
+// signing it in from a provider's env (sign_in_env), read from the profiles of
+// the engine every suite runs, are the copy the rules' cases are built from
+// and the names both rules quote, the one that requires one of them in env
+// under Env and the one that refuses each in env under every other mode. Then
+// every CLI is tried with every such name in env under each mode it may take:
+// beside the login it is admitted with (loginBeside), beside a key where it
+// has a key variable, and under Env. The engine refuses the name under a mode
+// other than Env exactly where the profile lists it and the API's rule
+// refuses it, signs the CLI in with env under Env where the profile lists it,
+// and admits it under Env exactly where the API does. A profile that gains such a name, or loses one, fails here until
+// the API follows it.
+func TestCLIAgentSignInEnvFollowsTheEngine(t *testing.T) {
+	namespace := newNamespace(t)
+	agents := llmProviderEnum(t, "spec", "agent")
+
+	source, err := os.OpenRoot(enginetest.Source(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = source.Close() })
+	raw, err := source.ReadFile(engineProfiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var profiles map[string]struct {
+		SignInEnv []string `json:"sign_in_env"`
+	}
+	if err := yaml.Unmarshal(raw, &profiles); err != nil {
+		t.Fatalf("%s: %v", engineProfiles, err)
+	}
+	engineLists := map[v1.CLIAgentName][]string{}
+	var everyName []string
+	for profile, p := range profiles {
+		if len(p.SignInEnv) == 0 {
+			continue
+		}
+		agent, ok := agentOfProfile(agents, profile)
+		if !ok {
+			t.Errorf("the engine's %s profile signs its CLI in from env by %v, and no agent the API offers is it",
+				profile, p.SignInEnv)
+			continue
+		}
+		engineLists[agent] = p.SignInEnv
+		everyName = append(everyName, p.SignInEnv...)
+	}
+	everyName = slices.Compact(slices.Sorted(slices.Values(everyName)))
+	if !maps.EqualFunc(engineLists, signInEnv, slices.Equal) {
+		t.Errorf("the engine's profiles sign their CLIs in from env by %v, the API's rules by %v", engineLists, signInEnv)
+	}
+	for _, message := range []string{msgCLIEnvUnset, msgCLIEnvOnly} {
+		rule := validationOf(t, "llmproviders.crewlet.ai", message, "spec")
+		named := make([]string, 0, len(everyName))
+		for _, m := range quotedVariable.FindAllStringSubmatch(rule.Rule, -1) {
+			named = append(named, m[1])
+		}
+		if got := slices.Compact(slices.Sorted(slices.Values(named))); !slices.Equal(got, everyName) {
+			t.Errorf("the API's rule %q quotes %v, the engine's profiles sign their CLIs in from env by %v",
+				message, got, everyName)
+		}
+	}
+
+	metered := v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey, APIKeySecretRef: secretKey("cli", apiKeyKey)}
+	providers := make([]v1.LLMProvider, 0, 3*len(agents)*len(everyName))
+	for _, variable := range everyName {
+		for _, agent := range agents {
+			name := v1.CLIAgentName(agent)
+			auths := []v1.CLIAgentAuth{loginBeside(t, namespace, name), {Mode: v1.CLIAgentAuthEnv}}
+			if cliVariables[name].key != "" {
+				auths = append(auths, metered)
+			}
+			for _, auth := range auths {
+				shape := signInShape{name: "env " + variable, auth: auth, env: []string{variable}}
+				p := shapedProvider(namespace, name, &shape)
+				p.Name = fmt.Sprintf("%s-%d", p.Name, len(providers))
+				providers = append(providers, *p)
+			}
+		}
+	}
+	report := askEngine(t, providers, true)
+	for i := range providers {
+		p := &providers[i]
+		variable, mode := p.Spec.Env[0].Name, p.Spec.Auth.Mode
+		listed := slices.Contains(engineLists[p.Spec.Agent], variable)
+		refusal := apiVerdict(t, p)
+		if mode == v1.CLIAgentAuthEnv {
+			// An env sign-in CLI reads a credential-named name as its
+			// model provider's key, and reports itself signed in from its
+			// environment.
+			signedIn := slices.Contains([]string{signInEnvMode, signInEnvironment}, report.signIns[p.Name])
+			engineAdmits := len(report.problems[p.Name]) == 0 && len(report.warnings[p.Name]) == 0 && signedIn
+			if listed && (!engineAdmits || report.signIns[p.Name] != signInEnvMode) {
+				t.Errorf("%s with %s in env under Env: its profile lists it, and the engine refuses it or reports it "+
+					"signed in with %q: %q", p.Spec.Agent, variable, report.signIns[p.Name], report.problems[p.Name])
+			}
+			if apiAdmits := refusal == ""; apiAdmits != engineAdmits {
+				t.Errorf("%s with %s in env under Env: the engine admits it = %v, the API = %v: %s",
+					p.Spec.Agent, variable, engineAdmits, apiAdmits, refusal)
+			}
+			continue
+		}
+		engineRefuses := slices.ContainsFunc(report.problems[p.Name], func(problem string) bool {
+			return strings.Contains(problem, variable+signInEnvRefusal)
+		})
+		if engineRefuses != listed {
+			t.Errorf("%s with %s in env under %s: the engine refuses it = %v, its profile lists it = %v: %q",
+				p.Spec.Agent, variable, cmp.Or(mode, v1.CLIAgentAuthSubscription), engineRefuses, listed, report.problems[p.Name])
+		}
+		switch {
+		case engineRefuses && !strings.Contains(refusal, msgCLIEnvOnly):
+			t.Errorf("%s with %s in env under %s: the engine refuses it and the API's rule does not: %q",
+				p.Spec.Agent, variable, cmp.Or(mode, v1.CLIAgentAuthSubscription), refusal)
+		case !engineRefuses && refusal != "":
+			t.Errorf("%s with %s in env under %s: the engine admits it and the API refuses it: %s",
+				p.Spec.Agent, variable, cmp.Or(mode, v1.CLIAgentAuthSubscription), refusal)
+		}
+	}
+}
+
+// signInEnvRefusal follows the variable in the engine's refusal of one its
+// profile signs the CLI in by from env, under a mode other than env
+// (crewlet's internal/config, validateEnvSignIn).
+const signInEnvRefusal = ` signs the "`
+
 // loginBeside is the sign-in a probe of a variable in env runs beside: a
 // bundle, a Subscription login that leaves the variable the only question,
 // for every CLI the API admits one for, and for a CLI that keeps no login
@@ -670,7 +796,7 @@ func holdVerdicts(t *testing.T, verdicts map[string]map[string]verdict) {
 			// show it: a bundle that restored would be written under the
 			// rendered state directory, in /var/lib/crewlet of the machine
 			// running the test.
-			signedIn := slices.Contains([]string{"token", "api key", "environment"}, v.signIn) ||
+			signedIn := slices.Contains([]string{"token", "api key", signInEnvironment, signInEnvMode}, v.signIn) ||
 				strings.HasPrefix(shape, shapeBundle)
 			// What the API admits the engine admits, without a doubt, so a
 			// revision is refused on the object rather than at the apply.
@@ -697,9 +823,12 @@ func holdVerdicts(t *testing.T, verdicts map[string]map[string]verdict) {
 // signInTableFollows holds the table docs/guides/cli-agents.md states what
 // each CLI takes in to what the engine and the API said: a row for every CLI
 // the API offers, naming its token and key variable as the engine's profile
-// does, a key in env where the engine signs the CLI in from one, a bundle
-// where the API admits one, and that it runs a seat's executor where it is one
-// of render.RunnerCLIs, which TestCLIAgentRunInFollowsTheEngine holds to the
+// does, a key in env where the engine signs the CLI in from one, under auth
+// mode Env the names the engine signs it in by there (its profile's
+// sign_in_env), a key in env where it signs it in from one there instead and
+// no where it signs it in from nothing there, a bundle where the API admits
+// one, and that it runs a seat's executor where it is one of
+// render.RunnerCLIs, which TestCLIAgentRunInFollowsTheEngine holds to the
 // engine.
 func signInTableFollows(t *testing.T, agents []string, variables map[v1.CLIAgentName]cliVariable,
 	fromEnv []v1.CLIAgentName, verdicts map[string]map[string]verdict) {
@@ -720,6 +849,45 @@ func signInTableFollows(t *testing.T, agents []string, variables map[v1.CLIAgent
 		return name
 	}
 	yes := func(cell string) bool { return !strings.HasPrefix(cell, "no") }
+	// envMode is what the engine signs agent in by under auth mode Env:
+	// the names one of which it admits and reports signed in with env, a
+	// key in env where it admits a model provider's key and reports the CLI
+	// signed in from its environment, and no where it admits neither.
+	envMode := func(agent string) string {
+		var names []string
+		for shape, byAgent := range verdicts {
+			name, ok := strings.CutPrefix(shape, shapeEnvMode)
+			if v := byAgent[agent]; ok && v.refusal == "" && v.problem == "" && v.signIn == signInEnvMode {
+				names = append(names, "`"+name+"`")
+			}
+		}
+		if len(names) > 0 {
+			slices.Sort(names)
+			return strings.Join(names, ", ")
+		}
+		if v := verdicts[shapeEnvMode+"OPENROUTER_API_KEY"][agent]; v.problem == "" && v.signIn == signInEnvironment {
+			return "a key in `env`"
+		}
+		return "no"
+	}
+	// stated is what a cell of that column says: no, a key in env, or the
+	// names its code spans quote, sorted, but env itself.
+	stated := func(cell string) string {
+		switch {
+		case strings.HasPrefix(cell, "no"):
+			return "no"
+		case strings.HasPrefix(cell, "a key in"):
+			return cell
+		}
+		var quoted []string
+		for _, span := range codeSpans(cell) {
+			if span != "env" {
+				quoted = append(quoted, "`"+span+"`")
+			}
+		}
+		slices.Sort(quoted)
+		return strings.Join(quoted, ", ")
+	}
 	seen := map[string]bool{}
 	for _, row := range rows {
 		agent := strings.Trim(row[0], "`")
@@ -737,8 +905,9 @@ func signInTableFollows(t *testing.T, agents []string, variables map[v1.CLIAgent
 			{"tokenSecretRef", variable(row[1]), want.headless},
 			{"auth.mode: APIKey", variable(row[2]), want.key},
 			{"a key in env", yes(row[3]), slices.Contains(fromEnv, v1.CLIAgentName(agent))},
-			{"credentialBundleSecretRef", yes(row[4]), verdicts[shapeBundle][agent].refusal == ""},
-			{"runs a seat's executor", yes(row[5]), slices.Contains(render.RunnerCLIs, v1.CLIAgentName(agent))},
+			{"auth.mode: Env signs in with", stated(row[4]), envMode(agent)},
+			{"credentialBundleSecretRef", yes(row[5]), verdicts[shapeBundle][agent].refusal == ""},
+			{"runs a seat's executor", yes(row[6]), slices.Contains(render.RunnerCLIs, v1.CLIAgentName(agent))},
 		} {
 			if c.got != c.want {
 				t.Errorf("%s: the sign-in table's %s cell for %s says %v, want %v", guide, c.column, agent, c.got, c.want)
@@ -844,6 +1013,14 @@ type verdict struct {
 	signIn string
 }
 
+// The SIGN-IN words of `crewlet llm list` the suite reads beside its token
+// and its key: a CLI signed in by a model provider's key in its environment
+// (env_sign_in), and one signed in by its env under auth.mode env.
+const (
+	signInEnvironment = "environment"
+	signInEnvMode     = "env"
+)
+
 // runnerProbe is the provider askEngine runs a seat's executor on when the
 // provider the seat probes is of a CLI Crewlet runs no executor on: Claude
 // Code on a key, which the engine admits.
@@ -853,10 +1030,11 @@ const runnerProbe = "probe-runner"
 // of the name of each shape that signs a subscription in with one variable in
 // env.
 const (
-	shapeAPIKey = "api key"
-	shapeToken  = "token"
-	shapeBundle = "bundle"
-	shapeEnv    = "subscription, env "
+	shapeAPIKey  = "api key"
+	shapeToken   = "token"
+	shapeBundle  = "bundle"
+	shapeEnv     = "subscription, env "
+	shapeEnvMode = "env mode, env "
 )
 
 // signInShape is one way to sign a CLI in.
@@ -868,13 +1046,15 @@ type signInShape struct {
 }
 
 // signInShapes are the ways a CLI may be signed in that the API can express:
-// a key, a token, a bundle, and the names env may carry. The names are probe
+// a key, a token, a bundle, and the names env may carry, under Subscription
+// and under auth mode Env, where env is the whole sign-in. The names are probe
 // input, not a list of what any CLI reads: names with each part the engine's
 // docs call a credential, names that only hold such a part inside a longer
-// word, one in lower case; and, beside a bundle so the variable is the only
-// question, every token and key variable the engine's profiles name
-// (variables) and one that is no credential. Whether each signs a CLI in is
-// the engine's answer.
+// word, one in lower case, and the names a profile signs its CLI in by from
+// env (signInEnv); and, beside a bundle so the variable is the only question,
+// every token and key variable the engine's profiles name (variables), those
+// names of signInEnv, also beside a key, and one that is no credential.
+// Whether each signs a CLI in is the engine's answer.
 func signInShapes(variables map[v1.CLIAgentName]cliVariable) []signInShape {
 	inEnv := []string{
 		"OPENROUTER_API_KEY", "openrouter_api_key", "GEMINI_API_KEYS", "VENDOR_APIKEY",
@@ -883,6 +1063,11 @@ func signInShapes(variables map[v1.CLIAgentName]cliVariable) []signInShape {
 		"VENDOR_OAUTH", "GITLAB_PAT",
 		envProxy, "HERMES_MAX_TOKENS", "MY_KEY2", "MONKEY", "KEYRING_PATH", "AUTHOR",
 	}
+	var signIns []string
+	for _, names := range signInEnv {
+		signIns = append(signIns, names...)
+	}
+	slices.Sort(signIns)
 	besideBundle := []string{envProxy}
 	for _, v := range variables {
 		for _, name := range []string{v.headless, v.key} {
@@ -892,14 +1077,15 @@ func signInShapes(variables map[v1.CLIAgentName]cliVariable) []signInShape {
 		}
 	}
 	slices.Sort(besideBundle[1:])
+	besideBundle = append(besideBundle, signIns...)
 	bundle := v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("cli", "bundle")}
-	shapes := make([]signInShape, 0, 3+len(inEnv)+len(besideBundle))
+	metered := v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey, APIKeySecretRef: secretKey("cli", apiKeyKey)}
+	shapes := make([]signInShape, 0, 4+2*len(inEnv)+len(besideBundle)+2*len(signIns))
 	shapes = append(shapes,
-		signInShape{name: shapeAPIKey, auth: v1.CLIAgentAuth{
-			Mode: v1.CLIAgentAuthAPIKey, APIKeySecretRef: secretKey("cli", apiKeyKey),
-		}},
+		signInShape{name: shapeAPIKey, auth: metered},
 		signInShape{name: shapeToken, auth: v1.CLIAgentAuth{TokenSecretRef: secretKey("cli", "token")}},
 		signInShape{name: shapeBundle, auth: bundle},
+		signInShape{name: "env mode, no env", auth: v1.CLIAgentAuth{Mode: v1.CLIAgentAuthEnv}},
 	)
 	for _, name := range inEnv {
 		shapes = append(shapes, signInShape{
@@ -908,8 +1094,18 @@ func signInShapes(variables map[v1.CLIAgentName]cliVariable) []signInShape {
 			env:  []string{name},
 		})
 	}
+	for _, name := range slices.Concat(inEnv, signIns) {
+		shapes = append(shapes, signInShape{
+			name: shapeEnvMode + name,
+			auth: v1.CLIAgentAuth{Mode: v1.CLIAgentAuthEnv},
+			env:  []string{name},
+		})
+	}
 	for _, name := range besideBundle {
 		shapes = append(shapes, signInShape{name: "bundle, env " + name, auth: bundle, env: []string{name}})
+	}
+	for _, name := range signIns {
+		shapes = append(shapes, signInShape{name: "api key, env " + name, auth: metered, env: []string{name}})
 	}
 	return shapes
 }

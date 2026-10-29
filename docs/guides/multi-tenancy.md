@@ -96,7 +96,11 @@ A Company opts in to the class's model providers with
 name them with kind `PlatformLLMProvider`. A platform provider is a coding
 CLI, as a tenant's own `LLMProvider` is, so the class's engine image carries
 it ([The image needs the CLI](cli-agents.md#the-image-needs-the-cli)). It
-signs in with a key alone: `auth.mode: APIKey` with `auth.apiKeySecretRef`,
+signs in with a key alone: `auth.mode: APIKey` with `auth.apiKeySecretRef`;
+`auth.mode: Env`, whose `env` alone signs the CLI in, such as Claude Code on
+the gateway's `ANTHROPIC_BASE_URL` with the per-tenant token it issued in
+`ANTHROPIC_AUTH_TOKEN`
+([A cloud provider or a gateway](cli-agents.md#a-cloud-provider-or-a-gateway));
 or, for Hermes, Pi and OpenCode, their model provider's key in `env`. A
 subscription's headless token or login is one account's, which every tenant
 of the class would share, so the API refuses one there: it belongs on a

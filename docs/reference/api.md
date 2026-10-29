@@ -218,6 +218,21 @@ names, and refuses one for a CLI whose profile names none, since it would
 reach nothing: so LLMProviderSpec holds tokenSecretRef to the CLIs with a
 token variable and mode APIKey to the CLIs with a key variable.
 
+Env signs the CLI in with the provider's env and nothing else: Crewlet
+hands it neither its token variable nor its key variable and seeds no
+login, so a cloud provider or a gateway is the CLI's one sign-in rather than
+a second one the CLI ranks against a token or a key by rules of its own. It
+takes a CLI whose Crewlet profile says what in env signs it in: ClaudeCode,
+whose profile lists the names that do (sign_in_env: ANTHROPIC_AUTH_TOKEN,
+CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX and CLAUDE_CODE_USE_FOUNDRY),
+one of which env must set, and Hermes, Pi and OpenCode, whose env must hold
+their model provider's key under a credential's name (below). Those
+ClaudeCode names are refused in env under every other mode, which hands the
+CLI a credential of its own beside them. tokenSecretRef and
+credentialBundleSecretRef are refused with it, as no token or login reaches
+the CLI. The rules are LLMProviderSpec's, which sees the agent and env beside
+auth.
+
 Hermes, Pi and OpenCode may sign in to a Subscription with neither: each
 fronts many model providers and reads each provider's key from that
 provider's own variable, so Crewlet's profile for it names no key variable
@@ -243,7 +258,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `mode` _[CLIAgentAuthMode](#cliagentauthmode)_ | mode is how the CLI signs in. Unset is Subscription. Crewlet's<br />`mode`. |  | Enum: [Subscription APIKey] <br />Optional: \{\} <br /> |
+| `mode` _[CLIAgentAuthMode](#cliagentauthmode)_ | mode is how the CLI signs in. Unset is Subscription. Crewlet's<br />`mode`. |  | Enum: [Subscription APIKey Env] <br />Optional: \{\} <br /> |
 | `tokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | tokenSecretRef is the Secret key holding a long-lived subscription<br />token the CLI mints for headless use. Crewlet's `token`, a credential<br />position. |  | Optional: \{\} <br /> |
 | `apiKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | apiKeySecretRef is the Secret key holding the metered API key auth<br />mode APIKey hands the CLI, in the key variable Crewlet's profile for<br />it names (ClaudeCode's ANTHROPIC_API_KEY, Codex's CODEX_API_KEY).<br />One key: a CLI holds one sign-in and rotates nothing, so a second key<br />is a provider of its own, later in a seat's chain. Crewlet's<br />`api_key`, a credential position: the value is pushed into the<br />engine's secret store and the document refers to it by name only. |  | Optional: \{\} <br /> |
 | `credentialBundleSecretRef` _[SecretKeyReference](#secretkeyreference)_ | credentialBundleSecretRef is the Secret key holding a credential<br />bundle `crewlet llm export` wrote. A bundle holding a login OpenCode<br />1.x made (its auth.json) is refused when the engine restores it, and<br />the provider runs signed out: export it again from OpenCode 2.<br />Crewlet's `credential_bundle`, a credential position. |  | Optional: \{\} <br /> |
@@ -255,18 +270,18 @@ _Underlying type:_ _string_
 
 CLIAgentAuthMode is how a model provider's CLI authenticates. It maps onto
 the `auth.mode` of a Crewlet providers.llm entry (Subscription is
-`subscription`, APIKey is `api-key`).
+`subscription`, APIKey is `api-key`, Env is `env`).
 
 Crewlet's `inherit-env`, which hands the CLI whichever token or key the
 engine's own environment holds, is not offered: a credential in the
 engine's environment is outside the encrypted store, readable by every
 process the engine runs, and resolvable by a ${NAME} written in many fields
 of the company document, so it would be the one credential the API takes by
-another route than a Secret reference. Subscription and APIKey cover what
-it is for.
+another route than a Secret reference. Subscription, APIKey and Env cover
+what it is for.
 
 _Validation:_
-- Enum: [Subscription APIKey]
+- Enum: [Subscription APIKey Env]
 
 _Appears in:_
 - [CLIAgentAuth](#cliagentauth)
@@ -276,6 +291,7 @@ _Appears in:_
 | --- | --- |
 | `Subscription` | CLIAgentAuthSubscription signs the CLI in to a subscription with<br />tokenSecretRef or credentialBundleSecretRef, or signs Hermes, Pi or<br />OpenCode in with its model provider's key in the provider's env.<br /> |
 | `APIKey` | CLIAgentAuthAPIKey gives the CLI the key of apiKeySecretRef, in the<br />key variable Crewlet's profile for it names, billing the metered<br />account. CursorAgent's key is a Cursor account's API key<br />(CURSOR_API_KEY), not a model provider's.<br /> |
+| `Env` | CLIAgentAuthEnv signs the CLI in with the provider's env alone: a<br />cloud provider's switch and its credentials (ClaudeCode's<br />CLAUDE_CODE_USE_BEDROCK with the AWS variables), a gateway's address<br />and the token it takes (ANTHROPIC_BASE_URL with ANTHROPIC_AUTH_TOKEN),<br />or, for Hermes, Pi and OpenCode, their model provider's key. Crewlet<br />hands the CLI neither its token variable nor its key variable, and<br />seeds no login, so nothing competes with what env signs in with.<br /> |
 
 
 #### CLIAgentName
@@ -1960,9 +1976,9 @@ Its rules hold every credential to a variable Crewlet's profile for the
 CLI reads, as Crewlet's own admission does (providers.llm.*): the engine
 refuses a write that names a credential its CLI would never be given, so
 the API refuses it on the object instead. The lists of CLIs the rules name
-are those whose profiles set token_env, api_key_env or env_sign_in in the
-engine the operator is tested against, Crewlet's main; a test holds them to
-that engine's own verdict. The rules also keep env off the variables
+and the variables they quote are those whose profiles set token_env,
+api_key_env, env_sign_in or sign_in_env in the engine the operator is tested
+against, Crewlet's main; a test holds them to that engine's own verdict. The rules also keep env off the variables
 Crewlet sets on every call to keep each seat's CLI inside its own home and
 its call's working directory (HOME, the XDG directories, TMPDIR, and the
 configuration directory or switch each CLI's profile names in config_env,
@@ -1989,7 +2005,9 @@ files or the document OpenCode 2's export printed, and writes a refreshed
 login back. An E2B box never receives it, as the login carries a refresh
 token the engine keeps rotating, so there a Subscription login reaches the
 run only as a variable of its environment, which for ClaudeCode is its
-headless token and for OpenCode its model provider's key in env.
+headless token and for OpenCode its model provider's key in env. Under
+auth mode APIKey or Env no login is seeded in either cell: the key, or
+env, is the sign-in, and it follows the run wherever it runs.
 
 
 
@@ -2006,7 +2024,7 @@ _Appears in:_
 | `webTools` _[CLIAgentWebTools](#cliagentwebtools)_ | webTools is whether the CLI keeps its own web tools. Unset is<br />Allowed, every seat's default. Denied is required of every provider<br />the Company's Dashboard Assistant runs on (spec.assistant.llm), and<br />is refused for a CLI Crewlet has no way to turn the web off for: it<br />takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 | `runIn` _[SandboxPlacement](#sandboxplacement)_ | runIn is where a seat's executor run launched on the provider happens:<br />Direct, a process of the engine pod that holds the seat, or E2B, the<br />Company's E2B sandbox, which spec.sandbox.e2b must then configure.<br />Unset takes the Company's spec.sandbox.defaultRunIn. It is read<br />wherever a seat's executor can launch on the provider: as the first<br />ClaudeCode or OpenCode member of its executor chain, and as a later<br />one a launch falls back to while the members before it sit out their<br />spent plans, so each run is placed by the member it runs on. Only<br />ClaudeCode and OpenCode take it, as only they run an executor.<br />Crewlet's `run_in`. |  | Enum: [Direct E2B] <br />Optional: \{\} <br /> |
 | `auth` _[CLIAgentAuth](#cliagentauth)_ | auth is how the CLI signs in. Crewlet's `auth`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
-| `env` _[SecretEnvVar](#secretenvvar) array_ | env is extra environment of the CLI, in every phase a seat runs on the<br />provider, its executor run included. In the engine's pod the CLI does<br />not get the engine's environment: it gets the part Crewlet's<br />allowlist names, such as PATH and the TLS and proxy variables, and the<br />variables the CLI's Crewlet profile passes through, such as<br />GeminiCLI's GOOGLE_CLOUD_PROJECT, with a HOME, a TMPDIR and XDG<br />directories of its seat's own rather than the engine's.<br />So a variable the CLI needs beyond that is given here, such as the<br />address of a gateway a CLI reads from its environment (ClaudeCode's<br />ANTHROPIC_BASE_URL). It is how Hermes, Pi and OpenCode sign in under<br />auth mode Subscription with no login of their own: their model<br />provider's key, under a name Crewlet reads as a credential, such as<br />OPENROUTER_API_KEY. It may not set the CLI's own token or key<br />variable, which auth owns, nor a variable Crewlet sets to keep the CLI<br />inside its seat's home and its call's working directory: HOME, the XDG<br />directories, TMPDIR, and the CLI's own configuration directory or<br />switch (docs/guides/cli-agents.md). Under auth mode Subscription it may<br />not set a variable Crewlet sets there to sign the CLI in with its<br />seat's login either: GeminiCLI's GOOGLE_GENAI_USE_GCA.<br />A seat's executor run on the provider, Direct or E2B, gets all of env,<br />beneath the Seat's own spec.sandbox.env, which wins a name: a<br />gateway's address and the bearer token it takes, a cloud switch such<br />as CLAUDE_CODE_USE_BEDROCK and its region, a proxy, so the run reaches<br />its model as the provider's other phases do. A ClaudeCode sign-in in<br />env (ANTHROPIC_AUTH_TOKEN or a CLAUDE_CODE_USE_* toggle) also signs an<br />E2B run in. A Seat whose spec.sandbox.env signs ClaudeCode in itself<br />keeps every sign-in of the provider's out of its runs, and the rest of<br />env in them. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `env` _[SecretEnvVar](#secretenvvar) array_ | env is extra environment of the CLI, in every phase a seat runs on the<br />provider, its executor run included. In the engine's pod the CLI does<br />not get the engine's environment: it gets the part Crewlet's<br />allowlist names, such as PATH and the TLS and proxy variables, and the<br />variables the CLI's Crewlet profile passes through, such as<br />GeminiCLI's GOOGLE_CLOUD_PROJECT, with a HOME, a TMPDIR and XDG<br />directories of its seat's own rather than the engine's.<br />So a variable the CLI needs beyond that is given here, such as the<br />address of a gateway a CLI reads from its environment (ClaudeCode's<br />ANTHROPIC_BASE_URL). It is how Hermes, Pi and OpenCode sign in under<br />auth mode Subscription or Env with no login of their own: their model<br />provider's key, under a name Crewlet reads as a credential, such as<br />OPENROUTER_API_KEY. Under auth mode Env it is the whole sign-in of<br />ClaudeCode too: a gateway's ANTHROPIC_AUTH_TOKEN, or a cloud<br />provider's switch (CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX,<br />CLAUDE_CODE_USE_FOUNDRY) with that provider's credentials, names it may<br />set under no other mode, which hands the CLI a credential of its own<br />beside them. It may not set the CLI's own token or key<br />variable, which auth owns, nor a variable Crewlet sets to keep the CLI<br />inside its seat's home and its call's working directory: HOME, the XDG<br />directories, TMPDIR, and the CLI's own configuration directory or<br />switch (docs/guides/cli-agents.md). Under auth mode Subscription it may<br />not set a variable Crewlet sets there to sign the CLI in with its<br />seat's login either: GeminiCLI's GOOGLE_GENAI_USE_GCA.<br />A seat's executor run on the provider, Direct or E2B, gets all of env,<br />beneath the Seat's own spec.sandbox.env, which wins a name: a<br />gateway's address and the bearer token it takes, a cloud switch such<br />as CLAUDE_CODE_USE_BEDROCK and its region, a proxy, so the run reaches<br />its model as the provider's other phases do. So under auth mode Env,<br />env signs an E2B run in as it signs the provider's other phases in. A<br />Seat whose spec.sandbox.env signs ClaudeCode in itself<br />keeps every sign-in of the provider's out of its runs, and the rest of<br />env in them. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `loginName` _string_ | loginName names the login, and the per-seat homes, the provider<br />keeps on the data volume. Providers of the company with the same<br />loginName that drive the same CLI share one login, which is how<br />several models run off one subscription; each CLI keeps its own<br />beside the others' (Crewlet's <state_dir>/<agent>), so one of another<br />CLI shares the directory and nothing in it. Unset is the provider's<br />own metadata.name. Crewlet's `state_dir`, as<br />/var/lib/crewlet/llm-cli/<loginName>. |  | MaxLength: 63 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9-]*$` <br />Optional: \{\} <br /> |
 
 
@@ -2603,8 +2621,11 @@ keys. Offer keys you would give each of them: one per tenant, or the
 per-tenant virtual keys of an LLM gateway, never the platform's own.
 
 It signs its CLI in with a key and nothing else: auth mode APIKey for a CLI
-Crewlet hands a key to, or, for Hermes, Pi and OpenCode, which read their
-model provider's key from that provider's own variable, the key in env. A
+Crewlet hands a key to; auth mode Env, whose env signs the CLI in alone,
+such as a ClaudeCode provider on the platform's gateway with the token it
+issued the tenant in ANTHROPIC_AUTH_TOKEN; or, for Hermes, Pi and OpenCode,
+which read their model provider's key from that provider's own variable,
+the key in env. A
 subscription's headless token or login is one account's, which every tenant
 of the class would share: it belongs on a tenant's own LLMProvider. The
 phases it serves in the engine's pod keep their per-seat homes on the data
@@ -2636,7 +2657,7 @@ _Appears in:_
 | `maxConcurrent` _integer_ | maxConcurrent is how many of the provider's CLI processes run at once<br />in each engine pod; each takes 200 to 450 MB of the pod's memory,<br />OpenCode's at the top of that range (docs/guides/cli-agents.md). One<br />process lives for a whole run of the CLI, many model requests and<br />tool calls long, and holds its place for all of it, so this is also<br />how many seats' runs the provider has going at once in a pod: a run<br />past it waits for a place. A model call made on the same provider<br />from inside one of a run's tool calls (a delegated worker's) borrows<br />the run's place rather than wait for another, which the runs holding<br />every place could leave it waiting for forever. Unset takes<br />Crewlet's default of 4. A seat's executor run takes none: it is a<br />process of its own box, and a seat runs one at a time. Crewlet's<br />`max_concurrent`. |  | Maximum: 64 <br />Minimum: 1 <br />Optional: \{\} <br /> |
 | `webTools` _[CLIAgentWebTools](#cliagentwebtools)_ | webTools is whether the CLI keeps its own web tools. Unset is<br />Allowed, every seat's default. Denied is required of every provider<br />the Company's Dashboard Assistant runs on (spec.assistant.llm), and<br />is refused for a CLI Crewlet has no way to turn the web off for: it<br />takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's<br />`overrides.web_tools`. |  | Enum: [Allowed Denied] <br />Optional: \{\} <br /> |
 | `auth` _[PlatformLLMProviderAuth](#platformllmproviderauth)_ | auth is how the CLI signs in. Crewlet's `auth`. |  | MinProperties: 1 <br />Required: \{\} <br /> |
-| `env` _[NamespacedSecretEnvVar](#namespacedsecretenvvar) array_ | env is extra environment of the CLI, as an LLMProvider's spec.env is,<br />each value read from a Secret in a namespace the platform controls:<br />the model provider's key Hermes, Pi or OpenCode signs in with, or the<br />address of the platform's gateway a CLI reads from its environment<br />(ClaudeCode's ANTHROPIC_BASE_URL), for every phase the provider<br />serves. A seat's executor run on the provider gets all of it, beneath<br />the Seat's own spec.sandbox.env, Direct on the tenant's engine pod or<br />in the tenant's own E2B sandbox, the gateway's address included.<br />Crewlet's `env`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `env` _[NamespacedSecretEnvVar](#namespacedsecretenvvar) array_ | env is extra environment of the CLI, as an LLMProvider's spec.env is,<br />each value read from a Secret in a namespace the platform controls:<br />the model provider's key Hermes, Pi or OpenCode signs in with, the<br />address of the platform's gateway a CLI reads from its environment<br />(ClaudeCode's ANTHROPIC_BASE_URL), or, under auth mode Env, the token<br />that gateway issued the tenant (ANTHROPIC_AUTH_TOKEN), for every phase<br />the provider serves. ClaudeCode's sign-in names (ANTHROPIC_AUTH_TOKEN<br />and the CLAUDE_CODE_USE_* switches) are refused under every other<br />mode. A seat's executor run on the provider gets all of it, beneath<br />the Seat's own spec.sandbox.env, Direct on the tenant's engine pod or<br />in the tenant's own E2B sandbox, the gateway's address included.<br />Crewlet's `env`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 
 
 #### PlatformLLMProviderAuth
@@ -2656,7 +2677,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `mode` _[CLIAgentAuthMode](#cliagentauthmode)_ | mode is how the CLI signs in: APIKey, with apiKeySecretRef, or<br />Subscription, which signs Hermes, Pi or OpenCode in with its model<br />provider's key in env. Unset is Subscription. Crewlet's `mode`. |  | Enum: [Subscription APIKey] <br />Optional: \{\} <br /> |
+| `mode` _[CLIAgentAuthMode](#cliagentauthmode)_ | mode is how the CLI signs in: APIKey, with apiKeySecretRef; Env, which<br />signs the CLI in with env alone, as an LLMProvider's auth mode Env<br />does; or Subscription, which signs Hermes, Pi or OpenCode in with its<br />model provider's key in env. Unset is Subscription. Crewlet's `mode`. |  | Enum: [Subscription APIKey Env] <br />Optional: \{\} <br /> |
 | `apiKeySecretRef` _[NamespacedSecretKeyReference](#namespacedsecretkeyreference)_ | apiKeySecretRef is the Secret key holding the API key auth mode<br />APIKey hands the CLI, in the key variable Crewlet's profile for it<br />names. Crewlet's `api_key`, a credential position. |  | Optional: \{\} <br /> |
 
 

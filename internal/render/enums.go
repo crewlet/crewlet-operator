@@ -207,6 +207,8 @@ func cliAgentAuthMode(m v1alpha1.CLIAgentAuthMode) string {
 		return "subscription"
 	case v1alpha1.CLIAgentAuthAPIKey:
 		return "api-key"
+	case v1alpha1.CLIAgentAuthEnv:
+		return "env"
 	}
 	return ""
 }
