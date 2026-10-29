@@ -230,8 +230,9 @@ const (
 	// carries the engine's zone into every executor run's box, E2B included:
 	// the zone it reads a reset the CLI names without one in, the engine's
 	// own TZ where it names a zone the system knows, and UTC otherwise
-	// (childZone).
-	envSignInRead = "v0.1.1-0.20261029073132-700660d0afa5"
+	// (childZone), its name cliprofile.ZoneVariable, which an entry's env may
+	// not set.
+	envSignInRead = "v0.1.1-0.20261029081131-3ccda043792f"
 	otelGo        = "internal/sandbox/otel.go"
 	// topologyGo and assistantDeepGo are the render's pod sizes and the
 	// engine's deep-work backend, which several rows name.
@@ -879,7 +880,7 @@ var mirrored = []mirror{
 			"address and bearer token, a cloud switch and its region reach every executor run, and a ClaudeCode " +
 			"sign-in there signs an E2B run in (signin.go's remoteSignIn); and the engine's zone, TZ, reaches every " +
 			"run, E2B included",
-		digest: "837318029689c0d41bce52eb6d06f8baa4f0a698e9ef8d9b2c49c3fff09ea7e5",
+		digest: "9550ddc63baf6f5dfb890558f26bd4a08f7658004efb626096f97a6968dac7bd",
 		read:   envSignInRead,
 	},
 	{

@@ -2075,6 +2075,15 @@ spec:
                       || (self.agent == ''KimiCode'' && e.name == ''KIMI_CODE_HOME'')
                       || (self.agent == ''Hermes'' && e.name == ''HERMES_HOME'') ||
                       (self.agent == ''Pi'' && e.name == ''PI_CODING_AGENT_DIR''))'
+                  - fieldPath: .env
+                    message: 'env may not set TZ: Crewlet hands every CLI it starts
+                      the engine''s own zone, its TZ, else UTC, and reads the CLI''s
+                      limit resets in it, so a zone of the provider''s own would be
+                      replaced or would have the resets read in the wrong zone, and
+                      Crewlet refuses the document. Drop it, and set TZ on the engine
+                      to move every CLI''s zone: the class''s podTemplate.spec.env
+                      or the Company''s spec.runtime.env'
+                    rule: '!has(self.env) || !self.env.exists(e, e.name == ''TZ'')'
                   - fieldPath: .model
                     message: 'an OpenCode model is <provider>/<model>, which OpenCode
                       splits at its first slash: a model with no slash, or with nothing

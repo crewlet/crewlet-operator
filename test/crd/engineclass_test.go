@@ -1151,6 +1151,13 @@ func TestPlatformLLMProviders(t *testing.T) {
 			want: msgCLIIsolation,
 		},
 		{
+			name: "a platform provider with TZ in env is refused",
+			mutate: platform(func(p *v1.PlatformLLMProvider) {
+				p.Env = []v1.NamespacedSecretEnvVar{envFrom("TZ")}
+			}),
+			want: msgCLIZone,
+		},
+		{
 			name: "a platform OpenCode model with no provider is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
 				keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)

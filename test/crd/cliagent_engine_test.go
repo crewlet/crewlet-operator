@@ -374,6 +374,53 @@ func TestCLIAgentIsolationFollowsTheEngine(t *testing.T) {
 	isolationTableFollows(t, agents, engineLists)
 }
 
+// TestCLIAgentZoneFollowsTheEngine holds the LLMProvider API's refusal of TZ
+// in env to the engine every suite runs, which pins the zone of every CLI it
+// starts and refuses TZ in a providers.llm entry's env for every CLI: each CLI
+// the API offers is tried with TZ, and with tz, which names no zone, in env
+// beside the login it is admitted with (loginBeside), so the variable is the
+// only question. The API refuses TZ with its zone rule exactly where the
+// engine refuses it, and admits tz where the engine does.
+func TestCLIAgentZoneFollowsTheEngine(t *testing.T) {
+	namespace := newNamespace(t)
+	agents := llmProviderEnum(t, "spec", "agent")
+	providers := make([]v1.LLMProvider, 0, 2*len(agents))
+	for _, variable := range []string{"TZ", "tz"} {
+		for _, agent := range agents {
+			name := v1.CLIAgentName(agent)
+			shape := signInShape{name: "env " + variable, auth: loginBeside(t, namespace, name), env: []string{variable}}
+			p := shapedProvider(namespace, name, &shape)
+			p.Name = fmt.Sprintf("%s-%d", p.Name, len(providers))
+			providers = append(providers, *p)
+		}
+	}
+	report := askEngine(t, providers, false)
+	for i := range providers {
+		p := &providers[i]
+		variable := p.Spec.Env[0].Name
+		engineRefuses := slices.ContainsFunc(report.problems[p.Name], func(problem string) bool {
+			return strings.Contains(problem, variable+zoneRefusal)
+		})
+		if want := variable == "TZ"; engineRefuses != want {
+			t.Errorf("%s with %s in env: the engine refuses it as the zone = %v, want %v: %q",
+				p.Spec.Agent, variable, engineRefuses, want, report.problems[p.Name])
+		}
+		refusal := apiVerdict(t, p)
+		switch {
+		case engineRefuses && !strings.Contains(refusal, msgCLIZone):
+			t.Errorf("%s with %s in env: the engine refuses it and the API's zone rule does not: %q",
+				p.Spec.Agent, variable, refusal)
+		case !engineRefuses && refusal != "":
+			t.Errorf("%s with %s in env: the engine admits it and the API refuses it: %s",
+				p.Spec.Agent, variable, refusal)
+		}
+	}
+}
+
+// zoneRefusal follows TZ in the engine's refusal of it in a providers.llm
+// entry's env (crewlet's internal/config, validateCredentials).
+const zoneRefusal = " is the zone the engine hands every CLI it starts"
+
 // TestCLIAgentSubscriptionEnvFollowsTheEngine holds the LLMProvider API's
 // refusal of a subscription variable in env to the engine: the variables each
 // CLI's profile sets under auth.mode subscription alone (subscription_env),

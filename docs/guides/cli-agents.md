@@ -333,6 +333,14 @@ its message and this table to the engine's lists:
 | `HERMES_HOME` | `Hermes` |
 | `PI_CODING_AGENT_DIR` | `Pi` |
 
+Nor may `env` set `TZ`. The engine hands every CLI it starts its own zone,
+the `TZ` of its pod where that names a zone it knows and `UTC` otherwise, and
+reads a limit's reset in it when the CLI names its time without one, so a
+zone of the provider's own would be replaced, or would have the reset read
+in the wrong zone: the engine refuses the document, and the API server
+refuses the provider first. Set `TZ` on the engine instead, in the class's
+`podTemplate` or the Company's `runtime.env`, to move every CLI's zone.
+
 Under `auth.mode: Subscription`, `env` may not set a variable the engine sets
 there to sign the CLI in with the login its seat's home holds either:
 `GeminiCLI`'s `GOOGLE_GENAI_USE_GCA`, which the engine sets to `true`, since

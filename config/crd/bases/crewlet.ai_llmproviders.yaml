@@ -226,7 +226,9 @@ spec:
                   variable, which auth owns, nor a variable Crewlet sets to keep the CLI
                   inside its seat's home and its call's working directory: HOME, the XDG
                   directories, TMPDIR, and the CLI's own configuration directory or
-                  switch (docs/guides/cli-agents.md). Under auth mode Subscription it may
+                  switch (docs/guides/cli-agents.md), nor TZ, as Crewlet hands every CLI
+                  the engine's own zone and reads its limit resets in it. Under auth mode
+                  Subscription it may
                   not set a variable Crewlet sets there to sign the CLI in with its
                   seat's login either: GeminiCLI's GOOGLE_GENAI_USE_GCA.
 
@@ -522,6 +524,14 @@ spec:
                 && e.name == ''CURSOR_CONFIG_DIR'') || (self.agent == ''KimiCode''
                 && e.name == ''KIMI_CODE_HOME'') || (self.agent == ''Hermes'' && e.name
                 == ''HERMES_HOME'') || (self.agent == ''Pi'' && e.name == ''PI_CODING_AGENT_DIR''))'
+            - fieldPath: .env
+              message: 'env may not set TZ: Crewlet hands every CLI it starts the
+                engine''s own zone, its TZ, else UTC, and reads the CLI''s limit resets
+                in it, so a zone of the provider''s own would be replaced or would
+                have the resets read in the wrong zone, and Crewlet refuses the document.
+                Drop it, and set TZ on the engine to move every CLI''s zone: the class''s
+                podTemplate.spec.env or the Company''s spec.runtime.env'
+              rule: '!has(self.env) || !self.env.exists(e, e.name == ''TZ'')'
             - fieldPath: .env
               message: 'under auth mode Subscription, env may not set a variable Crewlet
                 sets there to sign the CLI in with the login the seat''s home holds:

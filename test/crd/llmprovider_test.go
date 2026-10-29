@@ -129,6 +129,7 @@ const (
 	msgCLISubscriptionEnv = "under auth mode Subscription, env may not set a variable Crewlet sets there to sign " +
 		"the CLI in with the login the seat's home holds"
 	msgQwenKeyOnly = "QwenCode signs in with its key alone, under auth mode APIKey"
+	msgCLIZone     = "env may not set TZ: Crewlet hands every CLI it starts the engine's own zone"
 	msgCLIEnvAgent = "auth mode Env takes a CLI Crewlet signs in from its env"
 	msgCLIEnvUnset = "auth mode Env signs the CLI in with env alone, and env sets nothing that signs it in"
 	msgCLIEnvOnly  = "env may set a variable that signs the CLI in from env"
@@ -506,7 +507,25 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			name:   "an isolation variable's name in lower case is accepted",
 			mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, "home"),
 		},
+		createCase[*v1.LLMProvider]{
+			name:   "TZ in env is reported at env",
+			mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, "TZ"),
+			want:   atEnv,
+		},
+		createCase[*v1.LLMProvider]{
+			name:   "a zone's name in lower case is accepted",
+			mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, "tz"),
+		},
 	)
+	// Crewlet hands every CLI it starts the engine's own zone, and reads its
+	// limit resets in it, so it refuses TZ in env for every CLI.
+	for _, agent := range llmProviderEnum(t, "spec", "agent") {
+		cases = append(cases, createCase[*v1.LLMProvider]{
+			name:   agent + " with TZ in env is refused",
+			mutate: inEnvBesideBundle(v1.CLIAgentName(agent), "TZ"),
+			want:   msgCLIZone,
+		})
+	}
 	// Qwen Code keeps no login of its own in the builds Crewlet supports, so
 	// under Subscription it would sign in to nothing, whatever it is handed.
 	qwen := func(auth v1.CLIAgentAuth) func(*v1.LLMProvider) {
