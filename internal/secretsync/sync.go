@@ -22,14 +22,15 @@ type EngineSecrets interface {
 	ListSecrets(ctx context.Context) ([]engine.SecretInfo, error)
 	// PutSecrets stores or replaces up to engine.MaxSecretBatch values, each
 	// UTF-8, in one request (PUT /secrets), and the engine re-activates the
-	// active revision once if it reads any of them. The engine records the
-	// credential that wrote them (SecretInfo.OperatorID).
-	PutSecrets(ctx context.Context, values map[string][]byte) (engine.SecretsWritten, error)
+	// active revision once if it reads any of them, unless deferReload asks
+	// it to re-activate nothing. The engine records the credential that
+	// wrote them (SecretInfo.OperatorID).
+	PutSecrets(ctx context.Context, values map[string][]byte, deferReload bool) (engine.SecretsWritten, error)
 	// WriteSecret stores or replaces one value as raw bytes
 	// (PUT /secrets/{name}), for a value that is not UTF-8, which a batch's
 	// JSON body cannot carry, and the engine re-activates the active
-	// revision if it reads the name.
-	WriteSecret(ctx context.Context, name string, value []byte) (engine.SecretsWritten, error)
+	// revision if it reads the name, unless deferReload asks it not to.
+	WriteSecret(ctx context.Context, name string, value []byte, deferReload bool) (engine.SecretsWritten, error)
 	// DeleteSecret removes one entry, reporting whether it existed
 	// (DELETE /secrets/{name}), and the engine re-activates the active
 	// revision if it reads the name. Removing an absent entry is not an
@@ -73,9 +74,24 @@ type Result struct {
 	// Sync left it, for every value the revision reads. A request that
 	// changed only values the revision does not read made none, and changes
 	// nothing here. Nil when no request changed a value the revision reads:
-	// the caller then activates the revision itself where it has to.
+	// the caller then activates the revision itself where it has to. A
+	// deferred answer (engine.Reload.Deferred) and a null one never replace
+	// a re-activation an earlier request of the same Sync made.
 	Reload *engine.Reload
+	// ReloadAction is the engine call whose request made Reload:
+	// ActionWriteSecret, ActionPutSecrets or ActionDeleteSecret, which is
+	// how the operator says what activated the revision. Empty with Reload
+	// nil.
+	ReloadAction string
 }
+
+// The engine calls a Sync or Withdraw makes that re-activate the revision
+// (Result.ReloadAction), named as the client's methods are.
+const (
+	ActionWriteSecret  = "WriteSecret"
+	ActionPutSecrets   = "PutSecrets"
+	ActionDeleteSecret = "DeleteSecret"
+)
 
 // Overwrite is one owned entry somebody other than the operator wrote.
 type Overwrite struct {
@@ -119,14 +135,20 @@ type Overwrite struct {
 // engine.MaxSecretBatch names in name order (PutSecrets), because the engine
 // re-activates its active revision at every write of a value it reads: one
 // request per value would be one activation per value, the company running a
-// mix of the old and the new values between them. So a sync of up to
-// engine.MaxSecretBatch values is one activation, which Result.Reload
-// reports. A value that is not UTF-8 is written alone, before them, since a
-// JSON body cannot carry it unchanged: each is an activation of its own
-// where the revision reads it, the price of a credential that is not text,
-// which none of the positions the operator renders expects. The engine re-activates the revision
-// at the removal of a value it reads too, one removal at a time, which is
-// what Result.Reload reports where one comes last.
+// mix of the old and the new values between them. A value that is not UTF-8
+// is written alone, before them (WriteSecret), since a JSON body cannot carry
+// it unchanged. Every write request but the last asks the engine to
+// re-activate nothing (deferReload), and the last re-activates the revision
+// once for every value the sync wrote, which Result.Reload reports: a sync is
+// one activation however many requests carry it. Where the last request
+// re-activates nothing, because the revision reads none of its names, or its
+// re-activation fails, Result.Reload says so and the caller activates the
+// revision itself. A value written deferred is recorded as written (a
+// fingerprint in the State) only once the last write request has been
+// answered: a sync that fails, or stops, before that leaves it to be written
+// again by the next, whose last request activates it. The engine re-activates
+// the revision at the removal of a value it reads too, one removal at a time,
+// which is what Result.Reload reports where one comes last.
 //
 // A Desired that Resolve returned with an error pushes nothing, and Sync
 // refuses it rather than delete every entry.
@@ -253,57 +275,76 @@ func push(
 			res.Overwritten = append(res.Overwritten, Overwrite{Name: name, By: info.UpdatedBy, Credential: info.OperatorID})
 		}
 	}
-	// Each written alone re-activates the revision too, where it reads it,
-	// before the batch that re-activates it again with every value: what the
-	// last re-activation did is what Result.Reload reports.
+	type writeRequest struct {
+		names []string
+		alone bool
+	}
+	var requests []writeRequest
 	for _, name := range single {
-		written, err := eng.WriteSecret(ctx, name, desired.values[name])
-		if err != nil {
-			sortWritten(res)
-			return fmt.Errorf("writing %s into the engine's secret store: %w", name, err)
-		}
-		wrote(name)
-		res.written(written)
+		requests = append(requests, writeRequest{names: []string{name}, alone: true})
 	}
 	for batch := range slices.Chunk(batched, engine.MaxSecretBatch) {
-		values := make(map[string][]byte, len(batch))
-		for _, name := range batch {
-			values[name] = desired.values[name]
+		requests = append(requests, writeRequest{names: batch})
+	}
+	// WRITTEN DEFERRED, recorded once the last request is answered: until
+	// then nothing activates them, and a sync that stops leaves them for
+	// the next to write again.
+	var deferred []string
+	for i, request := range requests {
+		last := i == len(requests)-1
+		var written engine.SecretsWritten
+		var err error
+		action := ActionPutSecrets
+		if request.alone {
+			action = ActionWriteSecret
+			name := request.names[0]
+			written, err = eng.WriteSecret(ctx, name, desired.values[name], !last)
+		} else {
+			values := make(map[string][]byte, len(request.names))
+			for _, name := range request.names {
+				values[name] = desired.values[name]
+			}
+			written, err = eng.PutSecrets(ctx, values, !last)
 		}
-		written, err := eng.PutSecrets(ctx, values)
 		if err != nil {
 			sortWritten(res)
-			return fmt.Errorf("writing %s into the engine's secret store: %w", strings.Join(batch, ", "), err)
+			return fmt.Errorf("writing %s into the engine's secret store: %w", strings.Join(request.names, ", "), err)
 		}
-		for _, name := range batch {
+		if !last {
+			deferred = append(deferred, request.names...)
+			continue
+		}
+		for _, name := range append(deferred, request.names...) {
 			wrote(name)
 		}
-		res.written(written)
+		res.written(written, action)
 	}
 	sortWritten(res)
 	return nil
 }
 
 // removed records in res the engine's answer to a removal: its
-// re-activation, where the active revision reads the name.
+// re-activation, where it made one (adopt).
 func (res *Result) removed(answer engine.SecretRemoved) {
-	if len(answer.ReadBy) > 0 || answer.Reload != nil {
-		res.Reload = answer.Reload
-	}
+	res.adopt(answer.Reload, ActionDeleteSecret)
 }
 
-// written records in res the engine's answer to a write: its
-// re-activation, where the active revision reads one of the names.
-func (res *Result) written(answer engine.SecretsWritten) {
-	for _, paths := range answer.ReadBy {
-		if len(paths) > 0 {
-			res.Reload = answer.Reload
-			return
-		}
+// written records in res the engine's answer to a write, which action made:
+// its re-activation, where it made one (adopt).
+func (res *Result) written(answer engine.SecretsWritten, action string) {
+	res.adopt(answer.Reload, action)
+}
+
+// adopt takes reload as the sync's last re-activation, made by action, where
+// the engine made one: never a null answer (a request that re-activated
+// nothing, or whose re-activation the engine did not say) or a deferred one,
+// either of which would wipe what an earlier request of the same sync
+// activated and cost the company an activation it already had.
+func (res *Result) adopt(reload *engine.Reload, action string) {
+	if reload == nil || reload.Deferred {
+		return
 	}
-	if answer.Reload != nil {
-		res.Reload = answer.Reload
-	}
+	res.Reload, res.ReloadAction = reload, action
 }
 
 // sortWritten sorts what res says was written by name, as Result promises:

@@ -1138,7 +1138,7 @@ func TestReactivateRepeatsOnlyARevisionThatLetsTheValueGo(t *testing.T) {
 				if res.Reload.Landed() != byEngine {
 					t.Fatalf("the sync reports the engine's re-activation %+v", res.Reload)
 				}
-				next, err := w.run.reactivate(ctx, w.client, active, res.Reload, state)
+				next, err := w.run.reactivate(ctx, w.client, active, res.Reload, res.ReloadAction, state)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -1163,5 +1163,45 @@ func TestReactivateRepeatsOnlyARevisionThatLetsTheValueGo(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// actionRecorder records the action of every event, which events.FakeRecorder
+// drops.
+type actionRecorder struct{ actions []string }
+
+func (r *actionRecorder) Eventf(_ runtime.Object, _ runtime.Object, _, reason, action, _ string, _ ...any) {
+	r.actions = append(r.actions, reason+" "+action)
+}
+
+// TestAReactivationByTheEngineNamesTheRequestThatMadeIt: the engine
+// activates its revision again at a write of a value it reads as much as at
+// a removal, and the Reactivated event names the engine call whose request
+// did it, the secret sync's (secretsync.Result.ReloadAction). Every one was
+// labelled DeleteSecret, the write that re-activated in the push before an
+// apply the engine refused included.
+func TestAReactivationByTheEngineNamesTheRequestThatMadeIt(t *testing.T) {
+	for _, action := range []string{secretsync.ActionPutSecrets, secretsync.ActionWriteSecret,
+		secretsync.ActionDeleteSecret} {
+		t.Run(action, func(t *testing.T) {
+			ctx := context.Background()
+			w := newWithdrawal(t, runningLetsGo)
+			active, err := activeConfig(ctx, w.client)
+			if err != nil {
+				t.Fatal(err)
+			}
+			state, res, err := secretsync.Sync(ctx, w.client, w.resolve(t), w.state(t), operatorLogin)
+			if err != nil || !res.Reload.Landed() {
+				t.Fatalf("the sync = (%+v, %v), want the engine's re-activation", res.Reload, err)
+			}
+			recorder := &actionRecorder{}
+			w.run.Recorder = recorder
+			if _, err := w.run.reactivate(ctx, w.client, active, res.Reload, action, state); err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Contains(recorder.actions, "Reactivated "+action) {
+				t.Errorf("events %q, want Reactivated by %s", recorder.actions, action)
+			}
+		})
 	}
 }

@@ -464,7 +464,7 @@ func (c *Client) ListSecrets(ctx context.Context) ([]SecretInfo, error) {
 // secret store: WriteSecret, for a caller that needs no more than whether it
 // was stored.
 func (c *Client) PutSecret(ctx context.Context, name string, value []byte) error {
-	_, err := c.WriteSecret(ctx, name, value)
+	_, err := c.WriteSecret(ctx, name, value, false)
 	return err
 }
 
@@ -480,9 +480,18 @@ func (c *Client) PutSecret(ctx context.Context, name string, value []byte) error
 // what it receives, and an encoding step in between is a credential the
 // vendor then refuses. So this is the write for a value that is not UTF-8,
 // which PutSecrets cannot carry. Nothing this returns contains it.
-func (c *Client) WriteSecret(ctx context.Context, name string, value []byte) (SecretsWritten, error) {
+//
+// With deferReload the engine seals the value and re-activates nothing
+// (`?defer_reload=true`): SecretsWritten.Reload is Deferred, and ReadBy says
+// what a later re-activation reaches. It is for a writer that re-activates
+// once, at its last request, for every value it wrote.
+func (c *Client) WriteSecret(ctx context.Context, name string, value []byte, deferReload bool) (SecretsWritten, error) {
 	if err := checkSecretName(name); err != nil {
 		return SecretsWritten{}, err
+	}
+	var query url.Values
+	if deferReload {
+		query = url.Values{"defer_reload": {"true"}}
 	}
 	var answer struct {
 		Name   string        `json:"name"`
@@ -490,7 +499,7 @@ func (c *Client) WriteSecret(ctx context.Context, name string, value []byte) (Se
 		Reload *reloadAnswer `json:"reload"`
 	}
 	if err := c.call(ctx, request{
-		method: http.MethodPut, path: "/secrets/" + name,
+		method: http.MethodPut, path: "/secrets/" + name, query: query,
 		header: http.Header{headerContentType: {"application/octet-stream"}},
 		body:   value,
 	}, http.StatusOK, &answer); err != nil {
@@ -519,14 +528,18 @@ const MaxSecretBatch = 64
 // request is sent. The engine refuses the whole body when it refuses any
 // value, so a failed batch may have sealed none of them, or, for an error
 // inside the engine, some. Nothing this returns contains a value.
-func (c *Client) PutSecrets(ctx context.Context, values map[string][]byte) (SecretsWritten, error) {
+//
+// With deferReload the engine seals the values and re-activates nothing
+// (`defer_reload`), as WriteSecret's deferReload says.
+func (c *Client) PutSecrets(ctx context.Context, values map[string][]byte, deferReload bool) (SecretsWritten, error) {
 	if len(values) == 0 || len(values) > MaxSecretBatch {
 		return SecretsWritten{}, fmt.Errorf("write %d secrets in one request: the engine takes 1 to %d",
 			len(values), MaxSecretBatch)
 	}
 	body := struct {
-		Values map[string]string `json:"values"`
-	}{Values: make(map[string]string, len(values))}
+		Values      map[string]string `json:"values"`
+		DeferReload bool              `json:"defer_reload,omitempty"`
+	}{Values: make(map[string]string, len(values)), DeferReload: deferReload}
 	for name, value := range values {
 		if err := checkSecretName(name); err != nil {
 			return SecretsWritten{}, err

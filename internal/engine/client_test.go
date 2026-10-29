@@ -790,7 +790,7 @@ func TestPutSecretsSendsOneBody(t *testing.T) {
 			f := newFakeEngine(t)
 			f.handle("PUT /secrets", answer(http.StatusOK, `{"names":["K8S_A","K8S_B"],"bytes":{"K8S_A":16,"K8S_B":1},
 				"read_by":{"K8S_A":["providers.llm.default.auth.api_key"],"K8S_B":[]},"reload":`+tc.reload+`}`))
-			got, err := f.client().PutSecrets(context.Background(), values)
+			got, err := f.client().PutSecrets(context.Background(), values, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -847,7 +847,7 @@ func TestPutSecretsRefusesWhatTheEngineWouldBeforeSending(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newFakeEngine(t)
-			_, err := f.client().PutSecrets(context.Background(), values)
+			_, err := f.client().PutSecrets(context.Background(), values, false)
 			if err == nil {
 				t.Fatal("PutSecrets() succeeded, want an error")
 			}
@@ -862,7 +862,7 @@ func TestPutSecretsRefusesWhatTheEngineWouldBeforeSending(t *testing.T) {
 	f := newFakeEngine(t)
 	f.handle("PUT /secrets", answer(http.StatusBadRequest, `{"error":"invalid_body",
 		"detail":"K8S_A cannot be stored, so nothing was","invalid":{"K8S_A":"the value is too large"}}`))
-	_, err := f.client().PutSecrets(context.Background(), map[string][]byte{storedName: []byte(value)})
+	_, err := f.client().PutSecrets(context.Background(), map[string][]byte{storedName: []byte(value)}, false)
 	if err == nil || strings.Contains(err.Error(), value) {
 		t.Fatalf("PutSecrets() = %v, want the engine's refusal without the value", err)
 	}
@@ -1317,5 +1317,47 @@ func TestFleetRefusals(t *testing.T) {
 	malformed.handle("GET /fleet", answer(http.StatusOK, `{"this_node":"n","seats":[{"handle":"ana","node":"n","acquired_at":"yesterday"}]}`))
 	if got, err := malformed.client().Fleet(context.Background()); err == nil || !strings.Contains(err.Error(), "acquired_at") {
 		t.Errorf("Fleet() with a malformed acquired_at = %+v, %v, want an error naming acquired_at", got, err)
+	}
+}
+
+// TestADeferredWriteAsksTheEngineToActivateNothing: a write a sync defers
+// (every write but its last) says so to the engine, a batch in its body and a
+// value written alone in the query, and nothing else does; the engine's
+// deferred answer is read as such.
+func TestADeferredWriteAsksTheEngineToActivateNothing(t *testing.T) {
+	for _, deferReload := range []bool{false, true} {
+		t.Run(fmt.Sprintf("deferred %v", deferReload), func(t *testing.T) {
+			reload := `null`
+			if deferReload {
+				reload = `{"deferred":true}`
+			}
+			f := newFakeEngine(t)
+			f.handle("PUT /secrets", answer(http.StatusOK, `{"names":["K8S_A"],"read_by":{"K8S_A":[]},"reload":`+reload+`}`))
+			batch, err := f.client().PutSecrets(context.Background(), map[string][]byte{storedName: []byte("v")}, deferReload)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen := f.only()
+			if got := strings.Contains(string(seen.body), `"defer_reload":true`); got != deferReload {
+				t.Errorf("the batch's body %s, want defer_reload %v", seen.body, deferReload)
+			}
+			if (batch.Reload != nil && batch.Reload.Deferred) != deferReload {
+				t.Errorf("the batch's reload = %+v", batch.Reload)
+			}
+
+			f = newFakeEngine(t)
+			f.handle("PUT /secrets/"+storedName, answer(http.StatusOK, `{"name":"K8S_A","read_by":[],"reload":`+reload+`}`))
+			alone, err := f.client().WriteSecret(context.Background(), storedName, []byte{0xff}, deferReload)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen = f.only()
+			if got := seen.query == "defer_reload=true"; got != deferReload {
+				t.Errorf("the single write's query %q, want defer_reload %v", seen.query, deferReload)
+			}
+			if (alone.Reload != nil && alone.Reload.Deferred) != deferReload {
+				t.Errorf("the single write's reload = %+v", alone.Reload)
+			}
+		})
 	}
 }

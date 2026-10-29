@@ -25,7 +25,10 @@ import (
 // write it takes is Sync's, so it records self as the writer; a test plays
 // anybody else by writing an entry directly. It records every call, a batch
 // as "put" and its names, a value written alone as "put-raw" and its name,
+// each with "(deferred)" where it asked the engine to re-activate nothing,
 // and fails the ones a test names: a batch fails when any of its names does.
+// A name in silent answers read_by with a null reload, as an engine that
+// sealed it and did not say what it re-activated.
 type fakeEngine struct {
 	entries map[string]fakeEntry
 	calls   []string
@@ -40,6 +43,7 @@ type fakeEngine struct {
 	failList   error
 	failPut    map[string]error
 	failDelete map[string]error
+	silent     map[string]bool
 }
 
 type fakeEntry struct {
@@ -66,9 +70,19 @@ func (e *fakeEngine) ListSecrets(context.Context) ([]engine.SecretInfo, error) {
 	return out, nil
 }
 
-func (e *fakeEngine) PutSecrets(_ context.Context, values map[string][]byte) (engine.SecretsWritten, error) {
+// deferredCall is call as a fakeEngine records it for a request that asked
+// the engine to re-activate nothing.
+func deferredCall(call string, deferReload bool) string {
+	if !deferReload {
+		return call
+	}
+	verb, rest, _ := strings.Cut(call, " ")
+	return verb + "(deferred) " + rest
+}
+
+func (e *fakeEngine) PutSecrets(_ context.Context, values map[string][]byte, deferReload bool) (engine.SecretsWritten, error) {
 	names := slices.Sorted(maps.Keys(values))
-	e.calls = append(e.calls, "put "+strings.Join(names, " "))
+	e.calls = append(e.calls, deferredCall("put "+strings.Join(names, " "), deferReload))
 	if len(values) == 0 || len(values) > engine.MaxSecretBatch {
 		return engine.SecretsWritten{}, fmt.Errorf("invalid_body: %d values", len(values))
 	}
@@ -88,14 +102,18 @@ func (e *fakeEngine) PutSecrets(_ context.Context, values map[string][]byte) (en
 			written.ReadBy[name] = []string{"llm.api_key"}
 		}
 	}
-	if slices.ContainsFunc(names, func(name string) bool { return e.reads[name] }) {
+	switch {
+	case deferReload:
+		written.Reload = &engine.Reload{Deferred: true}
+	case slices.ContainsFunc(names, func(name string) bool { return e.silent[name] }):
+	case slices.ContainsFunc(names, func(name string) bool { return e.reads[name] }):
 		written.Reload = e.reactivate()
 	}
 	return written, nil
 }
 
-func (e *fakeEngine) WriteSecret(_ context.Context, name string, value []byte) (engine.SecretsWritten, error) {
-	e.calls = append(e.calls, "put-raw "+name)
+func (e *fakeEngine) WriteSecret(_ context.Context, name string, value []byte, deferReload bool) (engine.SecretsWritten, error) {
+	e.calls = append(e.calls, deferredCall("put-raw "+name, deferReload))
 	if err := e.failPut[name]; err != nil {
 		return engine.SecretsWritten{}, err
 	}
@@ -109,6 +127,12 @@ func (e *fakeEngine) WriteSecret(_ context.Context, name string, value []byte) (
 	written := engine.SecretsWritten{Names: []string{name}, ReadBy: map[string][]string{name: {}}}
 	if e.reads[name] {
 		written.ReadBy[name] = []string{"llm.api_key"}
+	}
+	switch {
+	case deferReload:
+		written.Reload = &engine.Reload{Deferred: true}
+	case e.silent[name]:
+	case e.reads[name]:
 		written.Reload = e.reactivate()
 	}
 	return written, nil
@@ -124,7 +148,7 @@ func (e *fakeEngine) DeleteSecret(_ context.Context, name string) (engine.Secret
 	removed := engine.SecretRemoved{Removed: ok, ReadBy: []string{}}
 	if e.reads[name] {
 		removed.ReadBy = []string{"mcp.servers.env"}
-		if ok {
+		if ok && !e.silent[name] {
 			removed.Reload = e.reactivate()
 		}
 	}
@@ -315,9 +339,12 @@ func TestSyncReportsTheLastReactivation(t *testing.T) {
 
 // TestSyncSplitsALargeSetIntoBatches: the engine takes at most
 // engine.MaxSecretBatch values a request, so a larger set goes in requests
-// of that many, in name order, and the re-activation reported is the last
-// one's, made with every value in the store. A batch that fails stops the
-// sync with those before it recorded.
+// of that many, in name order. Every request but the last asks the engine to
+// re-activate nothing, so the sync is one activation, made by the last with
+// every value in the store, and it is the one reported. A batch that fails
+// stops the sync with nothing written deferred recorded: nothing activated
+// those values, so the next sync writes them again, and its last request
+// activates them, once.
 func TestSyncSplitsALargeSetIntoBatches(t *testing.T) {
 	values := map[string]string{}
 	for i := range 2*engine.MaxSecretBatch + 2 {
@@ -338,44 +365,85 @@ func TestSyncSplitsALargeSetIntoBatches(t *testing.T) {
 	if !errors.Is(err, boom) {
 		t.Fatalf("Sync() error = %v, want the engine's", err)
 	}
-	assertCalls(t, eng, "list", "put "+strings.Join(first, " "), "put "+strings.Join(second, " "))
-	if !slices.Equal(res.Put, first) {
-		t.Fatalf("Put = %v, want the first batch alone", res.Put)
-	}
-	if got := slices.Sorted(maps.Keys(partial.fingerprints)); !slices.Equal(got, first) {
-		t.Fatalf("the state records %d names, want the %d of the first batch", len(got), len(first))
+	assertCalls(t, eng, "list", "put(deferred) "+strings.Join(first, " "), "put(deferred) "+strings.Join(second, " "))
+	if len(res.Put) != 0 || len(partial.fingerprints) != 0 || len(eng.reloaded) != 0 {
+		t.Fatalf("a sync stopped before its last request recorded Put %v and %d names, and activated %v; "+
+			"want nothing recorded and nothing activated", res.Put, len(partial.fingerprints), eng.reloaded)
 	}
 
 	delete(eng.failPut, second[0])
 	_, res = mustSync(t, eng, desiredOf(values), partial)
-	assertCalls(t, eng, "list", "put "+strings.Join(second, " "), "put "+strings.Join(third, " "))
-	if !slices.Equal(res.Put, slices.Concat(second, third)) {
+	assertCalls(t, eng, "list", "put(deferred) "+strings.Join(first, " "), "put(deferred) "+strings.Join(second, " "),
+		"put "+strings.Join(third, " "))
+	if !slices.Equal(res.Put, names) {
 		t.Fatalf("Put = %v", res.Put)
 	}
-	if want := eng.reloaded[len(eng.reloaded)-1]; res.Reload.RevisionID != want {
-		t.Fatalf("Reload = %+v, want the last batch's, %s", res.Reload, want)
+	if len(eng.reloaded) != 1 || res.Reload.RevisionID != eng.reloaded[0] || res.ReloadAction != ActionPutSecrets {
+		t.Fatalf("Reload = %+v by %q after %v, want one activation, the last batch's", res.Reload,
+			res.ReloadAction, eng.reloaded)
+	}
+}
+
+// TestASyncWhoseLastWriteFailsActivatesItsValuesNextTime: the last request
+// is the one that activates, so a sync whose last write fails, or that
+// stops before it, has activated nothing it wrote deferred. Those values
+// are recorded as unwritten, whether the run saved its state or not, and the
+// next sync writes them again and activates the revision once.
+func TestASyncWhoseLastWriteFailsActivatesItsValuesNextTime(t *testing.T) {
+	values := map[string]string{}
+	for i := range engine.MaxSecretBatch + 1 {
+		values[StoreName(secretref.Key{Namespace: "ns", Name: fmt.Sprintf("s%03d", i), Key: tokenKey})] = fmt.Sprintf("v%d", i)
+	}
+	names := slices.Sorted(maps.Keys(values))
+	last := names[engine.MaxSecretBatch]
+	for _, saved := range []bool{true, false} {
+		eng := newFakeEngine()
+		eng.reads = map[string]bool{}
+		for _, name := range names {
+			eng.reads[name] = true
+		}
+		eng.failPut[last] = errors.New("engine unavailable")
+		partial, _, err := Sync(context.Background(), eng, desiredOf(values), State{}, self)
+		if err == nil || len(eng.reloaded) != 0 || len(partial.fingerprints) != 0 {
+			t.Fatalf("a failed last write = %v, activated %v, recorded %d names; want the error, no activation "+
+				"and nothing recorded", err, eng.reloaded, len(partial.fingerprints))
+		}
+		delete(eng.failPut, last)
+		prev := partial
+		if !saved {
+			// THE RUN STOPPED before saving: the next starts from what the
+			// one before it saved.
+			prev = State{}
+		}
+		eng.takeCalls()
+		next, res := mustSync(t, eng, desiredOf(values), prev)
+		if len(eng.reloaded) != 1 || !res.Reload.Landed() || len(next.fingerprints) != len(names) {
+			t.Fatalf("the next sync (saved %v) activated %v with Reload %+v and recorded %d names; want one "+
+				"activation covering all %d", saved, eng.reloaded, res.Reload, len(next.fingerprints), len(names))
+		}
 	}
 }
 
 // TestSyncWritesAValueThatIsNotUTF8Alone: a JSON body cannot carry such a
 // value unchanged, so it is written as raw bytes on its own, before the
-// batch, whose re-activation, made with it in the store, is the one
-// reported; written last, its own is.
+// batch, and deferred: the batch's re-activation, made with it in the store,
+// is the sync's one, and is reported. Written last, its own is.
 func TestSyncWritesAValueThatIsNotUTF8Alone(t *testing.T) {
 	eng := newFakeEngine()
 	eng.reads = map[string]bool{nameA: true, nameB: true}
 	_, res := mustSync(t, eng, desiredOf(map[string]string{nameA: "a1", nameB: "\xff\xfe", nameC: "c1"}), State{})
-	assertCalls(t, eng, "list", "put-raw "+nameB, "put "+nameA+" "+nameC)
+	assertCalls(t, eng, "list", "put-raw(deferred) "+nameB, "put "+nameA+" "+nameC)
 	if !slices.Equal(res.Put, []string{nameA, nameB, nameC}) {
 		t.Fatalf("Put = %v, want every name, sorted", res.Put)
 	}
-	if !res.Reload.Landed() {
-		t.Fatalf("Reload = %+v, want the batch's re-activation", res.Reload)
+	if !res.Reload.Landed() || res.ReloadAction != ActionPutSecrets {
+		t.Fatalf("Reload = %+v by %q, want the batch's re-activation", res.Reload, res.ReloadAction)
 	}
 	assertStore(t, eng, map[string]fakeEntry{nameA: {"a1", self}, nameB: {"\xff\xfe", self}, nameC: {"c1", self}})
 
-	if len(eng.reloaded) != 2 || res.Reload.RevisionID != eng.reloaded[1] {
-		t.Fatalf("Reload = %+v after %v, want the batch's, the last", res.Reload, eng.reloaded)
+	// ONE ACTIVATION, for the binary value and the text ones alike.
+	if len(eng.reloaded) != 1 || res.Reload.RevisionID != eng.reloaded[0] {
+		t.Fatalf("Reload = %+v after %v, want one activation, the batch's", res.Reload, eng.reloaded)
 	}
 
 	// Written alone and last, its own re-activation is the one reported.
@@ -383,8 +451,30 @@ func TestSyncWritesAValueThatIsNotUTF8Alone(t *testing.T) {
 	eng.reads = map[string]bool{nameB: true}
 	_, res = mustSync(t, eng, desiredOf(map[string]string{nameB: "\xff"}), State{})
 	assertCalls(t, eng, "list", "put-raw "+nameB)
-	if !res.Reload.Landed() || res.Reload.RevisionID != firstReload {
-		t.Fatalf("Reload = %+v, want the write's own re-activation", res.Reload)
+	if !res.Reload.Landed() || res.Reload.RevisionID != firstReload || res.ReloadAction != ActionWriteSecret {
+		t.Fatalf("Reload = %+v by %q, want the write's own re-activation", res.Reload, res.ReloadAction)
+	}
+}
+
+// TestANullReloadKeepsTheSyncsLandedOne: a request answered with read_by and
+// a null reload re-activated nothing the operator can name, so it never
+// replaces the re-activation an earlier request of the same sync made, which
+// the engine runs: taking it for none, the operator would apply the document
+// again, one activation more.
+func TestANullReloadKeepsTheSyncsLandedOne(t *testing.T) {
+	eng := newFakeEngine()
+	eng.reads = map[string]bool{nameA: true, nameB: true}
+	state, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a1", nameB: "b1"}), State{})
+	eng.takeCalls()
+	landed := len(eng.reloaded)
+
+	eng.silent = map[string]bool{nameB: true}
+	_, res := mustSync(t, eng, desiredOf(map[string]string{nameA: "a2"}), state)
+	assertCalls(t, eng, "list", "put "+nameA, "delete "+nameB)
+	if len(eng.reloaded) != landed+1 || !res.Reload.Landed() || res.Reload.RevisionID != eng.reloaded[landed] ||
+		res.ReloadAction != ActionPutSecrets {
+		t.Fatalf("Reload = %+v by %q after %v, want the write's, which the silent removal kept", res.Reload,
+			res.ReloadAction, eng.reloaded)
 	}
 }
 
