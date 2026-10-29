@@ -114,6 +114,22 @@ const (
 	// before a box exists and the sign-in that must reach it are as at
 	// cliOnlyRead.
 	standingInstructionsRead = "v0.1.1-0.20261025043416-a2634a307854"
+	// codeHoldsRead is crewlet/crewlet#298's engine whose launches hand the
+	// run row they open the code holds of their turn, read at the head of its
+	// branch, where the run_sandbox launch was read again. A turn holds each
+	// scratch repository of the company's code host it names, so that the
+	// host's expiry of an idle one leaves it be while the turn may still use
+	// it, and Launch seals that set from its read until the row it opens
+	// exists, so that a hold another call of the turn takes meanwhile waits,
+	// then has the row keep it, every later hold reaching the row before the
+	// request it is taken for (launchHolds). The one refusal the holds add to
+	// a launch is the row's, of a set past the most one run may carry
+	// (sandbox.MaxCodeHolds), which only the repositories a turn names reach
+	// and no document foresees; and a company the operator runs hosts no
+	// code (its engineConfig may not set code), so its turns hold nothing.
+	// The head a launch runs on, its coding agent and every other refusal
+	// before a box exists are as at standingInstructionsRead.
+	codeHoldsRead = "v0.1.1-0.20261029165728-4ee3f06a5fde"
 	// refusalByModeRead is the engine whose remote-run refusal is worded by
 	// the entry's auth mode (credentialRefusal): an api-key entry whose key
 	// resolved to nothing is told to give the seat its own key, and an
@@ -703,8 +719,8 @@ var mirrored = []mirror{
 			"the catalogue's default, and refuses before a box exists what newCodingRun and sandboxCredentials " +
 			"refuse, and a run whose environment holds a value that resolves to nothing under a key nothing " +
 			"declares optional (runEnvironment's gap)",
-		digest: "b076a76f340bafe020454290babf1f76e03bb9beb78b183a720de3c07d23da75",
-		read:   standingInstructionsRead,
+		digest: "ca1dfe76778b715848f2e93d9894c2ed8ff93c3ec27b2104841e912eeb90d031",
+		read:   codeHoldsRead,
 	},
 	{
 		file: sandboxGo, name: "buildSandbox",
