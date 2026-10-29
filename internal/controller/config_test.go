@@ -668,7 +668,9 @@ var _ = Describe("Company config", Ordered, func() {
 		Eventually(func() []revision { return revisions(e) }).WithTimeout(settle).Should(HaveLen(3),
 			"the engine reads the value written back only when a revision activates")
 		Expect(revisions(e)[0].Summary).To(Equal("reload: secret " + storeName + " written"))
-		Expect(log.of(name)).To(ContainElement(SatisfyAll(
+		// The engine activates at the write back, before the reconcile that
+		// made it says so.
+		Eventually(func() []string { return log.of(name) }).WithTimeout(settle).Should(ContainElement(SatisfyAll(
 			HavePrefix("Warning SecretOverwritten Wrote back 1 values somebody else had replaced"),
 			ContainSubstring(storeName+" (written by "+access+", with "+access+")"),
 		)))
