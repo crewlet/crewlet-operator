@@ -105,30 +105,34 @@ const (
 	// in. Launch and LaunchExecutor hand the box the run's model in place of
 	// an API entry's endpoint, which moved no verdict.
 	cliOnlyRead = "v0.1.1-0.20261023214803-bbedf7ecebd7"
-	// standingInstructionsRead is the engine that hands an agent-mode run the
-	// seat's system prompt as its standing instructions, on the coding
-	// agent's append channel, apart from the brief, and names the run by the
-	// turn's task (LaunchExecutor's System and Label), and frames a wider
-	// task after a run_sandbox brief alone (Launch's Wider), an agent-mode
-	// brief being the turn's ask already. None is a verdict: the refusals
-	// before a box exists and the sign-in that must reach it are as at
-	// cliOnlyRead.
-	standingInstructionsRead = "v0.1.1-0.20261025043416-a2634a307854"
 	// codeHoldsRead is crewlet/crewlet#298's engine whose launches hand the
 	// run row they open the code holds of their turn, read at the head of its
-	// branch, where the run_sandbox launch was read again. A turn holds each
-	// scratch repository of the company's code host it names, so that the
-	// host's expiry of an idle one leaves it be while the turn may still use
-	// it, and Launch seals that set from its read until the row it opens
-	// exists, so that a hold another call of the turn takes meanwhile waits,
-	// then has the row keep it, every later hold reaching the row before the
-	// request it is taken for (launchHolds). The one refusal the holds add to
-	// a launch is the row's, of a set past the most one run may carry
+	// branch, where both launches were read again. A turn holds each scratch
+	// repository of the company's code host it names, so that the host's
+	// expiry of an idle one leaves it be while the turn may still use it, and
+	// a run_sandbox launch (Launch) and an agent-mode one (LaunchExecutor)
+	// alike seal that set from its read until the row they open exists, so
+	// that a hold another call of the turn takes meanwhile waits, then have
+	// the row keep it, every later hold reaching the row before the request
+	// it is taken for (launchHolds). The one refusal the holds add to a
+	// launch is the row's, of a set past the most one run may carry
 	// (sandbox.MaxCodeHolds), which only the repositories a turn names reach
 	// and no document foresees; and a company the operator runs hosts no
 	// code (its engineConfig may not set code), so its turns hold nothing.
-	// The head a launch runs on, its coding agent and every other refusal
-	// before a box exists are as at standingInstructionsRead.
+	// An agent-mode launch also resolves its run before it opens the run's
+	// session on the tool bridge, so that the session carries the run's
+	// model for every bridged call to name (mcpbridge.Session.Model); it
+	// refuses a node with no bridge before it assembles the run's
+	// environment, in the words the bridge's empty endpoint was refused in,
+	// and opens no session for a run executorRun refuses. Both launches were
+	// read before at the engine that hands an agent-mode run the seat's
+	// system prompt as its standing instructions, on the coding agent's
+	// append channel, apart from the brief, names the run by the turn's task
+	// (LaunchExecutor's System and Label), and frames a wider task after a
+	// run_sandbox brief alone (Launch's Wider), an agent-mode brief being the
+	// turn's ask already. None of it is a verdict: the head a launch runs
+	// on, its coding agent, every other refusal before a box exists and the
+	// sign-in that must reach the box are as at cliOnlyRead.
 	codeHoldsRead = "v0.1.1-0.20261029165728-4ee3f06a5fde"
 	// refusalByModeRead is the engine whose remote-run refusal is worded by
 	// the entry's auth mode (credentialRefusal): an api-key entry whose key
@@ -928,8 +932,8 @@ var mirrored = []mirror{
 			"tool loop (AgentModeBridgeUnsupported, NotExposed), and so is one whose CLI login cannot follow it " +
 			"into the remote sandbox (sandboxCredentials at phase Execute); a run whose environment holds a " +
 			"value that resolves to nothing starts without it",
-		digest: "05cd682090e7206bb923b20f179e3a2044d9ac2046258efb8ed921f186641032",
-		read:   standingInstructionsRead,
+		digest: "d94ef5223e5b02b916353dbf01004e6b5669d92102a43c2bdd75052f6d32a317",
+		read:   codeHoldsRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).executorRun",
