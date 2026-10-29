@@ -1549,7 +1549,7 @@ func putCredentials(t *testing.T, client *engine.Client, doc *Document) string {
 		for _, name := range batch {
 			chunk[name] = values[name]
 		}
-		written, err := client.PutSecrets(t.Context(), chunk)
+		written, err := client.PutSecrets(t.Context(), chunk, false)
 		if err != nil {
 			t.Fatal(err)
 		}

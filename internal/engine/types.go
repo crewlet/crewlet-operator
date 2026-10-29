@@ -363,8 +363,8 @@ type Reload struct {
 	Node             string
 
 	// Deferred is a write that asked the engine to re-activate nothing
-	// (defer_reload, which this client never sends): the values are sealed
-	// and not active yet.
+	// (defer_reload, Client.PutSecrets and Client.WriteSecret with
+	// deferReload): the values are sealed and not active yet.
 	Deferred bool
 }
 

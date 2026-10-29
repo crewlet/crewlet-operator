@@ -213,9 +213,9 @@ const (
 	// with under its completion's admission. What becomes of a lost job is
 	// as at executorFinalRead, and no other mirror moved.
 	runAskRead = "v0.1.1-0.20261029002927-2c650d0b2c33"
-	// envSignInRead is the engine of crewlet's feat/models-signin, read at
-	// the head of its branch before that change merged, which adds auth.mode
-	// env: a providers.llm entry whose env alone signs its CLI in. The names
+	// envSignInRead is crewlet#452's engine, read on crewlet's main where it
+	// merged (e0328e5d9d), which adds auth.mode env: a providers.llm entry
+	// whose env alone signs its CLI in. The names
 	// that sign a CLI in beyond its token and key variables moved from a list
 	// of the Claude Code runner's (codingagent.ClaudeCodeCredentialEnv, now
 	// gone) into the CLI's profile (sign_in_env, which only claude-code's
@@ -232,7 +232,7 @@ const (
 	// own TZ where it names a zone the system knows, and UTC otherwise
 	// (childZone), its name cliprofile.ZoneVariable, which an entry's env may
 	// not set.
-	envSignInRead = "v0.1.1-0.20261029081131-3ccda043792f"
+	envSignInRead = "v0.1.1-0.20261029083537-e0328e5d9daf"
 	// signInStampRead is crewlet#453's engine, read on crewlet's main where
 	// crewlet#452 merged on top of crewlet#454: an executor launch now stamps
 	// the picked member's sign-in identity on the run's row (the launch

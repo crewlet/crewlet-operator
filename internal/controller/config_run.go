@@ -512,7 +512,7 @@ func (run *configRun) enforce(
 	// below.
 	if active != nil && len(diffs) == 0 && hash == recorded.AppliedHash && len(pushed.Put) == 0 {
 		run.inSync(active)
-		failed, err := run.settle(ctx, eng, active, pushed.Reload, state, stateRef)
+		failed, err := run.settle(ctx, eng, active, pushed.Reload, pushed.ReloadAction, state, stateRef)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -548,7 +548,7 @@ func (run *configRun) enforce(
 		if run.invalid(err) {
 			// The sync above may have withdrawn a value the running
 			// revision lets go: it is activated again instead.
-			return run.settleRefused(ctx, eng, active, pushed.Reload, state, stateRef)
+			return run.settleRefused(ctx, eng, active, pushed.Reload, pushed.ReloadAction, state, stateRef)
 		}
 		return ctrl.Result{}, err
 	}
@@ -574,7 +574,7 @@ func (run *configRun) enforce(
 	applied, err := eng.ApplyConfig(ctx, req)
 	if err != nil {
 		if run.invalid(err) {
-			return run.settleRefused(ctx, eng, active, pushed.Reload, state, stateRef)
+			return run.settleRefused(ctx, eng, active, pushed.Reload, pushed.ReloadAction, state, stateRef)
 		}
 		return ctrl.Result{}, err
 	}
@@ -623,7 +623,7 @@ func (run *configRun) cleanUp(
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if _, err := run.settle(ctx, eng, after, synced.Reload, state, stateRef); err != nil {
+	if _, err := run.settle(ctx, eng, after, synced.Reload, synced.ReloadAction, state, stateRef); err != nil {
 		return ctrl.Result{}, err
 	}
 	return run.heldResync(ctrl.Result{RequeueAfter: applyPollInterval}), nil

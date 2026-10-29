@@ -113,7 +113,14 @@ flowchart TD
    write or removal of a value that revision reads, so that it runs with
    the new value: one write per value would be one activation per value,
    the company running a mix of old and new values between them. A sync's
-   values are one activation.
+   values are one activation: every write but the last asks the engine to
+   activate nothing (`defer_reload`), and the last activates the revision
+   once, with every value in the store. A sync whose last write fails, or
+   that stops before it, records the values it wrote deferred as unwritten,
+   so the next sync writes them again and its last write activates them;
+   where the last write activates nothing (the revision reads none of its
+   values) or its activation fails, the operator applies the document
+   itself.
    The entries the running document still references are kept until the next
    document replaces it, and so are those of every other revision an engine
    pod runs or would start on: each pod applies the fleet's revision on its

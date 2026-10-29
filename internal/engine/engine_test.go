@@ -401,7 +401,7 @@ func TestEngineASecretWriteReactivatesTheRevisionThatReadsIt(t *testing.T) {
 		}
 	}
 
-	written, err := client.PutSecrets(ctx, map[string][]byte{read: []byte("sk-enginetest-not-a-key"), unread: []byte("x")})
+	written, err := client.PutSecrets(ctx, map[string][]byte{read: []byte("sk-enginetest-not-a-key"), unread: []byte("x")}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,7 +411,7 @@ func TestEngineASecretWriteReactivatesTheRevisionThatReadsIt(t *testing.T) {
 	}
 	reactivated("the batch", written.Reload, first.Epoch+1)
 
-	written, err = client.PutSecrets(ctx, map[string][]byte{unread: []byte("y")})
+	written, err = client.PutSecrets(ctx, map[string][]byte{unread: []byte("y")}, false)
 	if err != nil || written.Reload != nil {
 		t.Fatalf("PutSecrets() of a value nothing reads = %+v, %v; want nothing re-activated", written, err)
 	}
