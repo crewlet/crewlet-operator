@@ -211,17 +211,13 @@ const (
 	// (attachCoordination); and runEnvironment and sandboxMCP renamed a
 	// parameter. Each mirror that moved was read again at it.
 	executorFinalRead = "v0.1.1-0.20261028203606-c6ba342a52ad"
-	// lostCarryRead is the same branch five commits on, where a lost job's
-	// round is resumed under its completion's admission: carryOnLost returns
-	// what the round is carried on with, and completeAdmitted resumes the
-	// turn with it. What becomes of a lost job is as at executorFinalRead,
-	// and no other mirror moved.
-	lostCarryRead = "v0.1.1-0.20261028211709-efc0c04f2beb"
 	// runAskRead is where a coding run asks a person through ask_and_wait
 	// and its question is recorded on its row (crewlet/crewlet#447): a lost
 	// job that had asked is parked on the question its row holds rather than
-	// one its box recorded. What becomes of a lost job is as at
-	// lostCarryRead, and no other mirror moved.
+	// one its box recorded. Before it, carryOnLost had come to return what
+	// the round is carried on with, for completeAdmitted to resume the turn
+	// with under its completion's admission. What becomes of a lost job is
+	// as at executorFinalRead, and no other mirror moved.
 	runAskRead = "v0.1.1-0.20261029002927-2c650d0b2c33"
 	otelGo     = "internal/sandbox/otel.go"
 	// topologyGo and assistantDeepGo are the render's pod sizes and the
