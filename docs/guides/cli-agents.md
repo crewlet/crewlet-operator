@@ -528,9 +528,8 @@ variable nor its key variable under it, and seeds no login into the homes it
 runs in, so the cloud provider or the gateway is the CLI's one sign-in: under
 `Subscription` or `APIKey` the mode's own token or key would reach the CLI
 beside it, and the CLI would pick between the two by rules of its own.
-`crewlet llm list` reports a Claude Code provider under it signed in with
-`env`, and a Hermes, Pi or OpenCode one with `environment`, as under
-`Subscription`.
+`crewlet llm list` reports a provider under it signed in with `env`, whichever
+CLI reads the env.
 
 ```yaml
 apiVersion: crewlet.ai/v1alpha1

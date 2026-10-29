@@ -865,7 +865,7 @@ func signInTableFollows(t *testing.T, agents []string, variables map[v1.CLIAgent
 			slices.Sort(names)
 			return strings.Join(names, ", ")
 		}
-		if v := verdicts[shapeEnvMode+"OPENROUTER_API_KEY"][agent]; v.problem == "" && v.signIn == signInEnvironment {
+		if v := verdicts[shapeEnvMode+"OPENROUTER_API_KEY"][agent]; v.problem == "" && v.signIn == signInEnvMode {
 			return "a key in `env`"
 		}
 		return "no"
