@@ -18,8 +18,8 @@
 // anything else an *APIError with the engine's code and message.
 //
 // No error this package returns carries a secret value: the engine never
-// echoes one, and a secret written with PutSecret travels only in the request
-// body, which no error, log line or wrap here includes.
+// echoes one, and a secret written with WriteSecret or PutSecrets travels
+// only in the request body, which no error, log line or wrap here includes.
 package engine
 
 import (
@@ -36,6 +36,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // DefaultTimeout bounds one request, connection to last byte, when the caller's
@@ -53,6 +54,9 @@ const DefaultTimeout = 30 * time.Second
 // store above 4 MiB; the margin covers its JSON or YAML rendering and the
 // derived hierarchy beside a refusal.
 const maxResponseBytes = 16 << 20
+
+// headerContentType is the header that says what a request's body is.
+const headerContentType = "Content-Type"
 
 // secretName is the grammar the engine keys its secret store by: an
 // environment-variable name, because that is what a ${NAME} in the company
@@ -353,7 +357,7 @@ func (c *Client) ApplyConfig(ctx context.Context, req ApplyRequest) (ApplyResult
 		return ApplyResult{}, errors.New("apply the company document: IfMatch and CreateOnly are mutually exclusive: " +
 			"a write cannot require both a particular active revision and none at all")
 	}
-	header := http.Header{"Content-Type": {"application/yaml"}}
+	header := http.Header{headerContentType: {"application/yaml"}}
 	if req.Summary != "" {
 		header.Set("X-Summary", req.Summary)
 	}
@@ -457,39 +461,143 @@ func (c *Client) ListSecrets(ctx context.Context) ([]SecretInfo, error) {
 }
 
 // PutSecret stores or rotates the value of name in the engine's encrypted
-// secret store. A ${name} in the company document resolves to it at the next
-// apply. The engine records who wrote it from the credential this client
-// authenticates with, never from anything the request says: see
-// SecretInfo.OperatorID.
+// secret store: WriteSecret, for a caller that needs no more than whether it
+// was stored.
+func (c *Client) PutSecret(ctx context.Context, name string, value []byte) error {
+	_, err := c.WriteSecret(ctx, name, value)
+	return err
+}
+
+// WriteSecret stores or rotates the value of name in the engine's encrypted
+// secret store (PUT /secrets/{name}). When the active revision reads name,
+// the engine re-activates it in the same request, so that a ${name} in the
+// running document resolves to the new value from then on, and answers 200
+// whatever that re-activation did: SecretsWritten.Reload says. The engine
+// records who wrote it from the credential this client authenticates with,
+// never from anything the request says: see SecretInfo.OperatorID.
 //
 // The value is the request body, sent as raw bytes: the engine stores exactly
 // what it receives, and an encoding step in between is a credential the
-// vendor then refuses. Nothing this returns contains it.
-func (c *Client) PutSecret(ctx context.Context, name string, value []byte) error {
+// vendor then refuses. So this is the write for a value that is not UTF-8,
+// which PutSecrets cannot carry. Nothing this returns contains it.
+func (c *Client) WriteSecret(ctx context.Context, name string, value []byte) (SecretsWritten, error) {
 	if err := checkSecretName(name); err != nil {
-		return err
+		return SecretsWritten{}, err
 	}
-	return c.call(ctx, request{
+	var answer struct {
+		Name   string        `json:"name"`
+		ReadBy []string      `json:"read_by"`
+		Reload *reloadAnswer `json:"reload"`
+	}
+	if err := c.call(ctx, request{
 		method: http.MethodPut, path: "/secrets/" + name,
-		header: http.Header{"Content-Type": {"application/octet-stream"}},
+		header: http.Header{headerContentType: {"application/octet-stream"}},
 		body:   value,
-	}, http.StatusOK, nil)
+	}, http.StatusOK, &answer); err != nil {
+		return SecretsWritten{}, err
+	}
+	return SecretsWritten{
+		Names: []string{name}, ReadBy: map[string][]string{name: answer.ReadBy}, Reload: answer.Reload.reload(),
+	}, nil
+}
+
+// MaxSecretBatch is the most values one PutSecrets writes: the engine
+// refuses a `PUT /secrets` body naming more.
+const MaxSecretBatch = 64
+
+// PutSecrets stores or rotates every value of values in the engine's
+// encrypted secret store in one request (PUT /secrets), and re-activates the
+// active revision once if it reads any of them. A rotation of several
+// credentials is then one activation, never a series that runs a mix of the
+// old and the new values. The engine answers 200 whatever the
+// re-activation did: SecretsWritten.Reload says, and is nil when nothing
+// reads any of the names.
+//
+// It writes 1 to MaxSecretBatch values, each named in the store's grammar
+// and valid UTF-8, since the body is JSON and a JSON string cannot carry
+// other bytes unchanged (WriteSecret can); anything else is refused before a
+// request is sent. The engine refuses the whole body when it refuses any
+// value, so a failed batch may have sealed none of them, or, for an error
+// inside the engine, some. Nothing this returns contains a value.
+func (c *Client) PutSecrets(ctx context.Context, values map[string][]byte) (SecretsWritten, error) {
+	if len(values) == 0 || len(values) > MaxSecretBatch {
+		return SecretsWritten{}, fmt.Errorf("write %d secrets in one request: the engine takes 1 to %d",
+			len(values), MaxSecretBatch)
+	}
+	body := struct {
+		Values map[string]string `json:"values"`
+	}{Values: make(map[string]string, len(values))}
+	for name, value := range values {
+		if err := checkSecretName(name); err != nil {
+			return SecretsWritten{}, err
+		}
+		if !utf8.Valid(value) {
+			return SecretsWritten{}, fmt.Errorf("the value of secret %s is not UTF-8, which a JSON body cannot carry "+
+				"unchanged: write it alone, as raw bytes", name)
+		}
+		body.Values[name] = string(value)
+	}
+	// A map of strings encodes without fail.
+	encoded, _ := json.Marshal(body)
+	var answer struct {
+		Names  []string            `json:"names"`
+		ReadBy map[string][]string `json:"read_by"`
+		Reload *reloadAnswer       `json:"reload"`
+	}
+	if err := c.call(ctx, request{
+		method: http.MethodPut, path: "/secrets",
+		header: http.Header{headerContentType: {"application/json"}},
+		body:   encoded,
+	}, http.StatusOK, &answer); err != nil {
+		return SecretsWritten{}, err
+	}
+	return SecretsWritten{Names: answer.Names, ReadBy: answer.ReadBy, Reload: answer.Reload.reload()}, nil
+}
+
+// reloadAnswer is the engine's `reload` in the answer of a write through
+// /secrets, as it writes it.
+type reloadAnswer struct {
+	RevisionID       string `json:"revision_id"`
+	Epoch            int64  `json:"epoch"`
+	Error            string `json:"error"`
+	Detail           string `json:"detail"`
+	StoredRevisionID string `json:"stored_revision_id"`
+	Node             string `json:"node"`
+	Deferred         bool   `json:"deferred"`
+}
+
+// reload is the Reload r says, nil for the engine's null.
+func (r *reloadAnswer) reload() *Reload {
+	if r == nil {
+		return nil
+	}
+	return &Reload{
+		RevisionID: r.RevisionID, Epoch: r.Epoch, Error: r.Error, Detail: r.Detail,
+		StoredRevisionID: r.StoredRevisionID, Node: r.Node, Deferred: r.Deferred,
+	}
 }
 
 // DeleteSecret removes name from the engine's secret store, and reports
-// whether there was a value to remove. Removing a name that is not there is
-// not an error.
-func (c *Client) DeleteSecret(ctx context.Context, name string) (removed bool, err error) {
+// whether there was a value to remove and what that did to the running
+// company. Removing a name that is not there is not an error.
+//
+// When the active revision reads name and a value was removed, the engine
+// re-activates that revision in the same request, so that it runs without
+// the value from then on, and answers 200 whatever the re-activation did:
+// SecretRemoved.Reload says.
+func (c *Client) DeleteSecret(ctx context.Context, name string) (SecretRemoved, error) {
 	if err := checkSecretName(name); err != nil {
-		return false, err
+		return SecretRemoved{}, err
 	}
 	var answer struct {
-		Removed bool `json:"removed"`
+		Removed bool          `json:"removed"`
+		ReadBy  []string      `json:"read_by"`
+		Reload  *reloadAnswer `json:"reload"`
 	}
 	if err := c.call(ctx, request{method: http.MethodDelete, path: "/secrets/" + name}, http.StatusOK, &answer); err != nil {
-		return false, err
+		return SecretRemoved{}, err
 	}
-	return answer.Removed, nil
+	return SecretRemoved{Removed: answer.Removed, ReadBy: answer.ReadBy, Reload: answer.Reload.reload()}, nil
 }
 
 // checkSecretName refuses a name the engine's store cannot hold before it
@@ -613,7 +721,7 @@ func (c *Client) call(ctx context.Context, r request, want int, out any) error {
 // roundTrip sends r and reads the answer, whatever its status.
 //
 // Every error it returns names the method and path and never the body, which
-// for PutSecret is a credential.
+// for WriteSecret and PutSecrets is a credential.
 func (c *Client) roundTrip(ctx context.Context, r request) (*response, error) {
 	target, err := url.Parse(c.baseURL + r.path)
 	if err != nil {

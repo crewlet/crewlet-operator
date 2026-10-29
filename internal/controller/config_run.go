@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"crypto/sha256"
@@ -504,11 +505,14 @@ func (run *configRun) enforce(
 	// overwrote, or one the store lost) leaves the hash where it was, but the
 	// engine reads its store only when a revision activates: since the
 	// overwrite, a reload may have handed it the other value, which it would
-	// keep running. So the same document is applied again, which is how a
-	// rotated credential reaches a running engine anyway.
+	// keep running. So a change of a value is followed by an activation,
+	// which is how a rotated credential reaches a running engine: the
+	// engine's own, which re-activates the revision that reads a value it is
+	// written or removes (reloadedBySync), or else the operator's apply
+	// below.
 	if active != nil && len(diffs) == 0 && hash == recorded.AppliedHash && len(pushed.Put) == 0 {
 		run.inSync(active)
-		failed, err := run.settle(ctx, eng, active, state, stateRef)
+		failed, err := run.settle(ctx, eng, active, pushed.Reload, state, stateRef)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -516,6 +520,23 @@ func (run *configRun) enforce(
 			return ctrl.Result{RequeueAfter: min(engineRetryInterval, run.resyncInterval())}, nil
 		}
 		return run.heldResync(ctrl.Result{RequeueAfter: run.resyncInterval()}), nil
+	}
+	reloaded, err := run.reloadedBySync(ctx, eng, active, diffs, pushed.Reload)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if reloaded != nil {
+		// The engine runs the rendered document with every value the sync
+		// left in its store: applying it again would be a second activation
+		// of the same thing. It is recorded as the apply would have been,
+		// and it read the store without every name withdrawn.
+		run.recordApply(*reloaded, hash, false, active, diffs,
+			strings.TrimPrefix(run.summary(active, diffs, pushed.Put), "crewlet-operator: ")+", re-activated by the engine")
+		state = state.Activated(reloaded.RevisionID, run.doc.Optional)
+		if err := secretsync.SaveState(ctx, run.Client, stateRef, c, state); err != nil {
+			return ctrl.Result{}, err
+		}
+		return run.cleanUp(ctx, eng, desired, state, stateRef)
 	}
 	// A revision the operator did not write, with other content: an edit
 	// made through the engine's API or dashboard, or a document the engine
@@ -527,7 +548,7 @@ func (run *configRun) enforce(
 		if run.invalid(err) {
 			// The sync above may have withdrawn a value the running
 			// revision lets go: it is activated again instead.
-			return run.settleRefused(ctx, eng, active, state, stateRef)
+			return run.settleRefused(ctx, eng, active, pushed.Reload, state, stateRef)
 		}
 		return ctrl.Result{}, err
 	}
@@ -553,7 +574,7 @@ func (run *configRun) enforce(
 	applied, err := eng.ApplyConfig(ctx, req)
 	if err != nil {
 		if run.invalid(err) {
-			return run.settleRefused(ctx, eng, active, state, stateRef)
+			return run.settleRefused(ctx, eng, active, pushed.Reload, state, stateRef)
 		}
 		return ctrl.Result{}, err
 	}
@@ -598,11 +619,11 @@ func (run *configRun) cleanUp(
 	if err := run.keepServing(ctx, eng, &pushing); err != nil {
 		return ctrl.Result{}, err
 	}
-	state, _, err = run.sync(ctx, eng, pushing, state, stateRef)
+	state, synced, err := run.sync(ctx, eng, pushing, state, stateRef)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if _, err := run.settle(ctx, eng, after, state, stateRef); err != nil {
+	if _, err := run.settle(ctx, eng, after, synced.Reload, state, stateRef); err != nil {
 		return ctrl.Result{}, err
 	}
 	return run.heldResync(ctrl.Result{RequeueAfter: applyPollInterval}), nil
@@ -623,6 +644,55 @@ func (run *configRun) adopt(state secretsync.State, active *engine.ActiveConfig,
 		return state
 	}
 	return state.Adopted(active.RevisionID, run.doc.Optional)
+}
+
+// reloadedBySync is the revision the engine activated when the sync changed
+// its store, where that is the rendered document running with every value
+// the sync left there: nil where the operator has to apply the document
+// itself.
+//
+// The engine re-activates its active revision whenever a request writes or
+// removes a value that revision reads, once for all the values of one write,
+// and answers what that did; reload, secretsync.Result.Reload, is the answer
+// to the last such request of the sync, after which the store held, of every value
+// the revision reads, what it holds now. Where that re-activation landed and
+// the document the engine ran before it is the rendered one (diffs is empty,
+// and both reference every store name as often, so that the rendered
+// document's reading of the store is that revision's, as adopt says), the
+// engine runs what an apply of the rendered document would activate. It
+// names no revision, so as in reactivate it is read back: the engine must run
+// the revision it answered, with the document the operator read before the
+// sync, or somebody else's write landed in between and the document is
+// applied.
+//
+// A re-activation that failed, one the engine did not make because nothing
+// the revision reads changed, and a write whose answer is not read, leave the
+// apply to the operator, as before the engine re-activated at all.
+func (run *configRun) reloadedBySync(
+	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, diffs []render.Path, reload *engine.Reload,
+) (*engine.ApplyResult, error) {
+	if active == nil || reload == nil || len(diffs) > 0 ||
+		!maps.Equal(storeReferences(run.doc.YAML), storeReferences(active.Document)) {
+		return nil, nil
+	}
+	log := logf.FromContext(ctx)
+	if !reload.Landed() {
+		// The engine sealed the values and says why it did not
+		// re-activate: the apply below is the activation instead.
+		log.Info("The engine did not activate its document again after the secret sync; applying it",
+			"error", reload.Error, "detail", reload.Detail)
+		return nil, nil
+	}
+	now, err := activeConfig(ctx, eng)
+	if err != nil {
+		return nil, err
+	}
+	if now == nil || now.RevisionID != reload.RevisionID || !bytes.Equal(now.Document, active.Document) {
+		log.Info("The engine runs another revision than the one it activated at the secret sync; applying the document",
+			"reloaded", reload.RevisionID)
+		return nil, nil
+	}
+	return &engine.ApplyResult{RevisionID: reload.RevisionID, Epoch: reload.Epoch, Warnings: []string{}}, nil
 }
 
 // sync pushes the desired values into the engine's secret store, deletes
