@@ -109,11 +109,11 @@ func TestEngineReloadActivatesTheDocumentAgain(t *testing.T) {
 // never reading a diverged posture while it does, and its /health then
 // reports it applied, converged (posture serve) and ok, with an applied epoch
 // that reaches the epoch the write returned; and the node's record in /fleet,
-// which follows /health and is waited for as it is, names that epoch, its revision and a clean outcome, and that revision as
-// the one it runs and, a data node's store outliving a restart, the one it
-// would start on: the engine moves what it starts on before it records the
-// apply, so no record names the applied revision as run and not as started
-// on.
+// which follows /health and is waited for as it is, names that epoch, its
+// revision and a clean outcome, and that revision as the one it runs and, a
+// data node's store outliving a restart, the one it would start on: the
+// engine moves what it starts on before it records the apply, so no record
+// names the applied revision as run and not as started on.
 func TestEngineHealthReportsTheAppliedEpoch(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -155,10 +155,10 @@ func TestEngineHealthReportsTheAppliedEpoch(t *testing.T) {
 		t.Errorf("Health() read a diverged posture during an apply that succeeded: %+v", diverged)
 	}
 	// THE PEERS' RECORD FOLLOWS /health, waited for as /health was. The
-	// engine moves its own progress, which /health reads, before it writes
-	// the record its peers read in /fleet (Crewlet's internal/engine
-	// Reconciler.apply), two writes to the coordination store later, so a
-	// read between the two finds the record not yet written.
+	// engine moves its own progress, which /health reads, then writes its
+	// boot row to its own store, and only then the record its peers read in
+	// /fleet to the coordination store (Crewlet's internal/engine
+	// Reconciler.apply), so a read between finds the record not yet written.
 	want := engine.ApplyRecord{
 		Epoch: applied.Epoch, RevisionID: applied.RevisionID, Status: engine.ApplyOK, Serving: applied.RevisionID,
 		Boots: applied.RevisionID,
@@ -185,6 +185,8 @@ func TestEngineHealthReportsTheAppliedEpoch(t *testing.T) {
 // record is behind want's epoch, which is a record not yet written (the zero
 // record) or one of an earlier apply, and an error naming the record for one
 // at want's epoch or later that is not want, which waiting will not change.
+// FAILING FAST THERE IS ON PURPOSE: an error record at the apply's epoch is the
+// engine's account of a failed apply, not a lag, so do not turn it into a wait.
 func recordSettled(record, want *engine.ApplyRecord) (bool, error) {
 	switch {
 	case *record == *want:
