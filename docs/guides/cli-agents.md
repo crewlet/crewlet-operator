@@ -719,9 +719,12 @@ An E2B run is not touched.
 trust and proxy variables, the box's home and temporary directories, and the
 run's own: the seat's identity, the Company's and the Seat's setup steps'
 `env`, the Seat's `spec.sandbox.env`, and the provider's sign-in and its
-whole `env` beneath them. So a `TZ` the class's `podTemplate` or the
-Company's `runtime.env` sets on the pod reaches every Direct run, and no E2B
-one. An E2B box gets the run's own alone. The provider's `env` reaches an
+whole `env` beneath them. An E2B box gets the run's own alone. Every run,
+in either cell, is also handed the engine's time zone as `TZ`, the zone
+Crewlet reads a limit's reset in when the CLI names its time without one:
+the `TZ` the class's `podTemplate` or the Company's `runtime.env` sets on the
+pod where it names a zone the engine knows, and `UTC` otherwise, never the
+image's local time. The provider's `env` reaches an
 executor run in either cell, as it reaches the provider's other phases: a
 gateway's `ANTHROPIC_BASE_URL`, and under `auth.mode: Env` the
 `ANTHROPIC_AUTH_TOKEN` it takes, or a Bedrock or Vertex switch and its

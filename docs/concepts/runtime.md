@@ -146,7 +146,9 @@ model the class provides). A seat's executor runs as its CLI's own run in a
 box: placed `Direct`, a process tree of the pod in a box on its sandboxes
 volume, as the engine's user, with the pod's `PATH`, locale, `TERM`, `TZ`,
 TLS trust and proxy variables and none of the rest of its environment;
-placed in `E2B`, outside the pod. The sockets a CLI the engine runs in the pod for a seat's
+placed in `E2B`, outside the pod, with the engine's `TZ` alone of it (`UTC`
+where the pod sets none the engine knows), the zone Crewlet reads a limit's
+reset in. The sockets a CLI the engine runs in the pod for a seat's
 other phases reaches its seat's tools through are the engine's own, in a
 directory it makes under its `TMPDIR`, open to its user alone; the operator
 leaves `TMPDIR` unset, so that is `/tmp`, on a data pod and a seat pod alike

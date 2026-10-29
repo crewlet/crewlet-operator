@@ -226,7 +226,11 @@ const (
 	// executorFinalRead, and the render's copy follows the profile instead.
 	// A box of an entry that signs in with no login (api-key, env) is seeded
 	// with none (SandboxCredentials), which the render's verdict never
-	// counted on: such an entry signs a box in by a variable.
+	// counted on: such an entry signs a box in by a variable. And SandboxEnv
+	// carries the engine's zone into every executor run's box, E2B included:
+	// the zone it reads a reset the CLI names without one in, the engine's
+	// own TZ where it names a zone the system knows, and UTC otherwise
+	// (childZone).
 	envSignInRead = "v0.1.1-0.20261029073132-700660d0afa5"
 	otelGo        = "internal/sandbox/otel.go"
 	// topologyGo and assistantDeepGo are the render's pod sizes and the
@@ -873,9 +877,10 @@ var mirrored = []mirror{
 		decides: "a provider's whole env follows an executor run into its box, Direct or E2B, with the sign-in its " +
 			"auth mode sets, less what the mode removes, the isolation variables and blank values: a gateway's " +
 			"address and bearer token, a cloud switch and its region reach every executor run, and a ClaudeCode " +
-			"sign-in there signs an E2B run in (signin.go's remoteSignIn)",
-		digest: "99dcdf37e05b3c0eec68291d82ae3fa74783ac6c5a09355cb99e9ff8dff034d1",
-		read:   executorFinalRead,
+			"sign-in there signs an E2B run in (signin.go's remoteSignIn); and the engine's zone, TZ, reaches every " +
+			"run, E2B included",
+		digest: "837318029689c0d41bce52eb6d06f8baa4f0a698e9ef8d9b2c49c3fff09ea7e5",
+		read:   envSignInRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).LaunchExecutor",
