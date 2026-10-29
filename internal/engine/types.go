@@ -306,9 +306,9 @@ type SecretInfo struct {
 	Source string
 }
 
-// SecretsWritten is what one batch write into the engine's secret store
-// (Client.PutSecrets) did: the values it sealed, and what that did to the
-// running company.
+// SecretsWritten is what one write into the engine's secret store
+// (Client.PutSecrets, Client.WriteSecret) did: the values it sealed, and what
+// that did to the running company.
 type SecretsWritten struct {
 	// Names are the names written, sorted.
 	Names []string
