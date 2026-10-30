@@ -134,6 +134,28 @@ const (
 	// on, its coding agent, every other refusal before a box exists and the
 	// sign-in that must reach the box are as at cliOnlyRead.
 	codeHoldsRead = "v0.1.1-0.20261029165728-4ee3f06a5fde"
+	// runReposRead is crewlet/crewlet#298's engine whose run_sandbox launch
+	// gives a run the repositories its call names on the company's own code
+	// host, read at the head of its branch, where the launch was read again.
+	// The launch takes the call's request where it took its brief, resolves
+	// the repositories the call names last of its checks, after every
+	// refusal a document foresees and before the turn's holds are sealed for
+	// the row, and hands a run given some its credential on the code host,
+	// the base its clones and pushes reach and git's configuration, in its
+	// launch's own environment and never on the row (ADR-0063). A company
+	// the operator runs hosts no code (its engineConfig may not set code), so
+	// no call of its seats names a repository: the tool offers repos only
+	// where the node serves the code host, refusing the argument elsewhere
+	// before the launcher is asked, and the launch refuses a repository
+	// where the company hosts no code. So none of it is a verdict: the head
+	// a launch runs on, its coding agent, every other refusal before a box
+	// exists and the sign-in that must reach the box are as at codeHoldsRead.
+	// The variables that environment carries are the engine's own
+	// (config.ReservedSandboxEnv), which Crewlet refuses in every env a run's
+	// environment is assembled from, and so do the API's rules on a Seat's
+	// spec.sandbox.env and a setup step's env, which test/crd holds to the
+	// engine (TestReservedRunVariablesFollowTheEngine).
+	runReposRead = "v0.1.1-0.20261030022059-2887e830ccb5"
 	// refusalByModeRead is the engine whose remote-run refusal is worded by
 	// the entry's auth mode (credentialRefusal): an api-key entry whose key
 	// resolved to nothing is told to give the seat its own key, and an
@@ -737,8 +759,8 @@ var mirrored = []mirror{
 			"the catalogue's default, and refuses before a box exists what newCodingRun and sandboxCredentials " +
 			"refuse, and a run whose environment holds a value that resolves to nothing under a key nothing " +
 			"declares optional (runEnvironment's gap)",
-		digest: "ca1dfe76778b715848f2e93d9894c2ed8ff93c3ec27b2104841e912eeb90d031",
-		read:   codeHoldsRead,
+		digest: "8c4ebcadecdfbb3d9c29f765184ac06aa4ea1079f8c9cb3e6a8cf5708fb073e8",
+		read:   runReposRead,
 	},
 	{
 		file: sandboxGo, name: "buildSandbox",
