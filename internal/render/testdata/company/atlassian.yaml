@@ -85,5 +85,12 @@ roles:
       crewlet.ai/pool: data
   project: OPS
   space: OPS
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack
 tracker:
   backend: jira

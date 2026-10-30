@@ -335,6 +335,10 @@ const (
 	// stores each seat's access at each vendor in the vendor's own terms
 	// and refuses a level outside the vendor's fixed set.
 	seatAccessRead = "v0.1.1-0.20261030031001-cb160d62f89c"
+	// seatAccessMergedRead is the engine with every part of per-seat access
+	// merged, which adds Deployments to a seat's GitHub App permissions and
+	// the seat_access_migrated gate on each kind.
+	seatAccessMergedRead = "v0.1.1-0.20261030052257-53bc8aa979f2"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -1993,6 +1997,15 @@ var mirrored = []mirror{
 		read:    bootBoundsRead,
 	},
 	{
+		file: "internal/seataccess/seataccess.go", name: "Kinds",
+		against: []string{renderCompanyGo},
+		decides: "the integration kinds whose per-seat access the engine manages, each of which an operator " +
+			"document names in seat_access_migrated (seatAccessKinds): atlassian, datadog, github, gitlab, " +
+			"mattermost and slack",
+		digest: "1f2dab9b9537b12d69e4e8f480d005042edab86e2879dfb9860223158a894bb4",
+		read:   seatAccessMergedRead,
+	},
+	{
 		file: "internal/envref/envref.go", name: "SealedName",
 		against: []string{"internal/secretsync/name.go", commonTypesGo, credentialsConceptMd},
 		decides: "the engine seals a credential it mints for a seat under the vendor, the field and the seat's " +
@@ -2004,10 +2017,10 @@ var mirrored = []mirror{
 	{
 		file: roleAccessGo, name: "GitHubPermissionKeys",
 		against: seatAccess,
-		decides: "a seat's GitHub App holds contents, issues, pull_requests, checks, actions and workflows, by " +
-			"GitHub's keys, each read or write, and Metadata is not offered",
-		digest: "2a21ada2dcfaadb0d9b070c5164589e24a30b9757329e30cd51401a040cf252b",
-		read:   seatAccessRead,
+		decides: "a seat's GitHub App holds contents, issues, pull_requests, checks, actions, deployments and " +
+			"workflows, by GitHub's keys, each read or write, and Metadata is not offered",
+		digest: "d1c35603ab547e5e0743594de58f49192e4b8928038c14d24eb810178e236fe9",
+		read:   seatAccessMergedRead,
 	},
 	{
 		file: roleAccessGo, name: "GitLabRoles",

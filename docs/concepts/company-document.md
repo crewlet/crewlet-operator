@@ -37,7 +37,7 @@ handle, and model providers and tool servers by name.
 
 | Object | Becomes |
 |---|---|
-| `Company` | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `token_budget`, `providers.embeddings`, `providers.sandbox`, `providers.llm_order`, `integrations.check_interval_seconds`, and one top-level key per `spec.engineConfig` entry |
+| `Company` | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `token_budget`, `providers.embeddings`, `providers.sandbox`, `providers.llm_order`, `integrations.check_interval_seconds`, `seat_access_migrated` (every integration kind, so the engine acts on each Seat's `spec.integrations`), and one top-level key per `spec.engineConfig` entry |
 | `EngineClass` | `providers.llm.<name>` for each of its `platformLLMProviders`, when the Company sets `spec.llm.usePlatformProviders`; its `state_dir` is `/var/lib/crewlet/llm-cli-platform/<name>`, on the data volume |
 | `LLMProvider` | `providers.llm.<metadata.name>`; its `state_dir` is `/var/lib/crewlet/llm-cli/<loginName>`, on the data volume |
 | `MCPServer` | one entry of `mcp_servers`, named by its `metadata.name` |

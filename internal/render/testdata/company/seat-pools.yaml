@@ -48,3 +48,10 @@ roles:
   handle: jane
   kind: human
   name: jane
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack

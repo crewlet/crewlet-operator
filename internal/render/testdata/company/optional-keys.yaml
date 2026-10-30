@@ -48,6 +48,13 @@ roles:
   handle: founder
   kind: human
   name: founder
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack
 units:
 - id: eng
   mcp_env:

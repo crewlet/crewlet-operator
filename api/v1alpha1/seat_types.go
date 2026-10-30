@@ -291,6 +291,11 @@ type GitHubPermissions struct {
 	// +optional
 	Actions GitHubPermission `json:"actions,omitempty"`
 
+	// deployments is the repository's deployments and their statuses.
+	// Crewlet's `deployments`.
+	// +optional
+	Deployments GitHubPermission `json:"deployments,omitempty"`
+
 	// workflows lets the seat push a commit that changes a file under
 	// .github/workflows, which GitHub refuses otherwise. GitHub offers it as
 	// Read and write alone, and a push needs contents Write too. The same

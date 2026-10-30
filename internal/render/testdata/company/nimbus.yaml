@@ -96,6 +96,13 @@ roles:
   manages:
   - cto
   name: Jane Founder
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack
 timezone: Europe/Berlin
 token_budget:
   day: 3000000

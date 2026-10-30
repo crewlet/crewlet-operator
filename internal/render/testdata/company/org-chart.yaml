@@ -62,6 +62,13 @@ roles:
   manages:
   - rnd
   name: Wile E.
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack
 skill_variables:
   support_url: https://support.acme.example
 timezone: America/Phoenix

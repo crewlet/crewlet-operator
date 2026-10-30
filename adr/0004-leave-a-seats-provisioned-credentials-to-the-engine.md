@@ -1,4 +1,4 @@
-# ADR-0004 — Leave a seat's provisioned credentials to the engine, under the engine's own name
+# ADR-0004: Leave a seat's provisioned credentials to the engine, under the engine's own name
 
 - **Status:** accepted; that a seat names a provisioned value only while its
   vendor's Integration provisions is superseded by ADR-0005

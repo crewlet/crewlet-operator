@@ -466,6 +466,7 @@ func gitHubPermissions(p *v1alpha1.GitHubPermissions) map[string]string {
 		"pull_requests": p.PullRequests,
 		"checks":        p.Checks,
 		"actions":       p.Actions,
+		"deployments":   p.Deployments,
 		"workflows":     p.Workflows,
 	} {
 		if level != "" {

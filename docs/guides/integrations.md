@@ -119,7 +119,7 @@ spec:                       # Seat sre
   | Vendor | Access | Scope |
   |---|---|---|
   | Datadog | `role`: a role id, managed (Datadog Read Only Role, Standard, Admin) or custom | none |
-  | GitHub | `permissions`: Contents, Issues, Pull requests, Checks, Actions and Workflows, each `Read` or `Write`; unset is No access | `repos`, the repositories the seat's tokens are narrowed to, within the Integration's `provisioning.repos` where it lists them |
+  | GitHub | `permissions`: Contents, Issues, Pull requests, Checks, Actions, Deployments and Workflows, each `Read` or `Write`; unset is No access | `repos`, the repositories the seat's tokens are narrowed to, within the Integration's `provisioning.repos` where it lists them |
   | GitLab | `accessLevel`: Guest, Planner, Reporter, Developer, Maintainer or Owner; or `memberRoleID`, a custom role on Ultimate | `projects`, within the Integration's `engineProvisioning.projects` where it lists them; unset is the whole group |
   | Jira | `projectRole`: a project role id of the site; what it may do is each project's permission scheme | `projects`, by key, among those a Unit's or a Seat's `spec.project` names |
   | Confluence | `spaceRole`: a space role id, where the site has role-based access; `operations` (`read:space`, `create:page`) where it does not | `spaces`, by key, among those a Unit's or a Seat's `spec.space` names |

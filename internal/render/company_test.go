@@ -82,6 +82,31 @@ func (c companyCase) input(t *testing.T) *Input {
 	return &in
 }
 
+// TestEveryDocumentIsMigratedForSeatAccess holds every company document to
+// naming every integration kind in seat_access_migrated, a company with no
+// integration at all included: the engine acts on a kind's seat blocks only
+// where the list names it, and under Enforce its own migration cannot add
+// the list. TestContractCompany holds the engine to reading the key.
+func TestEveryDocumentIsMigratedForSeatAccess(t *testing.T) {
+	want := []any{VendorAtlassian, VendorDatadog, VendorGitHub, VendorGitLab, VendorMattermost, VendorSlack}
+	for _, c := range companyCases() {
+		t.Run(c.name, func(t *testing.T) {
+			doc, err := Company(c.input(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var tree map[string]any
+			if err := yaml.Unmarshal(doc.YAML, &tree); err != nil {
+				t.Fatal(err)
+			}
+			got, _ := tree[keySeatAccessMigrated].([]any)
+			if !slices.Equal(got, want) {
+				t.Errorf("seat_access_migrated is %v, want %v", got, want)
+			}
+		})
+	}
+}
+
 // TestCompanyGolden pins every case's document. A difference is either a
 // regression or an intended change, which -update records for review.
 func TestCompanyGolden(t *testing.T) {
@@ -364,8 +389,10 @@ func TestCompanyHashIsOfTheYAML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The SHA-256 of "name: Tiny\n", the whole minimal document.
-	if want := "07cfca96aa4b4f2676edeed094ae837a83d856e8691991903e79655e5f5c2fa9"; doc.Hash != want || string(doc.YAML) != "name: Tiny\n" {
+	// The SHA-256 of the whole minimal document: its name, and every
+	// integration kind as one whose seats state their access per seat.
+	const whole = "name: Tiny\nseat_access_migrated:\n- atlassian\n- datadog\n- github\n- gitlab\n- mattermost\n- slack\n"
+	if want := "3fd6f1d7d6e7e1ba05294c5cdfc4230ba72c79d46794f1e82a16b7a1120d206b"; doc.Hash != want || string(doc.YAML) != whole {
 		t.Fatalf("hash %s of %q, want %s", doc.Hash, doc.YAML, want)
 	}
 }

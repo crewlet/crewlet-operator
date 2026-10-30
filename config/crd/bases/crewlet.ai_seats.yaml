@@ -427,6 +427,14 @@ spec:
                             - Read
                             - Write
                             type: string
+                          deployments:
+                            description: |-
+                              deployments is the repository's deployments and their statuses.
+                              Crewlet's `deployments`.
+                            enum:
+                            - Read
+                            - Write
+                            type: string
                           issues:
                             description: |-
                               issues is the repository's issues and their comments. Crewlet's

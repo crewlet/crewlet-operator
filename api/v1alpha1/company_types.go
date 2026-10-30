@@ -1245,7 +1245,10 @@ type CompanySpec struct {
 	//
 	// It may not set what another field or object of this API owns: name,
 	// mission, vision, policies, timezone, tracker, knowledge, token_budget,
-	// assistant, providers, integrations, mcp_servers, roles or units. Every
+	// assistant, providers, integrations, mcp_servers, roles, units or
+	// seat_access_migrated, which the operator writes with every
+	// integration kind so the engine acts on each Seat's
+	// spec.integrations. Every
 	// position Crewlet holds a credential in lives under one of those keys, so
 	// engineConfig can never carry a credential: the API server refuses a
 	// Company whose engineConfig names one of them, before anything is
@@ -1254,7 +1257,7 @@ type CompanySpec struct {
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=64
-	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_servers', 'roles', 'units']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, token_budget, assistant, providers, integrations, mcp_servers, roles or units: those are fields and objects of this API, among them every block that holds a credential"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, token_budget, assistant, providers, integrations, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
 	EngineConfig []EngineConfigEntry `json:"engineConfig,omitempty"`
 
 	// config is how the operator manages the company's document.

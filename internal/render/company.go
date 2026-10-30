@@ -495,9 +495,22 @@ func (r *renderer) company() companyDoc {
 	doc.Integrations = r.integrations()
 	doc.MCPServers = r.mcpServers()
 	doc.Roles, doc.Units = r.org()
+	doc.SeatAccessMigrated = seatAccessKinds
 	r.sandboxRequired(len(doc.Providers.LLM) > 0)
 	r.unofferedPlacements()
 	return doc
+}
+
+// seatAccessKinds is every integration kind whose per-seat access Crewlet
+// manages (its seataccess.Kinds, which the mirror table fingerprints), in the
+// sorted order the engine writes them. The engine acts on a kind's seat blocks
+// only where the document names the kind in seat_access_migrated, its guard
+// against reading a document from before per-seat access as every seat off.
+// The operator renders that schema natively, so every document names every
+// kind; and under the Enforce policy the engine's own migration, which would
+// add the list, cannot write the document.
+var seatAccessKinds = []string{
+	VendorAtlassian, VendorDatadog, VendorGitHub, VendorGitLab, VendorMattermost, VendorSlack,
 }
 
 func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {

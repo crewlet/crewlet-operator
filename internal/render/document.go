@@ -21,6 +21,9 @@ type companyDoc struct {
 	MCPServers   []mcpServerDoc  `json:"mcp_servers,omitempty"`
 	Roles        []roleDoc       `json:"roles,omitempty"`
 	Units        []unitDoc       `json:"units,omitempty"`
+	// SeatAccessMigrated is every integration kind whose per-seat access
+	// the document states in the seats' own blocks (seatAccessKinds).
+	SeatAccessMigrated []string `json:"seat_access_migrated,omitempty"`
 }
 
 type trackerDoc struct {
