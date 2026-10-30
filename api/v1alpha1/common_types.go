@@ -658,15 +658,24 @@ const (
 	ReasonSeatHeld = "SeatHeld"
 
 	// ReasonRevisionUnreadable is ConfigApplied=False when the engine cannot
+	// ReasonRevisionUnreadable is ConfigApplied=False when the engine cannot
 	// open the fleet's revision of the company document (409
 	// unreadable_revision or unsealed_revision, or crewlet#142's
 	// unreadable_fleet_revision, unknown_seal_revision or
 	// unsealed_fleet_revision): it is sealed under a key the keyring does not
 	// hold, sealed in a form the engine's build does not read, or stored
 	// without a seal. The engine then refuses to show the document and to take
-	// another, so the operator writes nothing; no wait changes that, and
-	// somebody has to give the engine what opens the revision, such as the
-	// key put back in the Secret <company>-keyring, or the build that sealed
+	// any write built from it, and no wait changes that. A sealed revision is
+	// replaced by no write, so the operator writes nothing, and somebody has
+	// to give the engine what opens it: the key put back in the Secret
+	// <company>-keyring, or the build that sealed it. A revision without a
+	// seal is replaced by a whole document, which reads nothing from it: under
+	// Enforce the operator replaces it with the rendered document as it reads
+	// it, recording a Warning event of this reason, and reports this there
+	// only for one that lands after that read, until its next look replaces
+	// it, ten seconds on; while the rendered document is held, the hold's own
+	// reason is reported and the revision stays. Under Seed and Observe, which
+	// write no such document, this is reported for as long as the engine runs
 	// it. The message names the revision and carries the engine's account and
 	// remedy.
 	ReasonRevisionUnreadable = "RevisionUnreadable"

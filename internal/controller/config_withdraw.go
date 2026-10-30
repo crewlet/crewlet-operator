@@ -58,7 +58,7 @@ import (
 // pushes in one request (engine.Client.PutSecrets), one activation for all of
 // them, and a rotation of a value the running document reads needs no apply
 // of the same document from the operator, who records the engine's
-// re-activation as its own (reloadedBySync).
+// re-activation as its own (syncActivation).
 //
 // The store serves every revision by that revision's own reading of a key,
 // though, and the revision the engine runs is the last good one, which keeps
@@ -115,7 +115,7 @@ import (
 // deletion of a key that one lets go may require the key. The operator
 // records an activation again, its own or the engine's, only once it has read
 // back that the revision activated is the document it read (reactivate,
-// reloadedBySync), and otherwise reads the revision activated as one whose
+// syncActivation), and otherwise reads the revision activated as one whose
 // reading it does not know, and says so.
 
 // withdrawHeld does, for a document this reconcile could not apply, what the
@@ -127,7 +127,10 @@ import (
 // again if it references one, and says what the store keeps for it. It does
 // nothing but under the Enforce policy, on an engine that runs, and nothing
 // where no such reference is absent, no activation is owed, and the store
-// keeps nothing it has said it keeps.
+// keeps nothing it has said it keeps. Over a revision the engine stores
+// without a seal it removes nothing and activates nothing: nobody can read
+// what that revision reads, and the write that replaces it once the document
+// is no longer held settles what is owed (KeepListed, reactivate).
 //
 // An error is the API server's, for the reconcile to retry. One of the
 // engine's, or one reaching it, is reported (withdrawalFailed) and tried
@@ -170,6 +173,16 @@ func (run *configRun) withdrawHeld(ctx context.Context, read secretsync.Desired)
 		return run.withdrawalFailed(ctx, err), nil
 	}
 	active, err := activeConfig(ctx, eng)
+	if revision, ok := engine.Unsealed(err); ok {
+		// A revision stored without a seal, which the rendered document
+		// replaces once nothing holds it (converge): until then nobody can
+		// read which values it reads and the nodes run, and boot again, the
+		// revision before it, so the store keeps everything it lists, as
+		// enforce keeps it before that write, and no activation can be made
+		// over it (reactivate).
+		run.unsealed, err = revision, nil
+		read.KeepListed(revision)
+	}
 	if err != nil {
 		return run.withdrawalFailed(ctx, err), nil
 	}
@@ -272,7 +285,8 @@ func (run *configRun) keep(read secretsync.Desired, next secretsync.State, retai
 		// The fleet's revision first, which is the one the conditions
 		// have always named, then those pods run beside it.
 		for _, revision := range slices.Sorted(maps.Keys(holders)) {
-			k := keptRevision{revision: revision, fleets: revision == read.Running(), unknown: !next.Records(revision)}
+			k := keptRevision{revision: revision, fleets: revision == read.Running(), unknown: !next.Records(revision),
+				unsealed: run.unsealed != "" && revision == run.unsealed}
 			if run.serving != nil {
 				k.pods = run.serving.revisions[revision]
 			}
@@ -297,12 +311,14 @@ func (run *configRun) keep(read secretsync.Desired, next secretsync.State, retai
 // keptRevision is a revision that keeps a value whose Secret is gone: the
 // fleet's, or one engine pods run or start on beside it (pods), which reads
 // it as required, or is one the operator does not know the reading of
-// (unknown).
+// (unknown), or the fleet's that the engine stores without a seal, which
+// nobody can read and its nodes do not run (unsealed).
 type keptRevision struct {
 	revision string
 	fleets   bool
 	pods     revisionPods
 	unknown  bool
+	unsealed bool
 }
 
 // tellKept records a Normal SecretKept event naming the names keep found the
@@ -330,7 +346,9 @@ func (run *configRun) keptPlainly() bool {
 // revision the engine runs" otherwise, reads them as required, or is one the
 // operator does not know the reading of and takes to; and a pod whose
 // revisions the operator does not know may run or start on one that does.
-// them names what they read.
+// The fleet's revision, where the engine stores it without a seal, is "the
+// engine's active revision" and never the one it runs: nobody can read it,
+// and its nodes run the revision before it. them names what they read.
 func (run *configRun) keptBecause(byID bool, them string) string {
 	var reasons []string
 	for _, k := range run.keptFor {
@@ -338,11 +356,20 @@ func (run *configRun) keptBecause(byID bool, them string) string {
 		switch {
 		case !k.fleets:
 			subject = fmt.Sprintf("revision %s, which %s,", k.revision, k.pods.phrase())
+		case k.unsealed && byID:
+			subject = fmt.Sprintf("revision %s, the engine's active revision,", k.revision)
+		case k.unsealed:
+			subject = "the engine's active revision"
 		case byID:
 			subject = fmt.Sprintf("revision %s, which the engine runs,", k.revision)
 		}
 		reading := "reads " + them + " as required"
-		if k.unknown {
+		switch {
+		case k.unsealed:
+			reading = "is stored without a seal and nobody can read it, while the engine's nodes run the revision they " +
+				"applied before it, which reads the store again whenever a node restarts, so the operator takes it to " +
+				"read " + them + " as required"
+		case k.unknown:
 			reading = "is one the operator has no record of activating and does not render, so it takes it to read " + them +
 				" as required"
 		}
@@ -541,7 +568,9 @@ func (c storeChanges) made() string {
 // state does not record, which keeps what it read until the next one runs. A
 // value written under a name the running revision does not reference stays
 // owed, for the next write of the document to read. active is the engine's
-// document as this reconcile read it, nil to read it here.
+// document as this reconcile read it, nil to read it here, and nil with
+// run.unsealed set where the engine runs a revision stored without a seal,
+// over which nothing is activated and state is returned as it is.
 //
 // It is the activation for every store change no write of the document is
 // coming to settle: a document the engine refused, or one held for a Secret.
@@ -573,6 +602,14 @@ func (run *configRun) reactivate(
 	state secretsync.State, ref types.NamespacedName,
 ) (secretsync.State, error) {
 	if len(state.Withdrawn()) == 0 && len(state.Written()) == 0 {
+		return state, nil
+	}
+	if active == nil && run.unsealed != "" {
+		// The engine runs a revision it stores without a seal, which it
+		// neither shows nor activates again: no activation can be made over
+		// it, and asking for one is refused every time. The withdrawals stay
+		// owed, and the write that replaces it settles them, its activation
+		// reading the store without them (State.Activated).
 		return state, nil
 	}
 	if active == nil {

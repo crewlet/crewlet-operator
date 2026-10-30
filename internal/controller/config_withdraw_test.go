@@ -48,16 +48,18 @@ import (
 // operator's client reads them. A write of the document is refused on the
 // condition it names, as the engine refuses it, and so is every document while
 // it is to refuse them, as refusal says; written are the revisions the writes
-// it took stored, and refused counts the ones it refused on their condition.
-// beforeReload, afterReload, beforeWrite and afterApply, when set, run once,
-// under its lock, just before a reload or a write is answered and just after
-// a reload or an apply is: somebody else's write landing between two of the
-// operator's. activation is how the next write's activation goes, and inert
-// the revisions writes stored whose activation has not landed
+// it took stored, conditions the If-Match each of those was sent with, and
+// refused counts the ones it refused on their condition. beforeReload,
+// afterReload, beforeCheck, beforeWrite and afterApply, when set, run once,
+// under its lock, just before a reload, a dry run or a write is answered and
+// just after a reload or an apply is: somebody else's write landing between
+// two of the operator's. activation is how the next write's activation goes,
+// and inert the revisions writes stored whose activation has not landed
 // (config_unconfirmed_test.go). minted counts the revisions it has named,
-// active or not, so that no two share an id. Its fleet answers the activation
-// pointer beside its nodes: the fleet's revision at its place in the history,
-// which is its epoch.
+// active or not, so that no two share an id, and requests are the requests it
+// answered since the last takeRequests, each its method and path. Its fleet
+// answers the activation pointer beside its nodes: the fleet's revision at its
+// place in the history, which is its epoch.
 //
 // A write into its store (PUT /secrets, PUT /secrets/{name}), and a removal
 // of a value (DELETE /secrets/{name}), re-activates the fleet's revision when its
@@ -77,10 +79,9 @@ import (
 // (fleetUnreadable), and missing names the revisions GET /config/revisions
 // does not find. configDown, secretsDown and reloadDown make it answer a read
 // of the fleet's document, a write to the store, and a reload of the fleet's
-// revision, as an engine that cannot decide who is asking does; unreadable,
-// when set, gives the body it answers a read of the fleet's document with, as
-// an engine whose keyring does not open that revision does
-// (config_unreadable_test.go).
+// revision, as an engine that cannot decide who is asking does; a revision it
+// cannot open answers what reads it as the engine does (unopened,
+// config_unreadable_test.go).
 //
 // Each node's row says what it starts on as the engine's does: a data node
 // (dataNode) the revision it runs, and a seat node, whose store is scratch,
@@ -88,12 +89,12 @@ import (
 // in place of that, as a data node whose record of it the engine has not
 // moved yet to the revision it runs, "" for none.
 type storeEngine struct {
-	mu        sync.Mutex
-	revisions []storeRevision
-	minted    int
-	written   []string
-	refused   int
-	store     map[string]string
+	mu                  sync.Mutex
+	revisions           []storeRevision
+	minted              int
+	written, conditions []string
+	refused             int
+	store               map[string]string
 	// refusal, when set, is how the engine refuses every PUT of the document,
 	// the dry run included: invalidDocument, a document it finds invalid, or
 	// for what only its own users can clear, heldSeat, a human seat somebody
@@ -104,6 +105,7 @@ type storeEngine struct {
 	configDown, secretsDown   bool
 	reloadDown                bool
 	beforeReload, afterReload func(e *storeEngine)
+	beforeCheck               func(e *storeEngine)
 	beforeWrite, afterApply   func(e *storeEngine)
 	reloadAnswer              *map[string]any
 	afterSecretsReload        func(e *storeEngine)
@@ -112,12 +114,12 @@ type storeEngine struct {
 	runsNone                  map[string]bool
 	fleetDown                 bool
 	missing                   map[string]bool
-	unreadable                func(revision string) string
 	activation                outcome
 	// reloadActivation is how the activation of the next reload goes, as
 	// activation is the next write's.
 	reloadActivation outcome
 	inert            []storeRevision
+	requests         []string
 	// beforeConfig and beforeFleet run once, before the engine answers the
 	// next read of the fleet's document or of its fleet: an activation
 	// somebody else makes in that moment.
@@ -199,6 +201,10 @@ func fleetUnreadable(w http.ResponseWriter) {
 type storeRevision struct {
 	id, summary string
 	document    []byte
+	// unopened, when set, is the engine's answer to a request that reads the
+	// revision, which it cannot open (config_unreadable_test.go): nil for
+	// one it opens.
+	unopened func(revision string) string
 }
 
 // newStoreEngine runs the engine with document as its active revision r1.
@@ -227,10 +233,15 @@ var (
 	invalidDocument = &engineRefusal{status: http.StatusBadRequest, body: `{"error":"validation_error",` +
 		`"detail":"refused","problems":[{"path":"roles","kind":"invalid","message":"refused"}]}`}
 	// heldSeat is the engine's refusal of a document that takes away a
-	// human seat a person holds.
+	// human seat a person holds, as crewlet#142 words it.
 	heldSeat = &engineRefusal{status: http.StatusConflict, body: `{"error":"seat_held",` +
-		`"detail":"This change removes human seats that people still hold: founder (held by a person).",` +
-		`"held":{"founder":{"person":"p-1","kind":"person","stage":"active"}}}`}
+		`"detail":"This change removes human seats that somebody still holds: founder (held by p-1).",` +
+		`"held":{"founder":{"person":"p-1","kind":"person","stage":"active"}},` +
+		`"hint":"Move each person to another human seat (PATCH /iam/people/{person} with seat) or remove them, ` +
+		`unbind a service account (PATCH /iam/people/{person} with no seat), cancel an open invitation ` +
+		`(DELETE /iam/invitations/{id}), each an admin's gesture, then send the write again.",` +
+		`"message":"This change removes a seat someone holds or is invited to. Move or remove them, or cancel ` +
+		`the invitation, first. The detail says who."}`}
 	// managedDocument is the engine's refusal of a write by a token that
 	// api.auth.company_writers does not name.
 	managedDocument = &engineRefusal{status: http.StatusForbidden, body: `{"error":"config_managed",` +
@@ -240,6 +251,7 @@ var (
 func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.requests = append(e.requests, r.Method+" "+r.URL.Path)
 	body, _ := io.ReadAll(r.Body)
 	answer := func(status int, v any) { answerJSON(w, status, v) }
 	e.before(r)
@@ -261,6 +273,8 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case active.unopened != nil && readsActive(r, active):
+		answerRaw(w, http.StatusConflict, active.unopened(active.id))
 	case r.Method == http.MethodGet && r.URL.Path == "/health":
 		posture := engine.PostureServe
 		if e.appliedLag > 0 {
@@ -274,22 +288,8 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 		e.readActive(w, active)
 	case r.Method == http.MethodPut && r.URL.Path == configRoute:
 		e.put(w, r, body, answer)
-	case r.Method == http.MethodPost && r.URL.Path == reloadRoute && e.reloadActivation == pending:
-		stored := storeRevision{id: e.mint(), document: active.document, summary: r.Header.Get("X-Summary")}
-		e.inert = append(e.inert, stored)
-		answerLost(w, stored.id, active.id)
 	case r.Method == http.MethodPost && r.URL.Path == reloadRoute:
-		reloaded := activate(active.document)
-		if e.afterReload != nil {
-			hook := e.afterReload
-			e.afterReload = nil
-			hook(e)
-		}
-		if e.reloadActivation == landed {
-			answerLost(w, reloaded.id, active.id)
-			return
-		}
-		activated(reloaded)
+		e.reload(w, active, r.Header.Get("X-Summary"), activate, activated)
 	case r.Method == http.MethodGet && r.URL.Path == secretsRoute:
 		listing := make([]map[string]string, 0, len(e.store))
 		for _, name := range slices.Sorted(maps.Keys(e.store)) {
@@ -310,6 +310,14 @@ func (e *storeEngine) serveSecretWrite(
 ) bool {
 	reads := func(name string) bool { return strings.Contains(string(active.document), "${"+name+"}") }
 	name, isSecret := strings.CutPrefix(r.URL.Path, "/secrets/")
+	if active.unopened != nil && (r.URL.Path == secretsRoute || isSecret) {
+		// The engine asks which paths of the fleet's revision read each
+		// name before it writes or removes one (crewlet's secretsapi,
+		// config.Reads), which opens the revision: over one it cannot
+		// open, the request fails whole, as an internal error.
+		answerJSON(w, http.StatusInternalServerError, refusal("internal_error", "Something went wrong on our side."))
+		return true
+	}
 	switch {
 	case r.Method == http.MethodPut && r.URL.Path == secretsRoute:
 		var batch struct {
@@ -457,6 +465,12 @@ func (e *storeEngine) serveServing(w http.ResponseWriter, path string, active st
 			answerJSON(w, http.StatusNotFound, refusal("not_found", "no revision "+revisionID))
 			return true
 		}
+		if unopened := e.revisions[i].unopened; unopened != nil {
+			// The engine opens the revision to answer it, and refuses one
+			// it cannot open as it refuses a read of the document.
+			answerRaw(w, http.StatusConflict, unopened(e.revisions[i].id))
+			return true
+		}
 		payload, err := yaml.YAMLToJSON(e.revisions[i].document)
 		if err != nil {
 			answerJSON(w, http.StatusInternalServerError, refusal("internal", err.Error()))
@@ -468,6 +482,32 @@ func (e *storeEngine) serveServing(w http.ResponseWriter, path string, active st
 		return false
 	}
 	return true
+}
+
+// reload answers a request, summarised as summary, to activate active again as
+// reloadActivation says it goes: stored and never activated (pending),
+// activated with the answer lost (landed), or activated.
+func (e *storeEngine) reload(
+	w http.ResponseWriter, active storeRevision, summary string, activate func([]byte) storeRevision,
+	activated func(storeRevision),
+) {
+	if e.reloadActivation == pending {
+		stored := storeRevision{id: e.mint(), document: active.document, summary: summary}
+		e.inert = append(e.inert, stored)
+		answerLost(w, stored.id, active.id)
+		return
+	}
+	reloaded := activate(active.document)
+	if e.afterReload != nil {
+		hook := e.afterReload
+		e.afterReload = nil
+		hook(e)
+	}
+	if e.reloadActivation == landed {
+		answerLost(w, reloaded.id, active.id)
+		return
+	}
+	activated(reloaded)
 }
 
 // before runs the hook, if one is set, that r's route takes before the engine
@@ -526,13 +566,8 @@ func refusal(code, detail string) map[string]any {
 }
 
 // readActive answers a read of the fleet's document, active: the document and
-// its ETag, or, where unreadable is set, the engine's refusal of a revision
-// its keyring does not open.
+// its ETag.
 func (e *storeEngine) readActive(w http.ResponseWriter, active storeRevision) {
-	if e.unreadable != nil {
-		answerRaw(w, http.StatusConflict, e.unreadable(active.id))
-		return
-	}
 	w.Header().Set("ETag", `"`+active.id+`"`)
 	_, _ = w.Write(active.document)
 }
@@ -564,6 +599,10 @@ func (e *storeEngine) put(w http.ResponseWriter, r *http.Request, body []byte, a
 		return
 	}
 	if dryRun(r) {
+		if hook := e.beforeCheck; hook != nil {
+			e.beforeCheck = nil
+			hook(e)
+		}
 		answer(http.StatusOK, map[string]any{"base_revision_id": e.active().id})
 		return
 	}
@@ -592,6 +631,7 @@ func (e *storeEngine) put(w http.ResponseWriter, r *http.Request, body []byte, a
 	}
 	revision := storeRevision{id: e.mint(), document: body, summary: r.Header.Get("X-Summary")}
 	e.written = append(e.written, revision.id)
+	e.conditions = append(e.conditions, strings.Trim(r.Header.Get("If-Match"), `"`))
 	switch e.activation {
 	case confirmed:
 		e.revisions = append(e.revisions, revision)
@@ -624,6 +664,24 @@ func (e *storeEngine) writes() ([]string, int) {
 	return slices.Clone(e.written), e.refused
 }
 
+// takeRequests returns the requests the engine answered since the last
+// takeRequests, each its method and path.
+func (e *storeEngine) takeRequests() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	requests := e.requests
+	e.requests = nil
+	return requests
+}
+
+// writtenOn is the If-Match each write the engine stored was sent with, as
+// writes names them, "" for none.
+func (e *storeEngine) writtenOn() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.conditions)
+}
+
 // ids are the engine's revisions, oldest first.
 func (e *storeEngine) ids() []string {
 	e.mu.Lock()
@@ -640,6 +698,18 @@ func (e *storeEngine) summaryOf() string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.revisions[len(e.revisions)-1].summary
+}
+
+// summaryOfRevision is the summary of revision id, "" for none.
+func (e *storeEngine) summaryOfRevision(id string) string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, r := range e.revisions {
+		if r.id == id {
+			return r.summary
+		}
+	}
+	return ""
 }
 
 func (e *storeEngine) holds(name string) bool {
@@ -2212,7 +2282,7 @@ func TestAnActivationNoNodeCanOpenSettlesNothing(t *testing.T) {
 	w.engine.mu.Lock()
 	w.engine.beforeFleet = func(e *storeEngine) {
 		e.activateOther(e.revisions[len(e.revisions)-1].document)
-		e.unreadable = keyringLost
+		e.revisions[len(e.revisions)-1].unopened = keyringLost
 	}
 	w.engine.mu.Unlock()
 	if _, err := w.run.withdrawHeld(ctx, w.resolve(t)); err != nil {

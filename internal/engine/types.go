@@ -264,8 +264,10 @@ type ApplyResult struct {
 	Epoch int64
 
 	// BaseRevisionID is, for a dry run, the revision the check was built on,
-	// empty when nothing was active. A caller that dry-runs and then applies
-	// with IfMatch set to it applies exactly what it checked.
+	// empty when nothing was active; one stored without a seal, which the
+	// write replaces having read nothing from it (Unsealed), included. A
+	// caller that dry-runs and then applies with IfMatch set to it applies
+	// exactly what it checked.
 	BaseRevisionID string
 
 	// Warnings are what the engine will run but a person should know about,

@@ -2987,13 +2987,14 @@ ReplacedRevision is what a write of the company document replaced where
 that was more than the operator's own document.
 
 _Validation:_
-- Enum: [Drifted]
+- Enum: [Unsealed Drifted]
 
 _Appears in:_
 - [UnconfirmedRevision](#unconfirmedrevision)
 
 | Field | Description |
 | --- | --- |
+| `Unsealed` | ReplacedUnsealed is a revision the engine stores without a seal, which<br />nobody can read and a whole document replaces.<br /> |
 | `Drifted` | ReplacedDrifted is a revision the operator did not write whose<br />document differed from the rendered one.<br /> |
 
 
@@ -4186,7 +4187,7 @@ _Appears in:_
 | `appliedHash` _string_ | appliedHash is the appliedHash of the write: the rendered document's<br />and its values' hash as they were when it was written, which<br />status.config.appliedHash records once the engine is seen running the<br />revision. |  | MaxLength: 128 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `writtenAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#time-v1-meta)_ | writtenAt is when the operator wrote it. A write the engine is seen<br />running is recorded as applied when the operator found it, since<br />nothing says when its activation landed; a seed taken from overtaken,<br />which nothing waits on, as applied when it was written. |  | Required: \{\} <br /> |
 | `objects` _[AppliedObjectCounts](#appliedobjectcounts)_ | objects counts the objects the revision was rendered from, which<br />status.config.objects records once the engine is seen running it. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `replaced` _[ReplacedRevision](#replacedrevision)_ | replaced says what the write replaced where that was more than the<br />operator's own document, which ConfigApplied and a Warning event report<br />once the engine is seen running the revision, as they report a write the<br />engine confirmed: Drifted, a revision the operator did not write whose<br />document differed from the rendered one, at driftedAt. Unset for any<br />other base, and for a reload: its base is a write of the operator's,<br />and where that write is recorded here too, the revision found running<br />reports what that write replaced, once, whichever of the two it is. |  | Enum: [Drifted] <br />Optional: \{\} <br /> |
+| `replaced` _[ReplacedRevision](#replacedrevision)_ | replaced says what the write replaced where that was more than the<br />operator's own document, which ConfigApplied and a Warning event report<br />once the engine is seen running the revision, as they report a write the<br />engine confirmed: Unsealed, a revision the engine stores without a seal,<br />which the write replaces reading nothing from it; Drifted, a revision<br />the operator did not write whose document differed from the rendered<br />one, at driftedAt. Unset for any other base, and for a reload: its base<br />is a write of the operator's, and where that write is recorded here too,<br />the revision found running reports what that write replaced, once,<br />whichever of the two it is. |  | Enum: [Unsealed Drifted] <br />Optional: \{\} <br /> |
 | `driftedAt` _string_ | driftedAt names where the Drifted revision the write replaced differed<br />from the rendered document, as ConfigApplied names it: up to five<br />places, and how many more there were. |  | MaxLength: 32768 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `documentSHA256` _string_ | documentSHA256 is set for a reload: the SHA-256, in hex, of the<br />document of the revision it activates again, as the engine answered<br />it. The engine activates again whichever revision is active when the<br />request lands, so the revision it stored is the operator's only where<br />its document is that one; one found running another document was a<br />reload of a revision somebody activated in between, and goes. |  | MaxLength: 64 <br />MinLength: 64 <br />Pattern: `^[0-9a-f]\{64\}$` <br />Optional: \{\} <br /> |
 

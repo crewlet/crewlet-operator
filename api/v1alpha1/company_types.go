@@ -1638,11 +1638,13 @@ type UnconfirmedRevision struct {
 	// replaced says what the write replaced where that was more than the
 	// operator's own document, which ConfigApplied and a Warning event report
 	// once the engine is seen running the revision, as they report a write the
-	// engine confirmed: Drifted, a revision the operator did not write whose
-	// document differed from the rendered one, at driftedAt. Unset for any
-	// other base, and for a reload: its base is a write of the operator's,
-	// and where that write is recorded here too, the revision found running
-	// reports what that write replaced, once, whichever of the two it is.
+	// engine confirmed: Unsealed, a revision the engine stores without a seal,
+	// which the write replaces reading nothing from it; Drifted, a revision
+	// the operator did not write whose document differed from the rendered
+	// one, at driftedAt. Unset for any other base, and for a reload: its base
+	// is a write of the operator's, and where that write is recorded here too,
+	// the revision found running reports what that write replaced, once,
+	// whichever of the two it is.
 	// +optional
 	Replaced ReplacedRevision `json:"replaced,omitempty"`
 
@@ -1669,10 +1671,14 @@ type UnconfirmedRevision struct {
 
 // ReplacedRevision is what a write of the company document replaced where
 // that was more than the operator's own document.
-// +kubebuilder:validation:Enum=Drifted
+// +kubebuilder:validation:Enum=Unsealed;Drifted
 type ReplacedRevision string
 
 const (
+	// ReplacedUnsealed is a revision the engine stores without a seal, which
+	// nobody can read and a whole document replaces.
+	ReplacedUnsealed ReplacedRevision = "Unsealed"
+
 	// ReplacedDrifted is a revision the operator did not write whose
 	// document differed from the rendered one.
 	ReplacedDrifted ReplacedRevision = "Drifted"

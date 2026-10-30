@@ -134,9 +134,11 @@ operator's under the `Enforce` policy, under which it keeps the store in step
 with the Secrets ([Management policies](../concepts/applying.md#management-policies)),
 and it holds where the revision the engine runs goes without the value too.
 A revision that reads the key as required, as the one from before you listed
-the key does, or another document somebody else activated, whose reading the
-operator does not know, keeps the value it holds until the next document
-runs, as the last good revision keeps every value it requires; the Company's
+the key does, another document somebody else activated, whose reading the
+operator does not know, or a revision the engine stores without a seal, which
+nobody can read while its nodes run the one before it, keeps the value it
+holds until the next document runs, as the last good revision keeps every
+value it requires; the Company's
 `SecretsSynced`, the object's `ResolvedRefs` message and a `SecretKept` event
 say so (a document the render holds is told by the event alone). Once no
 engine pod runs, or would start on, a revision that requires it, the operator

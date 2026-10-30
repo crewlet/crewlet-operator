@@ -592,8 +592,10 @@ func TestErrorMapping(t *testing.T) {
 // sentence (httpjson.Sentence): the code's own sentence, the revision, what
 // happened as the detail, and the remedy as the hint. A seal the engine's
 // build does not read is one code for either origin, told apart by its detail
-// and its hint.
+// and its hint. Each names refusedRevision.
 const (
+	refusedRevision = "rev-4"
+
 	unreadableRevision = `{"error":"unreadable_revision","message":"That revision is sealed under a key this ` +
 		`deployment no longer holds, so it cannot be read. Put the key back in the node's keyring first.",` +
 		`"revision_id":"rev-4","detail":"This node's keyring doesn't hold the key that revision is sealed under.",` +
@@ -651,10 +653,58 @@ func TestAnUnreadableRevisionNamesItAndItsRemedy(t *testing.T) {
 		if err := json.Unmarshal([]byte(body), &want); err != nil {
 			t.Fatal(err)
 		}
-		if apiErr.RevisionID != "rev-4" || apiErr.Message != want.Detail || apiErr.Hint != want.Hint ||
+		if apiErr.RevisionID != refusedRevision || apiErr.Message != want.Detail || apiErr.Hint != want.Hint ||
 			apiErr.RetryAfter != 0 {
 			t.Errorf("APIError = {revision %q, message %q, hint %q, retry after %s}, want {rev-4, the detail, "+
 				"the hint, 0}", apiErr.RevisionID, apiErr.Message, apiErr.Hint, apiErr.RetryAfter)
+		}
+	}
+}
+
+// TestUnsealedIsTheOneRevisionAWriteReplaces holds Unsealed to the one cause
+// the engine lets a whole document replace: a revision stored without a seal,
+// this node's copy or the fleet's, named by the refusal. A revision sealed
+// under a key the keyring lacks, or in a form the engine's build does not
+// read, is somebody's document, which the engine refuses every write over;
+// read as unsealed, the operator would send a write the engine refuses, or,
+// were the engine to take it, discard that document unread. A refusal that
+// names no revision is no base to condition a write on.
+func TestUnsealedIsTheOneRevisionAWriteReplaces(t *testing.T) {
+	for _, c := range []struct {
+		name, body string
+		unsealed   bool
+	}{
+		{"this node's copy without a seal", unsealedRevision, true},
+		{"the fleet's revision without a seal", unsealedFleetRevision, true},
+		{"a key the keyring lost", unreadableRevision, false},
+		{"a key the fleet seals under that this node lacks", unreadableFleetRevision, false},
+		{"this node's copy sealed in a form its build does not read", unknownSealRevision, false},
+		{"the fleet's revision sealed in a form this build does not read", unknownSealFleetRevision, false},
+		{"a revision without a seal the engine does not name",
+			strings.Replace(unsealedRevision, `"revision_id":"rev-4",`, "", 1), false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			f.handle("GET /health", answer(http.StatusOK, `{"status":"ok","applied_epoch":4}`))
+			f.handle("GET /config", answer(http.StatusConflict, c.body))
+			_, err := f.client().ActiveConfig(context.Background())
+			if !errors.Is(err, engine.ErrRevisionUnreadable) {
+				t.Fatalf("ActiveConfig() = %v, want ErrRevisionUnreadable", err)
+			}
+			revision, ok := engine.Unsealed(err)
+			want := ""
+			if c.unsealed {
+				want = refusedRevision
+			}
+			if ok != c.unsealed || revision != want {
+				t.Errorf("Unsealed() = %q, %t; want %q, %t", revision, ok, want, c.unsealed)
+			}
+		})
+	}
+	for _, err := range []error{nil, errors.New("dial tcp: connection refused"),
+		&engine.APIError{StatusCode: http.StatusConflict, RevisionID: refusedRevision}} {
+		if revision, ok := engine.Unsealed(err); ok {
+			t.Errorf("Unsealed(%v) = %q, true; want false: it is no refusal of a revision without a seal", err, revision)
 		}
 	}
 }
@@ -839,8 +889,8 @@ const (
 func TestSeatHeldNamesEachHolderButNotTheirLogin(t *testing.T) {
 	f := newFakeEngine(t)
 	f.handle("PUT /config", answer(http.StatusConflict, `{"detail":"This change removes human seats that `+
-		`people still hold: ana (held by an open invitation (inv-1)); founder (held by jane.doe@nimbus.example); `+
-		`release (held by service account svc:release).",`+
+		`somebody still holds: ana (held by an open invitation (inv-1)), founder (held by jane.doe@nimbus.example) `+
+		`and release (held by service account svc:release).",`+
 		`"error":"seat_held",`+
 		`"held":{"ana":{"invitation":"inv-1","expires_at":"2026-10-23T09:00:00Z"},`+
 		`"founder":{"person":"p-1","kind":"person","login":"jane.doe@nimbus.example","stage":"active"},`+

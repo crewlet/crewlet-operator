@@ -120,7 +120,9 @@ type Overwrite struct {
 // a value somebody else put there for its own and never notice. Then it
 // deletes every name the engine lists that Owns accepts and desired neither
 // pushes nor keeps, every absent name (Desired.Missing) but one a revision
-// kept reads as required (Desired.Keep, Desired.KeepServed), which it leaves
+// kept reads as required (Desired.Keep, Desired.KeepServed, and every name the
+// store lists for a revision nobody can read, Desired.KeepListed), which it
+// leaves
 // (Result.Retained, State.Retained), and every name a revision kept lets go
 // whose Secret or key is gone (Desired.Release) that no other revision kept
 // reads as required; it records each absent or released name it deleted as
@@ -184,6 +186,7 @@ func Sync(
 	if err != nil {
 		return prev, res, fmt.Errorf("listing the engine's secret store: %w", err)
 	}
+	desired = desired.withListed(listing)
 	listed := make(map[string]engine.SecretInfo, len(listing))
 	for _, info := range listing {
 		listed[info.Name] = info
@@ -444,6 +447,7 @@ func Withdraw(ctx context.Context, eng EngineSecrets, desired Desired, prev Stat
 	if err != nil {
 		return prev, res, fmt.Errorf("listing the engine's secret store: %w", err)
 	}
+	desired = desired.withListed(listing)
 	next := prev.carried(maps.Clone(prev.fingerprints))
 	listed := make(map[string]bool, len(listing))
 	var removing []string

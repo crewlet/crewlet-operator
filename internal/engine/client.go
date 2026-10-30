@@ -280,7 +280,8 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 // (a seat pod's does not: it starts on nothing and applies the fleet's
 // revision). Before the first apply it fails with ErrNoActiveRevision, and
 // on an engine that cannot open the fleet's revision with
-// ErrRevisionUnreadable, which names it.
+// ErrRevisionUnreadable, which names it (Unsealed reads the one a whole
+// document replaces).
 //
 // An engine that cannot read the activation pointer from its coordination
 // store answers 503 with a Retry-After, which is ErrUnavailable: "the fleet
@@ -365,13 +366,17 @@ func (c *Client) Revision(ctx context.Context, id string) (Revision, error) {
 // writer, with ErrRevisionAdvanced (a 412 when req.IfMatch is set, a 409 when
 // it is not); req.CreateOnly on a configured engine with ErrAlreadyConfigured;
 // a write while the engine cannot open the fleet's revision, which the write
-// reads first, with ErrRevisionUnreadable; and a write whose
-// activation the engine sent and could not confirm with ErrUnavailable naming
-// the revision it stored, which UnconfirmedActivation reads. The fleet may run
-// that revision or may not: the caller keeps it until a read of the fleet's
-// activation (Fleet.Activation) says which, and sends the write again, on the
-// condition it was first sent on, only once that read shows the fleet still
-// runs the revision the write was built on.
+// reads first, with ErrRevisionUnreadable, except over one stored without a
+// seal (Unsealed), which the write (a dry run included) replaces, reading
+// nothing from it: that revision stays the write's base, so a req.IfMatch is
+// judged against it as against any other, and a write without one replaces
+// it unconditionally; and a write whose activation the engine sent and could
+// not confirm with ErrUnavailable naming the revision it stored, which
+// UnconfirmedActivation reads. The fleet may run that revision or may not: the
+// caller keeps it until a read of the fleet's activation (Fleet.Activation)
+// says which, and sends the write again, on the condition it was first sent
+// on, only once that read shows the fleet still runs the revision the write
+// was built on.
 func (c *Client) ApplyConfig(ctx context.Context, req ApplyRequest) (ApplyResult, error) {
 	if req.IfMatch != "" && req.CreateOnly {
 		return ApplyResult{}, errors.New("apply the company document: IfMatch and CreateOnly are mutually exclusive: " +

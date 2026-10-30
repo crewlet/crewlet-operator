@@ -602,45 +602,6 @@ func TestASeedActivatedAgainIsReportedAsTheSeed(t *testing.T) {
 	}
 }
 
-// TestAWriteBuiltOnTheOneConfirmedStaysUnconfirmed: a write the operator
-// built on r2 in the moment r2 landed, before any read showed it running, may
-// land yet once r2 is confirmed: it stays unconfirmed, and is confirmed in
-// turn once it runs. Taken for a write r2 overtook, it was adopted as a
-// revision the operator had not written once it landed.
-func TestAWriteBuiltOnTheOneConfirmedStaysUnconfirmed(t *testing.T) {
-	w, company := unconfirmedWrite(t, landed)
-	w.engine.mu.Lock()
-	w.engine.inert = append(w.engine.inert, storeRevision{id: w.engine.mint(), document: w.engine.active().document})
-	w.engine.mu.Unlock()
-	company.Status.Config.Unconfirmed = append(company.Status.Config.Unconfirmed, crewletaiv1alpha1.UnconfirmedRevision{
-		RevisionID: "r3", BaseRevisionID: "r2", AppliedHash: company.Status.Config.Unconfirmed[0].AppliedHash,
-		WrittenAt: &metav1.Time{},
-	})
-	w.again(t, company)
-	reconcileOnce(t, w)
-	company = w.statusWritten()
-	if config := company.Status.Config; config.RevisionID != "r2" || len(config.Unconfirmed) != 1 ||
-		config.Unconfirmed[0].RevisionID != "r3" || len(config.Overtaken) != 0 {
-		t.Fatalf("status.config is %+v, want r2 recorded and r3, built on it, still unconfirmed", config)
-	}
-	w.engine.mu.Lock()
-	w.engine.land("r3")
-	w.engine.mu.Unlock()
-	w.again(t, company)
-	reconcileOnce(t, w)
-	if config := w.statusWritten().Status.Config; config.RevisionID != "r3" || len(config.Unconfirmed) != 0 {
-		t.Errorf("status.config is %+v, want r3 recorded as the operator's, and nothing unconfirmed", config)
-	}
-	if recorded := drained(w.events); !slices.ContainsFunc(recorded, func(e string) bool {
-		return strings.HasPrefix(e, "Normal Activated ") && strings.Contains(e, "revision r3 as epoch 3")
-	}) {
-		t.Errorf("events %q, want an Activated event saying the engine runs r3, the operator's write, as epoch 3", recorded)
-	}
-	if written, _ := w.engine.writes(); !slices.Equal(written, []string{"r2"}) {
-		t.Errorf("the operator wrote %v, want r2 alone", written)
-	}
-}
-
 // TestAWriteAReactivationOvertookIsNotSentAgain: a held reconcile activates
 // r1 again (r3), for the withdrawal of the registry, while a write built on it
 // (r2) is unconfirmed. r2 can no longer land, and r3 activated after the
@@ -990,6 +951,68 @@ func TestAReloadTheEngineCouldNotConfirmIsTheOperatorsOnceItRuns(t *testing.T) {
 	}
 }
 
+// TestAReloadBuiltOnAnUnconfirmedWriteStaysUnconfirmedOnceTheWriteIs: a held
+// reconcile finds r2, a write of the operator's whose activation went
+// unconfirmed, running, and activates it again for the registry it withdrew;
+// the engine stores that reload as r3, conditioned on r2, and loses the
+// answer, and r2 still runs by the read back, so r3 is recorded as a write
+// built on r2 (reloadUnconfirmed). The next reconcile confirms r2 and keeps
+// r3, which may land yet, and its own reload of r2 (r4) is lost the same way;
+// once r3 lands it is confirmed in turn, as the operator's. Taken for a write
+// r2 overtook, r3 was dropped with r2's confirmation, and its landing read as
+// a revision somebody else activated.
+func TestAReloadBuiltOnAnUnconfirmedWriteStaysUnconfirmedOnceTheWriteIs(t *testing.T) {
+	ctx := context.Background()
+	w := newWithdrawal(t, runningRequires)
+	operatorActivates(w)
+	if err := w.cluster.Create(ctx, valueSecret(optionalSecret, map[string]string{optionalKey: npmRegistry})); err != nil {
+		t.Fatal(err)
+	}
+	w.engine.activation = landed
+	reconcileOnce(t, w)
+	w.engine.activation = confirmed
+	company := w.statusWritten()
+	if err := w.cluster.Delete(ctx, valueSecret(optionalSecret, nil)); err != nil {
+		t.Fatal(err)
+	}
+	w.again(t, company)
+	w.engine.reloadActivation = pending
+	if _, err := w.run.withdrawHeld(ctx, secretsync.Desired{}); err != nil {
+		t.Fatal(err)
+	}
+	company = w.statusWritten()
+	if config := company.Status.Config; len(config.Unconfirmed) != 2 || config.Unconfirmed[1].RevisionID != "r3" ||
+		config.Unconfirmed[1].BaseRevisionID != "r2" {
+		t.Fatalf("status.config is %+v, want r2 unconfirmed and the reload r3 recorded on it", config)
+	}
+	drained(w.events)
+	w.again(t, company)
+	reconcileOnce(t, w)
+	company = w.statusWritten()
+	if config := company.Status.Config; config.RevisionID != "r2" || !slices.ContainsFunc(config.Unconfirmed,
+		func(u crewletaiv1alpha1.UnconfirmedRevision) bool {
+			return u.RevisionID == "r3" && u.BaseRevisionID == "r2"
+		}) {
+		t.Fatalf("status.config is %+v, want r2 recorded as the operator's and r3, built on it, still unconfirmed", config)
+	}
+	w.engine.reloadActivation = confirmed
+	w.engine.mu.Lock()
+	w.engine.land("r3")
+	w.engine.mu.Unlock()
+	drained(w.events)
+	w.again(t, company)
+	reconcileOnce(t, w)
+	if config := w.statusWritten().Status.Config; config.RevisionID != "r3" || len(config.Unconfirmed) != 0 {
+		t.Errorf("status.config is %+v, want r3 recorded as the operator's, and nothing unconfirmed", config)
+	}
+	if recorded := drained(w.events); warned(recorded, crewletaiv1alpha1.ReasonDrifted) ||
+		!slices.ContainsFunc(recorded, func(e string) bool {
+			return strings.HasPrefix(e, "Normal Activated ") && strings.Contains(e, "revision r3 as epoch 3")
+		}) {
+		t.Errorf("events %q, want r3 confirmed as the operator's, at epoch 3, and no drift reported", recorded)
+	}
+}
+
 // TestAWriteConfirmedLateIsHeldToTheDeadlineFromWhenItWasFound: the write's
 // answer was lost three minutes before the reconcile that finds it running,
 // and the engine is one epoch behind. Nothing says when the activation landed,
@@ -1306,20 +1329,23 @@ func TestAReloadThatLandsWhileTheNextOneFailsIsRecordedOnce(t *testing.T) {
 }
 
 // TestAReloadOfAnUnconfirmedReplacementReportsWhatTheWriteReplaced: the
-// operator's write r2 replaced r1, somebody else's document, and its answer
-// was lost; a held reconcile then found r2 running and its reload of r2 was
-// stored as r3, its answer lost too. Once r3 runs, its confirmation reports
-// that the rendered document replaced r1, once, and never names r2, the
-// operator's own write, as somebody else's: whether r2 was confirmed first or
-// not at all.
+// operator's write r2 replaced r1, somebody else's document or one the engine
+// stores without a seal, and its answer was lost; a held reconcile then found
+// r2 running and its reload of r2 was stored as r3, its answer lost too. Once
+// r3 runs, its confirmation reports that the rendered document replaced r1,
+// once, and never names r2, the operator's own write, as somebody else's or
+// as stored without a seal: whether r2 was confirmed first or not at all.
 func TestAReloadOfAnUnconfirmedReplacementReportsWhatTheWriteReplaced(t *testing.T) {
 	for _, c := range []struct {
-		name string
+		name     string
+		unsealed bool
 		// confirmFirst confirms r2 in a reconcile of its own before r3 lands.
 		confirmFirst bool
 	}{
-		{name: "r3 lands first"},
-		{name: "r2 confirmed first", confirmFirst: true},
+		{name: "r1 somebody else's, r3 lands first"},
+		{name: "r1 somebody else's, r2 confirmed first", confirmFirst: true},
+		{name: "r1 stored without a seal, r3 lands first", unsealed: true},
+		{name: "r1 stored without a seal, r2 confirmed first", unsealed: true, confirmFirst: true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			ctx := context.Background()
@@ -1328,6 +1354,9 @@ func TestAReloadOfAnUnconfirmedReplacementReportsWhatTheWriteReplaced(t *testing
 			company := w.run.company.DeepCopy()
 			company.Status.Config.RevisionID = "r0"
 			w.again(t, company)
+			if c.unsealed {
+				w.engine.cannotOpen(sealMissing)
+			}
 			if err := w.cluster.Create(ctx, valueSecret(optionalSecret, map[string]string{optionalKey: npmRegistry})); err != nil {
 				t.Fatal(err)
 			}
@@ -1368,6 +1397,9 @@ func TestAReloadOfAnUnconfirmedReplacementReportsWhatTheWriteReplaced(t *testing
 			reconcileOnce(t, w)
 			reports = append(reports, drained(w.events)...)
 			reason := crewletaiv1alpha1.ReasonDrifted
+			if c.unsealed {
+				reason = crewletaiv1alpha1.ReasonRevisionUnreadable
+			}
 			var warnings []string
 			for _, e := range reports {
 				if strings.HasPrefix(e, "Warning "+reason+" ") {
@@ -1375,9 +1407,11 @@ func TestAReloadOfAnUnconfirmedReplacementReportsWhatTheWriteReplaced(t *testing
 				}
 			}
 			// What the event says of the revision replaced: "revision r1,
-			// which the operator did not write".
+			// which the operator did not write", or "active revision r1 was
+			// one it stores without a seal".
 			names := func(revision string) bool {
-				return strings.Contains(warnings[0], "revision "+revision+", which")
+				return strings.Contains(warnings[0], "revision "+revision+", which") ||
+					strings.Contains(warnings[0], "revision "+revision+" was one")
 			}
 			if len(warnings) != 1 || !names("r1") || names("r2") {
 				t.Errorf("Warning %s events %q, want one, naming r1 and never r2", reason, warnings)

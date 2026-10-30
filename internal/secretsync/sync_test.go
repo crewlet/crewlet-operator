@@ -589,6 +589,85 @@ func TestSyncKeepsWhatTheRunningDocumentReferences(t *testing.T) {
 	}
 }
 
+// TestKeepListedDeletesNothingTheStoreLists: over a revision nobody can read
+// (one the engine stores without a seal), Sync and Withdraw keep every owned
+// name the store lists, whatever the next document reads of it and whatever
+// the State records of the revision's reading: an absent name, a released
+// one whose Secret is gone, and one nothing references. Which of them the
+// nodes need is what nobody can read, since they run, and boot again, the
+// revision before it. Values are still pushed, a foreign entry is left alone
+// as always, and the caller's Desired keeps none of the listing, yet names
+// the revision as what keeps each absent name the store retained (Holders),
+// which is how the operator says why it keeps one.
+func TestKeepListedDeletesNothingTheStoreLists(t *testing.T) {
+	ctx := context.Background()
+	keyD := secretref.Key{Namespace: "ns", Name: "d", Key: tokenKey}
+	nameD := StoreName(keyD)
+	eng := newFakeEngine()
+	eng.entries[foreignName] = fakeEntry{value: foreignValue, by: access}
+	// The State records revision2 letting nameB and nameC go: the engine
+	// stored it, as the operator activated it, without a seal.
+	state, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a1", nameB: "b", nameC: "c", nameD: "d"}),
+		State{}.Activated(revision2, []secretref.Key{keyB, keyC}))
+	eng.takeCalls()
+
+	next := desiredOf(map[string]string{nameA: "a2"})
+	next.absent = map[string]*MissingError{nameB: {Key: keyB, Reason: SecretNotFound}}
+	next.Release(&MissingError{Key: keyC, Reason: SecretNotFound})
+	next.Keep(revision2)
+	next.KeepListed(revision2)
+	synced, res, err := Sync(ctx, eng, next, state, self, discard)
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	assertCalls(t, eng, "list", "put "+nameA)
+	assertStore(t, eng, map[string]fakeEntry{
+		nameA: {value: "a2", by: self}, nameB: {value: "b", by: self}, nameC: {value: "c", by: self},
+		nameD: {value: "d", by: self}, foreignName: {value: foreignValue, by: access},
+	})
+	if len(res.Deleted) != 0 || !slices.Equal(res.Retained, []string{nameB}) || len(synced.Withdrawn()) != 0 {
+		t.Errorf("Deleted = %v, Retained = %v and Withdrawn() = %v; want none, [%s] and none",
+			res.Deleted, res.Retained, synced.Withdrawn(), nameB)
+	}
+	if len(next.kept[revision2]) != 0 {
+		t.Errorf("the caller's Desired keeps %v for %s after Sync, want what it was given, nothing",
+			next.kept[revision2], revision2)
+	}
+	if got := next.Holders(nameB, synced); !slices.Equal(got, []string{revision2}) {
+		t.Errorf("Holders(%s) = %v after Sync, want [%s], which the State records letting it go", nameB, got, revision2)
+	}
+
+	held := Desired{partial: true, absent: map[string]*MissingError{
+		nameB: {Key: keyB, Reason: SecretNotFound}, nameD: {Key: keyD, Reason: KeyNotFound},
+	}}
+	held.Release(&MissingError{Key: keyC, Reason: SecretNotFound})
+	held.KeepListed(revision2)
+	withdrawn, res, err := Withdraw(ctx, eng, held, synced)
+	if err != nil {
+		t.Fatalf("Withdraw: %v", err)
+	}
+	assertCalls(t, eng, "list")
+	if len(res.Deleted) != 0 || !slices.Equal(res.Retained, []string{nameB, nameD}) || len(withdrawn.Withdrawn()) != 0 {
+		t.Errorf("Deleted = %v, Retained = %v and Withdrawn() = %v; want none, [%s %s] and none",
+			res.Deleted, res.Retained, withdrawn.Withdrawn(), nameB, nameD)
+	}
+	if got := held.Holders(nameD, withdrawn); !slices.Equal(got, []string{revision2}) {
+		t.Errorf("Holders(%s) = %v after Withdraw, want [%s]", nameD, got, revision2)
+	}
+
+	// Kept as a revision whose document names nothing, the same Desired
+	// deletes all three: nameB and nameC as revision2 lets them go, and
+	// nameD as nothing references it.
+	plain := desiredOf(map[string]string{nameA: "a2"})
+	plain.absent = next.absent
+	plain.Release(&MissingError{Key: keyC, Reason: SecretNotFound})
+	plain.Keep(revision2)
+	_, res = mustSync(t, eng, plain, synced)
+	if !slices.Equal(res.Deleted, []string{nameB, nameC, nameD}) {
+		t.Errorf("Deleted = %v without KeepListed, want [%s %s %s]", res.Deleted, nameB, nameC, nameD)
+	}
+}
+
 // TestSyncWritesBeforeItDeletes: a document switch must find every name it
 // references written before anything it no longer references is removed.
 func TestSyncWritesBeforeItDeletes(t *testing.T) {

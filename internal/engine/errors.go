@@ -95,9 +95,11 @@ var (
 	// Retry-After: no wait opens the revision. A sealed one is somebody's
 	// document, which no write replaces, since that would discard it unread:
 	// what opens it is given to the engine, a key put in its keyring, which
-	// it reads when it starts, or the build that sealed it. The *APIError
-	// behind it carries the revision in RevisionID, the engine's account as
-	// its Message and the remedy as its Hint.
+	// it reads when it starts, or the build that sealed it. One without a
+	// seal no key opens, and the one write that goes on over it is a whole
+	// document (ApplyConfig), which reads nothing from it: Unsealed reports
+	// it. The *APIError behind it carries the revision in RevisionID, the
+	// engine's account as its Message and the remedy as its Hint.
 	ErrRevisionUnreadable = errors.New("the engine cannot open a revision of its company document")
 
 	// ErrNotReady is an engine that is up but should not be sent work: it
@@ -133,12 +135,15 @@ var codesForbidden = []string{"unauthorized", "token_refused", "seat_unavailable
 // put back in the keyring (unreadable_revision), a key the fleet seals under
 // given to this node (unreadable_fleet_revision), the build that sealed it
 // (unknown_seal_revision, one code for either origin, since that remedy is
-// the same for both), or the document brought back sealed
-// (unsealed_revision, unsealed_fleet_revision).
-var codesRevisionUnreadable = []string{
+// the same for both), or a whole document replacing it (codesUnsealed).
+var codesRevisionUnreadable = append([]string{
 	"unreadable_revision", "unreadable_fleet_revision", "unknown_seal_revision",
-	"unsealed_revision", "unsealed_fleet_revision",
-}
+}, codesUnsealed...)
+
+// codesUnsealed are the refusals of a revision stored without a seal, this
+// node's copy (unsealed_revision) or the fleet's (unsealed_fleet_revision):
+// the one cause a write replaces (Unsealed).
+var codesUnsealed = []string{"unsealed_revision", "unsealed_fleet_revision"}
 
 // codesWithProblems are the refusals of a document: the engine located each
 // failure in it, so they become a *ValidationError.
@@ -278,6 +283,32 @@ func (e *APIError) Is(target error) bool {
 		return slices.Contains(codesRevisionUnreadable, e.Code)
 	}
 	return false
+}
+
+// Unsealed is the engine's active revision, one it stores without a seal, and
+// true, when err is the engine's refusal to open it (ErrRevisionUnreadable
+// under unsealed_revision or unsealed_fleet_revision, naming the revision).
+// The fleet's pointer names it, and no node runs it: each runs the revision it
+// applied before.
+//
+// It is the one revision the engine cannot open that a write replaces: a
+// whole document sent with ApplyConfig goes on over it, reading nothing from
+// it, so no masked value is restored from it and no field carried, and the
+// engine judges the write as one replacing nothing. The revision is still the
+// write's base: a dry run names it as BaseRevisionID, and IfMatch is judged
+// against it. Every other write is built from the active document and is
+// refused over it as a read is. A revision sealed in any way the engine cannot
+// open (unreadable_revision, unreadable_fleet_revision,
+// unknown_seal_revision) is refused for every write, ApplyConfig included,
+// since replacing it would discard a document somebody sealed, and is not
+// reported here. Nor is a refusal that names no revision, on which no write
+// can be conditioned; the engine always names one.
+func Unsealed(err error) (string, bool) {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || !slices.Contains(codesUnsealed, apiErr.Code) || apiErr.RevisionID == "" {
+		return "", false
+	}
+	return apiErr.RevisionID, true
 }
 
 // UnconfirmedActivation is the revision a config write stored whose activation

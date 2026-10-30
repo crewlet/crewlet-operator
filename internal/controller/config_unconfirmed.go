@@ -142,24 +142,30 @@ func documentDigest(document []byte) string {
 }
 
 // unconfirmed records write, whose activation the engine could not confirm,
-// as revision stored, reports it on ConfigApplied, and returns when the next
+// as revision storedID, reports it on ConfigApplied, and returns when the next
 // reconcile settles it (settleUnconfirmed): as soon as the engine's
 // Retry-After says, the scale of one batch on its coordination store, and ten
 // seconds on where it sends none (engineRetry).
-func (run *configRun) unconfirmed(stored string, write writeAttempt, err error) time.Duration {
+func (run *configRun) unconfirmed(storedID string, write writeAttempt, err error) time.Duration {
 	retry := run.engineRetry(err)
 	recorded := run.recordedConfig()
 	config := recorded.DeepCopy()
 	now := metav1.NewTime(run.clock())
 	config.Unconfirmed = boundedWrites(append(config.Unconfirmed, crewletaiv1alpha1.UnconfirmedRevision{
-		RevisionID: stored, BaseRevisionID: write.base, AppliedHash: write.hash, WrittenAt: &now,
+		RevisionID: storedID, BaseRevisionID: write.base, AppliedHash: write.hash, WrittenAt: &now,
 		Objects: run.objectCounts(), Replaced: write.replaced, DriftedAt: write.driftedAt,
 	}))
 	run.config = config
+	stored := fmt.Sprintf("revision %s", storedID)
+	if write.replaced == crewletaiv1alpha1.ReplacedUnsealed {
+		// Said now, since the next report may be a while: the engine
+		// runs a revision nobody can read, which the write would replace.
+		stored += fmt.Sprintf(", which would replace revision %s, stored without a seal,", write.base)
+	}
 	run.configApplied = &metav1.Condition{
 		Type: crewletaiv1alpha1.ConditionConfigApplied, Status: metav1.ConditionFalse,
 		Reason: crewletaiv1alpha1.ReasonEngineUnavailable,
-		Message: ended(fmt.Sprintf("The engine stored the rendered document as revision %s and could not confirm that it "+
+		Message: ended(fmt.Sprintf("The engine stored the rendered document as %s and could not confirm that it "+
 			"activated it, so it may run it or may not. The operator reads which revision the engine runs before it writes "+
 			"again, in %s: %s", stored, retry, err)),
 	}
@@ -217,23 +223,23 @@ func overtakenBy(
 }
 
 // settleUnconfirmed settles the writes status.config.unconfirmed records
-// against active, the revision the engine runs as this reconcile read it. One
-// of them is active, with the document it was recorded with
-// (runsItsDocument): it is recorded as the operator's write
-// (confirmUnconfirmed). Otherwise the ones built on active stay, and every
-// other one goes, to status.config.overtaken where it was written into an
-// engine that ran no document; a reload found running another document was
-// built on a revision somebody else activated, and goes too. Under Observe
-// nothing is settled: the operator writes nothing there, and Observe records
-// the revision it finds in sync.
-func (run *configRun) settleUnconfirmed(ctx context.Context, eng *engine.Client, active *engine.ActiveConfig) error {
+// against runs, the revision the engine runs as this reconcile read it, empty
+// for none: active, whose document it read, or one it could not open whose
+// write the reconcile replaces (configRun.unsealed), on which a write the
+// engine could not confirm may have been built as well. One of them runs, with
+// the document it was recorded with (runsItsDocument): it is recorded as the
+// operator's write (confirmUnconfirmed). Otherwise the ones built on runs
+// stay, and every other one goes, to status.config.overtaken where it was
+// written into an engine that ran no document; a reload found running
+// another document was built on a revision somebody else activated, and goes
+// too. Under Observe nothing is settled: the operator writes nothing there,
+// and Observe records the revision it finds in sync.
+func (run *configRun) settleUnconfirmed(
+	ctx context.Context, eng *engine.Client, runs string, active *engine.ActiveConfig,
+) error {
 	recorded := run.recordedConfig()
 	if len(recorded.Unconfirmed) == 0 || run.policy() == crewletaiv1alpha1.ManagementPolicyObserve {
 		return nil
-	}
-	runs := ""
-	if active != nil {
-		runs = active.RevisionID
 	}
 	if i := unconfirmedIndex(recorded.Unconfirmed, runs); i >= 0 && runsItsDocument(&recorded.Unconfirmed[i], active) {
 		return run.confirmUnconfirmed(ctx, eng, &recorded, i)
@@ -258,7 +264,11 @@ func (run *configRun) settleUnconfirmed(ctx context.Context, eng *engine.Client,
 // record kept, or where it is a reload of a write recorded here too, what
 // that write replaced, which only it records (reloadUnconfirmed), and which
 // then goes with it: the revision it activated again landed, since the reload
-// runs. A write built on it stays unconfirmed, and every other one is
+// runs. A write built on it stays unconfirmed, since it may land yet:
+// a reconcile that holds its document reads the engine without recording what
+// it finds (status.config is left to the one that applies a document), so it
+// may find this one running and activate it again for a value it withdrew, and
+// that reload's answer can be lost too (reloadUnconfirmed). Every other one is
 // overtaken by it, and so is every write status.config.overtaken keeps: none
 // can land now, nor be the seed, since a write of the operator's runs.
 //
