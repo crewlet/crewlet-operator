@@ -221,7 +221,7 @@ over.
   limit bounds: a run that filled it would stop the store and the broker.
   Every other place an engine pod writes is bounded, so a run that writes
   without end is stopped at its own pod and never fills the node's disk.
-- **A deep-work run's too.** The Dashboard Assistant's deep work, when it
+- **A deep-work run's too.** Ask Crewlet's deep work, when it
   runs on the data pod rather than in `E2B`, is a confined box Crewlet makes
   on this volume, in a directory of its own beside the seats' boxes
   (`/var/lib/crewlet-sandboxes/assistant`), so `data.sandboxSizeLimit`
@@ -655,7 +655,7 @@ The public address is also where a coding run calls the engine back:
   seat runs, which reaches Crewlet's bridge at the fleet's address, the same
   on every node, the data pod a call reaches relaying it over the broker to
   the pod holding the run's seat, a seat pod included (see [Seat
-  pools](../guides/cli-agents.md#seat-pools)); and the Dashboard Assistant's
+  pools](../guides/cli-agents.md#seat-pools)); and Ask Crewlet's
   deep work, which Crewlet holds to the fleet's address wherever it runs, a
   `Direct` run on the data pod included. The data pods must therefore be
   able to reach the public address: under `networkPolicy: Isolated` the
@@ -749,7 +749,7 @@ proxies or forwarders), and every address but the cloud metadata
 endpoints and the class's `networkPolicy.egress.exceptCIDRs`, where the
 cluster's own networks belong ([Network policy](../guides/exposure.md#network-policy)).
 The route's proxies are there because a data pod calls the Company's own
-public address, for the Dashboard Assistant's deep work, and inside the
+public address, for Ask Crewlet's deep work, and inside the
 cluster that call usually lands on a proxy's pod without leaving it, where
 an address outside `exceptCIDRs` does not admit it.
 

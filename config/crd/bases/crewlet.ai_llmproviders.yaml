@@ -381,7 +381,7 @@ spec:
                 description: |-
                   webTools is whether the CLI keeps its own web tools. Unset is
                   Allowed, every seat's default. Denied is required of every provider
-                  the Company's Dashboard Assistant runs on (spec.assistant.llm), and
+                  Ask Crewlet runs on (spec.assistant.llm), and
                   is refused for a CLI Crewlet has no way to turn the web off for: it
                   takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's
                   `overrides.web_tools`.

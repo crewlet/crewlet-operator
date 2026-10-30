@@ -934,19 +934,19 @@ Seat's `Ready`). One thing a data pod does for a CLI a seat pod cannot do:
   above gives a key variable) or, for Hermes, Pi or OpenCode, its model
   provider's key in `env`, or place the seat in `data`.
 
-## A provider for the Dashboard Assistant
+## A provider for Ask Crewlet
 
-A seat keeps its CLI's own web tools. The Company's Dashboard Assistant
-(`spec.assistant`) does not: it reads only what the signed-in person's own
+A seat keeps its CLI's own web tools. Ask Crewlet (configured under
+`spec.assistant`) does not: it reads only what the signed-in person's own
 requests return, so Crewlet requires every provider in `spec.assistant.llm`
 to drive a CLI Crewlet runs with no tool of its own (no shell, no file
 reader, no tool server but the engine's own, which serves the person's
-assistant tools), with its web tools off. The assistant runs its providers in
+Ask Crewlet tools), with its web tools off. Ask Crewlet runs its providers in
 the engine's pod, as a seat's phases but the executor run, so a provider's
 `runIn` means nothing to it. Today that is
 `ClaudeCode` or `Pi`: `Codex` keeps a shell its read-only sandbox only
 confines, and `OpenCode`'s deny-all policy has not been measured to take its
-tools away, so both are refused for the assistant though either may still
+tools away, so both are refused for Ask Crewlet though either may still
 turn its web off for a seat. `webTools: Denied` turns them off, and renders as the
 entry's `overrides: {web_tools: denied}`:
 
@@ -975,7 +975,7 @@ for: `ClaudeCode`, `Codex`, `OpenCode` and `Pi`. Every other CLI's profile
 carries no measured web denial, and Crewlet refuses the setting. A provider
 of its own keeps the person in the drawer from queueing behind a seat's long
 call, and its timeout is sized for one round rather than for a coding task.
-Crewlet refuses an assistant chain naming a provider that keeps its web
+Crewlet refuses an Ask Crewlet chain naming a provider that keeps its web
 tools, or one on a CLI that keeps a tool of its own, in the dry run before
 every apply, and the refusal is reported on the Company. Crewlet's
 [configuration reference](https://github.com/crewlet/crewlet/blob/main/docs/getting-started/configuration.md)
@@ -983,17 +983,17 @@ describes the block and each bound.
 
 ### Deep work
 
-`spec.assistant.deepWork` lets the assistant hand a large task (research,
+`spec.assistant.deepWork` lets Ask Crewlet hand a large task (research,
 scripts, files, many steps) to a coding CLI running its own tools: its shell,
 its files and its web tools, which are the point of the escalation. The run
-reaches Crewlet only through the signed-in person's own assistant tools, over
+reaches Crewlet only through the signed-in person's own Ask Crewlet tools, over
 the tool bridge, so every read is still their request and every write still a
-proposal they approve. Unset, the assistant answers in quick mode only.
+proposal they approve. Unset, Ask Crewlet answers in quick mode only.
 
 Deep work runs on a provider driving `ClaudeCode`, an `LLMProvider` or a
 platform model provider: its run is confined around that CLI's own install
 and temporary directories, which no other CLI has been measured against. It is
-a provider of its own, beside the assistant's chain, whose web tools stay on:
+a provider of its own, beside Ask Crewlet's chain, whose web tools stay on:
 
 ```yaml
 apiVersion: crewlet.ai/v1alpha1
@@ -1055,8 +1055,8 @@ calls the person's tools back at the Company's public address, so a Company
 with none runs no deep work.
 
 Crewlet refuses a provider driving another CLI in the dry run before every
-apply, and the refusal is reported on the Company, as the assistant chain's
-is; the API cannot refuse it, since the rule turns on the provider's own
+apply, and the refusal is reported on the Company, as a refusal of Ask
+Crewlet's chain is; the API cannot refuse it, since the rule turns on the provider's own
 spec. A provider placed in `E2B` by its `runIn` in a Company with no
 `spec.sandbox.e2b` is refused on the LLMProvider
 (`SandboxPlacementNotOffered`).

@@ -66,8 +66,8 @@ say so. What the public listener serves depends on what the engine is given:
   connected is refused (`503`).
 - `/mcp/{token}`, the tool bridge: always. Every agent seat's executor is
   its coding CLI's run in a box, which calls the seat's tools back through
-  it ([Running seats on a coding CLI](cli-agents.md)), as the Dashboard
-  Assistant's deep work calls the person's, and the data pod a call reaches
+  it ([Running seats on a coding CLI](cli-agents.md)), as Ask
+  Crewlet's deep work calls the person's, and the data pod a call reaches
   relays it to the pod holding the run's seat, a seat pod included. A seat's
   box on its engine pod's own host, a `Direct` one, dials that pod's own
   listener on loopback and needs no route: a data pod's public listener, or

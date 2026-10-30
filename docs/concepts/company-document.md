@@ -127,8 +127,8 @@ names that the document does not hold blocks the document, as a seat's does,
 because Crewlet refuses such a chain where `llm_order` would only drop the
 key. An `LLMProvider`'s `webTools: Denied` becomes its entry's
 `overrides: {web_tools: denied}`, the one profile override the API offers;
-Crewlet requires it of every provider the assistant runs on
-([Running Seats on a Coding CLI](../guides/cli-agents.md#a-provider-for-the-dashboard-assistant)).
+Crewlet requires it of every provider Ask Crewlet runs on
+([Running Seats on a Coding CLI](../guides/cli-agents.md#a-provider-for-ask-crewlet)).
 Its `deepWork` becomes the block's `deep_work`, whose `llm` names one
 provider's key the same way and blocks the document when the document does
 not hold it; the API requires `spec.sandbox` beside it, so every deep-work
