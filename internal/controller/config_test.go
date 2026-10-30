@@ -1116,7 +1116,10 @@ var _ = Describe("Company config", Ordered, func() {
 		Consistently(count).WithTimeout(6*time.Second).Should(Equal(4),
 			"a revision was activated with the deleted Secret's value in the store, and activated again")
 		Eventually(startedWith).WithTimeout(settle).ShouldNot(HaveKey(optionalRegistry))
-		Expect(log.of(name)).NotTo(ContainElement(HavePrefix("Normal Reactivated ")))
+		// The engine runs the rendered document, which read every value the
+		// store still holds, so the one activation owed is the reload of it
+		// without the deleted value, not a write of the same document again.
+		Expect(log.of(name)).To(ContainElement(HavePrefix("Normal Reactivated ")))
 		Expect(log.of(name)).NotTo(ContainElement(HavePrefix("Normal SecretKept ")))
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)

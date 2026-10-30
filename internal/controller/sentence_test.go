@@ -152,12 +152,12 @@ func TestAReloadThatCannotBeReadBackEndsWhatItQuotesOnce(t *testing.T) {
 	w := newWithdrawal(t, runningLetsGo)
 	// The operator asks for the activation: the engine did not at the removal.
 	w.engine.reloadAnswer = new(map[string]any(nil))
-	state, res, err := secretsync.Sync(ctx, w.client, w.resolve(t), w.state(t), operatorLogin)
+	state, res, err := secretsync.Sync(ctx, w.client, w.resolve(t), w.state(t), operatorLogin, discardState)
 	if err != nil {
 		t.Fatal(err)
 	}
 	w.engine.afterReload = func(e *storeEngine) { e.configDown = true }
-	if _, err := w.run.reactivate(ctx, w.client, nil, res.Reload, res.ReloadAction, state); err != nil {
+	if _, err := w.run.reactivate(ctx, w.client, nil, res.Reload, res.ReloadAction, state, w.ref()); err != nil {
 		t.Fatal(err)
 	}
 	recorded := drained(w.events)

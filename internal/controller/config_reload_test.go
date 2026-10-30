@@ -75,6 +75,9 @@ func TestARotationIsTheEnginesOneActivation(t *testing.T) {
 	if state := w.state(t); state.Recorded() != "r2" || !slices.Equal(state.LetGo("r2"), []string{w.registry}) {
 		t.Fatalf("the state records %q letting %v go, want r2 read as the rendered document", state.Recorded(), state.LetGo("r2"))
 	}
+	if owed := w.state(t).Written(); len(owed) != 0 {
+		t.Errorf("the state owes %v, want nothing: r2 activated after the sync wrote the rotated value", owed)
+	}
 	if !slices.ContainsFunc(recorded, func(e string) bool { return strings.HasPrefix(e, "Normal Activated Activated revision r2 ") }) {
 		t.Errorf("events %q, want r2's activation", recorded)
 	}

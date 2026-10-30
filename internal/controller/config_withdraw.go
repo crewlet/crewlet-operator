@@ -102,7 +102,11 @@ import (
 // later reconcile, of this operator or one restarted; the activation an
 // apply makes is recorded before anything is deleted after it, so a deletion
 // whose own record a failed write lost is withdrawn again by a later
-// reconcile, which knows the revision lets the key go.
+// reconcile, which knows the revision lets the key go. And it is settled by
+// any activation the engine is read running after the deletion, whoever made
+// it, by the fleet's activation epoch the deletion was marked with
+// (settleRead, markChanges): a reload that failed, or lost its race to
+// another writer, is read back rather than taken for a failed withdrawal.
 //
 // The engine offers no conditional reload and no conditional delete:
 // whichever revision is active when the request lands is the one activated
@@ -186,6 +190,17 @@ func (run *configRun) withdrawHeld(ctx context.Context, read secretsync.Desired)
 	if err := run.keepServing(ctx, eng, &read); err != nil {
 		return ctrl.Result{}, err
 	}
+	// What the fleet keepServing read settles or marks is saved before
+	// anything is asked of the engine: the reload below may land and the save
+	// after it be lost, and a mark the read lowered that only this reconcile
+	// knows of would be loaded unread again, which no activation's epoch is
+	// above (markChanges).
+	state, moved := run.settleRead(ctx, eng, active, state)
+	if moved {
+		if err := secretsync.SaveState(ctx, run.Client, stateRef, c, state); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
 	next, res, withdrawErr := secretsync.Withdraw(ctx, eng, read, state)
 	if len(res.Deleted) > 0 {
 		run.event(corev1.EventTypeNormal, "SecretsSynced", "SyncSecrets",
@@ -201,7 +216,7 @@ func (run *configRun) withdrawHeld(ctx context.Context, read secretsync.Desired)
 	}
 	var reactivateErr error
 	if withdrawErr == nil {
-		next, reactivateErr = run.reactivate(ctx, eng, active, res.Reload, res.ReloadAction, next)
+		next, reactivateErr = run.reactivate(ctx, eng, active, res.Reload, res.ReloadAction, next, stateRef)
 	}
 	if err := secretsync.SaveState(ctx, run.Client, stateRef, c, next); err != nil {
 		return ctrl.Result{}, err
@@ -369,7 +384,7 @@ func (run *configRun) settle(
 	if len(state.Withdrawn()) == 0 {
 		return 0, nil
 	}
-	next, reactivateErr := run.reactivate(ctx, eng, active, reload, reloadAction, state)
+	next, reactivateErr := run.reactivate(ctx, eng, active, reload, reloadAction, state, ref)
 	if err := secretsync.SaveState(ctx, run.Client, ref, run.company, next); err != nil {
 		return 0, err
 	}
@@ -414,9 +429,9 @@ func (run *configRun) withdrawalFailed(ctx context.Context, err error) ctrl.Resu
 // The engine activates its revision again itself when a write or a removal
 // changes a value that revision reads (Crewlet's ADR-0070), and reload is
 // what the last such request answered (secretsync.Result.Reload), made by
-// the engine call reloadAction (secretsync.Result.ReloadAction): where it landed,
-// the engine read its store without every name removed, and it is the
-// activation; asking for another would activate the same document twice.
+// the engine call reloadAction (secretsync.Result.ReloadAction): where it
+// landed, the engine read its store without every name removed, and it is
+// the activation; asking for another would activate the same document twice.
 // Where it is nil or failed, the operator asks for one (POST /config/reload).
 //
 // Neither names a revision: the engine stores again whichever revision the
@@ -426,9 +441,14 @@ func (run *configRun) withdrawalFailed(ctx context.Context, err error) ctrl.Resu
 // one read lets go only where it is that document; otherwise the state goes
 // on recording the one read, which is no longer the fleet's, and a Warning
 // says so.
+// Before the operator's request the withdrawals are marked by the fleet's
+// activation epoch, and state saved in ref (markChanges): a request that
+// fails, or loses its race to another writer, is read back, and a revision
+// the fleet runs above that epoch came after every withdrawal, whoever
+// activated it, and settles them (reloadFailed).
 func (run *configRun) reactivate(
 	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, reload *engine.Reload, reloadAction string,
-	state secretsync.State,
+	state secretsync.State, ref types.NamespacedName,
 ) (secretsync.State, error) {
 	withdrawn := state.Withdrawn()
 	if len(withdrawn) == 0 {
@@ -454,15 +474,18 @@ func (run *configRun) reactivate(
 	if reload.Landed() {
 		by = reloadAction
 	}
-	byEngine := by != ""
 	reloaded := engine.ApplyResult{}
-	if byEngine {
+	if by != "" {
 		reloaded.RevisionID, reloaded.Epoch = reload.RevisionID, reload.Epoch
 	} else {
 		var err error
+		if state, err = run.markChanges(ctx, eng, state, ref); err != nil {
+			return state, err
+		}
 		if reloaded, err = eng.ReloadConfig(ctx, reactivationSummary(held)); err != nil {
-			return state, fmt.Errorf("activating revision %s again, so that the engine reads its secret store without %s: %w",
-				active.RevisionID, strings.Join(held, ", "), err)
+			return run.reloadFailed(ctx, eng, active, state, held,
+				fmt.Errorf("activating revision %s again, so that the engine reads its secret store without %s: %w",
+					active.RevisionID, strings.Join(held, ", "), err))
 		}
 	}
 	now, err := activeConfig(ctx, eng)
@@ -475,10 +498,56 @@ func (run *configRun) reactivate(
 		run.reactivatedUnconfirmed(active, reloaded, by, held,
 			"its document is not that one: somebody activated another revision before the request landed")
 	default:
-		run.recordReactivation(active, reloaded, by, held)
+		run.recordReactivation(active, reloaded, by, held, nil)
 		return state.Activated(reloaded.RevisionID, state.LetGoKeys(active.RevisionID)), nil
 	}
-	return state.Reactivated(), nil
+	// Whatever its document, the revision the request activated read the
+	// store after every write and withdrawal the state records.
+	return state.Reloaded(), nil
+}
+
+// reloadFailed is state once a request to activate active again, so that the
+// engine reads its store without held, failed with failed: settled as far as
+// the fleet's revision, read afresh, activated after the withdrawals, since
+// nothing read before the request saw what activated since, and failed where
+// any of held is still owed. A revision the fleet's activation names above
+// the epoch the withdrawals were marked by (markChanges) came after every one
+// of them, whoever activated it: the request itself, where it landed and its
+// answer did not, or another writer, who won the race with it. Where its
+// document is active's, the fleet runs that document again without held, as
+// a reactivation the operator confirmed does, and it is recorded as one
+// (recordReactivation, whose event says the request failed); otherwise it is
+// a revision whose reading the operator does not know, which a Warning says,
+// and the state goes on recording the one read, as reactivatedUnconfirmed
+// leaves it. A request that failed outright leaves the fleet on active, which
+// settles nothing.
+func (run *configRun) reloadFailed(
+	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, state secretsync.State, held []string,
+	failed error,
+) (secretsync.State, error) {
+	now, err := activeConfig(ctx, eng)
+	if err != nil || now == nil || now.RevisionID == active.RevisionID {
+		return state, failed
+	}
+	fleet, err := eng.Fleet(ctx)
+	if err != nil || fleet.Activation == nil || fleet.Activation.RevisionID != now.RevisionID {
+		return state, failed
+	}
+	settled := state.Ran(fleet.Activation.Epoch)
+	if owed := settled.Withdrawn(); slices.ContainsFunc(held, func(name string) bool { return slices.Contains(owed, name) }) {
+		return state, failed
+	}
+	activation := engine.ApplyResult{RevisionID: now.RevisionID, Epoch: fleet.Activation.Epoch}
+	if bytes.Equal(now.Document, active.Document) {
+		run.recordReactivation(active, activation, "", held, failed)
+		return settled.Adopted(now.RevisionID, state.LetGoKeys(active.RevisionID)), nil
+	}
+	run.event(corev1.EventTypeWarning, "Reactivated", "ReloadConfig", "%s", ended(fmt.Sprintf(
+		"Did not activate revision %s again: revision %s, another document, activated as epoch %d after the operator "+
+			"removed %s from the engine's secret store, and read the store without them; the operator takes it to read "+
+			"every value as required, as it does any revision it has no record of activating, and the request failed: %s",
+		active.RevisionID, now.RevisionID, fleet.Activation.Epoch, strings.Join(held, ", "), failed)))
+	return settled, nil
 }
 
 // reactivationSummary is the summary of the revision that activates the
@@ -495,16 +564,29 @@ func reactivationSummary(held []string) string {
 // recordReactivation records the running document activated again as
 // reloaded, without held, by the engine at the request of the sync's engine
 // call by (WriteSecret, PutSecrets or DeleteSecret: a write or a removal of
-// a value the revision reads), or at the operator's request, by empty. A revision the operator recorded
-// as its own is replaced by the one that activates it again, with the same
-// content, so that the next one it applies does not take it for an edit
-// somebody else made; one it did not write stays somebody else's.
-func (run *configRun) recordReactivation(active *engine.ActiveConfig, reloaded engine.ApplyResult, by string, held []string) {
-	who, action := reactivatedBy(by)
-	run.event(corev1.EventTypeNormal, "Reactivated", action,
-		"%s revision %s again, unchanged, as revision %s (epoch %d), so that the engine reads its secret store "+
-			"without %s: the Secret or key each stands for no longer exists, and the revision lets it go without its value.",
-		who, active.RevisionID, reloaded.RevisionID, reloaded.Epoch, strings.Join(held, ", "))
+// a value the revision reads), or at the operator's request, by empty. A
+// revision the operator recorded as its own is replaced by the one that
+// activates it again, with the same content, so that the next one it applies
+// does not take it for an edit somebody else made; one it did not write stays
+// somebody else's. failed is the error the operator's request answered where
+// the engine was read back running the document again anyway (reloadFailed),
+// nil where it answered the activation.
+func (run *configRun) recordReactivation(
+	active *engine.ActiveConfig, reloaded engine.ApplyResult, by string, held []string, failed error,
+) {
+	if failed == nil {
+		who, action := reactivatedBy(by)
+		run.event(corev1.EventTypeNormal, "Reactivated", action,
+			"%s revision %s again, unchanged, as revision %s (epoch %d), so that the engine reads its secret store "+
+				"without %s: the Secret or key each stands for no longer exists, and the revision lets it go without its "+
+				"value.", who, active.RevisionID, reloaded.RevisionID, reloaded.Epoch, strings.Join(held, ", "))
+	} else {
+		run.event(corev1.EventTypeNormal, "Reactivated", "ReloadConfig", "%s", ended(fmt.Sprintf(
+			"The engine runs revision %s again, unchanged, as revision %s (epoch %d), activated after the operator removed "+
+				"%s from its secret store, whose Secret or key no longer exists and which the revision lets go without its "+
+				"value, so it reads the store without them; the operator's request to activate it again failed: %s",
+			active.RevisionID, reloaded.RevisionID, reloaded.Epoch, strings.Join(held, ", "), failed)))
+	}
 	recorded := run.company.Status.Config
 	if run.config != nil {
 		recorded = *run.config
@@ -513,7 +595,7 @@ func (run *configRun) recordReactivation(active *engine.ActiveConfig, reloaded e
 		return
 	}
 	config := recorded.DeepCopy()
-	now := metav1.Now()
+	now := metav1.NewTime(run.clock())
 	config.RevisionID, config.Epoch, config.AppliedAt = reloaded.RevisionID, new(reloaded.Epoch), &now
 	run.config = config
 	if run.applied.kind == appliedInRevision && run.applied.revision == active.RevisionID {

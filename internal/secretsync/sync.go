@@ -143,10 +143,11 @@ type Overwrite struct {
 // one activation however many requests carry it. Where the last request
 // re-activates nothing, because the revision reads none of its names, or its
 // re-activation fails, Result.Reload says so and the caller activates the
-// revision itself. A value written deferred is recorded as written (a
-// fingerprint in the State) only once the last write request has been
-// answered: a sync that fails, or stops, before that leaves it to be written
-// again by the next, whose last request activates it. The engine re-activates
+// revision itself. A value written deferred gets its fingerprint in the
+// State only once the last write request has been answered: a sync that
+// fails, or stops, before that leaves it to be written again by the next,
+// whose last request activates it. Every value is recorded as owed
+// (State.Written) before the first request, as below. The engine re-activates
 // the revision at the removal of a value it reads too, one removal at a time,
 // which is what Result.Reload reports where one comes last.
 //
@@ -160,7 +161,20 @@ type Overwrite struct {
 // state: a retry from it repeats only what is not known to have happened.
 // A name whose write failed has no fingerprint in it, because the engine may
 // or may not have stored the value.
-func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, self string) (State, Result, error) {
+//
+// Before it writes the first value, Sync hands save the State with every name
+// it is about to write recorded as written (State.Written), and the
+// fingerprints as they were, and writes nothing unless save took it. A value
+// changes nothing the engine runs until a revision activates after it, and
+// one written back leaves its fingerprint where it was: recorded only after
+// the write, a save lost between the two left a value no revision read and
+// nothing that said so, and the next Sync, finding the store holding its own
+// value under the fingerprint it had, had nothing left to write. A name saved
+// as written whose value never reached the store owes an activation for
+// nothing, which costs one; the other way cost the engine the value.
+func Sync(
+	ctx context.Context, eng EngineSecrets, desired Desired, prev State, self string, save func(State) error,
+) (State, Result, error) {
 	var res Result
 	if desired.partial {
 		return prev, res, errors.New("syncing the engine's secret store: the values were not all read, " +
@@ -199,7 +213,11 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 		}
 	}
 
-	if err := push(ctx, eng, desired, listed, &next, self, &res); err != nil {
+	writes := next.toWrite(desired, listed, self)
+	if err := next.writeAhead(writes, save); err != nil {
+		return next, res, err
+	}
+	if err := push(ctx, eng, desired, writes, listed, &next, self, &res); err != nil {
 		return next, res, err
 	}
 
@@ -233,32 +251,35 @@ func Sync(ctx context.Context, eng EngineSecrets, desired Desired, prev State, s
 			return next, res, fmt.Errorf("deleting %s, %s, from the engine's secret store: %w", name, what, err)
 		}
 		res.removed(removed)
-		delete(next.fingerprints, name)
+		next.deleted(name)
 		res.Deleted = append(res.Deleted, name)
 		if absent {
 			next.withdraw(name)
 		}
 	}
 	res.Retained, next.retained = retained, nameSet(retained)
+	// A value written that the store no longer holds, and that this sync
+	// did not write again, is none the next activation reads.
+	for name := range next.written {
+		if _, ok := next.fingerprints[name]; !ok {
+			delete(next.written, name)
+		}
+	}
 	return next, res, nil
 }
 
-// push writes every value of desired that the engine does not hold as the
-// operator last wrote it, as Sync says, recording each written in next and
-// in res, with the engine's last re-activation; a failed write stops it.
+// push writes the values of desired named by writes (toWrite), as Sync
+// says, recording each written in next and in res, with the engine's last
+// re-activation; a failed write stops it.
 func push(
-	ctx context.Context, eng EngineSecrets, desired Desired, listed map[string]engine.SecretInfo, next *State,
-	self string, res *Result,
+	ctx context.Context, eng EngineSecrets, desired Desired, writes []string, listed map[string]engine.SecretInfo,
+	next *State, self string, res *Result,
 ) error {
 	var single, batched []string
 	fingerprints := map[string][]byte{}
-	for _, name := range desired.Names() {
+	for _, name := range writes {
 		value := desired.values[name]
 		fp := next.fingerprint(name, value)
-		info, ok := listed[name]
-		if ok && info.OperatorID == self && hmac.Equal(next.fingerprints[name], fp) {
-			continue
-		}
 		// Until the write is answered the engine may or may not hold it.
 		delete(next.fingerprints, name)
 		fingerprints[name] = fp
@@ -354,6 +375,43 @@ func sortWritten(res *Result) {
 	slices.SortFunc(res.Overwritten, func(a, b Overwrite) int { return strings.Compare(a.Name, b.Name) })
 }
 
+// toWrite are the names of desired Sync writes, given what the engine lists:
+// those it does not list, lists as written with a credential other than self,
+// or holds under another fingerprint than s does.
+func (s State) toWrite(desired Desired, listed map[string]engine.SecretInfo, self string) []string {
+	var writes []string
+	for _, name := range desired.Names() {
+		info, ok := listed[name]
+		if !ok || info.OperatorID != self || !hmac.Equal(s.fingerprints[name], s.fingerprint(name, desired.values[name])) {
+			writes = append(writes, name)
+		}
+	}
+	return writes
+}
+
+// writeAhead records every name of writes as written in s, which it changes
+// in place, once save has taken a State of its own recording them so, the
+// fingerprints as they were: the writes Sync makes next leave what save took
+// as it was. It records and saves nothing for no writes, and records nothing
+// where save fails.
+func (s *State) writeAhead(writes []string, save func(State) error) error {
+	if len(writes) == 0 {
+		return nil
+	}
+	ahead := s.carried(maps.Clone(s.fingerprints))
+	for _, name := range writes {
+		ahead.write(name)
+	}
+	if err := save(ahead); err != nil {
+		return fmt.Errorf("recording the values about to be written into the engine's secret store, %s: %w",
+			strings.Join(writes, ", "), err)
+	}
+	for _, name := range writes {
+		s.write(name)
+	}
+	return nil
+}
+
 // Withdraw removes from the engine's store the entry of every absent name of
 // desired (Desired.Missing) that it lists, but one a revision kept reads as
 // required (Desired.Keep, Desired.KeepServed), and of every name a revision
@@ -413,7 +471,7 @@ func Withdraw(ctx context.Context, eng EngineSecrets, desired Desired, prev Stat
 	for _, name := range gone {
 		_, pushed := prev.fingerprints[name]
 		if _, removed := desired.gone(name, prev); pushed && removed && !listed[name] {
-			delete(next.fingerprints, name)
+			next.deleted(name)
 			next.withdraw(name)
 		}
 	}
@@ -424,7 +482,7 @@ func Withdraw(ctx context.Context, eng EngineSecrets, desired Desired, prev Stat
 				name, err)
 		}
 		res.removed(removed)
-		delete(next.fingerprints, name)
+		next.deleted(name)
 		next.withdraw(name)
 		res.Deleted = append(res.Deleted, name)
 	}

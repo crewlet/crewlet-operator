@@ -228,12 +228,16 @@ func desiredOf(values map[string]string) Desired {
 
 func mustSync(t *testing.T, eng *fakeEngine, desired Desired, prev State) (State, Result) {
 	t.Helper()
-	next, res, err := Sync(context.Background(), eng, desired, prev, self)
+	next, res, err := Sync(context.Background(), eng, desired, prev, self, discard)
 	if err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
 	return next, res
 }
+
+// discard is a save that takes every State Sync hands it ahead of a write,
+// and keeps none.
+func discard(State) error { return nil }
 
 func assertStore(t *testing.T, eng *fakeEngine, want map[string]fakeEntry) {
 	t.Helper()
@@ -361,7 +365,7 @@ func TestSyncSplitsALargeSetIntoBatches(t *testing.T) {
 	}
 	boom := errors.New("engine unavailable")
 	eng.failPut[second[0]] = boom
-	partial, res, err := Sync(context.Background(), eng, desiredOf(values), State{}, self)
+	partial, res, err := Sync(context.Background(), eng, desiredOf(values), State{}, self, discard)
 	if !errors.Is(err, boom) {
 		t.Fatalf("Sync() error = %v, want the engine's", err)
 	}
@@ -403,7 +407,7 @@ func TestASyncWhoseLastWriteFailsActivatesItsValuesNextTime(t *testing.T) {
 			eng.reads[name] = true
 		}
 		eng.failPut[last] = errors.New("engine unavailable")
-		partial, _, err := Sync(context.Background(), eng, desiredOf(values), State{}, self)
+		partial, _, err := Sync(context.Background(), eng, desiredOf(values), State{}, self, discard)
 		if err == nil || len(eng.reloaded) != 0 || len(partial.fingerprints) != 0 {
 			t.Fatalf("a failed last write = %v, activated %v, recorded %d names; want the error, no activation "+
 				"and nothing recorded", err, eng.reloaded, len(partial.fingerprints))
@@ -609,7 +613,7 @@ func TestSyncReturnsWhatItAchieved(t *testing.T) {
 	desired := desiredOf(map[string]string{nameA: "a1", nameB: "b2"})
 	boom := errors.New("engine unavailable")
 	eng.failPut[nameB] = boom
-	partial, res, err := Sync(context.Background(), eng, desired, state, self)
+	partial, res, err := Sync(context.Background(), eng, desired, state, self, discard)
 	if !errors.Is(err, boom) {
 		t.Fatalf("Sync() error = %v, want the engine's", err)
 	}
@@ -626,7 +630,7 @@ func TestSyncReturnsWhatItAchieved(t *testing.T) {
 
 	delete(eng.failPut, nameB)
 	eng.failDelete[nameC] = boom
-	partial, res, err = Sync(context.Background(), eng, desired, partial, self)
+	partial, res, err = Sync(context.Background(), eng, desired, partial, self, discard)
 	if !errors.Is(err, boom) {
 		t.Fatalf("Sync() error = %v, want the engine's", err)
 	}
@@ -656,7 +660,7 @@ func TestSyncChangesNothingWhenTheListingFails(t *testing.T) {
 	eng.takeCalls()
 
 	eng.failList = errors.New("connection refused")
-	got, res, err := Sync(context.Background(), eng, desiredOf(map[string]string{nameB: "b1"}), state, self)
+	got, res, err := Sync(context.Background(), eng, desiredOf(map[string]string{nameB: "b1"}), state, self, discard)
 	if !errors.Is(err, eng.failList) {
 		t.Fatalf("Sync() error = %v", err)
 	}
@@ -821,7 +825,7 @@ func TestSyncRefusesAPartialDesired(t *testing.T) {
 	eng := newFakeEngine()
 	state, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a"}), State{})
 	eng.takeCalls()
-	next, _, err := Sync(context.Background(), eng, Desired{partial: true}, state, self)
+	next, _, err := Sync(context.Background(), eng, Desired{partial: true}, state, self, discard)
 	if err == nil {
 		t.Fatal("Sync took a partial Desired")
 	}
@@ -1176,4 +1180,204 @@ func TestSyncKeepsWhatEveryNodeRuns(t *testing.T) {
 			t.Errorf("Served() = %v and Held = %v", got, res.Held)
 		}
 	})
+}
+
+// TestAWrittenValueIsOwedUntilARevisionActivatesAfterIt: every value Sync
+// writes, rotated or written back over one the store lost or somebody else
+// wrote, is owed an activation (State.Written) until a revision activates
+// after it. A later sync with nothing to write keeps it owed, and so does
+// settling the withdrawals alone (Reactivated): the write-back leaves the
+// fingerprints as they were, so nothing else would say a revision may have
+// read the other value. An activation the operator makes (Activated), or any
+// revision activated after it (Reloaded), settles it, and a value Sync
+// deletes, or one the store no longer holds and nothing writes again, owes
+// nothing.
+func TestAWrittenValueIsOwedUntilARevisionActivatesAfterIt(t *testing.T) {
+	eng := newFakeEngine()
+	both := desiredOf(map[string]string{nameA: "a1", nameB: "b1"})
+	state, _ := mustSync(t, eng, both, State{})
+	if got := state.Written(); !slices.Equal(got, []string{nameA, nameB}) {
+		t.Fatalf("Written() after the first sync = %v, want [%s %s]", got, nameA, nameB)
+	}
+	if got := state.Activated(revision1, nil).Written(); len(got) != 0 {
+		t.Fatalf("Written() after an activation = %v, want none", got)
+	}
+	state = state.Activated(revision1, nil)
+
+	delete(eng.entries, nameA)
+	state, res := mustSync(t, eng, both, state)
+	if !slices.Equal(res.Put, []string{nameA}) || !slices.Equal(state.Written(), []string{nameA}) {
+		t.Fatalf("a value the store lost: Put = %v, Written() = %v, want [%s] for both", res.Put, state.Written(), nameA)
+	}
+	again, res := mustSync(t, eng, both, state)
+	if len(res.Put) != 0 || !slices.Equal(again.Written(), []string{nameA}) {
+		t.Fatalf("a sync with nothing to write: Put = %v, Written() = %v, want nothing put and [%s] still owed",
+			res.Put, again.Written(), nameA)
+	}
+	if got := again.Reactivated().Written(); !slices.Equal(got, []string{nameA}) {
+		t.Errorf("Written() once the withdrawals alone were settled = %v, want [%s] still owed", got, nameA)
+	}
+	if got := again.Reloaded().Written(); len(got) != 0 {
+		t.Errorf("Written() once a revision activated after the write = %v, want none", got)
+	}
+
+	eng.entries[nameB] = fakeEntry{value: "theirs", by: access}
+	state, _ = mustSync(t, eng, both, again.Activated(revision2, nil))
+	if got := state.Written(); !slices.Equal(got, []string{nameB}) {
+		t.Fatalf("Written() after a value somebody else wrote was written back = %v, want [%s]", got, nameB)
+	}
+	state, res = mustSync(t, eng, desiredOf(map[string]string{nameA: "a1"}), state)
+	if !slices.Equal(res.Deleted, []string{nameB}) || len(state.Written()) != 0 {
+		t.Fatalf("a written value Sync deleted: Deleted = %v, Written() = %v, want [%s] deleted and nothing owed",
+			res.Deleted, state.Written(), nameB)
+	}
+
+	state, _ = mustSync(t, eng, desiredOf(map[string]string{nameA: "a2"}), state)
+	gone := Desired{absent: map[string]*MissingError{nameA: {Key: keyA}}}
+	withdrawn, _, err := Withdraw(context.Background(), eng, gone, state)
+	if err != nil {
+		t.Fatalf("Withdraw: %v", err)
+	}
+	if got := withdrawn.Written(); len(got) != 0 {
+		t.Errorf("Written() of a value Withdraw deleted = %v, want none: its withdrawal is what is owed", got)
+	}
+
+	delete(eng.entries, nameA)
+	state, _ = mustSync(t, eng, desiredOf(nil), state)
+	if got := state.Written(); len(got) != 0 {
+		t.Errorf("Written() of a value the store lost and nothing writes again = %v, want none", got)
+	}
+}
+
+// TestSyncSavesAWriteBeforeItWritesTheValue: Sync hands its caller the State
+// with every name it is about to write recorded as written, and the
+// fingerprints as they were, before it writes the first value, and writes
+// nothing the caller did not save. A value written back leaves its
+// fingerprint where it was, so a save lost after the write would otherwise
+// leave nothing that said a revision has yet to read it: the next Sync finds
+// the store holding the operator's own value under that fingerprint and has
+// nothing left to write. And a rotated value saved under its new fingerprint
+// before it reached the store would never be written, the next Sync taking
+// the old value it finds there for the new one.
+func TestSyncSavesAWriteBeforeItWritesTheValue(t *testing.T) {
+	ctx := context.Background()
+	eng := newFakeEngine()
+	both := desiredOf(map[string]string{nameA: "a1", nameB: "b1"})
+	state, _ := mustSync(t, eng, both, State{})
+	state = state.Activated(revision1, nil)
+
+	// The store lost a1 and somebody wrote over b1: both are written back.
+	delete(eng.entries, nameA)
+	eng.entries[nameB] = fakeEntry{value: "theirs", by: access}
+	var saved []State
+	_, res, err := Sync(ctx, eng, both, state, self, func(ahead State) error {
+		if eng.holds(nameA) || eng.entries[nameB].by != access {
+			t.Error("Sync saved the State after it wrote a value")
+		}
+		saved = append(saved, ahead)
+		return nil
+	})
+	if err != nil || !slices.Equal(res.Put, []string{nameA, nameB}) {
+		t.Fatalf("Sync() = %+v, %v, want %s and %s written back", res, err, nameA, nameB)
+	}
+	if len(saved) != 1 || !slices.Equal(saved[0].Written(), []string{nameA, nameB}) {
+		t.Fatalf("saved ahead of the writes: %d States, want one recording [%s %s] written", len(saved), nameA, nameB)
+	}
+	// The save after the writes is lost: the next sync starts from the one
+	// ahead of them. b1, written back under the fingerprint it had, has
+	// nothing left to write, and a1, which the store had lost and so had no
+	// fingerprint, is written once more; both are still owed.
+	again, res := mustSync(t, eng, both, saved[0])
+	if !slices.Equal(res.Put, []string{nameA}) || !slices.Equal(again.Written(), []string{nameA, nameB}) {
+		t.Fatalf("a sync from the State saved ahead of the writes: Put = %v, Written() = %v, want [%s] put and "+
+			"[%s %s] still owed", res.Put, again.Written(), nameA, nameA, nameB)
+	}
+
+	// A rotated value whose write fails after the save: the State saved
+	// ahead of it keeps the old fingerprint, so the next sync writes it.
+	state = again.Activated(revision2, nil)
+	rotated := desiredOf(map[string]string{nameA: "a2", nameB: "b1"})
+	boom := errors.New("engine unavailable")
+	eng.failPut[nameA] = boom
+	saved = nil
+	if _, _, err := Sync(ctx, eng, rotated, state, self, func(ahead State) error {
+		saved = append(saved, ahead)
+		return nil
+	}); !errors.Is(err, boom) || len(saved) != 1 {
+		t.Fatalf("Sync() error = %v after %d saves, want the engine's after one", err, len(saved))
+	}
+	delete(eng.failPut, nameA)
+	if _, res := mustSync(t, eng, rotated, saved[0]); !slices.Equal(res.Put, []string{nameA}) {
+		t.Fatalf("a sync from the State saved ahead of a rotation that never reached the store: Put = %v, want [%s]",
+			res.Put, nameA)
+	}
+
+	// A save that fails writes nothing; a sync with nothing to write saves
+	// nothing ahead.
+	delete(eng.entries, nameA)
+	eng.takeCalls()
+	refused := errors.New("the API server did not answer")
+	if _, res, err := Sync(ctx, eng, rotated, state, self, func(State) error { return refused }); !errors.Is(err, refused) ||
+		len(res.Put) != 0 {
+		t.Fatalf("Sync() = %+v, %v with a save that failed, want the save's error and nothing written", res, err)
+	}
+	assertCalls(t, eng, "list")
+	settled, _ := mustSync(t, eng, rotated, state)
+	if _, _, err := Sync(ctx, eng, rotated, settled.Activated(revision1, nil), self, func(State) error {
+		t.Error("Sync saved ahead of a sync that writes nothing")
+		return nil
+	}); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+}
+
+// TestAChangeIsSettledByAnActivationAboveTheEpochReadAfterIt: a write or a
+// withdrawal waits for an activation above the epoch of the fleet's
+// activation pointer read first after it (Observed), and any activation the
+// engine is read running above it settles it (Ran), whoever made it. One no
+// read has followed yet is settled by no epoch at all, since the activation a
+// read names may predate the change; a later read keeps the earlier epoch; and
+// a name changed again after a read waits for a read after that change.
+func TestAChangeIsSettledByAnActivationAboveTheEpochReadAfterIt(t *testing.T) {
+	eng := newFakeEngine()
+	both := desiredOf(map[string]string{nameA: "a1", nameB: "b1"})
+	state, _ := mustSync(t, eng, both, State{})
+	if !state.Unobserved() {
+		t.Fatal("Unobserved() = false after a sync wrote two values")
+	}
+	if got := state.Ran(1 << 40).Written(); !slices.Equal(got, []string{nameA, nameB}) {
+		t.Fatalf("Written() after an activation with no read after the writes = %v, want both still owed", got)
+	}
+	state = state.Observed(7)
+	if state.Unobserved() {
+		t.Fatal("Unobserved() = true after a read")
+	}
+	if got := state.Ran(7).Written(); !slices.Equal(got, []string{nameA, nameB}) {
+		t.Fatalf("Written() after the activation the read named = %v, want both still owed", got)
+	}
+	if got := state.Ran(8).Written(); len(got) != 0 {
+		t.Fatalf("Written() after an activation above the read = %v, want none", got)
+	}
+	if got := state.Observed(9).Ran(8).Written(); len(got) != 0 {
+		t.Fatalf("Written() after a later read and an activation above the first = %v, want none", got)
+	}
+
+	delete(eng.entries, nameA)
+	state, _ = mustSync(t, eng, both, state)
+	if got := state.Ran(8).Written(); !slices.Equal(got, []string{nameA}) {
+		t.Fatalf("Written() of a value written again after the read = %v, want [%s] still owed", got, nameA)
+	}
+
+	gone := Desired{absent: map[string]*MissingError{nameB: {Key: keyB}}}
+	withdrawn, _, err := Withdraw(context.Background(), eng, gone, state.Activated(revision1, []secretref.Key{keyB}))
+	if err != nil {
+		t.Fatalf("Withdraw: %v", err)
+	}
+	withdrawn = withdrawn.Observed(10)
+	if got := withdrawn.Ran(10).Withdrawn(); !slices.Equal(got, []string{nameB}) {
+		t.Fatalf("Withdrawn() after the activation the read named = %v, want [%s] still owed", got, nameB)
+	}
+	if got := withdrawn.Ran(11).Withdrawn(); len(got) != 0 {
+		t.Fatalf("Withdrawn() after an activation above the read = %v, want none", got)
+	}
 }

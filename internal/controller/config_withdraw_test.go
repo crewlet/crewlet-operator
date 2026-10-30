@@ -104,6 +104,12 @@ type storeEngine struct {
 	// how many epochs /health reports the node behind the latest.
 	noActivation bool
 	appliedLag   int
+	// dryRunDown makes the engine answer a dry run as one that cannot
+	// decide it, a failure no wait of the reconcile's own clears.
+	dryRunDown bool
+	// afterPut, when set, runs once, under its lock, just after a value is
+	// written into the store.
+	afterPut func(e *storeEngine)
 }
 
 // dataNode reports whether node is a pod of the Company's data StatefulSet,
@@ -116,15 +122,19 @@ func dataNode(node string) bool {
 // otherwise.
 const storeNode = "acme-data-0"
 
-// down reports whether r is a request configDown, secretsDown or reloadDown
-// makes the engine refuse: a read of the fleet's document, a write to the
-// store, one name's or a batch's, or a reload of the fleet's revision.
+// down reports whether r is a request configDown, secretsDown, reloadDown or
+// dryRunDown makes the engine refuse: a read of the fleet's document, a write
+// to the store, one name's or a batch's, a reload of the fleet's revision, or
+// a dry run.
 func (e *storeEngine) down(r *http.Request) bool {
 	if r.Method == http.MethodGet {
 		return r.URL.Path == configRoute && e.configDown
 	}
 	if r.URL.Path == reloadRoute {
 		return e.reloadDown
+	}
+	if r.URL.Path == configRoute && dryRun(r) {
+		return e.dryRunDown
 	}
 	return (r.URL.Path == secretsRoute || strings.HasPrefix(r.URL.Path, secretsRoute+"/")) && e.secretsDown
 }
@@ -194,7 +204,7 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPut && r.URL.Path == configRoute && e.refuse:
 		answer(http.StatusBadRequest, map[string]any{"error": "validation_error", "detail": "refused",
 			"problems": []map[string]string{{"path": "roles", "kind": "invalid", "message": "refused"}}})
-	case r.Method == http.MethodPut && r.URL.Path == configRoute && r.URL.Query().Get("dry_run") == "true":
+	case r.Method == http.MethodPut && r.URL.Path == configRoute && dryRun(r):
 		answer(http.StatusOK, map[string]any{"base_revision_id": active.id})
 	case r.Method == http.MethodPut && r.URL.Path == configRoute:
 		applied := activate(body)
@@ -252,6 +262,11 @@ func (e *storeEngine) serveSecretWrite(
 				read = append(read, name)
 			}
 		}
+		if e.afterPut != nil {
+			hook := e.afterPut
+			e.afterPut = nil
+			hook(e)
+		}
 		var reload any
 		if len(read) > 0 {
 			reload = e.reactivate(activate, active, "reload: secrets "+strings.Join(read, ", ")+" written")
@@ -259,6 +274,11 @@ func (e *storeEngine) serveSecretWrite(
 		answerJSON(w, http.StatusOK, map[string]any{"names": names, readByField: readBy, reloadField: reload})
 	case r.Method == http.MethodPut && isSecret:
 		e.store[name] = string(body)
+		if e.afterPut != nil {
+			hook := e.afterPut
+			e.afterPut = nil
+			hook(e)
+		}
 		readBy, reload := []string{}, any(nil)
 		if reads(name) {
 			readBy = []string{readPath}
@@ -420,6 +440,11 @@ func (e *storeEngine) activation() *activationAnswer {
 	return &activationAnswer{RevisionID: e.revisions[len(e.revisions)-1].id, Epoch: len(e.revisions)}
 }
 
+// dryRun reports whether r asks only for a check of the document.
+func dryRun(r *http.Request) bool {
+	return r.URL.Query().Get("dry_run") == "true"
+}
+
 // answerJSON writes v as the JSON answer, with status.
 func answerJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -547,6 +572,11 @@ type withdrawal struct {
 	registry string
 	// requiring is a document whose server requires the registry.
 	requiring []byte
+	// pushed is what the operator pushed for r1, both values, and owe makes
+	// the state record them pushed after it (owePushed).
+	pushed   secretsync.Desired
+	recorded string
+	optional []secretref.Key
 	// stateWrites counts the writes of the secret sync's state since the
 	// reconcile began, and failWrite, when it is not 0, is the one that
 	// fails, the API server not answering.
@@ -618,18 +648,18 @@ func newWithdrawal(t *testing.T, r running) *withdrawal {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var state secretsync.State
-	if r.recorded != "" {
-		state = state.Activated(r.recorded, runningDoc.Optional)
-	}
 	// Pushed before r1 activated, so that r1 read them: nothing is
-	// re-activated for them.
+	// re-activated for them, and nothing is owed for them after it.
 	fe.reloadAnswer = new(map[string]any(nil))
-	state, _, err = secretsync.Sync(ctx, eng, present, state, operatorLogin)
+	state, _, err := secretsync.Sync(ctx, eng, present, secretsync.State{}, operatorLogin, discardState)
 	if err != nil {
 		t.Fatal(err)
 	}
 	fe.reloadAnswer = nil
+	state = state.Reloaded()
+	if r.recorded != "" {
+		state = state.Activated(r.recorded, runningDoc.Optional)
+	}
 	stateRef := types.NamespacedName{Namespace: company.Namespace, Name: secretSyncStateName(company)}
 	if err := secretsync.SaveState(ctx, cluster, stateRef, company, state); err != nil {
 		t.Fatal(err)
@@ -640,12 +670,37 @@ func newWithdrawal(t *testing.T, r running) *withdrawal {
 	w.stateWrites.Store(0)
 
 	w.engine, w.client, w.cluster = fe, eng, cluster
+	w.pushed, w.recorded, w.optional = present, r.recorded, runningDoc.Optional
 	w.registry = secretsync.StoreName(secretref.Key{Namespace: "ns", Name: optionalSecret, Key: optionalKey})
 	w.again(t, company)
 	if !fe.holds(w.registry) {
 		t.Fatal("the engine's store does not hold the registry the operator pushed")
 	}
 	return w
+}
+
+// owePushed makes the state the one a sync leaves that pushed both values
+// again after r1 activated, whose writes the engine re-activated nothing at:
+// the revision recorded as before, and both values owed until a revision
+// activates after them.
+func (w *withdrawal) owePushed(t *testing.T) {
+	t.Helper()
+	ctx := context.Background()
+	w.engine.reloadAnswer = new(map[string]any(nil))
+	state, _, err := secretsync.Sync(ctx, w.client, w.pushed, secretsync.State{}, operatorLogin, discardState)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.engine.reloadAnswer = nil
+	if w.recorded != "" {
+		state = state.Adopted(w.recorded, w.optional)
+	}
+	if len(state.Written()) == 0 {
+		t.Fatal("the sync pushed nothing again")
+	}
+	if err := secretsync.SaveState(ctx, w.cluster, w.ref(), w.run.company, state); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // again makes w.run a new reconcile of company, as a reconcile after the last
@@ -675,6 +730,15 @@ func (w *withdrawal) statusWritten() *crewletaiv1alpha1.Company {
 	}
 	return company
 }
+
+// ref is where the operator keeps the secret sync's state of w's Company.
+func (w *withdrawal) ref() types.NamespacedName {
+	return types.NamespacedName{Namespace: w.run.company.Namespace, Name: secretSyncStateName(w.run.company)}
+}
+
+// discardState is a save that takes every State secretsync.Sync hands it
+// ahead of a write, and keeps none: the test saves what Sync returns itself.
+func discardState(secretsync.State) error { return nil }
 
 // state is the secret sync's state as the reconcile saved it.
 func (w *withdrawal) state(t *testing.T) secretsync.State {
@@ -951,8 +1015,10 @@ func TestARevisionThatLetsAValueGoGoesWithoutItWhateverTheNextDocumentReads(t *t
 // the running revision lets it go too, the operator's own or the document it
 // renders, it goes before the apply, and the engine activates the running
 // revision again at its removal, which reads it: that is the document the
-// operator renders, so it is the one activation it takes, recorded as the
-// operator's apply, and nothing is dry-run that the engine could refuse.
+// operator renders, which the engine runs with every value, so it is the one
+// activation it takes, the withdrawal it owes (Reactivated), recorded in place
+// of the revision before it, and nothing is dry-run that the engine could
+// refuse.
 func TestTheNextDocumentLetsGoWhatTheRunningRevisionRequired(t *testing.T) {
 	for _, tc := range []struct {
 		running
@@ -962,8 +1028,8 @@ func TestTheNextDocumentLetsGoWhatTheRunningRevisionRequired(t *testing.T) {
 		revisions []string
 		kept      bool
 		// byEngine is the engine's re-activation at the removal, the
-		// document being the one the engine runs, taken for the apply
-		// before anything is dry-run.
+		// document being the one the engine runs, taken for the withdrawal
+		// it owes before anything is dry-run.
 		byEngine bool
 	}{
 		{running: runningRequires, revisions: []string{"r1", "r2", "r3"}},
@@ -1012,11 +1078,13 @@ func TestTheNextDocumentLetsGoWhatTheRunningRevisionRequired(t *testing.T) {
 				t.Errorf("the state lets %v go for %s, owes %v and retains %v, want the registry, nothing and nothing",
 					state.LetGo(last), last, state.Withdrawn(), state.Retained())
 			}
-			reactivated := len(tc.revisions) == 3 || tc.refused && !tc.byEngine
-			if told(recorded, "Reactivated") != reactivated {
-				t.Errorf("events %q: Reactivated told %t, want %t", recorded, !reactivated, reactivated)
+			// Every revision that lets the registry go is activated again
+			// without it: by the operator after the next document, or by the
+			// engine at the removal where the running one lets it go.
+			if !told(recorded, "Reactivated") {
+				t.Errorf("events %q, want Reactivated", recorded)
 			}
-			if reactivated && !strings.Contains(w.engine.summaryOf(), w.registry) {
+			if !strings.Contains(w.engine.summaryOf(), w.registry) {
 				t.Errorf("revision %s is summarised %q, which does not name the registry", last, w.engine.summaryOf())
 			}
 			if (!tc.refused || tc.byEngine) &&
@@ -1166,10 +1234,14 @@ func TestAReloadIsRecordedOnlyForTheDocumentItRead(t *testing.T) {
 			if got := w.engine.ids(); !slices.Equal(got, []string{"r1", "r2", "r3"}) {
 				t.Fatalf("the revisions are %v, want r1, r2 and r3, the reload %s", got, reload)
 			}
+			// The reload, whatever its document, activated after every
+			// value the operator wrote too, the one the fixture pushed.
 			state := w.state(t)
-			if state.Records(reload) || len(state.LetGo(reload)) != 0 || len(state.Withdrawn()) != 0 {
-				t.Errorf("the state records %s: %t, letting %v go, and owes %v; want %s unknown and nothing owed",
-					reload, state.Records(reload), state.LetGo(reload), state.Withdrawn(), reload)
+			if state.Records(reload) || len(state.LetGo(reload)) != 0 || len(state.Withdrawn()) != 0 ||
+				len(state.Written()) != 0 {
+				t.Errorf("the state records %s: %t, letting %v go, and owes %v withdrawn and %v written; "+
+					"want %s unknown and nothing owed",
+					reload, state.Records(reload), state.LetGo(reload), state.Withdrawn(), state.Written(), reload)
 			}
 			if !warned(recorded, "Reactivated") || told(recorded, "Reactivated") {
 				t.Errorf("events %q, want a Warning Reactivated", recorded)
@@ -1237,14 +1309,14 @@ func TestReactivateRepeatsOnlyARevisionThatLetsTheValueGo(t *testing.T) {
 					t.Fatal(err)
 				}
 				// Removed by a sync that kept nothing for the running revision.
-				state, res, err := secretsync.Sync(ctx, w.client, w.resolve(t), w.state(t), operatorLogin)
+				state, res, err := secretsync.Sync(ctx, w.client, w.resolve(t), w.state(t), operatorLogin, discardState)
 				if err != nil || !slices.Equal(state.Withdrawn(), []string{w.registry}) {
 					t.Fatalf("the sync withdrew %v (%v), want the registry", state.Withdrawn(), err)
 				}
 				if res.Reload.Landed() != byEngine {
 					t.Fatalf("the sync reports the engine's re-activation %+v", res.Reload)
 				}
-				next, err := w.run.reactivate(ctx, w.client, active, res.Reload, res.ReloadAction, state)
+				next, err := w.run.reactivate(ctx, w.client, active, res.Reload, res.ReloadAction, state, w.ref())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -1296,13 +1368,13 @@ func TestAReactivationByTheEngineNamesTheRequestThatMadeIt(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			state, res, err := secretsync.Sync(ctx, w.client, w.resolve(t), w.state(t), operatorLogin)
+			state, res, err := secretsync.Sync(ctx, w.client, w.resolve(t), w.state(t), operatorLogin, discardState)
 			if err != nil || !res.Reload.Landed() {
 				t.Fatalf("the sync = (%+v, %v), want the engine's re-activation", res.Reload, err)
 			}
 			recorder := &actionRecorder{}
 			w.run.Recorder = recorder
-			if _, err := w.run.reactivate(ctx, w.client, active, res.Reload, action, state); err != nil {
+			if _, err := w.run.reactivate(ctx, w.client, active, res.Reload, action, state, w.ref()); err != nil {
 				t.Fatal(err)
 			}
 			if !slices.Contains(recorder.actions, "Reactivated "+action) {
@@ -1326,7 +1398,7 @@ func TestARefusedDocumentComesBackWhenItsWithdrawalReportSays(t *testing.T) {
 	read := w.resolve(t)
 	read.Keep("r1", w.registry)
 	ref := types.NamespacedName{Namespace: w.run.company.Namespace, Name: secretSyncStateName(w.run.company)}
-	owed, _, err := secretsync.Sync(ctx, w.client, read, w.state(t), operatorLogin)
+	owed, _, err := secretsync.Sync(ctx, w.client, read, w.state(t), operatorLogin, discardState)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1376,7 +1448,7 @@ func TestARevisionAdoptedInSyncIsRecordedAtItsEpoch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := w.run.inSync(ctx, w.client, active); err != nil {
+	if err := w.run.inSync(ctx, w.client, active, w.run.company.Status.Config.AppliedHash); err != nil {
 		t.Fatal(err)
 	}
 	config := w.statusWritten().Status.Config
@@ -1395,7 +1467,7 @@ func TestARevisionAdoptedInSyncIsRecordedAtItsEpoch(t *testing.T) {
 	w.engine.mu.Lock()
 	w.engine.fleetDown = true
 	w.engine.mu.Unlock()
-	if err := w.run.inSync(ctx, w.client, active); err == nil || errors.Is(err, engine.ErrRevisionAdvanced) ||
+	if err := w.run.inSync(ctx, w.client, active, w.run.company.Status.Config.AppliedHash); err == nil || errors.Is(err, engine.ErrRevisionAdvanced) ||
 		w.run.config != nil {
 		t.Errorf("inSync over a fleet that cannot be read = %v, recording %+v; want an error that claims no race and "+
 			"nothing recorded", err, w.run.config)
@@ -1405,7 +1477,7 @@ func TestARevisionAdoptedInSyncIsRecordedAtItsEpoch(t *testing.T) {
 	w.engine.mu.Lock()
 	w.engine.fleetDown, w.engine.noActivation = false, true
 	w.engine.mu.Unlock()
-	if err := w.run.inSync(ctx, w.client, active); err == nil || errors.Is(err, engine.ErrRevisionAdvanced) ||
+	if err := w.run.inSync(ctx, w.client, active, w.run.company.Status.Config.AppliedHash); err == nil || errors.Is(err, engine.ErrRevisionAdvanced) ||
 		strings.Contains(err.Error(), "instead") || w.run.config != nil {
 		t.Errorf("inSync over a fleet answering without its activation = %v, recording %+v; want an error that claims no "+
 			"race and nothing recorded", err, w.run.config)
@@ -1418,7 +1490,7 @@ func TestARevisionAdoptedInSyncIsRecordedAtItsEpoch(t *testing.T) {
 	if _, err := w.client.ReloadConfig(ctx, "reloaded again"); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.run.inSync(ctx, w.client, active); !errors.Is(err, engine.ErrRevisionAdvanced) || w.run.config != nil {
+	if err := w.run.inSync(ctx, w.client, active, w.run.company.Status.Config.AppliedHash); !errors.Is(err, engine.ErrRevisionAdvanced) || w.run.config != nil {
 		t.Errorf("inSync of r2 while the fleet's activation names r3 = %v, recording %+v; want a lost race "+
 			"(ErrRevisionAdvanced) and nothing recorded", err, w.run.config)
 	}
@@ -1450,7 +1522,7 @@ func TestAnAdoptedRevisionIsHeldToItsOwnApplyDeadline(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := w.run.inSync(ctx, w.client, active); err != nil {
+		if err := w.run.inSync(ctx, w.client, active, w.run.company.Status.Config.AppliedHash); err != nil {
 			t.Fatal(err)
 		}
 		h, err := w.client.Health(ctx)
@@ -1475,6 +1547,421 @@ func TestAnAdoptedRevisionIsHeldToItsOwnApplyDeadline(t *testing.T) {
 		!strings.Contains(got.Message, "found it activated") {
 		t.Errorf("ConfigApplied of that reload %s after the operator found it = %+v, want ApplyFailed saying the operator "+
 			"found it activated", applyDeadline, got)
+	}
+}
+
+// TestAValueWrittenBackStaysOwedThroughAFailedWrite pins that a value the sync
+// writes back, which leaves the hash as it was, stays a reason to write the
+// document until a revision activates after it, however the reconcile that
+// wrote it back ends. The store lost the operator's value; a person's reload
+// activated a revision reading the store without it; the reconcile that wrote
+// it back, whose own re-activation by the engine failed, could not get its
+// write past the dry run. The next reconcile's sync has nothing to write, and
+// the document, its values and the engine's revision all match: judged by what
+// that sync wrote, the engine was in sync, and it went on running the revision
+// that read the store without the value.
+func TestAValueWrittenBackStaysOwedThroughAFailedWrite(t *testing.T) {
+	ctx := context.Background()
+	w := newWithdrawal(t, runningLetsGo)
+	if err := w.enforce(t); err != nil {
+		t.Fatal(err)
+	}
+	w.engine.reloadAnswer = failedReload("unavailable", "the coordination store did not answer")
+	tavily := secretsync.StoreName(secretref.Key{Namespace: "ns", Name: requiredSecret, Key: requiredKey})
+	w.engine.mu.Lock()
+	delete(w.engine.store, tavily)
+	w.engine.mu.Unlock()
+	if _, err := w.client.ReloadConfig(ctx, "reloaded by a person"); err != nil {
+		t.Fatal(err)
+	}
+	w.again(t, w.statusWritten())
+	w.engine.mu.Lock()
+	w.engine.dryRunDown = true
+	w.engine.mu.Unlock()
+	if err := w.enforce(t); err == nil {
+		t.Fatal("enforce() = nil over a dry run the engine could not answer")
+	}
+	if !w.engine.holds(tavily) || !slices.Equal(w.state(t).Written(), []string{tavily}) {
+		t.Fatalf("after the write-back: store holds %s = %t, state owes %v; want it held and owed",
+			tavily, w.engine.holds(tavily), w.state(t).Written())
+	}
+
+	w.again(t, w.statusWritten())
+	w.engine.mu.Lock()
+	w.engine.dryRunDown = false
+	w.engine.mu.Unlock()
+	if err := w.enforce(t); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.engine.ids(); !slices.Equal(got, []string{"r1", "r2", "r3", "r4"}) {
+		t.Fatalf("revisions = %v, want r4 written over the reload, which read the store without %s", got, tavily)
+	}
+	if summary := w.engine.summaryOf(); !strings.Contains(summary, "Secret ns/"+requiredSecret) {
+		t.Errorf("r4's summary = %q, want it to name the Secret written back", summary)
+	}
+	if got := w.state(t).Written(); len(got) != 0 {
+		t.Errorf("state owes %v after r4 activated, want nothing", got)
+	}
+}
+
+// settled runs reconciles of w's Company, each from the status the one before
+// it wrote, until one activates nothing, and returns the engine's revisions.
+func (w *withdrawal) settled(t *testing.T) []string {
+	t.Helper()
+	ids := w.engine.ids()
+	for range 4 {
+		if err := w.enforce(t); err != nil {
+			t.Fatal(err)
+		}
+		w.again(t, w.statusWritten())
+		if now := w.engine.ids(); !slices.Equal(now, ids) {
+			ids = now
+			continue
+		}
+		return ids
+	}
+	t.Fatalf("the reconciles go on activating revisions: %v", ids)
+	return nil
+}
+
+// TestASaveLostAfterAConfirmedWriteWritesNothingAgain pins that a write of the
+// document the engine confirmed settles every value it read, whether or not
+// the reconcile that made it got to save so. The store lost a value, the sync
+// wrote it back, the engine's own re-activation at the write failed, and the
+// operator's write activated a revision reading it;
+// the save of the state after that write is lost, and the next reconcile
+// starts from the state saved before the write, with the status that recorded
+// the write or, where the reconcile went no further, the status from before
+// it. Settled only by the save the reconcile lost, the value stayed owed, and
+// the next reconcile wrote the same document again, an epoch every node
+// applied for nothing.
+func TestASaveLostAfterAConfirmedWriteWritesNothingAgain(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		statusLost bool
+	}{
+		{name: "the status records the write"},
+		{name: "the status is the one from before the write", statusLost: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newWithdrawal(t, runningLetsGo)
+			ids := w.settled(t)
+			before := w.run.company.DeepCopy()
+			w.engine.reloadAnswer = failedReload("unavailable", "the coordination store did not answer")
+			tavily := secretsync.StoreName(secretref.Key{Namespace: "ns", Name: requiredSecret, Key: requiredKey})
+			w.engine.mu.Lock()
+			delete(w.engine.store, tavily)
+			w.engine.afterApply = func(*storeEngine) { w.failWrite.Store(w.stateWrites.Load() + 1) }
+			w.engine.mu.Unlock()
+			if err := w.enforce(t); !errors.Is(err, errStateWrite) {
+				t.Fatalf("the reconcile that wrote the value back ends with %v, want the save after its write", err)
+			}
+			written := w.engine.ids()
+			if len(written) != len(ids)+1 || !w.engine.holds(tavily) {
+				t.Fatalf("revisions %v and the store holds %s: %t, want one write after %v and the value back",
+					written, tavily, w.engine.holds(tavily), ids)
+			}
+
+			w.failWrite.Store(0)
+			next := w.statusWritten()
+			if tc.statusLost {
+				next = before
+			}
+			w.again(t, next)
+			if err := w.enforce(t); err != nil {
+				t.Fatal(err)
+			}
+			if got := w.engine.ids(); !slices.Equal(got, written) {
+				t.Fatalf("revisions = %v, want %v: the write that read the value runs", got, written)
+			}
+			if got := w.state(t).Written(); len(got) != 0 {
+				t.Errorf("the state owes %v, want nothing: the revision that runs read every value", got)
+			}
+			if config := w.statusWritten().Status.Config; config.RevisionID != written[len(written)-1] {
+				t.Errorf("status.config records %s, want the write that runs, %s", config.RevisionID, written[len(written)-1])
+			}
+		})
+	}
+}
+
+// TestAWriteBackWhoseSaveIsLostStaysOwed pins that a value the sync writes
+// back stays owed when the save after the write is lost. The store lost the
+// operator's value and a person's reload activated a revision reading the
+// store without it; the sync wrote it back, the engine's own re-activation at
+// the write failed, and the sync could not save that it had written it.
+// Recorded only after the write, nothing said so: the next sync found the
+// store holding the operator's own value under the fingerprint it had, wrote
+// nothing, and the operator took the reload for in sync while the engine went
+// on running it without the value.
+func TestAWriteBackWhoseSaveIsLostStaysOwed(t *testing.T) {
+	ctx := context.Background()
+	w := newWithdrawal(t, runningLetsGo)
+	w.settled(t)
+	tavily := secretsync.StoreName(secretref.Key{Namespace: "ns", Name: requiredSecret, Key: requiredKey})
+	w.engine.mu.Lock()
+	delete(w.engine.store, tavily)
+	w.engine.mu.Unlock()
+	if _, err := w.client.ReloadConfig(ctx, "reloaded by a person"); err != nil {
+		t.Fatal(err)
+	}
+	reloaded := w.engine.ids()
+	w.engine.reloadAnswer = failedReload("unavailable", "the coordination store did not answer")
+	// The save after the value is written is lost.
+	w.engine.mu.Lock()
+	w.engine.afterPut = func(*storeEngine) { w.failWrite.Store(w.stateWrites.Load() + 1) }
+	w.engine.mu.Unlock()
+	if err := w.enforce(t); !errors.Is(err, errStateWrite) {
+		t.Fatalf("the reconcile that wrote the value back ends with %v, want the save after the write", err)
+	}
+	if !w.engine.holds(tavily) || !slices.Equal(w.engine.ids(), reloaded) {
+		t.Fatalf("the store holds %s: %t, revisions %v; want it written back and nothing activated after %v",
+			tavily, w.engine.holds(tavily), w.engine.ids(), reloaded)
+	}
+
+	w.failWrite.Store(0)
+	w.again(t, w.statusWritten())
+	if err := w.enforce(t); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.engine.ids(); len(got) != len(reloaded)+1 {
+		t.Fatalf("revisions = %v, want the document written over the reload, which read the store without %s", got, tavily)
+	}
+	if summary := w.engine.summaryOf(); !strings.Contains(summary, "Secret ns/"+requiredSecret) {
+		t.Errorf("the write's summary = %q, want it to name the Secret written back", summary)
+	}
+	if got := w.state(t).Written(); len(got) != 0 {
+		t.Errorf("the state owes %v after the write activated, want nothing", got)
+	}
+}
+
+// TestARevisionThatReadEveryValueIsInSyncWhateverHashWasRecorded pins that the
+// hash the operator recorded is no part of whether the engine is in sync: a
+// revision of the rendered document that activated after every value the sync
+// wrote runs the document with every value, and is recorded with the hash of
+// what it runs. Held to the recorded hash, a write whose record was never
+// saved, of a document whose own hash moved, was written again.
+func TestARevisionThatReadEveryValueIsInSyncWhateverHashWasRecorded(t *testing.T) {
+	w := newWithdrawal(t, runningLetsGo)
+	ids := w.settled(t)
+	stale := w.run.company.DeepCopy()
+	stale.Status.Config.AppliedHash = "the hash of another document"
+	w.again(t, stale)
+	if err := w.enforce(t); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.engine.ids(); !slices.Equal(got, ids) {
+		t.Fatalf("revisions = %v, want %v: nothing written over a revision that runs the document", got, ids)
+	}
+	if w.run.config == nil || w.run.config.AppliedHash == stale.Status.Config.AppliedHash || w.run.config.AppliedHash == "" {
+		t.Errorf("status.config = %+v, want the hash of what runs recorded", w.run.config)
+	}
+}
+
+// TestAFailedReloadIsReadBack pins that a request to activate the running
+// revision again that fails is read back: a revision the engine runs above the
+// epoch the withdrawal was marked by came after the withdrawal, whoever
+// activated it, and settles it. Where its document is the one read, the
+// engine runs it again without the value and it is recorded as the operator's
+// reactivation, its event saying the request failed; where it is another
+// document, a Warning says the operator activated nothing again and takes it
+// to read every value as required. A request that fails with nothing
+// activated since leaves the withdrawal owed and reported. Taken for a failed
+// withdrawal whatever activated, the operator reported a value the engine no
+// longer read and activated a revision again for nothing.
+func TestAFailedReloadIsReadBack(t *testing.T) {
+	// What somebody activates before the request is refused.
+	const (
+		nothing = iota
+		same
+		another
+	)
+	for _, tc := range []struct {
+		name  string
+		other int
+	}{
+		{name: "nothing activated", other: nothing},
+		{name: "the running document activated again", other: same},
+		{name: "another document activated", other: another},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			w := newWithdrawal(t, runningLetsGo)
+			w.owePushed(t)
+			w.engine.mu.Lock()
+			w.engine.reloadDown = true
+			// The engine's own re-activation at the removal fails: the operator asks.
+			w.engine.reloadAnswer = failedReload("unavailable", "the coordination store did not answer")
+			switch tc.other {
+			case same:
+				w.engine.beforeReload = func(e *storeEngine) { e.activateOther(e.revisions[len(e.revisions)-1].document) }
+			case another:
+				w.engine.beforeReload = func(e *storeEngine) { e.activateOther(w.requiring) }
+			}
+			w.engine.mu.Unlock()
+			found := time.Date(2026, 10, 25, 9, 0, 0, 0, time.UTC)
+			w.run.now = func() time.Time { return found }
+			if _, err := w.run.withdrawHeld(ctx, w.resolve(t)); err != nil {
+				t.Fatal(err)
+			}
+			recorded := drained(w.events)
+			state := w.state(t)
+			if tc.other == nothing {
+				if !slices.Equal(state.Withdrawn(), []string{w.registry}) || len(state.Written()) == 0 ||
+					!warned(recorded, "SecretWithdrawalFailed") {
+					t.Errorf("the state owes withdrawals %v and writes %v, and events %q; want the registry and the "+
+						"values pushed before it owed, and the failure reported", state.Withdrawn(), state.Written(), recorded)
+				}
+				return
+			}
+			if got := w.engine.ids(); !slices.Equal(got, []string{"r1", "r2"}) {
+				t.Fatalf("the revisions are %v, want r1 and the r2 somebody activated", got)
+			}
+			if len(state.Withdrawn()) != 0 || len(state.Written()) != 0 || warned(recorded, "SecretWithdrawalFailed") {
+				t.Errorf("the state owes withdrawals %v and writes %v, and events %q; want both settled by r2, which "+
+					"activated after them, and no failure reported", state.Withdrawn(), state.Written(), recorded)
+			}
+			if again := tc.other == same; state.Records("r2") != again || told(recorded, "Reactivated") != again ||
+				warned(recorded, "Reactivated") == again {
+				t.Errorf("the state records r2: %t, events %q; want r2 recorded and a Normal Reactivated: %t, "+
+					"a Warning otherwise", state.Records("r2"), recorded, again)
+			}
+			if tc.other != same {
+				return
+			}
+			if !slices.Equal(state.LetGo("r2"), []string{w.registry}) {
+				t.Errorf("the state lets %v go for r2, want the registry, as r1 does", state.LetGo("r2"))
+			}
+			// r1 was the operator's, so r2, its document again, is.
+			if config := w.run.config; config == nil || config.RevisionID != "r2" || config.Epoch == nil ||
+				*config.Epoch != 2 || config.AppliedAt == nil || !config.AppliedAt.Time.Equal(found) {
+				t.Errorf("status.config = %+v, want r2 at epoch 2, applied when the operator found it, %s", config, found)
+			}
+		})
+	}
+}
+
+// TestAnActivationNoNodeCanOpenSettlesNothing pins that the fleet's
+// activation settles a change only where it names the revision the read of
+// the document returned, which GET /config opened: one a write activated
+// between the two reads may be one no node can open, which reads the store
+// for nobody.
+func TestAnActivationNoNodeCanOpenSettlesNothing(t *testing.T) {
+	ctx := context.Background()
+	w := newWithdrawal(t, runningLetsGo)
+	w.engine.mu.Lock()
+	w.engine.reloadDown = true
+	// The engine's own re-activation at the removal fails: the operator asks.
+	w.engine.reloadAnswer = failedReload("unavailable", "the coordination store did not answer")
+	w.engine.mu.Unlock()
+	if _, err := w.run.withdrawHeld(ctx, w.resolve(t)); err != nil {
+		t.Fatal(err)
+	}
+	w.again(t, w.statusWritten())
+	w.engine.mu.Lock()
+	w.engine.beforeFleet = func(e *storeEngine) {
+		e.activateOther(e.revisions[len(e.revisions)-1].document)
+		e.unreadable = keyringLost
+	}
+	w.engine.mu.Unlock()
+	if _, err := w.run.withdrawHeld(ctx, w.resolve(t)); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.state(t).Withdrawn(); !slices.Equal(got, []string{w.registry}) {
+		t.Errorf("the state owes %v, want the registry: r2, which the pointer names, is one no node opens", got)
+	}
+}
+
+// TestAnActivationAfterAWithdrawalSettlesIt pins that a revision the engine
+// runs above the epoch a withdrawal was marked by settles it, whoever
+// activated it: a person's reload after a request of the operator's failed
+// read the store without the value, and nothing is activated again for it.
+func TestAnActivationAfterAWithdrawalSettlesIt(t *testing.T) {
+	ctx := context.Background()
+	w := newWithdrawal(t, runningLetsGo)
+	w.engine.mu.Lock()
+	w.engine.reloadDown = true
+	// The engine's own re-activation at the removal fails: the operator asks.
+	w.engine.reloadAnswer = failedReload("unavailable", "the coordination store did not answer")
+	w.engine.mu.Unlock()
+	if _, err := w.run.withdrawHeld(ctx, w.resolve(t)); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.state(t).Withdrawn(); !slices.Equal(got, []string{w.registry}) {
+		t.Fatalf("the state owes %v after a request that failed, want the registry", got)
+	}
+	w.engine.mu.Lock()
+	w.engine.reloadDown = false
+	w.engine.mu.Unlock()
+	if _, err := w.client.ReloadConfig(ctx, "reloaded by a person"); err != nil {
+		t.Fatal(err)
+	}
+
+	w.again(t, w.statusWritten())
+	if _, err := w.run.withdrawHeld(ctx, w.resolve(t)); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.engine.ids(); !slices.Equal(got, []string{"r1", "r2"}) {
+		t.Errorf("the revisions are %v, want r1 and the person's r2: nothing activated again", got)
+	}
+	if got := w.state(t).Withdrawn(); len(got) != 0 {
+		t.Errorf("the state owes %v, want nothing: r2 read the store without the registry", got)
+	}
+}
+
+// TestAHeldReconcileSavesTheMarksItsReadSetBeforeItReloads pins that a
+// held reconcile saves the epoch its read of the fleet gave a change before
+// it asks for the reload that is to settle it. The withdrawal was made, the
+// fleet's activation pointer could not be read after it, and the request that
+// was to settle it failed, so it was saved unread. The next held reconcile
+// reads the pointer, which marks it, and reloads, and the save after the
+// reload is lost. Marked in memory alone, the withdrawal was loaded unread
+// again, which no activation's epoch is above, and the reconcile after that
+// activated the running revision a third time for a withdrawal the second had
+// settled.
+func TestAHeldReconcileSavesTheMarksItsReadSetBeforeItReloads(t *testing.T) {
+	ctx := context.Background()
+	w := newWithdrawal(t, runningLetsGo)
+	w.engine.mu.Lock()
+	// The fleet answers the read that says what every pod runs, before the
+	// withdrawal, and not the one after it that is to mark it.
+	w.engine.beforeFleet = func(e *storeEngine) {
+		e.beforeFleet = func(e *storeEngine) { e.fleetDown = true }
+	}
+	w.engine.reloadDown = true
+	// The engine's own re-activation at the removal fails: the operator asks.
+	w.engine.reloadAnswer = failedReload("unavailable", "the coordination store did not answer")
+	w.engine.mu.Unlock()
+	if _, err := w.run.withdrawHeld(ctx, w.resolve(t)); err != nil {
+		t.Fatal(err)
+	}
+	if state := w.state(t); !slices.Equal(state.Withdrawn(), []string{w.registry}) || !state.Unobserved() {
+		t.Fatalf("the state owes %v, unread: %t; want the registry, which no read of the fleet followed",
+			state.Withdrawn(), state.Unobserved())
+	}
+
+	w.engine.mu.Lock()
+	w.engine.fleetDown, w.engine.reloadDown = false, false
+	w.engine.afterReload = func(*storeEngine) { w.failWrite.Store(w.stateWrites.Load() + 1) }
+	w.engine.mu.Unlock()
+	w.again(t, w.statusWritten())
+	if _, err := w.run.withdrawHeld(ctx, w.resolve(t)); !errors.Is(err, errStateWrite) {
+		t.Fatalf("withdrawHeld() = %v, want the save after the reload lost", err)
+	}
+	reloaded := w.engine.ids()
+	if !slices.Equal(reloaded, []string{"r1", "r2"}) {
+		t.Fatalf("the revisions are %v, want r1 activated again as r2", reloaded)
+	}
+
+	w.failWrite.Store(0)
+	w.again(t, w.statusWritten())
+	if _, err := w.run.withdrawHeld(ctx, w.resolve(t)); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.engine.ids(); !slices.Equal(got, reloaded) {
+		t.Errorf("the revisions are %v, want %v: r2 activated after the withdrawal, and nothing again", got, reloaded)
+	}
+	if got := w.state(t).Withdrawn(); len(got) != 0 {
+		t.Errorf("the state owes %v, want nothing: r2 read the store without the registry", got)
 	}
 }
 

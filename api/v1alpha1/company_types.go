@@ -1451,10 +1451,10 @@ type ConfigStatus struct {
 	Epoch *int64 `json:"epoch,omitempty"`
 
 	// appliedHash is the hash of the rendered document and of the values
-	// of the Secret keys it references, as last applied: a change to
-	// either is applied as a new revision, since the engine reads a
-	// rotated value only when a revision activates. The values enter it
-	// only as keyed fingerprints, so it reveals nothing about them.
+	// of the Secret keys it references, as the revision recorded runs
+	// them: the operator's last write, or a revision it found running that
+	// document after every value it wrote. The values enter it only as
+	// keyed fingerprints, so it reveals nothing about them.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128

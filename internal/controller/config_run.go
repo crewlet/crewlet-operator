@@ -507,6 +507,9 @@ func (run *configRun) enforce(
 	if err := run.keepServing(ctx, eng, &pushing); err != nil {
 		return ctrl.Result{}, err
 	}
+	// What the fleet keepServing read settles or marks, the sync below
+	// saves, whatever it writes, before any activation is asked for.
+	state, _ = run.settleRead(ctx, eng, active, state)
 	// SecretKept is said of what the reconcile ends up keeping: a value the
 	// sync below keeps for the running revision goes after the apply.
 	defer run.tellKept()
@@ -517,17 +520,27 @@ func (run *configRun) enforce(
 
 	hash := appliedHash(run.doc, state, desired.Names())
 	recorded := c.Status.Config
-	// A value written back although no Secret changed (one somebody else
-	// overwrote, or one the store lost) leaves the hash where it was, but the
-	// engine reads its store only when a revision activates: since the
-	// overwrite, a reload may have handed it the other value, which it would
-	// keep running. So a change of a value is followed by an activation,
-	// which is how a rotated credential reaches a running engine: the
-	// engine's own, which re-activates the revision that reads a value it is
-	// written or removes (reloadedBySync), or else the operator's apply
-	// below.
-	if active != nil && len(diffs) == 0 && hash == recorded.AppliedHash && len(pushed.Put) == 0 {
-		return run.keepInSync(ctx, eng, active, pushed.Reload, pushed.ReloadAction, state, stateRef)
+	// The engine runs the rendered document with every value only where the
+	// revision it runs read the store after the last value the sync wrote:
+	// the engine reads its store only when a revision activates. The state
+	// says which values no activation is known to have read yet
+	// (State.Written), settled above by the activation the engine runs where
+	// that came after them, and every value is in it from before it was
+	// written: a value rotated, or one written back although no Secret
+	// changed (one somebody else overwrote, or one the store lost), which
+	// leaves the hash where it was, and one a write of the document that
+	// failed or lost its race left the next sync nothing to write. So the
+	// recorded hash is no part of the question: a revision of the rendered
+	// document that read every value is in sync whatever the operator
+	// recorded, a write of it whose record the reconcile that made it never
+	// saved included, and a withdrawal is all it owes (settle), activated by
+	// the engine at the removal or else by the operator. One that did not is
+	// activated again, which is how a rotated credential reaches a running
+	// engine: by the engine itself, which re-activates the revision that
+	// reads a value it is written (reloadedBySync), or else by the
+	// operator's apply below.
+	if active != nil && len(diffs) == 0 && len(state.Written()) == 0 {
+		return run.keepInSync(ctx, eng, active, hash, pushed.Reload, pushed.ReloadAction, state, stateRef)
 	}
 	reloaded, err := run.reloadedBySync(ctx, eng, active, diffs, pushed.Reload)
 	if err != nil {
@@ -535,11 +548,13 @@ func (run *configRun) enforce(
 	}
 	if reloaded != nil {
 		// The engine runs the rendered document with every value the sync
-		// left in its store: applying it again would be a second activation
-		// of the same thing. It is recorded as the apply would have been,
-		// and it read the store without every name withdrawn.
+		// left in its store, activated by the sync's own last request after
+		// every write and removal: applying it again would be a second
+		// activation of the same thing. It is recorded as the apply would
+		// have been, and it read the store without every name withdrawn and
+		// with every value written.
 		run.recordApply(*reloaded, hash, false, active, diffs,
-			strings.TrimPrefix(run.summary(active, diffs, pushed.Put), "crewlet-operator: ")+", re-activated by the engine")
+			strings.TrimPrefix(run.summary(active, diffs, state.Written()), "crewlet-operator: ")+", re-activated by the engine")
 		state = state.Activated(reloaded.RevisionID, run.doc.Optional)
 		if err := secretsync.SaveState(ctx, run.Client, stateRef, c, state); err != nil {
 			return ctrl.Result{}, err
@@ -568,7 +583,13 @@ func (run *configRun) enforce(
 	if err := run.widenPlacement(ctx, *run.rendered); err != nil {
 		return ctrl.Result{}, err
 	}
-	req := engine.ApplyRequest{Document: run.doc.YAML, Summary: run.summary(active, diffs, pushed.Put)}
+	// What the write's activation reads is marked before it is asked for,
+	// so that a save lost after it still leaves what it read settled by the
+	// next read of the engine.
+	if state, err = run.markChanges(ctx, eng, state, stateRef); err != nil {
+		return ctrl.Result{}, err
+	}
+	req := engine.ApplyRequest{Document: run.doc.YAML, Summary: run.summary(active, diffs, state.Written())}
 	if checked.BaseRevisionID == "" {
 		req.CreateOnly = true
 	} else {
@@ -703,15 +724,80 @@ func (run *configRun) reloadedBySync(
 	return &engine.ApplyResult{RevisionID: reload.RevisionID, Epoch: reload.Epoch, Warnings: []string{}}, nil
 }
 
+// settleRead is state with every change of the store settled that the
+// fleet's activation came after (State.Ran), and every change no read of the
+// fleet's activation pointer has followed marked by the epoch it names now
+// (State.Observed), and whether that moved a mark, which the caller saves
+// before it asks for an activation (markChanges' rule: a save lost after the
+// activation must leave a change the activation settles). It reads the fleet
+// the reconcile last read (fleetOf), which keepServing reads afresh after
+// this attempt's read of the document. active is the revision that read
+// returned, which GET /config opened: the activation settles only where it is
+// that revision. Both read the fleet's activation pointer, so another
+// revision there is one a write activated between the two reads, perhaps one
+// no node opens. state holds only what earlier reconciles changed, so any
+// read of the fleet this attempt makes followed it. A fleet that cannot be
+// read, or answers without its activation, settles and marks nothing.
+func (run *configRun) settleRead(
+	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, state secretsync.State,
+) (secretsync.State, bool) {
+	if len(state.Withdrawn()) == 0 && len(state.Written()) == 0 {
+		return state, false
+	}
+	fleet, err := run.fleetOf(ctx, eng)
+	if err != nil || fleet.Activation == nil {
+		return state, false
+	}
+	next := state
+	if active != nil && fleet.Activation.RevisionID == active.RevisionID {
+		next = next.Ran(fleet.Activation.Epoch)
+	}
+	next = next.Observed(fleet.Activation.Epoch)
+	return next, !next.SameMarks(state)
+}
+
+// markChanges reads the fleet's activation pointer after the changes of the
+// store state records that no read has followed yet, marks each with the
+// epoch it names (State.Observed), and saves state, before the caller asks
+// the engine for an activation: one the engine is later read running above
+// that epoch came after every change, whoever made it, so a save lost after
+// the activation the caller asks for leaves what that activation read settled
+// by the next read of the engine (settleRead) rather than owed for good. A
+// fleet that cannot be read, or answers without its activation, leaves them
+// unread, for an activation the operator sees confirmed to settle; a save
+// that fails is the caller's error, and no activation is asked for.
+func (run *configRun) markChanges(
+	ctx context.Context, eng *engine.Client, state secretsync.State, ref types.NamespacedName,
+) (secretsync.State, error) {
+	if !state.Unobserved() {
+		return state, nil
+	}
+	fleet, err := eng.Fleet(ctx)
+	if err != nil || fleet.Activation == nil {
+		logf.FromContext(ctx).V(1).Info("Failed to read the fleet's activation pointer after a change of the engine's "+
+			"secret store; the change waits for an activation the operator sees confirmed", "error", fmt.Sprint(err))
+		return state, nil
+	}
+	state = state.Observed(fleet.Activation.Epoch)
+	if err := secretsync.SaveState(ctx, run.Client, ref, run.company, state); err != nil {
+		return state, err
+	}
+	return state, nil
+}
+
 // sync pushes the desired values into the engine's secret store, deletes
 // what nothing references and what the revision the engine runs goes
-// without, and saves what it did, whether or not it got through. What it
-// keeps for that revision is recorded (keep), for the reconcile to say once
-// it knows it ends up keeping it (tellKept).
+// without, and saves what it did, whether or not it got through, and what it
+// is about to write before it writes it (secretsync.Sync). What it keeps for
+// that revision is recorded (keep), for the reconcile to say once it knows it
+// ends up keeping it (tellKept).
 func (run *configRun) sync(
 	ctx context.Context, eng *engine.Client, desired secretsync.Desired, state secretsync.State, ref types.NamespacedName,
 ) (secretsync.State, secretsync.Result, error) {
-	next, result, syncErr := secretsync.Sync(ctx, eng, desired, state, engine.TokenLogin(render.TokenOperator))
+	next, result, syncErr := secretsync.Sync(ctx, eng, desired, state, engine.TokenLogin(render.TokenOperator),
+		func(ahead secretsync.State) error {
+			return secretsync.SaveState(ctx, run.Client, ref, run.company, ahead)
+		})
 	if err := secretsync.SaveState(ctx, run.Client, ref, run.company, next); err != nil {
 		return next, result, errors.Join(syncErr, err)
 	}
@@ -822,10 +908,10 @@ func diffWith(doc *render.Document, active *engine.ActiveConfig) ([]render.Path,
 // a value is kept for a revision other than the fleet's (heldResync). reload
 // and reloadAction are the sync's, as settle takes them.
 func (run *configRun) keepInSync(
-	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, reload *engine.Reload, reloadAction string,
-	state secretsync.State, ref types.NamespacedName,
+	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, hash string, reload *engine.Reload,
+	reloadAction string, state secretsync.State, ref types.NamespacedName,
 ) (ctrl.Result, error) {
-	if err := run.inSync(ctx, eng, active); err != nil {
+	if err := run.inSync(ctx, eng, active, hash); err != nil {
 		return ctrl.Result{}, err
 	}
 	again, err := run.settle(ctx, eng, active, reload, reloadAction, state, ref)
@@ -848,9 +934,13 @@ func (run *configRun) keepInSync(
 // It fails where the fleet cannot be read or answers without its activation,
 // and with an *activationAhead, a lost race (engine.ErrRevisionAdvanced),
 // where the activation names another revision: converge reads again from the
-// start.
-func (run *configRun) inSync(ctx context.Context, eng *engine.Client, active *engine.ActiveConfig) error {
+// start. hash is what it runs (appliedHash), which the record takes: the one
+// recorded may be another, the operator's write of the same document whose
+// record the reconcile that made it never saved being taken for in sync too.
+func (run *configRun) inSync(ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, hash string) error {
 	recorded := run.company.Status.Config
+	config := recorded.DeepCopy()
+	config.AppliedHash = hash
 	if recorded.RevisionID != active.RevisionID {
 		// AT THE EPOCH IT ACTIVATED AS, which only the fleet's activation
 		// says: the one recorded is the revision it replaces, so the
@@ -871,12 +961,13 @@ func (run *configRun) inSync(ctx context.Context, eng *engine.Client, active *en
 		case fleet.Activation.RevisionID != active.RevisionID:
 			return &activationAhead{read: active.RevisionID, activation: *fleet.Activation}
 		}
-		config := recorded.DeepCopy()
 		config.RevisionID = active.RevisionID
 		config.Epoch = new(fleet.Activation.Epoch)
 		found := metav1.NewTime(run.clock())
 		config.AppliedAt = &found
 		config.Objects = run.objectCounts()
+	}
+	if !equality.Semantic.DeepEqual(*config, recorded) {
 		run.config = config
 	}
 	run.recordPlacement(*run.rendered, false)
@@ -1557,9 +1648,10 @@ func placesOf(diffs []render.Path) string {
 }
 
 // summary is the X-Summary of a write: "crewlet-operator: " and the objects
-// whose part of the document changed, or the Secrets whose rotated values
-// the write makes the engine read.
-func (run *configRun) summary(active *engine.ActiveConfig, diffs []render.Path, put []string) string {
+// whose part of the document changed, or the Secrets whose values, written
+// since a revision last activated (written, secretsync.State.Written), the
+// write makes the engine read.
+func (run *configRun) summary(active *engine.ActiveConfig, diffs []render.Path, written []string) string {
 	var objects []string
 	add := func(s string) {
 		if !slices.Contains(objects, s) {
@@ -1582,7 +1674,7 @@ func (run *configRun) summary(active *engine.ActiveConfig, diffs []render.Path, 
 		}
 	}
 	for _, k := range run.doc.Refs {
-		if slices.Contains(put, secretsync.StoreName(k)) && active != nil && len(diffs) == 0 {
+		if slices.Contains(written, secretsync.StoreName(k)) && active != nil && len(diffs) == 0 {
 			add("Secret " + k.Namespace + "/" + k.Name)
 		}
 	}

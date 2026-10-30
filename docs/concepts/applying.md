@@ -116,11 +116,11 @@ flowchart TD
    values are one activation: every write but the last asks the engine to
    activate nothing (`defer_reload`), and the last activates the revision
    once, with every value in the store. A sync whose last write fails, or
-   that stops before it, records the values it wrote deferred as unwritten,
-   so the next sync writes them again and its last write activates them;
-   where the last write activates nothing (the revision reads none of its
-   values) or its activation fails, the operator applies the document
-   itself.
+   that stops before it, records no fingerprint for the values it wrote
+   deferred, so the next sync writes them again and its last write
+   activates them; where the last write activates nothing (the revision
+   reads none of its values) or its activation fails, the operator applies
+   the document itself.
    The entries the running document still references are kept until the next
    document replaces it, and so are those of every other revision an engine
    pod runs or would start on: each pod applies the fleet's revision on its
@@ -201,40 +201,55 @@ flowchart TD
    without, and is told by the event alone. Step 7 deletes the value once
    the next document runs. Whenever the reconcile ends without activating a
    revision after it deleted a value, because the document is held at any
-   step, the operator activates the revision the engine runs again,
-   unchanged, so the engine reads its store without the deleted value
-   rather than starting a tool server or an executor run with it (a
-   `Reactivated` event): where that revision read the value, the engine did
-   so itself as the operator removed it, and the operator takes that
-   activation for its own; otherwise, or where the engine's failed, it asks
-   for one (`POST /config/reload`). It keeps what it owes in its record of
-   the store until a revision has activated. It activates again only a
-   revision that goes without the value, never one that keeps it, and
-   records the revision that activates it again as its own only once it has
-   read back that it is that document: the engine activates again whichever
-   revision is active when the request lands, so one somebody else activated
-   in between is reported with a Warning `Reactivated`, and read as a
-   revision whose reading the operator does not know. Nothing makes the
-   engine's reload or its deletion conditional on the revision the operator
-   read, so a revision somebody activates in that moment goes without a
-   value it may require until the Secret exists again.
+   step, or because the engine already runs it with every value it
+   references (step 4), the revision the engine runs is activated again,
+   unchanged, so the engine reads its store without the deleted value rather
+   than starting a tool server or an executor run with it (a `Reactivated`
+   event): where that revision read the value, the engine did so itself as
+   the operator removed it, and the operator takes that activation for its
+   own; otherwise, or where the engine's failed, it asks for one
+   (`POST /config/reload`). It keeps what it owes in its record of the store
+   until the engine runs a revision activated after the deletion, whoever
+   activated it ([What the engine has read](#what-the-engine-has-read)).
+   It activates again only a revision that goes without the value, never one
+   that keeps it, and records the revision that activates it again as its
+   own only once it has read back that it is that document: the engine
+   activates again whichever revision is active when the request lands, so
+   one somebody else activated in between is reported with a Warning
+   `Reactivated`, and read as a revision whose reading the operator does not
+   know. A request of the operator's that fails is read back too: a revision
+   the engine runs that activated after the deletion read the store without
+   the value, so nothing is owed and nothing is activated again; where it is
+   the running document again (the request landed although its answer did
+   not, or somebody reloaded the document), it is recorded as the
+   reactivation, and where it is another document, a Warning `Reactivated`
+   says the operator activated nothing again. Nothing makes the engine's
+   reload or its deletion conditional on the revision the operator read, so
+   a revision somebody activates in that moment goes without a value it may
+   require until the Secret exists again.
 4. **Compare.** The operator compares the engine's active document with the
-   rendered one, and compares a hash of the rendered document and
-   of the values it references with the one it recorded when it last applied
-   (`status.config.appliedHash`). If both match, there is nothing to write.
-   A changed value alone needs a new revision: the engine reads a rotated
-   value only when a revision activates. Where the engine runs the rendered
-   document, the write in step 3 made that revision, since the engine
-   activates the revision that reads a value it is written, and the
-   operator records it as its own apply (`status.config`), once it has read
-   back that the engine runs it, rather than activating the same document a
-   second time; its summary is the engine's, `reload: secret <NAME>
-   written`. Where the engine did not activate one (nothing it runs reads
-   the value, or its activation failed or was overtaken by another write),
-   the operator applies the same document itself, with a summary that names
-   the Secret. So with a value written back in step 3, for the same reason:
-   since it was replaced, a reload may have handed the engine the other
-   value.
+   rendered one, and checks that the revision the engine runs activated
+   after every value it wrote into the store. If both hold, there is nothing
+   to write, and the revision is recorded with a hash of the rendered
+   document and of the values it references (`status.config.appliedHash`)
+   whoever activated it. A changed value alone needs a new revision: the
+   engine reads a rotated value only when a revision activates. Where the
+   engine runs the rendered document, the write in step 3 made that
+   revision, since the engine activates the revision that reads a value it
+   is written, and the operator records it as its own apply
+   (`status.config`), once it has read back that the engine runs it, rather
+   than activating the same document a second time; its summary is the
+   engine's, `reload: secret <NAME> written`. Where the engine did not
+   activate one (nothing it runs reads the value, or its activation failed
+   or was overtaken by another write), the operator applies the same
+   document itself, with a summary that names the Secret. So with a value
+   written back in step 3, for the same reason: since it was replaced, a
+   reload may have handed the engine the other value. A value stays a reason
+   to write until the engine runs a revision activated after it is written
+   ([What the engine has read](#what-the-engine-has-read)), not just in the
+   reconcile that wrote it: a write that fails, or loses its race to another
+   writer, leaves the next sync nothing to write while the engine may still
+   run a revision that read the store before it.
 5. **Dry-run** the document. The engine checks everything the API server
    cannot: rules that span objects, such as a Seat that asks for a sandbox
    the Company does not offer. Each problem the engine reports is traced back,
@@ -338,12 +353,14 @@ changed. A fingerprint without the key that Secret also holds says nothing
 about a value. The same Secret holds the operator's record of the store's
 other facts: the revision whose reading of the values it knows, with the
 Secret keys that revision lets go without (`optional-keys`), the values it
-deleted that a revision has yet to activate without, and the ones it said it
-keeps. It records nothing of the engine's pods: what each runs and would
-start on is what `GET /fleet` says of it now, since a pod applies revisions,
-and a data pod moves the revision its volume starts it on, whether or not
-the operator is looking, and a pod the fleet does not list keeps every value
-it may need instead (step 3).
+deleted that a revision has yet to activate without (`withdrawn-names`), the
+ones it wrote that a revision has yet to activate with (`written-names`),
+each of those two with the activation epoch it waits past, and the ones it
+said it keeps. It records nothing of the engine's pods: what each runs and
+would start on is what `GET /fleet` says of it now, since a pod applies
+revisions, and a data pod moves the revision its volume starts it on, whether
+or not the operator is looking, and a pod the fleet does not list keeps every
+value it may need instead (step 3).
 
 The engine is reached at its first data pod,
 `http://<company>-data-0.<company>-data.<namespace>.svc:8080`, with the
@@ -361,6 +378,43 @@ its keyring does not open the fleet's revision, the Company reports
 `RevisionUnreadable` instead, which no retry clears, and the operator looks
 again when the data pods restart and every five minutes besides
 ([The engine cannot open its company document](../guides/troubleshooting.md#the-engine-cannot-open-its-company-document)).
+
+### What the engine has read
+
+The engine reads its secret store only when a revision activates: every node
+reads it at its attempt to apply the activation, a node that refuses the
+revision included, whose running revision resolves its references from what
+that attempt read. So a value written or deleted reaches nothing the engine
+runs until a revision activates after it. The fleet's activation pointer
+(`GET /fleet`, `activation`) names the fleet's revision at its epoch, and the
+epoch only grows. So the operator reads the pointer after every change it
+makes to the store, before it asks for the activation that is to read it, and
+marks each change with the epoch read (`withdrawn-names` and `written-names`
+keep it after the name): any revision the pointer names at a greater epoch
+activated after the change. A change is settled once the pointer is read
+naming such a revision, whoever activated it: the operator's own write or
+reload, a person's `crewlet config reload`, or the engine's own reload after
+it mints a credential. Only a revision the operator's read of `GET /config`
+returned counts, as one it saw opened: both read the pointer, and a revision
+a write activated between the two reads may be one no node can open. A value
+is marked as written before it is
+written, and the marks are saved before the activation is asked for, so a
+save the operator loses after either, or a restart between them, leaves the
+change owed, or settled by the next read of the engine, never settled by a
+revision that activated before it. A write of the document that the engine
+runs is therefore never sent again because the record of its activation was
+lost: the next reconcile finds the revision running above the epoch every
+value was marked by, and takes it for in sync. That needs a read of the
+pointer between the change and the activation. A change the operator could
+not follow with one, because the fleet could not be read or the engine had no
+document yet, is settled by the activation the operator sees answered, and
+where the record of that answer is lost as well, the next reconcile
+activates a revision again for it. So is a change whose activation the
+engine made itself: the last write or removal of a sync activates the
+revision inside the same request, before any read of the pointer can follow the change, so the
+operator settles it from that request's answer once it has read back that
+the engine runs the revision it names, and a save lost after that costs one
+activation more.
 
 ---
 
@@ -587,8 +641,9 @@ deleted Secret it keeps in the store for the revision the engine runs, which
 requires it or whose reading the operator does not know, `Reactivated` when
 it activated the running revision again so the engine reads its store
 without the value of a deleted Secret, a Warning `Reactivated` when the
-revision activated again is not the document it read, a Warning
-`SecretWithdrawalFailed` when it could not,
+revision activated again is not the document it read, or when a request that
+failed finds another document running that activated after the deletion, a
+Warning `SecretWithdrawalFailed` when it could not,
 `Drifted`, `Invalid` with the engine's problems, and
 `EngineWarnings` when the engine applied a revision it has something to say
 about. Events, conditions and logs name Secrets, keys and store entries,

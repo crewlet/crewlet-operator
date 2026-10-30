@@ -153,6 +153,49 @@ func TestSaveStateKeepsTheWithdrawnNames(t *testing.T) {
 	}
 }
 
+// TestSaveStateKeepsTheWrittenNames: the names written since a revision
+// last activated after them survive a save and a load, each with the epoch
+// it waits past or none, so a write of the document that fails, or an
+// operator that restarts, leaves them owed exactly as they were; a line that
+// names no entry the operator owns, which only a hand edit writes, is
+// dropped, one whose epoch is no number no lower than zero waits for a read
+// as one no read followed does, and an activation empties the list.
+func TestSaveStateKeepsTheWrittenNames(t *testing.T) {
+	ctx := context.Background()
+	c := newStateClient(t)
+	eng := newFakeEngine()
+	state, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a1"}), State{})
+	state, _ = mustSync(t, eng, desiredOf(map[string]string{nameA: "a1", nameB: "b1"}), state.Observed(3))
+	if err := SaveState(ctx, c, stateRef, company(), state); err != nil {
+		t.Fatalf("SaveState: %v", err)
+	}
+	secret := stateSecret(t, c)
+	if want := nameA + " 3\n" + nameB + "\n"; string(secret.Data[writtenField]) != want {
+		t.Fatalf("written-names = %q, want %q", secret.Data[writtenField], want)
+	}
+	secret.Data[writtenField] = append(secret.Data[writtenField], []byte("not-a-store-name 4\n"+nameC+" -1\n")...)
+	if err := c.Update(ctx, secret); err != nil {
+		t.Fatalf("editing the state: %v", err)
+	}
+	loaded, err := LoadState(ctx, c, stateRef, company())
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if !slices.Equal(loaded.Written(), []string{nameA, nameB, nameC}) {
+		t.Fatalf("Written() after a load = %v, want [%s %s %s]", loaded.Written(), nameA, nameB, nameC)
+	}
+	if got := loaded.Ran(4).Written(); !slices.Equal(got, []string{nameB, nameC}) {
+		t.Fatalf("Written() after a load and an activation at epoch 4 = %v, want [%s %s]", got, nameB, nameC)
+	}
+
+	if err := SaveState(ctx, c, stateRef, company(), loaded.Activated(revision1, nil)); err != nil {
+		t.Fatalf("SaveState: %v", err)
+	}
+	if got := stateSecret(t, c).Data[writtenField]; len(got) != 0 {
+		t.Errorf("the state Secret keeps the written names %q after a revision activated", got)
+	}
+}
+
 // TestActivationIsRecordedForItsRevisionAlone: what Activated records of the
 // operator's last activation answers for that revision and for no other, an
 // empty one included, the Secret keys it lets go as well as their names,
@@ -269,7 +312,7 @@ func TestSaveStateForgetsWhatTheStateDropped(t *testing.T) {
 		t.Fatalf("SaveState: %v", err)
 	}
 	got := slices.Sorted(maps.Keys(stateSecret(t, c).Data))
-	want := slices.Sorted(slices.Values([]string{nameA, fingerprintKeyField, withdrawnField, revisionField, letGoField, retainedField}))
+	want := slices.Sorted(slices.Values([]string{nameA, fingerprintKeyField, withdrawnField, writtenField, revisionField, letGoField, retainedField}))
 	if !slices.Equal(got, want) {
 		t.Fatalf("state Secret keys = %v, want %v", got, want)
 	}

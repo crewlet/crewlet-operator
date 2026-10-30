@@ -47,7 +47,7 @@ func TestSyncAgainstTheEngine(t *testing.T) {
 	}
 
 	desired := desiredOf(map[string]string{slack: "xoxb", signing: "sig"})
-	state, res, err := Sync(ctx, eng, desired, State{}, self)
+	state, res, err := Sync(ctx, eng, desired, State{}, self, discard)
 	if err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestSyncAgainstTheEngine(t *testing.T) {
 	// The engine's listing is all a second Sync has to go on besides the
 	// state, so this is where a mismatch in how the client reports the
 	// writer would show up as a rewrite on every reconcile.
-	state, res, err = Sync(ctx, eng, desired, state, self)
+	state, res, err = Sync(ctx, eng, desired, state, self, discard)
 	if err != nil {
 		t.Fatalf("second Sync: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestSyncAgainstTheEngine(t *testing.T) {
 	if err := other.PutSecret(ctx, slack, []byte("typed-by-hand")); err != nil {
 		t.Fatalf("overwriting %s: %v", slack, err)
 	}
-	_, res, err = Sync(ctx, eng, desired, state, self)
+	_, res, err = Sync(ctx, eng, desired, state, self, discard)
 	if err != nil {
 		t.Fatalf("third Sync: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestContractASyncIsOneActivation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, res, err := Sync(ctx, eng, desiredOf(map[string]string{read: "k1", slack: "xoxb", signing: "signing"}), State{}, self)
+	state, res, err := Sync(ctx, eng, desiredOf(map[string]string{read: "k1", slack: "xoxb", signing: "signing"}), State{}, self, discard)
 	if err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestContractASyncIsOneActivation(t *testing.T) {
 		t.Fatalf("the engine runs revision %s, want the re-activation %s", active.RevisionID, res.Reload.RevisionID)
 	}
 
-	_, res, err = Sync(ctx, eng, desiredOf(map[string]string{read: "k1", slack: "xoxb-rotated", signing: "signing"}), state, self)
+	_, res, err = Sync(ctx, eng, desiredOf(map[string]string{read: "k1", slack: "xoxb-rotated", signing: "signing"}), state, self, discard)
 	if err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestSyncKeepsWhatARefusedRevisionRuns(t *testing.T) {
 	self := engine.TokenLogin(enginetest.OperatorTokenID)
 	served := StoreName(secretref.Key{Namespace: nimbusNS, Name: "nimbus-e2b", Key: apiKeyKey})
 
-	state, _, err := Sync(ctx, eng, desiredOf(map[string]string{served: enginetest.SandboxKeyValue}), State{}, self)
+	state, _, err := Sync(ctx, eng, desiredOf(map[string]string{served: enginetest.SandboxKeyValue}), State{}, self, discard)
 	if err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestSyncKeepsWhatARefusedRevisionRuns(t *testing.T) {
 	desired.Keep(r.RevisionID)
 	keeping := desired
 	keeping.KeepServed(p.RevisionID, served)
-	state, res, err := Sync(ctx, eng, keeping, state, self)
+	state, res, err := Sync(ctx, eng, keeping, state, self, discard)
 	if err != nil {
 		t.Fatalf("Sync keeping the served revision: %v", err)
 	}
@@ -243,7 +243,7 @@ func TestSyncKeepsWhatARefusedRevisionRuns(t *testing.T) {
 		return servingP()
 	})
 
-	if _, res, err = Sync(ctx, eng, desired, state, self); err != nil || !slices.Equal(res.Deleted, []string{served}) {
+	if _, res, err = Sync(ctx, eng, desired, state, self, discard); err != nil || !slices.Equal(res.Deleted, []string{served}) {
 		t.Fatalf("Sync for the fleet's revision alone = %+v, %v; want %s deleted", res, err, served)
 	}
 	if err := e.Restart(t); err == nil {
