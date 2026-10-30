@@ -156,7 +156,9 @@ type UnitSpec struct {
 	// whose members follow the org chart. Crewlet takes lowercase letters,
 	// digits, - and _, starting with a letter or a digit, up to 64
 	// characters: the name itself, never #platform or a vendor's channel id.
-	// Crewlet's `channel`.
+	// On Chatlet a room belongs to one unit, so Crewlet refuses a second unit
+	// naming the same channel; a child unit that should share its parent's
+	// room names none. Crewlet's `channel`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=64
