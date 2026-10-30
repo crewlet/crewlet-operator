@@ -67,6 +67,9 @@ type credentialSource struct {
 const (
 	notOfferedStreamToken = "The data pod runs Crewlet's embedded broker, which needs no token; an external NATS " +
 		"cluster (`stream.type: nats`), where Crewlet reads one, is not offered."
+	notOfferedSlackAppConfig = "The operator's Slack seats are apps made outside the engine, whose credentials each " +
+		"Seat hands in from a Secret (`Seat.spec.integrations.slack.credentialsSecretRef`); the engine creating each " +
+		"agent's app, which this token is for, is not offered."
 	notOfferedLocalSandbox = "Crewlet's `container` cell, the one this environment is for, is not offered: " +
 		"`Company.spec.sandbox` places a seat's executor run `Direct` or in `E2B`, and `spec.engineConfig` " +
 		"may not set `providers`."
@@ -175,6 +178,7 @@ var credentialPositions = []credentialPosition{
 			Reference: "`SecretReference`, key `webhookSecret` (`GitHubAppWebhookSecretKey`)",
 		},
 	}},
+	{Tier: tierCompany, Path: "integrations.slack.app_config_token", Unsupported: notOfferedSlackAppConfig},
 	{Tier: tierCompany, Path: githubWebhookSecret, Sources: []credentialSource{
 		{Field: "Integration.spec.github.webhookSecretRef", Reference: oneKey},
 	}},

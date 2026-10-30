@@ -127,8 +127,10 @@ spec:                       # Seat sre
   | Slack | none: the bot token scopes of the app's manifest | none: the channels the bot is invited to |
 
   While a seat is on, its access is required: a Datadog `role`, a GitLab
-  `accessLevel` or `memberRoleID`, a Jira `projectRole`, a Confluence
-  `spaceRole` or `operations`, and Mattermost `roles`. A fixed set (GitLab's
+  `accessLevel` or `memberRoleID`, and Mattermost `roles`; a Jira
+  `projectRole` where the seat lists `projects`, and a Confluence `spaceRole`
+  or `operations` where it lists `spaces` (with neither, the seat holds the
+  product's access alone). A fixed set (GitLab's
   roles, Mattermost's roles, GitHub's permissions and levels) is checked when
   the Seat is written, and so is each required field; a scope outside the
   company's reach is refused by the engine's dry run, `Invalid` on the Seat. A role read live from the

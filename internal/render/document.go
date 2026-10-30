@@ -270,9 +270,20 @@ type mcpServerDoc struct {
 	Headers               map[string]string             `json:"headers,omitempty"`
 	OptionalKeys          []string                      `json:"optional_keys,omitempty"`
 	ToolPrefix            string                        `json:"tool_prefix,omitempty"`
+	SeatCredentials       []seatCredentialDoc           `json:"seat_credentials,omitempty"`
 	ToolAnnotations       map[string]toolAnnotationsDoc `json:"tool_annotations,omitempty"`
 	StartupTimeoutSeconds int32                         `json:"startup_timeout_seconds,omitempty"`
 	RequestTimeoutSeconds int32                         `json:"request_timeout_seconds,omitempty"`
+}
+
+// seatCredentialDoc is one per-seat credential a server reads. Its as is left
+// out: Crewlet takes the server's transport's, which is the only value it
+// accepts.
+type seatCredentialDoc struct {
+	Kind   string `json:"kind"`
+	Field  string `json:"field,omitempty"`
+	Key    string `json:"key"`
+	Prefix string `json:"prefix,omitempty"`
 }
 
 type toolAnnotationsDoc struct {

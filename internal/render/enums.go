@@ -332,3 +332,35 @@ func provisionedField(f v1alpha1.ProvisionedField) string {
 	}
 	return ""
 }
+
+// seatCredentialKind maps onto the integration's name in Crewlet's
+// seat_credentials.
+func seatCredentialKind(k v1alpha1.SeatCredentialKind) string {
+	switch k {
+	case v1alpha1.SeatCredentialAtlassian:
+		return VendorAtlassian
+	case v1alpha1.SeatCredentialDatadog:
+		return VendorDatadog
+	case v1alpha1.SeatCredentialGitHub:
+		return VendorGitHub
+	case v1alpha1.SeatCredentialGitLab:
+		return VendorGitLab
+	case v1alpha1.SeatCredentialMattermost:
+		return VendorMattermost
+	case v1alpha1.SeatCredentialSlack:
+		return VendorSlack
+	}
+	return ""
+}
+
+// seatCredentialField maps onto the field of Crewlet's seat_credentials,
+// which is the field of the engine's own name for the credential.
+func seatCredentialField(f v1alpha1.SeatCredentialField) string {
+	switch f {
+	case v1alpha1.SeatCredentialToken:
+		return sealedToken
+	case v1alpha1.SeatCredentialEmail:
+		return sealedEmail
+	}
+	return ""
+}

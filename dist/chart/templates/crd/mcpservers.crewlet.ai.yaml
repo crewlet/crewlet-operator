@@ -351,6 +351,79 @@ spec:
                 format: int32
                 minimum: 1
                 type: integer
+              seatCredentials:
+                description: |-
+                  seatCredentials declare which integration's per-seat credential the
+                  server reads, and under which variable (Stdio) or header (HTTP), so
+                  the engine gives each seat's instance that seat's own credential: the
+                  one it minted for the seat's account, or the one the Seat hands in
+                  for an integration it does not provision. Unset, a server the engine
+                  recognises by its command or address (glab mcp serve, slack-mcp-server,
+                  mcp-server-mattermost, mcp-atlassian, GitHub's and Datadog's remote
+                  servers) reads what the engine knows it reads; a declaration replaces
+                  that. A shared server reads none. Crewlet's `seat_credentials`.
+                items:
+                  description: |-
+                    MCPSeatCredential is one per-seat credential a tool server reads. It maps
+                    onto one entry of Crewlet's seat_credentials. The value is the engine's to
+                    give each seat's instance; nothing here names a credential.
+                  properties:
+                    field:
+                      description: |-
+                        field is which of an Atlassian account's credentials, its Token or
+                        its Email. Unset is the integration's credential itself, an
+                        Atlassian account's Token. Crewlet's `field`.
+                      enum:
+                      - Token
+                      - Email
+                      type: string
+                    key:
+                      description: |-
+                        key is the variable (Stdio) or header (HTTP) the server reads it
+                        under, which the server's transport decides. Crewlet's `key`.
+                      maxLength: 128
+                      minLength: 1
+                      pattern: ^[A-Za-z0-9!#$%&'*+.^_|~-]+$
+                      type: string
+                    kind:
+                      description: |-
+                        kind is the integration whose seat credential the server reads.
+                        Crewlet's `kind`.
+                      enum:
+                      - Atlassian
+                      - Datadog
+                      - GitHub
+                      - GitLab
+                      - Mattermost
+                      - Slack
+                      type: string
+                    prefix:
+                      description: |-
+                        prefix is text the value follows, such as "Bearer " for an
+                        Authorization header. Crewlet's `prefix`.
+                      maxLength: 32
+                      minLength: 1
+                      type: string
+                      x-kubernetes-validations:
+                      - message: 'prefix may not hold a ${NAME} reference: the operator
+                          refuses every one it did not write, since in many fields
+                          the engine resolves one from its own secret store and environment,
+                          which hold credentials that are not this object''s to name'
+                        rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                  required:
+                  - key
+                  - kind
+                  type: object
+                  x-kubernetes-validations:
+                  - fieldPath: .field
+                    message: field applies to Atlassian, whose account holds a Token
+                      and an Email; every other integration's seat credential is one
+                    rule: '!has(self.field) || self.kind == ''Atlassian'''
+                maxItems: 8
+                type: array
+                x-kubernetes-list-map-keys:
+                - key
+                x-kubernetes-list-type: map
               shared:
                 default: true
                 description: |-
@@ -465,6 +538,15 @@ spec:
                 case-insensitive, so its names must differ in more than case'
               rule: self.transport != 'HTTP' || !has(self.optionalKeys) || self.optionalKeys.all(a,
                 self.optionalKeys.exists_one(b, b.lowerAscii() == a.lowerAscii()))
+            - fieldPath: .seatCredentials
+              message: 'seatCredentials applies to a server with shared false: a shared
+                server acts as no seat, so it reads no seat''s credential'
+              rule: '!has(self.seatCredentials) || (has(self.shared) && !self.shared)'
+            - fieldPath: .seatCredentials
+              message: 'seatCredentials names each header once: HTTP header names
+                are case-insensitive, so its keys must differ in more than case'
+              rule: self.transport != 'HTTP' || !has(self.seatCredentials) || self.seatCredentials.all(a,
+                self.seatCredentials.exists_one(b, b.key.lowerAscii() == a.key.lowerAscii()))
           status:
             description: status is the server's observed state.
             minProperties: 1

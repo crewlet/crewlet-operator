@@ -466,6 +466,27 @@ Engine`, Datadog, an Atlassian organization) the engine hands the server the
 credential it minted for the seat, and the Seat names none; everywhere else
 the seat gives its own Secret in its `spec.mcp`.
 
+The engine knows which variable or header each server below reads a seat's
+credential under, by its command or its address. A per-seat server it does
+not recognise, or one that reads it under another key, says so in
+`seatCredentials`, which replaces what the engine would assume:
+
+```yaml
+spec:                       # MCPServer atlassian
+  shared: false
+  command: /usr/local/bin/mcp-atlassian
+  seatCredentials:
+    - {kind: Atlassian, field: Token, key: JIRA_API_TOKEN}
+    - {kind: Atlassian, field: Email, key: JIRA_USERNAME}
+```
+
+Each entry names the integration (`Atlassian`, `Datadog`, `GitHub`,
+`GitLab`, `Mattermost` or `Slack`), for Atlassian which of the account's two
+credentials (`Token` or `Email`), the variable (Stdio) or header (HTTP) the
+server reads it under, and an optional `prefix` such as `"Bearer "`. It names
+no credential: the engine gives each seat's instance that seat's own. A
+shared server acts as no seat and takes none.
+
 ### Mattermost
 
 ```yaml

@@ -339,9 +339,15 @@ const (
 	// merged, which adds Deployments to a seat's GitHub App permissions and
 	// the seat_access_migrated gate on each kind.
 	seatAccessMergedRead = "v0.1.1-0.20261030052257-53bc8aa979f2"
+	// seatCredentialsRead is the engine that lets an mcp_servers entry
+	// declare the seat credentials it reads.
+	seatCredentialsRead = "v0.1.1-0.20261030054628-ba705774dba0"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
+	// renderEnumsGo is the render's mapping of the API's values onto
+	// Crewlet's.
+	renderEnumsGo = "internal/render/enums.go"
 	// commonTypesGo is the API's shared types and condition reasons.
 	commonTypesGo = "api/v1alpha1/common_types.go"
 )
@@ -349,7 +355,7 @@ const (
 // seatAccess is every operator file that copies a vendor's fixed set of what
 // a seat may hold: the Seat API, which offers and refuses it, the render,
 // which writes it in the vendor's identifiers, and the guide that lists it.
-var seatAccess = []string{seatTypesGo, "internal/render/org.go", "internal/render/enums.go", integrationsMd}
+var seatAccess = []string{seatTypesGo, "internal/render/org.go", renderEnumsGo, integrationsMd}
 
 // adr0008Md is the record of where a seat's executor runs, and
 // credentialsConceptMd the page that says what reaches an engine pod and a
@@ -2004,6 +2010,21 @@ var mirrored = []mirror{
 			"mattermost and slack",
 		digest: "1f2dab9b9537b12d69e4e8f480d005042edab86e2879dfb9860223158a894bb4",
 		read:   seatAccessMergedRead,
+	},
+	{
+		file: "internal/config/toolbinding.go", name: "SeatCredentialKinds",
+		against: []string{mcpServerTypesGo, renderEnumsGo, toolServersMd},
+		decides: "a tool server reads the seat credential of atlassian, datadog, github, gitlab, mattermost or slack",
+		digest:  "86e9d149412f5b20431b0996e43ecc33da02e181a6dac7712b17addcfa64e788",
+		read:    seatCredentialsRead,
+	},
+	{
+		file: "internal/config/toolbinding.go", name: "seatCredentialFields",
+		against: []string{mcpServerTypesGo, renderEnumsGo, toolServersMd},
+		decides: "each integration's seat credential is one field, but an Atlassian account's two, TOKEN and EMAIL, " +
+			"so seat_credentials names a field for Atlassian alone",
+		digest: "9eb2b655a2a075f53c4ac5185316a9d6a26b8298e8b89cf4ab1f51158c4de3d7",
+		read:   seatCredentialsRead,
 	},
 	{
 		file: "internal/envref/envref.go", name: "SealedName",

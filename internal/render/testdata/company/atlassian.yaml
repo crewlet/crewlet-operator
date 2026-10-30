@@ -29,6 +29,26 @@ integrations:
     url: https://chat.helix.example
 knowledge:
   backend: confluence
+mcp_servers:
+- args:
+  - mcp-atlassian
+  command: uvx
+  name: atlassian
+  seat_credentials:
+  - field: TOKEN
+    key: JIRA_API_TOKEN
+    kind: atlassian
+  - field: EMAIL
+    key: JIRA_USERNAME
+    kind: atlassian
+  - field: TOKEN
+    key: CONFLUENCE_API_TOKEN
+    kind: atlassian
+  - field: EMAIL
+    key: CONFLUENCE_USERNAME
+    kind: atlassian
+  shared: false
+  transport: stdio
 name: Helix
 providers:
   llm:

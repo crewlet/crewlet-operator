@@ -1084,6 +1084,11 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 				doc.Headers[h.Name] = r.serverValue(s, fmt.Sprintf("spec.headers[%d].valueFrom", j), h.Name, h.Value, h.ValueFrom)
 			}
 		}
+		for _, c := range spec.SeatCredentials {
+			doc.SeatCredentials = append(doc.SeatCredentials, seatCredentialDoc{
+				Kind: seatCredentialKind(c.Kind), Field: seatCredentialField(c.Field), Key: c.Key, Prefix: c.Prefix,
+			})
+		}
 		if len(spec.ToolAnnotations) > 0 {
 			doc.ToolAnnotations = make(map[string]toolAnnotationsDoc, len(spec.ToolAnnotations))
 			for _, a := range spec.ToolAnnotations {

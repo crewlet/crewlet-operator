@@ -36,6 +36,26 @@ spec:
       name: anthropic
       key: apiKey
 ---
+# mcp-atlassian, given each seat's own Atlassian account by the engine under
+# the variables it reads, declared as the server would be by a company that
+# runs it under a name the engine does not recognise.
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: atlassian
+spec:
+  companyRef:
+    name: helix
+  transport: Stdio
+  shared: false
+  command: uvx
+  args: ["mcp-atlassian"]
+  seatCredentials:
+    - {kind: Atlassian, field: Token, key: JIRA_API_TOKEN}
+    - {kind: Atlassian, field: Email, key: JIRA_USERNAME}
+    - {kind: Atlassian, field: Token, key: CONFLUENCE_API_TOKEN}
+    - {kind: Atlassian, field: Email, key: CONFLUENCE_USERNAME}
+---
 apiVersion: crewlet.ai/v1alpha1
 kind: Integration
 metadata:

@@ -131,6 +131,71 @@ func TestMCPServerValidation(t *testing.T) {
 			mutate: asHTTP(func(s *v1.MCPServer) { s.Spec.Headers = secretHeaders }),
 		},
 		{
+			name: "a per-seat server's seat credentials are accepted",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Shared = new(false)
+				s.Spec.SeatCredentials = []v1.MCPSeatCredential{
+					{Kind: v1.SeatCredentialAtlassian, Field: v1.SeatCredentialToken, Key: envJiraToken},
+					{Kind: v1.SeatCredentialAtlassian, Field: v1.SeatCredentialEmail, Key: "JIRA_USERNAME"},
+				}
+			},
+		},
+		{
+			name: "an HTTP server's seat credential with a prefix is accepted",
+			mutate: asHTTP(func(s *v1.MCPServer) {
+				s.Spec.Shared = new(false)
+				s.Spec.SeatCredentials = []v1.MCPSeatCredential{
+					{Kind: v1.SeatCredentialGitHub, Key: headerAuthorization, Prefix: "Bearer "},
+				}
+			}),
+		},
+		{
+			name: "seat credentials on a shared server are refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.SeatCredentials = []v1.MCPSeatCredential{{Kind: v1.SeatCredentialGitLab, Key: "GITLAB_TOKEN"}}
+			},
+			want: "seatCredentials applies to a server with shared false",
+		},
+		{
+			name: "a field of an integration other than Atlassian is refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Shared = new(false)
+				s.Spec.SeatCredentials = []v1.MCPSeatCredential{
+					{Kind: v1.SeatCredentialGitLab, Field: v1.SeatCredentialToken, Key: "GITLAB_TOKEN"},
+				}
+			},
+			want: "field applies to Atlassian",
+		},
+		{
+			name: "an integration with no seat credential is refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Shared = new(false)
+				s.Spec.SeatCredentials = []v1.MCPSeatCredential{{Kind: "Jira", Key: envJiraToken}}
+			},
+			want: `seatCredentials[0].kind: Unsupported value: "Jira"`,
+		},
+		{
+			name: "one header read twice in two cases is refused",
+			mutate: asHTTP(func(s *v1.MCPServer) {
+				s.Spec.Shared = new(false)
+				s.Spec.SeatCredentials = []v1.MCPSeatCredential{
+					{Kind: v1.SeatCredentialSlack, Key: headerAuthorization},
+					{Kind: v1.SeatCredentialGitHub, Key: headerLower},
+				}
+			}),
+			want: "seatCredentials names each header once",
+		},
+		{
+			name: "a prefix naming a variable of the engine is refused",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Shared = new(false)
+				s.Spec.SeatCredentials = []v1.MCPSeatCredential{
+					{Kind: v1.SeatCredentialSlack, Key: "SLACK_MCP_XOXB_TOKEN", Prefix: "${PREFIX}"},
+				}
+			},
+			want: "prefix may not hold a ${NAME} reference",
+		},
+		{
 			name:   "a Stdio server without command is refused",
 			mutate: func(s *v1.MCPServer) { s.Spec.Command = "" },
 			want:   msgStdioCommand,

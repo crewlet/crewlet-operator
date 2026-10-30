@@ -367,7 +367,7 @@ func mcpCredentials(server string) v1.MCPCredentials {
 	return v1.MCPCredentials{
 		Name: server,
 		Env: []v1.MCPCredentialValue{{
-			Name:      "Authorization",
+			Name:      headerAuthorization,
 			ValueFrom: fromSecret(seatHandle+"-"+server, "authorization"),
 		}},
 	}

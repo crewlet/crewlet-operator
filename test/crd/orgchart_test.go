@@ -59,7 +59,7 @@ func TestUnitValidation(t *testing.T) {
 			mutate: func(u *v1.Unit) {
 				c := mcpCredentials(linearServer)
 				c.Env = append(c.Env, v1.MCPCredentialValue{
-					Name: "authorization", ValueFrom: fromSecret("platform-linear", "authorization"),
+					Name: headerLower, ValueFrom: fromSecret("platform-linear", headerLower),
 				})
 				u.Spec.MCP = []v1.MCPCredentials{c}
 			},
@@ -515,7 +515,7 @@ func TestSeatValidation(t *testing.T) {
 			name: "a literal Authorization header is refused",
 			mutate: func(s *v1.Seat) {
 				c := mcpCredentials(linearServer)
-				c.Env[0] = v1.MCPCredentialValue{Name: "Authorization", Value: new("Bearer literal")}
+				c.Env[0] = v1.MCPCredentialValue{Name: headerAuthorization, Value: new("Bearer literal")}
 				s.Spec.MCP = []v1.MCPCredentials{c}
 			},
 			want: msgLiteralCredential,

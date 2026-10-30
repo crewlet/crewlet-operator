@@ -494,7 +494,7 @@ func TestProvisionedCredentials(t *testing.T) {
 				mutate: func(s *v1.Seat) {
 					s.Spec.Sandbox = v1.SeatSandbox{Env: []v1.SeatEnvVar{
 						{Name: gitlabToken, ValueFrom: gitlabMinted},
-						{Name: "JIRA_API_TOKEN", ValueFrom: provisioned(v1.ProvisionedAtlassian, v1.ProvisionedToken)},
+						{Name: envJiraToken, ValueFrom: provisioned(v1.ProvisionedAtlassian, v1.ProvisionedToken)},
 						{Name: "JIRA_USERNAME", ValueFrom: provisioned(v1.ProvisionedAtlassian, v1.ProvisionedEmail)},
 						{Name: "DD_APP_KEY", ValueFrom: provisioned(v1.ProvisionedDatadog, v1.ProvisionedAppKey)},
 						{Name: "MATTERMOST_TOKEN", ValueFrom: provisioned(v1.ProvisionedMattermost, v1.ProvisionedBotToken)},
@@ -564,7 +564,7 @@ func TestSeatIntegrationAccess(t *testing.T) {
 						Enabled: on, AccessLevel: v1.GitLabReporter, Projects: []string{"nimbus-hq/infra"},
 					},
 					Jira:       v1.JiraSeatIntegration{Enabled: on, ProjectRole: "10101", Projects: []string{"PLAT"}},
-					Confluence: v1.ConfluenceSeatIntegration{Enabled: on, SpaceRole: spaceRoleID, Spaces: []string{"ENG", "~ana"}},
+					Confluence: v1.ConfluenceSeatIntegration{Enabled: on, SpaceRole: spaceRoleID, Spaces: []string{spaceENG, "~ana"}},
 					Datadog:    v1.DatadogSeatIntegration{Enabled: on, Role: datadogRoleID},
 					Mattermost: v1.MattermostSeatIntegration{
 						Enabled:  on,
@@ -592,8 +592,6 @@ func TestSeatIntegrationAccess(t *testing.T) {
 			mutate: func(s *v1.Seat) {
 				s.Spec.Integrations = v1.SeatIntegrations{
 					GitLab:     v1.GitLabSeatIntegration{Enabled: on},
-					Jira:       v1.JiraSeatIntegration{Enabled: on},
-					Confluence: v1.ConfluenceSeatIntegration{Enabled: on},
 					Datadog:    v1.DatadogSeatIntegration{Enabled: on},
 					Mattermost: v1.MattermostSeatIntegration{Enabled: on},
 				}
@@ -606,14 +604,25 @@ func TestSeatIntegrationAccess(t *testing.T) {
 			want:   "a seat that is on Datadog needs the role its service account holds",
 		},
 		{
-			name:   "a seat on Jira without a project role is refused",
-			mutate: func(s *v1.Seat) { s.Spec.Integrations.Jira = v1.JiraSeatIntegration{Enabled: on} },
-			want:   "a seat that is on Jira needs the project role it holds",
+			name: "a seat on Jira and Confluence with product access only is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Jira = v1.JiraSeatIntegration{Enabled: on}
+				s.Spec.Integrations.Confluence = v1.ConfluenceSeatIntegration{Enabled: on}
+			},
 		},
 		{
-			name:   "a seat on Confluence without its access is refused",
-			mutate: func(s *v1.Seat) { s.Spec.Integrations.Confluence = v1.ConfluenceSeatIntegration{Enabled: on} },
-			want:   "a seat that is on Confluence needs its access",
+			name: "a seat on Jira in projects without a project role is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Jira = v1.JiraSeatIntegration{Enabled: on, Projects: []string{"PLAT"}}
+			},
+			want: "a seat that is on Jira in projects needs the project role it holds there",
+		},
+		{
+			name: "a seat on Confluence in spaces without its access is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Confluence = v1.ConfluenceSeatIntegration{Enabled: on, Spaces: []string{spaceENG}}
+			},
+			want: "a seat that is on Confluence in spaces needs its access there",
 		},
 		{
 			name:   "a seat on Mattermost without roles is refused",
@@ -679,7 +688,7 @@ func TestSeatIntegrationAccess(t *testing.T) {
 			name: "Confluence space permissions by operation are accepted",
 			mutate: func(s *v1.Seat) {
 				s.Spec.Integrations.Confluence = v1.ConfluenceSeatIntegration{
-					Enabled: on, Operations: []string{"read:space", "create:page"}, Spaces: []string{"ENG"},
+					Enabled: on, Operations: []string{"read:space", "create:page"}, Spaces: []string{spaceENG},
 				}
 			},
 		},
@@ -743,6 +752,10 @@ func TestSeatIntegrationAccess(t *testing.T) {
 }
 
 const (
+	// envJiraToken is the variable mcp-atlassian reads a Jira token from,
+	// and spaceENG a Confluence space's key.
+	envJiraToken = "JIRA_API_TOKEN" //nolint:gosec // G101: a variable's name, which holds no credential.
+	spaceENG     = "ENG"
 	// datadogRoleID is a role id as Datadog's GET /api/v2/roles returns one.
 	datadogRoleID = "4f0e2b3c-1a2b-11ef-9c2b-da7ad0900002"
 	// spaceRoleID is a space role id as Confluence's space roles return one.

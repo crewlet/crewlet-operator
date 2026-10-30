@@ -814,7 +814,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | enabled is whether the seat is on Confluence. False removes the<br />account's Confluence product access and keeps the account. Crewlet's<br />`enabled`. |  | Required: \{\} <br /> |
-| `spaceRole` _string_ | spaceRole is the space role the seat holds in each of spaces, by its<br />id on the site (Confluence's role-based access): Viewer, Collaborator,<br />Manager, Admin, or a custom role. The engine checks it against the<br />site's roles on every pass, and reports one that no longer exists<br />rather than falling back to another. Crewlet's `space_role`. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9][A-Za-z0-9_:-]*$` <br />Optional: \{\} <br /> |
+| `spaceRole` _string_ | spaceRole is the space role the seat holds in each of spaces, by its<br />id on the site (Confluence's role-based access): Viewer, Collaborator,<br />Manager, Admin, or a custom role. The engine checks it against the<br />site's roles on every pass, and reports one that no longer exists<br />rather than falling back to another. It or operations is required<br />while the seat is on in spaces; with neither and no spaces, the seat<br />holds Confluence product access only. Crewlet's `space_role`. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9][A-Za-z0-9_:-]*$` <br />Optional: \{\} <br /> |
 | `operations` _string array_ | operations are Confluence's space permissions, as<br /><operation>:<target> under Confluence's own names, such as read:space<br />or create:page, the seat holds in each of spaces, for a site whose<br />role-based access is off. Crewlet's `operations`. |  | MaxItems: 64 <br />items:MaxLength: 64 <br />items:MinLength: 3 <br />items:Pattern: `^[a-z_]+:[a-z_]+$` <br />Optional: \{\} <br /> |
 | `spaces` _string array_ | spaces are the spaces, by key, the seat holds spaceRole or<br />operations in. Each must be a space the company's document names, as<br />a Unit's or a Seat's spec.space: Crewlet refuses another, which the<br />engine's dry run reports as Invalid on the Seat. Crewlet's `spaces`. |  | MaxItems: 128 <br />items:MaxLength: 255 <br />items:MinLength: 1 <br />items:Pattern: `^~?[A-Za-z0-9]+$` <br />Optional: \{\} <br /> |
 
@@ -1924,7 +1924,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | enabled is whether the seat is on Jira. False removes the account's<br />Jira product access and keeps the account. Crewlet's `enabled`. |  | Required: \{\} <br /> |
-| `projectRole` _string_ | projectRole is the project role the seat holds in each of projects,<br />by its id on the site (GET /rest/api/3/role), such as 10101. What a<br />role may do is each project's permission scheme. The engine checks it<br />against the site's roles on every pass, and reports one that no<br />longer exists rather than falling back to another. Required while<br />the seat is on. Crewlet's `project_role`. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `projectRole` _string_ | projectRole is the project role the seat holds in each of projects,<br />by its id on the site (GET /rest/api/3/role), such as 10101. What a<br />role may do is each project's permission scheme. The engine checks it<br />against the site's roles on every pass, and reports one that no<br />longer exists rather than falling back to another. Required while<br />the seat is on in projects; with neither, the seat holds Jira product<br />access only. Crewlet's `project_role`. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
 | `projects` _string array_ | projects are the projects, by key, the seat holds projectRole in.<br />Each must be a project the company's document names, as a Unit's or<br />a Seat's spec.project, so a seat cannot widen the company's reach:<br />Crewlet refuses another, which the engine's dry run reports as<br />Invalid on the Seat. Crewlet's `projects`. |  | MaxItems: 128 <br />items:MaxLength: 255 <br />items:MinLength: 1 <br />items:Pattern: `^[A-Z][A-Z0-9_]*$` <br />Optional: \{\} <br /> |
 
 
@@ -2298,6 +2298,27 @@ _Appears in:_
 | `valueFrom` _[SecretValueSource](#secretvaluesource)_ | valueFrom reads a credential from a Secret key, which holds the whole<br />header value, scheme included (for example "Bearer <token>"). |  | Optional: \{\} <br /> |
 
 
+#### MCPSeatCredential
+
+
+
+MCPSeatCredential is one per-seat credential a tool server reads. It maps
+onto one entry of Crewlet's seat_credentials. The value is the engine's to
+give each seat's instance; nothing here names a credential.
+
+
+
+_Appears in:_
+- [MCPServerSpec](#mcpserverspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `kind` _[SeatCredentialKind](#seatcredentialkind)_ | kind is the integration whose seat credential the server reads.<br />Crewlet's `kind`. |  | Enum: [Atlassian Datadog GitHub GitLab Mattermost Slack] <br />Required: \{\} <br /> |
+| `field` _[SeatCredentialField](#seatcredentialfield)_ | field is which of an Atlassian account's credentials, its Token or<br />its Email. Unset is the integration's credential itself, an<br />Atlassian account's Token. Crewlet's `field`. |  | Enum: [Token Email] <br />Optional: \{\} <br /> |
+| `key` _string_ | key is the variable (Stdio) or header (HTTP) the server reads it<br />under, which the server's transport decides. Crewlet's `key`. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9!#$%&'*+.^_\|~-]+$` <br />Required: \{\} <br /> |
+| `prefix` _string_ | prefix is text the value follows, such as "Bearer " for an<br />Authorization header. Crewlet's `prefix`. |  | MaxLength: 32 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+
+
 #### MCPServer
 
 
@@ -2345,6 +2366,7 @@ _Appears in:_
 | `url` _string_ | url is the endpoint of an HTTP server. Crewlet's `url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `headers` _[MCPHeader](#mcpheader) array_ | headers are sent with every request to an HTTP server, shared by every<br />instance; per-seat values belong in a Seat's or a Unit's spec.mcp.<br />Header names are case-insensitive, so names must differ in more than<br />case. Crewlet's `headers`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `optionalKeys` _string array_ | optionalKeys names the keys whose value may go missing: variables of env<br />(Stdio) or headers (HTTP), and the values every Seat and Unit gives the<br />server in spec.mcp, which land in the same environment or the same headers.<br />Crewlet starts a server only once every value it is started with has one, so<br />a value read from a Secret that does not exist, holds no such key or holds<br />an empty value keeps the server from starting. Under a key listed here, such<br />a value is left out instead, whole: the server starts without the variable,<br />or its requests go without the header, as Kubernetes starts a container<br />without an optional secretKeyRef. A missing Secret or key under one is then<br />no failure of the references of the object that gives the value, and holds<br />nothing back. Under the Enforce policy the operator also takes the value it<br />pushed for it out of the engine's secret store, and has the engine read the<br />store again whether or not the document can be applied, so the server is not<br />started again with a deleted Secret's value, but by a revision the engine<br />runs that reads the key as required (one from before the key was listed) or<br />whose reading the operator does not know (another document somebody else<br />activated), which keeps the value until the next document runs, and that one<br />is activated once with it and at once again without it; a Secret key that is<br />also read where it is required holds the document while it is missing, and<br />keeps the value it had in a revision the engine runs that requires it too<br />until the document applies. A Seat's or a Unit's value for a key replaces<br />the server's whole, so one that goes missing leaves the key out rather than<br />handing the server's own value back; and a provisioned value an Integration<br />mints for a seat is waited for whatever this says. Every entry must name a<br />key at least one value read from a Secret, or provisioned, is written under,<br />here or in a Seat's or a Unit's spec.mcp for this server: one under which<br />every value is a literal, which is never missing, or no value at all, leaves<br />nothing out and holds the document (ResolvedRefs=False with<br />OptionalKeyUnused), as Crewlet refuses it. A Stdio server's keys are<br />compared as written, an HTTP server's without case, as headers are.<br />Crewlet's `optional_keys`. |  | MaxItems: 32 <br />items:MaxLength: 128 <br />items:MinLength: 1 <br />items:Pattern: `^[A-Za-z0-9!#$%&'*+.^_\|~-]+$` <br />Optional: \{\} <br /> |
+| `seatCredentials` _[MCPSeatCredential](#mcpseatcredential) array_ | seatCredentials declare which integration's per-seat credential the<br />server reads, and under which variable (Stdio) or header (HTTP), so<br />the engine gives each seat's instance that seat's own credential: the<br />one it minted for the seat's account, or the one the Seat hands in<br />for an integration it does not provision. Unset, a server the engine<br />recognises by its command or address (glab mcp serve, slack-mcp-server,<br />mcp-server-mattermost, mcp-atlassian, GitHub's and Datadog's remote<br />servers) reads what the engine knows it reads; a declaration replaces<br />that. A shared server reads none. Crewlet's `seat_credentials`. |  | MaxItems: 8 <br />Optional: \{\} <br /> |
 | `toolPrefix` _string_ | toolPrefix is put in front of the server's tool names, to keep them<br />apart from another server's. Crewlet's `tool_prefix`. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[A-Za-z][A-Za-z0-9_-]*$` <br />Optional: \{\} <br /> |
 | `toolAnnotations` _[MCPToolAnnotations](#mcptoolannotations) array_ | toolAnnotations correct the hints individual tools advertise.<br />Crewlet's `tool_annotations`. |  | MaxItems: 128 <br />Optional: \{\} <br /> |
 | `startupTimeoutSeconds` _integer_ | startupTimeoutSeconds bounds starting the server and the handshake,<br />and separately its first tool listing, so a start can take up to twice<br />it before Crewlet gives the server up. Unset takes Crewlet's default<br />of 120. Crewlet's `startup_timeout_seconds`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
@@ -3231,6 +3253,51 @@ _Appears in:_
 | `atlassianAccount` _string_ | atlassianAccount is the person's identity on the company's Jira and<br />Confluence, one value for both: their account id on Atlassian Cloud,<br />such as 557058:f58131cb-b67d-43c7-b30d-6b58d40bd077 and never their<br />email address, and their username on a Data Center instance, such as<br />jane.doe. Webhooks name the person by it, so it attributes what they do<br />there to their seat, and agents assign and mention them by it.<br />Crewlet's `atlassian_account_id`, which holds the username on Data<br />Center despite its name. Any value up to 255 characters without<br />whitespace is taken, since a Data Center username may hold almost any<br />character. Where the company reaches Jira or Confluence on Atlassian<br />Cloud, a value outside the form of an account id (letters, digits,<br />'_', '\|', ':' and '-', at most 128 characters) is applied and reported<br />on the Seat as ResolvedRefs=False with the reason NotAnAccountID. |  | MaxLength: 255 <br />MinLength: 1 <br />Pattern: `^\S+$` <br />Optional: \{\} <br /> |
 | `githubLogin` _string_ | githubLogin is the person's GitHub login. Crewlet's `github_login`. |  | MaxLength: 39 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9-]+$` <br />Optional: \{\} <br /> |
 | `gitlabUsername` _string_ | gitlabUsername is the person's GitLab username, written without the<br />@: assignments, review requests, mentions, and the sender an inbound<br />webhook is attributed by. Crewlet's `gitlab_username`. GitLab's own<br />rule for a username's form holds it: letters, digits, '_', '-' and<br />'.', at most 255 characters, not starting with '-' and not ending<br />with '.'. |  | MaxLength: 255 <br />MinLength: 1 <br />Pattern: `^([A-Za-z0-9_.][A-Za-z0-9_.-]*[A-Za-z0-9_-]\|[A-Za-z0-9_])$` <br />Optional: \{\} <br /> |
+
+
+#### SeatCredentialField
+
+_Underlying type:_ _string_
+
+SeatCredentialField is which of an Atlassian account's two seat credentials
+a server reads. It maps onto Crewlet's seat_credentials[].field (Token is
+`TOKEN`, Email `EMAIL`).
+
+_Validation:_
+- Enum: [Token Email]
+
+_Appears in:_
+- [MCPSeatCredential](#mcpseatcredential)
+
+| Field | Description |
+| --- | --- |
+| `Token` |  |
+| `Email` |  |
+
+
+#### SeatCredentialKind
+
+_Underlying type:_ _string_
+
+SeatCredentialKind is an integration whose per-seat credential a tool
+server can read. It maps onto Crewlet's seat_credentials[].kind (Atlassian
+is `atlassian`, Datadog `datadog`, GitHub `github`, GitLab `gitlab`,
+Mattermost `mattermost`, Slack `slack`).
+
+_Validation:_
+- Enum: [Atlassian Datadog GitHub GitLab Mattermost Slack]
+
+_Appears in:_
+- [MCPSeatCredential](#mcpseatcredential)
+
+| Field | Description |
+| --- | --- |
+| `Atlassian` |  |
+| `Datadog` |  |
+| `GitHub` |  |
+| `GitLab` |  |
+| `Mattermost` |  |
+| `Slack` |  |
 
 
 #### SeatCredentialSource
