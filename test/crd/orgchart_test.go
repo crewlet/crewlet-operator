@@ -24,7 +24,7 @@ func TestUnitValidation(t *testing.T) {
 				u.Spec.ParentRef = v1.LocalObjectReference{Name: "engineering"}
 				u.Spec.LeadRef = v1.LocalObjectReference{Name: seatHandle}
 				u.Spec.Goals = []string{"p99 under 200ms"}
-				u.Spec.Channel = "#platform"
+				u.Spec.Channel = unitName
 				u.Spec.Project = containerKey
 				u.Spec.Space = containerKey
 				u.Spec.MCP = []v1.MCPCredentials{mcpCredentials(linearServer), mcpCredentials(sentryServer)}

@@ -102,7 +102,7 @@ var _ = Describe("Company", Ordered, func() {
 					// The smallest volume the API admits. kind's
 					// provisioner does not enforce it; the engine's
 					// event stream is sized from it all the same.
-					Storage: v1.DataStorage{Size: new(resource.MustParse("12Gi"))},
+					Storage: v1.DataStorage{Size: new(resource.MustParse("14Gi"))},
 				},
 				Exposure: v1.ExposureSettings{Webhooks: v1.WebhookExposure{Mode: v1.WebhookExposureNone}},
 				NetworkPolicy: v1.NetworkPolicySettings{

@@ -190,6 +190,7 @@ spec:
   displayName: Engineering
   type: Department
   purpose: Build the widgets.
+  channel: engineering
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat

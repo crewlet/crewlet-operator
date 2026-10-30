@@ -306,6 +306,32 @@ const (
 	// engine's own tracker and pages; it moves no window either.
 	bootRecoveryRead = "v0.1.1-0.20261025183322-23ffa9027d77"
 
+	// chatLogRead is crewlet's main at abd826b859, where crewlet#142 merged
+	// Chatlet, the engine's own chat, as a ninth state log every data node
+	// runs, and crewlet#478 merged per-seat integration access. The chat log
+	// is one more in the register, so each step of the boot that reads the
+	// logs one at a time reads one more, as with assistantLogRead: the
+	// join's listings of the trim floors, one more of them and one more row
+	// in each, and one more log's stats, and the admission's read of one
+	// more maintenance window. dataPodBootSeconds follows it, counted from
+	// dataPodStateLogs: 1766 seconds before the object store, where eight
+	// logs took 1646. Every other boot step it moved reads what it read: the
+	// inbox relay became the live relay, one registration for every domain's
+	// announcements where it was one for the inbox's; armHistory builds no
+	// reader on a node without data, which registered nothing before either;
+	// armPresence times its moves; the join's refusal names its logs in
+	// words; startStateLog and a log's start hand the seat-claim gate a hook
+	// the apply loop calls; createKey marks a write that went out unanswered;
+	// and a boot's handshake, which replaced the call to admit, is admit
+	// alone in the normal mode every engine pod runs in. A launch now asks
+	// the turn's fence again of every refusal it meets, and classes a
+	// refusal of the configuration's, both after every decision the render
+	// copies; a Confluence webhook carries its body's source and author
+	// beside the actor it names as before; and seatCredentialFields reads
+	// one per-kind table that also holds the values only the engine reads,
+	// keeping the same fields a tool server may read.
+	chatLogRead = "v0.1.1-0.20261030170958-abd826b8591e"
+
 	// The engine files most of the bounds on a boot are read from, and the
 	// guide that quotes the windows they add up to.
 	jsprovisionGo     = "internal/jsprovision/jsprovision.go"
@@ -551,7 +577,7 @@ var bootWindows = []string{
 // Most of them are the launch's own code: the member it runs on (member,
 // executorRunners), the cell it places the run in (agentPlacement,
 // buildSandbox and its round cap, defaultSandboxMaxTurns), the address the
-// box dials (LaunchExecutor, with the bridge's own Build, Reaches and the
+// box dials (launch, with the bridge's own Build, Reaches and the
 // node's boxHostURL, reachedOnLoopback and loopbackURL), and the login it hands the box
 // (newCodingRun, entryEnv, entrySignInName, sandboxCredentials and OnEngineHost). Some are
 // a sandbox backend's: what an E2B box is created from, (*E2BProvider).Create,
@@ -796,7 +822,7 @@ var mirrored = []mirror{
 		decides: "a run's environment is the env of the catalogue's and the seat's setup steps, then the seat's " +
 			"role.sandbox.env, each later layer winning a name, and a value that resolves to nothing is left out, " +
 			"quietly where the optional_keys beside the value that wins lists its key (a setup file's path " +
-			"likewise), and as the run's gap otherwise, which LaunchExecutor logs and starts the run without",
+			"likewise), and as the run's gap otherwise, which launch logs and starts the run without",
 		digest: "0ec78491f7653695460cde07c92b37f0fd44f9cb10d2e1bd7decfad44094be2a",
 		read:   executorFinalRead,
 	},
@@ -921,14 +947,22 @@ var mirrored = []mirror{
 	{
 		file: agentRunGo, name: "(*agentLauncher).LaunchExecutor",
 		against: append([]string{renderCompanyGo, configOptionalGo}, executorLogin...),
-		decides: "a launch, behind the turn's fence on a node with a sandbox runtime and a bridge something reaches, " +
+		decides: "every executor launch past the turn's fence is launch's, whose refusal is returned as it was " +
+			"unless the seat moved meanwhile",
+		digest: "b0a3beef9e317cb42c85290aefb40f2cc5c19b5ad7153576c675aea864220788",
+		read:   chatLogRead,
+	},
+	{
+		file: agentRunGo, name: "(*agentLauncher).launch",
+		against: append([]string{renderCompanyGo, configOptionalGo}, executorLogin...),
+		decides: "a launch, on a node with a sandbox runtime and a bridge something reaches, " +
 			"picks its member (member), places the run in the member's cell (agentPlacement, else the catalogue's " +
 			"default), refuses a cell whose box cannot dial the bridge (Reaches: a Direct box dials its node's own " +
 			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable)",
-		digest: "43e5c7c3c53bfdec54e1a05295aadaadc617d83f72b03cd73b2d8b28daa789a6",
-		read:   signInStampRead,
+		digest: "8534b7cd2fa15e88c9125839fde00dc5cf568d78fbe6635624a41a3774a04138",
+		read:   chatLogRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -965,8 +999,8 @@ var mirrored = []mirror{
 		decides: "the members a launch picks among are the executor chain's members, in order, whose CLI has an " +
 			"in-box runner (codingagent.Names, held by TestRunnerCLIsFollowTheEngineSource), and a chain with none " +
 			"launches nothing",
-		digest: "11df5269c5b19f733513c92b8069dc548f0ec7f988b3110e98f35e2cda39f95b",
-		read:   executorRead,
+		digest: "95412060b00824d49c72e824b8d74d7c08d6ad53b84293edac9f2d934b5a1e8a",
+		read:   chatLogRead,
 	},
 	{
 		file: agentRunGo, name: "agentPlacement",
@@ -1290,8 +1324,8 @@ var mirrored = []mirror{
 		against: atlassianAccount,
 		decides: "a Confluence webhook names its actor by accountId on Cloud and by username, else the user key, on " +
 			"Data Center, which is what a person's atlassian_account_id is matched against",
-		digest: "f93e753e2226757e3cd1e14f55610c86f3f384efb77980612c69d8458b1e9ab6",
-		read:   atlassianRead,
+		digest: "8627214fb2abd0b1200a4878b6a61e474152251f2cb5c033fde198bdce89ac8a",
+		read:   chatLogRead,
 	},
 	{
 		file: profileFile, name: "IsCredentialName",
@@ -1554,10 +1588,10 @@ var mirrored = []mirror{
 	{
 		file: backendsGo, name: "objectsReservation",
 		against: bootWindows,
-		decides: "sizing the nats bucket reads the broker's limit under LookupBudget, and carries on from the " +
-			"volume's free space past it",
-		digest: "7ba9b5772807a60484d6bbe24850daf0e6b09617a7bd9c95a28722822c38aa45",
-		read:   bootBoundsRead,
+		decides: "sizing the nats bucket reads the broker's limit under LookupBudget, and carries on past it from " +
+			"the share of the volume's free space a broker that states none holds (unstatedLimit)",
+		digest: "63c4ffb2d6fc2b31ef1a644622e17f250ef9444de7f066ea01d8f3a512255a0d",
+		read:   chatLogRead,
 	},
 	{
 		file: backendsGo, name: "openObjects",
@@ -1592,15 +1626,15 @@ var mirrored = []mirror{
 		file: "internal/engine/history.go", name: "(*Engine).armHistory",
 		against: bootWindows,
 		decides: "a data node registers its history answerer, one flush",
-		digest:  "a9ece00e3267829897fa33ad1a020dae4cc28592402905630304cc9f44dd97a6",
-		read:    bootBoundsRead,
+		digest:  "4d7b4387544fd890a46a25702eaf0d1faa63a7dd56957e840f7dd63f156761f8",
+		read:    chatLogRead,
 	},
 	{
-		file: "internal/engine/inboxrelay.go", name: "(*Engine).armInboxRelay",
+		file: "internal/engine/liverelay.go", name: "(*Engine).armLiveRelay",
 		against: bootWindows,
-		decides: "a data node registers its inbox relay, one flush",
-		digest:  "673a18d6bcdf74dad77ace48bd70a663d2879b58bd0e5590de638434cb204d53",
-		read:    bootBoundsRead,
+		decides: "a data node registers its live relay, one flush",
+		digest:  "a0c58451b496b79f9ea60400078332319ff26c5e30bc10c1b56d920595f3deb9",
+		read:    chatLogRead,
 	},
 	{
 		file: "internal/engine/maintenance_mode.go", name: "(*Engine).admit",
@@ -1610,11 +1644,19 @@ var mirrored = []mirror{
 		read:    bootBoundsRead,
 	},
 	{
+		file: "internal/engine/maintenance_mode.go", name: "(*Engine).handshake",
+		against: bootWindows,
+		decides: "a boot's half of the capacity window is admit alone in normal mode, every engine pod's: what " +
+			"supersedes a previous process's admission and acknowledges a window runs only in a maintenance mode",
+		digest: "7f7d99f653c446ba44eaf13aff9e3b3b44be2096844c46663c519eda87c49633",
+		read:   chatLogRead,
+	},
+	{
 		file: "internal/engine/presence.go", name: "(*Engine).armPresence",
 		against: bootWindows,
 		decides: "every node registers its presence answerer, one flush",
-		digest:  "4c0d3b84ff37218350fee94835fede14371d3dd70a6fc0e967fafba1f1b8bf71",
-		read:    bootBoundsRead,
+		digest:  "20edef0a7bc81e1c24cc9670cee699a0646ebefb538943d803afbc5768a68159",
+		read:    chatLogRead,
 	},
 	{
 		file: "internal/engine/remote.go", name: "(*Engine).serveEstate",
@@ -1642,16 +1684,16 @@ var mirrored = []mirror{
 		file: stateLogGo, name: "(*Engine).join",
 		against: bootWindows,
 		decides: "a node's join reads whether its rows can replay, and asks for a donor only when they cannot",
-		digest:  "51ba54deb4eb2abdc3365a04ca263e2e9c218ac809eba67b43ae5c00d35eb166",
-		read:    bootRecoveryRead,
+		digest:  "dab32de2f85b86a945e0dbc8e6e646615a6eb67b66a59e832109c9788fa2b914",
+		read:    chatLogRead,
 	},
 	{
 		file: stateLogGo, name: "(*Engine).startStateLog",
 		against: bootWindows,
 		decides: "the state logs read their ceilings, are provisioned under one sequence ceiling, joined, and " +
 			"started under another",
-		digest: "e23f2f866e38084ca2d6ed5034923b4f3ad38703397b23ed6c48f09ad3ec0984",
-		read:   bootRecoveryRead,
+		digest: "59a122e557ab71059b09e8f810940643957d6429bbfcbc340cb07faf382d506b",
+		read:   chatLogRead,
 	},
 	{
 		file: stateLogGo, name: "(*stateLog).provisionAll",
@@ -1671,8 +1713,8 @@ var mirrored = []mirror{
 		file: stateLogGo, name: "(*stateLog).start",
 		against: bootWindows,
 		decides: "a log's start reads its stats, attaches its consumer and verifies its checkpoint",
-		digest:  "db62104d27fe1aba85ff011579ef018f65c2862a9b20930cf31eeed5771bcceb",
-		read:    bootBoundsRead,
+		digest:  "07d570981b16033e5cc3f5c179265c902c74ec04a48e671ca7c86ac62cb821ac",
+		read:    chatLogRead,
 	},
 	{
 		file: stateLogGo, name: "(*stateLog).startLog",
@@ -1971,8 +2013,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "each round of a create-only write is a settled update and a leader read, each at the client's 5 " +
 			"s default",
-		digest: "d52d5def68b8d33f4b3f0e48d94386f5632a0f24fd0c5e470bd98032c32ce6c0",
-		read:   bootBoundsRead,
+		digest: "b96958987c5ddc851225e253ce05db9f6b1af539b9b1af60a3551ef146425dee",
+		read:   chatLogRead,
 	},
 	{
 		file: natsObjGo, name: "open",
@@ -2023,8 +2065,8 @@ var mirrored = []mirror{
 		against: []string{mcpServerTypesGo, renderEnumsGo, toolServersMd},
 		decides: "each integration's seat credential is one field, but an Atlassian account's two, TOKEN and EMAIL, " +
 			"so seat_credentials names a field for Atlassian alone",
-		digest: "9eb2b655a2a075f53c4ac5185316a9d6a26b8298e8b89cf4ab1f51158c4de3d7",
-		read:   seatCredentialsRead,
+		digest: "9a68989722fa22c2076f40c7d7d444a816a682bc43012aa23d06b07b1b89bebe",
+		read:   chatLogRead,
 	},
 	{
 		file: "internal/envref/envref.go", name: "SealedName",

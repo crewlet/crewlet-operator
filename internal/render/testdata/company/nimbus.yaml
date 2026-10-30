@@ -113,7 +113,7 @@ turn_engine:
   extension_enabled: true
 units:
 - children:
-  - channel: '#platform'
+  - channel: platform
     goals:
     - p99 API latency under 200ms
     id: platform

@@ -187,7 +187,8 @@ lists decide only at a launch, which no engine test reaches, so
 `TestMirroredEngineDeclarationsAreUnchanged` holds their code:
 [`internal/render/mirror_test.go`](internal/render/mirror_test.go) names every
 engine function whose decision the operator copies at a launch —
-`LaunchExecutor`, the `member` it picks a run's provider by among
+`LaunchExecutor` and the `launch` it makes past the turn's fence, the
+`member` it picks a run's provider by among
 `executorRunners`, the `agentPlacement` that places it and
 `Placement.OnEngineHost`, `entryEnv` and `entrySignInName`, `sandboxCredentials` and the
 `entrySignsIn` it judges a sign-in by, what a direct box is made of on the
@@ -309,7 +310,7 @@ there; `TestExecutorFollowsTheEngineSource` holds the variable the operator
 sets to the engine's, `TestContractExecutorIsAppliedWhereItCannotRun` holds
 the documents to the engine, and `TestMirroredEngineDeclarationsAreUnchanged`
 holds the code that launches a seat's executor and refuses it (`LaunchExecutor`,
-`member`, `executorRunners` and `agentPlacement` in Crewlet's
+`launch`, `member`, `executorRunners` and `agentPlacement` in Crewlet's
 `internal/engine/agentrun.go`, `Build` in `internal/api/mcpbridge/build.go`)
 to the code `internal/render/executor.go`, `internal/render/signin.go` and
 the head of a seat's executor chain in

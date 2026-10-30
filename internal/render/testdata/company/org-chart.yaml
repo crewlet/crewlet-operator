@@ -84,7 +84,7 @@ turn_engine:
   extension_enabled: false
   max_iterations: 4
 units:
-- channel: '#rnd'
+- channel: rnd
   children:
   - id: anvils
     name: anvils

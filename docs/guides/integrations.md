@@ -525,10 +525,12 @@ review, reaches the engine as theirs. A Human seat takes one field for each
 chat surface or tool it is reached on, and needs none: a person who works
 only through the engine's dashboard has no account to name, and signs in on
 their seat through the engine's identity directory
-([Bringing people in](people.md)). The engine warns of a
-Human seat with no chat contact, since a message addressed to it there
-reaches nobody, and the operator records the warning as an `EngineWarnings`
-event on the Company:
+([Bringing people in](people.md)). A company with a Mattermost or Slack
+Integration talks there, and the engine warns of a Human seat with no account
+on it, since a message addressed to it there reaches nobody; the operator
+records the warning as an `EngineWarnings` event on the Company. A company
+with neither talks on Chatlet, the engine's own chat in its dashboard, where
+every Human seat is reached without a contact. The fields:
 
 | Field | Surface | The value | Where to find it |
 |---|---|---|---|

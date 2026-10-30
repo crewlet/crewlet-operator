@@ -120,7 +120,7 @@ var _ = Describe("Seat pools", Ordered, func() {
 				Engine: v1.EngineSettings{Image: crewletImage, ImagePullPolicy: corev1.PullNever},
 				Data: v1.DataPodSettings{
 					Resources: small,
-					Storage:   v1.DataStorage{Size: new(resource.MustParse("12Gi"))},
+					Storage:   v1.DataStorage{Size: new(resource.MustParse("14Gi"))},
 				},
 				SeatPools: v1.SeatPoolSettings{
 					Policy:       v1.SeatPoolsAllowed,

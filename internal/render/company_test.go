@@ -25,7 +25,8 @@ type companyCase struct {
 	exposed bool
 	// advisories are the advisories Crewlet's validator gives the
 	// document, about choices of the tenant's that no render avoids: a
-	// chart of agents alone, which has no human seat.
+	// chart of agents alone, which has no human seat, and units on Chatlet
+	// that name no channel, which open no room for their team.
 	advisories []advisory
 }
 
@@ -49,7 +50,7 @@ func companyCases() []companyCase {
 		{name: "assistant", exposed: true, advisories: agentsAlone},
 		{name: caseAtlassian, exposed: true},
 		{name: caseSeatPools},
-		{name: caseOptionalKeys},
+		{name: caseOptionalKeys, advisories: []advisory{advisoryNoUnitChannel}},
 	}
 }
 

@@ -149,11 +149,18 @@ type UnitSpec struct {
 	// +kubebuilder:validation:items:MaxLength=1024
 	Goals []string `json:"goals,omitempty"`
 
-	// channel is the unit's channel on the company's chat surface, such as
-	// #platform; child units without one inherit it. Crewlet's `channel`.
+	// channel is the unit's channel on the company's chat surface, by name,
+	// such as platform; child units without one inherit it. On Chatlet, the
+	// engine's own chat and the surface of a company that declares no
+	// Mattermost or Slack Integration, each channel a unit names is a room
+	// whose members follow the org chart. Crewlet takes lowercase letters,
+	// digits, - and _, starting with a letter or a digit, up to 64
+	// characters: the name itself, never #platform or a vendor's channel id.
+	// Crewlet's `channel`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=256
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[a-z0-9][a-z0-9_-]{0,63}$`
 	Channel string `json:"channel,omitempty"`
 
 	// knowledge are free-text references to knowledge the unit relies on.
