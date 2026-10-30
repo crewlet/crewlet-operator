@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -607,11 +608,6 @@ type withdrawal struct {
 	registry string
 	// requiring is a document whose server requires the registry.
 	requiring []byte
-	// pushed is what the operator pushed for r1, both values, and owe makes
-	// the state record them pushed after it (owePushed).
-	pushed   secretsync.Desired
-	recorded string
-	optional []secretref.Key
 	// stateWrites counts the writes of the secret sync's state since the
 	// reconcile began, and failWrite, when it is not 0, is the one that
 	// fails, the API server not answering.
@@ -684,13 +680,14 @@ func newWithdrawal(t *testing.T, r running) *withdrawal {
 		t.Fatal(err)
 	}
 	// Pushed before r1 activated, so that r1 read them: nothing is
-	// re-activated for them, and nothing is owed for them after it.
+	// re-activated for them.
 	fe.reloadAnswer = new(map[string]any(nil))
 	state, _, err := secretsync.Sync(ctx, eng, present, secretsync.State{}, operatorLogin, discardState)
 	if err != nil {
 		t.Fatal(err)
 	}
 	fe.reloadAnswer = nil
+	// r1 activated after both values were pushed, so it read them.
 	state = state.Reloaded()
 	if r.recorded != "" {
 		state = state.Activated(r.recorded, runningDoc.Optional)
@@ -705,37 +702,12 @@ func newWithdrawal(t *testing.T, r running) *withdrawal {
 	w.stateWrites.Store(0)
 
 	w.engine, w.client, w.cluster = fe, eng, cluster
-	w.pushed, w.recorded, w.optional = present, r.recorded, runningDoc.Optional
 	w.registry = secretsync.StoreName(secretref.Key{Namespace: "ns", Name: optionalSecret, Key: optionalKey})
 	w.again(t, company)
 	if !fe.holds(w.registry) {
 		t.Fatal("the engine's store does not hold the registry the operator pushed")
 	}
 	return w
-}
-
-// owePushed makes the state the one a sync leaves that pushed both values
-// again after r1 activated, whose writes the engine re-activated nothing at:
-// the revision recorded as before, and both values owed until a revision
-// activates after them.
-func (w *withdrawal) owePushed(t *testing.T) {
-	t.Helper()
-	ctx := context.Background()
-	w.engine.reloadAnswer = new(map[string]any(nil))
-	state, _, err := secretsync.Sync(ctx, w.client, w.pushed, secretsync.State{}, operatorLogin, discardState)
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.engine.reloadAnswer = nil
-	if w.recorded != "" {
-		state = state.Adopted(w.recorded, w.optional)
-	}
-	if len(state.Written()) == 0 {
-		t.Fatal("the sync pushed nothing again")
-	}
-	if err := secretsync.SaveState(ctx, w.cluster, w.ref(), w.run.company, state); err != nil {
-		t.Fatal(err)
-	}
 }
 
 // again makes w.run a new reconcile of company, as a reconcile after the last
@@ -1544,6 +1516,152 @@ func TestADocumentTheEngineHoldsStillSettlesTheStore(t *testing.T) {
 	}
 }
 
+// TestARotatedValueReachesTheRevisionTheEngineRunsWhileTheDocumentIsHeld pins
+// that a value the sync writes into the store while the engine refuses the
+// document, a credential somebody rotated, is read by the revision the engine
+// runs: the operator activates that revision again for it, as it does for the
+// value of a deleted Secret, since no write of the document is coming to do
+// it. Only a withdrawal got that, so the running revision kept the old value,
+// a revoked key say, for as long as the document was refused, while every
+// node that restarted read the new one. A revision that does not reference the
+// value is not activated again for it, and an activation that fails says so
+// and comes back when it promises.
+func TestARotatedValueReachesTheRevisionTheEngineRunsWhileTheDocumentIsHeld(t *testing.T) {
+	for _, tc := range []struct {
+		name                string
+		refusal             *engineRefusal
+		unreferenced, fails bool
+	}{
+		{name: "the engine finds the document invalid", refusal: invalidDocument},
+		{name: "a seat somebody holds", refusal: heldSeat},
+		{name: "the running revision does not reference the value", refusal: invalidDocument, unreferenced: true},
+		{name: "the activation fails", refusal: invalidDocument, fails: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			w := newWithdrawal(t, runningLetsGo)
+			// Nothing is withdrawn: the registry's Secret is back, and the
+			// engine runs a revision that read every value.
+			if err := w.cluster.Create(ctx, valueSecret(optionalSecret, map[string]string{optionalKey: npmRegistry})); err != nil {
+				t.Fatal(err)
+			}
+			w.settled(t)
+			if owed := w.state(t).Written(); len(owed) != 0 {
+				t.Fatalf("the state owes %v before the rotation, want nothing", owed)
+			}
+			tavily := secretsync.StoreName(secretref.Key{Namespace: "ns", Name: requiredSecret, Key: requiredKey})
+			w.rotate(t)
+			w.engine.mu.Lock()
+			// The engine's own re-activation at the write fails: the
+			// activation is the operator's.
+			w.engine.reloadAnswer = failedReload("unavailable", "the coordination store did not answer")
+			w.engine.refusal, w.engine.reloadDown = tc.refusal, tc.fails
+			if tc.unreferenced {
+				// Somebody activated a document that names no such value.
+				doc := w.engine.revisions[len(w.engine.revisions)-1].document
+				w.engine.activateOther(bytes.ReplaceAll(doc, []byte("${"+tavily+"}"), []byte("tvly-literal")))
+			}
+			w.engine.mu.Unlock()
+			before := w.engine.ids()
+			result, err := w.run.converge(ctx, w.client)
+			if err != nil {
+				t.Fatalf("converge() = %v, want the refusal reported", err)
+			}
+			w.engine.mu.Lock()
+			stored := w.engine.store[tavily]
+			w.engine.mu.Unlock()
+			if stored != rotatedValue {
+				t.Fatalf("the store holds %q under %s, want the rotated value", stored, tavily)
+			}
+			recorded := drained(w.events)
+			ids, written := w.engine.ids(), w.state(t).Written()
+			switch {
+			case tc.unreferenced:
+				if !slices.Equal(ids, before) || !slices.Equal(written, []string{tavily}) {
+					t.Errorf("the revisions are %v and the state owes %v; want %v, nothing activated again for a value "+
+						"the running revision does not name, and the value owed to the next write", ids, written, before)
+				}
+			case tc.fails:
+				if !slices.Equal(written, []string{tavily}) || !slices.ContainsFunc(recorded, func(e string) bool {
+					return strings.HasPrefix(e, "Warning SecretRefreshFailed ") && strings.Contains(e, "tries again in 2s")
+				}) || result.RequeueAfter != 2*time.Second {
+					t.Errorf("the state owes %v, the next look is %s on and events %q; want the value owed, "+
+						"SecretRefreshFailed promising 2s, and 2s", written, result.RequeueAfter, recorded)
+				}
+			default:
+				if want := append(slices.Clone(before), fmt.Sprintf("r%d", len(before)+1)); !slices.Equal(ids, want) ||
+					len(written) != 0 {
+					t.Errorf("the revisions are %v and the state owes %v; want %v, the running revision activated "+
+						"again for the rotated value, and nothing owed", ids, written, want)
+				}
+				if !slices.ContainsFunc(recorded, func(e string) bool {
+					return strings.HasPrefix(e, "Normal Reactivated ") && strings.Contains(e, tavily)
+				}) {
+					t.Errorf("events %q, want Reactivated naming %s", recorded, tavily)
+				}
+			}
+		})
+	}
+}
+
+// TestAHeldDocumentHasTheEngineReadAValueWrittenBeforeIt pins that a reconcile
+// whose document is held makes the activation a value written earlier is
+// owed, where the revision the engine runs references it: a reconcile wrote a
+// rotated value and went no further, and the next one finds the document
+// held. It returned at once when nothing was withdrawn, missing or kept, so
+// the running revision went on with the old value for as long as the
+// document was held. An activation that fails is reported as one owed for a
+// value written, not as a withdrawal that failed.
+func TestAHeldDocumentHasTheEngineReadAValueWrittenBeforeIt(t *testing.T) {
+	for _, fails := range []bool{false, true} {
+		t.Run(map[bool]string{false: "the activation lands", true: "the activation fails"}[fails], func(t *testing.T) {
+			ctx := context.Background()
+			w := newWithdrawal(t, runningLetsGo)
+			if err := w.cluster.Create(ctx, valueSecret(optionalSecret, map[string]string{optionalKey: npmRegistry})); err != nil {
+				t.Fatal(err)
+			}
+			w.rotate(t)
+			// A reconcile wrote the rotated value, whose re-activation by the
+			// engine failed, and went no further.
+			w.engine.reloadAnswer = failedReload("unavailable", "the coordination store did not answer")
+			owed, _, err := secretsync.Sync(ctx, w.client, w.resolve(t), w.state(t), operatorLogin, discardState)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := secretsync.SaveState(ctx, w.cluster, w.ref(), w.run.company, owed); err != nil {
+				t.Fatal(err)
+			}
+			tavily := secretsync.StoreName(secretref.Key{Namespace: "ns", Name: requiredSecret, Key: requiredKey})
+			if !slices.Equal(owed.Written(), []string{tavily}) {
+				t.Fatalf("the state owes %v, want the rotated value", owed.Written())
+			}
+			w.engine.mu.Lock()
+			w.engine.reloadDown = fails
+			w.engine.mu.Unlock()
+			result, err := w.run.withdrawHeld(ctx, w.resolve(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			recorded := drained(w.events)
+			state := w.state(t)
+			if fails {
+				if !slices.Equal(state.Written(), []string{tavily}) || !slices.ContainsFunc(recorded, func(e string) bool {
+					return strings.HasPrefix(e, "Warning SecretRefreshFailed ") && strings.Contains(e, "tries again in 2s")
+				}) || warned(recorded, "SecretWithdrawalFailed") || result.RequeueAfter != 2*time.Second {
+					t.Errorf("the state owes %v, the next look is %s on and events %q; want the value owed, "+
+						"SecretRefreshFailed promising 2s and no failed withdrawal, and 2s",
+						state.Written(), result.RequeueAfter, recorded)
+				}
+				return
+			}
+			if got := w.engine.ids(); !slices.Equal(got, []string{"r1", "r2"}) || len(state.Written()) != 0 {
+				t.Errorf("the revisions are %v and the state owes %v; want r1 activated again for the rotated value, "+
+					"and nothing owed", got, state.Written())
+			}
+		})
+	}
+}
+
 // TestARevisionAdoptedInSyncIsRecordedAtItsEpoch pins that a revision of the
 // rendered document the operator did not activate, a reload of its document
 // here, is recorded at the epoch the fleet's activation names for it, and as
@@ -1909,7 +2027,6 @@ func TestAFailedReloadIsReadBack(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			w := newWithdrawal(t, runningLetsGo)
-			w.owePushed(t)
 			w.engine.mu.Lock()
 			w.engine.reloadDown = true
 			// The engine's own re-activation at the removal fails: the operator asks.
@@ -1929,10 +2046,10 @@ func TestAFailedReloadIsReadBack(t *testing.T) {
 			recorded := drained(w.events)
 			state := w.state(t)
 			if tc.other == nothing {
-				if !slices.Equal(state.Withdrawn(), []string{w.registry}) || len(state.Written()) == 0 ||
+				if !slices.Equal(state.Withdrawn(), []string{w.registry}) || len(state.Written()) != 0 ||
 					!warned(recorded, "SecretWithdrawalFailed") {
-					t.Errorf("the state owes withdrawals %v and writes %v, and events %q; want the registry and the "+
-						"values pushed before it owed, and the failure reported", state.Withdrawn(), state.Written(), recorded)
+					t.Errorf("the state owes withdrawals %v and writes %v, and events %q; want the registry owed, r1 having "+
+						"read every value, and the failure reported", state.Withdrawn(), state.Written(), recorded)
 				}
 				return
 			}

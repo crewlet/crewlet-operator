@@ -251,7 +251,14 @@ flowchart TD
    ([What the engine has read](#what-the-engine-has-read)), not just in the
    reconcile that wrote it: a write that fails, or loses its race to another
    writer, leaves the next sync nothing to write while the engine may still
-   run a revision that read the store before it.
+   run a revision that read the store before it. Where no write is coming,
+   because the engine refuses the document or it is held, the revision the
+   engine runs is activated again for a value that revision references
+   (`Reactivated`), so that a credential somebody rotated reaches the
+   running engine whatever else is wrong with the document: by the engine
+   itself at the write, or, where its activation failed, by the operator; a
+   Warning `SecretRefreshFailed` says when neither could. A value the
+   running revision does not reference waits for the write that does.
 5. **Dry-run** the document. The engine checks everything the API server
    cannot: rules that span objects, such as a Seat that asks for a sandbox
    the Company does not offer. Each problem the engine reports is traced back,
@@ -642,10 +649,13 @@ it wrote back and who had replaced it, `SecretKept` naming each value of a
 deleted Secret it keeps in the store for the revision the engine runs, which
 requires it or whose reading the operator does not know, `Reactivated` when
 it activated the running revision again so the engine reads its store
-without the value of a deleted Secret, a Warning `Reactivated` when the
-revision activated again is not the document it read, or when a request that
-failed finds another document running that activated after the deletion, a
-Warning `SecretWithdrawalFailed` when it could not,
+without the value of a deleted Secret, or with a value it wrote while no
+write of the document was coming, a Warning `Reactivated` when the revision
+activated again is not the document it read, or when a request that failed
+finds another document running that activated after the change, a Warning
+`SecretWithdrawalFailed` when it could not have the engine read its store
+without a deleted Secret's value, a Warning `SecretRefreshFailed` when it
+could not have it read a value it wrote,
 `Drifted`, `Invalid` with the engine's problems, and
 `EngineWarnings` when the engine applied a revision it has something to say
 about. Events, conditions and logs name Secrets, keys and store entries,
