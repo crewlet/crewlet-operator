@@ -92,6 +92,13 @@ type advisory struct{ path, says string }
 // tenant's is.
 var advisoryNoHumanSeat = advisory{path: keyRoles, says: "no `kind: human` seats"}
 
+// advisoryNoUnitChannel is Crewlet's advisory on a company on Chatlet, the
+// chat of one that declares no Mattermost or Slack, whose units name no
+// channel (config.channelAdvisories): each channel a unit names is a room
+// whose members follow the org chart, so with none no team has a room until
+// somebody opens one by hand. It is said at the first unit's channel.
+var advisoryNoUnitChannel = advisory{path: keyUnits + "[0].channel", says: "no unit in this company declares a `channel`"}
+
 // advisoryExecutorNeverRuns is Crewlet's advisory on the first seat of a
 // document whose executor chain holds a CLI that can never run its executor
 // beside one that can (config.executorWarnings): a launch passes over it, and
@@ -1200,11 +1207,11 @@ func TestContractGettingStarted(t *testing.T) {
 	for _, k := range doc.Refs {
 		env[secretsync.StoreName(k)] = dummyCredential(k)
 	}
-	// The guide's company has a Human seat for its reader, who joins it in
-	// the dashboard and is reached nowhere else: Crewlet says that seat
-	// has no chat contact, and nothing else.
-	founderUnreachable := advisory{path: "roles[0].contact", says: "founder is a human seat with no chat contact"}
-	validate(t, env, []advisory{founderUnreachable},
+	// The guide's company declares no vendor chat, so it runs on Chatlet,
+	// where its reader's Human seat is reached in the dashboard and its unit
+	// names the channel of its team's room: Crewlet has nothing to say
+	// about it.
+	validate(t, env, nil,
 		"-config", write(t, "crewlet.yaml", tierA.YAML), "-company", write(t, "company.yaml", doc.YAML))
 }
 

@@ -13,7 +13,6 @@ integrations:
       api_key: ${K8S_DATADOG_API_KEY_R2XMCNZGWCGX}
       app_key: ${K8S_DATADOG_APP_KEY_IIXGXLWMGXWV}
       email_domain: agents.helix.example
-      role: Datadog Standard Role
       site: us5.datadoghq.com
     route_to: none
     webhook_name: helix
@@ -35,6 +34,19 @@ mcp_servers:
   - mcp-atlassian
   command: uvx
   name: atlassian
+  seat_credentials:
+  - field: TOKEN
+    key: JIRA_API_TOKEN
+    kind: atlassian
+  - field: EMAIL
+    key: JIRA_USERNAME
+    kind: atlassian
+  - field: TOKEN
+    key: CONFLUENCE_API_TOKEN
+    kind: atlassian
+  - field: EMAIL
+    key: CONFLUENCE_USERNAME
+    kind: atlassian
   shared: false
   transport: stdio
 name: Helix
@@ -63,22 +75,42 @@ roles:
 - goal: Triage the issues and the alerts nobody owns yet.
   handle: triage
   integrations:
+    confluence:
+      enabled: true
+      space_role: 8f3b6c1e-2d4a-4e5f-9a0b-1c2d3e4f5a6b
+      spaces:
+      - OPS
+    datadog:
+      enabled: true
+      role: 4f0e2b3c-1a2b-11ef-9c2b-da7ad0900002
+    jira:
+      enabled: true
+      project_role: "10101"
+      projects:
+      - OPS
     mattermost:
       bot_token: ${K8S_TRIAGE_MATTERMOST_BOT_TOKEN_GXVBDKKLZ7W7}
-      channel: ops
+      channels:
+      - ops
+      - incidents
+      enabled: true
+      roles:
+      - system_user
+      - system_post_all_public
       username: helix-triage
   kind: agent
-  mcp_env:
-    atlassian:
-      CONFLUENCE_API_TOKEN: ${PROVISIONED_TRIAGE_ATLASSIAN_TOKEN_O7S5LR47DFCK}
-      CONFLUENCE_USERNAME: ${PROVISIONED_TRIAGE_ATLASSIAN_EMAIL_QRJKIZVI7O5D}
-      JIRA_API_TOKEN: ${PROVISIONED_TRIAGE_ATLASSIAN_TOKEN_O7S5LR47DFCK}
-      JIRA_USERNAME: ${PROVISIONED_TRIAGE_ATLASSIAN_EMAIL_QRJKIZVI7O5D}
   name: triage
   placement:
     labels:
       crewlet.ai/pool: data
   project: OPS
   space: OPS
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack
 tracker:
   backend: jira

@@ -327,7 +327,7 @@ func TestAValueIsReportedForWhatItKeepsFromStarting(t *testing.T) {
 	}
 	fromAna := func(name, key string) crewletaiv1alpha1.MCPCredentialValue {
 		return crewletaiv1alpha1.MCPCredentialValue{
-			Name: name, ValueFrom: crewletaiv1alpha1.SeatCredentialSource{SecretKeyRef: fromSecret(anaTavily, key).SecretKeyRef},
+			Name: name, ValueFrom: fromSecret(anaTavily, key),
 		}
 	}
 

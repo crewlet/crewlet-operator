@@ -1,9 +1,11 @@
 # A company on Atlassian Cloud: Jira is its tracker and Confluence its
 # knowledge base, both on sites the engine discovers through the
-# organization, where it creates each agent seat's account and mints the
-# token and the address the seat's Atlassian tool server signs in with.
+# organization, where it creates the account of each agent seat that is on
+# Jira or Confluence and mints the token its own tools sign in with.
 # Mattermost bots are made by hand (provisioning External), and Datadog
-# alerts that name no seat are dismissed. Its founder is a person, tied to
+# alerts that name no seat are dismissed. The triage agent holds a Jira
+# project role, a Confluence space role and a Datadog role, each by the id
+# the vendor lists it under. Its founder is a person, tied to
 # her Atlassian Cloud account id and her Mattermost username.
 apiVersion: crewlet.ai/v1alpha1
 kind: Company
@@ -34,6 +36,9 @@ spec:
       name: anthropic
       key: apiKey
 ---
+# mcp-atlassian, given each seat's own Atlassian account by the engine under
+# the variables it reads, declared as the server would be by a company that
+# runs it under a name the engine does not recognise.
 apiVersion: crewlet.ai/v1alpha1
 kind: MCPServer
 metadata:
@@ -45,6 +50,11 @@ spec:
   shared: false
   command: uvx
   args: ["mcp-atlassian"]
+  seatCredentials:
+    - {kind: Atlassian, field: Token, key: JIRA_API_TOKEN}
+    - {kind: Atlassian, field: Email, key: JIRA_USERNAME}
+    - {kind: Atlassian, field: Token, key: CONFLUENCE_API_TOKEN}
+    - {kind: Atlassian, field: Email, key: CONFLUENCE_USERNAME}
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Integration
@@ -126,7 +136,6 @@ spec:
     appKeySecretRef:
       name: datadog
       key: appKey
-    role: Datadog Standard Role
     emailDomain: agents.helix.example
     webhookName: helix
     handleTag: owner
@@ -141,33 +150,27 @@ spec:
   goal: Triage the issues and the alerts nobody owns yet.
   project: OPS
   space: OPS
-  mcp:
-    - name: atlassian
-      env:
-        - name: JIRA_API_TOKEN
-          valueFrom:
-            provisioned:
-              name: atlassian-token
-        - name: JIRA_USERNAME
-          valueFrom:
-            provisioned:
-              name: atlassian-email
-        - name: CONFLUENCE_API_TOKEN
-          valueFrom:
-            provisioned:
-              name: atlassian-token
-        - name: CONFLUENCE_USERNAME
-          valueFrom:
-            provisioned:
-              name: atlassian-email
   integrations:
     mattermost:
+      enabled: true
+      roles: [SystemPostAllPublic, SystemUser]
+      channels: [ops, incidents]
       botToken:
         secretKeyRef:
           name: triage-mattermost
           key: botToken
       username: helix-triage
-      channel: ops
+    jira:
+      enabled: true
+      projectRole: "10101"
+      projects: [OPS]
+    confluence:
+      enabled: true
+      spaceRole: 8f3b6c1e-2d4a-4e5f-9a0b-1c2d3e4f5a6b
+      spaces: [OPS]
+    datadog:
+      enabled: true
+      role: 4f0e2b3c-1a2b-11ef-9c2b-da7ad0900002
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat

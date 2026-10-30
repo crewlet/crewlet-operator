@@ -3,3 +3,10 @@ integrations:
     enabled: true
     webhook_secret: ${K8S_FORGE_GITHUB_WEBHOOK_SECRET_TBDDG2MGKIUZ}
 name: Forge
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack

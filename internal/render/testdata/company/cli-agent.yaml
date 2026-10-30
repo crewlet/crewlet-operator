@@ -89,3 +89,10 @@ roles:
   placement:
     labels:
       crewlet.ai/pool: data
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack

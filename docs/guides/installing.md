@@ -19,7 +19,7 @@ page installs it on a cluster you run companies on. The
 - A CNI that enforces NetworkPolicy, for the isolation around each engine
   ([Exposure and network policy](exposure.md#network-policy)).
 - A default StorageClass, or the one your EngineClasses name, that provisions
-  `ReadWriteOnce` volumes of at least 12Gi (9Gi for an EngineClass that keeps
+  `ReadWriteOnce` volumes of at least 14Gi (11Gi for an EngineClass that keeps
   its files in S3).
 - A way to take each company's backups: the operator takes none, and the
   engine trims its logs only behind a recent one, refusing writes once they

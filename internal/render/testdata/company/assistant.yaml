@@ -53,3 +53,10 @@ providers:
     default_run_in: e2b
     e2b:
       api_key: ${K8S_E2B_API_KEY_GSEHAAV5THN5}
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack

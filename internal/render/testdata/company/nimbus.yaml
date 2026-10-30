@@ -9,7 +9,6 @@ integrations:
   gitlab:
     enabled: true
     provisioning:
-      access_level: developer
       admin_token: ${K8S_NIMBUS_GITLAB_ADMIN_TOKEN_XJYIJLJITPA4}
       group: nimbus-hq
       group_webhook: auto
@@ -40,6 +39,11 @@ mcp_servers:
   name: gitlab
   shared: false
   transport: stdio
+- name: linear
+  request_timeout_seconds: 60
+  shared: false
+  transport: http
+  url: https://mcp.linear.app/mcp
 mission: Turn any hardware into cloud-native infrastructure.
 name: Nimbus
 policies:
@@ -92,6 +96,13 @@ roles:
   manages:
   - cto
   name: Jane Founder
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack
 timezone: Europe/Berlin
 token_budget:
   day: 3000000
@@ -102,7 +113,7 @@ turn_engine:
   extension_enabled: true
 units:
 - children:
-  - channel: '#platform'
+  - channel: platform
     goals:
     - p99 API latency under 200ms
     id: platform
@@ -120,14 +131,24 @@ units:
         github:
           app_id: 1234567
           app_slug: nimbus-ana
+          enabled: true
           installation_id: 89012345
+          permissions:
+            actions: read
+            checks: read
+            contents: read
+            issues: write
+            pull_requests: write
           private_key: ${K8S_ANA_GITHUB_APP_PRIVATE_KEY_JSUSQ7FYDCSN}
           repos:
           - nimbus-hq/nimbuscore
-          tier: review
           webhook_secret: ${K8S_ANA_GITHUB_APP_WEBHOOK_SECRET_DE4RFGLQA4OW}
+        gitlab:
+          access_level: 30
+          enabled: true
         slack:
           bot_token: ${K8S_ANA_SLACK_BOT_TOKEN_HGFIPUYDX4KF}
+          enabled: true
           signing_secret: ${K8S_ANA_SLACK_SIGNING_SECRET_YMDA6WMUYTHW}
       kind: agent
       llm:
@@ -136,10 +157,8 @@ units:
         default:
         - anthropic
       mcp_env:
-        github:
-          Authorization: ${K8S_ANA_GITHUB_AUTHORIZATION_TWHVOQBEQ7JM}
-        gitlab:
-          GITLAB_TOKEN: ${PROVISIONED_ANA_GITLAB_TOKEN_ZXUWOCASQLKO}
+        linear:
+          Authorization: ${K8S_ANA_LINEAR_AUTHORIZATION_Q4I32AL6KNJQ}
       name: Ana (Platform Engineer)
       placement:
         labels:
@@ -149,7 +168,7 @@ units:
       sandbox:
         env:
           GITHUB_TOKEN: ${K8S_ANA_GITHUB_TOKEN_OI3SDKAPI3E5}
-          GITLAB_TOKEN: ${PROVISIONED_ANA_GITLAB_TOKEN_ZXUWOCASQLKO}
+          GITLAB_TOKEN: ${GITLAB_TOKEN_ANA}
         mcp:
           servers:
           - github
@@ -180,6 +199,7 @@ units:
     integrations:
       slack:
         bot_token: ${K8S_CTO_SLACK_BOT_TOKEN_EOG5NAYJ7TBU}
+        enabled: true
         signing_secret: ${K8S_CTO_SLACK_SIGNING_SECRET_N3SILNAKL2CL}
     kind: agent
     llm:

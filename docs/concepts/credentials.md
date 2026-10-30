@@ -93,7 +93,7 @@ uses is readable by the company's tenant:
 
 ## Covered in v1alpha1
 
-Every position of the company document but the one below is covered: each
+Every position of the company document but the two below is covered: each
 has a field that fills it with a reference.
 
 | Crewlet position | Field | Reference |
@@ -112,9 +112,8 @@ has a field that fills it with a reference.
 | `mcp_servers[].headers.*` | `MCPServer.spec.headers[].valueFrom.secretKeyRef` | one `SecretKeyReference` per header |
 | `units[].mcp_env.*.*` | `Unit.spec.mcp[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable or header |
 | `roles[].mcp_env.*.*` | `Seat.spec.mcp[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable or header |
-| `roles[].mcp_env.*.*`, under an Integration with provisioning Engine (GitLab, Mattermost, Datadog, Atlassian) | `Seat.spec.mcp[].env[].valueFrom.provisioned` | `ProvisionedCredential`: no Secret; the engine mints the value into its own store |
 | `roles[].sandbox.env.*` | `Seat.spec.sandbox.env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
-| `roles[].sandbox.env.*`, under an Integration with provisioning Engine | `Seat.spec.sandbox.env[].valueFrom.provisioned` | `ProvisionedCredential`: no Secret; the engine mints the value into its own store |
+| `roles[].sandbox.env.*`, under the vendor's Integration with provisioning Engine | `Seat.spec.sandbox.env[].valueFrom.provisioned` | `ProvisionedCredential`: no Secret; the engine mints the value into its own store |
 | `roles[].sandbox.setup[].files.*` | `Seat.spec.sandbox.setup[].files[].valueFrom.secretKeyRef` | one `SecretKeyReference` per file |
 | `roles[].sandbox.setup[].env.*` | `Seat.spec.sandbox.setup[].env[].valueFrom.secretKeyRef` | one `SecretKeyReference` per variable |
 | `roles[].integrations.slack.bot_token` | `Seat.spec.integrations.slack.credentialsSecretRef` | `SecretReference`, key `botToken` (`SlackBotTokenKey`) |
@@ -127,8 +126,7 @@ has a field that fills it with a reference.
 | `integrations.gitlab.token` | `Integration.spec.gitlab.tokenSecretRef` | `SecretKeyReference` |
 | `integrations.gitlab.provisioning.admin_token` | `Integration.spec.gitlab.engineProvisioning.adminTokenSecretRef` | `SecretKeyReference` |
 | `integrations.mattermost.provisioning.admin_token` | `Integration.spec.mattermost.engineProvisioning.adminTokenSecretRef` | `SecretKeyReference` |
-| `roles[].integrations.mattermost.bot_token` | `Seat.spec.integrations.mattermost.botToken.secretKeyRef` | `SecretKeyReference` |
-| `roles[].integrations.mattermost.bot_token`, under a Mattermost Integration with provisioning Engine | `Seat.spec.integrations.mattermost.botToken.provisioned` | `ProvisionedCredential`: no Secret; the engine mints the value into its own store |
+| `roles[].integrations.mattermost.bot_token`, under a Mattermost Integration with provisioning External | `Seat.spec.integrations.mattermost.botToken.secretKeyRef` | `SecretKeyReference` |
 | `integrations.jira.token` | `Integration.spec.jira.tokenSecretRef` | `SecretKeyReference` |
 | `integrations.jira.webhook_secret` | `Integration.spec.jira.webhookSecretRef` | `SecretKeyReference` |
 | `integrations.confluence.token` | `Integration.spec.confluence.tokenSecretRef` | `SecretKeyReference` |
@@ -162,57 +160,56 @@ coding CLI's, take no literal value.
 | Crewlet position | Why it is not offered |
 |---|---|
 | `providers.sandbox.local.runtime_env.*` | Crewlet's `container` cell, the one this environment is for, is not offered: `Company.spec.sandbox` places a seat's executor run `Direct` or in `E2B`, and `spec.engineConfig` may not set `providers`. |
+| `integrations.slack.app_config_token` | The operator's Slack seats are apps made outside the engine, whose credentials each Seat hands in from a Secret (`Seat.spec.integrations.slack.credentialsSecretRef`); the engine creating each agent's app, which this token is for, is not offered. |
 
 ---
 
 ## Credentials the engine provisions
 
 An `Integration` with `provisioning: Engine` (GitLab, Mattermost, Datadog and
-an Atlassian organization) has the engine create each agent seat's account at
-the vendor, with the administrator credential the Integration references, and
-mint the account's credential itself. That value never exists in a Secret, so
-a seat names it as **provisioned** rather than with a `secretKeyRef`:
+an Atlassian organization) has the engine create the account of each agent
+seat that is on the vendor (its Seat's `spec.integrations`), with the
+administrator credential the Integration references, and mint the account's
+credential itself. That value never exists in a Secret, and no document says
+where it goes: the engine seals it under a name it derives for the seat,
+`<VENDOR>_<FIELD>_<HANDLE>` (see [below](#names-in-the-engines-secret-store)),
+and hands it to the vendor's tool server and its own tools itself, under the
+variable or header each reads. So a seat on a vendor the engine provisions
+names no credential of that vendor, in `spec.mcp` or in `spec.integrations`,
+and Crewlet refuses one there: the refusal comes from the engine's dry run,
+`Invalid` on the Seat.
+
+A seat's executor runs get no tool server's environment, so a value they need,
+such as the GitLab token git uses in the seat's box, is named in the seat's
+`spec.sandbox.env` as **provisioned**, by the vendor and the field:
 
 ```yaml
 spec:
-  mcp:
-    - name: gitlab
-      env:
-        - name: GITLAB_TOKEN
-          valueFrom:
-            provisioned:
-              name: gitlab-token
   sandbox:
     env:
       - name: GITLAB_TOKEN
         valueFrom:
           provisioned:
-            name: gitlab-token   # the same token as the tool server's
+            vendor: GitLab      # GitLab Token, Atlassian Token or Email, Datadog AppKey, Mattermost BotToken
+            field: Token
 ```
 
-A provisioned value is a reference, like a Secret's, to an entry of the
-engine's secret store, named for the seat's handle and the provisioned
-`name` (see [below](#names-in-the-engines-secret-store)). The engine finds
-the reference where its provisioning looks for a seat's credential (the
-GitLab, Datadog and Atlassian tool servers' variables, a seat's Mattermost
-bot token), mints the account's credential into that entry, and heals it on
-every reconcile pass; the operator never writes or deletes it. A seat's tool
-server that takes the value starts once it is minted, not before. Every place
-a seat names one provisioned `name` is one value. Only an Integration of its
-company with `provisioning: Engine` creates the value: while none does, the
-seat is applied with the reference all the same, the engine starts none of
-its tool servers that take the value, unless the MCPServer's `optionalKeys`
-lets them go without it, its executor runs and its chat app run without it,
-and the Seat reports
-`ResolvedRefs=False` with reason `NoProvisioner` (which holds nothing else
-back). A Unit's credentials are
-every member's, so they always come from Secrets.
+It renders as a reference to the engine's own entry for it,
+`${GITLAB_TOKEN_<HANDLE>}`, which the engine fills, heals on every reconcile
+pass and rotates; the operator never writes or deletes it. While the
+company has no Integration of the vendor with `provisioning: Engine`, nothing
+mints the value: the seat is applied with the reference all the same, its
+executor runs start without it, and the Seat reports `ResolvedRefs=False`
+with reason `NoProvisioner` (which holds nothing else back).
 
 Under `provisioning: External`, the default, the Integration holds no
-administrator credential, the engine creates nothing at the vendor, and
-every seat's credential is a Secret its Seat references.
-[Integrations](../guides/integrations.md) says, vendor by vendor, which
-variables the engine provisions.
+administrator credential, the engine creates nothing at the vendor, and every
+seat's credential is a Secret its Seat references, in `spec.integrations` or
+`spec.mcp`. That Secret key is the seat's alone: Crewlet refuses a variable
+another seat or a company block names too, which is how one seat's
+credential could reach another's account.
+[Integrations](../guides/integrations.md) says, vendor by vendor, where a
+seat's credential goes.
 
 ---
 
@@ -354,19 +351,20 @@ rotating a Secret rewrites an entry rather than replacing it.
 > whatever the next configuration reads of it
 > ([Applying a document](applying.md#what-one-reconcile-does)).
 
-A seat's provisioned credential has an entry of another shape, which the
-engine fills and the operator never writes or deletes:
+A seat's provisioned credential has an entry the engine names, fills and
+heals, and the operator never writes or deletes:
 
 ```
-PROVISIONED_<HANDLE>_<NAME>_<HASH>
+<VENDOR>_<FIELD>_<HANDLE>
 ```
 
-The seat's handle and the provisioned `name` are written as above, and the
-hash is twelve base32 characters of the SHA-256 of both, so two seats, or
-two values of one seat, never share an entry. A seat keeps its handle for
-life, so its provisioned credentials keep their entries across every render,
-reconcile and restart of the operator; another name would point the seat at
-an entry the engine never minted into, which it would then mint again.
+The vendor, the field and the seat's handle are upper-cased and joined by
+underscores, every character but letters, digits and underscores turned into
+an underscore: GitLab's token for the seat `sre-lead` is
+`GITLAB_TOKEN_SRE_LEAD`. The engine seals the credential under that name and
+no other, and a seat keeps its handle for life, so the entry is the same
+across every render, reconcile and restart of the operator. It never starts
+with `K8S_`, so the operator never takes it for one of its own.
 
 The engine's listing carries names, never values, so to know which values
 changed the operator keeps a fingerprint of each value it wrote, in a Secret

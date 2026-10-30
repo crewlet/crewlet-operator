@@ -15,8 +15,12 @@ import (
 // engineConfig. Every other top-level key is an engineConfig entry.
 var typedKeys = []string{
 	"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "token_budget",
-	keyProviders, keyIntegrations, keyMCPServers, keyRoles, keyUnits,
+	keyProviders, keyIntegrations, keyMCPServers, keyRoles, keyUnits, keySeatAccessMigrated,
 }
+
+// keySeatAccessMigrated is the document's list of the integration kinds whose
+// per-seat access its seats' blocks state (seatAccessKinds).
+const keySeatAccessMigrated = "seat_access_migrated"
 
 // identityKeys are the keys that name an element of a list of mappings in a
 // company document: a role's handle, a unit's id, a tool server's or a setup

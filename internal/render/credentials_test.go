@@ -351,9 +351,8 @@ func TestEngineConfigCannotNameACredentialBlock(t *testing.T) {
 	if len(blocks) == 0 {
 		t.Fatal("crewlet schema company marks no position, so this test would prove nothing")
 	}
-	entry := func(block string) map[string]any { return map[string]any{keyName: block, "value": map[string]any{}} }
 	for _, block := range blocks {
-		errs := validate(entry(block))
+		errs := validate(engineConfigEntry(block))
 		if !slices.ContainsFunc(errs, func(e *field.Error) bool { return strings.HasPrefix(e.Detail, engineConfigRefusal) }) {
 			t.Errorf("Crewlet holds a credential under %s, and the CRD lets engineConfig set it (%v): "+
 				"add it to the rule on Company.spec.engineConfig", block, errs)
@@ -361,8 +360,28 @@ func TestEngineConfigCannotNameACredentialBlock(t *testing.T) {
 	}
 	// A block that holds none is let through, so the refusals above are
 	// the rule's and not a validator that refuses everything.
-	if errs := validate(entry("turn_engine")); len(errs) > 0 {
+	if errs := validate(engineConfigEntry("turn_engine")); len(errs) > 0 {
 		t.Errorf("engineConfig may not set turn_engine, which holds no credential: %v", errs)
+	}
+}
+
+// engineConfigEntry is a Company.spec.engineConfig entry setting key to an
+// empty block.
+func engineConfigEntry(key string) map[string]any {
+	return map[string]any{keyName: key, "value": map[string]any{}}
+}
+
+// TestEngineConfigCannotNameATypedKey holds the rule on
+// Company.spec.engineConfig to typedKeys: an entry under a key the render
+// writes from a field would be merged over it, or replace it.
+func TestEngineConfigCannotNameATypedKey(t *testing.T) {
+	validate := engineConfigValidator(t)
+	for _, key := range typedKeys {
+		errs := validate(engineConfigEntry(key))
+		if !slices.ContainsFunc(errs, func(e *field.Error) bool { return strings.HasPrefix(e.Detail, engineConfigRefusal) }) {
+			t.Errorf("the render writes %s from the API, and the CRD lets engineConfig set it: add it to the rule "+
+				"on Company.spec.engineConfig", key)
+		}
 	}
 }
 

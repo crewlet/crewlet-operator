@@ -8,17 +8,17 @@ import (
 
 // The messages of the rules over the vendors the engine can provision.
 const (
-	msgEngineVendors   = "provisioning Engine applies to gitlab, mattermost, datadog and atlassian"
-	msgEngineRequired  = "datadog and atlassian need provisioning Engine"
-	msgGitLabEngine    = "gitlab.engineProvisioning is required with provisioning Engine and not allowed otherwise"
-	msgMattermostEng   = "mattermost.engineProvisioning is required with provisioning Engine and not allowed otherwise"
-	msgOneSite         = "url and cloudID are two ways to name one site: give one"
-	msgRouteTo         = "give exactly one of seatRef and dismiss: true"
-	msgSeatSource      = "exactly one of secretKeyRef and provisioned must be set"
-	msgUnitProvisioned = "a unit's credentials come from Secrets"
-	msgURLScheme       = "url must be an absolute URL starting with http:// or https://"
-	msgURLReference    = "url may not hold a ${NAME} reference"
-	msgSiteURL         = "siteURL must be an absolute URL starting with http:// or https://"
+	msgEngineVendors    = "provisioning Engine applies to gitlab, mattermost, datadog and atlassian"
+	msgEngineRequired   = "datadog and atlassian need provisioning Engine"
+	msgGitLabEngine     = "gitlab.engineProvisioning is required with provisioning Engine and not allowed otherwise"
+	msgMattermostEng    = "mattermost.engineProvisioning is required with provisioning Engine and not allowed otherwise"
+	msgOneSite          = "url and cloudID are two ways to name one site: give one"
+	msgRouteTo          = "give exactly one of seatRef and dismiss: true"
+	msgSeatSource       = "exactly one of secretKeyRef and provisioned must be set"
+	msgProvisionedField = "the engine mints a GitLab account's Token"
+	msgURLScheme        = "url must be an absolute URL starting with http:// or https://"
+	msgURLReference     = "url may not hold a ${NAME} reference"
+	msgSiteURL          = "siteURL must be an absolute URL starting with http:// or https://"
 )
 
 // nameUpperCaseURL names the case that offers a vendor's url with its scheme
@@ -155,12 +155,9 @@ func TestIntegrationVendors(t *testing.T) {
 					mutate: func(i *v1.Integration) {
 						p := &i.Spec.GitLab.EngineProvisioning
 						p.AccountOwner = v1.GitLabAccountOwnerInstance
-						p.AccessLevel = v1.GitLabDeveloper
-						p.AccessLevels = []v1.GitLabSeatAccess{{Name: seatHandle, AccessLevel: v1.GitLabMaintainer}}
 						p.UsernamePrefix = "agent-"
 						p.Projects = []string{gitlabGroup + "/api"}
 						p.GroupWebhook = v1.ContainerWebhookNever
-						p.TokenScopes = []string{"api", "read_repository"}
 					},
 				},
 				{
@@ -169,15 +166,6 @@ func TestIntegrationVendors(t *testing.T) {
 						i.Spec.GitLab.EngineProvisioning.AdminTokenSecretRef = v1.SecretKeyReference{}
 					},
 					want: "adminTokenSecretRef: Required value",
-				},
-				{
-					name: "one seat given two access levels is refused",
-					mutate: func(i *v1.Integration) {
-						i.Spec.GitLab.EngineProvisioning.AccessLevels = []v1.GitLabSeatAccess{
-							{Name: seatHandle, AccessLevel: v1.GitLabMaintainer}, {Name: seatHandle, AccessLevel: v1.GitLabDeveloper},
-						}
-					},
-					want: msgDuplicate,
 				},
 			},
 		},
@@ -349,7 +337,6 @@ func TestIntegrationVendors(t *testing.T) {
 					mutate: func(i *v1.Integration) {
 						d := &i.Spec.Datadog
 						d.RouteTo = v1.DatadogRouteTo{Dismiss: new(true)}
-						d.Role = "Datadog Standard Role"
 						d.EmailDomain = "agents.nimbus.example"
 						d.WebhookName = "nimbus"
 						d.HandleTag = "owner"
@@ -389,11 +376,6 @@ func TestIntegrationVendors(t *testing.T) {
 					name:   "a webhook name naming a variable of the engine is refused",
 					mutate: func(i *v1.Integration) { i.Spec.Datadog.WebhookName = "crewlet-${HOOK}" },
 					want:   "webhookName" + msgReference,
-				},
-				{
-					name:   "a role naming a variable of the engine is refused",
-					mutate: func(i *v1.Integration) { i.Spec.Datadog.Role = "${DATADOG_ROLE}" },
-					want:   "role" + msgReference,
 				},
 			},
 		},
@@ -462,66 +444,87 @@ func TestIntegrationVendorsAreImmutable(t *testing.T) {
 }
 
 func TestProvisionedCredentials(t *testing.T) {
-	provisioned := func(name string) v1.SeatCredentialSource {
-		return v1.SeatCredentialSource{Provisioned: v1.ProvisionedCredential{Name: name}}
+	provisioned := func(vendor v1.ProvisionedVendor, field v1.ProvisionedField) v1.SeatCredentialSource {
+		return v1.SeatCredentialSource{Provisioned: v1.ProvisionedCredential{Vendor: vendor, Field: field}}
 	}
+	gitlabMinted := provisioned(v1.ProvisionedGitLab, v1.ProvisionedToken)
+	memberRole := []v1.MattermostRole{v1.MattermostSystemUser}
 	t.Run("Seat", func(t *testing.T) {
 		runCreateCases(t, seat, []createCase[*v1.Seat]{
 			{name: "a seat with no credentials is accepted"},
 			{
-				name: "provisioned tool, sandbox and Mattermost credentials are accepted",
+				name: "a provisioned sandbox credential is accepted",
 				mutate: func(s *v1.Seat) {
-					s.Spec.MCP = []v1.MCPCredentials{{Name: gitlabServer, Env: []v1.MCPCredentialValue{
-						{Name: gitlabToken, ValueFrom: provisioned("gitlab-token")},
-					}}}
 					s.Spec.Sandbox = v1.SeatSandbox{Env: []v1.SeatEnvVar{
-						{Name: gitlabToken, ValueFrom: provisioned("gitlab-token")},
+						{Name: gitlabToken, ValueFrom: gitlabMinted},
 						{Name: "NPM_TOKEN", ValueFrom: seatFromSecret("ana-npm", "token")},
 					}}
-					s.Spec.Integrations.Mattermost = v1.MattermostSeatIntegration{
-						BotToken: provisioned("mattermost"), Username: "agent-ana", Channel: "deploys",
-					}
 				},
 			},
 			{
 				name: "a Mattermost bot token from a Secret is accepted",
 				mutate: func(s *v1.Seat) {
 					s.Spec.Integrations.Mattermost = v1.MattermostSeatIntegration{
-						BotToken: seatFromSecret("ana-mattermost", "botToken"),
+						Enabled: new(true), Roles: memberRole, BotToken: fromSecret("ana-mattermost", "botToken"),
+						Username: "agent-ana", Channels: []string{"deploys"},
+					}
+				},
+			},
+			{
+				// Under provisioning Engine the engine mints the bot's token,
+				// which no document names.
+				name: "a Mattermost bot without a token is accepted",
+				mutate: func(s *v1.Seat) {
+					s.Spec.Integrations.Mattermost = v1.MattermostSeatIntegration{
+						Enabled: new(true), Roles: memberRole, Channels: []string{"deploys"},
 					}
 				},
 			},
 			{
 				name: "a credential both from a Secret and provisioned is refused",
 				mutate: func(s *v1.Seat) {
-					source := provisioned("gitlab-token")
+					source := gitlabMinted
 					source.SecretKeyRef = secretKey("ana-gitlab", "token")
-					s.Spec.MCP = []v1.MCPCredentials{{Name: gitlabServer, Env: []v1.MCPCredentialValue{
-						{Name: gitlabToken, ValueFrom: source},
-					}}}
+					s.Spec.Sandbox = v1.SeatSandbox{Env: []v1.SeatEnvVar{{Name: gitlabToken, ValueFrom: source}}}
 				},
 				want: msgSeatSource,
 			},
 			{
-				name: "a Mattermost bot without a token is refused",
-				mutate: func(s *v1.Seat) {
-					s.Spec.Integrations.Mattermost = v1.MattermostSeatIntegration{Channel: "deploys"}
-				},
-				want: "botToken: Required value",
-			},
-			{
-				name: "a provisioned name that is no slug is refused",
+				name: "every credential the engine mints is accepted",
 				mutate: func(s *v1.Seat) {
 					s.Spec.Sandbox = v1.SeatSandbox{Env: []v1.SeatEnvVar{
-						{Name: gitlabToken, ValueFrom: provisioned("GitLab Token")},
+						{Name: gitlabToken, ValueFrom: gitlabMinted},
+						{Name: envJiraToken, ValueFrom: provisioned(v1.ProvisionedAtlassian, v1.ProvisionedToken)},
+						{Name: "JIRA_USERNAME", ValueFrom: provisioned(v1.ProvisionedAtlassian, v1.ProvisionedEmail)},
+						{Name: "DD_APP_KEY", ValueFrom: provisioned(v1.ProvisionedDatadog, v1.ProvisionedAppKey)},
+						{Name: "MATTERMOST_TOKEN", ValueFrom: provisioned(v1.ProvisionedMattermost, v1.ProvisionedBotToken)},
 					}}
 				},
-				want: "provisioned.name: Invalid value",
+			},
+			{
+				name: "a credential the engine does not mint for the vendor is refused",
+				mutate: func(s *v1.Seat) {
+					s.Spec.Sandbox = v1.SeatSandbox{Env: []v1.SeatEnvVar{
+						{Name: gitlabToken, ValueFrom: provisioned(v1.ProvisionedGitLab, v1.ProvisionedEmail)},
+					}}
+				},
+				want: msgProvisionedField,
+			},
+			{
+				name: "a vendor the engine provisions no account at is refused",
+				mutate: func(s *v1.Seat) {
+					s.Spec.Sandbox = v1.SeatSandbox{Env: []v1.SeatEnvVar{
+						{Name: "SLACK_BOT_TOKEN", ValueFrom: provisioned("Slack", v1.ProvisionedBotToken)},
+					}}
+				},
+				want: `provisioned.vendor: Unsupported value: "Slack"`,
 			},
 			{
 				name: "a Mattermost username outside the server's grammar is refused",
 				mutate: func(s *v1.Seat) {
-					s.Spec.Integrations.Mattermost = v1.MattermostSeatIntegration{BotToken: provisioned("bot"), Username: "Ana"}
+					s.Spec.Integrations.Mattermost = v1.MattermostSeatIntegration{
+						Enabled: new(true), Roles: memberRole, Username: "Ana",
+					}
 				},
 				want: "spec.integrations.mattermost.username: Invalid value",
 			},
@@ -532,21 +535,235 @@ func TestProvisionedCredentials(t *testing.T) {
 			{
 				name: "a unit's credentials from Secrets are accepted",
 				mutate: func(u *v1.Unit) {
-					u.Spec.MCP = []v1.MCPCredentials{mcpCredentials(gitlabServer)}
+					u.Spec.MCP = []v1.MCPCredentials{mcpCredentials(linearServer)}
 				},
 			},
 			{
-				name: "a provisioned unit credential is refused",
+				name: "a unit's setting as a literal value is accepted",
 				mutate: func(u *v1.Unit) {
 					u.Spec.MCP = []v1.MCPCredentials{{Name: gitlabServer, Env: []v1.MCPCredentialValue{
-						{Name: gitlabToken, ValueFrom: provisioned("gitlab-token")},
+						{Name: "GITLAB_HOST", Value: new("gitlab.example.com")},
 					}}}
 				},
-				want: msgUnitProvisioned,
 			},
 		})
 	})
 }
+
+// TestSeatIntegrationAccess holds each vendor block of a Seat's
+// spec.integrations to the access the vendor offers, in the vendor's own
+// terms, as Crewlet's document rules hold roles[].integrations.
+func TestSeatIntegrationAccess(t *testing.T) {
+	on := new(true)
+	runCreateCases(t, seat, []createCase[*v1.Seat]{
+		{
+			name: "every vendor's access is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations = v1.SeatIntegrations{
+					GitLab: v1.GitLabSeatIntegration{
+						Enabled: on, AccessLevel: v1.GitLabReporter, Projects: []string{"nimbus-hq/infra"},
+					},
+					Jira:       v1.JiraSeatIntegration{Enabled: on, ProjectRole: "10101", Projects: []string{"PLAT"}},
+					Confluence: v1.ConfluenceSeatIntegration{Enabled: on, SpaceRole: spaceRoleID, Spaces: []string{spaceENG, "~ana"}},
+					Datadog:    v1.DatadogSeatIntegration{Enabled: on, Role: datadogRoleID},
+					Mattermost: v1.MattermostSeatIntegration{
+						Enabled:  on,
+						Roles:    []v1.MattermostRole{v1.MattermostSystemPostAllPublic, v1.MattermostSystemUser},
+						Channels: []string{"town-square", "incidents"},
+						BotToken: fromSecret("ana-mattermost", "botToken"),
+					},
+				}
+			},
+		},
+		{
+			name: "every vendor turned off with its access kept is accepted",
+			mutate: func(s *v1.Seat) {
+				off := new(false)
+				s.Spec.Integrations = v1.SeatIntegrations{
+					GitLab:     v1.GitLabSeatIntegration{Enabled: off, AccessLevel: v1.GitLabOwner},
+					Jira:       v1.JiraSeatIntegration{Enabled: off},
+					Confluence: v1.ConfluenceSeatIntegration{Enabled: off},
+					Datadog:    v1.DatadogSeatIntegration{Enabled: off, Role: datadogRoleID},
+				}
+			},
+		},
+		{
+			name: "a seat on a vendor without the access it holds there is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations = v1.SeatIntegrations{
+					GitLab:     v1.GitLabSeatIntegration{Enabled: on},
+					Datadog:    v1.DatadogSeatIntegration{Enabled: on},
+					Mattermost: v1.MattermostSeatIntegration{Enabled: on},
+				}
+			},
+			want: "a seat that is on GitLab needs its role",
+		},
+		{
+			name:   "a seat on Datadog without a role is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Integrations.Datadog = v1.DatadogSeatIntegration{Enabled: on} },
+			want:   "a seat that is on Datadog needs the role its service account holds",
+		},
+		{
+			name: "a seat on Jira and Confluence with product access only is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Jira = v1.JiraSeatIntegration{Enabled: on}
+				s.Spec.Integrations.Confluence = v1.ConfluenceSeatIntegration{Enabled: on}
+			},
+		},
+		{
+			name: "a seat on Jira in projects without a project role is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Jira = v1.JiraSeatIntegration{Enabled: on, Projects: []string{"PLAT"}}
+			},
+			want: "a seat that is on Jira in projects needs the project role it holds there",
+		},
+		{
+			name: "a seat on Confluence in spaces without its access is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Confluence = v1.ConfluenceSeatIntegration{Enabled: on, Spaces: []string{spaceENG}}
+			},
+			want: "a seat that is on Confluence in spaces needs its access there",
+		},
+		{
+			name:   "a seat on Mattermost without roles is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Integrations.Mattermost = v1.MattermostSeatIntegration{Enabled: on} },
+			want:   "a seat that is on Mattermost needs the roles its bot holds",
+		},
+		{
+			name:   "a GitLab block without enabled is refused",
+			mutate: func(s *v1.Seat) { s.Spec.Integrations.GitLab = v1.GitLabSeatIntegration{AccessLevel: v1.GitLabGuest} },
+			want:   "spec.integrations.gitlab.enabled: Required value",
+		},
+		{
+			name: "a GitLab custom role is accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GitLab = v1.GitLabSeatIntegration{Enabled: on, MemberRoleID: 1007}
+			},
+		},
+		{
+			name: "a GitLab default role beside a custom one is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GitLab = v1.GitLabSeatIntegration{
+					Enabled: on, AccessLevel: v1.GitLabDeveloper, MemberRoleID: 1007,
+				}
+			},
+			want: "accessLevel and memberRoleID are two ways to name the seat's role",
+		},
+		{
+			name: "GitLab's Minimal Access, which grants an agent nothing, is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GitLab = v1.GitLabSeatIntegration{Enabled: on, AccessLevel: "MinimalAccess"}
+			},
+			want: `spec.integrations.gitlab.accessLevel: Unsupported value: "MinimalAccess"`,
+		},
+		{
+			name: "a GitLab project that is no path is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.GitLab = v1.GitLabSeatIntegration{Enabled: on, Projects: []string{"-infra"}}
+			},
+			want: "spec.integrations.gitlab.projects[0]: Invalid value",
+		},
+		{
+			name: "a Datadog role naming a variable of the engine is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Datadog = v1.DatadogSeatIntegration{Enabled: on, Role: "${DATADOG_ROLE}"}
+			},
+			want: "spec.integrations.datadog.role: Invalid value",
+		},
+		{
+			name: "a Jira project role that is no id is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Jira = v1.JiraSeatIntegration{Enabled: on, ProjectRole: "Developers"}
+			},
+			want: "spec.integrations.jira.projectRole: Invalid value",
+		},
+		{
+			name: "a Jira project that is no key is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Jira = v1.JiraSeatIntegration{Enabled: on, Projects: []string{"plat"}}
+			},
+			want: "spec.integrations.jira.projects[0]: Invalid value",
+		},
+		{
+			name: "Confluence space permissions by operation are accepted",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Confluence = v1.ConfluenceSeatIntegration{
+					Enabled: on, Operations: []string{"read:space", "create:page"}, Spaces: []string{spaceENG},
+				}
+			},
+		},
+		{
+			name: "a Confluence space role beside operations is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Confluence = v1.ConfluenceSeatIntegration{
+					Enabled: on, SpaceRole: spaceRoleID, Operations: []string{"read:space"},
+				}
+			},
+			want: "spaceRole and operations are two ways to grant the seat's access",
+		},
+		{
+			name: "a Confluence operation without its target is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Confluence = v1.ConfluenceSeatIntegration{Enabled: on, Operations: []string{"read"}}
+			},
+			want: "spec.integrations.confluence.operations[0]: Invalid value",
+		},
+		{
+			name: "Mattermost post:all without Member is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Mattermost = v1.MattermostSeatIntegration{
+					Enabled: on, Roles: []v1.MattermostRole{v1.MattermostSystemPostAll},
+					BotToken: fromSecret("ana-mattermost", "botToken"),
+				}
+			},
+			want: msgMattermostRoles,
+		},
+		{
+			name: "Mattermost roles beyond one set are refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Mattermost = v1.MattermostSeatIntegration{
+					Enabled: on,
+					Roles: []v1.MattermostRole{
+						v1.MattermostSystemUser, v1.MattermostSystemPostAll, v1.MattermostSystemAdmin,
+					},
+					BotToken: fromSecret("ana-mattermost", "botToken"),
+				}
+			},
+			want: msgMattermostRoles,
+		},
+		{
+			name: "a Mattermost role the server does not define is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Mattermost = v1.MattermostSeatIntegration{
+					Enabled: on, Roles: []v1.MattermostRole{v1.MattermostSystemUser, "SystemManager"},
+					BotToken: fromSecret("ana-mattermost", "botToken"),
+				}
+			},
+			want: `Unsupported value: "SystemManager"`,
+		},
+		{
+			name: "a Slack block without enabled is refused",
+			mutate: func(s *v1.Seat) {
+				s.Spec.Integrations.Slack = v1.SlackSeatIntegration{CredentialsSecretRef: v1.SecretReference{Name: "ana-slack"}}
+			},
+			want: "spec.integrations.slack.enabled: Required value",
+		},
+	})
+}
+
+const (
+	// envJiraToken is the variable mcp-atlassian reads a Jira token from,
+	// and spaceENG a Confluence space's key.
+	envJiraToken = "JIRA_API_TOKEN" //nolint:gosec // G101: a variable's name, which holds no credential.
+	spaceENG     = "ENG"
+	// datadogRoleID is a role id as Datadog's GET /api/v2/roles returns one.
+	datadogRoleID = "4f0e2b3c-1a2b-11ef-9c2b-da7ad0900002"
+	// spaceRoleID is a space role id as Confluence's space roles return one.
+	spaceRoleID = "b3f1c2d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+	// msgMattermostRoles is the refusal of roles outside Mattermost's sets
+	// for a bot.
+	msgMattermostRoles = "roles is one of Mattermost's sets for a bot"
+)
 
 // TestTrackerAndKnowledgeBackends: Jira and Confluence are a company's
 // tracker and knowledge base once their Integrations exist.

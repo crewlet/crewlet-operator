@@ -94,7 +94,7 @@ gives each company the smallest data volume the API admits.
 
 > **Watch for disk space.** The engine reserves three quarters of that volume
 > for its event stream, and kind's provisioner puts it on the node's disk
-> without enforcing the size: the Docker host needs about 10 GiB free for each
+> without enforcing the size: the Docker host needs about 12 GiB free for each
 > company, or its pod never becomes ready.
 
 ```bash
@@ -112,7 +112,7 @@ spec:
         cpu: 100m
         memory: 256Mi
     storage:
-      size: 12Gi
+      size: 14Gi
   exposure:
     webhooks:
       mode: None
@@ -128,6 +128,9 @@ EOF
 A namespace for the company, the Secret holding its model provider's API key,
 and the objects: the `Company`, a `Unit`, two agent `Seat`s in it, the
 `LLMProvider` they run on, and a Human `Seat` for you, which manages the unit.
+The company declares no Mattermost or Slack, so it talks on Chatlet, the
+engine's own chat, and the unit's `channel` gives its team a room there whose
+members follow the org chart.
 The provider is Claude Code on an Anthropic API key: every model Crewlet runs
 is a coding CLI it drives, and each agent seat's work is Claude Code's own run.
 The Company's `sandbox` places those runs `Direct`, a process of the data pod
@@ -182,6 +185,7 @@ spec:
   displayName: Engineering
   type: Department
   purpose: Build the widgets.
+  channel: engineering
 ---
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat

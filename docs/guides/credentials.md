@@ -203,6 +203,7 @@ kubectl create secret generic lead-slack -n acme \
 spec:                       # Seat lead
   integrations:
     slack:
+      enabled: true
       credentialsSecretRef: {name: lead-slack}   # keys botToken, signingSecret
 ```
 
@@ -222,7 +223,8 @@ kubectl create secret generic lead-github-app -n acme \
 spec:                       # Seat lead
   integrations:
     github:
-      tier: Review
+      enabled: true
+      permissions: {contents: Read, issues: Write, pullRequests: Write}
       repos: [acme/widgets]
       app:
         id: 1234567
@@ -233,14 +235,17 @@ spec:                       # Seat lead
 
 The webhook URL for the app is `status.integrations.github.webhookURL`.
 
-A `FullAccess` seat that has to change CI sets `workflows: true` beside its
-tier. GitHub refuses any push whose commits touch `.github/workflows` without
-that permission, and the same grant lets the seat's branches run a workflow
-it rewrote with the secrets the repository hands its runs, so it is off unless
-set and refused on any other tier. An app created before the seat opted in
-gains the permission only once its owner adds it at GitHub and the
-installation approves it
-([Workflow writes](https://github.com/crewlet/crewlet/blob/main/docs/integrations/github.md#workflow-writes-an-opt-in-for-full-access)).
+`permissions` are the app's permissions in GitHub's terms, each `Read` or
+`Write`, and a permission left out is No access; the engine narrows every
+installation token it issues for the seat to them and to `repos`. A seat that
+has to change CI holds `workflows: Write` beside `contents: Write`. GitHub
+refuses any push whose commits touch `.github/workflows` without that
+permission, and the same grant lets the seat's branches run a workflow it
+rewrote with the secrets the repository hands its runs, so it is off unless
+set. An app registered before the seat was given a permission gains it only
+once an owner of the organization accepts the app's new permissions at
+GitHub; until then the engine reports the seat's access as short of what its
+Seat asks ([An agent's access](integrations.md#an-agents-access)).
 
 ### The company's GitHub organization
 
@@ -265,6 +270,8 @@ everything it does there:
 spec:                       # Seat lead
   integrations:
     mattermost:
+      enabled: true
+      roles: [SystemUser]
       botToken:
         secretKeyRef: {name: lead-mattermost, key: botToken}
 ```
@@ -279,19 +286,21 @@ with are each a `SecretKeyReference` of the vendor's `Integration`;
 
 ### Credentials the engine provisions
 
-Under an `Integration` with `provisioning: Engine`, the engine creates each
-agent seat's account at the vendor and mints its credential itself, into its
-own secret store. No Secret holds that value, so the seat names it as
-**provisioned** where it would name a Secret key:
+Under an `Integration` with `provisioning: Engine`, the engine creates the
+account of each agent seat that is on the vendor and mints its credential
+itself, into its own secret store, under a name it gives it for the seat. No
+Secret holds that value, and the engine hands it to the vendor's tool server
+itself, so the Seat names none of that vendor's. A seat's executor runs, which
+get no tool server's environment, name one in `spec.sandbox.env` as
+**provisioned**:
 
 ```yaml
 spec:                       # Seat lead
-  mcp:
-    - name: gitlab
-      env:
-        - name: GITLAB_TOKEN
-          valueFrom:
-            provisioned: {name: gitlab-token}
+  sandbox:
+    env:
+      - name: GITLAB_TOKEN
+        valueFrom:
+          provisioned: {vendor: GitLab, field: Token}
 ```
 
 The engine rotates and heals it; the operator never writes, rewrites or

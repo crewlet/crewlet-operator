@@ -41,9 +41,12 @@ const (
 	// sampleGitHub names both the GitHub MCPServer and the GitHub
 	// Integration.
 	sampleGitHub = "github"
-	// sampleToolsets is a setting of the GitHub MCPServer's, a header
-	// naming the toolsets it offers.
-	sampleToolsets = "X-MCP-Toolsets"
+	// sampleLinear names the Linear MCPServer, a per-seat server of an
+	// integration the engine manages no account on, which a seat and a
+	// unit give credentials of their own; and sampleSetting a header that
+	// is no credential, which one may give it as a literal value.
+	sampleLinear  = "linear"
+	sampleSetting = "X-Client-Name"
 	// sampleGitLab names both the GitLab MCPServer and the GitLab
 	// Integration.
 	sampleGitLab = "gitlab"

@@ -1,12 +1,12 @@
 mcp_servers:
 - headers:
-    X-MCP-Toolsets: repos,issues
-  name: github
+    X-Client-Name: crewlet
+  name: linear
   optional_keys:
   - authorization
   shared: false
   transport: http
-  url: https://api.githubcopilot.com/mcp/
+  url: https://mcp.linear.app/mcp
 - args:
   - -y
   - tavily-mcp@0.2.22
@@ -48,19 +48,26 @@ roles:
   handle: founder
   kind: human
   name: founder
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack
 units:
 - id: eng
   mcp_env:
-    github:
-      Authorization: ${K8S_ENG_GITHUB_AUTHORIZATION_TNZSUXRLCVER}
+    linear:
+      Authorization: ${K8S_ENG_LINEAR_AUTHORIZATION_P2MYOY3RON6I}
   name: eng
   roles:
   - goal: Keep the build green.
     handle: coder
     kind: agent
     mcp_env:
-      github:
-        Authorization: ${K8S_CODER_GITHUB_AUTHORIZATION_O5XXIVYQLUVV}
+      linear:
+        Authorization: ${K8S_CODER_LINEAR_AUTHORIZATION_V3YWALBWXPGO}
     name: coder
     placement:
       labels:

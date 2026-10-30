@@ -76,16 +76,16 @@ spec:
 apiVersion: crewlet.ai/v1alpha1
 kind: MCPServer
 metadata:
-  name: github
+  name: linear
 spec:
   companyRef:
     name: optional
   transport: HTTP
   shared: false
-  url: https://api.githubcopilot.com/mcp/
+  url: https://mcp.linear.app/mcp
   headers:
-    - name: X-MCP-Toolsets
-      value: repos,issues
+    - name: X-Client-Name
+      value: crewlet
   optionalKeys:
     - authorization
 ---
@@ -97,12 +97,12 @@ spec:
   companyRef:
     name: optional
   mcp:
-    - name: github
+    - name: linear
       env:
         - name: Authorization
           valueFrom:
             secretKeyRef:
-              name: eng-github
+              name: eng-linear
               key: authorization
 ---
 apiVersion: crewlet.ai/v1alpha1
@@ -116,12 +116,12 @@ spec:
     name: eng
   goal: Keep the build green.
   mcp:
-    - name: github
+    - name: linear
       env:
         - name: Authorization
           valueFrom:
             secretKeyRef:
-              name: coder-github
+              name: coder-linear
               key: authorization
   sandbox:
     env:

@@ -35,11 +35,11 @@ type Input struct {
 	StoreName func(secretref.Key) string
 
 	// ProvisionedName is the name of the engine secret-store entry that
-	// holds the credential the engine provisions for the seat with the
-	// handle under the provisioned name. The document refers to it as
-	// ${ProvisionedName(handle, name)}. Like StoreName it must be a pure
-	// function of its arguments.
-	ProvisionedName func(handle, name string) string
+	// holds the credential field the engine mints for the seat with the
+	// handle at the vendor, which is the engine's own name for it. The
+	// document refers to it as ${ProvisionedName(vendor, field, handle)}.
+	// Like StoreName it must be a pure function of its arguments.
+	ProvisionedName func(vendor, field, handle string) string
 
 	// PublicBaseURL is the address vendors deliver webhooks to: the
 	// Company's spec.exposure.publicBaseURL, or the one the class's
@@ -135,7 +135,7 @@ func Company(in *Input) (*Document, error) {
 	// differ between the two.
 	_, probe, err := renderJSON(in,
 		func(k secretref.Key) string { return "PROBE_" + in.StoreName(k) },
-		func(handle, name string) string { return "PROBE_" + in.ProvisionedName(handle, name) })
+		func(vendor, field, handle string) string { return "PROBE_" + in.ProvisionedName(vendor, field, handle) })
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func ReportedOf(in *Input) []*RefError {
 // storeName naming each referenced Secret key's entry in the engine's store
 // and provisionedName each provisioned credential's.
 func renderJSON(
-	in *Input, storeName func(secretref.Key) string, provisionedName func(handle, name string) string,
+	in *Input, storeName func(secretref.Key) string, provisionedName func(vendor, field, handle string) string,
 ) (*renderer, []byte, error) {
 	in = new(*in)
 	in.StoreName = storeName
@@ -386,6 +386,15 @@ func (r *renderer) secret(name, key string) string {
 	return r.secretKey(secretref.Key{Namespace: r.namespace(), Name: name, Key: key})
 }
 
+// secretRef is secret for an optional reference: the pointer to k's value,
+// or "" for a reference left unset, which the document then omits.
+func (r *renderer) secretRef(k v1alpha1.SecretKeyReference) string {
+	if k.Name == "" {
+		return ""
+	}
+	return r.secret(k.Name, k.Key)
+}
+
 func (r *renderer) secretKey(k secretref.Key) string {
 	r.refs[k] = struct{}{}
 	r.required[k] = struct{}{}
@@ -405,60 +414,49 @@ func (r *renderer) optional() []secretref.Key {
 }
 
 // seatCredential returns the pointer the document holds for one of a seat's
-// own credentials: a Secret key's store entry, which the secret sync fills,
-// or a provisioned credential's, which the engine's provisioning fills. use
-// is the tool server or executor run the value is started with, nil for a
-// value of any other position. A provisioned credential in a company where no
-// Integration provisions is reported at field, as nothing fills it until one
-// does; it is rendered all the same, since Crewlet applies the reference and
-// only the seat goes without its value (withoutProvisioner).
+// own credentials that an executor run is started with, as use says: a Secret
+// key's store entry, which the secret sync fills, or a provisioned
+// credential's, which the engine fills under its own name for it. A
+// provisioned credential of a vendor no Integration of the company provisions
+// is reported at field, as nothing fills it until one does; it is rendered all
+// the same, since Crewlet applies the reference and only the seat's runs go
+// without its value (withoutProvisioner).
 func (r *renderer) seatCredential(s *v1alpha1.Seat, field string, src v1alpha1.SeatCredentialSource, use *startUse) string {
 	if ref := src.SecretKeyRef; ref.Name != "" {
-		if use != nil {
-			return r.startSecret(use, ref)
-		}
-		return r.secret(ref.Name, ref.Key)
+		return r.startSecret(use, ref)
 	}
-	if !r.engineProvisions() {
+	p := src.Provisioned
+	if !r.provisions(p.Vendor) {
 		r.errs.add(Reported, KindSeat, s.Name, field, v1alpha1.ReasonNoProvisioner, fmt.Sprintf(
-			"names the provisioned credential %s, and no Integration of Company %s has provisioning Engine, "+
-				"so nothing creates it: %s. Give the value from a Secret, or provision the vendor with the engine",
-			src.Provisioned.Name, r.in.Company.Name, withoutProvisioner(use)))
+			"names the %s the engine mints for the seat's %s account, and Company %s has no %s Integration with "+
+				"provisioning Engine, so nothing mints it: %s. Give the value from a Secret, or provision %s with "+
+				"the engine", p.Field, p.Vendor, r.in.Company.Name, p.Vendor, withoutProvisioner(use), p.Vendor))
 	}
-	name := r.in.ProvisionedName(SeatHandle(s), src.Provisioned.Name)
+	name := r.in.ProvisionedName(provisionedVendor(p.Vendor), provisionedField(p.Field), SeatHandle(s))
 	r.provisioned[name] = struct{}{}
 	return "${" + name + "}"
 }
 
-// withoutProvisioner is what becomes of a seat whose provisioned credential,
-// written at use, nothing creates. Crewlet holds a value that does not
-// resolve to the rule it holds a missing Secret's to: a tool server is not
-// started without one unless the value's key is optional, when it is left
-// out. A seat's executor run starts without it either way, since refusing the
-// run would fail the seat's turn: the key's optionalKeys says only whether the
-// engine logs the absence as a gap of the run.
+// withoutProvisioner is what becomes of a seat's executor runs when the
+// provisioned credential written at use is never minted. Crewlet starts a run
+// without a value that does not resolve, since refusing the run would fail the
+// seat's turn: the key's optionalKeys says only whether the engine logs the
+// absence as a gap of the run.
 func withoutProvisioner(use *startUse) string {
-	switch {
-	case use == nil:
-		return "the seat's chat app runs without it"
-	case use.server != "" && use.optional:
-		return fmt.Sprintf("the engine starts the seat's instance of MCPServer %s without it, as the server's "+
-			"optionalKeys lets it", use.server)
-	case use.server != "":
-		return fmt.Sprintf("the engine does not start the seat's instance of MCPServer %s, which takes it", use.server)
-	case use.optional:
+	if use.optional {
 		return "the seat's executor runs start without it, quietly, as the optionalKeys beside it let them"
-	default:
-		return "the seat's executor runs start without it, and the engine logs it as a gap of each " +
-			"(sandbox_env_unresolved)"
 	}
+	return "the seat's executor runs start without it, and the engine logs it as a gap of each " +
+		"(sandbox_env_unresolved)"
 }
 
-// engineProvisions reports whether an Integration of the company has the
-// engine create the seats' accounts, and so fill provisioned credentials.
-func (r *renderer) engineProvisions() bool {
+// provisions reports whether the company has the engine create the seats'
+// accounts at vendor, and so mint their credentials there: an Integration of
+// the vendor with provisioning Engine.
+func (r *renderer) provisions(vendor v1alpha1.ProvisionedVendor) bool {
 	for i := range r.in.Integrations {
-		if r.in.Integrations[i].Spec.Provisioning == v1alpha1.IntegrationProvisioningEngine {
+		in := &r.in.Integrations[i]
+		if in.Spec.Provisioning == v1alpha1.IntegrationProvisioningEngine && Vendor(in) == provisionedVendor(vendor) {
 			return true
 		}
 	}
@@ -497,9 +495,22 @@ func (r *renderer) company() companyDoc {
 	doc.Integrations = r.integrations()
 	doc.MCPServers = r.mcpServers()
 	doc.Roles, doc.Units = r.org()
+	doc.SeatAccessMigrated = seatAccessKinds
 	r.sandboxRequired(len(doc.Providers.LLM) > 0)
 	r.unofferedPlacements()
 	return doc
+}
+
+// seatAccessKinds is every integration kind whose per-seat access Crewlet
+// manages (its seataccess.Kinds, which the mirror table fingerprints), in the
+// sorted order the engine writes them. The engine acts on a kind's seat blocks
+// only where the document names the kind in seat_access_migrated, its guard
+// against reading a document from before per-seat access as every seat off.
+// The operator renders that schema natively, so every document names every
+// kind; and under the Enforce policy the engine's own migration, which would
+// add the list, cannot write the document.
+var seatAccessKinds = []string{
+	VendorAtlassian, VendorDatadog, VendorGitHub, VendorGitLab, VendorMattermost, VendorSlack,
 }
 
 func tokenBudget(b v1alpha1.TokenBudget) tokenBudgetDoc {
@@ -908,12 +919,7 @@ func Vendor(in *v1alpha1.Integration) string {
 // integration renders one Integration's block into doc.
 func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 	spec := &in.Spec
-	ref := func(k v1alpha1.SecretKeyReference) string {
-		if k.Name == "" {
-			return ""
-		}
-		return r.secret(k.Name, k.Key)
-	}
+	ref := r.secretRef
 	switch Vendor(in) {
 	case VendorSlack:
 		s := spec.Slack
@@ -955,12 +961,9 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 				Group:          p.Group,
 				AdminToken:     ref(p.AdminTokenSecretRef),
 				Mode:           gitLabAccountOwner(p.AccountOwner),
-				AccessLevel:    gitLabAccessLevel(p.AccessLevel),
-				AccessLevels:   r.gitLabAccessLevels(in, p.AccessLevels),
 				UsernamePrefix: p.UsernamePrefix,
 				Projects:       p.Projects,
 				GroupWebhook:   containerWebhookMode(p.GroupWebhook),
-				TokenScopes:    p.TokenScopes,
 			}
 		}
 	case VendorMattermost:
@@ -1013,7 +1016,6 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 				Site:        datadogSite(d.Site),
 				APIKey:      ref(d.APIKeySecretRef),
 				AppKey:      ref(d.AppKeySecretRef),
-				Role:        d.Role,
 				EmailDomain: d.EmailDomain,
 			},
 		}
@@ -1021,34 +1023,6 @@ func (r *renderer) integration(doc *integrationsDoc, in *v1alpha1.Integration) {
 		a := &spec.Atlassian
 		doc.Atlassian = &atlassianDoc{OrgID: a.OrgID, APIKey: ref(a.APIKeySecretRef)}
 	}
-}
-
-// gitLabAccessLevels renders a GitLab Integration's per-seat access levels,
-// which Crewlet keys by the seat's handle. A Seat that does not exist is
-// refused: written by its name, the level would go to whichever seat takes
-// that handle later, which nobody granted it to. A Human seat is rendered and
-// reported: the engine creates no GitLab account for a person, so its entry
-// grants nothing until the Seat becomes an Agent seat, which is what it says.
-func (r *renderer) gitLabAccessLevels(in *v1alpha1.Integration, levels []v1alpha1.GitLabSeatAccess) map[string]string {
-	if len(levels) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(levels))
-	for i, l := range levels {
-		field := fmt.Sprintf("spec.gitlab.engineProvisioning.accessLevels[%d].name", i)
-		s := r.seats[l.Name]
-		switch {
-		case s == nil:
-			r.errs.notFound(HarmsBeyond, KindIntegration, in.Name, field, r.noSeat(l.Name))
-			continue
-		case s.Spec.Kind == v1alpha1.SeatKindHuman:
-			r.errs.add(Reported, KindIntegration, in.Name, field, v1alpha1.ReasonHumanSeat, fmt.Sprintf(
-				"names Seat %s, a Human seat, which has no GitLab account: the engine provisions agent seats only, so "+
-					"the entry grants nothing", l.Name))
-		}
-		out[SeatHandle(s)] = gitLabAccessLevel(l.AccessLevel)
-	}
-	return out
 }
 
 // datadogRouteTo renders a Datadog Integration's route_to: the handle of the
@@ -1110,6 +1084,11 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 				doc.Headers[h.Name] = r.serverValue(s, fmt.Sprintf("spec.headers[%d].valueFrom", j), h.Name, h.Value, h.ValueFrom)
 			}
 		}
+		for _, c := range spec.SeatCredentials {
+			doc.SeatCredentials = append(doc.SeatCredentials, seatCredentialDoc{
+				Kind: seatCredentialKind(c.Kind), Field: seatCredentialField(c.Field), Key: c.Key, Prefix: c.Prefix,
+			})
+		}
 		if len(spec.ToolAnnotations) > 0 {
 			doc.ToolAnnotations = make(map[string]toolAnnotationsDoc, len(spec.ToolAnnotations))
 			for _, a := range spec.ToolAnnotations {
@@ -1143,13 +1122,9 @@ func (r *renderer) serverValue(s *v1alpha1.MCPServer, field, name string, litera
 
 // mcpEnv renders a Unit's or a Seat's per-server values as Crewlet's
 // mcp_env, a mapping from server name to variable (or header) name to value:
-// a setting as it is written, and a credential by the function value, which
-// renders one at its field of the object, started with the server as use
-// says.
-func (r *renderer) mcpEnv(
-	kind, name string, creds []v1alpha1.MCPCredentials,
-	value func(field string, src v1alpha1.SeatCredentialSource, use *startUse) string,
-) map[string]map[string]string {
+// a setting as it is written, and a credential as the pointer to its Secret
+// key's store entry, started with the server.
+func (r *renderer) mcpEnv(kind, name string, creds []v1alpha1.MCPCredentials) map[string]map[string]string {
 	if len(creds) == 0 {
 		return nil
 	}
@@ -1168,11 +1143,11 @@ func (r *renderer) mcpEnv(
 				continue
 			}
 			field := fmt.Sprintf("spec.mcp[%d].env[%d].valueFrom", i, j)
-			values[v.Name] = value(field, v.ValueFrom, &startUse{
+			values[v.Name] = r.startSecret(&startUse{
 				object: ObjectRef{Kind: kind, Name: name}, field: field, name: v.Name, server: c.Name,
 				optional: optionalKey(server, v.Name), list: ObjectRef{Kind: KindMCPServer, Name: c.Name},
 				listField: fieldOptionalKeys,
-			})
+			}, v.ValueFrom.SecretKeyRef)
 		}
 		out[c.Name] = values
 	}

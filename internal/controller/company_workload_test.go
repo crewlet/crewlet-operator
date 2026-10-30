@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -14,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
+	"github.com/crewlet/crewlet-operator/internal/engine/enginetest"
 	"github.com/crewlet/crewlet-operator/internal/render"
 )
 
@@ -23,7 +25,7 @@ import (
 // unless the class names a window, and never past the API's day.
 func TestDataPodStartupSeconds(t *testing.T) {
 	t.Parallel()
-	const nats, s3 = 1746, 1886
+	const nats, s3 = 1866, 2006
 	classWith := func(seconds int32, backend crewletaiv1alpha1.ObjectBackend) *crewletaiv1alpha1.EngineClass {
 		class := &crewletaiv1alpha1.EngineClass{}
 		class.Spec.Data.StartupSeconds = seconds
@@ -39,16 +41,16 @@ func TestDataPodStartupSeconds(t *testing.T) {
 	}{
 		{"a volume of no size", unset, "0", nats},
 		{"a quantity below zero, which no claim has", unset, "-2Gi", nats},
-		{"the smallest volume", unset, "12Gi", nats + 12*6},
-		{"the smallest volume, objects on the stream", classWith(0, crewletaiv1alpha1.ObjectBackendNATS), "12Gi", nats + 12*6},
-		{"the smallest volume, objects in S3", classWith(0, crewletaiv1alpha1.ObjectBackendS3), "9Gi", s3 + 9*6},
+		{"the smallest volume", unset, "14Gi", nats + 14*6},
+		{"the smallest volume, objects on the stream", classWith(0, crewletaiv1alpha1.ObjectBackendNATS), "14Gi", nats + 14*6},
+		{"the smallest volume, objects in S3", classWith(0, crewletaiv1alpha1.ObjectBackendS3), "11Gi", s3 + 11*6},
 		{"a volume of no size, objects in S3", classWith(0, crewletaiv1alpha1.ObjectBackendS3), "0", s3},
 		{"a volume of whole GiB", unset, "100Gi", nats + 100*6},
 		{"a part of a GiB counts as one", unset, "10737418241", nats + 11*6},
 		{"a volume in decimal units", unset, "500G", nats + 466*6},
 		{"a volume whose window would pass a day", unset, "20Ti", maxStartupSeconds},
-		{"the largest volume whose window is a day", unset, "14109Gi", nats + 14109*6},
-		{"a GiB more", unset, "14110Gi", maxStartupSeconds},
+		{"the largest volume whose window is a day", unset, "14089Gi", nats + 14089*6},
+		{"a GiB more", unset, "14090Gi", maxStartupSeconds},
 		{"a volume whose Value saturates", unset, "16Ei", maxStartupSeconds},
 		{"a volume whose Value wraps below zero", unset, "9223372036854775808", maxStartupSeconds},
 		{"a volume whose Value reads zero", unset, "1e30", maxStartupSeconds},
@@ -63,13 +65,45 @@ func TestDataPodStartupSeconds(t *testing.T) {
 	}
 }
 
+// TestDataPodBootCountsTheEnginesStateLogs holds the state logs the data
+// pod's startup window counts (dataPodStateLogs) to the engine the suites
+// run: a data node reports one replication loop for each state log it runs
+// in its /fleet record. The join and the admission read each log one at a
+// time, so a log the window does not count is a minute and more of reads a
+// boot can be cut short on, which no other test sees: the engine reaches
+// none of it on a disk that answers at once.
+func TestDataPodBootCountsTheEnginesStateLogs(t *testing.T) {
+	t.Parallel()
+	e := enginetest.Start(t)
+	client := e.Client()
+	// The node reports its loops from its heartbeat, which may not have
+	// beaten since its logs started when /health first answers.
+	deadline := time.Now().Add(time.Minute)
+	for {
+		fleet, err := client.Fleet(t.Context())
+		if err == nil {
+			if node, ok := fleet.Node(fleet.ThisNode); ok && node.StateLogs > 0 {
+				if node.StateLogs != dataPodStateLogs {
+					t.Fatalf("a data node runs %d state logs, and the data pod's startup window counts %d",
+						node.StateLogs, dataPodStateLogs)
+				}
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the engine's /fleet reports no state logs for its own node within a minute: %v", err)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
 // TestStartupFailureThreshold holds the startup probe's failures to the window
 // they make up, counted as the kubelet counts it: from a first probe that may
 // land at once, threshold-1 periods, never shorter than the window and short
 // of a period more.
 func TestStartupFailureThreshold(t *testing.T) {
 	t.Parallel()
-	for _, seconds := range []int32{1142, 1192, 1746, 1747, 1750, 1751, 1842, 1886, maxStartupSeconds - 1, maxStartupSeconds} {
+	for _, seconds := range []int32{1142, 1192, 1866, 1867, 1870, 1871, 1962, 2006, maxStartupSeconds - 1, maxStartupSeconds} {
 		threshold := startupFailureThreshold(seconds)
 		if window := (threshold - 1) * probePeriodSeconds; window < seconds || window >= seconds+probePeriodSeconds {
 			t.Errorf("startupFailureThreshold(%d) = %d, a window of %ds after the first probe", seconds, threshold, window)
@@ -220,7 +254,7 @@ func dataPodOf(t *testing.T, class *crewletaiv1alpha1.EngineClass) corev1.PodTem
 	t.Helper()
 	company := &crewletaiv1alpha1.Company{Namespace: testTenant, Name: companyName}
 	return decodedPod(t)(podTemplate(company, class, &workload{
-		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1746,
+		image: engineImageV020, bootstrap: &render.BootstrapDocument{}, startupSeconds: 1866,
 	}))
 }
 

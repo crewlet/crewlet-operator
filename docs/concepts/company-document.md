@@ -37,13 +37,13 @@ handle, and model providers and tool servers by name.
 
 | Object | Becomes |
 |---|---|
-| `Company` | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `token_budget`, `providers.embeddings`, `providers.sandbox`, `providers.llm_order`, `integrations.check_interval_seconds`, and one top-level key per `spec.engineConfig` entry |
+| `Company` | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `token_budget`, `providers.embeddings`, `providers.sandbox`, `providers.llm_order`, `integrations.check_interval_seconds`, `seat_access_migrated` (every integration kind, so the engine acts on each Seat's `spec.integrations`), and one top-level key per `spec.engineConfig` entry |
 | `EngineClass` | `providers.llm.<name>` for each of its `platformLLMProviders`, when the Company sets `spec.llm.usePlatformProviders`; its `state_dir` is `/var/lib/crewlet/llm-cli-platform/<name>`, on the data volume |
 | `LLMProvider` | `providers.llm.<metadata.name>`; its `state_dir` is `/var/lib/crewlet/llm-cli/<loginName>`, on the data volume |
 | `MCPServer` | one entry of `mcp_servers`, named by its `metadata.name` |
-| `Integration` | one of `integrations.slack`, `github`, `gitlab`, `mattermost`, `jira`, `confluence`, `datadog` and `atlassian`; a Seat it names (Datadog's `routeTo`, GitLab's `accessLevels`) by the seat's handle |
+| `Integration` | one of `integrations.slack`, `github`, `gitlab`, `mattermost`, `jira`, `confluence`, `datadog` and `atlassian`; a Seat it names (Datadog's `routeTo`) by the seat's handle |
 | `Unit` | one entry of `units`, or of its parent's `children` |
-| `Seat` | one entry of its Unit's `roles`, or of the top-level `roles` when it has no Unit |
+| `Seat` | one entry of its Unit's `roles`, or of the top-level `roles` when it has no Unit; its `spec.integrations` are the role's `integrations`, one block per vendor, each with its `enabled` |
 | `Schedule` | one entry of the `schedules` of the Seat's role or the Unit it targets, named by its `metadata.name` |
 
 Where the engine is reached is not part of the document: the engine reads its
@@ -273,11 +273,11 @@ last one is refused with `insufficient storage resources available`. A fresh
 node reserves what it keeps on the stream when it starts, and refuses to boot
 on a stream that cannot hold it
 ([the minimum room for a fresh node](https://github.com/crewlet/crewlet/blob/main/docs/guides/deployment.md#the-minimum-room-for-a-fresh-node)):
-the ceilings of its eight state logs, 7046430720 bytes at their smallest,
+the ceilings of its nine state logs, 8120172544 bytes at their smallest,
 and, with the class's `objects.backend` `NATS` (the default), the object
-store's bucket beside them at a quarter of the stream, 9395240959 bytes in
-all. So an EngineClass's `data.storage.size` is at least `12Gi`, whose three
-quarters is 9 GiB, or `9Gi` for a class that keeps its files in S3. That is
+store's bucket beside them at a quarter of the stream, 10826896725 bytes in
+all. So an EngineClass's `data.storage.size` is at least `14Gi`, whose three
+quarters is 10.5 GiB, or `11Gi` for a class that keeps its files in S3. That is
 the least that boots: the mailboxes and the coordination buckets grow into
 what is left. Nor does Crewlet start on more
 than 64 TiB, a guard against a unit mistake rather than a limit on the
@@ -410,7 +410,6 @@ that holds the reference:
 | `Seat` | a `spec.mcp` entry spells a header unlike the Seat's Unit spells it for the same HTTP server (`authorization` beside `Authorization`): Crewlet lays the unit's values under the member's by the name as written, and the server would be sent either | `Conflict` (on `Accepted`) | Engine |
 | `Integration` | another Integration of the company, earlier by name, connects the same vendor: a new one would displace the running one | `Conflict` | Harm |
 | `Integration` | Datadog's `routeTo.seatRef` names a Seat that does not exist, or a Human seat | `RefNotFound`, `HumanSeat` | Engine |
-| `Integration` | a GitLab `accessLevels` entry names a Seat that does not exist: written by its handle, the level would go to whichever seat takes it later | `RefNotFound` | Harm |
 | `Schedule` | `target.seatRef` or `target.unitRef` names a Seat or Unit that does not exist: a schedule is written inside the entry of what runs it, so the document has no place for it | `RefNotFound` | Engine |
 | `Schedule` | `target.seatRef` names a Human seat | `HumanSeat` | Engine |
 | any, the `Company` included | a string it renders into the document, `engineConfig` included, holds a `${NAME}` reference | `ReferenceNotAllowed` | Harm |
@@ -469,9 +468,7 @@ revision:
   company has `provisioning: Engine` (`NoProvisioner`), which goes without
   the value until one does: its tool server that takes it is not started,
   unless the MCPServer's `optionalKeys` lets it go without it, and its
-  executor runs and its chat app run without it; a GitLab `accessLevels`
-  entry naming a Human seat (`HumanSeat`), which grants nothing, as the
-  engine creates no GitLab account for a person; and a person's
+  executor runs and its chat app run without it; and a person's
   `contact.atlassianAccount` that is no Atlassian account id, such as an
   email address, while the company reaches Jira or Confluence on Atlassian
   Cloud, which names a person by account id alone (`NotAnAccountID`): what

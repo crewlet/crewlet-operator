@@ -174,20 +174,6 @@ const (
 	IntegrationProvisioningEngine IntegrationProvisioning = "Engine"
 )
 
-// GitLabAccessLevel is the membership level the engine gives a seat's GitLab
-// service account. It maps onto Crewlet's access_level (Developer is
-// `developer`, Maintainer is `maintainer`).
-// +kubebuilder:validation:Enum=Developer;Maintainer
-type GitLabAccessLevel string
-
-// The GitLab access levels.
-const (
-	// GitLabDeveloper can push branches and open merge requests.
-	GitLabDeveloper GitLabAccessLevel = "Developer"
-	// GitLabMaintainer can also merge to protected branches.
-	GitLabMaintainer GitLabAccessLevel = "Maintainer"
-)
-
 // GitLabAccountOwner is where the engine creates the seats' GitLab service
 // accounts. It maps onto Crewlet's provisioning mode (Group is `group`,
 // Instance is `instance`).
@@ -204,26 +190,14 @@ const (
 	GitLabAccountOwnerInstance GitLabAccountOwner = "Instance"
 )
 
-// GitLabSeatAccess overrides the access level of one seat's service account.
-type GitLabSeatAccess struct {
-	// name is the metadata.name of the Seat, in this namespace. Crewlet keys
-	// the override by the seat's handle, which the operator renders.
-	// +required
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
-	Name string `json:"name,omitempty"`
-
-	// accessLevel is the seat's membership level.
-	// +required
-	AccessLevel GitLabAccessLevel `json:"accessLevel,omitempty"`
-}
-
 // GitLabEngineProvisioning is how the engine provisions the seats' GitLab
 // accounts under provisioning Engine. It maps onto Crewlet's
-// integrations.gitlab.provisioning: for each agent seat whose credentials for
-// the MCPServer named gitlab name a provisioned value, the engine creates a
-// service account, adds it to the group and the projects, mints a token into
-// that value, and registers the webhook.
+// integrations.gitlab.provisioning: for each agent Seat whose
+// spec.integrations.gitlab is enabled, the engine creates a service account,
+// makes it a member of the group, or of the seat's projects, at the seat's
+// role, mints its token into an entry of its secret store it names for the
+// seat, and registers the webhook. Each seat's role and projects are on its
+// Seat.
 type GitLabEngineProvisioning struct {
 	// group is the top-level group, by its path, the service accounts join
 	// and the webhook is registered on. Crewlet's `group`.
@@ -245,19 +219,6 @@ type GitLabEngineProvisioning struct {
 	// +optional
 	AccountOwner GitLabAccountOwner `json:"accountOwner,omitempty"`
 
-	// accessLevel is the membership level of every seat's account. Unset
-	// takes Crewlet's default, Developer. Crewlet's `access_level`.
-	// +optional
-	AccessLevel GitLabAccessLevel `json:"accessLevel,omitempty"`
-
-	// accessLevels override accessLevel for single seats. Crewlet's
-	// `access_levels`.
-	// +optional
-	// +listType=map
-	// +listMapKey=name
-	// +kubebuilder:validation:MaxItems=64
-	AccessLevels []GitLabSeatAccess `json:"accessLevels,omitempty"`
-
 	// usernamePrefix is put before each seat's handle to form its account's
 	// username, for a group shared with people. Crewlet's
 	// `username_prefix`.
@@ -267,9 +228,9 @@ type GitLabEngineProvisioning struct {
 	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9_.-]+$`
 	UsernamePrefix string `json:"usernamePrefix,omitempty"`
 
-	// projects are projects, by path, the accounts also join, and the ones
-	// the webhook is registered on one by one when no group hook is.
-	// Crewlet's `projects`.
+	// projects are the projects, by path, a seat's spec.integrations.gitlab
+	// projects may name, and the ones the webhook is registered on one by
+	// one when no group hook is. Crewlet's `projects`.
 	// +optional
 	// +listType=set
 	// +kubebuilder:validation:MaxItems=128
@@ -282,23 +243,12 @@ type GitLabEngineProvisioning struct {
 	// Unset is Auto. Crewlet's `group_webhook`.
 	// +optional
 	GroupWebhook ContainerWebhookMode `json:"groupWebhook,omitempty"`
-
-	// tokenScopes are the scopes minted on each seat's token. Unset takes
-	// Crewlet's default, api. Crewlet's `token_scopes`.
-	// +optional
-	// +listType=set
-	// +kubebuilder:validation:MaxItems=16
-	// +kubebuilder:validation:items:MinLength=1
-	// +kubebuilder:validation:items:MaxLength=64
-	// +kubebuilder:validation:items:Pattern=`^[a-z_]+$`
-	TokenScopes []string `json:"tokenScopes,omitempty"`
 }
 
 // GitLabIntegration turns GitLab on for a company: webhooks from a GitLab
 // instance wake the seats they concern. It maps onto Crewlet's
-// integrations.gitlab. Each seat's GitLab token is a credential of the
-// MCPServer named gitlab in its Seat's spec.mcp, which is where Crewlet reads
-// a seat's GitLab identity from.
+// integrations.gitlab. Each seat's GitLab account and access are in its
+// Seat's spec.integrations.gitlab.
 type GitLabIntegration struct {
 	// url is the instance's base URL, such as https://gitlab.com. Crewlet's
 	// `url`.
@@ -619,9 +569,9 @@ type DatadogRouteTo struct {
 // DatadogIntegration turns Datadog on for a company: a firing monitor wakes
 // the seat its tags name. It maps onto Crewlet's integrations.datadog. The
 // engine registers the webhook at Datadog itself and creates a service
-// account for each agent seat whose credentials for the MCPServer named
-// datadog name a provisioned application key, so the Integration's
-// provisioning is Engine.
+// account for each agent Seat whose spec.integrations.datadog is enabled,
+// with the role that block names, so the Integration's provisioning is
+// Engine.
 type DatadogIntegration struct {
 	// webhookTokenSecretRef is the Secret key holding the token every
 	// delivery carries in its X-Crewlet-Token header: at least 26
@@ -651,15 +601,6 @@ type DatadogIntegration struct {
 	// accounts. Crewlet's `provisioning.app_key`, a credential position.
 	// +required
 	AppKeySecretRef SecretKeyReference `json:"appKeySecretRef,omitzero"`
-
-	// role is the Datadog role each seat's service account is created
-	// with, by its name. Unset takes Crewlet's default, Datadog Read Only
-	// Role. Crewlet's `provisioning.role`.
-	// +optional
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=256
-	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="role may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
-	Role string `json:"role,omitempty"`
 
 	// emailDomain is the domain the service accounts' addresses are built
 	// under; Datadog requires an address and never writes to it. Unset

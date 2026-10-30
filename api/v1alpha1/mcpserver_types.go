@@ -125,6 +125,68 @@ type MCPHeader struct {
 	ValueFrom SecretValueSource `json:"valueFrom,omitzero"`
 }
 
+// SeatCredentialKind is an integration whose per-seat credential a tool
+// server can read. It maps onto Crewlet's seat_credentials[].kind (Atlassian
+// is `atlassian`, Datadog `datadog`, GitHub `github`, GitLab `gitlab`,
+// Mattermost `mattermost`, Slack `slack`).
+// +kubebuilder:validation:Enum=Atlassian;Datadog;GitHub;GitLab;Mattermost;Slack
+type SeatCredentialKind string
+
+// The seat credential kinds.
+const (
+	SeatCredentialAtlassian  SeatCredentialKind = "Atlassian"
+	SeatCredentialDatadog    SeatCredentialKind = "Datadog"
+	SeatCredentialGitHub     SeatCredentialKind = "GitHub"
+	SeatCredentialGitLab     SeatCredentialKind = "GitLab"
+	SeatCredentialMattermost SeatCredentialKind = "Mattermost"
+	SeatCredentialSlack      SeatCredentialKind = "Slack"
+)
+
+// SeatCredentialField is which of an Atlassian account's two seat credentials
+// a server reads. It maps onto Crewlet's seat_credentials[].field (Token is
+// `TOKEN`, Email `EMAIL`).
+// +kubebuilder:validation:Enum=Token;Email
+type SeatCredentialField string
+
+// The Atlassian seat credential fields.
+const (
+	SeatCredentialToken SeatCredentialField = "Token"
+	SeatCredentialEmail SeatCredentialField = "Email"
+)
+
+// MCPSeatCredential is one per-seat credential a tool server reads. It maps
+// onto one entry of Crewlet's seat_credentials. The value is the engine's to
+// give each seat's instance; nothing here names a credential.
+// +kubebuilder:validation:XValidation:rule="!has(self.field) || self.kind == 'Atlassian'",message="field applies to Atlassian, whose account holds a Token and an Email; every other integration's seat credential is one",fieldPath=".field"
+type MCPSeatCredential struct {
+	// kind is the integration whose seat credential the server reads.
+	// Crewlet's `kind`.
+	// +required
+	Kind SeatCredentialKind `json:"kind,omitempty"`
+
+	// field is which of an Atlassian account's credentials, its Token or
+	// its Email. Unset is the integration's credential itself, an
+	// Atlassian account's Token. Crewlet's `field`.
+	// +optional
+	Field SeatCredentialField `json:"field,omitempty"`
+
+	// key is the variable (Stdio) or header (HTTP) the server reads it
+	// under, which the server's transport decides. Crewlet's `key`.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9!#$%&'*+.^_|~-]+$`
+	Key string `json:"key,omitempty"`
+
+	// prefix is text the value follows, such as "Bearer " for an
+	// Authorization header. Crewlet's `prefix`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=32
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="prefix may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
+	Prefix string `json:"prefix,omitempty"`
+}
+
 // MCPServerSpec is one tool server a company's agents call. It renders to one
 // entry of Crewlet's mcp_servers, named by the MCPServer's metadata.name;
 // Seats and Units give it per-seat values by that name.
@@ -133,6 +195,8 @@ type MCPHeader struct {
 // +kubebuilder:validation:XValidation:rule="self.transport == 'HTTP' ? has(self.url) : !has(self.url)",message="url is required with transport HTTP and not allowed with Stdio"
 // +kubebuilder:validation:XValidation:rule="self.transport == 'HTTP' || !has(self.headers)",message="headers apply to transport HTTP only"
 // +kubebuilder:validation:XValidation:rule="self.transport != 'HTTP' || !has(self.optionalKeys) || self.optionalKeys.all(a, self.optionalKeys.exists_one(b, b.lowerAscii() == a.lowerAscii()))",message="optionalKeys names each header once: HTTP header names are case-insensitive, so its names must differ in more than case",fieldPath=".optionalKeys"
+// +kubebuilder:validation:XValidation:rule="!has(self.seatCredentials) || (has(self.shared) && !self.shared)",message="seatCredentials applies to a server with shared false: a shared server acts as no seat, so it reads no seat's credential",fieldPath=".seatCredentials"
+// +kubebuilder:validation:XValidation:rule="self.transport != 'HTTP' || !has(self.seatCredentials) || self.seatCredentials.all(a, self.seatCredentials.exists_one(b, b.key.lowerAscii() == a.key.lowerAscii()))",message="seatCredentials names each header once: HTTP header names are case-insensitive, so its keys must differ in more than case",fieldPath=".seatCredentials"
 type MCPServerSpec struct {
 	// companyRef names the Company this server belongs to. Immutable.
 	// +required
@@ -248,6 +312,21 @@ type MCPServerSpec struct {
 	// +kubebuilder:validation:items:MaxLength=128
 	// +kubebuilder:validation:items:Pattern=`^[A-Za-z0-9!#$%&'*+.^_|~-]+$`
 	OptionalKeys []string `json:"optionalKeys,omitempty"`
+
+	// seatCredentials declare which integration's per-seat credential the
+	// server reads, and under which variable (Stdio) or header (HTTP), so
+	// the engine gives each seat's instance that seat's own credential: the
+	// one it minted for the seat's account, or the one the Seat hands in
+	// for an integration it does not provision. Unset, a server the engine
+	// recognises by its command or address (glab mcp serve, slack-mcp-server,
+	// mcp-server-mattermost, mcp-atlassian, GitHub's and Datadog's remote
+	// servers) reads what the engine knows it reads; a declaration replaces
+	// that. A shared server reads none. Crewlet's `seat_credentials`.
+	// +optional
+	// +listType=map
+	// +listMapKey=key
+	// +kubebuilder:validation:MaxItems=8
+	SeatCredentials []MCPSeatCredential `json:"seatCredentials,omitempty"`
 
 	// toolPrefix is put in front of the server's tool names, to keep them
 	// apart from another server's. Crewlet's `tool_prefix`.

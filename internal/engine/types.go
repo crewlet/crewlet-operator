@@ -543,6 +543,13 @@ type FleetNode struct {
 	// Seats is how many seats the node holds.
 	Seats int
 
+	// StateLogs is how many state logs the node runs, one replication loop
+	// each (Crewlet's appliers_total): every domain of the engine's register
+	// on a data node, and zero on a node without data, which runs none. The
+	// node reports it from its heartbeat, so a node that has not beaten
+	// since its logs started reports zero too.
+	StateLogs int
+
 	// Apply is the node's record of its last attempt to apply an epoch.
 	Apply ApplyRecord
 }

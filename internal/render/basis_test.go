@@ -29,29 +29,28 @@ import (
 // function itself, so that a rename fails to compile rather than leaving a
 // row of the table that no place answers.
 var (
-	fnCheckReferences    = nameOf(checkReferences)
-	fnProvidersDoc       = nameOf((*renderer).providersDoc)
-	fnProvider           = nameOf((*renderer).provider)
-	fnIntegrations       = nameOf((*renderer).integrations)
-	fnGitLabAccessLevels = nameOf((*renderer).gitLabAccessLevels)
-	fnDatadogRouteTo     = nameOf((*renderer).datadogRouteTo)
-	fnMcpEnv             = nameOf((*renderer).mcpEnv)
-	fnMcpOptionalKeys    = nameOf((*renderer).mcpOptionalKeys)
-	fnHeaderSpellings    = nameOf((*renderer).headerSpellings)
-	fnSeatCredential     = nameOf((*renderer).seatCredential)
-	fnPlanTopology       = nameOf(planTopology)
-	fnCheckCapacity      = nameOf(checkCapacity)
-	fnOrg                = nameOf((*renderer).org)
-	fnConflict           = nameOf(conflict[*v1alpha1.Seat])
-	fnUnit               = nameOf((*renderer).unit)
-	fnRole               = nameOf((*renderer).role)
-	fnScheduleTargets    = nameOf((*renderer).scheduleTargets)
-	fnManages            = nameOf((*renderer).manages)
-	fnSeatPodProviders   = nameOf((*renderer).seatPodProviders)
-	fnAtlassianAccounts  = nameOf((*renderer).atlassianAccounts)
-	fnNoExecutor         = nameOf((*renderer).noExecutor)
-	fnSandboxRequired    = nameOf((*renderer).sandboxRequired)
-	fnUnoffered          = nameOf((*renderer).unofferedPlacements)
+	fnCheckReferences   = nameOf(checkReferences)
+	fnProvidersDoc      = nameOf((*renderer).providersDoc)
+	fnProvider          = nameOf((*renderer).provider)
+	fnIntegrations      = nameOf((*renderer).integrations)
+	fnDatadogRouteTo    = nameOf((*renderer).datadogRouteTo)
+	fnMcpEnv            = nameOf((*renderer).mcpEnv)
+	fnMcpOptionalKeys   = nameOf((*renderer).mcpOptionalKeys)
+	fnHeaderSpellings   = nameOf((*renderer).headerSpellings)
+	fnSeatCredential    = nameOf((*renderer).seatCredential)
+	fnPlanTopology      = nameOf(planTopology)
+	fnCheckCapacity     = nameOf(checkCapacity)
+	fnOrg               = nameOf((*renderer).org)
+	fnConflict          = nameOf(conflict[*v1alpha1.Seat])
+	fnUnit              = nameOf((*renderer).unit)
+	fnRole              = nameOf((*renderer).role)
+	fnScheduleTargets   = nameOf((*renderer).scheduleTargets)
+	fnManages           = nameOf((*renderer).manages)
+	fnSeatPodProviders  = nameOf((*renderer).seatPodProviders)
+	fnAtlassianAccounts = nameOf((*renderer).atlassianAccounts)
+	fnNoExecutor        = nameOf((*renderer).noExecutor)
+	fnSandboxRequired   = nameOf((*renderer).sandboxRequired)
+	fnUnoffered         = nameOf((*renderer).unofferedPlacements)
 )
 
 // nameOf is the name a function of the package is declared under: the last
@@ -104,10 +103,6 @@ var findings = []struct {
 			"class's policy"},
 	{site{fnIntegrations, HarmsBeyond, v1alpha1.ReasonConflict},
 		"one block per vendor: a new Integration would displace the running one"},
-	{site{fnGitLabAccessLevels, HarmsBeyond, v1alpha1.ReasonRefNotFound},
-		"written by name, the level goes to whichever seat takes the handle later"},
-	{site{fnGitLabAccessLevels, Reported, v1alpha1.ReasonHumanSeat},
-		"the engine creates no account for a person: the entry grants nothing"},
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonRefNotFound}, "route_to naming no seat"},
 	{site{fnDatadogRouteTo, EngineRefuses, v1alpha1.ReasonHumanSeat}, "route_to naming a person"},
 	{site{fnMcpEnv, HarmsBeyond, v1alpha1.ReasonRefNotFound},
@@ -611,15 +606,15 @@ func engineCases() []engineCase {
 			name: "a seat's header spelled unlike its unit's", site: site{fnHeaderSpellings, EngineRefuses, v1alpha1.ReasonConflict},
 			input: sampleCompany,
 			mutate: func(in *Input) {
-				unit(in, unitPlatform).Spec.MCP = []v1alpha1.MCPCredentials{{Name: sampleGitHub, Env: []v1alpha1.MCPCredentialValue{{
-					Name: headerLower, ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "platform-github", Key: headerLower}},
+				unit(in, unitPlatform).Spec.MCP = []v1alpha1.MCPCredentials{{Name: sampleLinear, Env: []v1alpha1.MCPCredentialValue{{
+					Name: headerLower, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "platform-linear", Key: headerLower}},
 				}}}}
 			},
 			refused: "Seat/ana spec.mcp[0].env[0].name",
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
 				platform := unitHolding(t, doc, seatAna)
-				platform["mcp_env"] = map[string]any{sampleGitHub: map[string]any{headerLower: "${PLATFORM_GITHUB}"}}
+				platform["mcp_env"] = map[string]any{sampleLinear: map[string]any{headerLower: "${PLATFORM_LINEAR}"}}
 			},
 			at: headerAuthorization, says: "names the header its unit's block writes as",
 		},
@@ -627,16 +622,16 @@ func engineCases() []engineCase {
 			name: "an optional key only literals are written under", site: site{fnMcpOptionalKeys, EngineRefuses, v1alpha1.ReasonOptionalKeyUnused},
 			input: sampleCompany,
 			mutate: func(in *Input) {
-				toolServer(in, sampleGitHub).Spec.OptionalKeys = []string{sampleToolsets}
+				toolServer(in, sampleLinear).Spec.OptionalKeys = []string{sampleSetting}
 				seat(in, seatAna).Spec.MCP[0].Env = append(seat(in, seatAna).Spec.MCP[0].Env,
-					v1alpha1.MCPCredentialValue{Name: sampleToolsets, Value: new("repos")})
+					v1alpha1.MCPCredentialValue{Name: sampleSetting, Value: new("crewlet")})
 			},
-			refused: "MCPServer/github spec.optionalKeys[0]",
+			refused: "MCPServer/linear spec.optionalKeys[0]",
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
-				optionalKey(sampleGitHub, sampleToolsets)(t, doc)
-				env := role(t, doc, seatAna)["mcp_env"].(map[string]any)[sampleGitHub].(map[string]any)
-				env[sampleToolsets] = "repos"
+				optionalKey(sampleLinear, sampleSetting)(t, doc)
+				env := role(t, doc, seatAna)["mcp_env"].(map[string]any)[sampleLinear].(map[string]any)
+				env[sampleSetting] = "crewlet"
 			},
 			at: optionalKeysAt, says: "carries a ${VAR} reference",
 		},

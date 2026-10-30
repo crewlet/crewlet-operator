@@ -50,3 +50,10 @@ roles:
       crewlet.ai/pool: data
   sandbox:
     max_turns: 64
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack

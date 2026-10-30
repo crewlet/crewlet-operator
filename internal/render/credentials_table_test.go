@@ -67,6 +67,9 @@ type credentialSource struct {
 const (
 	notOfferedStreamToken = "The data pod runs Crewlet's embedded broker, which needs no token; an external NATS " +
 		"cluster (`stream.type: nats`), where Crewlet reads one, is not offered."
+	notOfferedSlackAppConfig = "The operator's Slack seats are apps made outside the engine, whose credentials each " +
+		"Seat hands in from a Secret (`Seat.spec.integrations.slack.credentialsSecretRef`); the engine creating each " +
+		"agent's app, which this token is for, is not offered."
 	notOfferedLocalSandbox = "Crewlet's `container` cell, the one this environment is for, is not offered: " +
 		"`Company.spec.sandbox` places a seat's executor run `Direct` or in `E2B`, and `spec.engineConfig` " +
 		"may not set `providers`."
@@ -140,16 +143,12 @@ var credentialPositions = []credentialPosition{
 	}},
 	{Tier: tierCompany, Path: "roles[].mcp_env.*.*", Sources: []credentialSource{
 		{Field: "Seat.spec.mcp[].env[].valueFrom.secretKeyRef", Reference: perEnvOrHead},
-		{
-			Field: "Seat.spec.mcp[].env[].valueFrom.provisioned", Reference: provisioned,
-			When: "under an Integration with provisioning Engine (GitLab, Mattermost, Datadog, Atlassian)",
-		},
 	}},
 	{Tier: tierCompany, Path: "roles[].sandbox.env.*", Sources: []credentialSource{
 		{Field: "Seat.spec.sandbox.env[].valueFrom.secretKeyRef", Reference: perVariable},
 		{
 			Field: "Seat.spec.sandbox.env[].valueFrom.provisioned", Reference: provisioned,
-			When: "under an Integration with provisioning Engine",
+			When: "under the vendor's Integration with provisioning Engine",
 		},
 	}},
 	{Tier: tierCompany, Path: "roles[].sandbox.setup[].files.*", Sources: []credentialSource{
@@ -179,6 +178,7 @@ var credentialPositions = []credentialPosition{
 			Reference: "`SecretReference`, key `webhookSecret` (`GitHubAppWebhookSecretKey`)",
 		},
 	}},
+	{Tier: tierCompany, Path: "integrations.slack.app_config_token", Unsupported: notOfferedSlackAppConfig},
 	{Tier: tierCompany, Path: githubWebhookSecret, Sources: []credentialSource{
 		{Field: "Integration.spec.github.webhookSecretRef", Reference: oneKey},
 	}},
@@ -199,10 +199,9 @@ var credentialPositions = []credentialPosition{
 		{Field: "Integration.spec.mattermost.engineProvisioning.adminTokenSecretRef", Reference: oneKey},
 	}},
 	{Tier: tierCompany, Path: "roles[].integrations.mattermost.bot_token", Sources: []credentialSource{
-		{Field: "Seat.spec.integrations.mattermost.botToken.secretKeyRef", Reference: oneKey},
 		{
-			Field: "Seat.spec.integrations.mattermost.botToken.provisioned", Reference: provisioned,
-			When: "under a Mattermost Integration with provisioning Engine",
+			Field: "Seat.spec.integrations.mattermost.botToken.secretKeyRef", Reference: oneKey,
+			When: "under a Mattermost Integration with provisioning External",
 		},
 	}},
 	{Tier: tierCompany, Path: "integrations.jira.token", Sources: []credentialSource{

@@ -62,6 +62,13 @@ roles:
   manages:
   - rnd
   name: Wile E.
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack
 skill_variables:
   support_url: https://support.acme.example
 timezone: America/Phoenix
@@ -77,7 +84,7 @@ turn_engine:
   extension_enabled: false
   max_iterations: 4
 units:
-- channel: '#rnd'
+- channel: rnd
   children:
   - id: anvils
     name: anvils

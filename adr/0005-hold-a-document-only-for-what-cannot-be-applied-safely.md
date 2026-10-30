@@ -92,12 +92,12 @@ operator stricter than the engine; one that is `Reported` is held the other
 way, so an engine that starts refusing it fails too. One reason can hold on
 one basis in one place and on another, or not at all, elsewhere
 (`RefNotFound` is the engine's refusal as Datadog's route, harm beyond the
-object as a GitLab access level), so the basis belongs to the place, not the
+object as a Unit's parent), so the basis belongs to the place, not the
 reason. The obvious alternative, holding every finding, makes the whole
 company's next revision depend on its least-configured seat; the other
 obvious one, writing what the render can and leaving the rest out, writes a
-company nobody asked for. This record supersedes one clause of the last
-sentence of ADR-0004's decision, that a seat names a provisioned value only
-while an Integration provisions: such a seat is now applied and reported
-(`NoProvisioner`). That a Unit's credentials cannot be provisioned stands. It does not decide which conditions exist, nor how the
+company nobody asked for. This record supersedes one clause of ADR-0004's
+decision, that a seat names a provisioned value only while its vendor's
+Integration provisions: such a seat is now applied and reported
+(`NoProvisioner`). It does not decide which conditions exist, nor how the
 engine treats a refused run.

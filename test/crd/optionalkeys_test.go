@@ -101,8 +101,10 @@ func TestSeatSandboxOptionalKeysValidation(t *testing.T) {
 				Env: []v1.SeatEnvVar{
 					{Name: envDatabaseURL, ValueFrom: seatFromSecret("ana-sandbox", "database")},
 					{
-						Name:      gitlabToken,
-						ValueFrom: v1.SeatCredentialSource{Provisioned: v1.ProvisionedCredential{Name: "gitlab-token"}},
+						Name: gitlabToken,
+						ValueFrom: v1.SeatCredentialSource{Provisioned: v1.ProvisionedCredential{
+							Vendor: v1.ProvisionedGitLab, Field: v1.ProvisionedToken,
+						}},
 					},
 				},
 				OptionalKeys: keys,

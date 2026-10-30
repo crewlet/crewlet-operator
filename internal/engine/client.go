@@ -207,6 +207,7 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 			Broker     string            `json:"broker"`
 			Labels     map[string]string `json:"labels"`
 			Seats      int               `json:"seats"`
+			StateLogs  int               `json:"appliers_total"`
 			Epoch      int64             `json:"config_epoch"`
 			RevisionID string            `json:"config_revision_id"`
 			Serving    string            `json:"config_serving_revision_id"`
@@ -237,6 +238,7 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 		n := &answer.Nodes[i]
 		f.Nodes = append(f.Nodes, FleetNode{
 			ID: n.ID, Roles: n.Roles, Broker: BrokerKind(n.Broker), Labels: n.Labels, Seats: n.Seats,
+			StateLogs: n.StateLogs,
 			Apply: ApplyRecord{
 				Epoch: n.Epoch, RevisionID: n.RevisionID, Status: ApplyStatus(n.Status), Error: n.Error, Serving: n.Serving,
 				Boots: n.Boots,

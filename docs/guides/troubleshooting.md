@@ -149,8 +149,8 @@ conditions. `kubectl get engineclasses` shows it.
 | | False | `RefNotFound` | It references an object that does not exist (a Unit, a Seat, an LLMProvider, an MCPServer); the message names it. |
 | | False | `Cycle` | A Unit's `parentRef` chain leads back to itself. |
 | | False | `PoolNotFound` | A Seat's `spec.placement.pool` is neither `data` nor one of its Company's `spec.topology.seatPools`. The seat is applied all the same, pinned to the label `crewlet.ai/undeclared-pool`, which no pod carries: it runs nowhere (`Ready=False`, `PoolNotFound`), or keeps running where it ran (`Applied=False`, `PlacementPending`), until the Company declares the pool or the Seat names another. Nothing else is held. |
-| | False | `HumanSeat` | A Schedule's `target.seatRef` or a Datadog Integration's `routeTo.seatRef` names a Human seat, for whom the engine runs no turn, which holds the document. Name an Agent seat (a Schedule may target the person's unit with `fanOut: Each`). On a GitLab Integration's `accessLevels` entry it holds nothing: the engine creates no GitLab account for a person, so the entry grants nothing, and the Integration is applied. |
-| | False | `NoProvisioner` | A Seat names a provisioned credential, and no Integration of its company has `provisioning: Engine`, so nothing creates the value: the engine starts none of the seat's tool servers that take it ([A tool server does not start](#a-tool-server-does-not-start)), unless the MCPServer's `optionalKeys` lets them go without it, and the seat's executor runs and its chat app run without it. The seat is applied all the same, and gets the value once an Integration provisions. Give the value from a Secret, or provision the vendor with the engine ([Connecting integrations](integrations.md#who-creates-the-seats-accounts)). |
+| | False | `HumanSeat` | A Schedule's `target.seatRef` or a Datadog Integration's `routeTo.seatRef` names a Human seat, for whom the engine runs no turn, which holds the document. Name an Agent seat (a Schedule may target the person's unit with `fanOut: Each`). |
+| | False | `NoProvisioner` | A Seat's `spec.sandbox.env` names a credential the engine mints at a vendor, and its company has no Integration of that vendor with `provisioning: Engine`, so nothing mints the value: the seat's executor runs start without it. The seat is applied all the same, and gets the value once the vendor's Integration provisions. Give the value from a Secret, or provision the vendor with the engine ([Connecting integrations](integrations.md#who-creates-the-seats-accounts)). |
 | | False | `NotAnAccountID` | A person's Seat sets `contact.atlassianAccount` to something that is no Atlassian account id, such as an email address, while its company reaches Jira or Confluence on Atlassian Cloud, which names a person by account id alone: what the person does there reaches no seat, and an agent's mention of them names nobody. The message names each product on Cloud. The seat is applied all the same. Give the person's account id ([A person's accounts](integrations.md#a-persons-accounts)). |
 | | False | `ReferenceNotAllowed` | A string it renders into the document holds a `${NAME}` reference. The operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment ([What blocks a document](../concepts/company-document.md#what-blocks-a-document)). The message names the place in the document. Give a credential with a Secret reference; in a sandbox command, write a variable as `$NAME`, which the sandbox's shell expands. |
 | | False | `SecretNotFound` | A Secret or key it references is missing, where it does not let a tool server or a seat's executor run go without the value. |
@@ -202,10 +202,10 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **`the broker refused to reserve the … log's ceiling`**, ending
   `insufficient storage resources available`: the engine could not reserve
   what a fresh node keeps on its event stream. The stream is given three
-  quarters of the data volume, and a fresh node reserves at least 9395240959
-  bytes of it, or 7046430720 when the class keeps its files in S3; the
+  quarters of the data volume, and a fresh node reserves at least 10826896725
+  bytes of it, or 8120172544 when the class keeps its files in S3; the
   message names the figure it needed and breaks it down. The class's
-  `data.storage.size` admits no less than `12Gi` (`9Gi` with the files in
+  `data.storage.size` admits no less than `14Gi` (`11Gi` with the files in
   S3), so this is a company whose volume was made smaller: under an older
   floor, or before an engine that keeps more on its stream.
   [Grow its volume](../concepts/runtime.md#growing-a-companys-data-volume).
@@ -219,7 +219,7 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **The pod restarts, its events saying `Startup probe failed`, and the
   previous log has no `engine_recovered` line**: the recovery of what the
   volume holds took longer than the startup probe allows, and every restart
-  starts it again. The window is 1,746 seconds (1,886 when the class keeps
+  starts it again. The window is 1,866 seconds (2,006 when the class keeps
   files in S3) plus six seconds per GiB of the volume; a disk that reads
   slower than that needs a longer one. Set the class's `data.startupSeconds`
   (up to a day), which rolls the data pods once, and let the next boot
@@ -609,13 +609,13 @@ API's [`GET /mcp-servers`](https://github.com/crewlet/crewlet/blob/main/docs/ref
   waited for (`mcp_server_awaiting_credential`, at info, and *Waiting for
   credentials* on the engine's dashboard), and the server starts once the
   value is sealed. Any other is `mcp_server_credential_missing`, an error
-  naming the variable, `K8S_…` for a Secret's key and `PROVISIONED_…` for a
-  provisioned value
+  naming the variable, `K8S_…` for a Secret's key and `<VENDOR>_<FIELD>_<HANDLE>`
+  for a credential the engine mints
   ([Names in the engine's secret store](../concepts/credentials.md#names-in-the-engines-secret-store)):
   a Secret key that holds an empty value, which the object that gives it
-  reports as `ResolvedRefs=False SecretValueEmpty`; a provisioned value
-  nothing creates, of which the Seat reports `ResolvedRefs=False
-  NoProvisioner`; or one its Integration cannot mint until somebody acts,
+  reports as `ResolvedRefs=False SecretValueEmpty`; a credential of a vendor
+  the company's Integration does not provision; or one its Integration
+  cannot mint until somebody acts,
   such as by giving it a working administrator credential, which the line
   says in the integration's own words. A setting the server can run
   without, rather than a seat's own credential, is listed in the MCPServer's
