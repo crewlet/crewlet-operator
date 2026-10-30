@@ -158,9 +158,11 @@ func (run *configRun) withdrawHeld(ctx context.Context, read secretsync.Desired)
 		return ctrl.Result{}, err
 	}
 	if len(read.Missing()) == 0 && len(released) == 0 && len(state.Withdrawn()) == 0 && len(state.Written()) == 0 &&
-		len(state.Retained()) == 0 {
+		len(state.Retained()) == 0 && len(run.recordedConfig().Unconfirmed) == 0 {
 		// No value to take out of the store or to say it keeps, no
-		// activation owed, and nothing said kept that has come back.
+		// activation owed, nothing said kept that has come back, and no
+		// write of the operator's that may run, which may let go what the
+		// revision the state records does not (settlePending).
 		return ctrl.Result{}, nil
 	}
 	eng, err := run.Engines.Engine(ctx, c)
@@ -171,6 +173,18 @@ func (run *configRun) withdrawHeld(ctx context.Context, read secretsync.Desired)
 	if err != nil {
 		return run.withdrawalFailed(ctx, err), nil
 	}
+	// The revision that runs may be a write of the operator's the engine
+	// could not confirm activating, whose reading the state recorded before
+	// it was sent, and whose document, where the render has moved on, lets
+	// go of what the one the state records does not.
+	settled := run.settlePending(state, active)
+	if settled.Recorded() != state.Recorded() {
+		// What the revision the state now records goes without.
+		if released, err = secretsync.Absent(ctx, run.APIReader, settled.LetGoKeys(settled.Recorded())); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	state = settled
 	if active != nil {
 		if run.doc != nil {
 			// Held for a Secret, not refused by the render: there is a
@@ -579,8 +593,17 @@ func (run *configRun) reactivate(
 	if by != "" {
 		reloaded.RevisionID, reloaded.Epoch = reload.RevisionID, reload.Epoch
 	} else {
+		// How the revision the request may store reads every name, should
+		// the engine not confirm activating it and a later read find it
+		// running (config_unconfirmed.go): as the one it activates again
+		// does.
+		own, ok := run.ownWrite(active)
+		ahead := ok && !state.Pends(own.AppliedHash)
+		if ahead {
+			state = state.Pending(own.AppliedHash, state.LetGoKeys(active.RevisionID))
+		}
 		var err error
-		if state, err = run.markChanges(ctx, eng, state, ref); err != nil {
+		if state, err = run.markChanges(ctx, eng, state, ref, ahead); err != nil {
 			return state, err
 		}
 		if reloaded, err = eng.ReloadConfig(ctx, reactivationSummary(owed)); err != nil {
@@ -622,10 +645,25 @@ func (run *configRun) reactivate(
 // a Warning says, and the state goes on recording the one read, as
 // reactivatedUnconfirmed leaves it. A request that failed outright leaves the
 // fleet on active, which settles nothing.
+//
+// One whose revision the engine stored and could not confirm activating may
+// yet land. That is decided from the answer, before anything is read back,
+// since a read that fails, or finds the revision running with the fleet's
+// pointer unreadable, leaves nothing else to say it: where active is the
+// operator's, the revision is recorded as its own write of the same document,
+// for the next read to settle as it settles one (reloadUnconfirmed), and the
+// changes it was asked for after await it, so that finding it running
+// settles them (State.Awaiting) however the pointer reads. Recorded only
+// where the read back still found active, it was taken, once it landed, for a
+// revision somebody else activated.
 func (run *configRun) reloadFailed(
 	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, state secretsync.State, owed storeChanges,
 	failed error,
 ) (secretsync.State, error) {
+	if stored, ok := engine.UnconfirmedActivation(failed); ok {
+		run.reloadUnconfirmed(active, stored)
+		state = state.Awaiting(stored)
+	}
 	now, err := activeConfig(ctx, eng)
 	if err != nil || now == nil || now.RevisionID == active.RevisionID {
 		return state, failed
@@ -679,10 +717,19 @@ func reactivationSummary(owed storeChanges) string {
 // by empty. A revision the operator recorded
 // as its own is replaced by the one that activates it again, with the same
 // content, so that the next one it applies does not take it for an edit
-// somebody else made; one it did not write stays somebody else's. failed is
-// the error the operator's request answered where the engine was read back
-// running the document again anyway (reloadFailed), nil where it answered the
-// activation.
+// somebody else made; so is a write of the operator's the engine could not
+// confirm activating and runs, whose record (status.config.unconfirmed) moves
+// to the revision that activates it again, for the next reconcile that
+// applies a document to confirm and report (config_unconfirmed.go); one it
+// did not write stays somebody else's. failed is the error the operator's
+// request answered where the engine was read back running the document again
+// anyway (reloadFailed), nil where it answered the activation.
+//
+// reloaded is recorded once: a record status.config.unconfirmed already holds
+// of it, a reload the engine stored and could not confirm activating
+// (reloadUnconfirmed), goes, as the read back settled it. Kept, it was a
+// second entry of one revision, which the API server refuses, or a revision
+// the next reconcile confirmed a second time.
 func (run *configRun) recordReactivation(
 	active *engine.ActiveConfig, reloaded engine.ApplyResult, by string, owed storeChanges, failed error,
 ) {
@@ -697,20 +744,30 @@ func (run *configRun) recordReactivation(
 				"so it reads the store %s; the operator's request to activate it again failed: %s",
 			active.RevisionID, reloaded.RevisionID, reloaded.Epoch, owed.made(), owed.why("the revision"), failed)))
 	}
-	recorded := run.company.Status.Config
-	if run.config != nil {
-		recorded = *run.config
+	recorded := run.recordedConfig()
+	config := recorded.DeepCopy()
+	if i := unconfirmedIndex(config.Unconfirmed, reloaded.RevisionID); i >= 0 {
+		config.Unconfirmed = slices.Delete(config.Unconfirmed, i, i+1)
+		run.config = config
 	}
-	if recorded.RevisionID != active.RevisionID {
+	now := metav1.NewTime(run.clock())
+	switch i := unconfirmedIndex(config.Unconfirmed, active.RevisionID); {
+	case recorded.RevisionID == active.RevisionID:
+		config.RevisionID, config.Epoch, config.AppliedAt = reloaded.RevisionID, new(reloaded.Epoch), &now
+		if run.applied.kind == appliedInRevision && run.applied.revision == active.RevisionID {
+			run.applied.revision = reloaded.RevisionID
+		}
+	case i >= 0:
+		// Confirmed only in the secret sync's state (settlePending), by a
+		// reconcile that holds its document: the record goes on to the
+		// revision that runs it now, which is the write's as much as the
+		// one it activated again was, rather than staying with one the
+		// next read finds overtaken.
+		config.Unconfirmed[i].RevisionID, config.Unconfirmed[i].WrittenAt = reloaded.RevisionID, &now
+	default:
 		return
 	}
-	config := recorded.DeepCopy()
-	now := metav1.NewTime(run.clock())
-	config.RevisionID, config.Epoch, config.AppliedAt = reloaded.RevisionID, new(reloaded.Epoch), &now
 	run.config = config
-	if run.applied.kind == appliedInRevision && run.applied.revision == active.RevisionID {
-		run.applied.revision = reloaded.RevisionID
-	}
 }
 
 // reactivatedUnconfirmed reports an activation of active again, reading the

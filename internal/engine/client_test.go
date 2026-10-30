@@ -1384,6 +1384,61 @@ func TestActiveConfigWhileTheFleetCannotBeRead(t *testing.T) {
 	}
 }
 
+// unknownOutcome is the engine's answer to a write it stored and whose
+// activation its coordination store did not answer (crewlet's
+// internal/api/configapi, RefuseActivationUnknown): 503 unavailable with the
+// unknown outcome, the revision it stored, the node whose history alone holds
+// it, the revision the write was built on, and a hint saying how to look
+// first, ended as httpjson.Sentence ends it.
+func unknownOutcome(stored, node, base string) string {
+	hint := fmt.Sprintf("Revision %[1]s was stored on node %[2]s, and the coordination store did not answer its "+
+		"activation, so whether the fleet runs it is unknown. GET /config names the active revision once the store "+
+		"answers again. If it is not %[1]s, the revision is in node %[2]s's history alone: send GET "+
+		"/config/revisions/%[1]s/diff, and POST /config/revisions/%[1]s/revert to make it the company, to that "+
+		"node — by its own address where a shared one fronts several, since any other node holds no copy and "+
+		"answers 404. Sending the write again makes another revision.", stored, node)
+	body, _ := json.Marshal(map[string]string{
+		"error": "unavailable", "message": "Can't answer right now. Try again in a moment, or ask another node.",
+		"outcome": "unknown", "stored_revision_id": stored, "node": node, "your_base": base, "hint": hint,
+	})
+	return string(body)
+}
+
+// TestUnconfirmedActivationIsTheEnginesUnknownOutcome pins which answers to a
+// write UnconfirmedActivation reads as one whose activation the engine sent
+// and could not confirm: the 503 naming the revision it stored, and no
+// other. A lost race names a stored revision too, but the engine knows it
+// did not activate, and a 503 naming none stored nothing to look for.
+func TestUnconfirmedActivationIsTheEnginesUnknownOutcome(t *testing.T) {
+	for _, c := range []struct {
+		name, body string
+		status     int
+		stored     string
+	}{
+		{name: "an activation whose answer was lost", status: http.StatusServiceUnavailable, stored: "rev-10",
+			body: unknownOutcome("rev-10", "node-0", "rev-9")},
+		{name: "a write that lost the race", status: http.StatusConflict,
+			body: `{"error":"revision_advanced","current_revision_id":"rev-9","stored_revision_id":"rev-10"}`},
+		{name: "a seed another write beat", status: http.StatusPreconditionFailed,
+			body: `{"error":"already_configured","current_revision_id":"rev-9","stored_revision_id":"rev-10"}`},
+		{name: "an engine that could not store it", status: http.StatusServiceUnavailable,
+			body: `{"error":"unavailable","message":"Can't answer right now. Try again in a moment, or ask another node."}`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFakeEngine(t)
+			f.handle("PUT /config", answer(c.status, c.body))
+			_, err := apply(f, write)
+			stored, ok := engine.UnconfirmedActivation(err)
+			if ok != (c.stored != "") || stored != c.stored {
+				t.Errorf("UnconfirmedActivation(%v) = %q, %t; want %q, %t", err, stored, ok, c.stored, c.stored != "")
+			}
+		})
+	}
+	if stored, ok := engine.UnconfirmedActivation(nil); ok || stored != "" {
+		t.Errorf("UnconfirmedActivation(nil) = %q, %t; want nothing", stored, ok)
+	}
+}
+
 // TestAReloadThatLosesItsRaceIsRevisionAdvanced pins that a reload, which
 // names no revision, is a write that races others: one that loses its
 // activation to another write is ErrRevisionAdvanced, as the engine answers it

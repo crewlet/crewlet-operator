@@ -97,9 +97,9 @@ func TestARevisionTheEngineCannotOpenBlocksTheDocument(t *testing.T) {
 			if result.RequeueAfter != w.run.resyncInterval() {
 				t.Errorf("the next look is %s on, want the resync interval, %s", result.RequeueAfter, w.run.resyncInterval())
 			}
-			if ids := w.engine.ids(); len(ids) != 1 {
-				t.Errorf("the engine holds revisions %v: the operator wrote over a revision the engine cannot open, "+
-					"want nothing written", ids)
+			if written, refused := w.engine.writes(); len(written) != 0 || refused != 0 {
+				t.Errorf("the operator wrote %v (and %d refused) over a revision the engine cannot open, want nothing",
+					written, refused)
 			}
 			if recorded := drained(w.events); !warned(recorded, crewletaiv1alpha1.ReasonRevisionUnreadable) {
 				t.Errorf("events %q, want a Warning RevisionUnreadable", recorded)

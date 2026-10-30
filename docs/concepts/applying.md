@@ -225,10 +225,15 @@ flowchart TD
    the running document again (the request landed although its answer did
    not, or somebody reloaded the document), it is recorded as the
    reactivation, and where it is another document, a Warning `Reactivated`
-   says the operator activated nothing again. Nothing makes the engine's
-   reload or its deletion conditional on the revision the operator read, so
-   a revision somebody activates in that moment goes without a value it may
-   require until the Secret exists again.
+   says the operator activated nothing again. Where the engine still runs
+   the revision read, and answered that it stored the request's revision and
+   could not confirm activating it, that revision may land yet: the deletion
+   stays owed and is reported, and, where the revision read is the
+   operator's, the stored one is recorded as an unconfirmed write of its
+   document (step 6), so that once it runs it is the operator's. Nothing
+   makes the engine's reload or its deletion conditional on the revision the
+   operator read, so a revision somebody activates in that moment goes
+   without a value it may require until the Secret exists again.
 4. **Compare.** The operator compares the engine's active document with the
    rendered one, and checks that the revision the engine runs activated
    after every value it wrote into the store. If both hold, there is nothing
@@ -268,7 +273,53 @@ flowchart TD
    engine with no document yet, on the condition that it still has none).
    The revision's summary is `crewlet-operator:` followed by the objects
    whose part of the document changed. A write that loses a race with
-   another writer is started over once from a fresh read.
+   another writer is started over once from a fresh read. When the engine
+   stores the revision and then can't confirm that it activated it (a `503`
+   naming the revision it stored), the fleet may run it or may not, so the
+   operator records the write in `status.config.unconfirmed` and writes
+   nothing more until it has read which revision the engine runs: that one,
+   and it is recorded and reported as the operator's write, as though the
+   engine had confirmed it, a revision somebody else wrote that it replaced
+   included (`DriftCorrected`, with the `Drifted` event recorded then), at
+   the epoch the fleet's activation names and as applied when the operator
+   found it, since nothing says when its activation landed; the one the
+   write was built on, and the write is sent again on the same condition,
+   which the engine refuses if the first one landed meanwhile; any other,
+   and the write goes, since it can no longer land. If it landed and was
+   activated again since (the engine's own reload after it mints a
+   credential, a `crewlet config reload`, or the operator's own activation
+   of it again), the revision that runs activated after every value the
+   write's sync wrote and withdrew ([What the engine has read](#what-the-engine-has-read)),
+   so, where it is the rendered document, it is in sync and nothing is
+   written. Under `Seed`, a write into an engine that had no document is
+   kept in `status.config.overtaken` once overtaken, and is the seed,
+   whatever revision runs now: nothing the engine says tells a seed that
+   landed and was replaced from another writer's create that reached the
+   engine first. It stays recorded until a reconcile decides with it, so one
+   that fails first does not lose it. Before the write is sent, the operator
+   also records, under the write's `appliedHash`, which Secret keys its
+   document lets go without (`pending-activations`), since nothing else says
+   it once the render has moved on: a write the engine is found running that
+   `status.config` names as the operator's, confirmed or not, is recorded as
+   reading the store that way, even where the reconcile that made it did not
+   get as far as saving the record of the store after it, so that the value of
+   a deleted Secret it lets go is taken out of the store rather than kept for
+   it. Where the `status.config` record of the write is lost too, the revision
+   reads as one the operator has no record of activating, requiring every
+   value it references. A reconcile that holds its document reads the engine
+   while a write is unconfirmed, records how a write that runs reads the
+   store, and leaves `status.config` to the next one that applies a document;
+   where it activates that write again, the write's record moves on to the
+   revision that activates it, which the next reconcile then confirms. A
+   request to activate the running revision again that the engine stores and
+   cannot confirm activating is recorded the same way, as a write of the
+   operator's of that revision's document, from the answer, whatever the
+   operator can read back after it (step 3), with a digest of that document
+   (`documentSHA256`): the engine activates again whichever revision is active
+   when the request lands, so a revision found running another document was a
+   reload of one somebody activated in between, and is not the operator's.
+   What a write replaced is reported once, by whichever of the write and such
+   a reload of it is found running.
 7. **Clean up** the store. The operator records the new revision in its
    record of the store, with the Secret keys its document lets go without,
    before it deletes anything, so that a deletion whose own record a failed
@@ -356,20 +407,23 @@ dry-runs and compares, and reads no Secret value and writes nothing; under
 never again (see [Management policies](#management-policies)).
 
 The operator remembers what it pushed as keyed fingerprints of the values, in
-a Secret of its own, `<company>-secret-sync`, owned by the Company: the
-engine never returns a value, so this is how the operator knows which ones
-changed. A fingerprint without the key that Secret also holds says nothing
-about a value. The same Secret holds the operator's record of the store's
-other facts: the revision whose reading of the values it knows, with the
-Secret keys that revision lets go without (`optional-keys`), the values it
-deleted that a revision has yet to activate without (`withdrawn-names`), the
-ones it wrote that a revision has yet to activate with (`written-names`),
-each of those two with the activation epoch it waits past, and the ones it
-said it keeps. It records nothing of the engine's pods: what each runs and
-would start on is what `GET /fleet` says of it now, since a pod applies
-revisions, and a data pod moves the revision its volume starts it on, whether
-or not the operator is looking, and a pod the fleet does not list keeps every
-value it may need instead (step 3).
+a Secret of its own, `<company>-secret-sync`, owned by the Company: the engine
+never returns a value, so this is how the operator knows which ones changed. A
+fingerprint without the key that Secret also holds says nothing about a value.
+The same Secret holds the operator's record of the store's other facts: the
+revision whose reading of the values it knows, with the Secret keys that
+revision lets go without (`optional-keys`), the values it deleted that a
+revision has yet to activate without (`withdrawn-names`), the ones it wrote
+that a revision has yet to activate with (`written-names`), each of those two
+with the activation epoch it waits past and the revisions it awaits
+(`awaited-revisions`), the ones it said it keeps, and, for each write of the
+document the engine may yet be found running before the operator's record of
+the store has followed it, the Secret keys that write's document lets go
+without, under its `appliedHash` (`pending-activations`). It records nothing
+of the engine's pods: what each runs and would start on is what `GET /fleet`
+says of it now, since a pod applies revisions, and a data pod moves the
+revision its volume starts it on, whether or not the operator is looking, and
+a pod the fleet does not list keeps every value it may need instead (step 3).
 
 The engine is reached at its first data pod,
 `http://<company>-data-0.<company>-data.<namespace>.svc:8080`, with the
@@ -414,13 +468,19 @@ revision that activated before it. A write of the document that the engine
 runs is therefore never sent again because the record of its activation was
 lost: the next reconcile finds the revision running above the epoch every
 value was marked by, and takes it for in sync. That needs a read of the
-pointer between the change and the activation. A change the operator could
-not follow with one, because the fleet could not be read or the engine had no
-document yet, is settled by the activation the operator sees answered, and
-where the record of that answer is lost as well, the next reconcile
-activates a revision again for it. So is a change whose activation the
-engine made itself: the last write or removal of a sync activates the
-revision inside the same request, before any read of the pointer can follow the change, so the
+pointer between the change and the activation. A change the operator could not
+follow with one, because the fleet could not be read or the engine had no
+document yet, is settled by the activation the operator sees answered; where
+the engine answers that it stored a revision for the activation and could not
+confirm activating it, which is when the pointer is likeliest to be
+unreadable, the change awaits that revision (`awaited-revisions`) and is
+settled once the engine is read running it, however the pointer reads then.
+Only where the engine confirmed the activation and the operator lost the
+record of that answer as well does the next reconcile activate a revision
+again for such a change: one write or reload of the document more, with the
+same values. So is a change whose activation the engine made itself: the
+last write or removal of a sync activates the revision inside the same
+request, before any read of the pointer can follow the change, so the
 operator settles it from that request's answer once it has read back that
 the engine runs the revision it names, and a save lost after that costs one
 activation more.
@@ -608,20 +668,30 @@ Besides the conditions:
   document as, its activation epoch, `appliedHash`, when the operator
   activated it or found it running (`appliedAt`), and how many objects of each
   kind it was rendered from (platform model providers included).
-  `status.config.placement` is where the document the engine runs pins its
-  agent seats: every value of `crewlet.ai/pool` (`data` and the Shared pools
-  that run a seat) and of `crewlet.ai/seat` (each seat of a PerSeat pool). It
-  is read from the engine's own document under every policy, so under Observe
-  and Seed too. A new revision's pins join the record before the operator's
-  write that activates it, and while the engine applies it the record is the
-  previous revision's pins and the new one's together, because the engine
-  keeps running the previous revision until it has applied the new one, and
-  for good if that apply fails. Once the engine reports the new revision's
-  epoch applied, the record is its pins alone; a document the engine owns
-  (Observe, Seed) is narrowed to only once the engine's own record of its last
-  apply names that revision and says it ended well. The runtime reconciler
-  reads it to keep a seat pool's pods running for as long as the running
-  revision pins a seat to them ([A pool removed while seats still run in
+  `status.config.unconfirmed` lists the operator's writes the engine stored
+  and couldn't confirm activating, at most 16, the oldest dropped first, until
+  a read of the revision the engine runs settles them (step 6 above), each
+  with what it replaced where that was somebody else's revision
+  (`replaced: Drifted`, and `driftedAt`, where it differed), for the report
+  made once the engine is seen running it. `status.config.overtaken` lists the
+  ones written into an engine that had no document that another revision
+  overtook, which can no longer land, and of which `Seed` takes one for the
+  seed, at most 16, until a reconcile records a revision of the rendered
+  document in sync, a write of it, or the seed. `status.config.placement` is
+  where the document the engine runs pins its agent seats: every value of
+  `crewlet.ai/pool` (`data` and the Shared pools that run a seat) and of
+  `crewlet.ai/seat` (each seat of a PerSeat pool). It is read from the
+  engine's own document under every policy, so under Observe and Seed too. A
+  new revision's pins join the record before the operator's write that
+  activates it, and while the engine applies it the record is the previous
+  revision's pins and the new one's together, because the engine keeps running
+  the previous revision until it has applied the new one, and for good if that
+  apply fails. Once the engine reports the new revision's epoch applied, the
+  record is its pins alone; a document the engine owns (Observe, Seed) is
+  narrowed to only once the engine's own record of its last apply names that
+  revision and says it ended well. The runtime reconciler reads it to keep a
+  seat pool's pods running for as long as the running revision pins a seat to
+  them ([A pool removed while seats still run in
   it](runtime.md#a-pool-removed-while-seats-still-run-in-it)).
 - **Seat**: its handle, its identity in the engine (`seatID`, derived from
   the company name and the handle), the pool that runs it and the
@@ -642,7 +712,9 @@ Besides the conditions:
 Every event the config reconciler records is on the Company, but a seat's
 pause, which is recorded on the Seat (`SeatPaused`, `SeatResumed`, and
 `Drifted` when it undid a change made in the engine): `Activated`
-with the revision, its epoch and its summary, `Applied` once the engine has
+with the revision, its epoch and its summary (for a write the engine couldn't
+confirm, with the revision and its epoch once a read shows the engine runs
+it), `Applied` once the engine has
 applied it, `ApplyFailed` when it did not, `SecretsSynced` with the store
 entries it wrote and deleted, a Warning `SecretOverwritten` naming each entry
 it wrote back and who had replaced it, `SecretKept` naming each value of a

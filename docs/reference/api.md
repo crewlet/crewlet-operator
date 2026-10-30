@@ -91,6 +91,7 @@ _Validation:_
 
 _Appears in:_
 - [ConfigStatus](#configstatus)
+- [UnconfirmedRevision](#unconfirmedrevision)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -761,8 +762,10 @@ _Appears in:_
 | `revisionID` _string_ | revisionID is the engine's id of the last revision the operator saw<br />run the rendered document: the one it applied, one the engine<br />activated with the same content (a reload), or, under Observe, the<br />one it found in sync. Under Seed it is the revision the document was<br />seeded as. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `epoch` _integer_ | epoch is the engine's activation counter for that revision. The<br />engine applies a revision asynchronously; it runs it once the applied<br />epoch its /health reports has reached this. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `appliedHash` _string_ | appliedHash is the hash of the rendered document and of the values<br />of the Secret keys it references, as the revision recorded runs<br />them: the operator's last write, or a revision it found running that<br />document after every value it wrote. The values enter it only as<br />keyed fingerprints, so it reveals nothing about them. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `appliedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#time-v1-meta)_ | appliedAt is when the operator activated the revision this records,<br />or found the engine running it where it adopted a revision of the<br />rendered document it did not write (a reload): what the operator's<br />wait for the engine to apply its epoch counts from. |  | Optional: \{\} <br /> |
+| `appliedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#time-v1-meta)_ | appliedAt is when the operator activated the revision this records,<br />or found the engine running it where it adopted a revision of the<br />rendered document it did not write (a reload), or a write of its own<br />whose activation the engine could not confirm (unconfirmed), which may<br />have landed any time since it was written: what the operator's wait<br />for the engine to apply its epoch counts from. |  | Optional: \{\} <br /> |
 | `objects` _[AppliedObjectCounts](#appliedobjectcounts)_ | objects counts the objects the revision was rendered from. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `unconfirmed` _[UnconfirmedRevision](#unconfirmedrevision) array_ | unconfirmed are the revisions of the rendered document the operator<br />wrote, which the engine stored, and whose activation the engine sent<br />to its fleet and could not confirm (a 503 naming the revision it<br />stored): the fleet may run one of them or none. Before it writes<br />again, the operator reads which revision the engine runs. If it runs<br />one of these, that write landed: status.config records it as the<br />operator's write, as though the engine had confirmed it. If it runs the<br />revision one of them was built on, that one has not landed and still<br />may, so it stays, and the write is sent again on the same condition,<br />which the engine refuses once one of them lands. Any other can no<br />longer land, and goes, to overtaken where it was written into an<br />engine that ran no document. A reload the operator asks for, to<br />activate a revision of its own again, is recorded here too when the<br />engine stores it and cannot confirm activating it, as a write of that<br />revision's document, whether or not a read after it could say which<br />revision runs. They are oldest first, and a seventeenth drops the<br />oldest. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `overtaken` _[UnconfirmedRevision](#unconfirmedrevision) array_ | overtaken are writes from unconfirmed into an engine that ran no<br />document that another revision the engine activated has overtaken.<br />None of them can land any more, and under Seed one of them is taken as<br />the seed whatever revision runs now: the engine stored it while it had<br />none, so either it landed and was replaced since, or another writer's<br />create reached the engine first, which nothing the engine says tells<br />apart. Each is kept until a reconcile decides with it, and they go<br />once status.config records a revision of the rendered document in<br />sync, a write of it, or the seed. They are oldest first, and a<br />seventeenth drops the oldest. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `placement` _[RevisionPlacement](#revisionplacement)_ | placement is where the revision the engine runs pins its agent seats,<br />read from the engine's document under every management policy. The<br />operator keeps a seat pool's pods running while the running revision<br />pins a seat to them, even after the pool or the seat's placement is<br />gone from the spec: a pod stopped while its seat is still pinned to<br />it would leave the seat held by nobody, and a blocked document keeps<br />the last good revision running. Once a revision that pins nothing to<br />them runs, the pods are deleted. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
@@ -2916,6 +2919,24 @@ _Appears in:_
 | `Atlassian` |  |
 
 
+#### ReplacedRevision
+
+_Underlying type:_ _string_
+
+ReplacedRevision is what a write of the company document replaced where
+that was more than the operator's own document.
+
+_Validation:_
+- Enum: [Drifted]
+
+_Appears in:_
+- [UnconfirmedRevision](#unconfirmedrevision)
+
+| Field | Description |
+| --- | --- |
+| `Drifted` | ReplacedDrifted is a revision the operator did not write whose<br />document differed from the rendered one.<br /> |
+
+
 #### RetentionSettings
 
 
@@ -4084,6 +4105,30 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `backend` _[TrackerBackend](#trackerbackend)_ | backend is which tracker the company runs. | Worklet | Enum: [Worklet Jira None] <br />Optional: \{\} <br /> |
 | `worklet` _[WorkletSettings](#workletsettings)_ | worklet is the policy of Worklet, for backend Worklet. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+
+
+#### UnconfirmedRevision
+
+
+
+UnconfirmedRevision is a write of the company document whose activation the
+engine could not confirm.
+
+
+
+_Appears in:_
+- [ConfigStatus](#configstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `revisionID` _string_ | revisionID is the revision the engine stored for the write. |  | MaxLength: 128 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `baseRevisionID` _string_ | baseRevisionID is the revision the write was built on, which its<br />activation was conditioned on. Empty for a write into an engine that<br />ran no document, conditioned on there being none. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `appliedHash` _string_ | appliedHash is the appliedHash of the write: the rendered document's<br />and its values' hash as they were when it was written, which<br />status.config.appliedHash records once the engine is seen running the<br />revision. |  | MaxLength: 128 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `writtenAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#time-v1-meta)_ | writtenAt is when the operator wrote it. A write the engine is seen<br />running is recorded as applied when the operator found it, since<br />nothing says when its activation landed; a seed taken from overtaken,<br />which nothing waits on, as applied when it was written. |  | Required: \{\} <br /> |
+| `objects` _[AppliedObjectCounts](#appliedobjectcounts)_ | objects counts the objects the revision was rendered from, which<br />status.config.objects records once the engine is seen running it. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `replaced` _[ReplacedRevision](#replacedrevision)_ | replaced says what the write replaced where that was more than the<br />operator's own document, which ConfigApplied and a Warning event report<br />once the engine is seen running the revision, as they report a write the<br />engine confirmed: Drifted, a revision the operator did not write whose<br />document differed from the rendered one, at driftedAt. Unset for any<br />other base, and for a reload: its base is a write of the operator's,<br />and where that write is recorded here too, the revision found running<br />reports what that write replaced, once, whichever of the two it is. |  | Enum: [Drifted] <br />Optional: \{\} <br /> |
+| `driftedAt` _string_ | driftedAt names where the Drifted revision the write replaced differed<br />from the rendered document, as ConfigApplied names it: up to five<br />places, and how many more there were. |  | MaxLength: 32768 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `documentSHA256` _string_ | documentSHA256 is set for a reload: the SHA-256, in hex, of the<br />document of the revision it activates again, as the engine answered<br />it. The engine activates again whichever revision is active when the<br />request lands, so the revision it stored is the operator's only where<br />its document is that one; one found running another document was a<br />reload of a revision somebody activated in between, and goes. |  | MaxLength: 64 <br />MinLength: 64 <br />Pattern: `^[0-9a-f]\{64\}$` <br />Optional: \{\} <br /> |
 
 
 #### Unit

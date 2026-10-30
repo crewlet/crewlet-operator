@@ -44,13 +44,20 @@ import (
 
 // storeEngine answers the engine's /health, /config, /config/revisions,
 // /fleet and /secrets routes from a revision history, the last of which is
-// the fleet's, and a store, as the operator's client reads them. A document
-// it is to refuse is refused as refusal says.
-// beforeReload, afterReload and afterApply, when set, run once, under its
-// lock, just before a reload is answered and just after a reload or an apply
-// is: somebody else's write landing between two of the operator's. Its fleet
-// answers the activation pointer beside its nodes: the fleet's revision at
-// its place in the history, which is its epoch.
+// the fleet's (none, an engine that runs no document yet), and a store, as the
+// operator's client reads them. A write of the document is refused on the
+// condition it names, as the engine refuses it, and so is every document while
+// it is to refuse them, as refusal says; written are the revisions the writes
+// it took stored, and refused counts the ones it refused on their condition.
+// beforeReload, afterReload, beforeWrite and afterApply, when set, run once,
+// under its lock, just before a reload or a write is answered and just after
+// a reload or an apply is: somebody else's write landing between two of the
+// operator's. activation is how the next write's activation goes, and inert
+// the revisions writes stored whose activation has not landed
+// (config_unconfirmed_test.go). minted counts the revisions it has named,
+// active or not, so that no two share an id. Its fleet answers the activation
+// pointer beside its nodes: the fleet's revision at its place in the history,
+// which is its epoch.
 //
 // A write into its store (PUT /secrets, PUT /secrets/{name}), and a removal
 // of a value (DELETE /secrets/{name}), re-activates the fleet's revision when its
@@ -65,13 +72,15 @@ import (
 // refused the fleet's, "" for one that has recorded no attempt and so not
 // said); runsNone names nodes beside those that refused the fleet's revision
 // and run no company, as a seat pod that started on nothing and refused it
-// does; fleetDown makes GET /fleet unanswerable, and missing names the
-// revisions GET /config/revisions does not find. configDown, secretsDown and
-// reloadDown make it answer a read of the fleet's document, a write to the
-// store, and a reload of the fleet's revision, as an engine that cannot decide
-// who is asking does; unreadable, when set, gives
-// the body it answers a read of the fleet's document with, as an engine whose
-// keyring does not open that revision does (config_unreadable_test.go).
+// does; fleetDown makes GET /fleet unanswerable, as an engine whose
+// coordination store does not answer the read of its lease table
+// (fleetUnreadable), and missing names the revisions GET /config/revisions
+// does not find. configDown, secretsDown and reloadDown make it answer a read
+// of the fleet's document, a write to the store, and a reload of the fleet's
+// revision, as an engine that cannot decide who is asking does; unreadable,
+// when set, gives the body it answers a read of the fleet's document with, as
+// an engine whose keyring does not open that revision does
+// (config_unreadable_test.go).
 //
 // Each node's row says what it starts on as the engine's does: a data node
 // (dataNode) the revision it runs, and a seat node, whose store is scratch,
@@ -81,6 +90,9 @@ import (
 type storeEngine struct {
 	mu        sync.Mutex
 	revisions []storeRevision
+	minted    int
+	written   []string
+	refused   int
 	store     map[string]string
 	// refusal, when set, is how the engine refuses every PUT of the document,
 	// the dry run included: invalidDocument, a document it finds invalid, or
@@ -92,7 +104,7 @@ type storeEngine struct {
 	configDown, secretsDown   bool
 	reloadDown                bool
 	beforeReload, afterReload func(e *storeEngine)
-	afterApply                func(e *storeEngine)
+	beforeWrite, afterApply   func(e *storeEngine)
 	reloadAnswer              *map[string]any
 	afterSecretsReload        func(e *storeEngine)
 	serving                   map[string]string
@@ -101,6 +113,11 @@ type storeEngine struct {
 	fleetDown                 bool
 	missing                   map[string]bool
 	unreadable                func(revision string) string
+	activation                outcome
+	// reloadActivation is how the activation of the next reload goes, as
+	// activation is the next write's.
+	reloadActivation outcome
+	inert            []storeRevision
 	// beforeConfig and beforeFleet run once, before the engine answers the
 	// next read of the fleet's document or of its fleet: an activation
 	// somebody else makes in that moment.
@@ -127,6 +144,14 @@ func dataNode(node string) bool {
 // storeNode is the node of a storeEngine's fleet unless serving says
 // otherwise.
 const storeNode = "acme-data-0"
+
+// mint names the engine's next revision: one past every revision it has
+// named, active or not, and past every one a test put in its history by
+// hand, so that no two share an id. The caller holds e's lock.
+func (e *storeEngine) mint() string {
+	e.minted = max(e.minted, len(e.revisions)+len(e.inert)) + 1
+	return fmt.Sprintf("r%d", e.minted)
+}
 
 // down reports whether r is a request configDown, secretsDown, reloadDown or
 // dryRunDown makes the engine refuse: a read of the fleet's document, a write
@@ -158,6 +183,19 @@ func cannotDecide(w http.ResponseWriter) {
 		`"message":"Can't check who you are right now. Try again in a moment."}`))
 }
 
+// fleetUnreadable is the engine's answer to GET /fleet when its coordination
+// store does not answer the read of the lease table, as crewlet#142 words it:
+// the unavailable code's own sentence, the condition's as the detail, and the
+// five seconds of the health tick that clears it.
+func fleetUnreadable(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Retry-After", "5")
+	w.WriteHeader(http.StatusServiceUnavailable)
+	_, _ = w.Write([]byte(`{"error":"unavailable",` +
+		`"message":"Can't answer right now. Try again in a moment, or ask another node.",` +
+		`"detail":"This node couldn't reach the rest of the fleet. Try again in a moment."}`))
+}
+
 type storeRevision struct {
 	id, summary string
 	document    []byte
@@ -166,7 +204,7 @@ type storeRevision struct {
 // newStoreEngine runs the engine with document as its active revision r1.
 func newStoreEngine(t *testing.T, document []byte) (*storeEngine, *engine.Client) {
 	t.Helper()
-	e := &storeEngine{revisions: []storeRevision{{id: "r1", document: document}}, store: map[string]string{}}
+	e := &storeEngine{revisions: []storeRevision{{id: "r1", document: document}}, minted: 1, store: map[string]string{}}
 	server := httptest.NewServer(http.HandlerFunc(e.serve))
 	t.Cleanup(server.Close)
 	return e, engine.New(server.URL, "token")
@@ -180,9 +218,7 @@ type engineRefusal struct {
 }
 
 func (refusal *engineRefusal) answer(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(refusal.status)
-	_, _ = io.WriteString(w, refusal.body)
+	answerRaw(w, refusal.status, refusal.body)
 }
 
 var (
@@ -207,15 +243,13 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	answer := func(status int, v any) { answerJSON(w, status, v) }
 	e.before(r)
-	active := e.revisions[len(e.revisions)-1]
+	active := e.active()
 	activate := func(document []byte) storeRevision {
-		revision := storeRevision{id: fmt.Sprintf("r%d", len(e.revisions)+1), document: document, summary: r.Header.Get("X-Summary")}
+		revision := storeRevision{id: e.mint(), document: document, summary: r.Header.Get("X-Summary")}
 		e.revisions = append(e.revisions, revision)
 		return revision
 	}
-	activated := func(revision storeRevision) {
-		answer(http.StatusCreated, map[string]any{revisionIDField: revision.id, "epoch": len(e.revisions)})
-	}
+	activated := func(revision storeRevision) { e.activated(answer, revision) }
 	if e.down(r) {
 		cannotDecide(w)
 		return
@@ -232,28 +266,28 @@ func (e *storeEngine) serve(w http.ResponseWriter, r *http.Request) {
 		if e.appliedLag > 0 {
 			posture = engine.PostureWait
 		}
-		answer(http.StatusOK, map[string]any{"status": "ok", "configured": true, "posture": posture,
+		answer(http.StatusOK, map[string]any{"status": "ok", "configured": active.id != "", "posture": posture,
 			"applied_epoch": len(e.revisions) - e.appliedLag})
+	case r.Method == http.MethodGet && r.URL.Path == configRoute && active.id == "":
+		answerRaw(w, http.StatusNotFound, `{"error":"no_active_revision"}`)
 	case r.Method == http.MethodGet && r.URL.Path == configRoute:
 		e.readActive(w, active)
-	case r.Method == http.MethodPut && r.URL.Path == configRoute && e.refusal != nil:
-		e.refusal.answer(w)
-	case r.Method == http.MethodPut && r.URL.Path == configRoute && dryRun(r):
-		answer(http.StatusOK, map[string]any{"base_revision_id": active.id})
 	case r.Method == http.MethodPut && r.URL.Path == configRoute:
-		applied := activate(body)
-		if e.afterApply != nil {
-			hook := e.afterApply
-			e.afterApply = nil
-			hook(e)
-		}
-		activated(applied)
+		e.put(w, r, body, answer)
+	case r.Method == http.MethodPost && r.URL.Path == reloadRoute && e.reloadActivation == pending:
+		stored := storeRevision{id: e.mint(), document: active.document, summary: r.Header.Get("X-Summary")}
+		e.inert = append(e.inert, stored)
+		answerLost(w, stored.id, active.id)
 	case r.Method == http.MethodPost && r.URL.Path == reloadRoute:
 		reloaded := activate(active.document)
 		if e.afterReload != nil {
 			hook := e.afterReload
 			e.afterReload = nil
 			hook(e)
+		}
+		if e.reloadActivation == landed {
+			answerLost(w, reloaded.id, active.id)
+			return
 		}
 		activated(reloaded)
 	case r.Method == http.MethodGet && r.URL.Path == secretsRoute:
@@ -375,8 +409,7 @@ func (e *storeEngine) serveServing(w http.ResponseWriter, path string, active st
 	revisionID, isRevision := strings.CutPrefix(path, "/config/revisions/")
 	switch {
 	case path == fleetRoute && e.fleetDown:
-		w.Header().Set("Retry-After", "1")
-		answerJSON(w, http.StatusServiceUnavailable, refusal("unavailable", "coordination is unreachable"))
+		fleetUnreadable(w)
 	case path == fleetRoute:
 		serving := e.serving
 		if serving == nil {
@@ -417,7 +450,7 @@ func (e *storeEngine) serveServing(w http.ResponseWriter, path string, active st
 			nodes = append(nodes, row(node, len(e.revisions), active.id, engine.ApplyError, ""))
 		}
 		answerJSON(w, http.StatusOK, map[string]any{"this_node": storeNode, "nodes": nodes, "target_epoch": len(e.revisions),
-			"activation": e.activation()})
+			"activation": e.pointer()})
 	case isRevision:
 		i := slices.IndexFunc(e.revisions, func(rev storeRevision) bool { return rev.id == revisionID })
 		if i < 0 || e.missing[revisionID] {
@@ -463,15 +496,16 @@ type activationAnswer struct {
 	Epoch      int    `json:"epoch"`
 }
 
-// activation is the activation pointer the engine answers beside its nodes:
-// the fleet's revision at the epoch it activated as, which is its place in
-// the history, nil where noActivation says the engine could not read it. The
-// caller holds e's lock.
-func (e *storeEngine) activation() *activationAnswer {
-	if e.noActivation {
+// pointer is the activation pointer the engine answers beside its nodes: the
+// fleet's revision at the epoch it activated as, which is its place in the
+// history; nil for an engine with no revision, and where noActivation says the
+// engine could not read it. The caller holds e's lock.
+func (e *storeEngine) pointer() *activationAnswer {
+	running := e.active().id
+	if running == "" || e.noActivation {
 		return nil
 	}
-	return &activationAnswer{RevisionID: e.revisions[len(e.revisions)-1].id, Epoch: len(e.revisions)}
+	return &activationAnswer{RevisionID: running, Epoch: len(e.revisions)}
 }
 
 // dryRun reports whether r asks only for a check of the document.
@@ -496,13 +530,98 @@ func refusal(code, detail string) map[string]any {
 // its keyring does not open.
 func (e *storeEngine) readActive(w http.ResponseWriter, active storeRevision) {
 	if e.unreadable != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusConflict)
-		_, _ = w.Write([]byte(e.unreadable(active.id)))
+		answerRaw(w, http.StatusConflict, e.unreadable(active.id))
 		return
 	}
 	w.Header().Set("ETag", `"`+active.id+`"`)
 	_, _ = w.Write(active.document)
+}
+
+// active is the revision the engine runs, the zero revision for none. The
+// caller holds e's lock.
+func (e *storeEngine) active() storeRevision {
+	if n := len(e.revisions); n > 0 {
+		return e.revisions[n-1]
+	}
+	return storeRevision{}
+}
+
+// answerRaw answers with status and body, the engine's JSON as it words it.
+func answerRaw(w http.ResponseWriter, status int, body string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write([]byte(body))
+}
+
+// put answers PUT /config, a write of the document whose body is body or its
+// dry run, as the engine does: a document it is to refuse is refused as refusal
+// says; a write is refused when its condition (If-Match, If-None-Match) no
+// longer holds, and otherwise stored and activated, the engine's answer to the
+// activation lost as activation says. The caller holds e's lock.
+func (e *storeEngine) put(w http.ResponseWriter, r *http.Request, body []byte, answer func(int, any)) {
+	if e.refusal != nil {
+		e.refusal.answer(w)
+		return
+	}
+	if dryRun(r) {
+		answer(http.StatusOK, map[string]any{"base_revision_id": e.active().id})
+		return
+	}
+	if hook := e.beforeWrite; hook != nil {
+		e.beforeWrite = nil
+		hook(e)
+	}
+	running := e.active().id
+	if base := strings.Trim(r.Header.Get("If-Match"), `"`); base != "" && base != running {
+		// A failed precondition: the write named in If-Match a revision
+		// that no longer runs, which the engine answers 412 whether it
+		// found it so before the write or lost the race to another after,
+		// naming the revision that runs and the base as the header gave it.
+		e.refused++
+		answerJSON(w, http.StatusPreconditionFailed, struct {
+			Code    string `json:"error"`
+			Current string `json:"current_revision_id"`
+			Base    string `json:"your_base"`
+		}{"revision_advanced", running, r.Header.Get("If-Match")})
+		return
+	}
+	if r.Header.Get("If-None-Match") == "*" && running != "" {
+		e.refused++
+		answerRaw(w, http.StatusPreconditionFailed, fmt.Sprintf(`{"error":"already_configured","current_revision_id":%q}`, running))
+		return
+	}
+	revision := storeRevision{id: e.mint(), document: body, summary: r.Header.Get("X-Summary")}
+	e.written = append(e.written, revision.id)
+	switch e.activation {
+	case confirmed:
+		e.revisions = append(e.revisions, revision)
+		if e.afterApply != nil {
+			hook := e.afterApply
+			e.afterApply = nil
+			hook(e)
+		}
+		e.activated(answer, revision)
+		return
+	case landed:
+		e.revisions = append(e.revisions, revision)
+	case pending:
+		e.inert = append(e.inert, revision)
+	}
+	answerLost(w, revision.id, strings.Trim(r.Header.Get("If-Match"), `"`))
+}
+
+// activated answers a write or a reload that activated revision, the
+// newest, at an epoch per activation. The caller holds e's lock.
+func (e *storeEngine) activated(answer func(int, any), revision storeRevision) {
+	answer(http.StatusCreated, map[string]any{"revision_id": revision.id, "epoch": len(e.revisions)})
+}
+
+// writes are the revisions the engine's writes of the document stored, and
+// how many it refused on their condition.
+func (e *storeEngine) writes() ([]string, int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.written), e.refused
 }
 
 // ids are the engine's revisions, oldest first.
@@ -534,7 +653,7 @@ func (e *storeEngine) holds(name string) bool {
 // edit through the engine's own API: the caller holds e's lock.
 func (e *storeEngine) activateOther(document []byte) {
 	e.revisions = append(e.revisions, storeRevision{
-		id: fmt.Sprintf("r%d", len(e.revisions)+1), document: document, summary: "somebody else's",
+		id: e.mint(), document: document, summary: "somebody else's",
 	})
 }
 
@@ -1130,16 +1249,18 @@ func TestAnApplyIsRecordedBeforeAnythingIsDeletedAfterIt(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		// fails is the write of the state in the first reconcile that
-		// fails: 1 before the apply, 2 its record, 3 after the deletion.
+		// fails: 1 the sync's before the apply, 2 the reading of the
+		// document saved before the write, 3 the apply's record, 4 after
+		// the deletion.
 		fails int32
 		// held is whether the next reconcile's document is another one,
 		// held for a Secret, so that only the record says how the revision
 		// the engine runs reads the value.
 		held bool
 	}{
-		{name: "the record of the apply is lost", fails: 2},
-		{name: "the record of the deletion is lost", fails: 3},
-		{name: "the record of the deletion is lost, and the next document is held", fails: 3, held: true},
+		{name: "the record of the apply is lost", fails: 3},
+		{name: "the record of the deletion is lost", fails: 4},
+		{name: "the record of the deletion is lost, and the next document is held", fails: 4, held: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
@@ -1152,13 +1273,13 @@ func TestAnApplyIsRecordedBeforeAnythingIsDeletedAfterIt(t *testing.T) {
 			// r2 reads, is removed: a record of the deletion lost is one of
 			// that activation lost too.
 			first := []string{"r1", "r2"}
-			if tc.fails == 3 {
+			if tc.fails == 4 {
 				first = append(first, "r3")
 			}
 			if got, deleted := w.engine.ids(), !w.engine.holds(w.registry); !slices.Equal(got, first) ||
-				deleted != (tc.fails == 3) {
+				deleted != (tc.fails == 4) {
 				t.Fatalf("the revisions are %v and the registry is deleted: %t, want %v, and deleted: %t",
-					got, deleted, first, tc.fails == 3)
+					got, deleted, first, tc.fails == 4)
 			}
 
 			w.failWrite.Store(0)
@@ -1190,7 +1311,7 @@ func TestAnApplyIsRecordedBeforeAnythingIsDeletedAfterIt(t *testing.T) {
 			// is one whose reading the operator does not know, which needs no
 			// activation for a value it already went without.
 			want := []string{"r1", "r2", "r3"}
-			if tc.fails == 3 && !tc.held {
+			if tc.fails == 4 && !tc.held {
 				want = append(want, "r4")
 			}
 			last := want[len(want)-1]
@@ -1202,7 +1323,7 @@ func TestAnApplyIsRecordedBeforeAnythingIsDeletedAfterIt(t *testing.T) {
 			if len(state.Withdrawn()) != 0 {
 				t.Errorf("the state owes %v, want nothing", state.Withdrawn())
 			}
-			if letsGo := tc.fails != 3 || !tc.held; letsGo != slices.Equal(state.LetGo(last), []string{w.registry}) {
+			if letsGo := tc.fails != 4 || !tc.held; letsGo != slices.Equal(state.LetGo(last), []string{w.registry}) {
 				t.Errorf("the state lets %v go for %s, want the registry: %t", state.LetGo(last), last, letsGo)
 			}
 		})

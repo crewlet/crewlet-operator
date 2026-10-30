@@ -150,8 +150,10 @@ type APIError struct {
 	// named one (revision_advanced, already_configured).
 	CurrentRevisionID string
 
-	// StoredRevisionID is the revision a write that lost the race stored and
-	// left inert, when the engine kept one.
+	// StoredRevisionID is the revision a write stored, when the engine kept
+	// one and could not activate it: a write that lost the race, which left
+	// it inert, or one whose activation the engine sent and could not
+	// confirm (UnconfirmedActivation), which it may run or may not.
 	StoredRevisionID string
 
 	// RevisionID is the revision a refusal is about, when the engine named
@@ -234,6 +236,24 @@ func (e *APIError) Is(target error) bool {
 		return slices.Contains(codesRevisionUnreadable, e.Code)
 	}
 	return false
+}
+
+// UnconfirmedActivation is the revision a config write stored whose activation
+// the engine sent to its fleet and could not confirm, and true, when err is
+// that answer: a 503 naming the revision it stored (ErrUnavailable with a
+// StoredRevisionID). A lost race names a stored revision too, but it is no
+// 503, and the engine knows that one did not activate.
+//
+// The fleet may run the revision or may not, and only a read of the fleet's
+// activation (Fleet.Activation) says which: a caller that wrote it keeps it
+// until a read does, and sends the write again only once one says it did
+// not land.
+func UnconfirmedActivation(err error) (string, bool) {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusServiceUnavailable || apiErr.StoredRevisionID == "" {
+		return "", false
+	}
+	return apiErr.StoredRevisionID, true
 }
 
 // NotReadyError is an engine that answered but will not take work now.

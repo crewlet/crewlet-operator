@@ -274,7 +274,8 @@ func TestEngineFleetNamesTheSeatsHolder(t *testing.T) {
 	}
 	// The fleet's activation names the revision GET /config answers, at its
 	// epoch: the one read that says which epoch a revision the operator did
-	// not activate itself activated as.
+	// not activate itself activated as, and that settles a write the engine
+	// could not confirm.
 	active, err := client.ActiveConfig(ctx)
 	if err != nil {
 		t.Fatal(err)

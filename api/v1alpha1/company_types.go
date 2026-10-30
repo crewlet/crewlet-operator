@@ -1462,14 +1462,55 @@ type ConfigStatus struct {
 
 	// appliedAt is when the operator activated the revision this records,
 	// or found the engine running it where it adopted a revision of the
-	// rendered document it did not write (a reload): what the operator's
-	// wait for the engine to apply its epoch counts from.
+	// rendered document it did not write (a reload), or a write of its own
+	// whose activation the engine could not confirm (unconfirmed), which may
+	// have landed any time since it was written: what the operator's wait
+	// for the engine to apply its epoch counts from.
 	// +optional
 	AppliedAt *metav1.Time `json:"appliedAt,omitempty"`
 
 	// objects counts the objects the revision was rendered from.
 	// +optional
 	Objects AppliedObjectCounts `json:"objects,omitzero"`
+
+	// unconfirmed are the revisions of the rendered document the operator
+	// wrote, which the engine stored, and whose activation the engine sent
+	// to its fleet and could not confirm (a 503 naming the revision it
+	// stored): the fleet may run one of them or none. Before it writes
+	// again, the operator reads which revision the engine runs. If it runs
+	// one of these, that write landed: status.config records it as the
+	// operator's write, as though the engine had confirmed it. If it runs the
+	// revision one of them was built on, that one has not landed and still
+	// may, so it stays, and the write is sent again on the same condition,
+	// which the engine refuses once one of them lands. Any other can no
+	// longer land, and goes, to overtaken where it was written into an
+	// engine that ran no document. A reload the operator asks for, to
+	// activate a revision of its own again, is recorded here too when the
+	// engine stores it and cannot confirm activating it, as a write of that
+	// revision's document, whether or not a read after it could say which
+	// revision runs. They are oldest first, and a seventeenth drops the
+	// oldest.
+	// +optional
+	// +listType=map
+	// +listMapKey=revisionID
+	// +kubebuilder:validation:MaxItems=16
+	Unconfirmed []UnconfirmedRevision `json:"unconfirmed,omitempty"`
+
+	// overtaken are writes from unconfirmed into an engine that ran no
+	// document that another revision the engine activated has overtaken.
+	// None of them can land any more, and under Seed one of them is taken as
+	// the seed whatever revision runs now: the engine stored it while it had
+	// none, so either it landed and was replaced since, or another writer's
+	// create reached the engine first, which nothing the engine says tells
+	// apart. Each is kept until a reconcile decides with it, and they go
+	// once status.config records a revision of the rendered document in
+	// sync, a write of it, or the seed. They are oldest first, and a
+	// seventeenth drops the oldest.
+	// +optional
+	// +listType=map
+	// +listMapKey=revisionID
+	// +kubebuilder:validation:MaxItems=16
+	Overtaken []UnconfirmedRevision `json:"overtaken,omitempty"`
 
 	// placement is where the revision the engine runs pins its agent seats,
 	// read from the engine's document under every management policy. The
@@ -1482,6 +1523,87 @@ type ConfigStatus struct {
 	// +optional
 	Placement RevisionPlacement `json:"placement,omitzero"`
 }
+
+// UnconfirmedRevision is a write of the company document whose activation the
+// engine could not confirm.
+type UnconfirmedRevision struct {
+	// revisionID is the revision the engine stored for the write.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	RevisionID string `json:"revisionID,omitempty"`
+
+	// baseRevisionID is the revision the write was built on, which its
+	// activation was conditioned on. Empty for a write into an engine that
+	// ran no document, conditioned on there being none.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	BaseRevisionID string `json:"baseRevisionID,omitempty"`
+
+	// appliedHash is the appliedHash of the write: the rendered document's
+	// and its values' hash as they were when it was written, which
+	// status.config.appliedHash records once the engine is seen running the
+	// revision.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	AppliedHash string `json:"appliedHash,omitempty"`
+
+	// writtenAt is when the operator wrote it. A write the engine is seen
+	// running is recorded as applied when the operator found it, since
+	// nothing says when its activation landed; a seed taken from overtaken,
+	// which nothing waits on, as applied when it was written.
+	// +required
+	WrittenAt *metav1.Time `json:"writtenAt,omitempty"`
+
+	// objects counts the objects the revision was rendered from, which
+	// status.config.objects records once the engine is seen running it.
+	// +optional
+	Objects AppliedObjectCounts `json:"objects,omitzero"`
+
+	// replaced says what the write replaced where that was more than the
+	// operator's own document, which ConfigApplied and a Warning event report
+	// once the engine is seen running the revision, as they report a write the
+	// engine confirmed: Drifted, a revision the operator did not write whose
+	// document differed from the rendered one, at driftedAt. Unset for any
+	// other base, and for a reload: its base is a write of the operator's,
+	// and where that write is recorded here too, the revision found running
+	// reports what that write replaced, once, whichever of the two it is.
+	// +optional
+	Replaced ReplacedRevision `json:"replaced,omitempty"`
+
+	// driftedAt names where the Drifted revision the write replaced differed
+	// from the rendered document, as ConfigApplied names it: up to five
+	// places, and how many more there were.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=32768
+	DriftedAt string `json:"driftedAt,omitempty"`
+
+	// documentSHA256 is set for a reload: the SHA-256, in hex, of the
+	// document of the revision it activates again, as the engine answered
+	// it. The engine activates again whichever revision is active when the
+	// request lands, so the revision it stored is the operator's only where
+	// its document is that one; one found running another document was a
+	// reload of a revision somebody activated in between, and goes.
+	// +optional
+	// +kubebuilder:validation:MinLength=64
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[0-9a-f]{64}$`
+	DocumentSHA256 string `json:"documentSHA256,omitempty"`
+}
+
+// ReplacedRevision is what a write of the company document replaced where
+// that was more than the operator's own document.
+// +kubebuilder:validation:Enum=Drifted
+type ReplacedRevision string
+
+const (
+	// ReplacedDrifted is a revision the operator did not write whose
+	// document differed from the rendered one.
+	ReplacedDrifted ReplacedRevision = "Drifted"
+)
 
 // RevisionPlacement is where a revision of the company document pins its
 // agent seats: the values of the two placement labels its roles name. Only

@@ -119,7 +119,7 @@ with your last change yet.
 | | False | `Drifted` | Under `Observe`, the engine runs another document; the message names the places that differ. |
 | | False | `Applying` | The operator activated the revision and the engine has not applied it yet; it runs the previous one meanwhile. Usually gone within seconds; it turns into `ApplyFailed` when the engine fails the revision or has not applied it 72 seconds after the write, or after the operator found it running where it adopts a revision it did not write. |
 | | False | `ApplyFailed` | The engine's first data pod, the one the operator reaches, did not apply the revision: it keeps running the one it ran before, and starts on the one its volume names if it restarts, the same one unless the engine is still moving it (the message says which), and the engine's secret store keeps every value of either meanwhile. The message carries the engine's status, its posture (`isolated` on a single node, `shed` or `stuck` beside peers that applied it) and its own account of the failure; see [The engine did not apply a revision](#the-engine-did-not-apply-a-revision). |
-| | False | `EngineUnavailable` | The operator cannot reach the engine, the engine does not know its token, or the engine asked to be asked again later (`503`: it is starting, or cannot read the coordination store that holds the fleet's revision). Retried every ten seconds, or sooner when the engine says when; see [The operator cannot reach the engine](#the-operator-cannot-reach-the-engine). |
+| | False | `EngineUnavailable` | The operator cannot reach the engine, the engine does not know its token, or the engine answered `503`: it asked to be asked again later (it is starting, or cannot read the coordination store that holds the fleet's revision), or it stored the operator's write and couldn't confirm activating it. Looked at again every ten seconds, or sooner when the engine says when, and a write it couldn't confirm is not sent again until a read shows it did not land; see [The operator cannot reach the engine](#the-operator-cannot-reach-the-engine). |
 | | False | `WriteRefused` | The engine refuses the operator's own token a change to the document (`403 config_managed`): its `api.auth.company_writers` names other tokens. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
 | | False | `NotGranted` | The engine knows the operator's token and will not let it make a request the operator needs (`403`): the token lacks the grant the message names, or the engine's identity directory binds it to a seat the company no longer has. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
 | | False | `SeatHeld` | The document takes a human seat out of the company, or makes it an agent's, while a person, a service account or an open invitation holds it in the engine (`409 seat_held`). The message names each seat and what holds it; the engine keeps running the revision it runs. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
@@ -369,6 +369,28 @@ requests to `http://<company>-data-0.<company>-data.<namespace>.svc:8080` fail:
   document it cannot vouch for, and the engine logs
   `config_request_unavailable`. It clears once the engine's broker is back;
   the data pod's log says why it is not.
+- The engine stored the operator's write and couldn't confirm that it
+  activated it: the message names the revision. The engine may run it or may
+  not. Nothing needs doing: the operator keeps the write in
+  `status.config.unconfirmed`, reads which revision the engine runs before it
+  writes again, and records the write as its own if the engine runs it, with
+  a `Normal` event `Activated` and, where it replaced a revision somebody else
+  wrote, `ConfigApplied=True DriftCorrected` and a Warning `Drifted`, as for
+  a write the engine confirmed, dated when it found it running. It never
+  writes the document a second time on top of one that landed, nor on top of
+  one that landed and was activated again before it looked (a reload): that
+  revision activated after every value the write was made with, so where it
+  is the rendered document the engine runs it with them, and it is in sync.
+  Under `Seed` a write into an engine that had no document is kept in
+  `status.config.overtaken` once another revision runs, and reported as the
+  seed, whatever revision runs now. A request to activate the operator's own
+  revision again, for the value of a deleted Secret or one written since,
+  that the engine stored and couldn't confirm is kept the same way, whatever
+  the operator could read back after it, beside the `SecretWithdrawalFailed`
+  or `SecretRefreshFailed` Warning, and recorded as the operator's once it
+  runs that revision's document; one found running another document reloaded
+  a revision somebody activated before the request landed, and is not the
+  operator's.
 
 ## Nobody can sign in
 

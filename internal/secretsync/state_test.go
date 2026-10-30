@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -196,6 +197,91 @@ func TestSaveStateKeepsTheWrittenNames(t *testing.T) {
 	}
 }
 
+// TestARevisionStoredForAnActivationSettlesTheChangesItWasAskedAfter: the
+// engine stored a revision for an activation the operator asked for after a
+// withdrawal and a write and could not confirm activating it, and no read of
+// the fleet's pointer followed either change, so no epoch the pointer names
+// later settles them (Ran). Finding that revision running settles both
+// (Found), and finding any other settles neither; a change made after the
+// activation was asked for waits for one of its own; what is awaited survives
+// a save and a load, a line a hand edit wrote is dropped, and nothing of it
+// is kept once the changes are settled otherwise. Without the record, the
+// operator activated the same document again for changes that activation had
+// already read.
+func TestARevisionStoredForAnActivationSettlesTheChangesItWasAskedAfter(t *testing.T) {
+	ctx := context.Background()
+	c := newStateClient(t)
+	state := State{key: newFingerprintKey()}
+	state.withdraw(nameA)
+	state.write(nameB)
+	awaiting := state.Awaiting(revision2)
+	if awaiting.SameMarks(state) {
+		t.Error("SameMarks() = true for a state that awaits a revision beside one that awaits none")
+	}
+	if got := awaiting.Ran(9); !slices.Equal(got.Withdrawn(), []string{nameA}) || !slices.Equal(got.Written(), []string{nameB}) {
+		t.Fatalf("Ran(9) settled %v and %v of changes no read followed; want both owed", got.Withdrawn(), got.Written())
+	}
+	if got := awaiting.Found(revision1); len(got.Withdrawn()) != 1 || len(got.Written()) != 1 {
+		t.Errorf("Found(%s) left %v and %v, want both owed: another revision is no proof the request landed",
+			revision1, got.Withdrawn(), got.Written())
+	}
+	if got := awaiting.Found(revision2); len(got.Withdrawn()) != 0 || len(got.Written()) != 0 || len(got.awaited()) != 0 {
+		t.Errorf("Found(%s) left %v, %v and awaits %v, want both settled and nothing awaited",
+			revision2, got.Withdrawn(), got.Written(), got.awaited())
+	}
+
+	later := awaiting.carried(nil)
+	later.write(nameB)
+	if got := later.Found(revision2); len(got.Withdrawn()) != 0 || !slices.Equal(got.Written(), []string{nameB}) {
+		t.Errorf("after %s was written again, Found(%s) left %v and %v; want the later write owed alone",
+			nameB, revision2, got.Withdrawn(), got.Written())
+	}
+
+	if err := SaveState(ctx, c, stateRef, company(), awaiting.Awaiting(revision1)); err != nil {
+		t.Fatalf("SaveState: %v", err)
+	}
+	secret := stateSecret(t, c)
+	if want := nameA + " " + revision1 + "\n" + nameA + " " + revision2 + "\n" + nameB + " " + revision1 + "\n" + nameB +
+		" " + revision2 + "\n"; string(secret.Data[awaitField]) != want {
+		t.Fatalf("%s = %q, want %q", awaitField, secret.Data[awaitField], want)
+	}
+	secret.Data[awaitField] = append(secret.Data[awaitField], []byte("not-a-store-name r3\n"+nameA+"\n"+nameC+" r3\n")...)
+	if err := c.Update(ctx, secret); err != nil {
+		t.Fatalf("editing the state: %v", err)
+	}
+	loaded, err := LoadState(ctx, c, stateRef, company())
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	want := map[string][]string{nameA: {revision1, revision2}, nameB: {revision1, revision2}}
+	if !maps.EqualFunc(loaded.awaited(), want, slices.Equal) {
+		t.Fatalf("awaits after a load = %v, want %v: a malformed line, and one for a change the state does not record, "+
+			"dropped", loaded.awaited(), want)
+	}
+	if got := loaded.Found(revision1); len(got.Withdrawn()) != 0 || len(got.Written()) != 0 {
+		t.Errorf("Found(%s) after a load left %v and %v, want both settled", revision1, got.Withdrawn(), got.Written())
+	}
+
+	for name, settled := range map[string]State{
+		"Reloaded":    loaded.Reloaded(),
+		"Reactivated": loaded.Reactivated(),
+		"Ran":         loaded.Observed(4).Ran(5),
+	} {
+		if err := SaveState(ctx, c, stateRef, company(), settled); err != nil {
+			t.Fatalf("SaveState: %v", err)
+		}
+		saved := awaitLines(stateSecret(t, c).Data[awaitField])
+		for awaited := range saved {
+			if !slices.Contains(settled.Withdrawn(), awaited) && !slices.Contains(settled.Written(), awaited) {
+				t.Errorf("after %s the state Secret holds %s for %s, a change it settled", name, awaitField, awaited)
+			}
+		}
+		if name == "Reactivated" && !slices.Equal(saved[nameB], []string{revision1, revision2}) {
+			t.Errorf("after Reactivated %s awaits %v, want the write still awaiting both revisions", nameB, saved[nameB])
+		}
+	}
+}
+
 // TestActivationIsRecordedForItsRevisionAlone: what Activated records of the
 // operator's last activation answers for that revision and for no other, an
 // empty one included, the Secret keys it lets go as well as their names,
@@ -264,7 +350,7 @@ func TestActivationIsRecordedForItsRevisionAlone(t *testing.T) {
 	if err := SaveState(ctx, c, stateRef, company(), State{key: next.key}); err != nil {
 		t.Fatalf("SaveState: %v", err)
 	}
-	for _, field := range []string{revisionField, letGoField, retainedField} {
+	for _, field := range []string{revisionField, letGoField, retainedField, pendingField, awaitField} {
 		if got, ok := stateSecret(t, c).Data[field]; !ok || len(got) != 0 {
 			t.Errorf("the state Secret holds %s = %q (present: %t), want it empty, and owned", field, got, ok)
 		}
@@ -296,6 +382,129 @@ func TestAdoptionRecordsARevisionWithoutSettlingAWithdrawal(t *testing.T) {
 	}
 }
 
+// TestAPendingReadingRecordsTheRevisionFoundRunningIt: the reading of a
+// document about to be written is recorded under the hash the caller gives it
+// (Pending), and once the caller finds a revision running that document
+// (Confirmed) the State records that revision's reading from it, as Adopted
+// records a revision of a document the caller renders: LetGo answers the
+// document's optional keys for it, and no withdrawal or write is settled,
+// since only a read of the epoch the revision activated as says it came after
+// them. The readings stay for the caller to drop, a hash never pending
+// confirms nothing, KeepPending keeps only the hashes it names, and a Sync
+// carries what is pending.
+func TestAPendingReadingRecordsTheRevisionFoundRunningIt(t *testing.T) {
+	const hash2, hash3 = "hash-of-revision-2", "hash-of-revision-3"
+	base := State{key: newFingerprintKey()}.Activated(revision1, nil)
+	base.withdraw(nameA)
+	base.write(nameB)
+	pending := base.Pending(hash2, []secretref.Key{keyC}).Pending(hash3, nil)
+	if len(base.pending()) != 0 || base.Pends(hash2) {
+		t.Fatalf("Pending changed the State it was made from: %v", base.pending())
+	}
+	if got := slices.Sorted(maps.Keys(pending.pending())); !slices.Equal(got, []string{hash2, hash3}) {
+		t.Fatalf("pending = %v, want [%s %s]", got, hash2, hash3)
+	}
+	if !pending.Pends(hash2) || !pending.Pends(hash3) || pending.Pends(revision2) {
+		t.Errorf("Pends(%s), Pends(%s), Pends(%s) = %t, %t, %t; want true, true, false", hash2, hash3, revision2,
+			pending.Pends(hash2), pending.Pends(hash3), pending.Pends(revision2))
+	}
+
+	confirmed, ok := pending.Confirmed(revision2, hash2)
+	if !ok {
+		t.Fatalf("Confirmed(%s, %s) found no pending reading", revision2, hash2)
+	}
+	if confirmed.Recorded() != revision2 || !slices.Equal(confirmed.LetGo(revision2), []string{nameC}) {
+		t.Errorf("after the confirmation Recorded() = %s and LetGo(%s) = %v, want %s and [%s]",
+			confirmed.Recorded(), revision2, confirmed.LetGo(revision2), revision2, nameC)
+	}
+	if !slices.Equal(confirmed.Withdrawn(), []string{nameA}) || !slices.Equal(confirmed.Written(), []string{nameB}) {
+		t.Errorf("after the confirmation Withdrawn() = %v and Written() = %v, want [%s] and [%s]: a confirmation "+
+			"settles nothing", confirmed.Withdrawn(), confirmed.Written(), nameA, nameB)
+	}
+	if got := slices.Sorted(maps.Keys(confirmed.pending())); !slices.Equal(got, []string{hash2, hash3}) {
+		t.Errorf("the confirmation left %v pending, want [%s %s]: dropping them is the caller's", got, hash2, hash3)
+	}
+	if pending.Recorded() != revision1 {
+		t.Errorf("Confirmed changed the State it was made from: Recorded() = %s", pending.Recorded())
+	}
+	for _, c := range []struct{ revision, hash string }{{revision2, "no-such-hash"}, {"", hash2}} {
+		if same, ok := pending.Confirmed(c.revision, c.hash); ok || same.Recorded() != revision1 {
+			t.Errorf("Confirmed(%q, %q) = %t, recorded %s; want nothing changed", c.revision, c.hash, ok, same.Recorded())
+		}
+	}
+	kept := pending.KeepPending([]string{hash3, "no-such-hash"})
+	if got := slices.Sorted(maps.Keys(kept.pending())); !slices.Equal(got, []string{hash3}) {
+		t.Errorf("KeepPending([%s no-such-hash]) keeps %v pending, want [%s]", hash3, got, hash3)
+	}
+	if len(pending.pending()) != 2 {
+		t.Errorf("KeepPending changed the State it was made from: %v", pending.pending())
+	}
+
+	eng := newFakeEngine()
+	synced, _ := mustSync(t, eng, desiredOf(map[string]string{nameA: "a1"}), base.Pending(hash2, []secretref.Key{keyC}))
+	if after, ok := synced.Confirmed(revision2, hash2); !ok || !slices.Equal(after.LetGo(revision2), []string{nameC}) {
+		t.Errorf("Confirmed(%s, %s) after a Sync = %t, let go %v; want the reading carried", revision2, hash2, ok,
+			after.LetGo(revision2))
+	}
+}
+
+// TestPendingReadingsSurviveASaveAndALoad: what Pending records survives a
+// save and a load, what only a hand edit writes (a line that is no Secret key,
+// a reading under no hash) is dropped, and a record that is not JSON at all is
+// nothing pending.
+func TestPendingReadingsSurviveASaveAndALoad(t *testing.T) {
+	ctx := context.Background()
+	const hash2, hash3 = "hash-of-revision-2", "hash-of-revision-3"
+	pending := State{key: newFingerprintKey()}.Activated(revision1, nil).
+		Pending(hash2, []secretref.Key{keyC}).Pending(hash3, nil)
+	c := newStateClient(t)
+	if err := SaveState(ctx, c, stateRef, company(), pending); err != nil {
+		t.Fatalf("SaveState: %v", err)
+	}
+	secret := stateSecret(t, c)
+	var records map[string]map[string]any
+	if err := json.Unmarshal(secret.Data[pendingField], &records); err != nil {
+		t.Fatalf("the state Secret holds %s = %q, not JSON: %v", pendingField, secret.Data[pendingField], err)
+	}
+	records[hash2]["optional"] = append(records[hash2]["optional"].([]any), "not-a-key")
+	records[""] = map[string]any{"optional": []any{keyC.String()}}
+	var err error
+	if secret.Data[pendingField], err = json.Marshal(records); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Update(ctx, secret); err != nil {
+		t.Fatalf("editing the state: %v", err)
+	}
+	loaded, err := LoadState(ctx, c, stateRef, company())
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if got := slices.Sorted(maps.Keys(loaded.pending())); !slices.Equal(got, []string{hash2, hash3}) {
+		t.Fatalf("pending after a load = %v, want [%s %s]", got, hash2, hash3)
+	}
+	if got := slices.Sorted(maps.Keys(loaded.pending()[hash2])); !slices.Equal(got, []string{nameC}) {
+		t.Errorf("the reading pending under %s after a load lets go %v, want [%s]", hash2, got, nameC)
+	}
+	if len(loaded.pending()[hash3]) != 0 {
+		t.Errorf("the reading pending under %s after a load lets go %v, want nothing", hash3, loaded.pending()[hash3])
+	}
+	again, _ := loaded.Confirmed(revision2, hash2)
+	want, _ := pending.Confirmed(revision2, hash2)
+	if !slices.Equal(again.LetGoKeys(revision2), want.LetGoKeys(revision2)) {
+		t.Errorf("Confirmed(%s, %s) after a load lets go %v, want %v", revision2, hash2, again.LetGoKeys(revision2),
+			want.LetGoKeys(revision2))
+	}
+
+	secret = stateSecret(t, c)
+	secret.Data[pendingField] = []byte("{not json")
+	if err := c.Update(ctx, secret); err != nil {
+		t.Fatalf("editing the state: %v", err)
+	}
+	if loaded, err = LoadState(ctx, c, stateRef, company()); err != nil || len(loaded.pending()) != 0 {
+		t.Errorf("LoadState over a pending record that is not JSON = %v, %v; want nothing pending", loaded.pending(), err)
+	}
+}
+
 // TestSaveStateForgetsWhatTheStateDropped: an entry the state no longer has
 // must leave the Secret too, or a later load would vouch for a name the
 // store no longer holds.
@@ -312,7 +521,8 @@ func TestSaveStateForgetsWhatTheStateDropped(t *testing.T) {
 		t.Fatalf("SaveState: %v", err)
 	}
 	got := slices.Sorted(maps.Keys(stateSecret(t, c).Data))
-	want := slices.Sorted(slices.Values([]string{nameA, fingerprintKeyField, withdrawnField, writtenField, revisionField, letGoField, retainedField}))
+	want := slices.Sorted(slices.Values([]string{nameA, fingerprintKeyField, withdrawnField, writtenField, revisionField,
+		letGoField, retainedField, pendingField, awaitField}))
 	if !slices.Equal(got, want) {
 		t.Fatalf("state Secret keys = %v, want %v", got, want)
 	}

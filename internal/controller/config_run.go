@@ -91,6 +91,11 @@ type configRun struct {
 	config          *crewletaiv1alpha1.ConfigStatus
 	// wrote is whether this reconcile activated a revision.
 	wrote bool
+	// confirmed is the revision, empty for none, that this reconcile found
+	// the engine running and that the operator wrote and the engine could
+	// not confirm activating (confirmUnconfirmed): a write an earlier
+	// reconcile made, of what it rendered then.
+	confirmed string
 
 	// objectsChecked and secretsChecked are whether the reconcile got as
 	// far as resolving the parts' references to other objects, and to
@@ -378,31 +383,7 @@ func (run *configRun) policy() crewletaiv1alpha1.ManagementPolicy {
 // error, and the reconcile is retried.
 func (run *configRun) converge(ctx context.Context, eng *engine.Client) (ctrl.Result, error) {
 	for attempt := 1; ; attempt++ {
-		active, err := activeConfig(ctx, eng)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if active != nil {
-			run.active = active.Document
-		}
-		var result ctrl.Result
-		switch policy := run.policy(); {
-		case policy == crewletaiv1alpha1.ManagementPolicyObserve:
-			return run.observe(ctx, eng, active)
-		case policy == crewletaiv1alpha1.ManagementPolicySeed && active != nil:
-			if err := run.seeded(active); err != nil {
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{RequeueAfter: run.resyncInterval()}, nil
-		default:
-			if run.desired == nil {
-				blocked, err := run.resolveSecrets(ctx)
-				if blocked || err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			result, err = run.enforce(ctx, eng, *run.desired, active)
-		}
+		result, err := run.convergeOnce(ctx, eng)
 		lost := errors.Is(err, engine.ErrRevisionAdvanced) || errors.Is(err, engine.ErrAlreadyConfigured)
 		if lost && attempt == 1 {
 			logf.FromContext(ctx).V(1).Info("Another writer changed the engine's document during the apply; reading it again")
@@ -412,22 +393,74 @@ func (run *configRun) converge(ctx context.Context, eng *engine.Client) (ctrl.Re
 	}
 }
 
-// activationAhead is inSync's answer where the fleet's activation names a
-// revision other than the one GET /config answered with: both read the
-// fleet's activation pointer, so another write activated a revision between
-// the two reads. It is a lost race (engine.ErrRevisionAdvanced), which
-// converge reads again from the start once, as it reads a write that lost.
+// convergeOnce is one attempt of converge, from a fresh read of the engine's
+// document.
+func (run *configRun) convergeOnce(ctx context.Context, eng *engine.Client) (ctrl.Result, error) {
+	// The fleet is read after this attempt's read of the document, never
+	// before it: confirmUnconfirmed, which runs before keepServing reads it
+	// afresh, takes the epoch the fleet's activation names for the revision
+	// this read returns, and an answer an attempt that lost its write read
+	// describes the engine from before that revision.
+	run.fleet, run.fleetErr = nil, nil
+	// A confirmation is of the revision the read runs: another one runs once
+	// the reconcile starts over.
+	run.confirmed = ""
+	active, err := activeConfig(ctx, eng)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if active != nil {
+		run.active = active.Document
+	}
+	// Before anything is decided from it: the revision the engine runs may be
+	// a write of the operator's that the engine could not confirm
+	// (config_unconfirmed.go).
+	if err := run.settleUnconfirmed(ctx, eng, active); err != nil {
+		return ctrl.Result{}, err
+	}
+	switch policy := run.policy(); {
+	case policy == crewletaiv1alpha1.ManagementPolicyObserve:
+		return run.observe(ctx, eng, active)
+	case policy == crewletaiv1alpha1.ManagementPolicySeed && active != nil:
+		if err := run.seeded(active); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: run.resyncInterval()}, nil
+	}
+	if run.desired == nil {
+		blocked, err := run.resolveSecrets(ctx)
+		if blocked || err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	return run.enforce(ctx, eng, *run.desired, active)
+}
+
+// activationAhead is inSync's answer, and confirmUnconfirmed's, where the
+// fleet's activation names a revision other than the one GET /config answered
+// with: both read the fleet's activation pointer, so another write activated
+// a revision between the two reads. It is a lost race
+// (engine.ErrRevisionAdvanced), which converge reads again from the start
+// once, as it reads a write that lost.
 type activationAhead struct {
 	// read is the revision GET /config answered with.
 	read string
 	// activation is the fleet's.
 	activation engine.Activation
+	// unconfirmed is whether read is a write of the operator's whose
+	// activation the engine could not confirm, rather than a revision of the
+	// rendered document the operator has not recorded.
+	unconfirmed bool
 }
 
 func (e *activationAhead) Error() string {
-	return fmt.Sprintf("the fleet runs the rendered document as revision %s, which the operator has not recorded, "+
-		"and its activation named revision %s (epoch %d) by the time the operator read the fleet: another write "+
-		"activated a revision between the two reads", e.read, e.activation.RevisionID, e.activation.Epoch)
+	runs := fmt.Sprintf("the rendered document as revision %s, which the operator has not recorded", e.read)
+	if e.unconfirmed {
+		runs = fmt.Sprintf("revision %s, which the operator wrote and the engine could not confirm activating", e.read)
+	}
+	return fmt.Sprintf("the fleet runs %s, and its activation named revision %s (epoch %d) by the time the operator "+
+		"read the fleet: another write activated a revision between the two reads", runs, e.activation.RevisionID,
+		e.activation.Epoch)
 }
 
 func (e *activationAhead) Unwrap() error { return engine.ErrRevisionAdvanced }
@@ -476,6 +509,7 @@ func (run *configRun) enforce(
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	state = run.settlePending(state, active)
 	run.told = state.Retained()
 	diffs, err := diffWith(run.doc, active)
 	if err != nil {
@@ -519,7 +553,7 @@ func (run *configRun) enforce(
 	}
 
 	hash := appliedHash(run.doc, state, desired.Names())
-	recorded := c.Status.Config
+	recorded := run.recordedConfig()
 	// The engine runs the rendered document with every value only where the
 	// revision it runs read the store after the last value the sync wrote:
 	// the engine reads its store only when a revision activates. The state
@@ -583,8 +617,13 @@ func (run *configRun) enforce(
 	}
 	// What the write's activation reads is marked before it is asked for,
 	// so that a save lost after it still leaves what it read settled by the
-	// next read of the engine.
-	if state, err = run.markChanges(ctx, eng, state, stateRef); err != nil {
+	// next read of the engine; and so is how its document reads every name,
+	// for the revision the engine stores, which a later read may find
+	// running although its activation went unconfirmed, or its record was
+	// never saved (settlePending).
+	ahead := !state.Pends(hash)
+	state = state.Pending(hash, run.doc.Optional)
+	if state, err = run.markChanges(ctx, eng, state, stateRef, ahead); err != nil {
 		return ctrl.Result{}, err
 	}
 	req := engine.ApplyRequest{Document: run.doc.YAML, Summary: run.summary(active, diffs, state.Written())}
@@ -600,10 +639,8 @@ func (run *configRun) enforce(
 	}
 	applied, err := eng.ApplyConfig(ctx, req)
 	if err != nil {
-		if result, refused, saveErr := run.refusedByEngine(ctx, eng, active, pushed.Reload, pushed.ReloadAction, state, stateRef, err); refused {
-			return result, saveErr
-		}
-		return ctrl.Result{}, err
+		return run.writeFailed(ctx, eng, err, writeAttemptOf(req, hash, drifted, diffs), active, pushed.Reload,
+			pushed.ReloadAction, state, stateRef)
 	}
 	run.recordApply(applied, hash, drifted, active, diffs, req.Summary)
 
@@ -701,6 +738,58 @@ func (run *configRun) refusedByEngine(
 	return ctrl.Result{}, false, nil
 }
 
+// writeAttempt is a write of the rendered document: the revision it was
+// built on, which it is conditioned on ("" for none), its appliedHash, and
+// what it replaced where that was more than the operator's own document
+// (replaced, with driftedAt, the places a Drifted one differed at as
+// ConfigApplied names them), which a write the engine could not confirm keeps
+// for the report made once a read shows it runs.
+type writeAttempt struct {
+	base, hash string
+	replaced   crewletaiv1alpha1.ReplacedRevision
+	driftedAt  string
+}
+
+// writeAttemptOf is req, a write of the rendered document whose appliedHash
+// is hash, as a writeAttempt: drifted where the revision it was built on is
+// somebody else's, which differed from the rendered document at diffs.
+func writeAttemptOf(req engine.ApplyRequest, hash string, drifted bool, diffs []render.Path) writeAttempt {
+	attempt := writeAttempt{base: req.IfMatch, hash: hash}
+	if drifted {
+		attempt.replaced, attempt.driftedAt = crewletaiv1alpha1.ReplacedDrifted, placesOf(diffs)
+	}
+	return attempt
+}
+
+// writeFailed ends the reconcile where the engine did not take the write,
+// failing with err. A document it refused is settled as one (refusedByEngine,
+// with the sync's reload and reloadAction).
+// A write it stored and could not confirm activating is recorded in
+// status.config.unconfirmed, the secret sync's state having recorded what its
+// activation reads before it was sent, and settled by the next read of the
+// revision the engine runs, never by sending the write again before it
+// (config_unconfirmed.go). Any other failure goes back.
+func (run *configRun) writeFailed(
+	ctx context.Context, eng *engine.Client, err error, write writeAttempt, active *engine.ActiveConfig,
+	reload *engine.Reload, reloadAction string, state secretsync.State, ref types.NamespacedName,
+) (ctrl.Result, error) {
+	if result, refused, saveErr := run.refusedByEngine(ctx, eng, active, reload, reloadAction, state, ref, err); refused {
+		return result, saveErr
+	}
+	if stored, ok := engine.UnconfirmedActivation(err); ok {
+		// How its document reads every name the state recorded before it
+		// was sent (markChanges), and the changes it was sent after await
+		// the revision the engine stored, which settles them once found
+		// running however the fleet's pointer reads (State.Awaiting).
+		after := run.unconfirmed(stored, write, err)
+		if saveErr := secretsync.SaveState(ctx, run.Client, ref, run.company, state.Awaiting(stored)); saveErr != nil {
+			return ctrl.Result{}, saveErr
+		}
+		return ctrl.Result{RequeueAfter: after}, nil
+	}
+	return ctrl.Result{}, err
+}
+
 // adopt is state recording the reading of active, the revision the engine
 // runs, where its document is the one this reconcile rendered: diffs, where
 // the two differ, is empty, and the engine's document references every store
@@ -768,30 +857,37 @@ func (run *configRun) reloadedBySync(
 }
 
 // settleRead is state with every change of the store settled that the
-// fleet's activation came after (State.Ran), and every change no read of the
-// fleet's activation pointer has followed marked by the epoch it names now
-// (State.Observed), and whether that moved a mark, which the caller saves
-// before it asks for an activation (markChanges' rule: a save lost after the
-// activation must leave a change the activation settles). It reads the fleet
-// the reconcile last read (fleetOf), which keepServing reads afresh after
-// this attempt's read of the document. active is the revision that read
-// returned, which GET /config opened: the activation settles only where it is
-// that revision. Both read the fleet's activation pointer, so another
-// revision there is one a write activated between the two reads, perhaps one
-// no node opens. state holds only what earlier reconciles changed, so any
-// read of the fleet this attempt makes followed it. A fleet that cannot be
-// read, or answers without its activation, settles and marks nothing.
+// fleet's activation came after (State.Ran), or that awaits the revision
+// this attempt read (State.Found: one the engine stored for an activation
+// asked for after the change and could not confirm, which settles it however
+// the pointer reads, and whether or not the fleet can be read), and every
+// change no read of the fleet's activation pointer has followed marked by the
+// epoch it names now (State.Observed), and whether that moved a mark, which
+// the caller saves before it asks for an activation (markChanges' rule: a
+// save lost after the activation must leave a change the activation settles).
+// It reads the fleet the reconcile last read (fleetOf), which keepServing
+// reads afresh after this attempt's read of the document. active is the
+// revision that read returned, which GET /config opened: the activation
+// settles only where it is that revision. Both read the fleet's activation
+// pointer, so another revision there is one a write activated between the
+// two reads, perhaps one no node opens. state holds only what earlier
+// reconciles changed, so any read of the fleet this attempt makes followed
+// it. A fleet that cannot be read, or answers without its activation, settles
+// nothing by the pointer and marks nothing.
 func (run *configRun) settleRead(
 	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, state secretsync.State,
 ) (secretsync.State, bool) {
-	if len(state.Withdrawn()) == 0 && len(state.Written()) == 0 {
-		return state, false
+	next := state
+	if active != nil {
+		next = next.Found(active.RevisionID)
+	}
+	if len(next.Withdrawn()) == 0 && len(next.Written()) == 0 {
+		return next, !next.SameMarks(state)
 	}
 	fleet, err := run.fleetOf(ctx, eng)
 	if err != nil || fleet.Activation == nil {
-		return state, false
+		return next, !next.SameMarks(state)
 	}
-	next := state
 	if active != nil && fleet.Activation.RevisionID == active.RevisionID {
 		next = next.Ran(fleet.Activation.Epoch)
 	}
@@ -808,24 +904,26 @@ func (run *configRun) settleRead(
 // by the next read of the engine (settleRead) rather than owed for good. A
 // fleet that cannot be read, or answers without its activation, leaves them
 // unread, for an activation the operator sees confirmed to settle; a save
-// that fails is the caller's error, and no activation is asked for.
+// that fails is the caller's error, and no activation is asked for. changed
+// says the caller changed state since it was saved, so that it is saved
+// whether or not a change of the store was marked.
 func (run *configRun) markChanges(
-	ctx context.Context, eng *engine.Client, state secretsync.State, ref types.NamespacedName,
+	ctx context.Context, eng *engine.Client, state secretsync.State, ref types.NamespacedName, changed bool,
 ) (secretsync.State, error) {
-	if !state.Unobserved() {
+	if state.Unobserved() {
+		fleet, err := eng.Fleet(ctx)
+		if err != nil || fleet.Activation == nil {
+			logf.FromContext(ctx).V(1).Info("Failed to read the fleet's activation pointer after a change of the "+
+				"engine's secret store; the change waits for an activation the operator sees confirmed",
+				"error", fmt.Sprint(err))
+		} else {
+			state, changed = state.Observed(fleet.Activation.Epoch), true
+		}
+	}
+	if !changed {
 		return state, nil
 	}
-	fleet, err := eng.Fleet(ctx)
-	if err != nil || fleet.Activation == nil {
-		logf.FromContext(ctx).V(1).Info("Failed to read the fleet's activation pointer after a change of the engine's "+
-			"secret store; the change waits for an activation the operator sees confirmed", "error", fmt.Sprint(err))
-		return state, nil
-	}
-	state = state.Observed(fleet.Activation.Epoch)
-	if err := secretsync.SaveState(ctx, run.Client, ref, run.company, state); err != nil {
-		return state, err
-	}
-	return state, nil
+	return state, secretsync.SaveState(ctx, run.Client, ref, run.company, state)
 }
 
 // sync pushes the desired values into the engine's secret store, deletes
@@ -945,11 +1043,12 @@ func diffWith(doc *render.Document, active *engine.ActiveConfig) ([]render.Path,
 }
 
 // keepInSync is enforce for an engine that runs the rendered document with
-// every value it references: it records the revision (inSync), makes the
-// activation the secret sync's state owes (settle), and comes back at the
-// resync, or sooner where that activation failed and its report says so, or
-// a value is kept for a revision other than the fleet's (heldResync). reload
-// and reloadAction are the sync's, as settle takes them.
+// every value it references, whose appliedHash is hash: it records the
+// revision (inSync), makes the activation the secret sync's state owes
+// (settle), and comes back at the resync, or sooner where that activation
+// failed and its report says so, or a value is kept for a revision other than
+// the fleet's (heldResync). reload and reloadAction are the sync's, as settle
+// takes them.
 func (run *configRun) keepInSync(
 	ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, hash string, reload *engine.Reload,
 	reloadAction string, state secretsync.State, ref types.NamespacedName,
@@ -980,10 +1079,12 @@ func (run *configRun) keepInSync(
 // start. hash is what it runs (appliedHash), which the record takes: the one
 // recorded may be another, the operator's write of the same document whose
 // record the reconcile that made it never saved being taken for in sync too.
+// The overtaken writes go (status.config.overtaken): the operator records a
+// revision of its own document, which none of them can say more about.
 func (run *configRun) inSync(ctx context.Context, eng *engine.Client, active *engine.ActiveConfig, hash string) error {
-	recorded := run.company.Status.Config
+	recorded := run.recordedConfig()
 	config := recorded.DeepCopy()
-	config.AppliedHash = hash
+	config.AppliedHash, config.Overtaken = hash, nil
 	if recorded.RevisionID != active.RevisionID {
 		// AT THE EPOCH IT ACTIVATED AS, which only the fleet's activation
 		// says: the one recorded is the revision it replaces, so the
@@ -1016,11 +1117,15 @@ func (run *configRun) inSync(ctx context.Context, eng *engine.Client, active *en
 	run.recordPlacement(*run.rendered, false)
 	// The reason of the last write (Applied, DriftCorrected) stays until
 	// the next one: it is what that write did.
-	if current := meta.FindStatusCondition(run.company.Status.Conditions, crewletaiv1alpha1.ConditionConfigApplied); current != nil &&
-		current.Status == metav1.ConditionTrue {
+	current := meta.FindStatusCondition(run.company.Status.Conditions, crewletaiv1alpha1.ConditionConfigApplied)
+	switch {
+	case run.confirmed != "" && run.configApplied != nil:
+		// That write is one this reconcile has just found running, which
+		// the engine could not confirm, and reported (confirmUnconfirmed).
+	case current != nil && current.Status == metav1.ConditionTrue:
 		kept := *current
 		run.configApplied = &kept
-	} else {
+	default:
 		run.configApplied = &metav1.Condition{
 			Type: crewletaiv1alpha1.ConditionConfigApplied, Status: metav1.ConditionTrue, Reason: crewletaiv1alpha1.ReasonApplied,
 			Message: fmt.Sprintf("The engine runs the rendered document as revision %s.", active.RevisionID),
@@ -1058,12 +1163,8 @@ func (run *configRun) recordApply(
 			"Seeded into revision %s; under the Company's Seed policy the engine owns the document since, and changes to this object are not applied.",
 			applied.RevisionID)}
 	case drifted:
-		condition.Reason = crewletaiv1alpha1.ReasonDriftCorrected
-		condition.Message = fmt.Sprintf("Revision %s, which the operator did not write, differed from the rendered document at %s; "+
-			"revision %s replaced it.", active.RevisionID, placesOf(diffs), applied.RevisionID)
-		run.event(corev1.EventTypeWarning, crewletaiv1alpha1.ReasonDrifted, "DetectDrift",
-			"The engine ran revision %s, which the operator did not write and which differed from the rendered document at %s; "+
-				"under the Enforce policy revision %s replaced it.", active.RevisionID, placesOf(diffs), applied.RevisionID)
+		run.reportReplaced(&condition, applied.RevisionID, active.RevisionID, crewletaiv1alpha1.ReplacedDrifted,
+			placesOf(diffs))
 	}
 	run.configApplied = &condition
 	// Activated, not applied: the engine applies it asynchronously, and
@@ -1074,6 +1175,27 @@ func (run *configRun) recordApply(
 		run.event(corev1.EventTypeWarning, "EngineWarnings", "ApplyConfig", "The engine runs revision %s with warnings: %s",
 			applied.RevisionID, sentences(applied.Warnings))
 	}
+}
+
+// reportReplaced says on condition, ConfigApplied for revision written, and in
+// a Warning event what written replaced where that was more than the
+// operator's own document: base, which was replaced (a Drifted revision the
+// operator did not write, which differed from the rendered document at
+// driftedAt). recordApply reports a write the engine confirmed with it, and
+// confirmUnconfirmed one it could not confirm, once a read shows it runs, so
+// both say the same.
+func (run *configRun) reportReplaced(
+	condition *metav1.Condition, written, base string, replaced crewletaiv1alpha1.ReplacedRevision, driftedAt string,
+) {
+	if replaced != crewletaiv1alpha1.ReplacedDrifted {
+		return
+	}
+	condition.Reason = crewletaiv1alpha1.ReasonDriftCorrected
+	condition.Message = fmt.Sprintf("Revision %s, which the operator did not write, differed from the rendered document at %s; "+
+		"revision %s replaced it.", base, driftedAt, written)
+	run.event(corev1.EventTypeWarning, crewletaiv1alpha1.ReasonDrifted, "DetectDrift",
+		"The engine ran revision %s, which the operator did not write and which differed from the rendered document at %s; "+
+			"under the Enforce policy revision %s replaced it.", base, driftedAt, written)
 }
 
 // observe compares the rendered document with the engine's and reports the
@@ -1156,7 +1278,23 @@ func (run *configRun) seeded(active *engine.ActiveConfig) error {
 	}
 	run.recordPlacement(running, false)
 	run.runningRevision = active.RevisionID
-	recorded := run.company.Status.Config.RevisionID
+	prior := run.recordedConfig()
+	recorded := prior.RevisionID
+	switch seed := run.overtakenSeed(); {
+	case recorded == "" && seed != nil:
+		// Seeded by a write the engine could not confirm, and replaced
+		// since: recorded as the seed, as a confirmed seed is.
+		config := prior.DeepCopy()
+		config.RevisionID, config.AppliedHash, config.AppliedAt = seed.RevisionID, seed.AppliedHash, seed.WrittenAt.DeepCopy()
+		config.Objects, config.Overtaken = seed.Objects, nil
+		run.config, recorded = config, seed.RevisionID
+	case recorded != "" && len(prior.Overtaken) > 0:
+		// The engine owns the document since the seed, and the operator
+		// writes nothing more that one of them could say anything about.
+		config := prior.DeepCopy()
+		config.Overtaken = nil
+		run.config = config
+	}
 	message := fmt.Sprintf("The engine had a company document (revision %s) before the operator seeded one; "+
 		"under the Company's Seed policy the operator leaves it to the engine.", active.RevisionID)
 	if recorded != "" {

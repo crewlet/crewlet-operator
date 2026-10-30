@@ -491,6 +491,9 @@ type Fleet struct {
 	// activate itself, such as a reload of its document, activated as:
 	// GET /config names the revision and not its epoch, and /health the
 	// epoch a node has applied, which may be another revision's.
+	// And it is the one answer to whether a write the engine could not
+	// confirm activated (ErrUnavailable naming a StoredRevisionID): the
+	// pointer names that revision or it does not.
 	Activation *Activation
 }
 
