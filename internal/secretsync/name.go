@@ -138,7 +138,7 @@ func referenceHash(k secretref.Key) string {
 // SealedName, which internal/render's mirror table fingerprints): the vendor,
 // the field and the handle joined by underscores and upper-cased, every
 // character the store's grammar refuses turned into an underscore rather than
-// dropped, so seats nova.1 and nova-1 keep two entries. A name that differed
+// dropped, so seats nova-1 and nova1 keep two entries. A name that differed
 // from the engine's by one character would point the seat at an entry nothing
 // ever fills. Every such name starts with the vendor's name, never Prefix, so
 // Owns refuses it and no Sync overwrites or collects what the engine minted

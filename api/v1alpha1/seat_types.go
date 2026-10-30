@@ -527,10 +527,11 @@ type MattermostSeatIntegration struct {
 // grants it Jira and gives it the project role in the projects; without one
 // (a Data Center instance) the account is made outside the engine, and the
 // engine reports the seat's access as managed outside Crewlet.
-// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.projectRole) || !has(self.projects)",message="a seat that is on Jira in projects needs the project role it holds there: give projectRole, or leave projects out for product access only",fieldPath=".projectRole"
+// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.projectRole) || !has(self.projects) || size(self.projects) == 0",message="a seat that is on Jira in projects needs the project role it holds there: give projectRole, or leave projects out for product access only",fieldPath=".projectRole"
 type JiraSeatIntegration struct {
-	// enabled is whether the seat is on Jira. False removes the account's
-	// Jira product access and keeps the account. Crewlet's `enabled`.
+	// enabled is whether the seat is on Jira. False takes the account out of
+	// its project roles and narrows its token, and keeps the account and its
+	// Jira product access. Crewlet's `enabled`.
 	// +required
 	Enabled *bool `json:"enabled,omitempty"`
 
@@ -569,12 +570,12 @@ type JiraSeatIntegration struct {
 // reports the seat's access as managed outside Crewlet. A site with
 // Confluence's role-based access grants by spaceRole; a site without it
 // grants space permissions by operation.
-// +kubebuilder:validation:XValidation:rule="!(has(self.spaceRole) && has(self.operations))",message="spaceRole and operations are two ways to grant the seat's access: give spaceRole on a site with role-based access, and operations on one without"
-// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.spaceRole) || has(self.operations) || !has(self.spaces)",message="a seat that is on Confluence in spaces needs its access there: give spaceRole, or operations where the site has no space roles, or leave spaces out for product access only"
+// +kubebuilder:validation:XValidation:rule="!(has(self.spaceRole) && has(self.operations) && size(self.operations) > 0)",message="spaceRole and operations are two ways to grant the seat's access: give spaceRole on a site with role-based access, and operations on one without"
+// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.spaceRole) || (has(self.operations) && size(self.operations) > 0) || !has(self.spaces) || size(self.spaces) == 0",message="a seat that is on Confluence in spaces needs its access there: give spaceRole, or operations where the site has no space roles, or leave spaces out for product access only"
 type ConfluenceSeatIntegration struct {
-	// enabled is whether the seat is on Confluence. False removes the
-	// account's Confluence product access and keeps the account. Crewlet's
-	// `enabled`.
+	// enabled is whether the seat is on Confluence. False takes away the
+	// account's access in its spaces and narrows its token, and keeps the
+	// account and its Confluence product access. Crewlet's `enabled`.
 	// +required
 	Enabled *bool `json:"enabled,omitempty"`
 

@@ -107,9 +107,12 @@ spec:                       # Seat sre
 
 - **`enabled` is a stored setting, and every block states it.** A vendor
   with no block is off for the seat, which is how a new agent starts. `false`
-  turns the seat off and keeps its account at the vendor, disabled, so its
-  history keeps its author and turning it back on needs nobody (but on
-  Slack, where a person approves the app's install again). Removing the
+  turns the seat off and keeps its account at the vendor: disabled where the
+  vendor can disable one (Datadog, GitLab, Mattermost, a suspended GitHub
+  installation), and on Jira and Confluence taken out of its project roles or
+  space access with its token narrowed, its product access kept. Its history
+  keeps its author and turning it back on needs nobody (but on Slack, where a
+  person approves the app's install again). Removing the
   account is a separate, confirmed action in the engine's dashboard, offered
   only while the seat is off.
 - **Access is in the vendor's own terms.** Each field takes the identifier
@@ -140,8 +143,8 @@ spec:                       # Seat sre
 - **The Seat is where access changes.** Under the Company's `Enforce`
   policy the engine's dashboard shows each agent's access read-only, like
   the rest of the document ([Applying](../concepts/applying.md#enforce-the-default)),
-  and its "Keep the vendor's setting" and "Turn back on" offers are changes
-  to the Seat. Whoever may write a Seat grants any role it names, the
+  and its "Keep the vendor's setting" and "Keep off" offers are changes to
+  the Seat; "Turn back on", which acts at the vendor, still runs. Whoever may write a Seat grants any role it names, the
   administration ones included (Datadog Admin Role, GitLab Maintainer or
   Owner, Jira Administrators, Confluence Admin, Mattermost System Admin,
   GitHub Contents or Workflows at `Write`), which the dashboard gates

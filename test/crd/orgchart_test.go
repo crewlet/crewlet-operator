@@ -575,6 +575,31 @@ func TestSeatValidation(t *testing.T) {
 	})
 }
 
+// TestSeatEmptyScopesAreNoScope proves an empty list reads as no list at all,
+// as Crewlet reads it: a seat on Jira with `projects: []` and no project role
+// holds product access only, and a Confluence spaceRole beside
+// `operations: []` is one grant, not two. Only an unstructured object can
+// send an empty list, since the typed client omits one.
+func TestSeatEmptyScopesAreNoScope(t *testing.T) {
+	namespace := newNamespace(t)
+	content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(seat(namespace, "scoped"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := &unstructured.Unstructured{Object: content}
+	obj.SetGroupVersionKind(v1.GroupVersion.WithKind("Seat"))
+	integrations := map[string]any{
+		"jira": map[string]any{"enabled": true, "projects": []any{}},
+		"confluence": map[string]any{
+			"enabled": true, "spaceRole": spaceRoleID, "operations": []any{}, "spaces": []any{spaceENG},
+		},
+	}
+	if err := unstructured.SetNestedMap(obj.Object, integrations, "spec", "integrations"); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, k8sClient.Create(ctx, obj), "")
+}
+
 // TestSeatEmptySandboxIsRefused proves a Seat's spec.sandbox written as {}
 // is refused: every agent seat's executor runs in a box whether or not the
 // seat says anything of it, so an empty block would read as a switch that
