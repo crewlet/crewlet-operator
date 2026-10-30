@@ -245,7 +245,7 @@ func TestAnEmptyValueOfTheCompanysOwnStepIsSaid(t *testing.T) {
 			valueSecret(stepSecret, map[string]string{stepKey: ""}))
 		step := crewletaiv1alpha1.SandboxSetupStep{
 			Name: "registry",
-			Env:  []crewletaiv1alpha1.SecretEnvVar{{Name: stepVar, ValueFrom: fromSecret(stepSecret, stepKey)}},
+			Env:  []crewletaiv1alpha1.SandboxEnvVar{{Name: stepVar, ValueFrom: fromSecret(stepSecret, stepKey)}},
 		}
 		if c.optional {
 			step.OptionalKeys = []string{stepVar}

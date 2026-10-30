@@ -168,8 +168,16 @@ type SeatSandbox struct {
 	// endpoint of the provider the code work runs on out of the box, unless
 	// a run goes without its value (optionalKeys), when the box is given
 	// them as it is with no sign-in; and a variable named as one the
-	// provider would set wins over it. Crewlet's `env`, a credential
-	// position.
+	// provider would set wins over it. It may not set a variable Crewlet
+	// sets in a coding run itself, which Crewlet refuses in every company
+	// document, and nor may a setup step's env: CREWLET_GIT_TOKEN and
+	// CREWLET_GIT_URL, a run's credential on the company's own code host and
+	// the base its clones and pushes reach, and CREWLET_GIT_TRAILER_SEAT,
+	// CREWLET_GIT_TRAILER_RUN and CREWLET_GIT_TRAILER_WORK_ITEM, the values
+	// its commit hook writes into every commit's trailers (Crewlet's
+	// ReservedSandboxEnv). No run of a company the operator runs is given
+	// them, since the operator does not offer the code host, but the names
+	// are the engine's all the same. Crewlet's `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name

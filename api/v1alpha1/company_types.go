@@ -305,6 +305,34 @@ type SandboxFile struct {
 	ValueFrom SecretValueSource `json:"valueFrom,omitzero"`
 }
 
+// SandboxEnvVar has SecretEnvVar's shape and is a type of its own for the rule
+// on its name: Crewlet reserves the variables it sets in a coding run itself
+// in each env a run's environment is assembled from (a setup step's, and a
+// Seat's spec.sandbox.env, whose SeatEnvVar holds the same rule), and nowhere
+// else, so an LLMProvider's env, which SecretEnvVar types, may hold them.
+
+// SandboxEnvVar is a variable a sandbox setup step merges into the
+// environment of its commands and of a coding run. Crewlet treats every value
+// there as a credential, so a literal value is not accepted: the value always
+// comes from a Secret.
+type SandboxEnvVar struct {
+	// name is the variable's name. It may not be one Crewlet sets in a coding
+	// run itself, which Crewlet refuses in every company document:
+	// CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_GIT_TRAILER_SEAT,
+	// CREWLET_GIT_TRAILER_RUN or CREWLET_GIT_TRAILER_WORK_ITEM (Crewlet's
+	// ReservedSandboxEnv).
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
+	// +kubebuilder:validation:XValidation:rule="!(self in ['CREWLET_GIT_TOKEN', 'CREWLET_GIT_URL', 'CREWLET_GIT_TRAILER_SEAT', 'CREWLET_GIT_TRAILER_RUN', 'CREWLET_GIT_TRAILER_WORK_ITEM'])",message="CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_GIT_TRAILER_SEAT, CREWLET_GIT_TRAILER_RUN and CREWLET_GIT_TRAILER_WORK_ITEM are the engine's: Crewlet sets them in a coding run itself, as the run's credential on the company's own code host, the base its clones and pushes reach and the values its commit hook writes into every commit's trailers, and refuses a company document that sets one, since a value here would break the run's clones and pushes or make a commit's trailers disagree with its push's record; remove it"
+	Name string `json:"name,omitempty"`
+
+	// valueFrom is the Secret key the value is read from.
+	// +required
+	ValueFrom SecretValueSource `json:"valueFrom,omitzero"`
+}
+
 // The optionalKeys rule of SandboxSetupStep compares every entry with every
 // variable of env and every path of files, and the API server sums its
 // estimated cost over every step a Company's or a Seat's spec.sandbox.setup
@@ -361,12 +389,17 @@ type SandboxSetupStep struct {
 	Commands []string `json:"commands,omitempty"`
 
 	// env is merged into the environment of the commands and of the run.
-	// Crewlet's `env`, a credential position.
+	// It may not set a variable Crewlet sets in a coding run itself, which
+	// Crewlet refuses in every company document, as a Seat's
+	// spec.sandbox.env may not: CREWLET_GIT_TOKEN, CREWLET_GIT_URL,
+	// CREWLET_GIT_TRAILER_SEAT, CREWLET_GIT_TRAILER_RUN and
+	// CREWLET_GIT_TRAILER_WORK_ITEM (Crewlet's ReservedSandboxEnv). Crewlet's
+	// `env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=32
-	Env []SecretEnvVar `json:"env,omitempty"`
+	Env []SandboxEnvVar `json:"env,omitempty"`
 
 	// optionalKeys names variables of env, and paths of files, whose value may go
 	// missing. Crewlet refuses to start a run_sandbox coding run whose environment

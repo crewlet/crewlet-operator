@@ -152,13 +152,19 @@ type SeatCredentialSource struct {
 }
 
 // SeatEnvVar is a named credential of a seat delivered as an environment
-// variable: from a Secret, or provisioned by the engine.
+// variable of its sandbox runs (a Seat's spec.sandbox.env): from a Secret, or
+// provisioned by the engine.
 type SeatEnvVar struct {
-	// name is the variable's name.
+	// name is the variable's name. It may not be one Crewlet sets in a coding
+	// run itself, which Crewlet refuses in every company document:
+	// CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_GIT_TRAILER_SEAT,
+	// CREWLET_GIT_TRAILER_RUN or CREWLET_GIT_TRAILER_WORK_ITEM (Crewlet's
+	// ReservedSandboxEnv).
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
+	// +kubebuilder:validation:XValidation:rule="!(self in ['CREWLET_GIT_TOKEN', 'CREWLET_GIT_URL', 'CREWLET_GIT_TRAILER_SEAT', 'CREWLET_GIT_TRAILER_RUN', 'CREWLET_GIT_TRAILER_WORK_ITEM'])",message="CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_GIT_TRAILER_SEAT, CREWLET_GIT_TRAILER_RUN and CREWLET_GIT_TRAILER_WORK_ITEM are the engine's: Crewlet sets them in a coding run itself, as the run's credential on the company's own code host, the base its clones and pushes reach and the values its commit hook writes into every commit's trailers, and refuses a company document that sets one, since a value here would break the run's clones and pushes or make a commit's trailers disagree with its push's record; remove it"
 	Name string `json:"name,omitempty"`
 
 	// valueFrom is where the value comes from.
@@ -167,9 +173,9 @@ type SeatEnvVar struct {
 }
 
 // SecretEnvVar is a named credential delivered as an environment variable,
-// such as a sandbox setup step's token or a coding CLI's model key. Crewlet
-// treats every value in the positions that use this type as a credential, so
-// a literal value is not accepted: the value always comes from a Secret.
+// such as a coding CLI's model key. Crewlet treats every value in the
+// positions that use this type as a credential, so a literal value is not
+// accepted: the value always comes from a Secret.
 type SecretEnvVar struct {
 	// name is the variable's name.
 	// +required

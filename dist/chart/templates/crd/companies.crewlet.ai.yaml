@@ -1015,20 +1015,45 @@ spec:
                         env:
                           description: |-
                             env is merged into the environment of the commands and of the run.
-                            Crewlet's `env`, a credential position.
+                            It may not set a variable Crewlet sets in a coding run itself, which
+                            Crewlet refuses in every company document, as a Seat's
+                            spec.sandbox.env may not: CREWLET_GIT_TOKEN, CREWLET_GIT_URL,
+                            CREWLET_GIT_TRAILER_SEAT, CREWLET_GIT_TRAILER_RUN and
+                            CREWLET_GIT_TRAILER_WORK_ITEM (Crewlet's ReservedSandboxEnv). Crewlet's
+                            `env`, a credential position.
                           items:
                             description: |-
-                              SecretEnvVar is a named credential delivered as an environment variable,
-                              such as a sandbox setup step's token or a coding CLI's model key. Crewlet
-                              treats every value in the positions that use this type as a credential, so
-                              a literal value is not accepted: the value always comes from a Secret.
+                              SandboxEnvVar is a variable a sandbox setup step merges into the
+                              environment of its commands and of a coding run. Crewlet treats every value
+                              there as a credential, so a literal value is not accepted: the value always
+                              comes from a Secret.
                             properties:
                               name:
-                                description: name is the variable's name.
+                                description: |-
+                                  name is the variable's name. It may not be one Crewlet sets in a coding
+                                  run itself, which Crewlet refuses in every company document:
+                                  CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_GIT_TRAILER_SEAT,
+                                  CREWLET_GIT_TRAILER_RUN or CREWLET_GIT_TRAILER_WORK_ITEM (Crewlet's
+                                  ReservedSandboxEnv).
                                 maxLength: 128
                                 minLength: 1
                                 pattern: ^[A-Za-z_][A-Za-z0-9_]*$
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_GIT_TRAILER_SEAT,
+                                    CREWLET_GIT_TRAILER_RUN and CREWLET_GIT_TRAILER_WORK_ITEM
+                                    are the engine''s: Crewlet sets them in a coding
+                                    run itself, as the run''s credential on the company''s
+                                    own code host, the base its clones and pushes
+                                    reach and the values its commit hook writes into
+                                    every commit''s trailers, and refuses a company
+                                    document that sets one, since a value here would
+                                    break the run''s clones and pushes or make a commit''s
+                                    trailers disagree with its push''s record; remove
+                                    it'
+                                  rule: '!(self in [''CREWLET_GIT_TOKEN'', ''CREWLET_GIT_URL'',
+                                    ''CREWLET_GIT_TRAILER_SEAT'', ''CREWLET_GIT_TRAILER_RUN'',
+                                    ''CREWLET_GIT_TRAILER_WORK_ITEM''])'
                               valueFrom:
                                 description: valueFrom is the Secret key the value
                                   is read from.

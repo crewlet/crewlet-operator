@@ -540,7 +540,7 @@ func TestCodeWorkGoesWithoutAMissingOptionalSignIn(t *testing.T) {
 				fixer.Spec.Sandbox.OptionalKeys = append(fixer.Spec.Sandbox.OptionalKeys, envClaudeSignIn)
 			}
 			if c.step {
-				step := v1alpha1.SandboxSetupStep{Name: "sign-in", Env: []v1alpha1.SecretEnvVar{{
+				step := v1alpha1.SandboxSetupStep{Name: "sign-in", Env: []v1alpha1.SandboxEnvVar{{
 					Name: envClaudeSignIn, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: stepSignIn},
 				}}}
 				if c.stepOptional {

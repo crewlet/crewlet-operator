@@ -153,7 +153,7 @@ func TestCodeWork(t *testing.T) {
 	}
 	setupEnv := func(company bool, name string) func(*Input) {
 		return func(in *Input) {
-			step := v1alpha1.SandboxSetupStep{Name: "login", Env: []v1alpha1.SecretEnvVar{{
+			step := v1alpha1.SandboxSetupStep{Name: "login", Env: []v1alpha1.SandboxEnvVar{{
 				Name:      name,
 				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "setup", Key: keyValue}},
 			}}}

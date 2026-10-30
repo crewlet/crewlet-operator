@@ -117,6 +117,19 @@ Variables and files the sandbox sets up for every run (`sandbox.setup[].env`,
 `sandbox.setup[].files`) and a Seat's own sandbox variables
 (`Seat.spec.sandbox.env`) take `valueFrom.secretKeyRef` for every entry.
 
+None of those variables, a Company's step's, a Seat's step's or the Seat's
+own, may be one Crewlet sets in a coding run itself: `CREWLET_GIT_TOKEN` and
+`CREWLET_GIT_URL`, a run's access to the company's own code host, and
+`CREWLET_GIT_TRAILER_SEAT`, `CREWLET_GIT_TRAILER_RUN` and
+`CREWLET_GIT_TRAILER_WORK_ITEM`, what its commit hook writes into every
+commit's trailers (Crewlet's
+[Repositories on this company's code host](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#repositories-on-this-companys-code-host)).
+Crewlet refuses a company document that sets one, and the API refuses it at
+the variable's name. The operator does not offer the code host, so no run of
+its companies is given those variables, but the names are Crewlet's all the
+same: a variable of your own, such as a token for another git host, takes
+another name.
+
 A file's `path` is where the seat's E2B box writes it. Name it relative to
 the box's home, `/home/user` (`.npmrc`), or under `~/` (`~/.npmrc`); a `..`
 that climbs out of the home lands where it resolves. An absolute path works

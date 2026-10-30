@@ -2688,6 +2688,26 @@ _Appears in:_
 | `pathStyle` _boolean_ | pathStyle addresses the bucket in the URL path rather than in the host<br />name; MinIO and most self-hosted gateways need it. |  | Optional: \{\} <br /> |
 
 
+#### SandboxEnvVar
+
+
+
+SandboxEnvVar is a variable a sandbox setup step merges into the
+environment of its commands and of a coding run. Crewlet treats every value
+there as a credential, so a literal value is not accepted: the value always
+comes from a Secret.
+
+
+
+_Appears in:_
+- [SandboxSetupStep](#sandboxsetupstep)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | name is the variable's name. It may not be one Crewlet sets in a coding<br />run itself, which Crewlet refuses in every company document:<br />CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_GIT_TRAILER_SEAT,<br />CREWLET_GIT_TRAILER_RUN or CREWLET_GIT_TRAILER_WORK_ITEM (Crewlet's<br />ReservedSandboxEnv). |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z_][A-Za-z0-9_]*$` <br />Required: \{\} <br /> |
+| `valueFrom` _[SecretValueSource](#secretvaluesource)_ | valueFrom is the Secret key the value is read from. |  | Required: \{\} <br /> |
+
+
 #### SandboxFile
 
 
@@ -2755,7 +2775,7 @@ _Appears in:_
 | `name` _string_ | name identifies the step in logs and failure messages, so Crewlet<br />refuses one of white space alone, and so does the API. |  | MaxLength: 63 <br />MinLength: 1 <br />Required: \{\} <br /> |
 | `files` _[SandboxFile](#sandboxfile) array_ | files are written into the sandbox before the commands run. Crewlet's<br />`files`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `commands` _string array_ | commands are shell commands run in order; one that exits non-zero<br />fails the sandbox. Crewlet's `commands`. Crewlet resolves nothing in a<br />command: the sandbox's login shell expands $NAME and $\{NAME\} from the<br />box's own environment (its HOME and PATH among it) and the run's,<br />never from the engine's. The run's is the steps' env, the Seat's<br />sandbox env, and what Crewlet adds: the agent's handle and, when it<br />has one, its email, and the variables that sign the coding agent in<br />to the provider its code work runs on, or, in an agent-mode<br />executor's run, those of the executor's own provider<br />(docs/guides/credentials.md says which, and when the seat's own env<br />leaves them out). The API refuses $\{NAME\} (NAME an identifier) all<br />the same, as the operator refuses every $\{NAME\} it did not write in a<br />string it renders: write a sandbox variable as $NAME. Parameter<br />expansions such as $\{1:-x\} are allowed. |  | MaxItems: 32 <br />items:MaxLength: 4096 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
-| `env` _[SecretEnvVar](#secretenvvar) array_ | env is merged into the environment of the commands and of the run.<br />Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `env` _[SandboxEnvVar](#sandboxenvvar) array_ | env is merged into the environment of the commands and of the run.<br />It may not set a variable Crewlet sets in a coding run itself, which<br />Crewlet refuses in every company document, as a Seat's<br />spec.sandbox.env may not: CREWLET_GIT_TOKEN, CREWLET_GIT_URL,<br />CREWLET_GIT_TRAILER_SEAT, CREWLET_GIT_TRAILER_RUN and<br />CREWLET_GIT_TRAILER_WORK_ITEM (Crewlet's ReservedSandboxEnv). Crewlet's<br />`env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `optionalKeys` _string array_ | optionalKeys names variables of env, and paths of files, whose value may go<br />missing. Crewlet refuses to start a run_sandbox coding run whose environment<br />or files hold a value that does not resolve: a Secret that does not exist,<br />holds no such key or holds an empty value. Under an entry listed here, such<br />a variable is left out of the run and such a file is not written, and the<br />run starts without it. A missing Secret or key under one is then no failure<br />of the object's references and holds nothing back. Under the Enforce policy<br />the operator also takes the value it pushed for it out of the engine's<br />secret store, and has the engine read the store again whether or not the<br />document can be applied, so no run starts with a deleted Secret's value, but<br />in a revision the engine runs that reads the key as required (one from<br />before the key was listed) or whose reading the operator does not know<br />(another document somebody else activated), which keeps the value until the<br />next document runs, and that one is activated once with it and at once again<br />without it; a Secret key that is also read where it is required holds the<br />document while it is missing, and keeps the value it had in a revision the<br />engine runs that requires it too until the document applies. A later step's<br />variable of the same name wins over this one's, and the Seat's<br />spec.sandbox.env over every step's, and the list beside the value that wins<br />is the one that counts for it; a file is the step's own. Crewlet's<br />`optional_keys`. |  | MaxItems: 48 <br />items:MaxLength: 1024 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
 | `brief` _string_ | brief tells the coding agent what this step made true about the<br />sandbox. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `timeoutSeconds` _integer_ | timeoutSeconds caps each command of the step. |  | Minimum: 1 <br />Optional: \{\} <br /> |
@@ -2981,7 +3001,8 @@ _Appears in:_
 
 
 SeatEnvVar is a named credential of a seat delivered as an environment
-variable: from a Secret, or provisioned by the engine.
+variable of its sandbox runs (a Seat's spec.sandbox.env): from a Secret, or
+provisioned by the engine.
 
 
 
@@ -2990,7 +3011,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | name is the variable's name. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z_][A-Za-z0-9_]*$` <br />Required: \{\} <br /> |
+| `name` _string_ | name is the variable's name. It may not be one Crewlet sets in a coding<br />run itself, which Crewlet refuses in every company document:<br />CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_GIT_TRAILER_SEAT,<br />CREWLET_GIT_TRAILER_RUN or CREWLET_GIT_TRAILER_WORK_ITEM (Crewlet's<br />ReservedSandboxEnv). |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z_][A-Za-z0-9_]*$` <br />Required: \{\} <br /> |
 | `valueFrom` _[SeatCredentialSource](#seatcredentialsource)_ | valueFrom is where the value comes from. |  | MinProperties: 1 <br />Required: \{\} <br /> |
 
 
@@ -3293,7 +3314,7 @@ _Appears in:_
 | `pauseTTLSeconds` _integer_ | pauseTTLSeconds is how long the seat's sandbox stays paused while it<br />waits on a person. Unset takes the Company's default; 0 never pauses.<br />Crewlet's `pause_ttl_seconds`. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `maxTurns` _integer_ | maxTurns caps the agentic rounds of the seat's coding runs. Unset<br />takes the Company's default; 0 is uncapped. Crewlet's `max_turns`. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `mcpServerRefs` _[LocalObjectReference](#localobjectreference) array_ | mcpServerRefs name the MCPServers the coding agent may use. Crewlet's<br />mcp.servers. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
-| `env` _[SeatEnvVar](#seatenvvar) array_ | env is the environment of the seat's sandbox runs, for the external<br />tokens its code work needs: from Secrets, or provisioned by the<br />engine, such as the GitLab token a provisioning Integration mints for<br />the seat, named as its tool server's is so both are one token. A<br />ClaudeCode sign-in here (CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY,<br />ANTHROPIC_AUTH_TOKEN or a CLAUDE_CODE_USE_* toggle) keeps the key and<br />endpoint of the provider the code work runs on out of the box, unless<br />a run goes without its value (optionalKeys), when the box is given<br />them as it is with no sign-in; and a variable named as one the<br />provider would set wins over it. Crewlet's `env`, a credential<br />position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `env` _[SeatEnvVar](#seatenvvar) array_ | env is the environment of the seat's sandbox runs, for the external<br />tokens its code work needs: from Secrets, or provisioned by the<br />engine, such as the GitLab token a provisioning Integration mints for<br />the seat, named as its tool server's is so both are one token. A<br />ClaudeCode sign-in here (CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY,<br />ANTHROPIC_AUTH_TOKEN or a CLAUDE_CODE_USE_* toggle) keeps the key and<br />endpoint of the provider the code work runs on out of the box, unless<br />a run goes without its value (optionalKeys), when the box is given<br />them as it is with no sign-in; and a variable named as one the<br />provider would set wins over it. It may not set a variable Crewlet<br />sets in a coding run itself, which Crewlet refuses in every company<br />document, and nor may a setup step's env: CREWLET_GIT_TOKEN and<br />CREWLET_GIT_URL, a run's credential on the company's own code host and<br />the base its clones and pushes reach, and CREWLET_GIT_TRAILER_SEAT,<br />CREWLET_GIT_TRAILER_RUN and CREWLET_GIT_TRAILER_WORK_ITEM, the values<br />its commit hook writes into every commit's trailers (Crewlet's<br />ReservedSandboxEnv). No run of a company the operator runs is given<br />them, since the operator does not offer the code host, but the names<br />are the engine's all the same. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `optionalKeys` _string array_ | optionalKeys names variables of env whose value may go missing. Crewlet<br />refuses to start a run_sandbox coding run whose environment holds a value<br />that does not resolve: a Secret that does not exist, holds no such key or<br />holds an empty value, or a provisioned value nothing mints. Under a variable<br />listed here, such a value is left out of the run instead, which starts<br />without it. A missing Secret or key under one is then no failure of the<br />Seat's references and holds nothing back. Under the Enforce policy the<br />operator also takes the value it pushed for it out of the engine's secret<br />store, and has the engine read the store again whether or not the document<br />can be applied, so no run starts with a deleted Secret's value, but in a<br />revision the engine runs that reads the key as required (one from before the<br />key was listed) or whose reading the operator does not know (another<br />document somebody else activated), which keeps the value until the next<br />document runs, and that one is activated once with it and at once again<br />without it; a Secret key that is also read where it is required holds the<br />document while it is missing, and keeps the value it had in a revision the<br />engine runs that requires it too until the document applies. A provisioned<br />value an Integration mints for the seat is waited for whatever this says.<br />env wins over a setup step's variable of the same name, and so does this<br />list over the step's optionalKeys for it. Crewlet's `optional_keys`. |  | MaxItems: 32 <br />items:MaxLength: 128 <br />items:MinLength: 1 <br />items:Pattern: `^[A-Za-z_][A-Za-z0-9_]*$` <br />Optional: \{\} <br /> |
 | `setup` _[SandboxSetupStep](#sandboxsetupstep) array_ | setup is the seat's own provisioning, applied after the Company's.<br />Crewlet's `setup`. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 
@@ -3389,15 +3410,14 @@ _Appears in:_
 
 
 SecretEnvVar is a named credential delivered as an environment variable,
-such as a sandbox setup step's token or a coding CLI's model key. Crewlet
-treats every value in the positions that use this type as a credential, so
-a literal value is not accepted: the value always comes from a Secret.
+such as a coding CLI's model key. Crewlet treats every value in the
+positions that use this type as a credential, so a literal value is not
+accepted: the value always comes from a Secret.
 
 
 
 _Appears in:_
 - [LLMProviderSpec](#llmproviderspec)
-- [SandboxSetupStep](#sandboxsetupstep)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -3473,6 +3493,7 @@ _Appears in:_
 - [EnvVar](#envvar)
 - [MCPEnvVar](#mcpenvvar)
 - [MCPHeader](#mcpheader)
+- [SandboxEnvVar](#sandboxenvvar)
 - [SandboxFile](#sandboxfile)
 - [SecretEnvVar](#secretenvvar)
 

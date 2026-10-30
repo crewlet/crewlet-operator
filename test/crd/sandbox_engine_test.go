@@ -125,7 +125,7 @@ type stepShape struct {
 // and a step that does one thing of each kind Crewlet counts.
 func setupStepShapes() []stepShape {
 	file := []v1.SandboxFile{{Path: ".npmrc", ValueFrom: fromSecret("company-sandbox", "file")}}
-	env := []v1.SecretEnvVar{{Name: "NPM_TOKEN", ValueFrom: fromSecret("company-sandbox", "token")}}
+	env := []v1.SandboxEnvVar{{Name: "NPM_TOKEN", ValueFrom: fromSecret("company-sandbox", "token")}}
 	return []stepShape{
 		{"a name of a space", v1.SandboxSetupStep{Name: " ", Brief: "b"}},
 		{"a name of tabs and a wide space", v1.SandboxSetupStep{Name: "\t\u3000\t", Brief: "b"}},
