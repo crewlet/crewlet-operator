@@ -165,28 +165,28 @@ type CompanyLLMSettings struct {
 	UsePlatformProviders *bool `json:"usePlatformProviders,omitempty"`
 }
 
-// CompanyAssistant is whether the company runs the Dashboard Assistant, the
-// models it runs on and the bounds of one turn. It maps onto Crewlet's
+// CompanyAssistant is whether the company runs Ask Crewlet, the models it
+// runs on and the bounds of one turn. It maps onto Crewlet's
 // `assistant` block, each field onto the field it names.
 //
-// The assistant answers a signed-in person's questions about the company and
+// Ask Crewlet answers a signed-in person's questions about the company and
 // prepares changes for that person to approve, acting only as them: every
 // read is a request of theirs, and nothing is written until they approve.
 // Every provider in llm must drive a CLI Crewlet runs with no tool of its
 // own (ClaudeCode or Pi; Codex keeps a shell its sandbox only confines, and
-// OpenCode's has not been measured to go), with webTools Denied: the
-// assistant runs it in the engine's pod, never as a seat's executor runs. Crewlet refuses any other in the dry run before every apply, and
+// OpenCode's has not been measured to go), with webTools Denied: Ask
+// Crewlet runs it in the engine's pod, never as a seat's executor runs. Crewlet refuses any other in the dry run before every apply, and
 // the refusal is reported on the Company, since the rule turns on the
 // providers' own specs.
 // +kubebuilder:validation:MinProperties=1
-// +kubebuilder:validation:XValidation:rule="!has(self.enabled) || !self.enabled || (has(self.llm) && size(self.llm) > 0)",message="an enabled assistant needs llm: name the model provider it runs on, one whose webTools is Denied",fieldPath=".llm"
+// +kubebuilder:validation:XValidation:rule="!has(self.enabled) || !self.enabled || (has(self.llm) && size(self.llm) > 0)",message="Ask Crewlet, when enabled, needs llm: name the model provider it runs on, one whose webTools is Denied",fieldPath=".llm"
 type CompanyAssistant struct {
-	// enabled runs the assistant. Unset or false leaves it off. Crewlet's
+	// enabled runs Ask Crewlet. Unset or false leaves it off. Crewlet's
 	// `enabled`.
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
 
-	// llm is the assistant's model chain, the first provider tried first,
+	// llm is Ask Crewlet's model chain, the first provider tried first,
 	// referred to as a Seat's chain is. Required when enabled is true.
 	// Crewlet's `llm`.
 	// +optional
@@ -224,27 +224,27 @@ type CompanyAssistant struct {
 	// +kubebuilder:validation:Maximum=365
 	RetentionDays int32 `json:"retentionDays,omitempty"`
 
-	// tokenBudget caps the tokens each person's assistant may spend per
+	// tokenBudget caps the tokens Ask Crewlet may spend for each person per
 	// window, charged on top of the company's own spec.tokenBudget.
 	// Crewlet's `token_budget`.
 	// +optional
 	TokenBudget TokenBudget `json:"tokenBudget,omitzero"`
 
-	// deepWork lets the assistant hand a large task (research, scripts,
+	// deepWork lets Ask Crewlet hand a large task (research, scripts,
 	// files, many steps) to a coding CLI running its own tools in a box of
-	// its own, which needs spec.sandbox. Unset, the assistant answers in
+	// its own, which needs spec.sandbox. Unset, Ask Crewlet answers in
 	// quick mode only. Crewlet's `deep_work`.
 	// +optional
 	DeepWork CompanyAssistantDeepWork `json:"deepWork,omitzero"`
 }
 
-// CompanyAssistantDeepWork is the Dashboard Assistant's deep work: the model
-// a large task is handed to and the bounds of one run. It maps onto Crewlet's
+// CompanyAssistantDeepWork is Ask Crewlet's deep work: the model a large
+// task is handed to and the bounds of one run. It maps onto Crewlet's
 // `assistant.deep_work` block, each field onto the field it names.
 //
 // A deep-work run is Claude Code in its own harness, with its shell, its
 // files and its web tools: the point of the escalation. Its one way into
-// Crewlet is the signed-in person's own assistant tools over the tool
+// Crewlet is the signed-in person's own Ask Crewlet tools over the tool
 // bridge, so every read is still that person's request and every write still
 // a proposal they approve. The provider llm names must drive ClaudeCode:
 // Crewlet confines a deep-work run on the engine pod around that one CLI's
@@ -869,7 +869,7 @@ type CompanyExposure struct {
 	// coding runs call the engine back on, overriding the one the class's
 	// webhooks.hostname derives. A seat's executor run in E2B calls the
 	// engine's tool bridge there, and exports its traces there while the
-	// class sends telemetry, and the Dashboard Assistant's deep work calls
+	// class sends telemetry, and Ask Crewlet's deep work calls
 	// the bridge there wherever it runs; a seat's Direct run, on a data pod
 	// or a seat pod, dials its own pod's listener on loopback for both.
 	// Required
@@ -1215,7 +1215,7 @@ type CompanySpec struct {
 	// +optional
 	LLM CompanyLLMSettings `json:"llm,omitzero"`
 
-	// assistant is the company's Dashboard Assistant. Unset leaves it off.
+	// assistant configures Ask Crewlet. Unset leaves it off.
 	// Crewlet's `assistant`.
 	// +optional
 	Assistant CompanyAssistant `json:"assistant,omitzero"`

@@ -38,9 +38,9 @@ const (
 // `denied`).
 //
 // A seat keeps its CLI's web tools: it must not have less reach than the
-// same CLI at a terminal. A provider the Company's Dashboard Assistant runs
-// on turns them off, which Crewlet requires of every model in
-// spec.assistant.llm: the assistant reads only what the signed-in person's
+// same CLI at a terminal. A provider Ask Crewlet runs on turns
+// them off, which Crewlet requires of every model in
+// spec.assistant.llm: Ask Crewlet reads only what the signed-in person's
 // own requests return, and a page the model fetched for itself is text no
 // authority decision saw. Crewlet turns them off only for a CLI whose profile
 // carries a measured way to (its web_denial): ClaudeCode, Codex, OpenCode and
@@ -270,7 +270,7 @@ type LLMProviderSettings struct {
 
 	// webTools is whether the CLI keeps its own web tools. Unset is
 	// Allowed, every seat's default. Denied is required of every provider
-	// the Company's Dashboard Assistant runs on (spec.assistant.llm), and
+	// Ask Crewlet runs on (spec.assistant.llm), and
 	// is refused for a CLI Crewlet has no way to turn the web off for: it
 	// takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's
 	// `overrides.web_tools`.

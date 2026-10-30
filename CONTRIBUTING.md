@@ -320,7 +320,7 @@ which engine pod's boxes dial their tool bridge on loopback
 `(*Bridge).Reaches` in `internal/api/mcpbridge/mcpbridge.go`) to
 `internal/controller/company_workload.go`, which gives every engine pod the
 Company's public address as `CREWLET_MCP_BRIDGE_URL` for the runs placed in
-E2B and the Dashboard Assistant's deep work alone, to
+E2B and Ask Crewlet's deep work alone, to
 `internal/render/bootstrap.go`, which binds a seat pod's `api.port` on every
 interface so that its own `Direct` boxes reach it on loopback, to
 `internal/controller/company_exposure.go`, which under `Isolated` lets the

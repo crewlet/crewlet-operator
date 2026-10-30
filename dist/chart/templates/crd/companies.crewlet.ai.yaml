@@ -75,15 +75,15 @@ spec:
             properties:
               assistant:
                 description: |-
-                  assistant is the company's Dashboard Assistant. Unset leaves it off.
+                  assistant configures Ask Crewlet. Unset leaves it off.
                   Crewlet's `assistant`.
                 minProperties: 1
                 properties:
                   deepWork:
                     description: |-
-                      deepWork lets the assistant hand a large task (research, scripts,
+                      deepWork lets Ask Crewlet hand a large task (research, scripts,
                       files, many steps) to a coding CLI running its own tools in a box of
-                      its own, which needs spec.sandbox. Unset, the assistant answers in
+                      its own, which needs spec.sandbox. Unset, Ask Crewlet answers in
                       quick mode only. Crewlet's `deep_work`.
                     properties:
                       llm:
@@ -140,12 +140,12 @@ spec:
                     type: object
                   enabled:
                     description: |-
-                      enabled runs the assistant. Unset or false leaves it off. Crewlet's
+                      enabled runs Ask Crewlet. Unset or false leaves it off. Crewlet's
                       `enabled`.
                     type: boolean
                   llm:
                     description: |-
-                      llm is the assistant's model chain, the first provider tried first,
+                      llm is Ask Crewlet's model chain, the first provider tried first,
                       referred to as a Seat's chain is. Required when enabled is true.
                       Crewlet's `llm`.
                     items:
@@ -204,7 +204,7 @@ spec:
                     type: integer
                   tokenBudget:
                     description: |-
-                      tokenBudget caps the tokens each person's assistant may spend per
+                      tokenBudget caps the tokens Ask Crewlet may spend for each person per
                       window, charged on top of the company's own spec.tokenBudget.
                       Crewlet's `token_budget`.
                     minProperties: 1
@@ -239,7 +239,7 @@ spec:
                 type: object
                 x-kubernetes-validations:
                 - fieldPath: .llm
-                  message: 'an enabled assistant needs llm: name the model provider
+                  message: 'Ask Crewlet, when enabled, needs llm: name the model provider
                     it runs on, one whose webTools is Denied'
                   rule: '!has(self.enabled) || !self.enabled || (has(self.llm) &&
                     size(self.llm) > 0)'
@@ -591,7 +591,7 @@ spec:
                       coding runs call the engine back on, overriding the one the class's
                       webhooks.hostname derives. A seat's executor run in E2B calls the
                       engine's tool bridge there, and exports its traces there while the
-                      class sends telemetry, and the Dashboard Assistant's deep work calls
+                      class sends telemetry, and Ask Crewlet's deep work calls
                       the bridge there wherever it runs; a seat's Direct run, on a data pod
                       or a seat pod, dials its own pod's listener on loopback for both.
                       Required

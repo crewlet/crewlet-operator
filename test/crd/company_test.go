@@ -669,7 +669,7 @@ func TestCompanyAssistantValidation(t *testing.T) {
 			c.Spec.Assistant = a
 		}
 	}
-	const msgEnabledNeedsLLM = "an enabled assistant needs llm"
+	const msgEnabledNeedsLLM = "Ask Crewlet, when enabled, needs llm"
 	cases := []createCase[*v1.Company]{
 		{name: "an enabled assistant is accepted", mutate: assistant(nil)},
 		{

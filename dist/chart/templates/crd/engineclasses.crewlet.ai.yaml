@@ -230,7 +230,7 @@ spec:
                       resumes or its pause TTL expires (the Seat's pauseTTLSeconds, else the
                       Company's spec.sandbox.defaultPauseTTLSeconds, 1800 seconds unless
                       set; 0 removes the box at once). It holds the confined box of each
-                      Dashboard Assistant deep-work run placed on the pod too, in a
+                      Ask Crewlet deep-work run placed on the pod too, in a
                       directory of its own. A box is removed when its run ends, and holds
                       the run's checkout, its coding CLI's home and temporary files, and
                       whatever the run installs and builds. A pod whose boxes
@@ -1371,7 +1371,7 @@ spec:
                       code host and the package registries it installs from are reached
                       from the pod; it calls its tools and sends its traces to its own pod's
                       listener on loopback, which no policy polices. A data pod also calls
-                      the Company's public address, for the Dashboard Assistant's deep work,
+                      the Company's public address, for Ask Crewlet's deep work,
                       which Crewlet holds to it in whichever cell it runs. A call that lands
                       on the public route's proxies inside the cluster is admitted by a rule
                       of the data pods' own, naming the webhooks route's proxy namespaces or
@@ -1956,7 +1956,7 @@ spec:
                       description: |-
                         webTools is whether the CLI keeps its own web tools. Unset is
                         Allowed, every seat's default. Denied is required of every provider
-                        the Company's Dashboard Assistant runs on (spec.assistant.llm), and
+                        Ask Crewlet runs on (spec.assistant.llm), and
                         is refused for a CLI Crewlet has no way to turn the web off for: it
                         takes ClaudeCode, Codex, OpenCode or Pi. Crewlet's
                         `overrides.web_tools`.

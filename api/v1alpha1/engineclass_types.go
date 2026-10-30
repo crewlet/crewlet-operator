@@ -198,7 +198,7 @@ type DataPodSettings struct {
 	// resumes or its pause TTL expires (the Seat's pauseTTLSeconds, else the
 	// Company's spec.sandbox.defaultPauseTTLSeconds, 1800 seconds unless
 	// set; 0 removes the box at once). It holds the confined box of each
-	// Dashboard Assistant deep-work run placed on the pod too, in a
+	// Ask Crewlet deep-work run placed on the pod too, in a
 	// directory of its own. A box is removed when its run ends, and holds
 	// the run's checkout, its coding CLI's home and temporary files, and
 	// whatever the run installs and builds. A pod whose boxes
@@ -607,7 +607,7 @@ const (
 
 // WebhookExposure is how vendors' webhooks, and the calls coding runs make
 // back to the engine, reach a company's engine: the tool bridge calls and the
-// traces of a seat's executor run in E2B, and the Dashboard Assistant's deep
+// traces of a seat's executor run in E2B, and Ask Crewlet's deep
 // work's calls, a seat's Direct run dialling its own engine pod on loopback
 // instead. Whatever the mode, they
 // reach the engine's public listener (Crewlet's api.public), a port of its
@@ -894,7 +894,7 @@ type NetworkPolicySettings struct {
 	// code host and the package registries it installs from are reached
 	// from the pod; it calls its tools and sends its traces to its own pod's
 	// listener on loopback, which no policy polices. A data pod also calls
-	// the Company's public address, for the Dashboard Assistant's deep work,
+	// the Company's public address, for Ask Crewlet's deep work,
 	// which Crewlet holds to it in whichever cell it runs. A call that lands
 	// on the public route's proxies inside the cluster is admitted by a rule
 	// of the data pods' own, naming the webhooks route's proxy namespaces or
