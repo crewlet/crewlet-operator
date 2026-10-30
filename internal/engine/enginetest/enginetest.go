@@ -562,18 +562,22 @@ func Binary(t T) string {
 
 // BoxURLVerdicts is whether the engine refuses to boot on each of variables,
 // the variables of a node's environment that hand its sandboxes an address to
-// dial back to it (Crewlet's engine.ReadBoxURLs: the tool bridge's and the
-// telemetry receiver's), as env sets them: true where it refuses the value,
-// false where it takes it. A boot reads them before it opens anything, and no
-// validation does, since they are the pod's environment rather than its
-// configuration; `crewlet llm doctor` reads them as the boot does, and says
-// which it would refuse, without running an engine. So that is what this
-// asks, beside document, a company document with a providers.llm entry for
-// doctor to examine, with env alone as its environment (and PATH and HOME)
-// and no Tier A, so that it resolves every reference from env, and without
-// its real completions. Doctor's own verdict on the entry is not read: on a
-// machine without the entry's CLI it reports a problem with it, as it does
-// on a box URL it refuses, and exits with an error for either.
+// dial back to it (Crewlet's engine.ReadBoxURLs: the tool bridge's, the
+// telemetry receiver's and the code host's, CREWLET_BOX_GIT_URL), as env sets
+// them: true where it refuses the value, false where it takes it. No pod the
+// operator runs carries the third, since the operator does not offer the code
+// host and the API refuses every CREWLET_ variable in a Company's or a
+// class's env, so its suites ask about the first two alone. A boot reads
+// them before it opens anything, and no validation does, since they are the
+// pod's environment rather than its configuration; `crewlet llm doctor` reads
+// them as the boot does, and says which it would refuse, without running an
+// engine. So that is what this asks, beside document, a company document
+// with a providers.llm entry for doctor to examine, with env alone as its
+// environment (and PATH and HOME) and no Tier A, so that it resolves every
+// reference from env, and without its real completions. Doctor's own verdict
+// on the entry is not read: on a machine without the entry's CLI it reports a
+// problem with it, as it does on a box URL it refuses, and exits with an
+// error for either.
 func BoxURLVerdicts(t T, document []byte, env map[string]string, variables ...string) map[string]bool {
 	t.Helper()
 	dir := t.TempDir()

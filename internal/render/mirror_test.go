@@ -196,6 +196,18 @@ const (
 	// refuses one that is set and unusable, both first read at codeHostRead.
 	boxURLGo       = "internal/sandbox/boxurl.go"
 	engineBoxURLGo = "internal/engine/boxurl.go"
+	// boxGitURLRead is crewlet/crewlet#298's engine whose boot reads a third
+	// address a box dials back to the engine, read at the head of its branch:
+	// the code host's base a coding box clones and pushes through
+	// (CREWLET_BOX_GIT_URL, sandbox.BoxGitURLVar), through ParseBoxURL as the
+	// tool bridge's and the telemetry receiver's are, its boot refused on a
+	// value that is set and unusable. The operator hands its pods the
+	// bridge's and the receiver's alone, which the render judges: it does not
+	// offer the code host, so it sets no code host's base, and no pod of its
+	// carries one another way, since the API refuses every CREWLET_ variable
+	// a Company or a class gives the engine's pods. So no boot of its meets
+	// the third address, and no verdict moves.
+	boxGitURLRead = "v0.1.1-0.20261030022059-2887e830ccb5"
 	// engineClassGo is the EngineClass API, which several decisions copied
 	// from the engine are written into.
 	engineClassGo = "api/v1alpha1/engineclass_types.go"
@@ -405,9 +417,11 @@ var addressCopies = []string{addressGo, companyTypesGo, engineClassGo, companyEx
 // holding a data pod back on one, the API refusing one a Company states as
 // its publicBaseURL or a class's webhooks host name template makes, and the
 // controller's message naming the variable and where its address came from;
-// and the controller's choice of which variables a pod is handed, which the
-// render judges (boxURLs and receiverURL).
-var boxURLCopies = append([]string{"internal/controller/company_workload.go"}, addressCopies...)
+// the controller's choice of which variables a pod is handed, which the
+// render judges (boxURLs and receiverURL); and enginetest's BoxURLVerdicts,
+// which names the addresses the boot reads for the suites that ask it.
+var boxURLCopies = append([]string{"internal/controller/company_workload.go", "internal/engine/enginetest/enginetest.go"},
+	addressCopies...)
 
 // signInPosture is every operator file that copies where Crewlet lets a
 // second factor be optional without the acknowledgement: the render, which
@@ -1225,17 +1239,18 @@ var mirrored = []mirror{
 	{
 		file: engineBoxURLGo, name: "ReadBoxURLs",
 		against: boxURLCopies,
-		decides: "a node reads the tool bridge's and the telemetry receiver's addresses, CREWLET_MCP_BRIDGE_URL and " +
-			"CREWLET_SANDBOX_OTEL_RECEIVER_URL, each through ParseBoxURL",
-		digest: "b50a0e635ba5d97bee86cbff5f1678b576f3b93b8d3f6148a0c8e42a4cbc8ccb",
-		read:   codeHostRead,
+		decides: "a node reads the tool bridge's, the telemetry receiver's and the code host's addresses, " +
+			"CREWLET_MCP_BRIDGE_URL, CREWLET_SANDBOX_OTEL_RECEIVER_URL and CREWLET_BOX_GIT_URL, each through " +
+			"ParseBoxURL",
+		digest: "7b282fd465e5691eef2c90769071f45c96b6225695dc0dc6de0b4e16cf2fb834",
+		read:   boxGitURLRead,
 	},
 	{
 		file: engineBoxURLGo, name: "BoxURLs.All",
 		against: boxURLCopies,
-		decides: "the addresses a node's boot refuses on are the receiver's and the bridge's",
-		digest:  "e345e77ddce9e86c4fc3f4a3fd330218c015309ab79a5f719ffe2d4b81918f89",
-		read:    codeHostRead,
+		decides: "the addresses a node's boot refuses on are the receiver's, the bridge's and the code host's",
+		digest:  "3733d06f883b8ca05113b53f214d68c90d79e6f910154968e8db740b926ded9b",
+		read:    boxGitURLRead,
 	},
 	{
 		file: engineBoxURLGo, name: "BoxURLs.Refusal",

@@ -25,7 +25,11 @@ const (
 // engine to its sandboxes, which dial it back (Crewlet's mcpbridge.BaseURLVar,
 // the tool bridge's, and sandbox.OtelReceiverURLVar, the telemetry
 // receiver's), and which AddressError names when Crewlet would refuse to
-// start on the address one holds.
+// start on the address one holds. Crewlet's boot reads a third the same way,
+// sandbox.BoxGitURLVar (CREWLET_BOX_GIT_URL), the base a coding box reaches
+// the company's code host at, which no pod the operator runs carries: the
+// operator does not offer the code host, so it sets none, and the API refuses
+// every CREWLET_ variable a Company or a class gives the engine's pods.
 const (
 	EnvBridgeURL   = "CREWLET_MCP_BRIDGE_URL"
 	EnvReceiverURL = "CREWLET_SANDBOX_OTEL_RECEIVER_URL"
