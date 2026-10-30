@@ -141,10 +141,9 @@ spec:
                   mcp are tool-server credentials and settings every agent seat
                   directly in this unit inherits; a seat's own values win per variable.
                   One entry per server, keyed by its name. Crewlet's `mcp_env`, a
-                  credential position. Every credential comes from a Secret: the engine
-                  provisions a credential for one seat, and a unit's are every member's.
-                  A value one seat must not share, such as slack-mcp-server's channel
-                  cache, belongs on the Seat.
+                  credential position. A value one seat must not share, such as
+                  slack-mcp-server's channel cache or a seat's own credential, belongs
+                  on the Seat.
                 items:
                   description: |-
                     MCPCredentials are the values one tool server is started with for a seat:
@@ -169,8 +168,8 @@ spec:
                       items:
                         description: |-
                           MCPCredentialValue is one value a tool server is started with for a seat:
-                          one of its credentials, from a Secret or provisioned by the engine, or a
-                          setting that is no credential, written as a literal value. Whether it is an
+                          one of its credentials, from a Secret, or a setting that is no credential,
+                          written as a literal value. Whether it is an
                           environment variable or a request header depends on the server's
                           transport, which is why its name follows the grammar of an HTTP header
                           name, of which an environment variable's name is a subset.
@@ -208,32 +207,13 @@ spec:
                               rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                           valueFrom:
                             description: |-
-                              valueFrom is where a credential comes from: a Secret key, or, for a
-                              Seat's own credentials, the engine (provisioned). For a header the
+                              valueFrom is the Secret key a credential comes from. For a header the
                               value is the whole header, scheme included (for example "Bearer
-                              <token>"); a provisioned value is the credential alone, so provision
-                              one for a variable rather than a header.
-                            minProperties: 1
+                              <token>"). A credential the engine mints for a seat's account at a
+                              vendor it provisions is never named here: the engine gives it to the
+                              vendor's tool server itself, and refuses a credential of that vendor's
+                              server here.
                             properties:
-                              provisioned:
-                                description: |-
-                                  provisioned is a value the engine creates and keeps, under an
-                                  Integration with provisioning Engine.
-                                properties:
-                                  name:
-                                    description: |-
-                                      name names the value among the seat's provisioned credentials. Every
-                                      place a seat names the same provisioned name refers to one value, so
-                                      a token given to a tool server's environment and to the seat's
-                                      sandbox is one token; different names are different values, such as
-                                      an account's token and its email address.
-                                    maxLength: 32
-                                    minLength: 1
-                                    pattern: ^[a-z0-9][a-z0-9-]*$
-                                    type: string
-                                required:
-                                - name
-                                type: object
                               secretKeyRef:
                                 description: secretKeyRef selects the Secret key that
                                   holds the value.
@@ -255,11 +235,9 @@ spec:
                                 - key
                                 - name
                                 type: object
+                            required:
+                            - secretKeyRef
                             type: object
-                            x-kubernetes-validations:
-                            - message: exactly one of secretKeyRef and provisioned
-                                must be set
-                              rule: has(self.secretKeyRef) != has(self.provisioned)
                         required:
                         - name
                         type: object
@@ -305,10 +283,6 @@ spec:
                 x-kubernetes-list-map-keys:
                 - name
                 x-kubernetes-list-type: map
-                x-kubernetes-validations:
-                - message: 'a unit''s credentials come from Secrets: the engine provisions
-                    a credential for one seat, so name it on the Seat'
-                  rule: self.all(c, c.env.all(v, !has(v.valueFrom) || !has(v.valueFrom.provisioned)))
               parentRef:
                 description: |-
                   parentRef names the Unit this one belongs to. Unset makes it a

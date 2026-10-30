@@ -25,8 +25,8 @@ const (
 )
 
 // MCPCredentialValue is one value a tool server is started with for a seat:
-// one of its credentials, from a Secret or provisioned by the engine, or a
-// setting that is no credential, written as a literal value. Whether it is an
+// one of its credentials, from a Secret, or a setting that is no credential,
+// written as a literal value. Whether it is an
 // environment variable or a request header depends on the server's
 // transport, which is why its name follows the grammar of an HTTP header
 // name, of which an environment variable's name is a subset.
@@ -58,13 +58,14 @@ type MCPCredentialValue struct {
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="value may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	Value *string `json:"value,omitempty"`
 
-	// valueFrom is where a credential comes from: a Secret key, or, for a
-	// Seat's own credentials, the engine (provisioned). For a header the
+	// valueFrom is the Secret key a credential comes from. For a header the
 	// value is the whole header, scheme included (for example "Bearer
-	// <token>"); a provisioned value is the credential alone, so provision
-	// one for a variable rather than a header.
+	// <token>"). A credential the engine mints for a seat's account at a
+	// vendor it provisions is never named here: the engine gives it to the
+	// vendor's tool server itself, and refuses a credential of that vendor's
+	// server here.
 	// +optional
-	ValueFrom SeatCredentialSource `json:"valueFrom,omitzero"`
+	ValueFrom SecretValueSource `json:"valueFrom,omitzero"`
 }
 
 // MCPCredentials are the values one tool server is started with for a seat:
@@ -185,15 +186,13 @@ type UnitSpec struct {
 	// mcp are tool-server credentials and settings every agent seat
 	// directly in this unit inherits; a seat's own values win per variable.
 	// One entry per server, keyed by its name. Crewlet's `mcp_env`, a
-	// credential position. Every credential comes from a Secret: the engine
-	// provisions a credential for one seat, and a unit's are every member's.
-	// A value one seat must not share, such as slack-mcp-server's channel
-	// cache, belongs on the Seat.
+	// credential position. A value one seat must not share, such as
+	// slack-mcp-server's channel cache or a seat's own credential, belongs
+	// on the Seat.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=16
-	// +kubebuilder:validation:XValidation:rule="self.all(c, c.env.all(v, !has(v.valueFrom) || !has(v.valueFrom.provisioned)))",message="a unit's credentials come from Secrets: the engine provisions a credential for one seat, so name it on the Seat"
 	MCP []MCPCredentials `json:"mcp,omitempty"`
 }
 

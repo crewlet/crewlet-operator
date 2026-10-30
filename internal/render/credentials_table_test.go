@@ -140,16 +140,12 @@ var credentialPositions = []credentialPosition{
 	}},
 	{Tier: tierCompany, Path: "roles[].mcp_env.*.*", Sources: []credentialSource{
 		{Field: "Seat.spec.mcp[].env[].valueFrom.secretKeyRef", Reference: perEnvOrHead},
-		{
-			Field: "Seat.spec.mcp[].env[].valueFrom.provisioned", Reference: provisioned,
-			When: "under an Integration with provisioning Engine (GitLab, Mattermost, Datadog, Atlassian)",
-		},
 	}},
 	{Tier: tierCompany, Path: "roles[].sandbox.env.*", Sources: []credentialSource{
 		{Field: "Seat.spec.sandbox.env[].valueFrom.secretKeyRef", Reference: perVariable},
 		{
 			Field: "Seat.spec.sandbox.env[].valueFrom.provisioned", Reference: provisioned,
-			When: "under an Integration with provisioning Engine",
+			When: "under the vendor's Integration with provisioning Engine",
 		},
 	}},
 	{Tier: tierCompany, Path: "roles[].sandbox.setup[].files.*", Sources: []credentialSource{
@@ -199,10 +195,9 @@ var credentialPositions = []credentialPosition{
 		{Field: "Integration.spec.mattermost.engineProvisioning.adminTokenSecretRef", Reference: oneKey},
 	}},
 	{Tier: tierCompany, Path: "roles[].integrations.mattermost.bot_token", Sources: []credentialSource{
-		{Field: "Seat.spec.integrations.mattermost.botToken.secretKeyRef", Reference: oneKey},
 		{
-			Field: "Seat.spec.integrations.mattermost.botToken.provisioned", Reference: provisioned,
-			When: "under a Mattermost Integration with provisioning Engine",
+			Field: "Seat.spec.integrations.mattermost.botToken.secretKeyRef", Reference: oneKey,
+			When: "under a Mattermost Integration with provisioning External",
 		},
 	}},
 	{Tier: tierCompany, Path: "integrations.jira.token", Sources: []credentialSource{

@@ -118,14 +118,14 @@ func containerWebhookMode(m v1alpha1.ContainerWebhookMode) string {
 	return ""
 }
 
-func gitHubAccessTier(t v1alpha1.GitHubAccessTier) string {
-	switch t {
-	case v1alpha1.GitHubAccessReadOnly:
-		return "read_only"
-	case v1alpha1.GitHubAccessReview:
-		return "review"
-	case v1alpha1.GitHubAccessFullAccess:
-		return "full_access"
+// gitHubPermission maps onto the level GitHub's API takes for an app
+// permission.
+func gitHubPermission(p v1alpha1.GitHubPermission) string {
+	switch p {
+	case v1alpha1.GitHubPermissionRead:
+		return "read"
+	case v1alpha1.GitHubPermissionWrite:
+		return "write"
 	}
 	return ""
 }
@@ -213,12 +213,37 @@ func cliAgentAuthMode(m v1alpha1.CLIAgentAuthMode) string {
 	return ""
 }
 
-func gitLabAccessLevel(l v1alpha1.GitLabAccessLevel) string {
+// gitLabAccessLevel maps a GitLab role onto the integer GitLab's Members API
+// takes for it, which is what Crewlet stores. Zero is an unset role.
+func gitLabAccessLevel(l v1alpha1.GitLabAccessLevel) int32 {
 	switch l {
+	case v1alpha1.GitLabGuest:
+		return 10
+	case v1alpha1.GitLabPlanner:
+		return 15
+	case v1alpha1.GitLabReporter:
+		return 20
 	case v1alpha1.GitLabDeveloper:
-		return "developer"
+		return 30
 	case v1alpha1.GitLabMaintainer:
-		return "maintainer"
+		return 40
+	case v1alpha1.GitLabOwner:
+		return 50
+	}
+	return 0
+}
+
+// mattermostRole maps onto the identifier Mattermost's API takes for a role.
+func mattermostRole(r v1alpha1.MattermostRole) string {
+	switch r {
+	case v1alpha1.MattermostSystemUser:
+		return "system_user"
+	case v1alpha1.MattermostSystemPostAllPublic:
+		return "system_post_all_public"
+	case v1alpha1.MattermostSystemPostAll:
+		return "system_post_all"
+	case v1alpha1.MattermostSystemAdmin:
+		return "system_admin"
 	}
 	return ""
 }
@@ -264,6 +289,46 @@ func secondFactor(f v1alpha1.SecondFactor) string {
 		return "optional"
 	case v1alpha1.SecondFactorRequired, "":
 		return ""
+	}
+	return ""
+}
+
+// provisionedVendor maps onto the vendor's name in the engine's own name for a
+// credential it mints, which is also the key of its integrations block.
+func provisionedVendor(v v1alpha1.ProvisionedVendor) string {
+	switch v {
+	case v1alpha1.ProvisionedGitLab:
+		return VendorGitLab
+	case v1alpha1.ProvisionedMattermost:
+		return VendorMattermost
+	case v1alpha1.ProvisionedDatadog:
+		return VendorDatadog
+	case v1alpha1.ProvisionedAtlassian:
+		return VendorAtlassian
+	}
+	return ""
+}
+
+// The fields of the engine's own names for the credentials it mints.
+const (
+	sealedToken    = "TOKEN"
+	sealedEmail    = "EMAIL"
+	sealedAppKey   = "APP_KEY"
+	sealedBotToken = "BOT_TOKEN"
+)
+
+// provisionedField maps onto the field in the engine's own name for a
+// credential it mints.
+func provisionedField(f v1alpha1.ProvisionedField) string {
+	switch f {
+	case v1alpha1.ProvisionedToken:
+		return sealedToken
+	case v1alpha1.ProvisionedEmail:
+		return sealedEmail
+	case v1alpha1.ProvisionedAppKey:
+		return sealedAppKey
+	case v1alpha1.ProvisionedBotToken:
+		return sealedBotToken
 	}
 	return ""
 }

@@ -63,9 +63,9 @@ type RefError struct {
 
 // Basis is why a finding holds the company's document, or that it does not
 // (ADR-0005). One reason can hold on one basis in one place and on another,
-// or not at all, in another (a Seat that does not exist is refused by the
-// engine as Datadog's route, and is harm beyond the object as a GitLab
-// access level), so each place that records a finding names its own: a
+// or not at all, in another (an object that does not exist is refused by
+// the engine as Datadog's route, and is harm beyond the object as a Unit's
+// parent), so each place that records a finding names its own: a
 // compile error if it does not, and TestEveryFindingHasABasis holds every
 // place to the table of them.
 type Basis int

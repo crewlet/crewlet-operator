@@ -101,8 +101,10 @@ func TestSeatSandboxOptionalKeysFollowTheEngine(t *testing.T) {
 			Env: []v1.SeatEnvVar{
 				{Name: envDatabaseURL, ValueFrom: seatFromSecret("coder-db", "url")},
 				{
-					Name:      gitlabToken,
-					ValueFrom: v1.SeatCredentialSource{Provisioned: v1.ProvisionedCredential{Name: "gitlab-token"}},
+					Name: gitlabToken,
+					ValueFrom: v1.SeatCredentialSource{Provisioned: v1.ProvisionedCredential{
+						Vendor: v1.ProvisionedGitLab, Field: v1.ProvisionedToken,
+					}},
 				},
 			},
 			OptionalKeys: keys,
@@ -159,7 +161,7 @@ func TestMCPServerOptionalKeysFollowTheEngine(t *testing.T) {
 		return v1.MCPEnvVar{Name: name, ValueFrom: fromSecret("tools", strings.ToLower(name))}
 	}
 	seatSecret := func(name string) v1.MCPCredentialValue {
-		return v1.MCPCredentialValue{Name: name, ValueFrom: seatFromSecret("coder-tools", strings.ToLower(name))}
+		return v1.MCPCredentialValue{Name: name, ValueFrom: fromSecret("coder-tools", strings.ToLower(name))}
 	}
 	shapes := []shape{
 		{

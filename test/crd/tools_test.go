@@ -29,14 +29,13 @@ func literal(name string) v1.MCPEnvVar { return v1.MCPEnvVar{Name: name, Value: 
 // is a variable's, an MCPServer's env. Each CRD carries its own generated
 // copy of a rule its types share, so a rule is held in every position rather
 // than in the one a kind's table happens to name. entry is an MCPServer's
-// variable, whose valueFrom is a Secret key alone: a provisioned value is a
-// Seat's, and its cases are the Seat's own.
+// variable, whose valueFrom is a Secret key, as every position's here is.
 func holdValue(t *testing.T, namespace string, entry v1.MCPEnvVar, want string) {
 	t.Helper()
 	s := seat(namespace, "probe")
 	s.Spec.MCP = []v1.MCPCredentials{{Name: "probe", Env: []v1.MCPCredentialValue{{
 		Name: entry.Name, Value: entry.Value,
-		ValueFrom: v1.SeatCredentialSource{SecretKeyRef: entry.ValueFrom.SecretKeyRef},
+		ValueFrom: entry.ValueFrom,
 	}}}}
 	u := unit(namespace, "probe")
 	u.Spec.MCP = s.Spec.MCP

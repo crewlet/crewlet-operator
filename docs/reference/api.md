@@ -793,6 +793,32 @@ _Appears in:_
 | `webhookTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | webhookTokenSecretRef is the Secret key holding the token a Confluence<br />Cloud webhook carries in its delivery URL, Cloud signing nothing: at<br />least 26 characters, random. Crewlet's `webhook_token`, a credential<br />position. |  | Optional: \{\} <br /> |
 
 
+#### ConfluenceSeatIntegration
+
+
+
+ConfluenceSeatIntegration is a seat's access on Confluence. It maps onto
+Crewlet's role integrations.confluence and needs the company's Confluence
+Integration. With the company's Atlassian Integration the engine creates
+the seat's account, grants it Confluence and gives it the access in the
+spaces; without one the account is made outside the engine, and the engine
+reports the seat's access as managed outside Crewlet. A site with
+Confluence's role-based access grants by spaceRole; a site without it
+grants space permissions by operation.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat is on Confluence. False removes the<br />account's Confluence product access and keeps the account. Crewlet's<br />`enabled`. |  | Required: \{\} <br /> |
+| `spaceRole` _string_ | spaceRole is the space role the seat holds in each of spaces, by its<br />id on the site (Confluence's role-based access): Viewer, Collaborator,<br />Manager, Admin, or a custom role. The engine checks it against the<br />site's roles on every pass, and reports one that no longer exists<br />rather than falling back to another. Crewlet's `space_role`. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9][A-Za-z0-9_:-]*$` <br />Optional: \{\} <br /> |
+| `operations` _string array_ | operations are Confluence's space permissions, as<br /><operation>:<target> under Confluence's own names, such as read:space<br />or create:page, the seat holds in each of spaces, for a site whose<br />role-based access is off. Crewlet's `operations`. |  | MaxItems: 64 <br />items:MaxLength: 64 <br />items:MinLength: 3 <br />items:Pattern: `^[a-z_]+:[a-z_]+$` <br />Optional: \{\} <br /> |
+| `spaces` _string array_ | spaces are the spaces, by key, the seat holds spaceRole or<br />operations in. Each must be a space the company's document names, as<br />a Unit's or a Seat's spec.space: Crewlet refuses another, which the<br />engine's dry run reports as Invalid on the Seat. Crewlet's `spaces`. |  | MaxItems: 128 <br />items:MaxLength: 255 <br />items:MinLength: 1 <br />items:Pattern: `^~?[A-Za-z0-9]+$` <br />Optional: \{\} <br /> |
+
+
 #### ContainerWebhookMode
 
 _Underlying type:_ _string_
@@ -899,9 +925,9 @@ _Appears in:_
 DatadogIntegration turns Datadog on for a company: a firing monitor wakes
 the seat its tags name. It maps onto Crewlet's integrations.datadog. The
 engine registers the webhook at Datadog itself and creates a service
-account for each agent seat whose credentials for the MCPServer named
-datadog name a provisioned application key, so the Integration's
-provisioning is Engine.
+account for each agent Seat whose spec.integrations.datadog is enabled,
+with the role that block names, so the Integration's provisioning is
+Engine.
 
 
 
@@ -915,7 +941,6 @@ _Appears in:_
 | `site` _[DatadogSite](#datadogsite)_ | site is the region the organization, and so its keys, are in.<br />Crewlet's `provisioning.site`. |  | Enum: [US1 US3 US5 EU1 AP1 AP2 US1FED] <br />Required: \{\} <br /> |
 | `apiKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | apiKeySecretRef is the Secret key holding an API key of the<br />organization, which says which organization a call is for. Crewlet's<br />`provisioning.api_key`, a credential position. |  | Required: \{\} <br /> |
 | `appKeySecretRef` _[SecretKeyReference](#secretkeyreference)_ | appKeySecretRef is the Secret key holding an application key, which<br />says which user acts: one allowed to manage webhooks and service<br />accounts. Crewlet's `provisioning.app_key`, a credential position. |  | Required: \{\} <br /> |
-| `role` _string_ | role is the Datadog role each seat's service account is created<br />with, by its name. Unset takes Crewlet's default, Datadog Read Only<br />Role. Crewlet's `provisioning.role`. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `emailDomain` _string_ | emailDomain is the domain the service accounts' addresses are built<br />under; Datadog requires an address and never writes to it. Unset<br />takes Crewlet's default, agents.crewlet.invalid. Crewlet's<br />`provisioning.email_domain`. |  | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$` <br />Optional: \{\} <br /> |
 | `webhookName` _string_ | webhookName is the name of the webhook the engine keeps at Datadog,<br />and so the handle monitors write: @webhook-<name>. Unset is crewlet.<br />Crewlet's `webhook_name`. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[^ @,]+$` <br />Optional: \{\} <br /> |
 | `handleTag` _string_ | handleTag is the monitor tag key whose value names the seat an alert<br />wakes, such as crewlet:sre-lead. Unset is crewlet. Crewlet's<br />`handle_tag`. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[a-z][a-z0-9_./-]*$` <br />Optional: \{\} <br /> |
@@ -937,6 +962,26 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `seatRef` _[LocalObjectReference](#localobjectreference)_ | seatRef names the agent Seat, in this namespace, the alert wakes.<br />Crewlet's `route_to`, as the seat's handle. |  | Optional: \{\} <br /> |
 | `dismiss` _boolean_ | dismiss wakes nobody: only monitors that name a seat reach an agent,<br />and the rest stay with whatever Datadog already does about them.<br />Crewlet's `route_to: none`. |  | Optional: \{\} <br /> |
+
+
+#### DatadogSeatIntegration
+
+
+
+DatadogSeatIntegration is a seat's service account on Datadog. It maps onto
+Crewlet's role integrations.datadog and needs the company's Datadog
+Integration, under which the engine creates the account with the role and
+mints its application key.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat is on Datadog. False disables the service<br />account and deletes its key; Datadog never erases a user, so its<br />history keeps its author. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `role` _string_ | role is the Datadog role the account holds, by its id<br />(GET /api/v2/roles): a managed role, such as Datadog Read Only Role,<br />or a custom one. The engine checks it against the organization's<br />roles on every pass, and reports one that no longer exists rather than<br />falling back to another. Required while the seat is on. Crewlet's<br />`role`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9][A-Za-z0-9-]*$` <br />Optional: \{\} <br /> |
 
 
 #### DatadogSite
@@ -1420,27 +1465,6 @@ _Appears in:_
 | `sectionName` _string_ | sectionName is the name of one listener of the Gateway. Unset attaches<br />to every listener that accepts the route. |  | MaxLength: 253 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
-#### GitHubAccessTier
-
-_Underlying type:_ _string_
-
-GitHubAccessTier is how much a seat may do in a repository. It maps onto
-Crewlet's role integrations.github.tier (ReadOnly is `read_only`, Review is
-`review`, FullAccess is `full_access`).
-
-_Validation:_
-- Enum: [ReadOnly Review FullAccess]
-
-_Appears in:_
-- [GitHubSeatIntegration](#githubseatintegration)
-
-| Field | Description |
-| --- | --- |
-| `ReadOnly` |  |
-| `Review` |  |
-| `FullAccess` |  |
-
-
 #### GitHubApp
 
 
@@ -1458,7 +1482,7 @@ _Appears in:_
 | `id` _integer_ | id is the app's numeric id. Crewlet's `app_id`. |  | Minimum: 1 <br />Required: \{\} <br /> |
 | `slug` _string_ | slug is the app's slug; the bot's login, and so how the seat is<br />mentioned, derives from it. Crewlet's `app_slug`. |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9-]*$` <br />Required: \{\} <br /> |
 | `installationID` _integer_ | installationID is the app's installation on the organization. Unset<br />while the app is created but not yet installed. Crewlet's<br />`installation_id`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `credentialsSecretRef` _[SecretReference](#secretreference)_ | credentialsSecretRef is a Secret holding the app's credentials under<br />the keys privateKey (the app's PEM key) and webhookSecret (which<br />verifies the app's own webhook deliveries). Crewlet's `private_key`<br />and `webhook_secret`, both credential positions. |  | Required: \{\} <br /> |
+| `credentialsSecretRef` _[SecretReference](#secretreference)_ | credentialsSecretRef is a Secret holding the app's credentials under<br />the keys privateKey (the app's PEM key) and webhookSecret (which<br />verifies the app's own webhook deliveries). Crewlet's `private_key`<br />and `webhook_secret`, both credential positions. The Secret is the<br />seat's alone: Crewlet refuses one another seat or an Integration names<br />too. |  | Required: \{\} <br /> |
 
 
 #### GitHubIntegration
@@ -1481,6 +1505,56 @@ _Appears in:_
 | `webhookSecretRef` _[SecretKeyReference](#secretkeyreference)_ | webhookSecretRef is the Secret key holding the secret that verifies<br />webhooks delivered to the company-wide route. Crewlet's<br />`webhook_secret`, a credential position. |  | Required: \{\} <br /> |
 | `tokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | tokenSecretRef is the Secret key holding an organization token with<br />the admin:org_hook scope, which the engine registers the company's<br />webhooks with. Unset registers none. Crewlet's `token`, a credential<br />position. |  | Optional: \{\} <br /> |
 | `provisioning` _[GitHubProvisioning](#githubprovisioning)_ | provisioning is where the webhooks are registered. It requires<br />tokenSecretRef, without which the engine registers nothing. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+
+
+#### GitHubPermission
+
+_Underlying type:_ _string_
+
+GitHubPermission is how much of one GitHub App permission a seat holds. It
+maps onto the level GitHub's API takes for it (Read is `read`, Write is
+`write`), and the dashboard shows it under GitHub's names, Read-only and
+Read and write. A permission left unset is GitHub's No access.
+
+_Validation:_
+- Enum: [Read Write]
+
+_Appears in:_
+- [GitHubPermissions](#githubpermissions)
+
+| Field | Description |
+| --- | --- |
+| `Read` |  |
+| `Write` |  |
+
+
+#### GitHubPermissions
+
+
+
+GitHubPermissions are the GitHub App permissions a seat holds, one field per
+permission GitHub defines for an app, each under GitHub's own key. They map
+onto Crewlet's role integrations.github.permissions. A permission left unset
+is No access; Metadata, which GitHub grants every app read-only, is not
+listed. The engine registers the seat's app with these permissions and
+narrows each installation token to them, so lowering one applies to the next
+token, and raising one past what the app was registered with waits for an
+owner of the organization to accept the app's new permissions.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [GitHubSeatIntegration](#githubseatintegration)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `contents` _[GitHubPermission](#githubpermission)_ | contents is the repository's code, branches and releases. Crewlet's<br />`contents`. |  | Enum: [Read Write] <br />Optional: \{\} <br /> |
+| `issues` _[GitHubPermission](#githubpermission)_ | issues is the repository's issues and their comments. Crewlet's<br />`issues`. |  | Enum: [Read Write] <br />Optional: \{\} <br /> |
+| `pullRequests` _[GitHubPermission](#githubpermission)_ | pullRequests is the repository's pull requests, their reviews and<br />comments. Crewlet's `pull_requests`. |  | Enum: [Read Write] <br />Optional: \{\} <br /> |
+| `checks` _[GitHubPermission](#githubpermission)_ | checks is the check runs and suites on the repository's commits.<br />Crewlet's `checks`. |  | Enum: [Read Write] <br />Optional: \{\} <br /> |
+| `actions` _[GitHubPermission](#githubpermission)_ | actions is the repository's workflow runs and artifacts. Crewlet's<br />`actions`. |  | Enum: [Read Write] <br />Optional: \{\} <br /> |
+| `workflows` _[GitHubPermission](#githubpermission)_ | workflows lets the seat push a commit that changes a file under<br />.github/workflows, which GitHub refuses otherwise. GitHub offers it as<br />Read and write alone, and a push needs contents Write too. The same<br />grant lets<br />the seat's branches run a workflow it rewrote with the secrets the<br />repository hands its runs, so pair it with branch protection and<br />environment-scoped secrets. Crewlet's `workflows`. |  | Enum: [Read Write] <br />Optional: \{\} <br /> |
 
 
 #### GitHubProvisioning
@@ -1509,21 +1583,20 @@ _Appears in:_
 
 
 
-GitHubSeatIntegration is a seat's identity on GitHub. It maps onto
-Crewlet's role integrations.github and needs the company's GitHub
+GitHubSeatIntegration is a seat's identity and access on GitHub. It maps
+onto Crewlet's role integrations.github and needs the company's GitHub
 Integration.
 
-_Validation:_
-- MinProperties: 1
+
 
 _Appears in:_
 - [SeatIntegrations](#seatintegrations)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `tier` _[GitHubAccessTier](#githubaccesstier)_ | tier is how much the seat may do in a repository. Unset is ReadOnly.<br />Crewlet's `tier`. |  | Enum: [ReadOnly Review FullAccess] <br />Optional: \{\} <br /> |
-| `repos` _string array_ | repos are the repositories the seat works in, as owner/name. Unset is<br />every repository the app's installation covers. Crewlet's `repos`. |  | MaxItems: 64 <br />items:MaxLength: 201 <br />items:Pattern: `^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$` <br />Optional: \{\} <br /> |
-| `workflows` _boolean_ | workflows grants the seat GitHub's workflows write permission, without<br />which GitHub refuses any push whose commits change a file under<br />.github/workflows. FullAccess seats only, and off unless set: the same<br />grant lets the seat's branches run a workflow it rewrote with the<br />secrets the repository hands its runs, so pair it with branch<br />protection and environment-scoped secrets. Crewlet's `workflows`. |  | Optional: \{\} <br /> |
+| `enabled` _boolean_ | enabled is whether the seat is on GitHub. False keeps the block, and<br />the engine suspends the app's installation rather than uninstalling<br />it, so turning it back on needs no person. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `permissions` _[GitHubPermissions](#githubpermissions)_ | permissions are the GitHub App permissions the seat holds. Unset is<br />No access on every permission but Metadata. Crewlet's `permissions`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `repos` _string array_ | repos are the repositories the seat's tokens are narrowed to, as<br />owner/name. Unset is every repository the app's installation covers,<br />which is the organization's choice at GitHub. Where the Integration<br />lists provisioning repos, each must be one of them: Crewlet refuses<br />another, which the engine's dry run reports as Invalid on the Seat.<br />Crewlet's `repos`. |  | MaxItems: 64 <br />items:MaxLength: 201 <br />items:Pattern: `^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$` <br />Optional: \{\} <br /> |
 | `app` _[GitHubApp](#githubapp)_ | app is the GitHub App the seat acts as. |  | Optional: \{\} <br /> |
 
 
@@ -1548,21 +1621,29 @@ _Appears in:_
 
 _Underlying type:_ _string_
 
-GitLabAccessLevel is the membership level the engine gives a seat's GitLab
-service account. It maps onto Crewlet's access_level (Developer is
-`developer`, Maintainer is `maintainer`).
+GitLabAccessLevel is a GitLab role, the level of a seat's membership in the
+group and its projects, under GitLab's own name. It maps onto Crewlet's
+access_level, the integer GitLab's Members API takes (Guest is 10, Planner
+15, Reporter 20, Developer 30, Maintainer 40, Owner 50). Security Manager,
+a beta GitLab leaves off by default, and Minimal Access, which grants an
+agent nothing, are not offered. The token the engine mints follows the
+role: below Developer it can read the API and the repositories but not
+push.
 
 _Validation:_
-- Enum: [Developer Maintainer]
+- Enum: [Guest Planner Reporter Developer Maintainer Owner]
 
 _Appears in:_
-- [GitLabEngineProvisioning](#gitlabengineprovisioning)
-- [GitLabSeatAccess](#gitlabseataccess)
+- [GitLabSeatIntegration](#gitlabseatintegration)
 
 | Field | Description |
 | --- | --- |
-| `Developer` | GitLabDeveloper can push branches and open merge requests.<br /> |
-| `Maintainer` | GitLabMaintainer can also merge to protected branches.<br /> |
+| `Guest` |  |
+| `Planner` |  |
+| `Reporter` |  |
+| `Developer` |  |
+| `Maintainer` |  |
+| `Owner` |  |
 
 
 #### GitLabAccountOwner
@@ -1591,10 +1672,12 @@ _Appears in:_
 
 GitLabEngineProvisioning is how the engine provisions the seats' GitLab
 accounts under provisioning Engine. It maps onto Crewlet's
-integrations.gitlab.provisioning: for each agent seat whose credentials for
-the MCPServer named gitlab name a provisioned value, the engine creates a
-service account, adds it to the group and the projects, mints a token into
-that value, and registers the webhook.
+integrations.gitlab.provisioning: for each agent Seat whose
+spec.integrations.gitlab is enabled, the engine creates a service account,
+makes it a member of the group, or of the seat's projects, at the seat's
+role, mints its token into an entry of its secret store it names for the
+seat, and registers the webhook. Each seat's role and projects are on its
+Seat.
 
 
 
@@ -1606,12 +1689,9 @@ _Appears in:_
 | `group` _string_ | group is the top-level group, by its path, the service accounts join<br />and the webhook is registered on. Crewlet's `group`. |  | MaxLength: 255 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9_.][A-Za-z0-9_./-]*$` <br />Required: \{\} <br /> |
 | `adminTokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | adminTokenSecretRef is the Secret key holding a personal access token<br />with the api scope of an Owner of the group (of an instance<br />administrator, for accountOwner Instance), which creates and removes<br />the service accounts. Crewlet's `admin_token`, a credential position. |  | Required: \{\} <br /> |
 | `accountOwner` _[GitLabAccountOwner](#gitlabaccountowner)_ | accountOwner is where the service accounts are created. Unset is<br />Group. Crewlet's `mode`. |  | Enum: [Group Instance] <br />Optional: \{\} <br /> |
-| `accessLevel` _[GitLabAccessLevel](#gitlabaccesslevel)_ | accessLevel is the membership level of every seat's account. Unset<br />takes Crewlet's default, Developer. Crewlet's `access_level`. |  | Enum: [Developer Maintainer] <br />Optional: \{\} <br /> |
-| `accessLevels` _[GitLabSeatAccess](#gitlabseataccess) array_ | accessLevels override accessLevel for single seats. Crewlet's<br />`access_levels`. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
 | `usernamePrefix` _string_ | usernamePrefix is put before each seat's handle to form its account's<br />username, for a group shared with people. Crewlet's<br />`username_prefix`. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9_.-]+$` <br />Optional: \{\} <br /> |
-| `projects` _string array_ | projects are projects, by path, the accounts also join, and the ones<br />the webhook is registered on one by one when no group hook is.<br />Crewlet's `projects`. |  | MaxItems: 128 <br />items:MaxLength: 255 <br />items:MinLength: 1 <br />items:Pattern: `^[A-Za-z0-9_.][A-Za-z0-9_./-]*$` <br />Optional: \{\} <br /> |
+| `projects` _string array_ | projects are the projects, by path, a seat's spec.integrations.gitlab<br />projects may name, and the ones the webhook is registered on one by<br />one when no group hook is. Crewlet's `projects`. |  | MaxItems: 128 <br />items:MaxLength: 255 <br />items:MinLength: 1 <br />items:Pattern: `^[A-Za-z0-9_.][A-Za-z0-9_./-]*$` <br />Optional: \{\} <br /> |
 | `groupWebhook` _[ContainerWebhookMode](#containerwebhookmode)_ | groupWebhook is whether one group hook replaces the per-project ones.<br />Unset is Auto. Crewlet's `group_webhook`. |  | Enum: [Auto Require Never] <br />Optional: \{\} <br /> |
-| `tokenScopes` _string array_ | tokenScopes are the scopes minted on each seat's token. Unset takes<br />Crewlet's default, api. Crewlet's `token_scopes`. |  | MaxItems: 16 <br />items:MaxLength: 64 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z_]+$` <br />Optional: \{\} <br /> |
 
 
 #### GitLabIntegration
@@ -1620,9 +1700,8 @@ _Appears in:_
 
 GitLabIntegration turns GitLab on for a company: webhooks from a GitLab
 instance wake the seats they concern. It maps onto Crewlet's
-integrations.gitlab. Each seat's GitLab token is a credential of the
-MCPServer named gitlab in its Seat's spec.mcp, which is where Crewlet reads
-a seat's GitLab identity from.
+integrations.gitlab. Each seat's GitLab account and access are in its
+Seat's spec.integrations.gitlab.
 
 
 
@@ -1638,21 +1717,29 @@ _Appears in:_
 | `engineProvisioning` _[GitLabEngineProvisioning](#gitlabengineprovisioning)_ | engineProvisioning is how the engine creates the seats' accounts.<br />Required with provisioning Engine, and not allowed with External. |  | Optional: \{\} <br /> |
 
 
-#### GitLabSeatAccess
+#### GitLabSeatIntegration
 
 
 
-GitLabSeatAccess overrides the access level of one seat's service account.
+GitLabSeatIntegration is a seat's account and access on GitLab. It maps onto
+Crewlet's role integrations.gitlab and needs the company's GitLab
+Integration. Under its provisioning Engine the engine creates the seat's
+service account, gives it the role in the projects, and mints its token.
+Under External the account is made outside the engine, which changes
+nothing at GitLab: enabled then turns the seat's own GitLab tools on and
+off, and the engine reports the seat's access as managed outside Crewlet.
 
 
 
 _Appears in:_
-- [GitLabEngineProvisioning](#gitlabengineprovisioning)
+- [SeatIntegrations](#seatintegrations)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | name is the metadata.name of the Seat, in this namespace. Crewlet keys<br />the override by the seat's handle, which the operator renders. |  | MaxLength: 253 <br />MinLength: 1 <br />Required: \{\} <br /> |
-| `accessLevel` _[GitLabAccessLevel](#gitlabaccesslevel)_ | accessLevel is the seat's membership level. |  | Enum: [Developer Maintainer] <br />Required: \{\} <br /> |
+| `enabled` _boolean_ | enabled is whether the seat is on GitLab. False keeps the account,<br />which the engine blocks and whose tokens it revokes, so its history<br />keeps its author and turning it back on needs no person. Crewlet's<br />`enabled`. |  | Required: \{\} <br /> |
+| `accessLevel` _[GitLabAccessLevel](#gitlabaccesslevel)_ | accessLevel is the seat's GitLab role. One of it and memberRoleID is<br />required while the seat is on. Crewlet's `access_level`. |  | Enum: [Guest Planner Reporter Developer Maintainer Owner] <br />Optional: \{\} <br /> |
+| `memberRoleID` _integer_ | memberRoleID is a custom role of the group, by its id, in place of<br />accessLevel: GitLab Ultimate only. The engine checks it against the<br />group's roles on every pass, and reports one that no longer exists<br />rather than falling back to another. Crewlet's `member_role_id`. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `projects` _string array_ | projects are the projects, by path, the seat is a member of. Unset is<br />the whole group. Where the Integration lists engineProvisioning<br />projects, each must be one of them, so a seat cannot widen the<br />company's reach: Crewlet refuses another, which the engine's dry run<br />reports as Invalid on the Seat. Crewlet's `projects`. |  | MaxItems: 128 <br />items:MaxLength: 255 <br />items:MinLength: 1 <br />items:Pattern: `^[A-Za-z0-9_.][A-Za-z0-9_./-]*$` <br />Optional: \{\} <br /> |
 
 
 #### IngressExposure
@@ -1815,6 +1902,29 @@ _Appears in:_
 | `tokenSecretRef` _[SecretKeyReference](#secretkeyreference)_ | tokenSecretRef is the Secret key holding the API token (Cloud) or<br />personal access token (Data Center) of an administrator account. The<br />engine reads an issue's watchers with it, which no webhook carries,<br />and registers the company's webhook. Crewlet's `token`, a credential<br />position. |  | Required: \{\} <br /> |
 | `webhookSecretRef` _[SecretKeyReference](#secretkeyreference)_ | webhookSecretRef is the Secret key holding the secret webhook<br />deliveries are signed with. Required for a Data Center instance, whose<br />route answers none without it; on Cloud, webhooks the engine<br />registers are signed with it, and the Forge relay needs none.<br />Crewlet's `webhook_secret`, a credential position. |  | Optional: \{\} <br /> |
 | `webhookName` _string_ | webhookName is the name of the webhook the engine registers, which is<br />how it tells its own from others on the site: two deployments<br />watching one site need two names. Unset is crewlet. Crewlet's<br />`webhook_name`. |  | MaxLength: 255 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+
+
+#### JiraSeatIntegration
+
+
+
+JiraSeatIntegration is a seat's access on Jira. It maps onto Crewlet's role
+integrations.jira and needs the company's Jira Integration. With the
+company's Atlassian Integration the engine creates the seat's account,
+grants it Jira and gives it the project role in the projects; without one
+(a Data Center instance) the account is made outside the engine, and the
+engine reports the seat's access as managed outside Crewlet.
+
+
+
+_Appears in:_
+- [SeatIntegrations](#seatintegrations)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | enabled is whether the seat is on Jira. False removes the account's<br />Jira product access and keeps the account. Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `projectRole` _string_ | projectRole is the project role the seat holds in each of projects,<br />by its id on the site (GET /rest/api/3/role), such as 10101. What a<br />role may do is each project's permission scheme. The engine checks it<br />against the site's roles on every pass, and reports one that no<br />longer exists rather than falling back to another. Required while<br />the seat is on. Crewlet's `project_role`. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[0-9]+$` <br />Optional: \{\} <br /> |
+| `projects` _string array_ | projects are the projects, by key, the seat holds projectRole in.<br />Each must be a project the company's document names, as a Unit's or<br />a Seat's spec.project, so a seat cannot widen the company's reach:<br />Crewlet refuses another, which the engine's dry run reports as<br />Invalid on the Seat. Crewlet's `projects`. |  | MaxItems: 128 <br />items:MaxLength: 255 <br />items:MinLength: 1 <br />items:Pattern: `^[A-Z][A-Z0-9_]*$` <br />Optional: \{\} <br /> |
 
 
 #### KnowledgeBackend
@@ -2075,8 +2185,8 @@ _Appears in:_
 
 
 MCPCredentialValue is one value a tool server is started with for a seat:
-one of its credentials, from a Secret or provisioned by the engine, or a
-setting that is no credential, written as a literal value. Whether it is an
+one of its credentials, from a Secret, or a setting that is no credential,
+written as a literal value. Whether it is an
 environment variable or a request header depends on the server's
 transport, which is why its name follows the grammar of an HTTP header
 name, of which an environment variable's name is a subset.
@@ -2098,7 +2208,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `name` _string_ | name is the environment variable's name (Stdio) or the header's name<br />(HTTP). |  | MaxLength: 128 <br />MinLength: 1 <br />Pattern: `^[A-Za-z0-9!#$%&'*+.^_\|~-]+$` <br />Required: \{\} <br /> |
 | `value` _string_ | value is a literal value, for a setting that is no credential. It<br />lands in the company document as written, where anyone who can read<br />this object reads it too. An empty string is a valid value, which is<br />why the field is a pointer. |  | MaxLength: 4096 <br />Optional: \{\} <br /> |
-| `valueFrom` _[SeatCredentialSource](#seatcredentialsource)_ | valueFrom is where a credential comes from: a Secret key, or, for a<br />Seat's own credentials, the engine (provisioned). For a header the<br />value is the whole header, scheme included (for example "Bearer<br /><token>"); a provisioned value is the credential alone, so provision<br />one for a variable rather than a header. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `valueFrom` _[SecretValueSource](#secretvaluesource)_ | valueFrom is the Secret key a credential comes from. For a header the<br />value is the whole header, scheme included (for example "Bearer<br /><token>"). A credential the engine mints for a seat's account at a<br />vendor it provisions is never named here: the engine gives it to the<br />vendor's tool server itself, and refuses a credential of that vendor's<br />server here. |  | Optional: \{\} <br /> |
 
 
 #### MCPCredentials
@@ -2402,6 +2512,30 @@ _Appears in:_
 | `engineProvisioning` _[MattermostEngineProvisioning](#mattermostengineprovisioning)_ | engineProvisioning is how the engine creates the seats' bots.<br />Required with provisioning Engine, and not allowed with External. |  | Optional: \{\} <br /> |
 
 
+#### MattermostRole
+
+_Underlying type:_ _string_
+
+MattermostRole is a role or permission of a Mattermost account, under the
+identifier Mattermost's API takes (SystemUser is `system_user`, the Member
+role; SystemPostAllPublic is `system_post_all_public`, post:channels;
+SystemPostAll is `system_post_all`, post:all; SystemAdmin is
+`system_admin`, System Admin).
+
+_Validation:_
+- Enum: [SystemUser SystemPostAllPublic SystemPostAll SystemAdmin]
+
+_Appears in:_
+- [MattermostSeatIntegration](#mattermostseatintegration)
+
+| Field | Description |
+| --- | --- |
+| `SystemUser` | MattermostSystemUser is Member, the role every account holds.<br /> |
+| `SystemPostAllPublic` | MattermostSystemPostAllPublic is post:channels: post in every public<br />channel, a member or not.<br /> |
+| `SystemPostAll` | MattermostSystemPostAll is post:all: post in every channel, private<br />ones and direct messages included.<br /> |
+| `SystemAdmin` | MattermostSystemAdmin is System Admin, which grants every other<br />administration privilege of the server too.<br /> |
+
+
 #### MattermostSeatIntegration
 
 
@@ -2409,8 +2543,11 @@ _Appears in:_
 MattermostSeatIntegration is a seat's own Mattermost bot. It maps onto
 Crewlet's role integrations.mattermost and needs the company's Mattermost
 Integration. One credential covers everything the bot does: the websocket
-the engine listens on, its REST calls, and the Mattermost tool server, whose
-credentials (in spec.mcp) name the same token.
+the engine listens on, its REST calls, and the Mattermost tool server.
+Under the Integration's provisioning Engine the engine creates the bot,
+gives it the roles and the channels, and mints its token; under External
+the bot is made outside the engine, and the engine reports its access as
+managed outside Crewlet.
 
 
 
@@ -2419,9 +2556,11 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `botToken` _[SeatCredentialSource](#seatcredentialsource)_ | botToken is the bot account's personal access token: from a Secret,<br />or provisioned by the engine under a Mattermost Integration with<br />provisioning Engine, which creates the bot and mints the token.<br />Crewlet's `bot_token`, a credential position. |  | MinProperties: 1 <br />Required: \{\} <br /> |
+| `enabled` _boolean_ | enabled is whether the seat is on Mattermost. False keeps the bot,<br />which the engine deactivates and whose tokens it revokes. Crewlet's<br />`enabled`. |  | Required: \{\} <br /> |
+| `roles` _[MattermostRole](#mattermostrole) array_ | roles are the bot account's roles: Member (SystemUser) alone, or<br />Member with one of post:channels, post:all and System Admin. Required<br />while the seat is on. Crewlet's `roles`. |  | Enum: [SystemUser SystemPostAllPublic SystemPostAll SystemAdmin] <br />MaxItems: 4 <br />MinItems: 1 <br />Optional: \{\} <br /> |
+| `channels` _string array_ | channels are the channels, by name (the URL slug), the bot is a<br />member of: it hears only the channels it is in. Where the Integration<br />lists engineProvisioning channels, each must be one of them: Crewlet<br />refuses another, which the engine's dry run reports as Invalid on the<br />Seat. Crewlet's `channels`. |  | MaxItems: 64 <br />items:MaxLength: 64 <br />items:MinLength: 1 <br />items:Pattern: `^[a-z0-9][a-z0-9_-]*$` <br />Optional: \{\} <br /> |
+| `botToken` _[SecretValueSource](#secretvaluesource)_ | botToken is the Secret key holding the personal access token of a bot<br />made outside the engine, under a Mattermost Integration with<br />provisioning External. Under provisioning Engine leave it unset: the<br />engine creates the bot and mints its token, which no document names,<br />and refuses one given here. The Secret key is the seat's alone:<br />Crewlet refuses one another seat or a company block names too.<br />Crewlet's `bot_token`, a credential position. |  | Optional: \{\} <br /> |
 | `username` _string_ | username is the bot's username, for a bot that exists under a name<br />other than the seat's handle (with the Integration's<br />engineProvisioning.usernamePrefix before it). Crewlet's `username`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9._-]*$` <br />Optional: \{\} <br /> |
-| `channel` _string_ | channel is a channel, by its name (the URL slug), the engine adds the<br />bot to when it provisions it, on top of the Integration's<br />engineProvisioning.channels. Crewlet's `channel`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9_-]*$` <br />Optional: \{\} <br /> |
 
 
 #### NamespacedSecretEnvVar
@@ -2687,13 +2826,16 @@ _Appears in:_
 
 
 
-ProvisionedCredential is a seat's credential the engine creates: an
+ProvisionedCredential is one of a seat's credentials the engine mints: an
 Integration with provisioning Engine (GitLab, Mattermost, Datadog,
 Atlassian) makes the seat's account at the vendor, mints the account's
-credential, and seals it in the engine's own secret store. The company
-document refers to it by a name the operator derives from the seat's handle
-and this name, and nothing else ever writes that store entry: the operator
-pushes no value into it and deletes none it finds there.
+credential, and seals it in the engine's own secret store under a name the
+engine gives it for the seat, `<VENDOR>_<FIELD>_<HANDLE>`, such as
+GITLAB_TOKEN_ANA. The engine hands it to the vendor's tool server itself;
+naming it here hands it to the seat's executor runs too, such as the GitLab
+token git uses in the seat's box. Nothing but the engine ever writes that
+store entry: the operator pushes no value into it and deletes none it finds
+there (ADR-0004).
 
 
 
@@ -2702,7 +2844,53 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | name names the value among the seat's provisioned credentials. Every<br />place a seat names the same provisioned name refers to one value, so<br />a token given to a tool server's environment and to the seat's<br />sandbox is one token; different names are different values, such as<br />an account's token and its email address. |  | MaxLength: 32 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9-]*$` <br />Required: \{\} <br /> |
+| `vendor` _[ProvisionedVendor](#provisionedvendor)_ | vendor is the vendor whose account the credential is of. |  | Enum: [GitLab Mattermost Datadog Atlassian] <br />Required: \{\} <br /> |
+| `field` _[ProvisionedField](#provisionedfield)_ | field is which of the account's credentials. |  | Enum: [Token Email AppKey BotToken] <br />Required: \{\} <br /> |
+
+
+#### ProvisionedField
+
+_Underlying type:_ _string_
+
+ProvisionedField is one credential the engine mints for a seat's account at
+a vendor. It maps onto the field in the engine's own name for it (Token is
+`TOKEN`, Email `EMAIL`, AppKey `APP_KEY`, BotToken `BOT_TOKEN`).
+
+_Validation:_
+- Enum: [Token Email AppKey BotToken]
+
+_Appears in:_
+- [ProvisionedCredential](#provisionedcredential)
+
+| Field | Description |
+| --- | --- |
+| `Token` |  |
+| `Email` |  |
+| `AppKey` |  |
+| `BotToken` |  |
+
+
+#### ProvisionedVendor
+
+_Underlying type:_ _string_
+
+ProvisionedVendor is a vendor whose seat accounts the engine creates, under
+an Integration with provisioning Engine. It maps onto the vendor's name in
+the engine's own name for a credential it mints (GitLab is `gitlab`,
+Mattermost `mattermost`, Datadog `datadog`, Atlassian `atlassian`).
+
+_Validation:_
+- Enum: [GitLab Mattermost Datadog Atlassian]
+
+_Appears in:_
+- [ProvisionedCredential](#provisionedcredential)
+
+| Field | Description |
+| --- | --- |
+| `GitLab` |  |
+| `Mattermost` |  |
+| `Datadog` |  |
+| `Atlassian` |  |
 
 
 #### RetentionSettings
@@ -3056,14 +3244,12 @@ _Validation:_
 - MinProperties: 1
 
 _Appears in:_
-- [MCPCredentialValue](#mcpcredentialvalue)
-- [MattermostSeatIntegration](#mattermostseatintegration)
 - [SeatEnvVar](#seatenvvar)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `secretKeyRef` _[SecretKeyReference](#secretkeyreference)_ | secretKeyRef selects the Secret key that holds the value. |  | Optional: \{\} <br /> |
-| `provisioned` _[ProvisionedCredential](#provisionedcredential)_ | provisioned is a value the engine creates and keeps, under an<br />Integration with provisioning Engine. |  | Optional: \{\} <br /> |
+| `provisioned` _[ProvisionedCredential](#provisionedcredential)_ | provisioned is a credential the engine mints for the seat's account<br />at a vendor, under that vendor's Integration with provisioning Engine. |  | Optional: \{\} <br /> |
 
 
 #### SeatEnvVar
@@ -3088,10 +3274,13 @@ _Appears in:_
 
 
 
-SeatIntegrations is a seat's own identity on the company's integrations:
-the chat app it speaks as, the code-host app it acts as. Its tool
-credentials, the GitLab, Jira, Confluence and Datadog ones included, are in
-spec.mcp instead, which is where Crewlet reads them.
+SeatIntegrations is a seat's own identity and access on the company's
+integrations, one block per vendor: whether the seat is on it, what it may
+do there in the vendor's own terms, and, where the vendor has one, the scope
+it may do it in. A vendor without a block is off for the seat. The
+credential the engine mints for a seat's account is sealed under a name the
+engine gives it for the seat, and the engine hands it to the vendor's tool
+server itself, so spec.mcp holds none for these vendors.
 
 _Validation:_
 - MinProperties: 1
@@ -3102,8 +3291,12 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `slack` _[SlackSeatIntegration](#slackseatintegration)_ | slack is the seat's own Slack app. |  | Optional: \{\} <br /> |
-| `github` _[GitHubSeatIntegration](#githubseatintegration)_ | github is the seat's identity on GitHub. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `github` _[GitHubSeatIntegration](#githubseatintegration)_ | github is the seat's identity and access on GitHub. |  | Optional: \{\} <br /> |
+| `gitlab` _[GitLabSeatIntegration](#gitlabseatintegration)_ | gitlab is the seat's account and access on GitLab. |  | Optional: \{\} <br /> |
 | `mattermost` _[MattermostSeatIntegration](#mattermostseatintegration)_ | mattermost is the seat's own Mattermost bot. |  | Optional: \{\} <br /> |
+| `jira` _[JiraSeatIntegration](#jiraseatintegration)_ | jira is the seat's access on Jira. |  | Optional: \{\} <br /> |
+| `confluence` _[ConfluenceSeatIntegration](#confluenceseatintegration)_ | confluence is the seat's access on Confluence. |  | Optional: \{\} <br /> |
+| `datadog` _[DatadogSeatIntegration](#datadogseatintegration)_ | datadog is the seat's service account on Datadog. |  | Optional: \{\} <br /> |
 
 
 #### SeatIntegrationsStatus
@@ -3387,7 +3580,7 @@ _Appears in:_
 | `pauseTTLSeconds` _integer_ | pauseTTLSeconds is how long the seat's box stays paused while its run<br />waits on a person. Unset takes the Company's default; 0 never pauses.<br />Crewlet's `pause_ttl_seconds`. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `maxTurns` _integer_ | maxTurns caps the agentic rounds of one of the seat's executor runs,<br />the only bound on its turn. Unset takes the Company's<br />spec.sandbox.defaultMaxTurns, else Crewlet's default of 96; 0 is<br />uncapped. Crewlet's `max_turns`. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 | `mcpServerRefs` _[LocalObjectReference](#localobjectreference) array_ | mcpServerRefs name the MCPServers the seat's executor box is given,<br />beside its tool bridge, which every executor box is given. Crewlet's<br />mcp.servers. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
-| `env` _[SeatEnvVar](#seatenvvar) array_ | env is the environment of the seat's executor runs, for the external<br />tokens its work needs: from Secrets, or provisioned by the engine,<br />such as the GitLab token a provisioning Integration mints for the<br />seat, named as its tool server's is so both are one token. A run gets<br />its provider's whole env beneath this, so a variable named here wins<br />over the provider's of that name. A ClaudeCode sign-in here<br />(CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or a<br />CLAUDE_CODE_USE_* toggle) keeps the provider's own sign-in out of the<br />box, its token or key and every sign-in in its env, a gateway's<br />bearer token or a cloud switch, while the rest of its env, such as a<br />gateway's address, still reaches the run: a seat meant to bypass the<br />gateway names ANTHROPIC_BASE_URL here itself. A run that goes without<br />the value is given the provider's sign-in as one with no sign-in here<br />is. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
+| `env` _[SeatEnvVar](#seatenvvar) array_ | env is the environment of the seat's executor runs, for the external<br />tokens its work needs: from Secrets, or provisioned by the engine,<br />such as the GitLab token a provisioning Integration mints for the<br />seat's account, which the engine gives its gitlab tool server too, so<br />both are one token. A run gets<br />its provider's whole env beneath this, so a variable named here wins<br />over the provider's of that name. A ClaudeCode sign-in here<br />(CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or a<br />CLAUDE_CODE_USE_* toggle) keeps the provider's own sign-in out of the<br />box, its token or key and every sign-in in its env, a gateway's<br />bearer token or a cloud switch, while the rest of its env, such as a<br />gateway's address, still reaches the run: a seat meant to bypass the<br />gateway names ANTHROPIC_BASE_URL here itself. A run that goes without<br />the value is given the provider's sign-in as one with no sign-in here<br />is. Crewlet's `env`, a credential position. |  | MaxItems: 32 <br />Optional: \{\} <br /> |
 | `optionalKeys` _string array_ | optionalKeys names variables of env whose value may go missing. An<br />executor run starts without a value that does not resolve, a Secret<br />that does not exist, holds no such key or holds an empty value, or a<br />provisioned value nothing has minted yet, whether or not it is listed<br />here: the run is the seat's turn itself, and refusing it would fail<br />every message the seat could answer meanwhile. Unlisted, the engine<br />logs each such value as a gap of the run (sandbox_env_unresolved), and<br />the operator reports an empty one on the Seat; listed, the variable is<br />left out quietly, as an absence that is expected, but for a value an<br />Integration mints for the seat, which is logged as awaited whatever<br />this says. A missing Secret or key under a listed variable is then no<br />failure of the Seat's references and holds nothing back. Under the<br />Enforce policy the operator also takes the value it pushed for it out<br />of the engine's secret store, and has the engine read the store again<br />whether or not the document can be applied, so no run starts with a<br />deleted Secret's value, but in a revision the engine runs that reads<br />the key as required (one from before the key was listed) or whose<br />reading the operator does not know (another document somebody else<br />activated), which keeps the value until the next document runs, and<br />that one is activated once with it and at once again without it; a<br />Secret key that is also read where it is required holds the document<br />while it is missing, and keeps the value it had in a revision the<br />engine runs that requires it too until the document applies. env wins<br />over a setup step's variable of the same name, and so does this list<br />over the step's optionalKeys for it. Crewlet's `optional_keys`. |  | MaxItems: 32 <br />items:MaxLength: 128 <br />items:MinLength: 1 <br />items:Pattern: `^[A-Za-z_][A-Za-z0-9_]*$` <br />Optional: \{\} <br /> |
 | `setup` _[SandboxSetupStep](#sandboxsetupstep) array_ | setup is the seat's own provisioning of its executor box, applied<br />after the Company's. Crewlet's `setup`. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 
@@ -3421,7 +3614,7 @@ _Appears in:_
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens this seat may spend per window, on top of<br />the Company's caps. Crewlet refuses a window below<br />turn_engine.executor_min_budget_tokens (25000 unless the Company's<br />spec.engineConfig sets turn_engine) on an Agent seat: an executor<br />launch needs that much of the window left, so the seat would never<br />launch one. The refusal comes from the engine's dry run, Invalid on<br />the Seat. Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `llm` _[SeatLLM](#seatllm)_ | llm is the model providers the seat runs on. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `learningEnabled` _boolean_ | learningEnabled overrides the company's learning setting for this<br />seat: false stops reflection after the seat's turns. Unset inherits.<br />Crewlet's `learning_enabled`. |  | Optional: \{\} <br /> |
-| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are the seat's own tool-server credentials, which make it act as<br />itself on each server, and its own settings, such as the channel cache<br />of slack-mcp-server, which no other seat may share. They are merged<br />over its unit's, per variable. One entry per server, keyed by its<br />name. Crewlet's `mcp_env`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are the seat's own tool-server credentials, which make it act as<br />itself on each server, and its own settings, such as the channel cache<br />of slack-mcp-server, which no other seat may share. They are merged<br />over its unit's, per variable. One entry per server, keyed by its<br />name. A credential of a vendor the engine provisions for the company<br />(GitLab or Mattermost under provisioning Engine, Datadog, an Atlassian<br />organization) is never given here: the engine hands the seat's own to<br />that vendor's server itself, and refuses one given here, which the<br />engine's dry run reports as Invalid on the Seat. A credential given<br />here is the seat's alone: Crewlet refuses a Secret key another seat or<br />an Integration names too. Crewlet's `mcp_env`, a credential position. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `sandbox` _[SeatSandbox](#seatsandbox)_ | sandbox is the seat's own settings for its executor's box, which runs<br />whether or not it is set. Unset takes the Company's spec.sandbox alone.<br />Agent seats only. Crewlet's `sandbox`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `placement` _[SeatPlacement](#seatplacement)_ | placement is where the seat runs. Unset runs it in the Company's<br />spec.topology.defaultSeatPool. |  | Optional: \{\} <br /> |
 | `paused` _boolean_ | paused says whether the seat may take work. True pauses it: it starts<br />no new turn, the mail it is sent waits on its inbox in order, and its<br />schedules' fires are skipped rather than queued; the turn it is on<br />finishes first unless stopRunning is set. False resumes it, and what<br />waited is delivered first. Unset leaves the seat's pause to the people<br />who run the company in the engine's dashboard: the operator reports a<br />pause they take, and never lifts it.<br />A pause is not part of the company document. Crewlet keeps it in its<br />coordination store, changed through its operator catalogue's<br />pause_seat and resume_seat tools, which the operator calls under the<br />Company's Enforce policy whenever the seat's pause differs from this<br />field; under Observe and Seed it only reports the difference. |  | Optional: \{\} <br /> |
@@ -3564,8 +3757,10 @@ reshaping every list that carries credentials.
 
 _Appears in:_
 - [EnvVar](#envvar)
+- [MCPCredentialValue](#mcpcredentialvalue)
 - [MCPEnvVar](#mcpenvvar)
 - [MCPHeader](#mcpheader)
+- [MattermostSeatIntegration](#mattermostseatintegration)
 - [SandboxFile](#sandboxfile)
 - [SecretEnvVar](#secretenvvar)
 
@@ -3625,7 +3820,9 @@ _Appears in:_
 
 SlackSeatIntegration is a seat's own Slack app, so the seat posts as itself.
 It maps onto Crewlet's role integrations.slack and needs the company's Slack
-Integration.
+Integration. Slack gives a bot no role: what the app may do is the bot token
+scopes of its manifest, and where it may do it is the channels it is
+invited to, so the block holds no access of its own.
 
 
 
@@ -3634,7 +3831,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `credentialsSecretRef` _[SecretReference](#secretreference)_ | credentialsSecretRef is a Secret holding the app's credentials under<br />the keys botToken (the bot token) and signingSecret (which verifies<br />the app's webhooks). Crewlet's `bot_token` and `signing_secret`, both<br />credential positions. Rewriting the Secret rotates them without a<br />restart. |  | Required: \{\} <br /> |
+| `enabled` _boolean_ | enabled is whether the seat is on Slack. False keeps the block, and<br />the engine revokes the app's bot token rather than deleting the app;<br />turning it back on needs a person to approve the install again.<br />Crewlet's `enabled`. |  | Required: \{\} <br /> |
+| `credentialsSecretRef` _[SecretReference](#secretreference)_ | credentialsSecretRef is a Secret holding the app's credentials under<br />the keys botToken (the bot token) and signingSecret (which verifies<br />the app's webhooks). Crewlet's `bot_token` and `signing_secret`, both<br />credential positions. Rewriting the Secret rotates them without a<br />restart. The Secret is the seat's alone: Crewlet refuses one another<br />seat or an Integration names too. |  | Required: \{\} <br /> |
 
 
 #### SlackSeatStatus
@@ -3870,7 +4068,7 @@ _Appears in:_
 | `knowledge` _string array_ | knowledge are free-text references to knowledge the unit relies on.<br />They are not a read scope. Crewlet's `knowledge`. |  | MaxItems: 32 <br />items:MaxLength: 1024 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
 | `project` _string_ | project is the tracker project the unit files work in, by its key.<br />Crewlet requires a container key to be an upper-case letter followed<br />by 1 to 9 upper-case letters or digits, such as PLAT. Crewlet's<br />`project`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
 | `space` _string_ | space is the knowledge container the unit writes pages in, by its<br />key, which follows the same rule as project. Crewlet's `space`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
-| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are tool-server credentials and settings every agent seat<br />directly in this unit inherits; a seat's own values win per variable.<br />One entry per server, keyed by its name. Crewlet's `mcp_env`, a<br />credential position. Every credential comes from a Secret: the engine<br />provisions a credential for one seat, and a unit's are every member's.<br />A value one seat must not share, such as slack-mcp-server's channel<br />cache, belongs on the Seat. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `mcp` _[MCPCredentials](#mcpcredentials) array_ | mcp are tool-server credentials and settings every agent seat<br />directly in this unit inherits; a seat's own values win per variable.<br />One entry per server, keyed by its name. Crewlet's `mcp_env`, a<br />credential position. A value one seat must not share, such as<br />slack-mcp-server's channel cache or a seat's own credential, belongs<br />on the Seat. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 
 
 #### UnitStatus

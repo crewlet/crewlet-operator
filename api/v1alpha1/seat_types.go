@@ -146,7 +146,8 @@ type SeatSandbox struct {
 	// env is the environment of the seat's executor runs, for the external
 	// tokens its work needs: from Secrets, or provisioned by the engine,
 	// such as the GitLab token a provisioning Integration mints for the
-	// seat, named as its tool server's is so both are one token. A run gets
+	// seat's account, which the engine gives its gitlab tool server too, so
+	// both are one token. A run gets
 	// its provider's whole env beneath this, so a variable named here wins
 	// over the provider's of that name. A ClaudeCode sign-in here
 	// (CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or a
@@ -221,29 +222,86 @@ type SeatPlacement struct {
 
 // SlackSeatIntegration is a seat's own Slack app, so the seat posts as itself.
 // It maps onto Crewlet's role integrations.slack and needs the company's Slack
-// Integration.
+// Integration. Slack gives a bot no role: what the app may do is the bot token
+// scopes of its manifest, and where it may do it is the channels it is
+// invited to, so the block holds no access of its own.
 type SlackSeatIntegration struct {
+	// enabled is whether the seat is on Slack. False keeps the block, and
+	// the engine revokes the app's bot token rather than deleting the app;
+	// turning it back on needs a person to approve the install again.
+	// Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// credentialsSecretRef is a Secret holding the app's credentials under
 	// the keys botToken (the bot token) and signingSecret (which verifies
 	// the app's webhooks). Crewlet's `bot_token` and `signing_secret`, both
 	// credential positions. Rewriting the Secret rotates them without a
-	// restart.
+	// restart. The Secret is the seat's alone: Crewlet refuses one another
+	// seat or an Integration names too.
 	// +required
 	CredentialsSecretRef SecretReference `json:"credentialsSecretRef,omitzero"`
 }
 
-// GitHubAccessTier is how much a seat may do in a repository. It maps onto
-// Crewlet's role integrations.github.tier (ReadOnly is `read_only`, Review is
-// `review`, FullAccess is `full_access`).
-// +kubebuilder:validation:Enum=ReadOnly;Review;FullAccess
-type GitHubAccessTier string
+// GitHubPermission is how much of one GitHub App permission a seat holds. It
+// maps onto the level GitHub's API takes for it (Read is `read`, Write is
+// `write`), and the dashboard shows it under GitHub's names, Read-only and
+// Read and write. A permission left unset is GitHub's No access.
+// +kubebuilder:validation:Enum=Read;Write
+type GitHubPermission string
 
-// The GitHub access tiers, least first.
+// The GitHub permission levels.
 const (
-	GitHubAccessReadOnly   GitHubAccessTier = "ReadOnly"
-	GitHubAccessReview     GitHubAccessTier = "Review"
-	GitHubAccessFullAccess GitHubAccessTier = "FullAccess"
+	GitHubPermissionRead  GitHubPermission = "Read"
+	GitHubPermissionWrite GitHubPermission = "Write"
 )
+
+// GitHubPermissions are the GitHub App permissions a seat holds, one field per
+// permission GitHub defines for an app, each under GitHub's own key. They map
+// onto Crewlet's role integrations.github.permissions. A permission left unset
+// is No access; Metadata, which GitHub grants every app read-only, is not
+// listed. The engine registers the seat's app with these permissions and
+// narrows each installation token to them, so lowering one applies to the next
+// token, and raising one past what the app was registered with waits for an
+// owner of the organization to accept the app's new permissions.
+// +kubebuilder:validation:MinProperties=1
+type GitHubPermissions struct {
+	// contents is the repository's code, branches and releases. Crewlet's
+	// `contents`.
+	// +optional
+	Contents GitHubPermission `json:"contents,omitempty"`
+
+	// issues is the repository's issues and their comments. Crewlet's
+	// `issues`.
+	// +optional
+	Issues GitHubPermission `json:"issues,omitempty"`
+
+	// pullRequests is the repository's pull requests, their reviews and
+	// comments. Crewlet's `pull_requests`.
+	// +optional
+	PullRequests GitHubPermission `json:"pullRequests,omitempty"`
+
+	// checks is the check runs and suites on the repository's commits.
+	// Crewlet's `checks`.
+	// +optional
+	Checks GitHubPermission `json:"checks,omitempty"`
+
+	// actions is the repository's workflow runs and artifacts. Crewlet's
+	// `actions`.
+	// +optional
+	Actions GitHubPermission `json:"actions,omitempty"`
+
+	// workflows lets the seat push a commit that changes a file under
+	// .github/workflows, which GitHub refuses otherwise. GitHub offers it as
+	// Read and write alone, and a push needs contents Write too. The same
+	// grant lets
+	// the seat's branches run a workflow it rewrote with the secrets the
+	// repository hands its runs, so pair it with branch protection and
+	// environment-scoped secrets. Crewlet's `workflows`.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="self == 'Write'",message="workflows is offered by GitHub as Write alone"
+	Workflows GitHubPermission `json:"workflows,omitempty"`
+}
 
 // GitHubApp is the GitHub App a seat acts as. An app carries exactly one bot
 // identity, so every agent seat that works on GitHub has its own.
@@ -271,24 +329,34 @@ type GitHubApp struct {
 	// credentialsSecretRef is a Secret holding the app's credentials under
 	// the keys privateKey (the app's PEM key) and webhookSecret (which
 	// verifies the app's own webhook deliveries). Crewlet's `private_key`
-	// and `webhook_secret`, both credential positions.
+	// and `webhook_secret`, both credential positions. The Secret is the
+	// seat's alone: Crewlet refuses one another seat or an Integration names
+	// too.
 	// +required
 	CredentialsSecretRef SecretReference `json:"credentialsSecretRef,omitzero"`
 }
 
-// GitHubSeatIntegration is a seat's identity on GitHub. It maps onto
-// Crewlet's role integrations.github and needs the company's GitHub
+// GitHubSeatIntegration is a seat's identity and access on GitHub. It maps
+// onto Crewlet's role integrations.github and needs the company's GitHub
 // Integration.
-// +kubebuilder:validation:MinProperties=1
-// +kubebuilder:validation:XValidation:rule="!has(self.workflows) || !self.workflows || (has(self.tier) && self.tier == 'FullAccess')",message="workflows applies to a FullAccess seat only: a seat that cannot push code has nothing to push a workflow with",fieldPath=".workflows"
 type GitHubSeatIntegration struct {
-	// tier is how much the seat may do in a repository. Unset is ReadOnly.
-	// Crewlet's `tier`.
-	// +optional
-	Tier GitHubAccessTier `json:"tier,omitempty"`
+	// enabled is whether the seat is on GitHub. False keeps the block, and
+	// the engine suspends the app's installation rather than uninstalling
+	// it, so turning it back on needs no person. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
 
-	// repos are the repositories the seat works in, as owner/name. Unset is
-	// every repository the app's installation covers. Crewlet's `repos`.
+	// permissions are the GitHub App permissions the seat holds. Unset is
+	// No access on every permission but Metadata. Crewlet's `permissions`.
+	// +optional
+	Permissions GitHubPermissions `json:"permissions,omitzero"`
+
+	// repos are the repositories the seat's tokens are narrowed to, as
+	// owner/name. Unset is every repository the app's installation covers,
+	// which is the organization's choice at GitHub. Where the Integration
+	// lists provisioning repos, each must be one of them: Crewlet refuses
+	// another, which the engine's dry run reports as Invalid on the Seat.
+	// Crewlet's `repos`.
 	// +optional
 	// +listType=set
 	// +kubebuilder:validation:MaxItems=64
@@ -296,32 +364,147 @@ type GitHubSeatIntegration struct {
 	// +kubebuilder:validation:items:Pattern=`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`
 	Repos []string `json:"repos,omitempty"`
 
-	// workflows grants the seat GitHub's workflows write permission, without
-	// which GitHub refuses any push whose commits change a file under
-	// .github/workflows. FullAccess seats only, and off unless set: the same
-	// grant lets the seat's branches run a workflow it rewrote with the
-	// secrets the repository hands its runs, so pair it with branch
-	// protection and environment-scoped secrets. Crewlet's `workflows`.
-	// +optional
-	Workflows *bool `json:"workflows,omitempty"`
-
 	// app is the GitHub App the seat acts as.
 	// +optional
 	App GitHubApp `json:"app,omitzero"`
 }
 
+// GitLabAccessLevel is a GitLab role, the level of a seat's membership in the
+// group and its projects, under GitLab's own name. It maps onto Crewlet's
+// access_level, the integer GitLab's Members API takes (Guest is 10, Planner
+// 15, Reporter 20, Developer 30, Maintainer 40, Owner 50). Security Manager,
+// a beta GitLab leaves off by default, and Minimal Access, which grants an
+// agent nothing, are not offered. The token the engine mints follows the
+// role: below Developer it can read the API and the repositories but not
+// push.
+// +kubebuilder:validation:Enum=Guest;Planner;Reporter;Developer;Maintainer;Owner
+type GitLabAccessLevel string
+
+// The GitLab roles, least first.
+const (
+	GitLabGuest      GitLabAccessLevel = "Guest"
+	GitLabPlanner    GitLabAccessLevel = "Planner"
+	GitLabReporter   GitLabAccessLevel = "Reporter"
+	GitLabDeveloper  GitLabAccessLevel = "Developer"
+	GitLabMaintainer GitLabAccessLevel = "Maintainer"
+	GitLabOwner      GitLabAccessLevel = "Owner"
+)
+
+// GitLabSeatIntegration is a seat's account and access on GitLab. It maps onto
+// Crewlet's role integrations.gitlab and needs the company's GitLab
+// Integration. Under its provisioning Engine the engine creates the seat's
+// service account, gives it the role in the projects, and mints its token.
+// Under External the account is made outside the engine, which changes
+// nothing at GitLab: enabled then turns the seat's own GitLab tools on and
+// off, and the engine reports the seat's access as managed outside Crewlet.
+// +kubebuilder:validation:XValidation:rule="!(has(self.accessLevel) && has(self.memberRoleID))",message="accessLevel and memberRoleID are two ways to name the seat's role: give one"
+// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.accessLevel) || has(self.memberRoleID)",message="a seat that is on GitLab needs its role: give accessLevel, or memberRoleID for a custom role"
+type GitLabSeatIntegration struct {
+	// enabled is whether the seat is on GitLab. False keeps the account,
+	// which the engine blocks and whose tokens it revokes, so its history
+	// keeps its author and turning it back on needs no person. Crewlet's
+	// `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// accessLevel is the seat's GitLab role. One of it and memberRoleID is
+	// required while the seat is on. Crewlet's `access_level`.
+	// +optional
+	AccessLevel GitLabAccessLevel `json:"accessLevel,omitempty"`
+
+	// memberRoleID is a custom role of the group, by its id, in place of
+	// accessLevel: GitLab Ultimate only. The engine checks it against the
+	// group's roles on every pass, and reports one that no longer exists
+	// rather than falling back to another. Crewlet's `member_role_id`.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	MemberRoleID int64 `json:"memberRoleID,omitempty"`
+
+	// projects are the projects, by path, the seat is a member of. Unset is
+	// the whole group. Where the Integration lists engineProvisioning
+	// projects, each must be one of them, so a seat cannot widen the
+	// company's reach: Crewlet refuses another, which the engine's dry run
+	// reports as Invalid on the Seat. Crewlet's `projects`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=128
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=255
+	// +kubebuilder:validation:items:Pattern=`^[A-Za-z0-9_.][A-Za-z0-9_./-]*$`
+	Projects []string `json:"projects,omitempty"`
+}
+
+// MattermostRole is a role or permission of a Mattermost account, under the
+// identifier Mattermost's API takes (SystemUser is `system_user`, the Member
+// role; SystemPostAllPublic is `system_post_all_public`, post:channels;
+// SystemPostAll is `system_post_all`, post:all; SystemAdmin is
+// `system_admin`, System Admin).
+// +kubebuilder:validation:Enum=SystemUser;SystemPostAllPublic;SystemPostAll;SystemAdmin
+type MattermostRole string
+
+// The Mattermost roles.
+const (
+	// MattermostSystemUser is Member, the role every account holds.
+	MattermostSystemUser MattermostRole = "SystemUser"
+	// MattermostSystemPostAllPublic is post:channels: post in every public
+	// channel, a member or not.
+	MattermostSystemPostAllPublic MattermostRole = "SystemPostAllPublic"
+	// MattermostSystemPostAll is post:all: post in every channel, private
+	// ones and direct messages included.
+	MattermostSystemPostAll MattermostRole = "SystemPostAll"
+	// MattermostSystemAdmin is System Admin, which grants every other
+	// administration privilege of the server too.
+	MattermostSystemAdmin MattermostRole = "SystemAdmin"
+)
+
 // MattermostSeatIntegration is a seat's own Mattermost bot. It maps onto
 // Crewlet's role integrations.mattermost and needs the company's Mattermost
 // Integration. One credential covers everything the bot does: the websocket
-// the engine listens on, its REST calls, and the Mattermost tool server, whose
-// credentials (in spec.mcp) name the same token.
+// the engine listens on, its REST calls, and the Mattermost tool server.
+// Under the Integration's provisioning Engine the engine creates the bot,
+// gives it the roles and the channels, and mints its token; under External
+// the bot is made outside the engine, and the engine reports its access as
+// managed outside Crewlet.
+// +kubebuilder:validation:XValidation:rule="!has(self.roles) || ('SystemUser' in self.roles && size(self.roles) <= 2)",message="roles is one of Mattermost's sets for a bot: SystemUser alone, or SystemUser with one of SystemPostAllPublic, SystemPostAll and SystemAdmin",fieldPath=".roles"
+// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.roles)",message="a seat that is on Mattermost needs the roles its bot holds: give roles, such as [SystemUser]",fieldPath=".roles"
 type MattermostSeatIntegration struct {
-	// botToken is the bot account's personal access token: from a Secret,
-	// or provisioned by the engine under a Mattermost Integration with
-	// provisioning Engine, which creates the bot and mints the token.
-	// Crewlet's `bot_token`, a credential position.
+	// enabled is whether the seat is on Mattermost. False keeps the bot,
+	// which the engine deactivates and whose tokens it revokes. Crewlet's
+	// `enabled`.
 	// +required
-	BotToken SeatCredentialSource `json:"botToken,omitzero"`
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// roles are the bot account's roles: Member (SystemUser) alone, or
+	// Member with one of post:channels, post:all and System Admin. Required
+	// while the seat is on. Crewlet's `roles`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=4
+	Roles []MattermostRole `json:"roles,omitempty"`
+
+	// channels are the channels, by name (the URL slug), the bot is a
+	// member of: it hears only the channels it is in. Where the Integration
+	// lists engineProvisioning channels, each must be one of them: Crewlet
+	// refuses another, which the engine's dry run reports as Invalid on the
+	// Seat. Crewlet's `channels`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=64
+	// +kubebuilder:validation:items:Pattern=`^[a-z0-9][a-z0-9_-]*$`
+	Channels []string `json:"channels,omitempty"`
+
+	// botToken is the Secret key holding the personal access token of a bot
+	// made outside the engine, under a Mattermost Integration with
+	// provisioning External. Under provisioning Engine leave it unset: the
+	// engine creates the bot and mints its token, which no document names,
+	// and refuses one given here. The Secret key is the seat's alone:
+	// Crewlet refuses one another seat or a company block names too.
+	// Crewlet's `bot_token`, a credential position.
+	// +optional
+	BotToken SecretValueSource `json:"botToken,omitzero"`
 
 	// username is the bot's username, for a bot that exists under a name
 	// other than the seat's handle (with the Integration's
@@ -331,34 +514,161 @@ type MattermostSeatIntegration struct {
 	// +kubebuilder:validation:MaxLength=64
 	// +kubebuilder:validation:Pattern=`^[a-z0-9][a-z0-9._-]*$`
 	Username string `json:"username,omitempty"`
+}
 
-	// channel is a channel, by its name (the URL slug), the engine adds the
-	// bot to when it provisions it, on top of the Integration's
-	// engineProvisioning.channels. Crewlet's `channel`.
+// JiraSeatIntegration is a seat's access on Jira. It maps onto Crewlet's role
+// integrations.jira and needs the company's Jira Integration. With the
+// company's Atlassian Integration the engine creates the seat's account,
+// grants it Jira and gives it the project role in the projects; without one
+// (a Data Center instance) the account is made outside the engine, and the
+// engine reports the seat's access as managed outside Crewlet.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.projectRole)",message="a seat that is on Jira needs the project role it holds: give projectRole",fieldPath=".projectRole"
+type JiraSeatIntegration struct {
+	// enabled is whether the seat is on Jira. False removes the account's
+	// Jira product access and keeps the account. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// projectRole is the project role the seat holds in each of projects,
+	// by its id on the site (GET /rest/api/3/role), such as 10101. What a
+	// role may do is each project's permission scheme. The engine checks it
+	// against the site's roles on every pass, and reports one that no
+	// longer exists rather than falling back to another. Required while
+	// the seat is on. Crewlet's `project_role`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=32
+	// +kubebuilder:validation:Pattern=`^[0-9]+$`
+	ProjectRole string `json:"projectRole,omitempty"`
+
+	// projects are the projects, by key, the seat holds projectRole in.
+	// Each must be a project the company's document names, as a Unit's or
+	// a Seat's spec.project, so a seat cannot widen the company's reach:
+	// Crewlet refuses another, which the engine's dry run reports as
+	// Invalid on the Seat. Crewlet's `projects`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=128
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=255
+	// +kubebuilder:validation:items:Pattern=`^[A-Z][A-Z0-9_]*$`
+	Projects []string `json:"projects,omitempty"`
+}
+
+// ConfluenceSeatIntegration is a seat's access on Confluence. It maps onto
+// Crewlet's role integrations.confluence and needs the company's Confluence
+// Integration. With the company's Atlassian Integration the engine creates
+// the seat's account, grants it Confluence and gives it the access in the
+// spaces; without one the account is made outside the engine, and the engine
+// reports the seat's access as managed outside Crewlet. A site with
+// Confluence's role-based access grants by spaceRole; a site without it
+// grants space permissions by operation.
+// +kubebuilder:validation:XValidation:rule="!(has(self.spaceRole) && has(self.operations))",message="spaceRole and operations are two ways to grant the seat's access: give spaceRole on a site with role-based access, and operations on one without"
+// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.spaceRole) || has(self.operations)",message="a seat that is on Confluence needs its access: give spaceRole, or operations where the site has no space roles"
+type ConfluenceSeatIntegration struct {
+	// enabled is whether the seat is on Confluence. False removes the
+	// account's Confluence product access and keeps the account. Crewlet's
+	// `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// spaceRole is the space role the seat holds in each of spaces, by its
+	// id on the site (Confluence's role-based access): Viewer, Collaborator,
+	// Manager, Admin, or a custom role. The engine checks it against the
+	// site's roles on every pass, and reports one that no longer exists
+	// rather than falling back to another. Crewlet's `space_role`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][A-Za-z0-9_:-]*$`
+	SpaceRole string `json:"spaceRole,omitempty"`
+
+	// operations are Confluence's space permissions, as
+	// <operation>:<target> under Confluence's own names, such as read:space
+	// or create:page, the seat holds in each of spaces, for a site whose
+	// role-based access is off. Crewlet's `operations`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:items:MinLength=3
+	// +kubebuilder:validation:items:MaxLength=64
+	// +kubebuilder:validation:items:Pattern=`^[a-z_]+:[a-z_]+$`
+	Operations []string `json:"operations,omitempty"`
+
+	// spaces are the spaces, by key, the seat holds spaceRole or
+	// operations in. Each must be a space the company's document names, as
+	// a Unit's or a Seat's spec.space: Crewlet refuses another, which the
+	// engine's dry run reports as Invalid on the Seat. Crewlet's `spaces`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=128
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=255
+	// +kubebuilder:validation:items:Pattern=`^~?[A-Za-z0-9]+$`
+	Spaces []string `json:"spaces,omitempty"`
+}
+
+// DatadogSeatIntegration is a seat's service account on Datadog. It maps onto
+// Crewlet's role integrations.datadog and needs the company's Datadog
+// Integration, under which the engine creates the account with the role and
+// mints its application key.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.role)",message="a seat that is on Datadog needs the role its service account holds: give role, a role id as GET /api/v2/roles lists it",fieldPath=".role"
+type DatadogSeatIntegration struct {
+	// enabled is whether the seat is on Datadog. False disables the service
+	// account and deletes its key; Datadog never erases a user, so its
+	// history keeps its author. Crewlet's `enabled`.
+	// +required
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// role is the Datadog role the account holds, by its id
+	// (GET /api/v2/roles): a managed role, such as Datadog Read Only Role,
+	// or a custom one. The engine checks it against the organization's
+	// roles on every pass, and reports one that no longer exists rather than
+	// falling back to another. Required while the seat is on. Crewlet's
+	// `role`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=64
-	// +kubebuilder:validation:Pattern=`^[a-z0-9][a-z0-9_-]*$`
-	Channel string `json:"channel,omitempty"`
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][A-Za-z0-9-]*$`
+	Role string `json:"role,omitempty"`
 }
 
-// SeatIntegrations is a seat's own identity on the company's integrations:
-// the chat app it speaks as, the code-host app it acts as. Its tool
-// credentials, the GitLab, Jira, Confluence and Datadog ones included, are in
-// spec.mcp instead, which is where Crewlet reads them.
+// SeatIntegrations is a seat's own identity and access on the company's
+// integrations, one block per vendor: whether the seat is on it, what it may
+// do there in the vendor's own terms, and, where the vendor has one, the scope
+// it may do it in. A vendor without a block is off for the seat. The
+// credential the engine mints for a seat's account is sealed under a name the
+// engine gives it for the seat, and the engine hands it to the vendor's tool
+// server itself, so spec.mcp holds none for these vendors.
 // +kubebuilder:validation:MinProperties=1
 type SeatIntegrations struct {
 	// slack is the seat's own Slack app.
 	// +optional
 	Slack SlackSeatIntegration `json:"slack,omitzero"`
 
-	// github is the seat's identity on GitHub.
+	// github is the seat's identity and access on GitHub.
 	// +optional
 	GitHub GitHubSeatIntegration `json:"github,omitzero"`
+
+	// gitlab is the seat's account and access on GitLab.
+	// +optional
+	GitLab GitLabSeatIntegration `json:"gitlab,omitzero"`
 
 	// mattermost is the seat's own Mattermost bot.
 	// +optional
 	Mattermost MattermostSeatIntegration `json:"mattermost,omitzero"`
+
+	// jira is the seat's access on Jira.
+	// +optional
+	Jira JiraSeatIntegration `json:"jira,omitzero"`
+
+	// confluence is the seat's access on Confluence.
+	// +optional
+	Confluence ConfluenceSeatIntegration `json:"confluence,omitzero"`
+
+	// datadog is the seat's service account on Datadog.
+	// +optional
+	Datadog DatadogSeatIntegration `json:"datadog,omitzero"`
 }
 
 // SeatContact is how agents reach a person: their accounts on the company's
@@ -568,7 +878,13 @@ type SeatSpec struct {
 	// itself on each server, and its own settings, such as the channel cache
 	// of slack-mcp-server, which no other seat may share. They are merged
 	// over its unit's, per variable. One entry per server, keyed by its
-	// name. Crewlet's `mcp_env`, a credential position.
+	// name. A credential of a vendor the engine provisions for the company
+	// (GitLab or Mattermost under provisioning Engine, Datadog, an Atlassian
+	// organization) is never given here: the engine hands the seat's own to
+	// that vendor's server itself, and refuses one given here, which the
+	// engine's dry run reports as Invalid on the Seat. A credential given
+	// here is the seat's alone: Crewlet refuses a Secret key another seat or
+	// an Integration names too. Crewlet's `mcp_env`, a credential position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name

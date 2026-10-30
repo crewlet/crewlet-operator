@@ -1,7 +1,9 @@
-# GitHub's remote tool server, and GitLab's own CLI as a local one.
-# shared: false starts one instance per seat with that seat's own credentials
-# (see the Seat ana): an Authorization header for GitHub, a GITLAB_TOKEN for
-# GitLab, which the engine mints.
+# GitHub's and Linear's remote tool servers, and GitLab's own CLI as a local
+# one. shared: false starts one instance per seat with that seat's own
+# credentials: the engine gives the github and gitlab servers each seat's own
+# token itself (its GitHub App's installation token, and the token it mints
+# for its GitLab account), and a seat gives the linear server its own API key
+# (see the Seat ana).
 #
 # A Stdio server's command runs in the engine's container, and Crewlet's image
 # ships no glab (nor any other runtime a stdio server needs): run this one on
@@ -19,6 +21,18 @@ spec:
   shared: false
   url: https://api.githubcopilot.com/mcp/
   toolPrefix: gh_
+  requestTimeoutSeconds: 60
+---
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: linear
+spec:
+  companyRef:
+    name: nimbus
+  transport: HTTP
+  shared: false
+  url: https://mcp.linear.app/mcp
   requestTimeoutSeconds: 60
 ---
 apiVersion: crewlet.ai/v1alpha1

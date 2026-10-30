@@ -195,8 +195,10 @@ func (e envNames) among(names []string) []string {
 // says which values the operator knows to.
 func (r *renderer) runEnvNames(s *v1alpha1.Seat) (names, leftOut envNames) {
 	type value struct {
-		key         secretref.Key
-		provisioned bool
+		key secretref.Key
+		// provisioned is the vendor of a credential the engine mints,
+		// unset for a Secret's value.
+		provisioned v1alpha1.ProvisionedVendor
 		optional    bool
 	}
 	won := map[string]value{}
@@ -211,7 +213,7 @@ func (r *renderer) runEnvNames(s *v1alpha1.Seat) (names, leftOut envNames) {
 		}
 	}
 	for _, e := range sb.Env {
-		v := value{provisioned: e.ValueFrom.Provisioned.Name != "", optional: slices.Contains(sb.OptionalKeys, e.Name)}
+		v := value{provisioned: e.ValueFrom.Provisioned.Vendor, optional: slices.Contains(sb.OptionalKeys, e.Name)}
 		if e.ValueFrom.SecretKeyRef.Name != "" {
 			v.key = r.key(e.ValueFrom.SecretKeyRef)
 		}
@@ -219,7 +221,7 @@ func (r *renderer) runEnvNames(s *v1alpha1.Seat) (names, leftOut envNames) {
 	}
 	names, leftOut = envNames{}, envNames{}
 	for name, v := range won {
-		if r.empty[v.key] || v.optional && r.unset[v.key] || v.provisioned && !r.engineProvisions() {
+		if r.empty[v.key] || v.optional && r.unset[v.key] || v.provisioned != "" && !r.provisions(v.provisioned) {
 			leftOut[name] = true
 			continue
 		}

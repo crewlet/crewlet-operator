@@ -253,9 +253,97 @@ spec:
                   integrations.
                 minProperties: 1
                 properties:
+                  confluence:
+                    description: confluence is the seat's access on Confluence.
+                    properties:
+                      enabled:
+                        description: |-
+                          enabled is whether the seat is on Confluence. False removes the
+                          account's Confluence product access and keeps the account. Crewlet's
+                          `enabled`.
+                        type: boolean
+                      operations:
+                        description: |-
+                          operations are Confluence's space permissions, as
+                          <operation>:<target> under Confluence's own names, such as read:space
+                          or create:page, the seat holds in each of spaces, for a site whose
+                          role-based access is off. Crewlet's `operations`.
+                        items:
+                          maxLength: 64
+                          minLength: 3
+                          pattern: ^[a-z_]+:[a-z_]+$
+                          type: string
+                        maxItems: 64
+                        type: array
+                        x-kubernetes-list-type: set
+                      spaceRole:
+                        description: |-
+                          spaceRole is the space role the seat holds in each of spaces, by its
+                          id on the site (Confluence's role-based access): Viewer, Collaborator,
+                          Manager, Admin, or a custom role. The engine checks it against the
+                          site's roles on every pass, and reports one that no longer exists
+                          rather than falling back to another. Crewlet's `space_role`.
+                        maxLength: 128
+                        minLength: 1
+                        pattern: ^[A-Za-z0-9][A-Za-z0-9_:-]*$
+                        type: string
+                      spaces:
+                        description: |-
+                          spaces are the spaces, by key, the seat holds spaceRole or
+                          operations in. Each must be a space the company's document names, as
+                          a Unit's or a Seat's spec.space: Crewlet refuses another, which the
+                          engine's dry run reports as Invalid on the Seat. Crewlet's `spaces`.
+                        items:
+                          maxLength: 255
+                          minLength: 1
+                          pattern: ^~?[A-Za-z0-9]+$
+                          type: string
+                        maxItems: 128
+                        type: array
+                        x-kubernetes-list-type: set
+                    required:
+                    - enabled
+                    type: object
+                    x-kubernetes-validations:
+                    - message: 'spaceRole and operations are two ways to grant the
+                        seat''s access: give spaceRole on a site with role-based access,
+                        and operations on one without'
+                      rule: '!(has(self.spaceRole) && has(self.operations))'
+                    - message: 'a seat that is on Confluence needs its access: give
+                        spaceRole, or operations where the site has no space roles'
+                      rule: '!self.enabled || has(self.spaceRole) || has(self.operations)'
+                  datadog:
+                    description: datadog is the seat's service account on Datadog.
+                    properties:
+                      enabled:
+                        description: |-
+                          enabled is whether the seat is on Datadog. False disables the service
+                          account and deletes its key; Datadog never erases a user, so its
+                          history keeps its author. Crewlet's `enabled`.
+                        type: boolean
+                      role:
+                        description: |-
+                          role is the Datadog role the account holds, by its id
+                          (GET /api/v2/roles): a managed role, such as Datadog Read Only Role,
+                          or a custom one. The engine checks it against the organization's
+                          roles on every pass, and reports one that no longer exists rather than
+                          falling back to another. Required while the seat is on. Crewlet's
+                          `role`.
+                        maxLength: 64
+                        minLength: 1
+                        pattern: ^[A-Za-z0-9][A-Za-z0-9-]*$
+                        type: string
+                    required:
+                    - enabled
+                    type: object
+                    x-kubernetes-validations:
+                    - fieldPath: .role
+                      message: 'a seat that is on Datadog needs the role its service
+                        account holds: give role, a role id as GET /api/v2/roles lists
+                        it'
+                      rule: '!self.enabled || has(self.role)'
                   github:
-                    description: github is the seat's identity on GitHub.
-                    minProperties: 1
+                    description: github is the seat's identity and access on GitHub.
                     properties:
                       app:
                         description: app is the GitHub App the seat acts as.
@@ -265,7 +353,9 @@ spec:
                               credentialsSecretRef is a Secret holding the app's credentials under
                               the keys privateKey (the app's PEM key) and webhookSecret (which
                               verifies the app's own webhook deliveries). Crewlet's `private_key`
-                              and `webhook_secret`, both credential positions.
+                              and `webhook_secret`, both credential positions. The Secret is the
+                              seat's alone: Crewlet refuses one another seat or an Integration names
+                              too.
                             properties:
                               name:
                                 description: name is the metadata.name of the Secret.
@@ -301,10 +391,83 @@ spec:
                         - id
                         - slug
                         type: object
+                      enabled:
+                        description: |-
+                          enabled is whether the seat is on GitHub. False keeps the block, and
+                          the engine suspends the app's installation rather than uninstalling
+                          it, so turning it back on needs no person. Crewlet's `enabled`.
+                        type: boolean
+                      permissions:
+                        description: |-
+                          permissions are the GitHub App permissions the seat holds. Unset is
+                          No access on every permission but Metadata. Crewlet's `permissions`.
+                        minProperties: 1
+                        properties:
+                          actions:
+                            description: |-
+                              actions is the repository's workflow runs and artifacts. Crewlet's
+                              `actions`.
+                            enum:
+                            - Read
+                            - Write
+                            type: string
+                          checks:
+                            description: |-
+                              checks is the check runs and suites on the repository's commits.
+                              Crewlet's `checks`.
+                            enum:
+                            - Read
+                            - Write
+                            type: string
+                          contents:
+                            description: |-
+                              contents is the repository's code, branches and releases. Crewlet's
+                              `contents`.
+                            enum:
+                            - Read
+                            - Write
+                            type: string
+                          issues:
+                            description: |-
+                              issues is the repository's issues and their comments. Crewlet's
+                              `issues`.
+                            enum:
+                            - Read
+                            - Write
+                            type: string
+                          pullRequests:
+                            description: |-
+                              pullRequests is the repository's pull requests, their reviews and
+                              comments. Crewlet's `pull_requests`.
+                            enum:
+                            - Read
+                            - Write
+                            type: string
+                          workflows:
+                            description: |-
+                              workflows lets the seat push a commit that changes a file under
+                              .github/workflows, which GitHub refuses otherwise. GitHub offers it as
+                              Read and write alone, and a push needs contents Write too. The same
+                              grant lets
+                              the seat's branches run a workflow it rewrote with the secrets the
+                              repository hands its runs, so pair it with branch protection and
+                              environment-scoped secrets. Crewlet's `workflows`.
+                            enum:
+                            - Read
+                            - Write
+                            type: string
+                            x-kubernetes-validations:
+                            - message: workflows is offered by GitHub as Write alone
+                              rule: self == 'Write'
+                        type: object
                       repos:
                         description: |-
-                          repos are the repositories the seat works in, as owner/name. Unset is
-                          every repository the app's installation covers. Crewlet's `repos`.
+                          repos are the repositories the seat's tokens are narrowed to, as
+                          owner/name. Unset is every repository the app's installation covers,
+                          which is the organization's choice at GitHub. Where the Integration
+                          lists provisioning repos, each must be one of them: Crewlet refuses
+                          another, which the engine's dry run reports as Invalid on the Seat.
+                          Crewlet's `repos`.
                         items:
                           maxLength: 201
                           pattern: ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$
@@ -312,61 +475,121 @@ spec:
                         maxItems: 64
                         type: array
                         x-kubernetes-list-type: set
-                      tier:
+                    required:
+                    - enabled
+                    type: object
+                  gitlab:
+                    description: gitlab is the seat's account and access on GitLab.
+                    properties:
+                      accessLevel:
                         description: |-
-                          tier is how much the seat may do in a repository. Unset is ReadOnly.
-                          Crewlet's `tier`.
+                          accessLevel is the seat's GitLab role. One of it and memberRoleID is
+                          required while the seat is on. Crewlet's `access_level`.
                         enum:
-                        - ReadOnly
-                        - Review
-                        - FullAccess
+                        - Guest
+                        - Planner
+                        - Reporter
+                        - Developer
+                        - Maintainer
+                        - Owner
                         type: string
-                      workflows:
+                      enabled:
                         description: |-
-                          workflows grants the seat GitHub's workflows write permission, without
-                          which GitHub refuses any push whose commits change a file under
-                          .github/workflows. FullAccess seats only, and off unless set: the same
-                          grant lets the seat's branches run a workflow it rewrote with the
-                          secrets the repository hands its runs, so pair it with branch
-                          protection and environment-scoped secrets. Crewlet's `workflows`.
+                          enabled is whether the seat is on GitLab. False keeps the account,
+                          which the engine blocks and whose tokens it revokes, so its history
+                          keeps its author and turning it back on needs no person. Crewlet's
+                          `enabled`.
                         type: boolean
+                      memberRoleID:
+                        description: |-
+                          memberRoleID is a custom role of the group, by its id, in place of
+                          accessLevel: GitLab Ultimate only. The engine checks it against the
+                          group's roles on every pass, and reports one that no longer exists
+                          rather than falling back to another. Crewlet's `member_role_id`.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                      projects:
+                        description: |-
+                          projects are the projects, by path, the seat is a member of. Unset is
+                          the whole group. Where the Integration lists engineProvisioning
+                          projects, each must be one of them, so a seat cannot widen the
+                          company's reach: Crewlet refuses another, which the engine's dry run
+                          reports as Invalid on the Seat. Crewlet's `projects`.
+                        items:
+                          maxLength: 255
+                          minLength: 1
+                          pattern: ^[A-Za-z0-9_.][A-Za-z0-9_./-]*$
+                          type: string
+                        maxItems: 128
+                        type: array
+                        x-kubernetes-list-type: set
+                    required:
+                    - enabled
                     type: object
                     x-kubernetes-validations:
-                    - fieldPath: .workflows
-                      message: 'workflows applies to a FullAccess seat only: a seat
-                        that cannot push code has nothing to push a workflow with'
-                      rule: '!has(self.workflows) || !self.workflows || (has(self.tier)
-                        && self.tier == ''FullAccess'')'
+                    - message: 'accessLevel and memberRoleID are two ways to name
+                        the seat''s role: give one'
+                      rule: '!(has(self.accessLevel) && has(self.memberRoleID))'
+                    - message: 'a seat that is on GitLab needs its role: give accessLevel,
+                        or memberRoleID for a custom role'
+                      rule: '!self.enabled || has(self.accessLevel) || has(self.memberRoleID)'
+                  jira:
+                    description: jira is the seat's access on Jira.
+                    properties:
+                      enabled:
+                        description: |-
+                          enabled is whether the seat is on Jira. False removes the account's
+                          Jira product access and keeps the account. Crewlet's `enabled`.
+                        type: boolean
+                      projectRole:
+                        description: |-
+                          projectRole is the project role the seat holds in each of projects,
+                          by its id on the site (GET /rest/api/3/role), such as 10101. What a
+                          role may do is each project's permission scheme. The engine checks it
+                          against the site's roles on every pass, and reports one that no
+                          longer exists rather than falling back to another. Required while
+                          the seat is on. Crewlet's `project_role`.
+                        maxLength: 32
+                        minLength: 1
+                        pattern: ^[0-9]+$
+                        type: string
+                      projects:
+                        description: |-
+                          projects are the projects, by key, the seat holds projectRole in.
+                          Each must be a project the company's document names, as a Unit's or
+                          a Seat's spec.project, so a seat cannot widen the company's reach:
+                          Crewlet refuses another, which the engine's dry run reports as
+                          Invalid on the Seat. Crewlet's `projects`.
+                        items:
+                          maxLength: 255
+                          minLength: 1
+                          pattern: ^[A-Z][A-Z0-9_]*$
+                          type: string
+                        maxItems: 128
+                        type: array
+                        x-kubernetes-list-type: set
+                    required:
+                    - enabled
+                    type: object
+                    x-kubernetes-validations:
+                    - fieldPath: .projectRole
+                      message: 'a seat that is on Jira needs the project role it holds:
+                        give projectRole'
+                      rule: '!self.enabled || has(self.projectRole)'
                   mattermost:
                     description: mattermost is the seat's own Mattermost bot.
                     properties:
                       botToken:
                         description: |-
-                          botToken is the bot account's personal access token: from a Secret,
-                          or provisioned by the engine under a Mattermost Integration with
-                          provisioning Engine, which creates the bot and mints the token.
+                          botToken is the Secret key holding the personal access token of a bot
+                          made outside the engine, under a Mattermost Integration with
+                          provisioning External. Under provisioning Engine leave it unset: the
+                          engine creates the bot and mints its token, which no document names,
+                          and refuses one given here. The Secret key is the seat's alone:
+                          Crewlet refuses one another seat or a company block names too.
                           Crewlet's `bot_token`, a credential position.
-                        minProperties: 1
                         properties:
-                          provisioned:
-                            description: |-
-                              provisioned is a value the engine creates and keeps, under an
-                              Integration with provisioning Engine.
-                            properties:
-                              name:
-                                description: |-
-                                  name names the value among the seat's provisioned credentials. Every
-                                  place a seat names the same provisioned name refers to one value, so
-                                  a token given to a tool server's environment and to the seat's
-                                  sandbox is one token; different names are different values, such as
-                                  an account's token and its email address.
-                                maxLength: 32
-                                minLength: 1
-                                pattern: ^[a-z0-9][a-z0-9-]*$
-                                type: string
-                            required:
-                            - name
-                            type: object
                           secretKeyRef:
                             description: secretKeyRef selects the Secret key that
                               holds the value.
@@ -386,20 +609,52 @@ spec:
                             - key
                             - name
                             type: object
+                        required:
+                        - secretKeyRef
                         type: object
-                        x-kubernetes-validations:
-                        - message: exactly one of secretKeyRef and provisioned must
-                            be set
-                          rule: has(self.secretKeyRef) != has(self.provisioned)
-                      channel:
+                      channels:
                         description: |-
-                          channel is a channel, by its name (the URL slug), the engine adds the
-                          bot to when it provisions it, on top of the Integration's
-                          engineProvisioning.channels. Crewlet's `channel`.
-                        maxLength: 64
-                        minLength: 1
-                        pattern: ^[a-z0-9][a-z0-9_-]*$
-                        type: string
+                          channels are the channels, by name (the URL slug), the bot is a
+                          member of: it hears only the channels it is in. Where the Integration
+                          lists engineProvisioning channels, each must be one of them: Crewlet
+                          refuses another, which the engine's dry run reports as Invalid on the
+                          Seat. Crewlet's `channels`.
+                        items:
+                          maxLength: 64
+                          minLength: 1
+                          pattern: ^[a-z0-9][a-z0-9_-]*$
+                          type: string
+                        maxItems: 64
+                        type: array
+                        x-kubernetes-list-type: set
+                      enabled:
+                        description: |-
+                          enabled is whether the seat is on Mattermost. False keeps the bot,
+                          which the engine deactivates and whose tokens it revokes. Crewlet's
+                          `enabled`.
+                        type: boolean
+                      roles:
+                        description: |-
+                          roles are the bot account's roles: Member (SystemUser) alone, or
+                          Member with one of post:channels, post:all and System Admin. Required
+                          while the seat is on. Crewlet's `roles`.
+                        items:
+                          description: |-
+                            MattermostRole is a role or permission of a Mattermost account, under the
+                            identifier Mattermost's API takes (SystemUser is `system_user`, the Member
+                            role; SystemPostAllPublic is `system_post_all_public`, post:channels;
+                            SystemPostAll is `system_post_all`, post:all; SystemAdmin is
+                            `system_admin`, System Admin).
+                          enum:
+                          - SystemUser
+                          - SystemPostAllPublic
+                          - SystemPostAll
+                          - SystemAdmin
+                          type: string
+                        maxItems: 4
+                        minItems: 1
+                        type: array
+                        x-kubernetes-list-type: set
                       username:
                         description: |-
                           username is the bot's username, for a bot that exists under a name
@@ -410,8 +665,19 @@ spec:
                         pattern: ^[a-z0-9][a-z0-9._-]*$
                         type: string
                     required:
-                    - botToken
+                    - enabled
                     type: object
+                    x-kubernetes-validations:
+                    - fieldPath: .roles
+                      message: 'roles is one of Mattermost''s sets for a bot: SystemUser
+                        alone, or SystemUser with one of SystemPostAllPublic, SystemPostAll
+                        and SystemAdmin'
+                      rule: '!has(self.roles) || (''SystemUser'' in self.roles &&
+                        size(self.roles) <= 2)'
+                    - fieldPath: .roles
+                      message: 'a seat that is on Mattermost needs the roles its bot
+                        holds: give roles, such as [SystemUser]'
+                      rule: '!self.enabled || has(self.roles)'
                   slack:
                     description: slack is the seat's own Slack app.
                     properties:
@@ -421,7 +687,8 @@ spec:
                           the keys botToken (the bot token) and signingSecret (which verifies
                           the app's webhooks). Crewlet's `bot_token` and `signing_secret`, both
                           credential positions. Rewriting the Secret rotates them without a
-                          restart.
+                          restart. The Secret is the seat's alone: Crewlet refuses one another
+                          seat or an Integration names too.
                         properties:
                           name:
                             description: name is the metadata.name of the Secret.
@@ -431,8 +698,16 @@ spec:
                         required:
                         - name
                         type: object
+                      enabled:
+                        description: |-
+                          enabled is whether the seat is on Slack. False keeps the block, and
+                          the engine revokes the app's bot token rather than deleting the app;
+                          turning it back on needs a person to approve the install again.
+                          Crewlet's `enabled`.
+                        type: boolean
                     required:
                     - credentialsSecretRef
+                    - enabled
                     type: object
                 type: object
               kind:
@@ -672,7 +947,13 @@ spec:
                   itself on each server, and its own settings, such as the channel cache
                   of slack-mcp-server, which no other seat may share. They are merged
                   over its unit's, per variable. One entry per server, keyed by its
-                  name. Crewlet's `mcp_env`, a credential position.
+                  name. A credential of a vendor the engine provisions for the company
+                  (GitLab or Mattermost under provisioning Engine, Datadog, an Atlassian
+                  organization) is never given here: the engine hands the seat's own to
+                  that vendor's server itself, and refuses one given here, which the
+                  engine's dry run reports as Invalid on the Seat. A credential given
+                  here is the seat's alone: Crewlet refuses a Secret key another seat or
+                  an Integration names too. Crewlet's `mcp_env`, a credential position.
                 items:
                   description: |-
                     MCPCredentials are the values one tool server is started with for a seat:
@@ -697,8 +978,8 @@ spec:
                       items:
                         description: |-
                           MCPCredentialValue is one value a tool server is started with for a seat:
-                          one of its credentials, from a Secret or provisioned by the engine, or a
-                          setting that is no credential, written as a literal value. Whether it is an
+                          one of its credentials, from a Secret, or a setting that is no credential,
+                          written as a literal value. Whether it is an
                           environment variable or a request header depends on the server's
                           transport, which is why its name follows the grammar of an HTTP header
                           name, of which an environment variable's name is a subset.
@@ -736,32 +1017,13 @@ spec:
                               rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                           valueFrom:
                             description: |-
-                              valueFrom is where a credential comes from: a Secret key, or, for a
-                              Seat's own credentials, the engine (provisioned). For a header the
+                              valueFrom is the Secret key a credential comes from. For a header the
                               value is the whole header, scheme included (for example "Bearer
-                              <token>"); a provisioned value is the credential alone, so provision
-                              one for a variable rather than a header.
-                            minProperties: 1
+                              <token>"). A credential the engine mints for a seat's account at a
+                              vendor it provisions is never named here: the engine gives it to the
+                              vendor's tool server itself, and refuses a credential of that vendor's
+                              server here.
                             properties:
-                              provisioned:
-                                description: |-
-                                  provisioned is a value the engine creates and keeps, under an
-                                  Integration with provisioning Engine.
-                                properties:
-                                  name:
-                                    description: |-
-                                      name names the value among the seat's provisioned credentials. Every
-                                      place a seat names the same provisioned name refers to one value, so
-                                      a token given to a tool server's environment and to the seat's
-                                      sandbox is one token; different names are different values, such as
-                                      an account's token and its email address.
-                                    maxLength: 32
-                                    minLength: 1
-                                    pattern: ^[a-z0-9][a-z0-9-]*$
-                                    type: string
-                                required:
-                                - name
-                                type: object
                               secretKeyRef:
                                 description: secretKeyRef selects the Secret key that
                                   holds the value.
@@ -783,11 +1045,9 @@ spec:
                                 - key
                                 - name
                                 type: object
+                            required:
+                            - secretKeyRef
                             type: object
-                            x-kubernetes-validations:
-                            - message: exactly one of secretKeyRef and provisioned
-                                must be set
-                              rule: has(self.secretKeyRef) != has(self.provisioned)
                         required:
                         - name
                         type: object
@@ -911,7 +1171,8 @@ spec:
                       env is the environment of the seat's executor runs, for the external
                       tokens its work needs: from Secrets, or provisioned by the engine,
                       such as the GitLab token a provisioning Integration mints for the
-                      seat, named as its tool server's is so both are one token. A run gets
+                      seat's account, which the engine gives its gitlab tool server too, so
+                      both are one token. A run gets
                       its provider's whole env beneath this, so a variable named here wins
                       over the provider's of that name. A ClaudeCode sign-in here
                       (CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or a
@@ -939,23 +1200,38 @@ spec:
                           properties:
                             provisioned:
                               description: |-
-                                provisioned is a value the engine creates and keeps, under an
-                                Integration with provisioning Engine.
+                                provisioned is a credential the engine mints for the seat's account
+                                at a vendor, under that vendor's Integration with provisioning Engine.
                               properties:
-                                name:
-                                  description: |-
-                                    name names the value among the seat's provisioned credentials. Every
-                                    place a seat names the same provisioned name refers to one value, so
-                                    a token given to a tool server's environment and to the seat's
-                                    sandbox is one token; different names are different values, such as
-                                    an account's token and its email address.
-                                  maxLength: 32
-                                  minLength: 1
-                                  pattern: ^[a-z0-9][a-z0-9-]*$
+                                field:
+                                  description: field is which of the account's credentials.
+                                  enum:
+                                  - Token
+                                  - Email
+                                  - AppKey
+                                  - BotToken
+                                  type: string
+                                vendor:
+                                  description: vendor is the vendor whose account
+                                    the credential is of.
+                                  enum:
+                                  - GitLab
+                                  - Mattermost
+                                  - Datadog
+                                  - Atlassian
                                   type: string
                               required:
-                              - name
+                              - field
+                              - vendor
                               type: object
+                              x-kubernetes-validations:
+                              - message: the engine mints a GitLab account's Token,
+                                  an Atlassian account's Token and Email, a Datadog
+                                  account's AppKey and a Mattermost bot's BotToken
+                                rule: 'self.vendor == ''GitLab'' ? self.field == ''Token''
+                                  : self.vendor == ''Atlassian'' ? self.field in [''Token'',
+                                  ''Email''] : self.vendor == ''Datadog'' ? self.field
+                                  == ''AppKey'' : self.field == ''BotToken'''
                             secretKeyRef:
                               description: secretKeyRef selects the Secret key that
                                 holds the value.

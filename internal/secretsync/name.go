@@ -127,40 +127,35 @@ func referenceHash(k secretref.Key) string {
 	return hashEncoding.EncodeToString(sum[:])[:hashLen]
 }
 
-// ProvisionedPrefix starts the name of every store entry a seat's provisioned
-// credential is kept in. It is not Prefix: those entries are the engine's
-// own, written by its provisioning when it mints a seat's credential, and
-// Sync must never overwrite or delete one.
-const ProvisionedPrefix = "PROVISIONED_"
-
-// MaxProvisionedNameLength is the longest name ProvisionedName returns.
-const MaxProvisionedNameLength = len(ProvisionedPrefix) + maxSecretPart + 1 + maxKeyPart + 1 + hashLen
-
 // ProvisionedName returns the name of the engine secret-store entry that
-// holds the credential the engine provisions for the seat with handle under
-// the provisioned name, and that the company document refers to as
-// ${ProvisionedName(handle, name)}.
+// holds the credential field the engine mints for the seat with handle at
+// vendor, and that the company document refers to as
+// ${ProvisionedName(vendor, field, handle)}.
 //
-// The engine's provisioning mints a seat's credential into whatever ${NAME}
-// the seat's own configuration holds where it looks for one, so the name is
-// the contract between the document and the engine: the operator chooses it
-// and the engine fills it. It is ProvisionedPrefix, the readable handle and
-// name, and a hash of both, so two seats, or two values of one seat, never
-// share an entry (handles a-b and a--b read the same once sanitised), and it
-// is a pure function of its arguments, so every render names the same entry
-// and a minted credential survives every render and restart of the operator:
-// a different name would point every seat at an entry the engine never
-// minted into, and the seat would lose its minted credential, such as a
-// GitLab token. Owns refuses every such name.
-func ProvisionedName(handle, name string) string {
+// The engine seals every credential it mints for a seat under a name it
+// derives itself, and under no other: no document names where it goes. So the
+// name is the engine's, and this is a copy of its derivation (envref's
+// SealedName, which internal/render's mirror table fingerprints): the vendor,
+// the field and the handle joined by underscores and upper-cased, every
+// character the store's grammar refuses turned into an underscore rather than
+// dropped, so seats nova.1 and nova-1 keep two entries. A name that differed
+// from the engine's by one character would point the seat at an entry nothing
+// ever fills. Every such name starts with the vendor's name, never Prefix, so
+// Owns refuses it and no Sync overwrites or collects what the engine minted
+// (ADR-0004).
+func ProvisionedName(vendor, field, handle string) string {
+	parts := []string{vendor, field}
+	if handle != "" {
+		parts = append(parts, handle)
+	}
 	var b strings.Builder
-	b.Grow(MaxProvisionedNameLength)
-	b.WriteString(ProvisionedPrefix)
-	b.WriteString(readable(handle, maxSecretPart))
-	b.WriteByte('_')
-	b.WriteString(readable(name, maxKeyPart))
-	b.WriteByte('_')
-	sum := sha256.Sum256([]byte(handle + "\x00" + name))
-	b.WriteString(hashEncoding.EncodeToString(sum[:])[:hashLen])
+	for _, r := range strings.ToUpper(strings.TrimSpace(strings.Join(parts, "_"))) {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
 	return b.String()
 }

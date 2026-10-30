@@ -39,8 +39,14 @@ spec:
     name: forge
   integrations:
     github:
-      tier: FullAccess
-      workflows: true
+      enabled: true
+      permissions:
+        contents: Write
+        issues: Write
+        pullRequests: Write
+        checks: Write
+        actions: Read
+        workflows: Write
       app:
         id: 42
         slug: forge-builder
@@ -57,6 +63,12 @@ spec:
     name: forge
   integrations:
     github:
-      tier: ReadOnly
+      enabled: true
+      permissions:
+        contents: Read
+        issues: Read
+        pullRequests: Read
+        checks: Read
+        actions: Read
       repos:
         - forge/api

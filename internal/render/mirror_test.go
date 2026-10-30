@@ -330,7 +330,22 @@ const (
 	// kinds framed from the artifact origin are still HTML pages and designs
 	// alone.
 	brandKindRead = "v0.1.1-0.20261025061312-a6fd4b115be7"
+
+	// seatAccessRead is the engine of per-seat integration access, which
+	// stores each seat's access at each vendor in the vendor's own terms
+	// and refuses a level outside the vendor's fixed set.
+	seatAccessRead = "v0.1.1-0.20261030031001-cb160d62f89c"
+	// roleAccessGo is where the engine states each vendor's fixed set of
+	// what a seat may hold.
+	roleAccessGo = "internal/config/roleaccess.go"
+	// commonTypesGo is the API's shared types and condition reasons.
+	commonTypesGo = "api/v1alpha1/common_types.go"
 )
+
+// seatAccess is every operator file that copies a vendor's fixed set of what
+// a seat may hold: the Seat API, which offers and refuses it, the render,
+// which writes it in the vendor's identifiers, and the guide that lists it.
+var seatAccess = []string{seatTypesGo, "internal/render/org.go", "internal/render/enums.go", integrationsMd}
 
 // adr0008Md is the record of where a seat's executor runs, and
 // credentialsConceptMd the page that says what reaches an engine pod and a
@@ -408,7 +423,7 @@ var executorBox = []string{"docs/guides/credentials.md", credentialsConceptMd}
 // runnable in any pool (ExecutorOf), the API's Ready reasons, and the pages
 // and the record that state the verdict.
 var bridgeVerdict = []string{
-	bootstrapGo, executorGo, "api/v1alpha1/common_types.go", cliAgentsMd, troubleshootingMd,
+	bootstrapGo, executorGo, commonTypesGo, cliAgentsMd, troubleshootingMd,
 	"docs/guides/topology.md", "docs/concepts/applying.md", runtimeMd, exposureMd,
 	adr0008Md,
 }
@@ -745,7 +760,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: sandboxGo, name: "sandboxCredentials",
-		against: append([]string{"api/v1alpha1/common_types.go", troubleshootingMd}, executorLogin...),
+		against: append([]string{commonTypesGo, troubleshootingMd}, executorLogin...),
 		decides: "the login of the member a launch picked is refused only in a box off the engine host (OnEngineHost: " +
 			"a Direct box is seeded with it), and there unless the run's environment signs its CLI in " +
 			"(entrySignsIn): SandboxLoginNotPortable, a refusal that fails the launch rather than moving it down " +
@@ -1976,6 +1991,39 @@ var mirrored = []mirror{
 		decides: "a bucket with no ceiling is given one only when the ceiling is named explicitly",
 		digest:  "07f0675b5fe636195f957377fe60140f3158d85b2fdabfe55a2a4bdc2f6cb79c",
 		read:    bootBoundsRead,
+	},
+	{
+		file: "internal/envref/envref.go", name: "SealedName",
+		against: []string{"internal/secretsync/name.go", commonTypesGo, credentialsConceptMd},
+		decides: "the engine seals a credential it mints for a seat under the vendor, the field and the seat's " +
+			"handle joined by underscores and upper-cased, every character but letters, digits and underscores " +
+			"turned into an underscore, and under no other name, which secretsync.ProvisionedName copies",
+		digest: "9e2cc88e4ff0ae4dcd23a9f29b9e6c77350897bc292dc4350e616912b680a659",
+		read:   seatAccessRead,
+	},
+	{
+		file: roleAccessGo, name: "GitHubPermissionKeys",
+		against: seatAccess,
+		decides: "a seat's GitHub App holds contents, issues, pull_requests, checks, actions and workflows, by " +
+			"GitHub's keys, each read or write, and Metadata is not offered",
+		digest: "2a21ada2dcfaadb0d9b070c5164589e24a30b9757329e30cd51401a040cf252b",
+		read:   seatAccessRead,
+	},
+	{
+		file: roleAccessGo, name: "GitLabRoles",
+		against: seatAccess,
+		decides: "a seat's GitLab role is Guest (10), Planner (15), Reporter (20), Developer (30), Maintainer (40) " +
+			"or Owner (50), by the integer GitLab's Members API takes, and neither Security Manager nor Minimal Access",
+		digest: "cf643b0d20691a83511683191dd8a37260d52748266d439cfc03ea06e8077af2",
+		read:   seatAccessRead,
+	},
+	{
+		file: roleAccessGo, name: "MattermostRoleSets",
+		against: seatAccess,
+		decides: "a seat's Mattermost bot holds system_user alone or with one of system_post_all_public, " +
+			"system_post_all and system_admin, each set written in Mattermost's own order",
+		digest: "ed925957ab3912395840a7991620f0660ca0a918fa694dc0602a318f167bec58",
+		read:   seatAccessRead,
 	},
 }
 

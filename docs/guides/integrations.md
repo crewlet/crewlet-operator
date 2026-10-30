@@ -28,8 +28,8 @@ vendor's server and shows its `MCPServer`.
 
 | `provisioning` | The seats' accounts | The Integration holds | A seat's credential |
 |---|---|---|---|
-| `External` (the default) | made by someone else: a person, or a platform's own flow | no administrator credential, so the engine creates, changes and removes nothing at the vendor | a Secret its Seat references |
-| `Engine` | made by the engine, and healed on every reconcile pass | the administrator credential the engine makes them with | a **provisioned** value: the engine mints it into its own store |
+| `External` (the default) | made by someone else: a person, or a platform's own flow | no administrator credential, so the engine creates, changes and removes nothing at the vendor | a Secret its Seat references, the seat's alone |
+| `Engine` | made by the engine for each seat that is on the vendor, at the access its Seat names, and healed on every reconcile pass | the administrator credential the engine makes them with | minted by the engine into its own store, under a name it gives it for the seat; the Seat names none |
 
 The engine can create accounts at GitLab, Mattermost, Datadog and in an
 Atlassian Cloud organization, and only there: `Engine` on Slack, GitHub,
@@ -50,27 +50,115 @@ accounts with the keys they reference whenever it holds them.
 > account limited to what provisioning needs.
 > [Credential Positions](../concepts/credentials.md) says where each one goes.
 
-A seat names a credential the engine provisions with `provisioned` where it
-would otherwise name a Secret key, in its tool servers' credentials
-(`spec.mcp`), its sandbox environment (`spec.sandbox.env`) and its
-Mattermost bot (`spec.integrations.mattermost.botToken`):
+Under `Engine` the engine hands the seat's credential to the vendor's tool
+server and its own tools itself, so a Seat names none of that vendor's, and
+Crewlet refuses one it names ([An agent's access](#an-agents-access)). A
+seat's executor runs get no tool server's environment: a value they need,
+such as the GitLab token git uses in the seat's box, is named in the seat's
+`spec.sandbox.env` as **provisioned**, by the vendor and the field:
 
 ```yaml
 valueFrom:
-  provisioned:
-    name: gitlab-token     # one value wherever this seat names it
+  provisioned: {vendor: GitLab, field: Token}   # the engine's GITLAB_TOKEN_<HANDLE>
 ```
 
-The engine finds the value where its provisioning looks for a seat's
-credential, which differs by vendor (below), and starts a seat's tool server
-that takes it once it has minted it. A provisioned value anywhere else is
-never filled, and so is one no Integration of the seat's company creates:
-while none has `provisioning: Engine`, the seat is applied and reports
-`ResolvedRefs=False NoProvisioner`. A tool server that takes a value nothing
-fills is not started, unless the MCPServer's `optionalKeys` lets it go
-without it; the seat's executor runs and a chat app run without it
-([A tool server does not start](troubleshooting.md#a-tool-server-does-not-start)).
-A Unit's credentials always come from Secrets.
+While the company has no Integration of that vendor with
+`provisioning: Engine`, nothing mints it: the seat is applied, its runs start
+without the value, and it reports `ResolvedRefs=False NoProvisioner`
+([Credentials the engine provisions](../concepts/credentials.md#credentials-the-engine-provisions)).
+
+## An agent's access
+
+Each agent Seat says, per vendor, whether it is on there, what it may do,
+and where, in its `spec.integrations`. Each block renders to the role's
+block of the same vendor in Crewlet's `integrations`. Where the engine
+provisions the vendor it holds the vendor to the block on every reconcile
+pass: it creates the account, gives it the access, narrows it to the scope,
+and puts back a role or scope someone changed at the vendor, reporting that
+it did.
+
+```yaml
+spec:                       # Seat sre
+  integrations:
+    datadog:
+      enabled: true
+      role: 4f0e2b3c-1a2b-11ef-9c2b-da7ad0900002   # a role id from GET /api/v2/roles
+    github:
+      enabled: true
+      permissions: {contents: Read, issues: Write, pullRequests: Write}
+      repos: [acme/backend]
+    gitlab:
+      enabled: true
+      accessLevel: Reporter
+      projects: [acme/infra]
+    jira:
+      enabled: true
+      projectRole: "10101"                         # a role id from GET /rest/api/3/role
+      projects: [OPS]
+    confluence:
+      enabled: true
+      spaceRole: 8f3b6c1e-2d4a-4e5f-9a0b-1c2d3e4f5a6b
+      spaces: [ENG]
+    mattermost:
+      enabled: true
+      roles: [SystemUser, SystemPostAllPublic]
+      channels: [town-square, incidents]
+```
+
+- **`enabled` is a stored setting, and every block states it.** A vendor
+  with no block is off for the seat, which is how a new agent starts. `false`
+  turns the seat off and keeps its account at the vendor, disabled, so its
+  history keeps its author and turning it back on needs nobody (but on
+  Slack, where a person approves the app's install again). Removing the
+  account is a separate, confirmed action in the engine's dashboard, offered
+  only while the seat is off.
+- **Access is in the vendor's own terms.** Each field takes the identifier
+  the vendor's API takes, shown in the engine's dashboard under the vendor's
+  exact name:
+
+  | Vendor | Access | Scope |
+  |---|---|---|
+  | Datadog | `role`: a role id, managed (Datadog Read Only Role, Standard, Admin) or custom | none |
+  | GitHub | `permissions`: Contents, Issues, Pull requests, Checks, Actions and Workflows, each `Read` or `Write`; unset is No access | `repos`, the repositories the seat's tokens are narrowed to, within the Integration's `provisioning.repos` where it lists them |
+  | GitLab | `accessLevel`: Guest, Planner, Reporter, Developer, Maintainer or Owner; or `memberRoleID`, a custom role on Ultimate | `projects`, within the Integration's `engineProvisioning.projects` where it lists them; unset is the whole group |
+  | Jira | `projectRole`: a project role id of the site; what it may do is each project's permission scheme | `projects`, by key, among those a Unit's or a Seat's `spec.project` names |
+  | Confluence | `spaceRole`: a space role id, where the site has role-based access; `operations` (`read:space`, `create:page`) where it does not | `spaces`, by key, among those a Unit's or a Seat's `spec.space` names |
+  | Mattermost | `roles`: `SystemUser` (Member), alone or with one of `SystemPostAllPublic` (post:channels), `SystemPostAll` (post:all) and `SystemAdmin` | `channels`, within the Integration's `engineProvisioning.channels` where it lists them |
+  | Slack | none: the bot token scopes of the app's manifest | none: the channels the bot is invited to |
+
+  While a seat is on, its access is required: a Datadog `role`, a GitLab
+  `accessLevel` or `memberRoleID`, a Jira `projectRole`, a Confluence
+  `spaceRole` or `operations`, and Mattermost `roles`. A fixed set (GitLab's
+  roles, Mattermost's roles, GitHub's permissions and levels) is checked when
+  the Seat is written, and so is each required field; a scope outside the
+  company's reach is refused by the engine's dry run, `Invalid` on the Seat. A role read live from the
+  vendor (Datadog's roles, Jira's project roles, Confluence's space roles,
+  GitLab's custom roles) is checked by the engine on every pass, and one the
+  vendor no longer has is reported, never replaced by another.
+- **The Seat is where access changes.** Under the Company's `Enforce`
+  policy the engine's dashboard shows each agent's access read-only, like
+  the rest of the document ([Applying](../concepts/applying.md#enforce-the-default)),
+  and its "Keep the vendor's setting" and "Turn back on" offers are changes
+  to the Seat. Whoever may write a Seat grants any role it names, the
+  administration ones included (Datadog Admin Role, GitLab Maintainer or
+  Owner, Jira Administrators, Confluence Admin, Mattermost System Admin,
+  GitHub Contents or Workflows at `Write`), which the dashboard gates
+  behind a fresh sign-in: hold the Seat to the same review with RBAC.
+- **A credential is the engine's where the engine provisions the vendor,
+  and the seat's own Secret where it does not.** Under an Integration with
+  `provisioning: Engine` (GitLab, Mattermost, Datadog, an Atlassian
+  organization), the engine mints the seat's credential, seals it under a
+  name it gives it for the seat (such as `GITLAB_TOKEN_SRE`), and hands it to
+  the vendor's per-seat tool server itself, under the variable or header the
+  server reads. The Seat names none, in `spec.mcp` or in
+  `spec.integrations`, and Crewlet refuses one it names there: the refusal
+  comes from the engine's dry run, `Invalid` on the Seat. For every other
+  vendor (Slack, GitHub, and GitLab, Mattermost, Jira and Confluence under
+  `External`) the seat's credential is a Secret its Seat references, in
+  `spec.integrations` or `spec.mcp`, and the Secret key is the seat's alone:
+  Crewlet refuses one another seat or an Integration names too. There
+  `enabled` turns the seat's own tools on and off, and the engine reports
+  its access as managed outside Crewlet.
 
 ## Where webhooks arrive
 
@@ -118,9 +206,7 @@ spec:
     engineProvisioning:
       group: acme
       adminTokenSecretRef: {name: acme-gitlab-admin, key: token}
-      accessLevel: Developer
-      accessLevels:
-        - {name: lead, accessLevel: Maintainer}                 # by Seat name
+      projects: [acme/api, acme/infra]                          # what a seat's projects may name
       groupWebhook: Auto
 ```
 
@@ -133,32 +219,36 @@ spec:
 - Under `Engine`, `adminTokenSecretRef` is a group Owner's personal access
   token with the `api` scope (an instance administrator's, with
   `accountOwner: Instance` on a self-managed instance). The engine creates a
-  service account per agent seat, adds it to the group and to `projects`,
-  and registers the webhook.
+  service account for each agent seat that is on GitLab, makes it a member
+  of the group, or of the seat's own `projects`, at the seat's role, and
+  registers the webhook. `projects` lists the projects a seat's `projects`
+  may name.
 
-A seat's GitLab identity is its token for the `MCPServer` named `gitlab`
-([`glab mcp serve`](tool-servers.md#gitlab), in the engine image; Crewlet
-looks for the seat's GitLab credential there, under `GITLAB_TOKEN`,
-`GITLAB_PERSONAL_ACCESS_TOKEN`, `Private-Token` or `Authorization`):
+An agent is on GitLab by its Seat's `spec.integrations.gitlab`
+([An agent's access](#an-agents-access)). Under `Engine` the engine mints the
+account's token, seals it as `GITLAB_TOKEN_<HANDLE>`, and hands it to the
+seat's instance of the per-seat `MCPServer` named `gitlab`
+([`glab mcp serve`](tool-servers.md#gitlab), in the engine image) under the
+variable or header the server reads; the token follows the role, so below
+Developer it reads the API and the repositories and cannot push:
 
 ```yaml
 spec:                       # Seat lead
-  mcp:
-    - name: gitlab
-      env:
-        - name: GITLAB_TOKEN
-          valueFrom:
-            provisioned: {name: gitlab-token}   # under Engine; a secretKeyRef under External
+  integrations:
+    gitlab:
+      enabled: true
+      accessLevel: Developer
+      projects: [acme/api]
   sandbox:
     env:
-      - name: GITLAB_TOKEN                      # the engine looks here too, for git
+      - name: GITLAB_TOKEN                      # the same token, for git in the box
         valueFrom:
-          provisioned: {name: gitlab-token}
+          provisioned: {vendor: GitLab, field: Token}
 ```
 
-A provisioned value is the credential alone, so provision a variable, such
-as `GITLAB_TOKEN` of a Stdio server, rather than an `Authorization` header,
-which would need a scheme in front of it.
+Under `External` the seat's GitLab account is made outside the engine, which
+changes nothing at GitLab, and its token is a Secret the Seat gives the
+`gitlab` server in `spec.mcp`, under `GITLAB_TOKEN`, the seat's alone.
 
 A person is tied to their GitLab account by their Seat's
 `contact.gitlabUsername` ([A person's accounts](#a-persons-accounts)).
@@ -225,25 +315,38 @@ connection to a load balancer's address in the cluster straight to the pods
 behind it.
 
 Each agent seat speaks as its own bot, whose one token covers the websocket,
-the REST calls and the Mattermost tool server:
+the REST calls and the Mattermost tool server. Under `Engine` the engine
+creates the bot for each seat that is on Mattermost and mints its token, so
+the Seat names none:
 
 ```yaml
 spec:                       # Seat lead
   integrations:
     mattermost:
+      enabled: true
+      roles: [SystemUser]                 # Member; see An agent's access
+      channels: [town-square, leads]      # within engineProvisioning.channels
+```
+
+Under `External` a bot made by hand, or by a platform, is a Secret key the
+Seat names twice, for the seat's bot and for its `mattermost` tool server,
+and `username` names the bot when it is not the seat's handle:
+
+```yaml
+spec:                       # Seat lead
+  integrations:
+    mattermost:
+      enabled: true
+      roles: [SystemUser]
       botToken:
-        provisioned: {name: mattermost}   # under Engine; a secretKeyRef under External
-      channel: leads                      # a channel the engine adds the bot to
+        secretKeyRef: {name: lead-mattermost, key: botToken}
   mcp:
     - name: mattermost
       env:
         - name: MATTERMOST_TOKEN
           valueFrom:
-            provisioned: {name: mattermost}   # the same token
+            secretKeyRef: {name: lead-mattermost, key: botToken}   # the same token
 ```
-
-Under `External` a bot made by hand, or by a platform, is a Secret key, and
-`username` names it when it is not the seat's handle.
 
 The seat's websocket only listens: the agent posts through the `mattermost`
 tool server, `mcp-server-mattermost`, which has to be in the engine image.
@@ -319,21 +422,26 @@ spec:
     apiKeySecretRef: {name: acme-atlassian, key: apiKey}   # created without scopes
 ```
 
-With the organization connected, the engine creates a service account per
-agent seat, grants it the Jira and Confluence sites, and mints its token; it
-also discovers the sites, so the Jira and Confluence Integrations may leave
-`url` and `cloudID` out. Each seat names the minted token and the account's
-address as two provisioned values:
+With the organization connected, the engine creates one service account for
+each agent seat that is on Jira or Confluence, grants it each product the
+seat is on, gives it the seat's project role in each of its Jira projects and
+its space role (or space permissions) in each of its Confluence spaces, and
+mints its token; it also discovers the sites, so the Jira and Confluence
+Integrations may leave `url` and `cloudID` out. The engine's own tracker and
+knowledge tools sign in as the seat with the token it sealed for it, so the
+Seat names no Atlassian credential:
 
 ```yaml
 spec:                       # Seat lead
-  mcp:
-    - name: atlassian
-      env:
-        - {name: JIRA_API_TOKEN, valueFrom: {provisioned: {name: atlassian-token}}}
-        - {name: JIRA_USERNAME, valueFrom: {provisioned: {name: atlassian-email}}}
-        - {name: CONFLUENCE_API_TOKEN, valueFrom: {provisioned: {name: atlassian-token}}}
-        - {name: CONFLUENCE_USERNAME, valueFrom: {provisioned: {name: atlassian-email}}}
+  integrations:
+    jira:
+      enabled: true
+      projectRole: "10101"      # the site's Developers role
+      projects: [OPS]
+    confluence:
+      enabled: true
+      spaceRole: 8f3b6c1e-2d4a-4e5f-9a0b-1c2d3e4f5a6b
+      spaces: [ENG]
 ```
 
 A Data Center deployment has no organization: leave this Integration out
@@ -356,19 +464,29 @@ spec:
     site: EU1
     apiKeySecretRef: {name: acme-datadog, key: apiKey}
     appKeySecretRef: {name: acme-datadog, key: appKey}
-    role: Datadog Read Only Role
 ```
 
 The engine registers the webhook at Datadog with the organization's keys, so
 monitors name it as `@webhook-crewlet` (`webhookName`). An alert wakes the
 seat its monitor's `crewlet:<handle>` tag names (`handleTag`), and
 `routeTo` the one an alert naming nobody wakes; a Human seat cannot be one.
-The engine also creates a service account, with `role`, for every agent seat
-whose credentials for the `MCPServer` named `datadog` name an application
-key (`DD_APP_KEY`, `DATADOG_APP_KEY` or `app_key`), and mints the key there:
-name it as provisioned. Crewlet names no Datadog tool server: the server you
-choose must read its key from one of those
-([Datadog's server](tool-servers.md#datadog)).
+The engine also creates a service account for every agent seat that is on
+Datadog, with the role its Seat names by id, and mints the account's
+application key:
+
+```yaml
+spec:                       # Seat sre
+  integrations:
+    datadog:
+      enabled: true
+      role: 4f0e2b3c-1a2b-11ef-9c2b-da7ad0900002   # GET /api/v2/roles
+```
+
+It seals the key under a name it gives it for the seat, `DATADOG_APP_KEY_<HANDLE>`,
+and hands it to the seat's instance of the per-seat `MCPServer` named
+`datadog` as `DD_APPLICATION_KEY`, the header Datadog's remote server reads;
+the organization's API key is the server's own `DD_API_KEY` header, the same
+for every seat ([Datadog's server](tool-servers.md#datadog)).
 
 ## Slack and GitHub
 
@@ -387,7 +505,9 @@ path in its `spec.mcp`: the server otherwise keeps the channels its bot can
 see in one file per workspace, which every seat on an engine pod shares for a
 day, and shows each seat the private channels and direct messages of
 whichever bot wrote it last. GitHub's tool server is GitHub's
-own remote one, which needs nothing in the image
+own remote one, which needs nothing in the image; the engine hands the seat's
+instance of it the installation token it issues for the seat's app, narrowed
+to the seat's `permissions` and `repos`
 ([GitHub's server](tool-servers.md#github)).
 
 ## A person's accounts

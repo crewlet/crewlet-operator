@@ -320,20 +320,6 @@ spec:
                     minLength: 1
                     pattern: ^[a-z][a-z0-9_./-]*$
                     type: string
-                  role:
-                    description: |-
-                      role is the Datadog role each seat's service account is created
-                      with, by its name. Unset takes Crewlet's default, Datadog Read Only
-                      Role. Crewlet's `provisioning.role`.
-                    maxLength: 256
-                    minLength: 1
-                    type: string
-                    x-kubernetes-validations:
-                    - message: 'role may not hold a ${NAME} reference: the operator
-                        refuses every one it did not write, since in many fields the
-                        engine resolves one from its own secret store and environment,
-                        which hold credentials that are not this object''s to name'
-                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                   routeTo:
                     description: |-
                       routeTo is where an alert goes whose monitor names no seat.
@@ -536,44 +522,6 @@ spec:
                       engineProvisioning is how the engine creates the seats' accounts.
                       Required with provisioning Engine, and not allowed with External.
                     properties:
-                      accessLevel:
-                        description: |-
-                          accessLevel is the membership level of every seat's account. Unset
-                          takes Crewlet's default, Developer. Crewlet's `access_level`.
-                        enum:
-                        - Developer
-                        - Maintainer
-                        type: string
-                      accessLevels:
-                        description: |-
-                          accessLevels override accessLevel for single seats. Crewlet's
-                          `access_levels`.
-                        items:
-                          description: GitLabSeatAccess overrides the access level
-                            of one seat's service account.
-                          properties:
-                            accessLevel:
-                              description: accessLevel is the seat's membership level.
-                              enum:
-                              - Developer
-                              - Maintainer
-                              type: string
-                            name:
-                              description: |-
-                                name is the metadata.name of the Seat, in this namespace. Crewlet keys
-                                the override by the seat's handle, which the operator renders.
-                              maxLength: 253
-                              minLength: 1
-                              type: string
-                          required:
-                          - accessLevel
-                          - name
-                          type: object
-                        maxItems: 64
-                        type: array
-                        x-kubernetes-list-map-keys:
-                        - name
-                        x-kubernetes-list-type: map
                       accountOwner:
                         description: |-
                           accountOwner is where the service accounts are created. Unset is
@@ -623,27 +571,15 @@ spec:
                         type: string
                       projects:
                         description: |-
-                          projects are projects, by path, the accounts also join, and the ones
-                          the webhook is registered on one by one when no group hook is.
-                          Crewlet's `projects`.
+                          projects are the projects, by path, a seat's spec.integrations.gitlab
+                          projects may name, and the ones the webhook is registered on one by
+                          one when no group hook is. Crewlet's `projects`.
                         items:
                           maxLength: 255
                           minLength: 1
                           pattern: ^[A-Za-z0-9_.][A-Za-z0-9_./-]*$
                           type: string
                         maxItems: 128
-                        type: array
-                        x-kubernetes-list-type: set
-                      tokenScopes:
-                        description: |-
-                          tokenScopes are the scopes minted on each seat's token. Unset takes
-                          Crewlet's default, api. Crewlet's `token_scopes`.
-                        items:
-                          maxLength: 64
-                          minLength: 1
-                          pattern: ^[a-z_]+$
-                          type: string
-                        maxItems: 16
                         type: array
                         x-kubernetes-list-type: set
                       usernamePrefix:

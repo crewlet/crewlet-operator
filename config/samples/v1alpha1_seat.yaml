@@ -1,7 +1,9 @@
 # Nimbus's seats: the founder (a person), the CTO and a platform engineer
 # (agents). The Secrets each agent references hold its own credentials, so it
-# acts as itself on Slack, on GitHub and on the GitHub tool server; on GitLab
-# it acts as the account the engine creates for it.
+# acts as itself on Slack, on GitHub and on the Linear tool server. On GitLab
+# it acts as the account the engine creates for it at the role its Seat
+# names, and the engine hands that account's token, and the GitHub App's
+# token, to the gitlab and github tool servers itself.
 apiVersion: crewlet.ai/v1alpha1
 kind: Seat
 metadata:
@@ -41,6 +43,7 @@ spec:
       - name: anthropic
   integrations:
     slack:
+      enabled: true
       # Keys: botToken, signingSecret.
       credentialsSecretRef:
         name: cto-slack
@@ -70,21 +73,13 @@ spec:
       - kind: PlatformLLMProvider
         name: platform-claude
   mcp:
-    - name: github
+    - name: linear
       env:
         - name: Authorization
           valueFrom:
             secretKeyRef:
-              name: ana-github
+              name: ana-linear
               key: authorization
-    - name: gitlab
-      env:
-        # The GitLab Integration's engine mints this token for Ana's
-        # service account; no Secret holds it.
-        - name: GITLAB_TOKEN
-          valueFrom:
-            provisioned:
-              name: gitlab-token
   # Ana's executor is Claude Code's own run on the head of her default
   # chain, LLMProvider anthropic, in the company's E2B sandbox, whose key
   # Crewlet exports into each of her boxes as ANTHROPIC_API_KEY. Her box
@@ -99,18 +94,30 @@ spec:
           secretKeyRef:
             name: ana-github
             key: token
-      # The same token as the tool server's, for git in the box.
+      # The token the engine mints for Ana's GitLab account, which it gives
+      # the gitlab tool server too, for git in the box.
       - name: GITLAB_TOKEN
         valueFrom:
           provisioned:
-            name: gitlab-token
+            vendor: GitLab
+            field: Token
   integrations:
     slack:
+      enabled: true
       # Keys: botToken, signingSecret.
       credentialsSecretRef:
         name: ana-slack
+    gitlab:
+      enabled: true
+      accessLevel: Developer
     github:
-      tier: Review
+      enabled: true
+      permissions:
+        contents: Read
+        issues: Write
+        pullRequests: Write
+        checks: Read
+        actions: Read
       repos:
         - nimbus-hq/nimbuscore
       app:

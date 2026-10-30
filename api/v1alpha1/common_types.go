@@ -115,24 +115,54 @@ type SecretValueSource struct {
 	SecretKeyRef SecretKeyReference `json:"secretKeyRef,omitzero"`
 }
 
-// ProvisionedCredential is a seat's credential the engine creates: an
+// ProvisionedVendor is a vendor whose seat accounts the engine creates, under
+// an Integration with provisioning Engine. It maps onto the vendor's name in
+// the engine's own name for a credential it mints (GitLab is `gitlab`,
+// Mattermost `mattermost`, Datadog `datadog`, Atlassian `atlassian`).
+// +kubebuilder:validation:Enum=GitLab;Mattermost;Datadog;Atlassian
+type ProvisionedVendor string
+
+// The provisioned vendors.
+const (
+	ProvisionedGitLab     ProvisionedVendor = "GitLab"
+	ProvisionedMattermost ProvisionedVendor = "Mattermost"
+	ProvisionedDatadog    ProvisionedVendor = "Datadog"
+	ProvisionedAtlassian  ProvisionedVendor = "Atlassian"
+)
+
+// ProvisionedField is one credential the engine mints for a seat's account at
+// a vendor. It maps onto the field in the engine's own name for it (Token is
+// `TOKEN`, Email `EMAIL`, AppKey `APP_KEY`, BotToken `BOT_TOKEN`).
+// +kubebuilder:validation:Enum=Token;Email;AppKey;BotToken
+type ProvisionedField string
+
+// The provisioned fields.
+const (
+	ProvisionedToken    ProvisionedField = "Token"
+	ProvisionedEmail    ProvisionedField = "Email"
+	ProvisionedAppKey   ProvisionedField = "AppKey"
+	ProvisionedBotToken ProvisionedField = "BotToken"
+)
+
+// ProvisionedCredential is one of a seat's credentials the engine mints: an
 // Integration with provisioning Engine (GitLab, Mattermost, Datadog,
 // Atlassian) makes the seat's account at the vendor, mints the account's
-// credential, and seals it in the engine's own secret store. The company
-// document refers to it by a name the operator derives from the seat's handle
-// and this name, and nothing else ever writes that store entry: the operator
-// pushes no value into it and deletes none it finds there.
+// credential, and seals it in the engine's own secret store under a name the
+// engine gives it for the seat, `<VENDOR>_<FIELD>_<HANDLE>`, such as
+// GITLAB_TOKEN_ANA. The engine hands it to the vendor's tool server itself;
+// naming it here hands it to the seat's executor runs too, such as the GitLab
+// token git uses in the seat's box. Nothing but the engine ever writes that
+// store entry: the operator pushes no value into it and deletes none it finds
+// there (ADR-0004).
+// +kubebuilder:validation:XValidation:rule="self.vendor == 'GitLab' ? self.field == 'Token' : self.vendor == 'Atlassian' ? self.field in ['Token', 'Email'] : self.vendor == 'Datadog' ? self.field == 'AppKey' : self.field == 'BotToken'",message="the engine mints a GitLab account's Token, an Atlassian account's Token and Email, a Datadog account's AppKey and a Mattermost bot's BotToken"
 type ProvisionedCredential struct {
-	// name names the value among the seat's provisioned credentials. Every
-	// place a seat names the same provisioned name refers to one value, so
-	// a token given to a tool server's environment and to the seat's
-	// sandbox is one token; different names are different values, such as
-	// an account's token and its email address.
+	// vendor is the vendor whose account the credential is of.
 	// +required
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=32
-	// +kubebuilder:validation:Pattern=`^[a-z0-9][a-z0-9-]*$`
-	Name string `json:"name,omitempty"`
+	Vendor ProvisionedVendor `json:"vendor,omitempty"`
+
+	// field is which of the account's credentials.
+	// +required
+	Field ProvisionedField `json:"field,omitempty"`
 }
 
 // SeatCredentialSource says where one of a seat's own credentials comes from:
@@ -145,8 +175,8 @@ type SeatCredentialSource struct {
 	// +optional
 	SecretKeyRef SecretKeyReference `json:"secretKeyRef,omitzero"`
 
-	// provisioned is a value the engine creates and keeps, under an
-	// Integration with provisioning Engine.
+	// provisioned is a credential the engine mints for the seat's account
+	// at a vendor, under that vendor's Integration with provisioning Engine.
 	// +optional
 	Provisioned ProvisionedCredential `json:"provisioned,omitzero"`
 }
@@ -354,13 +384,11 @@ const (
 	// document, and the part reports it on Applied too, except for the
 	// findings the operator applies and reports only, because only the part
 	// at fault suffers them: a Seat's PoolNotFound, NoProvisioner and
-	// NotAnAccountID, a Human seat named in a GitLab Integration's
-	// accessLevels (HumanSeat), and a value a tool server or a seat's
-	// executor run is started with that a Secret holds empty
-	// (SecretValueEmpty). Applied says which. True names, in its message,
-	// every value the child gives a tool server or an executor run under a
-	// key an optionalKeys list lets go without it whose Secret or key does
-	// not exist, or holds nothing.
+	// NotAnAccountID, and a value a tool server or a seat's executor run is
+	// started with that a Secret holds empty (SecretValueEmpty). Applied
+	// says which. True names, in its message, every value the child gives a
+	// tool server or an executor run under a key an optionalKeys list lets
+	// go without it whose Secret or key does not exist, or holds nothing.
 	ConditionResolvedRefs = "ResolvedRefs"
 
 	// ConditionApplied reports whether a child is part of the revision the
@@ -798,10 +826,7 @@ const (
 	// person, so the schedule could never fire, and refuses it. Target an
 	// Agent seat, or the person's unit with fanOut Each. It is also
 	// ResolvedRefs=False on an Integration whose Datadog routeTo.seatRef
-	// names a Human seat, which the engine refuses as well, and on one whose
-	// GitLab accessLevels entry does: the engine creates no GitLab account
-	// for a person, so that entry grants nothing, and is applied and
-	// reported only.
+	// names a Human seat, which the engine refuses as well.
 	ReasonHumanSeat = "HumanSeat"
 
 	// ReasonSeatPaused is Paused=True: the engine holds the seat paused, as

@@ -99,7 +99,7 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			name: "a unit's tool server is missing",
 			mutate: func(in *Input) {
 				unit(in, unitPlatform).Spec.MCP = []v1alpha1.MCPCredentials{{Name: "datadog", Env: []v1alpha1.MCPCredentialValue{{
-					Name: "DD_API_KEY", ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "dd", Key: "apiKey"}},
+					Name: "DD_API_KEY", ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "dd", Key: "apiKey"}},
 				}}}}
 			},
 			want: []refusal{{KindUnit, unitPlatform, "spec.mcp[0].name", v1alpha1.ReasonRefNotFound}},
@@ -212,14 +212,6 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 				in.Integrations = append(in.Integrations, datadogIntegration(seatJane))
 			},
 			want: []refusal{{KindIntegration, VendorDatadog, "spec.datadog.routeTo.seatRef.name", v1alpha1.ReasonHumanSeat}},
-		},
-		{
-			name: "gitlab gives an access level to a seat that does not exist",
-			mutate: func(in *Input) {
-				p := &integration(in, sampleGitLab).Spec.GitLab.EngineProvisioning
-				p.AccessLevels = []v1alpha1.GitLabSeatAccess{{Name: "mallory", AccessLevel: v1alpha1.GitLabMaintainer}}
-			},
-			want: []refusal{{KindIntegration, sampleGitLab, "spec.gitlab.engineProvisioning.accessLevels[0].name", v1alpha1.ReasonRefNotFound}},
 		},
 		{
 			name: "two integrations connect jira",
@@ -379,50 +371,28 @@ type reportedFinding struct{ kind, name, field, reason string }
 func reportedCases() []reportedCase {
 	return []reportedCase{
 		{
-			// Nothing creates the value until an Integration provisions:
-			// the seat's tool server is not started, and its executor runs
-			// without it.
-			name: "a seat names a provisioned credential and no integration provisions", fn: fnSeatCredential,
+			// Nothing mints the value until the vendor's Integration
+			// provisions: the seat's executor runs without it.
+			name: "a seat names a provisioned credential and its vendor's integration does not provision", fn: fnSeatCredential,
 			input: sampleCompany,
 			mutate: func(in *Input) {
 				integration(in, sampleGitLab).Spec.Provisioning = v1alpha1.IntegrationProvisioningExternal
 				integration(in, sampleGitLab).Spec.GitLab.EngineProvisioning = v1alpha1.GitLabEngineProvisioning{}
 			},
-			want: []reportedFinding{
-				{KindSeat, seatAna, fieldSecondServerValue, v1alpha1.ReasonNoProvisioner},
-				{KindSeat, seatAna, "spec.sandbox.env[1].valueFrom", v1alpha1.ReasonNoProvisioner},
-			},
-			writes: "${PROVISIONED_ANA_",
+			want:   []reportedFinding{{KindSeat, seatAna, "spec.sandbox.env[1].valueFrom", v1alpha1.ReasonNoProvisioner}},
+			writes: "GITLAB_TOKEN: ${GITLAB_TOKEN_ANA}",
 		},
 		{
-			name: "a seat's provisioned Mattermost bot token with no integration that provisions", fn: fnSeatCredential,
+			// Another vendor's provisioning mints nothing for GitLab.
+			name: "a seat names a provisioned credential of a vendor the company has no integration of", fn: fnSeatCredential,
 			input: sampleCompany,
 			mutate: func(in *Input) {
-				in.Integrations = slices.DeleteFunc(in.Integrations, func(i v1alpha1.Integration) bool { return i.Name == sampleGitLab })
-				for i := range in.Seats {
-					in.Seats[i].Spec.MCP = slices.DeleteFunc(in.Seats[i].Spec.MCP, func(c v1alpha1.MCPCredentials) bool { return c.Name == sampleGitLab })
-					if sb := &in.Seats[i].Spec.Sandbox; seatSandboxSet(sb) {
-						sb.Env = slices.DeleteFunc(sb.Env, func(e v1alpha1.SeatEnvVar) bool { return e.ValueFrom.SecretKeyRef.Name == "" })
-					}
+				seat(in, seatAna).Spec.Sandbox.Env[1].ValueFrom.Provisioned = v1alpha1.ProvisionedCredential{
+					Vendor: v1alpha1.ProvisionedDatadog, Field: v1alpha1.ProvisionedAppKey,
 				}
-				seat(in, seatCTO).Spec.Integrations.Mattermost.BotToken.Provisioned.Name = "bot"
 			},
-			want:   []reportedFinding{{KindSeat, seatCTO, "spec.integrations.mattermost.botToken", v1alpha1.ReasonNoProvisioner}},
-			writes: "bot_token: ${PROVISIONED_CTO_BOT_",
-		},
-		{
-			// The engine creates no GitLab account for a person, so the
-			// level grants nothing until the Seat is an Agent seat.
-			name: "gitlab gives an access level to a person", fn: fnGitLabAccessLevels,
-			input: sampleCompany,
-			mutate: func(in *Input) {
-				p := &integration(in, sampleGitLab).Spec.GitLab.EngineProvisioning
-				p.AccessLevels = []v1alpha1.GitLabSeatAccess{{Name: seatJane, AccessLevel: v1alpha1.GitLabMaintainer}}
-			},
-			want: []reportedFinding{
-				{KindIntegration, sampleGitLab, "spec.gitlab.engineProvisioning.accessLevels[0].name", v1alpha1.ReasonHumanSeat},
-			},
-			writes: "jane: maintainer",
+			want:   []reportedFinding{{KindSeat, seatAna, "spec.sandbox.env[1].valueFrom", v1alpha1.ReasonNoProvisioner}},
+			writes: "GITLAB_TOKEN: ${DATADOG_APP_KEY_ANA}",
 		},
 		{
 			// Jira and Confluence on Cloud name a person by account id: the

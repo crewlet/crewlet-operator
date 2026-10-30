@@ -34,7 +34,6 @@ const (
 	envDatabaseURL      = "DATABASE_URL"
 	envPGUser           = "PGUSER"
 	filePGPass          = ".pgpass"
-	provisionedGitLab   = "gitlab-token"
 	envClaudeSignIn     = "CLAUDE_CODE_OAUTH_TOKEN"
 	envGitLabToken      = "GITLAB_TOKEN"
 	fileNPMRC           = ".npmrc"
@@ -53,6 +52,12 @@ const (
 	fieldSecondOptionalKey = "spec.optionalKeys[1]"
 	fieldSecondServerValue = "spec.mcp[1].env[0].valueFrom"
 )
+
+// provisionedGitLab is the token the engine mints for a seat's GitLab
+// account.
+var provisionedGitLab = v1alpha1.ProvisionedCredential{
+	Vendor: v1alpha1.ProvisionedGitLab, Field: v1alpha1.ProvisionedToken,
+}
 
 // optionalSecret is the Secret key name/key in the test namespace.
 func optionalSecret(name, key string) secretref.Key {
@@ -77,7 +82,7 @@ func TestStartValuesSayWhichValuesMayGoMissing(t *testing.T) {
 	company := ObjectRef{Kind: KindCompany, Name: in.Company.Name}
 	coder := ObjectRef{Kind: KindSeat, Name: optionalSeat}
 	tavily := ObjectRef{Kind: KindMCPServer, Name: optionalTavily}
-	github := ObjectRef{Kind: KindMCPServer, Name: sampleGitHub}
+	linear := ObjectRef{Kind: KindMCPServer, Name: sampleLinear}
 	const (
 		firstStep   = "spec.sandbox.setup[0].optionalKeys"
 		seatSandbox = "spec.sandbox.optionalKeys"
@@ -88,8 +93,8 @@ func TestStartValuesSayWhichValuesMayGoMissing(t *testing.T) {
 			List: list, ListField: listField, Started: true,
 		}
 	}
-	unitHeader := value(optionalSecret("eng-github", headerLower), ObjectRef{Kind: KindUnit, Name: unitEng},
-		"spec.mcp[0].env[0].valueFrom", headerAuthorization, sampleGitHub, true, github, fieldOptionalKeys)
+	unitHeader := value(optionalSecret("eng-linear", headerLower), ObjectRef{Kind: KindUnit, Name: unitEng},
+		"spec.mcp[0].env[0].valueFrom", headerAuthorization, sampleLinear, true, linear, fieldOptionalKeys)
 	unitHeader.Started = false
 	want := []StartValue{
 		value(optionalSecret("npm", optionalToken), company, firstStepEnv, "NPM_TOKEN", "", false,
@@ -101,8 +106,8 @@ func TestStartValuesSayWhichValuesMayGoMissing(t *testing.T) {
 		value(optionalSecret("npm", "registry"), tavily, "spec.env[1].valueFrom", envRegistry, optionalTavily, true,
 			tavily, fieldOptionalKeys),
 		unitHeader,
-		value(optionalSecret("coder-github", headerLower), coder, "spec.mcp[0].env[0].valueFrom", headerAuthorization,
-			sampleGitHub, true, github, fieldOptionalKeys),
+		value(optionalSecret("coder-linear", headerLower), coder, "spec.mcp[0].env[0].valueFrom", headerAuthorization,
+			sampleLinear, true, linear, fieldOptionalKeys),
 		value(optionalSecret("coder-github", optionalToken), coder, seatEnv, envGitHubSignIn, "", false,
 			coder, seatSandbox),
 		value(optionalSecret("coder-db", "url"), coder, "spec.sandbox.env[1].valueFrom", envDatabaseURL, "", true, coder, seatSandbox),
@@ -189,7 +194,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 				toolServer(in, optionalTavily).Spec.Shared = new(false)
 				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
 					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
-						Name: envTavilyKey, ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
 					}},
 				})
 			},
@@ -208,7 +213,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			mutate: func(in *Input) {
 				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
 					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
-						Name: envTavilyKey, ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
 					}},
 				})
 			},
@@ -219,7 +224,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			mutate: func(in *Input) {
 				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
 					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
-						Name: envTavilyKey, ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
 					}},
 				})
 				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
@@ -411,21 +416,21 @@ func TestAnOptionalKeyNeedsAValueThatCanGoMissing(t *testing.T) {
 		{
 			name: "a key the server writes as a literal alone is refused",
 			mutate: func(in *Input) {
-				s := toolServer(in, sampleGitHub)
-				s.Spec.OptionalKeys = append(s.Spec.OptionalKeys, "x-mcp-toolsets")
+				s := toolServer(in, sampleLinear)
+				s.Spec.OptionalKeys = append(s.Spec.OptionalKeys, "x-client-name")
 			},
 			field: fieldSecondOptionalKey, says: "under which every value is a literal (this server's headers)",
 		},
 		{
 			name: "a key the server writes as a literal and a Seat from a Secret is taken",
 			mutate: func(in *Input) {
-				github := &seat(in, optionalSeat).Spec.MCP[0]
-				github.Env = append(github.Env, v1alpha1.MCPCredentialValue{
-					Name:      "X-MCP-Toolsets",
-					ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "coder-github", Key: "toolsets"}},
+				server := &seat(in, optionalSeat).Spec.MCP[0]
+				server.Env = append(server.Env, v1alpha1.MCPCredentialValue{
+					Name:      "X-Client-Name",
+					ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "coder-linear", Key: "client"}},
 				})
-				s := toolServer(in, sampleGitHub)
-				s.Spec.OptionalKeys = append(s.Spec.OptionalKeys, "x-mcp-toolsets")
+				s := toolServer(in, sampleLinear)
+				s.Spec.OptionalKeys = append(s.Spec.OptionalKeys, "x-client-name")
 			},
 		},
 		{
@@ -438,9 +443,9 @@ func TestAnOptionalKeyNeedsAValueThatCanGoMissing(t *testing.T) {
 		{
 			name: "a key a Seat writes only as a literal is refused",
 			mutate: func(in *Input) {
-				github := &seat(in, optionalSeat).Spec.MCP[0]
-				github.Env = append(github.Env, v1alpha1.MCPCredentialValue{Name: "X-Debug", Value: new("1")})
-				s := toolServer(in, sampleGitHub)
+				server := &seat(in, optionalSeat).Spec.MCP[0]
+				server.Env = append(server.Env, v1alpha1.MCPCredentialValue{Name: "X-Debug", Value: new("1")})
+				s := toolServer(in, sampleLinear)
 				s.Spec.OptionalKeys = append(s.Spec.OptionalKeys, "x-debug")
 			},
 			field: fieldSecondOptionalKey, says: literal,
@@ -449,27 +454,15 @@ func TestAnOptionalKeyNeedsAValueThatCanGoMissing(t *testing.T) {
 			name: "a key a Seat writes as a literal and a Unit from a Secret is taken",
 			mutate: func(in *Input) {
 				const readonly = "X-MCP-Readonly"
-				github := &seat(in, optionalSeat).Spec.MCP[0]
-				github.Env = append(github.Env, v1alpha1.MCPCredentialValue{Name: readonly, Value: new("true")})
+				server := &seat(in, optionalSeat).Spec.MCP[0]
+				server.Env = append(server.Env, v1alpha1.MCPCredentialValue{Name: readonly, Value: new("true")})
 				eng := &unit(in, unitEng).Spec.MCP[0]
 				eng.Env = append(eng.Env, v1alpha1.MCPCredentialValue{
 					Name:      readonly,
-					ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "eng-github", Key: "readonly"}},
+					ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "eng-linear", Key: "readonly"}},
 				})
-				s := toolServer(in, sampleGitHub)
+				s := toolServer(in, sampleLinear)
 				s.Spec.OptionalKeys = append(s.Spec.OptionalKeys, strings.ToLower(readonly))
-			},
-		},
-		{
-			name: "a key a Seat's provisioned value is written under is taken",
-			mutate: func(in *Input) {
-				github := &seat(in, optionalSeat).Spec.MCP[0]
-				github.Env = append(github.Env, v1alpha1.MCPCredentialValue{
-					Name:      "X-Gitlab-Token",
-					ValueFrom: v1alpha1.SeatCredentialSource{Provisioned: v1alpha1.ProvisionedCredential{Name: provisionedGitLab}},
-				})
-				s := toolServer(in, sampleGitHub)
-				s.Spec.OptionalKeys = append(s.Spec.OptionalKeys, "X-Gitlab-Token")
 			},
 		},
 	}
@@ -499,19 +492,13 @@ func TestAnOptionalKeyNeedsAValueThatCanGoMissing(t *testing.T) {
 }
 
 // TestNoProvisionerSaysWhatGoesWithoutIt holds the report on a provisioned
-// credential nothing creates to what Crewlet does without its value, by where
-// it is written: a tool server is not started unless the key is optional,
-// when it starts without it, and an executor run starts without it either
-// way, logged as a gap of the run unless the key is optional.
+// credential nothing mints to what Crewlet does without its value: an
+// executor run starts without it, logged as a gap of the run unless the key is
+// optional.
 func TestNoProvisionerSaysWhatGoesWithoutIt(t *testing.T) {
-	provisioned := v1alpha1.SeatCredentialSource{Provisioned: v1alpha1.ProvisionedCredential{Name: provisionedGitLab}}
+	provisioned := v1alpha1.SeatCredentialSource{Provisioned: provisionedGitLab}
 	in := companyCaseNamed(t, caseOptionalKeys).input(t)
 	coder := seat(in, optionalSeat)
-	coder.Spec.MCP[0].Env = append(coder.Spec.MCP[0].Env,
-		v1alpha1.MCPCredentialValue{Name: "X-Required", ValueFrom: provisioned},
-		v1alpha1.MCPCredentialValue{Name: "X-Optional", ValueFrom: provisioned})
-	github := toolServer(in, sampleGitHub)
-	github.Spec.OptionalKeys = append(github.Spec.OptionalKeys, "X-Optional")
 	coder.Spec.Sandbox.Env = append(coder.Spec.Sandbox.Env,
 		v1alpha1.SeatEnvVar{Name: envGitLabToken, ValueFrom: provisioned},
 		v1alpha1.SeatEnvVar{Name: "GITLAB_BACKUP_TOKEN", ValueFrom: provisioned})
@@ -523,8 +510,6 @@ func TestNoProvisionerSaysWhatGoesWithoutIt(t *testing.T) {
 		}
 	}
 	for field, says := range map[string]string{
-		"spec.mcp[0].env[1].valueFrom":  "the engine does not start the seat's instance of MCPServer github",
-		"spec.mcp[0].env[2].valueFrom":  "starts the seat's instance of MCPServer github without it",
 		"spec.sandbox.env[2].valueFrom": "the seat's executor runs start without it, and the engine logs it as a gap",
 		"spec.sandbox.env[3].valueFrom": "the seat's executor runs start without it, quietly",
 	} {
@@ -646,7 +631,7 @@ func TestExecutorStartsWithoutAValueThatHoldsNothing(t *testing.T) {
 		Path: fileNPMRC, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: npmrc},
 	}}}
 	provisioned := v1alpha1.SeatEnvVar{
-		Name: envGitLabToken, ValueFrom: v1alpha1.SeatCredentialSource{Provisioned: v1alpha1.ProvisionedCredential{Name: provisionedGitLab}},
+		Name: envGitLabToken, ValueFrom: v1alpha1.SeatCredentialSource{Provisioned: provisionedGitLab},
 	}
 	cases := []struct {
 		name   string
@@ -716,7 +701,7 @@ func optionalSecretOf(ref v1alpha1.SecretKeyReference) secretref.Key {
 func TestAHeaderIsSpelledAsItsUnitSpellsIt(t *testing.T) {
 	stdioBlock := func(owner *[]v1alpha1.MCPCredentials, name string) {
 		*owner = append(*owner, v1alpha1.MCPCredentials{Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
-			Name: name, ValueFrom: v1alpha1.SeatCredentialSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "tavily-project", Key: "id"}},
+			Name: name, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "tavily-project", Key: "id"}},
 		}}})
 	}
 	cases := []struct {

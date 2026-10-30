@@ -458,9 +458,13 @@ Crewlet looks for it.
 | Datadog | none named ([below](#datadog)) | — | — |
 
 The servers below write their settings out as values
-([Settings and credentials](#settings-and-credentials)), and each seat gives
-its own credentials for the server in its `spec.mcp`, as
-[Connecting Integrations](integrations.md) shows for each vendor.
+([Settings and credentials](#settings-and-credentials)). Each seat's own
+credential reaches its instance of a server one of two ways, as
+[Connecting Integrations](integrations.md) shows for each vendor: where the
+engine provisions the vendor (GitLab or Mattermost under `provisioning:
+Engine`, Datadog, an Atlassian organization) the engine hands the server the
+credential it minted for the seat, and the Seat names none; everywhere else
+the seat gives its own Secret in its `spec.mcp`.
 
 ### Mattermost
 
@@ -566,6 +570,7 @@ Each seat gives it the bot token of its Slack app, the same key its
 spec:                       # Seat lead
   integrations:
     slack:
+      enabled: true
       credentialsSecretRef: {name: lead-slack}    # keys botToken, signingSecret
   mcp:
     - name: slack
@@ -626,8 +631,10 @@ spec:
       value: "false"
 ```
 
-Each seat gives it `GITLAB_TOKEN` ([GitLab](integrations.md#gitlab)); on a
-self-managed instance, give it `GITLAB_HOST` as well, in the server's `env`,
+Each seat's instance gets the seat's GitLab token: from the engine under
+`provisioning: Engine`, and from the Seat's `spec.mcp`, under `GITLAB_TOKEN`,
+under `External` ([GitLab](integrations.md#gitlab)). On a self-managed
+instance, give the server `GITLAB_HOST` as well, in its `env`,
 and, when that instance serves plain HTTP, `GLAB_API_PROTOCOL` with the
 value `http` beside it: `glab` takes the API's scheme from that setting,
 `https` unless it says otherwise, never from the address in `GITLAB_HOST`.
@@ -678,18 +685,21 @@ spec:
   url: https://api.githubcopilot.com/mcp/
 ```
 
-A remote server: nothing goes into the image, and each seat sends its own
-`Authorization` header ([A tool server's token](credentials.md#a-tool-servers-token);
-Crewlet's [GitHub](https://github.com/crewlet/crewlet/blob/main/docs/integrations/github.md#mcp-tools)).
+A remote server: nothing goes into the image. The engine sends each seat's
+instance an `Authorization` header with the installation token it issues for
+the seat's own GitHub App, narrowed to the seat's `permissions` and `repos`
+([Slack and GitHub](integrations.md#slack-and-github); Crewlet's
+[GitHub](https://github.com/crewlet/crewlet/blob/main/docs/integrations/github.md#mcp-tools)).
 
 ### Datadog
 
-Crewlet names no Datadog tool server. Its provisioning mints each seat's
-application key into the credentials the seat gives the `MCPServer` named
-`datadog`, under `DD_APP_KEY`, `DATADOG_APP_KEY` or `app_key`
-([Datadog](integrations.md#datadog)): choose a server that reads its key
-from one of those, name it `datadog`, and, if it is a stdio server, install
-it in the image as above.
+Crewlet names no Datadog tool server. The engine hands each seat's instance
+of the per-seat `MCPServer` named `datadog` the application key it minted
+for the seat, as `DD_APPLICATION_KEY` ([Datadog](integrations.md#datadog)):
+Datadog's remote server (`https://mcp.datadoghq.com/v1/mcp` on US1, over
+`transport: HTTP`) reads it as a header, beside the organization's API key in
+the server's own `DD_API_KEY` header. Name the server `datadog`, give it
+`shared: false`, and, for a stdio server, install it in the image as above.
 
 ## See also
 

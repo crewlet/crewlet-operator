@@ -481,7 +481,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Expect(nimbus.Status.Config.AppliedHash).NotTo(BeEmpty())
 		Expect(nimbus.Status.Config.AppliedAt).NotTo(BeNil())
 		Expect(nimbus.Status.Config.Objects).To(Equal(crewletaiv1alpha1.AppliedObjectCounts{
-			Units: new(int32(2)), Seats: new(int32(3)), LLMProviders: new(int32(2)), MCPServers: new(int32(2)), Integrations: new(int32(3)),
+			Units: new(int32(2)), Seats: new(int32(3)), LLMProviders: new(int32(2)), MCPServers: new(int32(3)), Integrations: new(int32(3)),
 			Schedules: new(int32(2)),
 		}))
 		Expect(conditionOf(nimbus, crewletaiv1alpha1.ConditionSecretsSynced)(Default).Reason).To(Equal(crewletaiv1alpha1.ReasonSynced))
@@ -907,7 +907,7 @@ var _ = Describe("Company config", Ordered, func() {
 		updateLive(seat(name+"-ana"), func(s *crewletaiv1alpha1.Seat) {
 			s.Spec.MCP = []crewletaiv1alpha1.MCPCredentials{{Name: bad.Name, Env: []crewletaiv1alpha1.MCPCredentialValue{{
 				Name:      seatToken,
-				ValueFrom: crewletaiv1alpha1.SeatCredentialSource{SecretKeyRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-ana", Key: seatTokenKey}},
+				ValueFrom: crewletaiv1alpha1.SecretValueSource{SecretKeyRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-ana", Key: seatTokenKey}},
 			}}}}
 		})
 		applied(c, crewletaiv1alpha1.ReasonApplied)
@@ -1495,7 +1495,9 @@ var _ = Describe("Company config", Ordered, func() {
 		secret(boSlack, map[string]string{crewletaiv1alpha1.SlackBotTokenKey: "xoxb", crewletaiv1alpha1.SlackSigningSecretKey: "sig"})
 		c := company(name, crewletaiv1alpha1.ManagementPolicyEnforce, "ana")
 		bo := newSeat(namespace, name, "bo", func(s *crewletaiv1alpha1.Seat) {
-			s.Spec.Integrations.Slack.CredentialsSecretRef.Name = boSlack
+			s.Spec.Integrations.Slack = crewletaiv1alpha1.SlackSeatIntegration{
+				Enabled: new(true), CredentialsSecretRef: crewletaiv1alpha1.SecretReference{Name: boSlack},
+			}
 		})
 		standIn(c)
 		applied(c, crewletaiv1alpha1.ReasonApplied)

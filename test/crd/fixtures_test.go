@@ -231,7 +231,7 @@ func fromSecret(name, key string) v1.SecretValueSource {
 	return v1.SecretValueSource{SecretKeyRef: secretKey(name, key)}
 }
 
-// seatFromSecret is a seat's or a unit's credential read from a Secret key.
+// seatFromSecret is a seat's sandbox credential read from a Secret key.
 func seatFromSecret(name, key string) v1.SeatCredentialSource {
 	return v1.SeatCredentialSource{SecretKeyRef: secretKey(name, key)}
 }
@@ -339,6 +339,13 @@ const (
 	envSlackChannels = "SLACK_MCP_CHANNELS_CACHE"
 )
 
+// Tool servers of integrations the engine manages no account on, which a
+// seat and a unit give credentials of their own.
+const (
+	linearServer = "linear"
+	sentryServer = "sentry"
+)
+
 // Settings of tool servers the cases write out as literal values: an address
 // mcp-atlassian reads, and a header GitHub's remote server reads its toolsets
 // from.
@@ -361,7 +368,7 @@ func mcpCredentials(server string) v1.MCPCredentials {
 		Name: server,
 		Env: []v1.MCPCredentialValue{{
 			Name:      "Authorization",
-			ValueFrom: seatFromSecret(seatHandle+"-"+server, "authorization"),
+			ValueFrom: fromSecret(seatHandle+"-"+server, "authorization"),
 		}},
 	}
 }

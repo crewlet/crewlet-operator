@@ -166,15 +166,12 @@ type gitlabDoc struct {
 }
 
 type gitlabProvisioningDoc struct {
-	Group          string            `json:"group"`
-	AdminToken     string            `json:"admin_token"`
-	Mode           string            `json:"mode,omitempty"`
-	AccessLevel    string            `json:"access_level,omitempty"`
-	AccessLevels   map[string]string `json:"access_levels,omitempty"`
-	UsernamePrefix string            `json:"username_prefix,omitempty"`
-	Projects       []string          `json:"projects,omitempty"`
-	GroupWebhook   string            `json:"group_webhook,omitempty"`
-	TokenScopes    []string          `json:"token_scopes,omitempty"`
+	Group          string   `json:"group"`
+	AdminToken     string   `json:"admin_token"`
+	Mode           string   `json:"mode,omitempty"`
+	UsernamePrefix string   `json:"username_prefix,omitempty"`
+	Projects       []string `json:"projects,omitempty"`
+	GroupWebhook   string   `json:"group_webhook,omitempty"`
 }
 
 type mattermostDoc struct {
@@ -225,7 +222,6 @@ type datadogProvisioningDoc struct {
 	Site        string `json:"site"`
 	APIKey      string `json:"api_key"`
 	AppKey      string `json:"app_key"`
-	Role        string `json:"role,omitempty"`
 	EmailDomain string `json:"email_domain,omitempty"`
 }
 
@@ -367,30 +363,66 @@ type placementDoc struct {
 	Labels map[string]string `json:"labels"`
 }
 
+// roleIntegrationsDoc is a seat's blocks of Crewlet's role integrations.
+// Each block carries enabled whatever it says, since Crewlet requires it in
+// every block: a block is a stored setting, never inferred from what else the
+// seat holds.
 type roleIntegrationsDoc struct {
 	Slack      *roleSlackDoc      `json:"slack,omitempty"`
 	GitHub     *roleGitHubDoc     `json:"github,omitempty"`
+	GitLab     *roleGitLabDoc     `json:"gitlab,omitempty"`
 	Mattermost *roleMattermostDoc `json:"mattermost,omitempty"`
-}
-
-type roleMattermostDoc struct {
-	BotToken string `json:"bot_token"`
-	Username string `json:"username,omitempty"`
-	Channel  string `json:"channel,omitempty"`
+	Jira       *roleJiraDoc       `json:"jira,omitempty"`
+	Confluence *roleConfluenceDoc `json:"confluence,omitempty"`
+	Datadog    *roleDatadogDoc    `json:"datadog,omitempty"`
 }
 
 type roleSlackDoc struct {
+	Enabled       bool   `json:"enabled"`
 	BotToken      string `json:"bot_token"`
 	SigningSecret string `json:"signing_secret"`
 }
 
 type roleGitHubDoc struct {
-	Tier           string   `json:"tier,omitempty"`
-	Repos          []string `json:"repos,omitempty"`
-	Workflows      *bool    `json:"workflows,omitempty"`
-	AppID          int64    `json:"app_id,omitempty"`
-	AppSlug        string   `json:"app_slug,omitempty"`
-	InstallationID int64    `json:"installation_id,omitempty"`
-	PrivateKey     string   `json:"private_key,omitempty"`
-	WebhookSecret  string   `json:"webhook_secret,omitempty"`
+	Enabled        bool              `json:"enabled"`
+	Permissions    map[string]string `json:"permissions,omitempty"`
+	Repos          []string          `json:"repos,omitempty"`
+	AppID          int64             `json:"app_id,omitempty"`
+	AppSlug        string            `json:"app_slug,omitempty"`
+	InstallationID int64             `json:"installation_id,omitempty"`
+	PrivateKey     string            `json:"private_key,omitempty"`
+	WebhookSecret  string            `json:"webhook_secret,omitempty"`
+}
+
+type roleGitLabDoc struct {
+	Enabled      bool     `json:"enabled"`
+	AccessLevel  int32    `json:"access_level,omitempty"`
+	MemberRoleID int64    `json:"member_role_id,omitempty"`
+	Projects     []string `json:"projects,omitempty"`
+}
+
+type roleMattermostDoc struct {
+	Enabled  bool     `json:"enabled"`
+	Roles    []string `json:"roles,omitempty"`
+	Channels []string `json:"channels,omitempty"`
+	BotToken string   `json:"bot_token,omitempty"`
+	Username string   `json:"username,omitempty"`
+}
+
+type roleJiraDoc struct {
+	Enabled     bool     `json:"enabled"`
+	ProjectRole string   `json:"project_role,omitempty"`
+	Projects    []string `json:"projects,omitempty"`
+}
+
+type roleConfluenceDoc struct {
+	Enabled    bool     `json:"enabled"`
+	SpaceRole  string   `json:"space_role,omitempty"`
+	Operations []string `json:"operations,omitempty"`
+	Spaces     []string `json:"spaces,omitempty"`
+}
+
+type roleDatadogDoc struct {
+	Enabled bool   `json:"enabled"`
+	Role    string `json:"role,omitempty"`
 }
