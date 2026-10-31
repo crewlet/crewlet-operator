@@ -62,7 +62,8 @@ type SeatPause struct {
 	// Reason is why, in the pauser's words; empty when none was given.
 	Reason string
 	// StopRunning is whether the pause also ended the turn the seat was on
-	// rather than letting it finish.
+	// rather than letting it finish, and refuses its detached coding runs'
+	// writes until the seat is resumed.
 	StopRunning bool
 }
 
@@ -137,8 +138,10 @@ func (c *Client) SeatPauses(ctx context.Context) (map[string]SeatPause, error) {
 
 // PauseSeat pauses the agent seat handle: it starts no new turn until it is
 // resumed, its mail waits on its inbox in order, and its scheduled runs are
-// skipped. stopRunning also ends the turn it is on at its next round; reason
-// is shown on the seat and in its feed, at most MaxPauseReasonRunes
+// skipped. stopRunning also ends the turn it is on at its next round, and
+// refuses every change its detached coding runs would make (a call of the
+// seat's tools that writes, a push from their boxes) until it is resumed;
+// reason is shown on the seat and in its feed, at most MaxPauseReasonRunes
 // characters. The pause is recorded as the operator token's.
 //
 // Pausing a paused seat changes nothing, unless stopRunning adds a stop the
