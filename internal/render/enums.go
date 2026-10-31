@@ -72,6 +72,18 @@ func knowledgeBackend(b v1alpha1.KnowledgeBackend) string {
 	return ""
 }
 
+func chatBackend(b v1alpha1.ChatBackend) string {
+	switch b {
+	case v1alpha1.ChatChatlet:
+		return "chatlet"
+	case v1alpha1.ChatVendor:
+		return "vendor"
+	case v1alpha1.ChatNone:
+		return crewletNone
+	}
+	return ""
+}
+
 func embeddingProviderType(t v1alpha1.EmbeddingProviderType) string {
 	switch t {
 	case v1alpha1.EmbeddingProviderOpenAI, "":

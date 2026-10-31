@@ -6,10 +6,13 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"slices"
+	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -38,10 +41,14 @@ const (
 	fingerprintKeyLen = sha256.Size
 
 	// withdrawnField is the data key of the state Secret that lists the
-	// withdrawn names (State.Withdrawn), one per line. Like
-	// fingerprintKeyField it has a dash, so Owns never accepts it, and so
-	// have the three after it.
+	// withdrawn names (State.Withdrawn), and writtenField the one that lists
+	// the written names (State.Written): one per line, each followed, after
+	// a space, by the activation epoch it waits for an activation above,
+	// where a read of the fleet's activation pointer has followed it
+	// (State.Observed). Like fingerprintKeyField each has a dash, so Owns
+	// never accepts it, and so have the five after them.
 	withdrawnField = "withdrawn-names"
+	writtenField   = "written-names"
 
 	// revisionField and letGoField are the data keys of the state Secret
 	// that hold the revision whose reading of the store the State records
@@ -51,15 +58,32 @@ const (
 	revisionField = "activated-revision"
 	letGoField    = "optional-keys"
 	retainedField = "retained-names"
+
+	// pendingField is the data key of the state Secret that holds the
+	// readings of the documents written whose activation a read is still to
+	// confirm (State.Pending), as one JSON object keyed by the hash the
+	// caller gave each.
+	pendingField = "pending-activations"
+
+	// awaitField is the data key of the state Secret that lists the
+	// revisions the changes of the store await (State.Awaiting): one change
+	// and one revision per line, the name, a space and the revision.
+	awaitField = "awaited-revisions"
 )
 
 // State is what the operator last pushed into one engine's secret store: a
 // fingerprint of the value of every name it pushed, and the key the
-// fingerprints are computed under; the names it withdrew (Withdrawn); one
+// fingerprints are computed under; the names it withdrew (Withdrawn), and
+// the ones it wrote (Written), that no activation is known to have read the
+// store after, with the activation epoch each waits past (Observed, Ran); one
 // revision of the engine's document whose reading of the store it knows, with
 // the Secret keys that revision lets go without (Activated, Adopted, LetGo);
-// and the names it last kept for the running revision although their Secret
-// or key is gone (Retained).
+// the names it last kept for the running revision although their Secret or
+// key is gone (Retained); the reading of each document the caller wrote
+// whose revision a later read may find running without the caller having
+// recorded it (Pending, Confirmed); and the revisions the engine stored for
+// activations asked for after a change and could not confirm, any of which
+// found running settles it (Awaiting, Found).
 //
 // It records nothing of what an engine node runs or starts on, which the
 // caller reads from the engine's fleet alone: a node applies the fleet's
@@ -80,18 +104,68 @@ type State struct {
 	// value its methods return changed copies of, and each copy shares it.
 	key          string
 	fingerprints map[string][]byte
-	withdrawn    map[string]struct{}
+	// withdrawn and written are the store changes no activation is known to
+	// have read, by name: each the epoch of the fleet's activation pointer
+	// read first after it, which an activation the engine runs at a greater
+	// epoch came after, and unread where no read has followed it yet.
+	withdrawn map[string]int64
+	written   map[string]int64
+	// awaits are the revisions Awaiting recorded for those changes, by
+	// name: each a revision the engine stored for an activation asked for
+	// after the change, sorted. An entry for a name the State records no
+	// change of is none: a change settled otherwise leaves nothing to await.
+	awaits map[string][]string
+	// readings is how the documents the State knows of read the store, nil
+	// for none (readingRecord).
+	readings *readingRecord
+	retained map[string]struct{}
+}
+
+// readingRecord is how the documents a State knows of read the store: the
+// revision whose reading it records, and the documents the caller wrote whose
+// revision a read may yet find running (Pending), whose reading becomes the
+// revision's once one does (Confirmed). Behind one pointer, so that a State,
+// which callers pass by value, stays inside the size a value parameter is
+// held to; and never changed once made: a State that changes it makes another
+// (withReadings).
+type readingRecord struct {
 	// revision is the revision whose reading the State records, empty for
 	// none, and letGo the Secret keys its document lets go without, by
 	// store name.
 	revision string
 	letGo    map[string]secretref.Key
-	retained map[string]struct{}
+	// pending are the readings Pending recorded: the Secret keys each
+	// document lets go without, by store name, by the hash the caller gave
+	// the document.
+	pending map[string]map[string]secretref.Key
+}
+
+// reading is what s records of how documents read the store, the zero record
+// for nothing.
+func (s State) reading() readingRecord {
+	if s.readings == nil {
+		return readingRecord{}
+	}
+	return *s.readings
+}
+
+// withReadings is s recording r, which it does not change afterwards.
+func (s State) withReadings(r readingRecord) State {
+	s.readings = nil
+	if r.revision != "" || len(r.letGo) > 0 || len(r.pending) > 0 {
+		s.readings = &r
+	}
+	return s
+}
+
+// pending is what s records under Pending, nil for nothing.
+func (s State) pending() map[string]map[string]secretref.Key {
+	return s.reading().pending
 }
 
 // Withdrawn are the names Sync or Withdraw removed from the store because the
 // optional reference each stands for has no Secret or key any more, since a
-// revision last activated, sorted.
+// revision activated after the removal, sorted.
 //
 // The engine reads its store when a revision activates, and starts every tool
 // server and executor run with what it read then: removing a name changes
@@ -101,10 +175,40 @@ type State struct {
 // holds. So the caller activates a revision once a name is withdrawn, the
 // next document or the running one again, and then records it with
 // Activated, or with Reactivated where it activated none because the
-// revision the engine runs needs no activation for it. Kept in the saved
-// State, a withdrawal survives a failed activation and a restarted operator.
+// revision the engine runs needs no activation for it; and any activation the
+// engine is read running above the epoch the withdrawal waits past settles it
+// too (Ran), whoever made it. Kept in the saved State, a withdrawal survives a
+// failed activation, a lost save after it and a restarted operator.
 func (s State) Withdrawn() []string {
 	return slices.Sorted(maps.Keys(s.withdrawn))
+}
+
+// Written are the names Sync wrote a value under that no activation is known
+// to have read the store after, sorted: every value it pushed, whether new or
+// written back over one somebody else wrote or the store lost.
+//
+// A written value changes nothing the engine runs until a revision activates,
+// as a withdrawal does not, and a value written back leaves the fingerprints,
+// and so the caller's hash of what it applied, where they were: since the
+// value was replaced, a revision may have activated reading the other one,
+// which it goes on running. So a revision of the caller's document is one it
+// runs with every value only once a revision has activated after the last
+// write (Activated, Reloaded, Ran). Sync saves the mark before the value is
+// written, so a write survives a write of the document that fails or loses
+// its race, a save lost after the value was written, and a restarted
+// operator, which the caller's own record of what one reconcile wrote did not.
+func (s State) Written() []string {
+	return slices.Sorted(maps.Keys(s.written))
+}
+
+// Reloaded is s once a revision has activated after every write and
+// withdrawal it records, a revision whose document the caller does not know
+// included: the engine read the store with each value written and without
+// each withdrawn, so both are settled. The revision it records stays
+// recorded.
+func (s State) Reloaded() State {
+	s.withdrawn, s.written, s.awaits = nil, nil, nil
+	return s
 }
 
 // Reactivated is s with every withdrawal it records settled: a revision has
@@ -113,13 +217,174 @@ func (s State) Withdrawn() []string {
 // The revision it records stays recorded.
 func (s State) Reactivated() State {
 	s.withdrawn = nil
+	s.awaits = s.awaited()
 	return s
 }
 
+// unread is the mark of a change of the store no read of the fleet's
+// activation pointer has followed yet: no activation is above it, so none
+// settles it but one the caller makes, and the first read after it lowers it
+// to the epoch read (Observed).
+const unread = math.MaxInt64
+
+// Observed is s once the caller has read the fleet's activation pointer at
+// epoch after every change of the store s records: each change no read has
+// followed yet waits for an activation above epoch, which the pointer can
+// only name once a write after this read moved it, so after the change; one
+// a read followed already keeps the earlier epoch. Zero is a pointer that
+// names nothing.
+//
+// The epoch is read after the changes, never before: one read before a change
+// would settle it by an activation the pointer named before it, which read
+// the store without it. And it is read before the activation the caller asks
+// for, and saved with s before that is sent, so that a save lost after the
+// activation leaves a change that activation settles (Ran) rather than one it
+// waits past.
+func (s State) Observed(epoch int64) State {
+	s.withdrawn = observed(s.withdrawn, epoch)
+	s.written = observed(s.written, epoch)
+	return s
+}
+
+// Ran is s once the caller has read the fleet's activation pointer at epoch,
+// naming a revision it has seen opened (the one GET /config answered): every
+// change that waits for an activation above a lower epoch is settled, whoever
+// made that activation and whatever its document, since it came after the
+// change, and every node reads the store at its attempt to apply it, a node
+// that refuses it included, whose running revision resolves its references
+// from what that attempt read. A revision no node can open (one sealed under
+// a key the keyring lost, or stored without a seal) is not one they read the
+// store for, however the pointer names it, and settles nothing.
+func (s State) Ran(epoch int64) State {
+	s.withdrawn = ran(s.withdrawn, epoch)
+	s.written = ran(s.written, epoch)
+	s.awaits = s.awaited()
+	return s
+}
+
+// Awaiting is s once the caller has asked the engine for an activation after
+// every change of the store s records, and the engine stored revision for it
+// and could not confirm activating it: should a read find revision running,
+// it activated after every one of those changes and every node read the
+// store when it applied it, so it settles them (Found), whatever the fleet's
+// activation pointer says. A change a later read of the pointer has followed
+// is settled by any activation above it (Ran), and needs no such record; one
+// no read has followed (Observed) needs it, since no epoch the pointer names
+// later can settle it, and the pointer is likeliest to be unreadable when the
+// engine loses an activation's answer. A later change of a name waits for an
+// activation of its own.
+func (s State) Awaiting(revision string) State {
+	if revision == "" {
+		return s
+	}
+	awaits := s.awaited()
+	for _, marks := range []map[string]int64{s.withdrawn, s.written} {
+		for name := range marks {
+			if revisions := awaits[name]; !slices.Contains(revisions, revision) {
+				if awaits == nil {
+					awaits = map[string][]string{}
+				}
+				awaits[name] = slices.Sorted(slices.Values(append(slices.Clone(revisions), revision)))
+			}
+		}
+	}
+	s.awaits = awaits
+	return s
+}
+
+// Found is s once the caller has read the engine running revision, as a
+// revision its nodes can open: every change that awaits it (Awaiting) is
+// settled, as Ran settles one an activation above its epoch came after.
+func (s State) Found(revision string) State {
+	awaits := s.awaits
+	if revision == "" || len(awaits) == 0 {
+		return s
+	}
+	read := func(name string, _ int64) bool { return slices.Contains(awaits[name], revision) }
+	s.withdrawn = without(s.withdrawn, read)
+	s.written = without(s.written, read)
+	s.awaits = s.awaited()
+	return s
+}
+
+// SameMarks reports whether s and o record the same changes of the store,
+// each with the same mark and awaiting the same revisions: whether a save of
+// one leaves what a save of the other did.
+func (s State) SameMarks(o State) bool {
+	return maps.Equal(s.withdrawn, o.withdrawn) && maps.Equal(s.written, o.written) &&
+		maps.EqualFunc(s.awaited(), o.awaited(), slices.Equal)
+}
+
+// awaited is what s awaits (Awaiting) for the changes it records, in a map of
+// its own, nil for none: an entry for a name settled otherwise is dropped.
+func (s State) awaited() map[string][]string {
+	var awaits map[string][]string
+	for name, revisions := range s.awaits {
+		_, withdrawn := s.withdrawn[name]
+		_, written := s.written[name]
+		if len(revisions) == 0 || !withdrawn && !written {
+			continue
+		}
+		if awaits == nil {
+			awaits = map[string][]string{}
+		}
+		awaits[name] = revisions
+	}
+	return awaits
+}
+
+// Unobserved reports whether s records a change of the store no read of the
+// fleet's activation pointer has followed yet (Observed).
+func (s State) Unobserved() bool {
+	for _, marks := range []map[string]int64{s.withdrawn, s.written} {
+		for _, epoch := range marks {
+			if epoch == unread {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// observed is marks with every one above epoch lowered to it, in a map of its
+// own: the State's maps are values other States share.
+func observed(marks map[string]int64, epoch int64) map[string]int64 {
+	if marks == nil {
+		return nil
+	}
+	next := make(map[string]int64, len(marks))
+	for name, mark := range marks {
+		next[name] = min(mark, epoch)
+	}
+	return next
+}
+
+// ran is marks less every one an activation at epoch is above, in a map of
+// its own, nil for none.
+func ran(marks map[string]int64, epoch int64) map[string]int64 {
+	return without(marks, func(_ string, mark int64) bool { return epoch > mark })
+}
+
+// without is marks less every one settled reports, in a map of its own, nil
+// for none.
+func without(marks map[string]int64, settled func(name string, mark int64) bool) map[string]int64 {
+	var left map[string]int64
+	for name, mark := range marks {
+		if settled(name, mark) {
+			continue
+		}
+		if left == nil {
+			left = map[string]int64{}
+		}
+		left[name] = mark
+	}
+	return left
+}
+
 // Activated is s once the operator has activated revision, whose document
-// lets go without the Secret keys optional: every withdrawal is settled, as
-// Reactivated, and LetGo answers optional for revision from now on, and
-// nothing for any other.
+// lets go without the Secret keys optional: every withdrawal and every write
+// is settled, as Reloaded, and LetGo answers optional for revision from now
+// on, and nothing for any other.
 //
 // The caller records every activation it makes and knows the document of: an
 // apply, with render.Document.Optional of the document it applied, and an
@@ -127,7 +392,7 @@ func (s State) Reactivated() State {
 // revision it read, once it has confirmed that the revision activated again
 // is that one.
 func (s State) Activated(revision string, optional []secretref.Key) State {
-	return s.Reactivated().Adopted(revision, optional)
+	return s.Reloaded().Adopted(revision, optional)
 }
 
 // Adopted is s recording revision, whose document lets go without the Secret
@@ -136,23 +401,89 @@ func (s State) Activated(revision string, optional []secretref.Key) State {
 // optional, but did not activate it after the withdrawals it owes, so the
 // engine may have read the store with them.
 func (s State) Adopted(revision string, optional []secretref.Key) State {
-	s.revision = revision
-	s.letGo = make(map[string]secretref.Key, len(optional))
+	r := s.reading()
+	r.revision = revision
+	r.letGo = make(map[string]secretref.Key, len(optional))
 	for _, k := range optional {
-		s.letGo[StoreName(k)] = k
+		r.letGo[StoreName(k)] = k
 	}
-	return s
+	return s.withReadings(r)
+}
+
+// Pending is s recording the reading of a document the caller is about to
+// write, which lets go without the Secret keys optional, by hash, the hash the
+// caller gives that document, which must tell it from every other document it
+// writes: should a read find the revision the engine stored for the write
+// running before the caller has recorded its activation (its answer lost, or
+// the caller's record of it), Confirmed records that revision's reading from
+// it. The caller records it, and saves s, before the write is sent, since a
+// write whose answer is lost leaves nothing else to say how its document reads
+// the store.
+func (s State) Pending(hash string, optional []secretref.Key) State {
+	letGo := make(map[string]secretref.Key, len(optional))
+	for _, k := range optional {
+		letGo[StoreName(k)] = k
+	}
+	pending := maps.Clone(s.pending())
+	if pending == nil {
+		pending = map[string]map[string]secretref.Key{}
+	}
+	pending[hash] = letGo
+	r := s.reading()
+	r.pending = pending
+	return s.withReadings(r)
+}
+
+// Pends reports whether s records the reading of the document hash names
+// (Pending).
+func (s State) Pends(hash string) bool {
+	_, ok := s.pending()[hash]
+	return ok
+}
+
+// Confirmed is s recording revision, which the caller found running the
+// document whose reading Pending recorded under hash, as reading the store
+// that way, as Adopted records a revision of a document the caller renders:
+// without settling a withdrawal or a write, which only a read of the epoch the
+// revision activated as settles (Ran). ok is false where s records no reading
+// under hash, and s is returned unchanged.
+func (s State) Confirmed(revision, hash string) (next State, ok bool) {
+	letGo, ok := s.pending()[hash]
+	if !ok || revision == "" {
+		return s, false
+	}
+	r := s.reading()
+	r.revision, r.letGo = revision, letGo
+	return s.withReadings(r), true
+}
+
+// KeepPending is s recording only the readings Pending recorded under hashes:
+// the caller's record of the rest says no revision it has not recorded can be
+// that write.
+func (s State) KeepPending(hashes []string) State {
+	var kept map[string]map[string]secretref.Key
+	for _, hash := range hashes {
+		if letGo, ok := s.pending()[hash]; ok {
+			if kept == nil {
+				kept = map[string]map[string]secretref.Key{}
+			}
+			kept[hash] = letGo
+		}
+	}
+	r := s.reading()
+	r.pending = kept
+	return s.withReadings(r)
 }
 
 // Recorded is the revision whose reading s records, empty for none.
 func (s State) Recorded() string {
-	return s.revision
+	return s.reading().revision
 }
 
 // Records reports whether s records how revision reads the store: whether
 // LetGo answers for it.
 func (s State) Records(revision string) bool {
-	return revision != "" && revision == s.revision
+	return revision != "" && revision == s.reading().revision
 }
 
 // LetGo are the store names the document of revision lets go without, every
@@ -172,7 +503,7 @@ func (s State) LetGo(revision string) []string {
 	if !s.Records(revision) {
 		return nil
 	}
-	return slices.Sorted(maps.Keys(s.letGo))
+	return slices.Sorted(maps.Keys(s.reading().letGo))
 }
 
 // LetGoKeys are the Secret keys LetGo names the store entries of, sorted as
@@ -183,41 +514,76 @@ func (s State) LetGoKeys(revision string) []secretref.Key {
 	if !s.Records(revision) {
 		return nil
 	}
-	return slices.SortedFunc(maps.Values(s.letGo), secretref.Compare)
+	return slices.SortedFunc(maps.Values(s.reading().letGo), secretref.Compare)
 }
 
 // letsGo reports whether the document of revision lets go without name, as
 // LetGo says.
 func (s State) letsGo(revision, name string) bool {
-	_, ok := s.letGo[name]
+	_, ok := s.reading().letGo[name]
 	return ok && s.Records(revision)
 }
 
 // Retained are the names the last Sync or Withdraw left in the store,
 // although the optional reference each stands for has no Secret or key any
 // more, because the revision the engine runs reads them as required, or is
-// one whose reading the State does not record (Result.Retained), sorted. The caller compares them with the Retained of
-// the State it started from, to tell a name it newly keeps from one it has
-// already said it keeps.
+// one whose reading the State does not record (Result.Retained), sorted. The
+// caller compares them with the Retained of the State it started from, to
+// tell a name it newly keeps from one it has already said it keeps.
 func (s State) Retained() []string {
 	return slices.Sorted(maps.Keys(s.retained))
 }
 
-// withdraw records name as withdrawn in s, which it changes in place.
+// withdraw records name as withdrawn in s, which it changes in place: a
+// change no read has followed, whatever an earlier withdrawal of it waited
+// past.
 func (s *State) withdraw(name string) {
 	if s.withdrawn == nil {
-		s.withdrawn = map[string]struct{}{}
+		s.withdrawn = map[string]int64{}
 	}
-	s.withdrawn[name] = struct{}{}
+	s.withdrawn[name] = unread
+	s.changedAgain(name)
 }
 
-// carried is a State that starts from s: its key, its record of withdrawals
-// and of the activated revision, and what it last retained, in maps of its
-// own where a Sync or a Withdraw changes them in place, and fingerprints.
+// write records a value written under name in s, which it changes in place,
+// as withdraw records a withdrawal.
+func (s *State) write(name string) {
+	if s.written == nil {
+		s.written = map[string]int64{}
+	}
+	s.written[name] = unread
+	s.changedAgain(name)
+}
+
+// changedAgain records in s, which it changes in place, that name changed
+// after every activation Awaiting recorded for it: none of them read it now.
+func (s *State) changedAgain(name string) {
+	if _, ok := s.awaits[name]; ok {
+		awaits := maps.Clone(s.awaits)
+		delete(awaits, name)
+		if len(awaits) == 0 {
+			awaits = nil
+		}
+		s.awaits = awaits
+	}
+}
+
+// deleted records name removed from the store in s, which it changes in
+// place: what was written under it is no value any revision reads now, and
+// a withdrawal, where it is one, is what an activation owes for it.
+func (s *State) deleted(name string) {
+	delete(s.fingerprints, name)
+	delete(s.written, name)
+}
+
+// carried is a State that starts from s: its key, its record of withdrawals,
+// of writes and the revisions they await, and of how documents read the
+// store, and what it last retained, in maps of its own where a Sync or a
+// Withdraw changes them in place, and fingerprints.
 func (s State) carried(fingerprints map[string][]byte) State {
 	return State{
-		key: s.key, fingerprints: fingerprints, withdrawn: maps.Clone(s.withdrawn),
-		revision: s.revision, letGo: s.letGo, retained: s.retained,
+		key: s.key, fingerprints: fingerprints, withdrawn: maps.Clone(s.withdrawn), written: maps.Clone(s.written),
+		awaits: s.awaits, readings: s.readings, retained: s.retained,
 	}
 }
 
@@ -331,13 +697,78 @@ func LoadState(ctx context.Context, r client.Reader, ref types.NamespacedName, o
 	}
 	// A line that is no name the operator owns, or no Secret key, is
 	// dropped, as a malformed fingerprint is: only a hand edit writes one,
-	// and no entry of it can be the operator's to have withdrawn, let go or
-	// retained.
-	s.withdrawn = ownedLines(secret.Data[withdrawnField])
-	s.revision = string(secret.Data[revisionField])
-	s.letGo = keyLines(secret.Data[letGoField])
+	// and no entry of it can be the operator's to have withdrawn, written,
+	// let go or retained.
+	s.withdrawn = markLines(secret.Data[withdrawnField])
+	s.written = markLines(secret.Data[writtenField])
+	s.awaits = awaitLines(secret.Data[awaitField])
+	s.awaits = s.awaited()
 	s.retained = ownedLines(secret.Data[retainedField])
-	return s, nil
+	return s.withReadings(readingRecord{
+		revision: string(secret.Data[revisionField]), letGo: keyLines(secret.Data[letGoField]),
+		pending: pendingOf(secret.Data[pendingField]),
+	}), nil
+}
+
+// pendingRecord is one reading State.Pending recorded, as the state Secret
+// holds it: Secret keys as secretref.Key prints them.
+type pendingRecord struct {
+	Optional []string `json:"optional"`
+}
+
+// pendingOf reads the readings State.Pending recorded from data, nil for none.
+// What does not decode is dropped, as a malformed line of the other fields
+// is: only a hand edit writes it, and the cost is the one State.Confirmed
+// would have saved, a revision read as requiring every name it references.
+func pendingOf(data []byte) map[string]map[string]secretref.Key {
+	var records map[string]pendingRecord
+	if json.Unmarshal(data, &records) != nil {
+		return nil
+	}
+	var pending map[string]map[string]secretref.Key
+	for hash, r := range records {
+		if hash == "" {
+			continue
+		}
+		letGo := map[string]secretref.Key{}
+		for _, line := range r.Optional {
+			if k, ok := parseKey(line); ok {
+				letGo[StoreName(k)] = k
+			}
+		}
+		if pending == nil {
+			pending = map[string]map[string]secretref.Key{}
+		}
+		pending[hash] = letGo
+	}
+	return pending
+}
+
+// pendingData is s's pending readings as the state Secret holds them, keyed
+// by hash, and nothing for none, as the other lists are; encoding/json writes
+// the keys sorted, so a State saves the same bytes whatever order its maps
+// hold them in.
+func (s State) pendingData() []byte {
+	if len(s.pending()) == 0 {
+		return []byte{}
+	}
+	records := make(map[string]pendingRecord, len(s.pending()))
+	for hash, letGo := range s.pending() {
+		keys := slices.SortedFunc(maps.Values(letGo), secretref.Compare)
+		optional := make([]string, len(keys))
+		for i, k := range keys {
+			optional[i] = k.String()
+		}
+		records[hash] = pendingRecord{Optional: optional}
+	}
+	data, err := json.Marshal(records)
+	if err != nil {
+		// A map of strings to a struct of strings always encodes; were it
+		// ever not to, nothing pending is the State's zero, which costs a
+		// revision read as requiring every name and nothing else.
+		return []byte{}
+	}
+	return data
 }
 
 // keyLines are the lines of data that are Secret keys as secretref.Key prints
@@ -375,6 +806,81 @@ func parseKey(line string) (secretref.Key, bool) {
 		return secretref.Key{}, false
 	}
 	return k, true
+}
+
+// markLines are the lines of data that are names Owns accepts, each with the
+// epoch after it, nil for none. A name with no epoch after it, or one that is
+// not a number no lower than zero, is unread: only a hand edit writes the
+// second, and reading it as an epoch could settle a change no activation
+// read.
+func markLines(data []byte) map[string]int64 {
+	var marks map[string]int64
+	for line := range strings.Lines(string(data)) {
+		name, epoch, read := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+		if !Owns(name) {
+			continue
+		}
+		mark := int64(unread)
+		if n, err := strconv.ParseInt(epoch, 10, 64); read && err == nil && n >= 0 {
+			mark = n
+		}
+		if marks == nil {
+			marks = map[string]int64{}
+		}
+		marks[name] = mark
+	}
+	return marks
+}
+
+// marked is marks one per line, sorted by name, each followed by its epoch
+// where a read has followed it, never nil.
+func marked(marks map[string]int64) []byte {
+	out := []byte{}
+	for _, name := range slices.Sorted(maps.Keys(marks)) {
+		out = append(out, name...)
+		if mark := marks[name]; mark != unread {
+			out = append(out, ' ')
+			out = strconv.AppendInt(out, mark, 10)
+		}
+		out = append(out, '\n')
+	}
+	return out
+}
+
+// awaitLines are the lines of data that are a name Owns accepts and a
+// revision, the revisions of each name sorted, nil for none. A line that is
+// not one is dropped: only a hand edit writes it, and the cost is the one a
+// lost record of an unconfirmed activation costs, an activation asked for
+// again.
+func awaitLines(data []byte) map[string][]string {
+	var awaits map[string][]string
+	for line := range strings.Lines(string(data)) {
+		name, revision, ok := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+		if !ok || !Owns(name) || revision == "" || strings.ContainsAny(revision, " \t") ||
+			slices.Contains(awaits[name], revision) {
+			continue
+		}
+		if awaits == nil {
+			awaits = map[string][]string{}
+		}
+		awaits[name] = append(awaits[name], revision)
+	}
+	for name := range awaits {
+		slices.Sort(awaits[name])
+	}
+	return awaits
+}
+
+// awaitedLines is awaits one change and one revision per line, sorted by
+// name and then revision, never nil.
+func awaitedLines(awaits map[string][]string) []byte {
+	out := []byte{}
+	for _, name := range slices.Sorted(maps.Keys(awaits)) {
+		for _, revision := range awaits[name] {
+			out = append(out, name+" "+revision+"\n"...)
+		}
+	}
+	return out
 }
 
 // ownedLines are the lines of data that are names Owns accepts, as a set,
@@ -427,25 +933,29 @@ func SaveState(ctx context.Context, c client.Client, ref types.NamespacedName, o
 	if err != nil {
 		return fmt.Errorf("finding the kind of the owner of the secret sync state %s: %w", ref, err)
 	}
-	data := make(map[string][]byte, len(s.fingerprints)+5)
+	data := make(map[string][]byte, len(s.fingerprints)+7)
 	maps.Copy(data, s.fingerprints)
 	if len(s.key) > 0 {
 		data[fingerprintKeyField] = []byte(s.key)
 	}
 	// Written when they are empty too, so this field manager owns them: a
 	// list it left out would stay where a hand edit put it, and every
-	// reconcile would activate a revision for names it withdrew long ago,
-	// or take a revision whose reading it does not know for one that lets
-	// a name go.
-	data[withdrawnField] = lines(s.Withdrawn())
-	data[revisionField] = []byte(s.revision)
-	keys := slices.SortedFunc(maps.Values(s.letGo), secretref.Compare)
+	// reconcile would activate a revision for names it withdrew or wrote
+	// long ago, or take a revision whose reading it does not know for one
+	// that lets a name go.
+	data[withdrawnField] = marked(s.withdrawn)
+	data[writtenField] = marked(s.written)
+	data[awaitField] = awaitedLines(s.awaited())
+	reading := s.reading()
+	data[revisionField] = []byte(reading.revision)
+	keys := slices.SortedFunc(maps.Values(reading.letGo), secretref.Compare)
 	printed := make([]string, len(keys))
 	for i, k := range keys {
 		printed[i] = k.String()
 	}
 	data[letGoField] = lines(printed)
 	data[retainedField] = lines(s.Retained())
+	data[pendingField] = s.pendingData()
 	secret := corev1ac.Secret(ref.Name, ref.Namespace).
 		WithLabels(map[string]string{
 			"app.kubernetes.io/name":       "crewlet",

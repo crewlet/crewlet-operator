@@ -1097,10 +1097,17 @@ var _ = Describe("Company config", Ordered, func() {
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 
 		By("a person activating the running document again")
-		_, err := engine.New(e.URL, e.AccessToken).ReloadConfig(ctx, "reloaded by a person")
+		reloaded, err := engine.New(e.URL, e.AccessToken).ReloadConfig(ctx, "reloaded by a person")
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(count).WithTimeout(settle).Should(Equal(3))
 		Consistently(count).WithTimeout(3 * quietPeriod).Should(Equal(3))
+		Eventually(func(g Gomega) crewletaiv1alpha1.ConfigStatus {
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(c), c)).To(Succeed())
+			return c.Status.Config
+		}).WithTimeout(settle).Should(SatisfyAll(
+			HaveField("RevisionID", reloaded.RevisionID),
+			HaveField("Epoch", HaveValue(Equal(reloaded.Epoch))),
+		), "the reload is adopted at its own epoch, not at the epoch of the revision it replaced")
 
 		By("deleting the key's Secret")
 		Expect(k8sClient.Delete(ctx, &corev1.Secret{Namespace: namespace, Name: name + "-npm"})).To(Succeed())
@@ -1109,7 +1116,10 @@ var _ = Describe("Company config", Ordered, func() {
 		Consistently(count).WithTimeout(6*time.Second).Should(Equal(4),
 			"a revision was activated with the deleted Secret's value in the store, and activated again")
 		Eventually(startedWith).WithTimeout(settle).ShouldNot(HaveKey(optionalRegistry))
-		Expect(log.of(name)).NotTo(ContainElement(HavePrefix("Normal Reactivated ")))
+		// The engine runs the rendered document, which read every value the
+		// store still holds, so the one activation owed is the reload of it
+		// without the deleted value, not a write of the same document again.
+		Expect(log.of(name)).To(ContainElement(HavePrefix("Normal Reactivated ")))
 		Expect(log.of(name)).NotTo(ContainElement(HavePrefix("Normal SecretKept ")))
 		applied(c, crewletaiv1alpha1.ReasonApplied)
 		runsRendered(e, c)

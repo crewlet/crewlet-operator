@@ -35,10 +35,10 @@ func companyCases() []companyCase {
 	return []companyCase{
 		// The example company every page of the docs uses.
 		{name: sampleCompany, exposed: true},
-		{name: "minimal", advisories: agentsAlone},
+		{name: caseMinimal, advisories: agentsAlone},
 		{name: "minimal-agent", advisories: agentsAlone},
 		{name: "org-chart"},
-		{name: "slack", exposed: true, advisories: agentsAlone},
+		{name: caseSlack, exposed: true, advisories: agentsAlone},
 		{name: "slack-phrases", exposed: true, advisories: agentsAlone},
 		{name: "github-enterprise", exposed: true, advisories: agentsAlone},
 		{name: "github-minimal", exposed: true, advisories: agentsAlone},
@@ -51,6 +51,7 @@ func companyCases() []companyCase {
 		{name: caseAtlassian, exposed: true},
 		{name: caseSeatPools},
 		{name: caseOptionalKeys, advisories: []advisory{advisoryNoUnitChannel}},
+		{name: "chat"},
 	}
 }
 

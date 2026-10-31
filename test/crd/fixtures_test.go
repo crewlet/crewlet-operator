@@ -174,6 +174,8 @@ const (
 	msgS3EndpointHost              = "endpoint's host must be a name, an IPv4 address or an IPv6 address in brackets"
 	msgS3EndpointPort              = "endpoint's port must be 1 to 65535"
 	msgUnitID                      = "a Unit's name is its Crewlet unit id"
+	msgChatlet                     = "chatlet applies to backend Chatlet only, or to no backend"
+	msgChatRetention               = "messageRetentionDays must be 0, which keeps messages for ever, or 30 to 3650"
 	msgDuplicate                   = "Duplicate value"
 	msgThreeReplicas               = "Unsupported value: 3"
 	msgStorageFloor                = "size must be at least 11Gi"

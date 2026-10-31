@@ -231,15 +231,39 @@ func bounded(message string) string {
 	return message[:cut] + ellipsis
 }
 
-// sentences joins findings into one message, each ending with a period.
+// sentences joins findings into one message, each ending as ended ends it.
 func sentences(findings []string) string {
 	out := make([]string, len(findings))
 	for i, f := range findings {
-		f = capitalize(strings.TrimSpace(f))
-		if !strings.HasSuffix(f, ".") {
-			f += "."
-		}
-		out[i] = f
+		out[i] = ended(capitalize(strings.TrimSpace(f)))
 	}
 	return strings.Join(out, " ")
+}
+
+// ended is text as the end of a sentence: with a full stop added where it
+// has none, and as it is where it already ends with one, or with "!" or "?",
+// or with a parenthesis that closes on one.
+//
+// THE ONE RULE FOR A MESSAGE THAT ENDS IN WORDS IT QUOTES. A condition or an
+// event often ends with what somebody else said: the engine's refusal, its
+// account of an apply that failed, or an error that carries either. The
+// engine writes those as sentences, each with its full stop, while an error of
+// the operator's own or of Go's has none. So a message that added a full stop
+// to what it quoted ended "...won't change that.." whenever the quote was the
+// engine's, and one that added none ended without a stop whenever it was not.
+// The engine ends its own details and hints by the same rule (crewlet's
+// internal/api/httpjson, Sentence). The parenthesis is the client's: an
+// *engine.APIError quotes the engine's hint in parentheses after its message,
+// and the hint is a sentence with its own full stop, so a message quoting one
+// already ends inside them and a stop after them would end it twice ("….).").
+// TestQuotedEndingsGoThroughEnded holds every message of the package to it.
+func ended(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return text
+	}
+	if body := strings.TrimSuffix(text, ")"); body != "" && strings.ContainsRune(".!?", rune(body[len(body)-1])) {
+		return text
+	}
+	return text + "."
 }

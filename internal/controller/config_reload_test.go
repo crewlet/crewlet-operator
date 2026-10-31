@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/crewlet/crewlet-operator/internal/engine"
 	"github.com/crewlet/crewlet-operator/internal/secretref"
 	"github.com/crewlet/crewlet-operator/internal/secretsync"
 )
@@ -75,6 +77,9 @@ func TestARotationIsTheEnginesOneActivation(t *testing.T) {
 	if state := w.state(t); state.Recorded() != "r2" || !slices.Equal(state.LetGo("r2"), []string{w.registry}) {
 		t.Fatalf("the state records %q letting %v go, want r2 read as the rendered document", state.Recorded(), state.LetGo("r2"))
 	}
+	if owed := w.state(t).Written(); len(owed) != 0 {
+		t.Errorf("the state owes %v, want nothing: r2 activated after the sync wrote the rotated value", owed)
+	}
 	if !slices.ContainsFunc(recorded, func(e string) bool { return strings.HasPrefix(e, "Normal Activated Activated revision r2 ") }) {
 		t.Errorf("events %q, want r2's activation", recorded)
 	}
@@ -89,33 +94,25 @@ func TestARotationIsTheEnginesOneActivation(t *testing.T) {
 }
 
 // TestARotationIsAppliedWhereTheEngineDidNotReactivate: an engine whose
-// write re-activated nothing, or failed to, or whose re-activation somebody
-// else's write overtook before the operator read it back, leaves the apply
-// to the operator, which writes the rendered document itself.
+// write re-activated nothing, or failed to, leaves the apply to the
+// operator, which writes the rendered document itself.
 func TestARotationIsAppliedWhereTheEngineDidNotReactivate(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		// reload is what the engine answers of its re-activation instead
 		// of making one; nil for one it makes.
 		reload *map[string]any
-		// overtaken is whether somebody else activates the rendered
-		// document again right after the engine's re-activation.
-		overtaken bool
-		want      []string
+		want   []string
 	}{
 		{name: "nothing read the value", reload: new(map[string]any(nil)), want: []string{"r1", "r2"}},
 		{name: "the re-activation lost a race", reload: failedReload("revision_advanced", "another configuration write activated first"),
 			want: []string{"r1", "r2"}},
 		{name: "the re-activation could not be confirmed", reload: failedReload("unavailable", "the coordination store did not answer"),
 			want: []string{"r1", "r2"}},
-		{name: "somebody else's write overtook it", overtaken: true, want: []string{"r1", "r2", "r3", "r4"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := newRotation(t)
 			w.engine.reloadAnswer = tc.reload
-			if tc.overtaken {
-				w.engine.afterSecretsReload = func(e *storeEngine) { e.activateOther(e.revisions[len(e.revisions)-1].document) }
-			}
 			if err := w.enforce(t); err != nil {
 				t.Fatal(err)
 			}
@@ -141,4 +138,56 @@ func TestARotationIsAppliedWhereTheEngineDidNotReactivate(t *testing.T) {
 func failedReload(code, detail string) *map[string]any {
 	failed := refusal(code, detail)
 	return &failed
+}
+
+// TestARotationAnotherWriteOvertookIsNotWrittenOver: somebody else activates
+// the rendered document again right after the engine's re-activation at the
+// rotation, before the operator reads it back. The operator's write is
+// conditioned on the revision its reconcile read, so the engine refuses it
+// rather than store it over theirs unseen, and the next reconcile, from a
+// fresh read, writes the document on their revision: it cannot tell their
+// activation came after the rotated value, since it read the fleet after
+// both.
+func TestARotationAnotherWriteOvertookIsNotWrittenOver(t *testing.T) {
+	w := newRotation(t)
+	w.engine.afterSecretsReload = func(e *storeEngine) { e.activateOther(e.revisions[len(e.revisions)-1].document) }
+	if err := w.enforce(t); !errors.Is(err, engine.ErrRevisionAdvanced) {
+		t.Fatalf("enforce() = %v, want the write refused as a lost race", err)
+	}
+	if got := w.engine.ids(); !slices.Equal(got, []string{"r1", "r2", "r3"}) {
+		t.Fatalf("the revisions are %v, want r1, the engine's r2 and the other writer's r3: nothing written over r3", got)
+	}
+	w.again(t, w.statusWritten())
+	if err := w.enforce(t); err != nil {
+		t.Fatal(err)
+	}
+	written, _ := w.engine.writes()
+	if conditions := w.engine.writtenOn(); !slices.Equal(written, []string{"r4"}) ||
+		!slices.Equal(conditions, []string{"r3"}) {
+		t.Fatalf("the operator wrote %v on the conditions %v, want r4 on r3", written, conditions)
+	}
+	if owed := w.state(t).Written(); len(owed) != 0 {
+		t.Errorf("the state owes %v, want nothing after r4", owed)
+	}
+}
+
+// TestAWriteAfterTheEnginesActivationAtTheSyncIsConditionedOnIt: the engine
+// runs somebody else's document, and a rotated value has the engine activate
+// it again as the sync writes the value. The operator's write of the rendered
+// document is conditioned on that activation, read back as the same document,
+// not on the revision the reconcile read before the sync: conditioned on that
+// one, every rotation that came with a change of the document was refused as
+// a lost race and written again by a second reconcile.
+func TestAWriteAfterTheEnginesActivationAtTheSyncIsConditionedOnIt(t *testing.T) {
+	w := newWithdrawal(t, runningOther)
+	w.rotate(t)
+	if err := w.enforce(t); err != nil {
+		t.Fatal(err)
+	}
+	written, refused := w.engine.writes()
+	if conditions := w.engine.writtenOn(); !slices.Equal(written, []string{"r3"}) || refused != 0 ||
+		!slices.Equal(conditions, []string{"r2"}) {
+		t.Fatalf("the operator wrote %v on the conditions %v (and %d were refused), want r3 alone, conditioned on "+
+			"r2, the engine's activation at the sync", written, conditions, refused)
+	}
 }

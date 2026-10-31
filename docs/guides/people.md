@@ -44,8 +44,10 @@ spec:
 
 - `contact` is optional. It names the person's chat accounts, so that an
   agent can mention or message them on Slack or Mattermost; a person who
-  works only through the dashboard needs none. Crewlet warns of a Human seat
-  without one, which the operator reports as an `EngineWarnings` event
+  works only through the dashboard needs none. On a company that talks on
+  either, Crewlet warns of a Human seat with no account there, which the
+  operator reports as an `EngineWarnings` event; on Chatlet, which a company
+  with neither talks on, it warns of nothing
   ([A person's accounts](integrations.md#a-persons-accounts)).
 - `email` is optional too, and unique: two Seats of one company may not
   declare one address, compared as Crewlet compares them (case aside, and
@@ -167,7 +169,7 @@ kubectl get secret acme-api-access -n acme -o jsonpath='{.data.token}' | base64 
 
 In the dashboard, the sign-in page puts its token form first while nobody
 has joined (**Sign in with token**; once somebody has, it is folded under
-**Use an API token instead**). Paste the token, open **Agents › Org chart**,
+**Use an API token instead**). Paste the token, open **Company › Org chart**,
 open your seat (drawn **Open seat**) and choose:
 
 - **Invite**: your address, and **Admin** ticked. The invitation link is
@@ -202,8 +204,8 @@ wait for it: a company nobody has joined runs its agents all the same.
 
 ## Everyone after
 
-People with `admin` invite and create the others in the dashboard (**Agents ›
-Org chart**, on the person's seat; **Settings › People & access** to change,
+People with `admin` invite and create the others in the dashboard (**Company ›
+Org chart**, on the person's seat; **Settings › People** to change,
 suspend or remove them), or with `crewlet iam`. Each needs a vacant Human
 seat: add the Seat first. Under `Enforce` the company document is read-only in
 the dashboard, so a seat is added as a `Seat` object, not there

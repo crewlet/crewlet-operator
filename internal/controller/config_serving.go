@@ -396,7 +396,7 @@ func (run *configRun) heldSentence() string {
 	if len(run.serving.unread) > 0 {
 		why = append(why, "a revision the operator does not know of "+strings.Join(run.serving.unread, ", "))
 	}
-	return fmt.Sprintf(" It keeps %d %s the revision the engine is to run no longer needs, for %s, until no pod runs or "+
-		"boots on a revision that does: %s.", len(held), plural(len(held), "value", "values"), strings.Join(why, "; and "),
-		strings.Join(held, ", "))
+	return " " + ended(fmt.Sprintf("It keeps %d %s the revision the engine is to run no longer needs, for %s, until no pod "+
+		"runs or boots on a revision that does: %s", len(held), plural(len(held), "value", "values"), strings.Join(why, "; and "),
+		strings.Join(held, ", ")))
 }

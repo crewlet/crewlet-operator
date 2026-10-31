@@ -1,0 +1,22 @@
+chat:
+  backend: chatlet
+  chatlet:
+    default_channel_private: true
+    message_retention_days: 90
+    typing_status: addressed
+name: Talky
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack
+units:
+- channel: team
+  id: team
+  name: Team
+  roles:
+  - handle: founder
+    kind: human
+    name: Founder

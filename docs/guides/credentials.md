@@ -423,6 +423,15 @@ kubectl get company acme -n acme -o jsonpath='{.status.config.revisionID}{"\n"}'
 A change that leaves every referenced value as it was (a label, an
 annotation, another key nothing references) writes nothing.
 
+The new value reaches the engine even while it refuses the rendered
+document (`ConfigApplied=False`, say for a seat somebody holds): no revision
+of the document is written then, but the revision the engine runs is
+activated again, unchanged, with a `Reactivated` event naming the store
+entry, as long as that revision uses the value: the engine does so itself
+as the value is written, and the operator asks for it where the engine's
+activation failed. A Warning `SecretRefreshFailed` says it could not, and
+when it tries again.
+
 To rotate a provider's key without a moment where the vendor refuses the
 one in use, mind the order: write the new key into the Secret, wait for the
 revision that carries it, and only then revoke the old key at the vendor.

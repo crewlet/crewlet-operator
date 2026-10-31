@@ -134,9 +134,11 @@ operator's under the `Enforce` policy, under which it keeps the store in step
 with the Secrets ([Management policies](../concepts/applying.md#management-policies)),
 and it holds where the revision the engine runs goes without the value too.
 A revision that reads the key as required, as the one from before you listed
-the key does, or another document somebody else activated, whose reading the
-operator does not know, keeps the value it holds until the next document
-runs, as the last good revision keeps every value it requires; the Company's
+the key does, another document somebody else activated, whose reading the
+operator does not know, or a revision the engine stores without a seal, which
+nobody can read while its nodes run the one before it, keeps the value it
+holds until the next document runs, as the last good revision keeps every
+value it requires; the Company's
 `SecretsSynced`, the object's `ResolvedRefs` message and a `SecretKept` event
 say so (a document the render holds is told by the event alone). Once no
 engine pod runs, or would start on, a revision that requires it, the operator
@@ -512,9 +514,15 @@ Site URL's path. `mcp-server-mattermost` sends every call to that address
 with `httpx`, which follows no redirect unless told to, and it never tells
 it, so at an address Mattermost redirects no agent can post.
 
-The prefix makes its posting tool `mattermost_post_message`, the name
-Crewlet's [mentions skill](https://github.com/crewlet/crewlet/blob/main/examples/tool-skills/platform-mentions.md)
-triggers on. Each seat gives it `MATTERMOST_TOKEN`, the bot token of its
+The prefix makes the server's tools `mattermost_post_message`,
+`mattermost_update_message`, `mattermost_list_my_channels`,
+`mattermost_list_public_channels` and `mattermost_search_users`, the names
+Crewlet's bundled [tool skills](https://github.com/crewlet/crewlet/tree/main/examples/tool-skills)
+trigger on: its [mentions skill](https://github.com/crewlet/crewlet/blob/main/examples/tool-skills/platform-mentions.md)
+among them, which teaches a seat Mattermost's `@username` mentions and thread
+replies before its first post. Under another prefix, or a release that
+renames one of those tools, the skills go quiet without a word. Each seat
+gives it `MATTERMOST_TOKEN`, the bot token of its
 `spec.integrations.mattermost`
 ([Mattermost](integrations.md#mattermost); Crewlet's
 [Mattermost](https://github.com/crewlet/crewlet/blob/main/docs/integrations/mattermost.md#configure-in-yaml)).
@@ -576,6 +584,15 @@ spec:
       value: "true"
   toolPrefix: slack_
 ```
+
+The prefix does here what it does on Mattermost: it makes the server's tools
+`slack_conversations_add_message`, `slack_channels_list`,
+`slack_channels_me` and `slack_users_search`, the names the same bundled
+skills trigger on, so a seat posting on Slack is taught Slack's
+`<@member-id>` mentions and thread replies before its first post. Under
+another prefix, or a release that renames one of those tools, they go quiet
+without a word (Crewlet's
+[Slack](https://github.com/crewlet/crewlet/blob/main/docs/integrations/slack.md#configure-in-yaml)).
 
 `slack-mcp-server` registers `conversations_add_message`, its only tool that
 posts, when `SLACK_MCP_ADD_MESSAGE_TOOL` is set, or when

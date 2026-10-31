@@ -23,10 +23,11 @@ import (
 // never puts the real engine in. The real engine's ordinary path, an apply
 // that reaches ConfigApplied=True, is the envtest suite's (config_test.go).
 
-// fakeEngine answers /health and /fleet with the bodies it holds, and counts
-// the /fleet reads.
+// fakeEngine answers /health and /fleet with the bodies it holds, /fleet
+// with fleetStatus where it is set, and counts the /fleet reads.
 type fakeEngine struct {
 	health, fleet string
+	fleetStatus   int
 	fleetReads    int
 }
 
@@ -39,6 +40,9 @@ func (f *fakeEngine) client(t *testing.T) *engine.Client {
 			_, _ = w.Write([]byte(f.health))
 		case fleetRoute:
 			f.fleetReads++
+			if f.fleetStatus != 0 {
+				w.WriteHeader(f.fleetStatus)
+			}
 			_, _ = w.Write([]byte(f.fleet))
 		default:
 			http.NotFound(w, r)

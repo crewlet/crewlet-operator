@@ -653,6 +653,16 @@ func TestSeatPodsCarryNoSignIn(t *testing.T) {
 	}
 }
 
+// The least whole-GiB data volumes whose stream share holds what a fresh node
+// reserves, by where a class keeps its files: the broker's bucket beside the
+// logs, or S3 (leastDataVolume of freshNodeBucketFloor and
+// freshNodeLogsFloor), which the EngineClass's floors on data.storage.size
+// are.
+const (
+	leastBucketVolume = "14Gi"
+	leastLogsVolume   = "11Gi"
+)
+
 // TestBootstrapBoundsTheStreamByTheVolume pins the event stream's share of
 // the volume: three quarters of the claim the pod runs on, whatever the
 // class says now, since the claim is what the pod was given, and never more
@@ -663,7 +673,7 @@ func TestBootstrapBoundsTheStreamByTheVolume(t *testing.T) {
 		size string
 		want int64
 	}{
-		{size: "12Gi", want: 9 << 30},
+		{size: leastBucketVolume, want: 14 << 30 / 4 * 3},
 		{size: "85Ti", want: 85 << 40 / 4 * 3},
 		{size: "93824992236884", want: 70368744177663},
 		{size: "93824992236888", want: storeMaxBytesCeiling},
@@ -691,6 +701,56 @@ func TestBootstrapBoundsTheStreamByTheVolume(t *testing.T) {
 				t.Fatalf("stream.store_max_bytes = %d for a %s volume, want %d", got.Stream.StoreMaxBytes, c.size, c.want)
 			}
 		})
+	}
+}
+
+// TestBootstrapRefusesAVolumeUnderTheStreamFloor holds the render to what a
+// fresh node of Crewlet reserves on its stream, for each place a class keeps
+// its files: a volume whose share is under it, which a company keeps from an
+// older floor, is refused as a *VolumeError naming the volume, the stream it
+// gives, what a fresh node reserves and the least whole-GiB volume that holds
+// it, rather than rendered into a crewlet.yaml no node with a state log to
+// create boots on; the least such volume renders.
+func TestBootstrapRefusesAVolumeUnderTheStreamFloor(t *testing.T) {
+	for _, c := range []struct {
+		bootstrap, size, least string
+		stream, floor          int64
+	}{
+		{bootstrap: caseNATS, size: "12Gi", stream: 12 << 30 / 4 * 3, floor: freshNodeBucketFloor, least: leastBucketVolume},
+		{bootstrap: caseNATS, size: "13Gi", stream: 13 << 30 / 4 * 3, floor: freshNodeBucketFloor, least: leastBucketVolume},
+		// A byte under the least volume whose share holds the reservation.
+		{bootstrap: caseNATS, size: "14435862299", stream: 14435862299 / 4 * 3, floor: freshNodeBucketFloor,
+			least: leastBucketVolume},
+		{bootstrap: caseNATS, size: "0", stream: 0, floor: freshNodeBucketFloor, least: leastBucketVolume},
+		{bootstrap: "s3", size: "9Gi", stream: 9 << 30 / 4 * 3, floor: freshNodeLogsFloor, least: leastLogsVolume},
+		{bootstrap: "s3", size: "10826896727", stream: 10826896727 / 4 * 3, floor: freshNodeLogsFloor, least: leastLogsVolume},
+	} {
+		t.Run(c.bootstrap+"/"+c.size, func(t *testing.T) {
+			in := bootstrapCaseNamed(t, c.bootstrap).input(t)
+			in.VolumeSize = resource.MustParse(c.size)
+			doc, err := Bootstrap(in)
+			refused, ok := errors.AsType[*VolumeError](err)
+			if !ok || !errors.Is(err, ErrVolumeTooSmall) || doc != nil {
+				t.Fatalf("Bootstrap of a %s volume = %v, %v; want a *VolumeError", c.size, doc, err)
+			}
+			if !refused.Volume.Equal(in.VolumeSize) || refused.Stream != c.stream || refused.Floor != c.floor ||
+				refused.Least.String() != c.least {
+				t.Errorf("the refusal of a %s volume names %s, a stream of %d under %d and a least volume of %s; "+
+					"want %s, %d under %d and %s", c.size, refused.Volume.String(), refused.Stream, refused.Floor,
+					refused.Least.String(), c.size, c.stream, c.floor, c.least)
+			}
+		})
+	}
+	for _, c := range []struct{ bootstrap, size string }{
+		{bootstrap: caseNATS, size: "14435862300"}, {bootstrap: caseNATS, size: leastBucketVolume},
+		{bootstrap: "s3", size: "10826896728"}, {bootstrap: "s3", size: leastLogsVolume},
+	} {
+		in := bootstrapCaseNamed(t, c.bootstrap).input(t)
+		in.VolumeSize = resource.MustParse(c.size)
+		if _, err := Bootstrap(in); err != nil {
+			t.Errorf("Bootstrap refuses a %s volume with files in %s, whose share holds a fresh node: %v", c.size,
+				c.bootstrap, err)
+		}
 	}
 }
 

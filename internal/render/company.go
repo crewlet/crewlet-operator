@@ -485,10 +485,18 @@ func (r *renderer) company() companyDoc {
 			RootSpace:       spec.Knowledge.RootSpace,
 			Vectors:         spec.Knowledge.Vectors,
 		},
+		Chat:        chatDoc{Backend: chatBackend(spec.Chat.Backend)},
 		TokenBudget: tokenBudget(spec.TokenBudget),
 	}
 	if days := spec.Tracker.Worklet.InboxRetentionDays; days != 0 {
 		doc.Tracker.Worklet = &trackerWorkletDoc{InboxRetentionDays: days}
+	}
+	if chatlet := spec.Chat.Chatlet; chatlet != (v1alpha1.ChatletSettings{}) {
+		doc.Chat.Chatlet = &chatletDoc{
+			MessageRetentionDays:  chatlet.MessageRetentionDays,
+			DefaultChannelPrivate: chatlet.DefaultChannelPrivate,
+			TypingStatus:          workingStatus(chatlet.TypingStatus),
+		}
 	}
 	doc.Providers = r.providersDoc()
 	doc.Assistant = r.assistant()

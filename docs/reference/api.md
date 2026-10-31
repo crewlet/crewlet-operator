@@ -91,6 +91,7 @@ _Validation:_
 
 _Appears in:_
 - [ConfigStatus](#configstatus)
+- [UnconfirmedRevision](#unconfirmedrevision)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -363,6 +364,65 @@ _Appears in:_
 | --- | --- |
 | `Allowed` | CLIAgentWebToolsAllowed keeps the CLI's web tools, every seat's<br />default.<br /> |
 | `Denied` | CLIAgentWebToolsDenied runs the CLI with its web tools off.<br /> |
+
+
+#### ChatBackend
+
+_Underlying type:_ _string_
+
+ChatBackend is which chat surface a company runs. It maps onto Crewlet's
+chat.backend (Chatlet is `chatlet`, Vendor is `vendor`, None is `none`).
+
+_Validation:_
+- Enum: [Chatlet Vendor None]
+
+_Appears in:_
+- [ChatSettings](#chatsettings)
+
+| Field | Description |
+| --- | --- |
+| `Chatlet` | ChatChatlet is Chatlet, Crewlet's own chat: rooms the engine keeps, a<br />room for each unit's channel, read on the dashboard.<br /> |
+| `Vendor` | ChatVendor is the Slack or Mattermost the company's Integrations (or<br />a seat's Slack app) connect it to.<br /> |
+| `None` | ChatNone is a company with no chat.<br /> |
+
+
+#### ChatSettings
+
+
+
+ChatSettings is which chat surface a company runs and the policy of
+Chatlet. It maps onto Crewlet's chat block.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [CompanySpec](#companyspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `backend` _[ChatBackend](#chatbackend)_ | backend is which chat surface the company runs. Unset derives it, as<br />Crewlet does: Vendor for a company with a Slack or Mattermost<br />Integration or a seat with a Slack app, Chatlet for every other. So<br />there is no default here: a Chatlet written beside such an<br />Integration, or a Vendor without one, is refused by the engine's dry<br />run, reported on the Company, since a company's conversations cannot<br />live in two places. |  | Enum: [Chatlet Vendor None] <br />Optional: \{\} <br /> |
+| `chatlet` _[ChatletSettings](#chatletsettings)_ | chatlet is the policy of Chatlet: for backend Chatlet, or for no<br />backend on a company Crewlet derives Chatlet for. On a company whose<br />chat is a vendor's nothing would read it, so the engine's dry run<br />refuses it there, reported on the Company. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+
+
+#### ChatletSettings
+
+
+
+ChatletSettings is the policy of Chatlet. It maps onto Crewlet's
+chat.chatlet.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [ChatSettings](#chatsettings)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `messageRetentionDays` _integer_ | messageRetentionDays is how long a message lives before the engine<br />prunes it: 0 keeps messages for ever, and a horizon is 30 to 3650<br />days, since under a month somebody away could miss a decision before<br />reading it. Unset takes Crewlet's default of 365. Crewlet's<br />`message_retention_days`. |  | Maximum: 3650 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `defaultChannelPrivate` _boolean_ | defaultChannelPrivate makes a room created without a stated<br />visibility private; unset, such a room is public, readable by the<br />company's seats. A room created with a visibility keeps it. Crewlet's<br />`default_channel_private`. |  | Optional: \{\} <br /> |
+| `typingStatus` _[WorkingStatus](#workingstatus)_ | typingStatus is when a seat shows in a room that it is working on a<br />message. Unset takes Crewlet's default, Always. Crewlet's<br />`typing_status`. |  | Enum: [Always Addressed] <br />Optional: \{\} <br /> |
 
 
 #### ClassEnvVar
@@ -666,13 +726,14 @@ _Appears in:_
 | `timeZone` _string_ | timeZone is the company's clock, an IANA time zone such as<br />Europe/Berlin: where its days begin for budgets, due dates and<br />schedules. Unset is UTC. Crewlet's `timezone`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)*$` <br />Optional: \{\} <br /> |
 | `tracker` _[TrackerSettings](#trackersettings)_ | tracker is which work tracker the company runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `knowledge` _[KnowledgeSettings](#knowledgesettings)_ | knowledge is which knowledge base the company runs. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `chat` _[ChatSettings](#chatsettings)_ | chat is which chat surface the company runs: Chatlet, Crewlet's own,<br />unless it is connected to Slack or Mattermost. Crewlet's `chat`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `tokenBudget` _[TokenBudget](#tokenbudget)_ | tokenBudget caps the tokens all seats together may spend per window.<br />Each window binds every agent seat, so Crewlet refuses one below<br />turn_engine.executor_min_budget_tokens (25000 unless spec.engineConfig<br />sets turn_engine): an executor launch needs that much of every window<br />left, and a seat under a smaller ceiling would never launch one. The<br />refusal comes from the engine's dry run, Invalid on the Company.<br />Crewlet's `token_budget`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `llm` _[CompanyLLMSettings](#companyllmsettings)_ | llm is how the company chooses among its model providers. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `assistant` _[CompanyAssistant](#companyassistant)_ | assistant configures Ask Crewlet. Unset leaves it off.<br />Crewlet's `assistant`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `embeddings` _[EmbeddingSettings](#embeddingsettings)_ | embeddings is the provider vectors are computed with. Unset leaves<br />search keyword-only. Crewlet's providers.embeddings. |  | Optional: \{\} <br /> |
 | `sandbox` _[SandboxSettings](#sandboxsettings)_ | sandbox is where the company's agent seats' executors run. Required<br />of a company with an Agent seat and a model provider, which Crewlet<br />refuses without it (SandboxRequired). Crewlet's providers.sandbox. |  | Optional: \{\} <br /> |
 | `integrations` _[CompanyIntegrationSettings](#companyintegrationsettings)_ | integrations is company-wide integration behaviour. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, token_budget,<br />assistant, providers, integrations, mcp_servers, roles, units or<br />seat_access_migrated, which the operator writes with every<br />integration kind so the engine acts on each Seat's<br />spec.integrations. Every<br />position Crewlet holds a credential in lives under one of those keys, so<br />engineConfig can never carry a credential: the API server refuses a<br />Company whose engineConfig names one of them, before anything is<br />stored. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables, artifacts and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, chat,<br />token_budget, assistant, providers, integrations, mcp_servers, roles,<br />units or seat_access_migrated, which the operator writes with every<br />integration kind so the engine acts on each Seat's spec.integrations.<br />Every position Crewlet holds a credential in lives under one of those<br />keys, so engineConfig can never carry a credential: the API server<br />refuses a Company whose engineConfig names one of them, before anything<br />is stored. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
 | `config` _[ConfigSettings](#configsettings)_ | config is how the operator manages the company's document. | \{ managementPolicy:Enforce \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `topology` _[CompanyTopology](#companytopology)_ | topology is how the engine is laid out in pods. | \{ data:map[replicas:1] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `exposure` _[CompanyExposure](#companyexposure)_ | exposure overrides how the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
@@ -760,9 +821,11 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `revisionID` _string_ | revisionID is the engine's id of the last revision the operator saw<br />run the rendered document: the one it applied, one the engine<br />activated with the same content (a reload), or, under Observe, the<br />one it found in sync. Under Seed it is the revision the document was<br />seeded as. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `epoch` _integer_ | epoch is the engine's activation counter for that revision. The<br />engine applies a revision asynchronously; it runs it once the applied<br />epoch its /health reports has reached this. |  | Minimum: 0 <br />Optional: \{\} <br /> |
-| `appliedHash` _string_ | appliedHash is the hash of the rendered document and of the values<br />of the Secret keys it references, as last applied: a change to<br />either is applied as a new revision, since the engine reads a<br />rotated value only when a revision activates. The values enter it<br />only as keyed fingerprints, so it reveals nothing about them. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
-| `appliedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#time-v1-meta)_ | appliedAt is when the operator last applied a revision. |  | Optional: \{\} <br /> |
+| `appliedHash` _string_ | appliedHash is the hash of the rendered document and of the values<br />of the Secret keys it references, as the revision recorded runs<br />them: the operator's last write, or a revision it found running that<br />document after every value it wrote. The values enter it only as<br />keyed fingerprints, so it reveals nothing about them. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `appliedAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#time-v1-meta)_ | appliedAt is when the operator activated the revision this records,<br />or found the engine running it where it adopted a revision of the<br />rendered document it did not write (a reload), or a write of its own<br />whose activation the engine could not confirm (unconfirmed), which may<br />have landed any time since it was written: what the operator's wait<br />for the engine to apply its epoch counts from. |  | Optional: \{\} <br /> |
 | `objects` _[AppliedObjectCounts](#appliedobjectcounts)_ | objects counts the objects the revision was rendered from. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `unconfirmed` _[UnconfirmedRevision](#unconfirmedrevision) array_ | unconfirmed are the revisions of the rendered document the operator<br />wrote, which the engine stored, and whose activation the engine sent<br />to its fleet and could not confirm (a 503 naming the revision it<br />stored): the fleet may run one of them or none. Before it writes<br />again, the operator reads which revision the engine runs. If it runs<br />one of these, that write landed: status.config records it as the<br />operator's write, as though the engine had confirmed it. If it runs the<br />revision one of them was built on, that one has not landed and still<br />may, so it stays, and the write is sent again on the same condition,<br />which the engine refuses once one of them lands. Any other can no<br />longer land, and goes, to overtaken where it was written into an<br />engine that ran no document. A reload the operator asks for, to<br />activate a revision of its own again, is recorded here too when the<br />engine stores it and cannot confirm activating it, as a write of that<br />revision's document, whether or not a read after it could say which<br />revision runs. They are oldest first, and a seventeenth drops the<br />oldest. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
+| `overtaken` _[UnconfirmedRevision](#unconfirmedrevision) array_ | overtaken are writes from unconfirmed into an engine that ran no<br />document that another revision the engine activated has overtaken.<br />None of them can land any more, and under Seed one of them is taken as<br />the seed whatever revision runs now: the engine stored it while it had<br />none, so either it landed and was replaced since, or another writer's<br />create reached the engine first, which nothing the engine says tells<br />apart. Each is kept until a reconcile decides with it, and they go<br />once status.config records a revision of the rendered document in<br />sync, a write of it, or the seed. They are oldest first, and a<br />seventeenth drops the oldest. |  | MaxItems: 16 <br />Optional: \{\} <br /> |
 | `placement` _[RevisionPlacement](#revisionplacement)_ | placement is where the revision the engine runs pins its agent seats,<br />read from the engine's document under every management policy. The<br />operator keeps a seat pool's pods running while the running revision<br />pins a seat to them, even after the pool or the seat's placement is<br />gone from the spec: a pod stopped while its seat is still pinned to<br />it would leave the seat held by nobody, and a blocked document keeps<br />the last good revision running. Once a revision that pins nothing to<br />them runs, the pods are deleted. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
@@ -2916,6 +2979,25 @@ _Appears in:_
 | `Atlassian` |  |
 
 
+#### ReplacedRevision
+
+_Underlying type:_ _string_
+
+ReplacedRevision is what a write of the company document replaced where
+that was more than the operator's own document.
+
+_Validation:_
+- Enum: [Unsealed Drifted]
+
+_Appears in:_
+- [UnconfirmedRevision](#unconfirmedrevision)
+
+| Field | Description |
+| --- | --- |
+| `Unsealed` | ReplacedUnsealed is a revision the engine stores without a seal, which<br />nobody can read and a whole document replaces.<br /> |
+| `Drifted` | ReplacedDrifted is a revision the operator did not write whose<br />document differed from the rendered one.<br /> |
+
+
 #### RetentionSettings
 
 
@@ -3691,7 +3773,7 @@ _Appears in:_
 | `integrations` _[SeatIntegrations](#seatintegrations)_ | integrations is the seat's own identity on the company's<br />integrations. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `project` _string_ | project is the tracker project a seat outside every unit owns, by its<br />key; a seat in a unit takes its unit's. Crewlet requires a container<br />key to be an upper-case letter followed by 1 to 9 upper-case letters or<br />digits, such as LEAD. Crewlet's `project`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
 | `space` _string_ | space is the knowledge container a seat outside every unit owns, by<br />its key, which follows the same rule as project; a seat in a unit<br />takes its unit's. Crewlet's `space`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
-| `contact` _[SeatContact](#seatcontact)_ | contact is how agents reach the person in a Human seat on a chat<br />surface, and how what the person does there reaches the engine as<br />theirs. It applies to Human seats only, and is optional: a person who<br />works only through the engine's dashboard has no account to name, and<br />signs in on the seat through the engine's own identity directory. The<br />engine warns of a Human seat without one, since nothing addressed to it<br />on a chat surface reaches anybody, and the operator records the warning<br />as an EngineWarnings event on the Company. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `contact` _[SeatContact](#seatcontact)_ | contact is how agents reach the person in a Human seat on a vendor's<br />chat surface or tool, and how what the person does there reaches the<br />engine as theirs. It applies to Human seats only, and is optional: a<br />person who works only through the engine's dashboard has no account to<br />name, and signs in on the seat through the engine's own identity<br />directory. On a company that talks on Slack or Mattermost (an<br />Integration of either, or a seat's Slack app) the engine warns of a<br />Human seat with no account there, a slackUserID or a<br />mattermostUsername, since nothing addressed to it there reaches<br />anybody; a GitHub, GitLab or Atlassian account does not count, and the<br />operator records the warning as an EngineWarnings event on the<br />Company. On Chatlet, which a company with neither talks on, the person<br />reads the rooms on the dashboard as their seat, and nothing is warned. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `availability` _string_ | availability tells colleagues of a Human seat when to expect an<br />answer, such as "CET business hours". Crewlet's `availability`. |  | MaxLength: 256 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 
 
@@ -4086,6 +4168,30 @@ _Appears in:_
 | `worklet` _[WorkletSettings](#workletsettings)_ | worklet is the policy of Worklet, for backend Worklet. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
 
 
+#### UnconfirmedRevision
+
+
+
+UnconfirmedRevision is a write of the company document whose activation the
+engine could not confirm.
+
+
+
+_Appears in:_
+- [ConfigStatus](#configstatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `revisionID` _string_ | revisionID is the revision the engine stored for the write. |  | MaxLength: 128 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `baseRevisionID` _string_ | baseRevisionID is the revision the write was built on, which its<br />activation was conditioned on. Empty for a write into an engine that<br />ran no document, conditioned on there being none. |  | MaxLength: 128 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `appliedHash` _string_ | appliedHash is the appliedHash of the write: the rendered document's<br />and its values' hash as they were when it was written, which<br />status.config.appliedHash records once the engine is seen running the<br />revision. |  | MaxLength: 128 <br />MinLength: 1 <br />Required: \{\} <br /> |
+| `writtenAt` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.37/#time-v1-meta)_ | writtenAt is when the operator wrote it. A write the engine is seen<br />running is recorded as applied when the operator found it, since<br />nothing says when its activation landed; a seed taken from overtaken,<br />which nothing waits on, as applied when it was written. |  | Required: \{\} <br /> |
+| `objects` _[AppliedObjectCounts](#appliedobjectcounts)_ | objects counts the objects the revision was rendered from, which<br />status.config.objects records once the engine is seen running it. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `replaced` _[ReplacedRevision](#replacedrevision)_ | replaced says what the write replaced where that was more than the<br />operator's own document, which ConfigApplied and a Warning event report<br />once the engine is seen running the revision, as they report a write the<br />engine confirmed: Unsealed, a revision the engine stores without a seal,<br />which the write replaces reading nothing from it; Drifted, a revision<br />the operator did not write whose document differed from the rendered<br />one, at driftedAt. Unset for any other base, and for a reload: its base<br />is a write of the operator's, and where that write is recorded here too,<br />the revision found running reports what that write replaced, once,<br />whichever of the two it is. |  | Enum: [Unsealed Drifted] <br />Optional: \{\} <br /> |
+| `driftedAt` _string_ | driftedAt names where the Drifted revision the write replaced differed<br />from the rendered document, as ConfigApplied names it: up to five<br />places, and how many more there were. |  | MaxLength: 32768 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+| `documentSHA256` _string_ | documentSHA256 is set for a reload: the SHA-256, in hex, of the<br />document of the revision it activates again, as the engine answered<br />it. The engine activates again whichever revision is active when the<br />request lands, so the revision it stored is the operator's only where<br />its document is that one; one found running another document was a<br />reload of a revision somebody activated in between, and goes. |  | MaxLength: 64 <br />MinLength: 64 <br />Pattern: `^[0-9a-f]\{64\}$` <br />Optional: \{\} <br /> |
+
+
 #### Unit
 
 
@@ -4132,7 +4238,7 @@ _Appears in:_
 | `leadRef` _[LocalObjectReference](#localobjectreference)_ | leadRef names the Seat that leads the unit. Unset inherits the<br />parent's lead. Crewlet's `lead`. |  | Optional: \{\} <br /> |
 | `purpose` _string_ | purpose is what the unit is for. Crewlet's `purpose`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
 | `goals` _string array_ | goals are what the unit is working toward. Crewlet's `goals`. |  | MaxItems: 32 <br />items:MaxLength: 1024 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
-| `channel` _string_ | channel is the unit's channel on the company's chat surface, by name,<br />such as platform; child units without one inherit it. On Chatlet, the<br />engine's own chat and the surface of a company that declares no<br />Mattermost or Slack Integration, each channel a unit names is a room<br />whose members follow the org chart. Crewlet takes lowercase letters,<br />digits, - and _, starting with a letter or a digit, up to 64<br />characters: the name itself, never #platform or a vendor's channel id.<br />Crewlet's `channel`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9_-]\{0,63\}$` <br />Optional: \{\} <br /> |
+| `channel` _string_ | channel is the unit's channel on the company's chat surface, by name,<br />such as platform; child units without one inherit it. On Chatlet, the<br />engine's own chat and the surface of a company that declares no<br />Mattermost or Slack Integration, each channel a unit names is a room<br />whose members follow the org chart. Crewlet takes lowercase letters,<br />digits, - and _, starting with a letter or a digit, up to 64<br />characters: the name itself, never #platform or a vendor's channel id.<br />On Chatlet a room belongs to one unit, so Crewlet refuses a second unit<br />naming the same channel; a child unit that should share its parent's<br />room names none. Crewlet's `channel`. |  | MaxLength: 64 <br />MinLength: 1 <br />Pattern: `^[a-z0-9][a-z0-9_-]\{0,63\}$` <br />Optional: \{\} <br /> |
 | `knowledge` _string array_ | knowledge are free-text references to knowledge the unit relies on.<br />They are not a read scope. Crewlet's `knowledge`. |  | MaxItems: 32 <br />items:MaxLength: 1024 <br />items:MinLength: 1 <br />Optional: \{\} <br /> |
 | `project` _string_ | project is the tracker project the unit files work in, by its key.<br />Crewlet requires a container key to be an upper-case letter followed<br />by 1 to 9 upper-case letters or digits, such as PLAT. Crewlet's<br />`project`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
 | `space` _string_ | space is the knowledge container the unit writes pages in, by its<br />key, which follows the same rule as project. Crewlet's `space`. |  | MaxLength: 10 <br />MinLength: 2 <br />Pattern: `^[A-Z][A-Z0-9]\{1,9\}$` <br />Optional: \{\} <br /> |
@@ -4248,13 +4354,14 @@ _Validation:_
 - Enum: [Always Addressed]
 
 _Appears in:_
+- [ChatletSettings](#chatletsettings)
 - [MattermostIntegration](#mattermostintegration)
 - [SlackIntegration](#slackintegration)
 
 | Field | Description |
 | --- | --- |
 | `Always` | WorkingStatusAlways shows it on every turn a chat message started.<br /> |
-| `Addressed` | WorkingStatusAddressed shows it only when a person is plausibly<br />waiting: a direct message, a mention, or a thread the seat follows.<br /> |
+| `Addressed` | WorkingStatusAddressed shows it only when a person is plausibly<br />waiting on the seat: a direct message, a mention of it by name, and<br />on Slack or Mattermost a thread it is in because it was named there,<br />on Chatlet a reply in a thread it started or a person's message in a<br />unit's room that reached nobody else and so falls to it as the unit's<br />lead. Never a message it reached through a room-wide address, or only<br />by having spoken in the thread before.<br /> |
 
 
 #### WorkletSettings

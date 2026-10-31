@@ -33,6 +33,7 @@ flowchart TD
     EX -->|True| CA{"<b>ConfigApplied</b>"}
     CA -->|EngineUnavailable| UN["The operator cannot reach the engine"]
     CA -->|"WriteRefused, NotGranted, SeatHeld"| WR["The engine refuses a change<br/>to the document"]
+    CA -->|RevisionUnreadable| RU["The engine cannot open<br/>its company document"]
     CA -->|"Applying, ApplyFailed"| AF["The engine did not apply a revision"]
     SYM -->|"IdentityClaimed=False"| NS["Nobody can sign in"]
     CA -->|"any other reason"| NA["Changes are not applied"]
@@ -78,6 +79,7 @@ with your last change yet.
 | | False | `APITokensInvalid` | `<company>-api-tokens`, as a platform supplied it, lacks a token or holds one shorter than 43 characters or outside base64, base64url and hex. Repair it, or delete it to have the operator generate it. The pod is held as it is. |
 | | False | `InsecureSignInNotAcknowledged` | The class lets people sign in with a password alone (`spec.signIn.secondFactor: Optional`), and the Company is reached at an address Crewlet does not read as loopback, which the message names: Crewlet refuses to start so without the class's `spec.signIn.acceptInsecure: true`. The platform acknowledges it on the class or requires a second factor again ([Two-step verification](people.md#two-step-verification)). The pod is held as it is. |
 | | False | `AddressRefused` | An address the engine would be told it is reached at is one Crewlet refuses to start on; the message names it, its key in `crewlet.yaml` and where it came from. In practice it is the class's API route: its `api.hostname` template's last label holds `{{namespace}}` or `{{name}}`, and the Company's namespace is a number, such as `4711` or `0x1f`, or its namespace or name makes one with the characters beside it (`0x{{name}}` for a Company named `cafe`), so the host's last label is a number, which a browser reads as an IPv4 address. The platform ends the template in a domain of its own (`{{name}}.{{namespace}}.crewlet.example.com`), or the Company runs in a namespace of another name ([Reach the API from elsewhere](exposure.md#reach-the-api-from-elsewhere)). An address the Company states is refused by the API when it is written instead, unless it was admitted before the API refused it: the message then says to correct the Company's field. An artifact origin that meets the dashboard's is refused here too: give artifacts a domain of their own. The pod is held as it is. |
+| | False | `DataVolumeTooSmall` | The data volume gives the engine an event stream, three quarters of it, under what a fresh node reserves on it, its state logs at their floors and, with the files in the stream's own bucket, that bucket beside them. The class's `data.storage.size` admits no less than `14Gi` (`11Gi` with the files in S3), so this is a volume sized under an older floor, and the message names what to grow. A company that has its claim (one that kept it, or one created again over the claim a company deleted before kept) is told the volume and the claim: [grow the claim](../concepts/runtime.md#growing-a-companys-data-volume) to at least the size the message names, and the pod runs once the expansion lands. Until then it is held as it is, which keeps an engine that still starts on the volume running, though not one whose image has already moved to an engine that cannot reserve its state logs there. A new company made from a class stored before the floor rose has no claim yet and is told the class: set its `spec.data.storage.size` to at least that size, and the operator creates the company's volume at that size. |
 | `Exposed` | True | `RouteAccepted` | Every route the class asks for was accepted. When the message adds that the engine is told people reach it at `http://localhost:8080`, every link it gives a person, an invitation's included, leads there through a port-forward: set the Company's `spec.exposure.dashboardBaseURL`, or route the API ([Where people reach the dashboard](exposure.md#where-people-reach-the-dashboard)). |
 | | True | `NoRoutes` | The class routes nothing (webhooks `None` or `External`, API `ClusterInternal`, artifacts `None`). The message says the same about the dashboard's address as under `RouteAccepted`. |
 | | False | `RouteNotAccepted` | A Gateway has not attached the HTTPRoute, or the Ingress controller has not published an address. The message carries the controller's own reason; a Gateway listener's `allowedRoutes` that does not admit the tenant's namespace is the usual cause. |
@@ -85,7 +87,7 @@ with your last change yet.
 | | False | `GatewayAPINotInstalled` | The class routes through Gateways and the cluster had no Gateway API when the operator started. Install it and restart the operator. |
 | | False | `PublicBaseURLMissing` | The class's webhooks mode is `External` and the Company has no `spec.exposure.publicBaseURL`. |
 | | False | `RouteNotHTTPS` | No Gateway listener the artifacts route attaches to is HTTPS, so the data pod opens no artifact origin; add one with a certificate for the route's host. |
-| `SecretsSynced` | True | `Synced` | The engine's secret store holds every referenced value. The message counts the values a tool server or a seat's executor run may go without whose Secret or key does not exist, which the store does not hold, so the engine leaves each out ([A key that may go without its value](tool-servers.md#a-key-that-may-go-without-its-value)); names, in a sentence of its own, those the store keeps as they were for the revision the engine runs, because that revision reads them as required or is one whose reading the operator does not know (another document somebody else activated), each to go once a revision that lets it go runs; names, in another, those it keeps only for a revision an engine pod runs or would start on other than the fleet's, or for a pod whose revisions the operator does not know, with the pods, each to go once no pod runs or would start on a revision that references it ([The engine did not apply a revision](#the-engine-did-not-apply-a-revision)); and, the Company having no `ResolvedRefs`, names the values of its own setup steps a run goes without, under a key a step's `optionalKeys` lists, and a value of theirs that holds nothing under a key none lists, which every executor run starts without. |
+| `SecretsSynced` | True | `Synced` | The engine's secret store holds every referenced value. The message counts the values a tool server or a seat's executor run may go without whose Secret or key does not exist, which the store does not hold, so the engine leaves each out ([A key that may go without its value](tool-servers.md#a-key-that-may-go-without-its-value)); names, in a sentence of its own, those the store keeps as they were for the revision the engine runs, because that revision reads them as required or is one whose reading the operator does not know (another document somebody else activated), or for the engine's active revision, where that is one stored without a seal, which nobody can read while its nodes run the revision before it, each to go once a revision that lets it go runs; names, in another, those it keeps only for a revision an engine pod runs or would start on other than the fleet's, or for a pod whose revisions the operator does not know, with the pods, each to go once no pod runs or would start on a revision that references it ([The engine did not apply a revision](#the-engine-did-not-apply-a-revision)); and, the Company having no `ResolvedRefs`, names the values of its own setup steps a run goes without, under a key a step's `optionalKeys` lists, and a value of theirs that holds nothing under a key none lists, which every executor run starts without. |
 | | False | `SecretNotFound` | A referenced Secret or key is missing; the message names each. |
 | | False | `SecretTooLarge` | A value is over the 64 KiB the store accepts. |
 | | False | `EngineUnavailable` | Writing to the store failed; the message says why. Retried. |
@@ -109,19 +111,20 @@ with your last change yet.
 | | True | `DriftCorrected` | Under `Enforce`, someone changed the document in the engine and the operator applied the rendered one over it. A `Drifted` event names what differed. |
 | | True | `InSync` | Under `Observe`, the engine runs exactly the rendered document. |
 | | True | `Seeded` | Under `Seed`, the engine has a document and owns it from now on. |
-| | False | `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `HumanSeat`, `SecretNotFound`, `SecretTooLarge`, `PerSeatNotAllowed`, `CLIAuthNotPortable`, `NoExecutorCLI`, `SandboxPlacementNotOffered`, `OptionalKeyUnused` | An object of the company keeps the document from rendering. The object at fault reports the same reason on `Applied`; fix it there ([What blocks a document](../concepts/company-document.md#what-blocks-a-document)). Meanwhile, under `Enforce`, the operator still takes out of the engine's secret store the value of a deleted Secret the document lets go without, and activates the running revision again so the engine reads the store without it, with a `Reactivated` event, where the running revision lets the value go too, or a Warning `Reactivated` when the revision activated again is not the document it read; one that reads it as required, or another document somebody else activated, keeps it until the next document runs, with a `SecretKept` event, the only report of it here, since the Secrets are not read ([A key that may go without its value](tool-servers.md#a-key-that-may-go-without-its-value)). |
+| | False | `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `HumanSeat`, `SecretNotFound`, `SecretTooLarge`, `PerSeatNotAllowed`, `CLIAuthNotPortable`, `NoExecutorCLI`, `SandboxPlacementNotOffered`, `OptionalKeyUnused` | An object of the company keeps the document from rendering. The object at fault reports the same reason on `Applied`; fix it there ([What blocks a document](../concepts/company-document.md#what-blocks-a-document)). Meanwhile, under `Enforce`, the operator still takes out of the engine's secret store the value of a deleted Secret the document lets go without, and activates the running revision again so the engine reads the store without it, with a `Reactivated` event, where the running revision lets the value go too, or a Warning `Reactivated` when the revision activated again is not the document it read, or when its request failed and another document, activated after the deletion, runs instead, and it activated nothing again; one that reads it as required, or another document somebody else activated, keeps it until the next document runs, with a `SecretKept` event, the only report of it here, since the Secrets are not read ([A key that may go without its value](tool-servers.md#a-key-that-may-go-without-its-value)). |
 | | False | `NameConflict` | The Secret `<company>-secret-sync`, where the operator keeps what it pushed to the engine's store, exists and is someone else's; `SecretsSynced` says the same. Rename or delete it; nothing is applied meanwhile. |
 | | False | `SeatPoolsNotAllowed` | The Company declares `spec.topology.seatPools`, and its class's `seatPools.policy` is not `Allowed`. Remove the pools, or run the company with a class that allows them. |
 | | False | `SandboxRequired` | The Company has an agent seat and a model provider, and no `spec.sandbox`: every agent seat's executor runs in a box, and Crewlet refuses a company that places none on every write. Set `spec.sandbox.defaultRunIn` to `Direct`, or to `E2B` with `spec.sandbox.e2b` ([Where a seat's executor runs](cli-agents.md#where-a-seats-executor-runs)). |
 | | False | `PoolCapacityExceeded` | The company's seat pods would number more than its class's `seatPools.maxPods`: its Shared pools' replicas alone (the message says so; lower them), or with the pods of its PerSeat seats, each of which reports it too. |
 | | False | `Invalid` | The engine's dry run refused the document, in its own words, every problem in this message. A problem at a place a part rendered (a Seat, Unit, LLMProvider, MCPServer, Integration or Schedule) is also reported on that part, as `Applied=False Invalid`; one at a place the Company renders itself (its own fields, `spec.embeddings`, `spec.sandbox` and its setup steps) is in this message alone. |
 | | False | `Drifted` | Under `Observe`, the engine runs another document; the message names the places that differ. |
-| | False | `Applying` | The operator activated the revision and the engine has not applied it yet; it runs the previous one meanwhile. Usually gone within seconds; it turns into `ApplyFailed` when the engine fails the revision or has not applied it 72 seconds after the write. |
+| | False | `Applying` | The operator activated the revision and the engine has not applied it yet; it runs the previous one meanwhile. Usually gone within seconds; it turns into `ApplyFailed` when the engine fails the revision or has not applied it 72 seconds after the write, or after the operator found it running where it adopts a revision it did not write. |
 | | False | `ApplyFailed` | The engine's first data pod, the one the operator reaches, did not apply the revision: it keeps running the one it ran before, and starts on the one its volume names if it restarts, the same one unless the engine is still moving it (the message says which), and the engine's secret store keeps every value of either meanwhile. The message carries the engine's status, its posture (`isolated` on a single node, `shed` or `stuck` beside peers that applied it) and its own account of the failure; see [The engine did not apply a revision](#the-engine-did-not-apply-a-revision). |
-| | False | `EngineUnavailable` | The operator cannot reach the engine, the engine does not know its token, or the engine asked to be asked again later (`503`: it is starting, or cannot read the coordination store that holds the fleet's revision). Retried every ten seconds, or sooner when the engine says when; see [The operator cannot reach the engine](#the-operator-cannot-reach-the-engine). |
+| | False | `EngineUnavailable` | The operator cannot reach the engine, the engine does not know its token, or the engine answered `503`: it asked to be asked again later (it is starting, cannot read the coordination store that holds the fleet's revision, or met a condition of its own that clears, such as a store busy with other writes), met something on its side that waiting doesn't clear, or stored the operator's write and couldn't confirm activating it. Looked at again every ten seconds, or sooner when the engine says when, and a write it couldn't confirm is not sent again until a read shows it did not land; see [The operator cannot reach the engine](#the-operator-cannot-reach-the-engine). |
 | | False | `WriteRefused` | The engine refuses the operator's own token a change to the document (`403 config_managed`): its `api.auth.company_writers` names other tokens. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
 | | False | `NotGranted` | The engine knows the operator's token and will not let it make a request the operator needs (`403`): the token lacks the grant the message names, or the engine's identity directory binds it to a seat the company no longer has. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
 | | False | `SeatHeld` | The document takes a human seat out of the company, or makes it an agent's, while a person, a service account or an open invitation holds it in the engine (`409 seat_held`). The message names each seat and what holds it; the engine keeps running the revision it runs. See [The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document). |
+| | False | `RevisionUnreadable` | The engine cannot open the fleet's revision of the company document (`409 unreadable_revision`, `unreadable_fleet_revision`, `unknown_seal_revision`, `unsealed_revision` or `unsealed_fleet_revision`), so the engine shows the document to nobody and takes no write built from it. No wait changes that: the operator writes nothing, and looks again when the data pods restart and every five minutes besides. A revision stored without a seal is reported under `Seed` and `Observe`; under `Enforce` the operator replaces it with the rendered document, and reports it only for one that lands after the operator's read, until the next look ten seconds on replaces it. The message names the revision and quotes the engine's account and remedy; see [The engine cannot open its company document](#the-engine-cannot-open-its-company-document). |
 
 ### EngineClass
 
@@ -145,7 +148,7 @@ conditions. `kubectl get engineclasses` shows it.
 | | False | `CompanyNotFound` | `spec.companyRef` names no Company in the namespace. |
 | | False | `CompanyNotAccepted` | Its Company is not `Accepted` (its class is gone, or it is over its class's limits); the message carries why. Nothing of the company is applied until it is. |
 | | False | `Conflict` | Crewlet would read it and another object as one: two Seats with one handle, email address or contact account; two Integrations for one vendor; an LLMProvider named like a platform provider of the class; a Seat's header for an HTTP tool server spelled unlike its Unit spells it (`authorization` beside `Authorization`), which Crewlet would send either of. The message names the other object. |
-| `ResolvedRefs` | True | `Resolved` | Every object and Secret key it references exists; or the message names the values it gives a tool server or a seat's executor run that it goes without, whose Secret or key does not exist or holds an empty value, under a key an `optionalKeys` list lets the engine leave out, and that list: the MCPServer's for a value of a tool server's, a Seat's or Unit's included ([A key that may go without its value](tool-servers.md#a-key-that-may-go-without-its-value)). A line that adds that the engine keeps the value it held for the revision it runs names a deleted Secret's value that revision reads as required, or whose reading the operator does not know; it goes once a revision that lets it go runs. It says so while a Secret another object requires holds the document too; while another object keeps the document from rendering, the Secrets are not read, and the message says only that every object it references exists. |
+| `ResolvedRefs` | True | `Resolved` | Every object and Secret key it references exists; or the message names the values it gives a tool server or a seat's executor run that it goes without, whose Secret or key does not exist or holds an empty value, under a key an `optionalKeys` list lets the engine leave out, and that list: the MCPServer's for a value of a tool server's, a Seat's or Unit's included ([A key that may go without its value](tool-servers.md#a-key-that-may-go-without-its-value)). A line that adds that the engine keeps the value it held for the revision it runs names a deleted Secret's value that revision reads as required, or whose reading the operator does not know; one that says it keeps it for its active revision names one kept for a revision stored without a seal, which nobody can read while the nodes run the revision before it. Either goes once a revision that lets it go runs. It says so while a Secret another object requires holds the document too; while another object keeps the document from rendering, the Secrets are not read, and the message says only that every object it references exists. |
 | | False | `RefNotFound` | It references an object that does not exist (a Unit, a Seat, an LLMProvider, an MCPServer); the message names it. |
 | | False | `Cycle` | A Unit's `parentRef` chain leads back to itself. |
 | | False | `PoolNotFound` | A Seat's `spec.placement.pool` is neither `data` nor one of its Company's `spec.topology.seatPools`. The seat is applied all the same, pinned to the label `crewlet.ai/undeclared-pool`, which no pod carries: it runs nowhere (`Ready=False`, `PoolNotFound`), or keeps running where it ran (`Applied=False`, `PlacementPending`), until the Company declares the pool or the Seat names another. Nothing else is held. |
@@ -207,7 +210,9 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
   message names the figure it needed and breaks it down. The class's
   `data.storage.size` admits no less than `14Gi` (`11Gi` with the files in
   S3), so this is a company whose volume was made smaller: under an older
-  floor, or before an engine that keeps more on its stream.
+  floor, or before an engine that keeps more on its stream. The operator holds such a company's pods as they
+  are (`RuntimeReady=False DataVolumeTooSmall`, above), which cannot stop a
+  pod whose image moved under it from restarting.
   [Grow its volume](../concepts/runtime.md#growing-a-companys-data-volume).
 - **`config_apply_failed`**: the revision was stored but this node could not
   start it; the message says why. The engine keeps running the previous
@@ -367,6 +372,42 @@ requests to `http://<company>-data-0.<company>-data.<namespace>.svc:8080` fail:
   document it cannot vouch for, and the engine logs
   `config_request_unavailable`. It clears once the engine's broker is back;
   the data pod's log says why it is not.
+- The engine met a condition of its own that clears: its store busy with
+  other writes, closed while the node adopts a peer's snapshot or shuts
+  down, or a request out of time. `/config` and `/secrets` answer
+  `503 unavailable` with a `Retry-After` the operator follows, and the
+  condition in the engine's words, which the message quotes.
+- The engine met something on its side that waiting doesn't clear. It
+  answers `503` with no `Retry-After`, saying waiting won't change that and,
+  where it can tell, who has to act, and the condition says so before it
+  quotes the engine, rather than promise a retry that changes nothing. The
+  engine's log names what it met. The operator keeps asking every ten
+  seconds, so `ConfigApplied` turns once that is cleared in the engine.
+- The engine stored the operator's write and couldn't confirm that it
+  activated it: the message names the revision. The engine may run it or may
+  not. Nothing needs doing: the operator keeps the write in
+  `status.config.unconfirmed`, reads which revision the engine runs before it
+  writes again, and records the write as its own if the engine runs it, with a
+  `Normal` event `Activated` and, where it replaced a revision somebody else
+  wrote, `ConfigApplied=True DriftCorrected` and a Warning `Drifted`, or one
+  the engine stores without a seal, `ConfigApplied=True Applied` naming it and
+  a Warning `RevisionUnreadable`, as for a write the engine confirmed, dated
+  when it found it running. The message of the write it could not confirm
+  names such a revision already. It never writes the document a second time
+  on top of one that landed, nor on top of one that landed and was activated
+  again before it looked (a reload): that revision activated after every
+  value the write was made with, so where it is the rendered document the
+  engine runs it with them, and it is in sync. Under `Seed` a write into an
+  engine that had no document is kept in `status.config.overtaken` once
+  another revision runs, and reported as the seed, whatever revision runs
+  now. A request to activate the operator's own revision again, for the
+  value of a deleted Secret or one written since, that the engine stored and
+  couldn't confirm is kept the same way, whatever the operator could read
+  back after it, beside the `SecretWithdrawalFailed` or
+  `SecretRefreshFailed` Warning, and recorded as the operator's once it runs
+  that revision's document; one found running another document reloaded a
+  revision somebody activated before the request landed, and is not the
+  operator's.
 
 ## Nobody can sign in
 
@@ -430,29 +471,113 @@ while something in the engine's identity directory holds that seat. A person
 holds a human seat for as long as they are in the company, an open invitation
 holds the seat it invites to, and a service account may be bound to one. The
 engine keeps running the revision it runs, and the operator tries again every
-ten seconds. The message names each seat and what kind of thing holds it,
-never who; a Seat that still exists and is held reports `Applied=False
-SeatHeld` too. An admin of the company frees each seat first, in the engine's
+ten seconds. When it removes a value from the store meanwhile, the value of a
+deleted Secret that revision lets go without, it activates that revision
+again so that the engine reads the store without it, as for any document the
+engine refuses (step 3 of
+[What one reconcile does](../concepts/applying.md#what-one-reconcile-does)).
+The message names each seat and what kind of thing holds it, never who; a
+Seat that still exists and is held reports `Applied=False SeatHeld` too. An admin of the company frees each seat first, in the engine's
 dashboard or with [`crewlet iam`](https://github.com/crewlet/crewlet/blob/main/docs/concepts/identity-and-access.md):
 moves the person to another human seat or removes them, unbinds the service
 account, or cancels the invitation. `crewlet iam seats` lists what holds each
 seat. The operator does neither for you: whoever holds a seat is a person, or
 something a person set up. Or keep the seat: restore its Seat as a Human seat.
 
+## The engine cannot open its company document
+
+`ConfigApplied=False RevisionUnreadable` means the engine cannot open the
+fleet's revision of the company document. The engine refuses every read of the
+document with `409`, and every write built from it too; it keeps running what
+it applied, and shows no document until it can open that revision. No wait
+changes that. A revision that is sealed, under a key the keyring lacks or in a
+form the engine's build does not read, is somebody's document, which no write
+replaces, since that would discard it unread: nothing the operator sends opens
+it, so the operator writes nothing and does not ask again every ten seconds.
+It looks again when the data pods restart, and every five minutes besides. The
+message names the revision, quotes the engine's account and its remedy, and
+says which of five it is:
+
+- `unreadable_revision`: the revision is sealed under a key the data pod's
+  keyring does not hold. The keyring is the Secret `<company>-keyring`, which
+  the operator generates once and never rewrites, so a key gone from it was
+  taken out by somebody else, or the Secret was restored from an older backup
+  than the volumes. Put the key back in that Secret from the backup kept
+  with the volumes, with its `crewlet.ai/active-key-id` annotation as it was:
+  the data pods restart with it, and their restart runs the reconcile again.
+- `unreadable_fleet_revision`: the revision the fleet's activation pointer
+  carries is sealed under a key the data pod's keyring was never given.
+  Every pod of the company has its keyring from `<company>-keyring`, so the
+  data pod lacks a key the Secret gained after it started, and takes it when
+  it restarts (the pods roll on their own once the operator sees the
+  change), or a pod that held the key sealed a revision under it and the key
+  has since gone from the Secret: put it back as above.
+- `unknown_seal_revision`: the revision, the data pod's own copy or the one
+  the fleet's activation pointer carries, is sealed in a form the engine's
+  build does not read, most likely by a newer build of Crewlet than the data
+  pod runs. The keyring is not at fault, and putting a key back changes
+  nothing: run the data pods on the build that sealed it, the engine image
+  their EngineClass names (with the Company's `spec.runtime.version` as its
+  tag where the class allows that). A data pod still rolling onto that image
+  takes it when it restarts; one taken back to an older image than it ran
+  needs the newer one again. The engine's hint says which.
+- `unsealed_revision`: the revision is stored without a seal, which no keyring
+  opens and no engine reads; only an engine older than the keyring every
+  engine now requires stored one.
+- `unsealed_fleet_revision`: the revision on the fleet's activation pointer
+  carries no seal. Every engine seals what it activates, so it was put there
+  from outside the fleet.
+
+A revision without a seal is the one the engine lets a write replace: a whole
+document (`PUT /config`), which reads nothing from it, as the engine's hint
+says. Under `Enforce` the operator does exactly that, as soon as nothing holds
+the rendered document: it writes the rendered document over the revision,
+conditioned on it, and reports `ConfigApplied=True Applied` naming the
+revision it replaced, with a Warning `RevisionUnreadable` event saying so. A
+document held for a missing Secret, refused by the engine or by the render
+keeps the revision in place, and `ConfigApplied` carries the hold's own
+reason. Nothing is read from the revision, so nothing in the engine's secret
+store is deleted before the write: the engine's nodes go on running, and boot
+again when they restart, the revision they applied before it, which may read
+any value the store holds; the sync after the write removes what the
+replacement lets go. So under `Enforce`, `RevisionUnreadable` reports a
+revision without a seal only where one lands after the operator's read, until
+its next look ten seconds on replaces it. Under `Seed` and `Observe`, which
+write no document over the fleet's revision, it stays reported: an admin of
+the company replaces it with a whole document, or the Company's
+`managementPolicy` is set to `Enforce`, under which the operator replaces it
+with the rendered one. Should the rendered document drop a human seat somebody
+holds in the engine, the replacement is refused as any write is
+([`SeatHeld`](#the-engine-refuses-a-change-to-the-document)), naming every
+seat the document does not keep as a human seat that a person, a service
+account or an open invitation holds, since nobody can read which seats the
+revision it replaces had.
+
+To see which keys the keyring holds without printing them:
+
+```bash
+kubectl get secret acme-keyring -n acme -o go-template='{{range $k, $v := .data}}{{$k}}{{"\n"}}{{end}}'
+kubectl get events -n acme --field-selector involvedObject.name=acme,reason=RevisionUnreadable
+kubectl logs acme-data-0 -n acme | grep config_revision_unreadable | tail
+```
+
 ## The engine did not apply a revision
 
-`ConfigApplied=False ApplyFailed` means the engine stored and activated the
-revision the operator wrote and then could not apply it, or never did. The
-revision stays the fleet's: `GET /config` answers it, and every pod tries it
-again. A pod that did not apply it keeps serving the revision it ran before,
-and a data pod starts on the revision its volume names if it restarts, that
-same one unless the engine is still moving it (a seat pod starts on nothing
-and tries the fleet's revision again); the dry run accepted the new one,
-so what failed is something only applying it meets on this engine: a
-subsystem it could not start (Worklet, the code sandbox, the inbound
-edge), or a rule that needs the data pod's own configuration. The
-condition's message carries the engine's account of the failure, its
-`status` and its `posture`:
+`ConfigApplied=False ApplyFailed` means the engine activated a revision of
+the rendered document and then could not apply it, or never did: the revision
+the operator wrote, or one with the same document it found running and
+adopted without a write (a person's `crewlet config reload`, or the engine's
+own reload after it minted a credential). The revision stays the fleet's:
+`GET /config` answers it, and every pod tries it again. A pod that did not
+apply it keeps serving the revision it ran before, and a data pod starts on
+the revision its volume names if it restarts, that same one unless the
+engine is still moving it (a seat pod starts on nothing and tries the
+fleet's revision again); the dry run accepted the document, so what failed
+is something only applying it meets on this engine: a subsystem it could not
+start (Worklet, the code sandbox, the inbound edge), a value it resolves
+when the revision activates, or a rule that needs the data pod's own
+configuration. The condition's message carries the engine's account of the
+failure, its `status` and its `posture`:
 
 - `isolated`: the only node, or every node, failed the revision. It keeps
   serving and stays ready, and retries the revision three times at most.
@@ -511,7 +636,9 @@ has neither applied the revision nor concluded that it failed within 72
 seconds (its posture still reads `wait`), the engine is not polling its
 activation pointer at all, or an apply hangs with no peer to compare it
 against; its log says which, and a restart of the data pod is the usual
-remedy.
+remedy. The 72 seconds run from `status.config.appliedAt`: when the operator
+activated the revision, or found one it adopted running, never from its last
+write of another revision, which may be days old.
 
 ```bash
 kubectl logs acme-data-0 -n acme | grep -E 'config_apply_failed|reconcile_tick_failed' | tail
@@ -753,8 +880,10 @@ Some settings the engine runs are still worth knowing about. Plain `http` on
 a routable address sends passwords unencrypted. An `https` address with no
 proxy listed shows every caller as the proxy. A class may let people sign in
 with a password alone at a routable address, which it acknowledged. A company
-may have no human seat anyone can sign in to, or a token ceiling another
-leaves idle. None of these stops the engine. It says so in two places:
+may have no human seat anyone can sign in to, a token ceiling another leaves
+idle, a person on Slack or Mattermost nobody can mention there, or, on
+Chatlet, no unit with a `channel`, and so no team with a room the chart
+keeps. None of these stops the engine. It says so in two places:
 
 - **The Company's events**: the engine's answer to each revision the operator
   writes, as an `EngineWarnings` event (`The engine runs revision … with

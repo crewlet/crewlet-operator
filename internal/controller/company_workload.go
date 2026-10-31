@@ -931,6 +931,42 @@ func applyConfigOf[T any](v any) (*T, error) {
 	return out, nil
 }
 
+// volumeTooSmallMessage is RuntimeReady's account of a data volume whose
+// share, the engine's event stream, is under what a fresh node of Crewlet
+// reserves on it (small), with what clears it, which depends on where the volume's size
+// comes from (dataVolumeSize). Where the company has a claim, or a data
+// StatefulSet that makes one from a template that never changes (claimed),
+// the claim is what is grown. Where it has neither, the volume is the one its
+// class would give a new company, which a class stored before the floor rose
+// still can, since the API server's ratcheting keeps a stored value it no
+// longer admits: there is no claim to grow, so the class's size is what is
+// raised.
+func volumeTooSmallMessage(
+	c *crewletaiv1alpha1.Company, class *crewletaiv1alpha1.EngineClass, claimed bool, small *render.VolumeError,
+) string {
+	sizes := fmt.Sprintf("three quarters of it, the engine's event stream, is %d bytes: a fresh node of Crewlet "+
+		"reserves %d bytes of it for its state logs, and refuses to boot without them, so a data volume needs at "+
+		"least %s.", small.Stream, small.Floor, small.Least.String())
+	if !claimed {
+		return fmt.Sprintf("EngineClass %s gives a new company a data volume of %s, and %s Set the class's "+
+			"spec.data.storage.size to at least %s, and the operator creates the company's data volume at that size. "+
+			"Nothing of the company's data pods is created until then.",
+			class.Name, small.Volume.String(), sizes, small.Least.String())
+	}
+	return fmt.Sprintf("The data volume is %s, and %s Grow the claim %s to at least %s (its StorageClass must allow "+
+		"volume expansion; see \"Growing a company's data volume\" in the operator's docs/concepts/runtime.md), and the "+
+		"operator sizes the stream from it once the expansion lands. The pods are held as they are.",
+		small.Volume.String(), sizes, dataVolume+"-"+dataStatefulSetName(c)+"-0", small.Least.String())
+}
+
+// liveClaim reports whether claims holds a data volume claim not being
+// deleted: one a pod runs on, or will, whatever made it.
+func liveClaim(claims []corev1.PersistentVolumeClaim) bool {
+	return slices.ContainsFunc(claims, func(claim corev1.PersistentVolumeClaim) bool {
+		return claim.DeletionTimestamp.IsZero()
+	})
+}
+
 // existingStatefulSet returns the data StatefulSet, or nil when there is none.
 // The cache holds only the StatefulSets the operator manages (CacheOptions),
 // so when it has none the API server is asked: a StatefulSet of that name
@@ -975,6 +1011,14 @@ func (r *CompanyReconciler) statefulSetNamed(ctx context.Context, namespace, nam
 // what its engine reserves (made under an older floor, or before an engine
 // that keeps more on its stream) had no way out: the template cannot change,
 // and an expanded claim left the stream as small as it was.
+//
+// A claim that asks for less than the template is the exception, since the
+// template did not make it: a StatefulSet makes each claim at its template's
+// size, and a claim's request only ever grows. It is one a Company deleted
+// under spec.deletionPolicy Retain kept, which a Company created again under
+// its name runs on as it is, whatever its class gives a new volume now, so
+// it counts at what it asks for, or at what it was given if less. Counted at
+// the template, the stream was sized for a volume the pod does not have.
 func dataVolumeSize(
 	existing *appsv1.StatefulSet, class *crewletaiv1alpha1.EngineClass, claims []corev1.PersistentVolumeClaim,
 ) resource.Quantity {
@@ -997,7 +1041,14 @@ func dataVolumeSize(
 		size := template
 		requested, asked := claim.Spec.Resources.Requests[corev1.ResourceStorage]
 		granted, bound := claim.Status.Capacity[corev1.ResourceStorage]
-		if asked && bound {
+		switch {
+		case asked && requested.Cmp(template) < 0:
+			// A kept claim, which the template did not make.
+			size = requested
+			if bound && granted.Cmp(size) < 0 {
+				size = granted
+			}
+		case asked && bound:
 			grown := requested
 			if granted.Cmp(grown) < 0 {
 				grown = granted

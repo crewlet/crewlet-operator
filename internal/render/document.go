@@ -14,6 +14,7 @@ type companyDoc struct {
 	Timezone     string          `json:"timezone,omitempty"`
 	Tracker      trackerDoc      `json:"tracker,omitzero"`
 	Knowledge    knowledgeDoc    `json:"knowledge,omitzero"`
+	Chat         chatDoc         `json:"chat,omitzero"`
 	TokenBudget  tokenBudgetDoc  `json:"token_budget,omitzero"`
 	Assistant    assistantDoc    `json:"assistant,omitzero"`
 	Providers    providersDoc    `json:"providers,omitzero"`
@@ -41,6 +42,17 @@ type knowledgeDoc struct {
 	SkillsContainer *string  `json:"skills_container,omitempty"`
 	RootSpace       string   `json:"root_space,omitempty"`
 	Vectors         *bool    `json:"vectors,omitempty"`
+}
+
+type chatDoc struct {
+	Backend string      `json:"backend,omitempty"`
+	Chatlet *chatletDoc `json:"chatlet,omitempty"`
+}
+
+type chatletDoc struct {
+	MessageRetentionDays  *int32 `json:"message_retention_days,omitempty"`
+	DefaultChannelPrivate *bool  `json:"default_channel_private,omitempty"`
+	TypingStatus          string `json:"typing_status,omitempty"`
 }
 
 type tokenBudgetDoc struct {

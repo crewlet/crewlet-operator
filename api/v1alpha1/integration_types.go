@@ -16,7 +16,12 @@ const (
 	// WorkingStatusAlways shows it on every turn a chat message started.
 	WorkingStatusAlways WorkingStatus = "Always"
 	// WorkingStatusAddressed shows it only when a person is plausibly
-	// waiting: a direct message, a mention, or a thread the seat follows.
+	// waiting on the seat: a direct message, a mention of it by name, and
+	// on Slack or Mattermost a thread it is in because it was named there,
+	// on Chatlet a reply in a thread it started or a person's message in a
+	// unit's room that reached nobody else and so falls to it as the unit's
+	// lead. Never a message it reached through a room-wide address, or only
+	// by having spoken in the thread before.
 	WorkingStatusAddressed WorkingStatus = "Addressed"
 )
 

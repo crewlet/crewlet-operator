@@ -483,6 +483,28 @@ const (
 	// what to change.
 	ReasonAddressRefused = "AddressRefused"
 
+	// ReasonDataVolumeTooSmall is RuntimeReady=False when the company's data
+	// volume gives the engine an event stream (three quarters of it, Crewlet's
+	// stream.store_max_bytes) under what a fresh node of Crewlet reserves on
+	// it: its nine state logs at their floors, 8120172544 bytes, and with the
+	// files in the stream's own bucket that bucket beside them, 10826896725
+	// bytes in all. The EngineClass API admits no data.storage.size under
+	// 11Gi, or 14Gi with the files in the bucket, so what reaches this is a
+	// volume claimed under an older floor: a running company's, whose claim
+	// template cannot change, or one a class stored before the floor rose
+	// stamps on a new company. Crewlet refuses to boot on such a stream
+	// wherever it has a state log to create, a fresh node's every log and the
+	// chat log an engine adds to a stream made before it, so the operator
+	// holds the pods back as they are rather than roll an engine that cannot
+	// boot; an engine whose image has already moved still cannot run on the
+	// volume, and what the hold changes is that the cause is named. The
+	// message names the volume, the stream it gives, what a fresh node
+	// reserves and the least volume that holds it, and what clears it:
+	// growing the claim (docs/concepts/runtime.md, "Growing a company's data
+	// volume"), or, for a new company with no claim yet, raising its class's
+	// data.storage.size, at which the operator then creates its volume.
+	ReasonDataVolumeTooSmall = "DataVolumeTooSmall"
+
 	// ReasonNoAlarms is EngineHealthy=True: the engine raises no alarm.
 	ReasonNoAlarms = "NoAlarms"
 
@@ -634,6 +656,29 @@ const (
 	// company frees the seat first. It is also Applied=False on a Seat that
 	// still exists and is held: one whose kind turned from Human to Agent.
 	ReasonSeatHeld = "SeatHeld"
+
+	// ReasonRevisionUnreadable is ConfigApplied=False when the engine cannot
+	// ReasonRevisionUnreadable is ConfigApplied=False when the engine cannot
+	// open the fleet's revision of the company document (409
+	// unreadable_revision or unsealed_revision, or crewlet#142's
+	// unreadable_fleet_revision, unknown_seal_revision or
+	// unsealed_fleet_revision): it is sealed under a key the keyring does not
+	// hold, sealed in a form the engine's build does not read, or stored
+	// without a seal. The engine then refuses to show the document and to take
+	// any write built from it, and no wait changes that. A sealed revision is
+	// replaced by no write, so the operator writes nothing, and somebody has
+	// to give the engine what opens it: the key put back in the Secret
+	// <company>-keyring, or the build that sealed it. A revision without a
+	// seal is replaced by a whole document, which reads nothing from it: under
+	// Enforce the operator replaces it with the rendered document as it reads
+	// it, recording a Warning event of this reason, and reports this there
+	// only for one that lands after that read, until its next look replaces
+	// it, ten seconds on; while the rendered document is held, the hold's own
+	// reason is reported and the revision stays. Under Seed and Observe, which
+	// write no such document, this is reported for as long as the engine runs
+	// it. The message names the revision and carries the engine's account and
+	// remedy.
+	ReasonRevisionUnreadable = "RevisionUnreadable"
 
 	// ReasonInvalid is Applied=False (or ConfigApplied=False) when the
 	// engine's dry run refuses the rendered document; the message carries

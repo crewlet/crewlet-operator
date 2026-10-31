@@ -1249,11 +1249,12 @@ func askEngine(t *testing.T, providers []v1.LLMProvider, list bool) engineReport
 		}
 		in.Seats = append(in.Seats, *s)
 	}
-	// A person on a seat of their own, reached on a chat surface. Without
-	// one, Crewlet advises that nobody can be invited into the company,
-	// which is a verdict on the chart rather than on any provider; a
-	// tolerance for it here would hide that advisory on a provider's shape
-	// too, so the probe gives the engine nothing about the chart to say.
+	// A person on a seat of their own, on the company's own chat, where
+	// Crewlet asks no account of them. Without the seat, Crewlet advises
+	// that nobody can be invited into the company, which is a verdict on
+	// the chart rather than on any provider; a tolerance for it here would
+	// hide that advisory on a provider's shape too, so the probe gives the
+	// engine nothing about the chart to say.
 	founder := seat("probe", "founder")
 	founder.Spec.Kind = v1.SeatKindHuman
 	founder.Spec.Contact = v1.SeatContact{GitHubLogin: "probe-founder"}

@@ -30,6 +30,14 @@ const (
 	testUID       = types.UID("3f2a9c1e-6b1d-4e7a-9a52-0c8d5f1e2b47")
 )
 
+// caseSlack is the company case whose people talk on Slack, and caseMinimal
+// the one that connects nothing, which the contract tests start from for a
+// company on a vendor's chat and one on Chatlet.
+const (
+	caseSlack   = "slack"
+	caseMinimal = "minimal"
+)
+
 // The names of the Nimbus sample objects the tests break and look up.
 const (
 	sampleCompany   = "nimbus"
@@ -79,6 +87,9 @@ const (
 // keyName is the key an entry of the company document is named by: a role's,
 // a unit's, an engineConfig block's.
 const keyName = "name"
+
+// keyValue is the key an engineConfig entry holds its block under.
+const keyValue = "value"
 
 // keyLLM is the key of a model chain in the company document: a seat's, and
 // the assistant's.

@@ -6,9 +6,7 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine"
@@ -49,13 +47,9 @@ func TestPlacementRecordKeepsThePreviousPinsUntilApplied(t *testing.T) {
 // on a client that serves its status subresource.
 func placementCompany(t *testing.T, recorded crewletaiv1alpha1.RevisionPlacement) (client.Client, *crewletaiv1alpha1.Company) {
 	t.Helper()
-	scheme := runtime.NewScheme()
-	if err := crewletaiv1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
 	company := &crewletaiv1alpha1.Company{Namespace: "ns", Name: fleetCompany}
 	company.Status.Config = crewletaiv1alpha1.ConfigStatus{RevisionID: "r1", Placement: recorded}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(company).WithStatusSubresource(company).Build()
+	c := fakeClient().WithObjects(company).WithStatusSubresource(company).Build()
 	got := &crewletaiv1alpha1.Company{}
 	if err := c.Get(context.Background(), client.ObjectKeyFromObject(company), got); err != nil {
 		t.Fatal(err)

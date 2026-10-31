@@ -236,8 +236,10 @@ type ApplyRequest struct {
 	Summary string
 
 	// IfMatch makes the write conditional on the active revision being this
-	// one; a stale one fails with ErrRevisionAdvanced before anything is
-	// stored. Empty is unconditional. Mutually exclusive with CreateOnly.
+	// one: a stale one fails with ErrRevisionAdvanced, a 412, before anything
+	// is stored; a write another activated past once it was stored fails
+	// with it too. Empty is unconditional. Mutually exclusive with
+	// CreateOnly.
 	IfMatch string
 
 	// CreateOnly makes the write land only on an engine, and a fleet, with no
@@ -262,8 +264,10 @@ type ApplyResult struct {
 	Epoch int64
 
 	// BaseRevisionID is, for a dry run, the revision the check was built on,
-	// empty when nothing was active. A caller that dry-runs and then applies
-	// with IfMatch set to it applies exactly what it checked.
+	// empty when nothing was active; one stored without a seal, which the
+	// write replaces having read nothing from it (Unsealed), included. A
+	// caller that dry-runs and then applies with IfMatch set to it applies
+	// exactly what it checked.
 	BaseRevisionID string
 
 	// Warnings are what the engine will run but a person should know about,
@@ -481,6 +485,30 @@ type Fleet struct {
 	// TargetEpoch is the activation epoch the fleet converges on, zero when
 	// nothing has been activated or the engine could not read it.
 	TargetEpoch int64
+
+	// Activation is the fleet's activation pointer as the engine read it:
+	// the revision it names and that revision's activation epoch, read in
+	// one read with TargetEpoch. Nil when nothing has been activated or the
+	// engine could not read the pointer, which it does not tell apart.
+	//
+	// It is the one answer to which epoch a revision the operator did not
+	// activate itself, such as a reload of its document, activated as:
+	// GET /config names the revision and not its epoch, and /health the
+	// epoch a node has applied, which may be another revision's.
+	// And it is the one answer to whether a write the engine could not
+	// confirm activated (ErrUnavailable naming a StoredRevisionID): the
+	// pointer names that revision or it does not.
+	Activation *Activation
+}
+
+// Activation is one activation of the fleet's company document.
+type Activation struct {
+	// RevisionID is the revision the activation made active.
+	RevisionID string
+
+	// Epoch is the activation's epoch: every engine has applied the
+	// revision once its applied epoch reaches it.
+	Epoch int64
 }
 
 // Holder returns the lease of the seat with handle and the id the engine

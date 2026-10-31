@@ -40,6 +40,10 @@ func TestCompanyDefaults(t *testing.T) {
 		{"deletionPolicy", s.DeletionPolicy, v1.DeletionPolicyRetain},
 		{"tracker.backend", s.Tracker.Backend, v1.TrackerWorklet},
 		{"knowledge.backend", s.Knowledge.Backend, v1.KnowledgeDoclet},
+		// No default: unset is a backend the engine derives from the
+		// company's Integrations, and a Chatlet written for it would be
+		// refused beside a Slack or Mattermost one.
+		{"chat.backend", s.Chat.Backend, v1.ChatBackend("")},
 	} {
 		if !equal(d.got, d.want) {
 			t.Errorf("%s defaulted to %v, want %v", d.field, d.got, d.want)
@@ -62,6 +66,14 @@ func fullCompany(c *v1.Company) {
 		SkillsContainer: new(""),
 		RootSpace:       "HQ",
 		Vectors:         new(true),
+	}
+	c.Spec.Chat = v1.ChatSettings{
+		Backend: v1.ChatChatlet,
+		Chatlet: v1.ChatletSettings{
+			MessageRetentionDays:  new(int32(90)),
+			DefaultChannelPrivate: new(true),
+			TypingStatus:          v1.WorkingStatusAddressed,
+		},
 	}
 	c.Spec.TokenBudget = v1.TokenBudget{Day: 2_000_000}
 	c.Spec.LLM.Order = []v1.LLMProviderReference{
@@ -132,6 +144,67 @@ func TestCompanyValidation(t *testing.T) {
 				}
 			},
 			want: "worklet applies to backend Worklet only",
+		},
+		{
+			name: "a chatlet block on backend Vendor is refused",
+			mutate: func(c *v1.Company) {
+				c.Spec.Chat = v1.ChatSettings{
+					Backend: v1.ChatVendor,
+					Chatlet: v1.ChatletSettings{DefaultChannelPrivate: new(true)},
+				}
+			},
+			want: msgChatlet,
+		},
+		{
+			// As Crewlet takes it: with no backend the engine derives one,
+			// and a chatlet block applies wherever that is Chatlet.
+			name: "a chatlet block with no backend is accepted",
+			mutate: func(c *v1.Company) {
+				c.Spec.Chat = v1.ChatSettings{Chatlet: v1.ChatletSettings{DefaultChannelPrivate: new(true)}}
+			},
+		},
+		{
+			name: "a chatlet block on backend None is refused",
+			mutate: func(c *v1.Company) {
+				c.Spec.Chat = v1.ChatSettings{
+					Backend: v1.ChatNone,
+					Chatlet: v1.ChatletSettings{DefaultChannelPrivate: new(true)},
+				}
+			},
+			want: msgChatlet,
+		},
+		{
+			name:   "a company with no chat is accepted",
+			mutate: func(c *v1.Company) { c.Spec.Chat = v1.ChatSettings{Backend: v1.ChatNone} },
+		},
+		{name: "a message horizon of 0, for ever, is accepted", mutate: chatRetention(0)},
+		{name: "a message horizon of 29 days is refused", mutate: chatRetention(29), want: msgChatRetention},
+		{name: "a message horizon of 30 days is accepted", mutate: chatRetention(30)},
+		{name: "a message horizon of 3650 days is accepted", mutate: chatRetention(3650)},
+		{
+			name:   "a message horizon of 3651 days is refused",
+			mutate: chatRetention(3651),
+			want:   "should be less than or equal to 3650",
+		},
+		{
+			name:   "a message horizon below 0 is refused",
+			mutate: chatRetention(-1),
+			want:   "should be greater than or equal to 0",
+		},
+		{
+			name: "a typing status the engine does not have is refused",
+			mutate: func(c *v1.Company) {
+				c.Spec.Chat = v1.ChatSettings{
+					Backend: v1.ChatChatlet,
+					Chatlet: v1.ChatletSettings{TypingStatus: "Sometimes"},
+				}
+			},
+			want: "Unsupported value: \"Sometimes\"",
+		},
+		{
+			name:   "a chat backend the engine does not have is refused",
+			mutate: func(c *v1.Company) { c.Spec.Chat = v1.ChatSettings{Backend: "Slack"} },
+			want:   "Unsupported value: \"Slack\"",
 		},
 		{
 			// The second reference names the same provider: kind defaults
@@ -807,7 +880,7 @@ func TestCompanyAssistantDeepWorkValidation(t *testing.T) {
 
 func TestCompanyEngineConfigReservedKeys(t *testing.T) {
 	reserved := []string{
-		"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge",
+		"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "chat",
 		"token_budget", "assistant", "providers", "integrations", "mcp_servers", "roles", "units",
 	}
 	const msgReservedKey = "engineConfig may not set name, mission"
@@ -841,6 +914,13 @@ func TestCompanyEngineConfigReservedKeys(t *testing.T) {
 		},
 	)
 	runCreateCases(t, company, cases)
+}
+
+// chatRetention sets Chatlet's message horizon to days.
+func chatRetention(days int32) func(*v1.Company) {
+	return func(c *v1.Company) {
+		c.Spec.Chat = v1.ChatSettings{Backend: v1.ChatChatlet, Chatlet: v1.ChatletSettings{MessageRetentionDays: &days}}
+	}
 }
 
 func engineConfigOf(key string) []v1.EngineConfigEntry {

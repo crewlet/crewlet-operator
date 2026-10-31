@@ -323,7 +323,7 @@ bin/kubectl port-forward -n acme svc/acme-engine 8080:8080
 Open exactly <http://localhost:8080>: the engine is told it is reached there,
 and accepts a sign-in from that address and no other. While nobody has
 joined, the sign-in page puts its token form first: paste the token and
-choose **Sign in with token**. Then open **Agents › Org chart**, open the
+choose **Sign in with token**. Then open **Company › Org chart**, open the
 founder seat, choose **Add person** with your email address and **Admin**
 ticked, and open the password link it shows you once. Choose a password, sign
 in with your address, and set up the authenticator app the engine asks for.

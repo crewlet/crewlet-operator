@@ -14,8 +14,8 @@ import (
 // objects of the API render, the same list the API refuses in a Company's
 // engineConfig. Every other top-level key is an engineConfig entry.
 var typedKeys = []string{
-	"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "token_budget",
-	keyProviders, keyIntegrations, keyMCPServers, keyRoles, keyUnits, keySeatAccessMigrated,
+	"name", "mission", "vision", "policies", "timezone", "tracker", "knowledge", "chat", "token_budget",
+	"assistant", keyProviders, keyIntegrations, keyMCPServers, keyRoles, keyUnits, keySeatAccessMigrated,
 }
 
 // keySeatAccessMigrated is the document's list of the integration kinds whose

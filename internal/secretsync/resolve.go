@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/crewlet/crewlet-operator/internal/engine"
 	"github.com/crewlet/crewlet-operator/internal/secretref"
 )
 
@@ -99,6 +100,13 @@ type Desired struct {
 	// and no value, so Sync refuses it rather than delete every entry it
 	// does not push.
 	partial bool
+	// keepsListed is whether running, which KeepListed named then, is a
+	// revision nobody can read, for which every owned name the store lists
+	// is kept, each read as required (withListed). A bool rather than the
+	// revision's id beside running, and beside partial, which it shares a
+	// word with, keeps a Desired, a value every reconcile copies, inside the
+	// size a value parameter is held to.
+	keepsListed bool
 }
 
 // Names returns the names Desired pushes, sorted.
@@ -192,7 +200,28 @@ func (d *Desired) keep(revision string, names []string) {
 	d.kept = kept
 }
 
-// Running is the revision Keep named, empty for none.
+// KeepListed is Keep for a revision whose document nobody can read, one the
+// engine stores without a seal: revision is its id, and every name the store
+// lists that Owns accepts is kept, so Sync and Withdraw delete none that
+// Desired pushes no value for, an absent name (Missing) and a released one
+// (Release) included, whatever the State they are given records of the
+// revision's reading, while Sync still pushes every value Desired holds.
+//
+// Which names such a revision references is what nobody can read, and it is
+// not what the engine's nodes run: each runs the revision it applied before,
+// which it reads again from the store when it restarts, so not even a record
+// of how this revision reads a name says what they need. A name deleted while
+// such a revision is the active one is a value a node may start without at
+// its next boot, read as required by a revision the operator cannot see. The
+// store stays as it is until a revision somebody can read runs, which the
+// write that replaces this one is; the sync after that write removes what it
+// lets go.
+func (d *Desired) KeepListed(revision string) {
+	d.running = revision
+	d.keepsListed = true
+}
+
+// Running is the revision Keep or KeepListed named, empty for none.
 func (d Desired) Running() string {
 	return d.running
 }
@@ -214,18 +243,58 @@ func (d Desired) Unread() []string {
 	return slices.Sorted(maps.Keys(d.unread))
 }
 
-// Holders are the revisions kept (Keep, KeepServed) that reference name and
-// read it as required, as prev records their reading (State.LetGo), sorted:
-// those that keep an absent name in the store.
+// Holders are the revisions kept (Keep, KeepServed, KeepListed) that
+// reference name, an absent name the store holds (Result.Retained), and read
+// it as required, as prev records their reading (State.LetGo), sorted: those
+// that keep it in the store. The revision KeepListed named keeps every name
+// the store lists that Owns accepts, and reads each as required whatever prev
+// records, since nobody can read how it reads one, so it holds every such
+// name.
 func (d Desired) Holders(name string, prev State) []string {
+	out := d.holders(name, prev)
+	if d.keepsListed && Owns(name) && !slices.Contains(out, d.running) {
+		out = append(out, d.running)
+		slices.Sort(out)
+	}
+	return out
+}
+
+// holders is Holders by what d keeps alone: the revision KeepListed named
+// holds only the names withListed kept for it, those the store lists, so that
+// a name it no longer lists, which a run that stopped before saving removed,
+// is not taken for one it keeps.
+func (d Desired) holders(name string, prev State) []string {
 	var out []string
 	for revision, names := range d.kept {
-		if _, ok := names[name]; ok && !prev.letsGo(revision, name) {
+		if _, ok := names[name]; ok && (d.unreadable(revision) || !prev.letsGo(revision, name)) {
 			out = append(out, revision)
 		}
 	}
 	slices.Sort(out)
 	return out
+}
+
+// unreadable reports whether revision is the one KeepListed named, whose
+// document nobody can read.
+func (d Desired) unreadable(revision string) bool {
+	return d.keepsListed && revision == d.running
+}
+
+// withListed is d with every name listed that Owns accepts kept for the
+// revision KeepListed named, where it named one, and d itself otherwise. It
+// copies what it changes (keep), so the caller's Desired keeps what it was.
+func (d Desired) withListed(listed []engine.SecretInfo) Desired {
+	if !d.keepsListed {
+		return d
+	}
+	names := make([]string, 0, len(listed))
+	for _, info := range listed {
+		if Owns(info.Name) {
+			names = append(names, info.Name)
+		}
+	}
+	d.keep(d.running, names)
+	return d
 }
 
 // Release names the references the revision the engine runs lets go without
@@ -253,11 +322,12 @@ func (d *Desired) Release(absent ...*MissingError) {
 }
 
 // retains reports whether name, absent, stays in the store: a revision kept
-// references it (Keep, KeepServed) and reads it as required, which it does
-// unless prev records it as letting the name go without (State.LetGo), or a
-// node runs a revision the operator does not know (KeepUnread).
+// references it (Keep, KeepServed, KeepListed) and reads it as required,
+// which it does unless prev records it as letting the name go without
+// (State.LetGo), or a node runs a revision the operator does not know
+// (KeepUnread).
 func (d Desired) retains(name string, prev State) bool {
-	return len(d.unread) > 0 || len(d.Holders(name, prev)) > 0
+	return len(d.unread) > 0 || len(d.holders(name, prev)) > 0
 }
 
 // keeps reports whether a revision kept references name, or a node runs a
@@ -276,10 +346,11 @@ func (d Desired) keeps(name string) bool {
 
 // letGo reports whether a revision kept references name and, as prev
 // records its reading, lets it go: what makes a released name one to remove,
-// where no other revision kept retains it.
+// where no other revision kept retains it. The revision KeepListed named lets
+// nothing go: nobody can read how it reads a name, whatever prev records.
 func (d Desired) letGo(name string, prev State) bool {
 	for revision, names := range d.kept {
-		if _, ok := names[name]; ok && prev.letsGo(revision, name) {
+		if _, ok := names[name]; ok && !d.unreadable(revision) && prev.letsGo(revision, name) {
 			return true
 		}
 	}

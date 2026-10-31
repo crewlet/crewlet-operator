@@ -111,6 +111,75 @@ type KnowledgeSettings struct {
 	Vectors *bool `json:"vectors,omitempty"`
 }
 
+// ChatBackend is which chat surface a company runs. It maps onto Crewlet's
+// chat.backend (Chatlet is `chatlet`, Vendor is `vendor`, None is `none`).
+// +kubebuilder:validation:Enum=Chatlet;Vendor;None
+type ChatBackend string
+
+// The chat backends.
+const (
+	// ChatChatlet is Chatlet, Crewlet's own chat: rooms the engine keeps, a
+	// room for each unit's channel, read on the dashboard.
+	ChatChatlet ChatBackend = "Chatlet"
+	// ChatVendor is the Slack or Mattermost the company's Integrations (or
+	// a seat's Slack app) connect it to.
+	ChatVendor ChatBackend = "Vendor"
+	// ChatNone is a company with no chat.
+	ChatNone ChatBackend = "None"
+)
+
+// ChatletSettings is the policy of Chatlet. It maps onto Crewlet's
+// chat.chatlet.
+// +kubebuilder:validation:MinProperties=1
+type ChatletSettings struct {
+	// messageRetentionDays is how long a message lives before the engine
+	// prunes it: 0 keeps messages for ever, and a horizon is 30 to 3650
+	// days, since under a month somebody away could miss a decision before
+	// reading it. Unset takes Crewlet's default of 365. Crewlet's
+	// `message_retention_days`.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=3650
+	// +kubebuilder:validation:XValidation:rule="self == 0 || self >= 30",message="messageRetentionDays must be 0, which keeps messages for ever, or 30 to 3650"
+	MessageRetentionDays *int32 `json:"messageRetentionDays,omitempty"`
+
+	// defaultChannelPrivate makes a room created without a stated
+	// visibility private; unset, such a room is public, readable by the
+	// company's seats. A room created with a visibility keeps it. Crewlet's
+	// `default_channel_private`.
+	// +optional
+	DefaultChannelPrivate *bool `json:"defaultChannelPrivate,omitempty"`
+
+	// typingStatus is when a seat shows in a room that it is working on a
+	// message. Unset takes Crewlet's default, Always. Crewlet's
+	// `typing_status`.
+	// +optional
+	TypingStatus WorkingStatus `json:"typingStatus,omitempty"`
+}
+
+// ChatSettings is which chat surface a company runs and the policy of
+// Chatlet. It maps onto Crewlet's chat block.
+// +kubebuilder:validation:XValidation:rule="!has(self.chatlet) || !has(self.backend) || self.backend == 'Chatlet'",message="chatlet applies to backend Chatlet only, or to no backend, which Crewlet derives Chatlet for a company with no Slack or Mattermost"
+// +kubebuilder:validation:MinProperties=1
+type ChatSettings struct {
+	// backend is which chat surface the company runs. Unset derives it, as
+	// Crewlet does: Vendor for a company with a Slack or Mattermost
+	// Integration or a seat with a Slack app, Chatlet for every other. So
+	// there is no default here: a Chatlet written beside such an
+	// Integration, or a Vendor without one, is refused by the engine's dry
+	// run, reported on the Company, since a company's conversations cannot
+	// live in two places.
+	// +optional
+	Backend ChatBackend `json:"backend,omitempty"`
+
+	// chatlet is the policy of Chatlet: for backend Chatlet, or for no
+	// backend on a company Crewlet derives Chatlet for. On a company whose
+	// chat is a vendor's nothing would read it, so the engine's dry run
+	// refuses it there, reported on the Company.
+	// +optional
+	Chatlet ChatletSettings `json:"chatlet,omitzero"`
+}
+
 // LLMProviderKind is the kind of model provider a reference names.
 // +kubebuilder:validation:Enum=LLMProvider;PlatformLLMProvider
 type LLMProviderKind string
@@ -1201,6 +1270,11 @@ type CompanySpec struct {
 	// +optional
 	Knowledge KnowledgeSettings `json:"knowledge,omitzero"`
 
+	// chat is which chat surface the company runs: Chatlet, Crewlet's own,
+	// unless it is connected to Slack or Mattermost. Crewlet's `chat`.
+	// +optional
+	Chat ChatSettings `json:"chat,omitzero"`
+
 	// tokenBudget caps the tokens all seats together may spend per window.
 	// Each window binds every agent seat, so Crewlet refuses one below
 	// turn_engine.executor_min_budget_tokens (25000 unless spec.engineConfig
@@ -1237,27 +1311,26 @@ type CompanySpec struct {
 
 	// engineConfig is passed through into the company document as written,
 	// for the engine's tuning blocks that have no field here: turn_engine,
-	// learning, scheduling, workers, skill_variables and the
+	// learning, scheduling, workers, skill_variables, artifacts and the
 	// notification_* settings, spelled as Crewlet spells them. Each entry is
 	// one top-level key of the document and its value. The operator does not
 	// interpret it; the engine validates it in the dry run before every
 	// apply, and a refusal is reported on the Company.
 	//
 	// It may not set what another field or object of this API owns: name,
-	// mission, vision, policies, timezone, tracker, knowledge, token_budget,
-	// assistant, providers, integrations, mcp_servers, roles, units or
-	// seat_access_migrated, which the operator writes with every
-	// integration kind so the engine acts on each Seat's
-	// spec.integrations. Every
-	// position Crewlet holds a credential in lives under one of those keys, so
-	// engineConfig can never carry a credential: the API server refuses a
-	// Company whose engineConfig names one of them, before anything is
-	// stored.
+	// mission, vision, policies, timezone, tracker, knowledge, chat,
+	// token_budget, assistant, providers, integrations, mcp_servers, roles,
+	// units or seat_access_migrated, which the operator writes with every
+	// integration kind so the engine acts on each Seat's spec.integrations.
+	// Every position Crewlet holds a credential in lives under one of those
+	// keys, so engineConfig can never carry a credential: the API server
+	// refuses a Company whose engineConfig names one of them, before anything
+	// is stored.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=64
-	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, token_budget, assistant, providers, integrations, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'chat', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, token_budget, assistant, providers, integrations, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
 	EngineConfig []EngineConfigEntry `json:"engineConfig,omitempty"`
 
 	// config is how the operator manages the company's document.
@@ -1451,22 +1524,66 @@ type ConfigStatus struct {
 	Epoch *int64 `json:"epoch,omitempty"`
 
 	// appliedHash is the hash of the rendered document and of the values
-	// of the Secret keys it references, as last applied: a change to
-	// either is applied as a new revision, since the engine reads a
-	// rotated value only when a revision activates. The values enter it
-	// only as keyed fingerprints, so it reveals nothing about them.
+	// of the Secret keys it references, as the revision recorded runs
+	// them: the operator's last write, or a revision it found running that
+	// document after every value it wrote. The values enter it only as
+	// keyed fingerprints, so it reveals nothing about them.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	AppliedHash string `json:"appliedHash,omitempty"`
 
-	// appliedAt is when the operator last applied a revision.
+	// appliedAt is when the operator activated the revision this records,
+	// or found the engine running it where it adopted a revision of the
+	// rendered document it did not write (a reload), or a write of its own
+	// whose activation the engine could not confirm (unconfirmed), which may
+	// have landed any time since it was written: what the operator's wait
+	// for the engine to apply its epoch counts from.
 	// +optional
 	AppliedAt *metav1.Time `json:"appliedAt,omitempty"`
 
 	// objects counts the objects the revision was rendered from.
 	// +optional
 	Objects AppliedObjectCounts `json:"objects,omitzero"`
+
+	// unconfirmed are the revisions of the rendered document the operator
+	// wrote, which the engine stored, and whose activation the engine sent
+	// to its fleet and could not confirm (a 503 naming the revision it
+	// stored): the fleet may run one of them or none. Before it writes
+	// again, the operator reads which revision the engine runs. If it runs
+	// one of these, that write landed: status.config records it as the
+	// operator's write, as though the engine had confirmed it. If it runs the
+	// revision one of them was built on, that one has not landed and still
+	// may, so it stays, and the write is sent again on the same condition,
+	// which the engine refuses once one of them lands. Any other can no
+	// longer land, and goes, to overtaken where it was written into an
+	// engine that ran no document. A reload the operator asks for, to
+	// activate a revision of its own again, is recorded here too when the
+	// engine stores it and cannot confirm activating it, as a write of that
+	// revision's document, whether or not a read after it could say which
+	// revision runs. They are oldest first, and a seventeenth drops the
+	// oldest.
+	// +optional
+	// +listType=map
+	// +listMapKey=revisionID
+	// +kubebuilder:validation:MaxItems=16
+	Unconfirmed []UnconfirmedRevision `json:"unconfirmed,omitempty"`
+
+	// overtaken are writes from unconfirmed into an engine that ran no
+	// document that another revision the engine activated has overtaken.
+	// None of them can land any more, and under Seed one of them is taken as
+	// the seed whatever revision runs now: the engine stored it while it had
+	// none, so either it landed and was replaced since, or another writer's
+	// create reached the engine first, which nothing the engine says tells
+	// apart. Each is kept until a reconcile decides with it, and they go
+	// once status.config records a revision of the rendered document in
+	// sync, a write of it, or the seed. They are oldest first, and a
+	// seventeenth drops the oldest.
+	// +optional
+	// +listType=map
+	// +listMapKey=revisionID
+	// +kubebuilder:validation:MaxItems=16
+	Overtaken []UnconfirmedRevision `json:"overtaken,omitempty"`
 
 	// placement is where the revision the engine runs pins its agent seats,
 	// read from the engine's document under every management policy. The
@@ -1479,6 +1596,93 @@ type ConfigStatus struct {
 	// +optional
 	Placement RevisionPlacement `json:"placement,omitzero"`
 }
+
+// UnconfirmedRevision is a write of the company document whose activation the
+// engine could not confirm.
+type UnconfirmedRevision struct {
+	// revisionID is the revision the engine stored for the write.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	RevisionID string `json:"revisionID,omitempty"`
+
+	// baseRevisionID is the revision the write was built on, which its
+	// activation was conditioned on. Empty for a write into an engine that
+	// ran no document, conditioned on there being none.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	BaseRevisionID string `json:"baseRevisionID,omitempty"`
+
+	// appliedHash is the appliedHash of the write: the rendered document's
+	// and its values' hash as they were when it was written, which
+	// status.config.appliedHash records once the engine is seen running the
+	// revision.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	AppliedHash string `json:"appliedHash,omitempty"`
+
+	// writtenAt is when the operator wrote it. A write the engine is seen
+	// running is recorded as applied when the operator found it, since
+	// nothing says when its activation landed; a seed taken from overtaken,
+	// which nothing waits on, as applied when it was written.
+	// +required
+	WrittenAt *metav1.Time `json:"writtenAt,omitempty"`
+
+	// objects counts the objects the revision was rendered from, which
+	// status.config.objects records once the engine is seen running it.
+	// +optional
+	Objects AppliedObjectCounts `json:"objects,omitzero"`
+
+	// replaced says what the write replaced where that was more than the
+	// operator's own document, which ConfigApplied and a Warning event report
+	// once the engine is seen running the revision, as they report a write the
+	// engine confirmed: Unsealed, a revision the engine stores without a seal,
+	// which the write replaces reading nothing from it; Drifted, a revision
+	// the operator did not write whose document differed from the rendered
+	// one, at driftedAt. Unset for any other base, and for a reload: its base
+	// is a write of the operator's, and where that write is recorded here too,
+	// the revision found running reports what that write replaced, once,
+	// whichever of the two it is.
+	// +optional
+	Replaced ReplacedRevision `json:"replaced,omitempty"`
+
+	// driftedAt names where the Drifted revision the write replaced differed
+	// from the rendered document, as ConfigApplied names it: up to five
+	// places, and how many more there were.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=32768
+	DriftedAt string `json:"driftedAt,omitempty"`
+
+	// documentSHA256 is set for a reload: the SHA-256, in hex, of the
+	// document of the revision it activates again, as the engine answered
+	// it. The engine activates again whichever revision is active when the
+	// request lands, so the revision it stored is the operator's only where
+	// its document is that one; one found running another document was a
+	// reload of a revision somebody activated in between, and goes.
+	// +optional
+	// +kubebuilder:validation:MinLength=64
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[0-9a-f]{64}$`
+	DocumentSHA256 string `json:"documentSHA256,omitempty"`
+}
+
+// ReplacedRevision is what a write of the company document replaced where
+// that was more than the operator's own document.
+// +kubebuilder:validation:Enum=Unsealed;Drifted
+type ReplacedRevision string
+
+const (
+	// ReplacedUnsealed is a revision the engine stores without a seal, which
+	// nobody can read and a whole document replaces.
+	ReplacedUnsealed ReplacedRevision = "Unsealed"
+
+	// ReplacedDrifted is a revision the operator did not write whose
+	// document differed from the rendered one.
+	ReplacedDrifted ReplacedRevision = "Drifted"
+)
 
 // RevisionPlacement is where a revision of the company document pins its
 // agent seats: the values of the two placement labels its roles name. Only

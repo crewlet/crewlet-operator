@@ -73,7 +73,9 @@
 //     reads its store only when a revision activates, so each name removed
 //     is recorded (State.Withdrawn) until one has, for the caller to make
 //     one where none is applied, or the one it applied started with the
-//     value still there.
+//     value still there. Which activation came after a removal, or after a
+//     value written (State.Written), is told by the fleet's activation
+//     epoch read after it (State.Observed, State.Ran), whoever activated it.
 //
 // # What the operator owns in the store
 //

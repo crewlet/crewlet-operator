@@ -53,6 +53,14 @@ it stays in the engine's revision history.
 kubectl get events -n acme --field-selector involvedObject.name=acme,reason=Drifted
 ```
 
+A revision the engine stores without a seal, which no engine reads, is
+replaced the same way, without a comparison: nobody can read it, and a whole
+document is what replaces it. The operator reports `ConfigApplied=True Applied`
+naming the revision it replaced, with a Warning `RevisionUnreadable` event. A
+revision the engine cannot open because it is sealed, under a key its keyring
+lacks or in a form its build does not read, is never written over; see
+[The engine cannot open its company document](troubleshooting.md#the-engine-cannot-open-its-company-document).
+
 ## Observe
 
 The operator renders the document, has the engine dry-run it, and compares
@@ -101,7 +109,10 @@ the Secret values it references, and from then on leaves the engine alone.
 The Company reports `ConfigApplied=True Seeded`; every object reports
 `Applied=False NotManaged`, because a change to it is no longer applied, and
 `SecretsSynced` is `Unknown`. An engine that already had a document is never
-written to.
+written to, even one it cannot open: a revision it stores without a seal is
+reported as `ConfigApplied=False RevisionUnreadable`, for an admin of the
+company to replace with a whole document, or for `Enforce` to replace with the
+rendered one.
 
 > **Under Seed, rotate in the engine.** Rotating a Secret is not applied under
 > Seed either: rotate the credential through the engine's own secret store

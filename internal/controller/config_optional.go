@@ -192,7 +192,8 @@ type leftOutValue struct {
 
 // leftOutLines are the lines of values, each saying too where the engine's
 // store keeps the value it held for a revision an engine pod runs or starts
-// on (run.retained).
+// on, or for the engine's active revision where it stores that one without a
+// seal (run.retained).
 func (run *configRun) leftOutLines(values []leftOutValue) []string {
 	out := make([]string, len(values))
 	for i, v := range values {
@@ -200,8 +201,14 @@ func (run *configRun) leftOutLines(values []leftOutValue) []string {
 		switch {
 		case !slices.Contains(run.retained, v.key):
 		case run.keptPlainly():
-			out[i] += "; the engine keeps the value it held for the revision it runs, which " +
-				strings.TrimPrefix(run.keptBecause(false, "the key"), "the revision the engine runs ") +
+			held, subject := "the revision it runs", "the revision the engine runs "
+			if run.keptFor[0].unsealed {
+				// The engine's active revision, one stored without a seal,
+				// which its nodes do not run.
+				held, subject = "its active revision", "the engine's active revision "
+			}
+			out[i] += "; the engine keeps the value it held for " + held + ", which " +
+				strings.TrimPrefix(run.keptBecause(false, "the key"), subject) +
 				", until a revision that lets it go runs"
 		default:
 			out[i] += "; the engine keeps the value it held, as " + run.keptBecause(false, "the key") +
@@ -214,6 +221,6 @@ func (run *configRun) leftOutLines(values []leftOutValue) []string {
 // leftOutMessage is a part's ResolvedRefs=True message when it gives values
 // it lets go without whose Secret or key does not exist or holds nothing.
 func leftOutMessage(leftOut []string) string {
-	return "Every object it references exists, and every Secret key but these, each a value it gives under a key " +
-		"an optionalKeys list lets go without it: " + strings.Join(leftOut, "; ") + "."
+	return ended("Every object it references exists, and every Secret key but these, each a value it gives under a key " +
+		"an optionalKeys list lets go without it: " + strings.Join(leftOut, "; "))
 }

@@ -13,9 +13,10 @@
 // that takes a held human seat away a *SeatHeldError, a lost compare-and-set
 // matches ErrRevisionAdvanced, a refused token ErrUnauthorized, a token the
 // engine will not let do this ErrForbidden, a write a managed document
-// refuses this token ErrConfigManaged, a request the engine asks to be sent
-// again ErrUnavailable, a draining or unconfigured engine ErrNotReady, and
-// anything else an *APIError with the engine's code and message.
+// refuses this token ErrConfigManaged, a revision the engine cannot open
+// ErrRevisionUnreadable, a request the engine could not answer now
+// ErrUnavailable, a draining or unconfigured engine ErrNotReady, and anything
+// else an *APIError with the engine's code and message.
 //
 // No error this package returns carries a secret value: the engine never
 // echoes one, and a secret written with WriteSecret or PutSecrets travels
@@ -229,11 +230,18 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 		} `json:"unplaceable"`
 		UnmannedRoles []string `json:"unmanned_roles"`
 		TargetEpoch   int64    `json:"target_epoch"`
+		Activation    *struct {
+			RevisionID string `json:"revision_id"`
+			Epoch      int64  `json:"epoch"`
+		} `json:"activation"`
 	}
 	if err := c.call(ctx, request{method: http.MethodGet, path: "/fleet"}, http.StatusOK, &answer); err != nil {
 		return Fleet{}, err
 	}
 	f := Fleet{ThisNode: answer.ThisNode, UnmannedRoles: answer.UnmannedRoles, TargetEpoch: answer.TargetEpoch}
+	if a := answer.Activation; a != nil && a.RevisionID != "" {
+		f.Activation = &Activation{RevisionID: a.RevisionID, Epoch: a.Epoch}
+	}
 	for i := range answer.Nodes {
 		n := &answer.Nodes[i]
 		f.Nodes = append(f.Nodes, FleetNode{
@@ -270,7 +278,10 @@ func (c *Client) Fleet(ctx context.Context) (Fleet, error) {
 // goes on running the revision it ran before, and starts on the revision its
 // own store names where that store outlives a restart, as a data pod's does
 // (a seat pod's does not: it starts on nothing and applies the fleet's
-// revision). Before the first apply it fails with ErrNoActiveRevision.
+// revision). Before the first apply it fails with ErrNoActiveRevision, and
+// on an engine that cannot open the fleet's revision with
+// ErrRevisionUnreadable, which names it (Unsealed reads the one a whole
+// document replaces).
 //
 // An engine that cannot read the activation pointer from its coordination
 // store answers 503 with a Retry-After, which is ErrUnavailable: "the fleet
@@ -352,8 +363,20 @@ func (c *Client) Revision(ctx context.Context, id string) (Revision, error) {
 //
 // A document the engine refuses fails with a *ValidationError locating each
 // problem; a stale req.IfMatch, or a write that lost a race with another
-// writer, with ErrRevisionAdvanced; req.CreateOnly on a configured engine with
-// ErrAlreadyConfigured.
+// writer, with ErrRevisionAdvanced (a 412 when req.IfMatch is set, a 409 when
+// it is not); req.CreateOnly on a configured engine with ErrAlreadyConfigured;
+// a write while the engine cannot open the fleet's revision, which the write
+// reads first, with ErrRevisionUnreadable, except over one stored without a
+// seal (Unsealed), which the write (a dry run included) replaces, reading
+// nothing from it: that revision stays the write's base, so a req.IfMatch is
+// judged against it as against any other, and a write without one replaces
+// it unconditionally; and a write whose activation the engine sent and could
+// not confirm with ErrUnavailable naming the revision it stored, which
+// UnconfirmedActivation reads. The fleet may run that revision or may not: the
+// caller keeps it until a read of the fleet's activation (Fleet.Activation)
+// says which, and sends the write again, on the condition it was first sent
+// on, only once that read shows the fleet still runs the revision the write
+// was built on.
 func (c *Client) ApplyConfig(ctx context.Context, req ApplyRequest) (ApplyResult, error) {
 	if req.IfMatch != "" && req.CreateOnly {
 		return ApplyResult{}, errors.New("apply the company document: IfMatch and CreateOnly are mutually exclusive: " +

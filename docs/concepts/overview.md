@@ -31,7 +31,7 @@ the [API reference](../reference/api.md).
 | Kind | Scope | What it is | Becomes in the company document |
 |---|---|---|---|
 | `EngineClass` | Cluster | A platform's defaults and guard rails: the engine image, the size of the data pod, how companies are exposed, limits, models the platform provides | Nothing directly; it shapes the pods, the routes and the limits of every Company that names it |
-| `Company` | Namespace | The company itself, and the engine that runs it | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `token_budget`, `providers.embeddings`, `providers.sandbox`, and the engine tuning blocks in `engineConfig` |
+| `Company` | Namespace | The company itself, and the engine that runs it | `name`, `mission`, `vision`, `policies`, `timezone`, `tracker`, `knowledge`, `chat`, `token_budget`, `providers.embeddings`, `providers.sandbox`, and the engine tuning blocks in `engineConfig` |
 | `Unit` | Namespace | One node of the org chart: a division, a team, a squad | One entry of `units`, nested under its parent |
 | `Seat` | Namespace | One seat: an AI agent, or a person agents work with, tied to their own accounts ([A person's accounts](../guides/integrations.md#a-persons-accounts)) | One entry of `roles`, inside its unit |
 | `LLMProvider` | Namespace | A model a company's seats can run on: a coding CLI the engine drives ([Running seats on a coding CLI](../guides/cli-agents.md)) | One entry of `providers.llm` |

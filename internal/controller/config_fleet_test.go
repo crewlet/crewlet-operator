@@ -12,11 +12,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	crewletaiv1alpha1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine"
@@ -215,19 +212,12 @@ func TestSeatReadyFollowsTheFleet(t *testing.T) {
 // reconcile that would not have looked again.
 func TestPlacementResyncPollsOnlyWhileSeatsSettle(t *testing.T) {
 	const workload = fleetWorkload
-	scheme := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
-	if err := crewletaiv1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
 	statefulSet := func(ready int32) *appsv1.StatefulSet { return fleetStatefulSet(workload, ready) }
 	start := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
 	reconciler := &CompanyConfigReconciler{ResyncInterval: time.Minute}
 	look := func(at time.Time, ready int32, fleet *engine.Fleet, result ctrl.Result) time.Duration {
 		t.Helper()
-		reconciler.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(statefulSet(ready)).Build()
+		reconciler.Client = fakeClient().WithObjects(statefulSet(ready)).Build()
 		reconciler.now = func() time.Time { return at }
 		run, _ := seatRun("")
 		run.CompanyConfigReconciler = reconciler
@@ -305,10 +295,6 @@ func TestSeatsPastAPodsShareAreSettling(t *testing.T) {
 		workload = fleetWorkload
 		seatBo   = "bo"
 	)
-	scheme := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
 	nodes := func(n int) []engine.FleetNode {
 		var out []engine.FleetNode
 		for i := range n {
@@ -340,7 +326,7 @@ func TestSeatsPastAPodsShareAreSettling(t *testing.T) {
 			bo.Name, bo.Status.Handle = seatBo, seatBo
 			run.parts = append(run.parts, newPart(bo))
 			bo.Status.Placement = ana.obj.(*crewletaiv1alpha1.Seat).Status.Placement
-			run.Client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(fleetStatefulSet(workload, c.ready)).Build()
+			run.Client = fakeClient().WithObjects(fleetStatefulSet(workload, c.ready)).Build()
 			run.fleet = c.fleet
 			got, err := run.settlingSeats(context.Background())
 			if err != nil {

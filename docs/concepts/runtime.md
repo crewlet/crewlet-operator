@@ -521,8 +521,18 @@ A company's event stream is three quarters of its data volume, and the
 engine refuses to boot on a stream smaller than what a fresh node reserves
 ([the class's floor](company-document.md)). A volume made under an older
 floor, or before an engine that keeps more on its stream, can fall short, and
-a company that keeps more than its volume holds needs room too. Grow the
-claim, not the class:
+a company that keeps more than its volume holds needs room too. The operator
+holds the pods of a company whose volume falls short as they are, with
+`RuntimeReady=False`, reason `DataVolumeTooSmall`, naming the volume and its
+claim, rather than roll them onto an engine that cannot reserve its state
+logs; a pod whose image has already moved to such an engine restarts all the
+same, and the condition says why. A new company made from a class stored
+before the floor rose, which the API server lets keep a size it no longer
+admits until the size itself is changed, has no claim yet: the condition
+names the class instead, and setting the class's `data.storage.size` to at
+least its floor (`14Gi`, or `11Gi` with the files in S3) clears it, since the
+operator then creates the company's volume at that size. A company that has
+its claim grows the claim, not the class:
 
 1. The claim's StorageClass must allow it (`allowVolumeExpansion: true`);
    the API server refuses an expansion otherwise.
@@ -542,11 +552,14 @@ claim, not the class:
 The operator reads the size the claim has, the smaller of what it asks for
 and what it was given, and never less than the size it was made with, so an
 expansion counts once it has landed and a provisioner that rounded a claim up
-moves nothing. The class's `data.storage.size` is not involved, and the
-StatefulSet keeps the template it was created with. A StorageClass that
-cannot expand leaves only a new volume: take a backup and keep the keyring
-Secret with it ([Backups](#backups)), then restore it onto a large enough
-volume as Crewlet's backup guide describes.
+moves nothing. A claim that asks for less than the StatefulSet's template was
+not made from it: it is one a `Retain` deletion kept, which a Company created
+again under the same name runs on as it is, so it counts at what it asks for,
+or what it was given if less. The class's `data.storage.size` is not
+involved, and the StatefulSet keeps the template it was created with. A
+StorageClass that cannot expand leaves only a new volume: take a backup and
+keep the keyring Secret with it ([Backups](#backups)), then restore it onto a
+large enough volume as Crewlet's backup guide describes.
 
 The engine migrates its data forward only. The operator records the image the
 data pod last ran *and was ready on* in `status.engine.image`, and its tag in
@@ -596,7 +609,10 @@ engine would be told it is reached at that Crewlet refuses to start on
 class states it, so this is in practice the class's API route made of a
 Company's namespace or name, whose last label is a number as
 `{{name}}.{{namespace}}`'s is in a namespace named `4711` or `0x1f` ([Reach
-the API from elsewhere](../guides/exposure.md#reach-the-api-from-elsewhere)).
+the API from elsewhere](../guides/exposure.md#reach-the-api-from-elsewhere)),
+or a data volume whose stream is under what a fresh node reserves on it
+(`DataVolumeTooSmall`, [Growing a company's data
+volume](#growing-a-companys-data-volume)).
 Suspending still scales the pod to zero meanwhile.
 
 ---
@@ -824,6 +840,8 @@ operator:
 
 A Company created again with the same name and namespace after a `Retain`
 deletion adopts the kept keyring and finds its volume, and with it its estate.
+Its event stream is sized from that volume as the claim has it, whatever its
+class gives a new volume now.
 To discard a retained company for good, delete the claims first and the
 keyring Secret after them: a Company that finds its claims without its
 keyring holds its pod back rather than generate a keyring that cannot open
@@ -899,11 +917,17 @@ the start, which `EngineHealthy=False Alarms` shows.
 
 Take backups through the engine, which is the only process that can read its
 estate. `crewlet backup` writes a verified copy into a directory on the data
-pod's volume, without stopping the engine:
+pod's volume, without stopping the engine. Like every command that reaches a
+running node it takes the node's address with `-api` and its token from
+`CREWLET_API_TOKEN` alone, never a flag, so pipe in the access token the
+Company publishes ([Reaching the engine](#reaching-the-engine)); the
+directory is named on your machine, so the timestamp is its clock's, in UTC:
 
 ```bash
-kubectl exec -n acme acme-data-0 -- crewlet backup -config /etc/crewlet/crewlet.yaml \
-  -url http://127.0.0.1:8080 -dir /var/lib/crewlet/backups/$(date -u +%Y-%m-%dT%H-%M)
+dir=/var/lib/crewlet/backups/$(date -u +%Y-%m-%dT%H-%M)
+kubectl get secret acme-api-access -n acme -o jsonpath='{.data.token}' | base64 -d |
+  kubectl exec -i -n acme acme-data-0 -- sh -c 'CREWLET_API_TOKEN=$(cat) exec crewlet backup \
+    -config /etc/crewlet/crewlet.yaml -api http://127.0.0.1:8080 -dir "$1"' sh "$dir"
 ```
 
 Run it at least daily. Copy each backup off the volume (`kubectl cp`), since

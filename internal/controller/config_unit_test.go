@@ -7,12 +7,19 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/meta/testrestmapper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/yaml"
 
@@ -24,8 +31,28 @@ import (
 )
 
 // decodeSamples decodes every object in config/samples, the Nimbus company,
-// its parts and its class, the namespaced ones into the namespace given.
+// its parts and its class, the namespaced ones into the namespace given. Each
+// call has objects of its own, copied from one parse per test binary: the
+// samples are read by dozens of tests, and parsing them again for each was
+// most of what those tests cost.
 func decodeSamples(namespace string) ([]client.Object, error) {
+	parsed, err := samples()
+	if err != nil {
+		return nil, err
+	}
+	objects := make([]client.Object, 0, len(parsed))
+	for _, obj := range parsed {
+		obj = obj.DeepCopyObject().(client.Object)
+		if _, cluster := obj.(*crewletaiv1alpha1.EngineClass); !cluster {
+			obj.SetNamespace(namespace)
+		}
+		objects = append(objects, obj)
+	}
+	return objects, nil
+}
+
+// samples is every object in config/samples, decoded once, in no namespace.
+var samples = sync.OnceValues(func() ([]client.Object, error) {
 	files, err := filepath.Glob(filepath.Join("..", "..", "config", "samples", "v1alpha1_*.yaml"))
 	if err != nil {
 		return nil, err
@@ -72,13 +99,31 @@ func decodeSamples(namespace string) ([]client.Object, error) {
 			if err := yaml.UnmarshalStrict([]byte(manifest), obj); err != nil {
 				return nil, fmt.Errorf("%s: %w", file, err)
 			}
-			if typeMeta.Kind != render.KindEngineClass {
-				obj.SetNamespace(namespace)
-			}
 			objects = append(objects, obj)
 		}
 	}
 	return objects, nil
+})
+
+// testScheme holds the API types the fake clients of these tests serve, built
+// once per test binary: a scheme is read-only once built, and building one,
+// with the REST mapper a fake client otherwise derives from it, cost each
+// test that made a client more than the test itself.
+var testScheme = sync.OnceValue(func() *runtime.Scheme {
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(crewletaiv1alpha1.AddToScheme(scheme))
+	return scheme
+})
+
+// testRESTMapper maps every kind testScheme holds, built once with it.
+var testRESTMapper = sync.OnceValue(func() meta.RESTMapper {
+	return testrestmapper.TestOnlyStaticRESTMapper(testScheme())
+})
+
+// fakeClient is a fake client builder over testScheme and testRESTMapper.
+func fakeClient() *fake.ClientBuilder {
+	return fake.NewClientBuilder().WithScheme(testScheme()).WithRESTMapper(testRESTMapper())
 }
 
 // inputOf sorts objects into the input of a render.
