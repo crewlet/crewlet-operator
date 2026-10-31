@@ -381,7 +381,17 @@ for a token no seat is bound to. A pause the operator took reads
 The engine keeps the reason a pause was taken with: a `pauseReason` changed
 while the seat stays paused shows from its next pause on. Setting
 `stopRunning` on a seat already paused ends the turn it is on then; unsetting
-it changes nothing, since a stopped turn is not run again.
+it changes nothing, since a stopped turn is not run again and a stop lasts
+until the seat is resumed.
+
+A stop also reaches a coding run the seat detached, which outlives its turn
+and runs on through the pause: until the seat is resumed, the engine refuses
+every change the run would make, naming who stopped the seat. That is a call
+it makes through the tool bridge of any of the seat's tools not marked
+read-only, and a push its box makes to the company's code host, which the
+operator does not offer. Its reads still answer. A pause without
+`stopRunning` stops new work only, so a running job's writes land, as a turn
+in flight finishes.
 
 The engine knows no seat it does not run, so a Seat created with
 `paused: true` is paused once the revision that adds it is applied: the
@@ -448,7 +458,7 @@ Besides the conditions:
   and `<publicBaseURL>/webhooks/github/<handle>`, set as soon as the Company
   has the vendor's Integration and a public address. While the engine holds
   it paused, `status.pause` says who paused it, when, why, and whether its
-  running turn was stopped.
+  running turn was stopped and its detached coding runs' writes refused.
 - **Unit**: its depth in the chart (`0` at the top; unset for a Unit outside
   it) and how many Seats are directly in it.
 - **Integration**: the company-wide address the vendor delivers to, for

@@ -629,9 +629,14 @@ type SeatSpec struct {
 
 	// stopRunning ends the turn the seat is on at its next round when it is
 	// paused, rather than letting the turn finish; the stopped turn is not
-	// run again. Only with paused true. Setting it on a seat already paused
-	// stops the turn it is on then; unsetting it changes nothing, since a
-	// stopped turn stays stopped. Crewlet's pause `stop_running`.
+	// run again. A coding run the seat detached runs on, but every change
+	// it would make is refused until the seat is resumed: a call it makes
+	// through the tool bridge of any of the seat's tools not marked
+	// read-only, and a push its box makes to the company's code host, which
+	// the operator does not offer. Only with paused true. Setting it on a
+	// seat already paused stops the turn it is on then, and the writes of
+	// its runs; unsetting it changes nothing, since a stop lasts until the
+	// seat is resumed. Crewlet's pause `stop_running`.
 	// +optional
 	StopRunning *bool `json:"stopRunning,omitempty"`
 
@@ -767,7 +772,8 @@ type SeatPauseStatus struct {
 	// +kubebuilder:validation:MaxLength=500
 	Reason string `json:"reason,omitempty"`
 
-	// stopRunning is whether the pause also ended the turn the seat was on.
+	// stopRunning is whether the pause also ended the turn the seat was on,
+	// and refuses its detached coding runs' writes until it is resumed.
 	// +optional
 	StopRunning *bool `json:"stopRunning,omitempty"`
 }
