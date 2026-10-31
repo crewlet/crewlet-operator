@@ -227,7 +227,7 @@ func reported(state engine.SeatPause) pauseVerdict {
 	}
 	message += ". It starts no new turn and its mail waits on its inbox"
 	if state.StopRunning {
-		message += "; the turn it was on was stopped"
+		message += "; the turn it was on was stopped, and its detached coding runs' writes are refused until it is resumed"
 	}
 	return pauseVerdict{
 		status: metav1.ConditionTrue, reason: crewletaiv1alpha1.ReasonSeatPaused, message: message + ".", pause: state,
@@ -237,7 +237,7 @@ func reported(state engine.SeatPause) pauseVerdict {
 func pausedWord(paused, stop bool) string {
 	switch {
 	case paused && stop:
-		return "paused, its running turn stopped"
+		return "paused, its running turn stopped and its runs' writes refused"
 	case paused:
 		return "paused"
 	}

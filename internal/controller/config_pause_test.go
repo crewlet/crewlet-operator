@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -174,5 +175,33 @@ func TestASeatTheEngineDoesNotRunHasNoPause(t *testing.T) {
 	}
 	if len(f.calls) > 0 {
 		t.Errorf("the operator called %v for a seat the engine does not run", f.calls)
+	}
+}
+
+// TestAStoppedSeatSaysItsRunsWritesAreRefused holds the Paused condition of a
+// seat paused with stop_running to everything the stop does: the engine ends
+// the turn the seat was on and refuses its detached coding runs' writes until
+// it is resumed, so a condition naming only the turn would tell the person
+// reading it that a run's writes still land. A pause without the stop names
+// neither, since it stops new work only.
+func TestAStoppedSeatSaysItsRunsWritesAreRefused(t *testing.T) {
+	at := time.Date(2026, 10, 31, 9, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name string
+		stop bool
+	}{{"stopped", true}, {"paused only", false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			message := reported(engine.SeatPause{Paused: true, By: "jane", At: at, StopRunning: tc.stop}).message
+			for _, phrase := range []string{"the turn it was on was stopped", "detached coding runs' writes are refused until it is resumed"} {
+				if strings.Contains(message, phrase) != tc.stop {
+					t.Errorf("the condition's message %q names %q: %v, want %v", message, phrase, !tc.stop, tc.stop)
+				}
+			}
+			word := pausedWord(true, tc.stop)
+			if strings.Contains(word, "writes refused") != tc.stop {
+				t.Errorf("pausedWord(true, %v) = %q: says the runs' writes are refused is %v, want %v",
+					tc.stop, word, !tc.stop, tc.stop)
+			}
+		})
 	}
 }
