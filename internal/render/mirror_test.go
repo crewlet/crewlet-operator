@@ -401,6 +401,32 @@ const (
 	// none.
 	inboxLiftRead = "v0.1.1-0.20261027063930-66e8ad593665"
 
+	// brokerAuthRead is crewlet/crewlet#298's engine whose embedded broker
+	// admits only the fleet's keys (crewlet/crewlet@a7a499203), read at the
+	// head of its branch, where a node's connections to its own broker and a
+	// leaf's wait for the fleet were read again against the windows. Every
+	// connection the engine opens to its own broker is made in process, a
+	// clustered member's too (crewlet/crewlet@acde63711), and presents a key
+	// the process mints at each start ((*embeddedServer).connect). A data
+	// pod is a lone member and a seat pod a leaf, whose connections were in
+	// process already: each is still a handshake bounded by listenTimeout
+	// and a flush, so a pod's boot counts each connection at the 60 s it
+	// did. A leaf asks for the fleet's JetStream as it did, until
+	// clusterReadyTimeout; only its refusal moved, which now names the key
+	// the leaf presents, because a member that refuses that key looks from
+	// the leaf like one that is not there (awaitLeafReady). So a seat pod
+	// that every data pod refuses exits after the minute a seat pod that
+	// reaches none does, and no window moves. The decision that moved is
+	// who may link: the leaf listener admits a link only on a key derived
+	// from the company's keyring, which the render writes whole into every
+	// pod, data and seat alike, so no render changes. What it changes is
+	// the operator's text on what guards the leaf listener. An edit of the
+	// keyring that adds a key and makes it active strands no seat pod, since
+	// the seat pods take a new keyring only once every data pod is ready on
+	// it (writeSeatPool); one that removes the key they present has them
+	// refused between the two rolls, as the credentials guide says.
+	brokerAuthRead = "v0.1.1-0.20261030230815-ab6d97e67b58"
+
 	// The engine files most of the bounds on a boot are read from, and the
 	// guide that quotes the windows they add up to.
 	jsprovisionGo     = "internal/jsprovision/jsprovision.go"
@@ -1805,16 +1831,16 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "a leaf asks for the fleet's JetStream until clusterReadyTimeout, checking the deadline only " +
 			"before each ask",
-		digest: "18c689dfdc9356ecd3d8d273914a0c19d393047d2a9c69234146979fa92fadd3",
-		read:   bootBoundsRead,
+		digest: "af83b256e8110005765fdda32e45006f0ff7bee4a7d2a6a1b8955c69770d9a5d",
+		read:   brokerAuthRead,
 	},
 	{
 		file: embeddedGo, name: "(*embeddedServer).connect",
 		against: bootWindows,
 		decides: "a connection to the node's own broker is a handshake bounded by listenTimeout, then held to the " +
 			"contract",
-		digest: "879f96f323d34070554be24a1ff2aede52334a0cb153d33147d42a1bb4c072a3",
-		read:   bootBoundsRead,
+		digest: "31e5318acb11098be612c0c0fe615973a1941957318f27e859be28a110809364",
+		read:   brokerAuthRead,
 	},
 	{
 		file: embeddedGo, name: "awaitBoot",
