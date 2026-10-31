@@ -776,12 +776,13 @@ func engineEgress(settings *crewletaiv1alpha1.NetworkPolicySettings) []*networki
 // that closes the listener reaches the pods only as the data StatefulSet
 // rolls, which takes a drain at least and lasts as long as the rollout is
 // held back, and a pod that still listens meanwhile must stay behind the
-// policy. Crewlet's broker accepts any connection on
-// that port, with no authentication and no TLS, and whoever joins it reads
-// and writes the company's whole event stream; with companies sharing a
-// cluster, and sometimes a namespace, only a policy keeps another's pods off
-// it. It admits the leaf port from this company's seat pods alone, selected
-// by the company's label.
+// policy. Crewlet's broker admits a link on that port only on a key derived
+// from the company's keyring, but it encrypts nothing, and whoever joins it
+// reads and writes the company's whole event stream; with companies sharing a
+// cluster, and sometimes a namespace, the policy keeps another's pods from
+// reaching the port at all, so the keyring is not the only thing between
+// them and the stream. It admits the leaf port from this company's seat pods
+// alone, selected by the company's label.
 //
 // It selects the data pods for ingress, and a pod any policy selects for
 // ingress is denied every connection no policy admits: so without the class's

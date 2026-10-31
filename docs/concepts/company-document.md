@@ -266,8 +266,12 @@ opens the leaf listener seat pods join the event stream through
 Company has a pool yet: the class decides it, not the Company, so a company
 that adds its first pool restarts nothing, and a class that changes its
 policy restarts its companies' data pods. Like every port of Crewlet's
-embedded broker, the listener accepts any connection that reaches it, with no
-authentication and no TLS.
+embedded broker, the listener admits a link only when it presents a key
+derived from the company's keyring, which the operator writes into every
+data pod's and seat pod's `crewlet.yaml`: each pod presents the active key
+and accepts every key of the keyring it started with. The link carries no
+TLS ([The fleet's broker admits only its own
+nodes](https://github.com/crewlet/crewlet/blob/main/docs/guides/deployment.md#the-fleets-broker-admits-only-its-own-nodes)).
 
 The event stream is given three quarters of the data volume
 (`stream.store_max_bytes`), measured from the size the pod's volume claim

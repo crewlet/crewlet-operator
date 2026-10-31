@@ -605,8 +605,10 @@ A class that allows seat pools (`seatPools.policy: Allowed`) also has the
 operator create two more policies per company, under either mode:
 
 - `<company>-broker` admits the data pods' leaf listener (port 7422) from the
-  company's own seat pods and from nothing else, since Crewlet's broker port
-  takes any connection without authentication or TLS. Under `None` it also
+  company's own seat pods and from nothing else. Crewlet's broker admits a
+  link there only on a key derived from the company's keyring, but it
+  encrypts nothing, and the policy keeps every other pod from reaching the
+  port at all. Under `None` it also
   admits ports 8080, 8081 and 8082 from anywhere, so the data pods stay as
   open as they are without a policy.
 - `<company>-seats`, while the company runs seat pods, admits no connection to

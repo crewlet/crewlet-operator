@@ -78,15 +78,21 @@ breaks one of them is a vulnerability and should be reported as above.
   reach them, unless the EngineClass routes the whole API (`exposure.api`)
   through a Gateway or an Ingress of your own, which should be internal.
   Your CNI must enforce NetworkPolicy for that layer to exist.
-- **The data pods' leaf listener is unauthenticated.** While a company may
-  run seat pools, its data pods listen on port 7422 for the seat pods to
-  join the event stream, with no authentication and no TLS; whoever connects
-  reads and writes the company's whole event stream. The NetworkPolicy
+- **The data pods' leaf listener admits only the company's keys, and
+  encrypts nothing.** While a company may run seat pools, its data pods
+  listen on port 7422 for the seat pods to join the event stream. Crewlet's
+  broker admits a link there only when it presents a key derived from the
+  company's keyring, so whoever can read a Secret that carries it can join:
+  `<company>-keyring`, `<company>-bootstrap` or any
+  `<company>-bootstrap-<pool>-<hash>`. Whoever joins reads and writes the
+  company's whole event stream; the link carries no TLS, so whoever can watch the pod network
+  between the pods reads what crosses it. The NetworkPolicy
   `<company>-broker` admits the port only from pods carrying the company's
-  seat-pod labels, so the listener is closed to other namespaces only where
-  the CNI enforces NetworkPolicy, and within a namespace only where nobody
-  but the operator creates pods: one company per namespace, or a namespace
-  no tenant can create pods in
+  seat-pod labels, so other pods cannot reach the listener at all, but only
+  where the CNI enforces NetworkPolicy. Within a namespace neither holds
+  against whoever can create pods there, since such a pod can carry the
+  labels and mount any of those Secrets: one company per namespace, or a
+  namespace no tenant can create pods in
   ([Network policy](docs/concepts/runtime.md#network-policy)).
 - **The manager's metrics endpoint requires authentication.** It is served
   over HTTPS and every request is authorised against the Kubernetes API,

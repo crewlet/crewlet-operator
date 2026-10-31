@@ -615,10 +615,12 @@ Two more policies come with seat pools:
   seat pod), and for as long as any data pod that runs, or is stopping, was
   started from a template that opened it (the pod's annotation
   `crewlet.ai/leaf-listener: open`), however long the rollout that closes it
-  takes or is held back. Crewlet's leaf listener accepts any
-  connection, with no authentication and no TLS, and whoever joins it reads
-  and writes the company's whole event stream. It selects the data pods and
-  admits port 7422 only from pods labelled as this company's seat pods. Under
+  takes or is held back. Crewlet's leaf listener admits a link only on a
+  key derived from the company's keyring, but it encrypts nothing, and
+  whoever joins it reads and writes the company's whole event stream, so
+  the policy keeps every other pod from reaching it at all: it selects the
+  data pods and admits port 7422 only from pods labelled as this company's
+  seat pods. Under
   `None` it also admits ports 8080, 8081 and 8082 from anywhere, which keeps
   the API, the public listener and the artifact listener as open as they are
   without a policy and closes only the broker.
@@ -634,11 +636,13 @@ only while no policy of anyone else's selects them.
 
 > **Caution: the namespace is the trust boundary.** A policy selects pods by
 > their labels, and whoever can create a pod in the namespace can give it a
-> seat pod's labels and join the company's event stream; they can also mount
-> the company's keyring Secret into it and open its secret store, which no
-> policy governs. Companies that must not read each other's streams and
-> secrets need namespaces of their own, or a namespace where nobody but the
-> operator creates pods.
+> seat pod's labels and mount the company's keyring into it, which is all a
+> seat pod needs to join the company's event stream: `<company>-keyring`
+> holds it, and so do `<company>-bootstrap` and every
+> `<company>-bootstrap-<pool>-<hash>`. The keyring also opens the company's
+> secret store, and no policy governs either. Companies
+> that must not read each other's streams and secrets need namespaces of
+> their own, or a namespace where nobody but the operator creates pods.
 
 Two more limits hold for every NetworkPolicy, on most CNIs (Calico and
 Cilium among them): traffic from the node itself, and from `hostNetwork` pods

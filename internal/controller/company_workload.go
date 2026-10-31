@@ -76,8 +76,8 @@ const BootstrapHashAnnotation = "crewlet.ai/bootstrap-hash"
 // LeafListenerAnnotation marks a data pod whose engine opens the leaf
 // listener (render.LeafPort), with the value leafListenerOpen. It is how the
 // operator knows what the pods that run open, rather than what their next
-// template will: the listener accepts any connection, with no
-// authentication, so the NetworkPolicy that guards it (<c>-broker) stays
+// template will: the listener admits whoever holds the company's keyring,
+// and encrypts nothing, so the NetworkPolicy that guards it (<c>-broker) stays
 // until no running data pod opens it, however long a rollout that closes it
 // takes or is held back.
 const LeafListenerAnnotation = "crewlet.ai/leaf-listener"

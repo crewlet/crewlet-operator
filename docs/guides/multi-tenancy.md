@@ -139,8 +139,10 @@ apart:
   has stopped its engine.
 
 Within a namespace nothing keeps two Companies apart: whoever can create a
-pod there can mount either's keyring Secret, or label the pod as either's
-seat pod and join its event stream, which no NetworkPolicy prevents. Run one
+pod there can mount either's keyring, which opens its secret store and is
+the key its event stream admits (`<company>-keyring` holds it, and so does
+each of the Company's bootstrap Secrets), and label the pod as either's seat
+pod to reach that stream, which no NetworkPolicy prevents. Run one
 Company per tenant namespace, and let nobody but the operator create pods
 in it ([Network policy](../concepts/runtime.md#network-policy)).
 

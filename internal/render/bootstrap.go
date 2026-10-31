@@ -73,9 +73,10 @@ const (
 	// LeafPort is the port of a data pod's leaf listener, which the seat
 	// pods join the company's event stream through. It is open only when
 	// the class's seatPools.policy is Allowed. Like every port of
-	// Crewlet's embedded broker it accepts any connection that reaches it,
-	// with no authentication and no TLS, so only a NetworkPolicy keeps
-	// another tenant's pods off it.
+	// Crewlet's embedded broker it admits a link only on a key derived from
+	// the company's keyring, which every pod's crewlet.yaml carries, and
+	// encrypts nothing; a NetworkPolicy keeps every other pod from
+	// reaching it at all.
 	LeafPort = 7422
 )
 
