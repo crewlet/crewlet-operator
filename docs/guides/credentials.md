@@ -474,6 +474,19 @@ seat pod of the company, each restarting until the key is back in
 Adding a key to the Secret is safe (the pod rolls onto a keyring that opens
 everything it did); removing one is not.
 
+Adding a key and making it active (`crewlet.ai/active-key-id`) in one edit
+is safe as well. A seat pod joins the company's event stream presenting a
+key derived from its keyring's active key, and a data pod admits only the
+keys of the keyring it started with, but the operator moves the seat pods
+onto a new keyring only once every data pod is ready on it: until then they
+present the key that was active, which the data pods still hold, and after
+it the new one, which every data pod already holds. An edit that removes the
+key the seat pods present, making another active, does cut them off for a
+while, when the data pods boot on it at all: the data pods roll onto a
+keyring without that key and refuse each seat pod until it, too, has rolled
+onto the new keyring
+([Seat pods do not run](troubleshooting.md#seat-pods-do-not-run)).
+
 ## When a credential does not arrive
 
 | You see | It means |

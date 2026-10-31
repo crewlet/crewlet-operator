@@ -335,6 +335,21 @@ the company's own seat pods to port 7422 of its data pod, and a policy of
 yours that selects the data pod or the seat pods may refuse what it admits
 by adding isolation of its own.
 
+A seat pod's leaf can also reach the data pod and be refused. Its log says
+the same `made no link to any member`, naming the `secrets.keys` id it
+presents, and the data pod logs `broker_peer_refused` with `listener` `leaf`
+and `presented` `unknown`, at most once a minute; that line names the leaf's
+public nkey rather than the id. A seat pod presents a key derived from its
+keyring's active key, and a data pod admits only the keys of the keyring it
+started with. The operator moves the seat pods onto a new keyring only once
+every data pod is ready on it, so this follows an edit of `<company>-keyring`
+that removed the key the seat pods presented: the data pods rolled onto a
+keyring without it, and each seat pod is refused until it rolls onto the new
+keyring after them. A key added and made active in one edit does not cause
+it. The data pods do not boot at all while the secret store holds a value
+sealed under the removed key
+([The engine's own Secrets](credentials.md#the-engines-own-secrets)).
+
 After a pool is removed, its StatefulSet keeps running until a revision that
 pins no seat to it runs: `SeatsPlaced` names it, and the Company's
 `status.config.placement` says what the running revision pins.
