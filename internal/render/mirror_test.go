@@ -105,10 +105,25 @@ const (
 	// in. Launch and LaunchExecutor hand the box the run's model in place of
 	// an API entry's endpoint, which moved no verdict.
 	cliOnlyRead = "v0.1.1-0.20261023214803-bbedf7ecebd7"
-	// codeHoldsRead is crewlet/crewlet#298's engine whose launches hand the
-	// run row they open the code holds of their turn, read at the head of its
-	// branch, where both launches were read again. A turn holds each scratch
-	// repository of the company's code host it names, so that the host's
+	// bridgeStopRead is crewlet/crewlet#298's engine whose agent-mode launch
+	// opens its run's session on the tool bridge with the seat's stop
+	// (mcpbridge.Session.Stopped), read at the head of its branch, where
+	// LaunchExecutor was read again. The launch builds the session in
+	// bridgeSession now, with the fields it set before and the stop check,
+	// stoppedBy, the one reading the code host refuses a run's box's pushes
+	// by: a person's pause that stops the seat's running work refuses every
+	// bridged call of the run to a tool not proven read-only, until the seat
+	// is resumed, and answers it paused, naming who stopped the seat; a read
+	// still runs. That is no verdict on a launch: bridgeSession always sets
+	// the check, so the bridge's refusal of a session without one is never
+	// met, and the launch refuses what it refused before, in the same order.
+	// What a stop refuses a run is said where the operator says what a stop
+	// does, the Seat API's stopRunning and the applying page's seat pauses.
+	// Both launches were read before at crewlet/crewlet#298's engine whose
+	// launches hand the run row they open the code holds of their turn
+	// (v0.1.1-0.20261029165728-4ee3f06a5fde), the run_sandbox launch read
+	// again since at runReposRead. A turn holds each scratch repository of
+	// the company's code host it names, so that the host's
 	// expiry of an idle one leaves it be while the turn may still use it, and
 	// a run_sandbox launch (Launch) and an agent-mode one (LaunchExecutor)
 	// alike seal that set from its read until the row they open exists, so
@@ -124,8 +139,8 @@ const (
 	// model for every bridged call to name (mcpbridge.Session.Model); it
 	// refuses a node with no bridge before it assembles the run's
 	// environment, in the words the bridge's empty endpoint was refused in,
-	// and opens no session for a run executorRun refuses. Both launches were
-	// read before at the engine that hands an agent-mode run the seat's
+	// and opens no session for a run executorRun refuses. Before that, both
+	// launches were read at the engine that hands an agent-mode run the seat's
 	// system prompt as its standing instructions, on the coding agent's
 	// append channel, apart from the brief, names the run by the turn's task
 	// (LaunchExecutor's System and Label), and frames a wider task after a
@@ -133,7 +148,7 @@ const (
 	// turn's ask already. None of it is a verdict: the head a launch runs
 	// on, its coding agent, every other refusal before a box exists and the
 	// sign-in that must reach the box are as at cliOnlyRead.
-	codeHoldsRead = "v0.1.1-0.20261029165728-4ee3f06a5fde"
+	bridgeStopRead = "v0.1.1-0.20261030230815-ab6d97e67b58"
 	// runReposRead is crewlet/crewlet#298's engine whose run_sandbox launch
 	// gives a run the repositories its call names on the company's own code
 	// host, read at the head of its branch, where the launch was read again.
@@ -149,7 +164,8 @@ const (
 	// before the launcher is asked, and the launch refuses a repository
 	// where the company hosts no code. So none of it is a verdict: the head
 	// a launch runs on, its coding agent, every other refusal before a box
-	// exists and the sign-in that must reach the box are as at codeHoldsRead.
+	// exists and the sign-in that must reach the box are as they were where
+	// both launches were read for the code holds (bridgeStopRead says how).
 	// The variables that environment carries are the engine's own
 	// (config.ReservedSandboxEnv), which Crewlet refuses in every env a run's
 	// environment is assembled from, and so do the API's rules on a Seat's
@@ -968,8 +984,8 @@ var mirrored = []mirror{
 			"tool loop (AgentModeBridgeUnsupported, NotExposed), and so is one whose CLI login cannot follow it " +
 			"into the remote sandbox (sandboxCredentials at phase Execute); a run whose environment holds a " +
 			"value that resolves to nothing starts without it",
-		digest: "d94ef5223e5b02b916353dbf01004e6b5669d92102a43c2bdd75052f6d32a317",
-		read:   codeHoldsRead,
+		digest: "4855c9c523e090c8f93dcac8905db9b1b3638955d5569fa7d5ad73337c1397e9",
+		read:   bridgeStopRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).executorRun",
