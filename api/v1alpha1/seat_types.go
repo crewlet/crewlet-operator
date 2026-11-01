@@ -126,10 +126,10 @@ type SeatSandbox struct {
 	// +kubebuilder:validation:Minimum=0
 	PauseTTLSeconds *int32 `json:"pauseTTLSeconds,omitempty"`
 
-	// maxTurns caps the agentic rounds of one of the seat's executor runs,
-	// the only bound on its turn. Unset takes the Company's
-	// spec.sandbox.defaultMaxTurns, else Crewlet's default of 96; 0 is
-	// uncapped. Crewlet's `max_turns`.
+	// maxTurns caps the agentic rounds of one of the seat's executor runs.
+	// Unset takes the Company's spec.sandbox.defaultMaxTurns, which leaves
+	// runs uncapped unless it is set; 0 is uncapped, lifting a Company's cap
+	// for this seat. Crewlet's `max_turns`.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	MaxTurns *int32 `json:"maxTurns,omitempty"`
