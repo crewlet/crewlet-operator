@@ -21,7 +21,7 @@ import (
 var assistantCLIsSentence = regexp.MustCompile(`(?s)Today that is\s+(.*?):`)
 
 // assistantCLIsStated reads the CLIs the guide says the assistant runs on.
-func assistantCLIsStated(t *testing.T) []v1alpha1.CLIAgentName {
+func assistantCLIsStated(t *testing.T) []v1alpha1.Harness {
 	t.Helper()
 	const guide = "docs/guides/cli-agents.md"
 	data, err := os.ReadFile(filepath.Join("..", "..", guide))
@@ -33,9 +33,9 @@ func assistantCLIsStated(t *testing.T) []v1alpha1.CLIAgentName {
 		t.Fatalf("%s does not say which CLIs the assistant runs on (%q)", guide, assistantCLIsSentence)
 	}
 	spans := regexp.MustCompile("`([^`]+)`").FindAllSubmatch(m[1], -1)
-	out := make([]v1alpha1.CLIAgentName, 0, len(spans))
+	out := make([]v1alpha1.Harness, 0, len(spans))
 	for _, span := range spans {
-		out = append(out, v1alpha1.CLIAgentName(span[1]))
+		out = append(out, v1alpha1.Harness(span[1]))
 	}
 	slices.Sort(out)
 	return out
@@ -62,13 +62,13 @@ func TestContractAssistantCLIsFollowTheEngine(t *testing.T) {
 	config := write(t, "crewlet.yaml", tierA.YAML)
 	on := true
 
-	var takes []v1alpha1.CLIAgentName
-	for _, agent := range webDeniable(t, "crewlet.ai_llmproviders.yaml") {
+	var takes []v1alpha1.Harness
+	for _, harness := range webDeniable(t, "crewlet.ai_llmproviders.yaml") {
 		in := companyCaseNamed(t, "minimal").input(t)
 		in.LLMProviders = []v1alpha1.LLMProvider{{Spec: v1alpha1.LLMProviderSpec{
 			CompanyRef: v1alpha1.CompanyReference{Name: in.Company.Name},
 			LLMProviderSettings: v1alpha1.LLMProviderSettings{
-				Agent: agent, Model: "anthropic/model", WebTools: v1alpha1.CLIAgentWebToolsDenied,
+				Harness: harness, Model: "anthropic/model", WebTools: v1alpha1.HarnessWebToolsDenied,
 			},
 		}}}
 		in.LLMProviders[0].Name = assistantProbe
@@ -76,7 +76,7 @@ func TestContractAssistantCLIsFollowTheEngine(t *testing.T) {
 			LLM: []v1alpha1.LLMProviderReference{{Kind: v1alpha1.LLMProviderKindLLMProvider, Name: assistantProbe}}}
 		doc, err := Company(in)
 		if err != nil {
-			t.Fatalf("%s: %v", agent, err)
+			t.Fatalf("%s: %v", harness, err)
 		}
 		env := bootstrapEnv(tierA)
 		for _, k := range doc.Refs {
@@ -87,10 +87,10 @@ func TestContractAssistantCLIsFollowTheEngine(t *testing.T) {
 		got, stdout, _, _ := verdict(t, env, "-config", config, "-company", write(t, "company.yaml", doc.YAML))
 		refused := strings.Contains(stdout, "assistant.llm[0]")
 		if !refused {
-			takes = append(takes, agent)
+			takes = append(takes, harness)
 		}
 		if got.Valid && refused {
-			t.Errorf("%s: the verdict is valid and names assistant.llm[0]:\n%s", agent, stdout)
+			t.Errorf("%s: the verdict is valid and names assistant.llm[0]:\n%s", harness, stdout)
 		}
 	}
 	slices.Sort(takes)
@@ -134,37 +134,37 @@ func TestContractDeepWorkFollowsTheEngine(t *testing.T) {
 	if stated == nil {
 		t.Fatalf("%s does not say what deep work runs on (%q)", guide, deepWorkRunsOn)
 	}
-	want := v1alpha1.CLIAgentName(stated[1])
+	want := v1alpha1.Harness(stated[1])
 
 	key := v1alpha1.SecretKeyReference{Name: "model", Key: keyAPIKey}
-	settings := map[v1alpha1.CLIAgentName]func(*v1alpha1.LLMProviderSpec){
-		v1alpha1.CLIAgentClaudeCode: func(s *v1alpha1.LLMProviderSpec) {
+	settings := map[v1alpha1.Harness]func(*v1alpha1.LLMProviderSpec){
+		v1alpha1.HarnessClaudeCode: func(s *v1alpha1.LLMProviderSpec) {
 			s.Model = modelSonnet
-			s.Auth = v1alpha1.CLIAgentAuth{Mode: v1alpha1.CLIAgentAuthAPIKey, APIKeySecretRef: key}
+			s.Auth = v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: key}
 		},
-		v1alpha1.CLIAgentOpenCode: func(s *v1alpha1.LLMProviderSpec) {
+		v1alpha1.HarnessOpenCode: func(s *v1alpha1.LLMProviderSpec) {
 			s.Model = modelOpenCode
-			s.Auth = v1alpha1.CLIAgentAuth{Mode: v1alpha1.CLIAgentAuthSubscription}
+			s.Auth = v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthSubscription}
 			s.Env = []v1alpha1.SecretEnvVar{{Name: envGatewayKey,
 				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: key}}}
 		},
-		v1alpha1.CLIAgentCodex: func(s *v1alpha1.LLMProviderSpec) {
+		v1alpha1.HarnessCodex: func(s *v1alpha1.LLMProviderSpec) {
 			s.Model = modelCodex
-			s.Auth = v1alpha1.CLIAgentAuth{Mode: v1alpha1.CLIAgentAuthAPIKey, APIKeySecretRef: key}
+			s.Auth = v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: key}
 		},
 	}
-	// deepInput is a Company whose deep work runs on deepProbe, of agent,
+	// deepInput is a Company whose deep work runs on deepProbe, of harness,
 	// placed in cell, in a Company whose spec.sandbox runs Direct and, with
 	// e2b, configures E2B.
-	deepInput := func(agent v1alpha1.CLIAgentName, cell v1alpha1.SandboxPlacement, e2b bool) *Input {
+	deepInput := func(harness v1alpha1.Harness, cell v1alpha1.SandboxPlacement, e2b bool) *Input {
 		in := companyCaseNamed(t, "minimal").input(t)
 		in.PublicBaseURL = "https://minimal.hooks.example.com"
 		spec := v1alpha1.LLMProviderSpec{
 			CompanyRef: v1alpha1.CompanyReference{Name: in.Company.Name},
-			Agent:      agent,
+			Harness:    harness,
 			RunIn:      cell,
 		}
-		settings[agent](&spec)
+		settings[harness](&spec)
 		in.LLMProviders = []v1alpha1.LLMProvider{{Spec: spec}}
 		in.LLMProviders[0].Name = deepProbe
 		in.Company.Spec.Sandbox = v1alpha1.SandboxSettings{DefaultRunIn: v1alpha1.SandboxPlacementDirect}
@@ -191,19 +191,19 @@ func TestContractDeepWorkFollowsTheEngine(t *testing.T) {
 		return refused, stdout
 	}
 
-	var takes []v1alpha1.CLIAgentName
-	for _, agent := range slices.Sorted(maps.Keys(settings)) {
-		doc, err := Company(deepInput(agent, "", true))
+	var takes []v1alpha1.Harness
+	for _, harness := range slices.Sorted(maps.Keys(settings)) {
+		doc, err := Company(deepInput(harness, "", true))
 		if err != nil {
-			t.Fatalf("%s: %v", agent, err)
+			t.Fatalf("%s: %v", harness, err)
 		}
 		// The verdict read here is deep work's alone: whether any problem
 		// names assistant.deep_work.llm.
 		if refused, _ := check(doc.YAML, "assistant.deep_work.llm"); !refused {
-			takes = append(takes, agent)
+			takes = append(takes, harness)
 		}
 	}
-	if !slices.Equal(takes, []v1alpha1.CLIAgentName{want}) {
+	if !slices.Equal(takes, []v1alpha1.Harness{want}) {
 		t.Errorf("the engine runs deep work on %v; %s says %s alone", takes, guide, want)
 	}
 
@@ -212,9 +212,9 @@ func TestContractDeepWorkFollowsTheEngine(t *testing.T) {
 		in.LLMProviders = nil
 		in.Company.Spec.LLM.UsePlatformProviders = new(true)
 		in.Class.Spec.PlatformLLMProviders = []v1alpha1.PlatformLLMProvider{{
-			Name: deepProbe, Agent: want, Model: modelSonnet,
+			Name: deepProbe, Harness: want, Model: modelSonnet,
 			Auth: v1alpha1.PlatformLLMProviderAuth{
-				Mode: v1alpha1.CLIAgentAuthAPIKey,
+				Mode: v1alpha1.HarnessAuthAPIKey,
 				APIKeySecretRef: v1alpha1.NamespacedSecretKeyReference{
 					Namespace: "crewlet-system", Name: deepProbe, Key: keyAPIKey,
 				},

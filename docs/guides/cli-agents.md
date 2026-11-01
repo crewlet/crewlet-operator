@@ -3,7 +3,7 @@
 Every model a seat runs on is a coding CLI the engine drives: Claude Code for
 Anthropic's models, Codex for OpenAI's, OpenCode for open models on any
 provider, and the other CLIs of the table below. An `LLMProvider` names the
-CLI (`agent`), the model in that CLI's own grammar, and how it signs in: on a
+CLI (`harness`), the model in that CLI's own grammar, and how it signs in: on a
 subscription you already have, or on a metered API key.
 
 It renders one entry of Crewlet's `providers.llm`; Crewlet's
@@ -256,7 +256,7 @@ What each CLI takes, in the engine the operator is tested against, Crewlet's
 table to that engine's own verdict on every CLI and every sign-in, so neither
 can fall behind it):
 
-| `agent` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `auth.mode: Env` signs in with | `credentialBundleSecretRef` | Runs a seat's executor |
+| `harness` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `auth.mode: Env` signs in with | `credentialBundleSecretRef` | Runs a seat's executor |
 |---|---|---|---|---|---|---|
 | `ClaudeCode` | `CLAUDE_CODE_OAUTH_TOKEN` | `ANTHROPIC_API_KEY` | no | `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY` in `env` | yes | yes: `Direct` on any sign-in; `E2B` on the token, the key or `auth.mode: Env` |
 | `Codex` | no | `CODEX_API_KEY` | no | no | yes | no: the seat's other phases only |
@@ -276,7 +276,7 @@ on would be its own choice between its environment and its files, so the
 API server refuses the pair. Crewlet hands a token to a CLI only through the
 variable its profile names, and the engine refuses a token for a CLI whose
 profile names none, since it would reach nothing, so the API server
-refuses `tokenSecretRef` on any agent but `ClaudeCode` first. A
+refuses `tokenSecretRef` on any harness but `ClaudeCode` first. A
 Subscription provider that names neither is refused, with one exception:
 
 - **Hermes, Pi and OpenCode on a key in `env`.** Each fronts many model
@@ -356,7 +356,7 @@ metadata:
   name: hermes
 spec:
   companyRef: {name: acme}
-  agent: Hermes
+  harness: Hermes
   model: anthropic/claude-sonnet-5   # an OpenRouter model id: OPENROUTER_API_KEY selects OpenRouter
   auth:
     mode: Subscription
@@ -390,7 +390,7 @@ metadata:
   name: claude-code
 spec:
   companyRef: {name: acme}
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: sonnet
   auth:
     tokenSecretRef: {name: claude-subscription, key: oauthToken}
@@ -423,7 +423,7 @@ login (`/var/lib/crewlet/llm-cli/<loginName>/<cli>`, such as `claude-code` or
 directory and nothing in it
 ([Per-phase models](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#per-phase-models)).
 
-**Moving a provider to another `agent`** is an ordinary change, applied
+**Moving a provider to another `harness`** is an ordinary change, applied
 with no restart: the new CLI starts signed out in a login of its own beside
 the old one's, which stays there for a move back. Sign the new CLI in. A
 bundle belongs to the CLI it was exported from, so a provider's
@@ -507,7 +507,7 @@ metadata:
   name: claude-metered
 spec:
   companyRef: {name: acme}
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: claude-sonnet-5
   auth:
     mode: APIKey
@@ -546,7 +546,7 @@ metadata:
   name: claude-bedrock
 spec:
   companyRef: {name: acme}
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: sonnet
   auth:
     mode: Env
@@ -567,7 +567,7 @@ metadata:
   name: claude-gateway
 spec:
   companyRef: {name: acme}
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: sonnet
   auth:
     mode: Env
@@ -691,7 +691,7 @@ spec:                       # Company acme
     defaultRunIn: Direct
 ---
 spec:                       # LLMProvider opencode-e2b
-  agent: OpenCode
+  harness: OpenCode
   model: openrouter/anthropic/claude-sonnet-5
   runIn: E2B                    # needs the Company's spec.sandbox.e2b
   auth:
@@ -966,7 +966,7 @@ metadata:
 spec:
   companyRef:
     name: nimbus
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: sonnet
   timeoutSeconds: 90
   maxConcurrent: 4
@@ -1011,7 +1011,7 @@ metadata:
 spec:
   companyRef:
     name: nimbus
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: sonnet
   auth:
     mode: Subscription

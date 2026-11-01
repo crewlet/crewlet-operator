@@ -26,7 +26,7 @@ metadata:
 spec:
   companyRef:
     name: harbor
-  agent: OpenCode
+  harness: OpenCode
   model: openrouter/anthropic/claude-sonnet-5
   auth:
     mode: Subscription
@@ -44,7 +44,7 @@ metadata:
 spec:
   companyRef:
     name: harbor
-  agent: OpenCode
+  harness: OpenCode
   model: anthropic/claude-sonnet-5
   runIn: Direct
   auth:
