@@ -203,6 +203,30 @@ type MCPServerSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="companyRef is immutable"
 	CompanyRef CompanyReference `json:"companyRef,omitzero"`
 
+	// enabled runs the server. false turns it off and keeps it: the engine
+	// starts no instance of it, the company's, a seat's or a box's, and grants
+	// it to no seat, while this object and every Seat's and Unit's spec.mcp
+	// and spec.sandbox.mcpServerRefs that name it stay as they are, held to
+	// every rule they are held to now, for the day it is turned back on. A
+	// value it would be started with is then read by nothing, so one whose
+	// Secret key holds an empty value is no failure; a Secret or key that
+	// does not exist still holds the document, as every reference does.
+	// Crewlet's `enabled`.
+	// +optional
+	// +default=true
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// description says what the server is for. Each agent's prompt lists
+	// its tool servers by name before it shows any of their tools, and
+	// prints this beside the name, so it is what tells an agent which server
+	// to look in. One line of at most 200 characters, as Crewlet bounds it.
+	// Crewlet's `description`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=200
+	// +kubebuilder:validation:XValidation:rule="!self.matches('\\\\p{Cc}')",message="description is one line: it may hold no line break, tab or other control character"
+	Description string `json:"description,omitempty"`
+
 	// transport is how the engine reaches the server. Crewlet's `transport`.
 	// +optional
 	// +default="Stdio"
@@ -389,6 +413,7 @@ type MCPServerStatus struct {
 // +kubebuilder:printcolumn:name="Company",type=string,JSONPath=`.spec.companyRef.name`
 // +kubebuilder:printcolumn:name="Transport",type=string,JSONPath=`.spec.transport`
 // +kubebuilder:printcolumn:name="Shared",type=boolean,JSONPath=`.spec.shared`
+// +kubebuilder:printcolumn:name="Enabled",type=boolean,JSONPath=`.spec.enabled`
 // +kubebuilder:printcolumn:name="Applied",type=string,JSONPath=`.status.conditions[?(@.type=="Applied")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:validation:XValidation:rule="self.metadata.name != 'crewlet'",message="the name crewlet is reserved for the seat's own tool bridge"

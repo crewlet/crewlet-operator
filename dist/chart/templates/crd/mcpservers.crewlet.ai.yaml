@@ -31,6 +31,9 @@ spec:
     - jsonPath: .spec.shared
       name: Shared
       type: boolean
+    - jsonPath: .spec.enabled
+      name: Enabled
+      type: boolean
     - jsonPath: .status.conditions[?(@.type=="Applied")].status
       name: Applied
       type: string
@@ -115,6 +118,33 @@ spec:
                 x-kubernetes-validations:
                 - message: companyRef is immutable
                   rule: self == oldSelf
+              description:
+                description: |-
+                  description says what the server is for. Each agent's prompt lists
+                  its tool servers by name before it shows any of their tools, and
+                  prints this beside the name, so it is what tells an agent which server
+                  to look in. One line of at most 200 characters, as Crewlet bounds it.
+                  Crewlet's `description`.
+                maxLength: 200
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: 'description is one line: it may hold no line break, tab
+                    or other control character'
+                  rule: '!self.matches(''\\p{Cc}'')'
+              enabled:
+                default: true
+                description: |-
+                  enabled runs the server. false turns it off and keeps it: the engine
+                  starts no instance of it, the company's, a seat's or a box's, and grants
+                  it to no seat, while this object and every Seat's and Unit's spec.mcp
+                  and spec.sandbox.mcpServerRefs that name it stay as they are, held to
+                  every rule they are held to now, for the day it is turned back on. A
+                  value it would be started with is then read by nothing, so one whose
+                  Secret key holds an empty value is no failure; a Secret or key that
+                  does not exist still holds the document, as every reference does.
+                  Crewlet's `enabled`.
+                type: boolean
               env:
                 description: |-
                   env is the environment of a Stdio server's process, shared by every

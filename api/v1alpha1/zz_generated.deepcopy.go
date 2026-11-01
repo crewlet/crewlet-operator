@@ -1992,6 +1992,11 @@ func (in *MCPServerList) DeepCopyObject() runtime.Object {
 func (in *MCPServerSpec) DeepCopyInto(out *MCPServerSpec) {
 	*out = *in
 	out.CompanyRef = in.CompanyRef
+	if in.Enabled != nil {
+		in, out := &in.Enabled, &out.Enabled
+		*out = new(bool)
+		**out = **in
+	}
 	if in.Shared != nil {
 		in, out := &in.Shared, &out.Shared
 		*out = new(bool)

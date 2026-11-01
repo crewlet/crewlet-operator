@@ -231,6 +231,42 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			},
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue, want: true,
 		},
+		// A SERVER TURNED OFF STARTS NOTHING, its own instance, a seat's or
+		// a box's, so no value given it is started, whatever it holds.
+		{
+			name:   "a shared server's own value when it is turned off",
+			mutate: func(in *Input) { toolServer(in, optionalTavily).Spec.Enabled = new(false) },
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own,
+		},
+		{
+			name:   "a shared server's own value when it is turned on",
+			mutate: func(in *Input) { toolServer(in, optionalTavily).Spec.Enabled = new(true) },
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own, want: true,
+		},
+		{
+			name: "a per-seat server's own value a seat's block leaves alone, when it is turned off",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Enabled = new(false)
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{Name: "TAVILY_PROJECT", Value: new("docs")}},
+				})
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: own,
+		},
+		{
+			name: "a seat's value for a server its box is given, when the server is turned off",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Enabled = new(false)
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
 		{
 			name:   "a unit's header a member writes in another case",
 			mutate: func(in *Input) { seat(in, optionalSeat).Spec.MCP[0].Env[0].Name = headerUpper },

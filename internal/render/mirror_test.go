@@ -378,6 +378,14 @@ const (
 	// the round is carried on with, for completeAdmitted to resume the turn
 	// with under its completion's admission: all of that is unchanged.
 	collectedRead = "v0.1.1-0.20261101050452-a669d4fcc5a5"
+	// serverOffRead is crewlet#518's engine, read at the head of its branch
+	// before it merged, which adds mcp_servers[].enabled: a server turned off
+	// starts nothing. startSharedServers skips it, MCPServer.Grants grants it
+	// to no seat (so seatSpecs, which asks Grants, builds no seat's instance
+	// of it and is unchanged), and sandboxMCP gives no box it. The render
+	// follows it: markStarted starts none of its values, its own, a Seat's or
+	// a Unit's. Every other start is as it was.
+	serverOffRead = "v0.1.1-0.20261101064705-c2753750be78"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -860,9 +868,10 @@ var mirrored = []mirror{
 	{
 		file: engineMCPGo, name: "(*Engine).startSharedServers",
 		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
-		decides: "a shared server is started once for the company, with its own values alone (no seat's block)",
-		digest:  "f88ef4e48075a9adde25d5a5296cd9c82919d2792fff3e65f5d0404a5525f7d5",
-		read:    optionalKeysRead,
+		decides: "a shared server is started once for the company, with its own values alone (no seat's block), " +
+			"unless it is turned off, which starts nothing",
+		digest: "4eaab48e86a149a21ff2cf483933d70fe8c9a8e1195ea035a564b61a9f8ae730",
+		read:   serverOffRead,
 	},
 	{
 		file: engineMCPGo, name: "seatSpecs",
@@ -875,9 +884,9 @@ var mirrored = []mirror{
 		file: mcpConfigGo, name: "(*MCPServer).Grants",
 		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "a per-seat server is granted to every agent seat with a block of values for it, its own or its " +
-			"unit's, and a shared one to every agent seat",
-		digest: "68e24eca130819612cd092985ec133b3f1a494fd4a5ee4d5c73801daf2cc5a99",
-		read:   optionalKeysRead,
+			"unit's, a shared one to every agent seat, and a server turned off to none",
+		digest: "02a4c873bdc06d59f2112df2e8b478733ddf9c8f66bfd9bf48258ee7588eb70e",
+		read:   serverOffRead,
 	},
 	{
 		file: orgGo, name: "(*Organization).inheritMCPEnv",
@@ -891,9 +900,9 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "sandboxMCP",
 		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "an executor's box is given every server its seat's sandbox scopes, shared or not, with the seat's " +
-			"block for it",
-		digest: "5a808c6a2bed31c6c956ccbf60d362c565d837f342f78b2d808e3f2a08aa21f4",
-		read:   executorFinalRead,
+			"block for it, and none turned off",
+		digest: "03670857b95c2d949dda0b126efe1556da4a3b3b62246996463b47e3cfe2aa42",
+		read:   serverOffRead,
 	},
 	{
 		file: fileRulesGo, name: "(*Company).validateHeaderSpellings",

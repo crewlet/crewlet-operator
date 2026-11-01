@@ -193,6 +193,7 @@ metadata:
 spec:
   companyRef:
     name: acme
+  description: Searches the parts catalogue
   transport: Stdio
   shared: true
   command: catalog-mcp
@@ -208,6 +209,19 @@ spec:
       openWorld: false
   startupTimeoutSeconds: 30
   requestTimeoutSeconds: 120
+---
+# A server turned off: rendered whole, and started by nothing.
+apiVersion: crewlet.ai/v1alpha1
+kind: MCPServer
+metadata:
+  name: archive
+spec:
+  companyRef:
+    name: acme
+  enabled: false
+  description: Reads the archived catalogue
+  transport: Stdio
+  command: archive-mcp
 ---
 # A unit's standup each of its agent seats runs, in another zone than the
 # company's, with every setting a schedule has.
