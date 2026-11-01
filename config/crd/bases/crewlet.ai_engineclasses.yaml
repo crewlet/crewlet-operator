@@ -1944,8 +1944,9 @@ spec:
                         next provider. It bounds the phases the harness runs in the engine's
                         process (the reviewer, delegated workers, the summariser, the judge);
                         a seat's executor run on the provider, its harness's own run in a box, is
-                        bounded by its round cap instead (the Company's
-                        spec.sandbox.defaultMaxTurns and the Seat's spec.sandbox.maxTurns).
+                        not on this clock: its rounds are capped only where the Company's
+                        spec.sandbox.defaultMaxTurns or the Seat's spec.sandbox.maxTurns sets a
+                        cap.
                         Crewlet's `timeout_seconds`.
                       format: int32
                       minimum: 1
