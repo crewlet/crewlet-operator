@@ -526,11 +526,11 @@ spec:
               toolPrefix:
                 description: |-
                   toolPrefix is put in front of each of the server's tool names, to keep
-                  them apart from another server's. Every coding CLI puts a prefix of its
+                  them apart from another server's. Every harness puts a prefix of its
                   own in front of that before its model sees the tool, and a model takes
                   a tool name of at most 64 characters of letters, digits, _ and -, so
                   Crewlet offers a tool only where its prefixed name holds those alone
-                  and is at most 50 characters long, what the longest such CLI prefix
+                  and is at most 50 characters long, what the longest such harness prefix
                   leaves; it never shortens one. A prefix of at most 49 leaves room for a
                   name. Crewlet's `tool_prefix`.
                 maxLength: 49

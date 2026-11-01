@@ -85,7 +85,7 @@ holding back the document every other object of the Company is in:
 - **`toolPrefix`** is letters, digits, `_` and `-`, at most 49 characters. It
   goes in front of each of the server's tool names, and Crewlet offers a tool
   only where its prefixed name is at most 50 characters of those, what the
-  longest prefix a coding CLI gives the engine's tools leaves of a model's 64.
+  longest prefix a harness gives the engine's tools leaves of a model's 64.
   A tool it cannot offer is never shortened: Crewlet reports it on the
   server's row (`refused_tools` on `GET /mcp-servers`), with what would offer
   it, as it reports one another server's tool of the same name is offered in
