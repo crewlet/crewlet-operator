@@ -145,12 +145,25 @@ func TestMCPServerValidation(t *testing.T) {
 		{
 			name:   "a description over two lines is refused",
 			mutate: func(s *v1.MCPServer) { s.Spec.Description = "Searches the web\nand reads pages" },
-			want:   "description is one line",
+			want:   msgDescriptionLine,
 		},
 		{
 			name:   "a description with a tab is refused",
 			mutate: func(s *v1.MCPServer) { s.Spec.Description = "Searches\tthe web" },
-			want:   "description is one line",
+			want:   msgDescriptionLine,
+		},
+		{
+			// A LINE SEPARATOR AND A PARAGRAPH SEPARATOR break a line too,
+			// though neither is a control character, and Crewlet refuses
+			// both.
+			name:   "a description with a line separator is refused",
+			mutate: func(s *v1.MCPServer) { s.Spec.Description = "Searches the web\u2028and reads pages" },
+			want:   msgDescriptionLine,
+		},
+		{
+			name:   "a description with a paragraph separator is refused",
+			mutate: func(s *v1.MCPServer) { s.Spec.Description = "Searches the web\u2029and reads pages" },
+			want:   msgDescriptionLine,
 		},
 		{
 			name:   "an HTTP server with headers is accepted",

@@ -141,6 +141,7 @@ const (
 	msgCompanyName                 = "a Company's name must be a DNS label of at most 47 characters"
 	msgMissionLength               = "mission can be at most 1024 characters"
 	msgMissionLine                 = "mission is one line"
+	msgDescriptionLine             = "description is one line"
 	msgVisionLength                = "vision can be at most 2048 characters"
 	msgPolicyCount                 = "a company can keep at most 25 policies"
 	msgPolicyBlank                 = "a policy cannot be blank"
