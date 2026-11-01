@@ -219,12 +219,14 @@ type MCPServerSpec struct {
 	// description says what the server is for. Each agent's prompt lists
 	// its tool servers by name before it shows any of their tools, and
 	// prints this beside the name, so it is what tells an agent which server
-	// to look in. One line of at most 200 characters, as Crewlet bounds it.
-	// Crewlet's `description`.
+	// to look in. One line of at most 200 characters, as Crewlet bounds it:
+	// no control character, and neither of Unicode's line and paragraph
+	// separators (U+2028, U+2029), which break a line too. Crewlet's
+	// `description`.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=200
-	// +kubebuilder:validation:XValidation:rule="!self.matches('\\\\p{Cc}')",message="description is one line: it may hold no line break, tab or other control character"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[\\\\p{Cc}\\\\p{Zl}\\\\p{Zp}]')",message="description is one line: it may hold no line break, line or paragraph separator, tab or other control character"
 	Description string `json:"description,omitempty"`
 
 	// transport is how the engine reaches the server. Crewlet's `transport`.
