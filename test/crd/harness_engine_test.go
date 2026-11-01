@@ -641,11 +641,15 @@ const signInEnvRefusal = ` signs the "`
 
 // loginBeside is the sign-in a probe of a variable in env runs beside: a
 // bundle, a Subscription login that leaves the variable the only question,
-// for every harness the API admits one for, and for a harness that keeps no login
-// (QwenCode), which the API refuses a bundle, the sign-in it is admitted with.
+// for every harness the API admits one for, and for a harness that keeps no
+// login (QwenCode), which the API refuses a bundle, the sign-in it is
+// admitted with.
 func loginBeside(t *testing.T, namespace string, harness v1.Harness) v1.HarnessAuth {
 	t.Helper()
-	bundle := signInShape{name: shapeBundle, auth: v1.HarnessAuth{CredentialBundleSecretRef: secretKey("harness", "bundle")}}
+	bundle := signInShape{
+		name: shapeBundle,
+		auth: v1.HarnessAuth{CredentialBundleSecretRef: secretKey("harness", "bundle")},
+	}
 	if apiVerdict(t, shapedProvider(namespace, harness, &bundle)) == "" {
 		return bundle.auth
 	}
