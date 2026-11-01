@@ -16,12 +16,12 @@ import (
 
 // webToolsRule finds the CEL rule that holds webTools Denied to the CLIs
 // Crewlet can turn the web off for, and captures its list of them.
-var webToolsRule = regexp.MustCompile(`self\.webTools != 'Denied' \|\| self\.agent in \[([^\]]*)\]`)
+var webToolsRule = regexp.MustCompile(`self\.webTools != 'Denied' \|\| self\.harness in \[([^\]]*)\]`)
 
 // webDeniable reads the CLIs the rule admits webTools Denied for out of one
 // generated CRD, as the API server will judge them: every CEL rule in the
 // document is read, and exactly one must be the webTools rule.
-func webDeniable(t *testing.T, crd string) []v1alpha1.CLIAgentName {
+func webDeniable(t *testing.T, crd string) []v1alpha1.Harness {
 	t.Helper()
 	//nolint:gosec // G304: crd is one of the two CRD file names this file passes, under the module's own config.
 	data, err := os.ReadFile(filepath.Join("..", "..", "config", "crd", "bases", crd))
@@ -59,9 +59,9 @@ func webDeniable(t *testing.T, crd string) []v1alpha1.CLIAgentName {
 	if len(found) != 1 {
 		t.Fatalf("%s carries %d webTools rules, want one", crd, len(found))
 	}
-	out := make([]v1alpha1.CLIAgentName, 0, strings.Count(found[0][1], ",")+1)
+	out := make([]v1alpha1.Harness, 0, strings.Count(found[0][1], ",")+1)
 	for quoted := range strings.SplitSeq(found[0][1], ",") {
-		out = append(out, v1alpha1.CLIAgentName(strings.Trim(strings.TrimSpace(quoted), "'")))
+		out = append(out, v1alpha1.Harness(strings.Trim(strings.TrimSpace(quoted), "'")))
 	}
 	slices.Sort(out)
 	return out
@@ -88,23 +88,23 @@ func TestContractWebToolsDeniedFollowsTheEngine(t *testing.T) {
 	}
 	config := write(t, "crewlet.yaml", tierA.YAML)
 
-	var takes []v1alpha1.CLIAgentName
-	for _, agent := range []v1alpha1.CLIAgentName{
-		v1alpha1.CLIAgentClaudeCode, v1alpha1.CLIAgentCodex, v1alpha1.CLIAgentGeminiCLI, v1alpha1.CLIAgentQwenCode,
-		v1alpha1.CLIAgentOpenCode, v1alpha1.CLIAgentCursorAgent, v1alpha1.CLIAgentCopilot, v1alpha1.CLIAgentGrok,
-		v1alpha1.CLIAgentMuseCode, v1alpha1.CLIAgentKimiCode, v1alpha1.CLIAgentHermes, v1alpha1.CLIAgentPi,
+	var takes []v1alpha1.Harness
+	for _, harness := range []v1alpha1.Harness{
+		v1alpha1.HarnessClaudeCode, v1alpha1.HarnessCodex, v1alpha1.HarnessGeminiCLI, v1alpha1.HarnessQwenCode,
+		v1alpha1.HarnessOpenCode, v1alpha1.HarnessCursorAgent, v1alpha1.HarnessCopilot, v1alpha1.HarnessGrok,
+		v1alpha1.HarnessMuseCode, v1alpha1.HarnessKimiCode, v1alpha1.HarnessHermes, v1alpha1.HarnessPi,
 	} {
 		in := companyCaseNamed(t, "minimal").input(t)
 		in.LLMProviders = []v1alpha1.LLMProvider{{Spec: v1alpha1.LLMProviderSpec{
 			CompanyRef: v1alpha1.CompanyReference{Name: in.Company.Name},
 			LLMProviderSettings: v1alpha1.LLMProviderSettings{
-				Agent: agent, Model: "anthropic/model", WebTools: v1alpha1.CLIAgentWebToolsDenied,
+				Harness: harness, Model: "anthropic/model", WebTools: v1alpha1.HarnessWebToolsDenied,
 			},
 		}}}
 		in.LLMProviders[0].Name = "probe"
 		doc, err := Company(in)
 		if err != nil {
-			t.Fatalf("%s: %v", agent, err)
+			t.Fatalf("%s: %v", harness, err)
 		}
 		env := bootstrapEnv(tierA)
 		for _, k := range doc.Refs {
@@ -116,10 +116,10 @@ func TestContractWebToolsDeniedFollowsTheEngine(t *testing.T) {
 		got, stdout, _, _ := verdict(t, env, "-config", config, "-company", write(t, "company.yaml", doc.YAML))
 		refused := strings.Contains(stdout, "web_denial")
 		if !refused {
-			takes = append(takes, agent)
+			takes = append(takes, harness)
 		}
 		if got.Valid && refused {
-			t.Errorf("%s: the verdict is valid and names web_denial:\n%s", agent, stdout)
+			t.Errorf("%s: the verdict is valid and names web_denial:\n%s", harness, stdout)
 		}
 	}
 	slices.Sort(takes)

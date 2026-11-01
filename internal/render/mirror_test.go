@@ -64,7 +64,7 @@ const (
 	mirrorTable = "internal/render/mirror_test.go"
 	sandboxGo   = "internal/engine/sandbox.go"
 	agentRunGo  = "internal/engine/agentrun.go"
-	doctorGo    = "internal/providers/llm/cliagent/doctor.go"
+	doctorGo    = "internal/providers/llm/harness/doctor.go"
 	companyGo   = "internal/config/company.go"
 	firstRead   = "v0.1.1-0.20261010171839-4e45c6b992a2"
 
@@ -211,19 +211,47 @@ const (
 	// (attachCoordination); and runEnvironment and sandboxMCP renamed a
 	// parameter. Each mirror that moved was read again at it.
 	executorFinalRead = "v0.1.1-0.20261028203606-c6ba342a52ad"
-	// runAskRead is where a coding run asks a person through ask_and_wait
-	// and its question is recorded on its row (crewlet/crewlet#447): a lost
-	// job that had asked is parked on the question its row holds rather than
-	// one its box recorded. Before it, carryOnLost had come to return what
-	// the round is carried on with, for completeAdmitted to resume the turn
-	// with under its completion's admission. What becomes of a lost job is
-	// as at executorFinalRead, and no other mirror moved.
-	runAskRead = "v0.1.1-0.20261029002927-2c650d0b2c33"
+	// collectedRead is crewlet's main after crewlet/crewlet#525, where
+	// carryOnLost was last read. Since executorFinalRead it has moved twice
+	// without moving what becomes of a lost job. At crewlet/crewlet#447 a run
+	// came to ask a person through ask_and_wait with its question recorded on
+	// its row, so a lost job that had asked is parked on the question its row
+	// holds rather than one its box recorded, and carryOnLost came to return
+	// what the round is carried on with, for completeAdmitted to resume the
+	// turn with under its completion's admission. At crewlet/crewlet#513 a
+	// launch's spend became an executor_collected event of its own rather than
+	// a sandbox phase, so the lost job's record is published by
+	// publishCollected where it was publishPhase. No other mirror moved.
+	collectedRead = "v0.1.1-0.20261101131142-11badf3141d0"
+	// harnessRead is crewlet/crewlet#527's engine, read on crewlet's main
+	// where it merged (986af5348e): the coding CLI is a harness throughout
+	// the engine's Go, its packages move (cliagent to llm/harness, cliprofile
+	// to harness/harnessprofile, sandbox/codingagent to sandbox/executor) and
+	// its words with them. Every mirror it moved was read again at it, and
+	// each moved by its names and its messages alone: a package qualifier, a
+	// method (Provider.Agent is Harness), a field (a launch's CodingAgent is
+	// Harness), and a refusal that says "harness" where it said "CLI". No
+	// decision any of them copies moved.
+	harnessRead = "v0.1.1-0.20261101141833-986af5348ea5"
+	// harnessWireRead is crewlet/crewlet#528's engine, read on crewlet's main
+	// where it merged (0b2730bb44): the harness is named on the wire, and a
+	// sandbox's spec input with it (its CodingAgent field is Harness), which
+	// is the launch's only change. No other mirror moved. The launch was
+	// last read before it at harnessRead, which moved its names alone, and
+	// before that at crewlet#453 (e0328e5d9d), where an executor
+	// launch came to stamp the picked member's sign-in identity on the run's
+	// row (the launch request's SignInID), which the run's collection
+	// compares to relaunch, once, a run its vendor refused on a sign-in
+	// replaced while it ran; the member a launch picks, the cell it places
+	// the run in, the bridge it refuses, the environment it starts the run
+	// with and the login it refuses off the engine host are as at
+	// executorFinalRead, so the render's copies hold.
+	harnessWireRead = "v0.1.1-0.20261101144449-0b2730bb4452"
 	// envSignInRead is crewlet#452's engine, read on crewlet's main where it
 	// merged (e0328e5d9d), which adds auth.mode env: a providers.llm entry
 	// whose env alone signs its CLI in. The names
 	// that sign a CLI in beyond its token and key variables moved from a list
-	// of the Claude Code runner's (codingagent.ClaudeCodeCredentialEnv, now
+	// of the Claude Code runner's (executor.ClaudeCodeCredentialEnv, now
 	// gone) into the CLI's profile (sign_in_env, which only claude-code's
 	// names), so entryEnv, entrySignInName and entrySignsIn ask
 	// CredentialEnvNames, which reads it, where they asked the runner's list.
@@ -236,20 +264,10 @@ const (
 	// carries the engine's zone into every executor run's box, E2B included:
 	// the zone it reads a reset the CLI names without one in, the engine's
 	// own TZ where it names a zone the system knows, and UTC otherwise
-	// (childZone), its name cliprofile.ZoneVariable, which an entry's env may
-	// not set.
+	// (childZone), its name harnessprofile.ZoneVariable, which an entry's env
+	// may not set.
 	envSignInRead = "v0.1.1-0.20261029083537-e0328e5d9daf"
-	// signInStampRead is crewlet#453's engine, read on crewlet's main where
-	// crewlet#452 merged on top of crewlet#454: an executor launch now stamps
-	// the picked member's sign-in identity on the run's row (the launch
-	// request's SignInID), which the run's collection compares to relaunch,
-	// once, a run its vendor refused on a sign-in replaced while it ran. The
-	// member a launch picks, the cell it places the run in, the bridge it
-	// refuses, the environment it starts the run with and the login it
-	// refuses off the engine host are as at executorFinalRead, so the
-	// render's copies hold.
-	signInStampRead = "v0.1.1-0.20261029083537-e0328e5d9daf"
-	otelGo          = "internal/sandbox/otel.go"
+	otelGo        = "internal/sandbox/otel.go"
 	// topologyGo and assistantDeepGo are the render's pod sizes and the
 	// engine's deep-work backend, which several rows name.
 	topologyGo        = "internal/render/topology.go"
@@ -448,7 +466,7 @@ var credentialNames = []string{
 // reading of the engine's sign-in verdicts (its holdVerdicts).
 var executorLogin = []string{
 	signinGo, executorGo, "api/v1alpha1/llmprovider_types.go", "docs/guides/cli-agents.md",
-	"test/crd/cliagent_engine_test.go",
+	"test/crd/harness_engine_test.go",
 }
 
 // executorBox is every operator page that states what an executor's box
@@ -557,11 +575,11 @@ var bootWindows = []string{
 // and its cells (TestContractEngineRefusesWhatItHolds), what it applies and
 // fails at a launch alone (TestContractExecutorIsAppliedWhereItCannotRun),
 // the sign-in a provider's settings give it and the CLIs it admits a run_in
-// on (test/crd's TestCLIAgentSignInFollowsTheEngine and
-// TestCLIAgentRunInFollowsTheEngine), the deployment its validation reads a
+// on (test/crd's TestHarnessSignInFollowsTheEngine and
+// TestHarnessRunInFollowsTheEngine), the deployment its validation reads a
 // Jira or Confluence address on (TestContractAtlassianDeploymentIsTheEngines),
 // and the lists TestExecutorSignInFollowsTheEngineSource,
-// TestRunnerCLIsFollowTheEngineSource,
+// TestExecutorHarnessesFollowTheEngineSource,
 // TestAtlassianDeploymentFollowsTheEngineSource and
 // TestCredentialNameFollowsTheEngineSource read.
 //
@@ -761,8 +779,8 @@ var mirrored = []mirror{
 			"pass it, its environment (entryEnv) beneath the seat's, and its login, the CLI's credential files or " +
 			"the document OpenCode 2's export printed, as the run's credential files, for the box to seed or to " +
 			"ignore ((*E2BProvider).Create)",
-		digest: "930018749609e0fbdb8ad020c4b1c3ecbc03ba226bc13a1ae9eb781fdbdec5f4",
-		read:   executorFinalRead,
+		digest: "22ccc7c6a8e39b14a723e26d0af98a93dacde31816fc798cd7e9ba73d1e8766b",
+		read:   harnessRead,
 	},
 	{
 		file: e2bGo, name: "(*E2BProvider).Create",
@@ -782,8 +800,8 @@ var mirrored = []mirror{
 			"(CredentialEnvNames: its token_env, api_key_env and sign_in_env, which " +
 			"TestExecutorSignInFollowsTheEngineSource holds) none of its member's sign-in (entrySignInName) and " +
 			"the rest of that environment",
-		digest: "4b479aa3a1c24ce73476dc2c723ca50747a6000d0dc7ca631b79a5cacb093981",
-		read:   envSignInRead,
+		digest: "02d4e1e61f45a3c81cef18dd6687bc299718736540e279b85ac1e47756d2f996",
+		read:   harnessRead,
 	},
 	{
 		file: sandboxGo, name: "entrySignInName",
@@ -791,8 +809,8 @@ var mirrored = []mirror{
 		decides: "a member's sign-in, which a seat that signs ClaudeCode in itself keeps out of its run, is every " +
 			"variable that signs ClaudeCode in, the CLI's token and key variables and every credential-named " +
 			"one, a gateway's bearer token among them, and nothing else, so a gateway's address stays",
-		digest: "2fcc1173c42d6f02b7978e9d418f8f2908132f8f858075ec4c5ab7289a767d2b",
-		read:   envSignInRead,
+		digest: "9e6175afb6ff10da515464ff7747aa3e25e0f2b142ef562915c56cf117b22009",
+		read:   harnessRead,
 	},
 	{
 		file: sandboxGo, name: "signsIn",
@@ -808,8 +826,8 @@ var mirrored = []mirror{
 			"a Direct box is seeded with it), and there unless the run's environment signs its CLI in " +
 			"(entrySignsIn): SandboxLoginNotPortable, a refusal that fails the launch rather than moving it down " +
 			"the chain",
-		digest: "9cfb8b3288a8fa60fa231e82b51c9ab89b980974c955967d5c16ce1db7d53e44",
-		read:   executorRead,
+		digest: "363fcae93a8502774c80b5680f1b188e3245c95edbdfb7b79b367360ba26fe3c",
+		read:   harnessRead,
 	},
 	{
 		file: sandboxGo, name: "entrySignsIn",
@@ -818,8 +836,8 @@ var mirrored = []mirror{
 			"token or key variable, for ClaudeCode any variable that signs it in, and for an env sign-in CLI any " +
 			"credential-named one: the rule a seat's E2B run and the assistant's deep work, whose environment " +
 			"is its provider's alone, are both held to before a box exists",
-		digest: "b00aa590b340b4130c59e24319a58a38093dc7d5cddbc29eaad4ba855cff593d",
-		read:   envSignInRead,
+		digest: "7b9d56ad932882d328442e62b56c7100365144eb3bbc7f6c7d0120432e760d09",
+		read:   harnessRead,
 	},
 	{
 		file: sandboxGo, name: "(*Engine).runEnvironment",
@@ -912,8 +930,8 @@ var mirrored = []mirror{
 		decides: "the variables that sign a CLI in inside a box: its token and key variables, the names its profile " +
 			"signs it in by from env (sign_in_env: ClaudeCode's gateway token and cloud switches), and for an env " +
 			"sign-in CLI the credential-named variables of its env",
-		digest: "ca27a1868275b6f61d45d1c27689420ab4e519603128d751fd8075aaf611654c",
-		read:   envSignInRead,
+		digest: "32735810b5842041d5533d6193b7c1eebae75691e7b78dd945748d4afadf9e9b",
+		read:   harnessRead,
 	},
 	{
 		file: doctorGo, name: "(*Provider).SandboxCredentials",
@@ -933,7 +951,7 @@ var mirrored = []mirror{
 		read:   envSignInRead,
 	},
 	{
-		file: "internal/providers/llm/cliagent/signin.go", name: "(*Provider).signsInWithKey",
+		file: "internal/providers/llm/harness/signin.go", name: "(*Provider).signsInWithKey",
 		against: append(slices.Clone(executorLogin), executorBox...),
 		decides: "an entry signs in with no login under auth mode api-key and env, whatever else it holds, which " +
 			"SandboxCredentials and SandboxCredentialDocument seed its Direct box with none of",
@@ -948,8 +966,8 @@ var mirrored = []mirror{
 			"address and bearer token, a cloud switch and its region reach every executor run, and a ClaudeCode " +
 			"sign-in there signs an E2B run in (signin.go's remoteSignIn); and the engine's zone, TZ, reaches every " +
 			"run, E2B included",
-		digest: "9550ddc63baf6f5dfb890558f26bd4a08f7658004efb626096f97a6968dac7bd",
-		read:   envSignInRead,
+		digest: "6d6ac1557077e802661fd342638f344f12994505872e3fc439e30c1299150562",
+		read:   harnessRead,
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).LaunchExecutor",
@@ -968,8 +986,8 @@ var mirrored = []mirror{
 			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable)",
-		digest: "8534b7cd2fa15e88c9125839fde00dc5cf568d78fbe6635624a41a3774a04138",
-		read:   chatLogRead,
+		digest: "7cc5aab349f6c7df9a4dcfbe40e3f584a521efa96020125c454f00b48277c6d3",
+		read:   harnessWireRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
@@ -997,17 +1015,17 @@ var mirrored = []mirror{
 		decides: "a launch runs on the first member of the seat's executor chain with an in-box runner that is not " +
 			"sitting out its spent plan on the node, passing over every other CLI silently, and when every runner " +
 			"member is sitting out runs on none",
-		digest: "863b716f4c7243731fb8ac34e18664aed54fee0dc77c427277efdf05f1528210",
-		read:   executorRead,
+		digest: "69c971a1269d6e4a9ec03db3d897092b1fe408cb102468f51220286b6ebf0573",
+		read:   harnessRead,
 	},
 	{
 		file: agentRunGo, name: "executorRunners",
 		against: []string{executorGo, headsGo, seatTypesGo, llmProviderTypes, cliAgentsMd},
 		decides: "the members a launch picks among are the executor chain's members, in order, whose CLI has an " +
-			"in-box runner (codingagent.Names, held by TestRunnerCLIsFollowTheEngineSource), and a chain with none " +
+			"in-box runner (executor.Names, held by TestExecutorHarnessesFollowTheEngineSource), and a chain with none " +
 			"launches nothing",
-		digest: "95412060b00824d49c72e824b8d74d7c08d6ad53b84293edac9f2d934b5a1e8a",
-		read:   chatLogRead,
+		digest: "db7701f2022f0956af0cb4f6f5b1a10d7d99f938c48e7485b15c29d103dd09fe",
+		read:   harnessRead,
 	},
 	{
 		file: agentRunGo, name: "agentPlacement",
@@ -1029,8 +1047,8 @@ var mirrored = []mirror{
 		against: directBox,
 		decides: "a direct box is made under its box root (BoxRoot), made absolute, so the state_dir the render " +
 			"writes puts every box on the pod's sandboxes volume",
-		digest: "185d33ccd9ab0188e75622adb0c2712a1833dce1ad665fb2a47a37f293a57302",
-		read:   executorFinalRead,
+		digest: "d6cb3ebf814b985796d8bad68856e584021fcd855a1aa2c37aa54275b08780e7",
+		read:   harnessRead,
 	},
 	{
 		file: localGo, name: "DefaultBoxRoot",
@@ -1083,8 +1101,8 @@ var mirrored = []mirror{
 			"box where the box is left, and the seat's turn resumes, with what this returns, to carry its round " +
 			"on in a fresh run, in the kept box after its engine restarted and in a fresh one where the box went " +
 			"with its pod or its node",
-		digest: "f20d49d721d9ae2e60375d049b5f6dde7a0d92004a5786c7201db10bebb00fd4",
-		read:   runAskRead,
+		digest: "efdae0256a887ee13063c285bcedfc3416bd7209fa31034eded93c4cf84e4e91",
+		read:   collectedRead,
 	},
 	{
 		file: "internal/sandbox/lost.go", name: "MaxRoundLosses",
@@ -1179,8 +1197,8 @@ var mirrored = []mirror{
 			"node's own listener, so a Company with no public address runs no deep work, the data pods alone need " +
 			"egress to the public route (dataPodEgress), and a run placed on the engine host needs the host's " +
 			"confinement",
-		digest: "f4e0156246cfdaa7ae8d6c052b5fc39cf69f8cd2a964985195508c1813c1251b",
-		read:   executorFinalRead,
+		digest: "38abb71688f6ee7f1f1542b2d808d6f772c5b033b602e5d9cf52e2070e4930a8",
+		read:   harnessRead,
 	},
 	{
 		file: jiraClient, name: "DeploymentOf",

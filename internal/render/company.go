@@ -692,7 +692,7 @@ const CLIStateRoot = DataDir + "/llm-cli"
 // providers' loginName freely: under one root, a loginName equal to a
 // platform provider's name would point the two entries at one directory.
 // Crewlet keeps each CLI's files in a directory of its own under it
-// (<state_dir>/<agent>), so entries of different CLIs would share the
+// (<state_dir>/<harness>), so entries of different CLIs would share the
 // directory and nothing in it; entries of the same CLI would share its login
 // and seat homes, mixing the tenant's login into the directory of a provider
 // every tenant of the class is given.
@@ -707,14 +707,14 @@ const CLIPlatformStateRoot = DataDir + "/llm-cli-platform"
 // nothing.
 func llmEntry(s *v1alpha1.LLMProviderSettings, stateDir string) llmProviderDoc {
 	doc := llmProviderDoc{
-		Agent:          cliAgentName(s.Agent),
+		Harness:        harnessName(s.Harness),
 		Model:          s.Model,
 		StateDir:       stateDir,
 		TimeoutSeconds: s.TimeoutSeconds,
 		MaxConcurrent:  s.MaxConcurrent,
 	}
-	if s.WebTools == v1alpha1.CLIAgentWebToolsDenied {
-		doc.Overrides = &llmOverridesDoc{WebTools: cliAgentWebTools(s.WebTools)}
+	if s.WebTools == v1alpha1.HarnessWebToolsDenied {
+		doc.Overrides = &llmOverridesDoc{WebTools: harnessWebTools(s.WebTools)}
 	}
 	return doc
 }
@@ -727,7 +727,7 @@ func (r *renderer) llmProvider(p *v1alpha1.LLMProvider) llmProviderDoc {
 	doc := llmEntry(&s.LLMProviderSettings, CLIStateRoot+"/"+cmp.Or(s.LoginName, p.Name))
 	doc.RunIn = sandboxPlacement(s.RunIn)
 	doc.Env = r.secretEnv(s.Env)
-	doc.Auth = llmAuthDoc{Mode: cliAgentAuthMode(s.Auth.Mode)}
+	doc.Auth = llmAuthDoc{Mode: harnessAuthMode(s.Auth.Mode)}
 	if k := s.Auth.TokenSecretRef; k.Name != "" {
 		doc.Auth.Token = r.secret(k.Name, k.Key)
 	}
@@ -751,7 +751,7 @@ func (r *renderer) platformProvider(p *v1alpha1.PlatformLLMProvider) llmProvider
 			doc.Env[e.Name] = r.secretKey(secretref.Key{Namespace: ref.Namespace, Name: ref.Name, Key: ref.Key})
 		}
 	}
-	doc.Auth = llmAuthDoc{Mode: cliAgentAuthMode(p.Auth.Mode)}
+	doc.Auth = llmAuthDoc{Mode: harnessAuthMode(p.Auth.Mode)}
 	if k := p.Auth.APIKeySecretRef; k.Name != "" {
 		doc.Auth.APIKey = r.secretKey(secretref.Key{Namespace: k.Namespace, Name: k.Name, Key: k.Key})
 	}

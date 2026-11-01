@@ -93,7 +93,7 @@ type providersDoc struct {
 }
 
 type llmProviderDoc struct {
-	Agent          string            `json:"agent"`
+	Harness        string            `json:"harness"`
 	Model          string            `json:"model"`
 	RunIn          string            `json:"run_in,omitempty"`
 	StateDir       string            `json:"state_dir"`

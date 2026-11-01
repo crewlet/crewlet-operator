@@ -62,7 +62,7 @@ spec:
           effect: NoSchedule
   platformLLMProviders:
     - name: platform-claude
-      agent: ClaudeCode
+      harness: ClaudeCode
       model: claude-sonnet-5
       auth:
         mode: APIKey

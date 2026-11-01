@@ -163,31 +163,31 @@ func scheduleFanOut(f v1alpha1.ScheduleFanOut) string {
 	return ""
 }
 
-func cliAgentName(a v1alpha1.CLIAgentName) string {
+func harnessName(a v1alpha1.Harness) string {
 	switch a {
-	case v1alpha1.CLIAgentClaudeCode:
+	case v1alpha1.HarnessClaudeCode:
 		return "claude-code"
-	case v1alpha1.CLIAgentCodex:
+	case v1alpha1.HarnessCodex:
 		return "codex"
-	case v1alpha1.CLIAgentGeminiCLI:
+	case v1alpha1.HarnessGeminiCLI:
 		return "gemini-cli"
-	case v1alpha1.CLIAgentQwenCode:
+	case v1alpha1.HarnessQwenCode:
 		return "qwen-code"
-	case v1alpha1.CLIAgentOpenCode:
+	case v1alpha1.HarnessOpenCode:
 		return "opencode"
-	case v1alpha1.CLIAgentCursorAgent:
+	case v1alpha1.HarnessCursorAgent:
 		return "cursor-agent"
-	case v1alpha1.CLIAgentCopilot:
+	case v1alpha1.HarnessCopilot:
 		return "copilot"
-	case v1alpha1.CLIAgentGrok:
+	case v1alpha1.HarnessGrok:
 		return "grok"
-	case v1alpha1.CLIAgentMuseCode:
+	case v1alpha1.HarnessMuseCode:
 		return "muse-code"
-	case v1alpha1.CLIAgentKimiCode:
+	case v1alpha1.HarnessKimiCode:
 		return "kimi-code"
-	case v1alpha1.CLIAgentHermes:
+	case v1alpha1.HarnessHermes:
 		return "hermes"
-	case v1alpha1.CLIAgentPi:
+	case v1alpha1.HarnessPi:
 		return "pi"
 	}
 	return ""
@@ -203,23 +203,23 @@ func sandboxPlacement(p v1alpha1.SandboxPlacement) string {
 	return ""
 }
 
-func cliAgentWebTools(w v1alpha1.CLIAgentWebTools) string {
+func harnessWebTools(w v1alpha1.HarnessWebTools) string {
 	switch w {
-	case v1alpha1.CLIAgentWebToolsAllowed:
+	case v1alpha1.HarnessWebToolsAllowed:
 		return "allowed"
-	case v1alpha1.CLIAgentWebToolsDenied:
+	case v1alpha1.HarnessWebToolsDenied:
 		return "denied"
 	}
 	return ""
 }
 
-func cliAgentAuthMode(m v1alpha1.CLIAgentAuthMode) string {
+func harnessAuthMode(m v1alpha1.HarnessAuthMode) string {
 	switch m {
-	case v1alpha1.CLIAgentAuthSubscription:
+	case v1alpha1.HarnessAuthSubscription:
 		return "subscription"
-	case v1alpha1.CLIAgentAuthAPIKey:
+	case v1alpha1.HarnessAuthAPIKey:
 		return "api-key"
-	case v1alpha1.CLIAgentAuthEnv:
+	case v1alpha1.HarnessAuthEnv:
 		return "env"
 	}
 	return ""

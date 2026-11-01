@@ -79,7 +79,7 @@ metadata:
   name: anthropic
 spec:
   companyRef: {name: acme}
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: claude-sonnet-5
   auth:
     mode: APIKey
@@ -320,7 +320,7 @@ CLI inside its seat's home ([Signing in](cli-agents.md#signing-in)):
 
 ```yaml
 spec:                       # LLMProvider claude-code
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: sonnet
   auth:
     tokenSecretRef: {name: claude-subscription, key: oauthToken}
@@ -454,7 +454,7 @@ and every provider sharing its login, a new `loginName`: its login directory
 is then empty, and the revision that moves it restores the bundle there,
 with no restart. The old directory's
 login and seat homes stay on the data volume. A bundle belongs to the CLI it
-was exported from: after a provider moves to another `agent`, the new CLI's
+was exported from: after a provider moves to another `harness`, the new CLI's
 login is empty, and the bundle in the Secret is refused there until it holds
 one exported from the new CLI ([Signing in](cli-agents.md#signing-in)).
 
