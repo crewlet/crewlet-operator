@@ -20,6 +20,7 @@ spec:
   companyName: Forge
   sandbox:
     defaultRunIn: Direct
+    commitAttribution: false
     e2b:
       apiKeySecretRef:
         name: e2b

@@ -827,6 +827,14 @@ below `turn_engine.executor_min_budget_tokens` (25000 unless
 `spec.engineConfig` sets it) leaves no room for any launch: Crewlet's dry run
 refuses it, reported `Invalid` on the object.
 
+Every commit an executor run makes as itself credits Crewlet as co-author
+(`Co-authored-by: Crewlet <noreply@crewlet.ai>`, with the run's
+`Crewlet-Run:`), which GitHub lists among the commit's participants beside
+the seat. Git adds it through a hook the run's box is given, and a person's
+commit the run amends, cherry-picks or rebases is left alone. The Company's
+`spec.sandbox.commitAttribution: false` turns it off; see Crewlet's [Commit
+attribution](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#commit-attribution).
+
 ### A value a run may go without
 
 A seat's executor run is given the values of its environment and files that

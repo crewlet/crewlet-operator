@@ -729,6 +729,15 @@ type SandboxSettings struct {
 	// +kubebuilder:validation:Minimum=0
 	DefaultMaxTurns *int32 `json:"defaultMaxTurns,omitempty"`
 
+	// commitAttribution credits Crewlet on every commit an executor run
+	// makes as itself: `Co-authored-by: Crewlet <noreply@crewlet.ai>`, and
+	// `Crewlet-Run:` naming the run's turn. Git adds it, through a hook
+	// the run's box is given, and a person's commit the run amends,
+	// cherry-picks or rebases keeps no credit. Unset takes Crewlet's
+	// default, on; false credits nothing. Crewlet's `commit_attribution`.
+	// +optional
+	CommitAttribution *bool `json:"commitAttribution,omitempty"`
+
 	// setup is applied to every executor box before each seat's own steps.
 	// Crewlet's `setup`.
 	// +optional

@@ -654,6 +654,7 @@ func (r *renderer) providersDoc() providersDoc {
 			DefaultTimeoutSeconds:  s.DefaultTimeoutSeconds,
 			DefaultPauseTTLSeconds: s.DefaultPauseTTLSeconds,
 			DefaultMaxTurns:        s.DefaultMaxTurns,
+			CommitAttribution:      s.CommitAttribution,
 			Setup:                  r.setup(r.owner, s.Setup),
 		}
 		if r.offersDirect() {
