@@ -405,15 +405,15 @@ const (
 	// follows it: markStarted starts none of its values, its own, a Seat's or
 	// a Unit's. Every other start is as it was.
 	serverOffRead = "v0.1.1-0.20261101162029-981cbd5c3194"
-	// entryRulesRead is crewlet#534's engine, read at the head of its branch
-	// before it merged, which holds an MCP server's name, tool prefix, url
+	// entryRulesRead is crewlet#534's engine, read on crewlet's main where it
+	// merged (1ecc48d5ca), which holds an MCP server's name, tool prefix, url
 	// and value keys to what every client can use. sandboxMCP gives no box a
 	// server whose url, once resolved, Crewlet would not dial: plain http to
 	// a host on a public network, or a user name or password in it. The
 	// render's copy holds as it was: the API refuses such a url, and any
 	// ${NAME} in one, so a rendered server's url is the literal Crewlet
 	// dials, and every box that scopes the server is given it.
-	entryRulesRead = "v0.1.1-0.20261101134718-5ecd45431051"
+	entryRulesRead = "v0.1.1-0.20261101172218-1ecc48d5ca08"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -952,7 +952,7 @@ var mirrored = []mirror{
 		against: []string{mcpServerTypesGo},
 		decides: "a tool prefix is letters, digits, _ and -, and leaves room for a name in the longest tool name " +
 			"(its bound read from the engine by TestContractMCPServerEntryRulesAreTheEngines)",
-		digest: "b1e0f2a306759be51b13a895e0c72b9fd7ceb2ab015a69055f6d07242cca5d9d",
+		digest: "4cc7f7426386159a15e40feb1ff664cc5faed301be4d9af86c7728b51d569d46",
 		read:   entryRulesRead,
 	},
 	{
@@ -980,9 +980,10 @@ var mirrored = []mirror{
 	{
 		file: mcpNamesGo, name: "privateHost",
 		against: []string{mcpServerTypesGo},
-		decides: "a host on no public network is a loopback, private or link-local address, a one-label name, " +
-			"localhost, or a name under .localhost, .local, .home.arpa or .internal",
-		digest: "fea9394ad1a80ab5b27f0ec64724d451222fd9523901f3e670b4ea1dbaf74cd4",
+		decides: "a host on no public network is an address httpx.Public does not route, a one-label name, " +
+			"localhost, or a name under .localhost, .local, .home.arpa or .internal; the API accepts the loopback, " +
+			"private, link-local and shared (RFC 6598) ones of those addresses and refuses the rest",
+		digest: "43b83a62cb2b2f2d5dba70a4e0c8bc441996f62149c1f497560bc2636736a0a0",
 		read:   entryRulesRead,
 	},
 	{
