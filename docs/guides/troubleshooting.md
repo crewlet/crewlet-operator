@@ -788,11 +788,11 @@ applies, and runs the CLI on the pod that holds each seat, which the Seat's
 
 ```bash
 pod=$(kubectl get seat triage -n acme -o jsonpath='{.status.placement.node}')
-kubectl logs "$pod" -n acme | grep -E 'cli_agent_(carry_out_failed|sweep_failed|login_superseded)'
-kubectl logs acme-data-0 -n acme | grep -E 'cli_agent_bundle_(restore_failed|withheld)'
+kubectl logs "$pod" -n acme | grep -E 'harness_(carry_out_failed|sweep_failed|login_superseded)'
+kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withheld)'
 ```
 
-- **`cli_agent_bundle_restore_failed`** names the provider whose bundle did
+- **`harness_bundle_restore_failed`** names the provider whose bundle did
   not restore, and why, and the provider runs signed out. An OpenCode bundle
   holding a login OpenCode 1.x made (its `auth.json`) is refused: export it
   again from OpenCode 2
@@ -803,7 +803,7 @@ kubectl logs acme-data-0 -n acme | grep -E 'cli_agent_bundle_(restore_failed|wit
   ([Signing in](cli-agents.md#signing-in)).
   The login is still empty, so a good bundle in the Secret is restored at
   the next revision the operator applies, with no restart.
-- **`cli_agent_bundle_withheld`** names a provider somebody logged out with
+- **`harness_bundle_withheld`** names a provider somebody logged out with
   `crewlet llm logout` on the data pod. The logout is recorded in the
   provider's login directory on the data volume, and while it stands the
   engine restores the bundle there at no start and no revision, until a
@@ -817,7 +817,7 @@ kubectl logs acme-data-0 -n acme | grep -E 'cli_agent_bundle_(restore_failed|wit
   another 2.x release than the image's exported it. The error names three
   ways out, each run on the data pod (`kubectl exec`), and none fits a pod:
   `crewlet llm login`, which replaces the login (and logs
-  `cli_agent_shared_login_refused`), signs in at a terminal; `-from-host`
+  `harness_shared_login_refused`), signs in at a terminal; `-from-host`
   adopts a login made at one in the pod's own home; and `crewlet llm
   logout`, which needs neither, empties the login and then keeps the bundle
   out of it, as above. Export the bundle again with the OpenCode release
@@ -826,7 +826,7 @@ kubectl logs acme-data-0 -n acme | grep -E 'cli_agent_bundle_(restore_failed|wit
 - **Every call of an OpenCode provider fails, the CLI rejecting
   `--standalone`.** The image has npm's `opencode-ai`, OpenCode 1.x, where
   Crewlet drives OpenCode 2 alone ([OpenCode](cli-agents.md#opencode)).
-- **`cli_agent_carry_out_failed`** names a seat whose home was left open
+- **`harness_carry_out_failed`** names a seat whose home was left open
   (its last call could not carry its login out, or the engine stopped
   mid-call) and which another seat of the provider, sweeping such homes
   before its own call, could not carry out either, such as an OpenCode
@@ -837,9 +837,9 @@ kubectl logs acme-data-0 -n acme | grep -E 'cli_agent_bundle_(restore_failed|wit
   succeed, as after an image moved to an OpenCode that broke it; Crewlet's
   [Token refresh across seats](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#token-refresh-across-seats)
   says how to discard a login that can never be handed back.
-- **`cli_agent_sweep_failed`**: the engine could not list the provider's
+- **`harness_sweep_failed`**: the engine could not list the provider's
   seat homes on the volume to hand their logins back, and says why.
-- **`cli_agent_login_superseded`** names the provider, the login file and
+- **`harness_login_superseded`** names the provider, the login file and
   how its shared login moved (`shared=changed` or `removed`): a seat's
   refreshed login was dropped because the shared login moved after the seat
   started from it, at another seat's refresh, a `crewlet llm login` or

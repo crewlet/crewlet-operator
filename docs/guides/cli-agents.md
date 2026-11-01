@@ -429,7 +429,7 @@ the old one's, which stays there for a move back. Sign the new CLI in. A
 bundle belongs to the CLI it was exported from, so a provider's
 `auth.credentialBundleSecretRef` still holds the old CLI's files after the
 move, and the engine refuses to restore it into the new CLI's empty login,
-logging `cli_agent_bundle_restore_failed`, until the Secret holds a bundle
+logging `harness_bundle_restore_failed`, until the Secret holds a bundle
 exported from the new CLI
 ([An entry moved to another CLI](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#an-entry-moved-to-another-cli)).
 
@@ -459,7 +459,7 @@ home holds the entry's login alone.
 
 A login OpenCode 1.x made (`~/.local/share/opencode/auth.json`) is not read:
 a bundle holding one is refused when the engine restores it, which it logs
-as `cli_agent_bundle_restore_failed`, and the provider runs signed out, so
+as `harness_bundle_restore_failed`, and the provider runs signed out, so
 export it again from OpenCode 2. A bundle signs in a seat's executor run
 `Direct`, whose box is seeded with the login, and never one in `E2B`
 ([Where a seat's executor runs](#where-a-seats-executor-runs)).

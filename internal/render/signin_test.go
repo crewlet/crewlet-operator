@@ -31,7 +31,7 @@ import (
 // TestCredentialNameFollowsTheEngineSource.
 func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 	source := openSource(t, enginetest.Source(t))
-	raw, err := source.ReadFile("internal/providers/llm/cliagent/cliprofile/profiles.yaml")
+	raw, err := source.ReadFile("internal/providers/llm/harness/harnessprofile/profiles.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 // TestExecutorHarnessesFollowTheEngineSource holds the harnesses the render
 // runs a seat's executor on (ExecutorHarnesses) to the engine's two lists of
 // them, in their order: the coding agents it has an in-box runner for
-// (codingagent.Names), and the harnesses config lets run an executor
+// (executor.Names), and the harnesses config lets run an executor
 // (config.ExecutorHarnesses), which it refuses a chain without and a runIn on
 // any other harness by. A harness either gains moves every verdict the render
 // reaches on a chain, and the API's runIn rule
@@ -80,7 +80,7 @@ func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 		want[i] = harnessName(cli)
 	}
 
-	const names = "internal/sandbox/codingagent/names.go"
+	const names = "internal/sandbox/executor/names.go"
 	src, err := source.ReadFile(names)
 	if err != nil {
 		t.Fatal(err)
@@ -209,7 +209,7 @@ func fsReadDir(source *os.Root, dir string) ([]string, error) {
 
 // profileFile is the engine's file of CLI profiles, which declares how it
 // reads a credential's name (IsCredentialName and its credentialWords).
-const profileFile = "internal/providers/llm/cliagent/cliprofile/profile.go"
+const profileFile = "internal/providers/llm/harness/harnessprofile/profile.go"
 
 // credentialNameRules are the kinds whose CRDs read a credential's name, and
 // how many of their rules do (every other kind's, none): the LLMProvider
