@@ -70,6 +70,32 @@ spec:                       # MCPServer handbook
 Both are Crewlet's own fields
 ([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#turning-a-server-off)).
 
+## Names, prefixes and addresses
+
+An MCPServer's name is the server's name in the company document, and the
+API holds it, its `toolPrefix` and its `url` to what Crewlet holds them to
+([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#naming-a-server-and-its-tools)),
+so an object Crewlet would refuse is refused when it is applied, rather than
+holding back the document every other object of the Company is in:
+
+- **The name** is lowercase letters, digits and `-`, with no `.`, at most 32
+  characters, and not `crewlet`. It is the origin of every tool the server
+  serves, the key a Seat's or a Unit's `spec.mcp` names it by, and part of
+  every tool name an executor's box hands its model for a server it runs.
+- **`toolPrefix`** is letters, digits, `_` and `-`, at most 49 characters. It
+  goes in front of each of the server's tool names, and Crewlet offers a tool
+  only where its prefixed name is at most 50 characters of those, what the
+  longest prefix a harness gives the engine's tools leaves of a model's 64.
+  A tool it cannot offer is never shortened: Crewlet reports it on the
+  server's row (`refused_tools` on `GET /mcp-servers`), with what would offer
+  it, as it reports one another server's tool of the same name is offered in
+  place of (`shadowed_tools`).
+- **`url`** is `https`, or plain `http` only to a host on no public network,
+  since every request carries the server's credentials: a loopback, private,
+  link-local or shared (RFC 6598) address, a one-label name such as a Service's own name in its
+  namespace, `localhost`, or a name under `.localhost`, `.local` (a Service's
+  `<name>.<namespace>.svc.cluster.local`), `.home.arpa` or `.internal`.
+
 ## Settings and credentials
 
 A server's `env` (an HTTP server's `headers`) and the values a Seat or a Unit

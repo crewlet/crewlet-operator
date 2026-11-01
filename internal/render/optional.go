@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -174,6 +175,43 @@ func (r *renderer) headerSpellings() {
 				}
 			}
 		}
+	}
+}
+
+// variableName is the grammar of an environment variable's name, which every
+// value a Stdio server is started with is named by: Crewlet's envref.ValidName.
+var variableName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// valueNames refuses a Seat's or a Unit's spec.mcp value for a Stdio server
+// named outside a variable's grammar, as Crewlet refuses it on every write
+// (its validateMCPNames): the server's process is started with the value as
+// an environment variable of that name. The API holds every such name to a
+// header's grammar, since it cannot tell which server's transport a Seat or a
+// Unit names, and a header's grammar is the HTTP server's own; only here,
+// where the server is known, is a Stdio server's held to its own.
+func (r *renderer) valueNames() {
+	check := func(kind, name string, creds []v1alpha1.MCPCredentials) {
+		for i, c := range creds {
+			server := r.mcp[c.Name]
+			if server == nil || server.Spec.Transport == v1alpha1.MCPTransportHTTP {
+				continue
+			}
+			for j, v := range c.Env {
+				if variableName.MatchString(v.Name) {
+					continue
+				}
+				r.errs.add(EngineRefuses, kind, name, fmt.Sprintf("spec.mcp[%d].env[%d].name", i, j),
+					v1alpha1.ReasonConflict, fmt.Sprintf("is not an environment variable name, and MCPServer %s "+
+						"is Stdio: its process is started with the value under this name, so Crewlet refuses "+
+						"the document. Use letters, digits and _, not starting with a digit", c.Name))
+			}
+		}
+	}
+	for _, seat := range sortedByName(r.in.Seats) {
+		check(KindSeat, seat.Name, seat.Spec.MCP)
+	}
+	for _, unit := range sortedByName(r.in.Units) {
+		check(KindUnit, unit.Name, unit.Spec.MCP)
 	}
 }
 

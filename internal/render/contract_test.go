@@ -1816,3 +1816,89 @@ func awaitApplied(t *testing.T, client *engine.Client, applied engine.ApplyResul
 		return active
 	}
 }
+
+// TestContractMCPServerEntryRulesAreTheEngines holds what the MCPServer API
+// takes for a server's name, toolPrefix, url and description to what Crewlet
+// takes, both ways, with the engine the operator is tested against: a server
+// at each of the API's bounds renders a document Crewlet accepts, and one a
+// step past each, which the API refuses, Crewlet refuses too, at the field. So
+// the API's 32, 49 and its address and line rules are the engine's
+// (internal/config/mcpnames.go, and validateDescription in mcp.go), not a
+// guess that drifts: a profile with a longer prefix lowers Crewlet's bound,
+// and the first case here goes red until the API follows.
+func TestContractMCPServerEntryRulesAreTheEngines(t *testing.T) {
+	const caseName = "secret-positions"
+	tierA, err := Bootstrap(bootstrapCases()[0].input(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := write(t, "crewlet.yaml", tierA.YAML)
+	// withServer is the case's company with one more HTTP server, a copy of
+	// its github server changed by set.
+	withServer := func(t *testing.T, set func(*v1alpha1.MCPServer)) (*Document, map[string]string) {
+		t.Helper()
+		in := companyCaseNamed(t, caseName).input(t)
+		i := slices.IndexFunc(in.MCPServers, func(s v1alpha1.MCPServer) bool { return s.Name == "github" })
+		if i < 0 {
+			t.Fatal("the case has no MCPServer named github")
+		}
+		probe := *in.MCPServers[i].DeepCopy()
+		probe.Name = "probe"
+		set(&probe)
+		in.MCPServers = append(in.MCPServers, probe)
+		doc, err := Company(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		env := bootstrapEnv(tierA)
+		for _, k := range doc.Refs {
+			env[secretsync.StoreName(k)] = dummyCredential(k)
+		}
+		for _, name := range doc.Provisioned {
+			env[name] = "minted-" + name
+		}
+		return doc, env
+	}
+
+	t.Run("at the API's bounds", func(t *testing.T) {
+		doc, env := withServer(t, func(s *v1alpha1.MCPServer) {
+			s.Name = strings.Repeat("a", 32)
+			s.Spec.ToolPrefix = "_" + strings.Repeat("p", 48)
+			s.Spec.URL = "http://github-mcp.tools.svc.cluster.local:8080/mcp"
+			s.Spec.Description = "Reads the code host"
+		})
+		validate(t, env, companyCaseNamed(t, caseName).advisories,
+			"-config", config, "-company", write(t, "company.yaml", doc.YAML))
+	})
+	for _, c := range []struct {
+		name, field, says string
+		set               func(*v1alpha1.MCPServer)
+	}{
+		{"a name of 33 characters", "name", "at most 32",
+			func(s *v1alpha1.MCPServer) { s.Name = strings.Repeat("b", 33) }},
+		{"a name with a dot", "name", "is not a server name",
+			func(s *v1alpha1.MCPServer) { s.Name = "tools.github" }},
+		{"a toolPrefix of 50 characters", "tool_prefix", "a prefix of at most 49",
+			func(s *v1alpha1.MCPServer) { s.Spec.ToolPrefix = strings.Repeat("p", 50) }},
+		{"a toolPrefix with a dot", "tool_prefix", "holds characters a model's tool name cannot",
+			func(s *v1alpha1.MCPServer) { s.Spec.ToolPrefix = "gh." }},
+		{"plain http to a public host", "url", "plain http to a host on a public network",
+			func(s *v1alpha1.MCPServer) { s.Spec.URL = "http://mcp.example.com/mcp" }},
+		{"a line separator in the description", "description", "one line",
+			func(s *v1alpha1.MCPServer) { s.Spec.Description = "Reads the code host\u2028and its issues" }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			doc, env := withServer(t, c.set)
+			got, stdout, stderr, _ := verdict(t, env, "-config", config, "-company", write(t, "company.yaml", doc.YAML))
+			refused := slices.ContainsFunc(got.Problems, func(raw json.RawMessage) bool {
+				var p struct{ Path, Message string }
+				return json.Unmarshal(raw, &p) == nil && strings.HasPrefix(p.Path, "mcp_servers[") &&
+					strings.HasSuffix(p.Path, "]."+c.field) && strings.Contains(p.Message, c.says)
+			})
+			if got.Valid || !refused {
+				t.Errorf("crewlet validate did not refuse %s at mcp_servers[].%s saying %q:\n%s\n%s",
+					c.name, c.field, c.says, stdout, stderr)
+			}
+		})
+	}
+}
