@@ -27,7 +27,7 @@ var engineCredentialLists = []string{
 const (
 	atlassianCredentials = "internal/atlassian/seatcred.go"
 	atlassianTokenKeys   = "tokenKeys"
-	cliProfile           = "internal/providers/llm/cliagent/cliprofile/profile.go"
+	harnessProfile       = "internal/providers/llm/harness/harnessprofile/profile.go"
 )
 
 // literalSettings are names of settings that are no credential, which the
@@ -71,9 +71,9 @@ func TestToolServerLiteralsFollowTheEngine(t *testing.T) {
 	}
 	atlassian := stringsOf(t, atlassianCredentials, read(atlassianCredentials), atlassianTokenKeys)
 	credentials = append(credentials, atlassian...)
-	words := stringSlice(t, cliProfile, read(cliProfile), "credentialWords")
+	words := stringSlice(t, harnessProfile, read(harnessProfile), "credentialWords")
 	if len(words) == 0 {
-		t.Fatalf("%s declares no credential words", cliProfile)
+		t.Fatalf("%s declares no credential words", harnessProfile)
 	}
 	for _, word := range words {
 		header := strings.ToUpper(word[:1]) + strings.ToLower(word[1:])

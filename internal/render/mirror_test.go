@@ -64,7 +64,7 @@ const (
 	mirrorTable = "internal/render/mirror_test.go"
 	sandboxGo   = "internal/engine/sandbox.go"
 	agentRunGo  = "internal/engine/agentrun.go"
-	doctorGo    = "internal/providers/llm/cliagent/doctor.go"
+	doctorGo    = "internal/providers/llm/harness/doctor.go"
 	companyGo   = "internal/config/company.go"
 	firstRead   = "v0.1.1-0.20261010171839-4e45c6b992a2"
 
@@ -227,7 +227,7 @@ const (
 	// merged (e0328e5d9d), which adds auth.mode env: a providers.llm entry
 	// whose env alone signs its CLI in. The names
 	// that sign a CLI in beyond its token and key variables moved from a list
-	// of the Claude Code runner's (codingagent.ClaudeCodeCredentialEnv, now
+	// of the Claude Code runner's (executor.ClaudeCodeCredentialEnv, now
 	// gone) into the CLI's profile (sign_in_env, which only claude-code's
 	// names), so entryEnv, entrySignInName and entrySignsIn ask
 	// CredentialEnvNames, which reads it, where they asked the runner's list.
@@ -240,8 +240,8 @@ const (
 	// carries the engine's zone into every executor run's box, E2B included:
 	// the zone it reads a reset the CLI names without one in, the engine's
 	// own TZ where it names a zone the system knows, and UTC otherwise
-	// (childZone), its name cliprofile.ZoneVariable, which an entry's env may
-	// not set.
+	// (childZone), its name harnessprofile.ZoneVariable, which an entry's env
+	// may not set.
 	envSignInRead = "v0.1.1-0.20261029083537-e0328e5d9daf"
 	// signInStampRead is crewlet#453's engine, read on crewlet's main where
 	// crewlet#452 merged on top of crewlet#454: an executor launch now stamps
@@ -937,7 +937,7 @@ var mirrored = []mirror{
 		read:   envSignInRead,
 	},
 	{
-		file: "internal/providers/llm/cliagent/signin.go", name: "(*Provider).signsInWithKey",
+		file: "internal/providers/llm/harness/signin.go", name: "(*Provider).signsInWithKey",
 		against: append(slices.Clone(executorLogin), executorBox...),
 		decides: "an entry signs in with no login under auth mode api-key and env, whatever else it holds, which " +
 			"SandboxCredentials and SandboxCredentialDocument seed its Direct box with none of",
@@ -1008,7 +1008,7 @@ var mirrored = []mirror{
 		file: agentRunGo, name: "executorRunners",
 		against: []string{executorGo, headsGo, seatTypesGo, llmProviderTypes, cliAgentsMd},
 		decides: "the members a launch picks among are the executor chain's members, in order, whose CLI has an " +
-			"in-box runner (codingagent.Names, held by TestExecutorHarnessesFollowTheEngineSource), and a chain with none " +
+			"in-box runner (executor.Names, held by TestExecutorHarnessesFollowTheEngineSource), and a chain with none " +
 			"launches nothing",
 		digest: "95412060b00824d49c72e824b8d74d7c08d6ad53b84293edac9f2d934b5a1e8a",
 		read:   chatLogRead,

@@ -73,7 +73,7 @@ var cliVariables = map[v1.Harness]cliVariable{
 var envSignIn = []v1.Harness{v1.HarnessHermes, v1.HarnessPi, v1.HarnessOpenCode}
 
 // homeIsolation are the variables Crewlet sets on every call of every CLI to
-// keep it inside its seat's own home (cliprofile.HomeIsolation), and
+// keep it inside its seat's own home (harnessprofile.HomeIsolation), and
 // cliIsolation those each CLI's profile adds for its own configuration
 // directory or switch (config_env, work_config_env, isolation_env), in the
 // engine every suite runs: the variables the LLMProvider API's isolation rule
