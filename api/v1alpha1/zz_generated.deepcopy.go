@@ -2481,6 +2481,11 @@ func (in *SandboxSettings) DeepCopyInto(out *SandboxSettings) {
 		*out = new(int32)
 		**out = **in
 	}
+	if in.CommitAttribution != nil {
+		in, out := &in.CommitAttribution, &out.CommitAttribution
+		*out = new(bool)
+		**out = **in
+	}
 	if in.Setup != nil {
 		in, out := &in.Setup, &out.Setup
 		*out = make([]SandboxSetupStep, len(*in))

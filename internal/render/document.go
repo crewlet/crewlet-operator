@@ -130,6 +130,7 @@ type sandboxDoc struct {
 	DefaultTimeoutSeconds  int32            `json:"default_timeout_seconds,omitempty"`
 	DefaultPauseTTLSeconds *int32           `json:"default_pause_ttl_seconds,omitempty"`
 	DefaultMaxTurns        *int32           `json:"default_max_turns,omitempty"`
+	CommitAttribution      *bool            `json:"commit_attribution,omitempty"`
 	Setup                  []setupStepDoc   `json:"setup,omitempty"`
 }
 
