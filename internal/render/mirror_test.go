@@ -199,6 +199,13 @@ const (
 	// commits credit Crewlet as co-author, which the Company's
 	// spec.sandbox.commitAttribution renders.
 	commitAttributionRead = "v0.1.1-0.20261101000021-5df52121cb3d"
+	// uncappedRead is crewlet#546's engine: an executor run is uncapped unless
+	// the Company or the Seat sets a round cap. providers.sandbox's
+	// default_max_turns left out or 0 caps nothing, and the constant that
+	// held the shipped 96 is gone; (*SandboxProvider).MaxTurns is where the
+	// engine says it now, which the Company's spec.sandbox.defaultMaxTurns
+	// and the Seat's spec.sandbox.maxTurns render.
+	uncappedRead = "v0.1.1-0.20261101204309-4f58b2b8380e"
 	// executorFinalRead is crewlet#388's engine again, read at the head of
 	// its branch once crewlet's main to 7cd6b68b80 was merged into it,
 	// before that change merged. A node without the ingress role that runs
@@ -787,20 +794,21 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "buildSandbox",
 		against: []string{renderCompanyGo, companyTypesGo, seatTypesGo},
 		decides: "the catalogue every launch reads is built from providers.sandbox, over the cells the company reaches " +
-			"alone, with its default_run_in as the cell of a run whose entry names none, its default_max_turns, else " +
-			"96, as every run's round cap, its commit_attribution, on unless false, as whether every run's own " +
+			"alone, with its default_run_in as the cell of a run whose entry names none, its default_max_turns as " +
+			"every run's round cap, uncapped where it names none, its commit_attribution, on unless false, " +
+			"as whether every run's own " +
 			"commits credit Crewlet, and its setup steps as the setup every box is given; a company with no " +
 			"sandbox has none, and runs no executor",
 		digest: "17378c552d7b3434d9b28e7e770c1fcf674ef2e2472911702bdde4452e922874",
 		read:   commitAttributionRead,
 	},
 	{
-		file: "internal/config/sandbox.go", name: "defaultSandboxMaxTurns",
+		file: "internal/config/sandbox.go", name: "(*SandboxProvider).MaxTurns",
 		against: []string{companyTypesGo, seatTypesGo, harnessesMd},
-		decides: "an executor run on a seat and a catalogue that name no round cap takes 96 rounds at most, the only " +
-			"bound on a seat's turn",
-		digest: "bb2dfa06eb8b449af4c6df4ea5183fcd4b7a237f9e8fd8620a4e0d55a16ba5f7",
-		read:   executorRead,
+		decides: "an executor run on a seat and a catalogue that name no round cap is uncapped: default_max_turns " +
+			"left out or 0 caps nothing",
+		digest: "5f4b921bb6655891c825a9fe835ca28284286970a5bce857c353e4846b42c601",
+		read:   uncappedRead,
 	},
 	{
 		file: sandboxGo, name: "newCodingRun",

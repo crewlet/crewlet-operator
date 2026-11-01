@@ -820,9 +820,9 @@ request:
   place held by runs that are each waiting on such a call.
 
 An executor run is bounded by neither: it is never stopped on a clock, and
-its rounds are capped by the harness's own turn cap, the Seat's
-`spec.sandbox.maxTurns`, else the Company's `spec.sandbox.defaultMaxTurns`,
-else Crewlet's 96. A token ceiling (`tokenBudget`) on the Seat or the Company
+its rounds are uncapped unless the Seat's `spec.sandbox.maxTurns`, else the
+Company's `spec.sandbox.defaultMaxTurns`, sets a cap, which becomes the
+harness's own turn cap. A token ceiling (`tokenBudget`) on the Seat or the Company
 below `turn_engine.executor_min_budget_tokens` (25000 unless
 `spec.engineConfig` sets it) leaves no room for any launch: Crewlet's dry run
 refuses it, reported `Invalid` on the object.

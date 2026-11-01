@@ -722,9 +722,9 @@ type SandboxSettings struct {
 	DefaultPauseTTLSeconds *int32 `json:"defaultPauseTTLSeconds,omitempty"`
 
 	// defaultMaxTurns caps the agentic rounds of one executor run on seats
-	// that name none. It is the only bound on a seat's turn: an executor run
-	// is never stopped on a clock. Unset takes Crewlet's default of 96; 0 is
-	// uncapped. Crewlet's `default_max_turns`.
+	// that name none. Unset or 0 leaves runs uncapped: how many rounds a task
+	// takes is its harness's to judge, and an executor run is never stopped
+	// on a clock. Crewlet's `default_max_turns`.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	DefaultMaxTurns *int32 `json:"defaultMaxTurns,omitempty"`
