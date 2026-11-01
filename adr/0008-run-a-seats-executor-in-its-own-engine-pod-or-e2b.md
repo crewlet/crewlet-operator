@@ -7,13 +7,13 @@
 - **Enforced-by:** `internal/render.TestExecutor`,
   `internal/render.TestContractExecutorIsAppliedWhereItCannotRun`,
   `internal/render.TestContractDirectCell`,
-  `internal/render.TestRunnerCLIsFollowTheEngineSource`,
-  `internal/render.TestRunnerCLIsAreTheRunIn`,
+  `internal/render.TestExecutorHarnessesFollowTheEngineSource`,
+  `internal/render.TestExecutorHarnessesAreTheRunIn`,
   `internal/render.TestContractEngineRefusesWhatItHolds`,
   `internal/render.TestContractDeepWorkFollowsTheEngine`,
   `internal/render.TestContractExecutorFloorIsTheEngines`,
   `internal/render.TestMirroredEngineDeclarationsAreUnchanged`,
-  `test/crd.TestCLIAgentRunInFollowsTheEngine`,
+  `test/crd.TestHarnessRunInFollowsTheEngine`,
   `test/crd.TestSandboxPlacementValidation`,
   `test/crd.TestSeatEmptySandboxIsRefused`,
   `test/crd.TestEngineClassSandboxes`,
@@ -75,10 +75,10 @@ alike, and `E2B`, the Company's E2B sandbox. A run's cell is its provider's
 `LLMProvider.spec.runIn`, else the Company's `spec.sandbox.defaultRunIn`,
 which a `spec.sandbox` must state: there is no implicit cell, and the
 document always writes `default_run_in`. The API admits `runIn` on
-`ClaudeCode` and `OpenCode` alone (`render.RunnerCLIs`, held to Crewlet's
-runners), `defaultRunIn: E2B` only beside `spec.sandbox.e2b`, and no empty
-`Seat.spec.sandbox`, which would say nothing to Crewlet while reading as a
-switch. A platform provider names no `runIn` and takes the default.
+`ClaudeCode` and `OpenCode` alone (`render.ExecutorHarnesses`, held to
+Crewlet's runners), `defaultRunIn: E2B` only beside `spec.sandbox.e2b`, and
+no empty `Seat.spec.sandbox`, which would say nothing to Crewlet while
+reading as a switch. A platform provider names no `runIn` and takes the default.
 
 **Refused where Crewlet refuses it, on the object to change**
 (`EngineRefuses`): a Company with an agent seat and a model provider and no

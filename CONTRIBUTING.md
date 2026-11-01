@@ -177,11 +177,11 @@ or schema moves.
 What no validation shows is what a seat's executor launch runs and signs its
 CLI in with, which the renderer's verdict on a seat's executor turns on. The
 renderer's `TestExecutorSignInFollowsTheEngineSource` and
-`TestRunnerCLIsFollowTheEngineSource` read it from the engine's own source
-(`enginetest.Source`, the module `make crewlet` installed from): the
+`TestExecutorHarnessesFollowTheEngineSource` read it from the engine's own
+source (`enginetest.Source`, the module `make crewlet` installed from): the
 variables that sign Claude Code in from a run's environment, Claude Code's
 token and key variables among them, and the CLIs Crewlet has an in-box
-runner for, which test/crd's `TestCLIAgentRunInFollowsTheEngine` holds to
+runner for, which test/crd's `TestHarnessRunInFollowsTheEngine` holds to
 the engine's verdict on a provider's `run_in` too. The rules around those
 lists decide only at a launch, which no engine test reaches, so
 `TestMirroredEngineDeclarationsAreUnchanged` holds their code:
@@ -410,7 +410,7 @@ closely enough that nobody has to learn a house style:
   where a setting is told apart by its name: a literal `value` is refused
   under any name Crewlet reads as a credential's (`credentialNamePattern` in
   `internal/render/signin.go`, which tests hold to the engine's
-  `cliprofile.IsCredentialName` and to the names it reads a seat's tool
+  `harnessprofile.IsCredentialName` and to the names it reads a seat's tool
   credentials under), because a seat needs a setting of its own there, such as
   a cache path. No field accepts a literal secret, and the pass-through
   `engineConfig` may not name a block that holds credentials. [docs/concepts/credentials.md](docs/concepts/credentials.md)
@@ -508,7 +508,7 @@ commit:
 | the Gateway API CRDs the controller suite installs | `internal/controller/testdata/gateway-api` | `make gateway-api-crds`, after Dependabot bumps `sigs.k8s.io/gateway-api`; the suite fails until the two match |
 | cosign (`cosign-release`) | `.github/workflows/release.yml` | sigstore/cosign's releases |
 | Claude Code (`CLAUDE_CODE_VERSION`) | the Dockerfile in `docs/guides/cli-agents.md` | `https://downloads.claude.ai/claude-code-releases/latest`, the release Anthropic's installer installs |
-| OpenCode (`OPENCODE_VERSION`, `OPENCODE_INTEGRITY_*`) | the Dockerfile in `docs/guides/cli-agents.md` | `https://registry.npmjs.org/@opencode/cli/latest` (never the `beta` or `dev` tag), within the major Crewlet's opencode profile is written for (`written_for` in its `internal/providers/llm/cliagent/cliprofile/profiles.yaml`, OpenCode 2 today); the integrities each the `dist.integrity` of `@opencode/cli-linux-x64-baseline` and `@opencode/cli-linux-arm64` at that version |
+| OpenCode (`OPENCODE_VERSION`, `OPENCODE_INTEGRITY_*`) | the Dockerfile in `docs/guides/cli-agents.md` | `https://registry.npmjs.org/@opencode/cli/latest` (never the `beta` or `dev` tag), within the major Crewlet's opencode profile is written for (`written_for` in its `internal/providers/llm/harness/harnessprofile/profiles.yaml`, OpenCode 2 today); the integrities each the `dist.integrity` of `@opencode/cli-linux-x64-baseline` and `@opencode/cli-linux-arm64` at that version |
 | uv (`UV_IMAGE`), Python (`PYTHON_VERSION`), `mcp-server-mattermost` and `mcp-atlassian` (`MCP_*_VERSION`), and `RESOLVED_AT` | the Dockerfile in `docs/guides/tool-servers.md` | `ghcr.io/astral-sh/uv`, by digest; `https://pypi.org/pypi/<package>/json`; the newest Python of the minor version the comment at the pin holds it to, which the pinned uv must offer; `RESOLVED_AT` the day the versions were read |
 | glab (`GLAB_VERSION`, `GLAB_SHA256_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases/permalink/latest`, the digests from the release's `checksums.txt` |
 | slack-mcp-server (`SLACK_MCP_SERVER_VERSION`, `SLACK_MCP_SERVER_INTEGRITY_*`) | the Dockerfile in `docs/guides/tool-servers.md` | `https://registry.npmjs.org/slack-mcp-server/latest`, the integrities each platform package's `dist.integrity` |

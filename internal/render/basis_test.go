@@ -461,7 +461,7 @@ func engineCases() []engineCase {
 			t.Fatal("the document has no provider anthropic")
 		}
 		entry := maps.Clone(anthropic)
-		entry["agent"], entry["model"] = "codex", modelCodex
+		entry["harness"], entry["model"] = "codex", modelCodex
 		llm[providerCodex] = entry
 	}
 	return append([]engineCase{
@@ -499,7 +499,7 @@ func engineCases() []engineCase {
 				order, _ := providers["llm_order"].([]any)
 				providers["llm_order"] = append([]any{providerCodex}, order...)
 			},
-			at: providerCodex + ".agent", says: "cannot run an executor",
+			at: providerCodex + ".harness", says: "cannot run an executor",
 		},
 		{
 			name: "agent seats and a model and no spec.sandbox", site: site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
@@ -577,7 +577,7 @@ func engineCases() []engineCase {
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
 				directWithoutE2B(t, doc)[providerOpenCode] = map[string]any{
-					"agent": "opencode", "model": modelOpenCode, keyRunIn: cellE2B,
+					"harness": "opencode", "model": modelOpenCode, keyRunIn: cellE2B,
 					"auth":      map[string]any{"mode": "subscription"},
 					keyEnv:      map[string]any{envGatewayKey: "${OPENROUTER_API_KEY}"},
 					keyStateDir: "/var/lib/crewlet/llm-cli/" + providerOpenCode,

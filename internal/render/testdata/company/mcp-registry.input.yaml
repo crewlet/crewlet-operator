@@ -1,0 +1,11 @@
+# A Company naming the community MCP registry Crewlet's add flow searches:
+# rendered as mcp_registry.url, as written.
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: registry
+spec:
+  engineClassName: basic
+  companyName: Registry
+  mcpRegistry:
+    url: https://registry.modelcontextprotocol.io

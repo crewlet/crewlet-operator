@@ -64,8 +64,8 @@ type MCPToolAnnotations struct {
 // that is not a letter or a digit and read without case, is KEY, KEYS,
 // APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL,
 // CREDENTIALS, AUTH, OAUTH or PAT, which is how Crewlet itself reads a
-// credential's name (cliprofile.IsCredentialName), or when it is one of the
-// HTTP headers that carry one, Authorization, Proxy-Authorization and
+// credential's name (harnessprofile.IsCredentialName), or when it is one of
+// the HTTP headers that carry one, Authorization, Proxy-Authorization and
 // Cookie; such a name takes valueFrom, never a literal. So GITLAB_TOKEN,
 // TAVILY_API_KEY and X-Api-Key come from Secrets, and JIRA_URL or
 // SLACK_MCP_ADD_MESSAGE_TOOL may be written out. The rule keeps a credential
@@ -282,8 +282,9 @@ type MCPServerSpec struct {
 
 	// url is the endpoint of an HTTP server: https, or plain http only to a
 	// host on no public network, since every request carries the server's
-	// credentials. That is a loopback, private or link-local address, a
-	// one-label name (a Service's own name in its namespace), localhost, or
+	// credentials. That is a loopback, private, link-local or shared (RFC
+	// 6598, where a tailnet addresses its machines) address, a one-label
+	// name (a Service's own name in its namespace), localhost, or
 	// a name under .localhost, .local (a Service's
 	// <name>.<namespace>.svc.cluster.local), .home.arpa or .internal, judged
 	// by what the address says, as Crewlet judges it. Read by one pattern
@@ -294,7 +295,7 @@ type MCPServerSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() in ['http', 'https']",message="url must be an absolute http or https URL"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('(?i)^http://') || self.matches('(?i)^http://(localhost|[a-z0-9-]+|[a-z0-9.-]*\\\\.(localhost|local|home\\\\.arpa|internal)|(127|10)(\\\\.[0-9]{1,3}){3}|192\\\\.168(\\\\.[0-9]{1,3}){2}|172\\\\.(1[6-9]|2[0-9]|3[01])(\\\\.[0-9]{1,3}){2}|169\\\\.254(\\\\.[0-9]{1,3}){2}|\\\\[(::1|f[cd][0-9a-f]{2}:[0-9a-f:.]*|fe[89ab][0-9a-f]:[0-9a-f:.]*)\\\\])(:[0-9]+)?([/?#].*)?$')",message="url may be plain http only to a host on no public network, where every request and the credentials in it would travel unencrypted: use https, or a loopback, private or link-local address, a one-label name, localhost, or a name under .localhost, .local, .home.arpa or .internal"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('(?i)^http://') || self.matches('(?i)^http://(localhost|[a-z0-9-]+|[a-z0-9.-]*\\\\.(localhost|local|home\\\\.arpa|internal)|(127|10)(\\\\.[0-9]{1,3}){3}|192\\\\.168(\\\\.[0-9]{1,3}){2}|172\\\\.(1[6-9]|2[0-9]|3[01])(\\\\.[0-9]{1,3}){2}|169\\\\.254(\\\\.[0-9]{1,3}){2}|100\\\\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])(\\\\.[0-9]{1,3}){2}|\\\\[(::1|f[cd][0-9a-f]{2}:[0-9a-f:.]*|fe[89ab][0-9a-f]:[0-9a-f:.]*)\\\\])(:[0-9]+)?([/?#].*)?$')",message="url may be plain http only to a host on no public network, where every request and the credentials in it would travel unencrypted: use https, or a loopback, private or link-local address, a one-label name, localhost, or a name under .localhost, .local, .home.arpa or .internal"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="url may not hold a user name or password: a credential is named through a Secret, never written into an address"
 	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
 	URL string `json:"url,omitempty"`

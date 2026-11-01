@@ -78,7 +78,7 @@ spec:
     # Every opted-in tenant can read this key: give the class a gateway's
     # per-tenant virtual key, never the platform's own.
     - name: platform-claude
-      agent: ClaudeCode
+      harness: ClaudeCode
       model: claude-sonnet-5
       auth:
         mode: APIKey

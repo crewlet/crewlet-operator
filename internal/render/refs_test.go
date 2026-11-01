@@ -650,8 +650,8 @@ func cliProvider() v1alpha1.LLMProvider {
 		Name:      providerCLI,
 		Spec: v1alpha1.LLMProviderSpec{
 			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
-			LLMProviderSettings: v1alpha1.LLMProviderSettings{Agent: v1alpha1.CLIAgentClaudeCode, Model: modelSonnet},
-			Auth: v1alpha1.CLIAgentAuth{
+			LLMProviderSettings: v1alpha1.LLMProviderSettings{Harness: v1alpha1.HarnessClaudeCode, Model: modelSonnet},
+			Auth: v1alpha1.HarnessAuth{
 				TokenSecretRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "oauthToken"},
 			},
 		},

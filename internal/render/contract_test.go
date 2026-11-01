@@ -57,7 +57,7 @@ func validate(t *testing.T, env map[string]string, want []advisory, args ...stri
 	// A CLI's env is resolved where the engine builds the provider, and
 	// one that resolves to nothing is only logged there too: for a Hermes
 	// signed in through its env, that is a CLI with no key.
-	for _, unresolved := range []string{"config_reference_unresolved", "cli_agent_env_unresolved"} {
+	for _, unresolved := range []string{"config_reference_unresolved", "harness_env_unresolved"} {
 		if strings.Contains(stderr, unresolved) {
 			t.Errorf("a reference resolved to nothing:\n%s", stderr)
 		}
@@ -1564,7 +1564,7 @@ func TestContractExecutorFloorIsTheEngines(t *testing.T) {
 // providers of different CLIs under one loginName, as the loginName field and
 // the cli-agents guide say it does: the render gives both the loginName's
 // state_dir, and Crewlet keeps each CLI's files in a directory of its own
-// under it (<state_dir>/<agent>), so they share the directory and nothing in
+// under it (<state_dir>/<harness>), so they share the directory and nothing in
 // it.
 //
 // The engine once refused the pair twice over: its validation refused two
@@ -1634,7 +1634,7 @@ func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 		// Code has held since the first revision.
 		login := loginNameOf(modelProvider(in, providerClaude))
 		codex := modelProvider(in, providerCodex)
-		codex.Spec.Agent = v1alpha1.CLIAgentOpenCode
+		codex.Spec.Harness = v1alpha1.HarnessOpenCode
 		codex.Spec.Model = "openai/" + codex.Spec.Model
 		codex.Spec.LoginName = login
 		moved, err := Company(in)
@@ -1709,7 +1709,7 @@ func putCredentials(t *testing.T, client *engine.Client, doc *Document) string {
 // loginEntry is what a providers.llm entry says about where its CLI keeps its
 // files.
 type loginEntry struct {
-	Agent    string `json:"agent"`
+	Harness  string `json:"harness"`
 	StateDir string `json:"state_dir"`
 }
 
@@ -1736,7 +1736,7 @@ func requireOneLoginTwoCLIs(t *testing.T, what string, document []byte, login st
 	t.Helper()
 	entries := loginEntries(t, document)
 	dir := CLIStateRoot + "/" + login
-	byAgent := map[string]string{}
+	byHarness := map[string]string{}
 	for _, name := range providers {
 		e, ok := entries[name]
 		switch {
@@ -1744,10 +1744,10 @@ func requireOneLoginTwoCLIs(t *testing.T, what string, document []byte, login st
 			t.Fatalf("%s has no providers.llm.%s:\n%s", what, name, document)
 		case e.StateDir != dir:
 			t.Fatalf("%s gives providers.llm.%s the state_dir %q, want loginName %s's, %q:\n%s", what, name, e.StateDir, login, dir, document)
-		case byAgent[e.Agent] != "":
-			t.Fatalf("%s drives providers.llm.%s and %s on one CLI, %q, want two CLIs:\n%s", what, byAgent[e.Agent], name, e.Agent, document)
+		case byHarness[e.Harness] != "":
+			t.Fatalf("%s drives providers.llm.%s and %s on one CLI, %q, want two CLIs:\n%s", what, byHarness[e.Harness], name, e.Harness, document)
 		}
-		byAgent[e.Agent] = name
+		byHarness[e.Harness] = name
 	}
 	return entries
 }

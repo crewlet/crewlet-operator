@@ -39,7 +39,7 @@ metadata:
 spec:
   companyRef:
     name: optional
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: claude-sonnet-5
   auth:
     mode: APIKey

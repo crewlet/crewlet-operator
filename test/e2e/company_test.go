@@ -500,11 +500,11 @@ func applyProvider(namespace, company string) {
 		Spec: v1.LLMProviderSpec{
 			CompanyRef: v1.CompanyReference{Name: company},
 			LLMProviderSettings: v1.LLMProviderSettings{
-				Agent: v1.CLIAgentClaudeCode,
-				Model: "sonnet",
+				Harness: v1.HarnessClaudeCode,
+				Model:   "sonnet",
 			},
-			Auth: v1.CLIAgentAuth{
-				Mode:            v1.CLIAgentAuthAPIKey,
+			Auth: v1.HarnessAuth{
+				Mode:            v1.HarnessAuthAPIKey,
 				APIKeySecretRef: v1.SecretKeyReference{Name: providerSecret, Key: keyField},
 			},
 		},
