@@ -122,7 +122,7 @@ const (
 	// Both launches were read before at crewlet/crewlet#298's engine whose
 	// launches hand the run row they open the code holds of their turn
 	// (v0.1.1-0.20261029165728-4ee3f06a5fde), the run_sandbox launch read
-	// again since at runReposRead. A turn holds each scratch repository of
+	// again since at codeCeilingRead. A turn holds each scratch repository of
 	// the company's code host it names, so that the host's
 	// expiry of an idle one leaves it be while the turn may still use it, and
 	// a run_sandbox launch (Launch) and an agent-mode one (LaunchExecutor)
@@ -149,10 +149,22 @@ const (
 	// on, its coding agent, every other refusal before a box exists and the
 	// sign-in that must reach the box are as at cliOnlyRead.
 	bridgeStopRead = "v0.1.1-0.20261030230815-ab6d97e67b58"
-	// runReposRead is crewlet/crewlet#298's engine whose run_sandbox launch
-	// gives a run the repositories its call names on the company's own code
-	// host, read at the head of its branch, where the launch was read again.
-	// The launch takes the call's request where it took its brief, resolves
+	// codeCeilingRead is crewlet/crewlet#298's engine whose run_sandbox
+	// launch holds a box's every request of the code host to whom its turn
+	// works for, beside the seat's own grant, and has the box run git's
+	// file-system monitor only where its cell gives it a kernel of its own,
+	// read at the pushed head of its branch, where the launch was read again
+	// with the whole table. The launch hands the repositories it resolved,
+	// and the ceiling their resolution read (the run's CodeCeiling), to the
+	// run's box, and resolves them for the cell the run is placed in
+	// (resolveRunRepos takes the spec's Placement, which sandbox.CodingSteps
+	// reads). Both are reached only by a call that names repositories, after
+	// every refusal a document foresees, and a company the operator runs
+	// names none (below), so none of it is a verdict, and the decision text
+	// stands. Before that, the launch was read at crewlet/crewlet#298's engine
+	// whose run_sandbox launch gives a run the repositories its call names on
+	// the company's own code host
+	// (v0.1.1-0.20261030022059-2887e830ccb5). The launch takes the call's request where it took its brief, resolves
 	// the repositories the call names last of its checks, after every
 	// refusal a document foresees and before the turn's holds are sealed for
 	// the row, and hands a run given some its credential on the code host,
@@ -171,7 +183,7 @@ const (
 	// environment is assembled from, and so do the API's rules on a Seat's
 	// spec.sandbox.env and a setup step's env, which test/crd holds to the
 	// engine (TestReservedRunVariablesFollowTheEngine).
-	runReposRead = "v0.1.1-0.20261030022059-2887e830ccb5"
+	codeCeilingRead = "v0.1.1-0.20261101062317-46be603c9402"
 	// refusalByModeRead is the engine whose remote-run refusal is worded by
 	// the entry's auth mode (credentialRefusal): an api-key entry whose key
 	// resolved to nothing is told to give the seat its own key, and an
@@ -801,8 +813,8 @@ var mirrored = []mirror{
 			"the catalogue's default, and refuses before a box exists what newCodingRun and sandboxCredentials " +
 			"refuse, and a run whose environment holds a value that resolves to nothing under a key nothing " +
 			"declares optional (runEnvironment's gap)",
-		digest: "8c4ebcadecdfbb3d9c29f765184ac06aa4ea1079f8c9cb3e6a8cf5708fb073e8",
-		read:   runReposRead,
+		digest: "6212231d962a96e1c611a53b56b67bac919547a51b68006be7888d2e192f7fe7",
+		read:   codeCeilingRead,
 	},
 	{
 		file: sandboxGo, name: "buildSandbox",
