@@ -439,6 +439,40 @@ const (
 	// refused between the two rolls, as the credentials guide says.
 	brokerAuthRead = "v0.1.1-0.20261030230815-ab6d97e67b58"
 
+	// bootStanceRead is crewlet/crewlet#298's engine at the pushed head of
+	// its branch, where every row of this table was compared again: 195 of
+	// the 198 hold there, three of them boot rows whose digests had moved
+	// since they were read, recorded at this version. The other three,
+	// (*Engine).bootSecrets, (*Engine).join and (*Engine).startStateLog, stay
+	// at bootRecoveryRead, crewlet#311 on crewlet's main, which #298's branch
+	// has not merged: at its head bootSecrets is not declared, and join and
+	// startStateLog are the branch's own, so the three rows fail there. They
+	// hold the operator to the engine #298 lands as, which carries #311, and
+	// are read against bootWindows at the head of the branch once it has
+	// taken main in, as is every other row, this version's included. None of
+	// the three recorded here asks the broker anything it did not ask before,
+	// so no window moves and their decision texts stand. A log's start hands
+	// the reading of the log's end it took to the runner paired with where
+	// the runner stands, its checkpoint and the barriers its loop reached
+	// past it ((*statelog.Runner).Stance, read under the runner's own lock),
+	// where it paired the reading with the checkpoint alone
+	// (crewlet/crewlet@19aa26ea1): a value in memory, so the start still
+	// reads its stats, attaches its consumer and verifies its checkpoint, as
+	// (*stateLog).start's row says. The estate service gives the engine
+	// writes a git node answers for its peers a bound of their own, a slot
+	// each until it is answered (crewlet/crewlet@7468263a7), which estate's
+	// Serve makes as a channel when it builds the one server every lane
+	// answers through: its lanes are registered as they were, one after the
+	// other through the queue's Serve, the two git lanes only beside a git
+	// half, which no pod the operator runs is handed. And a log's state read
+	// notes how many members store the log as the broker reports it
+	// ((*DomainLog).stateInfo, crewlet/crewlet@09db07e30), which decides what
+	// a barrier that did not commit is refused as, and is still one read
+	// through ReadWith. The registered domains, which every loop of the boot
+	// over them multiplies and no digest sees, are the eight the windows
+	// count.
+	bootStanceRead = "v0.1.1-0.20261101062317-46be603c9402"
+
 	// The engine files most of the bounds on a boot are read from, and the
 	// guide that quotes the windows they add up to.
 	jsprovisionGo     = "internal/jsprovision/jsprovision.go"
@@ -1653,8 +1687,8 @@ var mirrored = []mirror{
 		file: stateLogGo, name: "(*stateLog).start",
 		against: bootWindows,
 		decides: "a log's start reads its stats, attaches its consumer and verifies its checkpoint",
-		digest:  "62f930ac3079f85e8704ca3ff2ff4ea7b8771af963dfd8e4c8ecaa3c723b4094",
-		read:    codeHostRead,
+		digest:  "be7f80d30b301ef66c3a8a478a79495b92af5cc342992ef21ee1660c1af03ec5",
+		read:    bootStanceRead,
 	},
 	{
 		file: stateLogGo, name: "(*stateLog).startLog",
@@ -1703,8 +1737,8 @@ var mirrored = []mirror{
 		against: bootWindows,
 		decides: "the estate service registers its lanes one after the other, each through the queue's Serve, and " +
 			"the git lanes beside them only when it is handed a git half",
-		digest: "a8fb9d8a6c8a3b24aa93f81c43e81e770a9d1a15180766f72fdd183bdf1972ea",
-		read:   gitLaneRead,
+		digest: "fc36b2d8ad8f921624379f67f2130537f0f0b8033f5f7df7d120b3481bbe28e7",
+		read:   bootStanceRead,
 	},
 	{
 		file: "internal/estate/wire.go", name: "lanes",
@@ -2124,8 +2158,8 @@ var mirrored = []mirror{
 		file: domainLogGo, name: "(*DomainLog).stateInfo",
 		against: bootWindows,
 		decides: "a log's state is read through ReadWith",
-		digest:  "366d004324711b563b2016377bf7d1523f91474683b542a1ee79fbf9462fb73a",
-		read:    codeHostRead,
+		digest:  "6a1ef157513db6222b46319f5540f8b7f9062633b7068b6af6492db8f67d50b8",
+		read:    bootStanceRead,
 	},
 	{
 		file: domainLogGo, name: "(*DomainLog).At",
