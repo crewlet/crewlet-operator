@@ -280,6 +280,8 @@ type githubProvisioningDoc struct {
 
 type mcpServerDoc struct {
 	Name                  string                        `json:"name"`
+	Enabled               *bool                         `json:"enabled,omitempty"`
+	Description           string                        `json:"description,omitempty"`
 	Transport             string                        `json:"transport"`
 	Shared                *bool                         `json:"shared,omitempty"`
 	Command               string                        `json:"command,omitempty"`

@@ -184,6 +184,11 @@ const fieldOptionalKeys = "spec.optionalKeys"
 // with, laid out as Crewlet's resolveServer and runEnvironment lay out what
 // each start is given, and returns the StartValues.
 //
+// A server turned off (spec.enabled false) starts nothing at all, so no value
+// of its own, a Seat's or a Unit's for it is Started: Crewlet's
+// startSharedServers skips it, MCPServer.Grants grants it to nobody and
+// sandboxMCP gives no box it.
+//
 // A tool server is started as the company's instance, when it is shared,
 // with its own values alone; as a seat's instance, for every agent seat a
 // per-seat server is granted to by a block of values for it, the seat's own
@@ -209,6 +214,9 @@ func (r *renderer) markStarted() []StartValue {
 		started[o][field] = true
 	}
 	for _, s := range sortedByName(r.in.MCPServers) {
+		if s.Spec.Enabled != nil && !*s.Spec.Enabled {
+			continue
+		}
 		shared := s.Spec.Shared == nil || *s.Spec.Shared
 		own := ownValues(s)
 		if shared {

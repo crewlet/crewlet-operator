@@ -45,6 +45,31 @@ agent seat directly in the unit. Every engine pod of a company runs the
 class's image, a [seat pool](topology.md)'s pods too, so the image has to
 carry every server any seat may need.
 
+## Turning a server off, and saying what it is for
+
+`enabled: false` turns a server off and keeps it. The engine starts no
+process of it, the company's, a seat's or a box's, and grants it to no
+seat, while the MCPServer and every Seat's and Unit's `spec.mcp` and
+`spec.sandbox.mcpServerRefs` that name it stay as they are. A value it would
+be started with is read by nothing while it is off, so a Secret key holding an
+empty value is no failure of the object that gives it; a Secret or key that
+does not exist still holds the document, as every reference does. Set it back to `true`
+(the default) and the next revision starts it again with the values its seats
+kept.
+
+`description` is one line of at most 200 characters, with no line break or
+tab, saying what the server is for. Each agent's prompt names its tool
+servers before it shows any of their tools, and prints the description beside
+the name, which is what tells an agent which server to look in:
+
+```yaml
+spec:                       # MCPServer handbook
+  description: Searches the engineering handbook and the runbooks
+```
+
+Both are Crewlet's own fields
+([Crewlet's guide](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#turning-a-server-off)).
+
 ## Settings and credentials
 
 A server's `env` (an HTTP server's `headers`) and the values a Seat or a Unit
