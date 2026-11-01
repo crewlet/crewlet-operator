@@ -419,7 +419,7 @@ func TestExecutor(t *testing.T) {
 			says:   []string{"where Crewlet would refuse it too (SandboxLoginNotPortable)"},
 		},
 		{
-			// Refused on its own (NoExecutorCLI): there is no executor to
+			// Refused on its own (NoExecutorHarness): there is no executor to
 			// report on.
 			name: "a seat whose chain no member of runs it", public: public,
 			mutate: func(in *Input) {

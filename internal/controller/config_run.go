@@ -1440,7 +1440,7 @@ func (run *configRun) refused(refusals []*render.RefError) {
 // executor runs are placed in a cell the Company does not configure.
 func unrunnable(reason string) bool {
 	switch reason {
-	case crewletaiv1alpha1.ReasonCLIAuthNotPortable, crewletaiv1alpha1.ReasonNoExecutorCLI,
+	case crewletaiv1alpha1.ReasonHarnessAuthNotPortable, crewletaiv1alpha1.ReasonNoExecutorHarness,
 		crewletaiv1alpha1.ReasonSandboxPlacementNotOffered:
 		return true
 	}

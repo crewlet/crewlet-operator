@@ -656,7 +656,7 @@ over, as it serves the seat's other phases. A run that hits its plan's limit
 is not moved to the next provider, but the next launch skips the spent one. A
 seat whose chain holds no `ClaudeCode` or `OpenCode` provider could run no
 turn, so Crewlet refuses it on every write and the operator refuses it first,
-on the Seat (`Applied=False`, `NoExecutorCLI`, at `spec.llm.default`, or at
+on the Seat (`Applied=False`, `NoExecutorHarness`, at `spec.llm.default`, or at
 `spec.llm` for a seat that names no chain and runs on the head of the
 Company's order). A chain holding a provider of each kind is applied, and the
 Seat's `Ready` message names the providers that never run its executor.
@@ -935,7 +935,7 @@ Seat's `Ready`). One thing a data pod does for a harness a seat pod cannot do:
   data pod. A vendor that rotates refresh tokens retires the token the other
   pods hold at each refresh, and logs them out. A seat in a seat pool that
   runs on a provider with `credentialBundleSecretRef`, in any phase, is
-  refused with `Applied=False`, `CLIAuthNotPortable`, which holds the
+  refused with `Applied=False`, `HarnessAuthNotPortable`, which holds the
   company's document: applied, it would log out every seat on that login,
   the data pod's included. Sign it in with
   `tokenSecretRef` (Claude Code), `auth.mode: APIKey` (a harness the table

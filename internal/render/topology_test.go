@@ -631,7 +631,7 @@ func TestAnUndeclaredPoolPinsNoPod(t *testing.T) {
 	}
 	// And the revision that would place the seat there is refused.
 	_, err = Company(in)
-	if got := refusalsOf(err); !slices.Equal(got, []string{"Seat/bo spec.llm.default[0].name CLIAuthNotPortable"}) {
+	if got := refusalsOf(err); !slices.Equal(got, []string{"Seat/bo spec.llm.default[0].name HarnessAuthNotPortable"}) {
 		t.Errorf("with pool %s declared, refused %v (%v), want the bundled login refused on its pods", later, got, err)
 	}
 

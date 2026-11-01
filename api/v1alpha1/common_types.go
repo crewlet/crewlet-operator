@@ -963,21 +963,21 @@ const (
 	// they are and starts no other.
 	ReasonPoolCapacityExceeded = "PoolCapacityExceeded"
 
-	// ReasonCLIAuthNotPortable is Applied=False on a Seat placed in a seat
+	// ReasonHarnessAuthNotPortable is Applied=False on a Seat placed in a seat
 	// pool that runs on an LLMProvider signed in with a credential
 	// bundle. A seat pod keeps the harness's login on its scratch volume, so the
 	// bundle is restored at every start, and every pod refreshes the one
 	// login on its own: a vendor that rotates refresh tokens then logs the
 	// whole company out.
-	ReasonCLIAuthNotPortable = "CLIAuthNotPortable"
+	ReasonHarnessAuthNotPortable = "HarnessAuthNotPortable"
 
-	// ReasonNoExecutorCLI is Applied=False on a Seat whose executor chain
+	// ReasonNoExecutorHarness is Applied=False on a Seat whose executor chain
 	// has no member that drives ClaudeCode or OpenCode, the harnesses Crewlet
 	// runs a seat's executor on: its spec.llm.default, or, with none, the
 	// head of the Company's model order, which a seat with no chain runs
 	// on. Crewlet refuses such a document on every write, as the seat could
 	// run no turn.
-	ReasonNoExecutorCLI = "NoExecutorCLI"
+	ReasonNoExecutorHarness = "NoExecutorHarness"
 
 	// ReasonSandboxRequired is ConfigApplied=False on a Company with an
 	// Agent seat and a model provider and no spec.sandbox: every agent

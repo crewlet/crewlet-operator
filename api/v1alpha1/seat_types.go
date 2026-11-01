@@ -62,7 +62,7 @@ type SeatLLM struct {
 	// and a launch falls back along the chain to the next such member. A
 	// member of any other harness never runs the executor and still serves every
 	// phase below that is unset. Crewlet refuses a chain with no ClaudeCode
-	// or OpenCode member, which the operator refuses as NoExecutorCLI, and
+	// or OpenCode member, which the operator refuses as NoExecutorHarness, and
 	// applies one that mixes them with an advisory that its executor never
 	// falls back to the others. Crewlet's `default`.
 	// +optional

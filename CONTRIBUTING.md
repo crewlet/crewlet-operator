@@ -255,7 +255,7 @@ verdicts, `NotExposed` and `SandboxLoginNotPortable`
 mirror what the engine refuses only when a seat launches its executor, never
 on a write, so the operator reports them on the Seat's `Ready` and applies
 the seat, as the engine does: drift there leaves a stale condition, not a held
-company. `NoExecutorCLI`, `SandboxRequired` and `SandboxPlacementNotOffered`
+company. `NoExecutorHarness`, `SandboxRequired` and `SandboxPlacementNotOffered`
 mirror refusals on every write and block the document. Three tests hold the
 split to the engine: `TestContractExecutorIsAppliedWhereItCannotRun` has it
 accept every document the renderer only reports on, so an engine that starts

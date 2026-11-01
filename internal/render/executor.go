@@ -55,7 +55,7 @@ import (
 // the engine would apply and fail alone (ADR-0005). It is reported on the
 // seat's Ready instead. What Crewlet refuses on every write is refused here,
 // on the object to change: a seat whose chain has no runner member
-// (NoExecutorCLI), a company with an agent seat and a model provider and no
+// (NoExecutorHarness), a company with an agent seat and a model provider and no
 // spec.sandbox (SandboxRequired), and a provider placed in E2B a seat or deep
 // work can launch on while the Company configures no e2b
 // (SandboxPlacementNotOffered).
@@ -98,7 +98,7 @@ type Executor struct {
 // member that can run it, keyed by the Seat's name, in a Company whose
 // spec.sandbox places its runs: without one Crewlet refuses the document
 // (SandboxRequired), as it does a seat whose chain has no such member
-// (NoExecutorCLI). Like ReportedOf it is a statement about each Seat's spec,
+// (NoExecutorHarness). Like ReportedOf it is a statement about each Seat's spec,
 // which holds while another object's refusal keeps Company from returning a
 // document.
 func ExecutorOf(in *Input) map[string]Executor {
@@ -415,7 +415,7 @@ func (r *renderer) noExecutor(s *v1alpha1.Seat) {
 	}
 	if len(s.Spec.LLM.Default) == 0 {
 		head := &chain[0]
-		r.errs.add(EngineRefuses, KindSeat, s.Name, fieldLLM, v1alpha1.ReasonNoExecutorCLI, fmt.Sprintf(
+		r.errs.add(EngineRefuses, KindSeat, s.Name, fieldLLM, v1alpha1.ReasonNoExecutorHarness, fmt.Sprintf(
 			"names no spec.llm.default, so the seat's executor runs on %s%s, and it drives %s: Crewlet runs a "+
 				"seat's executor, its harness's own run, only on ClaudeCode or OpenCode, and refuses a seat that could "+
 				"run no turn. Name a provider driving one of them in spec.llm.default, or put one first in the "+
@@ -426,7 +426,7 @@ func (r *renderer) noExecutor(s *v1alpha1.Seat) {
 	for i := range chain {
 		named[i] = fmt.Sprintf("%s (%s)", chain[i].describe(), chain[i].entry.harness)
 	}
-	r.errs.add(EngineRefuses, KindSeat, s.Name, fieldLLMDefault, v1alpha1.ReasonNoExecutorCLI, fmt.Sprintf(
+	r.errs.add(EngineRefuses, KindSeat, s.Name, fieldLLMDefault, v1alpha1.ReasonNoExecutorHarness, fmt.Sprintf(
 		"is %s, and none of them drives ClaudeCode or OpenCode: Crewlet runs a seat's executor, its harness's own run, "+
 			"only on those, and refuses a seat that could run no turn. Name a provider driving one of them in "+
 			"spec.llm.default, and keep these for the seat's other phases with spec.llm.review, subagent, "+

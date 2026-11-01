@@ -52,7 +52,7 @@ func TestSeatPodProviders(t *testing.T) {
 				bundled(in)
 				seatNamed(in, seatDee).Spec.LLM.Auxiliary = chain(providerClaudeCode)
 			},
-			want: []string{"Seat/dee spec.llm.auxiliary[0].name CLIAuthNotPortable"},
+			want: []string{"Seat/dee spec.llm.auxiliary[0].name HarnessAuthNotPortable"},
 		},
 		{
 			// Every phase runs on the default chain; the seat is refused
@@ -62,7 +62,7 @@ func TestSeatPodProviders(t *testing.T) {
 				bundled(in)
 				seatNamed(in, seatBo).Spec.LLM.Default = chain(providerClaudeCode)
 			},
-			want: []string{"Seat/bo spec.llm.default[0].name CLIAuthNotPortable"},
+			want: []string{"Seat/bo spec.llm.default[0].name HarnessAuthNotPortable"},
 		},
 		{
 			name: "a bundled login on the data pods",

@@ -83,7 +83,7 @@ reading as a switch. A platform provider names no `runIn` and takes the default.
 **Refused where Crewlet refuses it, on the object to change**
 (`EngineRefuses`): a Company with an agent seat and a model provider and no
 `spec.sandbox` (`SandboxRequired`), a Seat whose executor chain holds no
-`ClaudeCode` or `OpenCode` provider (`NoExecutorCLI`, at `spec.llm.default`,
+`ClaudeCode` or `OpenCode` provider (`NoExecutorHarness`, at `spec.llm.default`,
 or at `spec.llm` for a seat that runs on the head of the Company's order),
 and an LLMProvider placed in `E2B` that a seat's executor or the Company's
 deep work can launch on while the Company configures no `e2b`

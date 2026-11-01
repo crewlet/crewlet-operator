@@ -144,11 +144,11 @@ var findings = []struct {
 		"the unit's key is a seat's handle: the engine would read the Unit as the Seat, and grant that"},
 	{site{fnManages, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"written by handle, the authority goes to whichever seat takes the handle later"},
-	{site{fnSeatPodProviders, HarmsBeyond, v1alpha1.ReasonCLIAuthNotPortable},
+	{site{fnSeatPodProviders, HarmsBeyond, v1alpha1.ReasonHarnessAuthNotPortable},
 		"every seat pod refreshes the one login on its own and logs every seat on it out"},
-	{site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorCLI},
+	{site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
 		"a seat that names no chain, on the head of the order, a harness that runs no executor"},
-	{site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorCLI},
+	{site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
 		"a seat's own chain with no harness that runs an executor"},
 	{site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
 		"agent seats and a model, and no box for any executor to run in"},
@@ -462,7 +462,7 @@ func engineCases() []engineCase {
 	}
 	return append([]engineCase{
 		{
-			name: "a seat's own executor chain with no harness that runs it", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorCLI},
+			name: "a seat's own executor chain with no harness that runs it", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
 			input: sampleCompany,
 			mutate: func(in *Input) {
 				in.LLMProviders = append(in.LLMProviders, codexProvider())
@@ -479,7 +479,7 @@ func engineCases() []engineCase {
 		{
 			// Crewlet refuses it once, at the entry every such seat falls
 			// to; the render on each seat, whose spec.llm is what changes.
-			name: "a seat with no chain on a head of the order that runs no executor", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorCLI},
+			name: "a seat with no chain on a head of the order that runs no executor", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorHarness},
 			input: sampleCompany,
 			mutate: func(in *Input) {
 				in.LLMProviders = append(in.LLMProviders, codexProvider())

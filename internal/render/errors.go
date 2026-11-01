@@ -30,8 +30,8 @@ import (
 // Name), as ResolvedRefs=False with Reason, as Accepted=False for a
 // Conflict, or as Applied=False for a pool the class does not admit
 // (PerSeatNotAllowed, PoolCapacityExceeded) or whose pods cannot keep the
-// seat's harness login (CLIAuthNotPortable), for a seat whose executor chain has no
-// harness that runs it (NoExecutorCLI), and for a provider placed in a cell the
+// seat's harness login (HarnessAuthNotPortable), for a seat whose executor chain has no
+// harness that runs it (NoExecutorHarness), and for a provider placed in a cell the
 // Company does not configure (SandboxPlacementNotOffered); a refusal of the
 // Company itself is reported on its ConfigApplied (SandboxRequired among them). A Reported finding holds nothing:
 // the object is rendered as its spec says, ReportedOf lists the finding, and
@@ -50,8 +50,8 @@ type RefError struct {
 	// v1alpha1.ReasonHumanSeat, v1alpha1.ReasonNoProvisioner, or for a
 	// placement v1alpha1.ReasonPoolNotFound, v1alpha1.ReasonPerSeatNotAllowed,
 	// v1alpha1.ReasonPoolCapacityExceeded, v1alpha1.ReasonSeatPoolsNotAllowed
-	// or v1alpha1.ReasonCLIAuthNotPortable, or for a seat's executor
-	// v1alpha1.ReasonNoExecutorCLI, v1alpha1.ReasonSandboxRequired or
+	// or v1alpha1.ReasonHarnessAuthNotPortable, or for a seat's executor
+	// v1alpha1.ReasonNoExecutorHarness, v1alpha1.ReasonSandboxRequired or
 	// v1alpha1.ReasonSandboxPlacementNotOffered, or for a person's Atlassian
 	// account v1alpha1.ReasonNotAnAccountID.
 	Reason string
