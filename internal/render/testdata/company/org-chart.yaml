@@ -9,11 +9,17 @@ knowledge:
   skills_container: ""
   vectors: false
 mcp_servers:
+- command: archive-mcp
+  description: Reads the archived catalogue
+  enabled: false
+  name: archive
+  transport: stdio
 - args:
   - --read-only
   - --region
   - us
   command: catalog-mcp
+  description: Searches the parts catalogue
   name: catalog
   request_timeout_seconds: 120
   shared: true

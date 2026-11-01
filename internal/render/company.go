@@ -1074,6 +1074,8 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 		spec := &s.Spec
 		doc := mcpServerDoc{
 			Name:                  s.Name,
+			Enabled:               spec.Enabled,
+			Description:           spec.Description,
 			Transport:             mcpTransport(spec.Transport),
 			Shared:                spec.Shared,
 			Command:               spec.Command,

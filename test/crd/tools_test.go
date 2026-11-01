@@ -2,6 +2,7 @@ package crd_test
 
 import (
 	"regexp"
+	"strings"
 	"testing"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -91,6 +92,9 @@ func TestMCPServerDefaults(t *testing.T) {
 	if got.Spec.Shared == nil || !*got.Spec.Shared {
 		t.Errorf("shared defaulted to %v, want true", got.Spec.Shared)
 	}
+	if got.Spec.Enabled == nil || !*got.Spec.Enabled {
+		t.Errorf("enabled defaulted to %v, want true", got.Spec.Enabled)
+	}
 }
 
 func TestMCPServerValidation(t *testing.T) {
@@ -125,6 +129,28 @@ func TestMCPServerValidation(t *testing.T) {
 				s.Spec.StartupTimeoutSeconds = 120
 				s.Spec.RequestTimeoutSeconds = 60
 			},
+		},
+		{
+			name: "a server turned off, with a description, is accepted",
+			mutate: func(s *v1.MCPServer) {
+				s.Spec.Enabled = new(false)
+				s.Spec.Description = "Searches the public web; " + strings.Repeat("é", 175)
+			},
+		},
+		{
+			name:   "a description over 200 characters is refused",
+			mutate: func(s *v1.MCPServer) { s.Spec.Description = strings.Repeat("a", 201) },
+			want:   "spec.description: Too long",
+		},
+		{
+			name:   "a description over two lines is refused",
+			mutate: func(s *v1.MCPServer) { s.Spec.Description = "Searches the web\nand reads pages" },
+			want:   "description is one line",
+		},
+		{
+			name:   "a description with a tab is refused",
+			mutate: func(s *v1.MCPServer) { s.Spec.Description = "Searches\tthe web" },
+			want:   "description is one line",
 		},
 		{
 			name:   "an HTTP server with headers is accepted",
