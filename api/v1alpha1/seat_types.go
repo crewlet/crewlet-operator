@@ -169,15 +169,19 @@ type SeatSandbox struct {
 	// a run goes without its value (optionalKeys), when the box is given
 	// them as it is with no sign-in; and a variable named as one the
 	// provider would set wins over it. It may not set a variable Crewlet
-	// sets in a coding run itself, which Crewlet refuses in every company
-	// document, and nor may a setup step's env: CREWLET_GIT_TOKEN and
-	// CREWLET_GIT_URL, a run's credential on the company's own code host and
-	// the base its clones and pushes reach, and CREWLET_GIT_TRAILER_SEAT,
-	// CREWLET_GIT_TRAILER_RUN and CREWLET_GIT_TRAILER_WORK_ITEM, the values
-	// its commit hook writes into every commit's trailers (Crewlet's
-	// ReservedSandboxEnv). No run of a company the operator runs is given
-	// them, since the operator does not offer the code host, but the names
-	// are the engine's all the same. Crewlet's `env`, a credential position.
+	// sets in a box itself, which Crewlet refuses in every company document,
+	// and nor may a setup step's env: CREWLET_GIT_TOKEN and CREWLET_GIT_URL,
+	// a box's credential on the company's own code host and the base its
+	// clones and pushes reach; CREWLET_GIT_TRAILER_SEAT,
+	// CREWLET_GIT_TRAILER_RUN and CREWLET_GIT_TRAILER_WORK_ITEM, the values a
+	// coding run's commit hook writes into every commit's trailers; and
+	// CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE,
+	// CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and
+	// CREWLET_CHECK_SUMMARY, what a check's box is told of the check it runs
+	// (Crewlet's ReservedSandboxEnv). No box of a company the operator runs
+	// is given them, since the operator does not offer the code host, but
+	// the names are the engine's all the same. Crewlet's `env`, a credential
+	// position.
 	// +optional
 	// +listType=map
 	// +listMapKey=name

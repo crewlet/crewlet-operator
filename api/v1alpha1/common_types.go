@@ -155,16 +155,18 @@ type SeatCredentialSource struct {
 // variable of its sandbox runs (a Seat's spec.sandbox.env): from a Secret, or
 // provisioned by the engine.
 type SeatEnvVar struct {
-	// name is the variable's name. It may not be one Crewlet sets in a coding
-	// run itself, which Crewlet refuses in every company document:
+	// name is the variable's name. It may not be one Crewlet sets in a box
+	// itself, which Crewlet refuses in every company document:
 	// CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_GIT_TRAILER_SEAT,
-	// CREWLET_GIT_TRAILER_RUN or CREWLET_GIT_TRAILER_WORK_ITEM (Crewlet's
-	// ReservedSandboxEnv).
+	// CREWLET_GIT_TRAILER_RUN, CREWLET_GIT_TRAILER_WORK_ITEM,
+	// CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE,
+	// CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API or
+	// CREWLET_CHECK_SUMMARY (Crewlet's ReservedSandboxEnv).
 	// +required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
-	// +kubebuilder:validation:XValidation:rule="!(self in ['CREWLET_GIT_TOKEN', 'CREWLET_GIT_URL', 'CREWLET_GIT_TRAILER_SEAT', 'CREWLET_GIT_TRAILER_RUN', 'CREWLET_GIT_TRAILER_WORK_ITEM'])",message="CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_GIT_TRAILER_SEAT, CREWLET_GIT_TRAILER_RUN and CREWLET_GIT_TRAILER_WORK_ITEM are the engine's: Crewlet sets them in a coding run itself, as the run's credential on the company's own code host, the base its clones and pushes reach and the values its commit hook writes into every commit's trailers, and refuses a company document that sets one, since a value here would break the run's clones and pushes or make a commit's trailers disagree with its push's record; remove it"
+	// +kubebuilder:validation:XValidation:rule="!(self in ['CREWLET_GIT_TOKEN', 'CREWLET_GIT_URL', 'CREWLET_GIT_TRAILER_SEAT', 'CREWLET_GIT_TRAILER_RUN', 'CREWLET_GIT_TRAILER_WORK_ITEM', 'CREWLET_CHECK_REPO', 'CREWLET_CHECK_SHA', 'CREWLET_CHECK_BASE', 'CREWLET_CHECK_NAME', 'CREWLET_CHECK_ATTEMPT', 'CREWLET_CHECK_API', 'CREWLET_CHECK_SUMMARY'])",message="CREWLET_GIT_TOKEN, CREWLET_GIT_URL, CREWLET_GIT_TRAILER_SEAT, CREWLET_GIT_TRAILER_RUN, CREWLET_GIT_TRAILER_WORK_ITEM, CREWLET_CHECK_REPO, CREWLET_CHECK_SHA, CREWLET_CHECK_BASE, CREWLET_CHECK_NAME, CREWLET_CHECK_ATTEMPT, CREWLET_CHECK_API and CREWLET_CHECK_SUMMARY are the engine's: Crewlet sets them in a box itself, as a box's credential on the company's own code host and the base its clones and pushes reach, the values a coding run's commit hook writes into every commit's trailers and what a check's box is told of the check it runs, and refuses a company document that sets one, since a value here would break a run's clones and pushes, make a commit's trailers disagree with its push's record or tell a check's command another check than the one it runs; remove it"
 	Name string `json:"name,omitempty"`
 
 	// valueFrom is where the value comes from.

@@ -14,13 +14,15 @@ import (
 )
 
 // reservedRunEnvFile is the engine's file whose ReservedSandboxEnv names the
-// variables Crewlet sets in a coding run itself, which its config refuses in
-// every env a run's environment is assembled from.
+// variables Crewlet sets in a box itself, a coding run's and a check's, which
+// its config refuses in every env a box's environment is assembled from.
+// ReservedSandboxEnv appends ReservedCheckEnv's list to its own, so it is read
+// with the functions of the file it calls (stringsOf).
 const reservedRunEnvFile = "internal/config/sandbox.go"
 
 // TestReservedRunVariablesFollowTheEngine holds the API's refusal of the
-// variables Crewlet sets in a coding run itself to Crewlet's, both ways, in
-// each env a run's environment is assembled from (runEnvPlaces): the API
+// variables Crewlet sets in a box itself to Crewlet's, both ways, in
+// each env a box's environment is assembled from (runEnvPlaces): the API
 // refuses a variable there exactly when crewlet validate refuses the
 // document it renders at that variable. The names offered are the ones the
 // engine's source reserves (its config.ReservedSandboxEnv), so a name the
@@ -42,8 +44,8 @@ func TestReservedRunVariablesFollowTheEngine(t *testing.T) {
 	}
 	reserved := stringsOf(t, reservedRunEnvFile, src, "ReservedSandboxEnv")
 	if !slices.Equal(reserved, reservedRunEnv) {
-		t.Errorf("the engine reserves %v in a coding run's environment, and TestReservedRunVariablesValidation "+
-			"tries the API's rules with %v", reserved, reservedRunEnv)
+		t.Errorf("the engine reserves %v in a box's environment (a coding run's and a check's), and "+
+			"TestReservedRunVariablesValidation tries the API's rules with %v", reserved, reservedRunEnv)
 	}
 	names := slices.Concat(reserved, reservedRunEnv, ownRunEnv)
 	slices.Sort(names)

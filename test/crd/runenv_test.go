@@ -11,32 +11,39 @@ import (
 )
 
 // msgReservedRunEnv is the message of the rules that refuse, in an env a
-// coding run's environment is assembled from, a variable Crewlet sets in the
-// run itself.
-const msgReservedRunEnv = "are the engine's: Crewlet sets them in a coding run itself"
+// box's environment is assembled from, a variable Crewlet sets in the box
+// itself.
+const msgReservedRunEnv = "are the engine's: Crewlet sets them in a box itself"
 
 var (
-	// reservedRunEnv are the variables Crewlet sets in a coding run itself,
-	// its config.ReservedSandboxEnv, which
-	// TestReservedRunVariablesFollowTheEngine reads from the engine's source.
+	// reservedRunEnv are the variables Crewlet sets in a box itself, a
+	// coding run's and a check's, its config.ReservedSandboxEnv, which
+	// TestReservedRunVariablesFollowTheEngine reads from the engine's source:
+	// the code host's, then what a check's box is told of its check
+	// (ReservedCheckEnv, which ReservedSandboxEnv appends).
 	reservedRunEnv = []string{
 		"CREWLET_GIT_TOKEN", "CREWLET_GIT_URL", "CREWLET_GIT_TRAILER_SEAT", "CREWLET_GIT_TRAILER_RUN",
 		"CREWLET_GIT_TRAILER_WORK_ITEM",
+		"CREWLET_CHECK_REPO", "CREWLET_CHECK_SHA", "CREWLET_CHECK_BASE", "CREWLET_CHECK_NAME",
+		"CREWLET_CHECK_ATTEMPT", "CREWLET_CHECK_API", "CREWLET_CHECK_SUMMARY",
 	}
 	// ownRunEnv are names beside them that a run's environment may hold: a
 	// name Crewlet's own test of its rule takes, a prefix of the trailers'
 	// names and an extension of the token's, the variable that tells a node
 	// its boxes' git address (CREWLET_BOX_GIT_URL, which the engine reads from
-	// the node's environment, never a run's), the count git reads its
-	// configuration from the environment by, which Crewlet keeps and appends
-	// to, the token's name in another case, and a token for another git host.
+	// the node's environment, never a run's), the prefix of a check's names,
+	// an extension of its commit's and a setting of a check's the engine sets
+	// none of, the count git reads its configuration from the environment
+	// by, which Crewlet keeps and appends to, the token's name in another
+	// case, and a token for another git host.
 	ownRunEnv = []string{
 		"CREWLET_GIT_PROXY", "CREWLET_GIT_TRAILER", "CREWLET_GIT_TOKEN_FILE", "CREWLET_BOX_GIT_URL",
+		"CREWLET_CHECK", "CREWLET_CHECK_SHA_FILE", "CREWLET_CHECK_TIMEOUT",
 		"GIT_CONFIG_COUNT", "crewlet_git_token", "GITLAB_TOKEN",
 	}
 )
 
-// runEnvPlace is one env a coding run's environment is assembled from: the
+// runEnvPlace is one env a box's environment is assembled from: the
 // field of a variable there that the API refuses one of reservedRunEnv at,
 // the place the render writes the env to in the company document, where
 // crewlet validate refuses one (its path up to the variable, a list index
@@ -48,9 +55,9 @@ type runEnvPlace struct {
 	give    func(namespace, object, variable string) client.Object
 }
 
-// runEnvPlaces are the envs a coding run's environment is assembled from: a
+// runEnvPlaces are the envs a box's environment is assembled from: a
 // Company's setup step's, a Seat's setup step's and the Seat's own, each of
-// which Crewlet refuses a variable it sets in the run itself in.
+// which Crewlet refuses a variable it sets in the box itself in.
 var runEnvPlaces = []runEnvPlace{
 	{
 		name: "a Company's setup step", at: "spec.sandbox.setup[0].env[0].name",
@@ -105,7 +112,7 @@ func seatSandboxEnv(variables ...string) []v1.SeatEnvVar {
 }
 
 // TestReservedRunVariablesValidation covers the API's refusal of the
-// variables Crewlet sets in a coding run itself, in each env a run's
+// variables Crewlet sets in a box itself, in each env a run's
 // environment is assembled from: each is refused, with the rule's message, at
 // the variable's own name, where Crewlet refuses it too (at
 // roles[i].sandbox.env.<name>, for one), and every name beside them is taken
