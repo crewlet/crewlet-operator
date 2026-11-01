@@ -211,14 +211,6 @@ const (
 	// (attachCoordination); and runEnvironment and sandboxMCP renamed a
 	// parameter. Each mirror that moved was read again at it.
 	executorFinalRead = "v0.1.1-0.20261028203606-c6ba342a52ad"
-	// runAskRead is where a coding run asks a person through ask_and_wait
-	// and its question is recorded on its row (crewlet/crewlet#447): a lost
-	// job that had asked is parked on the question its row holds rather than
-	// one its box recorded. Before it, carryOnLost had come to return what
-	// the round is carried on with, for completeAdmitted to resume the turn
-	// with under its completion's admission. What becomes of a lost job is
-	// as at executorFinalRead, and no other mirror moved.
-	runAskRead = "v0.1.1-0.20261029002927-2c650d0b2c33"
 	// envSignInRead is crewlet#452's engine, read on crewlet's main where it
 	// merged (e0328e5d9d), which adds auth.mode env: a providers.llm entry
 	// whose env alone signs its CLI in. The names
@@ -374,6 +366,18 @@ const (
 	// seatCredentialsRead is the engine that lets an mcp_servers entry
 	// declare the seat credentials it reads.
 	seatCredentialsRead = "v0.1.1-0.20261030054628-ba705774dba0"
+	// collectedRead is crewlet#513's engine, read on crewlet's main where it
+	// merged, which records an executor's collected launch as its own record
+	// (executor_collected) rather than as a sandbox phase. carryOnLost now
+	// calls publishCollected where it called publishPhase, and nothing else
+	// in it moved: a lost job is still carried on, never collected, its
+	// spend still read off its box. No operator file reads either record.
+	// It was read before at crewlet#447's engine, where a lost job that had
+	// asked a person through ask_and_wait is parked on the question its row
+	// holds rather than one its box recorded, and carryOnLost returns what
+	// the round is carried on with, for completeAdmitted to resume the turn
+	// with under its completion's admission: all of that is unchanged.
+	collectedRead = "v0.1.1-0.20261101050452-a669d4fcc5a5"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -1083,8 +1087,8 @@ var mirrored = []mirror{
 			"box where the box is left, and the seat's turn resumes, with what this returns, to carry its round " +
 			"on in a fresh run, in the kept box after its engine restarted and in a fresh one where the box went " +
 			"with its pod or its node",
-		digest: "f20d49d721d9ae2e60375d049b5f6dde7a0d92004a5786c7201db10bebb00fd4",
-		read:   runAskRead,
+		digest: "efdae0256a887ee13063c285bcedfc3416bd7209fa31034eded93c4cf84e4e91",
+		read:   collectedRead,
 	},
 	{
 		file: "internal/sandbox/lost.go", name: "MaxRoundLosses",
