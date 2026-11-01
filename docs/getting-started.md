@@ -132,15 +132,15 @@ The company declares no Mattermost or Slack, so it talks on Chatlet, the
 engine's own chat, and the unit's `channel` gives its team a room there whose
 members follow the org chart.
 The provider is Claude Code on an Anthropic API key: every model Crewlet runs
-is a coding CLI it drives, and each agent seat's work is Claude Code's own run.
+is a harness it drives, and each agent seat's work is Claude Code's own run.
 The Company's `sandbox` places those runs `Direct`, a process of the data pod
 that holds each seat, with a box of its own on the pod's `sandboxes` volume
-([Where a seat's executor runs](guides/cli-agents.md#where-a-seats-executor-runs)).
+([Where a seat's executor runs](guides/harnesses.md#where-a-seats-executor-runs)).
 The key is only read when an agent works, so any value brings the company up.
 For agents that can do something, put a real Anthropic key in
 `ANTHROPIC_API_KEY` and give the class an engine image with Claude Code
 installed, which Crewlet's own image is not
-([The image needs the CLI](guides/cli-agents.md#the-image-needs-the-cli)).
+([The image needs the harness](guides/harnesses.md#the-image-needs-the-harness)).
 
 ```bash
 bin/kubectl create namespace acme
@@ -379,7 +379,7 @@ bin/kind delete cluster --name crewlet
 
 - [Installing the Operator](guides/installing.md) — a production install with the Helm chart
 - [How the Operator Models a Company](concepts/overview.md) — the kinds, and how they become one document
-- [Running Seats on a Coding CLI](guides/cli-agents.md) — the image with the CLI, and how each CLI signs in
+- [Running Seats on a Harness](guides/harnesses.md) — the image with the harness, and how each harness signs in
 - [Supplying Credentials](guides/credentials.md) — the Secret behind each credential
 - [Connecting Integrations](guides/integrations.md) — Slack, GitHub, GitLab and the other vendors
 - [Troubleshooting](guides/troubleshooting.md) — every condition and reason an object reports

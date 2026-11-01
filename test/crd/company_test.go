@@ -834,7 +834,7 @@ func TestCompanyAssistantDeepWorkValidation(t *testing.T) {
 		},
 		{
 			// A platform provider driving ClaudeCode runs deep work as an
-			// LLMProvider does: Crewlet asks only which CLI it drives.
+			// LLMProvider does: Crewlet asks only which harness it drives.
 			name: "deep work on a platform provider is accepted",
 			mutate: deepWork(func(d *v1.CompanyAssistantDeepWork) {
 				d.LLM.Kind = v1.LLMProviderKindPlatform

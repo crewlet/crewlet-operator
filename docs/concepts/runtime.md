@@ -123,10 +123,10 @@ Two cases are refused rather than guessed at:
 |---|---|
 | **Image** | The class's `engine.image`; with `engine.allowVersionOverride`, its tag replaced by the Company's `spec.runtime.version`. |
 | **Command** | `crewlet run -config /etc/crewlet/crewlet.yaml`, the bootstrap Secret's `crewlet.yaml` mounted read-only, readable by the engine's user alone (mode `0440`, group `fsGroup`). |
-| **Storage** | One volume claim per pod (`data-nimbus-data-0`) at `/var/lib/crewlet`, from the class's `data.storage`: the store, the event stream (three quarters of the volume, [sized from the claim](company-document.md#the-data-pods-crewletyaml)), and the store's native library cache (`TURSO_GO_CACHE_DIR`), so a restart does not extract it again. Beside it, the `scratch` `emptyDir`, of the class's `data.scratchSizeLimit` (10Gi unless set), on the node's disk, holding `/tmp` and `HOME`: what the processes the engine runs write off the data volume and outside a box, a seat's `Direct` run's writes to `/tmp` or the engine's home among it. And the `sandboxes` `emptyDir` at `/var/lib/crewlet-sandboxes`, of the class's `data.sandboxSizeLimit` (20Gi unless set), on the node's disk: the boxes Crewlet makes on the pod for the seats' executor runs it places there (`Direct`), one for each agent seat of the pod whose run is running and one for each run parked on a person's question, each holding the run's checkout, its CLI's home and what it installs and builds. A pod that writes more to either is evicted; neither limit bounds the data volume ([Box storage](#box-storage)). |
-| **Environment** | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the tool bridge's address, which is the Company's public address while it has one, on every engine pod alike (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`, and with them `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, the Company's public address, while the Company has one (see [Exposure](#exposure)); then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). All of it is the engine's: a stdio tool server the engine starts is handed only the part of it [Crewlet's allowlist](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#what-a-stdio-servers-environment-is) names, the proxy and TLS variables among it, a coding CLI that part and the variables its Crewlet profile passes through, a box Crewlet makes on the pod (a seat's `Direct` executor run, a deep-work run) that part alone, and a box in `E2B` none of it ([Stdio and HTTP](../guides/tool-servers.md#stdio-and-http)). |
+| **Storage** | One volume claim per pod (`data-nimbus-data-0`) at `/var/lib/crewlet`, from the class's `data.storage`: the store, the event stream (three quarters of the volume, [sized from the claim](company-document.md#the-data-pods-crewletyaml)), and the store's native library cache (`TURSO_GO_CACHE_DIR`), so a restart does not extract it again. Beside it, the `scratch` `emptyDir`, of the class's `data.scratchSizeLimit` (10Gi unless set), on the node's disk, holding `/tmp` and `HOME`: what the processes the engine runs write off the data volume and outside a box, a seat's `Direct` run's writes to `/tmp` or the engine's home among it. And the `sandboxes` `emptyDir` at `/var/lib/crewlet-sandboxes`, of the class's `data.sandboxSizeLimit` (20Gi unless set), on the node's disk: the boxes Crewlet makes on the pod for the seats' executor runs it places there (`Direct`), one for each agent seat of the pod whose run is running and one for each run parked on a person's question, each holding the run's checkout, its harness's home and what it installs and builds. A pod that writes more to either is evicted; neither limit bounds the data volume ([Box storage](#box-storage)). |
+| **Environment** | `CREWLET_NODE_ID`, the pod's name; `HOME`; `CREWLET_MCP_BRIDGE_URL`, the tool bridge's address, which is the Company's public address while it has one, on every engine pod alike (see [Exposure](#exposure)); the OpenTelemetry variables when the class sets `telemetry`, and with them `CREWLET_SANDBOX_OTEL_RECEIVER_URL`, the Company's public address, while the Company has one (see [Exposure](#exposure)); then the class's `podTemplate.spec.env` and the Company's `runtime.env`, merged by name. No credential of the engine's own is an environment variable (see [What the engine is given](company-document.md#the-data-pods-crewletyaml)). All of it is the engine's: a stdio tool server the engine starts is handed only the part of it [Crewlet's allowlist](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#what-a-stdio-servers-environment-is) names, the proxy and TLS variables among it, a harness that part and the variables its Crewlet profile passes through, a box Crewlet makes on the pod (a seat's `Direct` executor run, a deep-work run) that part alone, and a box in `E2B` none of it ([Stdio and HTTP](../guides/tool-servers.md#stdio-and-http)). |
 | **Ports** | 8080 (`http`), the API, the dashboard and the probes; 8081 (`public`), the public listener: the webhooks, the telemetry receiver, `/otlp/`, and the tool bridge, `/mcp/`, which a seat's box on the pod itself dials on loopback and every other run at the public address; 8082 (`artifacts`), the artifact listener, while the company has an artifact origin; and 7422 (`leaf`), the leaf listener seat pods join the event stream through, while the class's `seatPools.policy` is `Allowed`. The headless Service `nimbus-data` names 8080 and 7422; `nimbus-engine` names 8080, 8081 and 8082. |
-| **Probes** | `/health` for startup and liveness, `/ready` for readiness. Startup allows at least the class's `data.startupSeconds`, counted from the container's start, or, unset, 1,866 seconds (2,006 when the class keeps files in S3) plus six seconds per GiB of the data volume. The first figure is every bound the engine puts on a data pod's boot, laid end to end, and the API refuses a `startupSeconds` below it: its waits for its own broker and store, never for a peer. One of them grows with what the node holds and is left to the second figure, as the recovery is: the claim of each batch of a seat pod's events the node kept and could not settle, 15 s a batch. The second is for what the engine waits out unbounded: it recovers what it holds on the volume before `/health` answers `200`, which takes longer the more it holds, and a pod restarted mid-recovery starts it again. What the company configures does not count: `/health` answers once the recovery is over, and only then does the engine read the company's secrets, start its tool servers and restore its CLIs' logins, while `/ready` answers `503` `starting` until it serves. Liveness allows a minute of failures before a restart, longer than the 45 seconds in which the engine's watchdog ends a wedged process itself. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
+| **Probes** | `/health` for startup and liveness, `/ready` for readiness. Startup allows at least the class's `data.startupSeconds`, counted from the container's start, or, unset, 1,866 seconds (2,006 when the class keeps files in S3) plus six seconds per GiB of the data volume. The first figure is every bound the engine puts on a data pod's boot, laid end to end, and the API refuses a `startupSeconds` below it: its waits for its own broker and store, never for a peer. One of them grows with what the node holds and is left to the second figure, as the recovery is: the claim of each batch of a seat pod's events the node kept and could not settle, 15 s a batch. The second is for what the engine waits out unbounded: it recovers what it holds on the volume before `/health` answers `200`, which takes longer the more it holds, and a pod restarted mid-recovery starts it again. What the company configures does not count: `/health` answers once the recovery is over, and only then does the engine read the company's secrets, start its tool servers and restore its harnesses' logins, while `/ready` answers `503` `starting` until it serves. Liveness allows a minute of failures before a restart, longer than the 45 seconds in which the engine's watchdog ends a wedged process itself. `/health` answers while the engine drains, so liveness never kills a pod finishing its turns. |
 | **Stopping** | A five-second `preStop` sleep, so the endpoint is gone from the Services and Gateways before the engine drains, and the class's `data.terminationGracePeriodSeconds` (default five minutes) for the drain: the turn segments the engine runs in its own process finish, waiting turns are handed back. A seat's executor run is detached from its turn and does not hold the drain: one in `E2B` runs on, and the pod that holds the seat next resumes its turn; one running `Direct` on the pod ends with it, and its box with the pod's `sandboxes` volume, and Crewlet carries its round on in a fresh run once the pod is back ([When a Direct run's pod stops](#when-a-direct-runs-pod-stops)). |
 | **Updates** | `RollingUpdate` with `maxUnavailable: 1`, `podManagementPolicy: Parallel`. |
 | **Scheduling** | The class's `podTemplate`: labels, annotations, node selector, tolerations, affinity, topology spread, runtime and priority class; and its `data.resources`. |
@@ -139,20 +139,20 @@ its sandboxes volume ([Box storage](#box-storage)). A stdio MCP server it
 starts is handed the engine's `HOME` and writes to its home and `/tmp`,
 which share the scratch `emptyDir` and its limit, and `HOME` is set
 explicitly so an image built on another base still has a writable one. A
-coding CLI is handed a home, a `TMPDIR` and XDG directories of its seat's
+harness is handed a home, a `TMPDIR` and XDG directories of its seat's
 own instead, under
-`/var/lib/crewlet/llm-cli` on the data volume (`llm-cli-platform` for a
-model the class provides). A seat's executor runs as its CLI's own run in a
+`/var/lib/crewlet/llm-harness` on the data volume (`llm-harness-platform` for a
+model the class provides). A seat's executor runs as its harness's own run in a
 box: placed `Direct`, a process tree of the pod in a box on its sandboxes
 volume, as the engine's user, with the pod's `PATH`, locale, `TERM`, `TZ`,
 TLS trust and proxy variables and none of the rest of its environment;
 placed in `E2B`, outside the pod, with the engine's `TZ` alone of it (`UTC`
 where the pod sets none the engine knows), the zone Crewlet reads a limit's
-reset in. The sockets a CLI the engine runs in the pod for a seat's
+reset in. The sockets a harness the engine runs in the pod for a seat's
 other phases reaches its seat's tools through are the engine's own, in a
 directory it makes under its `TMPDIR`, open to its user alone; the operator
 leaves `TMPDIR` unset, so that is `/tmp`, on a data pod and a seat pod alike
-([Where a seat's executor runs](../guides/cli-agents.md#where-a-seats-executor-runs)).
+([Where a seat's executor runs](../guides/harnesses.md#where-a-seats-executor-runs)).
 
 The pod template carries the annotation `crewlet.ai/bootstrap-hash`, the hash
 of the bootstrap Secret's data, which rolls the pod when what it reads at
@@ -226,7 +226,7 @@ over.
   on this volume, in a directory of its own beside the seats' boxes
   (`/var/lib/crewlet-sandboxes/assistant`), so `data.sandboxSizeLimit`
   bounds what it writes as it bounds a seat's box ([Deep
-  work](../guides/cli-agents.md#deep-work)).
+  work](../guides/harnesses.md#deep-work)).
 
 ### When a Direct run's pod stops
 
@@ -235,7 +235,7 @@ detached from the engine's process, but not from its container, and no drain
 waits for it. A run cut short that way did not fail, and its turn is not
 lost: Crewlet records the run as lost with its host, and the seat's turn
 carries the round on, relaunching the executor for the same round in a fresh
-CLI session, told that a run before it was cut off and where to look for
+harness session, told that a run before it was cut off and where to look for
 what it left. Where the new run starts turns on whether the box is still on
 the pod's `sandboxes` volume:
 
@@ -661,7 +661,7 @@ The public address is also where a coding run calls the engine back:
 - Every engine pod is given the public address as `CREWLET_MCP_BRIDGE_URL`,
   the address of the engine's [tool
   bridge](https://github.com/crewlet/crewlet/blob/main/docs/concepts/code-sandbox.md#the-tool-bridge--a-seats-own-tools-from-inside-a-box):
-  every agent seat's executor is its coding CLI's run in a box, which calls
+  every agent seat's executor is its harness's run in a box, which calls
   the seat's own tools back at `/mcp/{token}`, each request carrying a token
   signed for its one run, which expires with it. A seat's box on its engine
   pod's own host, a `Direct` one, dials that pod's own listener on loopback,
@@ -671,7 +671,7 @@ The public address is also where a coding run calls the engine back:
   seat runs, which reaches Crewlet's bridge at the fleet's address, the same
   on every node, the data pod a call reaches relaying it over the broker to
   the pod holding the run's seat, a seat pod included (see [Seat
-  pools](../guides/cli-agents.md#seat-pools)); and Ask Crewlet's
+  pools](../guides/harnesses.md#seat-pools)); and Ask Crewlet's
   deep work, which Crewlet holds to the fleet's address wherever it runs, a
   `Direct` run on the data pod included. The data pods must therefore be
   able to reach the public address: under `networkPolicy: Isolated` the

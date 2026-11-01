@@ -26,7 +26,7 @@ providers:
       model: sonnet
       overrides:
         web_tools: denied
-      state_dir: /var/lib/crewlet/llm-cli/assistant
+      state_dir: /var/lib/crewlet/llm-harness/assistant
       timeout_seconds: 90
     assistant-deep:
       auth:
@@ -34,7 +34,7 @@ providers:
         token: ${K8S_CLAUDE_TOKEN_HWDLXXYNUX5H}
       harness: claude-code
       model: sonnet
-      state_dir: /var/lib/crewlet/llm-cli/assistant-deep
+      state_dir: /var/lib/crewlet/llm-harness/assistant-deep
     assistant-pi:
       auth:
         mode: subscription
@@ -44,7 +44,7 @@ providers:
       model: openrouter/anthropic/claude-sonnet-5
       overrides:
         web_tools: denied
-      state_dir: /var/lib/crewlet/llm-cli/assistant-pi
+      state_dir: /var/lib/crewlet/llm-harness/assistant-pi
   llm_order:
   - assistant
   - assistant-deep

@@ -241,7 +241,7 @@ type CompanyLLMSettings struct {
 // Ask Crewlet answers a signed-in person's questions about the company and
 // prepares changes for that person to approve, acting only as them: every
 // read is a request of theirs, and nothing is written until they approve.
-// Every provider in llm must drive a CLI Crewlet runs with no tool of its
+// Every provider in llm must drive a harness Crewlet runs with no tool of its
 // own (ClaudeCode or Pi; Codex keeps a shell its sandbox only confines, and
 // OpenCode's has not been measured to go), with webTools Denied: Ask
 // Crewlet runs it in the engine's pod, never as a seat's executor runs. Crewlet refuses any other in the dry run before every apply, and
@@ -300,7 +300,7 @@ type CompanyAssistant struct {
 	TokenBudget TokenBudget `json:"tokenBudget,omitzero"`
 
 	// deepWork lets Ask Crewlet hand a large task (research, scripts,
-	// files, many steps) to a coding CLI running its own tools in a box of
+	// files, many steps) to a harness running its own tools in a box of
 	// its own, which needs spec.sandbox. Unset, Ask Crewlet answers in
 	// quick mode only. Crewlet's `deep_work`.
 	// +optional
@@ -316,8 +316,8 @@ type CompanyAssistant struct {
 // Crewlet is the signed-in person's own Ask Crewlet tools over the tool
 // bridge, so every read is still that person's request and every write still
 // a proposal they approve. The provider llm names must drive ClaudeCode:
-// Crewlet confines a deep-work run on the engine pod around that one CLI's
-// install and temporary directories, which no other CLI has been measured
+// Crewlet confines a deep-work run on the engine pod around that one harness's
+// install and temporary directories, which no other harness has been measured
 // against. Crewlet refuses any other in the dry run before every apply, and
 // the refusal is reported on the Company, since the rule turns on the
 // provider's own spec.
@@ -455,7 +455,7 @@ type EmbeddingSettings struct {
 }
 
 // SandboxPlacement is where a seat's executor run happens: the cell of the
-// box its coding CLI's own run is placed in. It maps onto Crewlet's run_in and
+// box its harness's own run is placed in. It maps onto Crewlet's run_in and
 // default_run_in (Direct is `direct`, E2B is `e2b`). Crewlet's `container`
 // cell is not offered: it starts a container per box, and an engine pod has
 // no container runtime.
@@ -464,12 +464,12 @@ type SandboxPlacement string
 
 // The places an executor run happens.
 const (
-	// SandboxPlacementDirect runs the CLI as a process tree of the engine
+	// SandboxPlacementDirect runs the harness as a process tree of the engine
 	// pod that holds the seat, a data pod or a seat pod, in a box of its own
 	// on the pod's sandboxes volume, with its HOME, XDG and temporary
 	// directories inside the box and an allowlisted environment. That
 	// isolates the run's state, as Crewlet puts it, but not the host: the
-	// CLI runs as the engine's user, with the pod's network, CPU and memory,
+	// harness runs as the engine's user, with the pod's network, CPU and memory,
 	// and reads what the engine reads, the keyring in its crewlet.yaml and
 	// the store among it, and on a data pod the data volume. A box is seeded
 	// with its provider's login, a credential bundle's included, and calls
@@ -479,10 +479,10 @@ const (
 	// on it, and Crewlet carries each run's round on in a fresh run, at
 	// most twice a round.
 	SandboxPlacementDirect SandboxPlacement = "Direct"
-	// SandboxPlacementE2B runs the CLI in the Company's E2B sandbox, a
+	// SandboxPlacementE2B runs the harness in the Company's E2B sandbox, a
 	// machine of its own per run, which calls the seat's tools back at the
 	// Company's public address and is given only the variables that sign
-	// its CLI in.
+	// its harness in.
 	SandboxPlacementE2B SandboxPlacement = "E2B"
 )
 
@@ -544,7 +544,7 @@ type SandboxFile struct {
 // every test/crd case is the first to say.
 
 // SandboxSetupStep is one provisioning step applied to a seat's executor box
-// before its coding CLI starts. It maps onto a Crewlet sandbox setup step,
+// before its harness starts. It maps onto a Crewlet sandbox setup step,
 // which Crewlet refuses when it does nothing (no files, commands, env or
 // brief): that is almost always an unfinished edit, which would otherwise
 // apply cleanly for ever and look like it was working.
@@ -573,7 +573,7 @@ type SandboxSetupStep struct {
 	// environment (its HOME and PATH among it) and the run's, never from the
 	// engine's. The run's is the steps' env, the Seat's sandbox env, and
 	// what Crewlet adds: the agent's handle and, when it has one, its email,
-	// and the variables that sign the executor's CLI in to the provider it
+	// and the variables that sign the executor's harness in to the provider it
 	// runs on (docs/guides/credentials.md says which, and when the seat's
 	// own env leaves them out). The API refuses ${NAME} (NAME an identifier)
 	// all the same, as the operator refuses every ${NAME} it did not write
@@ -628,7 +628,7 @@ type SandboxSetupStep struct {
 	// +kubebuilder:validation:items:MaxLength=1024
 	OptionalKeys []string `json:"optionalKeys,omitempty"`
 
-	// brief tells the executor's CLI what this step made true about its
+	// brief tells the executor's harness what this step made true about its
 	// box.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
@@ -660,8 +660,8 @@ type E2BSandbox struct {
 
 	// template is the sandbox template, which also fixes each sandbox's CPU,
 	// memory and disk. Unset, each run gets the vendor's prebuilt template
-	// for its CLI (claude or opencode); a template set here is used for every
-	// run, so it must carry the CLI of every ClaudeCode or OpenCode provider
+	// for its harness (claude or opencode); a template set here is used for every
+	// run, so it must carry the harness of every ClaudeCode or OpenCode provider
 	// whose executor runs are placed in E2B. For OpenCode that is
 	// OpenCode 2, the @opencode/cli package (opencode --version prints
 	// opencode v2.…): Crewlet's OpenCode runner ends a run at once in a box
@@ -679,7 +679,7 @@ type E2BSandbox struct {
 // SandboxSettings is where a company's agent seats' executors run. It maps
 // onto Crewlet's providers.sandbox.
 //
-// Every agent seat's executor is its coding CLI's own run in a box, placed
+// Every agent seat's executor is its harness's own run in a box, placed
 // by the provider it launches on (its runIn) or by defaultRunIn. Crewlet
 // refuses a company with an agent seat and a model provider that configures
 // none, which the operator reports on the Company (SandboxRequired). Direct
@@ -1080,7 +1080,7 @@ type CompanyRuntime struct {
 	// class's variable of the same name. They are the engine's environment,
 	// not that of the processes it starts: a Stdio tool server is handed only
 	// the part Crewlet's allowlist names, such as PATH and the TLS and proxy
-	// variables, a coding CLI that part and the variables its Crewlet profile
+	// variables, a harness that part and the variables its Crewlet profile
 	// passes through, such as GeminiCLI's GOOGLE_CLOUD_PROJECT and
 	// GOOGLE_CLOUD_LOCATION, a seat's Direct executor run that part alone
 	// (the allowlist: PATH, the locale, TERM, TZ, the TLS trust and proxy
@@ -1088,7 +1088,7 @@ type CompanyRuntime struct {
 	// every executor run as the zone it reads a limit's reset in (UTC where
 	// TZ names no zone it knows). So a variable a tool server
 	// reads goes in its MCPServer's env (docs/guides/tool-servers.md), one a
-	// coding CLI reads in the engine's pod in its LLMProvider's spec.env,
+	// harness reads in the engine's pod in its LLMProvider's spec.env,
 	// and one a seat's executor run reads in the Seat's spec.sandbox.env.
 	//
 	// Names starting with CREWLET_ or OTEL_ are the operator's own.
@@ -1183,7 +1183,7 @@ type CompanyObjects struct {
 	// Issue them per company, with a policy that admits the company's own
 	// prefix of the bucket only (the class's objects.s3.prefix, expanded):
 	// they are written into the engine pod's crewlet.yaml, and code the
-	// tenant runs in the pod (a stdio MCP server, a coding CLI) can read
+	// tenant runs in the pod (a stdio MCP server, a harness) can read
 	// them. Unset uses the pod's own credentials through the SDK's
 	// default chain: a workload identity bound through the class's
 	// serviceAccount.annotations, which every company of the class shares

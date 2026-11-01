@@ -54,9 +54,9 @@ func validate(t *testing.T, env map[string]string, want []advisory, args ...stri
 	if !got.Valid || len(got.Problems) > 0 || err != nil {
 		t.Errorf("crewlet validate refused the document (exit %v):\n%s\n%s", err, stdout, stderr)
 	}
-	// A CLI's env is resolved where the engine builds the provider, and
+	// A harness's env is resolved where the engine builds the provider, and
 	// one that resolves to nothing is only logged there too: for a Hermes
-	// signed in through its env, that is a CLI with no key.
+	// signed in through its env, that is a harness with no key.
 	for _, unresolved := range []string{"config_reference_unresolved", "harness_env_unresolved"} {
 		if strings.Contains(stderr, unresolved) {
 			t.Errorf("a reference resolved to nothing:\n%s", stderr)
@@ -100,7 +100,7 @@ var advisoryNoHumanSeat = advisory{path: keyRoles, says: "no `kind: human` seats
 var advisoryNoUnitChannel = advisory{path: keyUnits + "[0].channel", says: "no unit in this company declares a `channel`"}
 
 // advisoryExecutorNeverRuns is Crewlet's advisory on the first seat of a
-// document whose executor chain holds a CLI that can never run its executor
+// document whose executor chain holds a harness that can never run its executor
 // beside one that can (config.executorWarnings): a launch passes over it, and
 // it serves the seat's other phases alone. The platform-providers case's seat
 // puts the Company's own Codex ahead of a platform Claude Code, a choice of
@@ -1454,7 +1454,7 @@ func TestContractExecutorRefusalsReachTheirObject(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			in := companyCaseNamed(t, "cli-agent").input(t)
+			in := companyCaseNamed(t, "harnesses").input(t)
 			c.mutate(in)
 			doc, err := Company(in)
 			if err != nil {
@@ -1481,7 +1481,7 @@ func TestContractExecutorRefusalsReachTheirObject(t *testing.T) {
 // the least of every token window of an agent seat's, and of its Company's,
 // that an executor launch needs left, so a ceiling below it parks the seat
 // before its first run and the engine refuses it on every write. The
-// Company's and the Seat's tokenBudget docs, the cli-agents and
+// Company's and the Seat's tokenBudget docs, the harnesses and
 // troubleshooting guides and ADR-0008 state it, since the API cannot refuse
 // it (spec.engineConfig may move the floor), and
 // TestContractExecutorFloorIsTheEngines holds it to the engine.
@@ -1522,7 +1522,7 @@ func TestContractExecutorFloorIsTheEngines(t *testing.T) {
 	}
 	dryRun := func(t *testing.T, set func(*Input, v1alpha1.TokenBudget), budget v1alpha1.TokenBudget) (*Document, error) {
 		t.Helper()
-		in := companyCaseNamed(t, "cli-agent").input(t)
+		in := companyCaseNamed(t, "harnesses").input(t)
 		set(in, budget)
 		doc, err := Company(in)
 		if err != nil {
@@ -1560,16 +1560,16 @@ func TestContractExecutorFloorIsTheEngines(t *testing.T) {
 	}
 }
 
-// TestContractProvidersOfTwoCLIsShareALoginName has the engine run two
-// providers of different CLIs under one loginName, as the loginName field and
-// the cli-agents guide say it does: the render gives both the loginName's
-// state_dir, and Crewlet keeps each CLI's files in a directory of its own
+// TestContractProvidersOfTwoHarnessesShareALoginName has the engine run two
+// providers of different harnesses under one loginName, as the loginName field and
+// the harnesses guide say it does: the render gives both the loginName's
+// state_dir, and Crewlet keeps each harness's files in a directory of its own
 // under it (<state_dir>/<harness>), so they share the directory and nothing in
 // it.
 //
 // The engine once refused the pair twice over: its validation refused two
-// CLIs on one state_dir, and a workspace registry that lives as long as the
-// process held each directory under the first CLI to open it and refused
+// harnesses on one state_dir, and a workspace registry that lives as long as the
+// process held each directory under the first harness to open it and refused
 // every other. A dry run reaches only the first. The engine builds a
 // revision's providers, and opens their workspaces, when a node applies the
 // revision, after the write has been answered: a node that cannot build it
@@ -1579,40 +1579,40 @@ func TestContractExecutorFloorIsTheEngines(t *testing.T) {
 //
 // The first case names the pair in the company's first revision. The second
 // runs the case as rendered, then moves the reviewer's provider to another
-// CLI under claude-e2b's loginName: the registry, holding that directory
+// harness under claude-e2b's loginName: the registry, holding that directory
 // under Claude Code since the first revision, refused the move on every node
 // that had run it, and applied it only on a node restarted since. The guide
 // says the move applies with no restart, so it is applied to the engine that
 // runs the first revision, which enginetest never restarts.
-func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
+func TestContractProvidersOfTwoHarnessesShareALoginName(t *testing.T) {
 	const (
 		providerClaude = "claude-e2b"
 		providerCodex  = "codex"
 	)
 
 	t.Run("named in the first revision", func(t *testing.T) {
-		in := companyCaseNamed(t, "cli-agent").input(t)
+		in := companyCaseNamed(t, "harnesses").input(t)
 		login := loginNameOf(modelProvider(in, providerClaude))
 		modelProvider(in, providerCodex).Spec.LoginName = login
 		doc, err := Company(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		requireOneLoginTwoCLIs(t, "the rendered document", doc.YAML, login, providerClaude, providerCodex)
+		requireOneLoginTwoHarnesses(t, "the rendered document", doc.YAML, login, providerClaude, providerCodex)
 
 		client := enginetest.Start(t).Client()
 		putCredentials(t, client, doc)
 		applied, err := client.ApplyConfig(t.Context(), engine.ApplyRequest{
-			Document: doc.YAML, CreateOnly: true, Summary: "two CLIs under one loginName",
+			Document: doc.YAML, CreateOnly: true, Summary: "two harnesses under one loginName",
 		})
 		if err != nil {
-			t.Fatalf("the engine refused two CLIs under one loginName: %v", err)
+			t.Fatalf("the engine refused two harnesses under one loginName: %v", err)
 		}
 		awaitApplied(t, client, applied)
 	})
 
 	t.Run("moved onto it in a live revision", func(t *testing.T) {
-		in := companyCaseNamed(t, "cli-agent").input(t)
+		in := companyCaseNamed(t, "harnesses").input(t)
 		first, err := Company(in)
 		if err != nil {
 			t.Fatal(err)
@@ -1620,10 +1620,10 @@ func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 		client := enginetest.Start(t).Client()
 		putCredentials(t, client, first)
 		running, err := client.ApplyConfig(t.Context(), engine.ApplyRequest{
-			Document: first.YAML, CreateOnly: true, Summary: "the cli-agent company",
+			Document: first.YAML, CreateOnly: true, Summary: "the harnesses company",
 		})
 		if err != nil {
-			t.Fatalf("applying the cli-agent company: %v", err)
+			t.Fatalf("applying the harnesses company: %v", err)
 		}
 		awaitApplied(t, client, running)
 
@@ -1641,7 +1641,7 @@ func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := requireOneLoginTwoCLIs(t, "the rendered move", moved.YAML, login, providerClaude, providerCodex)
+		want := requireOneLoginTwoHarnesses(t, "the rendered move", moved.YAML, login, providerClaude, providerCodex)
 
 		// The engine activates the running revision again as it takes the
 		// values the move reads, so the move is made on that revision.
@@ -1651,7 +1651,7 @@ func TestContractProvidersOfTwoCLIsShareALoginName(t *testing.T) {
 			Summary: "codex moves to OpenCode under claude-e2b's loginName",
 		})
 		if err != nil {
-			t.Fatalf("the engine refused a provider moved to another CLI under another provider's loginName: %v", err)
+			t.Fatalf("the engine refused a provider moved to another harness under another provider's loginName: %v", err)
 		}
 		active := awaitApplied(t, client, applied)
 		got := loginEntries(t, active.Document)
@@ -1706,7 +1706,7 @@ func putCredentials(t *testing.T, client *engine.Client, doc *Document) string {
 	return running
 }
 
-// loginEntry is what a providers.llm entry says about where its CLI keeps its
+// loginEntry is what a providers.llm entry says about where its harness keeps its
 // files.
 type loginEntry struct {
 	Harness  string `json:"harness"`
@@ -1729,13 +1729,13 @@ func loginEntries(t *testing.T, document []byte) map[string]loginEntry {
 	return doc.Providers.LLM
 }
 
-// requireOneLoginTwoCLIs fails the test unless document, described as what,
+// requireOneLoginTwoHarnesses fails the test unless document, described as what,
 // gives each of the providers the state_dir of loginName login, and drives
-// no two of them on one CLI. It returns the document's entries.
-func requireOneLoginTwoCLIs(t *testing.T, what string, document []byte, login string, providers ...string) map[string]loginEntry {
+// no two of them on one harness. It returns the document's entries.
+func requireOneLoginTwoHarnesses(t *testing.T, what string, document []byte, login string, providers ...string) map[string]loginEntry {
 	t.Helper()
 	entries := loginEntries(t, document)
-	dir := CLIStateRoot + "/" + login
+	dir := HarnessStateRoot + "/" + login
 	byHarness := map[string]string{}
 	for _, name := range providers {
 		e, ok := entries[name]
@@ -1745,7 +1745,7 @@ func requireOneLoginTwoCLIs(t *testing.T, what string, document []byte, login st
 		case e.StateDir != dir:
 			t.Fatalf("%s gives providers.llm.%s the state_dir %q, want loginName %s's, %q:\n%s", what, name, e.StateDir, login, dir, document)
 		case byHarness[e.Harness] != "":
-			t.Fatalf("%s drives providers.llm.%s and %s on one CLI, %q, want two CLIs:\n%s", what, byHarness[e.Harness], name, e.Harness, document)
+			t.Fatalf("%s drives providers.llm.%s and %s on one harness, %q, want two harnesses:\n%s", what, byHarness[e.Harness], name, e.Harness, document)
 		}
 		byHarness[e.Harness] = name
 	}
