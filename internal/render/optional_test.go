@@ -333,7 +333,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv,
 		},
 		{
-			name: "a seat's env whose executor chain holds no CLI that runs it",
+			name: "a seat's env whose executor chain holds no harness that runs it",
 			mutate: func(in *Input) {
 				in.LLMProviders[0].Spec.Harness, in.LLMProviders[0].Spec.Model = v1alpha1.HarnessCodex, modelCodex
 			},
@@ -621,7 +621,7 @@ func TestExecutorGoesWithoutASignInThatHoldsNothing(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			in := executorLoginInput(t, new(bundled(cliProvider)))
+			in := executorLoginInput(t, new(bundled(claudeCodeProvider)))
 			in.Unset, in.Empty = c.unset, c.empty
 			fixer := seat(in, executorSeat)
 			fixer.Spec.Sandbox.Env = append(fixer.Spec.Sandbox.Env, v1alpha1.SeatEnvVar{
@@ -702,7 +702,7 @@ func TestExecutorStartsWithoutAValueThatHoldsNothing(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			in := executorLoginInput(t, new(cliProvider()))
+			in := executorLoginInput(t, new(claudeCodeProvider()))
 			c.mutate(in)
 			e, ok := ExecutorOf(in)[executorSeat]
 			if !ok || e.Reason != "" {

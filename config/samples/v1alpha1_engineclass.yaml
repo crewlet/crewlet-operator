@@ -14,9 +14,9 @@ spec:
     # is tested against. GHCR keeps a main image only while it is main, so
     # past a trial copy it into your own registry and name the copy by
     # digest (docs/guides/installing.md, "Engine image"). Every model a
-    # seat runs on is a coding CLI the engine drives, which this image does
-    # not ship: name an image built from it with the CLI your companies'
-    # LLMProviders drive (docs/guides/cli-agents.md) to have the seats work.
+    # seat runs on is a harness the engine drives, which this image does
+    # not ship: name an image built from it with the harness your companies'
+    # LLMProviders drive (docs/guides/harnesses.md) to have the seats work.
     image: ghcr.io/crewlet/crewlet:main
     allowVersionOverride: false
   data:

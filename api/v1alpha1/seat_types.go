@@ -60,9 +60,9 @@ type SeatLLM struct {
 	// OpenCode and is not sitting out its spent plan on the node, in that
 	// member's cell (its runIn, else the Company's spec.sandbox.defaultRunIn),
 	// and a launch falls back along the chain to the next such member. A
-	// member of any other CLI never runs the executor and still serves every
+	// member of any other harness never runs the executor and still serves every
 	// phase below that is unset. Crewlet refuses a chain with no ClaudeCode
-	// or OpenCode member, which the operator refuses as NoExecutorCLI, and
+	// or OpenCode member, which the operator refuses as NoExecutorHarness, and
 	// applies one that mixes them with an advisory that its executor never
 	// falls back to the others. Crewlet's `default`.
 	// +optional
@@ -112,8 +112,8 @@ type SeatLLM struct {
 // SeatSandbox is what a seat's executor box reads beyond the Company's
 // spec.sandbox: its own provisioning and environment, the tool servers it is
 // given, and the bounds of one run. It maps onto Crewlet's role `sandbox`.
-// Nothing here places the box or picks its CLI: every agent seat's executor
-// is its coding CLI's own run, placed by the provider it launches on, so a
+// Nothing here places the box or picks its harness: every agent seat's executor
+// is its harness's own run, placed by the provider it launches on, so a
 // seat with no spec.sandbox runs on the Company's settings alone. An empty
 // one says nothing, and the API refuses it.
 // +kubebuilder:validation:MinProperties=1

@@ -52,8 +52,8 @@ type part struct {
 	unplaceable       []string
 	unplaceableReason string
 	// unrunnable are why the engine cannot run the part as written: a Seat
-	// whose pool's pods cannot keep the login of a CLI it runs on, or whose
-	// executor chain has no CLI that runs it, and an LLMProvider whose
+	// whose pool's pods cannot keep the login of a harness it runs on, or whose
+	// executor chain has no harness that runs it, and an LLMProvider whose
 	// executor runs are placed in a cell the Company does not configure.
 	// Its references resolve; the document is refused all the same.
 	unrunnable       []string
@@ -79,7 +79,7 @@ type part struct {
 	pauseGone bool
 	// executor is what the render found about an agent Seat's executor,
 	// nil for a seat whose executor chain resolves to nothing or holds no
-	// CLI that runs it (each refused on its own), and for every seat of a
+	// harness that runs it (each refused on its own), and for every seat of a
 	// Company with no spec.sandbox; read only once the reconcile rendered
 	// and read the Secrets (objectsChecked), and holding nothing.
 	executor *render.Executor

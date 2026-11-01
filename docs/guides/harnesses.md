@@ -1,9 +1,9 @@
-# Running Seats on a Coding CLI
+# Running Seats on a Harness
 
-Every model a seat runs on is a coding CLI the engine drives: Claude Code for
+Every model a seat runs on is a harness the engine drives: Claude Code for
 Anthropic's models, Codex for OpenAI's, OpenCode for open models on any
-provider, and the other CLIs of the table below. An `LLMProvider` names the
-CLI (`harness`), the model in that CLI's own grammar, and how it signs in: on a
+provider, and the other harnesses of the table below. An `LLMProvider` names the
+harness (`harness`), the model in that harness's own grammar, and how it signs in: on a
 subscription you already have, or on a metered API key.
 
 It renders one entry of Crewlet's `providers.llm`; Crewlet's
@@ -12,36 +12,36 @@ describes what the engine does with it. This guide covers what changes when
 the engine runs in a pod: the image, the login, and where a seat's executor
 runs.
 
-## The image needs the CLI
+## The image needs the harness
 
-The CLI is a program the engine starts, in the engine's own container, and
+The harness is a program the engine starts, in the engine's own container, and
 Crewlet's image ships none, so a company whose seats should do any work runs
-on a class that names a derived image. It adds the CLI, with whatever runtime
+on a class that names a derived image. It adds the harness, with whatever runtime
 it needs (Node.js for most of them; Claude Code and OpenCode need none, each
 being one native binary). Build one from the engine image you run, named by
 digest: the engine of the operator's release, or the copy of Crewlet's `main`
 image that [Installing](installing.md#engine-image) makes in your registry.
-Pin both the engine and the CLI.
+Pin both the engine and the harness.
 
-A class names one engine image, so a company that runs two CLIs, or a CLI
+A class names one engine image, so a company that runs two harnesses, or a harness
 and stdio tool servers, needs one image with all of them. Each Dockerfile
 here and the one of [Building the image](tool-servers.md#building-the-image)
 takes the image it extends as `ENGINE_IMAGE`: push the first image, then
 build the next Dockerfile with its `ENGINE_IMAGE` naming it, rather than
 pasting one Dockerfile into another
-([One image with a coding CLI](tool-servers.md#one-image-with-a-coding-cli)).
+([One image with a harness](tool-servers.md#one-image-with-a-harness)).
 
-The engine's root filesystem is read-only: a CLI the engine runs in the pod
+The engine's root filesystem is read-only: a harness the engine runs in the pod
 writes under the home the engine gives each seat and under `/tmp`, both
 writable, and the engine keeps the socket each such run reaches the seat's
 tools through in a directory of its own under `/tmp`. A seat's executor run
 placed `Direct` runs in the pod too, in a box directory on the pod's
-`sandboxes` volume, with the CLI's own shell, so whatever the seat's work runs
+`sandboxes` volume, with the harness's own shell, so whatever the seat's work runs
 there (`git`, a compiler, a package manager) has to be in the image, or be
 installed by the run into its box's home
 ([Where a seat's executor runs](#where-a-seats-executor-runs)). Each running
-CLI takes 200 to 450 MB. Size the class's `data.resources` for `maxConcurrent`
-of them per provider, which bounds the provider's CLI in every phase but the
+harness takes 200 to 450 MB. Size the class's `data.resources` for `maxConcurrent`
+of them per provider, which bounds the provider's harness in every phase but the
 executor's, and for one more, with whatever its shell runs, for each agent
 seat whose executor runs `Direct` on the pod at once, which `maxConcurrent`
 does not bound, and for each `Direct` run parked on a person's question, whose
@@ -84,7 +84,7 @@ FROM ${ENGINE_IMAGE}
 ARG CLAUDE_CODE_VERSION
 COPY --from=claude-code --chown=0:0 \
     /home/crewlet/.local/share/claude/versions/${CLAUDE_CODE_VERSION} /usr/local/bin/claude
-# The image is how the CLI is updated. The engine starts it with only an
+# The image is how the harness is updated. The engine starts it with only an
 # allowlist of its own environment, which DISABLE_UPDATES is not on, so an ENV
 # here would not reach it: the switch goes in the managed settings every
 # claude reads.
@@ -192,7 +192,7 @@ wrong:
   since a provider's `env` can switch it back on.
 
 Build it from the engine image, or from another image of
-[One image with a coding CLI](tool-servers.md#one-image-with-a-coding-cli),
+[One image with a harness](tool-servers.md#one-image-with-a-harness),
 
 ```bash
 docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet@sha256:<digest> \
@@ -237,23 +237,23 @@ spec:
 ## Signing in
 
 A subscription login is made at a terminal, by `crewlet llm login` or the
-CLI's own command, and a pod has none. `auth` therefore takes the login
+harness's own command, and a pod has none. `auth` therefore takes the login
 from a Secret, in one of two forms; takes a metered key instead; for the
-three CLIs that read their model provider's key from their environment,
+three harnesses that read their model provider's key from their environment,
 takes none and signs in with that key in `env`; or, for a cloud provider or
 a gateway, signs in with `env` alone:
 
 | Sign-in | What the Secret holds | Use it when |
 |---|---|---|
-| `auth.tokenSecretRef` | a long-lived headless token the CLI mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the CLI is Claude Code, the one CLI whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins a seat's executor run in `E2B` can carry (OpenCode carries its model provider's key in `env` there instead) |
-| `auth.credentialBundleSecretRef` | a bundle of the CLI's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any CLI but `QwenCode`, which keeps no login: the others mint no token Crewlet hands on |
-| `auth.mode: APIKey` with `auth.apiKeySecretRef` | the CLI's metered API key | the CLI's Crewlet profile names a key variable ([below](#a-metered-key)) |
-| `env`, with `auth.mode: Subscription` | the key of the model provider the CLI runs on, in the variable the CLI reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the CLI is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
-| `env`, with `auth.mode: Env` | what signs the CLI in from its environment: for Claude Code a gateway's `ANTHROPIC_AUTH_TOKEN`, or a cloud provider's switch and that provider's credentials; for Hermes, Pi and OpenCode their model provider's key | the CLI reaches its model through a cloud provider or a gateway rather than on the vendor's own subscription or key ([below](#a-cloud-provider-or-a-gateway)) |
+| `auth.tokenSecretRef` | a long-lived headless token the harness mints, such as the `CLAUDE_CODE_OAUTH_TOKEN` of `claude setup-token` | the harness is Claude Code, the one harness whose Crewlet profile names a token variable: it never needs refreshing, and it is the only one of Claude Code's subscription logins a seat's executor run in `E2B` can carry (OpenCode carries its model provider's key in `env` there instead) |
+| `auth.credentialBundleSecretRef` | a bundle of the harness's login (its credential files, or for OpenCode the document `opencode auth export --standalone` prints), from `crewlet llm export <key>` on a machine where you logged in | any harness but `QwenCode`, which keeps no login: the others mint no token Crewlet hands on |
+| `auth.mode: APIKey` with `auth.apiKeySecretRef` | the harness's metered API key | the harness's Crewlet profile names a key variable ([below](#a-metered-key)) |
+| `env`, with `auth.mode: Subscription` | the key of the model provider the harness runs on, in the variable the harness reads for it (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `NOUS_API_KEY`, ...) | the harness is Hermes, Pi or OpenCode: with its model provider's key in its environment, it needs no login |
+| `env`, with `auth.mode: Env` | what signs the harness in from its environment: for Claude Code a gateway's `ANTHROPIC_AUTH_TOKEN`, or a cloud provider's switch and that provider's credentials; for Hermes, Pi and OpenCode their model provider's key | the harness reaches its model through a cloud provider or a gateway rather than on the vendor's own subscription or key ([below](#a-cloud-provider-or-a-gateway)) |
 
-What each CLI takes, in the engine the operator is tested against, Crewlet's
+What each harness takes, in the engine the operator is tested against, Crewlet's
 `main` (Crewlet's profiles name the variables; a test holds the API's rules and this
-table to that engine's own verdict on every CLI and every sign-in, so neither
+table to that engine's own verdict on every harness and every sign-in, so neither
 can fall behind it):
 
 | `harness` | `tokenSecretRef` | `auth.mode: APIKey` fills | A key in `env` | `auth.mode: Env` signs in with | `credentialBundleSecretRef` | Runs a seat's executor |
@@ -271,10 +271,10 @@ can fall behind it):
 | `Hermes` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
 | `Pi` | no | no | yes | a key in `env` | yes | no: the seat's other phases only |
 
-A provider names one of the two logins: given both, which login the CLI acts
+A provider names one of the two logins: given both, which login the harness acts
 on would be its own choice between its environment and its files, so the
-API server refuses the pair. Crewlet hands a token to a CLI only through the
-variable its profile names, and the engine refuses a token for a CLI whose
+API server refuses the pair. Crewlet hands a token to a harness only through the
+variable its profile names, and the engine refuses a token for a harness whose
 profile names none, since it would reach nothing, so the API server
 refuses `tokenSecretRef` on any harness but `ClaudeCode` first. A
 Subscription provider that names neither is refused, with one exception:
@@ -285,30 +285,30 @@ Subscription provider that names neither is refused, with one exception:
   as signing in through its environment: Crewlet passes the provider's `env`
   to it untouched, which is the route its profile documents for a metered
   key. Crewlet counts an entry as a sign-in only by its name
-  ([below](#which-env-entries-sign-a-cli-in)).
-- **Every other CLI** keeps to a token, a bundle or a key. A CLI whose
+  ([below](#which-env-entries-sign-a-harness-in)).
+- **Every other harness** keeps to a token, a bundle or a key. A harness whose
   profile names a key variable takes its key with `auth.mode: APIKey`; the
   engine refuses that variable in `env` (below), and a key in `env` under any
-  other name is one the CLI does not read.
+  other name is one the harness does not read.
 - **QwenCode** keeps to a key alone. The builds of Qwen Code Crewlet supports
   refuse the OAuth login it once kept, so Crewlet's profile for it keeps no
   login and names no token variable: under `Subscription` it would sign in to
   nothing, a bundle included. The engine refuses that, and the API server
   refuses a QwenCode provider in any mode but `APIKey` first.
 
-`env` may never set the CLI's own token or key variable, the ones the table
+`env` may never set the harness's own token or key variable, the ones the table
 names (`ANTHROPIC_API_KEY` for `ClaudeCode`, `CURSOR_API_KEY` for
 `CursorAgent`, and so on), in any auth mode: `auth` owns them, and whether a
-value in `env` reached the CLI would turn on the mode and on what else holds
+value in `env` reached the harness would turn on the mode and on what else holds
 a credential, so the engine refuses the document and the API server refuses
-the provider first. Another CLI's variable is no such conflict:
+the provider first. Another harness's variable is no such conflict:
 `ANTHROPIC_API_KEY` is OpenCode's Anthropic key. Nor may `env` set
 `ClaudeCode`'s `ANTHROPIC_AUTH_TOKEN` or a `CLAUDE_CODE_USE_*` switch under
 any mode but `Env` ([A cloud provider or a gateway](#a-cloud-provider-or-a-gateway)).
 
-Nor may `env` set a variable the engine sets on every call to keep the CLI
+Nor may `env` set a variable the engine sets on every call to keep the harness
 inside its seat's own home and the call's working directory: the home, the
-XDG directories and the temporary directory of every CLI, and the CLI's own
+XDG directories and the temporary directory of every harness, and the harness's own
 configuration directory (and, for `Codex`, the directory of its state
 database), or, for `OpenCode`, its configuration directory and
 `OPENCODE_CONFIG_PROJECT_DISABLE`, the switch that keeps OpenCode from reading
@@ -318,13 +318,13 @@ project configuration from the directories above a seat's call, and, for
 above a seat's call, and Claude Code's auto-memory, out of it. `env` is
 layered over them, so a value there would replace that isolation for every
 seat on the provider: the engine refuses the document, and the API server
-refuses the provider first. Another CLI's variable is no conflict here
+refuses the provider first. Another harness's variable is no conflict here
 either: `CODEX_HOME` means nothing to OpenCode. A test holds the API's rule,
 its message and this table to the engine's lists:
 
 | `env` may not set | For |
 |---|---|
-| `HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, `TMPDIR` | every CLI |
+| `HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, `TMPDIR` | every harness |
 | `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_DISABLE_CLAUDE_MDS`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY` | `ClaudeCode` |
 | `CODEX_HOME`, `CODEX_SQLITE_HOME` | `Codex` |
 | `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_PROJECT_DISABLE` | `OpenCode` |
@@ -333,16 +333,16 @@ its message and this table to the engine's lists:
 | `HERMES_HOME` | `Hermes` |
 | `PI_CODING_AGENT_DIR` | `Pi` |
 
-Nor may `env` set `TZ`. The engine hands every CLI it starts its own zone,
+Nor may `env` set `TZ`. The engine hands every harness it starts its own zone,
 the `TZ` of its pod where that names a zone it knows and `UTC` otherwise, and
-reads a limit's reset in it when the CLI names its time without one, so a
+reads a limit's reset in it when the harness names its time without one, so a
 zone of the provider's own would be replaced, or would have the reset read
 in the wrong zone: the engine refuses the document, and the API server
 refuses the provider first. Set `TZ` on the engine instead, in the class's
-`podTemplate` or the Company's `runtime.env`, to move every CLI's zone.
+`podTemplate` or the Company's `runtime.env`, to move every harness's zone.
 
 Under `auth.mode: Subscription`, `env` may not set a variable the engine sets
-there to sign the CLI in with the login its seat's home holds either:
+there to sign the harness in with the login its seat's home holds either:
 `GeminiCLI`'s `GOOGLE_GENAI_USE_GCA`, which the engine sets to `true`, since
 Gemini CLI picks its sign-in from its environment and a login alone selects
 nothing. The engine sets it after `env`, so a value there would be replaced on
@@ -396,8 +396,8 @@ spec:
     tokenSecretRef: {name: claude-subscription, key: oauthToken}
 ```
 
-The login, and the homes the CLI keeps for each seat, live on the data
-volume, under `/var/lib/crewlet/llm-cli/<loginName>`, so a restarted data pod
+The login, and the homes the harness keeps for each seat, live on the data
+volume, under `/var/lib/crewlet/llm-harness/<loginName>`, so a restarted data pod
 keeps them; a seat pod keeps them on a scratch volume it loses at every start
 (see [Seat pools](#seat-pools)). That matters for a bundle: the engine
 restores one, when it starts and at every revision it applies, only into a
@@ -410,28 +410,28 @@ next time the engine starts or applies a revision, and moving the provider to
 another `loginName` restores one at once
 ([Rotating a credential](credentials.md#rotating-a-credential)).
 Nor does it restore one into a login `crewlet llm logout` emptied
-([A seat on a coding CLI runs signed out](troubleshooting.md#a-seat-on-a-coding-cli-runs-signed-out)).
+([A seat on a harness runs signed out](troubleshooting.md#a-seat-on-a-harness-runs-signed-out)).
 A bundle restored over a newer login is how a vendor that rotates refresh
 tokens logs a deployment out, which is why a token is the better of the two
-wherever the CLI mints one.
+wherever the harness mints one.
 
-Providers that set the same `loginName` and drive the same CLI share one
+Providers that set the same `loginName` and drive the same harness share one
 login and its seats' homes, which is how several models run off one
-subscription. Each CLI keeps its files in a directory of its own under the
-login (`/var/lib/crewlet/llm-cli/<loginName>/<cli>`, such as `claude-code` or
-`codex`), so a provider of another CLI with that `loginName` shares the
+subscription. Each harness keeps its files in a directory of its own under the
+login (`/var/lib/crewlet/llm-harness/<loginName>/<harness>`, such as `claude-code` or
+`codex`), so a provider of another harness with that `loginName` shares the
 directory and nothing in it
 ([Per-phase models](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#per-phase-models)).
 
 **Moving a provider to another `harness`** is an ordinary change, applied
-with no restart: the new CLI starts signed out in a login of its own beside
-the old one's, which stays there for a move back. Sign the new CLI in. A
-bundle belongs to the CLI it was exported from, so a provider's
-`auth.credentialBundleSecretRef` still holds the old CLI's files after the
-move, and the engine refuses to restore it into the new CLI's empty login,
+with no restart: the new harness starts signed out in a login of its own beside
+the old one's, which stays there for a move back. Sign the new harness in. A
+bundle belongs to the harness it was exported from, so a provider's
+`auth.credentialBundleSecretRef` still holds the old harness's files after the
+move, and the engine refuses to restore it into the new harness's empty login,
 logging `harness_bundle_restore_failed`, until the Secret holds a bundle
-exported from the new CLI
-([An entry moved to another CLI](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#an-entry-moved-to-another-cli)).
+exported from the new harness
+([An entry moved to another harness](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#an-entry-moved-to-another-harness)).
 
 ### An OpenCode login in a bundle
 
@@ -439,7 +439,7 @@ OpenCode 2 keeps its logins in a database of its own rather than in files,
 so an OpenCode bundle holds one file: the document `opencode auth export
 --standalone` printed. The engine keeps it as the login of record
 (`opencode/credentials/exported-credentials` under
-`/var/lib/crewlet/llm-cli/<loginName>`), imports it into an empty database in
+`/var/lib/crewlet/llm-harness/<loginName>`), imports it into an empty database in
 a seat's home before the seat's calls, and exports it back when OpenCode
 refreshed it
 ([Token refresh across seats](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#token-refresh-across-seats)).
@@ -449,7 +449,7 @@ Make it on a machine with OpenCode 2, npm's `@opencode/cli`:
 --standalone` in a login home of the entry's own, or sign in with OpenCode
 yourself and adopt that login with `crewlet llm login <key> -from-host`,
 which reads it through your OpenCode's export
-([Broker the vendor's own login](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#1-broker-the-vendors-own-login-any-cli));
+([Broker the vendor's own login](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#1-broker-the-vendors-own-login-any-harness));
 then `crewlet llm export <key>`. The export prints every login the OpenCode
 it runs in holds, keys stored with `opencode auth login` included, so a
 bundle adopted from your own home carries every provider you signed in to
@@ -464,7 +464,7 @@ export it again from OpenCode 2. A bundle signs in a seat's executor run
 `Direct`, whose box is seeded with the login, and never one in `E2B`
 ([Where a seat's executor runs](#where-a-seats-executor-runs)).
 
-### Which `env` entries sign a CLI in
+### Which `env` entries sign a harness in
 
 This is the sign-in of a Hermes, Pi or OpenCode provider in
 `auth.mode: Subscription` with neither a token nor a bundle, or in
@@ -472,7 +472,7 @@ This is the sign-in of a Hermes, Pi or OpenCode provider in
 holds a credential: one of its parts between underscores is, in any case,
 `KEY`, `KEYS`, `APIKEY`, `ACCESSKEY`, `SECRETKEY`, `TOKEN`, `SECRET`,
 `PASSWORD`, `PASSWD`, `CREDENTIAL`, `CREDENTIALS`, `AUTH`, `OAUTH` or `PAT`.
-So `OPENROUTER_API_KEY` and `GH_TOKEN` sign the CLI in, and `HTTPS_PROXY` or
+So `OPENROUTER_API_KEY` and `GH_TOKEN` sign the harness in, and `HTTPS_PROXY` or
 `HERMES_MAX_TOKENS` (a count of model tokens) do not; the API server refuses
 such a provider when its `env` holds no such name, since `crewlet llm list`
 would report it signed in to nothing. Write its `auth.mode: Subscription`
@@ -480,8 +480,8 @@ explicitly, as `auth` may not be empty. A key in `env` is a `${NAME}` the
 engine resolves from its encrypted store, so it never refreshes and runs on a
 seat pod too.
 
-> **Name only the sign-in you mean the CLI to use.** Beside a credential
-> bundle a key in `env` is a second sign-in, which the CLI settles by its own
+> **Name only the sign-in you mean the harness to use.** Beside a credential
+> bundle a key in `env` is a second sign-in, which the harness settles by its own
 > rules rather than by the order you wrote them in. Hermes, for one, loads its
 > home's `.env` over its environment, so a variable the bundle's `.env` also
 > sets takes the file's value, while a model provider's key in `env` wins over
@@ -490,9 +490,9 @@ seat pod too.
 
 ### A metered key
 
-`auth.mode: APIKey` gives the CLI the key of `auth.apiKeySecretRef` instead,
+`auth.mode: APIKey` gives the harness the key of `auth.apiKeySecretRef` instead,
 billing the metered account: Claude Code on an Anthropic API key, Codex on an
-OpenAI one. Crewlet hands the key over in the variable the CLI's profile
+OpenAI one. Crewlet hands the key over in the variable the harness's profile
 names, and in Crewlet's `main` eight name one (the table above); for the
 others the key would reach nothing, so the engine refuses the mode for them
 and the API server refuses it first. Hermes, Pi and OpenCode take their
@@ -514,30 +514,30 @@ spec:
     apiKeySecretRef: {name: anthropic, key: apiKey}
 ```
 
-The key is one key: a CLI holds one sign-in and rotates nothing, so a second
+The key is one key: a harness holds one sign-in and rotates nothing, so a second
 key is a second provider, later in a seat's chain, which a seat falls back to
 when the first is out of its limits. The API server refuses
 `apiKeySecretRef` without `auth.mode: APIKey`, and the mode without it:
-Crewlet would read the CLI's key variable from its own secret store and the
+Crewlet would read the harness's key variable from its own secret store and the
 engine's environment then, which hold no key this provider names. A gateway
-or proxy in front of the vendor is a variable the CLI reads from its
+or proxy in front of the vendor is a variable the harness reads from its
 environment, which goes in `env` from a Secret, such as Claude Code's
 `ANTHROPIC_BASE_URL`, and reaches every phase of the provider, a seat's
 executor run included. A gateway that takes a token of its own in place of
-the vendor's key signs the CLI in under `auth.mode: Env` instead (below).
+the vendor's key signs the harness in under `auth.mode: Env` instead (below).
 
 ### A cloud provider or a gateway
 
-`auth.mode: Env` signs the CLI in with its `env` and nothing else: a cloud
+`auth.mode: Env` signs the harness in with its `env` and nothing else: a cloud
 provider's switch and that provider's credentials, such as Claude Code on
 Amazon Bedrock, Google Vertex AI or Microsoft Foundry, or a gateway's
-address and the token it issued you. Crewlet hands the CLI neither its token
+address and the token it issued you. Crewlet hands the harness neither its token
 variable nor its key variable under it, and seeds no login into the homes it
-runs in, so the cloud provider or the gateway is the CLI's one sign-in: under
-`Subscription` or `APIKey` the mode's own token or key would reach the CLI
-beside it, and the CLI would pick between the two by rules of its own.
+runs in, so the cloud provider or the gateway is the harness's one sign-in: under
+`Subscription` or `APIKey` the mode's own token or key would reach the harness
+beside it, and the harness would pick between the two by rules of its own.
 `crewlet llm list` reports a provider under it signed in with `env`, whichever
-CLI reads the env.
+harness reads the env.
 
 ```yaml
 apiVersion: crewlet.ai/v1alpha1
@@ -584,7 +584,7 @@ Every value of `env` comes from a Secret, the cloud switch's `1` included, and
 reaches every phase of the provider, a seat's executor run in `E2B` too, which
 it signs in as it signs the provider's other phases in
 ([Where a seat's executor runs](#where-a-seats-executor-runs)). The API
-server holds the provider to what signs its CLI in from `env`, as the engine
+server holds the provider to what signs its harness in from `env`, as the engine
 does (the table above):
 
 - **`ClaudeCode`** needs one of the names its Crewlet profile lists as
@@ -594,18 +594,18 @@ does (the table above):
   reads beside it. Those four are refused in `env` under `Subscription` and
   `APIKey`, which hand Claude Code a token or a key beside them.
 - **Hermes, Pi and OpenCode** need their model provider's key under a name
-  Crewlet reads as a credential ([below](#which-env-entries-sign-a-cli-in)),
+  Crewlet reads as a credential ([below](#which-env-entries-sign-a-harness-in)),
   as under `Subscription`, with no login of theirs beside it.
-- **Every other CLI** is refused the mode: its Crewlet profile names nothing
+- **Every other harness** is refused the mode: its Crewlet profile names nothing
   that signs it in from its environment, so it would sign in to nothing.
 
 `tokenSecretRef` and `credentialBundleSecretRef` are refused with the mode,
-since no token or login reaches the CLI, and so is `apiKeySecretRef`, which
+since no token or login reaches the harness, and so is `apiKeySecretRef`, which
 `APIKey` alone reads.
 
 ## Where a seat's executor runs
 
-In every phase of a seat the CLI drives its own loop: it asks the model,
+In every phase of a seat the harness drives its own loop: it asks the model,
 calls the seat's tools, which reach it as the MCP tools of one server, and
 asks again, until the model stops or the engine ends the run. Every call goes
 through the engine's gates on its way to the tool, so a seat's tools are the
@@ -613,14 +613,14 @@ same in every phase. Where the loop runs is the phase's to decide, never the
 provider's, and there is no setting for it:
 
 - **Every phase but the executor** (the reviewer, a delegated worker, the
-  summariser) runs the CLI in the engine's pod that holds the seat, a data pod
-  or a seat pod alike, turn by turn, with the CLI's own shell and editor
-  denied, so the seat's tools are the only ones it has. The CLI reaches them
+  summariser) runs the harness in the engine's pod that holds the seat, a data pod
+  or a seat pod alike, turn by turn, with the harness's own shell and editor
+  denied, so the seat's tools are the only ones it has. The harness reaches them
   through `crewlet mcp-relay`, the engine's own binary, which it starts as a
   stdio MCP server and which carries its calls over a unix socket in a
   directory the engine makes for itself under the pod's `/tmp`, open to the
   engine's user alone: no listener, no token and no network.
-- **The seat's executor** is the CLI's own run, detached from the turn, in a
+- **The seat's executor** is the harness's own run, detached from the turn, in a
   box: the vendor's whole harness, with its own shell and editor, the seat's
   tools reached back over the engine's tool bridge. The turn waits until the
   run reports, and resumes then, on whichever engine pod holds the seat.
@@ -629,13 +629,13 @@ provider's, and there is no setting for it:
 flowchart LR
     subgraph pod["The engine pod that holds the seat"]
         ENG["<b>Engine</b><br/><i>the seat's turn</i>"]
-        HOST["<b>CLI, every other phase</b><br/><i>the seat's tools<br/>its only tools</i>"]
+        HOST["<b>Harness, every other phase</b><br/><i>the seat's tools<br/>its only tools</i>"]
         RELAY["<b>crewlet mcp-relay</b><br/><i>a unix socket under /tmp</i>"]
-        DIRECT["<b>CLI, the executor, Direct</b><br/><i>its own loop, shell and editor,<br/>in a box on the sandboxes volume</i>"]
+        DIRECT["<b>Harness, the executor, Direct</b><br/><i>its own loop, shell and editor,<br/>in a box on the sandboxes volume</i>"]
         PUB["<b>/mcp/ tool bridge</b><br/><i>the pod's own listener</i>"]
     end
     subgraph box["The company's E2B sandbox"]
-        E2B["<b>CLI, the executor, E2B</b><br/><i>its own loop, shell and editor</i>"]
+        E2B["<b>Harness, the executor, E2B</b><br/><i>its own loop, shell and editor</i>"]
     end
     ENG -->|"starts a run"| HOST
     HOST -->|"the seat's tools, over MCP"| RELAY
@@ -648,15 +648,15 @@ flowchart LR
 ```
 
 **The provider it runs on.** Crewlet runs a seat's executor on `ClaudeCode`
-or `OpenCode` alone, the CLIs it has an in-box runner for. Each launch walks
+or `OpenCode` alone, the harnesses it has an in-box runner for. Each launch walks
 the seat's executor chain, `spec.llm.default`, else the head of the Company's
 `spec.llm.order`, and takes the first provider driving one of them that is not
-sitting out its spent plan on the node; a provider of another CLI is passed
+sitting out its spent plan on the node; a provider of another harness is passed
 over, as it serves the seat's other phases. A run that hits its plan's limit
 is not moved to the next provider, but the next launch skips the spent one. A
 seat whose chain holds no `ClaudeCode` or `OpenCode` provider could run no
 turn, so Crewlet refuses it on every write and the operator refuses it first,
-on the Seat (`Applied=False`, `NoExecutorCLI`, at `spec.llm.default`, or at
+on the Seat (`Applied=False`, `NoExecutorHarness`, at `spec.llm.default`, or at
 `spec.llm` for a seat that names no chain and runs on the head of the
 Company's order). A chain holding a provider of each kind is applied, and the
 Seat's `Ready` message names the providers that never run its executor.
@@ -667,7 +667,7 @@ Seat's `Ready` message names the providers that never run its executor.
 | | `Direct` | `E2B` |
 |---|---|---|
 | Where | a process tree of the engine pod that holds the seat, in a box directory on the pod's `sandboxes` volume | the Company's E2B sandbox |
-| The CLI | the engine image's ([The image needs the CLI](#the-image-needs-the-cli)) | the E2B template's |
+| The harness | the engine image's ([The image needs the harness](#the-image-needs-the-harness)) | the E2B template's |
 | Its sign-in | any: the box of a `Subscription` provider is seeded with its login, and writes a refreshed one back; an `APIKey` or `Env` one's with none | a variable of the run's environment only: Claude Code's headless token or key, the provider's `env` under `auth.mode: Env`, OpenCode's model provider's key in `env`, or a sign-in in the Seat's `spec.sandbox` |
 | The seat's tools | the pod's own listener, on loopback, a data pod's or a seat pod's | the Company's public address |
 | A restart of the pod | ends the run, and Crewlet carries its round on in a fresh one | leaves it running |
@@ -679,7 +679,7 @@ and `E2B` needs `spec.sandbox.e2b`. A provider whose `runIn` is `E2B`, which a
 seat's executor or the Company's deep work can launch on, in a Company with no
 `spec.sandbox.e2b`, is refused on the LLMProvider
 (`SandboxPlacementNotOffered`). The API refuses `runIn` on a provider of any
-other CLI, since no run is ever launched on it. Want both cells? Make two
+other harness, since no run is ever launched on it. Want both cells? Make two
 providers and point each seat at the one that is right for it.
 [ADR-0008](../../adr/0008-run-a-seats-executor-in-its-own-engine-pod-or-e2b.md)
 records why these are the cells, and what was ruled out: Crewlet's
@@ -703,7 +703,7 @@ spec:                       # LLMProvider opencode-e2b
 ```
 
 **A Direct run is a process of the engine pod**, running as the engine's user
-with the CLI's shell: it reads and writes what that user can on the pod, a
+with the harness's shell: it reads and writes what that user can on the pod, a
 data pod's data volume and the engine's secret store included. What confines
 it is the pod's own boundary, the restricted security context and the network
 policy the class sets ([Exposure](exposure.md)), and nothing between it and
@@ -732,7 +732,7 @@ run's own: the seat's identity, the Company's and the Seat's setup steps'
 `env`, the Seat's `spec.sandbox.env`, and the provider's sign-in and its
 whole `env` beneath them. An E2B box gets the run's own alone. Every run,
 in either cell, is also handed the engine's time zone as `TZ`, the zone
-Crewlet reads a limit's reset in when the CLI names its time without one:
+Crewlet reads a limit's reset in when the harness names its time without one:
 the `TZ` the class's `podTemplate` or the Company's `runtime.env` sets on the
 pod where it names a zone the engine knows, and `UTC` otherwise, never the
 image's local time. The provider's `env` reaches an
@@ -744,8 +744,8 @@ credential is in
 [What a coding box carries](credentials.md#what-a-coding-box-carries).
 
 **An E2B run** gets, with no `spec.sandbox.e2b.template`, E2B's prebuilt
-template for its CLI (`claude` for Claude Code, `opencode` for OpenCode); a
-template you set is used for every run, so it must carry every CLI an E2B run
+template for its harness (`claude` for Claude Code, `opencode` for OpenCode); a
+template you set is used for every run, so it must carry every harness an E2B run
 of the company drives. For OpenCode that is OpenCode 2, the `@opencode/cli`
 package (`opencode --version` prints `opencode v2.…`): Crewlet's runner ends
 a run at once in a box that has OpenCode 1.x, npm's `opencode-ai`, with `this
@@ -777,7 +777,7 @@ each time `Ready` turns to it:
 - `NotExposed`: its run goes to `E2B`, and the Company has no public address
   for the box to call the seat's tools back at.
 - `SandboxLoginNotPortable`: its run goes to `E2B`, and nothing in the run's
-  environment signs its CLI in: a Claude Code provider signed in with a
+  environment signs its harness in: a Claude Code provider signed in with a
   credential bundle, or an OpenCode one with no key in `env`, and no sign-in
   in the env of the Company's or the Seat's setup steps or in the Seat's
   `spec.sandbox.env`.
@@ -786,7 +786,7 @@ The verdict judges the first provider a launch takes, as Crewlet's own guard
 does: a launch the box's login refuses fails, it does not move on down the
 chain. Each message names the field to change. While a node holds a seat
 whose executor can run, `Ready` is `True`, `LeaseHeld`, and its message names
-the provider, the CLI and the cell the seat's executor runs in, and the
+the provider, the harness and the cell the seat's executor runs in, and the
 providers a launch falls back to.
 
 A seat whose own `spec.sandbox` signs Claude Code in, with
@@ -800,18 +800,18 @@ Claude Code ranks its sign-ins by name, and a provider's key beside the
 seat's plan token would win. The rest of the provider's `env`, a gateway's
 address among it, still reaches the run.
 
-**Its bounds.** Two fields bound a provider's CLI in the engine's pod, in
-every phase but the executor's, and since a run of the CLI asks the model many
+**Its bounds.** Two fields bound a provider's harness in the engine's pod, in
+every phase but the executor's, and since a run of the harness asks the model many
 times and calls the seat's tools in between, neither is a bound on one
 request:
 
-- `timeoutSeconds` bounds one stretch of the CLI's model work with no tool
+- `timeoutSeconds` bounds one stretch of the harness's model work with no tool
   call in flight, from its launch or the answer to its last tool call to its
   next call or its end (600 seconds unset). A tool call stops the clock,
   however long a delegation or a slow tool server takes, and the next
   stretch starts afresh. A stretch past it ends the run with a timeout,
   which is retryable: a seat's chain moves on to its next provider.
-- `maxConcurrent` bounds the provider's live CLI processes in each pod (4
+- `maxConcurrent` bounds the provider's live harness processes in each pod (4
   unset). One process lives for a whole run and holds its place through the
   run's tool calls, so it is also how many seats' runs the provider has going
   at once in the pod, and a run past it waits. A model call made on the same
@@ -820,7 +820,7 @@ request:
   place held by runs that are each waiting on such a call.
 
 An executor run is bounded by neither: it is never stopped on a clock, and
-its rounds are capped by the CLI's own turn cap, the Seat's
+its rounds are capped by the harness's own turn cap, the Seat's
 `spec.sandbox.maxTurns`, else the Company's `spec.sandbox.defaultMaxTurns`,
 else Crewlet's 96. A token ceiling (`tokenBudget`) on the Seat or the Company
 below `turn_engine.executor_min_budget_tokens` (25000 unless
@@ -904,7 +904,7 @@ its own steps, as the Seat does a provisioned value nothing mints
 given: a step's variable the Seat's own `env` replaces is none.
 
 The executor verdict ([What the operator reports](#where-a-seats-executor-runs))
-reads the variables that sign the seat's CLI in once the reconcile has read
+reads the variables that sign the seat's harness in once the reconcile has read
 their Secrets: one a run goes without signs nothing in, and the box is given
 the provider's sign-in as it is with no variable of the seat's. A run goes
 without a value that is empty, whether or not its key is listed; one whose
@@ -917,7 +917,7 @@ Engine`. What the box receives from the provider is in
 
 A seat placed in a [seat pool](topology.md) runs on a seat pod, which keeps
 nothing between starts and serves only its probes and its own boxes. Every
-phase but the executor runs its CLI there as it does on a data pod, reaching
+phase but the executor runs its harness there as it does on a data pod, reaching
 the seat's tools through a socket under the seat pod's own `/tmp`. The
 seat's executor runs `Direct` on the seat pod, in a box on its own
 `sandboxes` volume, calling the seat's tools back through the bridge the
@@ -927,27 +927,27 @@ public address every engine pod is given: the data pod a call reaches
 relays it over the broker to the seat pod holding the seat, which the seat
 pod already dials out to. Nothing off a seat pod dials it, so a Company with
 no public address runs no `E2B` executor in a seat pool (`NotExposed` on the
-Seat's `Ready`). One thing a data pod does for a CLI a seat pod cannot do:
+Seat's `Ready`). One thing a data pod does for a harness a seat pod cannot do:
 
-- **A credential bundle.** The login lives under the CLI's state directory,
+- **A credential bundle.** The login lives under the harness's state directory,
   which on a seat pod is its scratch volume, so every seat pod restores the
   bundle at each start and then refreshes the login on its own, beside the
   data pod. A vendor that rotates refresh tokens retires the token the other
   pods hold at each refresh, and logs them out. A seat in a seat pool that
   runs on a provider with `credentialBundleSecretRef`, in any phase, is
-  refused with `Applied=False`, `CLIAuthNotPortable`, which holds the
+  refused with `Applied=False`, `HarnessAuthNotPortable`, which holds the
   company's document: applied, it would log out every seat on that login,
   the data pod's included. Sign it in with
-  `tokenSecretRef` (Claude Code), `auth.mode: APIKey` (a CLI the table
+  `tokenSecretRef` (Claude Code), `auth.mode: APIKey` (a harness the table
   above gives a key variable) or, for Hermes, Pi or OpenCode, its model
   provider's key in `env`, or place the seat in `data`.
 
 ## A provider for Ask Crewlet
 
-A seat keeps its CLI's own web tools. Ask Crewlet (configured under
+A seat keeps its harness's own web tools. Ask Crewlet (configured under
 `spec.assistant`) does not: it reads only what the signed-in person's own
 requests return, so Crewlet requires every provider in `spec.assistant.llm`
-to drive a CLI Crewlet runs with no tool of its own (no shell, no file
+to drive a harness Crewlet runs with no tool of its own (no shell, no file
 reader, no tool server but the engine's own, which serves the person's
 Ask Crewlet tools), with its web tools off. Ask Crewlet runs its providers in
 the engine's pod, as a seat's phases but the executor run, so a provider's
@@ -978,13 +978,13 @@ spec:
       key: apiKey
 ```
 
-The API admits `webTools: Denied` only for a CLI Crewlet can turn the web off
-for: `ClaudeCode`, `Codex`, `OpenCode` and `Pi`. Every other CLI's profile
+The API admits `webTools: Denied` only for a harness Crewlet can turn the web off
+for: `ClaudeCode`, `Codex`, `OpenCode` and `Pi`. Every other harness's profile
 carries no measured web denial, and Crewlet refuses the setting. A provider
 of its own keeps the person in the drawer from queueing behind a seat's long
 call, and its timeout is sized for one round rather than for a coding task.
 Crewlet refuses an Ask Crewlet chain naming a provider that keeps its web
-tools, or one on a CLI that keeps a tool of its own, in the dry run before
+tools, or one on a harness that keeps a tool of its own, in the dry run before
 every apply, and the refusal is reported on the Company. Crewlet's
 [configuration reference](https://github.com/crewlet/crewlet/blob/main/docs/getting-started/configuration.md)
 describes the block and each bound.
@@ -992,15 +992,15 @@ describes the block and each bound.
 ### Deep work
 
 `spec.assistant.deepWork` lets Ask Crewlet hand a large task (research,
-scripts, files, many steps) to a coding CLI running its own tools: its shell,
+scripts, files, many steps) to a harness running its own tools: its shell,
 its files and its web tools, which are the point of the escalation. The run
 reaches Crewlet only through the signed-in person's own Ask Crewlet tools, over
 the tool bridge, so every read is still their request and every write still a
 proposal they approve. Unset, Ask Crewlet answers in quick mode only.
 
 Deep work runs on a provider driving `ClaudeCode`, an `LLMProvider` or a
-platform model provider: its run is confined around that CLI's own install
-and temporary directories, which no other CLI has been measured against. It is
+platform model provider: its run is confined around that harness's own install
+and temporary directories, which no other harness has been measured against. It is
 a provider of its own, beside Ask Crewlet's chain, whose web tools stay on:
 
 ```yaml
@@ -1062,7 +1062,7 @@ executor run's does: a headless token (`tokenSecretRef`) or
 calls the person's tools back at the Company's public address, so a Company
 with none runs no deep work.
 
-Crewlet refuses a provider driving another CLI in the dry run before every
+Crewlet refuses a provider driving another harness in the dry run before every
 apply, and the refusal is reported on the Company, as a refusal of Ask
 Crewlet's chain is; the API cannot refuse it, since the rule turns on the provider's own
 spec. A provider placed in `E2B` by its `runIn` in a Company with no
@@ -1071,14 +1071,14 @@ spec. A provider placed in `E2B` by its `runIn` in a Company with no
 
 ## What v1alpha1 does not offer
 
-Crewlet's `custom` CLI and the profile `overrides` of the built-in ones are
+Crewlet's `custom` harness and the profile `overrides` of the built-in ones are
 not offered, but for the web stance above: they name the binary and the
 arguments the engine's pod runs. Nor is the `container` cell: an engine pod
 has no container runtime to start one in.
 
-Nor is Crewlet's `inherit-env` login, which gives the CLI whichever token or
+Nor is Crewlet's `inherit-env` login, which gives the harness whichever token or
 key the engine's container environment holds. A credential there is outside
-the engine's encrypted store: every process the engine runs (the CLI, a
+the engine's encrypted store: every process the engine runs (the harness, a
 stdio MCP server) can read it, and the engine resolves a `${NAME}` written in
 many fields of the company document from its environment too, so whoever can
 write such a field can have the engine send the value anywhere. The operator
@@ -1089,6 +1089,6 @@ Hermes, Pi or OpenCode take the login from a Secret instead.
 
 ## See also
 
-- [Crewlet's LLM backends](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md) — what the engine does with a CLI
-- [Choosing Where Seats Run](topology.md) — seat pools, and what a CLI cannot do there
+- [Crewlet's LLM backends](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md) — what the engine does with a harness
+- [Choosing Where Seats Run](topology.md) — seat pools, and what a harness cannot do there
 - [Exposure and Network Policy](exposure.md) — the public listener the tool bridge is served on

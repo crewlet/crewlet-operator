@@ -76,11 +76,11 @@ deleting a CRD deletes every company declared with it.
 ### Engine image
 
 Each EngineClass names the engine image its companies run
-(`spec.engine.image`). Every model a seat runs on is a coding CLI the engine
+(`spec.engine.image`). Every model a seat runs on is a harness the engine
 starts in its own container, and Crewlet's image ships none, so the image a
 class names to run working seats is one built from the engine's with the
-CLI its companies' providers drive
-([The image needs the CLI](cli-agents.md#the-image-needs-the-cli)). The
+harness its companies' providers drive
+([The image needs the harness](harnesses.md#the-image-needs-the-harness)). The
 operator is tested against Crewlet's `main`, as
 Crewlet publishes it at `ghcr.io/crewlet/crewlet:main`: every test suite runs
 that image, or the Crewlet commit it was built from, so the operator writes

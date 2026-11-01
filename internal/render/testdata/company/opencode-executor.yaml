@@ -9,7 +9,7 @@ providers:
       harness: opencode
       model: anthropic/claude-sonnet-5
       run_in: direct
-      state_dir: /var/lib/crewlet/llm-cli/anthropic
+      state_dir: /var/lib/crewlet/llm-harness/anthropic
     opencode:
       auth:
         mode: subscription
@@ -17,7 +17,7 @@ providers:
         OPENROUTER_API_KEY: ${K8S_OPENROUTER_API_KEY_A54OX7VM4MZL}
       harness: opencode
       model: openrouter/anthropic/claude-sonnet-5
-      state_dir: /var/lib/crewlet/llm-cli/opencode
+      state_dir: /var/lib/crewlet/llm-harness/opencode
   llm_order:
   - anthropic
   - opencode

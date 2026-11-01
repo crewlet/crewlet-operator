@@ -1,4 +1,4 @@
-# The Dashboard Assistant on two providers that turn their CLI's web tools
+# The Dashboard Assistant on two providers that turn their harness's web tools
 # off, which Crewlet requires of every model in spec.assistant.llm: Claude
 # Code on a metered key first, then Pi on its model provider's key. Every
 # bound is set, and each person's assistant has a daily budget of its own.

@@ -104,8 +104,8 @@ type llmProviderDoc struct {
 	Overrides      *llmOverridesDoc  `json:"overrides,omitempty"`
 }
 
-// llmOverridesDoc is the part of a CLI profile's overrides the API sets:
-// the web stance alone. Every other override names the CLI's binary and
+// llmOverridesDoc is the part of a harness profile's overrides the API sets:
+// the web stance alone. Every other override names the harness's binary and
 // arguments, which the engine's pod runs, and is not offered.
 type llmOverridesDoc struct {
 	WebTools string `json:"web_tools"`

@@ -263,7 +263,7 @@ func TestAnEmptyValueOfTheCompanysOwnStepIsSaid(t *testing.T) {
 				Namespace: "ns", Name: "claude", Spec: crewletaiv1alpha1.LLMProviderSpec{
 					CompanyRef: crewletaiv1alpha1.CompanyReference{Name: fleetCompany},
 					LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-						Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: cliModel,
+						Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: harnessModel,
 					},
 					Auth: crewletaiv1alpha1.HarnessAuth{
 						Mode:            crewletaiv1alpha1.HarnessAuthAPIKey,

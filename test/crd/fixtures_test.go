@@ -39,7 +39,7 @@ const (
 )
 
 // Environment variables the provider cases name: a model provider's key
-// some CLI's profile reads, a proxy, which is no credential, and the address
+// some harness's profile reads, a proxy, which is no credential, and the address
 // of a gateway Claude Code reads from its environment, which is none either.
 const (
 	envAnthropicKey = "ANTHROPIC_API_KEY"
@@ -48,15 +48,15 @@ const (
 	envBaseURL      = "ANTHROPIC_BASE_URL"
 )
 
-// cliVariable is the variable of the headless token and of the key Crewlet's
-// profile for a CLI names (token_env, api_key_env), empty where it names none.
-type cliVariable struct{ headless, key string }
+// harnessVariable is the variable of the headless token and of the key Crewlet's
+// profile for a harness names (token_env, api_key_env), empty where it names none.
+type harnessVariable struct{ headless, key string }
 
-// cliVariables are the variables of every CLI whose profile names one in the
+// harnessVariables are the variables of every harness whose profile names one in the
 // engine every suite runs, the ones the LLMProvider API's own-variable rule lists.
 // TestHarnessSignInFollowsTheEngine reads them from the engine and fails
 // while this copy, which the rule's cases are built from, differs.
-var cliVariables = map[v1.Harness]cliVariable{
+var harnessVariables = map[v1.Harness]harnessVariable{
 	v1.HarnessClaudeCode:  {headless: "CLAUDE_CODE_OAUTH_TOKEN", key: envAnthropicKey},
 	v1.HarnessCodex:       {key: "CODEX_API_KEY"},
 	v1.HarnessGeminiCLI:   {key: "GEMINI_API_KEY"},
@@ -67,22 +67,22 @@ var cliVariables = map[v1.Harness]cliVariable{
 	v1.HarnessMuseCode:    {key: "META_API_KEY"},
 }
 
-// envSignIn are the CLIs Crewlet's profiles mark env_sign_in in the engine
+// envSignIn are the harnesses Crewlet's profiles mark env_sign_in in the engine
 // every suite runs: a credential-named variable in env signs them in.
 // TestHarnessSignInFollowsTheEngine holds it to the engine too.
 var envSignIn = []v1.Harness{v1.HarnessHermes, v1.HarnessPi, v1.HarnessOpenCode}
 
-// homeIsolation are the variables Crewlet sets on every call of every CLI to
+// homeIsolation are the variables Crewlet sets on every call of every harness to
 // keep it inside its seat's own home (harnessprofile.HomeIsolation), and
-// cliIsolation those each CLI's profile adds for its own configuration
+// harnessIsolation those each harness's profile adds for its own configuration
 // directory or switch (config_env, work_config_env, isolation_env), in the
 // engine every suite runs: the variables the LLMProvider API's isolation rule
 // refuses in env. TestHarnessIsolationFollowsTheEngine reads them from the
 // engine's refusals and fails while this copy, which the rule's cases are
 // built from, differs.
 var (
-	homeIsolation = []string{"HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "TMPDIR"}
-	cliIsolation  = map[v1.Harness][]string{
+	homeIsolation    = []string{"HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "TMPDIR"}
+	harnessIsolation = map[v1.Harness][]string{
 		v1.HarnessClaudeCode:  {"CLAUDE_CONFIG_DIR", "CLAUDE_CODE_DISABLE_CLAUDE_MDS", "CLAUDE_CODE_DISABLE_AUTO_MEMORY"},
 		v1.HarnessCodex:       {"CODEX_HOME", "CODEX_SQLITE_HOME"},
 		v1.HarnessOpenCode:    {"OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_PROJECT_DISABLE"},
@@ -93,7 +93,7 @@ var (
 	}
 )
 
-// subscriptionEnv are the variables each CLI's profile sets under auth.mode
+// subscriptionEnv are the variables each harness's profile sets under auth.mode
 // subscription alone, after env, to point it at the login its seat's home
 // holds (subscription_env), in the engine every suite runs: the variables the
 // LLMProvider API's subscription rule refuses in env under Subscription.
@@ -104,7 +104,7 @@ var subscriptionEnv = map[v1.Harness][]string{
 	v1.HarnessGeminiCLI: {"GOOGLE_GENAI_USE_GCA"},
 }
 
-// signInEnv are the variables each CLI's profile lists as signing it in from
+// signInEnv are the variables each harness's profile lists as signing it in from
 // a provider's env (sign_in_env), in the engine every suite runs: what auth
 // mode Env requires one of, and what the LLMProvider API refuses in env under
 // every other mode. TestHarnessSignInEnvFollowsTheEngine reads them from the

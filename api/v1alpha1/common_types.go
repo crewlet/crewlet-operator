@@ -197,7 +197,7 @@ type SeatEnvVar struct {
 }
 
 // SecretEnvVar is a named credential delivered as an environment variable,
-// such as a sandbox setup step's token or a coding CLI's model key. Crewlet
+// such as a sandbox setup step's token or a harness's model key. Crewlet
 // treats every value in the positions that use this type as a credential, so
 // a literal value is not accepted: the value always comes from a Secret.
 type SecretEnvVar struct {
@@ -963,21 +963,21 @@ const (
 	// they are and starts no other.
 	ReasonPoolCapacityExceeded = "PoolCapacityExceeded"
 
-	// ReasonCLIAuthNotPortable is Applied=False on a Seat placed in a seat
+	// ReasonHarnessAuthNotPortable is Applied=False on a Seat placed in a seat
 	// pool that runs on an LLMProvider signed in with a credential
-	// bundle. A seat pod keeps the CLI's login on its scratch volume, so the
+	// bundle. A seat pod keeps the harness's login on its scratch volume, so the
 	// bundle is restored at every start, and every pod refreshes the one
 	// login on its own: a vendor that rotates refresh tokens then logs the
 	// whole company out.
-	ReasonCLIAuthNotPortable = "CLIAuthNotPortable"
+	ReasonHarnessAuthNotPortable = "HarnessAuthNotPortable"
 
-	// ReasonNoExecutorCLI is Applied=False on a Seat whose executor chain
-	// has no member that drives ClaudeCode or OpenCode, the CLIs Crewlet
+	// ReasonNoExecutorHarness is Applied=False on a Seat whose executor chain
+	// has no member that drives ClaudeCode or OpenCode, the harnesses Crewlet
 	// runs a seat's executor on: its spec.llm.default, or, with none, the
 	// head of the Company's model order, which a seat with no chain runs
 	// on. Crewlet refuses such a document on every write, as the seat could
 	// run no turn.
-	ReasonNoExecutorCLI = "NoExecutorCLI"
+	ReasonNoExecutorHarness = "NoExecutorHarness"
 
 	// ReasonSandboxRequired is ConfigApplied=False on a Company with an
 	// Agent seat and a model provider and no spec.sandbox: every agent
@@ -998,7 +998,7 @@ const (
 	// E2B, is a ClaudeCode LLMProvider signed in with a credential bundle
 	// and no ClaudeCode sign-in in its env, or an OpenCode one with no
 	// credential-named variable in its env, and nothing in the run's
-	// environment signs its CLI in: the env of the Company's
+	// environment signs its harness in: the env of the Company's
 	// spec.sandbox.setup steps, then of the Seat's, then the Seat's
 	// spec.sandbox.env, a value that resolves to nothing counting for none. A bundle stays on the engine's data volume, as it carries a
 	// refresh token the engine keeps rotating: Crewlet applies the seat and

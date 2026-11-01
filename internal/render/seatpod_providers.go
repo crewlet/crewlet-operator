@@ -8,10 +8,10 @@ import (
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
 )
 
-// What a seat pod cannot do that a data pod does: keep a CLI login it was
+// What a seat pod cannot do that a data pod does: keep a harness login it was
 // given as a credential bundle.
 //
-// A CLI's login lives under its state directory, which on a data pod is the
+// A harness's login lives under its state directory, which on a data pod is the
 // data volume and on a seat pod the scratch volume it loses at every start.
 // A credential bundle is restored into an empty login, so every seat pod
 // would restore it at each start and then refresh it on its own, beside the
@@ -21,7 +21,7 @@ import (
 // OpenCode reads from its env never refreshes, and is portable: a ${NAME}
 // every pod resolves from the fleet's encrypted store. Crewlet applies a
 // document that places such a seat in a seat pool, so the refusal is the
-// operator's own: applied, it would log out every seat on that CLI login, the
+// operator's own: applied, it would log out every seat on that harness login, the
 // seats on the data pods included, which is harm beyond the seat at fault.
 //
 // A seat pod's login on its scratch volume also seeds its Direct boxes, which
@@ -69,11 +69,11 @@ func (r *renderer) seatPodProviders(s *v1alpha1.Seat, pool string) {
 				continue
 			}
 			refused = append(refused, link.provider)
-			r.errs.add(HarmsBeyond, KindSeat, s.Name, link.field, v1alpha1.ReasonCLIAuthNotPortable, fmt.Sprintf(
-				"runs on LLMProvider %s, whose CLI signs in with a credential bundle, and places the seat in seat pool %s: "+
+			r.errs.add(HarmsBeyond, KindSeat, s.Name, link.field, v1alpha1.ReasonHarnessAuthNotPortable, fmt.Sprintf(
+				"runs on LLMProvider %s, whose harness signs in with a credential bundle, and places the seat in seat pool %s: "+
 					"a seat pod keeps the login on a volume it loses at every start, restores the bundle each time and "+
 					"refreshes it on its own, which logs every pod out once the vendor rotates the refresh token. Sign "+
-					"the CLI in with auth.tokenSecretRef (ClaudeCode), auth mode APIKey, or for Hermes, Pi or OpenCode "+
+					"the harness in with auth.tokenSecretRef (ClaudeCode), auth mode APIKey, or for Hermes, Pi or OpenCode "+
 					"its model provider's key in env, in place of the bundle, or place the seat in data",
 				link.provider, pool))
 		}

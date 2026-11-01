@@ -7,7 +7,7 @@ providers:
         mode: api-key
       harness: codex
       model: gpt-5
-      state_dir: /var/lib/crewlet/llm-cli/own-openai
+      state_dir: /var/lib/crewlet/llm-harness/own-openai
   llm_order:
   - own-openai
 seat_access_migrated:

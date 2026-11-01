@@ -247,7 +247,7 @@ go.
 
 A Seat's `spec.sandbox` and a setup step take an `optionalKeys` of their own
 for a seat's executor run's environment and files
-([A value a run may go without](cli-agents.md#a-value-a-run-may-go-without)).
+([A value a run may go without](harnesses.md#a-value-a-run-may-go-without)).
 Crewlet's
 [A key that may go without its value](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#a-key-that-may-go-without-its-value)
 has the engine's side.
@@ -474,12 +474,12 @@ that names it in `spec.mcp`, its own or its unit's, on the pod that holds the
 seat, so size the class's
 `data.resources` (and `seatPools.defaults.resources`) for those processes.
 
-### One image with a coding CLI
+### One image with a harness
 
 A class names one engine image, so a company that also runs a seat on a
-coding CLI needs one image with both. Build one on the other: build the image
-of [The image needs the CLI](cli-agents.md#the-image-needs-the-cli) for each
-CLI the company runs (Claude Code's, OpenCode's, or one built on the other)
+harness needs one image with both. Build one on the other: build the image
+of [The image needs the harness](harnesses.md#the-image-needs-the-harness) for each
+harness the company runs (Claude Code's, OpenCode's, or one built on the other)
 and push it, then build this Dockerfile with `ENGINE_IMAGE` naming it,
 
 ```bash
@@ -487,7 +487,7 @@ docker build --build-arg ENGINE_IMAGE=<your registry>/crewlet-cli@sha256:<digest
   -t <your registry>/crewlet-agents:<crewlet commit> .
 ```
 
-run the checks above against the result, and [OpenCode's](cli-agents.md#opencode)
+run the checks above against the result, and [OpenCode's](harnesses.md#opencode)
 too where OpenCode is in it, and name it in the class. Each Dockerfile takes
 the image it extends as `ENGINE_IMAGE`, so none is edited. Pasting one into
 another does not work: the second file's `ARG`s land inside the first one's
@@ -823,5 +823,5 @@ MCPServer object is still how a server is added. See
 ## See also
 
 - [Connecting Integrations](integrations.md) — each vendor's Integration and the seats' credentials for its server
-- [Running Seats on a Coding CLI](cli-agents.md) — the other program a derived engine image carries
+- [Running Seats on a Harness](harnesses.md) — the other program a derived engine image carries
 - [Crewlet's Tools & MCP](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md) — shared and per-seat servers, and what a server that fails costs
