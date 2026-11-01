@@ -16,7 +16,7 @@ import (
 )
 
 // The keys the providers the executor tests add are signed in under, and
-// the variable a CLI signed in through env reads its model provider's key
+// the variable a harness signed in through env reads its model provider's key
 // from.
 const (
 	keyAPIKey     = "apiKey"
@@ -24,7 +24,7 @@ const (
 	envGatewayKey = "OPENROUTER_API_KEY"
 )
 
-// The models the executor tests' providers run, each in its CLI's own
+// The models the executor tests' providers run, each in its harness's own
 // grammar: OpenCode's names the provider it routes through.
 const (
 	modelSonnet   = "sonnet"
@@ -228,10 +228,10 @@ func TestExecutor(t *testing.T) {
 			name: "a bundled ClaudeCode login in E2B", public: public,
 			mutate: func(in *Input) {
 				withE2B(in)
-				p := bundled(cliProvider)
+				p := bundled(claudeCodeProvider)
 				p.Spec.RunIn = v1alpha1.SandboxPlacementE2B
 				in.LLMProviders = append(in.LLMProviders, p)
-				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCLI)
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerClaudeCode)
 			},
 			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
 			saysOf: seatCy,
@@ -244,10 +244,10 @@ func TestExecutor(t *testing.T) {
 			name: "a ClaudeCode provider under auth mode Env in E2B", public: public,
 			mutate: func(in *Input) {
 				withE2B(in)
-				p := gatewayed(cliProvider, "ANTHROPIC_AUTH_TOKEN")
+				p := gatewayed(claudeCodeProvider, "ANTHROPIC_AUTH_TOKEN")
 				p.Spec.RunIn = v1alpha1.SandboxPlacementE2B
 				in.LLMProviders = append(in.LLMProviders, p)
-				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCLI)
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerClaudeCode)
 			},
 			want:   runnableBut(cyOwn(runnable)),
 			saysOf: seatCy,
@@ -258,10 +258,10 @@ func TestExecutor(t *testing.T) {
 			name: "a ClaudeCode provider on Bedrock under auth mode Env in E2B", public: public,
 			mutate: func(in *Input) {
 				withE2B(in)
-				p := gatewayed(cliProvider, "CLAUDE_CODE_USE_BEDROCK", "AWS_REGION", "AWS_BEARER_TOKEN_BEDROCK")
+				p := gatewayed(claudeCodeProvider, "CLAUDE_CODE_USE_BEDROCK", "AWS_REGION", "AWS_BEARER_TOKEN_BEDROCK")
 				p.Spec.RunIn = v1alpha1.SandboxPlacementE2B
 				in.LLMProviders = append(in.LLMProviders, p)
-				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCLI)
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerClaudeCode)
 			},
 			want: runnableBut(cyOwn(runnable)),
 		},
@@ -271,11 +271,11 @@ func TestExecutor(t *testing.T) {
 			name: "a bundled ClaudeCode login in E2B beside a gateway's address", public: public,
 			mutate: func(in *Input) {
 				withE2B(in)
-				p := bundled(cliProvider)
+				p := bundled(claudeCodeProvider)
 				p.Spec.RunIn = v1alpha1.SandboxPlacementE2B
-				p.Spec.Env = gatewayed(cliProvider, "ANTHROPIC_BASE_URL").Spec.Env
+				p.Spec.Env = gatewayed(claudeCodeProvider, "ANTHROPIC_BASE_URL").Spec.Env
 				in.LLMProviders = append(in.LLMProviders, p)
-				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCLI)
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerClaudeCode)
 			},
 			want:   runnableBut(cyOwn(v1alpha1.ReasonSandboxLoginNotPortable)),
 			saysOf: seatCy,
@@ -285,8 +285,8 @@ func TestExecutor(t *testing.T) {
 			// The box is seeded with the login on the engine pod.
 			name: "a bundled ClaudeCode login Direct", public: public,
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, bundled(cliProvider))
-				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCLI)
+				in.LLMProviders = append(in.LLMProviders, bundled(claudeCodeProvider))
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerClaudeCode)
 			},
 			want: runnableBut(cyOwn(runnable)),
 		},
@@ -294,11 +294,11 @@ func TestExecutor(t *testing.T) {
 			name: "a bundled ClaudeCode login in E2B, signed in by the seat", public: public,
 			mutate: func(in *Input) {
 				withE2B(in)
-				p := bundled(cliProvider)
+				p := bundled(claudeCodeProvider)
 				p.Spec.RunIn = v1alpha1.SandboxPlacementE2B
 				in.LLMProviders = append(in.LLMProviders, p)
 				cy := seatNamed(in, seatCy)
-				cy.Spec.LLM.Default = chainOfNames(providerCLI)
+				cy.Spec.LLM.Default = chainOfNames(providerClaudeCode)
 				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("CLAUDE_CODE_OAUTH_TOKEN")}}
 			},
 			want:   runnableBut(cyOwn(runnable)),
@@ -312,10 +312,10 @@ func TestExecutor(t *testing.T) {
 			name: "a bundled ClaudeCode login in E2B, signed in by a Company setup step", public: public,
 			mutate: func(in *Input) {
 				withE2B(in)
-				p := bundled(cliProvider)
+				p := bundled(claudeCodeProvider)
 				p.Spec.RunIn = v1alpha1.SandboxPlacementE2B
 				in.LLMProviders = append(in.LLMProviders, p)
-				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCLI)
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerClaudeCode)
 				in.Company.Spec.Sandbox.Setup = []v1alpha1.SandboxSetupStep{setupSignIn("CLAUDE_CODE_OAUTH_TOKEN")}
 			},
 			want:   runnableBut(cyOwn(runnable)),
@@ -326,11 +326,11 @@ func TestExecutor(t *testing.T) {
 			name: "a bundled ClaudeCode login in E2B, signed in by a seat's setup step", public: public,
 			mutate: func(in *Input) {
 				withE2B(in)
-				p := bundled(cliProvider)
+				p := bundled(claudeCodeProvider)
 				p.Spec.RunIn = v1alpha1.SandboxPlacementE2B
 				in.LLMProviders = append(in.LLMProviders, p)
 				cy := seatNamed(in, seatCy)
-				cy.Spec.LLM.Default = chainOfNames(providerCLI)
+				cy.Spec.LLM.Default = chainOfNames(providerClaudeCode)
 				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Setup: []v1alpha1.SandboxSetupStep{setupSignIn("ANTHROPIC_API_KEY")}}
 			},
 			want:   runnableBut(cyOwn(runnable)),
@@ -343,11 +343,11 @@ func TestExecutor(t *testing.T) {
 			name: "a bundled ClaudeCode login in E2B, the seat's sign-in empty", public: public,
 			mutate: func(in *Input) {
 				withE2B(in)
-				p := bundled(cliProvider)
+				p := bundled(claudeCodeProvider)
 				p.Spec.RunIn = v1alpha1.SandboxPlacementE2B
 				in.LLMProviders = append(in.LLMProviders, p)
 				cy := seatNamed(in, seatCy)
-				cy.Spec.LLM.Default = chainOfNames(providerCLI)
+				cy.Spec.LLM.Default = chainOfNames(providerClaudeCode)
 				cy.Spec.Sandbox = v1alpha1.SeatSandbox{Env: []v1alpha1.SeatEnvVar{seatSecret("CLAUDE_CODE_OAUTH_TOKEN")}}
 				in.Empty = []secretref.Key{{Namespace: testNamespace, Name: "cy-token", Key: "CLAUDE_CODE_OAUTH_TOKEN"}}
 			},
@@ -378,7 +378,7 @@ func TestExecutor(t *testing.T) {
 			says:   []string{"as OpenCode on LLMProvider opencode, in the Company's E2B sandbox"},
 		},
 		{
-			// A launch passes over a CLI that cannot run the executor; the
+			// A launch passes over a harness that cannot run the executor; the
 			// verdict is the first runner's, and the report says the other
 			// serves the seat's other phases.
 			name: "a Codex ahead of a ClaudeCode", public: public,
@@ -419,7 +419,7 @@ func TestExecutor(t *testing.T) {
 			says:   []string{"where Crewlet would refuse it too (SandboxLoginNotPortable)"},
 		},
 		{
-			// Refused on its own (NoExecutorCLI): there is no executor to
+			// Refused on its own (NoExecutorHarness): there is no executor to
 			// report on.
 			name: "a seat whose chain no member of runs it", public: public,
 			mutate: func(in *Input) {
@@ -527,13 +527,13 @@ func ownProvider(in *Input, name string) *v1alpha1.LLMProvider {
 // its order.
 func TestExecutorHarnessesAreTheRunIn(t *testing.T) {
 	quoted := make([]string, len(ExecutorHarnesses))
-	for i, cli := range ExecutorHarnesses {
-		quoted[i] = "'" + string(cli) + "'"
+	for i, harness := range ExecutorHarnesses {
+		quoted[i] = "'" + string(harness) + "'"
 	}
 	want := "!has(self.runIn) || self.harness in [" + strings.Join(quoted, ", ") + "]"
 	raw := crdOf(t, "llmproviders")
 	if !slices.Contains(rules(raw), want) {
-		t.Errorf("the LLMProvider CRD has no rule %q: a runIn is admitted on other CLIs than the render runs an executor on", want)
+		t.Errorf("the LLMProvider CRD has no rule %q: a runIn is admitted on other harnesses than the render runs an executor on", want)
 	}
 }
 
@@ -556,13 +556,13 @@ func TestContractExecutorIsAppliedWhereItCannotRun(t *testing.T) {
 		{
 			name: "E2B in a company with no public address",
 			input: func(t *testing.T) *Input {
-				in := companyCaseNamed(t, "cli-agent").input(t)
+				in := companyCaseNamed(t, "harnesses").input(t)
 				in.PublicBaseURL = ""
 				return in
 			},
 			seat:       "builder",
 			reason:     v1alpha1.ReasonNotExposed,
-			advisories: companyCaseNamed(t, "cli-agent").advisories,
+			advisories: companyCaseNamed(t, "harnesses").advisories,
 		},
 		{
 			name: "E2B on a login that cannot follow it",
@@ -570,10 +570,10 @@ func TestContractExecutorIsAppliedWhereItCannotRun(t *testing.T) {
 				in := companyCaseNamed(t, caseSeatPools).input(t)
 				in.PublicBaseURL = "https://nimbus.example.com"
 				withE2B(in)
-				p := bundled(cliProvider)
+				p := bundled(claudeCodeProvider)
 				p.Spec.RunIn = v1alpha1.SandboxPlacementE2B
 				in.LLMProviders = append(in.LLMProviders, p)
-				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerCLI)
+				seatNamed(in, seatCy).Spec.LLM.Default = chainOfNames(providerClaudeCode)
 				return in
 			},
 			seat:   seatCy,

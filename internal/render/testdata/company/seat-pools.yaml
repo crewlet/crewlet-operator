@@ -7,7 +7,7 @@ providers:
         mode: api-key
       harness: claude-code
       model: claude-sonnet-5
-      state_dir: /var/lib/crewlet/llm-cli/claude
+      state_dir: /var/lib/crewlet/llm-harness/claude
   llm_order:
   - claude
   sandbox:

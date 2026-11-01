@@ -61,7 +61,7 @@ providers:
         mode: api-key
       harness: claude-code
       model: claude-sonnet-5
-      state_dir: /var/lib/crewlet/llm-cli/anthropic
+      state_dir: /var/lib/crewlet/llm-harness/anthropic
       timeout_seconds: 600
     platform-claude:
       auth:
@@ -69,7 +69,7 @@ providers:
         mode: api-key
       harness: claude-code
       model: claude-sonnet-5
-      state_dir: /var/lib/crewlet/llm-cli-platform/platform-claude
+      state_dir: /var/lib/crewlet/llm-harness-platform/platform-claude
   llm_order:
   - anthropic
   - platform-claude

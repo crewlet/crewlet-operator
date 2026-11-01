@@ -270,7 +270,7 @@ func TestSlugsFollowGitHub(t *testing.T) {
 	// and break the page the reader lands on.
 	for heading, want := range map[string]string{
 		"Getting started":                      "getting-started",
-		"The image needs the CLI":              "the-image-needs-the-cli",
+		"The image needs the harness":          "the-image-needs-the-harness",
 		"crewlet.ai/v1alpha1":                  "crewletaiv1alpha1",
 		"LLM ↔ tool proxy":                     "llm--tool-proxy",
 		"What an agent's Slack app is":         "what-an-agents-slack-app-is",

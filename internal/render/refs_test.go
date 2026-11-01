@@ -639,20 +639,20 @@ func TestEveryReferenceInADocumentIsTheOperators(t *testing.T) {
 	}
 }
 
-// providerCLI names the LLMProvider cliProvider makes.
-const providerCLI = "claude-cli"
+// providerClaudeCode names the LLMProvider claudeCodeProvider makes.
+const providerClaudeCode = "claude-code"
 
-// cliProvider is a provider of Claude Code on a headless token, placed in
+// claudeCodeProvider is a provider of Claude Code on a headless token, placed in
 // the Company's default cell.
-func cliProvider() v1alpha1.LLMProvider {
+func claudeCodeProvider() v1alpha1.LLMProvider {
 	return v1alpha1.LLMProvider{
 		Namespace: testNamespace,
-		Name:      providerCLI,
+		Name:      providerClaudeCode,
 		Spec: v1alpha1.LLMProviderSpec{
 			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
 			LLMProviderSettings: v1alpha1.LLMProviderSettings{Harness: v1alpha1.HarnessClaudeCode, Model: modelSonnet},
 			Auth: v1alpha1.HarnessAuth{
-				TokenSecretRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "oauthToken"},
+				TokenSecretRef: v1alpha1.SecretKeyReference{Name: providerClaudeCode, Key: "oauthToken"},
 			},
 		},
 	}
