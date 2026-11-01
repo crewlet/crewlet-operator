@@ -295,7 +295,9 @@ spec:
 
                       It is at least every bound Crewlet puts on a data pod's boot, laid end
                       to end, which a window may not cut short: 1996 seconds, or 2136 with
-                      objects.backend S3, whose bucket every boot probes. Those are its waits
+                      objects.backend S3, whose bucket every boot probes. A value an older
+                      floor admitted, which the API server keeps until the field is written
+                      again, gives way to those bounds. They are its waits
                       for its own broker and store (provisioning the event stream, the
                       coordination buckets, the object store and the state logs, two minutes
                       a window on the broker of one member a data pod runs, and the requests

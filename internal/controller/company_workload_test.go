@@ -22,7 +22,9 @@ import (
 // TestDataPodStartupSeconds holds the data pod's startup window to the
 // recovery it has to cover: the boot's own bounds, by the class's object
 // store, plus six seconds for every GiB the volume may hold, rounded up,
-// unless the class names a window, and never past the API's day.
+// unless the class names a window, and never past the API's day. A class's
+// window under the boot's bounds, which an older floor admitted and the API
+// server's ratcheting keeps, gives way to them.
 func TestDataPodStartupSeconds(t *testing.T) {
 	t.Parallel()
 	const nats, s3 = 1996, 2136
@@ -55,6 +57,9 @@ func TestDataPodStartupSeconds(t *testing.T) {
 		{"a volume whose Value wraps below zero", unset, "9223372036854775808", maxStartupSeconds},
 		{"a volume whose Value reads zero", unset, "1e30", maxStartupSeconds},
 		{"the class's window, whatever the volume", classWith(2000, ""), "1Ti", 2000},
+		{"the class's window, objects in S3", classWith(2200, crewletaiv1alpha1.ObjectBackendS3), "2Ti", 2200},
+		{"a class's window an older floor admitted", classWith(1866, ""), "3Ti", nats},
+		{"a class's window an older floor admitted, objects in S3", classWith(2006, crewletaiv1alpha1.ObjectBackendS3), "4Ti", s3},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()

@@ -262,14 +262,20 @@ func dataPodBootWindow(class *crewletaiv1alpha1.EngineClass) int32 {
 
 // dataPodStartupSeconds is how long a data pod's engine may take to answer
 // /health 200, which it does once it has recovered what its volume holds (503
-// before, from the moment it binds): the class's spec.data.startupSeconds,
-// which the API holds to dataPodBootWindow at least, or, unset, the boot's
-// own bounds plus the recovery of a full volume. The volume is
-// dataVolumeSize's, which moves under a running company only when its owner
-// grows its claim, and the window grows with what it then holds.
+// before, from the moment it binds): the class's spec.data.startupSeconds, or,
+// unset, the boot's own bounds plus the recovery of a full volume, and never
+// less than those bounds (dataPodBootWindow). The volume is dataVolumeSize's,
+// which moves under a running company only when its owner grows its claim,
+// and the window grows with what it then holds.
 func dataPodStartupSeconds(class *crewletaiv1alpha1.EngineClass, volume resource.Quantity) int32 {
+	boot := dataPodBootWindow(class)
+	// The class's own window gives way to the boot's bounds where it falls
+	// under them. The API refuses such a window when it is written, but the
+	// API server's ratcheting keeps one stored under an older floor, which an
+	// engine whose boot waits longer has since raised, and a window under the
+	// bounds restarts a boot the engine would finish, into the same boot.
 	if s := class.Spec.Data.StartupSeconds; s > 0 {
-		return s
+		return max(s, boot)
 	}
 	const gibibyte = 1 << 30
 	// A volume too large for the sum below to be taken in an int64 takes the
@@ -280,7 +286,6 @@ func dataPodStartupSeconds(class *crewletaiv1alpha1.EngineClass, volume resource
 	if volume.CmpInt64(math.MaxInt64-gibibyte) > 0 {
 		return maxStartupSeconds
 	}
-	boot := dataPodBootWindow(class)
 	recovery := (volume.Value() + gibibyte - 1) / gibibyte * dataPodRecoverySecondsPerGiB
 	// Never under the boot's own window: a quantity below zero, which no
 	// claim has, would otherwise take a recovery's seconds away from it.
