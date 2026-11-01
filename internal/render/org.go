@@ -60,6 +60,7 @@ func (r *renderer) org() ([]roleDoc, []unitDoc) {
 
 	r.duplicateSeats()
 	r.headerSpellings()
+	r.valueNames()
 	r.atlassianAccounts()
 	r.scheduleTargets()
 	t := tree{children: children, members: members}
