@@ -31,7 +31,7 @@ import (
 // TestCredentialNameFollowsTheEngineSource.
 func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 	source := openSource(t, enginetest.Source(t))
-	raw, err := source.ReadFile("internal/providers/llm/cliagent/cliprofile/profiles.yaml")
+	raw, err := source.ReadFile("internal/providers/llm/harness/harnessprofile/profiles.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 	if err := yaml.Unmarshal(raw, &profiles); err != nil {
 		t.Fatal(err)
 	}
-	claudeCode := cliAgentName(v1alpha1.CLIAgentClaudeCode)
+	claudeCode := harnessName(v1alpha1.HarnessClaudeCode)
 	claude, ok := profiles[claudeCode]
 	if !ok {
 		t.Fatalf("the engine has no %s profile", claudeCode)
@@ -65,21 +65,22 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 	}
 }
 
-// TestRunnerCLIsFollowTheEngineSource holds the CLIs the render runs a seat's
-// executor on (RunnerCLIs) to the engine's two lists of them, in their order:
-// the coding agents it has an in-box runner for (codingagent.Names), and the
-// CLIs config lets run an executor (config.CodingAgents), which it refuses a
-// chain without and a runIn on any other CLI by. A CLI either gains moves
-// every verdict the render reaches on a chain, and the API's runIn rule
-// (TestRunnerCLIsAreTheRunIn).
-func TestRunnerCLIsFollowTheEngineSource(t *testing.T) {
+// TestExecutorHarnessesFollowTheEngineSource holds the harnesses the render
+// runs a seat's executor on (ExecutorHarnesses) to the engine's two lists of
+// them, in their order: the coding agents it has an in-box runner for
+// (executor.Names), and the harnesses config lets run an executor
+// (config.ExecutorHarnesses), which it refuses a chain without and a runIn on
+// any other harness by. A harness either gains moves every verdict the render
+// reaches on a chain, and the API's runIn rule
+// (TestExecutorHarnessesAreTheRunIn).
+func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 	source := openSource(t, enginetest.Source(t))
-	want := make([]string, len(RunnerCLIs))
-	for i, cli := range RunnerCLIs {
-		want[i] = cliAgentName(cli)
+	want := make([]string, len(ExecutorHarnesses))
+	for i, cli := range ExecutorHarnesses {
+		want[i] = harnessName(cli)
 	}
 
-	const names = "internal/sandbox/codingagent/names.go"
+	const names = "internal/sandbox/executor/names.go"
 	src, err := source.ReadFile(names)
 	if err != nil {
 		t.Fatal(err)
@@ -99,15 +100,15 @@ func TestRunnerCLIsFollowTheEngineSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := constsOf(t, source, path.Dir(providers))
-	list, ok := declared(t, providers, src, token.VAR, "CodingAgents").(*ast.CompositeLit)
+	list, ok := declared(t, providers, src, token.VAR, "ExecutorHarnesses").(*ast.CompositeLit)
 	if !ok {
-		t.Fatalf("CodingAgents in %s is no literal", providers)
+		t.Fatalf("ExecutorHarnesses in %s is no literal", providers)
 	}
 	got = make([]string, 0, len(list.Elts))
 	for _, elt := range list.Elts {
 		ident, ok := elt.(*ast.Ident)
 		if !ok {
-			t.Fatalf("CodingAgents in %s holds %T, not a constant's name", providers, elt)
+			t.Fatalf("ExecutorHarnesses in %s holds %T, not a constant's name", providers, elt)
 		}
 		got = append(got, config[ident.Name])
 	}
@@ -208,7 +209,7 @@ func fsReadDir(source *os.Root, dir string) ([]string, error) {
 
 // profileFile is the engine's file of CLI profiles, which declares how it
 // reads a credential's name (IsCredentialName and its credentialWords).
-const profileFile = "internal/providers/llm/cliagent/cliprofile/profile.go"
+const profileFile = "internal/providers/llm/harness/harnessprofile/profile.go"
 
 // credentialNameRules are the kinds whose CRDs read a credential's name, and
 // how many of their rules do (every other kind's, none): the LLMProvider

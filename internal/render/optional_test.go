@@ -335,7 +335,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 		{
 			name: "a seat's env whose executor chain holds no CLI that runs it",
 			mutate: func(in *Input) {
-				in.LLMProviders[0].Spec.Agent, in.LLMProviders[0].Spec.Model = v1alpha1.CLIAgentCodex, modelCodex
+				in.LLMProviders[0].Spec.Harness, in.LLMProviders[0].Spec.Model = v1alpha1.HarnessCodex, modelCodex
 			},
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: seatEnv,
 		},

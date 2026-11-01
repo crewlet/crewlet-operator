@@ -64,8 +64,8 @@ type MCPToolAnnotations struct {
 // that is not a letter or a digit and read without case, is KEY, KEYS,
 // APIKEY, ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL,
 // CREDENTIALS, AUTH, OAUTH or PAT, which is how Crewlet itself reads a
-// credential's name (cliprofile.IsCredentialName), or when it is one of the
-// HTTP headers that carry one, Authorization, Proxy-Authorization and
+// credential's name (harnessprofile.IsCredentialName), or when it is one of
+// the HTTP headers that carry one, Authorization, Proxy-Authorization and
 // Cookie; such a name takes valueFrom, never a literal. So GITLAB_TOKEN,
 // TAVILY_API_KEY and X-Api-Key come from Secrets, and JIRA_URL or
 // SLACK_MCP_ADD_MESSAGE_TOOL may be written out. The rule keeps a credential

@@ -28,7 +28,7 @@ metadata:
 spec:
   companyRef:
     name: helix
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: claude-sonnet-5
   auth:
     mode: APIKey

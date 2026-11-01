@@ -15,7 +15,7 @@ spec:
       size: 16Gi
   platformLLMProviders:
     - name: platform-claude
-      agent: ClaudeCode
+      harness: ClaudeCode
       model: claude-sonnet-5
       auth:
         mode: APIKey
@@ -26,7 +26,7 @@ spec:
     # Claude Code through the platform's gateway, which it reads from its
     # environment, on the tenant's virtual key.
     - name: platform-gateway
-      agent: ClaudeCode
+      harness: ClaudeCode
       model: sonnet
       timeoutSeconds: 120
       auth:
@@ -44,7 +44,7 @@ spec:
               key: baseURL
     # OpenCode on an open model, signed in by its model provider's key.
     - name: platform-open
-      agent: OpenCode
+      harness: OpenCode
       model: openrouter/meta-llama/llama-4-maverick
       maxConcurrent: 2
       auth:
@@ -79,7 +79,7 @@ metadata:
 spec:
   companyRef:
     name: managed
-  agent: Codex
+  harness: Codex
   model: gpt-5
   timeoutSeconds: 900
   auth:

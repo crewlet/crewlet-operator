@@ -90,8 +90,8 @@ var claudeCodeSignIn = slices.Concat([]string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHRO
 // credentialName is the names Crewlet reads as holding a credential, which
 // sign an env sign-in CLI in: one of their parts, cut at every character that
 // is not a letter or a digit, is, in any case, one of the words below
-// (cliprofile.IsCredentialName). It is the pattern of every rule of the API
-// that reads a credential's name, to which a test holds this copy: the
+// (harnessprofile.IsCredentialName). It is the pattern of every rule of the
+// API that reads a credential's name, to which a test holds this copy: the
 // LLMProvider and platform provider API's rules over env, which the CRD suite
 // holds to the engine's sign-in, and the tool-server API's refusal of a literal value
 // under such a name, which the CRD suite holds to the names the engine reads
@@ -104,13 +104,13 @@ const credentialNamePattern = `(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SE
 // cliEntry is what the verdicts on a seat read of a model provider's CLI, an
 // LLMProvider's or a platform provider's, the two kinds read alike.
 type cliEntry struct {
-	agent v1alpha1.CLIAgentName
+	harness v1alpha1.Harness
 	// runIn is the cell an LLMProvider names for its executor runs; a
 	// platform provider names none.
 	runIn v1alpha1.SandboxPlacement
 	// authMode is auth.mode, and token and bundle whether auth names a
 	// headless token or a credential bundle.
-	authMode      v1alpha1.CLIAgentAuthMode
+	authMode      v1alpha1.HarnessAuthMode
 	token, bundle bool
 	// env is the names of the provider's env.
 	env []string
@@ -119,7 +119,7 @@ type cliEntry struct {
 // ownEntry is what the verdicts read of an LLMProvider's spec.
 func ownEntry(s *v1alpha1.LLMProviderSpec) cliEntry {
 	e := cliEntry{
-		agent: s.Agent, runIn: s.RunIn, authMode: s.Auth.Mode,
+		harness: s.Harness, runIn: s.RunIn, authMode: s.Auth.Mode,
 		token: s.Auth.TokenSecretRef.Name != "", bundle: s.Auth.CredentialBundleSecretRef.Name != "",
 	}
 	for _, v := range s.Env {
@@ -132,7 +132,7 @@ func ownEntry(s *v1alpha1.LLMProviderSpec) cliEntry {
 // signed in with a key, never a token or a bundle, and placed by no runIn of
 // its own.
 func platformEntry(p *v1alpha1.PlatformLLMProvider) cliEntry {
-	e := cliEntry{agent: p.Agent, authMode: p.Auth.Mode}
+	e := cliEntry{harness: p.Harness, authMode: p.Auth.Mode}
 	for _, v := range p.Env {
 		e.env = append(e.env, v.Name)
 	}
@@ -156,14 +156,14 @@ func platformEntry(p *v1alpha1.PlatformLLMProvider) cliEntry {
 // named as a credential, in its env or the seat's environment, the seat's
 // winning a name.
 func (c *cliEntry) remoteSignIn(env envNames) (own bool, seat []string) {
-	if c.agent == v1alpha1.CLIAgentClaudeCode {
+	if c.harness == v1alpha1.HarnessClaudeCode {
 		switch c.authMode {
-		case v1alpha1.CLIAgentAuthAPIKey:
+		case v1alpha1.HarnessAuthAPIKey:
 			own = true
-		case v1alpha1.CLIAgentAuthEnv:
+		case v1alpha1.HarnessAuthEnv:
 			// Neither the token nor the key reaches the CLI: env alone
 			// signs it in, below.
-		case v1alpha1.CLIAgentAuthSubscription, "":
+		case v1alpha1.HarnessAuthSubscription, "":
 			own = c.token
 		}
 		own = own || slices.ContainsFunc(c.env, func(name string) bool { return slices.Contains(claudeCodeSignIn, name) })

@@ -39,13 +39,13 @@ func TestLLMProviderValidation(t *testing.T) {
 			want:   msgBlankModel,
 		},
 		{
-			name:   "a provider with no agent is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.Agent = "" },
-			want:   "spec.agent: Required value",
+			name:   "a provider with no harness is refused",
+			mutate: func(p *v1.LLMProvider) { p.Spec.Harness = "" },
+			want:   "spec.harness: Required value",
 		},
 		{
 			name:   "a provider with no auth is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.Auth = v1.CLIAgentAuth{} },
+			mutate: func(p *v1.LLMProvider) { p.Spec.Auth = v1.HarnessAuth{} },
 			want:   "spec.auth: Required value",
 		},
 		{
@@ -74,29 +74,29 @@ const msgWebTools = "webTools Denied takes a CLI Crewlet can turn the web off fo
 // list of CLIs to the engine's own verdict
 // (TestContractWebToolsDeniedFollowsTheEngine).
 func TestLLMProviderWebToolsValidation(t *testing.T) {
-	stance := func(agent v1.CLIAgentName, web v1.CLIAgentWebTools) func(*v1.LLMProvider) {
+	stance := func(harness v1.Harness, web v1.HarnessWebTools) func(*v1.LLMProvider) {
 		return func(p *v1.LLMProvider) {
-			p.Spec.Agent = agent
+			p.Spec.Harness = harness
 			p.Spec.WebTools = web
 		}
 	}
 	runCreateCases(t, llmProvider, []createCase[*v1.LLMProvider]{
-		{name: "web denied on Claude Code is accepted", mutate: stance(v1.CLIAgentClaudeCode, v1.CLIAgentWebToolsDenied)},
-		{name: "web denied on Codex is accepted", mutate: stance(v1.CLIAgentCodex, v1.CLIAgentWebToolsDenied)},
-		{name: "web allowed on Gemini CLI is accepted", mutate: stance(v1.CLIAgentGeminiCLI, v1.CLIAgentWebToolsAllowed)},
+		{name: "web denied on Claude Code is accepted", mutate: stance(v1.HarnessClaudeCode, v1.HarnessWebToolsDenied)},
+		{name: "web denied on Codex is accepted", mutate: stance(v1.HarnessCodex, v1.HarnessWebToolsDenied)},
+		{name: "web allowed on Gemini CLI is accepted", mutate: stance(v1.HarnessGeminiCLI, v1.HarnessWebToolsAllowed)},
 		{
 			name:   "web denied on Gemini CLI is refused",
-			mutate: stance(v1.CLIAgentGeminiCLI, v1.CLIAgentWebToolsDenied),
+			mutate: stance(v1.HarnessGeminiCLI, v1.HarnessWebToolsDenied),
 			want:   msgWebTools,
 		},
 		{
 			name:   "web denied on Grok is refused",
-			mutate: stance(v1.CLIAgentGrok, v1.CLIAgentWebToolsDenied),
+			mutate: stance(v1.HarnessGrok, v1.HarnessWebToolsDenied),
 			want:   msgWebTools,
 		},
 		{
 			name:   "a web stance outside the enum is refused",
-			mutate: stance(v1.CLIAgentClaudeCode, "Off"),
+			mutate: stance(v1.HarnessClaudeCode, "Off"),
 			want:   "spec.webTools: Unsupported value",
 		},
 	})
@@ -104,7 +104,7 @@ func TestLLMProviderWebToolsValidation(t *testing.T) {
 
 // The phrases the OpenCode model rule's message quotes from the engine's own
 // refusal of such a model: the error OpenCode 2 refuses it with, and the
-// command that lists the providers OpenCode knows. TestCLIAgentModelFollowsTheEngine
+// command that lists the providers OpenCode knows. TestHarnessModelFollowsTheEngine
 // holds the rule's message, the engine's refusal and docs/guides/cli-agents.md
 // to both.
 const (
@@ -147,21 +147,21 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	tokenProvider := func(namespace, name string) *v1.LLMProvider {
 		p := llmProvider(namespace, name)
 		p.Spec.Model = "sonnet"
-		p.Spec.Auth = v1.CLIAgentAuth{TokenSecretRef: secretKey("claude", "oauthToken")}
+		p.Spec.Auth = v1.HarnessAuth{TokenSecretRef: secretKey("claude", "oauthToken")}
 		return p
 	}
 	inE2B := func(p *v1.LLMProvider) { p.Spec.RunIn = v1.SandboxPlacementE2B }
 	// metered signs the provider in with auth mode APIKey on one key.
-	metered := v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey, APIKeySecretRef: secretKey(providerName, apiKeyKey)}
-	// keyInEnv signs agent in to a subscription with no login of its own,
+	metered := v1.HarnessAuth{Mode: v1.HarnessAuthAPIKey, APIKeySecretRef: secretKey(providerName, apiKeyKey)}
+	// keyInEnv signs harness in to a subscription with no login of its own,
 	// its model provider's key in env: the route Crewlet's Hermes, Pi and
 	// OpenCode profiles document, as they name no key variable for the
 	// engine to fill.
-	keyInEnv := func(agent v1.CLIAgentName, key string) func(*v1.LLMProvider) {
+	keyInEnv := func(harness v1.Harness, key string) func(*v1.LLMProvider) {
 		return func(p *v1.LLMProvider) {
 			p.Spec.Model = modelViaAnthropic
-			p.Spec.Agent = agent
-			p.Spec.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription}
+			p.Spec.Harness = harness
+			p.Spec.Auth = v1.HarnessAuth{Mode: v1.HarnessAuthSubscription}
 			p.Spec.Env = []v1.SecretEnvVar{{Name: key, ValueFrom: fromSecret("model-keys", "key")}}
 		}
 	}
@@ -172,7 +172,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			name: "every setting is accepted",
 			mutate: func(p *v1.LLMProvider) {
 				p.Spec.RunIn = v1.SandboxPlacementE2B
-				p.Spec.Auth.Mode = v1.CLIAgentAuthSubscription
+				p.Spec.Auth.Mode = v1.HarnessAuthSubscription
 				p.Spec.Env = []v1.SecretEnvVar{{Name: envProxy, ValueFrom: fromSecret("claude", "proxy")}}
 				p.Spec.TimeoutSeconds = 900
 				p.Spec.MaxConcurrent = 2
@@ -182,8 +182,8 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		{
 			name: "Codex on an exported login is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				p.Spec.Agent = v1.CLIAgentCodex
-				p.Spec.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("codex", "bundle")}
+				p.Spec.Harness = v1.HarnessCodex
+				p.Spec.Auth = v1.HarnessAuth{CredentialBundleSecretRef: secretKey("codex", "bundle")}
 			},
 		},
 		{
@@ -196,7 +196,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		{
 			name: "Codex on a metered key is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				p.Spec.Agent = v1.CLIAgentCodex
+				p.Spec.Harness = v1.HarnessCodex
 				p.Spec.Auth = metered
 			},
 		},
@@ -206,14 +206,14 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			// sandbox, where it signs OpenCode in.
 			name: "OpenCode in E2B on its model provider's key in env is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey)(p)
+				keyInEnv(v1.HarnessOpenCode, envAnthropicKey)(p)
 				inE2B(p)
 			},
 		},
 		{
 			name: "OpenCode run Direct through a gateway's key in env is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
+				keyInEnv(v1.HarnessOpenCode, "OPENROUTER_API_KEY")(p)
 				p.Spec.RunIn = v1.SandboxPlacementDirect
 				p.Spec.Model = modelViaOpenRouter
 			},
@@ -228,21 +228,21 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			mutate: func(p *v1.LLMProvider) {
 				inE2B(p)
 				p.Spec.Model = modelViaAnthropic
-				p.Spec.Agent = v1.CLIAgentOpenCode
-				p.Spec.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("opencode", "bundle")}
+				p.Spec.Harness = v1.HarnessOpenCode
+				p.Spec.Auth = v1.HarnessAuth{CredentialBundleSecretRef: secretKey("opencode", "bundle")}
 			},
 		},
 		{
 			name: "Claude Code in E2B on an exported login is accepted",
 			mutate: func(p *v1.LLMProvider) {
 				inE2B(p)
-				p.Spec.Auth = v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("claude", "bundle")}
+				p.Spec.Auth = v1.HarnessAuth{CredentialBundleSecretRef: secretKey("claude", "bundle")}
 			},
 		},
 		{
 			name: "OpenCode in E2B on a proxy alone in env is refused",
 			mutate: func(p *v1.LLMProvider) {
-				keyInEnv(v1.CLIAgentOpenCode, envProxy)(p)
+				keyInEnv(v1.HarnessOpenCode, envProxy)(p)
 				inE2B(p)
 			},
 			want: msgCLINoLogin,
@@ -251,7 +251,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			// Hermes signs in through env too, and has no in-box runner.
 			name: "Hermes with a runIn is refused",
 			mutate: func(p *v1.LLMProvider) {
-				keyInEnv(v1.CLIAgentHermes, "OPENROUTER_API_KEY")(p)
+				keyInEnv(v1.HarnessHermes, "OPENROUTER_API_KEY")(p)
 				inE2B(p)
 			},
 			want: msgCLIRunIn,
@@ -259,7 +259,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		{
 			name: "a headless token for a CLI other than Claude Code is refused",
 			mutate: func(p *v1.LLMProvider) {
-				p.Spec.Agent = v1.CLIAgentCodex
+				p.Spec.Harness = v1.HarnessCodex
 			},
 			want: msgCLIToken,
 		},
@@ -269,14 +269,14 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			name: "CursorAgent on a metered key is accepted",
 			mutate: func(p *v1.LLMProvider) {
 				p.Spec.Model = "auto"
-				p.Spec.Agent = v1.CLIAgentCursorAgent
+				p.Spec.Harness = v1.HarnessCursorAgent
 				p.Spec.Auth = metered
 			},
 		},
 		{
 			name: "auth mode APIKey for a CLI with no key variable is refused",
 			mutate: func(p *v1.LLMProvider) {
-				p.Spec.Agent = v1.CLIAgentHermes
+				p.Spec.Harness = v1.HarnessHermes
 				p.Spec.Auth = metered
 			},
 			want: msgCLIKeyAgent,
@@ -300,14 +300,14 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			// store and the engine's environment, which are not this
 			// object's to name.
 			name:   "auth mode APIKey without a key is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthAPIKey} },
+			mutate: func(p *v1.LLMProvider) { p.Spec.Auth = v1.HarnessAuth{Mode: v1.HarnessAuthAPIKey} },
 			want:   msgCLIKey,
 		},
 		{
 			name: "a runIn on a CLI with no in-box runner is refused",
 			mutate: func(p *v1.LLMProvider) {
 				p.Spec.RunIn = v1.SandboxPlacementDirect
-				p.Spec.Agent = v1.CLIAgentCodex
+				p.Spec.Harness = v1.HarnessCodex
 				p.Spec.Auth = metered
 			},
 			want: msgCLIRunIn,
@@ -316,34 +316,34 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			name: "a runIn refusal is reported at runIn",
 			mutate: func(p *v1.LLMProvider) {
 				inE2B(p)
-				p.Spec.Agent = v1.CLIAgentCodex
+				p.Spec.Harness = v1.HarnessCodex
 				p.Spec.Auth = metered
 			},
 			want: "spec.runIn: Invalid value",
 		},
 		{
 			name:   "a subscription with no login is refused",
-			mutate: func(p *v1.LLMProvider) { p.Spec.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription} },
+			mutate: func(p *v1.LLMProvider) { p.Spec.Auth = v1.HarnessAuth{Mode: v1.HarnessAuthSubscription} },
 			want:   msgCLINoLogin,
 		},
 		{
-			// The rule sits on spec, which sees the agent and env, and
+			// The rule sits on spec, which sees the harness and env, and
 			// reports the field a person has to change.
 			name:   "a subscription with no login is reported at auth",
-			mutate: func(p *v1.LLMProvider) { p.Spec.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthSubscription} },
+			mutate: func(p *v1.LLMProvider) { p.Spec.Auth = v1.HarnessAuth{Mode: v1.HarnessAuthSubscription} },
 			want:   atAuth,
 		},
 		{
 			// Crewlet compares a name's parts ignoring case.
 			name:   "Pi on a key in env under a lower-case name is accepted",
-			mutate: keyInEnv(v1.CLIAgentPi, "openrouter_api_key"),
+			mutate: keyInEnv(v1.HarnessPi, "openrouter_api_key"),
 		},
 		{
 			// A name whose parts are KEY or TOKEN only inside a longer
 			// word holds no credential to Crewlet, which reports such a
 			// CLI signed in to nothing.
 			name:   "Hermes on a count of model tokens in env is refused",
-			mutate: keyInEnv(v1.CLIAgentHermes, "HERMES_MAX_TOKENS"),
+			mutate: keyInEnv(v1.HarnessHermes, "HERMES_MAX_TOKENS"),
 			want:   msgCLINoLogin,
 		},
 		{
@@ -353,14 +353,14 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			// bundle's auth.json. Neither is refused.
 			name: "Hermes on an exported login beside a key in env is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				keyInEnv(v1.CLIAgentHermes, "OPENROUTER_API_KEY")(p)
+				keyInEnv(v1.HarnessHermes, "OPENROUTER_API_KEY")(p)
 				p.Spec.Auth.CredentialBundleSecretRef = secretKey("hermes", "bundle")
 			},
 		},
 		{
 			name: "Hermes on a subscription with neither a login nor env is refused",
 			mutate: func(p *v1.LLMProvider) {
-				keyInEnv(v1.CLIAgentHermes, "OPENROUTER_API_KEY")(p)
+				keyInEnv(v1.HarnessHermes, "OPENROUTER_API_KEY")(p)
 				p.Spec.Env = nil
 			},
 			want: msgCLINoLogin,
@@ -368,7 +368,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		{
 			name: "a subscription token beside auth mode APIKey is refused",
 			mutate: func(p *v1.LLMProvider) {
-				p.Spec.Auth.Mode = v1.CLIAgentAuthAPIKey
+				p.Spec.Auth.Mode = v1.HarnessAuthAPIKey
 				p.Spec.Auth.APIKeySecretRef = secretKey(providerName, apiKeyKey)
 			},
 			want: msgCLILoginFields,
@@ -378,12 +378,12 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			// in many fields of the company document can have the engine
 			// send anywhere, and the CLI's own children can read.
 			name:   "a login inherited from the engine's environment is not offered",
-			mutate: func(p *v1.LLMProvider) { p.Spec.Auth = v1.CLIAgentAuth{Mode: "InheritEnv"} },
+			mutate: func(p *v1.LLMProvider) { p.Spec.Auth = v1.HarnessAuth{Mode: "InheritEnv"} },
 			want:   `Unsupported value: "InheritEnv"`,
 		},
 		{
 			name:   "Crewlet's custom profile is not offered",
-			mutate: func(p *v1.LLMProvider) { p.Spec.Agent = "Custom" },
+			mutate: func(p *v1.LLMProvider) { p.Spec.Harness = "Custom" },
 			want:   `Unsupported value: "Custom"`,
 		},
 		{
@@ -399,25 +399,25 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	// CLI whose profile names a key variable (Codex's CODEX_API_KEY) has it
 	// dropped under Subscription, so the key would never reach it; one whose
 	// profile names none (KimiCode) reads a key only from its own files.
-	for _, agent := range llmProviderEnum(t, "spec", "agent") {
-		if slices.Contains(envSignIn, v1.CLIAgentName(agent)) {
+	for _, harness := range llmProviderEnum(t, "spec", "harness") {
+		if slices.Contains(envSignIn, v1.Harness(harness)) {
 			cases = append(cases,
 				createCase[*v1.LLMProvider]{
-					name:   agent + " on its model provider's key in env is accepted",
-					mutate: keyInEnv(v1.CLIAgentName(agent), "OPENROUTER_API_KEY"),
+					name:   harness + " on its model provider's key in env is accepted",
+					mutate: keyInEnv(v1.Harness(harness), "OPENROUTER_API_KEY"),
 				},
 				createCase[*v1.LLMProvider]{
 					// A proxy is configuration, and signs the CLI in
 					// to nothing.
-					name:   agent + " on a proxy alone in env is refused",
-					mutate: keyInEnv(v1.CLIAgentName(agent), envProxy),
+					name:   harness + " on a proxy alone in env is refused",
+					mutate: keyInEnv(v1.Harness(harness), envProxy),
 					want:   msgCLINoLogin,
 				})
 			continue
 		}
 		cases = append(cases, createCase[*v1.LLMProvider]{
-			name:   agent + " on a key in env is refused",
-			mutate: keyInEnv(v1.CLIAgentName(agent), "OPENROUTER_API_KEY"),
+			name:   harness + " on a key in env is refused",
+			mutate: keyInEnv(v1.Harness(harness), "OPENROUTER_API_KEY"),
 			want:   msgCLINoLogin,
 		})
 	}
@@ -427,17 +427,17 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	// credential. Each CLI is signed in some other way the API admits, a
 	// bundle beside a token variable and its own key beside a key variable,
 	// so the variable is the only fault.
-	bundle := v1.CLIAgentAuth{CredentialBundleSecretRef: secretKey("cli", "bundle")}
-	for _, agent := range slices.Sorted(maps.Keys(cliVariables)) {
-		own := cliVariables[agent]
+	bundle := v1.HarnessAuth{CredentialBundleSecretRef: secretKey("cli", "bundle")}
+	for _, harness := range slices.Sorted(maps.Keys(cliVariables)) {
+		own := cliVariables[harness]
 		for _, variable := range []string{own.headless, own.key} {
 			if variable == "" {
 				continue
 			}
 			cases = append(cases, createCase[*v1.LLMProvider]{
-				name: fmt.Sprintf("%s with its own %s in env is refused", agent, variable),
+				name: fmt.Sprintf("%s with its own %s in env is refused", harness, variable),
 				mutate: func(p *v1.LLMProvider) {
-					p.Spec.Agent = agent
+					p.Spec.Harness = harness
 					p.Spec.Auth = bundle
 					if variable == own.key {
 						p.Spec.Auth = metered
@@ -461,7 +461,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			// Another CLI's variable is that CLI's business: OpenCode
 			// reads ANTHROPIC_API_KEY as its model provider's key.
 			name:   "another CLI's key variable in env is accepted",
-			mutate: keyInEnv(v1.CLIAgentOpenCode, envAnthropicKey),
+			mutate: keyInEnv(v1.HarnessOpenCode, envAnthropicKey),
 		},
 	)
 	// Crewlet sets HOME, the XDG directories and TMPDIR on every call of
@@ -470,19 +470,19 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	// directory; env is layered over them, so Crewlet refuses each in env.
 	// Each CLI is signed in with a bundle, which the API admits for every
 	// one, so the variable is the only fault.
-	inEnvBesideBundle := func(agent v1.CLIAgentName, variable string) func(*v1.LLMProvider) {
+	inEnvBesideBundle := func(harness v1.Harness, variable string) func(*v1.LLMProvider) {
 		return func(p *v1.LLMProvider) {
 			p.Spec.Model = modelViaAnthropic
-			p.Spec.Agent = agent
+			p.Spec.Harness = harness
 			p.Spec.Auth = bundle
 			p.Spec.Env = []v1.SecretEnvVar{{Name: variable, ValueFrom: fromSecret("cli", "value")}}
 		}
 	}
-	for _, agent := range llmProviderEnum(t, "spec", "agent") {
-		name := v1.CLIAgentName(agent)
+	for _, harness := range llmProviderEnum(t, "spec", "harness") {
+		name := v1.Harness(harness)
 		for _, variable := range append(slices.Clone(homeIsolation), cliIsolation[name]...) {
 			cases = append(cases, createCase[*v1.LLMProvider]{
-				name:   fmt.Sprintf("%s with %s in env is refused", agent, variable),
+				name:   fmt.Sprintf("%s with %s in env is refused", harness, variable),
 				mutate: inEnvBesideBundle(name, variable),
 				want:   msgCLIIsolation,
 			})
@@ -492,46 +492,46 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		createCase[*v1.LLMProvider]{
 			// The rule sits on spec, and reports the field to change.
 			name:   "an isolation variable in env is reported at env",
-			mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, "HOME"),
+			mutate: inEnvBesideBundle(v1.HarnessClaudeCode, "HOME"),
 			want:   atEnv,
 		},
 		createCase[*v1.LLMProvider]{
 			// A profile's own directory is its CLI's alone: OpenCode
 			// does not read Codex's.
 			name:   "another CLI's configuration directory in env is accepted",
-			mutate: inEnvBesideBundle(v1.CLIAgentOpenCode, "CODEX_HOME"),
+			mutate: inEnvBesideBundle(v1.HarnessOpenCode, "CODEX_HOME"),
 		},
 		createCase[*v1.LLMProvider]{
 			// Crewlet matches a variable's name exactly, as the
 			// environment does.
 			name:   "an isolation variable's name in lower case is accepted",
-			mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, "home"),
+			mutate: inEnvBesideBundle(v1.HarnessClaudeCode, "home"),
 		},
 		createCase[*v1.LLMProvider]{
 			name:   "TZ in env is reported at env",
-			mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, "TZ"),
+			mutate: inEnvBesideBundle(v1.HarnessClaudeCode, "TZ"),
 			want:   atEnv,
 		},
 		createCase[*v1.LLMProvider]{
 			name:   "a zone's name in lower case is accepted",
-			mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, "tz"),
+			mutate: inEnvBesideBundle(v1.HarnessClaudeCode, "tz"),
 		},
 	)
 	// Crewlet hands every CLI it starts the engine's own zone, and reads its
 	// limit resets in it, so it refuses TZ in env for every CLI.
-	for _, agent := range llmProviderEnum(t, "spec", "agent") {
+	for _, harness := range llmProviderEnum(t, "spec", "harness") {
 		cases = append(cases, createCase[*v1.LLMProvider]{
-			name:   agent + " with TZ in env is refused",
-			mutate: inEnvBesideBundle(v1.CLIAgentName(agent), "TZ"),
+			name:   harness + " with TZ in env is refused",
+			mutate: inEnvBesideBundle(v1.Harness(harness), "TZ"),
 			want:   msgCLIZone,
 		})
 	}
 	// Qwen Code keeps no login of its own in the builds Crewlet supports, so
 	// under Subscription it would sign in to nothing, whatever it is handed.
-	qwen := func(auth v1.CLIAgentAuth) func(*v1.LLMProvider) {
+	qwen := func(auth v1.HarnessAuth) func(*v1.LLMProvider) {
 		return func(p *v1.LLMProvider) {
 			p.Spec.Model = "qwen3-coder-plus"
-			p.Spec.Agent = v1.CLIAgentQwenCode
+			p.Spec.Harness = v1.HarnessQwenCode
 			p.Spec.Auth = auth
 		}
 	}
@@ -555,29 +555,29 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	// its sign-in from its environment at the login its seat's home holds
 	// (GeminiCLI's GOOGLE_GENAI_USE_GCA), so it refuses that variable in env
 	// there; under APIKey it sets nothing, and the variable is the operator's.
-	for agent, variables := range subscriptionEnv {
+	for harness, variables := range subscriptionEnv {
 		for _, variable := range variables {
 			cases = append(cases,
 				createCase[*v1.LLMProvider]{
-					name:   fmt.Sprintf("%s with %s in env under Subscription is refused", agent, variable),
-					mutate: inEnvBesideBundle(agent, variable),
+					name:   fmt.Sprintf("%s with %s in env under Subscription is refused", harness, variable),
+					mutate: inEnvBesideBundle(harness, variable),
 					want:   msgCLISubscriptionEnv,
 				},
 				createCase[*v1.LLMProvider]{
-					name: fmt.Sprintf("%s with %s in env under APIKey is accepted", agent, variable),
+					name: fmt.Sprintf("%s with %s in env under APIKey is accepted", harness, variable),
 					mutate: func(p *v1.LLMProvider) {
-						inEnvBesideBundle(agent, variable)(p)
+						inEnvBesideBundle(harness, variable)(p)
 						p.Spec.Auth = metered
 					},
 				},
 				createCase[*v1.LLMProvider]{
 					// Another CLI's variable is that CLI's business.
 					name:   fmt.Sprintf("another CLI with %s in env under Subscription is accepted", variable),
-					mutate: inEnvBesideBundle(v1.CLIAgentClaudeCode, variable),
+					mutate: inEnvBesideBundle(v1.HarnessClaudeCode, variable),
 				},
 				createCase[*v1.LLMProvider]{
 					name:   fmt.Sprintf("%s in env under Subscription is reported at env", variable),
-					mutate: inEnvBesideBundle(agent, variable),
+					mutate: inEnvBesideBundle(harness, variable),
 					want:   atEnv,
 				})
 		}
@@ -589,11 +589,11 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	// one, and a CLI whose profile has neither cannot take the mode. A name
 	// of sign_in_env is refused under every other mode, which hands the CLI a
 	// credential of its own beside it.
-	envMode := func(agent v1.CLIAgentName, names ...string) func(*v1.LLMProvider) {
+	envMode := func(harness v1.Harness, names ...string) func(*v1.LLMProvider) {
 		return func(p *v1.LLMProvider) {
 			p.Spec.Model = modelViaAnthropic
-			p.Spec.Agent = agent
-			p.Spec.Auth = v1.CLIAgentAuth{Mode: v1.CLIAgentAuthEnv}
+			p.Spec.Harness = harness
+			p.Spec.Auth = v1.HarnessAuth{Mode: v1.HarnessAuthEnv}
 			p.Spec.Env = nil
 			for _, name := range names {
 				p.Spec.Env = append(p.Spec.Env, v1.SecretEnvVar{Name: name, ValueFrom: fromSecret("cloud", name)})
@@ -603,17 +603,17 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	cases = append(cases,
 		createCase[*v1.LLMProvider]{
 			name: "Claude Code on Bedrock under auth mode Env is accepted",
-			mutate: envMode(v1.CLIAgentClaudeCode,
+			mutate: envMode(v1.HarnessClaudeCode,
 				"CLAUDE_CODE_USE_BEDROCK", "AWS_REGION", "AWS_BEARER_TOKEN_BEDROCK"),
 		},
 		createCase[*v1.LLMProvider]{
 			name:   "Claude Code through a gateway's token under auth mode Env is accepted",
-			mutate: envMode(v1.CLIAgentClaudeCode, envBaseURL, "ANTHROPIC_AUTH_TOKEN"),
+			mutate: envMode(v1.HarnessClaudeCode, envBaseURL, "ANTHROPIC_AUTH_TOKEN"),
 		},
 		createCase[*v1.LLMProvider]{
 			name: "Claude Code in E2B under auth mode Env is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				envMode(v1.CLIAgentClaudeCode, "CLAUDE_CODE_USE_VERTEX", "CLOUD_ML_REGION")(p)
+				envMode(v1.HarnessClaudeCode, "CLAUDE_CODE_USE_VERTEX", "CLOUD_ML_REGION")(p)
 				inE2B(p)
 			},
 		},
@@ -621,29 +621,29 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			// A gateway's address says where the calls go, not whom
 			// they are made as.
 			name:   "Claude Code on a gateway's address alone under auth mode Env is refused",
-			mutate: envMode(v1.CLIAgentClaudeCode, envBaseURL),
+			mutate: envMode(v1.HarnessClaudeCode, envBaseURL),
 			want:   msgCLIEnvUnset,
 		},
 		createCase[*v1.LLMProvider]{
 			name:   "Claude Code under auth mode Env with no env is refused",
-			mutate: envMode(v1.CLIAgentClaudeCode),
+			mutate: envMode(v1.HarnessClaudeCode),
 			want:   msgCLIEnvUnset,
 		},
 		createCase[*v1.LLMProvider]{
 			name:   "an env that signs nothing in under auth mode Env is reported at env",
-			mutate: envMode(v1.CLIAgentClaudeCode, envBaseURL),
+			mutate: envMode(v1.HarnessClaudeCode, envBaseURL),
 			want:   atEnv,
 		},
 		createCase[*v1.LLMProvider]{
 			// Another CLI's key signs Claude Code in to nothing.
 			name:   "Claude Code on a model provider's key under auth mode Env is refused",
-			mutate: envMode(v1.CLIAgentClaudeCode, "OPENROUTER_API_KEY"),
+			mutate: envMode(v1.HarnessClaudeCode, "OPENROUTER_API_KEY"),
 			want:   msgCLIEnvUnset,
 		},
 		createCase[*v1.LLMProvider]{
 			name: "a headless token under auth mode Env is refused",
 			mutate: func(p *v1.LLMProvider) {
-				envMode(v1.CLIAgentClaudeCode, "ANTHROPIC_AUTH_TOKEN")(p)
+				envMode(v1.HarnessClaudeCode, "ANTHROPIC_AUTH_TOKEN")(p)
 				p.Spec.Auth.TokenSecretRef = secretKey("claude", "oauthToken")
 			},
 			want: msgCLILoginFields,
@@ -651,7 +651,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		createCase[*v1.LLMProvider]{
 			name: "a bundle under auth mode Env is refused",
 			mutate: func(p *v1.LLMProvider) {
-				envMode(v1.CLIAgentClaudeCode, "ANTHROPIC_AUTH_TOKEN")(p)
+				envMode(v1.HarnessClaudeCode, "ANTHROPIC_AUTH_TOKEN")(p)
 				p.Spec.Auth.CredentialBundleSecretRef = secretKey("claude", "bundle")
 			},
 			want: msgCLILoginFields,
@@ -659,35 +659,35 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		createCase[*v1.LLMProvider]{
 			name: "a key under auth mode Env is refused",
 			mutate: func(p *v1.LLMProvider) {
-				envMode(v1.CLIAgentClaudeCode, "ANTHROPIC_AUTH_TOKEN")(p)
+				envMode(v1.HarnessClaudeCode, "ANTHROPIC_AUTH_TOKEN")(p)
 				p.Spec.Auth.APIKeySecretRef = secretKey(providerName, apiKeyKey)
 			},
 			want: msgCLIKey,
 		},
 		createCase[*v1.LLMProvider]{
 			name:   "the CLI's own key variable in env under auth mode Env is refused",
-			mutate: envMode(v1.CLIAgentClaudeCode, "ANTHROPIC_AUTH_TOKEN", envAnthropicKey),
+			mutate: envMode(v1.HarnessClaudeCode, "ANTHROPIC_AUTH_TOKEN", envAnthropicKey),
 			want:   msgCLIOwnVariable,
 		},
 	)
-	for _, agent := range llmProviderEnum(t, "spec", "agent") {
-		name := v1.CLIAgentName(agent)
+	for _, harness := range llmProviderEnum(t, "spec", "harness") {
+		name := v1.Harness(harness)
 		switch {
 		case slices.Contains(envSignIn, name):
 			cases = append(cases,
 				createCase[*v1.LLMProvider]{
-					name:   agent + " on its model provider's key under auth mode Env is accepted",
+					name:   harness + " on its model provider's key under auth mode Env is accepted",
 					mutate: envMode(name, "OPENROUTER_API_KEY"),
 				},
 				createCase[*v1.LLMProvider]{
-					name:   agent + " on a proxy alone under auth mode Env is refused",
+					name:   harness + " on a proxy alone under auth mode Env is refused",
 					mutate: envMode(name, envProxy),
 					want:   msgCLIEnvUnset,
 				},
 				createCase[*v1.LLMProvider]{
 					// A cloud switch is no credential, and signs only
 					// Claude Code in.
-					name:   agent + " on Claude Code's cloud switch under auth mode Env is refused",
+					name:   harness + " on Claude Code's cloud switch under auth mode Env is refused",
 					mutate: envMode(name, "CLAUDE_CODE_USE_BEDROCK"),
 					want:   msgCLIEnvUnset,
 				})
@@ -696,47 +696,47 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 		default:
 			cases = append(cases,
 				createCase[*v1.LLMProvider]{
-					name:   agent + " under auth mode Env is refused",
+					name:   harness + " under auth mode Env is refused",
 					mutate: envMode(name, "OPENROUTER_API_KEY", "ANTHROPIC_AUTH_TOKEN"),
 					want:   msgCLIEnvAgent,
 				},
 				createCase[*v1.LLMProvider]{
-					name:   agent + " under auth mode Env is reported at auth",
+					name:   harness + " under auth mode Env is reported at auth",
 					mutate: envMode(name, "OPENROUTER_API_KEY"),
 					want:   atAuth,
 				})
 		}
 	}
-	for agent, names := range signInEnv {
+	for harness, names := range signInEnv {
 		for _, variable := range names {
 			cases = append(cases,
 				createCase[*v1.LLMProvider]{
-					name:   fmt.Sprintf("%s on %s under auth mode Env is accepted", agent, variable),
-					mutate: envMode(agent, variable),
+					name:   fmt.Sprintf("%s on %s under auth mode Env is accepted", harness, variable),
+					mutate: envMode(harness, variable),
 				},
 				createCase[*v1.LLMProvider]{
-					name:   fmt.Sprintf("%s with %s in env under Subscription is refused", agent, variable),
-					mutate: inEnvBesideBundle(agent, variable),
+					name:   fmt.Sprintf("%s with %s in env under Subscription is refused", harness, variable),
+					mutate: inEnvBesideBundle(harness, variable),
 					want:   msgCLIEnvOnly,
 				},
 				createCase[*v1.LLMProvider]{
-					name: fmt.Sprintf("%s with %s in env under APIKey is refused", agent, variable),
+					name: fmt.Sprintf("%s with %s in env under APIKey is refused", harness, variable),
 					mutate: func(p *v1.LLMProvider) {
-						inEnvBesideBundle(agent, variable)(p)
+						inEnvBesideBundle(harness, variable)(p)
 						p.Spec.Auth = metered
 					},
 					want: msgCLIEnvOnly,
 				},
 				createCase[*v1.LLMProvider]{
 					name:   fmt.Sprintf("%s in env under Subscription is reported at env", variable),
-					mutate: inEnvBesideBundle(agent, variable),
+					mutate: inEnvBesideBundle(harness, variable),
 					want:   atEnv,
 				},
 				createCase[*v1.LLMProvider]{
 					// The name signs only its own CLI in: to OpenCode it
 					// is a variable like any other.
 					name:   fmt.Sprintf("another CLI with %s in env under Subscription is accepted", variable),
-					mutate: inEnvBesideBundle(v1.CLIAgentOpenCode, variable),
+					mutate: inEnvBesideBundle(v1.HarnessOpenCode, variable),
 				})
 		}
 	}
@@ -746,7 +746,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 	// Unicode spaces beyond ASCII's among it.
 	openCodeModel := func(model string, runIn v1.SandboxPlacement) func(*v1.LLMProvider) {
 		return func(p *v1.LLMProvider) {
-			keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
+			keyInEnv(v1.HarnessOpenCode, "OPENROUTER_API_KEY")(p)
 			p.Spec.RunIn = runIn
 			p.Spec.Model = model
 		}
@@ -784,7 +784,7 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 			// without one.
 			name: "a Hermes model with no provider is accepted",
 			mutate: func(p *v1.LLMProvider) {
-				keyInEnv(v1.CLIAgentHermes, "OPENROUTER_API_KEY")(p)
+				keyInEnv(v1.HarnessHermes, "OPENROUTER_API_KEY")(p)
 				p.Spec.Model = claudeModel
 			},
 		},
@@ -800,25 +800,25 @@ func TestLLMProviderSignInValidation(t *testing.T) {
 func TestLLMProviderEnvSignInEmptyEnv(t *testing.T) {
 	namespace := newNamespace(t)
 	type probe struct {
-		agent v1.CLIAgentName
-		mode  v1.CLIAgentAuthMode
-		want  string
+		harness v1.Harness
+		mode    v1.HarnessAuthMode
+		want    string
 	}
 	probes := make([]probe, 0, 2*len(envSignIn)+len(signInEnv))
-	for _, agent := range envSignIn {
+	for _, harness := range envSignIn {
 		probes = append(probes,
-			probe{agent: agent, mode: v1.CLIAgentAuthSubscription, want: msgCLINoLogin},
-			probe{agent: agent, mode: v1.CLIAgentAuthEnv, want: msgCLIEnvUnset})
+			probe{harness: harness, mode: v1.HarnessAuthSubscription, want: msgCLINoLogin},
+			probe{harness: harness, mode: v1.HarnessAuthEnv, want: msgCLIEnvUnset})
 	}
-	for _, agent := range slices.Sorted(maps.Keys(signInEnv)) {
-		probes = append(probes, probe{agent: agent, mode: v1.CLIAgentAuthEnv, want: msgCLIEnvUnset})
+	for _, harness := range slices.Sorted(maps.Keys(signInEnv)) {
+		probes = append(probes, probe{harness: harness, mode: v1.HarnessAuthEnv, want: msgCLIEnvUnset})
 	}
 	for _, pr := range probes {
-		t.Run(string(pr.agent)+" "+string(pr.mode), func(t *testing.T) {
-			p := llmProvider(namespace, strings.ToLower(string(pr.agent)))
-			p.Spec.Agent = pr.agent
+		t.Run(string(pr.harness)+" "+string(pr.mode), func(t *testing.T) {
+			p := llmProvider(namespace, strings.ToLower(string(pr.harness)))
+			p.Spec.Harness = pr.harness
 			p.Spec.Model = modelViaAnthropic
-			p.Spec.Auth = v1.CLIAgentAuth{Mode: pr.mode}
+			p.Spec.Auth = v1.HarnessAuth{Mode: pr.mode}
 			content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(p)
 			if err != nil {
 				t.Fatal(err)

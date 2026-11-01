@@ -359,10 +359,10 @@ var _ = Describe("Company config", Ordered, func() {
 				// test's engine is not given a binary of: no seat ever
 				// reaches a model.
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
+					Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: cliModel,
 				},
-				Auth: crewletaiv1alpha1.CLIAgentAuth{
-					Mode:            crewletaiv1alpha1.CLIAgentAuthAPIKey,
+				Auth: crewletaiv1alpha1.HarnessAuth{
+					Mode:            crewletaiv1alpha1.HarnessAuthAPIKey,
 					APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey},
 				},
 			},
@@ -1197,10 +1197,10 @@ var _ = Describe("Company config", Ordered, func() {
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
 				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
+					Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: cliModel,
 				},
 				RunIn: crewletaiv1alpha1.SandboxPlacementE2B,
-				Auth: crewletaiv1alpha1.CLIAgentAuth{
+				Auth: crewletaiv1alpha1.HarnessAuth{
 					CredentialBundleSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-bundle", Key: llmKey},
 				},
 			},
@@ -1242,10 +1242,10 @@ var _ = Describe("Company config", Ordered, func() {
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
 				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-					Agent: crewletaiv1alpha1.CLIAgentCodex, Model: "gpt-5",
+					Harness: crewletaiv1alpha1.HarnessCodex, Model: "gpt-5",
 				},
-				Auth: crewletaiv1alpha1.CLIAgentAuth{
-					Mode:            crewletaiv1alpha1.CLIAgentAuthAPIKey,
+				Auth: crewletaiv1alpha1.HarnessAuth{
+					Mode:            crewletaiv1alpha1.HarnessAuthAPIKey,
 					APIKeySecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey},
 				},
 			},
@@ -1663,10 +1663,10 @@ var _ = Describe("Company config", Ordered, func() {
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
 				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-					Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: cliModel,
+					Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: cliModel,
 				},
 				RunIn: crewletaiv1alpha1.SandboxPlacementE2B,
-				Auth:  crewletaiv1alpha1.CLIAgentAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
+				Auth:  crewletaiv1alpha1.HarnessAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},
 			},
 		}
 		Expect(k8sClient.Create(ctx, remote)).To(Succeed())

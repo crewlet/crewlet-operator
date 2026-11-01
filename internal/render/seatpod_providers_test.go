@@ -17,19 +17,19 @@ import (
 func TestSeatPodProviders(t *testing.T) {
 	bundled := func(in *Input) {
 		p := cliProvider()
-		p.Spec.Auth = v1alpha1.CLIAgentAuth{
+		p.Spec.Auth = v1alpha1.HarnessAuth{
 			CredentialBundleSecretRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "bundle"},
 		}
 		in.LLMProviders = append(in.LLMProviders, p)
 	}
 	// keyInEnv is a CLI signed in through env, its model provider's key, as
 	// the seat's reviewer: Hermes and Pi run no executor.
-	keyInEnv := func(agent v1alpha1.CLIAgentName) func(*Input) {
+	keyInEnv := func(harness v1alpha1.Harness) func(*Input) {
 		return func(in *Input) {
 			p := cliProvider()
 			p.Spec.Model = modelOpenCode
-			p.Spec.Agent = agent
-			p.Spec.Auth = v1alpha1.CLIAgentAuth{Mode: v1alpha1.CLIAgentAuthSubscription}
+			p.Spec.Harness = harness
+			p.Spec.Auth = v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthSubscription}
 			p.Spec.Env = []v1alpha1.SecretEnvVar{{
 				Name:      envGatewayKey,
 				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "openrouter"}},
@@ -75,15 +75,15 @@ func TestSeatPodProviders(t *testing.T) {
 			// A key in env is a ${NAME} each pod resolves from the
 			// fleet's store, and nothing refreshes it.
 			name:   "Hermes on a key in env in a pool",
-			mutate: keyInEnv(v1alpha1.CLIAgentHermes),
+			mutate: keyInEnv(v1alpha1.HarnessHermes),
 		},
 		{
 			name:   "Pi on a key in env in a pool",
-			mutate: keyInEnv(v1alpha1.CLIAgentPi),
+			mutate: keyInEnv(v1alpha1.HarnessPi),
 		},
 		{
 			name:   "OpenCode on a key in env in a pool",
-			mutate: keyInEnv(v1alpha1.CLIAgentOpenCode),
+			mutate: keyInEnv(v1alpha1.HarnessOpenCode),
 		},
 		{
 			name: "a headless token in a pool",

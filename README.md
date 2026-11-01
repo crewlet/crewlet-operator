@@ -172,7 +172,7 @@ metadata:
 spec:
   companyRef:
     name: acme
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: claude-sonnet-5
   auth:
     mode: APIKey
