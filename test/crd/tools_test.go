@@ -362,8 +362,12 @@ func TestMCPServerValidation(t *testing.T) {
 			want:   msgPlainHTTP,
 		},
 		{
-			name:   "plain http to a shared address space host is refused",
-			mutate: asHTTP(func(s *v1.MCPServer) { s.Spec.URL = "http://100.64.1.1/mcp" }),
+			name:   "plain http to a shared address space host is accepted",
+			mutate: asHTTP(func(s *v1.MCPServer) { s.Spec.URL = "http://100.127.255.254/mcp" }),
+		},
+		{
+			name:   "plain http just past the shared address space is refused",
+			mutate: asHTTP(func(s *v1.MCPServer) { s.Spec.URL = "http://100.128.0.1/mcp" }),
 			want:   msgPlainHTTP,
 		},
 		{

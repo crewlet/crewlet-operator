@@ -91,8 +91,8 @@ holding back the document every other object of the Company is in:
   it, as it reports one another server's tool of the same name is offered in
   place of (`shadowed_tools`).
 - **`url`** is `https`, or plain `http` only to a host on no public network,
-  since every request carries the server's credentials: a loopback, private
-  or link-local address, a one-label name such as a Service's own name in its
+  since every request carries the server's credentials: a loopback, private,
+  link-local or shared (RFC 6598) address, a one-label name such as a Service's own name in its
   namespace, `localhost`, or a name under `.localhost`, `.local` (a Service's
   `<name>.<namespace>.svc.cluster.local`), `.home.arpa` or `.internal`.
 
