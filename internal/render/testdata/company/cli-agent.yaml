@@ -67,6 +67,7 @@ providers:
   - opencode
   - pi
   sandbox:
+    commit_attribution: false
     default_run_in: direct
     e2b:
       api_key: ${K8S_E2B_API_KEY_GSEHAAV5THN5}

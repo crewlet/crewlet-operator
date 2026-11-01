@@ -88,6 +88,7 @@ func fullCompany(c *v1.Company) {
 		DefaultRunIn:           v1.SandboxPlacementE2B,
 		E2B:                    v1.E2BSandbox{APIKeySecretRef: secretKey("e2b", apiKeyKey)},
 		DefaultPauseTTLSeconds: new(int32(0)),
+		CommitAttribution:      new(false),
 	}
 	// One object and one scalar: a value may be any JSON value.
 	c.Spec.EngineConfig = []v1.EngineConfigEntry{

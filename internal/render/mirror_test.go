@@ -188,6 +188,12 @@ const (
 	// the allowlisted part alone; a run starts without a value of its
 	// environment that resolves to nothing.
 	executorRead = "v0.1.1-0.20261026201916-b7ebd490a7d1"
+	// commitAttributionRead is crewlet#504's engine, read at the head of its
+	// branch before that change merged, where the catalogue also carries
+	// providers.sandbox.commit_attribution: on unless false, every run's own
+	// commits credit Crewlet as co-author, which the Company's
+	// spec.sandbox.commitAttribution renders.
+	commitAttributionRead = "v0.1.1-0.20261101000021-5df52121cb3d"
 	// executorFinalRead is crewlet#388's engine again, read at the head of
 	// its branch once crewlet's main to 7cd6b68b80 was merged into it,
 	// before that change merged. A node without the ingress role that runs
@@ -734,10 +740,11 @@ var mirrored = []mirror{
 		against: []string{renderCompanyGo, companyTypesGo, seatTypesGo},
 		decides: "the catalogue every launch reads is built from providers.sandbox, over the cells the company reaches " +
 			"alone, with its default_run_in as the cell of a run whose entry names none, its default_max_turns, else " +
-			"96, as every run's round cap, and its setup steps as the setup every box is given; a company with no " +
+			"96, as every run's round cap, its commit_attribution, on unless false, as whether every run's own " +
+			"commits credit Crewlet, and its setup steps as the setup every box is given; a company with no " +
 			"sandbox has none, and runs no executor",
-		digest: "c50896e3b0dff8bdcbcf4462422ce3b87e586c1a206f66192c989d7b3f32280d",
-		read:   executorRead,
+		digest: "17378c552d7b3434d9b28e7e770c1fcf674ef2e2472911702bdde4452e922874",
+		read:   commitAttributionRead,
 	},
 	{
 		file: "internal/config/sandbox.go", name: "defaultSandboxMaxTurns",
