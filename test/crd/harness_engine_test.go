@@ -1289,7 +1289,7 @@ func askEngine(t *testing.T, providers []v1.LLMProvider, list bool) engineReport
 		// A CLI's env is resolved where the engine builds the provider,
 		// and one that resolves to nothing is only logged: for a CLI
 		// signed in through its env, that is a CLI with no key.
-		for _, unresolved := range []string{"config_reference_unresolved", "cli_agent_env_unresolved"} {
+		for _, unresolved := range []string{"config_reference_unresolved", "harness_env_unresolved"} {
 			if strings.Contains(stderr.String(), unresolved) {
 				t.Errorf("crewlet %s: a reference resolved to nothing:\n%s", args[0], stderr.String())
 			}
