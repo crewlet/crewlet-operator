@@ -205,8 +205,8 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **`the broker refused to reserve the … log's ceiling`**, ending
   `insufficient storage resources available`: the engine could not reserve
   what a fresh node keeps on its event stream. The stream is given three
-  quarters of the data volume, and a fresh node reserves at least 10826896725
-  bytes of it, or 8120172544 when the class keeps its files in S3; the
+  quarters of the data volume, and a fresh node reserves at least 10916375210
+  bytes of it, or 8187281408 when the class keeps its files in S3; the
   message names the figure it needed and breaks it down. The class's
   `data.storage.size` admits no less than `14Gi` (`11Gi` with the files in
   S3), so this is a company whose volume was made smaller: under an older
@@ -224,7 +224,7 @@ kubectl logs acme-data-0 -n acme | grep -E 'api_bound|engine_recovered|api_liste
 - **The pod restarts, its events saying `Startup probe failed`, and the
   previous log has no `engine_recovered` line**: the recovery of what the
   volume holds took longer than the startup probe allows, and every restart
-  starts it again. The window is 1,866 seconds (2,006 when the class keeps
+  starts it again. The window is 1,996 seconds (2,136 when the class keeps
   files in S3) plus six seconds per GiB of the volume; a disk that reads
   slower than that needs a longer one. Set the class's `data.startupSeconds`
   (up to a day), which rolls the data pods once, and let the next boot
