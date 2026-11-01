@@ -90,8 +90,8 @@ var claudeCodeSignIn = slices.Concat([]string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHRO
 // credentialName is the names Crewlet reads as holding a credential, which
 // sign an env sign-in CLI in: one of their parts, cut at every character that
 // is not a letter or a digit, is, in any case, one of the words below
-// (cliprofile.IsCredentialName). It is the pattern of every rule of the API
-// that reads a credential's name, to which a test holds this copy: the
+// (harnessprofile.IsCredentialName). It is the pattern of every rule of the
+// API that reads a credential's name, to which a test holds this copy: the
 // LLMProvider and platform provider API's rules over env, which the CRD suite
 // holds to the engine's sign-in, and the tool-server API's refusal of a literal value
 // under such a name, which the CRD suite holds to the names the engine reads

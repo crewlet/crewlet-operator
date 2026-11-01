@@ -289,9 +289,9 @@ func TestHarnessRunInFollowsTheEngine(t *testing.T) {
 // the CLI to keep it inside its seat's own home and its call's working
 // directory, to the engine every suite runs. The engine refuses one in a
 // providers.llm entry's env naming every variable of the list for that CLI
-// (crewlet's validateCredentials, over cliprofile's IsolationVariables), so
-// one provider of each CLI the API offers sets HOME, which every CLI's list
-// holds, and the list is read from the refusal and held to the copy the
+// (crewlet's validateCredentials, over harnessprofile's IsolationVariables),
+// so one provider of each CLI the API offers sets HOME, which every CLI's
+// list holds, and the list is read from the refusal and held to the copy the
 // rule's cases are built from (homeIsolation and cliIsolation). Then every
 // name any CLI's list holds is tried on every CLI: the API refuses it with
 // its isolation rule exactly where the engine's list for that CLI holds it.
@@ -652,7 +652,7 @@ func loginBeside(t *testing.T, namespace string, harness v1.Harness) v1.HarnessA
 }
 
 // engineProfiles is the engine's table of CLI profiles.
-const engineProfiles = "internal/providers/llm/cliagent/cliprofile/profiles.yaml"
+const engineProfiles = "internal/providers/llm/harness/harnessprofile/profiles.yaml"
 
 // subscriptionRefusal follows the variable in the engine's refusal of one its
 // profile sets under subscription (crewlet's internal/config,
@@ -1289,7 +1289,7 @@ func askEngine(t *testing.T, providers []v1.LLMProvider, list bool) engineReport
 		// A CLI's env is resolved where the engine builds the provider,
 		// and one that resolves to nothing is only logged: for a CLI
 		// signed in through its env, that is a CLI with no key.
-		for _, unresolved := range []string{"config_reference_unresolved", "cli_agent_env_unresolved"} {
+		for _, unresolved := range []string{"config_reference_unresolved", "harness_env_unresolved"} {
 			if strings.Contains(stderr.String(), unresolved) {
 				t.Errorf("crewlet %s: a reference resolved to nothing:\n%s", args[0], stderr.String())
 			}

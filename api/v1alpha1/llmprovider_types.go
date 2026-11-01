@@ -148,7 +148,7 @@ const (
 // env as a sign-in only when its name says it holds a credential: one of
 // its parts between underscores is, in any case, KEY, KEYS, APIKEY,
 // ACCESSKEY, SECRETKEY, TOKEN, SECRET, PASSWORD, PASSWD, CREDENTIAL,
-// CREDENTIALS, AUTH, OAUTH or PAT (cliprofile.IsCredentialName). So
+// CREDENTIALS, AUTH, OAUTH or PAT (harnessprofile.IsCredentialName). So
 // OPENROUTER_API_KEY signs such a CLI in and HTTPS_PROXY or
 // HERMES_MAX_TOKENS does not, and one whose env holds no such name is
 // signed in to nothing, and refused. Every other CLI keeps to a token, a

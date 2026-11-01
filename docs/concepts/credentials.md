@@ -146,9 +146,10 @@ from one; the name can. So the API refuses a `value` under a name Crewlet
 reads as a credential's (one of its parts, cut at every character that is not
 a letter or a digit, is, in any case, `KEY`, `KEYS`, `APIKEY`, `ACCESSKEY`,
 `SECRETKEY`, `TOKEN`, `SECRET`, `PASSWORD`, `PASSWD`, `CREDENTIAL`,
-`CREDENTIALS`, `AUTH`, `OAUTH` or `PAT`, as its `cliprofile.IsCredentialName`
-reads one), and under the `Authorization`, `Proxy-Authorization` and `Cookie`
-headers, and a test holds that rule to every name the engine reads a seat's
+`CREDENTIALS`, `AUTH`, `OAUTH` or `PAT`, as its
+`harnessprofile.IsCredentialName` reads one), and under the `Authorization`,
+`Proxy-Authorization` and `Cookie` headers, and a test holds that rule to
+every name the engine reads a seat's
 tool credential under. A credential under a name that says nothing is still
 yours to keep in a Secret
 ([Settings and credentials](../guides/tool-servers.md#settings-and-credentials)).
