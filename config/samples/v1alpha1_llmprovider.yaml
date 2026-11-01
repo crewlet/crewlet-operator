@@ -8,7 +8,7 @@ metadata:
 spec:
   companyRef:
     name: nimbus
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: claude-sonnet-5
   timeoutSeconds: 600
   auth:

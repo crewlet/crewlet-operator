@@ -177,11 +177,11 @@ or schema moves.
 What no validation shows is what a seat's executor launch runs and signs its
 CLI in with, which the renderer's verdict on a seat's executor turns on. The
 renderer's `TestExecutorSignInFollowsTheEngineSource` and
-`TestRunnerCLIsFollowTheEngineSource` read it from the engine's own source
-(`enginetest.Source`, the module `make crewlet` installed from): the
+`TestExecutorHarnessesFollowTheEngineSource` read it from the engine's own
+source (`enginetest.Source`, the module `make crewlet` installed from): the
 variables that sign Claude Code in from a run's environment, Claude Code's
 token and key variables among them, and the CLIs Crewlet has an in-box
-runner for, which test/crd's `TestCLIAgentRunInFollowsTheEngine` holds to
+runner for, which test/crd's `TestHarnessRunInFollowsTheEngine` holds to
 the engine's verdict on a provider's `run_in` too. The rules around those
 lists decide only at a launch, which no engine test reaches, so
 `TestMirroredEngineDeclarationsAreUnchanged` holds their code:

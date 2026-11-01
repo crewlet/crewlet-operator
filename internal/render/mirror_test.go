@@ -211,14 +211,18 @@ const (
 	// (attachCoordination); and runEnvironment and sandboxMCP renamed a
 	// parameter. Each mirror that moved was read again at it.
 	executorFinalRead = "v0.1.1-0.20261028203606-c6ba342a52ad"
-	// runAskRead is where a coding run asks a person through ask_and_wait
-	// and its question is recorded on its row (crewlet/crewlet#447): a lost
-	// job that had asked is parked on the question its row holds rather than
-	// one its box recorded. Before it, carryOnLost had come to return what
-	// the round is carried on with, for completeAdmitted to resume the turn
-	// with under its completion's admission. What becomes of a lost job is
-	// as at executorFinalRead, and no other mirror moved.
-	runAskRead = "v0.1.1-0.20261029002927-2c650d0b2c33"
+	// collectedRead is crewlet's main after crewlet/crewlet#525, where
+	// carryOnLost was last read. Since executorFinalRead it has moved twice
+	// without moving what becomes of a lost job. At crewlet/crewlet#447 a run
+	// came to ask a person through ask_and_wait with its question recorded on
+	// its row, so a lost job that had asked is parked on the question its row
+	// holds rather than one its box recorded, and carryOnLost came to return
+	// what the round is carried on with, for completeAdmitted to resume the
+	// turn with under its completion's admission. At crewlet/crewlet#513 a
+	// launch's spend became an executor_collected event of its own rather than
+	// a sandbox phase, so the lost job's record is published by
+	// publishCollected where it was publishPhase. No other mirror moved.
+	collectedRead = "v0.1.1-0.20261101131142-11badf3141d0"
 	// envSignInRead is crewlet#452's engine, read on crewlet's main where it
 	// merged (e0328e5d9d), which adds auth.mode env: a providers.llm entry
 	// whose env alone signs its CLI in. The names
@@ -448,7 +452,7 @@ var credentialNames = []string{
 // reading of the engine's sign-in verdicts (its holdVerdicts).
 var executorLogin = []string{
 	signinGo, executorGo, "api/v1alpha1/llmprovider_types.go", "docs/guides/cli-agents.md",
-	"test/crd/cliagent_engine_test.go",
+	"test/crd/harness_engine_test.go",
 }
 
 // executorBox is every operator page that states what an executor's box
@@ -557,11 +561,11 @@ var bootWindows = []string{
 // and its cells (TestContractEngineRefusesWhatItHolds), what it applies and
 // fails at a launch alone (TestContractExecutorIsAppliedWhereItCannotRun),
 // the sign-in a provider's settings give it and the CLIs it admits a run_in
-// on (test/crd's TestCLIAgentSignInFollowsTheEngine and
-// TestCLIAgentRunInFollowsTheEngine), the deployment its validation reads a
+// on (test/crd's TestHarnessSignInFollowsTheEngine and
+// TestHarnessRunInFollowsTheEngine), the deployment its validation reads a
 // Jira or Confluence address on (TestContractAtlassianDeploymentIsTheEngines),
 // and the lists TestExecutorSignInFollowsTheEngineSource,
-// TestRunnerCLIsFollowTheEngineSource,
+// TestExecutorHarnessesFollowTheEngineSource,
 // TestAtlassianDeploymentFollowsTheEngineSource and
 // TestCredentialNameFollowsTheEngineSource read.
 //
@@ -1004,7 +1008,7 @@ var mirrored = []mirror{
 		file: agentRunGo, name: "executorRunners",
 		against: []string{executorGo, headsGo, seatTypesGo, llmProviderTypes, cliAgentsMd},
 		decides: "the members a launch picks among are the executor chain's members, in order, whose CLI has an " +
-			"in-box runner (codingagent.Names, held by TestRunnerCLIsFollowTheEngineSource), and a chain with none " +
+			"in-box runner (codingagent.Names, held by TestExecutorHarnessesFollowTheEngineSource), and a chain with none " +
 			"launches nothing",
 		digest: "95412060b00824d49c72e824b8d74d7c08d6ad53b84293edac9f2d934b5a1e8a",
 		read:   chatLogRead,
@@ -1083,8 +1087,8 @@ var mirrored = []mirror{
 			"box where the box is left, and the seat's turn resumes, with what this returns, to carry its round " +
 			"on in a fresh run, in the kept box after its engine restarted and in a fresh one where the box went " +
 			"with its pod or its node",
-		digest: "f20d49d721d9ae2e60375d049b5f6dde7a0d92004a5786c7201db10bebb00fd4",
-		read:   runAskRead,
+		digest: "efdae0256a887ee13063c285bcedfc3416bd7209fa31034eded93c4cf84e4e91",
+		read:   collectedRead,
 	},
 	{
 		file: "internal/sandbox/lost.go", name: "MaxRoundLosses",

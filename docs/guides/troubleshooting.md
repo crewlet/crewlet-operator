@@ -797,7 +797,7 @@ kubectl logs acme-data-0 -n acme | grep -E 'cli_agent_bundle_(restore_failed|wit
   holding a login OpenCode 1.x made (its `auth.json`) is refused: export it
   again from OpenCode 2
   ([An OpenCode login in a bundle](cli-agents.md#an-opencode-login-in-a-bundle)).
-  So is a bundle exported from another CLI than the provider's `agent`, as
+  So is a bundle exported from another CLI than the provider's `harness`, as
   it is after the provider moved to another one: put a bundle exported from
   the new CLI in the Secret
   ([Signing in](cli-agents.md#signing-in)).

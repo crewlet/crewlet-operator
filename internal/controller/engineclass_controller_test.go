@@ -82,9 +82,9 @@ var _ = Describe("EngineClass controller in a manager", Ordered, func() {
 					}},
 				}},
 				PlatformLLMProviders: []crewletaiv1alpha1.PlatformLLMProvider{{
-					Name: "platform-claude", Agent: crewletaiv1alpha1.CLIAgentClaudeCode, Model: "claude-sonnet-5",
+					Name: "platform-claude", Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: "claude-sonnet-5",
 					Auth: crewletaiv1alpha1.PlatformLLMProviderAuth{
-						Mode:            crewletaiv1alpha1.CLIAgentAuthAPIKey,
+						Mode:            crewletaiv1alpha1.HarnessAuthAPIKey,
 						APIKeySecretRef: crewletaiv1alpha1.NamespacedSecretKeyReference{Namespace: platform, Name: "llm", Key: "apiKey"},
 					},
 				}},

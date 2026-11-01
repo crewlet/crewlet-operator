@@ -1731,28 +1731,6 @@ spec:
                     LLMProvider's that apply to such a provider, each with the same message's
                     start, and hold to the same engine.
                   properties:
-                    agent:
-                      description: |-
-                        agent is which CLI to drive. The model is written as this CLI reads
-                        it, and a seat's executor run on the provider is handed it unchanged:
-                        OpenCode reads `<provider>/<model>`, such as
-                        `anthropic/claude-sonnet-5`. Only ClaudeCode and OpenCode run a
-                        seat's executor; every CLI serves a seat's other phases. Crewlet's
-                        `agent`.
-                      enum:
-                      - ClaudeCode
-                      - Codex
-                      - GeminiCLI
-                      - QwenCode
-                      - OpenCode
-                      - CursorAgent
-                      - Copilot
-                      - Grok
-                      - MuseCode
-                      - KimiCode
-                      - Hermes
-                      - Pi
-                      type: string
                     auth:
                       description: auth is how the CLI signs in. Crewlet's `auth`.
                       minProperties: 1
@@ -1875,6 +1853,29 @@ spec:
                       x-kubernetes-list-map-keys:
                       - name
                       x-kubernetes-list-type: map
+                    harness:
+                      description: |-
+                        harness is which harness to drive, the coding CLI that runs the model.
+                        The model is written as this harness reads it, and a seat's executor
+                        run on the provider is handed it unchanged: OpenCode reads
+                        `<provider>/<model>`, such as `anthropic/claude-sonnet-5`. Only
+                        ClaudeCode and OpenCode run a seat's executor; every harness serves a
+                        seat's other phases. Crewlet's `harness`
+                        (providers.llm.<name>.harness).
+                      enum:
+                      - ClaudeCode
+                      - Codex
+                      - GeminiCLI
+                      - QwenCode
+                      - OpenCode
+                      - CursorAgent
+                      - Copilot
+                      - Grok
+                      - MuseCode
+                      - KimiCode
+                      - Hermes
+                      - Pi
+                      type: string
                     maxConcurrent:
                       description: |-
                         maxConcurrent is how many of the provider's CLI processes run at once
@@ -1962,8 +1963,8 @@ spec:
                       - Denied
                       type: string
                   required:
-                  - agent
                   - auth
+                  - harness
                   - model
                   - name
                   type: object
@@ -1981,7 +1982,7 @@ spec:
                       token or login is one account''s, which every tenant of the
                       class would share: it belongs on a tenant''s own LLMProvider'
                     rule: '!has(self.auth) || (has(self.auth.mode) && self.auth.mode
-                      in [''APIKey'', ''Env'']) || (self.agent in [''Hermes'', ''Pi'',
+                      in [''APIKey'', ''Env'']) || (self.harness in [''Hermes'', ''Pi'',
                       ''OpenCode''] && has(self.env) && self.env.exists(e, e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)'')))'
                   - fieldPath: .auth
                     message: 'auth mode Env takes a CLI Crewlet signs in from its
@@ -1993,7 +1994,7 @@ spec:
                       nothing, and Crewlet refuses the document: sign it in with auth
                       mode APIKey'
                     rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode
-                      != ''Env'' || self.agent in [''ClaudeCode'', ''Hermes'', ''Pi'',
+                      != ''Env'' || self.harness in [''ClaudeCode'', ''Hermes'', ''Pi'',
                       ''OpenCode'']'
                   - fieldPath: .env
                     message: 'auth mode Env signs the CLI in with env alone, and env
@@ -2008,11 +2009,11 @@ spec:
                       PASSWORD, PASSWD, CREDENTIAL, CREDENTIALS, AUTH, OAUTH or PAT
                       (such as OPENROUTER_API_KEY)'
                     rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode
-                      != ''Env'' || !(self.agent in [''ClaudeCode'', ''Hermes'', ''Pi'',
-                      ''OpenCode'']) || (has(self.env) && self.env.exists(e, (self.agent
-                      == ''ClaudeCode'' && e.name in [''ANTHROPIC_AUTH_TOKEN'', ''CLAUDE_CODE_USE_BEDROCK'',
-                      ''CLAUDE_CODE_USE_VERTEX'', ''CLAUDE_CODE_USE_FOUNDRY'']) ||
-                      (self.agent in [''Hermes'', ''Pi'', ''OpenCode''] && e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)''))))'
+                      != ''Env'' || !(self.harness in [''ClaudeCode'', ''Hermes'',
+                      ''Pi'', ''OpenCode'']) || (has(self.env) && self.env.exists(e,
+                      (self.harness == ''ClaudeCode'' && e.name in [''ANTHROPIC_AUTH_TOKEN'',
+                      ''CLAUDE_CODE_USE_BEDROCK'', ''CLAUDE_CODE_USE_VERTEX'', ''CLAUDE_CODE_USE_FOUNDRY''])
+                      || (self.harness in [''Hermes'', ''Pi'', ''OpenCode''] && e.name.matches(''(?i)(^|[^A-Za-z0-9])(KEY|KEYS|APIKEY|ACCESSKEY|SECRETKEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH|OAUTH|PAT)([^A-Za-z0-9]|$)''))))'
                   - fieldPath: .env
                     message: 'env may set a variable that signs the CLI in from env
                       (ClaudeCode''s ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_BEDROCK,
@@ -2022,7 +2023,7 @@ spec:
                       its own, so Crewlet refuses the document. Set auth mode Env,
                       so that env is the provider''s one sign-in'
                     rule: (has(self.auth) && has(self.auth.mode) && self.auth.mode
-                      == 'Env') || !has(self.env) || !self.env.exists(e, self.agent
+                      == 'Env') || !has(self.env) || !self.env.exists(e, self.harness
                       == 'ClaudeCode' && e.name in ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK',
                       'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY'])
                   - message: 'auth mode APIKey takes a CLI Crewlet hands a key to:
@@ -2033,8 +2034,9 @@ spec:
                       reads a key only from its own files, which a platform provider
                       does not give it'
                     rule: '!has(self.auth) || !has(self.auth.mode) || self.auth.mode
-                      != ''APIKey'' || self.agent in [''ClaudeCode'', ''Codex'', ''GeminiCLI'',
-                      ''QwenCode'', ''CursorAgent'', ''Copilot'', ''Grok'', ''MuseCode'']'
+                      != ''APIKey'' || self.harness in [''ClaudeCode'', ''Codex'',
+                      ''GeminiCLI'', ''QwenCode'', ''CursorAgent'', ''Copilot'', ''Grok'',
+                      ''MuseCode'']'
                   - fieldPath: .env
                     message: 'env may not set the CLI''s own token or key variable
                       (ClaudeCode''s CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY,
@@ -2044,15 +2046,15 @@ spec:
                       owns it, and whether a value in env reaches the CLI would turn
                       on the auth mode. Give the key as auth.apiKeySecretRef with
                       auth mode APIKey'
-                    rule: '!has(self.env) || !self.env.exists(e, (self.agent == ''ClaudeCode''
-                      && e.name in [''CLAUDE_CODE_OAUTH_TOKEN'', ''ANTHROPIC_API_KEY''])
-                      || (self.agent == ''Codex'' && e.name == ''CODEX_API_KEY'')
-                      || (self.agent == ''GeminiCLI'' && e.name == ''GEMINI_API_KEY'')
-                      || (self.agent == ''QwenCode'' && e.name == ''OPENAI_API_KEY'')
-                      || (self.agent == ''CursorAgent'' && e.name == ''CURSOR_API_KEY'')
-                      || (self.agent == ''Copilot'' && e.name == ''COPILOT_GITHUB_TOKEN'')
-                      || (self.agent == ''Grok'' && e.name == ''XAI_API_KEY'') ||
-                      (self.agent == ''MuseCode'' && e.name == ''META_API_KEY''))'
+                    rule: '!has(self.env) || !self.env.exists(e, (self.harness ==
+                      ''ClaudeCode'' && e.name in [''CLAUDE_CODE_OAUTH_TOKEN'', ''ANTHROPIC_API_KEY''])
+                      || (self.harness == ''Codex'' && e.name == ''CODEX_API_KEY'')
+                      || (self.harness == ''GeminiCLI'' && e.name == ''GEMINI_API_KEY'')
+                      || (self.harness == ''QwenCode'' && e.name == ''OPENAI_API_KEY'')
+                      || (self.harness == ''CursorAgent'' && e.name == ''CURSOR_API_KEY'')
+                      || (self.harness == ''Copilot'' && e.name == ''COPILOT_GITHUB_TOKEN'')
+                      || (self.harness == ''Grok'' && e.name == ''XAI_API_KEY'') ||
+                      (self.harness == ''MuseCode'' && e.name == ''META_API_KEY''))'
                   - fieldPath: .env
                     message: 'env may not set a variable Crewlet sets on every call
                       of the CLI to keep it inside its seat''s own home and its call''s
@@ -2066,15 +2068,15 @@ spec:
                       the provider, so Crewlet refuses the document: drop it'
                     rule: '!has(self.env) || !self.env.exists(e, e.name in [''HOME'',
                       ''XDG_CONFIG_HOME'', ''XDG_DATA_HOME'', ''XDG_STATE_HOME'',
-                      ''XDG_CACHE_HOME'', ''TMPDIR''] || (self.agent == ''ClaudeCode''
+                      ''XDG_CACHE_HOME'', ''TMPDIR''] || (self.harness == ''ClaudeCode''
                       && e.name in [''CLAUDE_CONFIG_DIR'', ''CLAUDE_CODE_DISABLE_CLAUDE_MDS'',
-                      ''CLAUDE_CODE_DISABLE_AUTO_MEMORY'']) || (self.agent == ''Codex''
-                      && e.name in [''CODEX_HOME'', ''CODEX_SQLITE_HOME'']) || (self.agent
+                      ''CLAUDE_CODE_DISABLE_AUTO_MEMORY'']) || (self.harness == ''Codex''
+                      && e.name in [''CODEX_HOME'', ''CODEX_SQLITE_HOME'']) || (self.harness
                       == ''OpenCode'' && e.name in [''OPENCODE_CONFIG_DIR'', ''OPENCODE_CONFIG_PROJECT_DISABLE''])
-                      || (self.agent == ''CursorAgent'' && e.name == ''CURSOR_CONFIG_DIR'')
-                      || (self.agent == ''KimiCode'' && e.name == ''KIMI_CODE_HOME'')
-                      || (self.agent == ''Hermes'' && e.name == ''HERMES_HOME'') ||
-                      (self.agent == ''Pi'' && e.name == ''PI_CODING_AGENT_DIR''))'
+                      || (self.harness == ''CursorAgent'' && e.name == ''CURSOR_CONFIG_DIR'')
+                      || (self.harness == ''KimiCode'' && e.name == ''KIMI_CODE_HOME'')
+                      || (self.harness == ''Hermes'' && e.name == ''HERMES_HOME'')
+                      || (self.harness == ''Pi'' && e.name == ''PI_CODING_AGENT_DIR''))'
                   - fieldPath: .env
                     message: 'env may not set TZ: Crewlet hands every CLI it starts
                       the engine''s own zone, its TZ, else UTC, and reads the CLI''s
@@ -2093,7 +2095,7 @@ spec:
                       provider as OpenCode spells it (opencode models --standalone
                       lists them), such as anthropic/claude-sonnet-5 or openrouter/anthropic/claude-sonnet-5,
                       with that provider''s key in env'
-                    rule: self.agent != 'OpenCode' || !has(self.model) || (self.model.indexOf('/')
+                    rule: self.harness != 'OpenCode' || !has(self.model) || (self.model.indexOf('/')
                       >= 0 && self.model.substring(0, self.model.indexOf('/')).trim().size()
                       > 0 && self.model.substring(self.model.indexOf('/') + 1).trim().size()
                       > 0)
@@ -2102,7 +2104,7 @@ spec:
                       off for: ClaudeCode, Codex, OpenCode or Pi. Crewlet''s profile
                       for every other CLI carries no measured web denial, and refuses
                       the setting'
-                    rule: '!has(self.webTools) || self.webTools != ''Denied'' || self.agent
+                    rule: '!has(self.webTools) || self.webTools != ''Denied'' || self.harness
                       in [''ClaudeCode'', ''Codex'', ''OpenCode'', ''Pi'']'
                 maxItems: 16
                 type: array
