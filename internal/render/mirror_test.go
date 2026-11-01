@@ -231,15 +231,22 @@ const (
 	// each moved by its names and its messages alone: a package qualifier, a
 	// method (Provider.Agent is Harness), a field (a launch's CodingAgent is
 	// Harness), and a refusal that says "harness" where it said "CLI". No
-	// decision any of them copies moved. The launch was last read before it at
-	// crewlet#453 (e0328e5d9d), where an executor launch came to stamp the
-	// picked member's sign-in identity on the run's row (the launch request's
-	// SignInID), which the run's collection compares to relaunch, once, a run
-	// its vendor refused on a sign-in replaced while it ran; the member a
-	// launch picks, the cell it places the run in, the bridge it refuses, the
-	// environment it starts the run with and the login it refuses off the
-	// engine host are as at executorFinalRead, so the render's copies hold.
+	// decision any of them copies moved.
 	harnessRead = "v0.1.1-0.20261101141833-986af5348ea5"
+	// harnessWireRead is crewlet/crewlet#528's engine, read on crewlet's main
+	// where it merged (0b2730bb44): the harness is named on the wire, and a
+	// sandbox's spec input with it (its CodingAgent field is Harness), which
+	// is the launch's only change. No other mirror moved. The launch was
+	// last read before it at harnessRead, which moved its names alone, and
+	// before that at crewlet#453 (e0328e5d9d), where an executor
+	// launch came to stamp the picked member's sign-in identity on the run's
+	// row (the launch request's SignInID), which the run's collection
+	// compares to relaunch, once, a run its vendor refused on a sign-in
+	// replaced while it ran; the member a launch picks, the cell it places
+	// the run in, the bridge it refuses, the environment it starts the run
+	// with and the login it refuses off the engine host are as at
+	// executorFinalRead, so the render's copies hold.
+	harnessWireRead = "v0.1.1-0.20261101144449-0b2730bb4452"
 	// envSignInRead is crewlet#452's engine, read on crewlet's main where it
 	// merged (e0328e5d9d), which adds auth.mode env: a providers.llm entry
 	// whose env alone signs its CLI in. The names
@@ -979,8 +986,8 @@ var mirrored = []mirror{
 			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable)",
-		digest: "0e1daeb4b7ef171a2db62b26f4a69e1fdd42de344e337e4f94dc78db7beb46b4",
-		read:   harnessRead,
+		digest: "7cc5aab349f6c7df9a4dcfbe40e3f584a521efa96020125c454f00b48277c6d3",
+		read:   harnessWireRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
