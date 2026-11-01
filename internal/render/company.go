@@ -501,6 +501,9 @@ func (r *renderer) company() companyDoc {
 	doc.Providers = r.providersDoc()
 	doc.Assistant = r.assistant()
 	doc.Integrations = r.integrations()
+	if url := spec.MCPRegistry.URL; url != "" {
+		doc.MCPRegistry = &mcpRegistryDoc{URL: url}
+	}
 	doc.MCPServers = r.mcpServers()
 	doc.Roles, doc.Units = r.org()
 	doc.SeatAccessMigrated = seatAccessKinds

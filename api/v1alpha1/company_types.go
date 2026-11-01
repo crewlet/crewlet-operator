@@ -747,6 +747,28 @@ type SandboxSettings struct {
 	Setup []SandboxSetupStep `json:"setup,omitempty"`
 }
 
+// CompanyMCPRegistry names a community registry of MCP servers. It maps onto
+// Crewlet's mcp_registry. A block naming no registry says nothing, so it is
+// refused rather than read as none.
+// +kubebuilder:validation:MinProperties=1
+type CompanyMCPRegistry struct {
+	// url is the address of a registry that speaks the MCP Registry v0.1 API;
+	// Crewlet appends /v0.1/servers to it. An https address with no
+	// credentials, query or fragment, a private host included: what the
+	// registry answers is drafted into launch lines, so a plain http answer
+	// would be one any network peer could rewrite. A result is only ever a
+	// draft in Crewlet's add flow, marked as not reviewed, and Crewlet dials
+	// nothing a listing names. Crewlet's `url`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	// +kubebuilder:validation:XValidation:rule="isURL(self) && url(self).getScheme() == 'https' && url(self).getHostname() != ''",message="url must be an absolute https URL: what the registry answers is drafted into launch lines, so a plain http answer could be rewritten on its way"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('^[^:/?#]+://[^/?#]*@')",message="url may not hold a user name or password: a credential is named through a Secret, never written into an address"
+	// +kubebuilder:validation:XValidation:rule="!self.contains('?') && !self.contains('#')",message="url may not hold a query or a fragment: Crewlet appends the registry's /v0.1/servers path to it"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="url may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
+	URL string `json:"url,omitempty"`
+}
+
 // CompanyIntegrationSettings is company-wide behaviour of the integration
 // reconcile loop. The vendors themselves are Integration objects.
 // +kubebuilder:validation:MinProperties=1
@@ -1318,6 +1340,12 @@ type CompanySpec struct {
 	// +optional
 	Integrations CompanyIntegrationSettings `json:"integrations,omitzero"`
 
+	// mcpRegistry is the community MCP registry Crewlet's Settings › MCP &
+	// tools searches beside its curated catalogue when somebody adds a tool
+	// server. Unset, there is no community search. Crewlet's `mcp_registry`.
+	// +optional
+	MCPRegistry CompanyMCPRegistry `json:"mcpRegistry,omitzero"`
+
 	// engineConfig is passed through into the company document as written,
 	// for the engine's tuning blocks that have no field here: turn_engine,
 	// learning, scheduling, workers, skill_variables, artifacts and the
@@ -1328,18 +1356,18 @@ type CompanySpec struct {
 	//
 	// It may not set what another field or object of this API owns: name,
 	// mission, vision, policies, timezone, tracker, knowledge, chat,
-	// token_budget, assistant, providers, integrations, mcp_servers, roles,
-	// units or seat_access_migrated, which the operator writes with every
-	// integration kind so the engine acts on each Seat's spec.integrations.
-	// Every position Crewlet holds a credential in lives under one of those
-	// keys, so engineConfig can never carry a credential: the API server
-	// refuses a Company whose engineConfig names one of them, before anything
-	// is stored.
+	// token_budget, assistant, providers, integrations, mcp_registry,
+	// mcp_servers, roles, units or seat_access_migrated, which the operator
+	// writes with every integration kind so the engine acts on each Seat's
+	// spec.integrations. Every position Crewlet holds a credential in lives
+	// under one of those keys, so engineConfig can never carry a credential:
+	// the API server refuses a Company whose engineConfig names one of them,
+	// before anything is stored.
 	// +optional
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=64
-	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'chat', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, token_budget, assistant, providers, integrations, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
+	// +kubebuilder:validation:XValidation:rule="self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies', 'timezone', 'tracker', 'knowledge', 'chat', 'token_budget', 'assistant', 'providers', 'integrations', 'mcp_registry', 'mcp_servers', 'roles', 'units', 'seat_access_migrated']))",message="engineConfig may not set name, mission, vision, policies, timezone, tracker, knowledge, chat, token_budget, assistant, providers, integrations, mcp_registry, mcp_servers, roles, units or seat_access_migrated: those are fields and objects of this API, among them every block that holds a credential"
 	EngineConfig []EngineConfigEntry `json:"engineConfig,omitempty"`
 
 	// config is how the operator manages the company's document.
