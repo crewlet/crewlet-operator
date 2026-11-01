@@ -414,6 +414,14 @@ const (
 	// ${NAME} in one, so a rendered server's url is the literal Crewlet
 	// dials, and every box that scopes the server is given it.
 	entryRulesRead = "v0.1.1-0.20261101172218-1ecc48d5ca08"
+	// harnessCopyRead is crewlet/crewlet#530's engine, read on crewlet's main
+	// where it merged (5936f3b46c), the last piece of crewlet#522. sandboxMCP
+	// logs two servers it gives no box, and both log details now say "the
+	// executor" where they said "the coding agent": one turned off
+	// (crewlet#518) and one whose url Crewlet would not dial (crewlet#534).
+	// The servers it gives, withholds and refuses are as at entryRulesRead,
+	// so the render's copy holds. No other mirror moved.
+	harnessCopyRead = "v0.1.1-0.20261101181230-5936f3b46c60"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -929,8 +937,8 @@ var mirrored = []mirror{
 		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "an executor's box is given every server its seat's sandbox scopes, shared or not, with the seat's " +
 			"block for it, none turned off and none at an address Crewlet would not dial",
-		digest: "a5074c7d7567b84061ae5e5cbf4926512b40a949ccdb87250ec8d11c1a309d79",
-		read:   entryRulesRead,
+		digest: "987f6d38d8cfd32ca58874cdbd80845aebc2c38b7a039de06c0a2a92b97f84c8",
+		read:   harnessCopyRead,
 	},
 	{
 		file: mcpNamesGo, name: "mcpServerName",
