@@ -47,9 +47,9 @@ func codexProvider() v1alpha1.LLMProvider {
 		Namespace: testNamespace, Name: providerCodex,
 		Spec: v1alpha1.LLMProviderSpec{
 			CompanyRef:          v1alpha1.CompanyReference{Name: sampleCompany},
-			LLMProviderSettings: v1alpha1.LLMProviderSettings{Agent: v1alpha1.CLIAgentCodex, Model: modelCodex},
-			Auth: v1alpha1.CLIAgentAuth{
-				Mode: v1alpha1.CLIAgentAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerCodex, Key: keyAPIKey},
+			LLMProviderSettings: v1alpha1.LLMProviderSettings{Harness: v1alpha1.HarnessCodex, Model: modelCodex},
+			Auth: v1alpha1.HarnessAuth{
+				Mode: v1alpha1.HarnessAuthAPIKey, APIKeySecretRef: v1alpha1.SecretKeyReference{Name: providerCodex, Key: keyAPIKey},
 			},
 		},
 	}
@@ -63,10 +63,10 @@ func openCodeProvider() v1alpha1.LLMProvider {
 		Spec: v1alpha1.LLMProviderSpec{
 			CompanyRef: v1alpha1.CompanyReference{Name: sampleCompany},
 			LLMProviderSettings: v1alpha1.LLMProviderSettings{
-				Agent: v1alpha1.CLIAgentOpenCode, Model: modelOpenCode,
+				Harness: v1alpha1.HarnessOpenCode, Model: modelOpenCode,
 			},
 			RunIn: v1alpha1.SandboxPlacementE2B,
-			Auth:  v1alpha1.CLIAgentAuth{Mode: v1alpha1.CLIAgentAuthSubscription},
+			Auth:  v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthSubscription},
 			Env: []v1alpha1.SecretEnvVar{{
 				Name:      envGatewayKey,
 				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "openrouter", Key: keyAPIKey}},
@@ -80,7 +80,7 @@ func openCodeProvider() v1alpha1.LLMProvider {
 func bundled(provider func() v1alpha1.LLMProvider) v1alpha1.LLMProvider {
 	p := provider()
 	p.Spec.Env = nil
-	p.Spec.Auth = v1alpha1.CLIAgentAuth{CredentialBundleSecretRef: v1alpha1.SecretKeyReference{Name: p.Name, Key: keyBundle}}
+	p.Spec.Auth = v1alpha1.HarnessAuth{CredentialBundleSecretRef: v1alpha1.SecretKeyReference{Name: p.Name, Key: keyBundle}}
 	return p
 }
 
@@ -88,7 +88,7 @@ func bundled(provider func() v1alpha1.LLMProvider) v1alpha1.LLMProvider {
 // its env alone, which sets names, each from a Secret of its own.
 func gatewayed(provider func() v1alpha1.LLMProvider, names ...string) v1alpha1.LLMProvider {
 	p := provider()
-	p.Spec.Auth = v1alpha1.CLIAgentAuth{Mode: v1alpha1.CLIAgentAuthEnv}
+	p.Spec.Auth = v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthEnv}
 	p.Spec.Env = nil
 	for _, name := range names {
 		p.Spec.Env = append(p.Spec.Env, v1alpha1.SecretEnvVar{
@@ -437,9 +437,9 @@ func TestExecutor(t *testing.T) {
 				in.Company.Spec.Sandbox.DefaultRunIn = v1alpha1.SandboxPlacementE2B
 				in.Company.Spec.LLM.UsePlatformProviders = new(true)
 				in.Class.Spec.PlatformLLMProviders = []v1alpha1.PlatformLLMProvider{{
-					Name: platformHeadName, Agent: v1alpha1.CLIAgentClaudeCode, Model: "claude-sonnet-5",
+					Name: platformHeadName, Harness: v1alpha1.HarnessClaudeCode, Model: "claude-sonnet-5",
 					Auth: v1alpha1.PlatformLLMProviderAuth{
-						Mode: v1alpha1.CLIAgentAuthAPIKey,
+						Mode: v1alpha1.HarnessAuthAPIKey,
 						APIKeySecretRef: v1alpha1.NamespacedSecretKeyReference{
 							Namespace: "crewlet-system", Name: platformHeadName, Key: keyAPIKey,
 						},
@@ -521,15 +521,16 @@ func ownProvider(in *Input, name string) *v1alpha1.LLMProvider {
 	panic("no LLMProvider " + name)
 }
 
-// TestRunnerCLIsAreTheRunIn holds the CLIs the render runs a seat's executor
-// on to the ones the LLMProvider API admits a runIn on, both of which say
-// what Crewlet launches a run on: the CRD's rule names them in its order.
-func TestRunnerCLIsAreTheRunIn(t *testing.T) {
-	quoted := make([]string, len(RunnerCLIs))
-	for i, cli := range RunnerCLIs {
+// TestExecutorHarnessesAreTheRunIn holds the harnesses the render runs a
+// seat's executor on to the ones the LLMProvider API admits a runIn on, both
+// of which say what Crewlet launches a run on: the CRD's rule names them in
+// its order.
+func TestExecutorHarnessesAreTheRunIn(t *testing.T) {
+	quoted := make([]string, len(ExecutorHarnesses))
+	for i, cli := range ExecutorHarnesses {
 		quoted[i] = "'" + string(cli) + "'"
 	}
-	want := "!has(self.runIn) || self.agent in [" + strings.Join(quoted, ", ") + "]"
+	want := "!has(self.runIn) || self.harness in [" + strings.Join(quoted, ", ") + "]"
 	raw := crdOf(t, "llmproviders")
 	if !slices.Contains(rules(raw), want) {
 		t.Errorf("the LLMProvider CRD has no rule %q: a runIn is admitted on other CLIs than the render runs an executor on", want)

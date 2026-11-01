@@ -448,7 +448,7 @@ var credentialNames = []string{
 // reading of the engine's sign-in verdicts (its holdVerdicts).
 var executorLogin = []string{
 	signinGo, executorGo, "api/v1alpha1/llmprovider_types.go", "docs/guides/cli-agents.md",
-	"test/crd/cliagent_engine_test.go",
+	"test/crd/harness_engine_test.go",
 }
 
 // executorBox is every operator page that states what an executor's box
@@ -557,11 +557,11 @@ var bootWindows = []string{
 // and its cells (TestContractEngineRefusesWhatItHolds), what it applies and
 // fails at a launch alone (TestContractExecutorIsAppliedWhereItCannotRun),
 // the sign-in a provider's settings give it and the CLIs it admits a run_in
-// on (test/crd's TestCLIAgentSignInFollowsTheEngine and
-// TestCLIAgentRunInFollowsTheEngine), the deployment its validation reads a
+// on (test/crd's TestHarnessSignInFollowsTheEngine and
+// TestHarnessRunInFollowsTheEngine), the deployment its validation reads a
 // Jira or Confluence address on (TestContractAtlassianDeploymentIsTheEngines),
 // and the lists TestExecutorSignInFollowsTheEngineSource,
-// TestRunnerCLIsFollowTheEngineSource,
+// TestExecutorHarnessesFollowTheEngineSource,
 // TestAtlassianDeploymentFollowsTheEngineSource and
 // TestCredentialNameFollowsTheEngineSource read.
 //
@@ -1004,7 +1004,7 @@ var mirrored = []mirror{
 		file: agentRunGo, name: "executorRunners",
 		against: []string{executorGo, headsGo, seatTypesGo, llmProviderTypes, cliAgentsMd},
 		decides: "the members a launch picks among are the executor chain's members, in order, whose CLI has an " +
-			"in-box runner (codingagent.Names, held by TestRunnerCLIsFollowTheEngineSource), and a chain with none " +
+			"in-box runner (codingagent.Names, held by TestExecutorHarnessesFollowTheEngineSource), and a chain with none " +
 			"launches nothing",
 		digest: "95412060b00824d49c72e824b8d74d7c08d6ad53b84293edac9f2d934b5a1e8a",
 		read:   chatLogRead,

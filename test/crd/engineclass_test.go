@@ -1010,8 +1010,8 @@ func TestPlatformLLMProviders(t *testing.T) {
 	platform := func(change func(*v1.PlatformLLMProvider)) func(*v1.EngineClass) {
 		return func(c *v1.EngineClass) {
 			p := v1.PlatformLLMProvider{
-				Name: "platform", Agent: v1.CLIAgentClaudeCode, Model: claudeModel,
-				Auth: v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthAPIKey, APIKeySecretRef: key},
+				Name: "platform", Harness: v1.HarnessClaudeCode, Model: claudeModel,
+				Auth: v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthAPIKey, APIKeySecretRef: key},
 			}
 			if change != nil {
 				change(&p)
@@ -1019,13 +1019,13 @@ func TestPlatformLLMProviders(t *testing.T) {
 			c.Spec.PlatformLLMProviders = []v1.PlatformLLMProvider{p}
 		}
 	}
-	// keyInEnv signs agent in with its model provider's key in env, as
+	// keyInEnv signs harness in with its model provider's key in env, as
 	// Hermes, Pi and OpenCode sign in.
-	keyInEnv := func(agent v1.CLIAgentName, name string) func(*v1.PlatformLLMProvider) {
+	keyInEnv := func(harness v1.Harness, name string) func(*v1.PlatformLLMProvider) {
 		return func(p *v1.PlatformLLMProvider) {
-			p.Agent = agent
+			p.Harness = harness
 			p.Model = modelViaOpenRouter
-			p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthSubscription}
+			p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthSubscription}
 			p.Env = []v1.NamespacedSecretEnvVar{envFrom(name)}
 		}
 	}
@@ -1044,22 +1044,22 @@ func TestPlatformLLMProviders(t *testing.T) {
 		},
 		{
 			name:   "a platform OpenCode provider on its model provider's key in env is accepted",
-			mutate: platform(keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")),
+			mutate: platform(keyInEnv(v1.HarnessOpenCode, "OPENROUTER_API_KEY")),
 		},
 		{
 			name:   "a platform Codex provider on a key is accepted",
-			mutate: platform(func(p *v1.PlatformLLMProvider) { p.Agent = v1.CLIAgentCodex; p.Model = "gpt-5" }),
+			mutate: platform(func(p *v1.PlatformLLMProvider) { p.Harness = v1.HarnessCodex; p.Model = "gpt-5" }),
 		},
 		{
 			name:   "a platform provider with web denied is accepted",
-			mutate: platform(func(p *v1.PlatformLLMProvider) { p.WebTools = v1.CLIAgentWebToolsDenied }),
+			mutate: platform(func(p *v1.PlatformLLMProvider) { p.WebTools = v1.HarnessWebToolsDenied }),
 		},
 		{
 			name: "a platform provider with web denied on a CLI with no web denial is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
-				p.Agent = v1.CLIAgentGeminiCLI
+				p.Harness = v1.HarnessGeminiCLI
 				p.Model = "gemini-2.5-pro"
-				p.WebTools = v1.CLIAgentWebToolsDenied
+				p.WebTools = v1.HarnessWebToolsDenied
 			}),
 			want: msgWebTools,
 		},
@@ -1083,48 +1083,48 @@ func TestPlatformLLMProviders(t *testing.T) {
 			// class would share.
 			name: "a platform provider on a subscription is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
-				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthSubscription}
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthSubscription}
 			}),
 			want: msgPlatformSignIn,
 		},
 		{
 			name: "a platform provider on a subscription is reported at auth",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
-				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthSubscription}
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthSubscription}
 			}),
 			want: "spec.platformLLMProviders[0].auth: Invalid value",
 		},
 		{
 			// A proxy is configuration, and signs the CLI in to nothing.
 			name:   "a platform Hermes provider on a proxy alone in env is refused",
-			mutate: platform(keyInEnv(v1.CLIAgentHermes, envProxy)),
+			mutate: platform(keyInEnv(v1.HarnessHermes, envProxy)),
 			want:   msgPlatformSignIn,
 		},
 		{
 			// Codex reads its key from its own variable, which auth owns.
 			name:   "a platform Codex provider on a key in env is refused",
-			mutate: platform(keyInEnv(v1.CLIAgentCodex, "OPENROUTER_API_KEY")),
+			mutate: platform(keyInEnv(v1.HarnessCodex, "OPENROUTER_API_KEY")),
 			want:   msgPlatformSignIn,
 		},
 		{
 			name: "auth mode APIKey for a platform Hermes provider is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
-				keyInEnv(v1.CLIAgentHermes, "OPENROUTER_API_KEY")(p)
-				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthAPIKey, APIKeySecretRef: key}
+				keyInEnv(v1.HarnessHermes, "OPENROUTER_API_KEY")(p)
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthAPIKey, APIKeySecretRef: key}
 			}),
 			want: msgCLIKeyAgent,
 		},
 		{
 			name: "auth mode APIKey without a key is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
-				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthAPIKey}
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthAPIKey}
 			}),
 			want: msgCLIKey,
 		},
 		{
 			name: "a key outside auth mode APIKey is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
-				keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
+				keyInEnv(v1.HarnessOpenCode, "OPENROUTER_API_KEY")(p)
 				p.Auth.APIKeySecretRef = key
 			}),
 			want: msgCLIKey,
@@ -1160,7 +1160,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 		{
 			name: "a platform OpenCode model with no provider is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
-				keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
+				keyInEnv(v1.HarnessOpenCode, "OPENROUTER_API_KEY")(p)
 				p.Model = claudeModel
 			}),
 			want: msgOpenCodeModel,
@@ -1168,7 +1168,7 @@ func TestPlatformLLMProviders(t *testing.T) {
 		{
 			name: "a platform OpenCode model with no provider is reported at model",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
-				keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
+				keyInEnv(v1.HarnessOpenCode, "OPENROUTER_API_KEY")(p)
 				p.Model = "anthropic/ "
 			}),
 			want: "spec.platformLLMProviders[0].model: Invalid value",
@@ -1177,29 +1177,29 @@ func TestPlatformLLMProviders(t *testing.T) {
 			// The platform's gateway, on the token it issued the tenant.
 			name: "a platform Claude Code provider on its gateway's token under auth mode Env is accepted",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
-				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv}
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthEnv}
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envBaseURL), envFrom("ANTHROPIC_AUTH_TOKEN")}
 			}),
 		},
 		{
 			name: "a platform OpenCode provider on its model provider's key under auth mode Env is accepted",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
-				keyInEnv(v1.CLIAgentOpenCode, "OPENROUTER_API_KEY")(p)
-				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv}
+				keyInEnv(v1.HarnessOpenCode, "OPENROUTER_API_KEY")(p)
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthEnv}
 			}),
 		},
 		{
 			name: "a platform Codex provider under auth mode Env is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
-				keyInEnv(v1.CLIAgentCodex, "OPENROUTER_API_KEY")(p)
-				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv}
+				keyInEnv(v1.HarnessCodex, "OPENROUTER_API_KEY")(p)
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthEnv}
 			}),
 			want: msgCLIEnvAgent,
 		},
 		{
 			name: "a platform Claude Code provider on its gateway's address alone under auth mode Env is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
-				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv}
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthEnv}
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom(envBaseURL)}
 			}),
 			want: msgCLIEnvUnset,
@@ -1207,14 +1207,14 @@ func TestPlatformLLMProviders(t *testing.T) {
 		{
 			name: "a platform provider's env that signs nothing in under auth mode Env is reported at env",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
-				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv}
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthEnv}
 			}),
 			want: atPlatformEnv,
 		},
 		{
 			name: "a key under auth mode Env is refused",
 			mutate: platform(func(p *v1.PlatformLLMProvider) {
-				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.CLIAgentAuthEnv, APIKeySecretRef: key}
+				p.Auth = v1.PlatformLLMProviderAuth{Mode: v1.HarnessAuthEnv, APIKeySecretRef: key}
 				p.Env = []v1.NamespacedSecretEnvVar{envFrom("ANTHROPIC_AUTH_TOKEN")}
 			}),
 			want: msgCLIKey,

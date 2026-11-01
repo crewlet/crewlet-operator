@@ -44,7 +44,7 @@ metadata:
 spec:
   companyRef:
     name: helm
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: sonnet
   timeoutSeconds: 90
   maxConcurrent: 4
@@ -62,7 +62,7 @@ metadata:
 spec:
   companyRef:
     name: helm
-  agent: Pi
+  harness: Pi
   model: openrouter/anthropic/claude-sonnet-5
   webTools: Denied
   auth:
@@ -81,7 +81,7 @@ metadata:
 spec:
   companyRef:
     name: helm
-  agent: ClaudeCode
+  harness: ClaudeCode
   model: sonnet
   auth:
     mode: Subscription
