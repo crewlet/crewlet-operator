@@ -52,6 +52,7 @@ func companyCases() []companyCase {
 		{name: caseSeatPools},
 		{name: caseOptionalKeys, advisories: []advisory{advisoryNoUnitChannel}},
 		{name: "chat"},
+		{name: "mcp-registry", advisories: agentsAlone},
 	}
 }
 

@@ -739,6 +739,36 @@ Datadog's remote server (`https://mcp.datadoghq.com/v1/mcp` on US1, over
 the server's own `DD_API_KEY` header. Name the server `datadog`, give it
 `shared: false`, and, for a stdio server, install it in the image as above.
 
+## A community registry
+
+Crewlet's Settings › MCP & tools adds a server from a curated catalogue
+compiled into the engine. A Company may also name a community registry, which
+the same add flow then searches beside the catalogue:
+
+```yaml
+apiVersion: crewlet.ai/v1alpha1
+kind: Company
+metadata:
+  name: nimbus
+spec:
+  companyName: Nimbus
+  mcpRegistry:
+    url: https://registry.modelcontextprotocol.io
+```
+
+`spec.mcpRegistry.url` is rendered as `mcp_registry.url`. It is the address of
+a registry that speaks the MCP Registry v0.1 API, usually a mirror the company
+curates, and it must be an `https` address with no credentials, query or
+fragment; a private host is fine. The API server refuses anything else, as the
+engine does. Unset, there is no community search.
+
+A result is only ever a draft for Crewlet's add flow, marked as not reviewed,
+and the engine dials nothing a listing names. A server added from one is
+written into the company document by the dashboard, which a Company whose
+`spec.config.managementPolicy` is `Enforce` refuses: on such a Company, an
+MCPServer object is still how a server is added. See
+[Crewlet's catalogue and community registry](https://github.com/crewlet/crewlet/blob/main/docs/guides/tools-and-mcp.md#the-curated-catalogue-and-a-community-registry).
+
 ## See also
 
 - [Connecting Integrations](integrations.md) — each vendor's Integration and the seats' credentials for its server

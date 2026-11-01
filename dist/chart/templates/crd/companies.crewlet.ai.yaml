@@ -486,13 +486,13 @@ spec:
 
                   It may not set what another field or object of this API owns: name,
                   mission, vision, policies, timezone, tracker, knowledge, chat,
-                  token_budget, assistant, providers, integrations, mcp_servers, roles,
-                  units or seat_access_migrated, which the operator writes with every
-                  integration kind so the engine acts on each Seat's spec.integrations.
-                  Every position Crewlet holds a credential in lives under one of those
-                  keys, so engineConfig can never carry a credential: the API server
-                  refuses a Company whose engineConfig names one of them, before anything
-                  is stored.
+                  token_budget, assistant, providers, integrations, mcp_registry,
+                  mcp_servers, roles, units or seat_access_migrated, which the operator
+                  writes with every integration kind so the engine acts on each Seat's
+                  spec.integrations. Every position Crewlet holds a credential in lives
+                  under one of those keys, so engineConfig can never carry a credential:
+                  the API server refuses a Company whose engineConfig names one of them,
+                  before anything is stored.
                 items:
                   description: |-
                     EngineConfigEntry is one top-level key of the company document that
@@ -521,14 +521,14 @@ spec:
                 x-kubernetes-list-type: map
                 x-kubernetes-validations:
                 - message: 'engineConfig may not set name, mission, vision, policies,
-                    timezone, tracker, knowledge, token_budget, assistant, providers,
-                    integrations, mcp_servers, roles, units or seat_access_migrated:
+                    timezone, tracker, knowledge, chat, token_budget, assistant, providers,
+                    integrations, mcp_registry, mcp_servers, roles, units or seat_access_migrated:
                     those are fields and objects of this API, among them every block
                     that holds a credential'
                   rule: self.all(e, !(e.name in ['name', 'mission', 'vision', 'policies',
                     'timezone', 'tracker', 'knowledge', 'chat', 'token_budget', 'assistant',
-                    'providers', 'integrations', 'mcp_servers', 'roles', 'units',
-                    'seat_access_migrated']))
+                    'providers', 'integrations', 'mcp_registry', 'mcp_servers', 'roles',
+                    'units', 'seat_access_migrated']))
               exposure:
                 description: exposure overrides how the company is reached.
                 minProperties: 1
@@ -827,6 +827,43 @@ spec:
                       are pushed into the company's engine, where the tenant can read them
                       (see the class's platformLLMProviders).
                     type: boolean
+                type: object
+              mcpRegistry:
+                description: |-
+                  mcpRegistry is the community MCP registry Crewlet's Settings › MCP &
+                  tools searches beside its curated catalogue when somebody adds a tool
+                  server. Unset, there is no community search. Crewlet's `mcp_registry`.
+                minProperties: 1
+                properties:
+                  url:
+                    description: |-
+                      url is the address of a registry that speaks the MCP Registry v0.1 API;
+                      Crewlet appends /v0.1/servers to it. An https address with no
+                      credentials, query or fragment, a private host included: what the
+                      registry answers is drafted into launch lines, so a plain http answer
+                      would be one any network peer could rewrite. A result is only ever a
+                      draft in Crewlet's add flow, marked as not reviewed, and Crewlet dials
+                      nothing a listing names. Crewlet's `url`.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: 'url must be an absolute https URL: what the registry
+                        answers is drafted into launch lines, so a plain http answer
+                        could be rewritten on its way'
+                      rule: isURL(self) && url(self).getScheme() == 'https' && url(self).getHostname()
+                        != ''
+                    - message: 'url may not hold a user name or password: a credential
+                        is named through a Secret, never written into an address'
+                      rule: '!self.matches(''^[^:/?#]+://[^/?#]*@'')'
+                    - message: 'url may not hold a query or a fragment: Crewlet appends
+                        the registry''s /v0.1/servers path to it'
+                      rule: '!self.contains(''?'') && !self.contains(''#'')'
+                    - message: 'url may not hold a ${NAME} reference: the operator
+                        refuses every one it did not write, since in many fields the
+                        engine resolves one from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
                 type: object
               mission:
                 description: |-

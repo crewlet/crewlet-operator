@@ -1,0 +1,10 @@
+mcp_registry:
+  url: https://registry.modelcontextprotocol.io
+name: Registry
+seat_access_migrated:
+- atlassian
+- datadog
+- github
+- gitlab
+- mattermost
+- slack

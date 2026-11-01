@@ -464,6 +464,25 @@ _Appears in:_
 | `usePlatformProviders` _boolean_ | usePlatformProviders adds the EngineClass's platformLLMProviders to the<br />company, so seats can run on models the platform provides. Their keys<br />are pushed into the company's engine, where the tenant can read them<br />(see the class's platformLLMProviders). |  | Optional: \{\} <br /> |
 
 
+#### CompanyMCPRegistry
+
+
+
+CompanyMCPRegistry names a community registry of MCP servers. It maps onto
+Crewlet's mcp_registry. A block naming no registry says nothing, so it is
+refused rather than read as none.
+
+_Validation:_
+- MinProperties: 1
+
+_Appears in:_
+- [CompanySpec](#companyspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `url` _string_ | url is the address of a registry that speaks the MCP Registry v0.1 API;<br />Crewlet appends /v0.1/servers to it. An https address with no<br />credentials, query or fragment, a private host included: what the<br />registry answers is drafted into launch lines, so a plain http answer<br />would be one any network peer could rewrite. A result is only ever a<br />draft in Crewlet's add flow, marked as not reviewed, and Crewlet dials<br />nothing a listing names. Crewlet's `url`. |  | MaxLength: 2048 <br />MinLength: 1 <br />Optional: \{\} <br /> |
+
+
 #### CompanyObjects
 
 
@@ -554,7 +573,8 @@ _Appears in:_
 | `embeddings` _[EmbeddingSettings](#embeddingsettings)_ | embeddings is the provider vectors are computed with. Unset leaves<br />search keyword-only. Crewlet's providers.embeddings. |  | Optional: \{\} <br /> |
 | `sandbox` _[SandboxSettings](#sandboxsettings)_ | sandbox is where the company's agent seats' executors run. Required<br />of a company with an Agent seat and a model provider, which Crewlet<br />refuses without it (SandboxRequired). Crewlet's providers.sandbox. |  | Optional: \{\} <br /> |
 | `integrations` _[CompanyIntegrationSettings](#companyintegrationsettings)_ | integrations is company-wide integration behaviour. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
-| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables, artifacts and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, chat,<br />token_budget, assistant, providers, integrations, mcp_servers, roles,<br />units or seat_access_migrated, which the operator writes with every<br />integration kind so the engine acts on each Seat's spec.integrations.<br />Every position Crewlet holds a credential in lives under one of those<br />keys, so engineConfig can never carry a credential: the API server<br />refuses a Company whose engineConfig names one of them, before anything<br />is stored. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
+| `mcpRegistry` _[CompanyMCPRegistry](#companymcpregistry)_ | mcpRegistry is the community MCP registry Crewlet's Settings › MCP &<br />tools searches beside its curated catalogue when somebody adds a tool<br />server. Unset, there is no community search. Crewlet's `mcp_registry`. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
+| `engineConfig` _[EngineConfigEntry](#engineconfigentry) array_ | engineConfig is passed through into the company document as written,<br />for the engine's tuning blocks that have no field here: turn_engine,<br />learning, scheduling, workers, skill_variables, artifacts and the<br />notification_* settings, spelled as Crewlet spells them. Each entry is<br />one top-level key of the document and its value. The operator does not<br />interpret it; the engine validates it in the dry run before every<br />apply, and a refusal is reported on the Company.<br />It may not set what another field or object of this API owns: name,<br />mission, vision, policies, timezone, tracker, knowledge, chat,<br />token_budget, assistant, providers, integrations, mcp_registry,<br />mcp_servers, roles, units or seat_access_migrated, which the operator<br />writes with every integration kind so the engine acts on each Seat's<br />spec.integrations. Every position Crewlet holds a credential in lives<br />under one of those keys, so engineConfig can never carry a credential:<br />the API server refuses a Company whose engineConfig names one of them,<br />before anything is stored. |  | MaxItems: 64 <br />Optional: \{\} <br /> |
 | `config` _[ConfigSettings](#configsettings)_ | config is how the operator manages the company's document. | \{ managementPolicy:Enforce \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `topology` _[CompanyTopology](#companytopology)_ | topology is how the engine is laid out in pods. | \{ data:map[replicas:1] \} | MinProperties: 1 <br />Optional: \{\} <br /> |
 | `exposure` _[CompanyExposure](#companyexposure)_ | exposure overrides how the company is reached. |  | MinProperties: 1 <br />Optional: \{\} <br /> |
