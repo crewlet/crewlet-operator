@@ -332,8 +332,8 @@ const (
 	// reads, keeping the same fields a tool server may read.
 	chatLogRead = "v0.1.1-0.20261030170958-abd826b8591e"
 
-	// executorLogRead is crewlet#536's engine, read at the head of its branch
-	// (8d555f5cb4) before that change merged, whose data node runs a tenth
+	// executorLogRead is crewlet#536's engine, read at its merge commit on
+	// main (59b9bd3f04), whose data node runs a tenth
 	// state log, the executor log, which names each seat's executor sessions.
 	// startCore opens its two sides over the running log (openExecutor, which
 	// builds a reader and a writer and reads nothing over the network), as it
@@ -352,7 +352,7 @@ const (
 	// they did, and no other mirrored declaration moved. dataPodBootSeconds
 	// follows it, counted from dataPodStateLogs: 1896 seconds before the
 	// object store, where nine logs took 1766, eight 1646 and seven 1536.
-	executorLogRead = "v0.1.1-0.20261101145544-8d555f5cb484"
+	executorLogRead = "v0.1.1-0.20261101193927-59b9bd3f041e"
 
 	// The engine files most of the bounds on a boot are read from, and the
 	// guide that quotes the windows they add up to.
