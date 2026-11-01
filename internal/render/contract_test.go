@@ -1735,7 +1735,7 @@ func loginEntries(t *testing.T, document []byte) map[string]loginEntry {
 func requireOneLoginTwoHarnesses(t *testing.T, what string, document []byte, login string, providers ...string) map[string]loginEntry {
 	t.Helper()
 	entries := loginEntries(t, document)
-	dir := CLIStateRoot + "/" + login
+	dir := HarnessStateRoot + "/" + login
 	byHarness := map[string]string{}
 	for _, name := range providers {
 		e, ok := entries[name]

@@ -576,7 +576,7 @@ func engineCases() []engineCase {
 					"harness": "opencode", "model": modelOpenCode, keyRunIn: cellE2B,
 					"auth":      map[string]any{"mode": "subscription"},
 					keyEnv:      map[string]any{envGatewayKey: "${OPENROUTER_API_KEY}"},
-					keyStateDir: "/var/lib/crewlet/llm-cli/" + providerOpenCode,
+					keyStateDir: "/var/lib/crewlet/llm-harness/" + providerOpenCode,
 				}
 				role(t, doc, seatCTO)[keyLLM] = map[string]any{"default": []any{"anthropic", providerOpenCode}}
 			},

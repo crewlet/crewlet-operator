@@ -680,15 +680,15 @@ func (r *renderer) providersDoc() providersDoc {
 	return doc
 }
 
-// CLIStateRoot is the directory on a data pod's volume under which each
+// HarnessStateRoot is the directory on a data pod's volume under which each
 // LLMProvider keeps its login and its per-seat homes, one directory per
 // loginName: on the volume, so they outlive the pod.
-const CLIStateRoot = DataDir + "/llm-cli"
+const HarnessStateRoot = DataDir + "/llm-harness"
 
-// CLIPlatformStateRoot is the directory on a data pod's volume under which
+// HarnessPlatformStateRoot is the directory on a data pod's volume under which
 // each platform provider keeps its per-seat homes, one directory per name.
 //
-// A root of its own rather than CLIStateRoot, because a tenant chooses its
+// A root of its own rather than HarnessStateRoot, because a tenant chooses its
 // providers' loginName freely: under one root, a loginName equal to a
 // platform provider's name would point the two entries at one directory.
 // Crewlet keeps each harness's files in a directory of its own under it
@@ -696,7 +696,7 @@ const CLIStateRoot = DataDir + "/llm-cli"
 // directory and nothing in it; entries of the same harness would share its login
 // and seat homes, mixing the tenant's login into the directory of a provider
 // every tenant of the class is given.
-const CLIPlatformStateRoot = DataDir + "/llm-cli-platform"
+const HarnessPlatformStateRoot = DataDir + "/llm-harness-platform"
 
 // llmEntry renders what an LLMProvider and a platform provider share, with
 // the entry's state directory.
@@ -724,7 +724,7 @@ func llmEntry(s *v1alpha1.LLMProviderSettings, stateDir string) llmProviderDoc {
 // whether such a run can reach the seat's tools from there).
 func (r *renderer) llmProvider(p *v1alpha1.LLMProvider) llmProviderDoc {
 	s := &p.Spec
-	doc := llmEntry(&s.LLMProviderSettings, CLIStateRoot+"/"+cmp.Or(s.LoginName, p.Name))
+	doc := llmEntry(&s.LLMProviderSettings, HarnessStateRoot+"/"+cmp.Or(s.LoginName, p.Name))
 	doc.RunIn = sandboxPlacement(s.RunIn)
 	doc.Env = r.secretEnv(s.Env)
 	doc.Auth = llmAuthDoc{Mode: harnessAuthMode(s.Auth.Mode)}
@@ -743,7 +743,7 @@ func (r *renderer) llmProvider(p *v1alpha1.LLMProvider) llmProviderDoc {
 // platformProvider renders one of the EngineClass's platform providers, whose
 // key and env are read from Secrets in the namespaces the class names.
 func (r *renderer) platformProvider(p *v1alpha1.PlatformLLMProvider) llmProviderDoc {
-	doc := llmEntry(&p.LLMProviderSettings, CLIPlatformStateRoot+"/"+p.Name)
+	doc := llmEntry(&p.LLMProviderSettings, HarnessPlatformStateRoot+"/"+p.Name)
 	if len(p.Env) > 0 {
 		doc.Env = make(map[string]string, len(p.Env))
 		for _, e := range p.Env {

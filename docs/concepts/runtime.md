@@ -141,7 +141,7 @@ which share the scratch `emptyDir` and its limit, and `HOME` is set
 explicitly so an image built on another base still has a writable one. A
 harness is handed a home, a `TMPDIR` and XDG directories of its seat's
 own instead, under
-`/var/lib/crewlet/llm-cli` on the data volume (`llm-cli-platform` for a
+`/var/lib/crewlet/llm-harness` on the data volume (`llm-harness-platform` for a
 model the class provides). A seat's executor runs as its harness's own run in a
 box: placed `Direct`, a process tree of the pod in a box on its sandboxes
 volume, as the engine's user, with the pod's `PATH`, locale, `TERM`, `TZ`,

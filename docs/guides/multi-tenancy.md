@@ -111,7 +111,7 @@ above included, follow the run into either cell ([What a coding box
 carries](credentials.md#what-a-coding-box-carries)), so a seat's executor
 reaches its model through the gateway as the provider's other phases do. It
 keeps its seats' homes on each company's data volume under
-`/var/lib/crewlet/llm-cli-platform/<name>`.
+`/var/lib/crewlet/llm-harness-platform/<name>`.
 
 The control plane runs with the chart's tenant provisioner role
 (`tenantProvisioner` in the chart's values). It creates each tenant's

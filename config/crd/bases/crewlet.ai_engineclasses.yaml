@@ -1717,7 +1717,7 @@ spec:
                     subscription's headless token or login is one account's, which every tenant
                     of the class would share: it belongs on a tenant's own LLMProvider. The
                     phases it serves in the engine's pod keep their per-seat homes on the data
-                    volume under /var/lib/crewlet/llm-cli-platform/<name>, apart from every
+                    volume under /var/lib/crewlet/llm-harness-platform/<name>, apart from every
                     tenant's loginName.
 
                     A ClaudeCode or OpenCode platform provider may also be the member a seat's

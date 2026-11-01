@@ -397,7 +397,7 @@ spec:
 ```
 
 The login, and the homes the harness keeps for each seat, live on the data
-volume, under `/var/lib/crewlet/llm-cli/<loginName>`, so a restarted data pod
+volume, under `/var/lib/crewlet/llm-harness/<loginName>`, so a restarted data pod
 keeps them; a seat pod keeps them on a scratch volume it loses at every start
 (see [Seat pools](#seat-pools)). That matters for a bundle: the engine
 restores one, when it starts and at every revision it applies, only into a
@@ -418,7 +418,7 @@ wherever the harness mints one.
 Providers that set the same `loginName` and drive the same harness share one
 login and its seats' homes, which is how several models run off one
 subscription. Each harness keeps its files in a directory of its own under the
-login (`/var/lib/crewlet/llm-cli/<loginName>/<cli>`, such as `claude-code` or
+login (`/var/lib/crewlet/llm-harness/<loginName>/<harness>`, such as `claude-code` or
 `codex`), so a provider of another harness with that `loginName` shares the
 directory and nothing in it
 ([Per-phase models](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#per-phase-models)).
@@ -439,7 +439,7 @@ OpenCode 2 keeps its logins in a database of its own rather than in files,
 so an OpenCode bundle holds one file: the document `opencode auth export
 --standalone` printed. The engine keeps it as the login of record
 (`opencode/credentials/exported-credentials` under
-`/var/lib/crewlet/llm-cli/<loginName>`), imports it into an empty database in
+`/var/lib/crewlet/llm-harness/<loginName>`), imports it into an empty database in
 a seat's home before the seat's calls, and exports it back when OpenCode
 refreshed it
 ([Token refresh across seats](https://github.com/crewlet/crewlet/blob/main/docs/concepts/llm-backends.md#token-refresh-across-seats)).

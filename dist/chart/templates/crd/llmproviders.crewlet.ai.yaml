@@ -301,7 +301,7 @@ spec:
                   beside the others' (Crewlet's <state_dir>/<harness>), so one of another
                   harness shares the directory and nothing in it. Unset is the provider's
                   own metadata.name. Crewlet's `state_dir`, as
-                  /var/lib/crewlet/llm-cli/<loginName>.
+                  /var/lib/crewlet/llm-harness/<loginName>.
                 maxLength: 63
                 minLength: 1
                 pattern: ^[a-z0-9][a-z0-9-]*$

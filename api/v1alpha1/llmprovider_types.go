@@ -414,7 +414,7 @@ type LLMProviderSpec struct {
 	// beside the others' (Crewlet's <state_dir>/<harness>), so one of another
 	// harness shares the directory and nothing in it. Unset is the provider's
 	// own metadata.name. Crewlet's `state_dir`, as
-	// /var/lib/crewlet/llm-cli/<loginName>.
+	// /var/lib/crewlet/llm-harness/<loginName>.
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=63
