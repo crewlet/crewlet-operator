@@ -70,6 +70,9 @@ const (
 	notOfferedLocalSandbox = "A seat's code work runs in E2B alone (`Company.spec.sandbox.e2b`), and " +
 		"`spec.engineConfig` may not set `providers`, so no company runs a sandbox on the engine's host, " +
 		"whose container runtime this environment is for."
+	notOfferedCodeHost = "Crewlet's code host is not offered: no pod the operator runs has the `git` role or the " +
+		"cache that serves a company's repositories, and `spec.engineConfig` may not set `code`, so no company " +
+		"document holds a `code` block."
 )
 
 // The references a covered position's sources take.
@@ -232,6 +235,10 @@ var credentialPositions = []credentialPosition{
 	{Tier: tierCompany, Path: "integrations.atlassian.api_key", Sources: []credentialSource{
 		{Field: "Integration.spec.atlassian.apiKeySecretRef", Reference: oneKey},
 	}},
+	{Tier: tierCompany, Path: "code.checks.env.*", Unsupported: notOfferedCodeHost},
+	{Tier: tierCompany, Path: "code.repos[].mirror_from.credential", Unsupported: notOfferedCodeHost},
+	{Tier: tierCompany, Path: "code.repos[].mirror_to.credential", Unsupported: notOfferedCodeHost},
+	{Tier: tierCompany, Path: "code.repos[].import.credential", Unsupported: notOfferedCodeHost},
 
 	{Tier: tierBootstrap, Path: "api.auth.tokens[].token", Sources: []credentialSource{
 		{Reference: "Secret `<company>-api-tokens`, which the operator generates once (or a platform supplies): " +

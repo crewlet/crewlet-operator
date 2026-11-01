@@ -87,7 +87,7 @@ uses is readable by the company's tenant:
 
 ## Covered in v1alpha1
 
-Every position of the company document but the one below is covered: each
+Every position of the company document but those below is covered: each
 has a field that fills it with a reference.
 
 | Crewlet position | Field | Reference |
@@ -156,6 +156,7 @@ coding CLI's, take no literal value.
 | Crewlet position | Why it is not offered |
 |---|---|
 | `providers.sandbox.local.runtime_env.*` | A seat's code work runs in E2B alone (`Company.spec.sandbox.e2b`), and `spec.engineConfig` may not set `providers`, so no company runs a sandbox on the engine's host, whose container runtime this environment is for. |
+| `code.checks.env.*`, `code.repos[].mirror_from.credential`, `code.repos[].mirror_to.credential`, `code.repos[].import.credential` | Crewlet's code host is not offered: no pod the operator runs has the `git` role or the cache that serves a company's repositories, and `spec.engineConfig` may not set `code`, so no company document holds a `code` block. |
 
 ---
 
