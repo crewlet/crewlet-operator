@@ -117,8 +117,10 @@ const (
 	configOptionalGo = "internal/controller/config_optional.go"
 	// seatTypesGo is the Seat API.
 	seatTypesGo = "api/v1alpha1/seat_types.go"
-	// mcpServerTypesGo is the MCPServer API.
+	// mcpServerTypesGo is the MCPServer API, and unitTypesGo the Unit API,
+	// whose MCPCredentialValue a Seat's spec.mcp shares.
 	mcpServerTypesGo = "api/v1alpha1/mcpserver_types.go"
+	unitTypesGo      = "api/v1alpha1/unit_types.go"
 	// toolServersMd and cliAgentsMd are the guides that state what a tool
 	// server and an executor run are started with.
 	toolServersMd = "docs/guides/tool-servers.md"
@@ -133,6 +135,9 @@ const (
 	mcpConfigGo = "internal/config/mcp.go"
 	orgGo       = "internal/org/organization.go"
 	fileRulesGo = "internal/config/filerules.go"
+	// mcpNamesGo is where the engine holds a tool server's name, tool
+	// prefix, value keys and address to what every client can use.
+	mcpNamesGo = "internal/config/mcpnames.go"
 
 	// bootstrapGo is the render of both Tier A documents, mcpbridgeGo where the
 	// engine decides whether a node has a tool bridge, and bootGo which node
@@ -400,6 +405,15 @@ const (
 	// follows it: markStarted starts none of its values, its own, a Seat's or
 	// a Unit's. Every other start is as it was.
 	serverOffRead = "v0.1.1-0.20261101162029-981cbd5c3194"
+	// entryRulesRead is crewlet#534's engine, read at the head of its branch
+	// before it merged, which holds an MCP server's name, tool prefix, url
+	// and value keys to what every client can use. sandboxMCP gives no box a
+	// server whose url, once resolved, Crewlet would not dial: plain http to
+	// a host on a public network, or a user name or password in it. The
+	// render's copy holds as it was: the API refuses such a url, and any
+	// ${NAME} in one, so a rendered server's url is the literal Crewlet
+	// dials, and every box that scopes the server is given it.
+	entryRulesRead = "v0.1.1-0.20261101134718-5ecd45431051"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -463,7 +477,7 @@ var cloudIDGateway = append([]string{"api/v1alpha1/integration_types.go"}, atlas
 // refusal of a literal value), the render's copy of their pattern, and the
 // guide and the page that state the rule of a literal value.
 var credentialNames = []string{
-	"api/v1alpha1/llmprovider_types.go", engineClassGo, mcpServerTypesGo, "api/v1alpha1/unit_types.go",
+	"api/v1alpha1/llmprovider_types.go", engineClassGo, mcpServerTypesGo, unitTypesGo,
 	signinGo, "docs/guides/tool-servers.md", credentialsConceptMd,
 }
 
@@ -914,9 +928,69 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "sandboxMCP",
 		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "an executor's box is given every server its seat's sandbox scopes, shared or not, with the seat's " +
-			"block for it, and none turned off",
-		digest: "03670857b95c2d949dda0b126efe1556da4a3b3b62246996463b47e3cfe2aa42",
-		read:   serverOffRead,
+			"block for it, none turned off and none at an address Crewlet would not dial",
+		digest: "a5074c7d7567b84061ae5e5cbf4926512b40a949ccdb87250ec8d11c1a309d79",
+		read:   entryRulesRead,
+	},
+	{
+		file: mcpNamesGo, name: "mcpServerName",
+		against: []string{mcpServerTypesGo},
+		decides: "a tool server's name is lowercase letters, digits and hyphens, starting and ending with a letter " +
+			"or a digit",
+		digest: "ba9e38f2e23fe0e81dba24db66dab87fc899b80a5d53afc0980e723e8afa6943",
+		read:   entryRulesRead,
+	},
+	{
+		file: mcpNamesGo, name: "MaxMCPServerName",
+		against: []string{mcpServerTypesGo},
+		decides: "a tool server's name is at most 32 characters",
+		digest:  "46cb2d0fc055c6520bbeaba7c4076e98e0dab8cde92a8d5c0e7b8003ca355269",
+		read:    entryRulesRead,
+	},
+	{
+		file: mcpNamesGo, name: "(*MCPServer).validateToolPrefix",
+		against: []string{mcpServerTypesGo},
+		decides: "a tool prefix is letters, digits, _ and -, and leaves room for a name in the longest tool name " +
+			"(its bound read from the engine by TestContractMCPServerEntryRulesAreTheEngines)",
+		digest: "b1e0f2a306759be51b13a895e0c72b9fd7ceb2ab015a69055f6d07242cca5d9d",
+		read:   entryRulesRead,
+	},
+	{
+		file: mcpNamesGo, name: "(*MCPServer).keyProblem",
+		against: []string{renderOptionalGo, mcpServerTypesGo, unitTypesGo},
+		decides: "an HTTP server's values are named as headers and a Stdio server's as variables, its own, a " +
+			"seat's and a unit's alike",
+		digest: "157aa379a0b42d2fe72a766b9703fd0bbb37f79b8803ac65048170363072cf17",
+		read:   entryRulesRead,
+	},
+	{
+		file: mcpNamesGo, name: "headerName",
+		against: []string{mcpServerTypesGo, unitTypesGo},
+		decides: "a header's name is RFC 9110's token, which the API holds every value's name to less the backtick",
+		digest:  "2ddfda23f093e956c8a0c57846950be055869ebee6ebeef9a7a79ef8f851b574",
+		read:    entryRulesRead,
+	},
+	{
+		file: mcpNamesGo, name: "MCPAddressProblem",
+		against: []string{mcpServerTypesGo},
+		decides: "a tool server's url is https, or plain http to a host on no public network, with no user in it",
+		digest:  "b114a4439a6dd57685a0b507b31035105e98df4533872de62603b91fe31594a8",
+		read:    entryRulesRead,
+	},
+	{
+		file: mcpNamesGo, name: "privateHost",
+		against: []string{mcpServerTypesGo},
+		decides: "a host on no public network is a loopback, private or link-local address, a one-label name, " +
+			"localhost, or a name under .localhost, .local, .home.arpa or .internal",
+		digest: "fea9394ad1a80ab5b27f0ec64724d451222fd9523901f3e670b4ea1dbaf74cd4",
+		read:   entryRulesRead,
+	},
+	{
+		file: mcpConfigGo, name: "breaksALine",
+		against: []string{mcpServerTypesGo},
+		decides: "a description is one line: no control character, line separator or paragraph separator",
+		digest:  "cb440c2ff26ea87b89269c7b122dbbc73cc6afeb0d4969fd0546140ca2d4ece4",
+		read:    entryRulesRead,
 	},
 	{
 		file: fileRulesGo, name: "(*Company).validateHeaderSpellings",

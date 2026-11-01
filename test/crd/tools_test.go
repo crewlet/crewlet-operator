@@ -324,8 +324,77 @@ func TestMCPServerValidation(t *testing.T) {
 			mutate: func(s *v1.MCPServer) { s.Name = "crewlet" },
 			want:   "the name crewlet is reserved",
 		},
+		// THE ENGINE'S ENTRY RULES (crewlet internal/config/mcpnames.go):
+		// a server's name, its toolPrefix and its url, refused here as
+		// Crewlet refuses them, rather than as the company document every
+		// other object of the Company is applied with.
+		{
+			name:   "a name of 32 characters is accepted",
+			mutate: func(s *v1.MCPServer) { s.Name = strings.Repeat("a", 32) },
+		},
+		{
+			name:   "a name of 33 characters is refused",
+			mutate: func(s *v1.MCPServer) { s.Name = strings.Repeat("b", 33) },
+			want:   msgServerName,
+		},
+		{
+			name:   "a server name holding a dot is refused",
+			mutate: func(s *v1.MCPServer) { s.Name = "tools.github" },
+			want:   msgServerName,
+		},
+		{
+			name:   "a toolPrefix of 49 characters, starting with _, is accepted",
+			mutate: func(s *v1.MCPServer) { s.Spec.ToolPrefix = "_" + strings.Repeat("p", 48) },
+		},
+		{
+			name:   "a toolPrefix of 50 characters is refused",
+			mutate: func(s *v1.MCPServer) { s.Spec.ToolPrefix = strings.Repeat("p", 50) },
+			want:   "may not be more than 49",
+		},
+		{
+			name:   "a toolPrefix with a dot is refused",
+			mutate: func(s *v1.MCPServer) { s.Spec.ToolPrefix = "gh." },
+			want:   "should match",
+		},
+		{
+			name:   "plain http to a public host is refused",
+			mutate: asHTTP(func(s *v1.MCPServer) { s.Spec.URL = "http://mcp.example.com/mcp" }),
+			want:   msgPlainHTTP,
+		},
+		{
+			name:   "plain http to a shared address space host is refused",
+			mutate: asHTTP(func(s *v1.MCPServer) { s.Spec.URL = "http://100.64.1.1/mcp" }),
+			want:   msgPlainHTTP,
+		},
+		{
+			name:   "plain http to a Service in the cluster is accepted",
+			mutate: asHTTP(func(s *v1.MCPServer) { s.Spec.URL = "http://github-mcp.tools.svc.cluster.local:8080/mcp" }),
+		},
+		{
+			name:   "plain http to a Service by its own name is accepted",
+			mutate: asHTTP(func(s *v1.MCPServer) { s.Spec.URL = "http://github-mcp:8080/mcp" }),
+		},
+		{
+			name:   "plain http to a private address is accepted",
+			mutate: asHTTP(func(s *v1.MCPServer) { s.Spec.URL = "http://10.42.0.7:8080/mcp" }),
+		},
+		{
+			name:   "plain http to the loopback address is accepted",
+			mutate: asHTTP(func(s *v1.MCPServer) { s.Spec.URL = "http://[::1]:8080/mcp" }),
+		},
+		{
+			name:   "plain http to localhost is accepted",
+			mutate: asHTTP(func(s *v1.MCPServer) { s.Spec.URL = "http://localhost:3000/mcp" }),
+		},
 	})
 }
+
+// msgServerName and msgPlainHTTP are the messages of the rules an MCPServer's
+// name and url are held to as Crewlet holds them.
+const (
+	msgServerName = "an MCPServer's name is its Crewlet server name"
+	msgPlainHTTP  = "url may be plain http only to a host on no public network"
+)
 
 func TestIntegrationValidation(t *testing.T) {
 	// asGitHub replaces Slack with GitHub, then applies change.

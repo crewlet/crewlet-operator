@@ -787,3 +787,55 @@ func TestAHeaderIsSpelledAsItsUnitSpellsIt(t *testing.T) {
 		})
 	}
 }
+
+// TestAStdioServersValueIsNamedAsAVariable holds the render to Crewlet's
+// refusal of a Seat's or a Unit's value for a Stdio server named outside a
+// variable's grammar, on the object that gives it, and to nothing else: an
+// HTTP server's values are headers, whose grammar the API already holds them
+// to, and a variable's name is taken as written.
+//
+// Mutation: check an HTTP server's values too, or skip the Units, and this is
+// red.
+func TestAStdioServersValueIsNamedAsAVariable(t *testing.T) {
+	stdioBlock := func(owner *[]v1alpha1.MCPCredentials, name string) {
+		*owner = append(*owner, v1alpha1.MCPCredentials{Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+			Name: name, Value: new("crewlet"),
+		}}})
+	}
+	cases := []struct {
+		name    string
+		mutate  func(in *Input)
+		refused []string
+	}{
+		{name: "a variable's name", mutate: func(in *Input) { stdioBlock(&seat(in, optionalSeat).Spec.MCP, "TAVILY_PROJECT") }},
+		{name: "an HTTP server's header", mutate: func(in *Input) { seat(in, optionalSeat).Spec.MCP[0].Env[0].Name = "X-Team" }},
+		{
+			name:    "a seat's header's name for a Stdio server",
+			mutate:  func(in *Input) { stdioBlock(&seat(in, optionalSeat).Spec.MCP, "tavily-project") },
+			refused: []string{"Seat/coder spec.mcp[1].env[0].name"},
+		},
+		{
+			name:    "a unit's header's name for a Stdio server",
+			mutate:  func(in *Input) { stdioBlock(&unit(in, unitEng).Spec.MCP, "tavily.project") },
+			refused: []string{"Unit/" + unitEng + " spec.mcp[1].env[0].name"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			input := optionalInput(t)
+			c.mutate(input)
+			_, err := Company(input)
+			refusals := RefErrors(err)
+			refused := make([]string, 0, len(refusals))
+			for _, r := range refusals {
+				refused = append(refused, r.Kind+"/"+r.Name+" "+r.Field)
+				if r.Reason != v1alpha1.ReasonConflict || r.Basis != EngineRefuses {
+					t.Errorf("%s %s is refused on %v with %s", r.Kind, r.Name, r.Basis, r.Reason)
+				}
+			}
+			if !slices.Equal(refused, c.refused) {
+				t.Errorf("the render refuses %q, want %q", refused, c.refused)
+			}
+		})
+	}
+}
