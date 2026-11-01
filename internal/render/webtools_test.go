@@ -14,11 +14,11 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/secretsync"
 )
 
-// webToolsRule finds the CEL rule that holds webTools Denied to the CLIs
+// webToolsRule finds the CEL rule that holds webTools Denied to the harnesses
 // Crewlet can turn the web off for, and captures its list of them.
 var webToolsRule = regexp.MustCompile(`self\.webTools != 'Denied' \|\| self\.harness in \[([^\]]*)\]`)
 
-// webDeniable reads the CLIs the rule admits webTools Denied for out of one
+// webDeniable reads the harnesses the rule admits webTools Denied for out of one
 // generated CRD, as the API server will judge them: every CEL rule in the
 // document is read, and exactly one must be the webTools rule.
 func webDeniable(t *testing.T, crd string) []v1alpha1.Harness {
@@ -67,14 +67,14 @@ func webDeniable(t *testing.T, crd string) []v1alpha1.Harness {
 	return out
 }
 
-// TestContractWebToolsDeniedFollowsTheEngine holds the API's list of CLIs
-// webTools Denied is admitted for to the engine's own verdict, CLI by CLI: a
-// provider of each CLI the API knows is rendered with webTools Denied, the
+// TestContractWebToolsDeniedFollowsTheEngine holds the API's list of harnesses
+// webTools Denied is admitted for to the engine's own verdict, harness by harness: a
+// provider of each harness the API knows is rendered with webTools Denied, the
 // API's own rule set aside, and handed to `crewlet validate`. The engine
-// refuses the stance on a CLI whose profile carries no web denial, naming
+// refuses the stance on a harness whose profile carries no web denial, naming
 // web_denial, and takes it on every other; the rule must admit exactly the
-// CLIs the engine takes, on an LLMProvider and on a platform provider alike.
-// A CLI whose profile gains a measured denial in Crewlet fails here until the
+// harnesses the engine takes, on an LLMProvider and on a platform provider alike.
+// A harness whose profile gains a measured denial in Crewlet fails here until the
 // rule admits it, and one the rule admits that the engine refuses fails here
 // before a tenant's apply does.
 func TestContractWebToolsDeniedFollowsTheEngine(t *testing.T) {

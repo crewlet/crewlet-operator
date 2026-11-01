@@ -58,7 +58,7 @@ accounts with the keys they reference whenever it holds them.
 > organization keys go into the company's secret store, which every engine pod
 > of the company opens (the data pod and each seat pod hold its keyring), and
 > so does every process that runs as the engine: its stdio MCP servers, a
-> coding CLI, the code a seat runs. A seat steered by a prompt injection, or a
+> harness, the code a seat runs. A seat steered by a prompt injection, or a
 > compromised MCP package, is then one step from administering the vendor.
 > Give the provisioner the narrowest credential it accepts: a GitLab group
 > Owner's token rather than an instance administrator's, an Atlassian API key

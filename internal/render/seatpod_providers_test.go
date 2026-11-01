@@ -7,8 +7,8 @@ import (
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
 )
 
-// TestSeatPodProviders holds a seat placed in a seat pool to the CLI logins a
-// seat pod can keep: no CLI signed in with a credential bundle, which every
+// TestSeatPodProviders holds a seat placed in a seat pool to the harness logins a
+// seat pod can keep: no harness signed in with a credential bundle, which every
 // seat pod would restore and refresh on its own and so log every pod on that
 // login out, the data pods' included; a key in env, the sign-in of Hermes, Pi
 // and OpenCode, is as portable as a token. A seat on the data pods may run on
@@ -16,26 +16,26 @@ import (
 // report (TestExecutor).
 func TestSeatPodProviders(t *testing.T) {
 	bundled := func(in *Input) {
-		p := cliProvider()
+		p := claudeCodeProvider()
 		p.Spec.Auth = v1alpha1.HarnessAuth{
-			CredentialBundleSecretRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "bundle"},
+			CredentialBundleSecretRef: v1alpha1.SecretKeyReference{Name: providerClaudeCode, Key: "bundle"},
 		}
 		in.LLMProviders = append(in.LLMProviders, p)
 	}
-	// keyInEnv is a CLI signed in through env, its model provider's key, as
+	// keyInEnv is a harness signed in through env, its model provider's key, as
 	// the seat's reviewer: Hermes and Pi run no executor.
 	keyInEnv := func(harness v1alpha1.Harness) func(*Input) {
 		return func(in *Input) {
-			p := cliProvider()
+			p := claudeCodeProvider()
 			p.Spec.Model = modelOpenCode
 			p.Spec.Harness = harness
 			p.Spec.Auth = v1alpha1.HarnessAuth{Mode: v1alpha1.HarnessAuthSubscription}
 			p.Spec.Env = []v1alpha1.SecretEnvVar{{
 				Name:      envGatewayKey,
-				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: providerCLI, Key: "openrouter"}},
+				ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: providerClaudeCode, Key: "openrouter"}},
 			}}
 			in.LLMProviders = append(in.LLMProviders, p)
-			seatNamed(in, seatBo).Spec.LLM.Review = []v1alpha1.LLMProviderReference{{Name: providerCLI}}
+			seatNamed(in, seatBo).Spec.LLM.Review = []v1alpha1.LLMProviderReference{{Name: providerClaudeCode}}
 		}
 	}
 	chain := func(name string) []v1alpha1.LLMProviderReference {
@@ -50,7 +50,7 @@ func TestSeatPodProviders(t *testing.T) {
 			name: "a bundled login in a phase of a seat in a pool",
 			mutate: func(in *Input) {
 				bundled(in)
-				seatNamed(in, seatDee).Spec.LLM.Auxiliary = chain(providerCLI)
+				seatNamed(in, seatDee).Spec.LLM.Auxiliary = chain(providerClaudeCode)
 			},
 			want: []string{"Seat/dee spec.llm.auxiliary[0].name CLIAuthNotPortable"},
 		},
@@ -60,7 +60,7 @@ func TestSeatPodProviders(t *testing.T) {
 			name: "a bundled login as the default chain of a seat in a pool",
 			mutate: func(in *Input) {
 				bundled(in)
-				seatNamed(in, seatBo).Spec.LLM.Default = chain(providerCLI)
+				seatNamed(in, seatBo).Spec.LLM.Default = chain(providerClaudeCode)
 			},
 			want: []string{"Seat/bo spec.llm.default[0].name CLIAuthNotPortable"},
 		},
@@ -68,7 +68,7 @@ func TestSeatPodProviders(t *testing.T) {
 			name: "a bundled login on the data pods",
 			mutate: func(in *Input) {
 				bundled(in)
-				seatNamed(in, seatCy).Spec.LLM.Default = chain(providerCLI)
+				seatNamed(in, seatCy).Spec.LLM.Default = chain(providerClaudeCode)
 			},
 		},
 		{
@@ -88,8 +88,8 @@ func TestSeatPodProviders(t *testing.T) {
 		{
 			name: "a headless token in a pool",
 			mutate: func(in *Input) {
-				in.LLMProviders = append(in.LLMProviders, cliProvider())
-				seatNamed(in, seatBo).Spec.LLM.Default = chain(providerCLI)
+				in.LLMProviders = append(in.LLMProviders, claudeCodeProvider())
+				seatNamed(in, seatBo).Spec.LLM.Default = chain(providerClaudeCode)
 			},
 		},
 		{
@@ -99,7 +99,7 @@ func TestSeatPodProviders(t *testing.T) {
 			mutate: func(in *Input) {
 				bundled(in)
 				in.Class.Spec.SeatPools.AllowPerSeat = nil
-				seatNamed(in, seatAna).Spec.LLM.Default = chain(providerCLI)
+				seatNamed(in, seatAna).Spec.LLM.Default = chain(providerClaudeCode)
 			},
 			want: []string{anaPerSeatNotAllowed},
 		},

@@ -11,12 +11,12 @@ import (
 
 // Where an agent seat's executor runs, and whether it can.
 //
-// Every agent seat's executor is its coding CLI's own agentic run, detached
+// Every agent seat's executor is its harness's own agentic run, detached
 // from the turn that launched it, in a box (Crewlet's agentLauncher). A launch
 // walks the seat's executor chain, spec.llm.default, else the head of the
-// document's llm_order, and runs on the first member that drives a CLI with
+// document's llm_order, and runs on the first member that drives a harness with
 // an in-box runner, ClaudeCode or OpenCode (ExecutorHarnesses), and is not
-// sitting out its spent plan on the node: a member of any other CLI is passed
+// sitting out its spent plan on the node: a member of any other harness is passed
 // over silently, as it still serves the seat's other phases. The run goes to
 // the picked member's cell, its runIn, else the Company's
 // spec.sandbox.defaultRunIn (agentPlacement):
@@ -34,9 +34,9 @@ import (
 //     Company's public one, which any data pod answers and relays to the pod
 //     holding the seat over the broker (ADR-0056 in Crewlet): without one
 //     Crewlet refuses every launch (NotExposed). It is given only the
-//     variables that sign its CLI in (signin.go), so a provider whose login a
+//     variables that sign its harness in (signin.go), so a provider whose login a
 //     credential bundle restores cannot run there unless the seat's own
-//     environment signs its CLI in (SandboxLoginNotPortable).
+//     environment signs its harness in (SandboxLoginNotPortable).
 //
 // These two cells are the ones the operator offers, Crewlet's container cell
 // not among them, and a Direct box is made on the pod's sandboxes volume
@@ -127,8 +127,8 @@ type member struct {
 	field string
 	// platform is true for one of the EngineClass's platform providers.
 	platform bool
-	// cli is what the verdicts read of the provider's CLI.
-	cli cliEntry
+	// entry is what the verdicts read of the provider's harness.
+	entry harnessEntry
 }
 
 func (m *member) describe() string {
@@ -139,7 +139,7 @@ func (m *member) describe() string {
 }
 
 // runs reports whether the member can run a seat's executor.
-func (m *member) runs() bool { return slices.Contains(ExecutorHarnesses, m.cli.harness) }
+func (m *member) runs() bool { return slices.Contains(ExecutorHarnesses, m.entry.harness) }
 
 // executorChain resolves a seat's executor chain as Crewlet's phase.Resolve
 // does: the providers of spec.llm.default that resolve, in order, or with none
@@ -209,13 +209,13 @@ func (r *renderer) documentHead() (member, bool) {
 
 // ownMember is the member that is the Company's own LLMProvider name.
 func (r *renderer) ownMember(name, field string) member {
-	return member{name: name, field: field, cli: ownEntry(r.own[name])}
+	return member{name: name, field: field, entry: ownEntry(r.own[name])}
 }
 
 // platformMember is the member that is the EngineClass's platform provider
 // name.
 func (r *renderer) platformMember(name, field string) member {
-	return member{name: name, field: field, platform: true, cli: platformEntry(r.platform[name])}
+	return member{name: name, field: field, platform: true, entry: platformEntry(r.platform[name])}
 }
 
 // runnersOf is the members of chain that can run a seat's executor, in chain
@@ -239,7 +239,7 @@ func (r *renderer) launches(s *v1alpha1.Seat) bool {
 // spec.sandbox.defaultRunIn (Crewlet's agentPlacement). A platform provider
 // names none.
 func (r *renderer) cellOf(m *member) v1alpha1.SandboxPlacement {
-	return cmp.Or(m.cli.runIn, r.in.Company.Spec.Sandbox.DefaultRunIn)
+	return cmp.Or(m.entry.runIn, r.in.Company.Spec.Sandbox.DefaultRunIn)
 }
 
 // executor is the verdict on the agent seat s; false when its chain resolves
@@ -256,7 +256,7 @@ func (r *renderer) executor(s *v1alpha1.Seat) (Executor, bool) {
 	env, leftOut := r.runEnvNames(s)
 	head := &runners[0]
 	e := Executor{
-		Field: head.field, Member: head.name, Platform: head.platform, Harness: head.cli.harness,
+		Field: head.field, Member: head.name, Platform: head.platform, Harness: head.entry.harness,
 		Placement: r.cellOf(head),
 	}
 	e.Reason, e.Message = r.verdict(s, head, env, leftOut)
@@ -270,7 +270,7 @@ func (r *renderer) verdict(s *v1alpha1.Seat, m *member, env, leftOut envNames) (
 	company := r.in.Company.Name
 	public := r.in.PublicBaseURL
 	pool := SeatPool(r.in.Company, s)
-	runs := fmt.Sprintf("runs the seat's executor as %s on %s%s", m.cli.harness, m.describe(), r.heads(m))
+	runs := fmt.Sprintf("runs the seat's executor as %s on %s%s", m.entry.harness, m.describe(), r.heads(m))
 	noAddress := fmt.Sprintf("Company %s has no public address (status.endpoints.publicBaseURL)", company)
 	exposeIt := "Give the Company's EngineClass a webhooks route, or the Company spec.exposure.publicBaseURL"
 	switch r.cellOf(m) {
@@ -287,24 +287,24 @@ func (r *renderer) verdict(s *v1alpha1.Seat, m *member, env, leftOut envNames) (
 				"the seat's tools back at, so Crewlet refuses each launch of the seat's executor. %s, or %s",
 				runs, noAddress, exposeIt, directRemedy(m))
 		}
-		own, seat := m.cli.remoteSignIn(env)
+		own, seat := m.entry.remoteSignIn(env)
 		bridged := fmt.Sprintf("%s, in the Company's E2B sandbox, which calls the seat's tools back at %s/mcp/, where "+
 			"a data pod relays each call to the engine pod holding the seat", runs, public)
 		switch {
-		case len(seat) > 0 && m.cli.harness == v1alpha1.HarnessClaudeCode:
+		case len(seat) > 0 && m.entry.harness == v1alpha1.HarnessClaudeCode:
 			return "", fmt.Sprintf("%s, signed in by %s from the Company's or the seat's spec.sandbox, which Crewlet "+
 				"hands the run in place of the provider's own sign-in", bridged, strings.Join(seat, ", "))
 		case own:
 			return "", bridged
 		case len(seat) > 0:
 			return "", fmt.Sprintf("%s, signed in by %s from the Company's or the seat's spec.sandbox, as the "+
-				"provider's own %s login cannot follow the run there", bridged, strings.Join(seat, ", "), m.cli.harness)
+				"provider's own %s login cannot follow the run there", bridged, strings.Join(seat, ", "), m.entry.harness)
 		}
-		_, lost := m.cli.remoteSignIn(leftOut)
+		_, lost := m.entry.remoteSignIn(leftOut)
 		return v1alpha1.ReasonSandboxLoginNotPortable, fmt.Sprintf("%s, in the Company's E2B sandbox, where %s's %s login "+
 			"cannot follow it: a credential bundle stays on the engine's data volume, as it carries a refresh token "+
 			"the engine keeps rotating, and nothing in the run's environment signs %s in, so Crewlet refuses each "+
-			"launch of the seat's executor. To fix it, %s, or %s%s", runs, m.describe(), m.cli.harness, m.cli.harness,
+			"launch of the seat's executor. To fix it, %s, or %s%s", runs, m.describe(), m.entry.harness, m.entry.harness,
 			signInRemedy(m), directRemedy(m), leftOutNote(lost))
 	}
 }
@@ -330,9 +330,9 @@ func (r *renderer) heads(m *member) string {
 		"spec.llm.order names none", first, company)
 }
 
-// signInRemedy is how to sign m's CLI in for a run in E2B.
+// signInRemedy is how to sign m's harness in for a run in E2B.
 func signInRemedy(m *member) string {
-	if m.cli.harness == v1alpha1.HarnessOpenCode {
+	if m.entry.harness == v1alpha1.HarnessOpenCode {
 		return "put its model provider's key in the provider's env, or in the seat's spec.sandbox.env, under a " +
 			"name Crewlet reads as a credential, such as OPENROUTER_API_KEY"
 	}
@@ -349,7 +349,7 @@ func directRemedy(m *member) string {
 	switch {
 	case m.platform:
 		how = "set the Company's spec.sandbox.defaultRunIn to Direct, as a platform provider names no runIn,"
-	case m.cli.runIn != "":
+	case m.entry.runIn != "":
 		how = fmt.Sprintf("set LLMProvider %s's spec.runIn to Direct,", m.name)
 	default:
 		how = fmt.Sprintf("set LLMProvider %s's spec.runIn, or the Company's spec.sandbox.defaultRunIn, to Direct,", m.name)
@@ -366,7 +366,7 @@ func (r *renderer) fallbacks(s *v1alpha1.Seat, chain, runners []member, env, lef
 		steps := make([]string, 0, len(runners)-1)
 		for i := 1; i < len(runners); i++ {
 			m := &runners[i]
-			step := fmt.Sprintf("%s as %s, %s", m.describe(), m.cli.harness, cellWords(r.cellOf(m)))
+			step := fmt.Sprintf("%s as %s, %s", m.describe(), m.entry.harness, cellWords(r.cellOf(m)))
 			if reason, _ := r.verdict(s, m, env, leftOut); reason != "" {
 				step += fmt.Sprintf(", where Crewlet would refuse it too (%s)", reason)
 			}
@@ -378,7 +378,7 @@ func (r *renderer) fallbacks(s *v1alpha1.Seat, chain, runners []member, env, lef
 	var never []string
 	for i := range chain {
 		if m := &chain[i]; !m.runs() {
-			never = append(never, fmt.Sprintf("%s (%s)", m.describe(), m.cli.harness))
+			never = append(never, fmt.Sprintf("%s (%s)", m.describe(), m.entry.harness))
 		}
 	}
 	if len(never) > 0 {
@@ -417,17 +417,17 @@ func (r *renderer) noExecutor(s *v1alpha1.Seat) {
 		head := &chain[0]
 		r.errs.add(EngineRefuses, KindSeat, s.Name, fieldLLM, v1alpha1.ReasonNoExecutorCLI, fmt.Sprintf(
 			"names no spec.llm.default, so the seat's executor runs on %s%s, and it drives %s: Crewlet runs a "+
-				"seat's executor, its CLI's own run, only on ClaudeCode or OpenCode, and refuses a seat that could "+
+				"seat's executor, its harness's own run, only on ClaudeCode or OpenCode, and refuses a seat that could "+
 				"run no turn. Name a provider driving one of them in spec.llm.default, or put one first in the "+
-				"Company's spec.llm.order", head.describe(), r.heads(head), head.cli.harness))
+				"Company's spec.llm.order", head.describe(), r.heads(head), head.entry.harness))
 		return
 	}
 	named := make([]string, len(chain))
 	for i := range chain {
-		named[i] = fmt.Sprintf("%s (%s)", chain[i].describe(), chain[i].cli.harness)
+		named[i] = fmt.Sprintf("%s (%s)", chain[i].describe(), chain[i].entry.harness)
 	}
 	r.errs.add(EngineRefuses, KindSeat, s.Name, fieldLLMDefault, v1alpha1.ReasonNoExecutorCLI, fmt.Sprintf(
-		"is %s, and none of them drives ClaudeCode or OpenCode: Crewlet runs a seat's executor, its CLI's own run, "+
+		"is %s, and none of them drives ClaudeCode or OpenCode: Crewlet runs a seat's executor, its harness's own run, "+
 			"only on those, and refuses a seat that could run no turn. Name a provider driving one of them in "+
 			"spec.llm.default, and keep these for the seat's other phases with spec.llm.review, subagent, "+
 			"auxiliary or judge, or move one of them to ClaudeCode or OpenCode", strings.Join(named, ", ")))
@@ -454,7 +454,7 @@ func (r *renderer) sandboxRequired(models bool) {
 	}
 	slices.Sort(agents)
 	r.errs.add(EngineRefuses, KindCompany, r.in.Company.Name, "spec.sandbox", v1alpha1.ReasonSandboxRequired, fmt.Sprintf(
-		"is unset, and every agent seat's executor runs as its coding CLI's own run, in a box spec.sandbox "+
+		"is unset, and every agent seat's executor runs as its harness's own run, in a box spec.sandbox "+
 			"configures: %s, so Crewlet refuses the document. Set spec.sandbox.defaultRunIn to Direct to run the "+
 			"executors on the engine pods that hold the seats, or to E2B with spec.sandbox.e2b to run them in E2B",
 		seatsSentence(agents)))
@@ -496,7 +496,7 @@ func (r *renderer) unofferedPlacements() {
 			continue
 		}
 		for _, m := range runnersOf(chain) {
-			if !m.platform && m.cli.runIn == v1alpha1.SandboxPlacementE2B && !slices.Contains(seats[m.name], SeatHandle(s)) {
+			if !m.platform && m.entry.runIn == v1alpha1.SandboxPlacementE2B && !slices.Contains(seats[m.name], SeatHandle(s)) {
 				seats[m.name] = append(seats[m.name], SeatHandle(s))
 			}
 		}

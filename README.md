@@ -99,8 +99,8 @@ flowchart LR
     O -->|"company document, applied whole"| E
     O -->|"referenced secret values"| E
     E["<b>Crewlet engine</b><br/><i>one per Company</i>"]
-    E -->|"each agent seat's executor,<br/>its coding CLI's own run"| D["<b>A box on the engine pod</b><br/><i>Direct</i>"]
-    E -->|"each agent seat's executor,<br/>its coding CLI's own run"| SB["<b>The Company's E2B sandbox</b>"]
+    E -->|"each agent seat's executor,<br/>its harness's own run"| D["<b>A box on the engine pod</b><br/><i>Direct</i>"]
+    E -->|"each agent seat's executor,<br/>its harness's own run"| SB["<b>The Company's E2B sandbox</b>"]
     D -->|"/mcp/, the seat's tools,<br/>and /otlp/, its traces,<br/>on the pod's loopback"| E
     V["<b>Slack, GitHub, GitLab, …</b>"] -->|"/webhooks/ on the public listener"| E
     SB -->|"/otlp/ and /mcp/ on the public listener"| E
@@ -282,7 +282,7 @@ run.
 - [How the document is applied](docs/concepts/applying.md) · [How a company's engine runs](docs/concepts/runtime.md) · [Credential positions](docs/concepts/credentials.md)
 
 **Guides**
-- [Supplying credentials](docs/guides/credentials.md) · [Connecting integrations](docs/guides/integrations.md) · [Tool servers](docs/guides/tool-servers.md) · [Seats on a coding CLI](docs/guides/cli-agents.md)
+- [Supplying credentials](docs/guides/credentials.md) · [Connecting integrations](docs/guides/integrations.md) · [Tool servers](docs/guides/tool-servers.md) · [Seats on a harness](docs/guides/harnesses.md)
 - [Exposure and network policy](docs/guides/exposure.md) · [Bringing people in](docs/guides/people.md) · [Management policies](docs/guides/management-policies.md) · [Where seats run](docs/guides/topology.md)
 - [Hosting many tenants](docs/guides/multi-tenancy.md) · [Troubleshooting](docs/guides/troubleshooting.md)
 

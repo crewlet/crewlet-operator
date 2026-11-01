@@ -796,7 +796,7 @@ spec:
                       OpenCode and is not sitting out its spent plan on the node, in that
                       member's cell (its runIn, else the Company's spec.sandbox.defaultRunIn),
                       and a launch falls back along the chain to the next such member. A
-                      member of any other CLI never runs the executor and still serves every
+                      member of any other harness never runs the executor and still serves every
                       phase below that is unset. Crewlet refuses a chain with no ClaudeCode
                       or OpenCode member, which the operator refuses as NoExecutorCLI, and
                       applies one that mixes them with an advisory that its executor never
@@ -1375,14 +1375,14 @@ spec:
                     items:
                       description: |-
                         SandboxSetupStep is one provisioning step applied to a seat's executor box
-                        before its coding CLI starts. It maps onto a Crewlet sandbox setup step,
+                        before its harness starts. It maps onto a Crewlet sandbox setup step,
                         which Crewlet refuses when it does nothing (no files, commands, env or
                         brief): that is almost always an unfinished edit, which would otherwise
                         apply cleanly for ever and look like it was working.
                       properties:
                         brief:
                           description: |-
-                            brief tells the executor's CLI what this step made true about its
+                            brief tells the executor's harness what this step made true about its
                             box.
                           maxLength: 2048
                           minLength: 1
@@ -1395,7 +1395,7 @@ spec:
                             environment (its HOME and PATH among it) and the run's, never from the
                             engine's. The run's is the steps' env, the Seat's sandbox env, and
                             what Crewlet adds: the agent's handle and, when it has one, its email,
-                            and the variables that sign the executor's CLI in to the provider it
+                            and the variables that sign the executor's harness in to the provider it
                             runs on (docs/guides/credentials.md says which, and when the seat's
                             own env leaves them out). The API refuses ${NAME} (NAME an identifier)
                             all the same, as the operator refuses every ${NAME} it did not write
@@ -1423,7 +1423,7 @@ spec:
                           items:
                             description: |-
                               SecretEnvVar is a named credential delivered as an environment variable,
-                              such as a sandbox setup step's token or a coding CLI's model key. Crewlet
+                              such as a sandbox setup step's token or a harness's model key. Crewlet
                               treats every value in the positions that use this type as a credential, so
                               a literal value is not accepted: the value always comes from a Secret.
                             properties:

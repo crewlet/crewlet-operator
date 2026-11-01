@@ -147,9 +147,9 @@ var findings = []struct {
 	{site{fnSeatPodProviders, HarmsBeyond, v1alpha1.ReasonCLIAuthNotPortable},
 		"every seat pod refreshes the one login on its own and logs every seat on it out"},
 	{site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorCLI},
-		"a seat that names no chain, on the head of the order, a CLI that runs no executor"},
+		"a seat that names no chain, on the head of the order, a harness that runs no executor"},
 	{site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorCLI},
-		"a seat's own chain with no CLI that runs an executor"},
+		"a seat's own chain with no harness that runs an executor"},
 	{site{fnSandboxRequired, EngineRefuses, v1alpha1.ReasonSandboxRequired},
 		"agent seats and a model, and no box for any executor to run in"},
 	{site{fnUnoffered, EngineRefuses, v1alpha1.ReasonSandboxPlacementNotOffered},
@@ -462,7 +462,7 @@ func engineCases() []engineCase {
 	}
 	return append([]engineCase{
 		{
-			name: "a seat's own executor chain with no CLI that runs it", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorCLI},
+			name: "a seat's own executor chain with no harness that runs it", site: site{fnNoExecutor, EngineRefuses, v1alpha1.ReasonNoExecutorCLI},
 			input: sampleCompany,
 			mutate: func(in *Input) {
 				in.LLMProviders = append(in.LLMProviders, codexProvider())

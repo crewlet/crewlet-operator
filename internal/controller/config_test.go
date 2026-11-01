@@ -346,7 +346,7 @@ var _ = Describe("Company config", Ordered, func() {
 				CompanyName: "Acme " + name, EngineClassName: class.Name,
 				Config: crewletaiv1alpha1.ConfigSettings{ManagementPolicy: policy},
 				// Every agent seat's executor runs in a box: Direct, on
-				// the data pod, where the test's engine runs no CLI.
+				// the data pod, where the test's engine runs no harness.
 				Sandbox: crewletaiv1alpha1.SandboxSettings{DefaultRunIn: crewletaiv1alpha1.SandboxPlacementDirect},
 			},
 		}
@@ -359,7 +359,7 @@ var _ = Describe("Company config", Ordered, func() {
 				// test's engine is not given a binary of: no seat ever
 				// reaches a model.
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-					Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: cliModel,
+					Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: harnessModel,
 				},
 				Auth: crewletaiv1alpha1.HarnessAuth{
 					Mode:            crewletaiv1alpha1.HarnessAuthAPIKey,
@@ -1197,7 +1197,7 @@ var _ = Describe("Company config", Ordered, func() {
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
 				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-					Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: cliModel,
+					Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: harnessModel,
 				},
 				RunIn: crewletaiv1alpha1.SandboxPlacementE2B,
 				Auth: crewletaiv1alpha1.HarnessAuth{
@@ -1293,7 +1293,7 @@ var _ = Describe("Company config", Ordered, func() {
 		Eventually(reasonOf(c, crewletaiv1alpha1.ConditionConfigApplied)).WithTimeout(settle).
 			Should(Equal(crewletaiv1alpha1.ReasonSandboxRequired))
 		Expect(conditionOf(c, crewletaiv1alpha1.ConditionConfigApplied)(Default).Message).
-			To(ContainSubstring("Company/" + name + " spec.sandbox: is unset, and every agent seat's executor runs as its coding CLI's own run"))
+			To(ContainSubstring("Company/" + name + " spec.sandbox: is unset, and every agent seat's executor runs as its harness's own run"))
 		Eventually(reasonOf(bundle, crewletaiv1alpha1.ConditionApplied)).WithTimeout(settle).
 			ShouldNot(Equal(crewletaiv1alpha1.ReasonSandboxPlacementNotOffered),
 				"the refusal of the Company stands for the provider's, as Crewlet asks nothing of a cell without providers.sandbox")
@@ -1663,7 +1663,7 @@ var _ = Describe("Company config", Ordered, func() {
 			Spec: crewletaiv1alpha1.LLMProviderSpec{
 				CompanyRef: crewletaiv1alpha1.CompanyReference{Name: name},
 				LLMProviderSettings: crewletaiv1alpha1.LLMProviderSettings{
-					Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: cliModel,
+					Harness: crewletaiv1alpha1.HarnessClaudeCode, Model: harnessModel,
 				},
 				RunIn: crewletaiv1alpha1.SandboxPlacementE2B,
 				Auth:  crewletaiv1alpha1.HarnessAuth{TokenSecretRef: crewletaiv1alpha1.SecretKeyReference{Name: name + "-llm", Key: llmKey}},

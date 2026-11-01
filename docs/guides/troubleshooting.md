@@ -42,7 +42,7 @@ flowchart TD
     SYM -->|"SeatsPlaced=False"| SP["Seat pods do not run"]
     SYM -->|"a vendor's webhooks"| WH["Webhooks do not arrive"]
     SYM -->|"an agent never answers,<br/>a tool is missing"| TS["A tool server does not start"]
-    SYM -->|"a seat on a coding CLI<br/>is signed in to nothing"| SO["A seat on a coding CLI<br/>runs signed out"]
+    SYM -->|"a seat on a harness<br/>is signed in to nothing"| SO["A seat on a harness<br/>runs signed out"]
     SYM -->|"an OpenCode call<br/>or run fails at once"| SO
     SYM -->|"a warning, nothing broken"| AD["Read what the engine<br/>is worth telling you"]
 ```
@@ -114,7 +114,7 @@ with your last change yet.
 | | False | `RefNotFound`, `Cycle`, `Conflict`, `ReferenceNotAllowed`, `HumanSeat`, `SecretNotFound`, `SecretTooLarge`, `PerSeatNotAllowed`, `CLIAuthNotPortable`, `NoExecutorCLI`, `SandboxPlacementNotOffered`, `OptionalKeyUnused` | An object of the company keeps the document from rendering. The object at fault reports the same reason on `Applied`; fix it there ([What blocks a document](../concepts/company-document.md#what-blocks-a-document)). Meanwhile, under `Enforce`, the operator still takes out of the engine's secret store the value of a deleted Secret the document lets go without, and activates the running revision again so the engine reads the store without it, with a `Reactivated` event, where the running revision lets the value go too, or a Warning `Reactivated` when the revision activated again is not the document it read, or when its request failed and another document, activated after the deletion, runs instead, and it activated nothing again; one that reads it as required, or another document somebody else activated, keeps it until the next document runs, with a `SecretKept` event, the only report of it here, since the Secrets are not read ([A key that may go without its value](tool-servers.md#a-key-that-may-go-without-its-value)). |
 | | False | `NameConflict` | The Secret `<company>-secret-sync`, where the operator keeps what it pushed to the engine's store, exists and is someone else's; `SecretsSynced` says the same. Rename or delete it; nothing is applied meanwhile. |
 | | False | `SeatPoolsNotAllowed` | The Company declares `spec.topology.seatPools`, and its class's `seatPools.policy` is not `Allowed`. Remove the pools, or run the company with a class that allows them. |
-| | False | `SandboxRequired` | The Company has an agent seat and a model provider, and no `spec.sandbox`: every agent seat's executor runs in a box, and Crewlet refuses a company that places none on every write. Set `spec.sandbox.defaultRunIn` to `Direct`, or to `E2B` with `spec.sandbox.e2b` ([Where a seat's executor runs](cli-agents.md#where-a-seats-executor-runs)). |
+| | False | `SandboxRequired` | The Company has an agent seat and a model provider, and no `spec.sandbox`: every agent seat's executor runs in a box, and Crewlet refuses a company that places none on every write. Set `spec.sandbox.defaultRunIn` to `Direct`, or to `E2B` with `spec.sandbox.e2b` ([Where a seat's executor runs](harnesses.md#where-a-seats-executor-runs)). |
 | | False | `PoolCapacityExceeded` | The company's seat pods would number more than its class's `seatPools.maxPods`: its Shared pools' replicas alone (the message says so; lower them), or with the pods of its PerSeat seats, each of which reports it too. |
 | | False | `Invalid` | The engine's dry run refused the document, in its own words, every problem in this message. A problem at a place a part rendered (a Seat, Unit, LLMProvider, MCPServer, Integration or Schedule) is also reported on that part, as `Applied=False Invalid`; one at a place the Company renders itself (its own fields, `spec.embeddings`, `spec.sandbox` and its setup steps) is in this message alone. |
 | | False | `Drifted` | Under `Observe`, the engine runs another document; the message names the places that differ. |
@@ -157,16 +157,16 @@ conditions. `kubectl get engineclasses` shows it.
 | | False | `NotAnAccountID` | A person's Seat sets `contact.atlassianAccount` to something that is no Atlassian account id, such as an email address, while its company reaches Jira or Confluence on Atlassian Cloud, which names a person by account id alone: what the person does there reaches no seat, and an agent's mention of them names nobody. The message names each product on Cloud. The seat is applied all the same. Give the person's account id ([A person's accounts](integrations.md#a-persons-accounts)). |
 | | False | `ReferenceNotAllowed` | A string it renders into the document holds a `${NAME}` reference. The operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment ([What blocks a document](../concepts/company-document.md#what-blocks-a-document)). The message names the place in the document. Give a credential with a Secret reference; in a sandbox command, write a variable as `$NAME`, which the sandbox's shell expands. |
 | | False | `SecretNotFound` | A Secret or key it references is missing, where it does not let a tool server or a seat's executor run go without the value. |
-| | False | `SecretValueEmpty` | A value it gives a tool server or a seat's executor run is read from a Secret key that holds an empty value, under a key no `optionalKeys` lists, and it is the value the engine starts with (not one every seat replaces with its own). Crewlet starts no tool server with a value that resolves to nothing, so the server it is given to is not started, for the company or the seat ([A tool server does not start](#a-tool-server-does-not-start)); each of the seat's executor runs starts without it, which the engine logs as a gap of the run (`sandbox_env_unresolved`). The object is applied all the same, with a Warning event. Give the key a value, or list it in the `optionalKeys` the message names: the MCPServer's `spec.optionalKeys` for a server's own value, the Seat's `spec.sandbox.optionalKeys` or the step's for a run's ([A value a run may go without](cli-agents.md#a-value-a-run-may-go-without)). A Seat's or a Unit's value for a tool server is the identity the seat's instance acts as, and the message offers no list for it. |
+| | False | `SecretValueEmpty` | A value it gives a tool server or a seat's executor run is read from a Secret key that holds an empty value, under a key no `optionalKeys` lists, and it is the value the engine starts with (not one every seat replaces with its own). Crewlet starts no tool server with a value that resolves to nothing, so the server it is given to is not started, for the company or the seat ([A tool server does not start](#a-tool-server-does-not-start)); each of the seat's executor runs starts without it, which the engine logs as a gap of the run (`sandbox_env_unresolved`). The object is applied all the same, with a Warning event. Give the key a value, or list it in the `optionalKeys` the message names: the MCPServer's `spec.optionalKeys` for a server's own value, the Seat's `spec.sandbox.optionalKeys` or the step's for a run's ([A value a run may go without](harnesses.md#a-value-a-run-may-go-without)). A Seat's or a Unit's value for a tool server is the identity the seat's instance acts as, and the message offers no list for it. |
 | | False | `OptionalKeyUnused` | An MCPServer's `optionalKeys` names a key no value read from a Secret, or provisioned, is written under, not by its own `env` or `headers` nor by any Seat's or Unit's `spec.mcp` for it: none at all, or literal `value`s only, which the message names. It leaves nothing out, and Crewlet refuses it, which holds the document. Remove the entry, name the key it was meant for (a Stdio server's keys are compared as written, and the message names the spelling a key is written in), or read one of the literals from a Secret. Removing a Seat's value, or the Seat, can cause it. |
 | | False | `SecretTooLarge` | A value it references is over 64 KiB. |
 | `Applied` | True | `InRevision` | It is in the revision the engine runs, which the message names; the condition's `observedGeneration` is the generation that revision holds. |
-| | False | `Invalid` | The engine refused its part of the document; the message is the engine's. One only the engine's dry run sees: a Seat's `tokenBudget` window below `turn_engine.executor_min_budget_tokens` (25000 unless the Company's `spec.engineConfig` sets `turn_engine`), the room an executor launch needs, so the seat would park as starved before its first run (the Company's own `tokenBudget` is refused on `ConfigApplied` the same way). Raise the ceiling, or lower the floor in `spec.engineConfig`. Another: a setup step's file a box the step reaches refuses, such as an absolute path in a seat whose executor runs `Direct` ([Where a seat's executor runs](cli-agents.md#where-a-seats-executor-runs)). |
+| | False | `Invalid` | The engine refused its part of the document; the message is the engine's. One only the engine's dry run sees: a Seat's `tokenBudget` window below `turn_engine.executor_min_budget_tokens` (25000 unless the Company's `spec.engineConfig` sets `turn_engine`), the room an executor launch needs, so the seat would park as starved before its first run (the Company's own `tokenBudget` is refused on `ConfigApplied` the same way). Raise the ceiling, or lower the floor in `spec.engineConfig`. Another: a setup step's file a box the step reaches refuses, such as an absolute path in a seat whose executor runs `Direct` ([Where a seat's executor runs](harnesses.md#where-a-seats-executor-runs)). |
 | | False | `PerSeatNotAllowed` | A Seat is placed in a PerSeat pool, and its Company's class does not set `seatPools.allowPerSeat`. Place it in `data` or a Shared pool. |
 | | False | `PoolCapacityExceeded` | A Seat is placed in a PerSeat pool, and its pods would take the company's seat pods past the class's `seatPools.maxPods`. The seats already running in pods of their own are admitted first, then the rest oldest first; the first seat that does not fit is refused, and every seat after it. Place it in a Shared pool, or lower a pool's replicas. |
 | | False | `PlacementPending` | The Seat moves to another pool, whose StatefulSet has no ready pod yet: it keeps running where the revision the engine runs pins it, and is moved once a pod of its new pool is ready. A pool at `replicas: 0` never gets one, and neither does a pool the Company does not declare (`ResolvedRefs=False`, `PoolNotFound`). |
-| | False | `CLIAuthNotPortable` | A Seat is placed in a seat pool, and runs on an `LLMProvider` signed in with a credential bundle, which every seat pod would restore and refresh on its own. Sign the CLI in with `tokenSecretRef` (Claude Code), `auth.mode: APIKey` or, for Hermes, Pi or OpenCode, its model provider's key in `env`, in place of the bundle ([Signing in](cli-agents.md#signing-in)), or place the seat in `data`. |
-| | False | `NoExecutorCLI` | An agent Seat's executor chain holds no provider driving `ClaudeCode` or `OpenCode`, the CLIs Crewlet runs a seat's executor on, so the seat could run no turn, and Crewlet refuses it on every write. The message names the field: `spec.llm.default`, or `spec.llm` for a seat that names no chain and runs on the head of the Company's `spec.llm.order`. Name a provider driving one of them first in `spec.llm.default`, keeping the others for the seat's other phases (`spec.llm.review`, `subagent`, `auxiliary`, `judge`), or put one first in the Company's order ([Where a seat's executor runs](cli-agents.md#where-a-seats-executor-runs)). |
+| | False | `CLIAuthNotPortable` | A Seat is placed in a seat pool, and runs on an `LLMProvider` signed in with a credential bundle, which every seat pod would restore and refresh on its own. Sign the harness in with `tokenSecretRef` (Claude Code), `auth.mode: APIKey` or, for Hermes, Pi or OpenCode, its model provider's key in `env`, in place of the bundle ([Signing in](harnesses.md#signing-in)), or place the seat in `data`. |
+| | False | `NoExecutorCLI` | An agent Seat's executor chain holds no provider driving `ClaudeCode` or `OpenCode`, the harnesses Crewlet runs a seat's executor on, so the seat could run no turn, and Crewlet refuses it on every write. The message names the field: `spec.llm.default`, or `spec.llm` for a seat that names no chain and runs on the head of the Company's `spec.llm.order`. Name a provider driving one of them first in `spec.llm.default`, keeping the others for the seat's other phases (`spec.llm.review`, `subagent`, `auxiliary`, `judge`), or put one first in the Company's order ([Where a seat's executor runs](harnesses.md#where-a-seats-executor-runs)). |
 | | False | `SandboxPlacementNotOffered` | An LLMProvider's `runIn` is `E2B`, a seat's executor or the Company's deep work can launch on it, and the Company's `spec.sandbox` configures no `e2b`: Crewlet refuses a run placed in a cell nothing configures, on every write. The message names the seats. Configure `spec.sandbox.e2b`, set `runIn` to `Direct`, or remove it to take `spec.sandbox.defaultRunIn`. |
 | | False | `SeatHeld` | A Human Seat turned Agent while a person, a service account or an open invitation holds the seat in the engine's identity directory: the engine refuses the document until an admin of the company frees the seat, and the Company's `ConfigApplied` says how ([The engine refuses a change to the document](#the-engine-refuses-a-change-to-the-document)). |
 | | False | `Blocked` | It is fine, and another object keeps the document from being applied (a document is applied whole). Fix the object the Company's `ConfigApplied` names. A part whose current generation already runs keeps `True` meanwhile. |
@@ -179,11 +179,11 @@ conditions. `kubectl get engineclasses` shows it.
 | | True or False | `PauseNotManaged` | The seat's pause differs from `spec.paused`, and the Company's policy is `Observe` or `Seed`, under which the operator changes no pause. |
 | | Unknown | `PauseUnknown` | The engine may or may not have recorded the operator's pause or resume, or did not answer; the operator asks again in ten seconds. |
 | | Unknown | `PauseRefused` | The engine refused the operator's pause or resume; the message is the engine's. The operator asks again in ten seconds: a refusal for contention passes by itself. |
-| `Ready` (agent Seat) | True | `LeaseHeld` | An engine pod holds the seat and runs it; `status.placement.node` names the pod. The message says so when the pod is not one of the seat's StatefulSet yet: the engine moves it there once it runs the revision that places it. It names the provider, the CLI and the cell the seat's executor runs in, the providers a launch falls back to, and any in its chain that never run it. |
+| `Ready` (agent Seat) | True | `LeaseHeld` | An engine pod holds the seat and runs it; `status.placement.node` names the pod. The message says so when the pod is not one of the seat's StatefulSet yet: the engine moves it there once it runs the revision that places it. It names the provider, the harness and the cell the seat's executor runs in, the providers a launch falls back to, and any in its chain that never run it. |
 | | False | `Unplaced` | No engine pod holds the seat; its messages wait. The message says why: the seat is not in the revision the engine runs yet (see `Applied`); its pool runs no pod (see the Company's `SeatsPlaced`, and [A seat runs nowhere](#a-seat-runs-nowhere)); or a pod that may run it is up and the engine has not claimed it yet, which takes seconds. |
 | | False | `PoolNotFound` | No engine pod holds the seat, and none can: its pool is not one the Company declares, so no pod carries the label it is pinned to (see `ResolvedRefs`). |
-| | False | `NotExposed` | The Seat's executor runs in `E2B`, and the Company has no public address for the box to call the seat's tools back at, so the engine refuses each launch of its executor, in whatever pool the seat is placed (the message names the pod that holds it). The seat is applied all the same. Give the class a webhooks route or the Company `spec.exposure.publicBaseURL`, or run the executor `Direct`, on the engine pod that holds the seat ([Where a seat's executor runs](cli-agents.md#where-a-seats-executor-runs)). |
-| | False | `SandboxLoginNotPortable` | The Seat's executor runs in `E2B`, and nothing in the run's environment signs its CLI in: a `ClaudeCode` provider signed in by a credential bundle with nothing in the run's environment (the env of the Company's and the Seat's setup steps, and the Seat's `spec.sandbox.env`) that signs Claude Code in, or an `OpenCode` one with no credential-named variable in its `env` or the run's environment. A bundle stays on the data volume, so the engine refuses each launch. The seat is applied all the same. Sign `ClaudeCode` in with `tokenSecretRef`, `auth.mode: APIKey` or `auth.mode: Env` (a gateway's token or a cloud switch in its `env`), or give the seat a Claude Code sign-in in `spec.sandbox.env` (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY`); sign `OpenCode` in with its model provider's key in `env`, or give the seat that key in `spec.sandbox.env`; or run the executor `Direct`, which is seeded with the provider's login. |
+| | False | `NotExposed` | The Seat's executor runs in `E2B`, and the Company has no public address for the box to call the seat's tools back at, so the engine refuses each launch of its executor, in whatever pool the seat is placed (the message names the pod that holds it). The seat is applied all the same. Give the class a webhooks route or the Company `spec.exposure.publicBaseURL`, or run the executor `Direct`, on the engine pod that holds the seat ([Where a seat's executor runs](harnesses.md#where-a-seats-executor-runs)). |
+| | False | `SandboxLoginNotPortable` | The Seat's executor runs in `E2B`, and nothing in the run's environment signs its harness in: a `ClaudeCode` provider signed in by a credential bundle with nothing in the run's environment (the env of the Company's and the Seat's setup steps, and the Seat's `spec.sandbox.env`) that signs Claude Code in, or an `OpenCode` one with no credential-named variable in its `env` or the run's environment. A bundle stays on the data volume, so the engine refuses each launch. The seat is applied all the same. Sign `ClaudeCode` in with `tokenSecretRef`, `auth.mode: APIKey` or `auth.mode: Env` (a gateway's token or a cloud switch in its `env`), or give the seat a Claude Code sign-in in `spec.sandbox.env` (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` or `CLAUDE_CODE_USE_FOUNDRY`); sign `OpenCode` in with its model provider's key in `env`, or give the seat that key in `spec.sandbox.env`; or run the executor `Direct`, which is seeded with the provider's login. |
 | | False | `Suspended` | The Company is suspended. |
 | | Unknown | `EngineUnavailable` | The operator could not read the engine's fleet; the message says why, and the Company's `ConfigApplied` usually does too. `status.placement.node` is what the engine said last. |
 | `Healthy` (Integration) | True | `CheckPassed` | The engine reports the vendor connected. |
@@ -775,16 +775,16 @@ API's [`GET /mcp-servers`](https://github.com/crewlet/crewlet/blob/main/docs/ref
   over `http://` with `400 Use HTTPS`. Give it the Integration's `url`
   ([Mattermost](integrations.md#mattermost)).
 
-## A seat on a coding CLI runs signed out
+## A seat on a harness runs signed out
 
 An LLMProvider reports `Applied=True` once the engine runs the
-document that names it; whether its CLI signs in is the engine's to see, at
+document that names it; whether its harness signs in is the engine's to see, at
 run time, and a provider signed in to nothing fails every call, so its
 seats' chains move on to the next provider. The engine restores a
 credential bundle on the data pod, when it starts and at every revision it
-applies, and runs the CLI on the pod that holds each seat, which the Seat's
+applies, and runs the harness on the pod that holds each seat, which the Seat's
 `status.placement.node` names (a seat on a bundle runs in `data`:
-[Seat pools](cli-agents.md#seat-pools)):
+[Seat pools](harnesses.md#seat-pools)):
 
 ```bash
 pod=$(kubectl get seat triage -n acme -o jsonpath='{.status.placement.node}')
@@ -796,11 +796,11 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   not restore, and why, and the provider runs signed out. An OpenCode bundle
   holding a login OpenCode 1.x made (its `auth.json`) is refused: export it
   again from OpenCode 2
-  ([An OpenCode login in a bundle](cli-agents.md#an-opencode-login-in-a-bundle)).
-  So is a bundle exported from another CLI than the provider's `harness`, as
+  ([An OpenCode login in a bundle](harnesses.md#an-opencode-login-in-a-bundle)).
+  So is a bundle exported from another harness than the provider's `harness`, as
   it is after the provider moved to another one: put a bundle exported from
-  the new CLI in the Secret
-  ([Signing in](cli-agents.md#signing-in)).
+  the new harness in the Secret
+  ([Signing in](harnesses.md#signing-in)).
   The login is still empty, so a good bundle in the Secret is restored at
   the next revision the operator applies, with no restart.
 - **`harness_bundle_withheld`** names a provider somebody logged out with
@@ -808,11 +808,11 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   provider's login directory on the data volume, and while it stands the
   engine restores the bundle there at no start and no revision, until a
   login is written there again, by one of the commands the warning names
-  for that CLI (a headless token does not end it). To run the provider on
+  for that harness (a headless token does not end it). To run the provider on
   its bundle without one, give it, and every provider sharing its login, a
   new `loginName`
   ([Rotating a credential](credentials.md#rotating-a-credential)).
-- **Every call fails, saying the CLI refused to import the shared login.**
+- **Every call fails, saying the harness refused to import the shared login.**
   OpenCode cannot read the login the bundle restored, usually because
   another 2.x release than the image's exported it. The error names three
   ways out, each run on the data pod (`kubectl exec`), and none fits a pod:
@@ -823,14 +823,14 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   out of it, as above. Export the bundle again with the OpenCode release
   the image runs, and move the provider onto it with a new
   `loginName`.
-- **Every call of an OpenCode provider fails, the CLI rejecting
+- **Every call of an OpenCode provider fails, the harness rejecting
   `--standalone`.** The image has npm's `opencode-ai`, OpenCode 1.x, where
-  Crewlet drives OpenCode 2 alone ([OpenCode](cli-agents.md#opencode)).
+  Crewlet drives OpenCode 2 alone ([OpenCode](harnesses.md#opencode)).
 - **`harness_carry_out_failed`** names a seat whose home was left open
   (its last call could not carry its login out, or the engine stopped
   mid-call) and which another seat of the provider, sweeping such homes
   before its own call, could not carry out either, such as an OpenCode
-  export that failed, whether or not the CLI had refreshed anything; it says
+  export that failed, whether or not the harness had refreshed anything; it says
   when the other seats try again (`retry_in`), after a minute, doubling to
   half an hour. The seat's own next call tries every time and is refused
   meanwhile, so its chain moves on. If it repeats, the export cannot
@@ -849,12 +849,12 @@ kubectl logs acme-data-0 -n acme | grep -E 'harness_bundle_(restore_failed|withh
   with `this box runs OpenCode 1.…` in the run's report, which the engine's
   dashboard shows on the run. The box has OpenCode 1.x: name a template
   built with `@opencode/cli`
-  ([Where a seat's executor runs](cli-agents.md#where-a-seats-executor-runs)). No
+  ([Where a seat's executor runs](harnesses.md#where-a-seats-executor-runs)). No
   condition of the operator's can see it.
 - **A seat's executor run fails at once, every launch**, the run's report
-  saying its CLI was not found (`claude` or `opencode`): the run is `Direct`,
-  and the engine image has no such CLI. Nothing validates that before a run:
-  build the class's image with it ([The image needs the CLI](cli-agents.md#the-image-needs-the-cli)).
+  saying its harness was not found (`claude` or `opencode`): the run is `Direct`,
+  and the engine image has no such harness. Nothing validates that before a run:
+  build the class's image with it ([The image needs the harness](harnesses.md#the-image-needs-the-harness)).
 - **A seat's executor run starts again, its run's record saying it was cut
   off before it finished,** after its pod's engine restarted or its pod was
   replaced, by a rolling update, a drain or an eviction: a `Direct` run is a

@@ -1,4 +1,4 @@
-# Coding CLIs as model providers. A seat's executor is its CLI's own run in a
+# Harnesses as model providers. A seat's executor is its harness's own run in a
 # box: Claude Code on a subscription's headless token runs it in the
 # company's E2B sandbox (its runIn), and OpenCode, behind it in the seat's
 # chain, runs it while Claude Code sits out its plan, in the company's

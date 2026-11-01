@@ -31,17 +31,17 @@ import (
 )
 
 // TestHarnessSignInFollowsTheEngine holds the LLMProvider API's rules over a
-// provider's sign-in, and the table docs/guides/cli-agents.md states
+// provider's sign-in, and the table docs/guides/harnesses.md states
 // them in, to the engine every suite runs (crewlet's main) rather than to a
-// copy of its profile table. The token and key variable of each CLI are read
+// copy of its profile table. The token and key variable of each harness are read
 // from crewlet's own refusals, and held to the copy the API's own-variable
-// rule and its cases name. Every CLI the API offers is then tried in every
+// rule and its cases name. Every harness the API offers is then tried in every
 // sign-in shape, those variables among them, each provider driving one seat's
 // executor: the API server's verdict is taken from the installed CRD, and the
 // engine's from the crewlet binary, by `crewlet validate` (does it admit the
 // provider and its seat, and does it doubt either) and `crewlet llm list`
-// (what it reports the CLI signed in with). A crewlet change that moves a
-// profile's token or key variable, or marks another CLI as signing in through
+// (what it reports the harness signed in with). A crewlet change that moves a
+// profile's token or key variable, or marks another harness as signing in through
 // its environment, fails here, on the next run, until the API and the guide
 // follow it.
 //
@@ -58,7 +58,7 @@ func TestHarnessSignInFollowsTheEngine(t *testing.T) {
 	variables := engineVariables(t, namespace, harnesses)
 	for _, harness := range harnesses {
 		name := v1.Harness(harness)
-		if got, want := variables[name], cliVariables[name]; got != want {
+		if got, want := variables[name], harnessVariables[name]; got != want {
 			t.Errorf("%s: the engine's profile names token variable %q and key variable %q, the API's rules %q and %q",
 				harness, got.headless, got.key, want.headless, want.key)
 		}
@@ -88,7 +88,7 @@ func TestHarnessSignInFollowsTheEngine(t *testing.T) {
 
 	holdVerdicts(t, verdicts)
 
-	// The CLIs a model provider's key in env signs in are the engine's, and
+	// The harnesses a model provider's key in env signs in are the engine's, and
 	// the ones the API's rules and their cases name.
 	var fromEnv []v1.Harness
 	for harness, v := range verdicts[shapeEnv+"OPENROUTER_API_KEY"] {
@@ -107,8 +107,8 @@ func TestHarnessSignInFollowsTheEngine(t *testing.T) {
 // TestHarnessModelFollowsTheEngine holds the LLMProvider API's rules over a
 // provider's model to the engine, which refuses a model of
 // white space alone, and on every write a model with no provider segment for
-// a CLI whose profile reads its model as <provider>/<model>
-// (model_names_provider). Every CLI the API offers is
+// a harness whose profile reads its model as <provider>/<model>
+// (model_names_provider). Every harness the API offers is
 // tried, signed in a way the API admits for it, with models
 // with and without a provider, with empty segments and with segments of white
 // space, Go's and Unicode's beyond ASCII's among it: the API refuses with its
@@ -117,7 +117,7 @@ func TestHarnessSignInFollowsTheEngine(t *testing.T) {
 // OpenCode's, fails here until the API follows it. The engine's refusal of a
 // model naming no provider quotes the error OpenCode answers it with and the
 // command that lists OpenCode's providers, and so do the rule's message and
-// docs/guides/cli-agents.md, where a person reads why their model was
+// docs/guides/harnesses.md, where a person reads why their model was
 // refused: all three are held to the same two phrases.
 //
 // The API's rule is the engine's test, transcribed: a slash, and something
@@ -136,7 +136,7 @@ func TestHarnessModelFollowsTheEngine(t *testing.T) {
 		// Not white space to Go: a format character and a zero-width
 		// space are a provider and a model like any other.
 		"\u180e/x", "x/\u200b",
-		// No model at all, which the engine refuses whatever the CLI.
+		// No model at all, which the engine refuses whatever the harness.
 		"   ", "\u3000",
 	}
 	refusedModels := map[v1.Harness]bool{}
@@ -212,29 +212,29 @@ func TestHarnessModelFollowsTheEngine(t *testing.T) {
 		t.Errorf("neither side refused an OpenCode model with its model rule; the wording was held on nothing")
 	}
 	// The guide wraps its lines, so it is read as words.
-	guide, err := os.ReadFile(filepath.Join("..", "..", "docs", "guides", "cli-agents.md"))
+	guide, err := os.ReadFile(filepath.Join("..", "..", "docs", "guides", "harnesses.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	prose := strings.Join(strings.Fields(string(guide)), " ")
 	for _, phrase := range []string{openCodeModelRefusal, openCodeModelListing} {
 		if !strings.Contains(prose, "`"+phrase+"`") {
-			t.Errorf("docs/guides/cli-agents.md does not quote %q, as the engine's refusal of an OpenCode model "+
+			t.Errorf("docs/guides/harnesses.md does not quote %q, as the engine's refusal of an OpenCode model "+
 				"naming no provider does", phrase)
 		}
 	}
 }
 
 // TestHarnessRunInFollowsTheEngine holds the LLMProvider API's rule over a
-// provider's runIn, and the CLIs the operator reads as running a seat's
+// provider's runIn, and the harnesses the operator reads as running a seat's
 // executor (render.ExecutorHarnesses), to the engine every suite runs. Every
-// CLI the API offers is tried, signed in a way the API admits for it, with
+// harness the API offers is tried, signed in a way the API admits for it, with
 // runIn Direct and with runIn E2B in a Company that configures both: the API
 // refuses with its runIn rule exactly the providers whose run_in the engine
-// refuses, which it refuses on a CLI it has no in-box runner for, and the
-// CLIs whose runIn both admit are render.ExecutorHarnesses, on which the
+// refuses, which it refuses on a harness it has no in-box runner for, and the
+// harnesses whose runIn both admit are render.ExecutorHarnesses, on which the
 // operator's executor verdicts, its NoExecutorCLI refusal and the sign-in
-// table's column rest. A crewlet change that gives another CLI an in-box
+// table's column rest. A crewlet change that gives another harness an in-box
 // runner, or takes one away, fails here until the API, the render and the
 // guide follow it.
 func TestHarnessRunInFollowsTheEngine(t *testing.T) {
@@ -250,7 +250,7 @@ func TestHarnessRunInFollowsTheEngine(t *testing.T) {
 			p := shapedProvider(namespace, v1.Harness(harness), &shape)
 			p.Spec.RunIn = runIn
 			refusal := apiVerdict(t, p)
-			if refusal != "" && !strings.Contains(refusal, msgCLIRunIn) {
+			if refusal != "" && !strings.Contains(refusal, msgHarnessRunIn) {
 				t.Fatalf("%s, %s, runIn %s: the API refuses the provider for more than its runIn: %s",
 					harness, shape.name, runIn, refusal)
 			}
@@ -278,7 +278,7 @@ func TestHarnessRunInFollowsTheEngine(t *testing.T) {
 		}
 		slices.Sort(runners)
 		if !slices.Equal(runners, want) {
-			t.Errorf("runIn %s: the engine places the runs of %v, the operator reads the CLIs that run a seat's "+
+			t.Errorf("runIn %s: the engine places the runs of %v, the operator reads the harnesses that run a seat's "+
 				"executor as %v (render.ExecutorHarnesses)", runIn, runners, want)
 		}
 	}
@@ -286,19 +286,19 @@ func TestHarnessRunInFollowsTheEngine(t *testing.T) {
 
 // TestHarnessIsolationFollowsTheEngine holds the LLMProvider API's rule over
 // the variables env may not set, because Crewlet sets them on every call of
-// the CLI to keep it inside its seat's own home and its call's working
+// the harness to keep it inside its seat's own home and its call's working
 // directory, to the engine every suite runs. The engine refuses one in a
-// providers.llm entry's env naming every variable of the list for that CLI
+// providers.llm entry's env naming every variable of the list for that harness
 // (crewlet's validateCredentials, over harnessprofile's IsolationVariables),
-// so one provider of each CLI the API offers sets HOME, which every CLI's
+// so one provider of each harness the API offers sets HOME, which every harness's
 // list holds, and the list is read from the refusal and held to the copy the
-// rule's cases are built from (homeIsolation and cliIsolation). Then every
-// name any CLI's list holds is tried on every CLI: the API refuses it with
-// its isolation rule exactly where the engine's list for that CLI holds it.
+// rule's cases are built from (homeIsolation and harnessIsolation). Then every
+// name any harness's list holds is tried on every harness: the API refuses it with
+// its isolation rule exactly where the engine's list for that harness holds it.
 // The rule quotes no name beyond those lists, and the lists are also stated
 // where a person reads them, in the rule's message, which the API server
 // answers a refused provider with, and in the table of
-// docs/guides/cli-agents.md: both are held to the engine's lists too. A
+// docs/guides/harnesses.md: both are held to the engine's lists too. A
 // crewlet change that gives a profile another config_env, work_config_env
 // or isolation_env variable, or drops one, fails here until the rule, its
 // message and the guide follow it.
@@ -330,9 +330,9 @@ func TestHarnessIsolationFollowsTheEngine(t *testing.T) {
 		}
 		got := slices.Sorted(slices.Values(lists[0]))
 		engineLists[p.Spec.Harness] = got
-		want := slices.Sorted(slices.Values(append(slices.Clone(homeIsolation), cliIsolation[p.Spec.Harness]...)))
+		want := slices.Sorted(slices.Values(append(slices.Clone(homeIsolation), harnessIsolation[p.Spec.Harness]...)))
 		if !slices.Equal(got, want) {
-			t.Errorf("%s: the engine sets %v on every call to isolate the CLI, the API's rule refuses %v in env",
+			t.Errorf("%s: the engine sets %v on every call to isolate the harness, the API's rule refuses %v in env",
 				p.Spec.Harness, got, want)
 		}
 		for _, name := range got {
@@ -349,7 +349,7 @@ func TestHarnessIsolationFollowsTheEngine(t *testing.T) {
 			shape := signInShape{name: "env " + variable, auth: beside[name], env: []string{variable}}
 			refusal := apiVerdict(t, shapedProvider(namespace, name, &shape))
 			switch engineRefuses := slices.Contains(engineLists[name], variable); {
-			case engineRefuses && !strings.Contains(refusal, msgCLIIsolation):
+			case engineRefuses && !strings.Contains(refusal, msgHarnessIsolation):
 				t.Errorf("%s with %s in env: the engine refuses it and the API's isolation rule does not: %q",
 					harness, variable, refusal)
 			case !engineRefuses && refusal != "":
@@ -362,7 +362,7 @@ func TestHarnessIsolationFollowsTheEngine(t *testing.T) {
 	// The probe above tries the engine's names alone, so a name the rule
 	// refuses that no list holds, a provider the API refuses and the engine
 	// runs, is read off the rule instead.
-	rule := validationOf(t, "llmproviders.crewlet.ai", msgCLIIsolation, "spec")
+	rule := validationOf(t, "llmproviders.crewlet.ai", msgHarnessIsolation, "spec")
 	quoted := quotedVariable.FindAllStringSubmatch(rule.Rule, -1)
 	named := make([]string, 0, len(quoted))
 	for _, m := range quoted {
@@ -376,8 +376,8 @@ func TestHarnessIsolationFollowsTheEngine(t *testing.T) {
 }
 
 // TestHarnessZoneFollowsTheEngine holds the LLMProvider API's refusal of TZ
-// in env to the engine every suite runs, which pins the zone of every CLI it
-// starts and refuses TZ in a providers.llm entry's env for every CLI: each CLI
+// in env to the engine every suite runs, which pins the zone of every harness it
+// starts and refuses TZ in a providers.llm entry's env for every harness: each harness
 // the API offers is tried with TZ, and with tz, which names no zone, in env
 // beside the login it is admitted with (loginBeside), so the variable is the
 // only question. The API refuses TZ with its zone rule exactly where the
@@ -408,7 +408,7 @@ func TestHarnessZoneFollowsTheEngine(t *testing.T) {
 		}
 		refusal := apiVerdict(t, p)
 		switch {
-		case engineRefuses && !strings.Contains(refusal, msgCLIZone):
+		case engineRefuses && !strings.Contains(refusal, msgHarnessZone):
 			t.Errorf("%s with %s in env: the engine refuses it and the API's zone rule does not: %q",
 				p.Spec.Harness, variable, refusal)
 		case !engineRefuses && refusal != "":
@@ -424,9 +424,9 @@ const zoneRefusal = " is the zone the engine hands every harness it starts"
 
 // TestHarnessSubscriptionEnvFollowsTheEngine holds the LLMProvider API's
 // refusal of a subscription variable in env to the engine: the variables each
-// CLI's profile sets under auth.mode subscription alone (subscription_env),
+// harness's profile sets under auth.mode subscription alone (subscription_env),
 // read from the profiles of the engine every suite runs, are the copy the
-// rule's cases are built from and the names the rule quotes; and for every CLI
+// rule's cases are built from and the names the rule quotes; and for every harness
 // and every such variable, the engine refuses it in a Subscription provider's
 // env exactly where the API does. A profile that gains one fails here until
 // the API follows it.
@@ -468,7 +468,7 @@ func TestHarnessSubscriptionEnvFollowsTheEngine(t *testing.T) {
 	if !maps.EqualFunc(engineLists, subscriptionEnv, slices.Equal) {
 		t.Errorf("the engine's profiles set %v under subscription, the API's rule refuses %v", engineLists, subscriptionEnv)
 	}
-	rule := validationOf(t, "llmproviders.crewlet.ai", msgCLISubscriptionEnv, "spec")
+	rule := validationOf(t, "llmproviders.crewlet.ai", msgHarnessSubscriptionEnv, "spec")
 	quoted := quotedVariable.FindAllStringSubmatch(rule.Rule, -1)
 	named := make([]string, 0, len(quoted))
 	for _, m := range quoted {
@@ -478,7 +478,7 @@ func TestHarnessSubscriptionEnvFollowsTheEngine(t *testing.T) {
 		t.Errorf("the API's subscription rule refuses %v in env, the engine's profiles set %v", got, everyName)
 	}
 
-	// Every CLI with every such variable, beside the login it is admitted
+	// Every harness with every such variable, beside the login it is admitted
 	// with (loginBeside), so the variable is the only question.
 	providers := make([]v1.LLMProvider, 0, len(harnesses)*len(everyName))
 	for _, variable := range everyName {
@@ -503,7 +503,7 @@ func TestHarnessSubscriptionEnvFollowsTheEngine(t *testing.T) {
 		}
 		refusal := apiVerdict(t, p)
 		switch {
-		case engineRefuses && !strings.Contains(refusal, msgCLISubscriptionEnv):
+		case engineRefuses && !strings.Contains(refusal, msgHarnessSubscriptionEnv):
 			t.Errorf("%s with %s in env: the engine refuses it under subscription and the API's rule does not: %q",
 				p.Spec.Harness, variable, refusal)
 		case !engineRefuses && refusal != "":
@@ -514,16 +514,16 @@ func TestHarnessSubscriptionEnvFollowsTheEngine(t *testing.T) {
 }
 
 // TestHarnessSignInEnvFollowsTheEngine holds the LLMProvider API's rules over
-// auth mode Env to the engine: the variables each CLI's profile lists as
+// auth mode Env to the engine: the variables each harness's profile lists as
 // signing it in from a provider's env (sign_in_env), read from the profiles of
 // the engine every suite runs, are the copy the rules' cases are built from
 // and the names both rules quote, the one that requires one of them in env
 // under Env and the one that refuses each in env under every other mode. Then
-// every CLI is tried with every such name in env under each mode it may take:
+// every harness is tried with every such name in env under each mode it may take:
 // beside the login it is admitted with (loginBeside), beside a key where it
 // has a key variable, and under Env. The engine refuses the name under a mode
 // other than Env exactly where the profile lists it and the API's rule
-// refuses it, signs the CLI in with env under Env where the profile lists it,
+// refuses it, signs the harness in with env under Env where the profile lists it,
 // and admits it under Env exactly where the API does. A profile that gains such a name, or loses one, fails here until
 // the API follows it.
 func TestHarnessSignInEnvFollowsTheEngine(t *testing.T) {
@@ -553,7 +553,7 @@ func TestHarnessSignInEnvFollowsTheEngine(t *testing.T) {
 		}
 		harness, ok := harnessOfProfile(harnesses, profile)
 		if !ok {
-			t.Errorf("the engine's %s profile signs its CLI in from env by %v, and no harness the API offers is it",
+			t.Errorf("the engine's %s profile signs its harness in from env by %v, and no harness the API offers is it",
 				profile, p.SignInEnv)
 			continue
 		}
@@ -562,27 +562,28 @@ func TestHarnessSignInEnvFollowsTheEngine(t *testing.T) {
 	}
 	everyName = slices.Compact(slices.Sorted(slices.Values(everyName)))
 	if !maps.EqualFunc(engineLists, signInEnv, slices.Equal) {
-		t.Errorf("the engine's profiles sign their CLIs in from env by %v, the API's rules by %v", engineLists, signInEnv)
+		t.Errorf("the engine's profiles sign their harnesses in from env by %v, the API's rules by %v",
+			engineLists, signInEnv)
 	}
-	for _, message := range []string{msgCLIEnvUnset, msgCLIEnvOnly} {
+	for _, message := range []string{msgHarnessEnvUnset, msgHarnessEnvOnly} {
 		rule := validationOf(t, "llmproviders.crewlet.ai", message, "spec")
 		named := make([]string, 0, len(everyName))
 		for _, m := range quotedVariable.FindAllStringSubmatch(rule.Rule, -1) {
 			named = append(named, m[1])
 		}
 		if got := slices.Compact(slices.Sorted(slices.Values(named))); !slices.Equal(got, everyName) {
-			t.Errorf("the API's rule %q quotes %v, the engine's profiles sign their CLIs in from env by %v",
+			t.Errorf("the API's rule %q quotes %v, the engine's profiles sign their harnesses in from env by %v",
 				message, got, everyName)
 		}
 	}
 
-	metered := v1.HarnessAuth{Mode: v1.HarnessAuthAPIKey, APIKeySecretRef: secretKey("cli", apiKeyKey)}
+	metered := v1.HarnessAuth{Mode: v1.HarnessAuthAPIKey, APIKeySecretRef: secretKey("harness", apiKeyKey)}
 	providers := make([]v1.LLMProvider, 0, 3*len(harnesses)*len(everyName))
 	for _, variable := range everyName {
 		for _, harness := range harnesses {
 			name := v1.Harness(harness)
 			auths := []v1.HarnessAuth{loginBeside(t, namespace, name), {Mode: v1.HarnessAuthEnv}}
-			if cliVariables[name].key != "" {
+			if harnessVariables[name].key != "" {
 				auths = append(auths, metered)
 			}
 			for _, auth := range auths {
@@ -600,8 +601,8 @@ func TestHarnessSignInEnvFollowsTheEngine(t *testing.T) {
 		listed := slices.Contains(engineLists[p.Spec.Harness], variable)
 		refusal := apiVerdict(t, p)
 		if mode == v1.HarnessAuthEnv {
-			// Under auth.mode env the engine reports every CLI it admits
-			// signed in with env, an env sign-in CLI that reads a
+			// Under auth.mode env the engine reports every harness it admits
+			// signed in with env, an env sign-in harness that reads a
 			// credential-named name as its model provider's key included.
 			engineAdmits := len(report.problems[p.Name]) == 0 && len(report.warnings[p.Name]) == 0 &&
 				report.signIns[p.Name] == signInEnvMode
@@ -623,7 +624,7 @@ func TestHarnessSignInEnvFollowsTheEngine(t *testing.T) {
 				p.Spec.Harness, variable, cmp.Or(mode, v1.HarnessAuthSubscription), engineRefuses, listed, report.problems[p.Name])
 		}
 		switch {
-		case engineRefuses && !strings.Contains(refusal, msgCLIEnvOnly):
+		case engineRefuses && !strings.Contains(refusal, msgHarnessEnvOnly):
 			t.Errorf("%s with %s in env under %s: the engine refuses it and the API's rule does not: %q",
 				p.Spec.Harness, variable, cmp.Or(mode, v1.HarnessAuthSubscription), refusal)
 		case !engineRefuses && refusal != "":
@@ -634,24 +635,24 @@ func TestHarnessSignInEnvFollowsTheEngine(t *testing.T) {
 }
 
 // signInEnvRefusal follows the variable in the engine's refusal of one its
-// profile signs the CLI in by from env, under a mode other than env
+// profile signs the harness in by from env, under a mode other than env
 // (crewlet's internal/config, validateEnvSignIn).
 const signInEnvRefusal = ` signs the "`
 
 // loginBeside is the sign-in a probe of a variable in env runs beside: a
 // bundle, a Subscription login that leaves the variable the only question,
-// for every CLI the API admits one for, and for a CLI that keeps no login
+// for every harness the API admits one for, and for a harness that keeps no login
 // (QwenCode), which the API refuses a bundle, the sign-in it is admitted with.
 func loginBeside(t *testing.T, namespace string, harness v1.Harness) v1.HarnessAuth {
 	t.Helper()
-	bundle := signInShape{name: shapeBundle, auth: v1.HarnessAuth{CredentialBundleSecretRef: secretKey("cli", "bundle")}}
+	bundle := signInShape{name: shapeBundle, auth: v1.HarnessAuth{CredentialBundleSecretRef: secretKey("harness", "bundle")}}
 	if apiVerdict(t, shapedProvider(namespace, harness, &bundle)) == "" {
 		return bundle.auth
 	}
-	return admittedSignIn(harness, cliVariables).auth
+	return admittedSignIn(harness, harnessVariables).auth
 }
 
-// engineProfiles is the engine's table of CLI profiles.
+// engineProfiles is the engine's table of harness profiles.
 const engineProfiles = "internal/providers/llm/harness/harnessprofile/profiles.yaml"
 
 // subscriptionRefusal follows the variable in the engine's refusal of one its
@@ -672,7 +673,7 @@ func harnessOfProfile(harnesses []string, profile string) (v1.Harness, bool) {
 }
 
 // quotedVariable is a variable's name quoted in a CEL rule: upper case, so
-// never a CLI's name, which is written in mixed case.
+// never a harness's name, which is written in mixed case.
 var quotedVariable = regexp.MustCompile(`'([A-Z][A-Z0-9_]*)'`)
 
 // validationOf is the validation the installed CRD crd declares on the field
@@ -704,16 +705,16 @@ func validationOf(t *testing.T, crd, message string, path ...string) apiextensio
 
 // isolationMessageFollows holds the isolation rule's message to the engine's
 // lists. Its first sentence names, after its colon, the variables of every
-// CLI ahead of "for any CLI", and then each CLI's own after "<CLI>'s", so a
-// CLI's list as the message states it is the first group and its own.
+// harness ahead of "for any harness", and then each harness's own after "<harness>'s", so a
+// harness's list as the message states it is the first group and its own.
 func isolationMessageFollows(t *testing.T, message string, harnesses []string, lists map[v1.Harness][]string) {
 	t.Helper()
 	_, named, colon := strings.Cut(message, ": ")
 	named, _, _ = strings.Cut(named, ". ")
-	every, own, group := strings.Cut(named, " for any CLI")
+	every, own, group := strings.Cut(named, " for any harness")
 	if !colon || !group || len(variableName.FindAllString(every, -1)) == 0 {
-		t.Fatalf("the API's isolation rule's message names no variables for every CLI ahead of %q: %s",
-			" for any CLI", message)
+		t.Fatalf("the API's isolation rule's message names no variables for every harness ahead of %q: %s",
+			" for any harness", message)
 	}
 	stated := map[v1.Harness][]string{}
 	for _, harness := range harnesses {
@@ -721,7 +722,7 @@ func isolationMessageFollows(t *testing.T, message string, harnesses []string, l
 	}
 	marks := possessive.FindAllStringSubmatchIndex(own, -1)
 	if len(marks) == 0 || len(variableName.FindAllString(own[:marks[0][0]], -1)) > 0 {
-		t.Errorf("the API's isolation rule's message names variables of no CLI after %q: %s", " for any CLI", message)
+		t.Errorf("the API's isolation rule's message names variables of no harness after %q: %s", " for any harness", message)
 	}
 	for i, m := range marks {
 		harness, end := own[m[2]:m[3]], len(own)
@@ -746,7 +747,7 @@ func isolationMessageFollows(t *testing.T, message string, harnesses []string, l
 	}
 }
 
-// possessive is a CLI's name ahead of the variables a message names for it,
+// possessive is a harness's name ahead of the variables a message names for it,
 // as in "Codex's CODEX_HOME".
 var possessive = regexp.MustCompile(`\b([A-Z][A-Za-z]+)'s `)
 
@@ -754,12 +755,12 @@ var possessive = regexp.MustCompile(`\b([A-Z][A-Za-z]+)'s `)
 // joined by underscores.
 var variableName = regexp.MustCompile(`\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*\b`)
 
-// isolationTableFollows holds the table docs/guides/cli-agents.md lists the
+// isolationTableFollows holds the table docs/guides/harnesses.md lists the
 // variables env may not set in to the engine's lists: a row of the variables
-// of every CLI, and a row of each CLI's own, every CLI the API offers covered.
+// of every harness, and a row of each harness's own, every harness the API offers covered.
 func isolationTableFollows(t *testing.T, harnesses []string, lists map[v1.Harness][]string) {
 	t.Helper()
-	const guide = "docs/guides/cli-agents.md"
+	const guide = "docs/guides/harnesses.md"
 	rows, err := docs.Table(filepath.Join("..", "..", guide), "`env` may not set")
 	if err != nil {
 		t.Fatal(err)
@@ -770,7 +771,7 @@ func isolationTableFollows(t *testing.T, harnesses []string, lists map[v1.Harnes
 	stated := map[v1.Harness][]string{}
 	for _, row := range rows {
 		names := codeSpans(row[0])
-		if row[1] == "every CLI" {
+		if row[1] == "every harness" {
 			for _, harness := range harnesses {
 				stated[v1.Harness(harness)] = append(stated[v1.Harness(harness)], names...)
 			}
@@ -807,8 +808,8 @@ func codeSpans(cell string) []string {
 }
 
 // isolationRefusal is the engine's refusal of a variable in a providers.llm
-// entry's env that it sets on every call of the CLI, naming every such
-// variable for that CLI (crewlet's internal/config, validateCredentials):
+// entry's env that it sets on every call of the harness, naming every such
+// variable for that harness (crewlet's internal/config, validateCredentials):
 // here, of HOME.
 var isolationRefusal = regexp.MustCompile(`HOME is a variable the engine sets for every call of this harness to ` +
 	`keep it inside its seat's own home and its call's working directory \(([A-Za-z0-9_, ]+)\)`)
@@ -816,7 +817,7 @@ var isolationRefusal = regexp.MustCompile(`HOME is a variable the engine sets fo
 // admittedSignIn is a sign-in the API admits for harness, one of signInShapes:
 // its headless token, its key, its model provider's key in env, or a bundle,
 // the first it has.
-func admittedSignIn(harness v1.Harness, variables map[v1.Harness]cliVariable) signInShape {
+func admittedSignIn(harness v1.Harness, variables map[v1.Harness]harnessVariable) signInShape {
 	name := shapeBundle
 	switch v := variables[harness]; {
 	case v.headless != "":
@@ -836,8 +837,8 @@ func holdVerdicts(t *testing.T, verdicts map[string]map[string]verdict) {
 	for shape, byHarness := range verdicts {
 		for harness, v := range byHarness {
 			admitted := v.refusal == ""
-			// A bundle signs the CLI in from the login the engine restores
-			// from it (the CLI's credential files, or the document
+			// A bundle signs the harness in from the login the engine restores
+			// from it (the harness's credential files, or the document
 			// OpenCode's export printed). `llm list` restores the configured
 			// bundle before it reports, as the engine does, but the probe's
 			// is a placeholder no restore can read, so the column cannot
@@ -854,7 +855,7 @@ func holdVerdicts(t *testing.T, verdicts map[string]map[string]verdict) {
 			if admitted && v.warning != "" {
 				t.Errorf("%s, %s: the API admits it and the engine warns: %s", harness, shape, v.warning)
 			}
-			// What the API admits signs the CLI in.
+			// What the API admits signs the harness in.
 			if admitted && !signedIn {
 				t.Errorf("%s, %s: the API admits it and the engine reports it signed in with %q", harness, shape, v.signIn)
 			}
@@ -868,20 +869,20 @@ func holdVerdicts(t *testing.T, verdicts map[string]map[string]verdict) {
 	}
 }
 
-// signInTableFollows holds the table docs/guides/cli-agents.md states what
-// each CLI takes in to what the engine and the API said: a row for every CLI
+// signInTableFollows holds the table docs/guides/harnesses.md states what
+// each harness takes in to what the engine and the API said: a row for every harness
 // the API offers, naming its token and key variable as the engine's profile
-// does, a key in env where the engine signs the CLI in from one, under auth
+// does, a key in env where the engine signs the harness in from one, under auth
 // mode Env the names the engine signs it in by there (its profile's
 // sign_in_env), a key in env where it signs it in from one there instead and
 // no where it signs it in from nothing there, a bundle where the API admits
 // one, and that it runs a seat's executor where it is one of
 // render.ExecutorHarnesses, which TestHarnessRunInFollowsTheEngine holds to the
 // engine.
-func signInTableFollows(t *testing.T, harnesses []string, variables map[v1.Harness]cliVariable,
+func signInTableFollows(t *testing.T, harnesses []string, variables map[v1.Harness]harnessVariable,
 	fromEnv []v1.Harness, verdicts map[string]map[string]verdict) {
 	t.Helper()
-	const guide = "docs/guides/cli-agents.md"
+	const guide = "docs/guides/harnesses.md"
 	rows, err := docs.Table(filepath.Join("..", "..", guide), "`harness`")
 	if err != nil {
 		t.Fatal(err)
@@ -898,7 +899,7 @@ func signInTableFollows(t *testing.T, harnesses []string, variables map[v1.Harne
 	}
 	yes := func(cell string) bool { return !strings.HasPrefix(cell, "no") }
 	// envMode is what the engine signs harness in by under auth mode Env, which
-	// it reports as env whatever the CLI: a key in env where it admits a
+	// it reports as env whatever the harness: a key in env where it admits a
 	// model provider's key, the names one of which it admits where it does
 	// not, and no where it admits neither.
 	envMode := func(harness string) string {
@@ -970,21 +971,21 @@ func signInTableFollows(t *testing.T, harnesses []string, variables map[v1.Harne
 }
 
 // engineVariables reads from the engine the token and key variable
-// its profile for each of harnesses names. One provider of each CLI asks for
+// its profile for each of harnesses names. One provider of each harness asks for
 // both, in auth mode APIKey with a token, which the engine refuses naming
 // the token variable it would have removed or saying the profile names none,
 // and with every key variable the API's rules name set in env, of which the
-// engine refuses the one auth owns for that CLI, or says the profile names no
+// engine refuses the one auth owns for that harness, or says the profile names no
 // key variable for auth mode APIKey to fill. A profile that gains a key
 // variable no rule names answers neither, which fails the read.
-func engineVariables(t *testing.T, namespace string, harnesses []string) map[v1.Harness]cliVariable {
+func engineVariables(t *testing.T, namespace string, harnesses []string) map[v1.Harness]harnessVariable {
 	t.Helper()
 	probe := signInShape{auth: v1.HarnessAuth{
 		Mode:            v1.HarnessAuthAPIKey,
-		TokenSecretRef:  secretKey("cli", "token"),
-		APIKeySecretRef: secretKey("cli", apiKeyKey),
+		TokenSecretRef:  secretKey("harness", "token"),
+		APIKeySecretRef: secretKey("harness", apiKeyKey),
 	}}
-	for _, v := range cliVariables {
+	for _, v := range harnessVariables {
 		if v.key != "" && !slices.Contains(probe.env, v.key) {
 			probe.env = append(probe.env, v.key)
 		}
@@ -1010,7 +1011,7 @@ func engineVariables(t *testing.T, namespace string, harnesses []string) map[v1.
 		}
 		return found[0], nil
 	}
-	out := map[v1.Harness]cliVariable{}
+	out := map[v1.Harness]harnessVariable{}
 	for i := range providers {
 		p := &providers[i]
 		problems := report.problems[p.Name]
@@ -1023,7 +1024,7 @@ func engineVariables(t *testing.T, namespace string, harnesses []string) map[v1.
 			t.Fatalf("%s: reading its token variable: %v", p.Spec.Harness, err)
 		}
 		if key != "" || token != "" {
-			out[p.Spec.Harness] = cliVariable{headless: token, key: key}
+			out[p.Spec.Harness] = harnessVariable{headless: token, key: key}
 		}
 	}
 	return out
@@ -1062,8 +1063,8 @@ type verdict struct {
 }
 
 // The SIGN-IN words of `crewlet llm list` the suite reads beside its token
-// and its key: a CLI signed in by a model provider's key in its environment
-// (env_sign_in) under auth.mode subscription, and any CLI signed in by its env
+// and its key: a harness signed in by a model provider's key in its environment
+// (env_sign_in) under auth.mode subscription, and any harness signed in by its env
 // under auth.mode env.
 const (
 	signInEnvironment = "environment"
@@ -1071,7 +1072,7 @@ const (
 )
 
 // runnerProbe is the provider askEngine runs a seat's executor on when the
-// provider the seat probes is of a CLI Crewlet runs no executor on: Claude
+// provider the seat probes is of a harness Crewlet runs no executor on: Claude
 // Code on a key, which the engine admits.
 const runnerProbe = "probe-runner"
 
@@ -1086,7 +1087,7 @@ const (
 	shapeEnvMode = "env mode, env "
 )
 
-// signInShape is one way to sign a CLI in.
+// signInShape is one way to sign a harness in.
 type signInShape struct {
 	name string
 	auth v1.HarnessAuth
@@ -1094,17 +1095,17 @@ type signInShape struct {
 	env []string
 }
 
-// signInShapes are the ways a CLI may be signed in that the API can express:
+// signInShapes are the ways a harness may be signed in that the API can express:
 // a key, a token, a bundle, and the names env may carry, under Subscription
 // and under auth mode Env, where env is the whole sign-in. The names are probe
-// input, not a list of what any CLI reads: names with each part the engine's
+// input, not a list of what any harness reads: names with each part the engine's
 // docs call a credential, names that only hold such a part inside a longer
-// word, one in lower case, and the names a profile signs its CLI in by from
+// word, one in lower case, and the names a profile signs its harness in by from
 // env (signInEnv); and, beside a bundle so the variable is the only question,
 // every token and key variable the engine's profiles name (variables), those
 // names of signInEnv, also beside a key, and one that is no credential.
-// Whether each signs a CLI in is the engine's answer.
-func signInShapes(variables map[v1.Harness]cliVariable) []signInShape {
+// Whether each signs a harness in is the engine's answer.
+func signInShapes(variables map[v1.Harness]harnessVariable) []signInShape {
 	inEnv := []string{
 		"OPENROUTER_API_KEY", "openrouter_api_key", "GEMINI_API_KEYS", "VENDOR_APIKEY",
 		"AWS_ACCESSKEY", "AWS_SECRETKEY", "GH_TOKEN", "OAUTH2_TOKEN", "DB_SECRET",
@@ -1127,12 +1128,12 @@ func signInShapes(variables map[v1.Harness]cliVariable) []signInShape {
 	}
 	slices.Sort(besideBundle[1:])
 	besideBundle = append(besideBundle, signIns...)
-	bundle := v1.HarnessAuth{CredentialBundleSecretRef: secretKey("cli", "bundle")}
-	metered := v1.HarnessAuth{Mode: v1.HarnessAuthAPIKey, APIKeySecretRef: secretKey("cli", apiKeyKey)}
+	bundle := v1.HarnessAuth{CredentialBundleSecretRef: secretKey("harness", "bundle")}
+	metered := v1.HarnessAuth{Mode: v1.HarnessAuthAPIKey, APIKeySecretRef: secretKey("harness", apiKeyKey)}
 	shapes := make([]signInShape, 0, 4+2*len(inEnv)+len(besideBundle)+2*len(signIns))
 	shapes = append(shapes,
 		signInShape{name: shapeAPIKey, auth: metered},
-		signInShape{name: shapeToken, auth: v1.HarnessAuth{TokenSecretRef: secretKey("cli", "token")}},
+		signInShape{name: shapeToken, auth: v1.HarnessAuth{TokenSecretRef: secretKey("harness", "token")}},
 		signInShape{name: shapeBundle, auth: bundle},
 		signInShape{name: "env mode, no env", auth: v1.HarnessAuth{Mode: v1.HarnessAuthEnv}},
 	)
@@ -1167,7 +1168,7 @@ func shapedProvider(namespace string, harness v1.Harness, s *signInShape) *v1.LL
 	p.Spec.Model = "probe/probe-model"
 	p.Spec.Auth = s.auth
 	for _, name := range s.env {
-		p.Spec.Env = append(p.Spec.Env, v1.SecretEnvVar{Name: name, ValueFrom: fromSecret("cli", "env")})
+		p.Spec.Env = append(p.Spec.Env, v1.SecretEnvVar{Name: name, ValueFrom: fromSecret("harness", "env")})
 	}
 	return p
 }
@@ -1204,7 +1205,7 @@ type engineReport struct {
 }
 
 // askEngine renders providers into one company document, as the operator
-// would apply it, each on an agent seat of its own name: a provider whose CLI
+// would apply it, each on an agent seat of its own name: a provider whose harness
 // Crewlet runs a seat's executor on (render.ExecutorHarnesses) drives the
 // seat's executor, so that the engine's rules over a seat's executor run on
 // it run too, and any other serves the seat's review, as such a provider
@@ -1218,7 +1219,7 @@ func askEngine(t *testing.T, providers []v1.LLMProvider, list bool) engineReport
 	t.Helper()
 	runner := llmProvider("probe", runnerProbe)
 	runner.Spec.Model = "probe/probe-model"
-	runner.Spec.Auth = v1.HarnessAuth{Mode: v1.HarnessAuthAPIKey, APIKeySecretRef: secretKey("cli", apiKeyKey)}
+	runner.Spec.Auth = v1.HarnessAuth{Mode: v1.HarnessAuthAPIKey, APIKeySecretRef: secretKey("harness", apiKeyKey)}
 	in := &render.Input{
 		Company: company("probe", companyName),
 		Class:   engineClass("", "basic"),
@@ -1286,9 +1287,9 @@ func askEngine(t *testing.T, providers []v1.LLMProvider, list bool) engineReport
 		if err != nil && stdout.Len() == 0 {
 			t.Fatalf("crewlet %s failed (%v):\n%s", strings.Join(args, " "), err, stderr.String())
 		}
-		// A CLI's env is resolved where the engine builds the provider,
-		// and one that resolves to nothing is only logged: for a CLI
-		// signed in through its env, that is a CLI with no key.
+		// A harness's env is resolved where the engine builds the provider,
+		// and one that resolves to nothing is only logged: for a harness
+		// signed in through its env, that is a harness with no key.
 		for _, unresolved := range []string{"config_reference_unresolved", "harness_env_unresolved"} {
 			if strings.Contains(stderr.String(), unresolved) {
 				t.Errorf("crewlet %s: a reference resolved to nothing:\n%s", args[0], stderr.String())

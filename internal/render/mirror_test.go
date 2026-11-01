@@ -119,10 +119,10 @@ const (
 	seatTypesGo = "api/v1alpha1/seat_types.go"
 	// mcpServerTypesGo is the MCPServer API.
 	mcpServerTypesGo = "api/v1alpha1/mcpserver_types.go"
-	// toolServersMd and cliAgentsMd are the guides that state what a tool
+	// toolServersMd and harnessesMd are the guides that state what a tool
 	// server and an executor run are started with.
 	toolServersMd = "docs/guides/tool-servers.md"
-	cliAgentsMd   = "docs/guides/cli-agents.md"
+	harnessesMd   = "docs/guides/harnesses.md"
 	// runtimeMd is the page that states what an engine pod is made of and
 	// where its boxes live.
 	runtimeMd = "docs/concepts/runtime.md"
@@ -171,7 +171,7 @@ const (
 
 	// executorRead is crewlet#388's engine, read at the head of its branch
 	// before that change merged, where every agent seat's executor is its
-	// coding CLI's own run in a box. A launch picks the first member of the
+	// harness's own run in a box. A launch picks the first member of the
 	// seat's executor chain with an in-box runner that is not sitting out its
 	// plan, and places the run by that member's run_in, else the catalogue's
 	// default_run_in: the one run is the seat's turn, and every second agent
@@ -249,10 +249,10 @@ const (
 	harnessWireRead = "v0.1.1-0.20261101144449-0b2730bb4452"
 	// envSignInRead is crewlet#452's engine, read on crewlet's main where it
 	// merged (e0328e5d9d), which adds auth.mode env: a providers.llm entry
-	// whose env alone signs its CLI in. The names
-	// that sign a CLI in beyond its token and key variables moved from a list
+	// whose env alone signs its harness in. The names
+	// that sign a harness in beyond its token and key variables moved from a list
 	// of the Claude Code runner's (executor.ClaudeCodeCredentialEnv, now
-	// gone) into the CLI's profile (sign_in_env, which only claude-code's
+	// gone) into the harness's profile (sign_in_env, which only claude-code's
 	// names), so entryEnv, entrySignInName and entrySignsIn ask
 	// CredentialEnvNames, which reads it, where they asked the runner's list.
 	// For every profile the engine ships the names are the ones they were, in
@@ -262,7 +262,7 @@ const (
 	// with none (SandboxCredentials), which the render's verdict never
 	// counted on: such an entry signs a box in by a variable. And SandboxEnv
 	// carries the engine's zone into every executor run's box, E2B included:
-	// the zone it reads a reset the CLI names without one in, the engine's
+	// the zone it reads a reset the harness names without one in, the engine's
 	// own TZ where it names a zone the system knows, and UTC otherwise
 	// (childZone), its name harnessprofile.ZoneVariable, which an entry's env
 	// may not set.
@@ -459,7 +459,7 @@ var cloudIDGateway = append([]string{"api/v1alpha1/integration_types.go"}, atlas
 
 // credentialNames is every operator file that copies how the engine reads a
 // credential's name: the API's rules that read one (the LLMProvider and
-// platform provider APIs' over a CLI's sign-in, and the tool-server API's
+// platform provider APIs' over a harness's sign-in, and the tool-server API's
 // refusal of a literal value), the render's copy of their pattern, and the
 // guide and the page that state the rule of a literal value.
 var credentialNames = []string{
@@ -467,13 +467,13 @@ var credentialNames = []string{
 	signinGo, "docs/guides/tool-servers.md", credentialsConceptMd,
 }
 
-// executorLogin is every operator file that copies how an executor run's CLI
+// executorLogin is every operator file that copies how an executor run's harness
 // signs in where it runs, and when Crewlet refuses it for signing in to
 // nothing: the render's executor verdict and its sign-in rules, the
 // LLMProvider API's docs and the guide that state it, and the CRD suite's
 // reading of the engine's sign-in verdicts (its holdVerdicts).
 var executorLogin = []string{
-	signinGo, executorGo, "api/v1alpha1/llmprovider_types.go", "docs/guides/cli-agents.md",
+	signinGo, executorGo, "api/v1alpha1/llmprovider_types.go", "docs/guides/harnesses.md",
 	"test/crd/harness_engine_test.go",
 }
 
@@ -491,7 +491,7 @@ var executorBox = []string{"docs/guides/credentials.md", credentialsConceptMd}
 // runnable in any pool (ExecutorOf), the API's Ready reasons, and the pages
 // and the record that state the verdict.
 var bridgeVerdict = []string{
-	bootstrapGo, executorGo, commonTypesGo, cliAgentsMd, troubleshootingMd,
+	bootstrapGo, executorGo, commonTypesGo, harnessesMd, troubleshootingMd,
 	"docs/guides/topology.md", "docs/concepts/applying.md", runtimeMd, exposureMd,
 	adr0008Md,
 }
@@ -502,7 +502,7 @@ var bridgeVerdict = []string{
 // docs and pages that say what a Direct run gets of the pod's environment.
 var directBox = []string{
 	renderCompanyGo, bootstrapGo, companyWorkloadGo, seatPoolsGo, companyTypesGo, engineClassGo,
-	runtimeMd, cliAgentsMd,
+	runtimeMd, harnessesMd,
 }
 
 // runTelemetry is every operator file that states where a seat's executor run
@@ -525,7 +525,7 @@ var runTelemetry = []string{
 // and the pages and the record that say what each limit bounds.
 var boxWrites = []string{
 	topologyGo, bootstrapGo, companyWorkloadGo, engineClassGo,
-	runtimeMd, cliAgentsMd, "docs/guides/multi-tenancy.md", troubleshootingMd,
+	runtimeMd, harnessesMd, "docs/guides/multi-tenancy.md", troubleshootingMd,
 	adr0008Md,
 }
 
@@ -540,7 +540,7 @@ var boxWrites = []string{
 // rationale for the emptyDir, the API docs of the pods' grace periods, and the
 // pages and the record that say so.
 var directRunEnds = []string{
-	bootstrapGo, companyTypesGo, engineClassGo, runtimeMd, cliAgentsMd, "docs/guides/topology.md",
+	bootstrapGo, companyTypesGo, engineClassGo, runtimeMd, harnessesMd, "docs/guides/topology.md",
 	troubleshootingMd, adr0008Md,
 }
 
@@ -550,7 +550,7 @@ var directRunEnds = []string{
 // render's rationale for the volume and its default limit, the API docs of
 // deep work and of the limit, and the pages and the record that say so.
 var deepWorkBox = []string{
-	bootstrapGo, topologyGo, companyTypesGo, engineClassGo, cliAgentsMd, runtimeMd, adr0008Md,
+	bootstrapGo, topologyGo, companyTypesGo, engineClassGo, harnessesMd, runtimeMd, adr0008Md,
 }
 
 // parkedBoxes is every operator file that copies how many boxes, and how many
@@ -561,7 +561,7 @@ var deepWorkBox = []string{
 // limit, the API docs of that limit, of the pods' resources and of the turns
 // a seat pod runs at once, and the pages that size a pod by them.
 var parkedBoxes = []string{
-	topologyGo, engineClassGo, companyTypesGo, runtimeMd, cliAgentsMd,
+	topologyGo, engineClassGo, companyTypesGo, runtimeMd, harnessesMd,
 }
 
 // bootWindows is every operator file that copies the bounds the engine puts
@@ -582,7 +582,7 @@ var bootWindows = []string{
 // what it refuses on a write of a seat's executor, its chain, its catalogue
 // and its cells (TestContractEngineRefusesWhatItHolds), what it applies and
 // fails at a launch alone (TestContractExecutorIsAppliedWhereItCannotRun),
-// the sign-in a provider's settings give it and the CLIs it admits a run_in
+// the sign-in a provider's settings give it and the harnesses it admits a run_in
 // on (test/crd's TestHarnessSignInFollowsTheEngine and
 // TestHarnessRunInFollowsTheEngine), the deployment its validation reads a
 // Jira or Confluence address on (TestContractAtlassianDeploymentIsTheEngines),
@@ -774,7 +774,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: "internal/config/sandbox.go", name: "defaultSandboxMaxTurns",
-		against: []string{companyTypesGo, seatTypesGo, cliAgentsMd},
+		against: []string{companyTypesGo, seatTypesGo, harnessesMd},
 		decides: "an executor run on a seat and a catalogue that name no round cap takes 96 rounds at most, the only " +
 			"bound on a seat's turn",
 		digest: "bb2dfa06eb8b449af4c6df4ea5183fcd4b7a237f9e8fd8620a4e0d55a16ba5f7",
@@ -784,7 +784,7 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "newCodingRun",
 		against: append(slices.Clone(executorLogin), executorBox...),
 		decides: "a run on the member a launch picked is handed that member's model as its runs in the engine's pod " +
-			"pass it, its environment (entryEnv) beneath the seat's, and its login, the CLI's credential files or " +
+			"pass it, its environment (entryEnv) beneath the seat's, and its login, the harness's credential files or " +
 			"the document OpenCode 2's export printed, as the run's credential files, for the box to seed or to " +
 			"ignore ((*E2BProvider).Create)",
 		digest: "22ccc7c6a8e39b14a723e26d0af98a93dacde31816fc798cd7e9ba73d1e8766b",
@@ -796,14 +796,14 @@ var mirrored = []mirror{
 		decides: "a box in the Company's E2B sandbox is created from its template, the run's timeout and the run's " +
 			"environment alone, never from the run's credential files, so the member's login (its credential " +
 			"files, or the document OpenCode 2's export printed) never reaches it, and only a variable of the " +
-			"run's environment signs its CLI in there",
+			"run's environment signs its harness in there",
 		digest: "65305f3ecc87afac5544b7bddb91062389e5a0e0b76a63481f6f191e778e2a03",
 		read:   e2bCreateRead,
 	},
 	{
 		file: sandboxGo, name: "entryEnv",
 		against: append(slices.Clone(executorLogin), executorBox...),
-		decides: "a run is handed its member's environment (SandboxEnv) beneath the seat's, and a run of a CLI " +
+		decides: "a run is handed its member's environment (SandboxEnv) beneath the seat's, and a run of a harness " +
 			"whose profile names sign_in_env (ClaudeCode's alone) whose seat's environment signs it in " +
 			"(CredentialEnvNames: its token_env, api_key_env and sign_in_env, which " +
 			"TestExecutorSignInFollowsTheEngineSource holds) none of its member's sign-in (entrySignInName) and " +
@@ -815,7 +815,7 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "entrySignInName",
 		against: append(slices.Clone(executorLogin), executorBox...),
 		decides: "a member's sign-in, which a seat that signs ClaudeCode in itself keeps out of its run, is every " +
-			"variable that signs ClaudeCode in, the CLI's token and key variables and every credential-named " +
+			"variable that signs ClaudeCode in, the harness's token and key variables and every credential-named " +
 			"one, a gateway's bearer token among them, and nothing else, so a gateway's address stays",
 		digest: "9e6175afb6ff10da515464ff7747aa3e25e0f2b142ef562915c56cf117b22009",
 		read:   harnessRead,
@@ -831,7 +831,7 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "sandboxCredentials",
 		against: append([]string{commonTypesGo, troubleshootingMd}, executorLogin...),
 		decides: "the login of the member a launch picked is refused only in a box off the engine host (OnEngineHost: " +
-			"a Direct box is seeded with it), and there unless the run's environment signs its CLI in " +
+			"a Direct box is seeded with it), and there unless the run's environment signs its harness in " +
 			"(entrySignsIn): SandboxLoginNotPortable, a refusal that fails the launch rather than moving it down " +
 			"the chain",
 		digest: "363fcae93a8502774c80b5680f1b188e3245c95edbdfb7b79b367360ba26fe3c",
@@ -839,9 +839,9 @@ var mirrored = []mirror{
 	},
 	{
 		file: sandboxGo, name: "entrySignsIn",
-		against: append(append([]string{cliAgentsMd}, executorLogin...), executorBox...),
-		decides: "a run's environment signs its CLI in, in a box off the engine host, when it holds the CLI's " +
-			"token or key variable, for ClaudeCode any variable that signs it in, and for an env sign-in CLI any " +
+		against: append(append([]string{harnessesMd}, executorLogin...), executorBox...),
+		decides: "a run's environment signs its harness in, in a box off the engine host, when it holds the harness's " +
+			"token or key variable, for ClaudeCode any variable that signs it in, and for an env sign-in harness any " +
 			"credential-named one: the rule a seat's E2B run and the assistant's deep work, whose environment " +
 			"is its provider's alone, are both held to before a box exists",
 		digest: "7b9d56ad932882d328442e62b56c7100365144eb3bbc7f6c7d0120432e760d09",
@@ -850,7 +850,7 @@ var mirrored = []mirror{
 	{
 		file: sandboxGo, name: "(*Engine).runEnvironment",
 		against: append([]string{
-			signinGo, renderCompanyGo, renderOptionalGo, configOptionalGo, seatTypesGo, companyTypesGo, cliAgentsMd,
+			signinGo, renderCompanyGo, renderOptionalGo, configOptionalGo, seatTypesGo, companyTypesGo, harnessesMd,
 		}, executorBox...),
 		decides: "a run's environment is the env of the catalogue's and the seat's setup steps, then the seat's " +
 			"role.sandbox.env, each later layer winning a name, and a value that resolves to nothing is left out, " +
@@ -936,9 +936,9 @@ var mirrored = []mirror{
 	{
 		file: doctorGo, name: "(*Provider).CredentialEnvNames",
 		against: append(slices.Clone(executorLogin), executorBox...),
-		decides: "the variables that sign a CLI in inside a box: its token and key variables, the names its profile " +
+		decides: "the variables that sign a harness in inside a box: its token and key variables, the names its profile " +
 			"signs it in by from env (sign_in_env: ClaudeCode's gateway token and cloud switches), and for an env " +
-			"sign-in CLI the credential-named variables of its env",
+			"sign-in harness the credential-named variables of its env",
 		digest: "32735810b5842041d5533d6193b7c1eebae75691e7b78dd945748d4afadf9e9b",
 		read:   harnessRead,
 	},
@@ -1020,17 +1020,17 @@ var mirrored = []mirror{
 	},
 	{
 		file: agentRunGo, name: "(*agentLauncher).member",
-		against: []string{executorGo, headsGo, seatTypesGo, llmProviderTypes, cliAgentsMd},
+		against: []string{executorGo, headsGo, seatTypesGo, llmProviderTypes, harnessesMd},
 		decides: "a launch runs on the first member of the seat's executor chain with an in-box runner that is not " +
-			"sitting out its spent plan on the node, passing over every other CLI silently, and when every runner " +
+			"sitting out its spent plan on the node, passing over every other harness silently, and when every runner " +
 			"member is sitting out runs on none",
 		digest: "69c971a1269d6e4a9ec03db3d897092b1fe408cb102468f51220286b6ebf0573",
 		read:   harnessRead,
 	},
 	{
 		file: agentRunGo, name: "executorRunners",
-		against: []string{executorGo, headsGo, seatTypesGo, llmProviderTypes, cliAgentsMd},
-		decides: "the members a launch picks among are the executor chain's members, in order, whose CLI has an " +
+		against: []string{executorGo, headsGo, seatTypesGo, llmProviderTypes, harnessesMd},
+		decides: "the members a launch picks among are the executor chain's members, in order, whose harness has an " +
 			"in-box runner (executor.Names, held by TestExecutorHarnessesFollowTheEngineSource), and a chain with none " +
 			"launches nothing",
 		digest: "db7701f2022f0956af0cb4f6f5b1a10d7d99f938c48e7485b15c29d103dd09fe",
@@ -1165,7 +1165,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: assistantGo, name: "(*Company).DeepWorkPlacement",
-		against: []string{companyTypesGo, executorGo, cliAgentsMd, runtimeMd,
+		against: []string{companyTypesGo, executorGo, harnessesMd, runtimeMd,
 			adr0008Md},
 		decides: "deep work runs in its provider's run_in, else in E2B where the company configures it, else in a " +
 			"container with an image, else on the engine host under the engine's own confinement, never by " +
@@ -1200,7 +1200,7 @@ var mirrored = []mirror{
 	},
 	{
 		file: assistantDeepGo, name: "(*assistantDeep).target",
-		against: []string{companyTypesGo, engineClassGo, companyExposureGo, cliAgentsMd, exposureMd, runtimeMd,
+		against: []string{companyTypesGo, engineClassGo, companyExposureGo, harnessesMd, exposureMd, runtimeMd,
 			"SECURITY.md", adr0008Md},
 		decides: "deep work reaches Crewlet at the fleet's bridge address in whichever cell it runs, never at its " +
 			"node's own listener, so a Company with no public address runs no deep work, the data pods alone need " +

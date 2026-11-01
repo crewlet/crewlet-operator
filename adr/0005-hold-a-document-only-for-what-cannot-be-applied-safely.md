@@ -38,7 +38,7 @@ render that records a finding names which (`render.Basis`):
    refuses the document on a write, or the document has no place to write
    the object (a Schedule lives inside the entry of the role or unit that
    runs it, so one of a seat that does not exist cannot be written; a seat
-   whose executor chain has no CLI that runs it, or a company with agent
+   whose executor chain has no harness that runs it, or a company with agent
    seats and no sandbox to place their runs in, is refused on every write).
    Applying it is impossible; refusing it first only says so on the object
    at fault.
@@ -46,7 +46,7 @@ render that records a finding names which (`render.Basis`):
    other objects' identity, authority, credentials or work (a Unit left out
    with its subtree, a `${NAME}` that resolves another object's value, a
    name written for an object that does not exist yet and so granted to
-   whichever object takes it later, a CLI login every seat pod refreshes on
+   whichever object takes it later, a harness login every seat pod refreshes on
    its own).
 3. **ClassPolicy**: the EngineClass's administrator forbids it (seat pools,
    PerSeat pools, the seat-pod budget, the platform providers offered).
@@ -66,7 +66,7 @@ reach past its object later either: a seat placed in a pool the Company does
 not declare is pinned to a label of its own (`crewlet.ai/undeclared-pool`),
 never the pool's, because the pods of the pool, once declared, would carry
 the pool's label and run the seat under a revision that was never checked
-against what they can run (a CLI login kept as a credential bundle, held as
+against what they can run (a harness login kept as a credential bundle, held as
 harm beyond the object), and the running revision's pins keep pods and open
 the data pods' listener.
 
