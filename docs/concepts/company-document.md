@@ -273,9 +273,9 @@ last one is refused with `insufficient storage resources available`. A fresh
 node reserves what it keeps on the stream when it starts, and refuses to boot
 on a stream that cannot hold it
 ([the minimum room for a fresh node](https://github.com/crewlet/crewlet/blob/main/docs/guides/deployment.md#the-minimum-room-for-a-fresh-node)):
-the ceilings of its nine state logs, 8120172544 bytes at their smallest,
+the ceilings of its ten state logs, 8187281408 bytes at their smallest,
 and, with the class's `objects.backend` `NATS` (the default), the object
-store's bucket beside them at a quarter of the stream, 10826896725 bytes in
+store's bucket beside them at a quarter of the stream, 10916375210 bytes in
 all. So an EngineClass's `data.storage.size` is at least `14Gi`, whose three
 quarters is 10.5 GiB, or `11Gi` for a class that keeps its files in S3. That is
 the least that boots: the mailboxes and the coordination buckets grow into
