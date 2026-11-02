@@ -96,6 +96,19 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			},
 		},
 		{
+			// Crewlet refuses a box a server signed in to with OAuth on
+			// every write, turned off or not: the box could not renew the
+			// access token.
+			name: "a seat's box is given a server signed in to with OAuth",
+			mutate: func(in *Input) {
+				server := toolServer(in, sampleGitHub)
+				server.Spec.Shared = new(true)
+				server.Spec.Enabled = new(false)
+				server.Spec.OAuth = v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientDCR}
+			},
+			want: []refusal{{KindSeat, seatAna, "spec.sandbox.mcpServerRefs[0].name", v1alpha1.ReasonConflict}},
+		},
+		{
 			name: "a unit's tool server is missing",
 			mutate: func(in *Input) {
 				unit(in, unitPlatform).Spec.MCP = []v1alpha1.MCPCredentials{{Name: "datadog", Env: []v1alpha1.MCPCredentialValue{{

@@ -52,6 +52,9 @@ const (
 	// its second tool server.
 	fieldSecondOptionalKey = "spec.optionalKeys[1]"
 	fieldSecondServerValue = "spec.mcp[1].env[0].valueFrom"
+	// keyClientSecret is the key of the Secret a test's OAuth client takes
+	// its secret from.
+	keyClientSecret = "clientSecret"
 )
 
 // provisionedGitLab is the token the engine mints for a seat's GitLab
@@ -392,6 +395,21 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			},
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
 		},
+		// AN OAUTH CLIENT'S SECRET is read at every renewal of the sign-in,
+		// so Crewlet holds the server back on it, as it does on its url.
+		{
+			name:   "a shared server's OAuth client secret",
+			mutate: func(in *Input) { signInTavily(in) },
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: fieldOAuthClientSecret, want: true,
+		},
+		{
+			name: "a shared server's OAuth client secret when it is turned off",
+			mutate: func(in *Input) {
+				signInTavily(in)
+				toolServer(in, optionalTavily).Spec.Enabled = new(false)
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: fieldOAuthClientSecret,
+		},
 		{
 			name:   "a unit's header a member writes in another case",
 			mutate: func(in *Input) { seat(in, optionalSeat).Spec.MCP[0].Env[0].Name = headerUpper },
@@ -500,6 +518,18 @@ func localRefs(names ...string) []v1alpha1.LocalObjectReference {
 func enclose(in *Input, inner, outer string) {
 	in.Units = append(in.Units, v1alpha1.Unit{ObjectMeta: metav1.ObjectMeta{Name: outer}})
 	unit(in, inner).Spec.ParentRef.Name = outer
+}
+
+// signInTavily makes the optional-keys case's tavily server a remote one the
+// company signs in to as its own confidential OAuth client.
+func signInTavily(in *Input) {
+	s := toolServer(in, optionalTavily)
+	s.Spec.Transport, s.Spec.Command, s.Spec.Args, s.Spec.Env = v1alpha1.MCPTransportHTTP, "", nil, nil
+	s.Spec.URL, s.Spec.OptionalKeys = "https://mcp.tavily.example.com/mcp", nil
+	s.Spec.OAuth = v1alpha1.MCPOAuth{
+		Client: v1alpha1.MCPOAuthClientOwn, ClientID: "crewlet-optional",
+		ClientSecret: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "tavily-oauth", Key: keyClientSecret}},
+	}
 }
 
 // optionalInput is the optional-keys case's input.

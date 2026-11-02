@@ -142,6 +142,9 @@ var findings = []struct {
 		"the engine runs the unit and every descendant inheriting its lead with no lead"},
 	{site{fnRole, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the sandbox would reach whichever server takes the name later"},
+	{site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+		"a box given a server the company signs in to with OAuth: it is handed the server's credentials once, at its " +
+			"launch, and cannot renew the access token"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonRefNotFound},
 		"a schedule lives inside its seat's entry, which does not exist"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonHumanSeat}, "a schedule on a person"},
@@ -686,6 +689,30 @@ func engineCases() []engineCase {
 				env[sampleSetting] = "crewlet"
 			},
 			at: optionalKeysAt, says: "carries a ${VAR} reference",
+		},
+		{
+			// Ana's box is given the github server, which the company now
+			// signs in to with OAuth.
+			name: "a seat's box given a server signed in to with OAuth", site: site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				server := toolServer(in, sampleGitHub)
+				server.Spec.Shared = new(true)
+				server.Spec.OAuth = v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD}
+			},
+			refused: "Seat/ana spec.sandbox.mcpServerRefs[0].name",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				for _, server := range doc[keyMCPServers].([]any) {
+					if entry := server.(map[string]any); entry[keyName] == sampleGitHub {
+						delete(entry, "shared")
+						entry["oauth"] = map[string]any{"client": "cimd"}
+						return
+					}
+				}
+				t.Fatalf("the document has no tool server %s", sampleGitHub)
+			},
+			at: "sandbox.mcp.servers[0]", says: "signed in to with OAuth",
 		},
 		{
 			name: "a seat's chain names no provider", site: site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},

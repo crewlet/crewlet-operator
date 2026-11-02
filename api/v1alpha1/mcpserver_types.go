@@ -223,6 +223,89 @@ type MCPServerAccess struct {
 	ExceptSeatRefs []LocalObjectReference `json:"exceptSeatRefs,omitempty"`
 }
 
+// MCPOAuthClient is how the engine registers at a tool server's authorization
+// server when it signs the company in. It maps onto Crewlet's
+// mcp_servers[].oauth.client (CIMD is `cimd`, DCR `dcr`, Own `own`).
+// +kubebuilder:validation:Enum=CIMD;DCR;Own
+type MCPOAuthClient string
+
+// The ways the engine registers at an authorization server.
+const (
+	// MCPOAuthClientCIMD signs in as the client the engine describes in the
+	// client metadata document it publishes at its own address, which is
+	// the client's id.
+	MCPOAuthClientCIMD MCPOAuthClient = "CIMD"
+	// MCPOAuthClientDCR registers a client at the authorization server when a
+	// sign-in starts (dynamic client registration), which issues the id.
+	MCPOAuthClientDCR MCPOAuthClient = "DCR"
+	// MCPOAuthClientOwn signs in as a client an administrator registered at
+	// the vendor beforehand, whose id clientID gives.
+	MCPOAuthClientOwn MCPOAuthClient = "Own"
+)
+
+// MCPOAuth signs the company in to an HTTP tool server with OAuth: one grant
+// for the whole company, which a person makes once from the server's page in
+// the engine's dashboard, and which the engine renews on every pod that runs
+// the server. It maps onto Crewlet's mcp_servers[].oauth.
+//
+// The grant itself is not here, nor anywhere the operator writes: what the
+// sign-in is granted (its refresh token, and the client a registration
+// issues) is sealed in the engine's own store and never read back out. This
+// says only how the engine signs in.
+// +kubebuilder:validation:XValidation:rule="self.client == 'Own' ? has(self.clientID) : !has(self.clientID)",message="clientID is required with client Own, the id the company's own client was registered under at the vendor, and not allowed otherwise: with CIMD the id is the address of the engine's client metadata document, with DCR the one the registration issues",fieldPath=".clientID"
+// +kubebuilder:validation:XValidation:rule="self.client == 'Own' || !has(self.clientSecret)",message="clientSecret applies to client Own, a client registered at the vendor as confidential: with CIMD or DCR the engine signs in as a public client, with no secret",fieldPath=".clientSecret"
+type MCPOAuth struct {
+	// client is how the engine registers at the server's authorization
+	// server: CIMD, by the client metadata document it publishes; DCR, by
+	// registering a client when a sign-in starts; or Own, as a client an
+	// administrator registered at the vendor beforehand. The engine's check
+	// of a server's address says which the server supports. Crewlet's
+	// `client`.
+	// +required
+	Client MCPOAuthClient `json:"client,omitempty"`
+
+	// clientID is the id the company's own client was registered under at
+	// the vendor: required with client Own, and not allowed with CIMD or
+	// DCR, where the id is the engine's or the registration's. Printable
+	// ASCII and spaces, as RFC 6749 spells a client id, with no space at
+	// either end, and at most 256 characters: Crewlet sets no bound, and the
+	// API server needs one to cost the rules over it. Crewlet's `client_id`.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+	// +kubebuilder:validation:XValidation:rule="self.matches('^[!-~]([ -~]*[!-~])?$')",message="clientID is printable ASCII characters and spaces, as RFC 6749 spells a client id, with no space at either end"
+	// +kubebuilder:validation:XValidation:rule="!self.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]')",message="clientID may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
+	ClientID string `json:"clientID,omitempty"`
+
+	// clientSecret reads the secret of the company's own client, for a
+	// client registered at the vendor as confidential, from a Secret key;
+	// leave it unset for a public one. Only with client Own. Crewlet reads
+	// it at every renewal of the sign-in, so it starts the server only once
+	// the value is there: a Secret key that holds an empty value holds no
+	// document back, and the MCPServer reports ResolvedRefs=False with
+	// SecretValueEmpty until it holds one, while a Secret or key that does
+	// not exist holds the document, as every reference does. Crewlet's
+	// `client_secret`, a credential position.
+	// +optional
+	ClientSecret SecretValueSource `json:"clientSecret,omitzero"`
+
+	// scopes are the scopes the sign-in asks for, in any order. Unset, it
+	// asks for the ones the server's own metadata lists, or none where it
+	// lists none. Each is one scope token as RFC 6749 spells it: printable
+	// ASCII characters with no space, double quote or backslash, at most 256
+	// of them, a bound the API server needs to cost its rules and Crewlet
+	// does not set. At most 50 scopes, as Crewlet bounds them. Crewlet's
+	// `scopes`.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=50
+	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=256
+	// +kubebuilder:validation:XValidation:rule="self.all(s, s.matches('^[!#-\\\\[\\\\]-~]+$'))",message="each scope is one scope token as RFC 6749 spells it: printable ASCII characters with no space, double quote or backslash"
+	// +kubebuilder:validation:XValidation:rule="self.all(s, !s.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]'))",message="scopes may not hold a ${NAME} reference: the operator refuses every one it did not write, since in many fields the engine resolves one from its own secret store and environment, which hold credentials that are not this object's to name"
+	Scopes []string `json:"scopes,omitempty"`
+}
+
 // MCPServerSpec is one tool server a company's agents call. It renders to one
 // entry of Crewlet's mcp_servers, named by the MCPServer's metadata.name;
 // Seats and Units give it per-seat values by that name.
@@ -234,6 +317,9 @@ type MCPServerAccess struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.seatCredentials) || (has(self.shared) && !self.shared)",message="seatCredentials applies to a server with shared false: a shared server acts as no seat, so it reads no seat's credential",fieldPath=".seatCredentials"
 // +kubebuilder:validation:XValidation:rule="self.transport != 'HTTP' || !has(self.seatCredentials) || self.seatCredentials.all(a, self.seatCredentials.exists_one(b, b.key.lowerAscii() == a.key.lowerAscii()))",message="seatCredentials names each header once: HTTP header names are case-insensitive, so its keys must differ in more than case",fieldPath=".seatCredentials"
 // +kubebuilder:validation:XValidation:rule="!has(self.access) || !has(self.seatCredentials)",message="access does not apply to a server with seatCredentials: a server reading each agent's own vendor credential reaches the agent seats that are on at that vendor's integration (a Seat's spec.integrations.<vendor>.enabled), the one place that grant is made, so remove access and turn seats on or off there",fieldPath=".access"
+// +kubebuilder:validation:XValidation:rule="!has(self.oauth) || self.transport == 'HTTP'",message="oauth signs the company in to a remote server and applies to transport HTTP only: a Stdio server is launched with its credentials in env",fieldPath=".oauth"
+// +kubebuilder:validation:XValidation:rule="!has(self.oauth) || !has(self.shared) || self.shared",message="oauth is one sign-in for the whole company, and a server with shared false acts as each seat's own identity: give each seat its credential in a Seat's or a Unit's spec.mcp, or make the server shared",fieldPath=".oauth"
+// +kubebuilder:validation:XValidation:rule="!has(self.oauth) || !has(self.headers) || self.headers.all(h, h.name.lowerAscii() != 'authorization')",message="headers may not hold Authorization beside oauth: the OAuth sign-in sends the Authorization header with each request. Remove the header, or remove oauth to send it instead",fieldPath=".headers"
 type MCPServerSpec struct {
 	// companyRef names the Company this server belongs to. Immutable.
 	// +required
@@ -370,6 +456,26 @@ type MCPServerSpec struct {
 	// +kubebuilder:validation:MaxItems=32
 	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, b.name.lowerAscii() == a.name.lowerAscii()))",message="names must differ in more than case: HTTP header names are case-insensitive"
 	Headers []MCPHeader `json:"headers,omitempty"`
+
+	// oauth signs the company in to an HTTP server with OAuth, for a server
+	// that takes no static token: the engine registers at the server's
+	// authorization server as this says, a person signs in once from the
+	// server's page in the engine's dashboard, and the engine sends the
+	// access token it is granted in the Authorization header of every
+	// request, renewing it as it runs out, on every pod that runs the
+	// server. One sign-in for the whole company, so only for a server whose
+	// shared is true, and never beside an Authorization header in headers,
+	// which the sign-in sends itself. Until somebody signs in, and again
+	// once the vendor refuses to renew the grant, the engine starts no
+	// instance of the server and reports it as needing a sign-in, so its
+	// tools go unserved. A grant is sent only to the address it was issued
+	// for: a changed url waits for a sign-in at the new address. No executor's box is given such a server: a Seat's
+	// spec.sandbox.mcpServerRefs naming it holds the company's document,
+	// since a box is handed a server's credentials once, at its launch,
+	// and cannot renew the access token, so the box reaches the server's
+	// tools through its tool bridge instead. Crewlet's `oauth`.
+	// +optional
+	OAuth MCPOAuth `json:"oauth,omitzero"`
 
 	// optionalKeys names the keys whose value may go missing: variables of env
 	// (Stdio) or headers (HTTP), and the values every Seat and Unit gives the
