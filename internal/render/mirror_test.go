@@ -412,14 +412,6 @@ const (
 	// ${NAME} in one, so a rendered server's url is the literal Crewlet
 	// dials, and every box that scopes the server is given it.
 	entryRulesRead = "v0.1.1-0.20261101172218-1ecc48d5ca08"
-	// harnessCopyRead is crewlet/crewlet#530's engine, read on crewlet's main
-	// where it merged (5936f3b46c), the last piece of crewlet#522. sandboxMCP
-	// logs two servers it gives no box, and both log details now say "the
-	// executor" where they said "the coding agent": one turned off
-	// (crewlet#518) and one whose url Crewlet would not dial (crewlet#534).
-	// The servers it gives, withholds and refuses are as at entryRulesRead,
-	// so the render's copy holds. No other mirror moved.
-	harnessCopyRead = "v0.1.1-0.20261101181230-5936f3b46c60"
 	// serverHealthRead is crewlet/crewlet#554's engine, read on crewlet's main
 	// where it merged (2f52194d02), which keeps each MCP server's health.
 	// startSharedServers now stamps when each shared server's outcome began
@@ -429,21 +421,40 @@ const (
 	// one reading a server's page shares with MCPAddressProblem, which now
 	// calls it by that name; neither rule moved, so the render's copies hold.
 	serverHealthRead = "v0.1.1-0.20261102002330-2f52194d0262"
-	// harnessSkillsRead is crewlet's main at 2f52194d02, read for
-	// (*agentLauncher).launch, which crewlet/crewlet#549 and #552 moved: the
-	// run now hands its harness the skills its seat holds (the bridge's list and
-	// the box's files). The launch was last read at crewlet#528 (0b2730bb44),
-	// where the harness came to be named on the wire and a sandbox's spec input
-	// with it (its CodingAgent field is Harness); before that at harnessRead,
-	// which moved its names alone, and at crewlet#453 (e0328e5d9d), where an
-	// executor launch came to stamp the picked member's sign-in identity on the
-	// run's row (the launch request's SignInID), which the run's collection
-	// compares to relaunch, once, a run its vendor refused on a sign-in
-	// replaced while it ran. The member a launch picks, the cell it places the
-	// run in, the bridge it refuses, the environment it starts the run with and
-	// the login it refuses off the engine host are as at executorFinalRead, so
-	// the render's copies hold.
-	harnessSkillsRead = "v0.1.1-0.20261102002330-2f52194d0262"
+	// sessionKeepRead is crewlet/crewlet#568's engine, read at the head of
+	// crewlet's feat/keep-executor-session (baa9405e9b): every executor
+	// launch's harness session is kept, scrubbed of the credentials the
+	// launch handed its box. Three mirrors moved, each for that bookkeeping
+	// alone, so the render's copies hold.
+	//
+	// runEnvironment now also collects, as the run's secrets, what each
+	// layer's references resolved to and a setup file whose whole content is
+	// one reference. The environment a run starts with is as at
+	// executorFinalRead, where it was last read.
+	//
+	// sandboxMCP notes what each server's url's references resolved to. It
+	// was last read at crewlet#530 (5936f3b46c), the last piece of
+	// crewlet#522, where both of its log details came to say "the executor"
+	// where they said "the coding agent": one for a server turned off
+	// (crewlet#518) and one for a url Crewlet would not dial (crewlet#534).
+	// The servers it gives, withholds and refuses are as at entryRulesRead.
+	//
+	// (*agentLauncher).launch hands both to the launch's request, and tells a
+	// stop decided on the run from the turn's own, noting a launch the turn's
+	// stop ended after its run was recorded. It was last read at 2f52194d02
+	// for crewlet#549 and #552, where the run came to hand its harness the
+	// skills its seat holds (the bridge's list and the box's files); before
+	// that at crewlet#528 (0b2730bb44), where the harness came to be named on
+	// the wire and a sandbox's spec input with it (its CodingAgent field is
+	// Harness); at harnessRead, which moved its names alone; and at
+	// crewlet#453 (e0328e5d9d), where an executor launch came to stamp the
+	// picked member's sign-in identity on the run's row (the launch request's
+	// SignInID), which the run's collection compares to relaunch, once, a run
+	// its vendor refused on a sign-in replaced while it ran. The member a
+	// launch picks, the cell it places the run in, the bridge it refuses, the
+	// environment it starts the run with and the login it refuses off the
+	// engine host are as at executorFinalRead.
+	sessionKeepRead = "v0.1.1-0.20261102075019-baa9405e9bde"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -901,8 +912,8 @@ var mirrored = []mirror{
 			"role.sandbox.env, each later layer winning a name, and a value that resolves to nothing is left out, " +
 			"quietly where the optional_keys beside the value that wins lists its key (a setup file's path " +
 			"likewise), and as the run's gap otherwise, which launch logs and starts the run without",
-		digest: "0ec78491f7653695460cde07c92b37f0fd44f9cb10d2e1bd7decfad44094be2a",
-		read:   executorFinalRead,
+		digest: "c41706942afc96363271277b8f631642725db3f4ecaa74951aab16aa767467d8",
+		read:   sessionKeepRead,
 	},
 	{
 		file: toolCredentialsGo, name: "resolveServer",
@@ -960,8 +971,8 @@ var mirrored = []mirror{
 		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "an executor's box is given every server its seat's sandbox scopes, shared or not, with the seat's " +
 			"block for it, none turned off and none at an address Crewlet would not dial",
-		digest: "987f6d38d8cfd32ca58874cdbd80845aebc2c38b7a039de06c0a2a92b97f84c8",
-		read:   harnessCopyRead,
+		digest: "d505cf307d11bea95aa79e71cc4c63504e4f2598d2f22853bf0a50aad4486688",
+		read:   sessionKeepRead,
 	},
 	{
 		file: mcpNamesGo, name: "mcpServerName",
@@ -1101,8 +1112,8 @@ var mirrored = []mirror{
 			"listener, which every engine pod serves its own boxes, every other the fleet's address; NotExposed), " +
 			"starts the run without a value of its environment that resolves to nothing, and refuses the picked " +
 			"member's login only off the engine host (sandboxCredentials: SandboxLoginNotPortable)",
-		digest: "85dfce629a3e1eb9f134c1b2554a8cdce93615577b7db20d6d9f98be4a797fef",
-		read:   harnessSkillsRead,
+		digest: "ef0ba5e70bd410f1eaece9cac49ce783224b8e29a2eaccb57888cfaa591df0ff",
+		read:   sessionKeepRead,
 	},
 	{
 		file: "internal/sandbox/launch.go", name: "withTelemetry",
