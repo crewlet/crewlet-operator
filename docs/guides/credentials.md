@@ -377,9 +377,12 @@ its setup steps' and a harness's, take no literal value.
 A remote server the company signs in to with OAuth (`spec.oauth`) takes no
 token from a Secret at all: an administrator signs in from the engine's
 dashboard, and the grant stays in the engine's own store, which the operator
-neither writes nor reads. The one credential of such a server the operator
-pushes is the secret of the company's own client, where the vendor issued it
-as confidential:
+neither writes nor reads; or the engine signs in as a service identity, and
+holds the tokens it is issued in its memory alone. The one credential of
+such a server the operator pushes is the secret of the company's own client:
+for a person's sign-in where the vendor issued it as confidential, and
+always for a service identity (`grant: ClientCredentials`), which signs in
+with it:
 
 ```yaml
 spec:                       # MCPServer tickets
@@ -390,7 +393,9 @@ spec:                       # MCPServer tickets
       secretKeyRef: {name: tickets-oauth, key: clientSecret}
 ```
 
-[Signing in with OAuth](tool-servers.md#signing-in-with-oauth) has the rest.
+[Signing in with OAuth](tool-servers.md#signing-in-with-oauth) and
+[Signing in as a service identity](tool-servers.md#signing-in-as-a-service-identity)
+have the rest.
 
 ### What the platform supplies
 

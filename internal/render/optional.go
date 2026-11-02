@@ -280,7 +280,7 @@ func (r *renderer) markStarted() []StartValue {
 			if seat.Spec.Kind == v1alpha1.SeatKindHuman || !r.reaches(s, seat) {
 				continue
 			}
-			boxed := allowsEveryTool(s.Spec.Tools) && s.Spec.OAuth.Client == "" &&
+			boxed := allowsEveryTool(s.Spec.Tools) && !signsInWithOAuth(s) &&
 				slices.ContainsFunc(seat.Spec.Sandbox.MCPServerRefs,
 					func(ref v1alpha1.LocalObjectReference) bool { return ref.Name == s.Name })
 			if shared && !boxed {

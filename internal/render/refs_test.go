@@ -14,6 +14,9 @@ import (
 	"github.com/crewlet/crewlet-operator/internal/secretref"
 )
 
+// fieldBoxServer is the field of the first server a Seat's box is given.
+const fieldBoxServer = "spec.sandbox.mcpServerRefs[0].name"
+
 // TestCompanyRefusesWhatItCannotRender covers every reference between
 // objects the API server cannot check, each broken on its own in an
 // otherwise valid company. Each refusal must name the object and the field
@@ -92,7 +95,7 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 			},
 			want: []refusal{
 				{KindSeat, seatAna, "spec.mcp[0].name", v1alpha1.ReasonRefNotFound},
-				{KindSeat, seatAna, "spec.sandbox.mcpServerRefs[0].name", v1alpha1.ReasonRefNotFound},
+				{KindSeat, seatAna, fieldBoxServer, v1alpha1.ReasonRefNotFound},
 			},
 		},
 		{
@@ -106,7 +109,24 @@ func TestCompanyRefusesWhatItCannotRender(t *testing.T) {
 				server.Spec.Enabled = new(false)
 				server.Spec.OAuth = v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientDCR}
 			},
-			want: []refusal{{KindSeat, seatAna, "spec.sandbox.mcpServerRefs[0].name", v1alpha1.ReasonConflict}},
+			want: []refusal{{KindSeat, seatAna, fieldBoxServer, v1alpha1.ReasonConflict}},
+		},
+		{
+			// A service identity names no client: the box is refused it
+			// all the same, as Crewlet refuses every server it signs in
+			// to with OAuth.
+			name: "a seat's box is given a server signed in to as a service identity",
+			mutate: func(in *Input) {
+				server := toolServer(in, sampleGitHub)
+				server.Spec.Shared = new(true)
+				server.Spec.OAuth = v1alpha1.MCPOAuth{
+					Grant: v1alpha1.MCPOAuthGrantClientCredentials, ClientID: serviceClientID,
+					ClientSecret: v1alpha1.SecretValueSource{
+						SecretKeyRef: v1alpha1.SecretKeyReference{Name: "github-oauth", Key: keyClientSecret},
+					},
+				}
+			},
+			want: []refusal{{KindSeat, seatAna, fieldBoxServer, v1alpha1.ReasonConflict}},
 		},
 		{
 			name: "a unit's tool server is missing",

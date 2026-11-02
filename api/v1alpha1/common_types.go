@@ -825,9 +825,10 @@ const (
 	// credential, the identity its instance acts as, is not one to start
 	// without; a Seat's spec.sandbox.optionalKeys, or the step's own, for an
 	// executor run's, which is then left out quietly. An MCPServer's
-	// spec.oauth.clientSecret is one too, under no list: Crewlet reads it at
-	// every renewal of the sign-in and starts the server only once it holds
-	// a value.
+	// spec.oauth.clientSecret is one too, under no list: Crewlet signs in
+	// with it, a person's grant at every renewal and a service identity at
+	// every access token it is issued, and starts the server only once it
+	// holds a value.
 	ReasonSecretValueEmpty = "SecretValueEmpty"
 
 	// ReasonOptionalKeyUnused is ResolvedRefs=False on an MCPServer whose
