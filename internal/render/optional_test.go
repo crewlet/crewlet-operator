@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -20,6 +19,8 @@ const (
 	firstStepEnv  = "spec.sandbox.setup[0].env[0].valueFrom"
 	firstStepFile = "spec.sandbox.setup[0].files[0].valueFrom"
 	seatEnv       = "spec.sandbox.env[0].valueFrom"
+	// firstMCPEnv is the first value of an object's first spec.mcp block.
+	firstMCPEnv = "spec.mcp[0].env[0].valueFrom"
 )
 
 // The objects of the optional-keys case the tests break, and the keys and
@@ -95,7 +96,7 @@ func TestStartValuesSayWhichValuesMayGoMissing(t *testing.T) {
 		}
 	}
 	unitHeader := value(optionalSecret("eng-linear", headerLower), ObjectRef{Kind: KindUnit, Name: unitEng},
-		"spec.mcp[0].env[0].valueFrom", headerAuthorization, sampleLinear, true, linear, fieldOptionalKeys)
+		firstMCPEnv, headerAuthorization, sampleLinear, true, linear, fieldOptionalKeys)
 	unitHeader.Started = false
 	want := []StartValue{
 		value(optionalSecret("npm", optionalToken), company, firstStepEnv, "NPM_TOKEN", "", false,
@@ -107,7 +108,7 @@ func TestStartValuesSayWhichValuesMayGoMissing(t *testing.T) {
 		value(optionalSecret("npm", "registry"), tavily, "spec.env[1].valueFrom", envRegistry, optionalTavily, true,
 			tavily, fieldOptionalKeys),
 		unitHeader,
-		value(optionalSecret("coder-linear", headerLower), coder, "spec.mcp[0].env[0].valueFrom", headerAuthorization,
+		value(optionalSecret("coder-linear", headerLower), coder, firstMCPEnv, headerAuthorization,
 			sampleLinear, true, linear, fieldOptionalKeys),
 		value(optionalSecret("coder-github", optionalToken), coder, seatEnv, envGitHubSignIn, "", false,
 			coder, seatSandbox),
@@ -210,7 +211,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 		{
 			name: "a per-seat server's own value, granted to a unit the seat is not in",
 			mutate: func(in *Input) {
-				in.Units = append(in.Units, v1alpha1.Unit{ObjectMeta: metav1.ObjectMeta{Name: unitOrg}})
+				in.Units = append(in.Units, v1alpha1.Unit{Name: unitOrg})
 				toolServer(in, optionalTavily).Spec.Shared = new(false)
 				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{UnitRefs: localRefs(unitOrg)}
 			},
@@ -256,7 +257,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 				seat(in, optionalSeat).Spec.MCP = nil
 				toolServer(in, sampleLinear).Spec.Access = &v1alpha1.MCPServerAccess{}
 			},
-			object: ObjectRef{Kind: KindUnit, Name: unitEng}, field: "spec.mcp[0].env[0].valueFrom",
+			object: ObjectRef{Kind: KindUnit, Name: unitEng}, field: firstMCPEnv,
 		},
 		{
 			// A server reading a vendor's seat credential reaches the seats
@@ -395,12 +396,12 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 		{
 			name:   "a unit's header a member writes in another case",
 			mutate: func(in *Input) { seat(in, optionalSeat).Spec.MCP[0].Env[0].Name = headerUpper },
-			object: ObjectRef{Kind: KindUnit, Name: unitEng}, field: "spec.mcp[0].env[0].valueFrom",
+			object: ObjectRef{Kind: KindUnit, Name: unitEng}, field: firstMCPEnv,
 		},
 		{
 			name:   "a unit's header no member replaces",
 			mutate: func(in *Input) { seat(in, optionalSeat).Spec.MCP = nil },
-			object: ObjectRef{Kind: KindUnit, Name: unitEng}, field: "spec.mcp[0].env[0].valueFrom", want: true,
+			object: ObjectRef{Kind: KindUnit, Name: unitEng}, field: firstMCPEnv, want: true,
 		},
 		{
 			name: "a Company step's variable a seat's env replaces",
@@ -498,7 +499,7 @@ func localRefs(names ...string) []v1alpha1.LocalObjectReference {
 
 // enclose puts a new Unit named outer above the Unit named inner.
 func enclose(in *Input, inner, outer string) {
-	in.Units = append(in.Units, v1alpha1.Unit{ObjectMeta: metav1.ObjectMeta{Name: outer}})
+	in.Units = append(in.Units, v1alpha1.Unit{Name: outer})
 	unit(in, inner).Spec.ParentRef.Name = outer
 }
 

@@ -192,9 +192,9 @@ func TestMCPServerValidation(t *testing.T) {
 			name: "a server granted to units and seats, with seats left out, is accepted",
 			mutate: func(s *v1.MCPServer) {
 				s.Spec.Access = &v1.MCPServerAccess{
-					UnitRefs:       []v1.LocalObjectReference{{Name: "engineering"}, {Name: "design"}},
+					UnitRefs:       []v1.LocalObjectReference{{Name: accessUnit}, {Name: "design"}},
 					SeatRefs:       []v1.LocalObjectReference{{Name: "pm"}},
-					ExceptSeatRefs: []v1.LocalObjectReference{{Name: "intern"}},
+					ExceptSeatRefs: []v1.LocalObjectReference{{Name: accessExcepted}},
 				}
 			},
 		},
@@ -214,7 +214,7 @@ func TestMCPServerValidation(t *testing.T) {
 			name: "a grant on a server reading a vendor's seat credential is refused",
 			mutate: func(s *v1.MCPServer) {
 				s.Spec.Shared = new(false)
-				s.Spec.SeatCredentials = []v1.MCPSeatCredential{{Kind: v1.SeatCredentialGitLab, Key: "GITLAB_TOKEN"}}
+				s.Spec.SeatCredentials = []v1.MCPSeatCredential{{Kind: v1.SeatCredentialGitLab, Key: gitlabToken}}
 				s.Spec.Access = &v1.MCPServerAccess{SeatRefs: []v1.LocalObjectReference{{Name: "pm"}}}
 			},
 			want: msgAccessSeatCredentials,
@@ -234,9 +234,9 @@ func TestMCPServerValidation(t *testing.T) {
 			name: "a seat both granted and left out is refused",
 			mutate: func(s *v1.MCPServer) {
 				s.Spec.Access = &v1.MCPServerAccess{
-					UnitRefs:       []v1.LocalObjectReference{{Name: "engineering"}},
-					SeatRefs:       []v1.LocalObjectReference{{Name: "pm"}, {Name: "intern"}},
-					ExceptSeatRefs: []v1.LocalObjectReference{{Name: "intern"}},
+					UnitRefs:       []v1.LocalObjectReference{{Name: accessUnit}},
+					SeatRefs:       []v1.LocalObjectReference{{Name: "pm"}, {Name: accessExcepted}},
+					ExceptSeatRefs: []v1.LocalObjectReference{{Name: accessExcepted}},
 				}
 			},
 			want: msgAccessSeatBoth,
@@ -245,7 +245,7 @@ func TestMCPServerValidation(t *testing.T) {
 			name: "a unit named twice is refused",
 			mutate: func(s *v1.MCPServer) {
 				s.Spec.Access = &v1.MCPServerAccess{
-					UnitRefs: []v1.LocalObjectReference{{Name: "engineering"}, {Name: "engineering"}},
+					UnitRefs: []v1.LocalObjectReference{{Name: accessUnit}, {Name: accessUnit}},
 				}
 			},
 			want: msgDuplicate,
@@ -254,8 +254,8 @@ func TestMCPServerValidation(t *testing.T) {
 			name: "a seat left out twice is refused",
 			mutate: func(s *v1.MCPServer) {
 				s.Spec.Access = &v1.MCPServerAccess{
-					UnitRefs:       []v1.LocalObjectReference{{Name: "engineering"}},
-					ExceptSeatRefs: []v1.LocalObjectReference{{Name: "intern"}, {Name: "intern"}},
+					UnitRefs:       []v1.LocalObjectReference{{Name: accessUnit}},
+					ExceptSeatRefs: []v1.LocalObjectReference{{Name: accessExcepted}, {Name: accessExcepted}},
 				}
 			},
 			want: msgDuplicate,
@@ -270,7 +270,7 @@ func TestMCPServerValidation(t *testing.T) {
 		{
 			name: "seat credentials on a shared server are refused",
 			mutate: func(s *v1.MCPServer) {
-				s.Spec.SeatCredentials = []v1.MCPSeatCredential{{Kind: v1.SeatCredentialGitLab, Key: "GITLAB_TOKEN"}}
+				s.Spec.SeatCredentials = []v1.MCPSeatCredential{{Kind: v1.SeatCredentialGitLab, Key: gitlabToken}}
 			},
 			want: "seatCredentials applies to a server with shared false",
 		},
@@ -279,7 +279,7 @@ func TestMCPServerValidation(t *testing.T) {
 			mutate: func(s *v1.MCPServer) {
 				s.Spec.Shared = new(false)
 				s.Spec.SeatCredentials = []v1.MCPSeatCredential{
-					{Kind: v1.SeatCredentialGitLab, Field: v1.SeatCredentialToken, Key: "GITLAB_TOKEN"},
+					{Kind: v1.SeatCredentialGitLab, Field: v1.SeatCredentialToken, Key: gitlabToken},
 				}
 			},
 			want: "field applies to Atlassian",
@@ -477,6 +477,10 @@ func TestMCPServerValidation(t *testing.T) {
 const (
 	msgServerName = "an MCPServer's name is its Crewlet server name"
 	msgPlainHTTP  = "url may be plain http only to a host on no public network"
+	// accessUnit and accessExcepted are the Unit and the Seat an MCPServer's
+	// access names in the access cases.
+	accessUnit     = "engineering"
+	accessExcepted = "intern"
 )
 
 func TestIntegrationValidation(t *testing.T) {

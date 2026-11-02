@@ -440,18 +440,18 @@ func engineCases() []engineCase {
 			t.Fatalf("the document has no tool server %s", name)
 		}
 	}
-	// grant writes access as the access of the tool server named, as the
-	// render writes an MCPServer's spec.access.
-	grant := func(name string, access map[string]any) func(*testing.T, map[string]any) {
+	// grant writes access as the access of the sample's linear tool server,
+	// as the render writes an MCPServer's spec.access.
+	grant := func(access map[string]any) func(*testing.T, map[string]any) {
 		return func(t *testing.T, doc map[string]any) {
 			t.Helper()
 			for _, server := range doc[keyMCPServers].([]any) {
-				if entry := server.(map[string]any); entry[keyName] == name {
+				if entry := server.(map[string]any); entry[keyName] == sampleLinear {
 					entry["access"] = access
 					return
 				}
 			}
-			t.Fatalf("the document has no tool server %s", name)
+			t.Fatalf("the document has no tool server %s", sampleLinear)
 		}
 	}
 	// linearAccess sets the Linear server's spec.access, which Ana, whose
@@ -778,7 +778,7 @@ func engineCases() []engineCase {
 			input:   sampleCompany,
 			mutate:  linearAccess(v1alpha1.MCPServerAccess{UnitRefs: localRefs(unitPlatform, missing)}),
 			refused: "MCPServer/linear spec.access.unitRefs[1].name",
-			write:   grant(sampleLinear, map[string]any{"units": []any{missing, unitPlatform}}),
+			write:   grant(map[string]any{keyUnits: []any{missing, unitPlatform}}),
 			at:      "access.units[0]", says: `"missing" is no unit's key`,
 		},
 		{
@@ -786,7 +786,7 @@ func engineCases() []engineCase {
 			input:   sampleCompany,
 			mutate:  linearAccess(v1alpha1.MCPServerAccess{SeatRefs: localRefs(seatAna, missing)}),
 			refused: "MCPServer/linear spec.access.seatRefs[1].name",
-			write:   grant(sampleLinear, map[string]any{"seats": []any{seatAna, missing}}),
+			write:   grant(map[string]any{accessSeats: []any{seatAna, missing}}),
 			at:      "access.seats[1]", says: `"missing" is no seat's handle`,
 		},
 		{
@@ -796,7 +796,7 @@ func engineCases() []engineCase {
 				UnitRefs: localRefs(unitPlatform), ExceptSeatRefs: localRefs(missing),
 			}),
 			refused: "MCPServer/linear spec.access.exceptSeatRefs[0].name",
-			write:   grant(sampleLinear, map[string]any{"units": []any{unitPlatform}, "except": []any{missing}}),
+			write:   grant(map[string]any{keyUnits: []any{unitPlatform}, "except": []any{missing}}),
 			at:      "access.except[0]", says: `"missing" is no seat's handle`,
 		},
 		{
@@ -804,7 +804,7 @@ func engineCases() []engineCase {
 			input:   sampleCompany,
 			mutate:  linearAccess(v1alpha1.MCPServerAccess{SeatRefs: localRefs(seatAna, seatJane)}),
 			refused: "MCPServer/linear spec.access.seatRefs[1].name",
-			write:   grant(sampleLinear, map[string]any{"seats": []any{seatAna, seatJane}}),
+			write:   grant(map[string]any{accessSeats: []any{seatAna, seatJane}}),
 			at:      "access.seats[1]", says: "a person runs no tools",
 		},
 		{
@@ -814,7 +814,7 @@ func engineCases() []engineCase {
 				UnitRefs: localRefs(unitPlatform), ExceptSeatRefs: localRefs(seatJane),
 			}),
 			refused: "MCPServer/linear spec.access.exceptSeatRefs[0].name",
-			write:   grant(sampleLinear, map[string]any{"units": []any{unitPlatform}, "except": []any{seatJane}}),
+			write:   grant(map[string]any{keyUnits: []any{unitPlatform}, "except": []any{seatJane}}),
 			at:      "access.except[0]", says: "a person runs no tools",
 		},
 		{

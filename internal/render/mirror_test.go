@@ -395,14 +395,6 @@ const (
 	// seatCredentialsRead is the engine that lets an mcp_servers entry
 	// declare the seat credentials it reads.
 	seatCredentialsRead = "v0.1.1-0.20261030054628-ba705774dba0"
-	// serverOffRead is crewlet#518's engine, read on crewlet's main where it
-	// merged (981cbd5c31), which adds mcp_servers[].enabled: a server turned off
-	// starts nothing. startSharedServers skips it, MCPServer.Grants grants it
-	// to no seat (so seatSpecs, which asks Grants, builds no seat's instance
-	// of it and is unchanged), and sandboxMCP gives no box it. The render
-	// follows it: markStarted starts none of its values, its own, a Seat's or
-	// a Unit's. Every other start is as it was.
-	serverOffRead = "v0.1.1-0.20261101162029-981cbd5c3194"
 	// entryRulesRead is crewlet#534's engine, read on crewlet's main where it
 	// merged (1ecc48d5ca), which holds an MCP server's name, tool prefix, url
 	// and value keys to what every client can use. sandboxMCP gives no box a
@@ -412,14 +404,6 @@ const (
 	// ${NAME} in one, so a rendered server's url is the literal Crewlet
 	// dials, and every box that scopes the server is given it.
 	entryRulesRead = "v0.1.1-0.20261101172218-1ecc48d5ca08"
-	// harnessCopyRead is crewlet/crewlet#530's engine, read on crewlet's main
-	// where it merged (5936f3b46c), the last piece of crewlet#522. sandboxMCP
-	// logs two servers it gives no box, and both log details now say "the
-	// executor" where they said "the coding agent": one turned off
-	// (crewlet#518) and one whose url Crewlet would not dial (crewlet#534).
-	// The servers it gives, withholds and refuses are as at entryRulesRead,
-	// so the render's copy holds. No other mirror moved.
-	harnessCopyRead = "v0.1.1-0.20261101181230-5936f3b46c60"
 	// serverHealthRead is crewlet/crewlet#554's engine, read on crewlet's main
 	// where it merged (2f52194d02), which keeps each MCP server's health.
 	// startSharedServers now stamps when each shared server's outcome began

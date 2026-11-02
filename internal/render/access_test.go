@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/crewlet/crewlet-operator/api/v1alpha1"
 	"github.com/crewlet/crewlet-operator/internal/engine"
@@ -21,6 +20,9 @@ const (
 	serverCatalog = "catalog"
 	serverArchive = "archive"
 	seatWelder    = "welder"
+	seatAssistant = "assistant"
+	// accessSeats is the key Crewlet's access names seats under.
+	accessSeats = "seats"
 )
 
 // reachedBy is every agent Seat the render counts server as reaching, by
@@ -45,14 +47,14 @@ func reachedBy(in *Input, server string) []string {
 // wins over it, an empty access reaches nobody, an absent one every agent
 // seat, and a person is reached by nothing.
 func TestAToolServerReachesTheSeatsItsAccessNames(t *testing.T) {
-	agents := []string{"assistant", "caster", "smith", "vp", seatWelder}
+	agents := []string{seatAssistant, "caster", "smith", "vp", seatWelder}
 	cases := []struct {
 		name   string
 		mutate func(*Input)
 		server string
 		want   []string
 	}{
-		{name: "units, a seat and a seat left out", server: serverCatalog, want: []string{"assistant", "caster", "smith"}},
+		{name: "units, a seat and a seat left out", server: serverCatalog, want: []string{seatAssistant, "caster", "smith"}},
 		{name: "an empty access", server: serverArchive},
 		{
 			name:   "no access",
@@ -65,7 +67,7 @@ func TestAToolServerReachesTheSeatsItsAccessNames(t *testing.T) {
 				a := toolServer(in, serverCatalog).Spec.Access
 				a.SeatRefs = append(a.SeatRefs, v1alpha1.LocalObjectReference{Name: seatWelder})
 			},
-			server: serverCatalog, want: []string{"assistant", "caster", "smith", seatWelder},
+			server: serverCatalog, want: []string{seatAssistant, "caster", "smith", seatWelder},
 		},
 		{
 			name: "the top of the chart",
@@ -109,7 +111,7 @@ func TestContractAToolServerReachesWhomTheEngineGrants(t *testing.T) {
 	in := companyCaseNamed(t, sampleCompany).input(t)
 	probe := func(name string, shared, enabled bool, access *v1alpha1.MCPServerAccess) v1alpha1.MCPServer {
 		return v1alpha1.MCPServer{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: in.Company.Namespace},
+			Name: name, Namespace: in.Company.Namespace,
 			Spec: v1alpha1.MCPServerSpec{
 				CompanyRef: v1alpha1.CompanyReference{Name: in.Company.Name},
 				Transport:  v1alpha1.MCPTransportStdio, Command: "probe-mcp",
@@ -203,7 +205,7 @@ func engineReaches(t *testing.T, e *enginetest.Engine, server string) []string {
 	if err := json.NewDecoder(resp.Body).Decode(&detail); err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET /mcp-servers/%s: %d, %v", server, resp.StatusCode, err)
 	}
-	var out []string
+	out := make([]string, 0, len(detail.Reaches))
 	for _, reach := range detail.Reaches {
 		out = append(out, reach.Seat)
 	}
