@@ -484,12 +484,12 @@ const (
 	// company's grant or that identity; the operator renders no oauth block,
 	// so no rendered server is signed in to, and the render's copy holds.
 	serviceIdentityRead = "v0.1.1-0.20261102170345-7b43d84822ae"
-	// mcpLimitsRead is crewlet/crewlet#594's engine, read at its head
-	// (6d3b3a57e0, with crewlet's main merged in at a85be54571), which lets a
-	// unit's lead narrow an MCP server for their own teams (mcp_limits on a
-	// seat or a unit, a server turned off with enabled: false): each agent
-	// seat is held to the strictest of its own limits and every enclosing
-	// unit's (resolveMCPLimits). Grants reads a limit that turns a server
+	// mcpLimitsRead is crewlet/crewlet#594's engine, read on crewlet's main
+	// where it merged (bb2df11096), which lets a unit's lead narrow an MCP
+	// server for their own teams (mcp_limits on a seat or a unit, a server
+	// turned off with enabled: false): each agent seat is held to the
+	// strictest of its own limits and every enclosing unit's
+	// (resolveMCPLimits). Grants reads a limit that turns a server
 	// off, so a per-seat server starts no child for such a seat, and
 	// sandboxMCP gives a box no server a seat's limits hold a tool of back, a
 	// listing the engine refuses (validateMCPLimits); MCPToolPolicy.validate's
@@ -498,7 +498,7 @@ const (
 	// turns off for the seat and gives its box no server a limit holds back,
 	// the API renders spec.mcpLimits, and the Seat's sandbox listing of such
 	// a server is refused.
-	mcpLimitsRead = "v0.1.1-0.20261102192613-6d3b3a57e016"
+	mcpLimitsRead = "v0.1.1-0.20261102203033-bb2df1109698"
 	// orgLimitsGo is where the engine resolves what the limits on the way
 	// down to a seat hold each server to, and mcpLimitsGo where it refuses
 	// a limit, and a sandbox listing a limit holds back.
