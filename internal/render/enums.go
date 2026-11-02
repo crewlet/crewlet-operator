@@ -106,6 +106,18 @@ func mcpTransport(t v1alpha1.MCPTransport) string {
 	return ""
 }
 
+func toolLevel(l v1alpha1.MCPToolLevel) string {
+	switch l {
+	case v1alpha1.MCPToolLevelAllow:
+		return "allow"
+	case v1alpha1.MCPToolLevelApprove:
+		return "approve"
+	case v1alpha1.MCPToolLevelBlocked:
+		return "blocked"
+	}
+	return ""
+}
+
 // mcpOAuthGrant maps onto Crewlet's mcp_servers[].oauth.grant: "" where the
 // MCPServer gives no grant, which Crewlet reads as authorization_code.
 func mcpOAuthGrant(g v1alpha1.MCPOAuthGrant) string {

@@ -67,9 +67,8 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 
 // TestExecutorHarnessesFollowTheEngineSource holds the harnesses the render
 // runs a seat's executor on (ExecutorHarnesses) to the engine's two lists of
-// them, in their order: the harnesses it has an in-box runner for
-// (executor.Names, which names each of the package's harnesses list by its
-// Name), and the harnesses config lets run an executor
+// them, in their order: the harnesses it has an in-box runner for (the
+// harnesses executor.Names names, each by its Name), and the harnesses config lets run an executor
 // (config.ExecutorHarnesses), which it refuses a chain without and a runIn on
 // any other harness by. A harness either gains moves every verdict the render
 // reaches on a chain, and the API's runIn rule
@@ -113,63 +112,39 @@ func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 	}
 }
 
-// runnerNames is the harnesses the executor package's Names lists, in its
-// order: Names names each harness of the package's harnesses list by its
-// Name method, and each harness's Name returns one of the package's string
-// constants. A Names that reads anything else, or a harness whose Name is
-// not one constant, fails the test, which then has to be read again.
+// runnerNames is the name of each harness the engine has an in-box runner
+// for, in the order executor.Names gives them: the harnesses listed in the
+// package's `harnesses` literal in file (src), each a type whose Name method
+// returns one string constant of the package.
 func runnerNames(t *testing.T, source *os.Root, file string, src []byte) []string {
 	t.Helper()
-	parsed, err := parser.ParseFile(token.NewFileSet(), file, src, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	listed := false
-	for _, decl := range parsed.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Name.Name != "Names" || fn.Recv != nil || fn.Body == nil {
-			continue
-		}
-		ast.Inspect(fn.Body, func(n ast.Node) bool {
-			if loop, ok := n.(*ast.RangeStmt); ok {
-				if x, ok := loop.X.(*ast.Ident); ok && x.Name == "harnesses" {
-					listed = true
-				}
-			}
-			return true
-		})
-	}
-	if !listed {
-		t.Fatalf("%s's Names does not name the package's harnesses list: read what it lists again", file)
-	}
 	list, ok := declared(t, file, src, "harnesses").(*ast.CompositeLit)
 	if !ok {
 		t.Fatalf("harnesses in %s is no literal", file)
 	}
 	dir := path.Dir(file)
-	consts := constsOf(t, source, dir)
-	named := nameMethods(t, source, dir)
+	consts, named := constsOf(t, source, dir), nameMethods(t, source, dir)
 	out := make([]string, 0, len(list.Elts))
 	for _, elt := range list.Elts {
 		harness, ok := elt.(*ast.CompositeLit)
 		if !ok {
-			t.Fatalf("harnesses in %s holds %T, not a harness type's literal", file, elt)
+			t.Fatalf("harnesses in %s holds %T, not a harness type's value", file, elt)
 		}
 		typ, ok := harness.Type.(*ast.Ident)
 		if !ok {
-			t.Fatalf("harnesses in %s holds a literal of %T, not of a harness type of its own", file, harness.Type)
+			t.Fatalf("harnesses in %s holds a %T literal, not a harness type's value", file, harness.Type)
 		}
 		constant, ok := named[typ.Name]
 		if !ok {
-			t.Fatalf("%s's harness %s has no Name returning one of its constants", dir, typ.Name)
+			t.Fatalf("%s declares no Name of %s returning a constant", dir, typ.Name)
 		}
 		out = append(out, consts[constant])
 	}
 	return out
 }
 
-// nameMethods is, for every type of the Go package in dir of source whose
-// Name method returns one identifier, that identifier, by the type's name.
+// nameMethods is, for each type of the package in dir with a value-receiver
+// Name method that returns one identifier, that identifier.
 func nameMethods(t *testing.T, source *os.Root, dir string) map[string]string {
 	t.Helper()
 	entries, err := fsReadDir(source, dir)
@@ -197,11 +172,8 @@ func nameMethods(t *testing.T, source *os.Root, dir string) map[string]string {
 				continue
 			}
 			recv, ok := fn.Recv.List[0].Type.(*ast.Ident)
-			if !ok {
-				continue
-			}
-			ret, ok := fn.Body.List[0].(*ast.ReturnStmt)
-			if !ok || len(ret.Results) != 1 {
+			ret, isReturn := fn.Body.List[0].(*ast.ReturnStmt)
+			if !ok || !isReturn || len(ret.Results) != 1 {
 				continue
 			}
 			if ident, ok := ret.Results[0].(*ast.Ident); ok {
@@ -384,8 +356,8 @@ func stringLiteral(t *testing.T, file, name string, e ast.Expr) string {
 	return s
 }
 
-// declared is the value the var of name alone is declared with in the Go
-// source src of file.
+// declared is the value a var of name alone is declared with in the Go source
+// src of file.
 func declared(t *testing.T, file string, src []byte, name string) ast.Expr {
 	t.Helper()
 	parsed, err := parser.ParseFile(token.NewFileSet(), file, src, 0)

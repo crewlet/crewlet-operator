@@ -138,6 +138,11 @@ const (
 	// mcpNamesGo is where the engine holds a tool server's name, tool
 	// prefix, value keys and address to what every client can use.
 	mcpNamesGo = "internal/config/mcpnames.go"
+	// mcpToolsGo is where the engine sets each tool of a server at a level,
+	// and refuses a sandbox listing of a server that holds a tool back.
+	mcpToolsGo = "internal/config/mcptools.go"
+	// renderOrgGo is the render of the org chart, a Seat's sandbox included.
+	renderOrgGo = "internal/render/org.go"
 
 	// bootstrapGo is the render of both Tier A documents, mcpbridgeGo where the
 	// engine decides whether a node has a tool bridge, and bootGo which node
@@ -395,14 +400,6 @@ const (
 	// seatCredentialsRead is the engine that lets an mcp_servers entry
 	// declare the seat credentials it reads.
 	seatCredentialsRead = "v0.1.1-0.20261030054628-ba705774dba0"
-	// serverOffRead is crewlet#518's engine, read on crewlet's main where it
-	// merged (981cbd5c31), which adds mcp_servers[].enabled: a server turned off
-	// starts nothing. startSharedServers skips it, MCPServer.Grants grants it
-	// to no seat (so seatSpecs, which asks Grants, builds no seat's instance
-	// of it and is unchanged), and sandboxMCP gives no box it. The render
-	// follows it: markStarted starts none of its values, its own, a Seat's or
-	// a Unit's. Every other start is as it was.
-	serverOffRead = "v0.1.1-0.20261101162029-981cbd5c3194"
 	// entryRulesRead is crewlet#534's engine, read on crewlet's main where it
 	// merged (1ecc48d5ca), which holds an MCP server's name, tool prefix, url
 	// and value keys to what every client can use. sandboxMCP gives no box a
@@ -412,14 +409,6 @@ const (
 	// ${NAME} in one, so a rendered server's url is the literal Crewlet
 	// dials, and every box that scopes the server is given it.
 	entryRulesRead = "v0.1.1-0.20261101172218-1ecc48d5ca08"
-	// harnessCopyRead is crewlet/crewlet#530's engine, read on crewlet's main
-	// where it merged (5936f3b46c), the last piece of crewlet#522. sandboxMCP
-	// logs two servers it gives no box, and both log details now say "the
-	// executor" where they said "the coding agent": one turned off
-	// (crewlet#518) and one whose url Crewlet would not dial (crewlet#534).
-	// The servers it gives, withholds and refuses are as at entryRulesRead,
-	// so the render's copy holds. No other mirror moved.
-	harnessCopyRead = "v0.1.1-0.20261101181230-5936f3b46c60"
 	// serverHealthRead is crewlet/crewlet#554's engine, read on crewlet's main
 	// where it merged (2f52194d02), which keeps each MCP server's health.
 	// startSharedServers now stamps when each shared server's outcome began
@@ -460,49 +449,54 @@ const (
 	mcpAccessRead = "v0.1.1-0.20261102112847-60028e53a804"
 	// mcpAccessGo is where the engine decides whom a tool server reaches.
 	mcpAccessGo = "internal/config/mcpaccess.go"
-	// mcpOAuthRead is crewlet/crewlet#588's engine, read at its head
-	// (81fc602507), which signs the company in to a remote MCP server with
-	// OAuth (mcp_servers[].oauth). resolveServer holds a server back while the
-	// secret of its own OAuth client resolves to nothing, as it does on its
-	// url, under no optional_keys: the render gives that secret as a value the
-	// server is started with that no list governs (oauthClientSecret), and the
-	// controller reports it empty without offering a list.
-	// startSharedServers starts a server signed in to with OAuth only while
-	// the company holds a grant for the address it is configured at, and
-	// retires one whose grant was given up or refused; the render cannot know
-	// a grant, which is the engine's own state, and keeps marking the
-	// server's values started, since an empty one holds the server back once
-	// somebody signs in. sandboxMCP gives no box a server signed in to with
-	// OAuth, beside crewlet#586's guard on a server the seat is not granted;
-	// Crewlet refuses such a listing on every write, which the render refuses
-	// too (the role's finding), and markStarted starts no box's values for
-	// one.
-	mcpOAuthRead = "v0.1.1-0.20261102130311-81fc6025077c"
-	// inboxLaneRead is crewlet/crewlet#563's (*Queue).attach, read at
-	// crewlet/crewlet#588's head (81fc602507), which carries it. An attach to
-	// a topic with a priority lane now opens the lane's durable consumer
-	// after the topic's own, each looked up under the lookup budget and
-	// settled; queue.HasLane holds for a seat's inbox alone
-	// (topics.SeatFromInbox). The attach dataPodBootSeconds counts is the
-	// custody keeper's consumer, which is no seat's inbox, so it still opens
-	// one consumer (openConsumer is the old lookup and settle, moved into a
-	// function of its own), and no boot window moves. This closes
-	// crewlet-operator#66.
-	inboxLaneRead = "v0.1.1-0.20261102130311-81fc6025077c"
-	// serviceIdentityRead is crewlet/crewlet#589's engine, read at its head
-	// (a6b8711ba1) and following that head as it moves, which signs in to a
-	// remote MCP server as a service identity (mcp_servers[].oauth.grant
-	// client_credentials). startSharedServers takes the token source of a
-	// server signed in to with OAuth from tokenSourceFor: a service
-	// identity's is issued its access tokens as the server is used, so the
-	// server starts at once, and a person's grant is still held back until
-	// the company holds a grant for its address. The render's copy
-	// (markStarted) marks a shared, enabled server's own values started, its
-	// OAuth client's secret among them, whichever grant, which is what the
-	// engine does for a service identity and, for a person's grant, as at
-	// mcpOAuthRead. resolveServer and sandboxMCP read every oauth block
-	// alike, whichever grant, and the service identity moves neither.
-	serviceIdentityRead = "v0.1.1-0.20261102154203-a6b8711ba1d0"
+	// toolLevelsRead is crewlet/crewlet#587's engine, read on crewlet's main
+	// where it merged (65fce4b904), which sets each tool of an MCP server at a
+	// level
+	// (mcp_servers[].tools): a blocked tool is never offered to an agent,
+	// and a sandbox reaches a server whole, so the engine refuses a sandbox
+	// listing of a server that holds any tool back (validateBoxToolLevels)
+	// and sandboxMCP gives no box one. The render follows it: it writes
+	// spec.tools, refuses such a listing on the Seat, and starts no value a
+	// box would be given such a server.
+	toolLevelsRead = "v0.1.1-0.20261102131138-65fce4b904ff"
+	// inboxLaneRead is crewlet's main at 65fce4b904, read for
+	// (*Queue).attach, which crewlet/crewlet#563 moved: an agent's inbox gains
+	// a priority lane, a second consumer attach opens beside the topic's own
+	// (queue.HasLane), and both are opened by openConsumer, the lookup and
+	// read-back attach made inline before. The custody keeper's topic is no
+	// inbox, so its attach still looks its one consumer up and reads it back,
+	// and the data pod's boot window that counts it holds.
+	inboxLaneRead = "v0.1.1-0.20261102131138-65fce4b904ff"
+	// mcpOAuthRead is crewlet/crewlet#588's engine, read on crewlet's main
+	// where it merged (e4e51c1213), which signs Crewlet in to a remote MCP
+	// server with OAuth (mcp_servers[].oauth). A server signed in to with
+	// OAuth is started with the bearer the engine holds for it, or held back
+	// until somebody signs in (startSharedServers), its client secret is one
+	// of the values it waits for (resolveServer), and sandboxMCP gives no box
+	// such a server. The operator renders no oauth block yet, so no rendered
+	// server is signed in to with OAuth, and the render's copies hold as they
+	// were.
+	mcpOAuthRead = "v0.1.1-0.20261102154049-e4e51c1213ee"
+	// toolApprovalRead is crewlet/crewlet#591's engine, read on crewlet's main
+	// where it merged (7b43d84822), which adds the approve level (a call to such a tool waits for a
+	// person's answer) and starts a tool nothing sets at the level its hints
+	// give it (allow for a tool its server marks read-only, approve for
+	// every other). A server whose entry sets no default of allow may then
+	// hold any tool back, so the engine refuses a sandbox listing of it and
+	// sandboxMCP gives no box one. The render follows it: it writes Approve,
+	// refuses such a listing on the Seat, and starts no value a box would
+	// be given such a server.
+	toolApprovalRead = "v0.1.1-0.20261102170345-7b43d84822ae"
+	// serviceIdentityRead is crewlet/crewlet#589's engine, read on crewlet's
+	// main at 7b43d84822, which signs Crewlet in to a server as its own
+	// service identity (OAuth client credentials). startSharedServers starts
+	// a server signed in to with OAuth under a token source that is either the
+	// company's grant or that identity; the operator renders no oauth block,
+	// so no rendered server is signed in to, and the render's copy holds.
+	serviceIdentityRead = "v0.1.1-0.20261102170345-7b43d84822ae"
+	// mcpRiskGo is where the engine reads a tool's hints as a risk, and the
+	// level a tool nothing sets starts at.
+	mcpRiskGo = "internal/mcp/risk.go"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -707,9 +701,17 @@ var bootWindows = []string{
 // and the seats'), Reach with the seat facts it reads, placeSeats (the units a
 // seat sits in) and markAccessLanes (the integrations it is on at), which
 // decide whom a server reaches, inheritMCPEnv (a unit's block under its
-// members') and sandboxMCP (an executor's box). Whom a server reaches is held
-// at the shapes it tries by TestContractAToolServerReachesWhomTheEngineGrants
-// too. And validateHeaderSpellings, with
+// members') and sandboxMCP (an executor's box), which gives no box a server
+// not every tool of which runs at allow (MCPToolPolicy.AllowsEveryTool), a
+// listing of which the engine refuses (validateBoxToolLevels) and the render
+// refuses on the Seat; the levels themselves are a closed set (MCPToolLevels)
+// keyed by a tool's own name (MCPToolPolicy.validate), which the API holds
+// to, and a tool nothing sets starts at the level its hints give it
+// (StartingLevel, reading them with RiskOf), which the API and the guide
+// state. Whom a
+// server reaches is held at the shapes it tries by
+// TestContractAToolServerReachesWhomTheEngineGrants too. And
+// validateHeaderSpellings, with
 // spelledUnlike, refuses a header a seat spells unlike its unit, which the
 // render refuses too (headerSpellings).
 //
@@ -969,13 +971,13 @@ var mirrored = []mirror{
 	},
 	{
 		file: toolCredentialsGo, name: "resolveServer",
-		against: []string{renderOptionalGo, renderCompanyGo, configOptionalGo, mcpServerTypesGo, toolServersMd},
+		against: []string{renderOptionalGo, configOptionalGo, mcpServerTypesGo, toolServersMd},
 		decides: "a tool server starts with its env (stdio) or headers (http), a seat's mcp_env for it over them key " +
 			"by key, merged by the key the server reads (a header in any case) before anything resolves, so a seat's " +
 			"key replaces the server's whole; a value that resolves to nothing, or to an empty value, is left out " +
 			"where the server's optional_keys lists its key, whichever layer wrote it, and holds the server back " +
-			"otherwise; and a url, or the secret of the server's own OAuth client, that resolves to nothing holds it " +
-			"back whatever optional_keys says",
+			"otherwise; and a url that resolves to nothing holds it back whatever optional_keys says (and, for a " +
+			"server signed in to with OAuth, which the operator does not render, its client secret too)",
 		digest: "4bbbc9ef6bbe9d2f83a692b07b352845e65dd8bb5dba034141922c77851fce31",
 		read:   mcpOAuthRead,
 	},
@@ -990,11 +992,10 @@ var mirrored = []mirror{
 	},
 	{
 		file: engineMCPGo, name: "(*Engine).startSharedServers",
-		against: []string{renderOptionalGo, configOptionalGo, mcpServerTypesGo, toolServersMd},
+		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
 		decides: "a shared server is started once for the company, with its own values alone (no seat's block), " +
-			"unless it is turned off, which starts nothing; one signed in to with a person's OAuth grant only while " +
-			"the company holds a grant for its address, and one signed in to as a service identity at once, its " +
-			"access tokens issued as it is used",
+			"unless it is turned off, which starts nothing (or signed in to with OAuth, by a person or as its " +
+			"service identity, and not yet able to get a token, which the operator does not render)",
 		digest: "c00b0a0520700b1f8b08d7187e323417c24d0bc74d9a91330eb40b9629be278c",
 		read:   serviceIdentityRead,
 	},
@@ -1052,10 +1053,55 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "sandboxMCP",
 		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "an executor's box is given every server its seat's sandbox scopes and the seat is granted, shared " +
-			"or not, with the seat's block for it, none turned off, none signed in to with OAuth and none at an " +
-			"address Crewlet would not dial",
-		digest: "5040ea18aa1e9c282c790d159ab9e5563685d74878efaf7658d9c7021792b692",
+			"or not, with the seat's block for it, none turned off, none at an address Crewlet would not dial, and " +
+			"none that holds a tool back from the agents (nor one signed in to with OAuth, which the operator does " +
+			"not render)",
+		digest: "c6cae9f55a07202264908ee378b6b6fec1d6ff3c33b31c73ad1478df768cb850",
 		read:   mcpOAuthRead,
+	},
+	{
+		file: mcpToolsGo, name: "MCPToolLevels",
+		against: []string{mcpServerTypesGo, renderEnumsGo, toolServersMd},
+		decides: "a tool of a server runs at allow, approve or blocked",
+		digest:  "92c79f9ba3098ddc56ea61ffc87f3756a5574123492b1565352b087ab10349f0",
+		read:    toolApprovalRead,
+	},
+	{
+		file: mcpToolsGo, name: "MCPToolPolicy.validate",
+		against: []string{mcpServerTypesGo, toolServersMd},
+		decides: "a tool's level is keyed by a name that is not empty and holds no space and no control character",
+		digest:  "e3437b7b8fca5815d3f342479d0ee3239da00e4c7951c75a9e6966f8f01b8614",
+		read:    toolLevelsRead,
+	},
+	{
+		file: mcpToolsGo, name: "MCPToolPolicy.AllowsEveryTool",
+		against: []string{renderCompanyGo, renderOptionalGo},
+		decides: "a server runs every tool at allow only when its default is allow and every level it sets is " +
+			"allow, an unset default leaving each tool at the level its hints give it",
+		digest: "62135469f009d5fd8ddf19e2dcd58cfa7cd2a5e1516452e41d1069f76aabd2cc",
+		read:   toolApprovalRead,
+	},
+	{
+		file: mcpToolsGo, name: "(*Company).validateBoxToolLevels",
+		against: []string{renderOrgGo, toolServersMd},
+		decides: "a sandbox listing of a server not every tool of which runs at allow is refused at the listing",
+		digest:  "b52e95de3ac718e384e8e67f9658cf60ec177ec5b92bf7fcfc7623bcb2d935e1",
+		read:    toolApprovalRead,
+	},
+	{
+		file: mcpRiskGo, name: "StartingLevel",
+		against: []string{mcpServerTypesGo, renderCompanyGo, toolServersMd},
+		decides: "a tool nothing sets runs at allow when its hints read read-only, and at approve otherwise",
+		digest:  "68e92649740c227c8c724238ca1ef8bda47377a816d629e98f8c1eefb2288479",
+		read:    toolApprovalRead,
+	},
+	{
+		file: mcpRiskGo, name: "RiskOf",
+		against: []string{mcpServerTypesGo, toolServersMd},
+		decides: "a tool reads as read-only only when it asserts so, and a tool whose hints say nothing as " +
+			"destructive",
+		digest: "c43d6964244fe179032a1557eb26272bd195d789336dce2b245fcd1861436d79",
+		read:   toolApprovalRead,
 	},
 	{
 		file: mcpNamesGo, name: "mcpServerName",
@@ -2074,7 +2120,7 @@ var mirrored = []mirror{
 		file: "internal/queue/jetstream/attach.go", name: "(*Queue).attach",
 		against: bootWindows,
 		decides: "attaching a durable group looks up, creates and reads back its consumer, then looks it up and " +
-			"reads it back again, and a seat's inbox does so again for its priority lane's consumer",
+			"reads it back again, and an agent's inbox its lane's consumer too",
 		digest: "17c1001b72e34f1d49be6db7cb3ee885c721098d6eaee5e52acc9eb8caeb0274",
 		read:   inboxLaneRead,
 	},
