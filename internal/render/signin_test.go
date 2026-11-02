@@ -68,7 +68,8 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 // TestExecutorHarnessesFollowTheEngineSource holds the harnesses the render
 // runs a seat's executor on (ExecutorHarnesses) to the engine's two lists of
 // them, in their order: the harnesses it has an in-box runner for
-// (executor.Names), and the harnesses config lets run an executor
+// (executor.Names, which names each of the package's harnesses list by its
+// Name), and the harnesses config lets run an executor
 // (config.ExecutorHarnesses), which it refuses a chain without and a runIn on
 // any other harness by. A harness either gains moves every verdict the render
 // reaches on a chain, and the API's runIn rule
@@ -85,12 +86,7 @@ func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runners := constsOf(t, source, path.Dir(names))
-	idents := returnedIdents(t, names, src, "Names")
-	got := make([]string, 0, len(idents))
-	for _, ident := range idents {
-		got = append(got, runners[ident])
-	}
+	got := runnerNames(t, source, names, src)
 	if !slices.Equal(got, want) {
 		t.Errorf("the engine has an in-box runner for %v, the render runs an executor on %v", got, want)
 	}
@@ -100,7 +96,7 @@ func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := constsOf(t, source, path.Dir(providers))
-	list, ok := declared(t, providers, src, token.VAR, "ExecutorHarnesses").(*ast.CompositeLit)
+	list, ok := declared(t, providers, src, "ExecutorHarnesses").(*ast.CompositeLit)
 	if !ok {
 		t.Fatalf("ExecutorHarnesses in %s is no literal", providers)
 	}
@@ -117,39 +113,103 @@ func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 	}
 }
 
-// returnedIdents is the names of the constants the function name returns as
-// one []string literal in the Go source src of file.
-func returnedIdents(t *testing.T, file string, src []byte, name string) []string {
+// runnerNames is the harnesses the executor package's Names lists, in its
+// order: Names names each harness of the package's harnesses list by its
+// Name method, and each harness's Name returns one of the package's string
+// constants. A Names that reads anything else, or a harness whose Name is
+// not one constant, fails the test, which then has to be read again.
+func runnerNames(t *testing.T, source *os.Root, file string, src []byte) []string {
 	t.Helper()
 	parsed, err := parser.ParseFile(token.NewFileSet(), file, src, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
+	listed := false
 	for _, decl := range parsed.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Name.Name != name || fn.Recv != nil || fn.Body == nil || len(fn.Body.List) != 1 {
+		if !ok || fn.Name.Name != "Names" || fn.Recv != nil || fn.Body == nil {
 			continue
 		}
-		ret, ok := fn.Body.List[0].(*ast.ReturnStmt)
-		if !ok || len(ret.Results) != 1 {
-			break
-		}
-		list, ok := ret.Results[0].(*ast.CompositeLit)
-		if !ok {
-			break
-		}
-		var out []string
-		for _, elt := range list.Elts {
-			ident, ok := elt.(*ast.Ident)
-			if !ok {
-				t.Fatalf("%s's %s returns %T, not a constant's name", file, name, elt)
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			if loop, ok := n.(*ast.RangeStmt); ok {
+				if x, ok := loop.X.(*ast.Ident); ok && x.Name == "harnesses" {
+					listed = true
+				}
 			}
-			out = append(out, ident.Name)
-		}
-		return out
+			return true
+		})
 	}
-	t.Fatalf("%s declares no %s returning one []string literal", file, name)
-	return nil
+	if !listed {
+		t.Fatalf("%s's Names does not name the package's harnesses list: read what it lists again", file)
+	}
+	list, ok := declared(t, file, src, "harnesses").(*ast.CompositeLit)
+	if !ok {
+		t.Fatalf("harnesses in %s is no literal", file)
+	}
+	dir := path.Dir(file)
+	consts := constsOf(t, source, dir)
+	named := nameMethods(t, source, dir)
+	out := make([]string, 0, len(list.Elts))
+	for _, elt := range list.Elts {
+		harness, ok := elt.(*ast.CompositeLit)
+		if !ok {
+			t.Fatalf("harnesses in %s holds %T, not a harness type's literal", file, elt)
+		}
+		typ, ok := harness.Type.(*ast.Ident)
+		if !ok {
+			t.Fatalf("harnesses in %s holds a literal of %T, not of a harness type of its own", file, harness.Type)
+		}
+		constant, ok := named[typ.Name]
+		if !ok {
+			t.Fatalf("%s's harness %s has no Name returning one of its constants", dir, typ.Name)
+		}
+		out = append(out, consts[constant])
+	}
+	return out
+}
+
+// nameMethods is, for every type of the Go package in dir of source whose
+// Name method returns one identifier, that identifier, by the type's name.
+func nameMethods(t *testing.T, source *os.Root, dir string) map[string]string {
+	t.Helper()
+	entries, err := fsReadDir(source, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]string{}
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry, ".go") || strings.HasSuffix(entry, "_test.go") {
+			continue
+		}
+		file := path.Join(dir, entry)
+		src, err := source.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		parsed, err := parser.ParseFile(token.NewFileSet(), file, src, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, decl := range parsed.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Name.Name != "Name" || fn.Recv == nil || len(fn.Recv.List) != 1 || fn.Body == nil ||
+				len(fn.Body.List) != 1 {
+				continue
+			}
+			recv, ok := fn.Recv.List[0].Type.(*ast.Ident)
+			if !ok {
+				continue
+			}
+			ret, ok := fn.Body.List[0].(*ast.ReturnStmt)
+			if !ok || len(ret.Results) != 1 {
+				continue
+			}
+			if ident, ok := ret.Results[0].(*ast.Ident); ok {
+				out[recv.Name] = ident.Name
+			}
+		}
+	}
+	return out
 }
 
 // constsOf is every string constant the Go package in dir of source
@@ -292,7 +352,7 @@ func crdOf(t *testing.T, kind string) any {
 // the Go source src of file.
 func stringSliceVar(t *testing.T, file string, src []byte, name string) []string {
 	t.Helper()
-	return stringLiterals(t, file, name, declared(t, file, src, token.VAR, name))
+	return stringLiterals(t, file, name, declared(t, file, src, name))
 }
 
 // stringLiterals is the string literals of e, a literal of a []string of
@@ -324,9 +384,9 @@ func stringLiteral(t *testing.T, file, name string, e ast.Expr) string {
 	return s
 }
 
-// declared is the value a var or const (tok) of name alone is declared with
-// in the Go source src of file.
-func declared(t *testing.T, file string, src []byte, tok token.Token, name string) ast.Expr {
+// declared is the value the var of name alone is declared with in the Go
+// source src of file.
+func declared(t *testing.T, file string, src []byte, name string) ast.Expr {
 	t.Helper()
 	parsed, err := parser.ParseFile(token.NewFileSet(), file, src, 0)
 	if err != nil {
@@ -334,7 +394,7 @@ func declared(t *testing.T, file string, src []byte, tok token.Token, name strin
 	}
 	for _, decl := range parsed.Decls {
 		gen, ok := decl.(*ast.GenDecl)
-		if !ok || gen.Tok != tok {
+		if !ok || gen.Tok != token.VAR {
 			continue
 		}
 		for _, spec := range gen.Specs {
@@ -344,7 +404,7 @@ func declared(t *testing.T, file string, src []byte, tok token.Token, name strin
 			}
 		}
 	}
-	t.Fatalf("%s declares no %s %s", file, tok, name)
+	t.Fatalf("%s declares no var %s", file, name)
 	return nil
 }
 
