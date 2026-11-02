@@ -646,6 +646,21 @@ const (
 	//     (crewlet/crewlet@c434ea10e); and createKey tells a create the broker
 	//     did not answer from one it refused (crewlet/crewlet@387ed35c9).
 	tenLogsRead = "v0.1.1-0.20261102031859-ec453fd43cc8"
+
+	// bridgeBaseRead is crewlet/crewlet#298's engine at the same head as
+	// tenLogsRead, once this branch had taken this repository's main in
+	// through #52, where every row outside the boot's windows was compared
+	// again: each holds there as main read it but the tool bridge's Build.
+	// The branch's boot reads every address a box dials back to the engine
+	// through ParseBoxURL first (ReadBoxURLs, refusing to start on a value
+	// that is set and unusable) and hands Build the base it read, where Build
+	// read CREWLET_MCP_BRIDGE_URL itself and trimmed it; beside it Build
+	// still takes the loopback address of the node's own listener, and builds
+	// no bridge given neither. So a node's bridge is built from the same
+	// values as main read it, and the render's address verdicts, which judge
+	// every address the controller hands a pod by ParseBoxURL's grammar,
+	// already hold a pod back on one the boot would refuse.
+	bridgeBaseRead = "v0.1.1-0.20261102031859-ec453fd43cc8"
 	// chatLogRead is crewlet's main at abd826b859, where crewlet#142 merged
 	// Chatlet, the engine's own chat, as a ninth state log every data node
 	// runs, and crewlet#478 merged per-seat integration access. The chat log
@@ -1757,11 +1772,11 @@ var mirrored = []mirror{
 	{
 		file: mcpbridgeGo, name: "Build",
 		against: []string{executorGo, companyWorkloadGo},
-		decides: "a node builds its tool bridge from CREWLET_MCP_BRIDGE_URL, from the loopback address of its own " +
-			"listener, or from both, and given neither (a variable of spaces alone being none) builds none, so every " +
-			"launch of a box that would dial it is refused",
-		digest: "904155dfd22fec3dbf6518ab5ccc6df7d14b0e8ec0180bc4bc477df57ef672ca",
-		read:   executorRead,
+		decides: "a node builds its tool bridge from the base its boot read from CREWLET_MCP_BRIDGE_URL through " +
+			"ParseBoxURL (ReadBoxURLs), from the loopback address of its own listener, or from both, and given " +
+			"neither builds none, so every launch of a box that would dial it is refused",
+		digest: "c085f28a6035c1cb5f6588bbf9c12a9108733cf38cd5f6b353e488ec28c46598",
+		read:   bridgeBaseRead,
 	},
 	{
 		file: listenersGo, name: "(*nodeListeners).boxHostURL",
