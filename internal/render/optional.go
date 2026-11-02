@@ -86,7 +86,8 @@ type StartValue struct {
 	// ListField that list's field: the MCPServer's spec.optionalKeys for a
 	// value it is started with, its own or a Seat's or a Unit's, a Seat's
 	// spec.sandbox.optionalKeys for its env, a setup step's own for its env
-	// and files.
+	// and files. Both are zero for a value no list governs, which is never
+	// left out: an MCPServer's OAuth client secret.
 	List      ObjectRef
 	ListField string
 	// Started is whether the engine starts something with the value: a
@@ -95,6 +96,10 @@ type StartValue struct {
 	// replaces wherever it would be read starts nothing, whatever it holds.
 	Started bool
 }
+
+// Listable reports whether an optionalKeys list governs the value, so that
+// listing its key there has it left out.
+func (v *StartValue) Listable() bool { return v.ListField != "" }
 
 // Seat reports whether the value is one of a Seat's or a Unit's spec.mcp for
 // a tool server: the identity the seat's instance acts as, which Crewlet
@@ -228,17 +233,20 @@ const fieldOptionalKeys = "spec.optionalKeys"
 // sandboxMCP gives no box it.
 //
 // A tool server is started as the company's instance, when it is shared,
-// with its own values alone, whoever it reaches; as a seat's instance, for
-// every agent seat a per-seat server reaches (reaches, Crewlet's
-// MCPServer.Grants), whether or not the seat or its unit gives it values; and
-// in an executor's box, for every agent seat the server reaches whose
-// spec.sandbox.mcpServerRefs names it, shared or not, while every tool of it
-// runs at Allow, its spec.tools a default of Allow and no other level
-// (sandboxMCP gives no box any other server). A seat's instance and box are
-// given the server's own values with its unit's block laid over them and its
-// own over that, a key compared as the server compares its keys (sameKey):
-// Crewlet lays a unit's block under the direct agent members' (inheritMCPEnv),
-// and a seat's whole block over the server's (resolveServer). A block for a server that does not reach its seat starts
+// with its own values alone, whoever it reaches, its OAuth client's secret
+// among them, which Crewlet holds the server back on as it does on its url;
+// as a seat's instance, for every agent seat a per-seat server reaches
+// (reaches, Crewlet's MCPServer.Grants), whether or not the seat or its unit
+// gives it values; and in an executor's box, for every agent seat the server
+// reaches whose spec.sandbox.mcpServerRefs names it, shared or not, while
+// every tool of it runs at Allow, its spec.tools a default of Allow and no
+// other level, and it is not signed in to with OAuth (sandboxMCP gives no box
+// any other server, and Crewlet refuses the document that lists one). A seat's
+// instance and box are given the server's own values with its unit's block
+// laid over them and its own over that, a key compared as the server compares
+// its keys (sameKey): Crewlet lays a unit's block under the direct agent
+// members' (inheritMCPEnv), and a seat's whole block over the server's
+// (resolveServer). A block for a server that does not reach its seat starts
 // nothing: Crewlet refuses the document that holds one, unless it reads the
 // block itself (a server named github, gitlab, datadog, atlassian, jira or
 // confluence).
@@ -264,6 +272,9 @@ func (r *renderer) markStarted() []StartValue {
 		own := ownValues(s)
 		if shared {
 			startWinners(s, start, own)
+			if s.Spec.OAuth.ClientSecret.SecretKeyRef.Name != "" {
+				start(ObjectRef{Kind: KindMCPServer, Name: s.Name}, fieldOAuthClientSecret)
+			}
 		}
 		for _, seat := range sortedByName(r.in.Seats) {
 			if seat.Spec.Kind == v1alpha1.SeatKindHuman || !r.reaches(s, seat) {
@@ -275,8 +286,9 @@ func (r *renderer) markStarted() []StartValue {
 				// nothing of it for the seat, as Crewlet's Grants reads it.
 				continue
 			}
-			boxed := !held && allowsEveryTool(s.Spec.Tools) && slices.ContainsFunc(seat.Spec.Sandbox.MCPServerRefs,
-				func(ref v1alpha1.LocalObjectReference) bool { return ref.Name == s.Name })
+			boxed := !held && allowsEveryTool(s.Spec.Tools) && !signsInWithOAuth(s) &&
+				slices.ContainsFunc(seat.Spec.Sandbox.MCPServerRefs,
+					func(ref v1alpha1.LocalObjectReference) bool { return ref.Name == s.Name })
 			if shared && !boxed {
 				continue
 			}

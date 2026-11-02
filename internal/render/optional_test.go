@@ -53,6 +53,11 @@ const (
 	// its second tool server.
 	fieldSecondOptionalKey = "spec.optionalKeys[1]"
 	fieldSecondServerValue = "spec.mcp[1].env[0].valueFrom"
+	// keyClientSecret is the key of the Secret a test's OAuth client takes
+	// its secret from.
+	keyClientSecret = "clientSecret"
+	// serviceClientID is the id a test's service identity signs in as.
+	serviceClientID = "crewlet-agents"
 )
 
 // provisionedGitLab is the token the engine mints for a seat's GitLab
@@ -509,6 +514,41 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			},
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
 		},
+		// AN OAUTH CLIENT'S SECRET is read at every renewal of the sign-in,
+		// so Crewlet holds the server back on it, as it does on its url.
+		{
+			name:   "a shared server's OAuth client secret",
+			mutate: func(in *Input) { signInTavily(in) },
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: fieldOAuthClientSecret, want: true,
+		},
+		// A SERVICE IDENTITY signs in with its client's secret at every
+		// access token it is issued, and Crewlet holds the server back on
+		// it as it does on a person's sign-in's.
+		{
+			name:   "a service identity's client secret",
+			mutate: func(in *Input) { signInTavilyAsService(in) },
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: fieldOAuthClientSecret, want: true,
+		},
+		// NO BOX IS GIVEN A SERVER SIGNED IN TO WITH OAUTH, by either grant
+		// (sandboxMCP), so a seat's value for it starts nothing there.
+		{
+			name:   "a seat's value for a server signed in to with OAuth its box lists",
+			mutate: func(in *Input) { signInTavily(in); boxTavily(in) },
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
+		{
+			name:   "a seat's value for a service identity its box lists",
+			mutate: func(in *Input) { signInTavilyAsService(in); boxTavily(in) },
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
+		{
+			name: "a shared server's OAuth client secret when it is turned off",
+			mutate: func(in *Input) {
+				signInTavily(in)
+				toolServer(in, optionalTavily).Spec.Enabled = new(false)
+			},
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: fieldOAuthClientSecret,
+		},
 		{
 			name:   "a unit's header a member writes in another case",
 			mutate: func(in *Input) { seat(in, optionalSeat).Spec.MCP[0].Env[0].Name = headerUpper },
@@ -617,6 +657,37 @@ func localRefs(names ...string) []v1alpha1.LocalObjectReference {
 func enclose(in *Input, inner, outer string) {
 	in.Units = append(in.Units, v1alpha1.Unit{Name: outer})
 	unit(in, inner).Spec.ParentRef.Name = outer
+}
+
+// signInTavily makes the optional-keys case's tavily server a remote one the
+// company signs in to as its own confidential OAuth client.
+func signInTavily(in *Input) {
+	s := toolServer(in, optionalTavily)
+	s.Spec.Transport, s.Spec.Command, s.Spec.Args, s.Spec.Env = v1alpha1.MCPTransportHTTP, "", nil, nil
+	s.Spec.URL, s.Spec.OptionalKeys = "https://mcp.tavily.example.com/mcp", nil
+	s.Spec.OAuth = v1alpha1.MCPOAuth{
+		Client: v1alpha1.MCPOAuthClientOwn, ClientID: "crewlet-optional",
+		ClientSecret: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "tavily-oauth", Key: keyClientSecret}},
+	}
+}
+
+// signInTavilyAsService makes the optional-keys case's tavily server a remote
+// one the engine signs in to as the company's service identity.
+func signInTavilyAsService(in *Input) {
+	signInTavily(in)
+	o := &toolServer(in, optionalTavily).Spec.OAuth
+	o.Grant, o.Client = v1alpha1.MCPOAuthGrantClientCredentials, ""
+}
+
+// boxTavily gives the optional-keys case's seat a value of its own for the
+// tavily server, and lists the server for the seat's box.
+func boxTavily(in *Input) {
+	seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+		Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+			Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+		}},
+	})
+	seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
 }
 
 // optionalInput is the optional-keys case's input.

@@ -325,6 +325,17 @@ func (r *renderer) role(at Path, s *v1alpha1.Seat) roleDoc {
 						"the engine's bridge, each at its level", ref.Name))
 				continue
 			}
+			// A box cannot renew a sign-in, so Crewlet refuses the entry on
+			// every write, the server turned off or not (its
+			// validateMCPServerReferences). It is rendered as written, so
+			// the document held is the one the engine refuses.
+			if signsInWithOAuth(r.mcp[ref.Name]) {
+				r.errs.add(EngineRefuses, KindSeat, s.Name, fmt.Sprintf("spec.sandbox.mcpServerRefs[%d].name", i),
+					v1alpha1.ReasonConflict, fmt.Sprintf("names MCPServer %s, which signs the company in with OAuth "+
+						"(spec.oauth), and Crewlet refuses the document: a box is handed a server's credentials once, "+
+						"at its launch, an access token runs out within the hour, and only the engine holds what "+
+						"renews it. Remove the entry: the box reaches the server's tools through its tool bridge", ref.Name))
+			}
 			if doc.Sandbox.MCP == nil {
 				doc.Sandbox.MCP = &roleSandboxMCP{}
 			}

@@ -202,6 +202,8 @@ func TestCompanyEveryCredentialPosition(t *testing.T) {
 		{"providers.sandbox.setup[0].env.NPM_TOKEN", "tenant-nimbus/company-sandbox[npmToken]"},
 		{"mcp_servers[2].env.LINEAR_API_KEY", "tenant-nimbus/linear[apiKey]"},
 		{"mcp_servers[0].headers.X-Org", "tenant-nimbus/github-mcp[org]"},
+		{"mcp_servers[3].oauth.client_secret", "tenant-nimbus/tickets-oauth[clientSecret]"},
+		{"mcp_servers[4].oauth.client_secret", "tenant-nimbus/vendor-oauth[clientSecret]"},
 		{"units[0].mcp_env.linear.LINEAR_TEAM_TOKEN", "tenant-nimbus/engineering-linear[token]"},
 		{"units[0].children[0].mcp_env.linear.LINEAR_TEAM_TOKEN", "tenant-nimbus/platform-linear[token]"},
 		{"units[0].roles[0].mcp_env.linear.LINEAR_TEAM_TOKEN", "tenant-nimbus/coder-linear[token]"},

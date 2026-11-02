@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -1099,6 +1100,16 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 				doc.Headers[h.Name] = r.serverValue(s, fmt.Sprintf("spec.headers[%d].valueFrom", j), h.Name, h.Value, h.ValueFrom)
 			}
 		}
+		if signsInWithOAuth(s) {
+			o := &spec.OAuth
+			doc.OAuth = &mcpOAuthDoc{
+				Grant:        mcpOAuthGrant(o.Grant),
+				Client:       mcpOAuthClient(o.Client),
+				ClientID:     o.ClientID,
+				ClientSecret: r.oauthClientSecret(s),
+				Scopes:       sortedSet(o.Scopes),
+			}
+		}
 		for _, c := range spec.SeatCredentials {
 			doc.SeatCredentials = append(doc.SeatCredentials, seatCredentialDoc{
 				Kind: seatCredentialKind(c.Kind), Field: seatCredentialField(c.Field), Key: c.Key, Prefix: c.Prefix,
@@ -1216,6 +1227,41 @@ func (r *renderer) serverValue(s *v1alpha1.MCPServer, field, name string, litera
 		optional: optionalKey(s, name), list: ObjectRef{Kind: KindMCPServer, Name: s.Name}, listField: fieldOptionalKeys,
 	}, from.SecretKeyRef)
 }
+
+// signsInWithOAuth reports whether s sets its spec.oauth, which Crewlet's
+// oauth is written for. No one field of it is set by every sign-in (a
+// person's names its client, a service identity its grant and no client), so
+// it is set when any field is, as the API server's has(self.oauth) reads it:
+// its omitzero leaves the block out of the object exactly when none is.
+func signsInWithOAuth(s *v1alpha1.MCPServer) bool {
+	return !reflect.ValueOf(s.Spec.OAuth).IsZero()
+}
+
+// oauthClientSecret renders the secret of s's own OAuth client, "" where it
+// has none. Crewlet holds the server back while it resolves to nothing, as it
+// holds one back on its url (resolveServer), whichever grant signs in with
+// it: a person's sign-in sends it at every renewal, and a service identity at
+// every access token it is issued. So it is a value the server is started
+// with, under no key an optionalKeys list governs, and never left out.
+func (r *renderer) oauthClientSecret(s *v1alpha1.MCPServer) string {
+	ref := s.Spec.OAuth.ClientSecret.SecretKeyRef
+	if ref.Name == "" {
+		return ""
+	}
+	return r.startSecret(&startUse{
+		object: ObjectRef{Kind: KindMCPServer, Name: s.Name}, field: fieldOAuthClientSecret, name: keyOAuthClientSecret,
+		server: s.Name,
+	}, ref)
+}
+
+// fieldOAuthClientSecret is an MCPServer's OAuth client secret, and
+// keyOAuthClientSecret the key Crewlet reads it under.
+//
+//nolint:gosec // G101: a field's path and a key's name, which hold no credential.
+const (
+	fieldOAuthClientSecret = "spec.oauth.clientSecret"
+	keyOAuthClientSecret   = "client_secret"
+)
 
 // mcpEnv renders a Unit's or a Seat's per-server values as Crewlet's
 // mcp_env, a mapping from server name to variable (or header) name to value:

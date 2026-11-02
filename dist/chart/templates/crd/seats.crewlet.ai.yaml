@@ -1403,8 +1403,12 @@ spec:
                       mcpServerRefs name the MCPServers the seat's executor box is given,
                       beside its tool bridge, which every executor box is given. Each must
                       reach the seat (the MCPServer's access): the engine refuses one that
-                      does not, which its dry run reports as Invalid on the Seat. Crewlet's
-                      mcp.servers.
+                      does not, which its dry run reports as Invalid on the Seat. An entry
+                      naming one that signs in with OAuth (its spec.oauth) holds the
+                      company's document (Accepted=False with Conflict), as Crewlet refuses
+                      it: a box is handed a server's credentials once, at its launch, and
+                      cannot renew the access token, so it reaches that server's tools
+                      through its tool bridge instead. Crewlet's mcp.servers.
                     items:
                       description: |-
                         LocalObjectReference names another object of the kind the referring field

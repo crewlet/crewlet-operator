@@ -290,6 +290,7 @@ type mcpServerDoc struct {
 	Env                   map[string]string             `json:"env,omitempty"`
 	URL                   string                        `json:"url,omitempty"`
 	Headers               map[string]string             `json:"headers,omitempty"`
+	OAuth                 *mcpOAuthDoc                  `json:"oauth,omitempty"`
 	OptionalKeys          []string                      `json:"optional_keys,omitempty"`
 	ToolPrefix            string                        `json:"tool_prefix,omitempty"`
 	SeatCredentials       []seatCredentialDoc           `json:"seat_credentials,omitempty"`
@@ -307,6 +308,19 @@ type mcpAccessDoc struct {
 	Units  []string `json:"units,omitempty"`
 	Seats  []string `json:"seats,omitempty"`
 	Except []string `json:"except,omitempty"`
+}
+
+// mcpOAuthDoc is how the engine signs the company in to a server with OAuth.
+// Its client_secret is the pointer to a Secret key's store entry, never a
+// value. grant is left out where the MCPServer gives none, which Crewlet
+// reads as a person's sign-in, and client is left out of a service identity,
+// which Crewlet refuses it on.
+type mcpOAuthDoc struct {
+	Grant        string   `json:"grant,omitempty"`
+	Client       string   `json:"client,omitempty"`
+	ClientID     string   `json:"client_id,omitempty"`
+	ClientSecret string   `json:"client_secret,omitempty"`
+	Scopes       []string `json:"scopes,omitempty"`
 }
 
 // seatCredentialDoc is one per-seat credential a server reads. Its as is left

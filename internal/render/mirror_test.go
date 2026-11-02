@@ -1066,7 +1066,7 @@ var mirrored = []mirror{
 		decides: "an executor's box is given every server its seat's sandbox scopes and the seat is granted, shared " +
 			"or not, with the seat's block for it, none turned off (on its entry or by a limit), none at an address " +
 			"Crewlet would not dial, and none that holds a tool back from the agents or a tool the seat's limits " +
-			"hold back (nor one signed in to with OAuth, which the operator does not render)",
+			"hold back, nor one signed in to with OAuth, a listing the render refuses on the Seat",
 		digest: "b17afa5842d693258a9a19ca225f9df5c4fd91f0e5e07b422e56974749361076",
 		read:   mcpLimitsRead,
 	},
