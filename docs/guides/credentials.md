@@ -374,6 +374,24 @@ name with a part such as `TOKEN`, `KEY`, `SECRET` or `PASSWORD`, and under the
 the rule). The other lists of variables a credential goes in, a sandbox's,
 its setup steps' and a harness's, take no literal value.
 
+A remote server the company signs in to with OAuth (`spec.oauth`) takes no
+token from a Secret at all: an administrator signs in from the engine's
+dashboard, and the grant stays in the engine's own store, which the operator
+neither writes nor reads. The one credential of such a server the operator
+pushes is the secret of the company's own client, where the vendor issued it
+as confidential:
+
+```yaml
+spec:                       # MCPServer tickets
+  oauth:
+    client: Own
+    clientID: crewlet-nimbus
+    clientSecret:
+      secretKeyRef: {name: tickets-oauth, key: clientSecret}
+```
+
+[Signing in with OAuth](tool-servers.md#signing-in-with-oauth) has the rest.
+
 ### What the platform supplies
 
 An `EngineClass` may reference Secrets in the platform's own namespace for the

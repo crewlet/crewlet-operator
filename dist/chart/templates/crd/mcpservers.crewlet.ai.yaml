@@ -442,6 +442,134 @@ spec:
                 - message: 'names must differ in more than case: HTTP header names
                     are case-insensitive'
                   rule: self.all(a, self.exists_one(b, b.name.lowerAscii() == a.name.lowerAscii()))
+              oauth:
+                description: |-
+                  oauth signs the company in to an HTTP server with OAuth, for a server
+                  that takes no static token: the engine registers at the server's
+                  authorization server as this says, a person signs in once from the
+                  server's page in the engine's dashboard, and the engine sends the
+                  access token it is granted in the Authorization header of every
+                  request, renewing it as it runs out, on every pod that runs the
+                  server. One sign-in for the whole company, so only for a server whose
+                  shared is true, and never beside an Authorization header in headers,
+                  which the sign-in sends itself. Until somebody signs in, and again
+                  once the vendor refuses to renew the grant, the engine starts no
+                  instance of the server and reports it as needing a sign-in, so its
+                  tools go unserved. A grant is sent only to the address it was issued
+                  for: a changed url waits for a sign-in at the new address. No executor's box is given such a server: a Seat's
+                  spec.sandbox.mcpServerRefs naming it holds the company's document,
+                  since a box is handed a server's credentials once, at its launch,
+                  and cannot renew the access token, so the box reaches the server's
+                  tools through its tool bridge instead. Crewlet's `oauth`.
+                properties:
+                  client:
+                    description: |-
+                      client is how the engine registers at the server's authorization
+                      server: CIMD, by the client metadata document it publishes; DCR, by
+                      registering a client when a sign-in starts; or Own, as a client an
+                      administrator registered at the vendor beforehand. The engine's check
+                      of a server's address says which the server supports. Crewlet's
+                      `client`.
+                    enum:
+                    - CIMD
+                    - DCR
+                    - Own
+                    type: string
+                  clientID:
+                    description: |-
+                      clientID is the id the company's own client was registered under at
+                      the vendor: required with client Own, and not allowed with CIMD or
+                      DCR, where the id is the engine's or the registration's. Printable
+                      ASCII and spaces, as RFC 6749 spells a client id, with no space at
+                      either end, and at most 256 characters: Crewlet sets no bound, and the
+                      API server needs one to cost the rules over it. Crewlet's `client_id`.
+                    maxLength: 256
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: clientID is printable ASCII characters and spaces,
+                        as RFC 6749 spells a client id, with no space at either end
+                      rule: self.matches('^[!-~]([ -~]*[!-~])?$')
+                    - message: 'clientID may not hold a ${NAME} reference: the operator
+                        refuses every one it did not write, since in many fields the
+                        engine resolves one from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
+                      rule: '!self.matches(''[$][{][A-Za-z_][A-Za-z0-9_]*[}]'')'
+                  clientSecret:
+                    description: |-
+                      clientSecret reads the secret of the company's own client, for a
+                      client registered at the vendor as confidential, from a Secret key;
+                      leave it unset for a public one. Only with client Own. Crewlet reads
+                      it at every renewal of the sign-in, so it starts the server only once
+                      the value is there: a Secret key that holds an empty value holds no
+                      document back, and the MCPServer reports ResolvedRefs=False with
+                      SecretValueEmpty until it holds one, while a Secret or key that does
+                      not exist holds the document, as every reference does. Crewlet's
+                      `client_secret`, a credential position.
+                    properties:
+                      secretKeyRef:
+                        description: secretKeyRef selects the Secret key that holds
+                          the value.
+                        properties:
+                          key:
+                            description: key is the key within the Secret's data.
+                            maxLength: 253
+                            minLength: 1
+                            pattern: ^[-._a-zA-Z0-9]+$
+                            type: string
+                          name:
+                            description: name is the metadata.name of the Secret.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                    required:
+                    - secretKeyRef
+                    type: object
+                  scopes:
+                    description: |-
+                      scopes are the scopes the sign-in asks for, in any order. Unset, it
+                      asks for the ones the server's own metadata lists, or none where it
+                      lists none. Each is one scope token as RFC 6749 spells it: printable
+                      ASCII characters with no space, double quote or backslash, at most 256
+                      of them, a bound the API server needs to cost its rules and Crewlet
+                      does not set. At most 50 scopes, as Crewlet bounds them. Crewlet's
+                      `scopes`.
+                    items:
+                      maxLength: 256
+                      minLength: 1
+                      type: string
+                    maxItems: 50
+                    type: array
+                    x-kubernetes-list-type: set
+                    x-kubernetes-validations:
+                    - message: 'each scope is one scope token as RFC 6749 spells it:
+                        printable ASCII characters with no space, double quote or
+                        backslash'
+                      rule: self.all(s, s.matches('^[!#-\\[\\]-~]+$'))
+                    - message: 'scopes may not hold a ${NAME} reference: the operator
+                        refuses every one it did not write, since in many fields the
+                        engine resolves one from its own secret store and environment,
+                        which hold credentials that are not this object''s to name'
+                      rule: self.all(s, !s.matches('[$][{][A-Za-z_][A-Za-z0-9_]*[}]'))
+                required:
+                - client
+                type: object
+                x-kubernetes-validations:
+                - fieldPath: .clientID
+                  message: 'clientID is required with client Own, the id the company''s
+                    own client was registered under at the vendor, and not allowed
+                    otherwise: with CIMD the id is the address of the engine''s client
+                    metadata document, with DCR the one the registration issues'
+                  rule: 'self.client == ''Own'' ? has(self.clientID) : !has(self.clientID)'
+                - fieldPath: .clientSecret
+                  message: 'clientSecret applies to client Own, a client registered
+                    at the vendor as confidential: with CIMD or DCR the engine signs
+                    in as a public client, with no secret'
+                  rule: self.client == 'Own' || !has(self.clientSecret)
               optionalKeys:
                 description: |-
                   optionalKeys names the keys whose value may go missing: variables of env
@@ -780,6 +908,23 @@ spec:
                 the one place that grant is made, so remove access and turn seats
                 on or off there'
               rule: '!has(self.access) || !has(self.seatCredentials)'
+            - fieldPath: .oauth
+              message: 'oauth signs the company in to a remote server and applies
+                to transport HTTP only: a Stdio server is launched with its credentials
+                in env'
+              rule: '!has(self.oauth) || self.transport == ''HTTP'''
+            - fieldPath: .oauth
+              message: 'oauth is one sign-in for the whole company, and a server with
+                shared false acts as each seat''s own identity: give each seat its
+                credential in a Seat''s or a Unit''s spec.mcp, or make the server
+                shared'
+              rule: '!has(self.oauth) || !has(self.shared) || self.shared'
+            - fieldPath: .headers
+              message: 'headers may not hold Authorization beside oauth: the OAuth
+                sign-in sends the Authorization header with each request. Remove the
+                header, or remove oauth to send it instead'
+              rule: '!has(self.oauth) || !has(self.headers) || self.headers.all(h,
+                h.name.lowerAscii() != ''authorization'')'
           status:
             description: status is the server's observed state.
             minProperties: 1

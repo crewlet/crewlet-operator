@@ -1823,14 +1823,18 @@ func awaitApplied(t *testing.T, client *engine.Client, applied engine.ApplyResul
 }
 
 // TestContractMCPServerEntryRulesAreTheEngines holds what the MCPServer API
-// takes for a server's name, toolPrefix, url and description to what Crewlet
-// takes, both ways, with the engine the operator is tested against: a server
-// at each of the API's bounds renders a document Crewlet accepts, and one a
-// step past each, which the API refuses, Crewlet refuses too, at the field. So
-// the API's 32, 49 and its address and line rules are the engine's
-// (internal/config/mcpnames.go, and validateDescription in mcp.go), not a
-// guess that drifts: a profile with a longer prefix lowers Crewlet's bound,
-// and the first case here goes red until the API follows.
+// takes for a server's name, toolPrefix, url, description and OAuth sign-in
+// to what Crewlet takes, both ways, with the engine the operator is tested
+// against: a server at each of the API's bounds renders a document Crewlet
+// accepts, and one a step past each, which the API refuses, Crewlet refuses
+// too, at the field. So the API's 32, 49 and its address and line rules are
+// the engine's (internal/config/mcpnames.go, and validateDescription in
+// mcp.go), and so are its rules over spec.oauth (mcpoauth.go): which
+// registration names an id or a secret, the scope token's characters, the
+// 50 scopes, and a sign-in that is the company's, for a remote server, with
+// no Authorization header of its own. None is a guess that drifts: a profile
+// with a longer prefix lowers Crewlet's bound, and the first case here goes
+// red until the API follows.
 func TestContractMCPServerEntryRulesAreTheEngines(t *testing.T) {
 	const caseName = "secret-positions"
 	tierA, err := Bootstrap(bootstrapCases()[0].input(t))
@@ -1875,6 +1879,45 @@ func TestContractMCPServerEntryRulesAreTheEngines(t *testing.T) {
 		validate(t, env, companyCaseNamed(t, caseName).advisories,
 			"-config", config, "-company", write(t, "company.yaml", doc.YAML))
 	})
+	// The fields of an oauth block the cases are refused at, what Crewlet
+	// says of a scope it refuses, and a scope.
+	const (
+		atClientID = "oauth.client_id"
+		atScope    = "oauth.scopes[0]"
+		notAScope  = "is not a scope"
+		scopeRead  = "read"
+	)
+	// signedIn makes the probe a shared server the company signs in to as o
+	// says, its headers (X-Org, no Authorization) as they are.
+	signedIn := func(o v1alpha1.MCPOAuth) func(*v1alpha1.MCPServer) {
+		return func(s *v1alpha1.MCPServer) {
+			s.Spec.Shared = new(true)
+			s.Spec.OAuth = o
+		}
+	}
+	// scopes are fifty scope tokens, the API's bound, which use every
+	// character a scope token may hold between them.
+	scopes := []string{scopeRead, "write:issues", "https://example.com/auth/read", "!#$%&'()*+,-./:;<=>?@[]^_`{|}~"}
+	for i := len(scopes); i < 50; i++ {
+		scopes = append(scopes, fmt.Sprintf("s%d", i))
+	}
+	for _, c := range []struct {
+		name string
+		set  func(*v1alpha1.MCPServer)
+	}{
+		{"a sign-in by the engine's client metadata document", signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD})},
+		{"a sign-in by a registration asking for fifty scopes", signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientDCR, Scopes: scopes})},
+		{"the company's own confidential client under the longest id", signedIn(v1alpha1.MCPOAuth{
+			Client: v1alpha1.MCPOAuthClientOwn, ClientID: "!" + strings.Repeat(" ~", 127) + "!",
+			ClientSecret: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "probe-oauth", Key: keyClientSecret}},
+		})},
+	} {
+		t.Run("at the API's bounds: "+c.name, func(t *testing.T) {
+			doc, env := withServer(t, c.set)
+			validate(t, env, companyCaseNamed(t, caseName).advisories,
+				"-config", config, "-company", write(t, "company.yaml", doc.YAML))
+		})
+	}
 	for _, c := range []struct {
 		name, field, says string
 		set               func(*v1alpha1.MCPServer)
@@ -1891,6 +1934,47 @@ func TestContractMCPServerEntryRulesAreTheEngines(t *testing.T) {
 			func(s *v1alpha1.MCPServer) { s.Spec.URL = "http://mcp.example.com/mcp" }},
 		{"a line separator in the description", "description", "one line",
 			func(s *v1alpha1.MCPServer) { s.Spec.Description = "Reads the code host\u2028and its issues" }},
+		{"the company's own client with no id", atClientID, "needs the id",
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientOwn})},
+		{"the company's own client with an id of white space alone", atClientID, "needs the id",
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientOwn, ClientID: " \t "})},
+		{"a client id beside the engine's client metadata document", atClientID, "client_id is the company's own",
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD, ClientID: "crewlet-acme"})},
+		{"a client id beside a registration", atClientID, "client_id is the company's own",
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientDCR, ClientID: "crewlet-acme"})},
+		{"a client secret beside a registration", "oauth.client_secret", "client_secret is the company's own",
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientDCR, ClientSecret: v1alpha1.SecretValueSource{
+				SecretKeyRef: v1alpha1.SecretKeyReference{Name: "probe-oauth", Key: keyClientSecret},
+			}})},
+		{"fifty-one scopes", "oauth.scopes", "at most 50",
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD, Scopes: append(slices.Clone(scopes), "s50")})},
+		{"a scope with a space", atScope, notAScope,
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD, Scopes: []string{"read write"}})},
+		{"a scope with a double quote", atScope, notAScope,
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD, Scopes: []string{`read"`}})},
+		{"a scope with a backslash", atScope, notAScope,
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD, Scopes: []string{`read\all`}})},
+		{"a scope outside ASCII", atScope, notAScope,
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD, Scopes: []string{"l\u00e9cture"}})},
+		{"a scope listed twice", "oauth.scopes[1]", "listed twice",
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD, Scopes: []string{scopeRead, scopeRead}})},
+		{"a sign-in on a Stdio server", "oauth", "stdio", func(s *v1alpha1.MCPServer) {
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD})(s)
+			s.Spec.Transport, s.Spec.Command, s.Spec.URL, s.Spec.Headers = v1alpha1.MCPTransportStdio, "probe-mcp", "", nil
+		}},
+		{"a sign-in on a per-seat server", "oauth", "per-agent server", func(s *v1alpha1.MCPServer) {
+			signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD})(s)
+			s.Spec.Shared = new(false)
+		}},
+		{"an Authorization header beside the sign-in", "headers.Authorization", "sends the Authorization header",
+			func(s *v1alpha1.MCPServer) {
+				signedIn(v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD})(s)
+				s.Spec.Headers = append(s.Spec.Headers, v1alpha1.MCPHeader{
+					Name: "Authorization", ValueFrom: v1alpha1.SecretValueSource{
+						SecretKeyRef: v1alpha1.SecretKeyReference{Name: "probe-auth", Key: "authorization"},
+					},
+				})
+			}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			doc, env := withServer(t, c.set)
