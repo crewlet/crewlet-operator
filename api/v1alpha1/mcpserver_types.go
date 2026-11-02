@@ -515,7 +515,7 @@ type MCPServerSpec struct {
 	// server that holds any tool back. Unset offers every tool. Crewlet's
 	// `tools`.
 	// +optional
-	Tools *MCPTools `json:"tools,omitempty"`
+	Tools MCPTools `json:"tools,omitzero"`
 
 	// startupTimeoutSeconds bounds starting the server and the handshake,
 	// and separately its first tool listing, so a start can take up to twice

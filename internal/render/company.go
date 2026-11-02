@@ -1169,8 +1169,8 @@ func (r *renderer) mcpAccess(s *v1alpha1.MCPServer) *mcpAccessDoc {
 
 // toolsOf is a server's tool levels as Crewlet's tools block, or nil where
 // the spec sets none, so the entry writes no tools.
-func toolsOf(t *v1alpha1.MCPTools) *toolsDoc {
-	if t == nil || (t.Default == "" && len(t.Levels) == 0) {
+func toolsOf(t v1alpha1.MCPTools) *toolsDoc {
+	if t.Default == "" && len(t.Levels) == 0 {
 		return nil
 	}
 	doc := &toolsDoc{Default: toolLevel(t.Default)}
@@ -1189,10 +1189,7 @@ func toolsOf(t *v1alpha1.MCPTools) *toolsDoc {
 // Crewlet refuses a sandbox listing of a server that holds any tool back and
 // gives no sandbox one (MCPToolPolicy.AllowsEveryTool, validateBoxToolLevels
 // and sandboxMCP).
-func allowsEveryTool(t *v1alpha1.MCPTools) bool {
-	if t == nil {
-		return true
-	}
+func allowsEveryTool(t v1alpha1.MCPTools) bool {
 	if t.Default != "" && t.Default != v1alpha1.MCPToolLevelAllow {
 		return false
 	}
