@@ -1214,8 +1214,8 @@ var mirrored = []mirror{
 		against: directRunEnds,
 		decides: "a job lost with its host is never collected as the run's result: what it spent is read off its " +
 			"box where the box is left, and the seat's turn resumes, with what this returns, to carry its round " +
-			"on in a fresh run, in the kept box after its engine restarted and in a fresh one where the box went " +
-			"with its pod or its node",
+			"on, in the kept box after its engine restarted — continuing the lost job's own session there where " +
+			"Crewlet kept it — and in a fresh box and a fresh session where the box went with its pod or its node",
 		digest: "efdae0256a887ee13063c285bcedfc3416bd7209fa31034eded93c4cf84e4e91",
 		read:   collectedRead,
 	},
