@@ -310,6 +310,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			name: "a per-seat server's own value an executor's box is given",
 			mutate: func(in *Input) {
 				toolServer(in, optionalTavily).Spec.Shared = new(false)
+				toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
 				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
 			},
 			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: registry, want: true,
@@ -333,6 +334,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
 					}},
 				})
+				toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
 				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
 			},
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue, want: true,
@@ -342,6 +344,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			name: "a seat's value for a shared server its box lists and its grant leaves out",
 			mutate: func(in *Input) {
 				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{}
+				toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
 				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
 					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
 						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
@@ -384,6 +387,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			name: "a seat's value for a server its box is given, when the server is turned off",
 			mutate: func(in *Input) {
 				toolServer(in, optionalTavily).Spec.Enabled = new(false)
+				toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
 				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
 					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
 						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
@@ -393,15 +397,15 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			},
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
 		},
-		// A SERVER THAT HOLDS A TOOL BACK IS GIVEN TO NO BOX, which would
-		// reach it whole past the engine, so a seat's value for a shared
-		// server, which only its box would be given, is not started.
+		// A SERVER WHOSE EVERY TOOL DOES NOT RUN AT ALLOW IS GIVEN TO NO
+		// BOX, which would reach it whole past the engine, so a seat's value
+		// for a shared server, which only its box would be given, is not
+		// started.
 		{
 			name: "a seat's value for a shared server its box is given, when the server blocks a tool",
 			mutate: func(in *Input) {
-				toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{Levels: []v1alpha1.MCPToolLevelEntry{
-					{Tool: toolCrawl, Level: v1alpha1.MCPToolLevelBlocked},
-				}}
+				toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow,
+					Levels: []v1alpha1.MCPToolLevelEntry{{Tool: toolCrawl, Level: v1alpha1.MCPToolLevelBlocked}}}
 				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
 					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
 						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
@@ -424,6 +428,36 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
 			},
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue, want: true,
+		},
+		{
+			// A TOOL NOTHING SETS STARTS BY ITS HINTS, at Approve unless the
+			// server marks it read-only, which no document can know before
+			// the server lists: a server with no default of Allow is given to
+			// no box.
+			name: "a seat's value for a shared server its box is given, when the server sets no tools",
+			mutate: func(in *Input) {
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
+		{
+			name: "a seat's value for a shared server its box is given, when a tool waits for approval",
+			mutate: func(in *Input) {
+				toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow,
+					Levels: []v1alpha1.MCPToolLevelEntry{{Tool: toolCrawl, Level: v1alpha1.MCPToolLevelApprove}}}
+				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+					}},
+				})
+				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
+			},
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
 		},
 		{
 			name: "a seat's value for a shared server its box is given, when the server blocks every tool",

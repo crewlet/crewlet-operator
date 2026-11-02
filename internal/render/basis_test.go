@@ -719,6 +719,28 @@ func engineCases() []engineCase {
 			at: "sandbox.mcp.servers[0]", says: "holds tools back from its agents",
 		},
 		{
+			// Ana's sandbox lists the Linear server, which sets no tools: a
+			// tool it does not mark read-only starts at Approve, and the
+			// harness in the box would call it past the engine, unasked.
+			name: "a sandbox listing of a server that sets no tools", site: site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleLinear}}
+			},
+			refused: "Seat/ana spec.sandbox.mcpServerRefs[0].name",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				ana := role(t, doc, seatAna)
+				sandbox, _ := ana["sandbox"].(map[string]any)
+				if sandbox == nil {
+					sandbox = map[string]any{}
+					ana["sandbox"] = sandbox
+				}
+				sandbox["mcp"] = map[string]any{"servers": []any{sampleLinear}}
+			},
+			at: "sandbox.mcp.servers[0]", says: "it sets no default",
+		},
+		{
 			name: "a seat's chain names no provider", site: site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
 			input:   sampleCompany,
 			mutate:  func(in *Input) { seat(in, seatCTO).Spec.LLM.Default = []v1alpha1.LLMProviderReference{{Name: missing}} },

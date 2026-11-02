@@ -233,10 +233,11 @@ agent seats a server reaches (`(*MCPServer).Reach` and
 it tries), and
 the spellings of a header it refuses (`validateHeaderSpellings` and
 `spelledUnlike` in `internal/config/filerules.go`), and the levels a tool of a
-server runs at, with the sandbox listing it refuses for a server that holds a
-tool back (`MCPToolLevels`, `MCPToolPolicy.validate`,
+server runs at, with the sandbox listing it refuses for a server not every
+tool of which runs at allow (`MCPToolLevels`, `MCPToolPolicy.validate`,
 `MCPToolPolicy.AllowsEveryTool` and `(*Company).validateBoxToolLevels` in
-`internal/config/mcptools.go`); those are read against
+`internal/config/mcptools.go`) and the level a tool nothing sets starts at
+(`StartingLevel` and `RiskOf` in `internal/mcp/risk.go`); those are read against
 the controller's report of such a value as well
 (`internal/controller/config_optional.go`), the MCPServer, Seat and
 Company API types, and the [tool servers](docs/guides/tool-servers.md),

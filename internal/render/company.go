@@ -1184,16 +1184,15 @@ func toolsOf(t *v1alpha1.MCPTools) *toolsDoc {
 }
 
 // allowsEveryTool reports whether every tool a server lists, whatever it
-// lists, runs at Allow: no levels, or a default of Allow and no level holding
-// one back. An executor's sandbox reaches a server whole, past the engine, so
-// Crewlet refuses a sandbox listing of a server that holds any tool back and
+// lists, runs at Allow: a default of Allow and no level holding one back. An
+// unset default leaves each tool at the level its hints give it, Approve for
+// any tool the server does not mark read-only, which no document can know
+// before the server lists. An executor's sandbox reaches a server whole, past
+// the engine, so Crewlet refuses a sandbox listing of any other server and
 // gives no sandbox one (MCPToolPolicy.AllowsEveryTool, validateBoxToolLevels
 // and sandboxMCP).
 func allowsEveryTool(t *v1alpha1.MCPTools) bool {
-	if t == nil {
-		return true
-	}
-	if t.Default != "" && t.Default != v1alpha1.MCPToolLevelAllow {
+	if t == nil || t.Default != v1alpha1.MCPToolLevelAllow {
 		return false
 	}
 	for _, l := range t.Levels {

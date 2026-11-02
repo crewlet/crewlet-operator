@@ -646,17 +646,21 @@ spec:
                 description: |-
                   tools sets the level each of the server's tools runs at: default for
                   every tool, levels for one tool by the server's own name. A Blocked
-                  tool is never offered to an agent, and a Seat's sandbox may not list a
-                  server that holds any tool back. Unset offers every tool. Crewlet's
-                  `tools`.
+                  tool is never offered to an agent, a call to a tool at Approve waits for
+                  a person's answer, and a Seat's sandbox may list only a server whose
+                  every tool runs at Allow. Unset, a tool the server marks read-only runs
+                  at Allow and every other tool at Approve. Crewlet's `tools`.
                 minProperties: 1
                 properties:
                   default:
                     description: |-
                       default is the level of every tool levels does not name, a tool the
-                      server adds later included. Unset is Allow. Crewlet's `tools.default`.
+                      server adds later included. Unset, each such tool starts at the level
+                      its hints give it: Allow for a tool the server marks read-only, Approve
+                      for every other. Crewlet's `tools.default`.
                     enum:
                     - Allow
+                    - Approve
                     - Blocked
                     type: string
                   levels:
@@ -673,6 +677,7 @@ spec:
                           description: level is the level the tool runs at.
                           enum:
                           - Allow
+                          - Approve
                           - Blocked
                           type: string
                         tool:

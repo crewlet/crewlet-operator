@@ -110,6 +110,8 @@ func toolLevel(l v1alpha1.MCPToolLevel) string {
 	switch l {
 	case v1alpha1.MCPToolLevelAllow:
 		return "allow"
+	case v1alpha1.MCPToolLevelApprove:
+		return "approve"
 	case v1alpha1.MCPToolLevelBlocked:
 		return "blocked"
 	}

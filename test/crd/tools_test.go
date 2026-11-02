@@ -474,17 +474,22 @@ func TestMCPServerValidation(t *testing.T) {
 			mutate: withTools(&v1.MCPTools{Default: v1.MCPToolLevelBlocked, Levels: []v1.MCPToolLevelEntry{
 				{Tool: "list_invoices", Level: v1.MCPToolLevelAllow},
 				{Tool: "get-invoice.v2", Level: v1.MCPToolLevelAllow},
+				{Tool: "void_invoice", Level: v1.MCPToolLevelApprove},
 			}}),
 		},
 		{
-			name:   "a default outside Allow and Blocked is refused",
-			mutate: withTools(&v1.MCPTools{Default: "Approve"}),
+			name:   "a default of Approve is accepted",
+			mutate: withTools(&v1.MCPTools{Default: v1.MCPToolLevelApprove}),
+		},
+		{
+			name:   "a default outside Allow, Approve and Blocked is refused",
+			mutate: withTools(&v1.MCPTools{Default: "Ask"}),
 			want:   "spec.tools.default: Unsupported value",
 		},
 		{
-			name: "a level outside Allow and Blocked is refused",
+			name: "a level outside Allow, Approve and Blocked is refused",
 			mutate: withTools(&v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
-				{Tool: toolDeleteInvoice, Level: "blocked"},
+				{Tool: toolDeleteInvoice, Level: "approve"},
 			}}),
 			want: "spec.tools.levels[0].level: Unsupported value",
 		},

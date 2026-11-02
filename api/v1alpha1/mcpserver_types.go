@@ -53,15 +53,18 @@ type MCPToolAnnotations struct {
 }
 
 // MCPToolLevel is the level a tool of a server runs at. It maps onto Crewlet's
-// tool levels (Allow is `allow`, Blocked `blocked`): Allow offers the tool to
-// every agent the server reaches, and Blocked never offers it to an agent, which
-// is then neither listed to nor callable by any of them.
-// +kubebuilder:validation:Enum=Allow;Blocked
+// tool levels (Allow is `allow`, Approve `approve`, Blocked `blocked`): Allow
+// offers the tool to every agent the server reaches and runs each call, Approve
+// offers it and holds each call until a person allows or denies it, and Blocked
+// never offers it to an agent, which is then neither listed to nor callable by
+// any of them.
+// +kubebuilder:validation:Enum=Allow;Approve;Blocked
 type MCPToolLevel string
 
 // The tool levels.
 const (
 	MCPToolLevelAllow   MCPToolLevel = "Allow"
+	MCPToolLevelApprove MCPToolLevel = "Approve"
 	MCPToolLevelBlocked MCPToolLevel = "Blocked"
 )
 
@@ -85,18 +88,25 @@ type MCPToolLevelEntry struct {
 }
 
 // MCPTools sets the level each tool of a server runs at. It maps onto
-// Crewlet's tools. A server that sets none offers every tool it lists.
+// Crewlet's tools. A tool neither default nor levels sets starts at the level
+// its hints give it (toolAnnotations applied): Allow for a tool the server
+// marks read-only, Approve for every other, a tool with no hints included.
 //
 // Crewlet never files a blocked tool, so no agent is offered, lists or calls
-// it, on the engine or from an executor's sandbox through the engine's bridge.
-// A sandbox that lists the server in spec.sandbox.mcpServerRefs would reach it
-// whole, past the engine, so a Seat may not list a server that holds any tool
-// back: the operator reports such a listing on the Seat and holds the document,
-// as Crewlet refuses it.
+// it, on the engine or from an executor's sandbox through the engine's bridge,
+// and it runs a call to a tool at Approve only once a person allows it: an
+// executor's run parks on the person's answer, and every other phase is
+// refused the call. A sandbox that lists the server in
+// spec.sandbox.mcpServerRefs would reach it whole, past the engine, so a Seat
+// may list only a server whose every tool runs at Allow (default Allow and no
+// other level): the operator reports any other listing on the Seat and holds
+// the document, as Crewlet refuses it.
 // +kubebuilder:validation:MinProperties=1
 type MCPTools struct {
 	// default is the level of every tool levels does not name, a tool the
-	// server adds later included. Unset is Allow. Crewlet's `tools.default`.
+	// server adds later included. Unset, each such tool starts at the level
+	// its hints give it: Allow for a tool the server marks read-only, Approve
+	// for every other. Crewlet's `tools.default`.
 	// +optional
 	Default MCPToolLevel `json:"default,omitempty"`
 
@@ -511,9 +521,10 @@ type MCPServerSpec struct {
 
 	// tools sets the level each of the server's tools runs at: default for
 	// every tool, levels for one tool by the server's own name. A Blocked
-	// tool is never offered to an agent, and a Seat's sandbox may not list a
-	// server that holds any tool back. Unset offers every tool. Crewlet's
-	// `tools`.
+	// tool is never offered to an agent, a call to a tool at Approve waits for
+	// a person's answer, and a Seat's sandbox may list only a server whose
+	// every tool runs at Allow. Unset, a tool the server marks read-only runs
+	// at Allow and every other tool at Approve. Crewlet's `tools`.
 	// +optional
 	Tools *MCPTools `json:"tools,omitempty"`
 
