@@ -67,8 +67,8 @@ func TestExecutorSignInFollowsTheEngineSource(t *testing.T) {
 
 // TestExecutorHarnessesFollowTheEngineSource holds the harnesses the render
 // runs a seat's executor on (ExecutorHarnesses) to the engine's two lists of
-// them, in their order: the harnesses it has an in-box runner for
-// (executor.Names), and the harnesses config lets run an executor
+// them, in their order: the harnesses it has an in-box runner for (the
+// harnesses executor.Names names, each by its Name), and the harnesses config lets run an executor
 // (config.ExecutorHarnesses), which it refuses a chain without and a runIn on
 // any other harness by. A harness either gains moves every verdict the render
 // reaches on a chain, and the API's runIn rule
@@ -85,12 +85,7 @@ func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runners := constsOf(t, source, path.Dir(names))
-	idents := returnedIdents(t, names, src, "Names")
-	got := make([]string, 0, len(idents))
-	for _, ident := range idents {
-		got = append(got, runners[ident])
-	}
+	got := runnerNames(t, source, names, src)
 	if !slices.Equal(got, want) {
 		t.Errorf("the engine has an in-box runner for %v, the render runs an executor on %v", got, want)
 	}
@@ -117,39 +112,76 @@ func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 	}
 }
 
-// returnedIdents is the names of the constants the function name returns as
-// one []string literal in the Go source src of file.
-func returnedIdents(t *testing.T, file string, src []byte, name string) []string {
+// runnerNames is the name of each harness the engine has an in-box runner
+// for, in the order executor.Names gives them: the harnesses listed in the
+// package's `harnesses` literal in file (src), each a type whose Name method
+// returns one string constant of the package.
+func runnerNames(t *testing.T, source *os.Root, file string, src []byte) []string {
 	t.Helper()
-	parsed, err := parser.ParseFile(token.NewFileSet(), file, src, 0)
+	list, ok := declared(t, file, src, token.VAR, "harnesses").(*ast.CompositeLit)
+	if !ok {
+		t.Fatalf("harnesses in %s is no literal", file)
+	}
+	dir := path.Dir(file)
+	consts, named := constsOf(t, source, dir), nameMethods(t, source, dir)
+	out := make([]string, 0, len(list.Elts))
+	for _, elt := range list.Elts {
+		harness, ok := elt.(*ast.CompositeLit)
+		if !ok {
+			t.Fatalf("harnesses in %s holds %T, not a harness type's value", file, elt)
+		}
+		typ, ok := harness.Type.(*ast.Ident)
+		if !ok {
+			t.Fatalf("harnesses in %s holds a %T literal, not a harness type's value", file, harness.Type)
+		}
+		constant, ok := named[typ.Name]
+		if !ok {
+			t.Fatalf("%s declares no Name of %s returning a constant", dir, typ.Name)
+		}
+		out = append(out, consts[constant])
+	}
+	return out
+}
+
+// nameMethods is, for each type of the package in dir with a value-receiver
+// Name method that returns one identifier, that identifier.
+func nameMethods(t *testing.T, source *os.Root, dir string) map[string]string {
+	t.Helper()
+	entries, err := fsReadDir(source, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, decl := range parsed.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Name.Name != name || fn.Recv != nil || fn.Body == nil || len(fn.Body.List) != 1 {
+	out := map[string]string{}
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry, ".go") || strings.HasSuffix(entry, "_test.go") {
 			continue
 		}
-		ret, ok := fn.Body.List[0].(*ast.ReturnStmt)
-		if !ok || len(ret.Results) != 1 {
-			break
+		file := path.Join(dir, entry)
+		src, err := source.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
 		}
-		list, ok := ret.Results[0].(*ast.CompositeLit)
-		if !ok {
-			break
+		parsed, err := parser.ParseFile(token.NewFileSet(), file, src, 0)
+		if err != nil {
+			t.Fatal(err)
 		}
-		var out []string
-		for _, elt := range list.Elts {
-			ident, ok := elt.(*ast.Ident)
-			if !ok {
-				t.Fatalf("%s's %s returns %T, not a constant's name", file, name, elt)
+		for _, decl := range parsed.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Name.Name != "Name" || fn.Recv == nil || len(fn.Recv.List) != 1 || fn.Body == nil ||
+				len(fn.Body.List) != 1 {
+				continue
 			}
-			out = append(out, ident.Name)
+			recv, ok := fn.Recv.List[0].Type.(*ast.Ident)
+			ret, isReturn := fn.Body.List[0].(*ast.ReturnStmt)
+			if !ok || !isReturn || len(ret.Results) != 1 {
+				continue
+			}
+			if ident, ok := ret.Results[0].(*ast.Ident); ok {
+				out[recv.Name] = ident.Name
+			}
 		}
-		return out
 	}
-	t.Fatalf("%s declares no %s returning one []string literal", file, name)
-	return nil
+	return out
 }
 
 // constsOf is every string constant the Go package in dir of source
