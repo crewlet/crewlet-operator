@@ -442,6 +442,17 @@ const (
 	// seat is granted. The render follows it: markStarted starts a seat's
 	// instance and box by reaches, and the API's access renders the grant.
 	mcpAccessRead = "v0.1.1-0.20261102112847-60028e53a804"
+	// priorityLaneRead is crewlet's main at 60028e53a8, read for
+	// (*Queue).attach, which crewlet/crewlet#563 (a person waiting on a seat
+	// goes ahead of its background work) moved: a seat's inbox carries a
+	// priority lane, and attaching to a laned topic opens the lane's consumer
+	// after the topic's own, each through the one lookup the attach always
+	// made (openConsumer). Only a seat's inbox is laned (queue.HasLane), and a
+	// pod's boot attaches no inbox: a data pod's attaches the custody keeper's
+	// group on crewlet.custody.records, which still looks its consumer up,
+	// creates and reads it back, then looks it up and reads it back again, so
+	// the boot windows that count it hold.
+	priorityLaneRead = "v0.1.1-0.20261102112847-60028e53a804"
 	// mcpAccessGo is where the engine decides whom a tool server reaches.
 	mcpAccessGo = "internal/config/mcpaccess.go"
 	// roleAccessGo is where the engine states each vendor's fixed set of
@@ -2010,10 +2021,10 @@ var mirrored = []mirror{
 	{
 		file: "internal/queue/jetstream/attach.go", name: "(*Queue).attach",
 		against: bootWindows,
-		decides: "attaching a durable group looks up, creates and reads back its consumer, then looks it up and " +
-			"reads it back again",
-		digest: "c10a5e667bc9202dd55d2322b9a559a79adfde4884020720c8f933c7e196e118",
-		read:   bootBoundsRead,
+		decides: "attaching a durable group on a topic that is no seat's inbox looks up, creates and reads back " +
+			"its consumer, then looks it up and reads it back again",
+		digest: "17c1001b72e34f1d49be6db7cb3ee885c721098d6eaee5e52acc9eb8caeb0274",
+		read:   priorityLaneRead,
 	},
 	{
 		file: embeddedGo, name: "(*embeddedServer).awaitLeafReady",
