@@ -790,6 +790,50 @@ func engineCases() []engineCase {
 			at: anaBoxAt, says: "signed in to with OAuth",
 		},
 		{
+			// Ana's box is given the github server, which the company now
+			// signs in to as a service identity: the engine is issued its
+			// tokens as the server is used, and a box is handed a server's
+			// credentials once, at its launch. Every tool of it runs at Allow,
+			// so the sign-in is the one reason a box may not have it.
+			name:  "a seat's box given a server signed in to as a service identity",
+			site:  site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				server := toolServer(in, sampleGitHub)
+				server.Spec.Shared = new(true)
+				server.Spec.OAuth = v1alpha1.MCPOAuth{
+					Grant: v1alpha1.MCPOAuthGrantClientCredentials, ClientID: serviceClientID,
+					ClientSecret: v1alpha1.SecretValueSource{
+						SecretKeyRef: v1alpha1.SecretKeyReference{Name: "github-oauth", Key: keyClientSecret},
+					},
+				}
+				server.Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
+				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleGitHub}}
+			},
+			refused: anaBoxRef,
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				found := false
+				for _, server := range doc[keyMCPServers].([]any) {
+					if entry := server.(map[string]any); entry[keyName] == sampleGitHub {
+						delete(entry, "shared")
+						//nolint:gosec // G101: a ${NAME} reference, which holds no credential.
+						entry["oauth"] = map[string]any{
+							"grant": "client_credentials", "client_id": serviceClientID,
+							"client_secret": "${GITHUB_OAUTH_CLIENT_SECRET}",
+						}
+						entry["tools"] = map[string]any{keyDefault: levelAllow}
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("the document has no tool server %s", sampleGitHub)
+				}
+				listInAnasBox(t, doc, sampleGitHub)
+			},
+			at: anaBoxAt, says: "signed in to with OAuth",
+		},
+		{
 			name: "a seat's chain names no provider", site: site{fnProvider, EngineRefuses, v1alpha1.ReasonRefNotFound},
 			input:   sampleCompany,
 			mutate:  func(in *Input) { seat(in, seatCTO).Spec.LLM.Default = []v1alpha1.LLMProviderReference{{Name: missing}} },

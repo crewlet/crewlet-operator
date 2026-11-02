@@ -118,7 +118,20 @@ func toolLevel(l v1alpha1.MCPToolLevel) string {
 	return ""
 }
 
-// mcpOAuthClient maps onto Crewlet's mcp_servers[].oauth.client.
+// mcpOAuthGrant maps onto Crewlet's mcp_servers[].oauth.grant: "" where the
+// MCPServer gives no grant, which Crewlet reads as authorization_code.
+func mcpOAuthGrant(g v1alpha1.MCPOAuthGrant) string {
+	switch g {
+	case v1alpha1.MCPOAuthGrantAuthorizationCode:
+		return "authorization_code"
+	case v1alpha1.MCPOAuthGrantClientCredentials:
+		return "client_credentials"
+	}
+	return ""
+}
+
+// mcpOAuthClient maps onto Crewlet's mcp_servers[].oauth.client: "" where the
+// MCPServer gives none, as a service identity does.
 func mcpOAuthClient(c v1alpha1.MCPOAuthClient) string {
 	switch c {
 	case v1alpha1.MCPOAuthClientCIMD:
