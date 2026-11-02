@@ -460,6 +460,35 @@ const (
 	mcpAccessRead = "v0.1.1-0.20261102112847-60028e53a804"
 	// mcpAccessGo is where the engine decides whom a tool server reaches.
 	mcpAccessGo = "internal/config/mcpaccess.go"
+	// mcpOAuthRead is crewlet/crewlet#588's engine, read at its head
+	// (448b277915), which signs the company in to a remote MCP server with
+	// OAuth (mcp_servers[].oauth). resolveServer holds a server back while the
+	// secret of its own OAuth client resolves to nothing, as it does on its
+	// url, under no optional_keys: the render gives that secret as a value the
+	// server is started with that no list governs (oauthClientSecret), and the
+	// controller reports it empty without offering a list.
+	// startSharedServers starts a server signed in to with OAuth only while
+	// the company holds a grant for the address it is configured at, and
+	// retires one whose grant was given up or refused; the render cannot know
+	// a grant, which is the engine's own state, and keeps marking the
+	// server's values started, since an empty one holds the server back once
+	// somebody signs in. sandboxMCP gives no box a server signed in to with
+	// OAuth, beside crewlet#586's guard on a server the seat is not granted;
+	// Crewlet refuses such a listing on every write, which the render refuses
+	// too (the role's finding), and markStarted starts no box's values for
+	// one.
+	mcpOAuthRead = "v0.1.1-0.20261102114923-448b277915ed"
+	// inboxLaneRead is crewlet/crewlet#563's (*Queue).attach, read at
+	// crewlet/crewlet#588's head (448b277915), which carries it. An attach to
+	// a topic with a priority lane now opens the lane's durable consumer
+	// after the topic's own, each looked up under the lookup budget and
+	// settled; queue.HasLane holds for a seat's inbox alone
+	// (topics.SeatFromInbox). The attach dataPodBootSeconds counts is the
+	// custody keeper's consumer, which is no seat's inbox, so it still opens
+	// one consumer (openConsumer is the old lookup and settle, moved into a
+	// function of its own), and no boot window moves. This closes
+	// crewlet-operator#66.
+	inboxLaneRead = "v0.1.1-0.20261102114923-448b277915ed"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -926,14 +955,15 @@ var mirrored = []mirror{
 	},
 	{
 		file: toolCredentialsGo, name: "resolveServer",
-		against: []string{renderOptionalGo, configOptionalGo, mcpServerTypesGo, toolServersMd},
+		against: []string{renderOptionalGo, renderCompanyGo, configOptionalGo, mcpServerTypesGo, toolServersMd},
 		decides: "a tool server starts with its env (stdio) or headers (http), a seat's mcp_env for it over them key " +
 			"by key, merged by the key the server reads (a header in any case) before anything resolves, so a seat's " +
 			"key replaces the server's whole; a value that resolves to nothing, or to an empty value, is left out " +
 			"where the server's optional_keys lists its key, whichever layer wrote it, and holds the server back " +
-			"otherwise; and a url that resolves to nothing holds it back whatever optional_keys says",
-		digest: "9c0e4c752f99ed95681917f85f0168b0ef8e690b7454d07341d88788200fad67",
-		read:   seatAppTokenRead,
+			"otherwise; and a url, or the secret of the server's own OAuth client, that resolves to nothing holds it " +
+			"back whatever optional_keys says",
+		digest: "4bbbc9ef6bbe9d2f83a692b07b352845e65dd8bb5dba034141922c77851fce31",
+		read:   mcpOAuthRead,
 	},
 	{
 		file: toolCredentialsGo, name: "(*refGap).hold",
@@ -946,11 +976,12 @@ var mirrored = []mirror{
 	},
 	{
 		file: engineMCPGo, name: "(*Engine).startSharedServers",
-		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
+		against: []string{renderOptionalGo, configOptionalGo, mcpServerTypesGo, toolServersMd},
 		decides: "a shared server is started once for the company, with its own values alone (no seat's block), " +
-			"unless it is turned off, which starts nothing",
-		digest: "e25cd3a65c03750a8ce653985d913984eb4356ffd9ccccfd113f378c190f6d6c",
-		read:   serverHealthRead,
+			"unless it is turned off, which starts nothing, and one signed in to with OAuth only while the company " +
+			"holds a grant for its address",
+		digest: "3c581857e795bed9e0419f2e544f7ced919fd144795bbf0b975598565cd1270e",
+		read:   mcpOAuthRead,
 	},
 	{
 		file: engineMCPGo, name: "seatSpecs",
@@ -1006,9 +1037,10 @@ var mirrored = []mirror{
 		file: sandboxGo, name: "sandboxMCP",
 		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "an executor's box is given every server its seat's sandbox scopes and the seat is granted, shared " +
-			"or not, with the seat's block for it, none turned off and none at an address Crewlet would not dial",
-		digest: "3c6071f4b4549e23f41c83367f9c7e3a3070dc84ac1894c66c578e0e96568fc8",
-		read:   mcpAccessRead,
+			"or not, with the seat's block for it, none turned off, none signed in to with OAuth and none at an " +
+			"address Crewlet would not dial",
+		digest: "5040ea18aa1e9c282c790d159ab9e5563685d74878efaf7658d9c7021792b692",
+		read:   mcpOAuthRead,
 	},
 	{
 		file: mcpNamesGo, name: "mcpServerName",
@@ -2027,9 +2059,9 @@ var mirrored = []mirror{
 		file: "internal/queue/jetstream/attach.go", name: "(*Queue).attach",
 		against: bootWindows,
 		decides: "attaching a durable group looks up, creates and reads back its consumer, then looks it up and " +
-			"reads it back again",
-		digest: "c10a5e667bc9202dd55d2322b9a559a79adfde4884020720c8f933c7e196e118",
-		read:   bootBoundsRead,
+			"reads it back again, and a seat's inbox does so again for its priority lane's consumer",
+		digest: "17c1001b72e34f1d49be6db7cb3ee885c721098d6eaee5e52acc9eb8caeb0274",
+		read:   inboxLaneRead,
 	},
 	{
 		file: embeddedGo, name: "(*embeddedServer).awaitLeafReady",
