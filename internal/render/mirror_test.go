@@ -245,20 +245,6 @@ const (
 	// Harness), and a refusal that says "harness" where it said "CLI". No
 	// decision any of them copies moved.
 	harnessRead = "v0.1.1-0.20261101141833-986af5348ea5"
-	// harnessWireRead is crewlet/crewlet#528's engine, read on crewlet's main
-	// where it merged (0b2730bb44): the harness is named on the wire, and a
-	// sandbox's spec input with it (its CodingAgent field is Harness), which
-	// is the launch's only change. No other mirror moved. The launch was
-	// last read before it at harnessRead, which moved its names alone, and
-	// before that at crewlet#453 (e0328e5d9d), where an executor
-	// launch came to stamp the picked member's sign-in identity on the run's
-	// row (the launch request's SignInID), which the run's collection
-	// compares to relaunch, once, a run its vendor refused on a sign-in
-	// replaced while it ran; the member a launch picks, the cell it places
-	// the run in, the bridge it refuses, the environment it starts the run
-	// with and the login it refuses off the engine host are as at
-	// executorFinalRead, so the render's copies hold.
-	harnessWireRead = "v0.1.1-0.20261101144449-0b2730bb4452"
 	// envSignInRead is crewlet#452's engine, read on crewlet's main where it
 	// merged (e0328e5d9d), which adds auth.mode env: a providers.llm entry
 	// whose env alone signs its harness in. The names
@@ -446,9 +432,17 @@ const (
 	// harnessSkillsRead is crewlet's main at 2f52194d02, read for
 	// (*agentLauncher).launch, which crewlet/crewlet#549 and #552 moved: the
 	// run now hands its harness the skills its seat holds (the bridge's list and
-	// the box's files). The member it runs on, the cell it is placed in, what
-	// its box reaches, its environment and the login it is handed are as they
-	// were at harnessWireRead, so the render's copies hold.
+	// the box's files). The launch was last read at crewlet#528 (0b2730bb44),
+	// where the harness came to be named on the wire and a sandbox's spec input
+	// with it (its CodingAgent field is Harness); before that at harnessRead,
+	// which moved its names alone, and at crewlet#453 (e0328e5d9d), where an
+	// executor launch came to stamp the picked member's sign-in identity on the
+	// run's row (the launch request's SignInID), which the run's collection
+	// compares to relaunch, once, a run its vendor refused on a sign-in
+	// replaced while it ran. The member a launch picks, the cell it places the
+	// run in, the bridge it refuses, the environment it starts the run with and
+	// the login it refuses off the engine host are as at executorFinalRead, so
+	// the render's copies hold.
 	harnessSkillsRead = "v0.1.1-0.20261102002330-2f52194d0262"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
