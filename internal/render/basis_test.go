@@ -143,8 +143,9 @@ var findings = []struct {
 	{site{fnRole, HarmsBeyond, v1alpha1.ReasonRefNotFound},
 		"the sandbox would reach whichever server takes the name later"},
 	{site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
-		"a box given a server the company signs in to with OAuth: it is handed the server's credentials once, at its " +
-			"launch, and cannot renew the access token"},
+		"a sandbox listing of a server that holds a tool back, or of one the company signs in to with OAuth: the " +
+			"sandbox would reach the tool past the engine, or is handed the server's credentials once, at its launch, " +
+			"and cannot renew the access token"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonRefNotFound},
 		"a schedule lives inside its seat's entry, which does not exist"},
 	{site{fnScheduleTargets, EngineRefuses, v1alpha1.ReasonHumanSeat}, "a schedule on a person"},
@@ -443,18 +444,18 @@ func engineCases() []engineCase {
 			t.Fatalf("the document has no tool server %s", name)
 		}
 	}
-	// grant writes access as the access of the tool server named, as the
-	// render writes an MCPServer's spec.access.
-	grant := func(name string, access map[string]any) func(*testing.T, map[string]any) {
+	// grant writes access as the access of the sample's linear tool server,
+	// as the render writes an MCPServer's spec.access.
+	grant := func(access map[string]any) func(*testing.T, map[string]any) {
 		return func(t *testing.T, doc map[string]any) {
 			t.Helper()
 			for _, server := range doc[keyMCPServers].([]any) {
-				if entry := server.(map[string]any); entry[keyName] == name {
+				if entry := server.(map[string]any); entry[keyName] == sampleLinear {
 					entry["access"] = access
 					return
 				}
 			}
-			t.Fatalf("the document has no tool server %s", name)
+			t.Fatalf("the document has no tool server %s", sampleLinear)
 		}
 	}
 	// linearAccess sets the Linear server's spec.access, which Ana, whose
@@ -691,26 +692,91 @@ func engineCases() []engineCase {
 			at: optionalKeysAt, says: "carries a ${VAR} reference",
 		},
 		{
+			// Ana's sandbox lists the Linear server, one tool of which is
+			// blocked: the harness in the box would reach it past the engine.
+			name: "a sandbox listing of a server that holds a tool back", site: site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				toolServer(in, sampleLinear).Spec.Tools = v1alpha1.MCPTools{Levels: []v1alpha1.MCPToolLevelEntry{
+					{Tool: "delete_issue", Level: v1alpha1.MCPToolLevelBlocked},
+				}}
+				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleLinear}}
+			},
+			refused: "Seat/ana spec.sandbox.mcpServerRefs[0].name",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				for _, server := range doc[keyMCPServers].([]any) {
+					if entry := server.(map[string]any); entry[keyName] == sampleLinear {
+						entry["tools"] = map[string]any{"levels": map[string]any{"delete_issue": levelBlocked}}
+					}
+				}
+				ana := role(t, doc, seatAna)
+				sandbox, _ := ana["sandbox"].(map[string]any)
+				if sandbox == nil {
+					sandbox = map[string]any{}
+					ana["sandbox"] = sandbox
+				}
+				sandbox["mcp"] = map[string]any{"servers": []any{sampleLinear}}
+			},
+			at: "sandbox.mcp.servers[0]", says: "holds tools back from its agents",
+		},
+		{
+			// Ana's sandbox lists the Linear server, which sets no tools: a
+			// tool it does not mark read-only starts at Approve, and the
+			// harness in the box would call it past the engine, unasked.
+			name: "a sandbox listing of a server that sets no tools", site: site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
+			input: sampleCompany,
+			mutate: func(in *Input) {
+				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleLinear}}
+			},
+			refused: "Seat/ana spec.sandbox.mcpServerRefs[0].name",
+			write: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				ana := role(t, doc, seatAna)
+				sandbox, _ := ana["sandbox"].(map[string]any)
+				if sandbox == nil {
+					sandbox = map[string]any{}
+					ana["sandbox"] = sandbox
+				}
+				sandbox["mcp"] = map[string]any{"servers": []any{sampleLinear}}
+			},
+			at: "sandbox.mcp.servers[0]", says: "it sets no default",
+		},
+		{
 			// Ana's box is given the github server, which the company now
-			// signs in to with OAuth.
+			// signs in to with OAuth. Every tool of it runs at Allow, so the
+			// sign-in is the one reason a box may not have it.
 			name: "a seat's box given a server signed in to with OAuth", site: site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
 			input: sampleCompany,
 			mutate: func(in *Input) {
 				server := toolServer(in, sampleGitHub)
 				server.Spec.Shared = new(true)
 				server.Spec.OAuth = v1alpha1.MCPOAuth{Client: v1alpha1.MCPOAuthClientCIMD}
+				server.Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
+				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleGitHub}}
 			},
 			refused: "Seat/ana spec.sandbox.mcpServerRefs[0].name",
 			write: func(t *testing.T, doc map[string]any) {
 				t.Helper()
+				found := false
 				for _, server := range doc[keyMCPServers].([]any) {
 					if entry := server.(map[string]any); entry[keyName] == sampleGitHub {
 						delete(entry, "shared")
 						entry["oauth"] = map[string]any{"client": "cimd"}
-						return
+						entry["tools"] = map[string]any{"default": levelAllow}
+						found = true
 					}
 				}
-				t.Fatalf("the document has no tool server %s", sampleGitHub)
+				if !found {
+					t.Fatalf("the document has no tool server %s", sampleGitHub)
+				}
+				ana := role(t, doc, seatAna)
+				sandbox, _ := ana["sandbox"].(map[string]any)
+				if sandbox == nil {
+					sandbox = map[string]any{}
+					ana["sandbox"] = sandbox
+				}
+				sandbox["mcp"] = map[string]any{"servers": []any{sampleGitHub}}
 			},
 			at: "sandbox.mcp.servers[0]", says: "signed in to with OAuth",
 		},
@@ -805,7 +871,7 @@ func engineCases() []engineCase {
 			input:   sampleCompany,
 			mutate:  linearAccess(v1alpha1.MCPServerAccess{UnitRefs: localRefs(unitPlatform, missing)}),
 			refused: "MCPServer/linear spec.access.unitRefs[1].name",
-			write:   grant(sampleLinear, map[string]any{"units": []any{missing, unitPlatform}}),
+			write:   grant(map[string]any{keyUnits: []any{missing, unitPlatform}}),
 			at:      "access.units[0]", says: `"missing" is no unit's key`,
 		},
 		{
@@ -813,7 +879,7 @@ func engineCases() []engineCase {
 			input:   sampleCompany,
 			mutate:  linearAccess(v1alpha1.MCPServerAccess{SeatRefs: localRefs(seatAna, missing)}),
 			refused: "MCPServer/linear spec.access.seatRefs[1].name",
-			write:   grant(sampleLinear, map[string]any{"seats": []any{seatAna, missing}}),
+			write:   grant(map[string]any{accessSeats: []any{seatAna, missing}}),
 			at:      "access.seats[1]", says: `"missing" is no seat's handle`,
 		},
 		{
@@ -823,7 +889,7 @@ func engineCases() []engineCase {
 				UnitRefs: localRefs(unitPlatform), ExceptSeatRefs: localRefs(missing),
 			}),
 			refused: "MCPServer/linear spec.access.exceptSeatRefs[0].name",
-			write:   grant(sampleLinear, map[string]any{"units": []any{unitPlatform}, "except": []any{missing}}),
+			write:   grant(map[string]any{keyUnits: []any{unitPlatform}, "except": []any{missing}}),
 			at:      "access.except[0]", says: `"missing" is no seat's handle`,
 		},
 		{
@@ -831,7 +897,7 @@ func engineCases() []engineCase {
 			input:   sampleCompany,
 			mutate:  linearAccess(v1alpha1.MCPServerAccess{SeatRefs: localRefs(seatAna, seatJane)}),
 			refused: "MCPServer/linear spec.access.seatRefs[1].name",
-			write:   grant(sampleLinear, map[string]any{"seats": []any{seatAna, seatJane}}),
+			write:   grant(map[string]any{accessSeats: []any{seatAna, seatJane}}),
 			at:      "access.seats[1]", says: "a person runs no tools",
 		},
 		{
@@ -841,7 +907,7 @@ func engineCases() []engineCase {
 				UnitRefs: localRefs(unitPlatform), ExceptSeatRefs: localRefs(seatJane),
 			}),
 			refused: "MCPServer/linear spec.access.exceptSeatRefs[0].name",
-			write:   grant(sampleLinear, map[string]any{"units": []any{unitPlatform}, "except": []any{seatJane}}),
+			write:   grant(map[string]any{keyUnits: []any{unitPlatform}, "except": []any{seatJane}}),
 			at:      "access.except[0]", says: "a person runs no tools",
 		},
 		{

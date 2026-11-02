@@ -52,6 +52,75 @@ type MCPToolAnnotations struct {
 	OpenWorld *bool `json:"openWorld,omitempty"`
 }
 
+// MCPToolLevel is the level a tool of a server runs at. It maps onto Crewlet's
+// tool levels (Allow is `allow`, Approve `approve`, Blocked `blocked`): Allow
+// offers the tool to every agent the server reaches and runs each call, Approve
+// offers it and holds each call until a person allows or denies it, and Blocked
+// never offers it to an agent, which is then neither listed to nor callable by
+// any of them.
+// +kubebuilder:validation:Enum=Allow;Approve;Blocked
+type MCPToolLevel string
+
+// The tool levels.
+const (
+	MCPToolLevelAllow   MCPToolLevel = "Allow"
+	MCPToolLevelApprove MCPToolLevel = "Approve"
+	MCPToolLevelBlocked MCPToolLevel = "Blocked"
+)
+
+// MCPToolLevelEntry sets the level of one tool of a server. It maps onto one
+// key of Crewlet's tools.levels.
+type MCPToolLevelEntry struct {
+	// tool is the tool's name as the server lists it, before toolPrefix:
+	// the name an operator reads off the server's listing, which stays the
+	// same when the prefix changes. A name holds no space and no control
+	// character, as no tool name does; a well-formed name the server does
+	// not list blocks nothing, and Crewlet names it on the server's page.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[^\p{Z}\p{Cc}]+$`
+	Tool string `json:"tool,omitempty"`
+
+	// level is the level the tool runs at.
+	// +required
+	Level MCPToolLevel `json:"level,omitempty"`
+}
+
+// MCPTools sets the level each tool of a server runs at. It maps onto
+// Crewlet's tools. A tool neither default nor levels sets starts at the level
+// its hints give it (toolAnnotations applied): Allow for a tool the server
+// marks read-only, Approve for every other, a tool with no hints included.
+//
+// Crewlet never files a blocked tool, so no agent is offered, lists or calls
+// it, on the engine or from an executor's sandbox through the engine's bridge,
+// and it runs a call to a tool at Approve only once a person allows it: an
+// executor's run parks on the person's answer, and every other phase is
+// refused the call. A sandbox that lists the server in
+// spec.sandbox.mcpServerRefs would reach it whole, past the engine, so a Seat
+// may list only a server whose every tool runs at Allow (default Allow and no
+// other level): the operator reports any other listing on the Seat and holds
+// the document, as Crewlet refuses it.
+// +kubebuilder:validation:MinProperties=1
+type MCPTools struct {
+	// default is the level of every tool levels does not name, a tool the
+	// server adds later included. Unset, each such tool starts at the level
+	// its hints give it: Allow for a tool the server marks read-only, Approve
+	// for every other. Crewlet's `tools.default`.
+	// +optional
+	Default MCPToolLevel `json:"default,omitempty"`
+
+	// levels sets one tool's level each, by the server's own name for it.
+	// Crewlet's `tools.levels`. At most 256, the most tools Crewlet lists of
+	// one server.
+	// +optional
+	// +listType=map
+	// +listMapKey=tool
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=256
+	Levels []MCPToolLevelEntry `json:"levels,omitempty"`
+}
+
 // MCPEnvVar is one variable of a Stdio tool server's environment, which every
 // instance of the server starts with: a credential, read from a Secret, or a
 // setting that is no credential, written as a literal value, such as the
@@ -555,6 +624,15 @@ type MCPServerSpec struct {
 	// +listMapKey=tool
 	// +kubebuilder:validation:MaxItems=128
 	ToolAnnotations []MCPToolAnnotations `json:"toolAnnotations,omitempty"`
+
+	// tools sets the level each of the server's tools runs at: default for
+	// every tool, levels for one tool by the server's own name. A Blocked
+	// tool is never offered to an agent, a call to a tool at Approve waits for
+	// a person's answer, and a Seat's sandbox may list only a server whose
+	// every tool runs at Allow. Unset, a tool the server marks read-only runs
+	// at Allow and every other tool at Approve. Crewlet's `tools`.
+	// +optional
+	Tools MCPTools `json:"tools,omitzero"`
 
 	// startupTimeoutSeconds bounds starting the server and the handshake,
 	// and separately its first tool listing, so a start can take up to twice

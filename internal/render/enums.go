@@ -106,6 +106,18 @@ func mcpTransport(t v1alpha1.MCPTransport) string {
 	return ""
 }
 
+func toolLevel(l v1alpha1.MCPToolLevel) string {
+	switch l {
+	case v1alpha1.MCPToolLevelAllow:
+		return "allow"
+	case v1alpha1.MCPToolLevelApprove:
+		return "approve"
+	case v1alpha1.MCPToolLevelBlocked:
+		return "blocked"
+	}
+	return ""
+}
+
 // mcpOAuthClient maps onto Crewlet's mcp_servers[].oauth.client.
 func mcpOAuthClient(c v1alpha1.MCPOAuthClient) string {
 	switch c {

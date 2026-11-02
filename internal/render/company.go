@@ -1123,6 +1123,7 @@ func (r *renderer) mcpServers() []mcpServerDoc {
 				}
 			}
 		}
+		doc.Tools = toolsOf(spec.Tools)
 		out = append(out, doc)
 		r.source(Path{keyMCPServers, i}, ObjectRef{Kind: KindMCPServer, Name: s.Name})
 	}
@@ -1172,6 +1173,42 @@ func (r *renderer) mcpAccess(s *v1alpha1.MCPServer) *mcpAccessDoc {
 	doc.Except = handles("exceptSeatRefs", a.ExceptSeatRefs)
 	slices.Sort(doc.Units)
 	return doc
+}
+
+// toolsOf is a server's tool levels as Crewlet's tools block, or nil where
+// the spec sets none, so the entry writes no tools.
+func toolsOf(t v1alpha1.MCPTools) *toolsDoc {
+	if t.Default == "" && len(t.Levels) == 0 {
+		return nil
+	}
+	doc := &toolsDoc{Default: toolLevel(t.Default)}
+	if len(t.Levels) > 0 {
+		doc.Levels = make(map[string]string, len(t.Levels))
+		for _, l := range t.Levels {
+			doc.Levels[l.Tool] = toolLevel(l.Level)
+		}
+	}
+	return doc
+}
+
+// allowsEveryTool reports whether every tool a server lists, whatever it
+// lists, runs at Allow: a default of Allow and no level holding one back. An
+// unset default leaves each tool at the level its hints give it, Approve for
+// any tool the server does not mark read-only, which no document can know
+// before the server lists. An executor's sandbox reaches a server whole, past
+// the engine, so Crewlet refuses a sandbox listing of any other server and
+// gives no sandbox one (MCPToolPolicy.AllowsEveryTool, validateBoxToolLevels
+// and sandboxMCP).
+func allowsEveryTool(t v1alpha1.MCPTools) bool {
+	if t.Default != v1alpha1.MCPToolLevelAllow {
+		return false
+	}
+	for _, l := range t.Levels {
+		if l.Level != v1alpha1.MCPToolLevelAllow {
+			return false
+		}
+	}
+	return true
 }
 
 // serverValue renders one of s's own values, of its env or its headers, under

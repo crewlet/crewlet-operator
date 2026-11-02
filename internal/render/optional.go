@@ -238,16 +238,18 @@ const fieldOptionalKeys = "spec.optionalKeys"
 // as a seat's instance, for every agent seat a per-seat server reaches
 // (reaches, Crewlet's MCPServer.Grants), whether or not the seat or its unit
 // gives it values; and in an executor's box, for every agent seat the server
-// reaches whose spec.sandbox.mcpServerRefs names it, shared or not
-// (sandboxMCP), and never a box a server signed in to with OAuth, which
-// Crewlet refuses the document for. A seat's instance and box are given the
-// server's own values with its unit's block laid over them and its own over
-// that, a key compared as the server compares its keys (sameKey): Crewlet
-// lays a unit's block under the direct agent members' (inheritMCPEnv), and a
-// seat's whole block over the server's (resolveServer). A block for a server
-// that does not reach its seat starts nothing: Crewlet refuses the document
-// that holds one, unless it reads the block itself (a server named github,
-// gitlab, datadog, atlassian, jira or confluence).
+// reaches whose spec.sandbox.mcpServerRefs names it, shared or not, while
+// every tool of it runs at Allow, its spec.tools a default of Allow and no
+// other level, and it is not signed in to with OAuth (sandboxMCP gives no box
+// any other server, and Crewlet refuses the document that lists one). A seat's
+// instance and box are given the server's own values with its unit's block
+// laid over them and its own over that, a key compared as the server compares
+// its keys (sameKey): Crewlet lays a unit's block under the direct agent
+// members' (inheritMCPEnv), and a seat's whole block over the server's
+// (resolveServer). A block for a server that does not reach its seat starts
+// nothing: Crewlet refuses the document that holds one, unless it reads the
+// block itself (a server named github, gitlab, datadog, atlassian, jira or
+// confluence).
 //
 // A seat's executor run, which every agent seat whose executor can launch
 // starts once the Company places its runs (ExecutorOf), is given the
@@ -278,8 +280,9 @@ func (r *renderer) markStarted() []StartValue {
 			if seat.Spec.Kind == v1alpha1.SeatKindHuman || !r.reaches(s, seat) {
 				continue
 			}
-			boxed := s.Spec.OAuth.Client == "" && slices.ContainsFunc(seat.Spec.Sandbox.MCPServerRefs,
-				func(ref v1alpha1.LocalObjectReference) bool { return ref.Name == s.Name })
+			boxed := allowsEveryTool(s.Spec.Tools) && s.Spec.OAuth.Client == "" &&
+				slices.ContainsFunc(seat.Spec.Sandbox.MCPServerRefs,
+					func(ref v1alpha1.LocalObjectReference) bool { return ref.Name == s.Name })
 			if shared && !boxed {
 				continue
 			}

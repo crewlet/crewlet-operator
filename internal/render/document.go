@@ -295,6 +295,7 @@ type mcpServerDoc struct {
 	ToolPrefix            string                        `json:"tool_prefix,omitempty"`
 	SeatCredentials       []seatCredentialDoc           `json:"seat_credentials,omitempty"`
 	ToolAnnotations       map[string]toolAnnotationsDoc `json:"tool_annotations,omitempty"`
+	Tools                 *toolsDoc                     `json:"tools,omitempty"`
 	StartupTimeoutSeconds int32                         `json:"startup_timeout_seconds,omitempty"`
 	RequestTimeoutSeconds int32                         `json:"request_timeout_seconds,omitempty"`
 }
@@ -327,6 +328,13 @@ type seatCredentialDoc struct {
 	Field  string `json:"field,omitempty"`
 	Key    string `json:"key"`
 	Prefix string `json:"prefix,omitempty"`
+}
+
+// toolsDoc is the level each tool of a server runs at, levels keyed by the
+// server's own name for the tool.
+type toolsDoc struct {
+	Default string            `json:"default,omitempty"`
+	Levels  map[string]string `json:"levels,omitempty"`
 }
 
 type toolAnnotationsDoc struct {
