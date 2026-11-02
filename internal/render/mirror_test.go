@@ -461,7 +461,7 @@ const (
 	// mcpAccessGo is where the engine decides whom a tool server reaches.
 	mcpAccessGo = "internal/config/mcpaccess.go"
 	// mcpOAuthRead is crewlet/crewlet#588's engine, read at its head
-	// (448b277915), which signs the company in to a remote MCP server with
+	// (81fc602507), which signs the company in to a remote MCP server with
 	// OAuth (mcp_servers[].oauth). resolveServer holds a server back while the
 	// secret of its own OAuth client resolves to nothing, as it does on its
 	// url, under no optional_keys: the render gives that secret as a value the
@@ -477,9 +477,9 @@ const (
 	// Crewlet refuses such a listing on every write, which the render refuses
 	// too (the role's finding), and markStarted starts no box's values for
 	// one.
-	mcpOAuthRead = "v0.1.1-0.20261102114923-448b277915ed"
+	mcpOAuthRead = "v0.1.1-0.20261102130311-81fc6025077c"
 	// inboxLaneRead is crewlet/crewlet#563's (*Queue).attach, read at
-	// crewlet/crewlet#588's head (448b277915), which carries it. An attach to
+	// crewlet/crewlet#588's head (81fc602507), which carries it. An attach to
 	// a topic with a priority lane now opens the lane's durable consumer
 	// after the topic's own, each looked up under the lookup budget and
 	// settled; queue.HasLane holds for a seat's inbox alone
@@ -488,7 +488,7 @@ const (
 	// one consumer (openConsumer is the old lookup and settle, moved into a
 	// function of its own), and no boot window moves. This closes
 	// crewlet-operator#66.
-	inboxLaneRead = "v0.1.1-0.20261102114923-448b277915ed"
+	inboxLaneRead = "v0.1.1-0.20261102130311-81fc6025077c"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
