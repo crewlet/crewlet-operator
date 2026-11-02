@@ -467,6 +467,16 @@ const (
 	// inbox, so its attach still looks its one consumer up and reads it back,
 	// and the data pod's boot window that counts it holds.
 	inboxLaneRead = "v0.1.1-0.20261102131138-65fce4b904ff"
+	// mcpOAuthRead is crewlet/crewlet#588's engine, read on crewlet's main
+	// where it merged (e4e51c1213), which signs Crewlet in to a remote MCP
+	// server with OAuth (mcp_servers[].oauth). A server signed in to with
+	// OAuth is started with the bearer the engine holds for it, or held back
+	// until somebody signs in (startSharedServers), its client secret is one
+	// of the values it waits for (resolveServer), and sandboxMCP gives no box
+	// such a server. The operator renders no oauth block yet, so no rendered
+	// server is signed in to with OAuth, and the render's copies hold as they
+	// were.
+	mcpOAuthRead = "v0.1.1-0.20261102154049-e4e51c1213ee"
 	// toolApprovalRead is crewlet/crewlet#591's engine, read at its branch
 	// head, which adds the approve level (a call to such a tool waits for a
 	// person's answer) and starts a tool nothing sets at the level its hints
@@ -476,7 +486,7 @@ const (
 	// sandboxMCP gives no box one. The render follows it: it writes Approve,
 	// refuses such a listing on the Seat, and starts no value a box would
 	// be given such a server.
-	toolApprovalRead = "v0.1.1-0.20261102132043-b9c953adaf7e"
+	toolApprovalRead = "v0.1.1-0.20261102163221-830fc19bc61f"
 	// mcpRiskGo is where the engine reads a tool's hints as a risk, and the
 	// level a tool nothing sets starts at.
 	mcpRiskGo = "internal/mcp/risk.go"
@@ -959,9 +969,10 @@ var mirrored = []mirror{
 			"by key, merged by the key the server reads (a header in any case) before anything resolves, so a seat's " +
 			"key replaces the server's whole; a value that resolves to nothing, or to an empty value, is left out " +
 			"where the server's optional_keys lists its key, whichever layer wrote it, and holds the server back " +
-			"otherwise; and a url that resolves to nothing holds it back whatever optional_keys says",
-		digest: "9c0e4c752f99ed95681917f85f0168b0ef8e690b7454d07341d88788200fad67",
-		read:   seatAppTokenRead,
+			"otherwise; and a url that resolves to nothing holds it back whatever optional_keys says (and, for a " +
+			"server signed in to with OAuth, which the operator does not render, its client secret too)",
+		digest: "4bbbc9ef6bbe9d2f83a692b07b352845e65dd8bb5dba034141922c77851fce31",
+		read:   mcpOAuthRead,
 	},
 	{
 		file: toolCredentialsGo, name: "(*refGap).hold",
@@ -976,9 +987,10 @@ var mirrored = []mirror{
 		file: engineMCPGo, name: "(*Engine).startSharedServers",
 		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
 		decides: "a shared server is started once for the company, with its own values alone (no seat's block), " +
-			"unless it is turned off, which starts nothing",
-		digest: "e25cd3a65c03750a8ce653985d913984eb4356ffd9ccccfd113f378c190f6d6c",
-		read:   serverHealthRead,
+			"unless it is turned off, which starts nothing (or signed in to with OAuth and not yet signed in to, " +
+			"which the operator does not render)",
+		digest: "3c581857e795bed9e0419f2e544f7ced919fd144795bbf0b975598565cd1270e",
+		read:   mcpOAuthRead,
 	},
 	{
 		file: engineMCPGo, name: "seatSpecs",
@@ -1035,9 +1047,10 @@ var mirrored = []mirror{
 		against: []string{renderOptionalGo, configOptionalGo},
 		decides: "an executor's box is given every server its seat's sandbox scopes and the seat is granted, shared " +
 			"or not, with the seat's block for it, none turned off, none at an address Crewlet would not dial, and " +
-			"none that holds a tool back from the agents",
-		digest: "4ab172f004f9da63fb2c8b638b38b308040d7cbb5875304c86b88dac1453e70b",
-		read:   toolLevelsRead,
+			"none that holds a tool back from the agents (nor one signed in to with OAuth, which the operator does " +
+			"not render)",
+		digest: "c6cae9f55a07202264908ee378b6b6fec1d6ff3c33b31c73ad1478df768cb850",
+		read:   mcpOAuthRead,
 	},
 	{
 		file: mcpToolsGo, name: "MCPToolLevels",

@@ -526,7 +526,7 @@ type MCPServerSpec struct {
 	// every tool runs at Allow. Unset, a tool the server marks read-only runs
 	// at Allow and every other tool at Approve. Crewlet's `tools`.
 	// +optional
-	Tools *MCPTools `json:"tools,omitempty"`
+	Tools MCPTools `json:"tools,omitzero"`
 
 	// startupTimeoutSeconds bounds starting the server and the handshake,
 	// and separately its first tool listing, so a start can take up to twice

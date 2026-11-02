@@ -310,7 +310,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			name: "a per-seat server's own value an executor's box is given",
 			mutate: func(in *Input) {
 				toolServer(in, optionalTavily).Spec.Shared = new(false)
-				toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
 				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
 			},
 			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: registry, want: true,
@@ -334,7 +334,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
 					}},
 				})
-				toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
 				seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
 			},
 			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue, want: true,
@@ -344,7 +344,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			name: "a seat's value for a shared server its box lists and its grant leaves out",
 			mutate: func(in *Input) {
 				toolServer(in, optionalTavily).Spec.Access = &v1alpha1.MCPServerAccess{}
-				toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
 				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
 					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
 						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
@@ -387,7 +387,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			name: "a seat's value for a server its box is given, when the server is turned off",
 			mutate: func(in *Input) {
 				toolServer(in, optionalTavily).Spec.Enabled = new(false)
-				toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow}
 				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
 					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
 						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
@@ -404,7 +404,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 		{
 			name: "a seat's value for a shared server its box is given, when the server blocks a tool",
 			mutate: func(in *Input) {
-				toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow,
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow,
 					Levels: []v1alpha1.MCPToolLevelEntry{{Tool: toolCrawl, Level: v1alpha1.MCPToolLevelBlocked}}}
 				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
 					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
@@ -418,7 +418,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 		{
 			name: "a seat's value for a shared server its box is given, when every tool is allowed",
 			mutate: func(in *Input) {
-				toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow,
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow,
 					Levels: []v1alpha1.MCPToolLevelEntry{{Tool: toolCrawl, Level: v1alpha1.MCPToolLevelAllow}}}
 				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
 					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
@@ -448,7 +448,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 		{
 			name: "a seat's value for a shared server its box is given, when a tool waits for approval",
 			mutate: func(in *Input) {
-				toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow,
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelAllow,
 					Levels: []v1alpha1.MCPToolLevelEntry{{Tool: toolCrawl, Level: v1alpha1.MCPToolLevelApprove}}}
 				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
 					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
@@ -462,7 +462,7 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 		{
 			name: "a seat's value for a shared server its box is given, when the server blocks every tool",
 			mutate: func(in *Input) {
-				toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelBlocked}
+				toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelBlocked}
 				seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
 					Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
 						Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},

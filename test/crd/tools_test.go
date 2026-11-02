@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "github.com/crewlet/crewlet-operator/api/v1alpha1"
@@ -471,7 +473,7 @@ func TestMCPServerValidation(t *testing.T) {
 		},
 		{
 			name: "tool levels by the server's own names are accepted",
-			mutate: withTools(&v1.MCPTools{Default: v1.MCPToolLevelBlocked, Levels: []v1.MCPToolLevelEntry{
+			mutate: withTools(v1.MCPTools{Default: v1.MCPToolLevelBlocked, Levels: []v1.MCPToolLevelEntry{
 				{Tool: "list_invoices", Level: v1.MCPToolLevelAllow},
 				{Tool: "get-invoice.v2", Level: v1.MCPToolLevelAllow},
 				{Tool: "void_invoice", Level: v1.MCPToolLevelApprove},
@@ -479,23 +481,23 @@ func TestMCPServerValidation(t *testing.T) {
 		},
 		{
 			name:   "a default of Approve is accepted",
-			mutate: withTools(&v1.MCPTools{Default: v1.MCPToolLevelApprove}),
+			mutate: withTools(v1.MCPTools{Default: v1.MCPToolLevelApprove}),
 		},
 		{
 			name:   "a default outside Allow, Approve and Blocked is refused",
-			mutate: withTools(&v1.MCPTools{Default: "Ask"}),
+			mutate: withTools(v1.MCPTools{Default: "Ask"}),
 			want:   "spec.tools.default: Unsupported value",
 		},
 		{
 			name: "a level outside Allow, Approve and Blocked is refused",
-			mutate: withTools(&v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
+			mutate: withTools(v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
 				{Tool: toolDeleteInvoice, Level: "approve"},
 			}}),
 			want: "spec.tools.levels[0].level: Unsupported value",
 		},
 		{
 			name: "a tool named with a space is refused",
-			mutate: withTools(&v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
+			mutate: withTools(v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
 				{Tool: "delete invoice", Level: v1.MCPToolLevelBlocked},
 			}}),
 			want: msgToolName,
@@ -503,32 +505,44 @@ func TestMCPServerValidation(t *testing.T) {
 		{
 			// A NO-BREAK SPACE is a space to Crewlet, though not to \s.
 			name: "a tool named with a no-break space is refused",
-			mutate: withTools(&v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
+			mutate: withTools(v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
 				{Tool: "delete invoice", Level: v1.MCPToolLevelBlocked},
 			}}),
 			want: msgToolName,
 		},
 		{
 			name: "a tool named with a control character is refused",
-			mutate: withTools(&v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
+			mutate: withTools(v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
 				{Tool: "delete\x7finvoice", Level: v1.MCPToolLevelBlocked},
 			}}),
 			want: msgToolName,
 		},
 		{
 			name: "one tool given two levels is refused",
-			mutate: withTools(&v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
+			mutate: withTools(v1.MCPTools{Levels: []v1.MCPToolLevelEntry{
 				{Tool: toolDeleteInvoice, Level: v1.MCPToolLevelBlocked},
 				{Tool: toolDeleteInvoice, Level: v1.MCPToolLevelAllow},
 			}}),
 			want: "spec.tools.levels[1]: Duplicate value",
 		},
-		{
-			name:   "an empty tools block is refused",
-			mutate: withTools(&v1.MCPTools{}),
-			want:   "should have at least 1 properties",
-		},
 	})
+}
+
+// TestMCPServerToolsBlockNamesALevel holds an MCPServer's tools block to set a
+// level: an empty block is refused rather than read as none. A typed client
+// never sends one (the empty value is omitted), so it is written as a manifest
+// would write it.
+func TestMCPServerToolsBlockNamesALevel(t *testing.T) {
+	content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(mcpServer(newNamespace(t), "empty-tools"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := &unstructured.Unstructured{Object: content}
+	empty.SetGroupVersionKind(v1.GroupVersion.WithKind("MCPServer"))
+	if err := unstructured.SetNestedMap(empty.Object, map[string]any{}, "spec", "tools"); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, k8sClient.Create(ctx, empty), "spec.tools")
 }
 
 // toolDeleteInvoice is a tool the level cases block, and msgToolName the API
@@ -539,7 +553,7 @@ const (
 )
 
 // withTools sets an MCPServer's tool levels.
-func withTools(tools *v1.MCPTools) func(*v1.MCPServer) {
+func withTools(tools v1.MCPTools) func(*v1.MCPServer) {
 	return func(s *v1.MCPServer) { s.Spec.Tools = tools }
 }
 

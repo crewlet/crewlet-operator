@@ -24,7 +24,7 @@ const (
 // none, which Crewlet reads as each tool at the level its hints give it.
 func TestToolLevelsAreWrittenByTheServersOwnNames(t *testing.T) {
 	in := optionalInput(t)
-	toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{
+	toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{
 		Default: v1alpha1.MCPToolLevelBlocked,
 		Levels: []v1alpha1.MCPToolLevelEntry{
 			{Tool: "tavily_search", Level: v1alpha1.MCPToolLevelAllow},
@@ -43,12 +43,12 @@ func TestToolLevelsAreWrittenByTheServersOwnNames(t *testing.T) {
 		t.Errorf("tools.levels is %v, want %v", levels, want)
 	}
 
-	toolServer(in, optionalTavily).Spec.Tools = &v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelApprove}
+	toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{Default: v1alpha1.MCPToolLevelApprove}
 	if tools, _ := renderedServer(t, in, optionalTavily)["tools"].(map[string]any); tools["default"] != levelApprove {
 		t.Errorf("a default of Approve writes tools %v, want default approve", tools)
 	}
 
-	toolServer(in, optionalTavily).Spec.Tools = nil
+	toolServer(in, optionalTavily).Spec.Tools = v1alpha1.MCPTools{}
 	if tools, ok := renderedServer(t, in, optionalTavily)["tools"]; ok {
 		t.Errorf("a server that sets no level writes tools %v, want none", tools)
 	}

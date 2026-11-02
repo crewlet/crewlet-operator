@@ -95,7 +95,7 @@ func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := constsOf(t, source, path.Dir(providers))
-	list, ok := declared(t, providers, src, token.VAR, "ExecutorHarnesses").(*ast.CompositeLit)
+	list, ok := declared(t, providers, src, "ExecutorHarnesses").(*ast.CompositeLit)
 	if !ok {
 		t.Fatalf("ExecutorHarnesses in %s is no literal", providers)
 	}
@@ -118,7 +118,7 @@ func TestExecutorHarnessesFollowTheEngineSource(t *testing.T) {
 // returns one string constant of the package.
 func runnerNames(t *testing.T, source *os.Root, file string, src []byte) []string {
 	t.Helper()
-	list, ok := declared(t, file, src, token.VAR, "harnesses").(*ast.CompositeLit)
+	list, ok := declared(t, file, src, "harnesses").(*ast.CompositeLit)
 	if !ok {
 		t.Fatalf("harnesses in %s is no literal", file)
 	}
@@ -324,7 +324,7 @@ func crdOf(t *testing.T, kind string) any {
 // the Go source src of file.
 func stringSliceVar(t *testing.T, file string, src []byte, name string) []string {
 	t.Helper()
-	return stringLiterals(t, file, name, declared(t, file, src, token.VAR, name))
+	return stringLiterals(t, file, name, declared(t, file, src, name))
 }
 
 // stringLiterals is the string literals of e, a literal of a []string of
@@ -356,9 +356,9 @@ func stringLiteral(t *testing.T, file, name string, e ast.Expr) string {
 	return s
 }
 
-// declared is the value a var or const (tok) of name alone is declared with
-// in the Go source src of file.
-func declared(t *testing.T, file string, src []byte, tok token.Token, name string) ast.Expr {
+// declared is the value a var of name alone is declared with in the Go source
+// src of file.
+func declared(t *testing.T, file string, src []byte, name string) ast.Expr {
 	t.Helper()
 	parsed, err := parser.ParseFile(token.NewFileSet(), file, src, 0)
 	if err != nil {
@@ -366,7 +366,7 @@ func declared(t *testing.T, file string, src []byte, tok token.Token, name strin
 	}
 	for _, decl := range parsed.Decls {
 		gen, ok := decl.(*ast.GenDecl)
-		if !ok || gen.Tok != tok {
+		if !ok || gen.Tok != token.VAR {
 			continue
 		}
 		for _, spec := range gen.Specs {
@@ -376,7 +376,7 @@ func declared(t *testing.T, file string, src []byte, tok token.Token, name strin
 			}
 		}
 	}
-	t.Fatalf("%s declares no %s %s", file, tok, name)
+	t.Fatalf("%s declares no var %s", file, name)
 	return nil
 }
 

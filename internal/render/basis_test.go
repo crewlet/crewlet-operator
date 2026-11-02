@@ -695,7 +695,7 @@ func engineCases() []engineCase {
 			name: "a sandbox listing of a server that holds a tool back", site: site{fnRole, EngineRefuses, v1alpha1.ReasonConflict},
 			input: sampleCompany,
 			mutate: func(in *Input) {
-				toolServer(in, sampleLinear).Spec.Tools = &v1alpha1.MCPTools{Levels: []v1alpha1.MCPToolLevelEntry{
+				toolServer(in, sampleLinear).Spec.Tools = v1alpha1.MCPTools{Levels: []v1alpha1.MCPToolLevelEntry{
 					{Tool: "delete_issue", Level: v1alpha1.MCPToolLevelBlocked},
 				}}
 				seat(in, seatAna).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: sampleLinear}}

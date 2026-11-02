@@ -161,6 +161,7 @@ harness's, take no literal value.
 | Crewlet position | Why it is not offered |
 |---|---|
 | `providers.sandbox.local.runtime_env.*` | Crewlet's `container` cell, the one this environment is for, is not offered: `Company.spec.sandbox` places a seat's executor run `Direct` or in `E2B`, and `spec.engineConfig` may not set `providers`. |
+| `mcp_servers[].oauth.client_secret` | Signing Crewlet in to an MCP server with OAuth is not offered: `MCPServer.spec` has no `oauth` block, so no rendered server reads a client secret. |
 | `integrations.slack.app_config_token` | The operator's Slack seats are apps made outside the engine, whose credentials each Seat hands in from a Secret (`Seat.spec.integrations.slack.credentialsSecretRef`); the engine creating each agent's app, which this token is for, is not offered. |
 
 ---

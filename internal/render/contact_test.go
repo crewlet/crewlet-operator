@@ -485,7 +485,7 @@ func TestAtlassianDeploymentFollowsTheEngineSource(t *testing.T) {
 func engineEnvironments(t *testing.T, src []byte) []atlassianEnvironment {
 	t.Helper()
 	const name = "environments"
-	list, ok := declared(t, atlassianHostGo, src, token.VAR, name).(*ast.CompositeLit)
+	list, ok := declared(t, atlassianHostGo, src, name).(*ast.CompositeLit)
 	if !ok {
 		t.Fatalf("%s in %s is no literal", name, atlassianHostGo)
 	}
