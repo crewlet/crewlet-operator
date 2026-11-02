@@ -56,6 +56,8 @@ const (
 	// keyClientSecret is the key of the Secret a test's OAuth client takes
 	// its secret from.
 	keyClientSecret = "clientSecret"
+	// serviceClientID is the id a test's service identity signs in as.
+	serviceClientID = "crewlet-agents"
 )
 
 // provisionedGitLab is the token the engine mints for a seat's GitLab
@@ -482,6 +484,26 @@ func TestStartedValuesAreTheOnesTheEngineStartsWith(t *testing.T) {
 			mutate: func(in *Input) { signInTavily(in) },
 			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: fieldOAuthClientSecret, want: true,
 		},
+		// A SERVICE IDENTITY signs in with its client's secret at every
+		// access token it is issued, and Crewlet holds the server back on
+		// it as it does on a person's sign-in's.
+		{
+			name:   "a service identity's client secret",
+			mutate: func(in *Input) { signInTavilyAsService(in) },
+			object: ObjectRef{Kind: KindMCPServer, Name: optionalTavily}, field: fieldOAuthClientSecret, want: true,
+		},
+		// NO BOX IS GIVEN A SERVER SIGNED IN TO WITH OAUTH, by either grant
+		// (sandboxMCP), so a seat's value for it starts nothing there.
+		{
+			name:   "a seat's value for a server signed in to with OAuth its box lists",
+			mutate: func(in *Input) { signInTavily(in); boxTavily(in) },
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
+		{
+			name:   "a seat's value for a service identity its box lists",
+			mutate: func(in *Input) { signInTavilyAsService(in); boxTavily(in) },
+			object: ObjectRef{Kind: KindSeat, Name: optionalSeat}, field: fieldSecondServerValue,
+		},
 		{
 			name: "a shared server's OAuth client secret when it is turned off",
 			mutate: func(in *Input) {
@@ -610,6 +632,25 @@ func signInTavily(in *Input) {
 		Client: v1alpha1.MCPOAuthClientOwn, ClientID: "crewlet-optional",
 		ClientSecret: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: "tavily-oauth", Key: keyClientSecret}},
 	}
+}
+
+// signInTavilyAsService makes the optional-keys case's tavily server a remote
+// one the engine signs in to as the company's service identity.
+func signInTavilyAsService(in *Input) {
+	signInTavily(in)
+	o := &toolServer(in, optionalTavily).Spec.OAuth
+	o.Grant, o.Client = v1alpha1.MCPOAuthGrantClientCredentials, ""
+}
+
+// boxTavily gives the optional-keys case's seat a value of its own for the
+// tavily server, and lists the server for the seat's box.
+func boxTavily(in *Input) {
+	seat(in, optionalSeat).Spec.MCP = append(seat(in, optionalSeat).Spec.MCP, v1alpha1.MCPCredentials{
+		Name: optionalTavily, Env: []v1alpha1.MCPCredentialValue{{
+			Name: envTavilyKey, ValueFrom: v1alpha1.SecretValueSource{SecretKeyRef: v1alpha1.SecretKeyReference{Name: coderTavily, Key: keyAPIKey}},
+		}},
+	})
+	seat(in, optionalSeat).Spec.Sandbox.MCPServerRefs = []v1alpha1.LocalObjectReference{{Name: optionalTavily}}
 }
 
 // optionalInput is the optional-keys case's input.
