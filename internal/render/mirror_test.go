@@ -459,6 +459,14 @@ const (
 	// spec.tools, refuses such a listing on the Seat, and starts no value a
 	// box would be given such a server.
 	toolLevelsRead = "v0.1.1-0.20261102131138-65fce4b904ff"
+	// inboxLaneRead is crewlet's main at 65fce4b904, read for
+	// (*Queue).attach, which crewlet/crewlet#563 moved: an agent's inbox gains
+	// a priority lane, a second consumer attach opens beside the topic's own
+	// (queue.HasLane), and both are opened by openConsumer, the lookup and
+	// read-back attach made inline before. The custody keeper's topic is no
+	// inbox, so its attach still looks its one consumer up and reads it back,
+	// and the data pod's boot window that counts it holds.
+	inboxLaneRead = "v0.1.1-0.20261102131138-65fce4b904ff"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -2060,9 +2068,9 @@ var mirrored = []mirror{
 		file: "internal/queue/jetstream/attach.go", name: "(*Queue).attach",
 		against: bootWindows,
 		decides: "attaching a durable group looks up, creates and reads back its consumer, then looks it up and " +
-			"reads it back again",
-		digest: "c10a5e667bc9202dd55d2322b9a559a79adfde4884020720c8f933c7e196e118",
-		read:   bootBoundsRead,
+			"reads it back again, and an agent's inbox its lane's consumer too",
+		digest: "17c1001b72e34f1d49be6db7cb3ee885c721098d6eaee5e52acc9eb8caeb0274",
+		read:   inboxLaneRead,
 	},
 	{
 		file: embeddedGo, name: "(*embeddedServer).awaitLeafReady",
