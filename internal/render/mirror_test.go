@@ -429,6 +429,15 @@ const (
 	// The servers it gives, withholds and refuses are as at entryRulesRead,
 	// so the render's copy holds. No other mirror moved.
 	harnessCopyRead = "v0.1.1-0.20261101181230-5936f3b46c60"
+	// serverHealthRead is crewlet/crewlet#554's engine, read on crewlet's main
+	// where it merged (2f52194d02), which keeps each MCP server's health.
+	// startSharedServers now stamps when each shared server's outcome began
+	// before it replaces the outcomes, so a server's page can say how long it
+	// has been serving or down. Which servers it starts, and with which
+	// values, is as it was. It also exports privateHost as MCPPrivateHost, the
+	// one reading a server's page shares with MCPAddressProblem, which now
+	// calls it by that name; neither rule moved, so the render's copies hold.
+	serverHealthRead = "v0.1.1-0.20261102002330-2f52194d0262"
 	// roleAccessGo is where the engine states each vendor's fixed set of
 	// what a seat may hold.
 	roleAccessGo = "internal/config/roleaccess.go"
@@ -914,8 +923,8 @@ var mirrored = []mirror{
 		against: []string{renderOptionalGo, configOptionalGo, toolServersMd},
 		decides: "a shared server is started once for the company, with its own values alone (no seat's block), " +
 			"unless it is turned off, which starts nothing",
-		digest: "4eaab48e86a149a21ff2cf483933d70fe8c9a8e1195ea035a564b61a9f8ae730",
-		read:   serverOffRead,
+		digest: "e25cd3a65c03750a8ce653985d913984eb4356ffd9ccccfd113f378c190f6d6c",
+		read:   serverHealthRead,
 	},
 	{
 		file: engineMCPGo, name: "seatSpecs",
@@ -990,17 +999,17 @@ var mirrored = []mirror{
 		file: mcpNamesGo, name: "MCPAddressProblem",
 		against: []string{mcpServerTypesGo},
 		decides: "a tool server's url is https, or plain http to a host on no public network, with no user in it",
-		digest:  "b114a4439a6dd57685a0b507b31035105e98df4533872de62603b91fe31594a8",
-		read:    entryRulesRead,
+		digest:  "1da77eba150454d25a97504c9a7c4d6f6f8e90eab98016065af51e3a8fab13e7",
+		read:    serverHealthRead,
 	},
 	{
-		file: mcpNamesGo, name: "privateHost",
+		file: mcpNamesGo, name: "MCPPrivateHost",
 		against: []string{mcpServerTypesGo},
 		decides: "a host on no public network is an address httpx.Public does not route, a one-label name, " +
 			"localhost, or a name under .localhost, .local, .home.arpa or .internal; the API accepts the loopback, " +
 			"private, link-local and shared (RFC 6598) ones of those addresses and refuses the rest",
-		digest: "43b83a62cb2b2f2d5dba70a4e0c8bc441996f62149c1f497560bc2636736a0a0",
-		read:   entryRulesRead,
+		digest: "1495bb79fe2b2de1183690c3ac04945d0e38b4f48e6f51cdc72fb3b0e374a978",
+		read:   serverHealthRead,
 	},
 	{
 		file: mcpConfigGo, name: "breaksALine",
