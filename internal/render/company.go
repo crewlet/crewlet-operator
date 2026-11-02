@@ -1297,6 +1297,38 @@ func (r *renderer) mcpEnv(kind, name string, creds []v1alpha1.MCPCredentials) ma
 	return out
 }
 
+// mcpLimits renders a Unit's or a Seat's limits on tool servers as Crewlet's
+// mcp_limits, a mapping from server name to what the limit holds back. A limit
+// naming an MCPServer this namespace does not hold is reported on the object,
+// as an mcp entry naming one is: Crewlet refuses a limit on a server the
+// company does not declare, since it would hold back whichever server later
+// took the name.
+func (r *renderer) mcpLimits(kind, name string, limits []v1alpha1.MCPLimit) map[string]mcpLimitDoc {
+	if len(limits) == 0 {
+		return nil
+	}
+	out := make(map[string]mcpLimitDoc, len(limits))
+	for i, l := range limits {
+		if r.mcp[l.Name] == nil {
+			r.errs.notFound(HarmsBeyond, kind, name, fmt.Sprintf("spec.mcpLimits[%d].name", i), fmt.Sprintf(
+				"names MCPServer %s, which does not exist in namespace %s", l.Name, r.namespace()))
+			continue
+		}
+		var doc mcpLimitDoc
+		if l.Enabled != nil && !*l.Enabled {
+			doc.Enabled = new(false)
+		}
+		if len(l.Tools) > 0 {
+			doc.Tools = make(map[string]string, len(l.Tools))
+			for _, t := range l.Tools {
+				doc.Tools[t.Tool] = limitLevel(t.Level)
+			}
+		}
+		out[l.Name] = doc
+	}
+	return out
+}
+
 // sortedByName returns pointers to the objects in items, ordered by
 // metadata.name, leaving items as it is.
 func sortedByName[T any, P interface {

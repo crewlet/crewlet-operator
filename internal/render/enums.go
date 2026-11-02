@@ -118,6 +118,16 @@ func toolLevel(l v1alpha1.MCPToolLevel) string {
 	return ""
 }
 
+func limitLevel(l v1alpha1.MCPLimitLevel) string {
+	switch l {
+	case v1alpha1.MCPLimitLevelApprove:
+		return "approve"
+	case v1alpha1.MCPLimitLevelBlocked:
+		return "blocked"
+	}
+	return ""
+}
+
 // mcpOAuthGrant maps onto Crewlet's mcp_servers[].oauth.grant: "" where the
 // MCPServer gives no grant, which Crewlet reads as authorization_code.
 func mcpOAuthGrant(g v1alpha1.MCPOAuthGrant) string {

@@ -101,6 +101,81 @@ type MCPCredentials struct {
 	Env []MCPCredentialValue `json:"env,omitempty"`
 }
 
+// MCPLimitLevel is the level a limit holds a tool of a server to. It maps onto
+// Crewlet's limit levels (Approve is `approve`, Blocked `blocked`): Approve
+// holds each call until a person allows or denies it, and Blocked never offers
+// the tool. A limit has no Allow: only the MCPServer's own spec.tools lets a
+// tool run.
+// +kubebuilder:validation:Enum=Approve;Blocked
+type MCPLimitLevel string
+
+// The limit levels.
+const (
+	MCPLimitLevelApprove MCPLimitLevel = "Approve"
+	MCPLimitLevelBlocked MCPLimitLevel = "Blocked"
+)
+
+// MCPToolLimit holds one tool of a server to a level. It maps onto one key of
+// an entry of Crewlet's `mcp_limits`, `tools`.
+type MCPToolLimit struct {
+	// tool is the tool's name as the server lists it, before toolPrefix, as
+	// the MCPServer's spec.tools.levels names it. A name holds no space and
+	// no control character, as no tool name does.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[^\p{Z}\p{Cc}]+$`
+	Tool string `json:"tool,omitempty"`
+
+	// level is the level the tool is held to. It runs at the stricter of this
+	// and its own level on the MCPServer.
+	// +required
+	Level MCPLimitLevel `json:"level,omitempty"`
+}
+
+// MCPLimit narrows one tool server for the agent seats it applies to: a Seat,
+// or every agent seat beneath a Unit at any depth. It maps onto one entry of
+// Crewlet's `mcp_limits`, keyed by the server's name.
+//
+// A limit only narrows. Crewlet holds each agent seat to the strictest of its
+// own limits, every enclosing unit's and the MCPServer's own spec.tools: a
+// server any of them turns off is off for the seat, and a tool runs at the
+// strictest level any of them sets, so no limit lets a tool run that the
+// MCPServer blocks or holds for approval. A server turned off keeps its grant
+// (the MCPServer's access) and the seat's values for it.
+//
+// A seat's sandbox reaches a server whole, past the engine, so Crewlet refuses
+// spec.sandbox.mcpServerRefs naming a server the seat's limits hold a tool of
+// back, which its dry run reports as Invalid on the Seat. A server a limit
+// turns off is kept in the listing and given to no sandbox.
+// +kubebuilder:validation:XValidation:rule="!has(self.enabled) || !self.enabled",message="a limit cannot turn a server on: only the MCPServer does; set enabled to false, or leave it out"
+// +kubebuilder:validation:XValidation:rule="has(self.enabled) || has(self.tools)",message="a limit holds something back: set enabled to false, or hold a tool at Approve or Blocked"
+type MCPLimit struct {
+	// name is the metadata.name of the MCPServer, in this namespace, the
+	// limit is on.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name,omitempty"`
+
+	// enabled false turns the server off for the seats the limit applies to:
+	// nothing of it starts for them and none of its tools is offered to them.
+	// A limit cannot turn a server on, so true is refused. Crewlet's
+	// `enabled`, the MCPServer's own word for it.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// tools holds tools of the server back, one entry each, by the server's
+	// own name for the tool. Crewlet's `tools`. At most 256, the most tools
+	// Crewlet lists of one server.
+	// +optional
+	// +listType=map
+	// +listMapKey=tool
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=256
+	Tools []MCPToolLimit `json:"tools,omitempty"`
+}
+
 // UnitSpec is one node of a company's org chart: a division, a team, a squad.
 // It renders to one entry of Crewlet's units, nested under its parent's.
 type UnitSpec struct {
@@ -208,6 +283,19 @@ type UnitSpec struct {
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=16
 	MCP []MCPCredentials `json:"mcp,omitempty"`
+
+	// mcpLimits narrow the tool servers granted to every agent seat beneath
+	// this unit, at any depth: a server turned off for them, a tool held at
+	// Approve or Blocked. One entry per server, keyed by its name. They never
+	// widen a grant: each seat is held to the strictest of its own limits,
+	// every enclosing unit's and the MCPServer's own. Crewlet's
+	// `mcp_limits`, which the engine lets a unit's lead narrow and only an
+	// administrator lift.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=16
+	MCPLimits []MCPLimit `json:"mcpLimits,omitempty"`
 }
 
 // UnitStatus is what the operator observed about a Unit.
